@@ -29,7 +29,14 @@ from pulserver.recon.preprocessing import (
 
 def test_public_namespace_is_small_and_module_oriented():
     assert recon.__all__ == [
+        "AcquisitionBucket",
+        "AcquisitionBucketStats",
+        "ExamCache",
+        "ReconApp",
+        "ReconContext",
+        "ReconResult",
         "algorithms",
+        "app",
         "calibration",
         "corrections",
         "denoisers",
@@ -46,6 +53,7 @@ def test_public_namespace_is_small_and_module_oriented():
     assert "Connection" not in dir(recon)
     assert "Server" not in dir(recon)
     assert "MrdMetadata" not in dir(recon)
+    assert recon.ReconApp is recon.app.ReconApp
 
 
 def test_importing_public_root_does_not_load_private_mrd_stack():

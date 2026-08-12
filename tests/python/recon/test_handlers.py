@@ -1,30 +1,21 @@
-"""Tests for private MRD FFT handlers."""
+"""Tests for built-in reconstruction apps through the private MRD adapter."""
+
+from __future__ import annotations
 
 import ismrmrd
 import numpy as np
 
-# ---------------------------------------------------------------------------
-# Helpers: fake connection that yields pre-built acquisitions
-# ---------------------------------------------------------------------------
+from pulserver import ExamCache, ReconContext
+from pulserver.recon._mrd.application import run_application
 
 
 class FakeConnection:
-    """Minimal Connection stand-in for handler testing.
-
-    Yields the supplied acquisitions, then acts like the connection is closed.
-    Captures any sent items in ``self.sent``.
-    """
-
-    def __init__(self, acquisitions: list[ismrmrd.Acquisition]) -> None:
-        self._items = list(acquisitions)
+    def __init__(self, items) -> None:
+        self._items = list(items)
         self.sent: list = []
-        self.socket = self  # handlers call connection.socket.write for close
 
     def __iter__(self):
         yield from self._items
-
-    def write(self, data: bytes) -> None:
-        pass  # swallow close message
 
     def send(self, item) -> None:
         self.sent.append(item)
@@ -36,241 +27,157 @@ def _make_acquisitions(
     n_channels: int = 2,
     n_slices: int = 1,
 ) -> list[ismrmrd.Acquisition]:
-    """Create a list of fake acquisitions for testing."""
-    acqs = []
-    for slc in range(n_slices):
-        for pe in range(n_pe):
-            acq = ismrmrd.Acquisition()
-            acq.resize(n_ro, n_channels)
-            acq.data[:] = (
-                np.random.default_rng()
-                .standard_normal((n_channels, n_ro))
-                .astype(np.complex64)
+    acquisitions = []
+    generator = np.random.default_rng(42)
+    for slice_index in range(n_slices):
+        for phase_index in range(n_pe):
+            acquisition = ismrmrd.Acquisition()
+            acquisition.resize(n_ro, n_channels)
+            acquisition.data[:] = generator.standard_normal((n_channels, n_ro)).astype(
+                np.complex64
             )
-            acq.idx.kspace_encode_step_1 = pe
-            acq.idx.slice = slc
-
-            # Mark last line in slice
-            if pe == n_pe - 1:
-                acq.setFlag(ismrmrd.ACQ_LAST_IN_SLICE)
-
-            acqs.append(acq)
-
-    # Mark very last acquisition as last in measurement
-    acqs[-1].setFlag(ismrmrd.ACQ_LAST_IN_MEASUREMENT)
-    return acqs
+            acquisition.idx.kspace_encode_step_1 = phase_index
+            acquisition.idx.slice = slice_index
+            if phase_index == n_pe - 1:
+                acquisition.setFlag(ismrmrd.ACQ_LAST_IN_SLICE)
+            acquisitions.append(acquisition)
+    acquisitions[-1].setFlag(ismrmrd.ACQ_LAST_IN_MEASUREMENT)
+    return acquisitions
 
 
-def _make_metadata(
+def _make_header(
     n_ro: int = 32,
     n_pe: int = 16,
     fov_x: float = 256.0,
     fov_y: float = 256.0,
     fov_z: float = 5.0,
-):
-    """Create a minimal ISMRMRD metadata header (as xsd object)."""
-    # experimentalConditions is a required keyword-only field as of ismrmrd
-    # >= 1.15's generated xsd dataclasses; construct it eagerly rather than
-    # assigning it after the fact.
-    hdr = ismrmrd.xsd.ismrmrdHeader(
-        experimentalConditions=ismrmrd.xsd.experimentalConditionsType(
-            H1resonanceFrequency_Hz=63_750_000
-        )
-    )
-
-    # encodingSpaceType/fieldOfViewMm/encodingType are required keyword-only
-    # fields as of ismrmrd >= 1.15's generated xsd dataclasses; build the
-    # nested objects bottom-up rather than assigning attributes after a
-    # no-arg construction.
-    es = ismrmrd.xsd.encodingSpaceType(
+) -> ismrmrd.xsd.ismrmrdHeader:
+    encoded = ismrmrd.xsd.encodingSpaceType(
         matrixSize=ismrmrd.xsd.matrixSizeType(x=n_ro, y=n_pe, z=1),
         fieldOfView_mm=ismrmrd.xsd.fieldOfViewMm(x=fov_x, y=fov_y, z=fov_z),
     )
-    rs = ismrmrd.xsd.encodingSpaceType(
+    reconstructed = ismrmrd.xsd.encodingSpaceType(
         matrixSize=ismrmrd.xsd.matrixSizeType(x=n_ro, y=n_pe, z=1),
         fieldOfView_mm=ismrmrd.xsd.fieldOfViewMm(x=fov_x, y=fov_y, z=fov_z),
     )
-    lim = ismrmrd.xsd.encodingLimitsType(
-        kspace_encoding_step_1=ismrmrd.xsd.limitType(
-            minimum=0,
-            maximum=n_pe - 1,
-            center=n_pe // 2,
-        )
-    )
-    enc = ismrmrd.xsd.encodingType(
-        encodedSpace=es,
-        reconSpace=rs,
-        encodingLimits=lim,
-        trajectory=ismrmrd.xsd.trajectoryType("cartesian"),
-    )
-
-    hdr.encoding.append(enc)
-    return hdr
-
-
-# ---------------------------------------------------------------------------
-# simplefft handler
-# ---------------------------------------------------------------------------
-
-
-def test_simplefft_produces_image():
-    from pulserver.recon._mrd.handlers.simplefft import _reconstruct
-
-    n_pe, n_ro, n_ch = 16, 32, 2
-    acqs = _make_acquisitions(n_pe=n_pe, n_ro=n_ro, n_channels=n_ch, n_slices=1)
-    metadata = _make_metadata(n_ro=n_ro, n_pe=n_pe)
-
-    image = _reconstruct(acqs, metadata)
-    assert image is not None
-    assert isinstance(image, ismrmrd.Image)
-    assert image.data.size > 0
-
-
-def test_simplefft_empty_group():
-    from pulserver.recon._mrd.handlers.simplefft import _reconstruct
-
-    metadata = _make_metadata()
-    assert _reconstruct([], metadata) is None
-
-
-def test_simplefft_output_dtype():
-    from pulserver.recon._mrd.handlers.simplefft import _reconstruct
-
-    acqs = _make_acquisitions(n_pe=8, n_ro=16, n_channels=1)
-    metadata = _make_metadata(n_ro=16, n_pe=8)
-    image = _reconstruct(acqs, metadata)
-    # Image data should be int16
-    assert image.data.dtype == np.int16 or image.data.dtype == np.float32
-
-
-# ---------------------------------------------------------------------------
-# fftrecon handler
-# ---------------------------------------------------------------------------
-
-
-def test_fftrecon_multi_slice():
-    from pulserver.recon._mrd.handlers.fftrecon import _reconstruct
-
-    n_pe, n_ro, n_ch, n_slc = 8, 16, 2, 3
-    acqs = _make_acquisitions(n_pe=n_pe, n_ro=n_ro, n_channels=n_ch, n_slices=n_slc)
-    metadata = _make_metadata(n_ro=n_ro, n_pe=n_pe)
-
-    result = _reconstruct(acqs, metadata)
-    assert isinstance(result, np.ndarray)
-    assert result.shape[0] == n_slc
-    assert result.dtype == np.int16
-
-
-def test_fftrecon_single_slice():
-    from pulserver.recon._mrd.handlers.fftrecon import _reconstruct
-
-    n_pe, n_ro = 8, 16
-    acqs = _make_acquisitions(n_pe=n_pe, n_ro=n_ro, n_channels=1, n_slices=1)
-    metadata = _make_metadata(n_ro=n_ro, n_pe=n_pe)
-
-    result = _reconstruct(acqs, metadata)
-    assert result.shape == (1, n_ro, n_pe)
-
-
-def test_fftrecon_array2image():
-    from pulserver.recon._mrd.handlers.fftrecon import _array2image
-
-    n_pe, n_ro = 8, 16
-    data = np.random.default_rng().integers(0, 100, (n_ro, n_pe), dtype=np.int16)
-    acqs = _make_acquisitions(n_pe=n_pe, n_ro=n_ro, n_channels=1)
-    metadata = _make_metadata(n_ro=n_ro, n_pe=n_pe)
-
-    image = _array2image(data, acqs, metadata)
-    assert isinstance(image, ismrmrd.Image)
-    assert image.attribute_string  # meta should be non-empty
-
-
-def _make_metadata_kw(n_ro: int = 16, n_pe: int = 8) -> ismrmrd.xsd.ismrmrdHeader:
-    """Keyword-constructed metadata, for ismrmrd/xsdata versions that require
-    the encoding/header fields at construction time (``_make_metadata`` above
-    uses attribute assignment, which this installed version rejects)."""
-    space = ismrmrd.xsd.encodingSpaceType(
-        matrixSize=ismrmrd.xsd.matrixSizeType(x=n_ro, y=n_pe, z=1),
-        fieldOfView_mm=ismrmrd.xsd.fieldOfViewMm(x=256.0, y=256.0, z=5.0),
-    )
-    lim = ismrmrd.xsd.encodingLimitsType(
-        kspace_encoding_step_1=ismrmrd.xsd.limitType(
-            minimum=0, maximum=n_pe - 1, center=n_pe // 2
-        )
-    )
-    enc = ismrmrd.xsd.encodingType(
-        encodedSpace=space,
-        reconSpace=space,
-        encodingLimits=lim,
+    encoding = ismrmrd.xsd.encodingType(
+        encodedSpace=encoded,
+        reconSpace=reconstructed,
+        encodingLimits=ismrmrd.xsd.encodingLimitsType(
+            kspace_encoding_step_1=ismrmrd.xsd.limitType(
+                minimum=0,
+                maximum=n_pe - 1,
+                center=n_pe // 2,
+            )
+        ),
         trajectory=ismrmrd.xsd.trajectoryType("cartesian"),
     )
     return ismrmrd.xsd.ismrmrdHeader(
         experimentalConditions=ismrmrd.xsd.experimentalConditionsType(
-            H1resonanceFrequency_Hz=127730000
+            H1resonanceFrequency_Hz=63_750_000
         ),
-        encoding=[enc],
+        encoding=[encoding],
     )
 
 
-def test_fftrecon_process_filters_interleaved_waveforms(monkeypatch):
-    """Regression test: a live connection interleaves ismrmrd.Waveform
-    messages (e.g. sequence-description / physio packets) with the imaging
-    Acquisitions -- exactly as the real VRE client does. Drives the real
-    fftrecon.process(), not a re-simplified copy of its predicates, so a
-    regression to the old ``accept=lambda acq: not acq.is_flag_set(...)``
-    (no isinstance check, drops the LAST_IN_MEASUREMENT-flagged line) fails
-    this test.
-    """
-    from pulserver.recon._mrd.handlers import fftrecon
+def _context(header) -> ReconContext:
+    return ReconContext(header=header, exam=ExamCache(("exam", "test")), config="test")
 
-    n_pe, n_ro = 8, 16
-    acqs = _make_acquisitions(n_pe=n_pe, n_ro=n_ro, n_channels=1, n_slices=1)
 
-    waveform = ismrmrd.Waveform()
-    waveform.resize(1033, 1)  # deliberately different shape than acq.data
+def test_simplefft_emits_one_image_per_slice():
+    from pulserver.recon._mrd.handlers.simplefft import PLUGIN
 
-    # Interleave: one waveform mid-stream, one right after the final
-    # LAST_IN_MEASUREMENT-flagged acquisition (as the VRE client does).
-    stream = [*acqs[: n_pe // 2], waveform, *acqs[n_pe // 2 :], waveform]
-    conn = FakeConnection(stream)
-    metadata = _make_metadata_kw(n_ro=n_ro, n_pe=n_pe)
+    acquisitions = _make_acquisitions(n_pe=8, n_ro=16, n_channels=2, n_slices=3)
+    connection = FakeConnection(acquisitions)
+    run_application(PLUGIN, connection, _context(_make_header(16, 8)))
 
-    # Sidestep the (pre-existing, unrelated) DICOM-template gaps in
-    # MrdDicomBuilder -- spy on the real _reconstruct/_array2image instead,
-    # so the real accept/finish predicates inside process() are exercised.
-    seen_group_sizes = []
-    real_reconstruct = fftrecon._reconstruct
+    assert len(connection.sent) == 3
+    assert all(isinstance(image, ismrmrd.Image) for image in connection.sent)
+    assert all(image.data.dtype == np.int16 for image in connection.sent)
 
-    def _spy_reconstruct(group, metadata):
-        seen_group_sizes.append(len(group))
-        assert all(isinstance(item, ismrmrd.Acquisition) for item in group)
-        return real_reconstruct(group, metadata)
 
-    monkeypatch.setattr(fftrecon, "_reconstruct", _spy_reconstruct)
-    monkeypatch.setattr(fftrecon, "_array2image", lambda *_args, **_kwargs: object())
+def test_simplefft_passes_non_acquisition_items_through():
+    from pulserver.recon._mrd.handlers.simplefft import PLUGIN
+
+    acquisitions = _make_acquisitions(n_pe=4, n_ro=8, n_channels=1)
+    incoming_image = ismrmrd.Image.from_array(np.ones((2, 2), dtype=np.float32))
+    connection = FakeConnection([incoming_image, *acquisitions])
+    run_application(PLUGIN, connection, _context(_make_header(8, 4)))
+
+    assert connection.sent[0] is incoming_image
+    assert isinstance(connection.sent[1], ismrmrd.Image)
+
+
+def test_fftrecon_emits_one_dicom_per_slice(monkeypatch):
+    import pulserver.recon._mrd.application as application
+    from pulserver.recon._mrd.handlers.fftrecon import PLUGIN
+
     monkeypatch.setattr(
-        fftrecon, "MrdDicomBuilder", lambda _metadata: lambda img: ("dset", img)
+        application,
+        "MrdDicomBuilder",
+        lambda _header: lambda image: ("dicom", image),
     )
+    acquisitions = _make_acquisitions(n_pe=8, n_ro=16, n_channels=2, n_slices=3)
+    connection = FakeConnection(acquisitions)
+    run_application(PLUGIN, connection, _context(_make_header(16, 8)))
 
-    fftrecon.process(conn, "recon1.py", metadata)  # must not raise
-
-    assert seen_group_sizes == [
-        n_pe
-    ]  # all real acquisitions, no waveforms, none dropped
-    assert len(conn.sent) == 1
-
-
-# ---------------------------------------------------------------------------
-# savedataonly handler
-# ---------------------------------------------------------------------------
+    assert len(connection.sent) == 3
+    assert all(item[0] == "dicom" for item in connection.sent)
+    assert [item[1].slice for item in connection.sent] == [0, 1, 2]
 
 
-def test_savedataonly_drains():
-    from pulserver.recon._mrd.handlers.savedataonly import process
+def test_interleaved_waveform_is_attached_to_bucket():
+    from pulserver import ReconApp
 
-    acqs = _make_acquisitions(n_pe=4, n_ro=8, n_channels=1)
-    conn = FakeConnection(acqs)
-    metadata = _make_metadata(n_ro=8, n_pe=4)
+    seen = []
 
-    # Should not raise
-    process(conn, {}, metadata)
+    class Capture(ReconApp):
+        def reconstruct(self, bucket, context):
+            del context
+            seen.append(bucket)
+
+    acquisitions = _make_acquisitions(n_pe=4, n_ro=8, n_channels=1)
+    waveform = ismrmrd.Waveform()
+    waveform.resize(16, 1)
+    connection = FakeConnection([*acquisitions[:2], waveform, *acquisitions[2:]])
+    run_application(Capture(), connection, _context(_make_header(8, 4)))
+
+    assert len(seen) == 1
+    assert seen[0].waveforms == (waveform,)
+    assert seen[0].kspace().shape == (4, 1, 8)
+
+
+def test_bucket_matches_gadgetron_data_and_reference_classification():
+    from pulserver import ReconApp
+
+    seen = []
+
+    class Capture(ReconApp):
+        def reconstruct(self, bucket, context):
+            del context
+            seen.append(bucket)
+
+    imaging, calibration, combined, phase = _make_acquisitions(
+        n_pe=4,
+        n_ro=8,
+        n_channels=1,
+    )
+    calibration.setFlag(ismrmrd.ACQ_IS_PARALLEL_CALIBRATION)
+    combined.setFlag(ismrmrd.ACQ_IS_PARALLEL_CALIBRATION_AND_IMAGING)
+    phase.setFlag(ismrmrd.ACQ_IS_PHASECORR_DATA)
+    connection = FakeConnection([imaging, calibration, combined, phase])
+    run_application(Capture(split_on=None), connection, _context(_make_header(8, 4)))
+
+    assert len(seen) == 1
+    assert seen[0].data == (imaging, combined)
+    assert seen[0].ref == (calibration, combined)
+    assert seen[0].datastats[0].kspace_encode_step_1 == frozenset({0, 2})
+    assert seen[0].refstats[0].kspace_encode_step_1 == frozenset({1, 2})
+
+
+def test_savedataonly_consumes_without_output():
+    from pulserver.recon._mrd.handlers.savedataonly import PLUGIN
+
+    connection = FakeConnection(_make_acquisitions(n_pe=4, n_ro=8, n_channels=1))
+    run_application(PLUGIN, connection, _context(_make_header(8, 4)))
+    assert connection.sent == []

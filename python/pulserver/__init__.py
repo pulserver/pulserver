@@ -1,9 +1,10 @@
 """Pulserver package root.
 
-This namespace holds the *plugin contract* only: the base classes a sequence
-plugin subclasses, the abstract types those classes exchange, the typed
-protocol parameters its UI is built from, the helpers that serialise and
-validate a protocol, and the offline CLI entry point.
+This namespace holds the *plugin contracts* only: the base classes sequence
+and reconstruction plugins subclass, the abstract types those classes
+exchange, the typed protocol parameters the scanner UI is built from, the
+helpers that serialise and validate a protocol, and the offline CLI entry
+point.
 
 Everything used to *build* a sequence is deliberately **not** re-exported
 here, so that the three roles stay visibly separate::
@@ -11,6 +12,7 @@ here, so that the three roles stay visibly separate::
     import pulserver.pypulseq as pp          # events, Sequence, Opts
     import pulserver.design as design        # modules and scan loops
     from pulserver import Sequence, UIParam  # plugin contract
+    from pulserver import ReconApp           # reconstruction plugin contract
 
 :mod:`pulserver.pypulseq` is the event layer — upstream PyPulseq re-exported
 whole, plus Pulserver's replacements for a few of its objects.
@@ -39,50 +41,64 @@ from __future__ import annotations
 import importlib
 
 __all__ = [
-    "pypulseq",
-    "design",
-    "io",
-    "sequence",
-    "sequences",
-    "examples",
-    "params",
-    "Sequence",
-    "PulseqSequence",
-    "SequenceModule",
-    "ScanLoop",
-    "EncodingAxis",
-    "run_cli",
-    "UIParam",
-    "Validate",
-    "ParamKind",
-    "InputMode",
-    "FloatKey",
-    "IntKey",
+    "AcquisitionBucket",
+    "AcquisitionBucketStats",
     "BoolKey",
-    "EnumKey",
-    "SequenceType",
-    "ImagingMode",
-    "PreparationType",
-    "TriggerType",
-    "TypeinFloatParam",
-    "DropdownFloatParam",
-    "TypeinIntParam",
-    "DropdownIntParam",
     "BoolParam",
-    "StringListParam",
     "Description",
+    "DropdownFloatParam",
+    "DropdownIntParam",
+    "EncodingAxis",
+    "EnumKey",
+    "ExamCache",
+    "FloatKey",
+    "ImagingMode",
+    "InputMode",
+    "IntKey",
+    "ParamKind",
+    "PreparationType",
     "Protocol",
     "ProtocolValue",
-    "make_enum_param",
-    "validate_protocol",
-    "protocol_to_dict",
+    "PulseqSequence",
+    "ReconApp",
+    "ReconContext",
+    "ReconResult",
+    "ScanLoop",
+    "Sequence",
+    "SequenceModule",
+    "SequenceType",
+    "StringListParam",
+    "TriggerType",
+    "TypeinFloatParam",
+    "TypeinIntParam",
+    "UIParam",
+    "Validate",
+    "design",
     "dict_to_protocol",
+    "examples",
+    "io",
+    "make_enum_param",
+    "params",
+    "protocol_to_dict",
+    "pypulseq",
+    "run_cli",
+    "sequence",
+    "sequences",
+    "validate_protocol",
 ]
 
 
 _CORE_MODULES = {"params"}
 #: Authoring data types defined under ``design`` but named by the contract.
 _AUTHORING_TYPES = {"ScanLoop", "EncodingAxis"}
+_RECON_APP_TYPES = {
+    "AcquisitionBucket",
+    "AcquisitionBucketStats",
+    "ExamCache",
+    "ReconApp",
+    "ReconContext",
+    "ReconResult",
+}
 _SUBMODULES = {"io", "pypulseq", "design", "sequence", "sequences", "examples"}
 
 
@@ -93,6 +109,8 @@ def __getattr__(name: str):
         return importlib.import_module(f"{__name__}._core._protocol")
     if name in _AUTHORING_TYPES:
         return getattr(importlib.import_module(f"{__name__}.design._sampling"), name)
+    if name in _RECON_APP_TYPES:
+        return getattr(importlib.import_module(f"{__name__}.recon.app"), name)
     try:
         return getattr(importlib.import_module(f"{__name__}._core"), name)
     except AttributeError:

@@ -209,16 +209,17 @@ def test_window_averaging_is_off_by_default_and_only_moves_a_curved_readout():
     assert float(np.abs(midpoint - averaged).max()) > 1e-3
 
 
-def test_a_block_range_bounds_the_answer(gre):
+def test_a_time_range_bounds_the_answer(gre):
     whole = gre.calculate_kspace(dense=False)[0]
-    part = gre.calculate_kspace(dense=False, block_range=(1, len(gre) // 2))[0]
+    half = float(np.sum(gre.block_durations)) / 2.0
+    part = gre.calculate_kspace(dense=False, time_range=[0.0, half])[0]
     assert part.shape[1] < whole.shape[1]
 
 
-@pytest.mark.parametrize("block_range", [(0, 10), (10, 5)])
-def test_a_bad_block_range_is_refused(gre, block_range):
+@pytest.mark.parametrize("time_range", [[1.0, 0.0], [0.0, 1.0, 2.0]])
+def test_a_bad_time_range_is_refused(gre, time_range):
     with pytest.raises(ValueError):
-        gre.calculate_kspace(block_range=block_range)
+        gre.calculate_kspace(time_range=time_range)
 
 
 @pytest.mark.parametrize("offsets", [[1e-6, 2e-6], [0.0] * 4])
@@ -564,7 +565,7 @@ def test_the_definitions_match_matlab_autolabel(stem):
 
 #: `autoLabel`'s parameter list, and what each is called here.
 AUTOLABEL_PARAMETERS = {
-    "blockRange": "block_range",
+    "blockRange": "time_range",
     "useLabels": "use_labels",
     "useAux": "use_aux",
     "skipApply": "skip_apply",

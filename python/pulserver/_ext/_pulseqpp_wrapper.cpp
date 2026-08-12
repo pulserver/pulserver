@@ -457,6 +457,15 @@ PYBIND11_MODULE(_pulseqpp_wrapper, m)
                  return py::array_t<double>({self.num_blocks()}, self.block_durations(),
                                             py::cast(&self, py::return_value_policy::reference));
              })
+        /* Soft delays rewrite a block's duration and nothing else about it,
+           so they get a scalar setter rather than a rebuild of the block. */
+        .def("set_block_duration",
+             [](Sequence& self, int index, double seconds) {
+                 if (index < 1 || index > self.num_blocks())
+                     throw py::index_error("block index out of range");
+                 self.block_durations()[index - 1] = seconds;
+             },
+             py::arg("index"), py::arg("seconds"))
 
         /* -- library sizes, for the Python side to report --------------- */
         .def("num_gradients", &Sequence::num_gradients)

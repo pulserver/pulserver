@@ -16,7 +16,14 @@ transport machinery is intentionally private under :mod:`pulserver.recon._mrd`.
 from __future__ import annotations
 
 __all__ = [
+    "AcquisitionBucket",
+    "AcquisitionBucketStats",
+    "ExamCache",
+    "ReconApp",
+    "ReconContext",
+    "ReconResult",
     "algorithms",
+    "app",
     "calibration",
     "corrections",
     "denoisers",
@@ -33,13 +40,36 @@ __all__ = [
 import importlib
 from typing import TYPE_CHECKING, Any
 
-_SUBMODULES = tuple(name for name in __all__ if name != "pics")
+_SUBMODULES = (
+    "algorithms",
+    "app",
+    "calibration",
+    "corrections",
+    "denoisers",
+    "density",
+    "execution",
+    "motion",
+    "optim",
+    "physics",
+    "preprocessing",
+    "simulation",
+)
+_APP_TYPES = {
+    "AcquisitionBucket",
+    "AcquisitionBucketStats",
+    "ExamCache",
+    "ReconApp",
+    "ReconContext",
+    "ReconResult",
+}
 
 
 def __getattr__(name: str) -> Any:
     """Lazily resolve public reconstruction modules and entry points."""
     if name in _SUBMODULES:
         return importlib.import_module(f"{__name__}.{name}")
+    if name in _APP_TYPES:
+        return getattr(importlib.import_module(f"{__name__}.app"), name)
     if name == "pics":
         return importlib.import_module(f"{__name__}.algorithms").pics
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
@@ -51,6 +81,7 @@ def __dir__() -> list[str]:
 
 
 if TYPE_CHECKING:
+    from . import app as app
     from . import algorithms as algorithms
     from . import calibration as calibration
     from . import corrections as corrections
@@ -63,3 +94,9 @@ if TYPE_CHECKING:
     from . import preprocessing as preprocessing
     from . import simulation as simulation
     from .algorithms import pics as pics
+    from .app import AcquisitionBucket as AcquisitionBucket
+    from .app import AcquisitionBucketStats as AcquisitionBucketStats
+    from .app import ExamCache as ExamCache
+    from .app import ReconApp as ReconApp
+    from .app import ReconContext as ReconContext
+    from .app import ReconResult as ReconResult

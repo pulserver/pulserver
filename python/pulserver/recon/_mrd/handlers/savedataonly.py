@@ -1,27 +1,22 @@
-"""Private save-data-only handler for draining acquisitions."""
+"""Private data-sink reconstruction app."""
 
-import logging
-from typing import Any
+from __future__ import annotations
 
-from .. import constants
+__all__ = ["PLUGIN", "SaveDataOnly"]
+
+from ...app import AcquisitionBucket, ReconApp, ReconContext
 
 
-def process(connection: Any, config: Any, metadata: Any) -> None:
-    """Drain all incoming data without reconstruction.
+class SaveDataOnly(ReconApp):
+    """Consume and optionally persist a measurement without emitting images."""
 
-    Parameters
-    ----------
-    connection : Connection
-        Active MRD connection.
-    config : Any
-        Unused configuration payload.
-    metadata : Any
-        Unused ISMRMRD XML header.
-    """
-    logging.info("savedataonly handler — draining all incoming data")
-    try:
-        for _msg in connection:
-            pass
-    finally:
-        end = constants.GadgetMessageIdentifier.pack(constants.GADGET_MESSAGE_CLOSE)
-        connection.socket.write(end)
+    def reconstruct(
+        self,
+        bucket: AcquisitionBucket,
+        context: ReconContext,
+    ) -> None:
+        """Discard the in-memory bucket after the connection saver sees it."""
+        del bucket, context
+
+
+PLUGIN = SaveDataOnly()

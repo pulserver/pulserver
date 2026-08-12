@@ -113,11 +113,6 @@ _TRIGGER_CHANNELS = {
 #: What every method whose implementation isn't ported yet says. The
 #: signature above each of these already matches upstream PyPulseq's; only
 #: the body is missing.
-_NOT_PORTED = (
-    "Sequence.{what} has upstream PyPulseq's signature but no implementation "
-    "yet. See the module docstring."
-)
-
 #: Upstream's default gradient-spectrum window, in seconds. Needed only to
 #: tell a caller who chose a window from one who left it alone, since under
 #: ``tr`` the window is the repetition time and nothing else.
@@ -247,6 +242,40 @@ class Sequence:
         """
         return self._native.block_events()
 
+    # -- the scan structure the C core recovers ---------------------------
+    #
+    # These three read the same cached `_Structure` every TR-based analysis
+    # works from, so asking for them beside `plot(tr=...)` or `calculate_pns`
+    # costs nothing extra. They are derived, never declared: a `.seq` written
+    # anywhere states no TR and no segmentation, and what is reported here is
+    # what `pulseg_find_tr` recovered from the blocks themselves.
+
+    @property
+    def num_trs(self) -> int:
+        """int : How many structural TRs the repeating region holds.
+
+        The *structural* repeat, which is not the number of TRs the scanner
+        plays -- averages multiply it, and prep and cooldown TRs sit outside
+        it. The bound on what ``tr=<int>`` can name is
+        :attr:`~._sequence._Structure.num_instances`, reached through
+        ``plot(tr=...)``, not this.
+        """
+        return self._structure_for("num_trs").num_trs
+
+    @property
+    def tr_size(self) -> int:
+        """int : How many blocks one TR holds."""
+        return int(self._structure_for("tr_size").tr["tr_size"])
+
+    @property
+    def num_segments(self) -> int:
+        """int : How many distinct segments the sequence was decomposed into.
+
+        The interpreter's unit of playout. Index one with
+        ``plot(segment_idx=...)``.
+        """
+        return len(self._structure_for("num_segments").segments)
+
     @property
     def definitions(self) -> dict[str, object]:
         """dict : The ``[DEFINITIONS]`` entries set so far.
@@ -364,7 +393,10 @@ class Sequence:
             ``block_duration``, plus ``rf``, ``gx``, ``gy``, ``gz``, ``adc``,
             ``rotation``, ``rf_shim`` and ``soft_delay`` -- ``None`` when the
             block does not carry them -- and the list-valued ``triggers``,
-            ``label_sets`` and ``label_incs``.
+            ``label_sets``, ``label_incs`` and ``labels``. The last is the
+            other two interleaved as ``(kind, name, value)`` in play order,
+            which is the only form that says whether a ``SET`` preceded an
+            ``INC`` of the same counter.
 
         Notes
         -----
@@ -382,6 +414,11 @@ class Sequence:
             triggers=[],
             label_sets=[],
             label_incs=[],
+            # The same label operations again, interleaved in the order the
+            # block plays them. `label_sets` and `label_incs` cannot say
+            # whether a SET came before an INC of the same counter; label
+            # evaluation has to know.
+            labels=[],
             rotation=None,
             rf_shim=None,
             soft_delay=None,
@@ -450,6 +487,100 @@ class Sequence:
 
     def register_soft_delay_event(self, event: object) -> int:  # noqa: ARG002 - upstream's signature
         """Accepted for upstream compatibility; a soft delay carries no shape."""
+        return 0
+
+    def register_control_event(self, event: object) -> int:  # noqa: ARG002 - MATLAB's signature
+        """Accepted for symmetry; a trigger or digital output carries no shape.
+
+        MATLAB's ``registerControlEvent``. Upstream PyPulseq has no equivalent,
+        so this exists to complete the registration idiom rather than to
+        satisfy a drop-in call.
+        """
+        return 0
+
+    def register_rotation_event(self, event: object) -> int:
+        """Register a rotation extension ahead of the blocks that carry it.
+
+        MATLAB's ``registerRotationEvent``; PyPulseq has no equivalent, because
+        it cannot read the extension at all.
+
+        Returns
+        -------
+        int
+            The rotation library id holding this orientation.
+
+        Notes
+        -----
+        **Registering the same rotation twice returns the same id**, because
+        this looks for an equal row before appending one. That is not true of
+        ``add_block``, which appends a row per block and lets
+        :meth:`remove_duplicates` collapse them afterwards -- the right
+        trade for the hot path, where searching the library per block would
+        make building a scan quadratic in the thing that is already largest.
+
+        So this does not save the scan any work; it gives a caller a stable
+        name for an orientation. Do not hold the id across
+        :meth:`remove_duplicates`, which renumbers every library.
+        """
+        rotation = getattr(event, "rot_quaternion", event)
+        # The same call ``add_block`` makes, in the same convention -- scalar
+        # first, canonical sign. Reading the quaternion any other way would
+        # register a row that the identical event played through a block would
+        # not match, and the whole point of registering is that it matches.
+        if hasattr(rotation, "as_quat"):
+            quaternion = np.asarray(
+                rotation.as_quat(canonical=True, scalar_first=True), dtype=float
+            ).ravel()
+        else:
+            quaternion = np.asarray(rotation, dtype=float).ravel()
+        if quaternion.size != 4:
+            raise ValueError(f"a rotation is four numbers, got {quaternion.size}")
+        if not np.isclose(np.linalg.norm(quaternion), 1.0, atol=1e-6):
+            raise ValueError("rotation quaternion is not a unit quaternion")
+
+        existing = self._find_row(self._native.num_rotations, self._native.rotation_row, quaternion)
+        if existing:
+            return existing
+        self._touch()
+        return int(self._native.register_rotation(quaternion.tolist()))
+
+    def register_rf_shim_event(self, event: object) -> int:
+        """Register an RF-shim extension ahead of the blocks that carry it.
+
+        MATLAB's ``registerRfShimEvent``; PyPulseq has no equivalent. A shim is
+        one complex number per transmit channel and is normally shared across a
+        whole scan, so registering it once is the point.
+        """
+        shim = np.asarray(
+            getattr(event, "shim_vector", event), dtype=complex
+        ).ravel()
+        # The library stores magnitude and phase interleaved, which is how the
+        # file writes them.
+        values: list[float] = []
+        for channel in shim:
+            values.extend((float(np.abs(channel)), float(np.angle(channel))))
+
+        existing = self._find_row(
+            self._native.num_rf_shims, self._native.rf_shim_row, np.asarray(values)
+        )
+        if existing:
+            return existing
+        self._touch()
+        return int(self._native.register_rf_shim(values))
+
+    @staticmethod
+    def _find_row(count, read, wanted: np.ndarray) -> int:
+        """The id of an existing row equal to ``wanted``, or 0 for none.
+
+        A linear scan, which is right here and wrong in ``add_block``: this is
+        called once per distinct orientation or shim, outside the loop, when
+        the library is still small. Doing the same per block is what would make
+        building a scan quadratic.
+        """
+        for identifier in range(1, int(count()) + 1):
+            row = np.asarray(read(identifier), dtype=float).ravel()
+            if row.size == wanted.size and np.allclose(row, wanted, rtol=0, atol=1e-12):
+                return identifier
         return 0
 
     def remove_duplicates(self) -> None:
@@ -734,8 +865,9 @@ class Sequence:
         *,
         tr: str | int | None = None,
         rf_channel: int = 0,
+        segment_idx: int | None = None,
     ):
-        """Draw the sequence, or one canonical TR: ADC, RF, and the three gradients.
+        """Draw the sequence, one canonical TR, or one segment.
 
         Parameters
         ----------
@@ -790,6 +922,20 @@ class Sequence:
         rf_channel : int, default 0
             For a pTx TR, which transmit channel upstream draws. The rest are
             added to the same two panels afterwards. Read only under ``tr``.
+        segment_idx : int, optional
+            Draw one segment instead, as its **highest-energy instance** plays.
+
+            A segment is the interpreter's unit of playout, and which
+            repetition of it carries the most gradient energy is what the C
+            core already tracks (``max_energy_start_block``) in order to run
+            the safety checks against it. This draws exactly those blocks, on
+            the sequence's own clock, so what is on screen is the instance the
+            checks were run on rather than the first one that happened to be
+            played. :attr:`num_segments` says how many there are.
+
+            Not combinable with ``tr``: a TR is the core's reconstructed
+            canonical waveform and a segment is a run of real blocks, so a
+            call naming both is asking for two different pictures.
 
         Returns
         -------
@@ -802,6 +948,9 @@ class Sequence:
             If ``label`` is asked for under ``tr``. A canonical TR is built by
             the C core out of waveforms, and the core does not carry label
             values through it, so there is nothing truthful to mark.
+        ValueError
+            If ``tr`` and ``segment_idx`` are given together, or if
+            ``segment_idx`` is out of range.
 
         Notes
         -----
@@ -826,7 +975,16 @@ class Sequence:
         axis; ``fig1`` and ``fig2`` are then the same figure. ``save=True``
         writes that one window as ``seq_plot.jpg`` rather than upstream's pair.
         """
-        if tr is None:
+        if tr is not None and segment_idx is not None:
+            raise ValueError(
+                "plot(): tr draws the canonical TR the safety core reconstructs and "
+                "segment_idx draws a run of real blocks -- pass one or the other"
+            )
+
+        if segment_idx is not None:
+            first, last = self._segment_blocks(segment_idx)
+            window = self._upstream_window(first, last)
+        elif tr is None:
             first, last = self._blocks_over(*_span(time_range))
             if last - first + 1 > _LOUD_ABOVE:
                 warnings.warn(
@@ -886,7 +1044,7 @@ class Sequence:
         trajectory_delay: float | list[float] | np.ndarray = 0.0,
         gradient_offset: float | list[float] | np.ndarray = 0.0,
         *,
-        block_range: tuple[int, int] | None = None,
+        time_range: list[float] | None = None,
         frame: str = "physical",
         sample_window_average: bool = False,
         dense: bool = True,
@@ -914,9 +1072,10 @@ class Sequence:
             times -- those are synchronised with each other by construction.
         gradient_offset : float or array-like, optional
             A constant background gradient in Hz/m, one value or one per axis.
-        block_range : tuple of int, optional
-            ``(first, last)``, 1-based and inclusive, to analyse part of the
-            sequence. The whole of it by default.
+        time_range : list of float, optional
+            ``[start, stop]`` in seconds, to analyse part of the sequence.
+            The whole of it by default. The blocks this touches are the ones
+            decoded, and the times come back on the sequence's own clock.
         frame : {'physical', 'logical'}, optional
             Whether to resolve rotation extensions into the answer.
             ``'physical'``, the default, is what upstream PyPulseq and Pulseq's
@@ -967,10 +1126,11 @@ class Sequence:
         --------
         auto_label : the encoding counters derived from this trajectory.
         """
+        blocks = self._window_for(time_range)
         result = self._kspace(
             trajectory_delay=trajectory_delay,
             gradient_offset=gradient_offset,
-            block_range=block_range,
+            blocks=blocks,
             frame=frame,
             sample_window_average=sample_window_average,
             # The breakpoint-grid trajectory has nowhere to go in upstream's
@@ -992,7 +1152,7 @@ class Sequence:
                     "k_traj_adc. Use dense=False for the ADC samples, or _kspace() for "
                     "the breakpoint-grid trajectory, which does resolve them."
                 )
-            first, last = self._block_range(block_range)
+            first, last = blocks
             upstream = to_upstream(self, first=first, last=(None if last == 0 else last))
             k_traj = upstream.calculate_kspace(
                 trajectory_delay=trajectory_delay,
@@ -1024,7 +1184,7 @@ class Sequence:
         *,
         trajectory_delay=0.0,
         gradient_offset=0.0,
-        block_range=None,
+        blocks=None,
         frame="physical",
         sample_window_average=False,
         dense=True,
@@ -1034,11 +1194,14 @@ class Sequence:
         Kept separate because :meth:`calculate_kspace` has to return exactly
         upstream's tuple, and the derived echo positions, the k-space centre
         and the repeat-key statistics have nowhere in it to go.
+
+        ``blocks`` is the 1-based inclusive pair the public methods resolve
+        their ``time_range`` into, not a window of its own.
         """
         if frame not in ("physical", "logical"):
             raise ValueError(f"frame must be 'physical' or 'logical', not {frame!r}")
 
-        first, last = self._block_range(block_range)
+        first, last = (1, 0) if blocks is None else blocks
         return self._native.calculate_kspace(
             _per_axis(trajectory_delay, "trajectory_delay"),
             _per_axis(gradient_offset, "gradient_offset"),
@@ -1053,7 +1216,7 @@ class Sequence:
         self,
         *,
         # -- MATLAB Pulseq's autoLabel parameters, under Python names --------
-        block_range: tuple[int, int] | None = None,
+        time_range: list[float] | None = None,
         use_labels: dict | None = None,
         use_aux: dict | None = None,
         skip_apply: bool = False,
@@ -1086,8 +1249,9 @@ class Sequence:
 
         Parameters
         ----------
-        block_range : tuple of int, optional
-            ``(first, last)``, 1-based and inclusive.
+        time_range : list of float, optional
+            ``[start, stop]`` in seconds. MATLAB's ``blockRange`` in the same
+            position, in the unit PyPulseq windows everything else by.
         use_labels : dict, optional
             Skip detection and apply these counters instead -- the labels
             half of a previous call's return value, or a set computed some
@@ -1218,7 +1382,7 @@ class Sequence:
                 f"'acquisition', got {sort_slices!r}"
             )
 
-        first, last = self._block_range(block_range)
+        first, last = self._window_for(time_range)
 
         # Detection-only options against a caller who has skipped detection.
         # MATLAB raises on the same combination, and for the same reason: it
@@ -1310,24 +1474,6 @@ class Sequence:
                 self.set_definition(key, value.tolist() if hasattr(value, "tolist") else value)
             self._touch()
         return result["labels"], aux
-
-    def _block_range(self, block_range) -> tuple[int, int]:
-        """Upstream-style ``(first, last)`` as the C core's 1-based pair.
-
-        ``0`` for the last block is the core's "to the end", which is why the
-        default is not ``len(self)``: a range that ends at the end must stay
-        true if the sequence grows.
-        """
-        if block_range is None:
-            return 1, 0
-        first, last = block_range
-        first = int(first)
-        last = int(last)
-        if first < 1:
-            raise ValueError(f"block_range starts at block 1, not {first}")
-        if last != 0 and last < first:
-            raise ValueError(f"block_range {block_range!r} is empty")
-        return first, last
 
     def calculate_kspacePP(
         self,
@@ -1426,7 +1572,7 @@ class Sequence:
         # The window carries the time in front of it as a lead-in block
         # numbered 0, so walking it from zero already gives absolute times.
         rf = self._rf_times_of(window, 0.0)
-        adc = self._adc_times_of(window, 0.0, block_range=(first, last))
+        adc = self._adc_times_of(window, 0.0, block_span=(first, last))
 
         if compat:
             return (
@@ -1493,7 +1639,7 @@ class Sequence:
         """
         first, last = self._window_for(time_range)
         window = self._upstream_window(first, last)
-        samples = self._adc_times_of(window, 0.0, block_range=(first, last))
+        samples = self._adc_times_of(window, 0.0, block_span=(first, last))
         return samples if not compat else (samples.t, samples.fp)
 
     def get_gradients(
@@ -1566,7 +1712,7 @@ class Sequence:
         )
 
     def _adc_times_of(
-        self, window: pp.Sequence, elapsed: float, *, block_range: tuple[int, int]
+        self, window: pp.Sequence, elapsed: float, *, block_span: tuple[int, int]
     ) -> AdcTimes:
         """Walk a window's ADC events into sample times and per-sample phase."""
         gamma_b0 = self.system.gamma * self.system.B0
@@ -1617,10 +1763,10 @@ class Sequence:
             sample_phase=_stack(sample_phases),
             block=np.asarray(blocks, dtype=int),
             num_samples=np.asarray(counts, dtype=int),
-            _echoes=lambda: self._echo_centers(block_range),
+            _echoes=lambda: self._echo_centers(block_span),
         )
 
-    def _echo_centers(self, block_range: tuple[int, int]) -> tuple[np.ndarray, np.ndarray]:
+    def _echo_centers(self, blocks: tuple[int, int]) -> tuple[np.ndarray, np.ndarray]:
         """``(sample index, time)`` of the k-space centre of each readout.
 
         The C core already reports which sample of each readout is nearest
@@ -1629,8 +1775,8 @@ class Sequence:
         than re-deriving it here, and it is the same number the recon and the
         scanner use.
         """
-        first, last = block_range
-        result = self._kspace(block_range=(first, last), dense=False)
+        first, last = blocks
+        result = self._kspace(blocks=(first, last), dense=False)
 
         centers = np.asarray(result["readout_center_sample"], dtype=int)
         counts = np.asarray(result["readout_samples"], dtype=int)
@@ -1643,16 +1789,325 @@ class Sequence:
         times[inside] = t_adc[absolute[inside]]
         return centers, times
 
-    def check_timing(self, print_errors: bool = False):
-        """Check every block's timing against the raster. Not ported yet;
-        see upstream
-        :meth:`pypulseq.Sequence.sequence.Sequence.check_timing`."""
-        raise NotImplementedError(_NOT_PORTED.format(what="check_timing"))
+    def calc_moments_btensor(
+        self,
+        calc_b: bool = True,
+        calc_m1: bool = False,
+        calc_m2: bool = False,
+        calc_m3: bool = False,
+        n_dummy: int = 0,
+        *,
+        time_range: list[float] | None = None,
+        compat: bool = True,
+    ):
+        """The diffusion b-tensor and the gradient moments, one per excitation.
+
+        Parameters
+        ----------
+        calc_b : bool, default True
+            Compute the b-tensor.
+        calc_m1, calc_m2, calc_m3 : bool, default False
+            Compute the first, second and third gradient moments.
+        n_dummy : int, default 0
+            Leading excitations to skip.
+        time_range : list of float, optional
+            ``[start, stop]`` in seconds. The whole sequence by default.
+        compat : bool, optional
+            MATLAB's ``(B, m1, m2, m3)`` by default -- ``B`` shaped
+            ``(R, 3, 3)`` in s/m^2, the moments ``(R, 3)``. ``False`` returns a
+            :class:`~._results.BTensor`, which adds the b-values, b-vectors and
+            per-shot tensors in the units and shapes a diffusion pipeline takes.
+
+        Returns
+        -------
+        tuple or BTensor
+
+        Notes
+        -----
+        **Where the echo is, is the whole difference from MATLAB.**
+        ``calcMomentsBtensor`` takes the echo to be ``2*t_refocusing -
+        t_excitation`` and carries its own ``TODO: fixme for double-refocused
+        sequences``, because that formula reads exactly one refocusing pulse
+        per excitation and is wrong the moment there are two -- which is what
+        every twice-refocused diffusion sequence has. Here the echo is the ADC
+        sample the C core found nearest k-space zero, walking the real
+        trajectory; the number is the same one the reconstruction and the
+        scanner use. So a twice-refocused, an oscillating-gradient or a
+        free-waveform sequence is handled by the same code as a Stejskal-Tanner
+        one, with no special case.
+
+        MATLAB flips the gradient sign once, at the first refocusing pulse in
+        the interval. The sign here flips at *every* refocusing pulse, which is
+        the same answer for one and the right one for two.
+
+        The waveforms are this class's, so an arbitrary gradient stored on the
+        centres raster has its raster-edge samples restored -- see
+        :meth:`waveforms`. The integration is exact rather than sampled: a
+        Pulseq gradient is piecewise linear, so ``q`` is piecewise quadratic
+        and ``q_i q_j`` piecewise quartic, and each piece is integrated in
+        closed form.
+
+        See Also
+        --------
+        Sequence.calculate_kspace : the trajectory the echo positions come from.
+        """
+        first, last = self._window_for(time_range)
+        window = self._upstream_window(first, last)
+
+        channels = window.waveforms()
+        pulses = self._rf_times_of(window, 0.0)
+        excitations = np.sort(pulses.of("excitation", "undefined").t)
+        refocusings = np.sort(pulses.of("refocusing").t)
+
+        if n_dummy:
+            excitations = excitations[int(n_dummy) :]
+        if excitations.size == 0:
+            raise ValueError(
+                "calc_moments_btensor(): the window holds no excitation pulse, so there "
+                "is nothing to integrate from. A b-tensor is per excitation."
+            )
+
+        _, echoes = self._echo_centers((first, last))
+        echoes = np.asarray(echoes, dtype=float)
+        echoes = np.sort(echoes[np.isfinite(echoes)])
+
+        ends = np.concatenate((excitations[1:], [self._window_end(channels)]))
+        moments = [order for order, wanted in ((1, calc_m1), (2, calc_m2), (3, calc_m3)) if wanted]
+
+        b_tensor = np.zeros((excitations.size, 3, 3))
+        gradient_moments = {order: np.zeros((excitations.size, 3)) for order in (1, 2, 3)}
+        echo_times = np.full(excitations.size, np.nan)
+
+        for shot, (start, limit) in enumerate(zip(excitations, ends)):
+            echo = self._echo_for(start, limit, echoes, refocusings)
+            echo_times[shot] = echo
+            if not np.isfinite(echo) or echo <= start:
+                continue
+
+            pieces = _gradient_pieces(channels, start, echo, refocusings)
+            if calc_b:
+                b_tensor[shot] = _b_tensor_over(pieces)
+            for order in moments:
+                gradient_moments[order][shot] = _moment_over(pieces, order)
+
+        if compat:
+            return (
+                b_tensor,
+                gradient_moments[1],
+                gradient_moments[2],
+                gradient_moments[3],
+            )
+        return _results.BTensor.of(
+            B=b_tensor,
+            m1=gradient_moments[1],
+            m2=gradient_moments[2],
+            m3=gradient_moments[3],
+            excitation_times=excitations,
+            echo_times=echo_times,
+        )
+
+    @staticmethod
+    def _window_end(channels: list[np.ndarray]) -> float:
+        """The last time any gradient channel carries, seconds."""
+        ends = [channel[0, -1] for channel in channels if channel.shape[1]]
+        return float(max(ends)) if ends else 0.0
+
+    @staticmethod
+    def _echo_for(start: float, limit: float, echoes: np.ndarray, refocusings: np.ndarray) -> float:
+        """When this shot's echo happens.
+
+        The first measured echo centre in the interval, and only if there is
+        none does this fall back to MATLAB's ``2*t_refocusing - t_excitation``
+        -- which is there for a sequence with no ADC at all (a design being
+        checked before its readout is attached), not as an equal alternative.
+        """
+        inside = echoes[(echoes > start) & (echoes <= limit)]
+        if inside.size:
+            return float(inside[0])
+        refocused = refocusings[(refocusings > start) & (refocusings < limit)]
+        if refocused.size:
+            return float(2.0 * refocused[0] - start)
+        return float("nan")
+
+    def check_timing(self, print_errors: bool = False):  # noqa: ARG002 - upstream's signature
+        """Check every block's timing against the raster. Not ported, deliberately.
+
+        The interpreter checks this itself, at predownload, against the
+        scanner's own rasters -- which are the rasters that matter and which a
+        design script can only guess at. Running a second check here would
+        either agree with it, in which case it is noise, or disagree with it,
+        in which case the one that agrees with the hardware is not this one.
+
+        The timing report upstream's own checker produces is still reachable,
+        as part of :meth:`test_report`, which runs upstream's analysis on an
+        upstream sequence.
+        """
+        raise NotImplementedError(
+            "Sequence.check_timing is not ported: the interpreter runs this check at "
+            "predownload against the scanner's own raster times, and a second answer "
+            "here could only be the less authoritative one. test_report() carries "
+            "upstream's timing report if that is what you want."
+        )
 
     def test_report(self) -> str:
-        """A text report on the sequence. Not ported yet; see upstream
-        :meth:`pypulseq.Sequence.sequence.Sequence.test_report`."""
-        raise NotImplementedError(_NOT_PORTED.format(what="test_report"))
+        """Upstream PyPulseq's text report on the sequence.
+
+        Timings, gradient and slew extrema, the k-space extent and the
+        resolution they imply, and upstream's own timing check -- run by
+        upstream's :func:`~pypulseq.Sequence.ext_test_report.ext_test_report`
+        on an upstream sequence built from these blocks, so the report is the
+        one a PyPulseq user recognises rather than a second dialect of it.
+
+        Notes
+        -----
+        The sequence handed over has rotations resolved into its gradients and
+        RF shims spread across the transmit channels, so the extrema reported
+        are the ones the scanner plays. The trajectory inside the report is
+        therefore upstream's; :meth:`calculate_kspace` is the C core's and is
+        the one to quote.
+        """
+        return self._upstream_window(1, self.num_blocks).test_report()
+
+    def calc_rf_power(
+        self,
+        time_range: list[float] | None = None,
+        *,
+        window_duration: float | None = None,
+        compat: bool = True,
+    ):
+        """RF power, energy and RMS amplitude, in Pulseq's relative units.
+
+        Parameters
+        ----------
+        time_range : list of float, optional
+            ``[start, stop]`` in seconds. The whole sequence by default.
+        window_duration : float, optional
+            Report the worst sliding window of this many seconds rather than
+            the average over the whole range -- 10 s and 6 min are the two
+            windows SAR is regulated over. The window is rounded up to whole
+            blocks, so a short window on long blocks over-reports.
+        compat : bool, optional
+            MATLAB's ``(mean_pwr, peak_pwr, rf_rms, total_energy)`` by
+            default. ``False`` returns an :class:`~._results.RfPower`.
+
+        Returns
+        -------
+        tuple or RfPower
+            ``mean_pwr`` in Hz^2, ``peak_pwr`` in Hz^2, ``rf_rms`` in Hz,
+            ``total_energy`` in Hz^2 s -- which is Hz.
+
+        Notes
+        -----
+        **These numbers are relative and are not SAR.** They are amplitudes in
+        Hz, so dividing by ``gamma`` gives Tesla and by ``gamma**2`` gives
+        mT^2 s; the step from there to watts per kilogram runs through the
+        electric field, which depends on the transmit coil and on the subject.
+        MATLAB's ``calcRfPower`` says the same thing at more length. The
+        number the scanner gates on comes from the interpreter's own SAR
+        model, not from here.
+
+        MATLAB integrates each pulse on a fixed 1 us raster, per block. Here
+        the raster is the sequence's own and the integral is done **once per
+        distinct waveform**, not per block and not even per library row:
+        ``|B1|**2`` scales as the square of the row's amplitude, so a
+        variable-flip-angle train of thousands of rows over one shape
+        decompresses that shape once and multiplies. Spreading the result over
+        the blocks is one fancy-index. On a 100 000-block scan that is ~6 ms
+        deduplicated and ~140 ms not, against ~2.9 s for the naive walk.
+
+        **The TR structure is deliberately not used**, though every other
+        analysis here can be asked about one. It would not help: recovering it
+        costs ~100 ms on that same scan -- more than this whole computation --
+        because it serialises the sequence and parses it back, while the RF
+        library is *already* deduplicated across the whole scan, which is the
+        same saving TR folding would offer and a stronger one, since it holds
+        across TRs as well as within them.
+
+        There is one deliberate difference from MATLAB beyond that. MATLAB's
+        sliding window indexes its per-block bookkeeping with an offset on the
+        way in and without one on the way out, so a ``blockRange`` that does
+        not start at block 1 reads the wrong blocks back out of the window.
+        The window here is computed from cumulative sums instead, which has no
+        such index to get wrong.
+        """
+        first, last = self._window_for(time_range)
+        durations = np.asarray(self.block_durations, dtype=float)[first - 1 : last]
+        rf_ids = np.asarray(self.block_events, dtype=np.int64)[first - 1 : last, 0]
+
+        # One integral per distinct *shape*, not per row and certainly not per
+        # block. |B1|**2 scales as the square of the row's amplitude, so a
+        # variable-flip-angle train -- thousands of rows over one waveform --
+        # decompresses that waveform once and multiplies. The lookup itself is
+        # a fancy-index, so nothing walks the blocks in Python.
+        unit: dict[tuple[int, int, int], tuple[float, float]] = {}
+        table = np.zeros((self._native.num_rf() + 1, 2))
+        for rf_id in np.unique(rf_ids[rf_ids > 0]).tolist():
+            row = self._native.rf_row(int(rf_id))
+            key = (int(row[1]), int(row[2]), int(row[3]))
+            if key not in unit:
+                unit[key] = self._rf_power_of(*key)
+            table[rf_id] = np.asarray(unit[key]) * row[0] ** 2
+
+        energies, peaks = table[rf_ids, 0], table[rf_ids, 1]
+
+        total_energy = float(energies.sum())
+        peak_power = float(peaks.max()) if peaks.size else 0.0
+        span = float(durations.sum())
+
+        if window_duration is None:
+            reference, worst_energy = span, total_energy
+        else:
+            reference = float(window_duration)
+            if reference <= 0:
+                raise ValueError(f"window_duration must be positive, not {window_duration!r}")
+            worst_energy = _worst_window(durations, energies, reference)
+
+        # MATLAB keeps a second accumulator for the RMS, but its summand is
+        # `rms**2 * shape_dur`, which *is* the pulse's energy -- so the two
+        # accumulators are the same number and rf_rms is sqrt(mean_pwr).
+        mean_power = worst_energy / reference if reference > 0 else 0.0
+        rf_rms = float(np.sqrt(mean_power))
+
+        if compat:
+            return mean_power, peak_power, rf_rms, total_energy
+        return _results.RfPower(
+            mean_power=mean_power,
+            peak_power=peak_power,
+            rf_rms=rf_rms,
+            total_energy=total_energy,
+            duration=span,
+            window_duration=window_duration,
+        )
+
+    def _rf_power_of(self, magnitude_id: int, phase_id: int, time_id: int) -> tuple[float, float]:
+        """``(energy, peak power)`` for one shape triple at unit amplitude.
+
+        MATLAB's ``mr.calcRfPower``: resample onto the RF raster at sample
+        centres, then sum ``|B1|**2`` times the raster. The complex signal is
+        what gets resampled, not its magnitude, because that is what MATLAB
+        interpolates and the two differ once a pulse carries phase on a
+        non-uniform time raster.
+
+        The row's amplitude does not appear: both outputs scale as its square,
+        which is what lets one shape serve every row that plays it.
+
+        The raster is the **sequence's**, not ``system``'s. A sequence read
+        from a file carries the raster its ``[DEFINITIONS]`` state, which need
+        not be the one this ``Opts`` was built with -- and taking the wrong one
+        stretches or squashes the pulse, so the energy comes out scaled by the
+        ratio of the two.
+        """
+        raster = float(self._native.rf_raster_time)
+        magnitude = _shape(self._native, magnitude_id)
+        count = magnitude.size
+        if count <= 0:
+            return 0.0, 0.0
+
+        signal = magnitude * np.exp(2j * np.pi * _shape(self._native, phase_id))
+        times = _times(self._native, time_id, count, raster)
+        centres = (np.arange(count) + 0.5) * raster
+        squared = np.abs(np.interp(centres, times, signal, left=0.0, right=0.0)) ** 2
+        return float(squared.sum()) * raster, float(squared.max())
 
     def calculate_pns(
         self,
@@ -2011,32 +2466,328 @@ class Sequence:
             self._structure = _Structure(self)
         return self._structure
 
-    def evaluate_labels(self, init: dict | None = None, evolution: str = "none") -> dict:
-        """Label values through the sequence. Not ported yet; see upstream
-        :meth:`pypulseq.Sequence.sequence.Sequence.evaluate_labels`."""
-        raise NotImplementedError(_NOT_PORTED.format(what="evaluate_labels"))
+    def evaluate_labels(
+        self,
+        init: dict | None = None,
+        evolution: str = "none",
+        *,
+        time_range: list[float] | None = None,
+    ) -> dict:
+        """Play the label counters through the sequence and report where they get to.
 
-    def apply_soft_delay(self, **kwargs: object) -> None:
-        """Apply soft-delay values to block durations. Not ported yet; see
-        upstream
-        :meth:`pypulseq.Sequence.sequence.Sequence.apply_soft_delay`."""
-        raise NotImplementedError(_NOT_PORTED.format(what="apply_soft_delay"))
+        Parameters
+        ----------
+        init : dict, optional
+            Starting values, for evaluating a sequence a window at a time.
+            Not modified.
+        evolution : {"none", "blocks", "adc", "label"}, optional
+            What to record. ``"none"``, the default, keeps only the final
+            value of each label. ``"blocks"`` records after every block,
+            ``"adc"`` after every block holding an ADC, and ``"label"`` after
+            every block that touches a label.
+        time_range : list of float, optional
+            ``[start, stop]`` in seconds, to evaluate part of the sequence.
+            MATLAB's ``evalLabels`` takes a block range here and PyPulseq
+            carries a ``TODO`` about wanting one; a time window is what every
+            other method on this class takes.
+
+        Returns
+        -------
+        dict
+            Label name to its final value, or to an array of its values under
+            an ``evolution``. Only labels the sequence actually uses appear.
+
+        Notes
+        -----
+        Upstream's semantics, on this class's blocks -- including that a label
+        first seen by an ``INC`` starts from zero, and that a label evolution
+        reports ``0`` for blocks before the label was first touched.
+
+        The one place this can differ from upstream is a block that both
+        ``SET``s and ``INC``s the *same* counter: the operations are applied in
+        the order the block plays them, read off the extension chain, rather
+        than sets-then-increments.
+        """
+        if evolution not in ("none", "blocks", "adc", "label"):
+            raise ValueError(
+                "evaluate_labels(): evolution must be 'none', 'blocks', 'adc' or 'label', "
+                f"not {evolution!r}"
+            )
+
+        first, last = self._window_for(time_range)
+        labels: dict[str, float] = dict(init or {})
+        evolutions: list[dict] = []
+
+        for index in range(first, last + 1):
+            block = self.get_block(index)
+            if block.labels:
+                for kind, name, value in block.labels:
+                    if kind == "SET":
+                        labels[name] = value
+                    else:
+                        labels[name] = labels.get(name, 0) + value
+                if evolution == "label":
+                    evolutions.append(dict(labels))
+
+            if evolution == "blocks" or (evolution == "adc" and block.adc is not None):
+                evolutions.append(dict(labels))
+
+        if evolutions:
+            return {
+                name: np.array([step.get(name, 0) for step in evolutions]) for name in labels
+            }
+        return labels
+
+    def apply_soft_delay(self, **kwargs: float) -> None:
+        """Set named soft delays, rewriting the block durations that carry them.
+
+        Each block holding a soft delay named in ``kwargs`` gets the duration
+        ``value / factor + offset``, rounded to the block-duration raster.
+
+        Parameters
+        ----------
+        **kwargs
+            Soft-delay hints and their values in seconds -- ``TE=40e-3``. Only
+            the delays named are touched; the sequence may hold others.
+
+        Raises
+        ------
+        ValueError
+            If a named hint is not in the sequence, if a hint and a numeric ID
+            disagree with an earlier block's pairing of the two, or if a value
+            works out to a negative duration.
+
+        Notes
+        -----
+        Upstream's arithmetic and upstream's diagnostics, on this class's
+        blocks. A soft delay is a *design-time* parameter -- the sequence
+        arrives at the scanner with its durations already resolved -- so this
+        is for a script that builds one sequence and writes several timings of
+        it, not for anything on the interpreter's path.
+
+        See Also
+        --------
+        get_default_soft_delay_values : the values already in the blocks.
+        """
+        raster = float(self.system.block_duration_raster)
+        seen: dict[str, int] = {}
+        warned: set[int] = set()
+
+        for index in range(1, self.num_blocks + 1):
+            delay = getattr(self.get_block(index), "soft_delay", None)
+            if delay is None:
+                continue
+
+            self._check_soft_delay_consistency(delay, index, seen)
+            if delay.hint not in kwargs:
+                continue
+
+            exact = float(kwargs[delay.hint]) / delay.factor + delay.offset
+            rounded = round(exact / raster) * raster
+            if abs(rounded - exact) > 0.5e-6 and delay.numID not in warned:
+                warnings.warn(
+                    f"Soft delay '{delay.hint}' in block {index}: duration rounded by "
+                    f"{abs(rounded - exact) * 1e6:.1f} us to align with the block raster "
+                    f"({raster * 1e6:.1f} us). Reported once per soft delay.",
+                    stacklevel=2,
+                )
+                warned.add(delay.numID)
+            if rounded < 0:
+                raise ValueError(
+                    f"Soft delay '{delay.hint}' in block {index}: the value works out to a "
+                    f"negative duration ({rounded * 1e6:.1f} us). Check the offset "
+                    f"({delay.offset * 1e6:.1f} us) and factor ({delay.factor})."
+                )
+            self._native.set_block_duration(index, rounded)
+
+        unknown = [hint for hint in kwargs if hint not in seen]
+        if unknown:
+            available = sorted(seen) or ["none"]
+            raise ValueError(
+                f"apply_soft_delay(): {unknown} not in the sequence. "
+                f"Available soft delays: {available}"
+            )
+        self._touch()
+
+    def get_default_soft_delay_values(self) -> tuple[dict, list[str]]:
+        """The soft-delay values the sequence was built with, and what is wrong.
+
+        Returns
+        -------
+        values : dict
+            Hint to the delay value in seconds implied by the block durations
+            as they stand -- ``(duration - offset) * factor``, the inverse of
+            what :meth:`apply_soft_delay` writes. This is what a user
+            interface offers as the starting point of each slider.
+        report : list of str
+            One line per inconsistency found. Empty when the sequence is sound.
+
+        Notes
+        -----
+        MATLAB's ``getDefaultSoftDelayValues``, which PyPulseq has no
+        equivalent of. Two of its three outputs: the ``softDelayState`` cell
+        array is MATLAB's intermediate, and its ``min``/``max`` are carried on
+        the dict's values here instead --- each is a
+        :class:`~._results.SoftDelay`, whose ``value`` is what the mapping
+        compares and prints, so the dict reads as MATLAB's ``easyStruct``
+        while still carrying the range the delay may be set over.
+
+        The limits come from the duration reaching zero, which is the only
+        bound the sequence itself states; a delay that would collide with the
+        events inside its block is not caught here, and is not caught by
+        MATLAB either.
+        """
+        report: list[str] = []
+        seen: dict[str, int] = {}
+        state: dict[int, dict] = {}
+
+        for index in range(1, self.num_blocks + 1):
+            delay = getattr(self.get_block(index), "soft_delay", None)
+            if delay is None:
+                continue
+
+            if delay.numID < 0:
+                report.append(f"Block {index}: soft delay '{delay.hint}' has a negative numeric ID")
+                continue
+            if delay.factor == 0:
+                report.append(
+                    f"Block {index}: soft delay '{delay.hint}'/{delay.numID} has factor 0"
+                )
+                continue
+            try:
+                self._check_soft_delay_consistency(delay, index, seen)
+            except ValueError as problem:
+                report.append(str(problem))
+
+            default = (float(self.block_durations[index - 1]) - delay.offset) * delay.factor
+            # A duration of zero is the only limit the sequence itself states;
+            # which side of the range it is depends on the sign of the factor.
+            limit = -delay.offset * delay.factor
+            held = state.get(delay.numID)
+            if held is None:
+                state[delay.numID] = {
+                    "hint": delay.hint,
+                    "value": default,
+                    "block": index,
+                    "minimum": limit if delay.factor > 0 else 0.0,
+                    "maximum": np.inf if delay.factor > 0 else limit,
+                }
+                continue
+
+            if abs(default - held["value"]) > 1e-7:
+                report.append(
+                    f"Block {index}: soft delay '{delay.hint}'/{delay.numID} implies "
+                    f"{default * 1e6:.1f} us, against {held['value'] * 1e6:.1f} us from block "
+                    f"{held['block']}"
+                )
+            if delay.factor > 0:
+                held["minimum"] = max(held["minimum"], limit)
+            else:
+                held["maximum"] = min(held["maximum"], limit)
+
+        values: dict[str, _results.SoftDelay] = {}
+        for numeric in sorted(state):
+            held = state[numeric]
+            values[held["hint"]] = _results.SoftDelay(
+                hint=held["hint"],
+                numeric_id=numeric,
+                value=held["value"],
+                minimum=held["minimum"],
+                maximum=held["maximum"],
+            )
+        return values, report
+
+    @staticmethod
+    def _check_soft_delay_consistency(delay, index: int, seen: dict[str, int]) -> None:
+        """One hint means one numeric ID and back, across the whole sequence."""
+        known = seen.setdefault(delay.hint, delay.numID)
+        if known != delay.numID:
+            raise ValueError(
+                f"Block {index}: soft delay '{delay.hint}' has numeric ID {delay.numID}, "
+                f"against {known} where the same hint appeared before"
+            )
+        for hint, numeric in seen.items():
+            if numeric == delay.numID and hint != delay.hint:
+                raise ValueError(
+                    f"Block {index}: soft delay numeric ID {delay.numID} is called "
+                    f"'{delay.hint}' here and '{hint}' earlier"
+                )
 
     def flip_grad_axis(self, axis: str) -> None:
-        """Invert every gradient on ``axis``. Not ported yet; see upstream
-        :meth:`pypulseq.Sequence.sequence.Sequence.flip_grad_axis`."""
-        raise NotImplementedError(_NOT_PORTED.format(what="flip_grad_axis"))
+        """Invert every gradient on ``axis``, in place.
+
+        ``mod_grad_axis(axis, -1)``, which is what upstream's own implementation
+        does too.
+        """
+        self.mod_grad_axis(axis, -1.0)
 
     def mod_grad_axis(self, axis: str, modifier: float) -> None:
-        """Scale every gradient on ``axis``. Not ported yet; see upstream
-        :meth:`pypulseq.Sequence.sequence.Sequence.mod_grad_axis`."""
-        raise NotImplementedError(_NOT_PORTED.format(what="mod_grad_axis"))
+        """Scale every gradient on ``axis`` by ``modifier``, in place.
 
-    def find_block_by_time(self, t: float) -> int:
-        """The index of the block containing time ``t``. Not ported yet; see
-        upstream
-        :meth:`pypulseq.Sequence.sequence.Sequence.find_block_by_time`."""
-        raise NotImplementedError(_NOT_PORTED.format(what="find_block_by_time"))
+        Runs on the same C++ path :class:`~pulserver.pypulseq.TransformFOV`
+        uses for its ``scale``: a gradient is stored as a normalised shape
+        beside a scalar amplitude, so scaling an axis multiplies one number per
+        row and touches no waveform. The cost is the number of distinct
+        gradients, not the length of the scan.
+
+        Unlike upstream's, this does not refuse a sequence whose gradients are
+        shared between axes -- there is no such sharing here, because an
+        amplitude belongs to the row rather than to the shape.
+        """
+        if axis not in ("x", "y", "z"):
+            raise ValueError(f"axis must be 'x', 'y' or 'z', not {axis!r}")
+        factors = [1.0, 1.0, 1.0]
+        factors["xyz".index(axis)] = float(modifier)
+        self._native.apply_fov_scale(*factors)
+        self._touch()
+
+    def copy_definitions(self, other: Sequence) -> None:
+        """Replace this sequence's definitions with another's.
+
+        MATLAB's ``copyDefinitions``; PyPulseq has no equivalent.
+        """
+        self._definitions = dict(other.definitions)
+        self._touch()
+
+    def sound(self, *args: object, **kwargs: object):
+        """Play the sequence through the speaker. Not ported, deliberately.
+
+        MATLAB's ``sound()`` renders the gradient waveforms as audio so a human
+        can listen for something wrong. The rigorous version of that question
+        is :meth:`calculate_gradient_spectrum` with ``resonance_lines=True``,
+        which answers it against the scanner's own forbidden bands instead of
+        against an ear.
+        """
+        raise NotImplementedError(
+            "Sequence.sound is MATLAB's acoustic preview and is not ported -- use "
+            "calculate_gradient_spectrum(tr=..., resonance_lines=True) for the "
+            "measured version of the same question."
+        )
+
+    def find_block_by_time(self, t: float) -> int | None:
+        """The 1-based index of the block being played at time ``t`` seconds.
+
+        ``None`` when ``t`` falls outside the sequence, which is what upstream
+        documents.
+
+        The public face of the search every ``time_range`` argument already
+        runs -- :meth:`_blocks_over` is the same ``searchsorted`` over the
+        cumulative block durations, and is what the analysis methods use.
+
+        Notes
+        -----
+        **This deliberately does not reproduce upstream's answer, which is
+        wrong.** ``pypulseq.Sequence.find_block_by_time`` returns the result of
+        a zero-based ``searchsorted`` and then indexes a one-based dictionary
+        with it, so it is off by one everywhere and raises ``KeyError: 0`` for
+        any time inside the *first* block. There is no ``compat`` flag here
+        because there is nothing worth being compatible with.
+        """
+        moment = float(t)
+        edges = np.concatenate(([0.0], np.cumsum(self._native.block_durations())))
+        if edges.size < 2 or moment < 0.0 or moment >= edges[-1]:
+            return None
+        return int(np.searchsorted(edges, moment, side="right"))
 
     def install(self, target: str | None = None, clear_cache: bool = False, **kwargs) -> None:
         """Copy the sequence to a scanner. Not ported; see upstream
@@ -2236,6 +2987,35 @@ class Sequence:
         return carrier.rf_from_lib_data(lib_data, use)
 
     # -- internals -------------------------------------------------------
+
+    def _segment_blocks(self, segment_idx: int) -> tuple[int, int]:
+        """Segment ``segment_idx`` as a 1-based inclusive block range.
+
+        The blocks the C core reports are its **highest-energy** instance --
+        ``pulseg_get_subseq_segment_block_indices`` resolves them through the
+        execution stream when it can -- so this names the repetition the safety
+        checks were run against, not the first one played.
+        """
+        segments = self._structure_for("plot").segments
+        index = int(segment_idx)
+        if not 0 <= index < len(segments):
+            raise ValueError(
+                f"segment_idx={index} is out of range; the sequence holds "
+                f"{len(segments)} segments"
+            )
+
+        indices = [int(value) for value in segments[index]["block_indices"]]
+        if not indices:
+            raise ValueError(f"segment_idx={index} reports no blocks")
+        # The core hands back a run, and a plot is a window over a timeline;
+        # a hypothetical gapped segment would have to be drawn as pieces, and
+        # silently drawing its hull instead would be a lie about the picture.
+        if indices != list(range(indices[0], indices[0] + len(indices))):
+            raise NotImplementedError(
+                f"segment {index} is not a contiguous run of blocks ({indices[:8]}...), "
+                "which plot() has no way to draw as one window"
+            )
+        return indices[0] + 1, indices[-1] + 1
 
     def _blocks_over(self, start: float, stop: float) -> tuple[int, int]:
         """The blocks overlapping ``start..stop`` seconds, 1-based inclusive."""
@@ -2498,6 +3278,143 @@ class _Structure:
         return _safety.AMPLITUDE_MODES["actual"], index
 
 
+class _Pieces:
+    """One shot's gradients as straight-line pieces, refocusing folded in.
+
+    ``offsets`` and ``widths`` locate each piece relative to the excitation;
+    ``start`` and ``slope`` are its gradient in Hz/m and Hz/m/s. Between two
+    nodes each channel is a single straight line, which is what lets the
+    integrals below be closed-form rather than sampled.
+
+    **The sign belongs to the piece, not to the node.** A refocusing pulse
+    inverts the phase accumulated so far, which is the same as inverting every
+    gradient after it -- but the node *at* the pulse is the end of one piece
+    and the start of the next, and those two want opposite signs. So the flip
+    is counted per piece, from its own start time, and the sign multiplies
+    both of that piece's endpoints. Every refocusing instant is forced into
+    the grid, so no piece ever straddles one.
+
+    The flip happens at *every* refocusing pulse rather than only the first,
+    which is the same answer for a Stejskal-Tanner pair and the right one for
+    a twice-refocused sequence -- where MATLAB's single flip is wrong, and
+    says so in its own ``TODO``.
+    """
+
+    __slots__ = ("offsets", "widths", "start", "slope")
+
+    def __init__(self, times: np.ndarray, gradients: np.ndarray, flips: np.ndarray) -> None:
+        widths = np.diff(times)
+        keep = widths > 0
+        self.widths = widths[keep]
+        self.offsets = (times[:-1] - times[0])[keep]
+
+        signs = ((-1.0) ** np.searchsorted(flips, times[:-1], side="right"))[keep, None]
+        first = gradients[:-1][keep] * signs
+        last = gradients[1:][keep] * signs
+        self.start = first
+        self.slope = np.divide(
+            last - first, self.widths[:, None], out=np.zeros_like(first), where=self.widths[:, None] > 0
+        )
+
+    def __len__(self) -> int:
+        return int(self.widths.size)
+
+
+def _gradient_pieces(
+    channels: list[np.ndarray], start: float, stop: float, refocusings: np.ndarray
+) -> _Pieces:
+    """The three gradients over ``start..stop`` as :class:`_Pieces`.
+
+    The grid is the union of every channel's own nodes with the interval ends
+    and the refocusing instants.
+    """
+    inside = refocusings[(refocusings > start) & (refocusings < stop)]
+    nodes = [np.array([start, stop], dtype=float), inside]
+    for channel in channels[:3]:
+        if channel.shape[1]:
+            nodes.append(channel[0])
+
+    times = np.unique(np.concatenate(nodes))
+    times = times[(times >= start) & (times <= stop)]
+
+    gradients = np.zeros((times.size, 3))
+    for axis, channel in enumerate(channels[:3]):
+        if channel.shape[1]:
+            gradients[:, axis] = np.interp(times, channel[0], channel[1], left=0.0, right=0.0)
+    return _Pieces(times, gradients, inside)
+
+
+def _b_tensor_over(pieces: _Pieces) -> np.ndarray:
+    """``(3, 3)`` of ``integral q_i q_j dt`` in s/m^2, exactly.
+
+    ``q = 2*pi*integral g dt`` in rad/m. A Pulseq gradient is piecewise
+    linear, so ``q`` is piecewise quadratic and the product of two of its
+    components is a quartic -- integrated in closed form per piece rather than
+    sampled, which is what makes the answer independent of any raster.
+    """
+    if not len(pieces):
+        return np.zeros((3, 3))
+
+    widths = pieces.widths
+    # q(tau) = q0 + 2*pi*(a*tau + b*tau**2/2), as coefficients in tau.
+    increments = 2 * np.pi * (
+        pieces.start * widths[:, None] + 0.5 * pieces.slope * widths[:, None] ** 2
+    )
+    origins = np.zeros_like(increments)
+    origins[1:] = np.cumsum(increments, axis=0)[:-1]
+    coefficients = np.stack(
+        (origins, 2 * np.pi * pieces.start, np.pi * pieces.slope), axis=-1
+    )  # (n, 3, 3)
+
+    # The integral of tau**(p+q) over a piece, as a weight per coefficient pair.
+    powers = np.arange(3)
+    orders = powers[:, None] + powers[None, :] + 1
+    weights = widths[:, None, None] ** orders / orders
+    return np.einsum("nip,njq,npq->ij", coefficients, coefficients, weights)
+
+
+def _moment_over(pieces: _Pieces, order: int) -> np.ndarray:
+    """``2*pi*integral g(t) * (t - t0)**order dt`` per axis, exactly.
+
+    Units are rad/m times seconds to the ``order``. The weight is measured
+    from the excitation, which is where MATLAB measures it from.
+    """
+    from math import comb
+
+    if not len(pieces):
+        return np.zeros(3)
+
+    total = np.zeros(3)
+    for power in range(order + 1):
+        # (offset + tau)**order expanded, times the piece's own (a + b*tau).
+        weight = comb(order, power) * pieces.offsets ** (order - power)
+        for degree, coefficient in ((power, pieces.start), (power + 1, pieces.slope)):
+            total += weight * pieces.widths ** (degree + 1) / (degree + 1) @ coefficient
+    return 2 * np.pi * total
+
+
+def _worst_window(durations: np.ndarray, values: np.ndarray, width: float) -> float:
+    """The largest sum of ``values`` over any window of at most ``width`` seconds.
+
+    MATLAB grows the window by one block and then trims from the front while
+    it is too wide, taking its maximum *before* the trim -- so the window that
+    wins may be up to one block wider than asked for, which is its documented
+    "rounded up to a certain number of complete blocks". Reproduced here as
+    two cumulative sums and a search rather than a loop, which is the same
+    answer without MATLAB's index bug (see :meth:`Sequence.calc_rf_power`).
+    """
+    if values.size == 0:
+        return 0.0
+
+    elapsed = np.concatenate(([0.0], np.cumsum(durations)))
+    accumulated = np.concatenate(([0.0], np.cumsum(values)))
+    # Window entering block i spans blocks `start(i)..i`, where start is the
+    # front the trim left after block i-1: the earliest block whose tail is
+    # still within `width` of the end of block i-1.
+    starts = np.searchsorted(elapsed, elapsed[:-1] - width, side="left")
+    return float((accumulated[1:] - accumulated[starts]).max())
+
+
 def _rf_use(rf: SimpleNamespace) -> str:
     """One decoded RF pulse's use tag, as one of :data:`~._results.RF_USES`.
 
@@ -2711,9 +3628,11 @@ def _decode_extensions(native, head: int, block: SimpleNamespace) -> None:
         elif name == "LABELSET":
             value, label_id = native.label_set_row(reference)
             block.label_sets.append((native.label_name(label_id), value))
+            block.labels.append(("SET", native.label_name(label_id), value))
         elif name == "LABELINC":
             value, label_id = native.label_inc_row(reference)
             block.label_incs.append((native.label_name(label_id), value))
+            block.labels.append(("INC", native.label_name(label_id), value))
         elif name == "ROTATIONS":
             block.rotation = native.rotation_row(reference)
         elif name == "RF_SHIMS":

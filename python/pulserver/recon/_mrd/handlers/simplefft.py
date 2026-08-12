@@ -1,139 +1,81 @@
-"""Private simple 2D FFT reconstruction handler.
+"""Private Cartesian FFT reconstruction app returning MRD images."""
 
-Accumulates k-space lines per slice, applies 2D IFFT + root-sum-of-squares
-coil combination, and sends back ISMRMRD images.
-"""
+from __future__ import annotations
 
-import ctypes
-import logging
-from collections.abc import Generator, Iterator
-from typing import Any
+__all__ = ["PLUGIN", "SimpleFftRecon"]
 
-import ismrmrd
 import numpy as np
 import numpy.fft as fft
 
+from ...app import AcquisitionBucket, ReconApp, ReconContext, ReconResult
 from .. import mrdhelper
 
 
-def process(connection: Any, config: Any, metadata: Any) -> None:
-    """Run simple 2D FFT reconstruction.
+class SimpleFftRecon(ReconApp):
+    """Reconstruct one Cartesian slice whenever its final line arrives."""
 
-    Parameters
-    ----------
-    connection : Connection
-        Active MRD connection yielding ``ismrmrd.Acquisition`` items.
-    config : Any
-        Configuration dict/string from the CONFIG message.
-    metadata : Any
-        Parsed ISMRMRD XML header (``ismrmrd.xsd`` object or raw text).
-    """
-    logging.info("simplefft handler — config: %s", config)
+    def __init__(self) -> None:
+        super().__init__(
+            split_on="ACQ_LAST_IN_SLICE",
+            reject_flags=(
+                "ACQ_IS_NOISE_MEASUREMENT",
+                "ACQ_IS_PHASECORR_DATA",
+            ),
+        )
 
-    for group in _conditional_groups(
-        connection,
-        accept=lambda acq: not acq.is_flag_set(ismrmrd.ACQ_IS_PHASECORR_DATA),
-        finish=lambda acq: acq.is_flag_set(ismrmrd.ACQ_LAST_IN_SLICE),
-    ):
-        image = _reconstruct(group, metadata)
-        if image is not None:
-            connection.send(image)
-
-
-# ------------------------------------------------------------------
-# Helpers
-# ------------------------------------------------------------------
-
-
-def _conditional_groups(
-    iterable: Iterator[Any],
-    accept: Any,
-    finish: Any,
-) -> Generator[list[ismrmrd.Acquisition], None, None]:
-    """Yield groups of acquisitions accepted by *accept*, split on *finish*."""
-    group: list[ismrmrd.Acquisition] = []
-    try:
-        for item in iterable:
-            if item is None:
-                break
-            if accept(item):
-                group.append(item)
-            if finish(item):
-                yield group
-                group = []
-    finally:
-        from .. import constants
-
-        end = constants.GadgetMessageIdentifier.pack(constants.GADGET_MESSAGE_CLOSE)
-        iterable.socket.write(end)
+    def reconstruct(
+        self,
+        bucket: AcquisitionBucket,
+        context: ReconContext,
+    ) -> ReconResult | None:
+        """Apply a two-dimensional IFFT and root-sum-of-squares combine."""
+        if not bucket.data:
+            return None
+        data = _reconstruct(bucket, context.header)
+        return ReconResult(
+            data.transpose(),
+            attributes={
+                "ImageProcessingHistory": ["PULSERVER", "PYTHON", "FFT"],
+                "WindowCenter": str((_max_value(context.header) + 1) // 2),
+                "WindowWidth": str(_max_value(context.header) + 1),
+            },
+        )
 
 
-def _reconstruct(
-    group: list[ismrmrd.Acquisition], metadata: Any
-) -> ismrmrd.Image | None:
-    """Reconstruct a single-slice image from a group of readouts.
+PLUGIN = SimpleFftRecon()
 
-    Parameters
-    ----------
-    group : list[ismrmrd.Acquisition]
-        Readout lines for one slice.
-    metadata : Any
-        Parsed ISMRMRD XML header.
 
-    Returns
-    -------
-    ismrmrd.Image or None
-        Reconstructed image, or ``None`` if *group* is empty.
-    """
-    if not group:
-        return None
+# %% private module subroutines
 
-    logging.info("Reconstructing group of %d readouts", len(group))
 
-    # Stack: [cha, RO, PE]
-    data = np.stack([acq.data for acq in group], axis=-1)
-
-    # 2D IFFT
+def _reconstruct(bucket: AcquisitionBucket, header) -> np.ndarray:
+    data = np.stack([acquisition.data for acquisition in bucket.data], axis=-1)
     data = fft.fftshift(data, axes=(1, 2))
     data = fft.ifft2(data, axes=(1, 2))
     data = fft.ifftshift(data, axes=(1, 2))
-
-    # Root-sum-of-squares coil combination
     data = np.sqrt(np.sum(np.abs(data) ** 2, axis=0))
 
-    # Bit depth
-    bits = mrdhelper.get_userParameterLong_value(metadata, "BitsStored") or 12
-    max_val = 2**bits - 1
-    data *= max_val / data.max()
+    maximum = float(data.max(initial=0.0))
+    if maximum > 0.0:
+        data *= _max_value(header) / maximum
     data = np.around(data).astype(np.int16)
 
-    # Crop readout oversampling
-    enc = metadata.encoding[0]
-    if enc.reconSpace.matrixSize.x:
-        off = (data.shape[0] - enc.reconSpace.matrixSize.x) // 2
-        data = data[off : off + enc.reconSpace.matrixSize.x, :]
-    if enc.reconSpace.matrixSize.y:
-        off = (data.shape[1] - enc.reconSpace.matrixSize.y) // 2
-        data = data[:, off : off + enc.reconSpace.matrixSize.y]
+    encoding = header.encoding[0]
+    target_x = int(encoding.reconSpace.matrixSize.x or data.shape[0])
+    target_y = int(encoding.reconSpace.matrixSize.y or data.shape[1])
+    data = _center_crop(data, target_x, axis=0)
+    return _center_crop(data, target_y, axis=1)
 
-    # Build ISMRMRD Image
-    image = ismrmrd.Image.from_array(
-        data.transpose(), acquisition=group[0], transpose=False
-    )
-    image.image_index = 1
-    image.field_of_view = (
-        ctypes.c_float(enc.reconSpace.fieldOfView_mm.x),
-        ctypes.c_float(enc.reconSpace.fieldOfView_mm.y),
-        ctypes.c_float(enc.reconSpace.fieldOfView_mm.z),
-    )
 
-    meta = ismrmrd.Meta(
-        {
-            "DataRole": "Image",
-            "ImageProcessingHistory": ["FIRE", "PYTHON"],
-            "WindowCenter": str((max_val + 1) // 2),
-            "WindowWidth": str(max_val + 1),
-        }
-    )
-    image.attribute_string = meta.serialize()
-    return image
+def _max_value(header) -> int:
+    bits = mrdhelper.get_userParameterLong_value(header, "BitsStored") or 12
+    return 2 ** int(bits) - 1
+
+
+def _center_crop(data: np.ndarray, size: int, *, axis: int) -> np.ndarray:
+    if size >= data.shape[axis]:
+        return data
+    start = (data.shape[axis] - size) // 2
+    selection = [slice(None)] * data.ndim
+    selection[axis] = slice(start, start + size)
+    return data[tuple(selection)]

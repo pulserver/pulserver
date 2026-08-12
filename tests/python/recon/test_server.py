@@ -1,140 +1,101 @@
-"""Tests for private MRD server handler resolution."""
+"""Tests for private MRD reconstruction-app resolution."""
+
+from __future__ import annotations
 
 import sys
 import types
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
-from pulserver.recon._mrd.server import Server, _NullHandler
-
-# ---------------------------------------------------------------------------
-# Handler resolution
-# ---------------------------------------------------------------------------
+from pulserver import ReconApp
+from pulserver.recon._mrd.server import Server, _NullApp
 
 
-def test_resolve_handler_from_importable_module():
-    """A config that matches an importable module with process() is loaded."""
-    fake_module = types.ModuleType("fake_handler")
-    fake_module.process = lambda _conn, _cfg, _meta: None
+class _TestApp(ReconApp):
+    def reconstruct(self, bucket, context):
+        del bucket, context
 
+
+def _module(name: str) -> types.ModuleType:
+    module = types.ModuleType(name)
+    module.PLUGIN = _TestApp()
+    return module
+
+
+def _server() -> Server:
     server = Server.__new__(Server)
     server.default_handler = "savedataonly"
     server.handler_dirs = []
-
-    with patch.dict(sys.modules, {"fake_handler": fake_module}):
-        result = server._resolve_handler("fake_handler")
-    assert result is fake_module
+    return server
 
 
-def test_resolve_handler_from_private_built_in_package():
-    """Bundled handlers remain available after moving behind the private API."""
-    server = Server.__new__(Server)
-    server.default_handler = "savedataonly"
-    server.handler_dirs = []
-
-    result = server._resolve_handler("simplefft")
-
-    assert result.__name__ == "pulserver.recon._mrd.handlers.simplefft"
-    assert callable(result.process)
+def test_resolve_app_from_importable_module():
+    module = _module("fake_recon")
+    with patch.dict(sys.modules, {"fake_recon": module}):
+        result = _server()._resolve_app("fake_recon")
+    assert result is module.PLUGIN
 
 
-def test_resolve_handler_fallback_to_default():
-    """Unknown config falls back to default_handler."""
-    fake_default = types.ModuleType("my_default")
-    fake_default.process = lambda _conn, _cfg, _meta: None
+def test_resolve_app_from_private_built_in_package():
+    result = _server()._resolve_app("simplefft")
+    assert isinstance(result, ReconApp)
+    assert type(result).__name__ == "SimpleFftRecon"
 
-    server = Server.__new__(Server)
+
+def test_resolve_app_falls_back_to_default():
+    module = _module("my_default")
+    server = _server()
     server.default_handler = "my_default"
-    server.handler_dirs = []
-
-    with patch.dict(sys.modules, {"my_default": fake_default}):
-        result = server._resolve_handler("nonexistent_module_xyz")
-    assert result is fake_default
+    with patch.dict(sys.modules, {"my_default": module}):
+        result = server._resolve_app("missing_recon_module")
+    assert result is module.PLUGIN
 
 
-def test_resolve_handler_null_config():
-    """Config 'null' goes directly to default handler."""
-    fake_default = types.ModuleType("savedataonly")
-    fake_default.process = lambda _conn, _cfg, _meta: None
-
-    server = Server.__new__(Server)
-    server.default_handler = "savedataonly"
-    server.handler_dirs = []
-
-    with patch.dict(sys.modules, {"savedataonly": fake_default}):
-        result = server._resolve_handler("null")
-    assert result is fake_default
+def test_null_config_uses_default_app():
+    result = _server()._resolve_app("null")
+    assert type(result).__name__ == "SaveDataOnly"
 
 
-def test_resolve_handler_from_handler_dir(tmp_path):
-    """Resolves a handler from a .py file in handler_dirs."""
-    handler_file = tmp_path / "custom_recon.py"
-    handler_file.write_text("def process(connection, config, metadata):\n    pass\n")
-
-    server = Server.__new__(Server)
-    server.default_handler = "savedataonly"
+def test_resolve_app_from_handler_dir(tmp_path):
+    plugin_file = tmp_path / "custom_recon.py"
+    plugin_file.write_text(
+        "from pulserver import ReconApp\n"
+        "class CustomRecon(ReconApp):\n"
+        "    def reconstruct(self, bucket, context):\n"
+        "        return None\n"
+        "PLUGIN = CustomRecon()\n"
+    )
+    server = _server()
     server.handler_dirs = [str(tmp_path)]
 
-    result = server._resolve_handler("custom_recon")
-    assert hasattr(result, "process")
-    assert result.__name__ == "custom_recon"
+    result = server._resolve_app("custom_recon.py")
+
+    assert isinstance(result, ReconApp)
+    assert type(result).__name__ == "CustomRecon"
 
 
-def test_resolve_handler_file_without_process_skipped(tmp_path):
-    """A .py file without process() is skipped."""
-    handler_file = tmp_path / "bad_handler.py"
-    handler_file.write_text("x = 42\n")
-
-    fake_default = types.ModuleType("savedataonly")
-    fake_default.process = lambda _conn, _cfg, _meta: None
-
-    server = Server.__new__(Server)
-    server.default_handler = "savedataonly"
+def test_file_without_plugin_is_skipped(tmp_path):
+    plugin_file = tmp_path / "bad_recon.py"
+    plugin_file.write_text("value = 42\n")
+    server = _server()
     server.handler_dirs = [str(tmp_path)]
 
-    with patch.dict(sys.modules, {"savedataonly": fake_default}):
-        result = server._resolve_handler("bad_handler")
-    assert result is fake_default
+    result = server._resolve_app("bad_recon")
+
+    assert type(result).__name__ == "SaveDataOnly"
 
 
-def test_resolve_handler_ultimate_fallback():
-    """When nothing resolves—even default—returns _NullHandler."""
-    server = Server.__new__(Server)
-    server.default_handler = "totally_missing_module"
-    server.handler_dirs = []
-
-    result = server._resolve_handler("also_missing")
-    assert result is _NullHandler
+def test_missing_app_and_default_use_null_app():
+    server = _server()
+    server.default_handler = "missing_default_recon"
+    result = server._resolve_app("also_missing")
+    assert isinstance(result, _NullApp)
 
 
-# ---------------------------------------------------------------------------
-# _NullHandler
-# ---------------------------------------------------------------------------
-
-
-def test_null_handler_has_process():
-    assert hasattr(_NullHandler, "process")
-    assert callable(_NullHandler.process)
-
-
-def test_null_handler_drains_connection():
-    mock_conn = MagicMock()
-    mock_conn.__iter__ = MagicMock(return_value=iter([1, 2, 3]))
-    mock_conn.socket = MagicMock()
-
-    _NullHandler.process(mock_conn, "null", None)
-    mock_conn.socket.write.assert_called_once()
-
-
-# ---------------------------------------------------------------------------
-# Server.__init__
-# ---------------------------------------------------------------------------
-
-
-def test_server_init_binds_socket():
-    """Server.__init__ should bind to a port without error."""
-    server = Server(host="127.0.0.1", port=0)  # port=0 → OS picks a free port
-    # Check that the socket is bound
-    addr = server._socket.getsockname()
-    assert addr[0] == "127.0.0.1"
-    assert addr[1] > 0
+def test_server_init_owns_exam_cache_and_binds_socket():
+    server = Server(host="127.0.0.1", port=0)
+    address = server._socket.getsockname()
+    assert address[0] == "127.0.0.1"
+    assert address[1] > 0
+    assert server._exam_caches.current_exam_id is None
+    server._exam_caches.close()
     server._socket.close()

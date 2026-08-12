@@ -39,10 +39,13 @@ from ._opts import Opts as _Opts
 from ._sequence import Sequence as _Sequence
 from ._results import (
     AdcTimes as _AdcTimes,
+    BTensor as _BTensor,
     GradientSpectrum as _GradientSpectrum,
     KSpace as _KSpace,
     Pns as _Pns,
+    RfPower as _RfPower,
     RfTimes as _RfTimes,
+    SoftDelay as _SoftDelay,
     Waveforms as _Waveforms,
     WaveformsAndTimes as _WaveformsAndTimes,
 )
@@ -59,18 +62,41 @@ _EXCLUDED_UPSTREAM = {
     "make_adiabatic_pulse",
 }
 
+#: Upstream callables that must not be wrapped: they take or return no event,
+#: and wrapping a class would replace its constructor with a plain function.
+_UNWRAPPED_UPSTREAM = {"SigpyPulseOpts"}
+
+# Upstream's own imports -- ``np``, ``math``, ``importlib``, the submodules its
+# ``__init__`` happens to touch -- come across too. They are noise in a plugin's
+# namespace, but ``import pulserver.pypulseq as pp`` promises to cover
+# everything ``import pypulseq as pp`` would, and a contract test holds us to
+# it. Completeness wins over tidiness; that is what drop-in means.
 for _name in dir(_pypulseq):
-    if not _name.startswith("_") and _name not in _EXCLUDED_UPSTREAM:
-        globals()[_name] = getattr(_pypulseq, _name)
-del _name
+    if _name.startswith("_") or _name in _EXCLUDED_UPSTREAM:
+        continue
+    _value = getattr(_pypulseq, _name)
+    # Every callable in the namespace goes through the interoperation
+    # decorator, not only the ``make_*`` factories. ``calc_duration(gx)``,
+    # ``align(...)``, ``split_gradient(g)``, ``scale_grad(g, 2)`` and
+    # ``rotate(...)`` all take events, and upstream implements them with
+    # ``isinstance(x, SimpleNamespace)`` checks and ``copy.deepcopy`` -- both of
+    # which a C++ event fails. Wrapping only the factories left the rest of the
+    # namespace raising TypeError on our own events.
+    if callable(_value) and not isinstance(_value, type) and _name not in _UNWRAPPED_UPSTREAM:
+        _value = _events.interoperating(_value)
+    globals()[_name] = _value
+del _name, _value
 
 Sequence = _Sequence
 TransformFOV = _TransformFOV
 AdcTimes = _AdcTimes
+BTensor = _BTensor
 GradientSpectrum = _GradientSpectrum
 KSpace = _KSpace
 Pns = _Pns
+RfPower = _RfPower
 RfTimes = _RfTimes
+SoftDelay = _SoftDelay
 Waveforms = _Waveforms
 WaveformsAndTimes = _WaveformsAndTimes
 Opts = _Opts
@@ -98,10 +124,13 @@ del _name
 RESULTS = frozenset(
     {
         "AdcTimes",
+        "BTensor",
         "GradientSpectrum",
         "KSpace",
         "Pns",
+        "RfPower",
         "RfTimes",
+        "SoftDelay",
         "Waveforms",
         "WaveformsAndTimes",
     }

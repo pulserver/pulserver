@@ -31,10 +31,13 @@ import numpy as np
 
 __all__ = [
     "AdcTimes",
+    "BTensor",
     "GradientSpectrum",
     "KSpace",
     "Pns",
+    "RfPower",
     "RfTimes",
+    "SoftDelay",
     "Waveforms",
     "WaveformsAndTimes",
 ]
@@ -258,3 +261,146 @@ class GradientSpectrum:
     times: np.ndarray
     spectrograms_rss: np.ndarray
     resonance_lines: object | None = None
+
+
+@dataclass(frozen=True)
+class BTensor:
+    """The diffusion b-tensor per excitation, in both communities' units.
+
+    MATLAB's ``calcMomentsBtensor`` returns ``B`` in **s/m^2** and leaves the
+    step to a diffusion pipeline to the caller. Both live here:
+
+    - ``B``, ``m1``, ``m2``, ``m3`` are MATLAB's, unchanged, so a script
+      ported from it reads the same numbers. ``B`` is s/m^2 and ``m_n`` is
+      rad/m times seconds to the n-th.
+    - ``b_values``, ``b_vectors`` and ``b_tensors`` are **s/mm^2**, which is
+      what every diffusion tool means by a b-value.
+
+    ``b_tensors`` is directly what DIPY's ``gradient_table(..., btens=)``
+    takes as an ``(N, 3, 3)`` array: the full tensor, whose trace is that
+    shot's b-value, *not* normalised to unit trace. For MRtrix3's ``-grad``
+    table, ``numpy.column_stack((b_vectors, b_values))`` is the ``(N, 4)``
+    ``[x y z b]`` it reads; for ``-fslgrad``, ``b_vectors.T`` and
+    ``b_values``. All of it is in the sequence's physical frame, rotation
+    extensions resolved, which is the frame the scanner plays and the one a
+    scanner-space gradient table is expected in.
+
+    ``b_delta`` is the normalised anisotropy that distinguishes b-tensor
+    encodings -- 1 for linear, 0 for spherical, -0.5 for planar -- computed
+    from the eigenvalues rather than assumed from the sequence's name.
+    """
+
+    B: np.ndarray
+    m1: np.ndarray
+    m2: np.ndarray
+    m3: np.ndarray
+    excitation_times: np.ndarray
+    echo_times: np.ndarray
+    b_values: np.ndarray
+    b_vectors: np.ndarray
+    b_tensors: np.ndarray
+    eigenvalues: np.ndarray
+    b_delta: np.ndarray
+
+    @classmethod
+    def of(
+        cls,
+        *,
+        B: np.ndarray,
+        m1: np.ndarray,
+        m2: np.ndarray,
+        m3: np.ndarray,
+        excitation_times: np.ndarray,
+        echo_times: np.ndarray,
+    ) -> BTensor:
+        """Derive the diffusion-facing fields from the tensors."""
+        # s/m^2 to s/mm^2. The tensor is symmetric by construction, so eigh
+        # is the right decomposition and its eigenvalues come out ascending.
+        tensors = np.asarray(B, dtype=float) * 1e-6
+        values, vectors = np.linalg.eigh(tensors) if tensors.size else (
+            np.zeros((0, 3)),
+            np.zeros((0, 3, 3)),
+        )
+        traces = np.trace(tensors, axis1=-2, axis2=-1)
+
+        # The principal direction, with a fixed sign: a b-vector and its
+        # negative describe the same measurement, and a table that flips
+        # between them for numerical reasons is a table nobody can diff.
+        principal = vectors[..., -1] if tensors.size else np.zeros((0, 3))
+        leading = np.argmax(np.abs(principal), axis=-1) if tensors.size else np.zeros(0, dtype=int)
+        if tensors.size:
+            signs = np.sign(np.take_along_axis(principal, leading[:, None], axis=-1))
+            signs[signs == 0] = 1.0
+            principal = principal * signs
+
+        with np.errstate(invalid="ignore", divide="ignore"):
+            # Topgaard's b_delta: the eigenvalue furthest from the mean is the
+            # axial one, and the other two average to the radial one.
+            mean = traces / 3.0
+            axial = np.take_along_axis(
+                values, np.argmax(np.abs(values - mean[:, None]), axis=-1)[:, None], axis=-1
+            ).squeeze(-1) if tensors.size else np.zeros(0)
+            radial = (traces - axial) / 2.0
+            delta = np.where(traces > 0, (axial - radial) / np.where(traces > 0, traces, 1.0), 0.0)
+
+        return cls(
+            B=np.asarray(B, dtype=float),
+            m1=np.asarray(m1, dtype=float),
+            m2=np.asarray(m2, dtype=float),
+            m3=np.asarray(m3, dtype=float),
+            excitation_times=np.asarray(excitation_times, dtype=float),
+            echo_times=np.asarray(echo_times, dtype=float),
+            b_values=traces,
+            b_vectors=principal,
+            b_tensors=tensors,
+            eigenvalues=values,
+            b_delta=delta,
+        )
+
+
+@dataclass(frozen=True)
+class RfPower:
+    """RF energy and power over a window, in Pulseq's relative units.
+
+    Amplitudes are in Hz, so ``mean_power`` and ``peak_power`` are Hz^2 and
+    ``total_energy`` is Hz^2 s. Dividing by ``gamma`` (and ``gamma**2``) gives
+    Tesla and mT^2 s; **none of them is SAR**, which needs the electric field
+    and so depends on the transmit coil and on the subject.
+
+    ``duration`` is the window actually walked, and ``window_duration`` is the
+    sliding window ``mean_power`` and ``rf_rms`` were maximised over, or
+    ``None`` when they are averages over the whole of it. ``total_energy`` is
+    always the whole window's, never one slice of it.
+    """
+
+    mean_power: float
+    peak_power: float
+    rf_rms: float
+    total_energy: float
+    duration: float
+    window_duration: float | None = None
+
+
+@dataclass(frozen=True)
+class SoftDelay:
+    """One named soft delay: what it is set to, and what it may be set to.
+
+    MATLAB's ``getDefaultSoftDelayValues`` returns the values in a struct and
+    the limits in a parallel cell array. Here they travel together, and
+    ``__float__`` makes the object usable wherever the value alone was wanted
+    --- ``seq.apply_soft_delay(TE=float(defaults["TE"]))``.
+
+    The limits are where the block duration would reach zero, which is the
+    only bound the sequence itself states. A value inside them can still be
+    impossible for a different reason -- events that no longer fit the block --
+    and neither this nor MATLAB catches that.
+    """
+
+    hint: str
+    numeric_id: int
+    value: float
+    minimum: float
+    maximum: float
+
+    def __float__(self) -> float:
+        return float(self.value)

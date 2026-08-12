@@ -12,15 +12,16 @@ import socket
 import sys
 import threading
 import time
-from types import ModuleType
 from typing import Any
 
 import ismrmrd
 import ismrmrd.xsd
 
-from . import constants
+from ..app import ReconApp, ReconContext
+from .application import run_application
 from .concurrency import compute_max_concurrent
 from .connection import Connection, DataSaver, build_save_path
+from .exam import ExamCacheManager
 from .rtp_connection import RtpServer
 
 
@@ -28,8 +29,8 @@ class Server:
     """TCP server that accepts ISMRMRD/MRD streaming connections.
 
     Each incoming connection is handled in a separate thread.  The server
-    reads the config message to determine which handler module to load,
-    then delegates processing to ``module.process(connection, config, metadata)``.
+    reads the config message to determine which :class:`~pulserver.ReconApp`
+    plugin to load, then privately adapts the MRD stream to acquisition buckets.
 
     Parameters
     ----------
@@ -78,6 +79,7 @@ class Server:
             override=max_concurrent_recons,
         )
         self._slots = threading.BoundedSemaphore(self._max_slots)
+        self._exam_caches = ExamCacheManager()
 
         self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -99,7 +101,7 @@ class Server:
         """Start the RTP PMC server in a background daemon thread (if rtp_port is set)."""
         if self.rtp_port is None:
             return
-        handler_mod = self._try_import(self.rtp_handler)
+        handler_mod = self._try_import_processor(self.rtp_handler)
         for d in self.handler_dirs:
             if handler_mod is not None:
                 break
@@ -107,7 +109,7 @@ class Server:
 
             path = os.path.join(d, self.rtp_handler + ".py")
             if os.path.isfile(path):
-                handler_mod = self._load_from_file(self.rtp_handler, path)
+                handler_mod = self._load_processor_from_file(self.rtp_handler, path)
         self._rtp_server = RtpServer(
             host=self.host,
             port=self.rtp_port,
@@ -127,6 +129,7 @@ class Server:
         # Graceful shutdown on SIGTERM / SIGINT
         def _shutdown(signum, frame):
             logging.info("Received signal %d — shutting down", signum)
+            self._exam_caches.close()
             self._socket.close()
             sys.exit(0)
 
@@ -172,6 +175,8 @@ class Server:
             )
             t.start()
 
+        self._exam_caches.close()
+
     # ------------------------------------------------------------------
     # Connection handler (runs in its own thread)
     # ------------------------------------------------------------------
@@ -204,57 +209,60 @@ class Server:
             # Parse header
             try:
                 metadata = ismrmrd.xsd.CreateFromDocument(metadata_xml)
-                if (
-                    metadata.acquisitionSystemInformation.systemFieldStrength_T
-                    is not None
-                ):
+                system = getattr(metadata, "acquisitionSystemInformation", None)
+                if system is not None and system.systemFieldStrength_T is not None:
                     logging.info(
                         "Data from %s %s at %1.1fT",
-                        metadata.acquisitionSystemInformation.systemVendor,
-                        metadata.acquisitionSystemInformation.systemModel,
-                        metadata.acquisitionSystemInformation.systemFieldStrength_T,
+                        system.systemVendor,
+                        system.systemModel,
+                        system.systemFieldStrength_T,
                     )
             except Exception:
                 logging.warning("Metadata is not valid MRD XML — passing as text")
                 metadata = metadata_xml
 
-            # 3) Try to acquire a recon slot (non-blocking)
-            acquired = self._slots.acquire(blocking=False)
-            if not acquired:
-                logging.warning(
-                    "All %d recon slot(s) busy — queuing connection to disk  handler=%s",
+            # Observing the XML header changes the current exam immediately,
+            # even if this connection must be queued. An old generation remains
+            # alive until every reconstruction that already leased it finishes.
+            with self._exam_caches.lease(metadata) as exam:
+                # 3) Try to acquire a recon slot (non-blocking)
+                acquired = self._slots.acquire(blocking=False)
+                if not acquired:
+                    logging.warning(
+                        "All %d recon slot(s) busy — queuing connection to disk  handler=%s",
+                        self._max_slots,
+                        config,
+                    )
+                    self._drain_and_queue(connection, config, metadata, metadata_xml)
+                    return
+
+                # 4) Configure data saver with the correct bucket-based path
+                if self.save_data:
+                    save_path = build_save_path(metadata, self.output_dir)
+                    connection.saver = DataSaver(
+                        savedataFile=os.path.basename(save_path),
+                        savedataFolder=os.path.dirname(save_path),
+                        savedataGroup="dataset",
+                    )
+                    connection.saver.create_save_file()
+                    if metadata_xml is not None and connection.saver.dset is not None:
+                        try:
+                            connection.saver.dset.write_xml_header(metadata_xml.toXML())
+                        except Exception as exc:
+                            logging.warning(
+                                "Could not write XML header to save file: %s", exc
+                            )
+
+                # 5) Resolve and run the application.
+                app = self._resolve_app(config)
+                logging.info(
+                    "Starting reconstruction app '%s'  [slot %d/%d]",
+                    type(app).__name__,
+                    self._max_slots - self._slots._value,  # approximate occupancy
                     self._max_slots,
-                    config,
                 )
-                self._drain_and_queue(connection, config, metadata, metadata_xml)
-                return
-
-            # 4) Configure data saver with the correct bucket-based path
-            if self.save_data:
-                save_path = build_save_path(metadata, self.output_dir)
-                connection.saver = DataSaver(
-                    savedataFile=os.path.basename(save_path),
-                    savedataFolder=os.path.dirname(save_path),
-                    savedataGroup="dataset",
-                )
-                connection.saver.create_save_file()
-                if metadata_xml is not None and connection.saver.dset is not None:
-                    try:
-                        connection.saver.dset.write_xml_header(metadata_xml.toXML())
-                    except Exception as exc:
-                        logging.warning(
-                            "Could not write XML header to save file: %s", exc
-                        )
-
-            # 5) Resolve and run handler
-            module = self._resolve_handler(config)
-            logging.info(
-                "Starting handler '%s'  [slot %d/%d]",
-                module.__name__,
-                self._max_slots - self._slots._value,  # approximate occupancy
-                self._max_slots,
-            )
-            module.process(connection, config, metadata)
+                context = ReconContext(header=metadata, exam=exam, config=config)
+                run_application(app, connection, context)
 
         except Exception:
             logging.exception("Error handling connection  handler=%s", config)
@@ -342,17 +350,18 @@ class Server:
         )
 
     # ------------------------------------------------------------------
-    # Handler resolution
+    # Reconstruction-app resolution
     # ------------------------------------------------------------------
 
-    def _resolve_handler(self, config: str) -> ModuleType:
-        """Resolve a handler module from a *config* string.
+    def _resolve_app(self, config: str) -> ReconApp:
+        """Resolve a ``PLUGIN`` reconstruction app from a *config* string.
 
         Resolution order:
 
         1. ``importlib.import_module(config)`` (installed packages / sys.path),
-           then Pulserver's private built-in handler package.
-        2. Search ``handler_dirs`` for ``<config>.py`` with a ``process`` callable.
+           then Pulserver's private built-in app package.
+        2. Search ``handler_dirs`` for ``<config>.py`` with a ``PLUGIN``
+           :class:`~pulserver.ReconApp` instance.
         3. Fall back to ``self.default_handler``.
 
         Parameters
@@ -362,12 +371,12 @@ class Server:
 
         Returns
         -------
-        ModuleType
-            A module exposing a ``process(connection, config, metadata)`` callable.
+        ReconApp
+            Configured reconstruction application.
         """
         # Direct absolute file path — load without the import system.
         # This handles custom recon scripts whose path is sent verbatim by the C++ client
-        # (e.g. /workspace/.../recon/recon42.py).  Using _load_from_file avoids the
+        # (e.g. /workspace/.../recon/recon42.py). Loading by file avoids the
         # import-system which would mis-interpret a filesystem path as a module name.
         if (
             config
@@ -376,9 +385,9 @@ class Server:
             and os.path.isfile(config)
         ):
             name = os.path.splitext(os.path.basename(config))[0]
-            mod = self._load_from_file(name, config)
-            if mod is not None:
-                return mod
+            app = self._load_app_from_file(name, config)
+            if app is not None:
+                return app
             logging.warning(
                 "Handler file '%s' could not be loaded — falling back to '%s'",
                 config,
@@ -387,17 +396,21 @@ class Server:
 
         # Fast path: try standard import
         if config and config != "null":
-            mod = self._try_import(config)
-            if mod is not None:
-                return mod
+            module_name = (
+                os.path.splitext(config)[0] if config.endswith(".py") else config
+            )
+            app = self._try_import_app(module_name)
+            if app is not None:
+                return app
 
             # Search handler directories
             for d in self.handler_dirs:
-                path = os.path.join(d, config + ".py")
+                filename = config if config.endswith(".py") else config + ".py"
+                path = os.path.join(d, filename)
                 if os.path.isfile(path):
-                    mod = self._load_from_file(config, path)
-                    if mod is not None:
-                        return mod
+                    app = self._load_app_from_file(module_name, path)
+                    if app is not None:
+                        return app
 
             logging.warning(
                 "Handler '%s' not found — falling back to '%s'",
@@ -406,58 +419,80 @@ class Server:
             )
 
         # Fallback
-        mod = self._try_import(self.default_handler)
-        if mod is not None:
-            return mod
+        app = self._try_import_app(self.default_handler)
+        if app is not None:
+            return app
 
         for d in self.handler_dirs:
             path = os.path.join(d, self.default_handler + ".py")
             if os.path.isfile(path):
-                mod = self._load_from_file(self.default_handler, path)
-                if mod is not None:
-                    return mod
+                app = self._load_app_from_file(self.default_handler, path)
+                if app is not None:
+                    return app
 
         # Last resort: inline drain
-        return _NullHandler
+        return _NullApp()
 
     @staticmethod
-    def _try_import(name: str) -> ModuleType | None:
-        """Import *name* and return it if it has a ``process`` callable."""
+    def _try_import_app(name: str) -> ReconApp | None:
+        """Import *name* and return its configured ``PLUGIN`` app."""
         candidates = (name, f"{__package__}.handlers.{name}")
         for candidate in candidates:
             try:
-                mod = importlib.import_module(candidate)
-                if hasattr(mod, "process") and callable(mod.process):
-                    return mod
+                module = importlib.import_module(candidate)
             except ImportError:
-                pass
+                continue
+            app = getattr(module, "PLUGIN", None)
+            if isinstance(app, ReconApp):
+                return app
         return None
 
     @staticmethod
-    def _load_from_file(name: str, path: str) -> ModuleType | None:
-        """Load a module from *path* and return it if it has ``process``."""
+    def _load_app_from_file(name: str, path: str) -> ReconApp | None:
+        """Load *path* and return its configured ``PLUGIN`` app."""
         try:
             spec = importlib.util.spec_from_file_location(name, path)
-            mod = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(mod)
-            if hasattr(mod, "process") and callable(mod.process):
-                return mod
+            if spec is None or spec.loader is None:
+                raise ImportError(f"could not create an import spec for {path}")
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            app = getattr(module, "PLUGIN", None)
+            if isinstance(app, ReconApp):
+                return app
+            logging.error("Recon plugin %s has no ReconApp PLUGIN instance", path)
         except Exception as exc:
             logging.error("Failed to load '%s' from %s: %s", name, path, exc)
         return None
 
-
-class _NullHandler:
-    """Drain all messages without processing."""
-
-    __name__ = "null"
+    @staticmethod
+    def _try_import_processor(name: str):
+        """Import a legacy process module used only by the private RTP server."""
+        try:
+            module = importlib.import_module(name)
+        except ImportError:
+            return None
+        return module if callable(getattr(module, "process", None)) else None
 
     @staticmethod
-    def process(connection, config, metadata):
-        logging.info("Null handler — draining connection")
+    def _load_processor_from_file(name: str, path: str):
+        """Load a private RTP process module from a file."""
         try:
-            for _msg in connection:
-                pass
-        finally:
-            end = constants.GadgetMessageIdentifier.pack(constants.GADGET_MESSAGE_CLOSE)
-            connection.socket.write(end)
+            spec = importlib.util.spec_from_file_location(name, path)
+            if spec is None or spec.loader is None:
+                raise ImportError(f"could not create an import spec for {path}")
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            if callable(getattr(module, "process", None)):
+                return module
+        except Exception as exc:
+            logging.error(
+                "Failed to load RTP handler '%s' from %s: %s", name, path, exc
+            )
+        return None
+
+
+class _NullApp(ReconApp):
+    """Consume acquisition buckets without producing output."""
+
+    def reconstruct(self, bucket, context):
+        del bucket, context

@@ -218,7 +218,6 @@ def test_scaling_an_rf_amplitude_costs_no_extra_shape(system):
     [
         "payload",
         "tr_info",
-        "num_trs",
         "tr_duration",
         "tr_block_range",
         "segments",
@@ -232,36 +231,35 @@ def test_scaling_an_rf_amplitude_costs_no_extra_shape(system):
     ],
 )
 def test_the_scan_structure_placeholders_are_gone_rather_than_stubbed(name):
-    """They belong to the layer above; this class does not stand in for it."""
+    """They belong to the layer above; this class does not stand in for it.
+
+    ``num_trs``, ``tr_size`` and ``num_segments`` were once on this list and
+    are deliberately off it: they answer about the structure the C core
+    *recovered*, which is this class's own knowledge, where the entries above
+    stood in for a scan-definition layer that lives elsewhere. The rest of
+    that layer's vocabulary stays gone.
+    """
     assert not hasattr(pp.Sequence, name)
 
 
-#: Every method that carries upstream's signature but not its implementation
-#: yet, with arguments named the way upstream names them -- so the call itself
-#: proves the signature matches, and the exception proves it is still a stub.
-_NOT_PORTED = [
-    ("check_timing", (), {"print_errors": True}),
-    ("test_report", (), {}),
-    ("evaluate_labels", (), {"init": None, "evolution": "adc"}),
-    ("apply_soft_delay", (), {"TE": 40e-3}),
-    ("flip_grad_axis", ("x",), {}),
-    ("mod_grad_axis", (), {"axis": "y", "modifier": 0.5}),
-    ("find_block_by_time", (), {"t": 0.01}),
+#: Methods that raise on purpose, and the reason each states. A stub here is a
+#: decision, not a gap, and the message has to say which -- so the test matches
+#: on the reason and not merely on the exception type.
+_DELIBERATE_STUBS = [
+    ("install", (), {}, "Siemens scanner transfer"),
+    ("check_timing", (), {"print_errors": True}, "predownload"),
+    ("sound", (), {}, "acoustic preview"),
 ]
 
 
-@pytest.mark.parametrize(("name", "args", "kwargs"), _NOT_PORTED, ids=[n for n, _, _ in _NOT_PORTED])
-def test_the_unported_methods_take_upstreams_arguments_and_say_they_are_stubs(
-    seq, name, args, kwargs
-):
-    with pytest.raises(NotImplementedError, match="no implementation"):
+@pytest.mark.parametrize(
+    ("name", "args", "kwargs", "reason"),
+    _DELIBERATE_STUBS,
+    ids=[n for n, _, _, _ in _DELIBERATE_STUBS],
+)
+def test_the_deliberate_stubs_refuse_and_say_why(seq, name, args, kwargs, reason):
+    with pytest.raises(NotImplementedError, match=reason):
         getattr(seq, name)(*args, **kwargs)
-
-
-def test_install_refuses_rather_than_pretending_to_be_pending(seq):
-    """``install`` is not unfinished, it is out of scope -- and says which."""
-    with pytest.raises(NotImplementedError, match="Siemens scanner transfer"):
-        seq.install()
 
 
 #: Methods that *are* implemented, and still have to answer to upstream's
@@ -284,6 +282,13 @@ _PORTED = [
     "set_extension_string_ID",
     "get_raw_block_content_IDs",
     "rf_from_lib_data",
+    "flip_grad_axis",
+    "mod_grad_axis",
+    "find_block_by_time",
+    "check_timing",
+    "test_report",
+    "evaluate_labels",
+    "apply_soft_delay",
 ]
 
 
@@ -300,7 +305,7 @@ def test_every_public_upstream_method_exists_here():
     assert missing == []
 
 
-@pytest.mark.parametrize("name", [name for name, _, _ in _NOT_PORTED] + _PORTED)
+@pytest.mark.parametrize("name", _PORTED)
 def test_the_methods_take_upstreams_arguments_the_way_upstream_takes_them(name):
     """Upstream's parameters, in order, with upstream's defaults, and first.
 
@@ -421,3 +426,130 @@ def test_calculate_kspace_pp_is_deprecated_outright(seq):
     """Upstream warns and forwards; here the deprecated spelling is an error."""
     with pytest.raises(DeprecationWarning, match="use calculate_kspace instead"):
         seq.calculate_kspacePP()
+
+
+# %% extension registration (MATLAB's registerRotationEvent / registerRfShimEvent)
+
+
+def test_registering_a_rotation_or_shim_twice_returns_the_same_id(system):
+    """Unlike ``add_block``, which appends per block and lets dedup collapse
+    them, registration looks for an equal row first -- so an orientation has
+    one stable name."""
+    seq = pp.Sequence(system=system)
+    turn = pp.make_rotation(Rotation.from_euler("z", 30, degrees=True))
+    other = pp.make_rotation(Rotation.from_euler("z", 60, degrees=True))
+    shim = pp.make_rf_shim(np.array([1 + 0j, 0.5 * np.exp(1j * 0.7)]))
+
+    assert seq.register_rotation_event(turn) == seq.register_rotation_event(turn)
+    assert seq.register_rotation_event(other) != seq.register_rotation_event(turn)
+    assert seq._native.num_rotations() == 2
+
+    assert seq.register_rf_shim_event(shim) == seq.register_rf_shim_event(shim)
+    assert seq._native.num_rf_shims() == 1
+
+
+def test_pre_registering_an_extension_changes_nothing_in_the_written_file(system, events):
+    """The registration idiom has to be free of consequence, or it is a trap."""
+    turn = pp.make_rotation(Rotation.from_euler("z", 30, degrees=True))
+    shim = pp.make_rf_shim(np.array([1 + 0j, 0.5 * np.exp(1j * 0.7)]))
+
+    def build(*, preregister):
+        built = pp.Sequence(system=system)
+        if preregister:
+            built.register_rotation_event(turn)
+            built.register_rf_shim_event(shim)
+            built.register_control_event(events["trigger"])
+        built.add_block(events["gx"], turn)
+        built.add_block(events["rf"], shim)
+        built.remove_duplicates()
+        return built
+
+    assert build(preregister=True)._to_text(create_signature=False) == build(
+        preregister=False
+    )._to_text(create_signature=False)
+
+
+def test_a_rotation_must_be_a_unit_quaternion(system):
+    seq = pp.Sequence(system=system)
+    with pytest.raises(ValueError, match="unit quaternion"):
+        seq.register_rotation_event(pp.make_rotation(np.array([1.0, 1.0, 1.0, 1.0])))
+    with pytest.raises(ValueError, match="four numbers"):
+        seq.register_rotation_event(pp.make_rotation(np.array([1.0, 0.0])))
+
+
+# %% gradient axis scaling, on the TransformFOV path
+
+
+@pytest.mark.parametrize("axis", ["x", "y", "z"])
+def test_mod_grad_axis_scales_only_that_axis(seq, axis):
+    before = [seq.get_block(n) for n in range(1, seq.num_blocks + 1)]
+    seq.mod_grad_axis(axis, 0.5)
+    after = [seq.get_block(n) for n in range(1, seq.num_blocks + 1)]
+
+    for old, new in zip(before, after):
+        for name in ("gx", "gy", "gz"):
+            was, now = getattr(old, name), getattr(new, name)
+            if was is None:
+                assert now is None
+                continue
+            factor = 0.5 if name[-1] == axis else 1.0
+            if was.type == "trap":
+                assert now.amplitude == pytest.approx(was.amplitude * factor)
+            else:
+                np.testing.assert_allclose(now.waveform, was.waveform * factor, rtol=1e-9)
+
+
+def test_flip_grad_axis_is_a_negative_scale(seq):
+    before = seq.get_block(3).gx.amplitude
+    seq.flip_grad_axis("x")
+    assert seq.get_block(3).gx.amplitude == pytest.approx(-before)
+
+
+def test_mod_grad_axis_refuses_an_axis_that_is_not_one(seq):
+    with pytest.raises(ValueError, match="must be 'x', 'y' or 'z'"):
+        seq.mod_grad_axis("w", 2.0)
+
+
+# %% the rest of the batch
+
+
+def test_find_block_by_time_finds_the_block_being_played(seq):
+    """Including the first block, where upstream's own version raises."""
+    edges = np.concatenate(([0.0], np.cumsum(seq.block_durations)))
+    for number in range(1, seq.num_blocks + 1):
+        middle = 0.5 * (edges[number - 1] + edges[number])
+        assert seq.find_block_by_time(middle) == number
+    assert seq.find_block_by_time(edges[-1] + 1.0) is None
+    assert seq.find_block_by_time(-1.0) is None
+    # A block boundary belongs to the block that starts there.
+    assert seq.find_block_by_time(edges[1]) == 2
+
+
+def test_find_block_by_time_does_not_reproduce_upstreams_off_by_one(seq):
+    """Upstream indexes a one-based dict with a zero-based searchsorted, so it
+    is off by one and raises KeyError on the first block. Pinned so nobody
+    "restores parity" by reintroducing the bug."""
+    native = upstream.Sequence(system=seq.system)
+    for _ in range(4):
+        native.add_block(upstream.make_delay(1e-3))
+    with pytest.raises(KeyError):
+        native.find_block_by_time(0.0005)
+
+
+def test_copy_definitions_takes_another_sequences_definitions(seq, system):
+    seq.set_definition("Name", "source")
+    seq.set_definition("FOV", [0.22, 0.22, 0.005])
+
+    other = pp.Sequence(system=system)
+    other.copy_definitions(seq)
+    assert other.get_definition("Name") == "source"
+    assert other.get_definition("FOV") == [0.22, 0.22, 0.005]
+
+    # A copy, not a view.
+    seq.set_definition("Name", "changed")
+    assert other.get_definition("Name") == "source"
+
+
+def test_sound_refuses_and_points_at_the_measured_answer(seq):
+    with pytest.raises(NotImplementedError, match="calculate_gradient_spectrum"):
+        seq.sound()

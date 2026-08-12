@@ -114,7 +114,7 @@ whose readouts do not share a direction has no Cartesian counters and raises,
 as MATLAB's does.
 
 Every `autoLabel` parameter is accepted, under the Python spelling of its name
-and in its own order — `block_range`, `use_labels`, `use_aux`, `skip_apply`,
+and in its own order — `time_range`, `use_labels`, `use_aux`, `skip_apply`,
 `mirror_fourier`, `reflect`, `reorder`, `sort_slices`, `no_plots` — with
 Pulserver's additions (`trajectory_delay`, `repeat_dims`, `skip`) after them
 rather than mixed in. `use_labels` and `use_aux` skip detection and apply a
@@ -347,6 +347,8 @@ deliberately **cannot** be unpacked — they have no `__iter__` and no
 | `calculate_kspace` | 5-tuple | {class}`~pulserver.pypulseq.KSpace` |
 | `calculate_pns` | 4-tuple | {class}`~pulserver.pypulseq.Pns` |
 | `calculate_gradient_spectrum` | 4-tuple | {class}`~pulserver.pypulseq.GradientSpectrum` |
+| `calc_rf_power` | MATLAB's 4-tuple | {class}`~pulserver.pypulseq.RfPower` |
+| `calc_moments_btensor` | MATLAB's 4-tuple | {class}`~pulserver.pypulseq.BTensor` |
 
 What only `compat=False` can tell you:
 
@@ -366,6 +368,21 @@ What only `compat=False` can tell you:
   same curve as `k_traj` in five to ten times fewer points.
 - **Acoustic resonance lines.** `GradientSpectrum.resonance_lines`, which used
   to be smuggled out as a fifth tuple element.
+- **A gradient table a diffusion pipeline can read.** MATLAB's b-tensor is in
+  s/m² with the step to a b-value left to the caller. `BTensor.b_tensors` is
+  the same tensor in s/mm², which is exactly DIPY's `gradient_table(...,
+  btens=)` argument, and `column_stack((b_vectors, b_values))` is MRtrix3's
+  `[x y z b]` table. `b_delta` says whether the encoding is linear, planar or
+  spherical, from the eigenvalues rather than from the sequence's name.
+- **Which window the RF power is for.** `RfPower.duration` and
+  `RfPower.window_duration` say whether `mean_power` is an average over the
+  whole range or the worst sliding window inside it — MATLAB returns the two
+  cases as the same four numbers with nothing to tell them apart.
+
+{class}`~pulserver.pypulseq.SoftDelay` is not a `compat` return: it is what
+`get_default_soft_delay_values` puts in its mapping, carrying each delay's
+current value together with the range it may be set over. `float()` on it is
+the value, so it drops straight back into `apply_soft_delay`.
 
 ```{eval-rst}
 .. autosummary::
@@ -378,4 +395,7 @@ What only `compat=False` can tell you:
    pulserver.pypulseq.KSpace
    pulserver.pypulseq.Pns
    pulserver.pypulseq.GradientSpectrum
+   pulserver.pypulseq.RfPower
+   pulserver.pypulseq.SoftDelay
+   pulserver.pypulseq.BTensor
 ```

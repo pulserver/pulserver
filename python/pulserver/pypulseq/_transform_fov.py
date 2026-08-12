@@ -118,7 +118,7 @@ class TransformFOV:
     ...     rotation=Rotation.from_euler("y", 30, degrees=True).as_matrix(),
     ...     translation=(0.0, 0.0, 25.0),
     ... )
-    >>> tilt.apply_to_sequence(seq, block_range=(1, 4), in_place=True)  # doctest: +SKIP
+    >>> tilt.apply_to_sequence(seq, time_range=[0.0, 0.02], in_place=True)  # doctest: +SKIP
     """
 
     def __init__(
@@ -179,7 +179,7 @@ class TransformFOV:
         self,
         seq: Sequence,
         *,
-        block_range: tuple[int, int] | None = None,
+        time_range: list[float] | None = None,
         in_place: bool = False,
     ) -> Sequence:
         """Apply the transformation to ``seq``.
@@ -188,12 +188,12 @@ class TransformFOV:
         ----------
         seq : Sequence
             The sequence to transform.
-        block_range : tuple of int, optional
-            ``(first, last)``, 1-based and inclusive. The whole sequence by
-            default. Blocks outside the range are left exactly as they were,
-            but they still count towards where k stands inside it -- a shift
-            applied to part of a scan gives those blocks the same phase they
-            would have had from shifting all of it.
+        time_range : list of float, optional
+            ``[start, stop]`` in seconds. The whole sequence by default. The
+            blocks this window touches are the ones transformed; the rest are
+            left exactly as they were, but they still count towards where k
+            stands inside it -- a shift applied to part of a scan gives those
+            blocks the same phase they would have had from shifting all of it.
         in_place : bool, default False
             Transform ``seq`` itself rather than a copy. The default matches
             MATLAB's ``applyToSeq``, which hands back a new sequence.
@@ -206,17 +206,12 @@ class TransformFOV:
         Raises
         ------
         ValueError
-            If ``block_range`` falls outside the sequence.
+            If ``time_range`` is not a two-element window in increasing order.
         """
         target = seq if in_place else seq._clone()
 
         count = target.num_blocks
-        if block_range is None:
-            first, last = 1, count
-        else:
-            first, last = (int(value) for value in block_range)
-            if not 1 <= first <= last <= count:
-                raise ValueError(f"block range {(first, last)} is outside 1..{count}")
+        first, last = (1, count) if count == 0 else target._window_for(time_range)
 
         if count == 0:
             return target

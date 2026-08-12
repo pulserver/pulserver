@@ -26,6 +26,9 @@ from typing import TYPE_CHECKING, Any
 import ismrmrd
 import ismrmrd.xsd
 
+from ..app import ReconContext
+from .application import run_application
+
 if TYPE_CHECKING:
     from .server import Server
 
@@ -150,7 +153,10 @@ class ReplayConnection:
 
             if isinstance(item, DicomWithName):
                 out_path = os.path.join(self._output_dir, item.filename)
-                item.dataset.save_as(out_path)
+                if item.dset is None:
+                    logging.warning("ReplayConnection: empty DICOM output skipped")
+                    return
+                item.dset.save_as(out_path)
                 logging.info("ReplayConnection: saved DICOM → %s", out_path)
                 return
         except Exception:
@@ -217,7 +223,7 @@ class ReplayWorker(threading.Thread):
     server : Server
         The running :class:`~pulserver.recon._mrd.server.Server` instance.  The worker
         calls ``server._slots.acquire()`` / ``server._slots.release()``
-        and ``server._resolve_handler()`` / ``server.output_dir``.
+        and ``server._resolve_app()`` / ``server.output_dir``.
     """
 
     _POLL_INTERVAL = 5.0  # seconds between scans when queue is empty
@@ -324,9 +330,15 @@ class ReplayWorker(threading.Thread):
             acquired = True
             logging.info("ReplayWorker: recon slot acquired  mrd=%s", mrd_path)
 
-            module = self._server._resolve_handler(handler_name)
+            app = self._server._resolve_app(handler_name)
             replay_conn = ReplayConnection(mrd_path, output_dir)
-            module.process(replay_conn, handler_name, metadata)
+            with self._server._exam_caches.lease(metadata) as exam:
+                context = ReconContext(
+                    header=metadata,
+                    exam=exam,
+                    config=handler_name,
+                )
+                run_application(app, replay_conn, context)
 
             _rename_sidecar(processing_path, ".processed.json")
             logging.info("ReplayWorker: completed  mrd=%s", mrd_path)

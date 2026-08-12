@@ -53,6 +53,12 @@ def _amplitudes(seq):
     return [seq.get_block(i).gx.amplitude for i in range(1, seq.num_blocks + 1)]
 
 
+def _over(seq, first, last):
+    """``time_range`` covering blocks ``first..last``, 1-based inclusive."""
+    edges = np.concatenate(([0.0], np.cumsum(seq.block_durations)))
+    return [float(edges[first - 1]), float(edges[last])]
+
+
 # %% what it refuses
 
 
@@ -85,9 +91,19 @@ def test_a_misshapen_transform_is_rejected(kwargs, match):
         pp.TransformFOV(**kwargs)
 
 
-def test_a_block_range_outside_the_sequence_is_rejected(seq):
-    with pytest.raises(ValueError, match=r"outside 1\.\.3"):
-        pp.TransformFOV(translation=(1.0, 0.0, 0.0)).apply_to_sequence(seq, block_range=(1, 9))
+def test_a_backwards_time_range_is_rejected(seq):
+    with pytest.raises(ValueError, match="after begin time"):
+        pp.TransformFOV(translation=(1.0, 0.0, 0.0)).apply_to_sequence(seq, time_range=[0.02, 0.0])
+
+
+def test_a_time_range_past_the_end_clamps_to_the_last_block(seq):
+    """Unlike a block range, a window is not a claim about how long the
+    sequence is -- asking past the end asks for what is there."""
+    whole = pp.TransformFOV(translation=(10.0, 0.0, 0.0)).apply_to_sequence(seq)
+    past = pp.TransformFOV(translation=(10.0, 0.0, 0.0)).apply_to_sequence(
+        seq, time_range=[0.0, 9.0]
+    )
+    assert _phases(past) == _phases(whole)
 
 
 # %% translation
@@ -111,10 +127,10 @@ def test_a_shift_along_an_axis_with_no_gradient_does_nothing(seq):
     assert _phases(seq) == before
 
 
-def test_a_block_range_leaves_the_blocks_outside_it_alone(seq):
+def test_a_time_range_leaves_the_blocks_outside_it_alone(seq):
     before = _phases(seq)
     pp.TransformFOV(translation=(10.0, 0.0, 0.0)).apply_to_sequence(
-        seq, block_range=(2, 2), in_place=True
+        seq, time_range=_over(seq, 2, 2), in_place=True
     )
     after = _phases(seq)
     assert after[1] != before[1]
@@ -124,7 +140,9 @@ def test_a_block_range_leaves_the_blocks_outside_it_alone(seq):
 def test_a_ranged_shift_gives_the_same_phase_as_shifting_everything(seq):
     """Absolute k is accumulated from block 1, so the boundary does not matter."""
     whole = pp.TransformFOV(translation=(10.0, 0.0, 0.0)).apply_to_sequence(seq)
-    part = pp.TransformFOV(translation=(10.0, 0.0, 0.0)).apply_to_sequence(seq, block_range=(3, 3))
+    part = pp.TransformFOV(translation=(10.0, 0.0, 0.0)).apply_to_sequence(
+        seq, time_range=_over(seq, 3, 3)
+    )
     assert part.get_block(3).adc.phase_offset == pytest.approx(whole.get_block(3).adc.phase_offset)
 
 
