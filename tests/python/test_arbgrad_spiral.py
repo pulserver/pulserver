@@ -5,7 +5,7 @@ import math
 import numpy as np
 import pypulseq as pp
 import pytest
-from pulserver.design._lowlevel import arbgrad
+from pulserver.pypulseq import _arbgrad as arbgrad
 from pulserver.pypulseq import Sequence, make_rotation
 
 try:

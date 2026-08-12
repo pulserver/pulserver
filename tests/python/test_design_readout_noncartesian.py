@@ -8,7 +8,7 @@ import pytest
 pp = pytest.importorskip("pypulseq")
 
 from pulserver.design import _readout as readout
-from pulserver.design import traj2grad
+from pulserver.design._traj2grad import traj2grad
 
 OPTS_KW = {"max_grad": 40, "grad_unit": "mT/m", "max_slew": 150, "slew_unit": "T/m/s"}
 

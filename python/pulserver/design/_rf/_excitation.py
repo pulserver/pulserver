@@ -9,8 +9,9 @@ import numpy as np
 import pypulseq as pp
 
 from ...pypulseq._opts import default_system
+from ...pypulseq._rf_pulses import make_slr_pulse as _make_slr_events
 from ._base import RfPulse
-from ._slr import design_slr
+from ...pypulseq._slr import design_slr  # noqa: F401
 
 PulseType = Literal["st", "ex", "se", "inv", "sat"]
 FilterType = Literal["ls", "pm", "min", "max", "ms"]
@@ -23,6 +24,16 @@ RF_SPOILING_INCREMENT_DEG = 117.0
 
 def _system_or_default(system: pp.Opts | None) -> pp.Opts:
     return default_system(system)
+
+
+def make_slr_pulse(flip_angle: float, *, system: pp.Opts | None = None, **kwargs) -> RfPulse:
+    """The events :func:`pulserver.pypulseq.make_slr_pulse` builds, as a module."""
+    system = _system_or_default(system)
+    built = _make_slr_events(flip_angle, system=system, **kwargs)
+    if not kwargs.get("return_gz"):
+        return RfPulse(system, built)
+    rf, gz, gz_reph = built
+    return RfPulse(system, rf, (gz,), (gz_reph,))
 
 
 def _slr_sample_count(duration: float, dwell: float) -> int:
@@ -158,186 +169,6 @@ def make_adiabatic_pulse(
         event, gradient, rephaser = result
         return RfPulse(system, event, (gradient,), (rephaser,))
     return RfPulse(system, result)
-
-
-def make_slr_pulse(
-    flip_angle: float,
-    *,
-    duration: float = DEFAULT_DURATION,
-    delay: float = 0.0,
-    dwell: float = 0.0,
-    freq_offset: float = 0.0,
-    phase_offset: float = 0.0,
-    center_pos: float = 0.5,
-    slice_thickness: float = 0.0,
-    return_gz: bool = False,
-    time_bw_product: float = DEFAULT_TIME_BANDWIDTH_PRODUCT,
-    pulse_type: PulseType = "st",
-    filter_type: FilterType = "ls",
-    passband_ripple: float = 0.01,
-    stopband_ripple: float = 0.01,
-    cancel_alpha_phase: bool = False,
-    max_grad: float = 0.0,
-    max_slew: float = 0.0,
-    system: pp.Opts | None = None,
-    use: str = "undefined",
-    freq_ppm: float = 0.0,
-    phase_ppm: float = 0.0,
-):
-    """Create an SLR-designed pulse, without requiring SigPy.
-
-    Shinnar-Le Roux design turns the desired *slice profile* into an RF
-    envelope through an equivalent FIR filter problem, giving a far sharper
-    profile than a truncated sinc at the same duration. The filter is designed
-    in-package, so SigPy is not a dependency; the interface follows pypulseq's
-    former SigPy pulse factory.
-
-    ``pulse_type`` selects the profile the filter is designed for — ``"ex"``
-    (90-degree excitation), ``"se"`` (spin-echo refocusing), ``"inv"``
-    (inversion), ``"sat"`` (saturation), or ``"st"`` (small-tip). Using the
-    wrong one gives a visibly degraded profile at large flip angles.
-    ``make_sigpy_pulse`` remains as an alias for the pypulseq factory this
-    replaces; new code should use this name.
-
-    Parameters
-    ----------
-    flip_angle : float
-        Nominal flip angle (rad).
-    duration : float, optional
-        Pulse duration (s). Bandwidth is ``time_bw_product / duration``.
-    delay : float, optional
-        Event delay before the RF starts (s).
-    freq_offset : float, optional
-        RF frequency offset (Hz).
-    phase_offset : float, optional
-        RF phase offset (rad).
-    dwell : float, optional
-        RF raster (s); ``0`` uses ``system.rf_raster_time``.
-    center_pos : float, optional
-        Effective-rotation position within the pulse, in ``[0, 1]``; sets the
-        rephasing area when ``return_gz`` is true.
-    slice_thickness : float, optional
-        Slice thickness (m); required when ``return_gz`` is true.
-    return_gz : bool, optional
-        Also design the slice-selection and rephasing gradients.
-    time_bw_product : float, optional
-        Time-bandwidth product; higher means a sharper profile and more
-        sidelobes for the same duration.
-    pulse_type : {'st', 'ex', 'se', 'inv', 'sat'}, optional
-        Profile the SLR filter is designed for.
-    filter_type : {'ls', 'pm', 'min', 'max', 'ms'}, optional
-        FIR design method; ``'ls'`` least-squares (default), ``'pm'``
-        equiripple, ``'min'``/``'max'`` minimum/maximum phase.
-    passband_ripple : float, optional
-        Allowed ripple inside the passband.
-    stopband_ripple : float, optional
-        Allowed ripple in the stopband.
-    cancel_alpha_phase : bool, optional
-        Remove the SLR alpha-polynomial phase.
-    max_grad : float, optional
-        Gradient amplitude limit for the selection gradient; ``0`` uses
-        ``system``.
-    max_slew : float, optional
-        Slew limit for the selection gradient; ``0`` uses ``system``.
-    system : pypulseq.Opts, optional
-        System limits.
-    use : str, optional
-        Pulseq ``use`` tag.
-    freq_ppm : float, optional
-        Frequency offset relative to the field strength (ppm).
-    phase_ppm : float, optional
-        Phase offset relative to the field strength (ppm).
-
-    Returns
-    -------
-    RfPulse
-        Module holding the RF event; with ``return_gz=True`` its
-        ``gradients`` and ``rephasers`` hold the slice-selection pair.
-
-    Examples
-    --------
-    >>> import numpy as np
-    >>> import pulserver.design as design
-    >>> import pulserver.pypulseq as pp
-    >>> pulse = design.make_slr_pulse(np.deg2rad(90), duration=2e-3, pulse_type="ex")
-    >>> pulse.rf.signal.shape
-    (2000,)
-
-    Append the RF block, and any requested selection/rephasing blocks::
-
-        seq = pp.Sequence(pulse.system)
-        for block in pulse:
-            seq.add_block(*block)
-
-    The pulse, and the profile a Bloch simulation of it produces:
-
-    .. plot::
-       :include-source: false
-
-       import numpy as np
-       import pulserver.design as design
-       import pulserver.pypulseq as pp
-       from _figures import rf_figure
-       system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
-       rf_figure(design.make_slr_pulse(np.deg2rad(90), slice_thickness=5e-3,
-                                   return_gz=True, system=system),
-                 "slice", title="SLR 90 deg, 5 mm, TBW 4")
-
-    See Also
-    --------
-    make_slice_selective_pulse : this pulse plus its selection gradients.
-    make_frequency_selective_pulse : the non-spatial, spectral counterpart.
-    """
-    system = _system_or_default(system)
-    dwell = system.rf_raster_time if dwell == 0 else dwell
-    if not 0.0 <= center_pos <= 1.0:
-        raise ValueError("center_pos must lie in [0, 1]")
-    if return_gz and slice_thickness <= 0:
-        raise ValueError("slice_thickness must be > 0 when return_gz=True")
-
-    n = _slr_sample_count(duration, dwell)
-    waveform = design_slr(
-        n,
-        time_bw_product,
-        pulse_type=pulse_type,
-        filter_type=filter_type,
-        passband_ripple=passband_ripple,
-        stopband_ripple=stopband_ripple,
-        cancel_alpha_phase=cancel_alpha_phase,
-    )
-    actual_duration = n * dwell
-    result = pp.make_arbitrary_rf(
-        signal=waveform,
-        flip_angle=flip_angle,
-        delay=delay,
-        dwell=dwell,
-        freq_offset=freq_offset,
-        phase_offset=phase_offset,
-        return_gz=return_gz,
-        slice_thickness=slice_thickness,
-        bandwidth=time_bw_product / actual_duration,
-        time_bw_product=time_bw_product,
-        max_grad=max_grad,
-        max_slew=max_slew,
-        system=system,
-        use=use,
-        freq_ppm=freq_ppm,
-        phase_ppm=phase_ppm,
-        center=center_pos * actual_duration,
-    )
-    if not return_gz:
-        return RfPulse(system, result)
-
-    rf, gz = result
-    flat_area = gz.amplitude * gz.flat_time
-    ramp_area = gz.area - flat_area
-    rephase_area = -flat_area * (1.0 - center_pos) - 0.5 * ramp_area
-    gz_reph = pp.make_trapezoid(channel="z", area=rephase_area, system=system)
-    return RfPulse(system, rf, (gz,), (gz_reph,))
-
-
-# Back-compatible name for pypulseq's former SigPy-backed factory.
-make_sigpy_pulse = make_slr_pulse
 
 
 def make_frequency_selective_pulse(

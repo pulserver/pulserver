@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import math
 
-import numpy as np
 import pypulseq as pp
 
+from ..pypulseq._timing import quantize_readout_timing  # noqa: F401
+
 DEFAULT_BANDWIDTH_HZ_PX = 125_000.0
-MAX_RASTER_SEARCH_STEPS = 50_000
 MAX_GRAD_DERATE = 0.9
 MAX_SLEW_DERATE = 0.9
 
@@ -107,78 +107,6 @@ def apply_system_derates(
 
     opts.max_grad = opts._pulserver_base_max_grad * float(grad_derate)
     opts.max_slew = opts._pulserver_base_max_slew * float(slew_derate)
-
-
-def quantize_readout_timing(
-    nx_ro: int,
-    target_bw_hz_px: float,
-    grad_raster_s: float,
-    adc_raster_s: float,
-    min_flat_time_s: float,
-) -> tuple[float, float]:
-    """Find an ADC dwell and readout flat time compatible with both rasters.
-
-    Searches for the smallest ADC-raster-multiple dwell whose total flat time
-    (``nx_ro * dwell``) lands exactly on the gradient raster while staying as
-    close as possible to the requested per-pixel bandwidth.
-
-    Parameters
-    ----------
-    nx_ro : int
-        Number of readout samples.
-    target_bw_hz_px : float
-        Requested receiver bandwidth per pixel (Hz).
-    grad_raster_s : float
-        Gradient raster time (s).
-    adc_raster_s : float
-        ADC raster time (s).
-    min_flat_time_s : float
-        Lower bound on the flat time (s), e.g. from the max-gradient limit.
-
-    Returns
-    -------
-    dwell_s : float
-        ADC dwell time (s), a multiple of ``adc_raster_s``.
-    flat_time_s : float
-        Readout flat time ``nx_ro * dwell_s`` (s), a multiple of
-        ``grad_raster_s``.
-
-    Examples
-    --------
-    Quantize a 256-sample readout at ~250 Hz/px bandwidth:
-
-    >>> from pulserver.design import _system as system
-    >>> dwell, flat = system.quantize_readout_timing(256, 62_500.0, 1e-5, 1e-7, 0.0)
-    >>> abs(flat / 1e-5 - round(flat / 1e-5)) < 1e-9
-    True
-    """
-    target_dwell = 1.0 / target_bw_hz_px
-    m_target = max(1, round(target_dwell / adc_raster_s))
-
-    m_min = max(m_target, int(np.ceil(min_flat_time_s / (nx_ro * adc_raster_s))))
-
-    best_m = None
-    best_cost = None
-
-    for step in range(MAX_RASTER_SEARCH_STEPS):
-        m = m_min + step
-        flat = nx_ro * m * adc_raster_s
-        ratio = flat / grad_raster_s
-        if abs(ratio - round(ratio)) > 1e-9:
-            continue
-        cost = abs((m * adc_raster_s) - target_dwell)
-        if best_cost is None or cost < best_cost:
-            best_cost = cost
-            best_m = m
-            if cost == 0.0:
-                break
-
-    if best_m is None:
-        best_m = m_min
-
-    dwell = best_m * adc_raster_s
-    flat_time = nx_ro * dwell
-    return dwell, flat_time
 
 
 def round_to_raster(value_s: float, raster_s: float = 1e-5) -> float:

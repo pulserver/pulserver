@@ -263,6 +263,24 @@ std::vector<std::uint8_t> bridson(
     return mask;
 }
 
+/**
+ * How sparse a mask can possibly be on this geometry.
+ *
+ * `add_calibration` forces the whole `cx * cy` block in on every attempt, so
+ * no mask has fewer than that many samples and no acceleration above
+ * `nx * ny / (cx * cy)` is reachable however the search is run.
+ */
+double reachable_ceiling(const Geometry &geometry)
+{
+    const auto total = checked_product(geometry.ny, geometry.nx);
+    const auto forced = checked_product(geometry.cy, geometry.cx);
+    if (forced == 0)
+    {
+        return std::numeric_limits<double>::infinity();
+    }
+    return static_cast<double>(total) / static_cast<double>(forced);
+}
+
 std::vector<std::uint8_t> poisson(
     const Geometry &geometry,
     double acceleration,
@@ -271,35 +289,88 @@ std::vector<std::uint8_t> poisson(
     std::uint64_t seed,
     bool crop_corner)
 {
-    double low = 0.0;
-    double high = static_cast<double>(std::max(geometry.nx, geometry.ny));
-    double actual = std::numeric_limits<double>::infinity();
-    std::vector<std::uint8_t> best;
     const auto total = checked_product(geometry.ny, geometry.nx);
-    for (int iteration = 0; iteration < 64; ++iteration)
+    const double ceiling = reachable_ceiling(geometry);
+    if (acceleration - tolerance > ceiling)
     {
-        const double slope = (low + high) / 2.0;
-        auto mask = bridson(geometry, slope, max_attempts, seed, crop_corner);
-        const auto count = std::count(mask.begin(), mask.end(), static_cast<std::uint8_t>(1));
-        actual =
-            static_cast<double>(total) / static_cast<double>(std::max<std::ptrdiff_t>(count, 1));
-        best = std::move(mask);
-        if (std::abs(actual - acceleration) < tolerance)
+        std::ostringstream message;
+        message << "acceleration " << acceleration << " is unreachable on a " << geometry.nx
+                << "x" << geometry.ny << " grid: the " << geometry.cx << "x" << geometry.cy
+                << " calibration block is always sampled, which is "
+                << checked_product(geometry.cy, geometry.cx) << " of " << total
+                << " points and caps acceleration at " << ceiling;
+        throw std::invalid_argument(message.str());
+    }
+
+    // The count a slope yields is stochastic, so this is a binary search over a
+    // noisy objective: neighbouring slopes can straddle the tolerance window
+    // without either landing inside it. Hence keeping the closest mask seen
+    // rather than the last, and re-drawing a collapsed bracket on fresh RNG
+    // substreams -- derived from `seed`, so one seed still gives one mask.
+    std::vector<std::uint8_t> closest;
+    double closest_actual = std::numeric_limits<double>::infinity();
+
+    for (std::uint64_t attempt = 0; attempt < 16; ++attempt)
+    {
+        const std::uint64_t stream = seed + attempt * 0x9e3779b97f4a7c15ULL;
+        double low = 0.0;
+        double high = static_cast<double>(std::max(geometry.nx, geometry.ny));
+
+        for (int iteration = 0; iteration < 64; ++iteration)
         {
-            return best;
-        }
-        if (actual < acceleration)
-        {
-            low = slope;
-        }
-        else
-        {
-            high = slope;
+            const double slope = (low + high) / 2.0;
+            auto mask = bridson(geometry, slope, max_attempts, stream, crop_corner);
+            const auto count = std::count(mask.begin(), mask.end(), static_cast<std::uint8_t>(1));
+            const double actual = static_cast<double>(total) /
+                                  static_cast<double>(std::max<std::ptrdiff_t>(count, 1));
+
+            if (std::abs(actual - acceleration) < std::abs(closest_actual - acceleration))
+            {
+                closest_actual = actual;
+                closest = std::move(mask);
+            }
+            if (std::abs(actual - acceleration) < tolerance)
+            {
+                return closest;
+            }
+
+            if (actual < acceleration)
+            {
+                low = slope;
+            }
+            else
+            {
+                high = slope;
+            }
+            // Once the bracket no longer separates two doubles, every further
+            // iteration redraws the same slope; another substream is the only
+            // thing left that can move the answer.
+            if (!(low < high) || (high - low) <= std::abs(high) * 1e-12)
+            {
+                break;
+            }
         }
     }
+
+    // Acceleration is total/count with count an integer, so it moves in steps
+    // of about accel^2/total near the target. A tolerance finer than one step
+    // can ask for a value no mask on this grid is able to take.
+    const double quantum = acceleration * acceleration / static_cast<double>(total);
+
     std::ostringstream message;
     message << "cannot generate Poisson mask for acceleration " << acceleration
-            << " within tolerance " << tolerance << "; last acceleration was " << actual;
+            << " within tolerance " << tolerance << "; the closest reachable was "
+            << closest_actual << " (" << total << " points over "
+            << std::count(closest.begin(), closest.end(), static_cast<std::uint8_t>(1))
+            << " sampled)";
+    if (tolerance < quantum)
+    {
+        message << ". On a " << geometry.nx << "x" << geometry.ny
+                << " grid one sample moves the acceleration by about " << quantum
+                << " near " << acceleration << ", so no mask can land within " << tolerance;
+    }
+    message << ". Widen tol to at least " << std::abs(closest_actual - acceleration)
+            << " to accept the closest";
     throw std::invalid_argument(message.str());
 }
 

@@ -1,7 +1,8 @@
 """Rotation extension event constructor.
 
-This helper mirrors the pypulseq-style event factory pattern and returns a
-SimpleNamespace consumed by pulserver's fast Sequence path.
+The event holds the caller's rotation object itself, so ``add_block`` keys its
+quaternion cache on that object's identity and asks SciPy for the four numbers
+once per orientation rather than once per block.
 """
 
 from __future__ import annotations
@@ -42,8 +43,11 @@ def make_rotation(rot_quaternion: Any) -> SimpleNamespace:
 
     Rotate a radial base spoke over a golden-angle plan::
 
-        for angle in _lowlevel.make_radial_tilt(377, scheme="golden").positions[:, 0]:
+        for angle in pp.calc_golden_angles(377):
             readout(seq, rotation=Rotation.from_euler("z", angle))
+
+    Reusing one rotation object across blocks costs one ``as_quat`` call for all
+    of them; a fresh object per shot costs one each.
 
     See Also
     --------

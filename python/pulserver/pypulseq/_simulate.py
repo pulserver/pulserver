@@ -12,12 +12,12 @@ plot would show.
 
 from __future__ import annotations
 
-__all__ = ["bloch", "sim_rf"]
+__all__ = ["bloch", "calc_rf_bandwidth", "sim_rf"]
 
 import numpy as np
 import pypulseq as pp
 
-from . import _results
+from . import _events, _results
 from ._opts import default_system
 
 
@@ -100,40 +100,132 @@ def _adapted_step(bandwidth: float, dt: float | None) -> float:
     return 10e-6
 
 
-def _bandwidth_and_centre(rf, freq_offset: float, cutoff: float, df: float) -> tuple[float, float]:
-    """Width at ``cutoff`` of the peak, and the midpoint of the two flanks, in Hz.
-
-    Not :func:`pypulseq.calc_rf_bandwidth`: that one mis-measures a pulse
-    carrying a frequency offset -- on a 2 ms TBW-4 sinc shifted by 1.5 kHz it
-    reports 20 Hz instead of ~1900, and leaves the peak at zero. The offset
-    matters here because it decides where the simulated axis has to sit.
-    """
+def _spectrum(rf, freq_offset: float, df: float) -> tuple[np.ndarray, np.ndarray]:
+    """Frequency axis and magnitude spectrum of a pulse, at resolution ``df``."""
     times = np.asarray(rf.t, dtype=float)
     signal = np.asarray(rf.signal, dtype=complex) * np.exp(2j * np.pi * freq_offset * times)
     if times.size < 2 or not np.any(signal):
-        return 0.0, freq_offset
+        return np.zeros(0), np.zeros(0)
 
     step = float(np.min(np.diff(times)))
     grid = np.arange(times[0], times[-1] + 0.5 * step, step)
     sampled = np.interp(grid, times, signal.real) + 1j * np.interp(grid, times, signal.imag)
 
     # Zero-pad until one bin is no wider than the resolution asked for.
-    n = max(int(round(1.0 / (df * step))), sampled.size)
-    spectrum = np.abs(np.fft.fftshift(np.fft.fft(sampled, n)))
-    frequency = np.fft.fftshift(np.fft.fftfreq(n, step))
+    n = max(round(1.0 / (df * step)), sampled.size)
+    return np.fft.fftshift(np.fft.fftfreq(n, step)), np.abs(np.fft.fftshift(np.fft.fft(sampled, n)))
 
+
+def _flanks(spectrum: np.ndarray, cutoff: float) -> tuple[int, int]:
+    """Indices where the main lobe first falls below ``cutoff`` of its height.
+
+    Walked outward from the maximum, so a side lobe over threshold cannot widen
+    the answer.
+    """
     peak = int(np.argmax(spectrum))
     threshold = cutoff * spectrum[peak]
-    # Walk outward from the peak rather than taking the outermost sample over
-    # threshold anywhere, so a side lobe cannot widen the answer.
     left = peak
     while left > 0 and spectrum[left - 1] >= threshold:
         left -= 1
     right = peak
-    while right < n - 1 and spectrum[right + 1] >= threshold:
+    while right < spectrum.size - 1 and spectrum[right + 1] >= threshold:
         right += 1
+    return left, right
 
+
+def _bandwidth_and_centre(rf, freq_offset: float, cutoff: float, df: float) -> tuple[float, float]:
+    """Width at ``cutoff`` of the peak, and the midpoint of the two flanks, in Hz."""
+    frequency, spectrum = _spectrum(rf, freq_offset, df)
+    if frequency.size == 0:
+        return 0.0, freq_offset
+    left, right = _flanks(spectrum, cutoff)
     return float(frequency[right] - frequency[left]), float(0.5 * (frequency[left] + frequency[right]))
+
+
+def calc_rf_bandwidth(
+    rf,
+    cutoff: float = 0.5,
+    return_axis: bool = False,
+    return_spectrum: bool = False,
+    dw: float = 10,
+    dt: float | None = None,  # noqa: ARG001 - upstream's signature; the pulse carries its own step
+):
+    """Spectral width of an RF pulse, from an FFT of its envelope.
+
+    A low-flip-angle approximation: the excitation profile is taken to be the
+    Fourier transform of the pulse, and the bandwidth the width of that
+    transform's main lobe at ``cutoff`` of its height. For the profile a real
+    pulse produces at its real flip angle, simulate it with :func:`sim_rf`.
+
+    Parameters
+    ----------
+    rf : SimpleNamespace or RfEvent
+        RF pulse event.
+    cutoff : float, optional
+        Fraction of the peak the flanks are measured at.
+    return_axis : bool, optional
+        Also return the frequency axis.
+    return_spectrum : bool, optional
+        Also return the spectrum.
+    dw : float, optional
+        Spectral resolution (Hz).
+    dt : float, optional
+        Sampling step (s); defaults to the pulse's own.
+
+    Returns
+    -------
+    bw : float
+        Bandwidth (Hz).
+    spectrum : numpy.ndarray, optional
+        Present when ``return_spectrum``, second.
+    w : numpy.ndarray, optional
+        Present when ``return_axis``: second on its own, third alongside a
+        spectrum.
+
+    Notes
+    -----
+    The width is measured between the flanks, not from the position of the
+    maximum: across the flat top of a main lobe it is truncation ripple that
+    decides which bin is highest, so that bin is not the pulse's centre.
+
+    ``freq_offset`` shifts the band and leaves its width alone.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> import pulserver.pypulseq as pp
+    >>> system = pp.Opts(max_grad=30, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+    >>> rf = pp.make_sinc_pulse(
+    ...     flip_angle=np.pi / 2, duration=2e-3, time_bw_product=4, system=system
+    ... )
+    >>> bool(abs(pp.calc_rf_bandwidth(rf) - 4 / 2e-3) < 0.1 * 4 / 2e-3)
+    True
+
+    Retuning the pulse moves its band without widening it:
+
+    >>> rf.freq_offset = 1500.0
+    >>> bool(abs(pp.calc_rf_bandwidth(rf) - 4 / 2e-3) < 0.1 * 4 / 2e-3)
+    True
+
+    See Also
+    --------
+    sim_rf : the simulated profile, valid at any flip angle.
+    """
+    rf = _events.as_namespace(rf)
+    frequency, spectrum = _spectrum(rf, float(getattr(rf, "freq_offset", 0.0)), dw)
+    if frequency.size == 0:
+        bandwidth = 0.0
+    else:
+        left, right = _flanks(spectrum, cutoff)
+        bandwidth = float(frequency[right] - frequency[left])
+
+    if return_spectrum and return_axis:
+        return bandwidth, spectrum, frequency
+    if return_spectrum:
+        return bandwidth, spectrum
+    if return_axis:
+        return bandwidth, frequency
+    return bandwidth
 
 
 def sim_rf(

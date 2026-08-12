@@ -1,10 +1,12 @@
-"""Local port of MATLAB Pulseq's ``rotate3D``.
+"""Rotating a block's gradients by a general 3x3 matrix.
 
-Upstream PyPulseq 1.5.0 ships :func:`pypulseq.rotate.rotate`, which rotates
-gradients about a single axis. The ``ROTATIONS`` block extension Pulserver
-writes carries a full quaternion, so applying it needs the general 3x3 form
-that MATLAB Pulseq has as ``rotate3D`` and that PyPulseq only gained after
-1.5.0. This module is that function, kept private until upstream ships it.
+:func:`pypulseq.rotate.rotate` turns them about a single axis; a ``ROTATIONS``
+block extension carries a full quaternion, which needs this.
+
+The body works in :class:`~types.SimpleNamespace` events, as
+:func:`pypulseq.scale_grad` and :func:`pypulseq.add_gradients` do.
+:mod:`pulserver.pypulseq` exports it through the interoperation decorator, so a
+caller passes and receives slotted events.
 """
 
 from __future__ import annotations
@@ -17,6 +19,8 @@ import numpy as np
 import pypulseq as pp
 from pypulseq.add_gradients import add_gradients
 from pypulseq.scale_grad import scale_grad
+
+from ._opts import default_system
 
 _AXES = ("x", "y", "z")
 
@@ -52,8 +56,7 @@ def rotate3D(
     list of SimpleNamespace
         Bypassed events first, then the rotated gradients.
     """
-    if system is None:
-        system = pp.Opts.default
+    system = default_system(system)
 
     rotation_matrix = np.asarray(rotation_matrix, dtype=float)
     if rotation_matrix.shape != (3, 3):

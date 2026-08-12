@@ -75,7 +75,7 @@ from types import SimpleNamespace
 import numpy as np
 import pypulseq as pp
 
-from .._gradients import CRUSHER_CYCLES_Z, make_crusher
+from .._gradients import CRUSHER_CYCLES_Z, _crusher_trapezoid
 from .._schedules import make_traps_schedule
 from .._system import (
     DEFAULT_BANDWIDTH_HZ_PX,
@@ -115,7 +115,7 @@ def _snapshot_index(value):
 
 def build_z_crusher(opts: pp.Opts, thickness_m: float, cycles: float = CRUSHER_CYCLES_Z):
     """Standalone z-axis crusher trapezoid (helper; the trains fuse their own)."""
-    return make_crusher(opts, "z", dephasing_cycles=cycles, voxel_size=thickness_m)
+    return _crusher_trapezoid(opts, "z", dephasing_cycles=cycles, voxel_size=thickness_m)
 
 
 def build_refocusing_pulse(

@@ -23,12 +23,12 @@ This namespace is the event layer *only*. The factories that assemble events
 into whole modules and scan loops — RF pulses, readouts, sampling plans, phase
 schedules — live in {doc}`pulserver.design <design>`.
 
-A few upstream names are deliberately withheld. `make_adiabatic_pulse` is not
-re-exported, because Pulserver's inversion and preparation modules design
-their adiabatic pulses internally. `compress_shape`, `decompress_shape` and
-`convert` are not re-exported either: upstream exposes them as modules rather
-than as part of its authoring vocabulary, and nothing a plugin writes should
-need to reach the shape codec directly.
+Three upstream names are deliberately withheld: `compress_shape`,
+`decompress_shape` and `convert`. Upstream exposes them as modules rather than
+as part of its authoring vocabulary, and nothing a plugin writes should need to
+reach the shape codec directly. Reaching for one — or for a MATLAB name with no
+counterpart here, such as `addCustomLabel` — raises an `AttributeError` that
+gives the reason and points at what to use instead.
 
 ## Replaced objects
 
@@ -280,6 +280,7 @@ about the hardware.
    :nosignatures:
 
    pulserver.pypulseq.make_adc
+   pulserver.pypulseq.make_adiabatic_pulse
    pulserver.pypulseq.make_arbitrary_grad
    pulserver.pypulseq.make_arbitrary_rf
    pulserver.pypulseq.make_block_pulse
@@ -317,9 +318,9 @@ merely inverts — `ref_eff` combines the last two. `bloch` is the integrator
 underneath, exposed for a caller simulating something the pulse alone does not
 describe, such as a two-dimensional profile under its own gradients.
 
-It does not use `pypulseq.calc_rf_bandwidth` to choose its frequency axis:
-that function mis-measures a pulse carrying a frequency offset, reporting
-20 Hz for a 2 ms TBW-4 sinc shifted by 1.5 kHz.
+`calc_rf_bandwidth` measures the width of the pulse's main lobe between its
+flanks, and follows a pulse that carries a `freq_offset`. It is the low-flip
+approximation; `sim_rf` is what to use for a profile at a real flip angle.
 
 ```{eval-rst}
 .. autosummary::
@@ -328,6 +329,113 @@ that function mis-measures a pulse carrying a frequency offset, reporting
 
    pulserver.pypulseq.sim_rf
    pulserver.pypulseq.bloch
+   pulserver.pypulseq.calc_rf_bandwidth
+```
+
+## Base factories
+
+Stated in what a sequence knows rather than in gradient area or dwell time.
+`make_crusher` is `make_extended_trapezoid_area` with the area replaced by
+cycles of dephasing across a voxel, so it can also ride a gradient that is
+already running. `make_phase_encoding` builds the full-amplitude template a
+scan loop scales per view — resolution alone fixes it, since field of view and
+matrix cancel — and `make_phase_blip` states the step between echoes in k-space
+cells, so `steps=R` *is* an acceleration of R.
+
+`calc_adc_timing` returns a dwell on the ADC raster whose
+`num_samples * dwell` is a whole number of gradient rasters, which is what lets
+the ADC sit exactly over the readout flat top.
+
+`make_slr_pulse` designs its FIR filter in-package, so SigPy is not a
+dependency; it is also exported as `make_sigpy_pulse`. `make_spsp_pulse` builds
+a spectral-spatial pulse on an alternating gradient, and `make_sms_pulse` turns
+any RF event into equispaced bands.
+
+`traj_to_grad` **diverges from upstream by default**: `time_optimal=True` takes
+`k` as geometry only and re-parameterises it in time with MRArbGrad, so the
+limits hold everywhere by construction and the returned length is the solver's.
+Pass `time_optimal=False` for upstream's finite difference of an
+already-rastered trajectory.
+
+```{eval-rst}
+.. autosummary::
+   :toctree: generated/pypulseq
+   :nosignatures:
+
+   pulserver.pypulseq.calc_adc_timing
+   pulserver.pypulseq.make_crusher
+   pulserver.pypulseq.make_phase_blip
+   pulserver.pypulseq.make_phase_encoding
+   pulserver.pypulseq.make_sigpy_pulse
+   pulserver.pypulseq.make_slr_pulse
+   pulserver.pypulseq.make_sms_pulse
+   pulserver.pypulseq.make_spsp_pulse
+   pulserver.pypulseq.traj_to_grad
+```
+
+## Sampling masks, orderings and angles
+
+Plain arrays: a boolean mask over the phase-encode grid, a list of shots each
+holding the view indices it acquires in order, or one angle per spoke. The scan
+loops built from them live in {doc}`pulserver.design <design>`.
+
+The four mask modes are `make_uniform_mask`, `make_caipirinha_mask`,
+`make_random_mask` and `make_poisson_disc_mask`; only the first works on a
+single phase-encode axis. Poisson-disc refuses a request it cannot meet and
+says which of the two arithmetic reasons applies — the calibration block alone
+being denser than the request, or the grid being too coarse for one sample to
+land inside `tol`.
+
+```{eval-rst}
+.. autosummary::
+   :toctree: generated/pypulseq
+   :nosignatures:
+
+   pulserver.pypulseq.calc_golden_angles
+   pulserver.pypulseq.calc_raga_angles
+   pulserver.pypulseq.calc_sampled_lines
+   pulserver.pypulseq.calc_tiny_golden_angles
+   pulserver.pypulseq.calc_traversal_order
+   pulserver.pypulseq.calc_uniform_angles
+   pulserver.pypulseq.make_caipirinha_mask
+   pulserver.pypulseq.make_centric_order
+   pulserver.pypulseq.make_linear_order
+   pulserver.pypulseq.make_poisson_disc_mask
+   pulserver.pypulseq.make_radial_adaptive_order
+   pulserver.pypulseq.make_radial_order
+   pulserver.pypulseq.make_random_mask
+   pulserver.pypulseq.make_shuffling_order
+   pulserver.pypulseq.make_uniform_mask
+```
+
+## Routines MATLAB Pulseq has and PyPulseq does not
+
+Ports of `mr.*` functions upstream never carried over, under PyPulseq's naming.
+`make_hexagon_gradient_area` reaches an area between two given amplitudes
+without holding a plateau, which is sometimes shorter than
+`make_extended_trapezoid_area` and never longer. `calc_rf_power` gives one
+pulse's relative energy, peak power and RMS amplitude — `Sequence.calc_rf_power`
+answers the same question of a whole sequence. `rotate3D` turns a block's
+gradients by a full 3x3 matrix where upstream's `rotate` turns them about one
+axis. `restore_additional_shape_samples` recovers the raster-edge samples of a
+gradient stored on a centres raster. `verify_file_signature` re-hashes a `.seq`
+and checks it against its own `[SIGNATURE]`.
+
+`mr.addRamps` is **not** ported: it needs a working `calc_ramp`, and
+`pypulseq.calc_ramp` raises for any ramp of more than zero intermediate points.
+Use `traj_to_grad`, which solves the same problem under the same limits.
+
+```{eval-rst}
+.. autosummary::
+   :toctree: generated/pypulseq
+   :nosignatures:
+
+   pulserver.pypulseq.calc_rf_power
+   pulserver.pypulseq.get_supported_rf_use
+   pulserver.pypulseq.make_hexagon_gradient_area
+   pulserver.pypulseq.restore_additional_shape_samples
+   pulserver.pypulseq.rotate3D
+   pulserver.pypulseq.verify_file_signature
 ```
 
 ## Label constants

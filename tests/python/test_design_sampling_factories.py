@@ -8,7 +8,7 @@ import pulserver.design as design
 import pulserver.pypulseq as pp
 import pytest
 from pulserver import ScanLoop
-from pulserver.design import _lowlevel
+import pulserver.pypulseq as _lowlevel
 
 
 def test_cartesian_sampling_covers_gre_fse_and_mprage_from_one_factory():

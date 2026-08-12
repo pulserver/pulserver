@@ -161,3 +161,100 @@ def test_a_wrapped_helper_keeps_its_upstream_signature():
         assert inspect.signature(getattr(pp, name)) == inspect.signature(
             getattr(upstream, name)
         ), name
+
+
+#: One valid minimal call per event factory in the namespace. Written out rather
+#: than generated, so adding a factory means adding a row here and the test
+#: below fails until it is.
+def _factory_calls(system):
+    from scipy.spatial.transform import Rotation
+
+    ramp = np.array([0.0, 1000.0, 1000.0, 0.0])
+    return {
+        "make_adc": lambda: pp.make_adc(num_samples=64, duration=1.6e-3, system=system),
+        "make_adiabatic_pulse": lambda: pp.make_adiabatic_pulse(
+            pulse_type="hypsec", duration=10e-3, system=system
+        ),
+        "make_arbitrary_grad": lambda: pp.make_arbitrary_grad("x", ramp, system=system),
+        "make_arbitrary_rf": lambda: pp.make_arbitrary_rf(
+            np.ones(100), flip_angle=0.5, system=system
+        ),
+        "make_block_pulse": lambda: pp.make_block_pulse(
+            flip_angle=0.5, duration=1e-3, system=system
+        ),
+        "make_crusher": lambda: pp.make_crusher(4.0, 5e-3, "z", system=system),
+        "make_delay": lambda: pp.make_delay(1e-3),
+        "make_digital_output_pulse": lambda: pp.make_digital_output_pulse("osc0", duration=1e-3),
+        "make_extended_trapezoid": lambda: pp.make_extended_trapezoid(
+            "x", amplitudes=np.array([0.0, 1000.0, 0.0]),
+            times=np.array([0.0, 200e-6, 400e-6]), system=system,
+        ),
+        "make_extended_trapezoid_area": lambda: pp.make_extended_trapezoid_area(
+            area=1000, channel="x", grad_start=0.0, grad_end=0.0, system=system
+        ),
+        "make_gauss_pulse": lambda: pp.make_gauss_pulse(
+            flip_angle=0.5, duration=2e-3, system=system
+        ),
+        "make_hexagon_gradient_area": lambda: pp.make_hexagon_gradient_area(
+            area=1000, channel="x", grad_start=0.0, grad_end=0.0, system=system
+        ),
+        "make_label": lambda: pp.make_label("LIN", "SET", 3),
+        "make_phase_blip": lambda: pp.make_phase_blip("y", 0.24, steps=2, system=system),
+        "make_phase_encoding": lambda: pp.make_phase_encoding("y", 0.22 / 64, system=system),
+        "make_rf_shim": lambda: pp.make_rf_shim([1 + 0j, 0.5 + 0.5j]),
+        "make_rotation": lambda: pp.make_rotation(Rotation.from_euler("z", 0.3)),
+        "make_sigpy_pulse": lambda: pp.make_sigpy_pulse(0.5, system=system),
+        "make_sinc_pulse": lambda: pp.make_sinc_pulse(
+            flip_angle=0.5, duration=2e-3, system=system
+        ),
+        "make_slr_pulse": lambda: pp.make_slr_pulse(0.5, system=system),
+        "make_sms_pulse": lambda: pp.make_sms_pulse(
+            pp.make_sinc_pulse(flip_angle=0.5, duration=2e-3, system=system), 3, 1000.0
+        ),
+        "make_spsp_pulse": lambda: pp.make_spsp_pulse(
+            0.5,
+            10e-3,
+            300.0,
+            n_subpulses=12,
+            system=pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=180, slew_unit="T/m/s"),
+        ),
+        "make_soft_delay": lambda: pp.make_soft_delay(numID=1, hint="TE"),
+        "make_trapezoid": lambda: pp.make_trapezoid(channel="x", area=1000, system=system),
+        "make_trigger": lambda: pp.make_trigger("physio1", duration=1e-3),
+    }
+
+
+#: The two factories whose product is deliberately not slotted, and why.
+_UNSLOTTED = {
+    "make_rotation": "add_block caches quaternions by the identity of the rotation "
+    "object, so the event must keep holding it rather than four floats",
+    "make_rf_shim": "a shim is registered into its own library rather than carried "
+    "in a block slot, so there is no RfShimEvent for it to become",
+}
+
+
+def test_every_factory_hands_back_an_event_with_its_fields_in_slots(system):
+    """The property `add_block` is fast because of.
+
+    A `SimpleNamespace` event costs a dictionary lookup per field on every
+    block that carries it -- measured at 0.78 us against 0.46 us for a slotted
+    label. One factory returning the slow representation is enough to put that
+    cost back on every sequence that uses it.
+    """
+    calls = _factory_calls(system)
+    # Everything that builds an event: the sampling factories are named the
+    # same way but hand back plain arrays.
+    assert set(calls) == {
+        name for name in pp.__all__ if name.startswith("make_") and name not in pp.SAMPLING
+    }
+
+    for name, call in calls.items():
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            made = call()
+        events = _events_in(made) or [made]
+        slotted = [isinstance(event, cxx.Event) for event in events]
+        if name in _UNSLOTTED:
+            assert not any(slotted), f"{name} is now slotted: {_UNSLOTTED[name]} no longer holds"
+        else:
+            assert all(slotted), f"{name} returned {[type(e).__name__ for e in events]}"

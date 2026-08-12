@@ -235,7 +235,7 @@ class SequenceModule(Sequence[Block], ABC):
         state — without abusing a built-in counter (see
         :func:`pulserver.pypulseq.make_label`). The cost of that is that a
         misspelled counter becomes a custom label rather than an error;
-        :attr:`pulserver.pypulseq.Sequence.custom_labels` is where they show up.
+        :meth:`pulserver.pypulseq.Sequence.evaluate_labels` is where they show up.
 
         Two lowercase spellings are label sugar, because they read better in a
         loop than the label does: ``once=`` is ``ONCE``, and ``adc_flag=False``

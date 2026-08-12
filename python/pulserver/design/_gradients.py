@@ -58,7 +58,7 @@ def make_spoiler(
        plt.xlabel("t [ms]"); plt.ylabel("G [Hz/m]")
     """
     return tuple(
-        make_crusher(
+        _crusher_trapezoid(
             system,
             axis,
             dephasing_cycles=dephasing_cycles,
@@ -68,104 +68,7 @@ def make_spoiler(
     )
 
 
-def make_phase_encoding(
-    system: pp.Opts,
-    axis: str,
-    resolution_m: float,
-    *,
-    duration: float | None = None,
-):
-    """Build the full-amplitude phase-encode trapezoid for a target resolution.
-
-    The largest phase-encode step an acquisition needs is set by resolution
-    alone: index ``i`` of ``n`` encodes area ``(i - n/2) / fov``, so the
-    extreme is ``(n/2) / fov`` — and since ``resolution = fov / n``, that is
-    ``1 / (2 * resolution)``. Field of view and matrix size cancel, so neither
-    is asked for here.
-
-    This factory therefore builds **one** gradient and nothing else. *Which*
-    views are played, and in what order, is a
-    :class:`~pulserver.ScanLoop`; scale this template by
-    :func:`~pulserver.design.calc_encoding_scales` to get any individual
-    view::
-
-        gy = design.make_phase_encoding(system, "y", fov_y / ny)
-        for shot in loop:
-            ky = int(shot[0, 0])
-            scale = float(design.calc_encoding_scales(ky, ny))
-            seq.add_block(pp.scale_grad(gy, scale), gx_pre)
-
-    Acceleration and partial Fourier do not appear either: they change which
-    views the loop contains, not the gradient that encodes them.
-
-    Parameters
-    ----------
-    system : pypulseq.Opts
-        System limits.
-    axis : str
-        Gradient channel (``"x"``, ``"y"``, or ``"z"``).
-    resolution_m : float
-        Target resolution along ``axis`` (m) — ``fov / matrix`` for an
-        in-plane encode, the partition spacing for a 3D slab encode.
-    duration : float or None, optional
-        Force a gradient duration (s); ``None`` uses the shortest feasible.
-
-    Returns
-    -------
-    SimpleNamespace
-        Trapezoid of area ``1 / (2 * resolution_m)``, to be
-        :func:`pypulseq.scale_grad`-ed per view.
-
-    Raises
-    ------
-    ValueError
-        If ``resolution_m`` is not positive.
-
-    Examples
-    --------
-    >>> import pypulseq as pp
-    >>> from pulserver.design import make_phase_encoding
-    >>> gy = make_phase_encoding(pp.Opts(), "y", 0.22 / 64)
-    >>> round(gy.area, 3)
-    145.455
-
-    The same call encodes a 3D slab's partitions — the resolution along ``z``
-    is the partition spacing:
-
-    >>> gz = make_phase_encoding(pp.Opts(), "z", 1e-3)
-    >>> round(gz.area, 1)
-    500.0
-
-    .. plot::
-       :include-source: false
-
-       import numpy as np
-       import pypulseq as pp
-       import matplotlib.pyplot as plt
-       from pulserver.pypulseq import scale_grad
-       from pulserver.design import make_phase_encoding, make_cartesian_sampling
-       ny = 32
-       template = make_phase_encoding(pp.Opts(), "y", 0.22 / ny)
-       scales = make_cartesian_sampling((64, ny)).to_scales((ny,))[:, 0]
-       plt.stem(range(ny), [scale_grad(template, s).area for s in scales])
-       plt.xlabel("view"); plt.ylabel("area [1/m]")
-       plt.title("one template, scaled by the scan loop")
-
-    See Also
-    --------
-    pulserver.design.calc_encoding_scales : the per-view factors that scale this.
-    make_phase_blip : the small step played between echoes of a train.
-    """
-    resolution_m = float(resolution_m)
-    if not resolution_m > 0.0:
-        raise ValueError(f"resolution_m must be > 0, got {resolution_m}")
-    kwargs = {"channel": axis, "area": 1.0 / (2.0 * resolution_m), "system": system}
-    if duration is not None:
-        kwargs["duration"] = duration
-    return pp.make_trapezoid(**kwargs)
-
-
-def make_crusher(
+def _crusher_trapezoid(
     system: pp.Opts,
     axis: str,
     *,
@@ -224,79 +127,6 @@ def make_crusher(
             raise ValueError("voxel_size is required when specifying dephasing_cycles")
         area = dephasing_cycles / voxel_size
     return pp.make_trapezoid(channel=axis, area=area, system=system)
-
-
-def make_phase_blip(
-    system: pp.Opts,
-    axis: str,
-    fov: float,
-    *,
-    steps: float = 1.0,
-    duration: float | None = None,
-):
-    """Create a phase blip spanning ``steps`` Cartesian k-space cells.
-
-    The short gradient played between echoes of a train to advance the phase
-    encode. Stated in *cells* rather than area: one cell is ``1 / fov``, so a
-    blip of ``steps=1`` moves one line and ``steps=R`` implements an
-    acceleration of ``R`` without any further arithmetic. Negative ``steps``
-    blip backwards.
-
-    Parameters
-    ----------
-    system : pypulseq.Opts
-        System limits.
-    axis : str
-        Gradient channel (``"x"``, ``"y"``, or ``"z"``).
-    fov : float
-        Field of view along ``axis`` (m); one k-space cell is ``1 / fov``.
-    steps : float, optional
-        Cells to traverse; non-zero, may be negative.
-    duration : float or None, optional
-        Force a blip duration (s); ``None`` uses the shortest feasible.
-
-    Returns
-    -------
-    SimpleNamespace
-        Blip trapezoid with area ``steps / fov``.
-
-    Examples
-    --------
-    >>> import pypulseq as pp_up
-    >>> from pulserver.design import make_phase_blip
-    >>> blip = make_phase_blip(pp_up.Opts(), "y", 0.24, steps=2)
-    >>> round(blip.area, 3)
-    8.333
-
-    Blip by the increments a sampling plan prescribes::
-
-        for step in plan.increments(shot)[:, 0]:
-            seq.add_block(make_phase_blip(system, "y", fov, steps=step))
-
-    .. plot::
-       :include-source: false
-
-       import pypulseq as pp_up
-       from pulserver.design import make_phase_blip
-       import matplotlib.pyplot as plt
-       g = make_phase_blip(pp_up.Opts(), "y", 0.24, steps=2)
-       t = [0, g.rise_time, g.rise_time + g.flat_time,
-            g.rise_time + g.flat_time + g.fall_time]
-       plt.plot([x * 1e3 for x in t], [0, g.amplitude, g.amplitude, 0])
-       plt.xlabel("t [ms]"); plt.ylabel("G [Hz/m]")
-
-    See Also
-    --------
-    make_phase_encoding : the full-area encode used once per shot.
-    """
-    if fov <= 0:
-        raise ValueError("fov must be > 0")
-    if steps == 0:
-        raise ValueError("steps must be non-zero")
-    kwargs = {"channel": axis, "area": float(steps) / float(fov), "system": system}
-    if duration is not None:
-        kwargs["duration"] = duration
-    return pp.make_trapezoid(**kwargs)
 
 
 def partition_geometry(npar: int, slice_spacing_m: float):

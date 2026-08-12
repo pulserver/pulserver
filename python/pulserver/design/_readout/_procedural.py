@@ -14,7 +14,7 @@ from __future__ import annotations
 import numpy as np
 import pypulseq as pp
 
-from .. import _arbgrad as arbgrad
+from ...pypulseq import _arbgrad as arbgrad
 from .._gradients import SPOIL_FACTOR_X
 from .._rf import _excitation_helpers as excitation
 from .._system import (

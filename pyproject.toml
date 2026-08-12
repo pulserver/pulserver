@@ -13,7 +13,7 @@ authors = [{ name = "pulserver" }]
 dependencies = []
 
 [project.optional-dependencies]
-sequence = ["pypulseq>=1.5.0", "scipy", "numpy>=2.0", "matplotlib"]
+sequence = ["pypulseq>=1.5.0", "scipy", "numpy>=2.0", "matplotlib", "mri-nufft"]
 recon = [
   "numpy>=2.0",
   "ismrmrd>=1.14.1",

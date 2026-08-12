@@ -11,8 +11,8 @@ NumPy k-space samples in cycles/m and returns a rasterized gradient in Hz/m.
 
 Shot-to-shot ordering (uniform vs golden-angle vs any other scheme) and
 rotation are deliberately kept out of the C++ layer and live here instead
-(:func:`shot_angles`, backed by vendored mri-nufft angle/ordering utilities —
-see ``arbgrad/_vendor_mrinufft/NOTICE.md``), to be paired with
+(:func:`shot_angles`, over mri-nufft's angle and Fibonacci utilities), to be
+paired with
 :func:`pulserver.pypulseq.make_rotation` when a consuming sequence replicates
 the base waveform across shots.
 
@@ -39,7 +39,7 @@ units before handing it to ``pypulseq.make_arbitrary_grad``.
 
 Examples
 --------
->>> from pulserver.design._lowlevel import arbgrad
+>>> from pulserver.pypulseq import _arbgrad as arbgrad
 >>> wf = arbgrad.spiral(fov=0.256, n_pix=128,
 ...                     slew_limit=50 * 42.5756e6 * 0.256 / 128,
 ...                     grad_limit=50e-3 * 42.5756e6 * 0.256 / 128,
@@ -58,13 +58,14 @@ from math import pi
 
 import numpy as np
 
-from ..._ext import _arbgrad_wrapper as _ext
-from ._vendor_mrinufft._angles import Tilts, initialize_tilt
-from ._vendor_mrinufft._fibonacci import (
+from mrinufft.trajectories.maths import (
     generate_fibonacci_circle,
     generate_fibonacci_lattice,
     generate_fibonacci_sphere,
 )
+from mrinufft.trajectories.utils import Tilts, initialize_tilt
+
+from ..._ext import _arbgrad_wrapper as _ext
 
 __all__ = [
     "BaseWaveform",
@@ -83,7 +84,7 @@ __all__ = [
 DEFAULT_GAMMA_HZ_PER_T = 42.5756e6
 
 # User-facing aliases onto the vendored mri-nufft Tilts vocabulary (see
-# _vendor_mrinufft/_angles.py); kept for readability/back-compat.
+# mri-nufft's Tilts enum); kept for readability.
 _SHOT_ANGLE_ALIASES = {"linear": Tilts.UNIFORM}
 
 
@@ -274,7 +275,7 @@ def shot_angles(n_shots: int, mode: str | float = "uniform") -> np.ndarray:
 
     Backed by mri-nufft's vendored tilt-strategy utilities (:class:`Tilts`,
     :func:`initialize_tilt`) plus a Fibonacci-circle ordering — see
-    ``arbgrad/_vendor_mrinufft/NOTICE.md``.
+    mri-nufft's ``initialize_tilt``.
 
     Parameters
     ----------

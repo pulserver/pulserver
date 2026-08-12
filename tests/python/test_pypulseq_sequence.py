@@ -434,7 +434,7 @@ def test_a_trid_needs_a_real_name(system, name):
 
 def test_the_withheld_upstream_names_say_why_rather_than_vanishing():
     """A bare AttributeError would read as an oversight, not a decision."""
-    for name in ("make_adiabatic_pulse", "convert", "compress_shape", "decompress_shape"):
+    for name in ("convert", "compress_shape", "decompress_shape"):
         with pytest.raises(AttributeError, match="does not export"):
             getattr(pp, name)
 

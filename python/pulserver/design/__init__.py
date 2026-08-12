@@ -43,7 +43,6 @@ writes its own ``for`` statements, and a custom ``ScanLoop`` is built from
 
 from __future__ import annotations
 
-from ._gradients import make_crusher, make_phase_blip, make_phase_encoding  # noqa: F401
 from ._readout._factories import (  # noqa: F401
     make_bssfp_readout,
     make_epi_readout,
@@ -77,10 +76,7 @@ from ._rf import (  # noqa: F401
     make_pins_slice_selective_pulse,
     make_plane_selective_pulse,
     make_refocusing_pulse,
-    make_sigpy_pulse,
     make_slice_selective_pulse,
-    make_slr_pulse,
-    make_spsp_pulse,
     make_t1t2_prep_pulse,
     make_t2prep_pulse,
 )
@@ -95,15 +91,7 @@ from ._sampling import (  # noqa: F401
     make_slice_loop,
 )
 from ._schedules import make_phase_cycling_schedule, make_rf_spoiling_schedule, make_traps_schedule  # noqa: F401
-from ._timing import calc_adc_timing  # noqa: F401
-from ._traj2grad import traj2grad  # noqa: F401
 
-#: Gradient events expressed in imaging terms rather than in area.
-_GRADIENTS = {
-    "make_crusher",
-    "make_phase_blip",
-    "make_phase_encoding",
-}
 #: Slice-, slab-, frequency-selective and non-selective excitation modules.
 _RF_EXCITATION = {
     "make_frequency_selective_pulse",
@@ -113,13 +101,11 @@ _RF_EXCITATION = {
     "make_pins",
     "make_pins_slice_selective_pulse",
     "make_refocusing_pulse",
-    "make_slr_pulse",
     "make_slice_selective_pulse",
 }
 #: Multidimensional and spectral-spatial excitation modules.
 _RF_MULTIDIMENSIONAL = {
     "make_plane_selective_pulse",
-    "make_spsp_pulse",
 }
 #: Magnetization-preparation modules.
 _PREPARATION = {
@@ -168,19 +154,12 @@ _SCHEDULES = {
     "make_rf_spoiling_schedule",
     "make_traps_schedule",
 }
-#: Waveform-level helpers that are neither a module nor a loop.
-_WAVEFORMS = {
-    "calc_adc_timing",
-    "traj2grad",
-}
 
 __all__ = sorted(
-    _GRADIENTS
-    | _RF_EXCITATION
+    _RF_EXCITATION
     | _RF_MULTIDIMENSIONAL
     | _PREPARATION
     | _READOUTS
     | _SAMPLING
     | _SCHEDULES
-    | _WAVEFORMS
 )

@@ -10,6 +10,8 @@ __all__ = [
 
 from types import SimpleNamespace
 
+from ._events import convert as _convert
+
 #: Counters: per-acquisition integer indices, one ISMRMRD ``EncodingCounters``
 #: field each. These are what a :class:`~pulserver.ScanLoop` axis emits — the
 #: reconstruction sorts data by them, and the interpreter derives the
@@ -193,14 +195,16 @@ def get_supported_labels() -> tuple[str, ...]:
     return _SUPPORTED_LABELS
 
 
-def make_label(label: str, type: str, value: int | bool | float) -> SimpleNamespace:  # noqa: A002
+def make_label(label: str, type: str, value: int | bool | float):  # noqa: A002
     """Create a label event without validating *label* against the built-in list.
 
     Identical to :func:`pypulseq.make_label` but does **not** raise
     :exc:`ValueError` for unknown label strings, allowing user-defined labels to
     be passed to :meth:`pulserver.pypulseq.Sequence.add_block`. The label is
-    auto-registered and retrievable via
-    :attr:`pulserver.pypulseq.Sequence.custom_labels`.
+    auto-registered, written to the file, and read back by name;
+    :meth:`pulserver.pypulseq.Sequence.evaluate_labels` reports its value.
+    Recognising it is the interpreter's business, and one it does not
+    recognise it ignores.
 
     Labels are how a sequence tells the reconstruction *what* each acquisition
     is — which line, partition, echo, slice, average. Upstream restricts them
@@ -219,8 +223,9 @@ def make_label(label: str, type: str, value: int | bool | float) -> SimpleNamesp
 
     Returns
     -------
-    types.SimpleNamespace
-        Label event with ``type`` ``'labelset'`` or ``'labelinc'``.
+    LabelEvent
+        Label event with ``type`` ``'labelset'`` or ``'labelinc'``, its fields
+        in slots.
 
     Raises
     ------
@@ -234,19 +239,22 @@ def make_label(label: str, type: str, value: int | bool | float) -> SimpleNamesp
     >>> event.type, event.label, event.value
     ('labelset', 'LIN', 12)
 
-    A custom label passes through unvalidated, and is retrievable afterwards:
+    A custom label passes through unvalidated, and is readable afterwards
+    beside the built-in ones:
 
     >>> import pulserver.pypulseq as pp
-    >>> label = make_label("BIN", "SET", 3)
-    >>> delay = pp.make_delay(1e-3)
-    >>> seq = pp.Sequence(pp.Opts(), 1, (delay, label))
-    >>> seq.add_block(delay, label)
-    >>> sorted(seq.custom_labels)
-    ['BIN']
+    >>> system = pp.Opts()
+    >>> seq = pp.Sequence(system)
+    >>> _ = seq.add_block(
+    ...     pp.make_delay(1e-3), make_label("BIN", "SET", 3), make_label("LIN", "SET", 2)
+    ... )
+    >>> seq.evaluate_labels() == {"BIN": 3, "LIN": 2}
+    True
 
     See Also
     --------
     get_supported_labels : the built-in label set.
+    pulserver.pypulseq.Sequence.evaluate_labels : label values at a block.
     """
     out = SimpleNamespace()
     if type == "SET":
@@ -257,4 +265,4 @@ def make_label(label: str, type: str, value: int | bool | float) -> SimpleNamesp
         raise ValueError("Invalid type. Must be one of 'SET' or 'INC'.")
     out.label = label
     out.value = int(value)
-    return out
+    return _convert(out)

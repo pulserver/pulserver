@@ -20,9 +20,7 @@ from ._excitation import (
     make_hard_pulse,
     make_inversion_pulse,
     make_refocusing_pulse,
-    make_sigpy_pulse,
     make_slice_selective_pulse,
-    make_slr_pulse,
 )
 from ._multiband import (
     make_multiband,
@@ -53,7 +51,6 @@ from ._spatial import (
     make_plane_selective_pulse,
     make_spatially_selective_pulse,
     make_spiral_selective_pulse,
-    make_spsp_pulse,
 )
 
 __all__ = [
@@ -72,15 +69,12 @@ __all__ = [
     "T2PrepPulse",
     "DiffusionPrepPulse",
     "make_hard_pulse",
-    "make_sigpy_pulse",
-    "make_slr_pulse",
     "make_frequency_selective_pulse",
     "make_slice_selective_pulse",
     "make_multiband_frequency_selective_pulse",
     "make_pins_slice_selective_pulse",
     "make_multiband",
     "make_pins",
-    "make_spsp_pulse",
     "make_plane_selective_pulse",
     "make_inversion_pulse",
     "make_refocusing_pulse",

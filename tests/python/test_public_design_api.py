@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 import importlib.util
 import inspect
 from pathlib import Path
@@ -14,23 +15,19 @@ import pypulseq as upstream
 import pytest
 from pulserver import ScanLoop, SequenceModule
 from pulserver.design import (
-    _lowlevel,
-    calc_adc_timing,
     make_bssfp_readout,
-    make_crusher,
     make_hard_pulse,
     make_line_readout,
-    make_phase_blip,
     make_phase_cycling_schedule,
-    make_phase_encoding,
     make_rf_spoiling_schedule,
     make_traps_schedule,
 )
-from pulserver.design._lowlevel import make_radial_tilt
+from pulserver.design._sampling.noncartesian import make_radial_tilt
+from pulserver.pypulseq import calc_adc_timing, make_crusher, make_phase_blip, make_phase_encoding
 
 
 def test_enhanced_pypulseq_contains_complete_upstream_namespace() -> None:
-    withheld = {"compress_shape", "convert", "decompress_shape", "make_adiabatic_pulse"}
+    withheld = {"compress_shape", "convert", "decompress_shape"}
     upstream_names = {name for name in dir(upstream) if not name.startswith("_")} - withheld
     assert upstream_names <= set(pp.__all__)
     assert all(hasattr(pp, name) for name in upstream_names)
@@ -46,7 +43,7 @@ def test_enhanced_pypulseq_contains_complete_upstream_namespace() -> None:
     # The factories are upstream's, wrapped; the event they build differs.
     assert pp.make_delay is not upstream.make_delay
     assert pp.make_delay.__wrapped__ is upstream.make_delay
-    assert callable(design.traj2grad)
+    assert callable(pp.traj_to_grad)
 
 
 def test_pypulseq_namespace_is_upstream_plus_a_declared_override_set() -> None:
@@ -60,32 +57,53 @@ def test_pypulseq_namespace_is_upstream_plus_a_declared_override_set() -> None:
 
 
 def test_design_toolbox_is_disjoint_from_the_event_layer() -> None:
-    # The split is by role: pypulseq builds events, design builds modules and
-    # loops.  A name must never be reachable through both.
+    """The split is by what a function returns.
+
+    ``pulserver.pypulseq`` holds anything that hands back a Pulseq event or a
+    plain array; ``pulserver.design`` holds anything that hands back a
+    ``SequenceModule`` or a ``ScanLoop``. A name must never be reachable
+    through both.
+    """
     assert set(design.__all__).isdisjoint(pp.__all__)
-    assert set(_lowlevel.__all__).isdisjoint(pp.__all__)
-    # The escape hatch is a strictly separate tier, never a second spelling of
-    # a public factory.
-    assert set(_lowlevel.__all__).isdisjoint(design.__all__)
     for name in design.__all__:
         assert not hasattr(pp, name), f"{name} leaked back into pulserver.pypulseq"
 
 
-def test_design_factories_are_reachable_only_through_the_design_namespace() -> None:
-    moved = {
+def test_module_and_loop_factories_are_reachable_only_through_design() -> None:
+    """Everything here returns a SequenceModule or a ScanLoop."""
+    module_or_loop = {
         "make_line_readout",
         "make_slice_selective_pulse",
         "make_cartesian_sampling",
         "make_rf_spoiling_schedule",
-        "make_crusher",
-        "calc_adc_timing",
-        "traj2grad",
+        "make_slice_loop",
     }
-    assert moved <= set(design.__all__)
-    for name in moved:
+    assert module_or_loop <= set(design.__all__)
+    for name in module_or_loop:
         assert callable(getattr(design, name))
         with pytest.raises(AttributeError):
             getattr(pp, name)
+
+
+def test_event_and_array_factories_are_reachable_only_through_pypulseq() -> None:
+    """The other side of the same rule: events and plain arrays live in pp."""
+    events_and_arrays = {
+        "make_crusher",
+        "make_phase_encoding",
+        "make_phase_blip",
+        "make_slr_pulse",
+        "make_spsp_pulse",
+        "make_sms_pulse",
+        "calc_adc_timing",
+        "traj_to_grad",
+        "make_poisson_disc_mask",
+        "calc_golden_angles",
+        "calc_traversal_order",
+    }
+    assert events_and_arrays <= set(pp.__all__)
+    for name in events_and_arrays:
+        assert callable(getattr(pp, name))
+        assert name not in design.__all__
 
 
 def test_pulserver_base_overrides_are_vendor_neutral_and_callable() -> None:
@@ -115,7 +133,7 @@ def test_opts_takes_exactly_upstreams_arguments() -> None:
 
 def test_upstream_shape_codec_helpers_are_not_re_exported() -> None:
     """The shape codec and unit converter are not authoring vocabulary."""
-    withheld = ("compress_shape", "convert", "decompress_shape", "make_adiabatic_pulse")
+    withheld = ("compress_shape", "convert", "decompress_shape")
     for name in withheld:
         assert name not in pp.__all__
         assert name not in pp.UPSTREAM
@@ -132,8 +150,8 @@ def test_ordering_names_are_sequence_agnostic() -> None:
         "make_shuffling_order",
     }
     old_fse_names = {name.replace("make_", "make_fse_") for name in generic}
-    assert generic <= set(_lowlevel.__all__)
-    assert old_fse_names.isdisjoint(_lowlevel.__all__)
+    assert generic <= set(pp.__all__)
+    assert old_fse_names.isdisjoint(pp.__all__)
 
 
 def test_preparation_signatures_have_no_slice_selection_controls() -> None:
@@ -238,7 +256,7 @@ def test_root_namespace_excludes_waveform_authoring_helpers() -> None:
     for name in leaked:
         with pytest.raises(AttributeError):
             getattr(pulserver, name)
-        assert hasattr(design, name) or hasattr(_lowlevel, name)
+        assert hasattr(design, name) or hasattr(pp, name) or callable(make_radial_tilt)
 
 
 def test_protocol_helpers_kept_out_of_the_public_contract() -> None:
@@ -254,15 +272,19 @@ def test_protocol_helpers_kept_out_of_the_public_contract() -> None:
 
 
 def test_arbgrad_is_not_part_of_the_public_surface() -> None:
+    """The raw waveform core is private; ``traj_to_grad`` is its way out."""
     assert "arbgrad" not in pp.__all__
     assert "arbgrad" not in design.__all__
-    # The raw waveform core is reachable, but only through the escape hatch.
-    assert "arbgrad" in _lowlevel.__all__
-    assert callable(design.traj2grad)
+    assert not hasattr(pp, "arbgrad")
+    assert callable(pp.traj_to_grad)
 
 
 def test_implementation_namespaces_are_private() -> None:
     legacy_names = {"encoding", "readout", "rf", "sampling", "schedules", "system"}
+    # The editable-install loader still answers find_spec from the file map it
+    # was built with, so ask the question by importing instead.
+    with pytest.raises((ImportError, FileNotFoundError)):
+        importlib.import_module("pulserver.design._lowlevel")
     assert legacy_names.isdisjoint(pulserver.__all__)
     assert legacy_names.isdisjoint(pp.__all__)
     assert legacy_names.isdisjoint(design.__all__)
@@ -287,13 +309,13 @@ def test_rf_and_readout_factories_return_only_common_module_protocol() -> None:
 
 
 def test_gradient_helpers_use_physical_units_and_axes() -> None:
+    """Each is stated in what a sequence knows, not in gradient area."""
     system = pp.Opts()
-    crusher = make_crusher(system, "z", dephasing_cycles=4.0, voxel_size=5e-3)
-    explicit = make_crusher(system, "z", area=800.0)
-    template = make_phase_encoding(system, "y", 0.24 / 64)
-    blip = make_phase_blip(system, "y", 0.24, steps=2)
+    _, times, amplitudes = make_crusher(4.0, 5e-3, "z", system=system)
+    template = make_phase_encoding("y", 0.24 / 64, system=system)
+    blip = make_phase_blip("y", 0.24, steps=2, system=system)
 
-    assert crusher.area == pytest.approx(explicit.area)
+    assert float(np.trapezoid(amplitudes, times)) == pytest.approx(4.0 / 5e-3)
     assert template.channel == "y" and template.area == pytest.approx(64 / (2 * 0.24))
     assert blip.area == pytest.approx(2 / 0.24)
     assert "make_spoiler" not in design.__all__
