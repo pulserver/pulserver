@@ -74,7 +74,7 @@ source_suffix = {
     ".md": "markdown",
     ".rst": "restructuredtext",
 }
-exclude_patterns = ["_build", "README.md"]
+exclude_patterns = ["_build", "_staged", "README.md"]
 
 # The repository contains reference material that deliberately links to source
 # files and headings outside this Sphinx project.  MyST cannot resolve those

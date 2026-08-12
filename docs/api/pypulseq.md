@@ -376,8 +376,9 @@ already-rastered trajectory.
 ## Sampling masks, orderings and angles
 
 Plain arrays: a boolean mask over the phase-encode grid, a list of shots each
-holding the view indices it acquires in order, or one angle per spoke. The scan
-loops built from them live in {doc}`pulserver.design <design>`.
+holding the view indices it acquires in order, or one angle per spoke. They are
+here rather than in {doc}`pulserver.design <design>` because they are data a
+scan loop indexes with, not modules; the loop that walks them is the plugin's.
 
 The four mask modes are `make_uniform_mask`, `make_caipirinha_mask`,
 `make_random_mask` and `make_poisson_disc_mask`; only the first works on a
@@ -406,6 +407,36 @@ land inside `tol`.
    pulserver.pypulseq.make_random_mask
    pulserver.pypulseq.make_shuffling_order
    pulserver.pypulseq.make_uniform_mask
+```
+
+## System limits, rasters and RF schedules
+
+The arithmetic a design does against an `Opts` and a count, before any event
+exists. `apply_system_derates` leaves a margin under the hardware limits and
+caches the originals, so calling it twice does not compound.
+`round_to_raster` and `ceil_to_raster` put a time on a raster boundary --
+which matters because `add_block` rounds a block up to the block raster, so a
+duration computed from `calc_duration` alone is a raster short of where the
+block actually ends. `quantize_readout_timing` is `calc_adc_timing` keyed on
+bandwidth per pixel rather than on dwell.
+
+The schedules are the per-repetition RF lists: quadratic spoiling, which never
+repeats so coherences average away; fixed phase cycling, which deliberately
+does repeat so a steady state is preserved; and Alsop's TRAPS sweep for a long
+refocusing train.
+
+```{eval-rst}
+.. autosummary::
+   :toctree: generated/pypulseq
+   :nosignatures:
+
+   pulserver.pypulseq.apply_system_derates
+   pulserver.pypulseq.ceil_to_raster
+   pulserver.pypulseq.round_to_raster
+   pulserver.pypulseq.quantize_readout_timing
+   pulserver.pypulseq.make_phase_cycling_schedule
+   pulserver.pypulseq.make_rf_spoiling_schedule
+   pulserver.pypulseq.make_traps_schedule
 ```
 
 ## Routines MATLAB Pulseq has and PyPulseq does not
@@ -441,11 +472,11 @@ Use `traj_to_grad`, which solves the same problem under the same limits.
 ## Label constants
 
 The Pulseq label set splits in two. **Counters** say where an acquisition
-belongs and come from a scan loop's axes — {meth}`~pulserver.ScanLoop.label_state`
-reports the values, {meth}`~pulserver.SequenceModule.set_state` emits them.
-**Flags** say how a block is played or classified and come from
-{meth}`~pulserver.SequenceModule.set_state`, which scopes them to the module
-unless they are in `STICKY_FLAGS`.
+belongs; a module builds a slot per counter it is asked for and the scan
+loop writes the value. **Flags** say how a block is played or classified.
+Both are `make_label` events, and both are sticky in the file -- a value
+set at one block holds until another block sets it again -- so a flag that
+should not outlive its blocks has to be cleared by the loop that set it.
 
 `COUNTER_LABELS`, `FLAG_LABELS` and `STICKY_FLAGS` are that split as module
 constants: the ten ISMRMRD `EncodingCounters` fields, everything else, and the

@@ -275,3 +275,43 @@ def test_an_ordering_covers_the_coordinates_it_was_given_exactly_once():
         shots = order(coords, 4)
         flat = [index for shot in shots for index in shot]
         assert sorted(flat) == list(range(len(coords))), order.__name__
+
+
+# -- arbitrary-gradient duration ------------------------------------------
+
+
+@pytest.mark.parametrize("grad_raster", [10e-6, 20e-6])
+def test_a_uniformly_sampled_gradient_lasts_one_raster_per_sample(grad_raster):
+    system = pp.Opts(grad_raster_time=grad_raster)
+    waveform = np.full(10, 1e5)
+    gradient = pp.make_arbitrary_grad(channel="x", waveform=waveform, system=system)
+    assert pp.calc_duration(gradient) == pytest.approx(waveform.size * grad_raster)
+
+
+@pytest.mark.parametrize("grad_raster", [10e-6, 20e-6])
+def test_an_extended_trapezoid_lasts_until_its_last_vertex(grad_raster):
+    """Its times are vertices, not sample centres, so nothing follows the last.
+
+    Reading them as sample centres invents half a step of tail out of the
+    closing ramp, which lands the duration off the gradient raster -- and
+    every delay `align` then computes against it is illegal.
+    """
+    system = pp.Opts(grad_raster_time=grad_raster)
+    times = np.array([0.0, 2e-4, 1e-3, 1.2e-3])
+    gradient = pp.make_extended_trapezoid(
+        channel="x", amplitudes=np.array([0.0, 1e5, 1e5, 0.0]), times=times, system=system
+    )
+    assert pp.calc_duration(gradient) == pytest.approx(times[-1])
+
+
+@pytest.mark.parametrize("grad_raster", [10e-6, 20e-6])
+def test_a_solved_bridge_lands_on_the_gradient_raster(grad_raster):
+    """The case the two conventions are told apart for: a bridged spoiler."""
+    system = pp.Opts(
+        max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s", grad_raster_time=grad_raster
+    )
+    gradient, _, _ = pp.make_extended_trapezoid_area(
+        area=-5000.0, channel="x", grad_start=0.0, grad_end=4.5e5, system=system
+    )
+    steps = pp.calc_duration(gradient) / grad_raster
+    assert steps == pytest.approx(round(steps))

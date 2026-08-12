@@ -242,10 +242,12 @@ def test_every_factory_hands_back_an_event_with_its_fields_in_slots(system):
     cost back on every sequence that uses it.
     """
     calls = _factory_calls(system)
-    # Everything that builds an event: the sampling factories are named the
-    # same way but hand back plain arrays.
+    # Everything that builds an event. The sampling and schedule factories are
+    # named the same way but hand back plain arrays.
     assert set(calls) == {
-        name for name in pp.__all__ if name.startswith("make_") and name not in pp.SAMPLING
+        name
+        for name in pp.__all__
+        if name.startswith("make_") and name not in pp.SAMPLING and name not in pp.SYSTEM
     }
 
     for name, call in calls.items():

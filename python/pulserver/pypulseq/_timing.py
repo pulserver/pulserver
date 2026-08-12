@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-__all__ = ["calc_adc_timing", "quantize_readout_timing"]
+__all__ = ["calc_adc_timing", "ceil_to_raster", "quantize_readout_timing", "round_to_raster"]
+
+import math
 
 import numpy as np
 
@@ -152,3 +154,60 @@ def quantize_readout_timing(
 
     dwell = best_m * adc_raster_s
     return dwell, nx_ro * dwell
+
+
+def round_to_raster(value_s: float, raster_s: float = 1e-5) -> float:
+    """Round ``value_s`` to the nearest multiple of ``raster_s``.
+
+    An RF pulse's center of mass -- an adiabatic hypsec pulse's weighted center,
+    say -- generally does not fall on a raster boundary, so a delay computed
+    from it has to be re-aligned before it can be a block duration.
+
+    Parameters
+    ----------
+    value_s : float
+        Time to round (s).
+    raster_s : float, optional
+        Raster period (s).
+
+    Returns
+    -------
+    float
+        ``value_s`` rounded to the nearest raster multiple.
+
+    Examples
+    --------
+    >>> import pulserver.pypulseq as pp
+    >>> round(pp.round_to_raster(1.23456e-3), 12)
+    0.00123
+    """
+    return round(value_s / raster_s) * raster_s
+
+
+def ceil_to_raster(value_s: float, raster_s: float) -> float:
+    """Round ``value_s`` up to the next multiple of ``raster_s``.
+
+    A small tolerance keeps a value already on the raster from being pushed up
+    a full step by floating-point noise.
+
+    Parameters
+    ----------
+    value_s : float
+        Time to round (s).
+    raster_s : float
+        Raster period (s).
+
+    Returns
+    -------
+    float
+        Smallest raster multiple ``>= value_s`` (up to tolerance).
+
+    Examples
+    --------
+    >>> import pulserver.pypulseq as pp
+    >>> pp.ceil_to_raster(1.01e-5, 1e-5)
+    2e-05
+    >>> pp.ceil_to_raster(2e-5, 1e-5)
+    2e-05
+    """
+    return math.ceil(value_s / raster_s - 1e-10) * raster_s

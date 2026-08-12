@@ -87,3 +87,52 @@ Opts.default = Opts()
 def default_system(system: _pp.Opts | None) -> _pp.Opts:
     """Return ``system`` or Pulserver's current default limits."""
     return Opts.default if system is None else system
+
+
+#: Fraction of the hardware limits a designed waveform is allowed to reach.
+MAX_GRAD_DERATE = 0.9
+MAX_SLEW_DERATE = 0.9
+
+
+def apply_system_derates(
+    opts: _pp.Opts,
+    *,
+    grad_derate: float = MAX_GRAD_DERATE,
+    slew_derate: float = MAX_SLEW_DERATE,
+) -> None:
+    """Derate the gradient and slew limits of ``opts`` in place.
+
+    The base limits are cached on the object the first time this is called, and
+    every later call derates those rather than the current values, so repeating
+    it does not compound.
+
+    Parameters
+    ----------
+    opts : pypulseq.Opts
+        System limits, modified in place.
+    grad_derate, slew_derate : float, optional
+        Fraction of the base ``max_grad`` / ``max_slew`` to allow.
+
+    Returns
+    -------
+    None
+
+    Examples
+    --------
+    >>> import pulserver.pypulseq as pp
+    >>> opts = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+    >>> base = opts.max_grad
+    >>> pp.apply_system_derates(opts)
+    >>> opts.max_grad == 0.9 * base
+    True
+    >>> pp.apply_system_derates(opts)
+    >>> opts.max_grad == 0.9 * base
+    True
+    """
+    if not hasattr(opts, "_pulserver_base_max_grad"):
+        opts._pulserver_base_max_grad = float(opts.max_grad)
+    if not hasattr(opts, "_pulserver_base_max_slew"):
+        opts._pulserver_base_max_slew = float(opts.max_slew)
+
+    opts.max_grad = opts._pulserver_base_max_grad * float(grad_derate)
+    opts.max_slew = opts._pulserver_base_max_slew * float(slew_derate)

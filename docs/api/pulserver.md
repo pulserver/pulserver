@@ -16,8 +16,8 @@ from pulserver import Sequence, UIParam   # plugin contract
 
 {doc}`pulserver.pypulseq <pypulseq>` is the event layer: upstream PyPulseq
 re-exported whole, plus Pulserver's replacements for a few of its objects.
-{doc}`pulserver.design <design>` is the toolbox above it — every factory
-returning a `SequenceModule` or a `ScanLoop`.
+{doc}`pulserver.design <design>` is the toolbox above it — every
+`SequenceModule` Pulserver ships.
 
 Ready-to-run sequence callbacks are intentionally a separate public namespace:
 {doc}`pulserver.sequences <sequences>`.  They accept explicit sequence
@@ -42,43 +42,31 @@ protocol and synthesises the `.seq` file.
 
 ## Abstract types
 
-The things every `pulserver.design` factory returns, named here because they
-are part of the contract rather than of any one waveform family. There are
-two, plus the descriptor that annotates one of them:
+The type every `pulserver.design` class is, named here because it is part of
+the contract rather than of any one waveform family.
 
-| Type | Question | Feeds |
-| --- | --- | --- |
-| `SequenceModule` | *what do I play?* | `seq.add_block(*block)` |
-| `ScanLoop` | *what varies, in what order?* | `lin_idx`/`par_idx`, `rotation`, `freq_offset_hz` |
-| `EncodingAxis` | *what does one column of that loop mean?* | the counter it emits, the converter that applies |
+`SequenceModule` answers one question — *what do I play?* — and its blocks
+feed `seq.add_block(*block)`. It owns a design: the gradients solved, the TE
+and TR budgeted, the ADC landed on both time rasters, and the resulting events
+published under the names its constructor gave them.
 
-There is one loop type, not one per axis. A `ScanLoop` is a table of
-**positions**, a grouping of them into **shots** — one shot being one
-excitation's worth of the loop — and one `EncodingAxis` per position column.
-An encoding position is a set of frequency offsets, gradient scalings and
-rotations, and nothing about that restricts it to k-space: a Cartesian echo
-train, a non-Cartesian view list, an SMS slice group, a dynamic frame and an
-inversion-time series are the same table under different axis declarations.
-The axis fixes which converter applies (`to_scales`, `to_rotations`,
-`to_frequencies`) and which counter `label_state()` reports.
+It owns nothing else. A module does not iterate, holds no per-shot state, and
+never sees a sampling pattern. How frames, slices, contrasts and shots nest is
+plain `for` statements in the plugin, which is what keeps a preparation, a
+trigger or a dummy TR insertable at any level — and per-shot variation is
+ordinary PyPulseq: a phase is an attribute write, an encode is `scale_grad`,
+an orientation is a rotation event.
 
-A module has one setter, `set_state`: the numbers that re-render its waveforms
-(lowercase keywords) plus the per-shot counters and sticky flags (uppercase
-ones). Triggers and digital outputs are declared with the module, because which
-block they belong on is a property of its design.
-
-Neither type owns the loop itself. How frames, slices, contrasts and shots
-nest is plain `for` statements in the plugin, which is what keeps a
-preparation, a trigger or a dummy TR insertable at any level.
+The tables a loop indexes with — masks, view orderings, projection angles, RF
+phase schedules — are plain arrays and live in {doc}`pulserver.pypulseq
+<pypulseq>`.
 
 ```{eval-rst}
 .. autosummary::
    :toctree: generated/pulserver
    :nosignatures:
 
-   pulserver.ScanLoop
    pulserver.SequenceModule
-   pulserver.EncodingAxis
 ```
 
 ## Protocol parameter types

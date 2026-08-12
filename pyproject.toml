@@ -75,12 +75,23 @@ sdist.include = [
 # installs the self-contained bridge plugins directly as
 # ``pulserver.sequences.<name>`` without copying or moving their source.
 packages = { "pulserver" = "python/pulserver", "pulserver/sequences" = "examples/sequences", "pulserver/examples/recon" = "examples/recon" }
+# Source kept in the repository to port physics from, not importable and of no
+# use to an installed package.
+exclude = ["pulserver/design/_disabled/**"]
 
 # Formatting + linting using ruff.
 [tool.ruff]
 line-length = 88
 fix = true
-extend-exclude = ["__init__.py", "docs/**", "external/**", "tests/utils/pulseq/**"]
+extend-exclude = [
+  "__init__.py",
+  "docs/**",
+  "external/**",
+  # Not imported, and written against a module protocol that no longer exists.
+  # Linting it would rewrite code whose only job is to be read while porting.
+  "python/pulserver/design/_disabled/**",
+  "tests/utils/pulseq/**",
+]
 exclude = ["docs/**"]
 
 [tool.ruff.format]

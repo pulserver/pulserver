@@ -94,6 +94,25 @@ def convert(event: Any) -> Any:
     return event if convert_one is None else convert_one(event)
 
 
+def _shape_dur(tt: Any) -> float:
+    """How long an arbitrary gradient lasts, from the times it stores.
+
+    PyPulseq gives ``tt`` two meanings and tells them apart by where it
+    starts. A uniformly rastered waveform stores *sample centres*, so the
+    first is half a raster in and the shape runs half a raster past the last;
+    an extended trapezoid stores *vertices*, the first at zero, and the shape
+    ends at the last one. Reading the second as though it were the first
+    invents a tail out of the final ramp, which lands the duration off the
+    gradient raster and makes every alignment against it illegal.
+    """
+    times = _np.asarray(tt, dtype=float)
+    if times.size < 2:
+        return 0.0
+    if times[0] == 0.0:
+        return float(times[-1])
+    return float(times[-1] + (times[-1] - times[-2]) / 2)
+
+
 #: Fields upstream reads off an event that our slots do not carry under that
 #: name, per event type: how to compute each from the event we do have.
 #:
@@ -109,9 +128,7 @@ _COMPLETIONS: dict[str, dict[str, Callable[[Any], Any]]] = {
     },
     "grad": {
         "area": lambda e: float(_np.trapezoid(e.waveform, e.tt)),
-        "shape_dur": lambda e: float(e.tt[-1] + (e.tt[-1] - e.tt[-2]) / 2)
-        if len(e.tt) > 1
-        else 0.0,
+        "shape_dur": lambda e: _shape_dur(e.tt),
     },
     "trigger": {"channel": lambda e: _trigger_channel(e)},
     "output": {"channel": lambda e: _trigger_channel(e)},

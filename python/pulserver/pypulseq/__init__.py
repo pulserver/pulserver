@@ -65,11 +65,18 @@ from ._rf_pulses import make_sms_pulse as _make_sms_pulse
 from ._rf_pulses import make_spsp_pulse as _make_spsp_pulse
 from ._rotate3d import rotate3D as _rotate3D
 from ._shapes import restore_additional_shape_samples as _restore_additional_shape_samples
+from ._schedules import make_phase_cycling_schedule as _make_phase_cycling_schedule
+from ._schedules import make_rf_spoiling_schedule as _make_rf_spoiling_schedule
+from ._schedules import make_traps_schedule as _make_traps_schedule
 from ._timing import calc_adc_timing as _calc_adc_timing
+from ._timing import ceil_to_raster as _ceil_to_raster
+from ._timing import quantize_readout_timing as _quantize_readout_timing
+from ._timing import round_to_raster as _round_to_raster
 from ._traj_to_grad import traj_to_grad as _traj_to_grad
 from ._make_rf_shim import make_rf_shim as _make_rf_shim
 from ._make_rotation import make_rotation as _make_rotation
 from ._opts import Opts as _Opts
+from ._opts import apply_system_derates as _apply_system_derates
 from ._sequence import Sequence as _Sequence
 from ._results import (
     AdcTimes as _AdcTimes,
@@ -139,6 +146,13 @@ SoftDelay = _SoftDelay
 Waveforms = _Waveforms
 WaveformsAndTimes = _WaveformsAndTimes
 Opts = _Opts
+apply_system_derates = _apply_system_derates
+ceil_to_raster = _ceil_to_raster
+round_to_raster = _round_to_raster
+quantize_readout_timing = _quantize_readout_timing
+make_phase_cycling_schedule = _make_phase_cycling_schedule
+make_rf_spoiling_schedule = _make_rf_spoiling_schedule
+make_traps_schedule = _make_traps_schedule
 get_supported_labels = _get_supported_labels
 make_label = _make_label
 make_rf_shim = _make_rf_shim
@@ -231,8 +245,8 @@ MATLAB_PARITY = frozenset(
 )
 
 #: Base factories that return an event or a plain array rather than a
-#: :class:`~pulserver.SequenceModule` or :class:`~pulserver.ScanLoop`, which is
-#: what puts them in this namespace and not in :mod:`pulserver.design`.
+#: :class:`~pulserver.SequenceModule`, which is what puts them in this
+#: namespace and not in :mod:`pulserver.design`.
 BASE_FACTORIES = frozenset(
     {
         "calc_adc_timing",
@@ -247,9 +261,9 @@ BASE_FACTORIES = frozenset(
     }
 )
 
-#: Undersampling masks, view orderings and projection angles. Plain arrays, so
-#: they belong here; the scan loops built from them belong to
-#: :mod:`pulserver.design`.
+#: Undersampling masks, view orderings and projection angles. Plain arrays a
+#: scan loop indexes with, so they belong here rather than in
+#: :mod:`pulserver.design`, which holds only modules.
 SAMPLING = frozenset(
     {
         "calc_golden_angles",
@@ -270,12 +284,28 @@ SAMPLING = frozenset(
     }
 )
 
+#: System-limit derating, raster rounding, and the per-repetition RF phase and
+#: flip lists a scan loop indexes. All of them answer from an :class:`Opts` and
+#: a count rather than from a sequence, which is what puts them here.
+SYSTEM = frozenset(
+    {
+        "apply_system_derates",
+        "ceil_to_raster",
+        "make_phase_cycling_schedule",
+        "make_rf_spoiling_schedule",
+        "make_traps_schedule",
+        "quantize_readout_timing",
+        "round_to_raster",
+    }
+)
+
 OVERRIDES = frozenset(
     {
         *RESULTS,
         *MATLAB_PARITY,
         *BASE_FACTORIES,
         *SAMPLING,
+        *SYSTEM,
         "COUNTER_LABELS",
         "FLAG_LABELS",
         "STICKY_FLAGS",

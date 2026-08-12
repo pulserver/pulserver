@@ -10,14 +10,14 @@ Everything used to *build* a sequence is deliberately **not** re-exported
 here, so that the three roles stay visibly separate::
 
     import pulserver.pypulseq as pp          # events, Sequence, Opts
-    import pulserver.design as design        # modules and scan loops
+    import pulserver.design as design        # reusable sequence modules
     from pulserver import Sequence, UIParam  # plugin contract
     from pulserver import ReconApp           # reconstruction plugin contract
 
 :mod:`pulserver.pypulseq` is the event layer — upstream PyPulseq re-exported
 whole, plus Pulserver's replacements for a few of its objects.
-:mod:`pulserver.design` is the toolbox above it: every factory returning a
-:class:`SequenceModule` or a :class:`ScanLoop`.
+:mod:`pulserver.design` is the toolbox above it: every
+:class:`SequenceModule` — an excitation, a preparation, one readout TR.
 
 Examples
 --------
@@ -32,8 +32,7 @@ The authoring modules (``io``, ``pypulseq`` and ``design``) require the
 *optional* ``pypulseq`` dependency, so they are imported lazily (PEP 562):
 ``import pulserver`` — and hence ``pulserver.recon``, which runs in the scanner
 recon env without ``pypulseq`` — stays import-clean; accessing an authoring name
-pulls it in (raising a clear error if the extra is absent). ``ScanLoop`` and
-``EncodingAxis`` are authoring types and load the same way.
+pulls it in (raising a clear error if the extra is absent).
 """
 
 from __future__ import annotations
@@ -48,7 +47,6 @@ __all__ = [
     "Description",
     "DropdownFloatParam",
     "DropdownIntParam",
-    "EncodingAxis",
     "EnumKey",
     "ExamCache",
     "FloatKey",
@@ -63,7 +61,6 @@ __all__ = [
     "ReconApp",
     "ReconContext",
     "ReconResult",
-    "ScanLoop",
     "Sequence",
     "SequenceModule",
     "SequenceType",
@@ -89,8 +86,6 @@ __all__ = [
 
 
 _CORE_MODULES = {"params"}
-#: Authoring data types defined under ``design`` but named by the contract.
-_AUTHORING_TYPES = {"ScanLoop", "EncodingAxis"}
 _RECON_APP_TYPES = {
     "AcquisitionBucket",
     "AcquisitionBucketStats",
@@ -107,8 +102,6 @@ def __getattr__(name: str):
         return importlib.import_module(f"{__name__}.{name}")
     if name in _CORE_MODULES:
         return importlib.import_module(f"{__name__}._core._protocol")
-    if name in _AUTHORING_TYPES:
-        return getattr(importlib.import_module(f"{__name__}.design._sampling"), name)
     if name in _RECON_APP_TYPES:
         return getattr(importlib.import_module(f"{__name__}.recon.app"), name)
     try:

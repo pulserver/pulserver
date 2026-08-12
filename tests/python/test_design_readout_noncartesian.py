@@ -1,317 +1,415 @@
-"""Tests for class-based non-Cartesian readouts."""
+"""The non-Cartesian readouts, and the interleaves they are built from.
+
+The trajectory designers are checked against the geometry they claim -- where
+the path starts, where it ends, how far out it reaches -- and the readout
+modules against what a scan loop needs from them: one interleave, oriented by
+the loop, with a TE that points at the k = 0 crossing.
+"""
 
 from __future__ import annotations
 
 import numpy as np
 import pytest
+from scipy.spatial.transform import Rotation
 
-pp = pytest.importorskip("pypulseq")
+import pulserver.design as design
+import pulserver.pypulseq as pp
+from pulserver.design.readout import _trajectories as trajectories
 
-from pulserver.design import _readout as readout
-from pulserver.design._traj2grad import traj2grad
-
-OPTS_KW = {"max_grad": 40, "grad_unit": "mT/m", "max_slew": 150, "slew_unit": "T/m/s"}
-
-
-def _opts():
-    return pp.Opts(**OPTS_KW)
+FOV = 0.22
+MATRIX = 128
+KMAX = MATRIX / (2 * FOV)
 
 
-def _labels(seq, name):
-    result = []
-    for block_id in range(1, len(seq.block_events) + 1):
-        block = seq.get_block(block_id)
-        for label in (block.label or {}).values():
-            if label.label == name:
-                result.append((label.type, label.value))
-    return result
+@pytest.fixture
+def system():
+    return pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
 
 
-def test_traj2grad_obeys_vector_limits():
-    opts = _opts()
-    u = np.linspace(0.0, 1.0, 256)
-    path = 50.0 * u[:, None] * np.column_stack((np.cos(6 * np.pi * u), np.sin(6 * np.pi * u)))
-    gradient = traj2grad(path, opts, end_at_zero=False)
-    assert gradient.shape[1] == 3
-    assert np.max(np.linalg.norm(gradient, axis=1)) <= opts.max_grad * 1.001
-    slew = np.diff(gradient, axis=0) / opts.grad_raster_time
-    assert np.max(np.linalg.norm(slew, axis=1)) <= opts.max_slew * 1.001
+@pytest.fixture
+def excitation(system):
+    return design.SpatialSelectiveExcitation(system, 15.0, 5e-3)
 
 
-def test_numpy_trajectory_generators_have_expected_endpoints():
-    radial = readout.radial_trajectory(0.2, 32)
-    assert np.allclose(radial[[0, -1], 0], [-80.0, 80.0])
-    assert np.all(radial[:, 1] == 0.0)
-
-    spiral = readout.spiral_trajectory(0.2, 32, 8, density="constant", num_points=128)
-    assert np.allclose(spiral[0], 0.0)
-    assert np.linalg.norm(spiral[-1]) == pytest.approx(80.0)
-
-    rosette = readout.rosette_trajectory(0.2, 32, num_points=129)
-    assert np.allclose(rosette[[0, -1]], 0.0, atol=1e-12)
+@pytest.fixture
+def slab(system):
+    return design.SpatialSelectiveExcitation(system, 8.0, 0.12, is_slab=True)
 
 
-def test_rosette_trajectory_shape_parameters_are_internal_to_base_interleave():
-    open_petals = readout.rosette_trajectory(0.2, 32, petals=5, angular_frequency_ratio=3 / 5, num_points=129)
-    tight_petals = readout.rosette_trajectory(0.2, 32, petals=5, angular_frequency_ratio=7 / 5, num_points=129)
-    more_petals = readout.rosette_trajectory(0.2, 32, petals=7, angular_frequency_ratio=3 / 5, num_points=129)
-    assert not np.allclose(open_petals, tight_petals)
-    assert not np.allclose(open_petals, more_petals)
-    with pytest.raises(ValueError, match="angular_frequency_ratio"):
-        readout.rosette_trajectory(0.2, 32, angular_frequency_ratio=0.0)
+def _radius(path):
+    return np.linalg.norm(np.asarray(path)[:, :2], axis=1)
 
 
-def test_spiral_density_modes_and_validation():
-    constant = readout.spiral_trajectory(0.22, 32, 8, density="constant", num_points=128)
-    variable = readout.spiral_trajectory(0.22, 32, 8, density="variable", num_points=128)
-    dual = readout.spiral_trajectory(
-        0.22,
-        32,
-        8,
-        density="dual",
-        inner_design_interleaves=8,
-        outer_design_interleaves=16,
-        transition_speed=20,
-        num_points=128,
-    )
-    assert not np.allclose(constant, variable)
-    assert not np.allclose(variable, dual)
-    with pytest.raises(ValueError, match="outer_design_interleaves"):
-        readout.spiral_trajectory(0.22, 32, 8, density="dual")
+# ----------------------------------------------------------------------
+# The designed interleaves
+# ----------------------------------------------------------------------
+
+
+def test_a_radial_spoke_runs_edge_to_edge_through_the_centre(system):
+    spoke = trajectories.Radial(system, FOV, MATRIX)
+    path = spoke.trajectory
+    assert path[0, 0] == pytest.approx(-KMAX)
+    assert path[-1, 0] == pytest.approx(KMAX)
+    assert spoke.has_prewinder and spoke.has_rewinder
 
 
 @pytest.mark.parametrize(
-    ("variant", "has_pre", "has_rew"),
-    [("outward", False, True), ("inward", True, False), ("in_out", True, True)],
+    ("direction", "starts_at_centre", "ends_at_centre"),
+    [("outward", True, False), ("inward", False, True), ("in_out", False, False)],
 )
-def test_spiral_variants_have_expected_winders_and_refocus(variant, has_pre, has_rew):
-    opts = _opts()
-    arm = readout.Spiral(opts, 0.22, 32, 8, variant=variant, num_points=256)
-    assert arm.has_prewinder is has_pre
-    assert arm.has_rewinder is has_rew
-    assert arm.design_interleaves == 8
-    if variant == "in_out":
-        assert arm.n_samples == 64
-
-    seq = pp.Sequence(opts)
-    _module = readout.NonCartesian2D(arm).set_state(lin_idx=3)
-    for _block in _module.blocks:
-        seq.add_block(*_block)
-    _, k_full, *_ = seq.calculate_kspace()
-    assert np.allclose(k_full[:, -1], 0.0, atol=1e-6)
-    assert seq.check_timing()[0]
-    assert _labels(seq, "LIN") == [("labelset", 3)]
+def test_a_spiral_runs_the_direction_it_was_asked_for(
+    system, direction, starts_at_centre, ends_at_centre
+):
+    arm = trajectories.Spiral(system, FOV, MATRIX, 16, direction=direction)
+    radius = _radius(arm.trajectory)
+    assert bool(radius[0] < 0.05 * KMAX) is starts_at_centre
+    assert bool(radius[-1] < 0.05 * KMAX) is ends_at_centre
+    assert radius.max() == pytest.approx(KMAX, rel=1e-6)
 
 
-def test_radial_has_both_winders_and_nyquist_shot_count():
-    opts = _opts()
-    spoke = readout.Radial(opts, 0.22, 64)
-    assert spoke.has_prewinder and spoke.has_rewinder
-    assert spoke.recommended_rotations == int(np.ceil(np.pi * 64 / 2))
-    seq = pp.Sequence(opts)
-    _module = readout.NonCartesian2D(spoke).set_state()
-    for _block in _module.blocks:
-        seq.add_block(*_block)
-    _, k_full, *_ = seq.calculate_kspace()
-    assert np.allclose(k_full[:, -1], 0.0, atol=1e-6)
-    assert seq.check_timing()[0]
+def test_an_in_out_spiral_crosses_the_centre_halfway(system):
+    arm = trajectories.Spiral(system, FOV, MATRIX, 16, direction="in_out")
+    radius = _radius(arm.trajectory)
+    assert int(np.argmin(radius)) == pytest.approx(radius.size // 2, abs=2)
 
 
-def test_rosette_has_no_winders_and_derives_adc_sampling():
-    arm = readout.Rosette(_opts(), 0.22, 32, petals=5)
-    assert not arm.has_prewinder
-    assert not arm.has_rewinder
-    assert arm.design_interleaves is None
-    assert arm.recommended_rotations is None
-    assert arm.n_samples == arm.petals * arm.samples_per_petal
-    assert arm.n_samples > 32
-    assert arm.trajectory.shape == (arm.n_samples, 2)
-    assert arm.design_trajectory.shape == (2049, 2)
-    assert arm.bandwidth_hz_px >= arm.requested_bandwidth_hz_px
-    acquired_steps = np.linalg.norm(np.diff(arm.trajectory, axis=0), axis=1)
-    assert np.max(acquired_steps) <= 1.0 / 0.22 + 1e-9
-
-    seq = pp.Sequence(arm.system)
-    _module = readout.NonCartesian2D(arm).set_state(lin_idx=2)
-    for _block in _module.blocks:
-        seq.add_block(*_block)
-    assert seq.check_timing()[0]
-    assert all(abs(gradient.area) < 1e-9 for gradient in arm.gradients)
-    _, k_full, *_ = seq.calculate_kspace()
-    assert np.allclose(k_full[:, -1], 0.0, atol=1e-3)
+def test_the_designer_reaches_and_leaves_k_zero_with_bridges(system):
+    """Whichever end is off-centre gets a bridge; the centred end does not."""
+    outward = trajectories.Spiral(system, FOV, MATRIX, 16, direction="outward")
+    inward = trajectories.Spiral(system, FOV, MATRIX, 16, direction="inward")
+    assert not outward.has_prewinder and outward.has_rewinder
+    assert inward.has_prewinder and not inward.has_rewinder
 
 
-def test_rosette_acquires_every_requested_petal():
-    arm = readout.Rosette(_opts(), 0.22, 64, petals=5, derate=False)
-    radius = np.linalg.norm(arm.trajectory, axis=1)
-    kmax = 64 / (2.0 * 0.22)
-
-    # Every equal-duration petal segment reaches the requested k-space edge;
-    # the ADC also reaches the final return to the centre rather than ending
-    # a dwell-raster-sized tail early.
-    for petal in np.array_split(radius, arm.petals):
-        assert np.max(petal) >= 0.98 * kmax
-    assert radius[-1] <= 0.05 * kmax
+def test_a_rosette_returns_to_where_it_started(system):
+    petals = trajectories.Rosette(system, FOV, 64, petals=5)
+    assert not petals.has_prewinder and not petals.has_rewinder
+    radius = _radius(petals.trajectory)
+    assert radius[0] == pytest.approx(0.0, abs=1e-6 * KMAX)
+    assert radius[-1] == pytest.approx(0.0, abs=1e-6 * KMAX)
 
 
-def test_rosette_echo_spacing_stretches_gradient_and_rejects_impossible_request():
-    base = readout.Rosette(_opts(), 0.22, 32, petals=5, derate=False)
-    target_spacing = 1.5 * base.min_echo_spacing_s
-    stretched = readout.Rosette(_opts(), 0.22, 32, petals=5, echo_spacing_s=target_spacing, derate=False)
-    assert stretched.echo_spacing_s >= target_spacing
-    assert stretched.echo_spacing_s < target_spacing + stretched.system.grad_raster_time / stretched.petals
-    base_peak = np.max(np.hypot(base.gx.waveform, base.gy.waveform))
-    stretched_peak = np.max(np.hypot(stretched.gx.waveform, stretched.gy.waveform))
-    assert stretched_peak < base_peak
-    with pytest.raises(ValueError, match="minimum feasible"):
-        readout.Rosette(
-            _opts(),
-            0.22,
-            32,
-            petals=5,
-            echo_spacing_s=0.5 * base.min_echo_spacing_s,
-            derate=False,
-        )
+def test_design_interleaves_sets_the_pitch_not_the_shot_count(system):
+    """More nominal interleaves is a more open arm, not more arms."""
+    tight = trajectories.Spiral(system, FOV, MATRIX, 8)
+    open_ = trajectories.Spiral(system, FOV, MATRIX, 32)
+    assert open_.read_duration < tight.read_duration
+    assert open_.design_interleaves == 32
 
 
-def test_slice_rephasing_is_right_aligned_with_prewinder():
-    opts = _opts()
-    arm = readout.Spiral(opts, 0.22, 32, 8, variant="inward", num_points=256)
-    gz = pp.make_trapezoid(channel="z", area=-30.0, system=opts)
-    seq = pp.Sequence(opts)
-    _module = readout.NonCartesian2D(arm, slice_rephasing=gz).set_state()
-    for _block in _module.blocks:
-        seq.add_block(*_block)
-    block = seq.get_block(1)
-    duration = pp.calc_duration(block)
-    assert pp.calc_duration(block.gz) == pytest.approx(duration)
-    assert pp.calc_duration(block.gx) == pytest.approx(duration)
+# ----------------------------------------------------------------------
+# Rotating an interleave
+# ----------------------------------------------------------------------
 
 
-def test_multiecho_labels_set_then_increment():
-    opts = _opts()
-    arm = readout.Radial(opts, 0.22, 32)
-    seq = pp.Sequence(opts)
-    _module = readout.NonCartesian2D(arm, num_echoes=3).set_state()
-    for _block in _module.blocks:
-        seq.add_block(*_block)
-    assert _labels(seq, "ECO") == [("labelset", 0), ("labelinc", 1), ("labelinc", 1)]
+@pytest.mark.parametrize("angle", [0.0, np.pi / 3, -0.7, np.pi])
+def test_rotating_an_interleave_turns_its_path_and_nothing_else(system, angle):
+    base = trajectories.Spiral(system, FOV, MATRIX, 16)
+    turned = base.rotated(angle)
 
-
-def test_stack_generates_full_phase_template_and_labels_indices():
-    opts = _opts()
-    arm = readout.Spiral(opts, 0.22, 32, 8, variant="in_out", num_points=256)
-    gz_reph = pp.make_trapezoid(channel="z", area=-20.0, system=opts)
-    stack = readout.StackOfTrajectories(
-        arm,
-        fov_z_m=0.16,
-        nz=8,
-        slice_rephasing=gz_reph,
-        num_echoes=2,
+    rotation = np.array(
+        [[np.cos(angle), -np.sin(angle)], [np.sin(angle), np.cos(angle)]]
     )
-    assert stack._phase_template is not None
-    seq = pp.Sequence(opts)
-    stack.set_state(lin_idx=5, par_idx=2)
-    for _block in stack.blocks:
-        seq.add_block(*_block)
-    assert seq.check_timing()[0]
-    assert seq.duration()[0] == pytest.approx(stack.duration)
-    assert _labels(seq, "LIN") == [("labelset", 5)]
-    assert _labels(seq, "PAR") == [("labelset", 2)]
-    assert _labels(seq, "ECO") == [("labelset", 0), ("labelinc", 1)]
-    _, k_full, *_ = seq.calculate_kspace()
-    # Stack phase encoding is rewound; only the caller-provided slice
-    # rephasing moment remains in this isolated readout-train test.
-    assert np.allclose(k_full[:, -1], [0.0, 0.0, gz_reph.area], atol=1e-6)
-    with pytest.raises(IndexError):
-        list(stack.set_state(par_idx=8))
+    assert np.allclose(turned.trajectory[:, :2], base.trajectory[:, :2] @ rotation.T, atol=1e-9)
+    assert turned.read_duration == pytest.approx(base.read_duration)
+    assert turned.adc is base.adc
 
 
-def test_projection_accepts_matrix_rotation_with_fast_sequence():
-    arm = readout.Radial(_opts(), 0.22, 16)
-    sequence = readout.Projection(arm).set_state(lin_idx=4, rotation=np.eye(3)).get()
-    assert len(sequence.block_events) == 3
+def test_a_three_axis_interleave_has_no_plane_to_turn_in(system):
+    path = trajectories.spiral_trajectory(FOV, 64, 8)
+    volume = np.column_stack([path, np.linspace(-10.0, 10.0, path.shape[0])])
+    with pytest.raises(ValueError, match="planar interleave"):
+        trajectories.Arbitrary(system, volume, matrix=64).rotated(0.5)
 
 
-def test_arbitrary_native_3d_path():
-    opts = _opts()
-    u = np.linspace(0.0, 1.0, 128)
-    path = np.column_stack((30 * u * np.cos(2 * np.pi * u), 30 * u * np.sin(2 * np.pi * u), 20 * u))
-    shot = readout.Arbitrary(opts, path, matrix=32)
-    train = readout.NonCartesian3D(shot)
-    seq = pp.Sequence(opts)
-    train.set_state(lin_idx=1)
-    for _block in train.blocks:
-        seq.add_block(*_block)
-    assert shot.gz is not None
-    assert seq.check_timing()[0]
-    _, k_full, *_ = seq.calculate_kspace()
-    assert np.allclose(k_full[:, -1], 0.0, atol=1e-6)
+# ----------------------------------------------------------------------
+# Layout
+# ----------------------------------------------------------------------
 
 
-def _stack(opts, nz=8):
-    arm = readout.Spiral(opts, 0.22, 32, 8, variant="in_out", num_points=256)
-    gz_reph = pp.make_trapezoid(channel="z", area=-20.0, system=opts)
-    return readout.StackOfTrajectories(arm, fov_z_m=0.16, nz=nz, slice_rephasing=gz_reph)
+def _readout(cls, system, excitation, **kwargs):
+    gz = getattr(excitation.events, "gz_select", None) or getattr(
+        excitation.events, "gz_slab", None
+    )
+    return cls(system, excitation.rf, gz, fov_m=FOV, matrix=MATRIX, **kwargs)
 
 
-def test_a_stacks_winders_are_solved_once_per_partition_not_once_per_shot():
-    """The single most expensive thing a stack-of-spirals shot used to do.
-
-    A partition lobe and the excitation's rephasing share the z axis, so their
-    summed moment is an arbitrary waveform and ``_aligned_gradients`` re-solves
-    it. That solve depends on the partition and on whether the rephasing rides
-    along -- never on the shot -- so a scan pays ``nz`` of them, not one per
-    interleaf.
-    """
-    opts = _opts()
-    stack = _stack(opts, nz=4)
-
-    for lin_idx in range(6):
-        for par_idx in range(4):
-            assert stack.set_state(lin_idx=lin_idx, par_idx=par_idx).blocks
-    assert len(stack._prewinder_cache) == 4, "one per partition, not one per shot"
-    assert len(stack._rewinder_cache) == 4
-
-    # ...and the solved events are shared from then on, which is what keeps the
-    # sequence writer's shape cache hitting on them.
-    first = stack.set_state(lin_idx=0, par_idx=2).blocks
-    again = stack.set_state(lin_idx=7, par_idx=2).blocks
-    assert first[0][0] is again[0][0]
+FAMILIES = [
+    (design.RadialReadout2D, {}),
+    (design.RadialProjectionReadout, {}),
+    (design.SpiralReadout2D, {"design_interleaves": 16}),
+    (design.SpiralProjectionReadout, {"design_interleaves": 16}),
+    (design.RosetteReadout2D, {"petals": 5}),
+]
+STACKS = [
+    (design.RadialStackReadout, {}),
+    (design.SpiralStackReadout, {"design_interleaves": 16}),
+]
 
 
-def test_a_stack_registers_the_same_blocks_cached_as_freshly_solved():
-    """Solving a partition once is an optimisation the emitted file cannot see."""
-    import pulserver.io as pio
-    from pulserver.pypulseq import Sequence as PulserverSequence
+@pytest.mark.parametrize(("cls", "kwargs"), FAMILIES, ids=lambda value: getattr(value, "__name__", ""))
+def test_every_family_lays_out_valid_pulseq(system, excitation, cls, kwargs):
+    readout = _readout(cls, system, excitation, **kwargs)
+    assert readout.check_timing()[0]
+    assert readout.blocks[0][0] is readout.rf
+    assert any(getattr(e, "type", "") == "adc" for block in readout.blocks for e in block)
 
-    opts = _opts()
-    shots = ((0, 0), (3, 2), (1, 2), (4, 7))
 
-    cached = PulserverSequence._unstructured(opts)
-    shared = _stack(opts)
-    for lin_idx, par_idx in shots:
-        shared.set_state(lin_idx=lin_idx, par_idx=par_idx, phase_offset_rad=0.1 * lin_idx)
-        for _block in shared.blocks:
-            cached.add_block(*_block)
-    fresh = PulserverSequence._unstructured(opts)
-    for lin_idx, par_idx in shots:
-        _module = _stack(opts).set_state(
-            lin_idx=lin_idx, par_idx=par_idx, phase_offset_rad=0.1 * lin_idx
+@pytest.mark.parametrize(("cls", "kwargs"), STACKS, ids=lambda value: getattr(value, "__name__", ""))
+def test_a_stack_adds_a_partition_encode_and_its_rewinder(system, slab, cls, kwargs):
+    readout = _readout(cls, system, slab, fov_z_m=0.12, matrix_z=32, **kwargs)
+    assert readout.gz_phase.channel == "z"
+    assert readout.gz_phase.area == pytest.approx(1.0 / (2.0 * (0.12 / 32)))
+    assert readout.gz_rew.area == pytest.approx(-readout.gz_phase.area)
+    assert readout.check_timing()[0]
+
+
+def test_a_projection_readout_has_no_partition_to_encode(system, excitation):
+    with pytest.raises(TypeError):
+        _readout(design.RadialProjectionReadout, system, excitation, fov_z_m=0.12, matrix_z=32)
+
+
+def test_the_echo_time_points_at_the_k_zero_crossing(system, excitation):
+    """Read off the integrated gradient, so each family answers for itself."""
+    for cls, kwargs in FAMILIES:
+        readout = _readout(cls, system, excitation, **kwargs)
+        k_traj_adc, _, t_excitation, _, t_adc = readout.calculate_kspace()
+        count = int(readout.adc.num_samples)
+        radius = np.linalg.norm(k_traj_adc[:2, :count], axis=0)
+        nearest = int(np.argmin(radius))
+        measured = float(t_adc[nearest]) - float(t_excitation[0])
+        assert measured == pytest.approx(
+            readout.echo_time, abs=2 * float(readout.adc.dwell) + 1e-9
+        ), cls.__name__
+
+
+def test_an_outward_spiral_starts_at_the_echo(system, excitation):
+    readout = _readout(design.SpiralReadout2D, system, excitation, design_interleaves=16)
+    k_traj_adc = readout.calculate_kspace()[0]
+    assert np.linalg.norm(k_traj_adc[:2, 0]) < 0.05 * KMAX
+
+
+# ----------------------------------------------------------------------
+# Orientation
+# ----------------------------------------------------------------------
+
+
+def test_the_default_lays_out_one_interleave_for_the_loop_to_turn(system, excitation):
+    """One waveform, however many arms the scan plays: the rotation is an event."""
+    readout = _readout(design.SpiralReadout2D, system, excitation, design_interleaves=16)
+    assert not isinstance(readout.gx_read, list)
+
+    seq = pp.Sequence(system)
+    angles = pp.calc_golden_angles(4)
+    for angle in angles:
+        seq.add_block(readout.rf, readout.gz_select)
+        seq.add_block(
+            readout.gx_read,
+            readout.gy_read,
+            readout.adc,
+            pp.make_rotation(Rotation.from_euler("z", float(angle))),
         )
-        for _block in _module.blocks:
-            fresh.add_block(*_block)
+        seq.add_block(readout.gx_rew, readout.gy_rew)
 
-    assert cached.block_events == fresh.block_events
-    assert cached.block_durations == fresh.block_durations
-    # The bytes themselves, which is the constraint that actually binds: a
-    # shared solved waveform must register the same shape as a fresh one.
-    assert pio.write(cached, output=None) == pio.write(fresh, output=None)
+    assert seq.check_timing()[0]
+    count = int(readout.adc.num_samples)
+    k_traj_adc = seq.calculate_kspace(dense=False)[0]
+    first = k_traj_adc[:2, :count]
+    for index, angle in enumerate(angles[1:], start=1):
+        turn = np.array(
+            [
+                [np.cos(angle), -np.sin(angle)],
+                [np.sin(angle), np.cos(angle)],
+            ]
+        )
+        arm = k_traj_adc[:2, index * count : (index + 1) * count]
+        assert np.allclose(arm, turn @ first, atol=1e-6)
 
 
-def test_a_stack_still_rejects_an_out_of_range_partition_on_a_cache_hit():
-    """The cache must not become a hole in the validation."""
-    stack = _stack(_opts(), nz=4)
-    assert stack.set_state(lin_idx=0, par_idx=2).blocks
-    with pytest.raises(IndexError, match="phase_idx"):
-        stack.set_state(lin_idx=0, par_idx=9).blocks  # noqa: B018 - the access is the trigger
+def test_explicit_mode_publishes_one_waveform_per_arm(system, excitation):
+    angles = np.deg2rad(np.arange(6) * 30.0)
+    readout = _readout(
+        design.SpiralReadout2D, system, excitation,
+        design_interleaves=16, explicit=True, angles=angles, tr=10e-3,
+    )
+    assert isinstance(readout.gx_read, list)
+    assert len(readout.gx_read) == len(readout.gy_read) == len(angles)
+    assert readout.check_timing()[0]
+
+
+def test_every_explicit_arm_is_the_base_arm_turned(system, excitation):
+    angles = np.deg2rad(np.arange(4) * 45.0)
+    readout = _readout(
+        design.SpiralReadout2D, system, excitation,
+        design_interleaves=16, explicit=True, angles=angles, tr=10e-3,
+    )
+    k_traj_adc = readout.calculate_kspace()[0]
+    count = int(readout.adc.num_samples)
+    first = k_traj_adc[:2, :count]
+    for index, angle in enumerate(angles[1:], start=1):
+        turn = np.array(
+            [[np.cos(angle), -np.sin(angle)], [np.sin(angle), np.cos(angle)]]
+        )
+        arm = k_traj_adc[:2, index * count : (index + 1) * count]
+        assert np.allclose(arm, turn @ first, atol=1e-6)
+
+
+def test_every_explicit_arm_takes_the_same_repetition_time(system, excitation):
+    """Re-solving a bridge per angle changes its length; a TR must not follow."""
+    angles = np.deg2rad(np.arange(5) * 37.0)
+    readout = _readout(
+        design.SpiralReadout2D, system, excitation,
+        design_interleaves=16, explicit=True, angles=angles, tr=10e-3,
+    )
+    assert readout.duration == pytest.approx(10e-3)
+    assert readout.seq.duration()[0] == pytest.approx(len(angles) * 10e-3)
+
+
+def test_a_sampling_pattern_is_not_the_readouts_to_hold(system, excitation):
+    with pytest.raises(ValueError, match="sampling pattern"):
+        _readout(
+            design.SpiralReadout2D, system, excitation,
+            design_interleaves=16, angles=np.zeros(4),
+        )
+
+
+def test_explicit_without_angles_says_what_is_missing(system, excitation):
+    with pytest.raises(ValueError, match="needs the angles"):
+        _readout(design.SpiralReadout2D, system, excitation, design_interleaves=16, explicit=True)
+
+
+# ----------------------------------------------------------------------
+# Timing and spoiling
+# ----------------------------------------------------------------------
+
+
+def test_a_longer_te_or_tr_is_padded_with_a_wait(system, excitation):
+    readout = _readout(
+        design.SpiralReadout2D, system, excitation, design_interleaves=16, te=3e-3, tr=15e-3
+    )
+    assert readout.echo_time == pytest.approx(3e-3)
+    assert readout.duration == pytest.approx(15e-3)
+
+
+@pytest.mark.parametrize(("kwargs", "name"), [({"te": 1e-5}, "TE"), ({"tr": 1e-4}, "TR")])
+def test_an_impossible_time_is_refused_by_name(system, excitation, kwargs, name):
+    with pytest.raises(ValueError, match=f"requested {name}"):
+        _readout(design.SpiralReadout2D, system, excitation, design_interleaves=16, **kwargs)
+
+
+def test_the_spoiler_winds_the_cycles_it_was_asked_for(system, excitation):
+    cycles, voxel = 4.0, 1e-3
+    readout = _readout(
+        design.SpiralReadout2D, system, excitation,
+        design_interleaves=16, spoiling_cycles=cycles, voxel_size_m=voxel,
+    )
+    moment = float(np.trapezoid(readout.gspoil.waveform, readout.gspoil.tt))
+    assert moment == pytest.approx(cycles / voxel, rel=1e-3)
+    assert readout.gspoil.channel == "z"
+
+
+def test_a_rewound_shot_ends_where_it_started(system, excitation):
+    readout = _readout(design.SpiralReadout2D, system, excitation, design_interleaves=16)
+    seq = pp.Sequence(system)
+    for block in readout.blocks:
+        seq.add_block(*block)
+    assert np.allclose(seq.calculate_kspace()[1][:2, -1], 0.0, atol=0.02 * KMAX)
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "message"),
+    [
+        ({"num_echoes": 0}, "num_echoes must be >= 1"),
+        ({"spoiling_cycles": -1.0}, "spoiling_cycles must be >= 0"),
+        ({"spoiling_axis": "w"}, "spoiling_axis must be one of"),
+    ],
+)
+def test_an_impossible_readout_is_refused(system, excitation, kwargs, message):
+    with pytest.raises(ValueError, match=message):
+        _readout(design.SpiralReadout2D, system, excitation, design_interleaves=16, **kwargs)
+
+
+# ----------------------------------------------------------------------
+# End to end
+# ----------------------------------------------------------------------
+
+
+def test_a_stack_of_spirals_is_a_plain_pypulseq_loop(system, slab, tmp_path):
+    readout = _readout(
+        design.SpiralStackReadout, system, slab,
+        design_interleaves=16, fov_z_m=0.12, matrix_z=8, tr=12e-3, labels=("LIN", "PAR"),
+    )
+    arms, partitions = 6, 8
+    angles = pp.calc_golden_angles(arms)
+    phases = pp.make_rf_spoiling_schedule(arms * partitions)
+    lin_label, par_label = readout.adc_labels
+
+    seq = pp.Sequence(system)
+    for shot, (arm, partition) in enumerate(
+        (arm, partition) for arm in range(arms) for partition in range(partitions)
+    ):
+        readout.rf.phase_offset = readout.adc.phase_offset = phases[shot]
+        lin_label.value, par_label.value = arm, partition
+        kz = (partition - partitions / 2) / (partitions / 2)
+        rotation = pp.make_rotation(Rotation.from_euler("z", float(angles[arm])))
+
+        seq.add_block(readout.rf, readout.gz_select)
+        seq.add_block(pp.scale_grad(readout.gz_phase, kz))
+        seq.add_block(readout.gx_read, readout.gy_read, readout.adc, *readout.adc_labels, rotation)
+        seq.add_block(
+            readout.gx_rew,
+            readout.gy_rew,
+            pp.scale_grad(readout.gz_rew, kz),
+            rotation,
+        )
+        seq.add_block(readout.wait_tr)
+
+    assert seq.check_timing()[0]
+    path = tmp_path / "spiral_stack.seq"
+    seq.write(str(path))
+
+    written = pp.Sequence()
+    written.read(str(path))
+    assert written.num_blocks == seq.num_blocks
+
+
+# ----------------------------------------------------------------------
+# Vector limits
+# ----------------------------------------------------------------------
+
+
+def _vector_slew(events):
+    """Peak slew of a set of same-grid gradients taken as one vector."""
+    times = np.asarray(events[0].tt, dtype=float)
+    waveforms = np.column_stack([np.asarray(e.waveform, dtype=float) for e in events])
+    return float(np.max(np.linalg.norm(np.diff(waveforms, axis=0) / np.diff(times)[:, None], axis=1)))
+
+
+@pytest.mark.parametrize("direction", ["outward", "inward", "in_out"])
+def test_the_bridges_of_two_axes_obey_the_vector_slew_limit(system, excitation, direction):
+    """Two axes solved separately against the full limit combine past it.
+
+    Per axis nothing is wrong, so no per-axis check reports it -- but the
+    scanner limit is on the vector, and a rotation makes the point visible by
+    mixing the combined slew onto a single axis.
+    """
+    readout = _readout(
+        design.SpiralReadout2D, system, excitation, design_interleaves=16, direction=direction
+    )
+    for bracket in (("gx_pre", "gy_pre"), ("gx_rew", "gy_rew")):
+        events = [getattr(readout.events, name, None) for name in bracket]
+        if any(event is None for event in events):
+            continue
+        assert _vector_slew(events) <= system.max_slew * 1.001, bracket
+
+
+def test_a_rotated_interleave_is_still_playable(system, excitation):
+    """The check the vector limit exists for, run the way a scan would."""
+    readout = _readout(design.SpiralReadout2D, system, excitation, design_interleaves=16)
+    seq = pp.Sequence(system)
+    for angle in np.linspace(0.0, np.pi, 7):
+        rotation = pp.make_rotation(Rotation.from_euler("z", float(angle)))
+        seq.add_block(readout.rf, readout.gz_select)
+        seq.add_block(readout.gx_read, readout.gy_read, readout.adc, rotation)
+        seq.add_block(readout.gx_rew, readout.gy_rew, rotation)
+    assert seq.check_timing()[0]

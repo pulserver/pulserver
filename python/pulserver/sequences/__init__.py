@@ -1,11 +1,11 @@
-"""Source-checkout forwarding module for :mod:`pulserver.sequences`.
+"""Ready-to-run sequence factories for interactive Pulserver use.
 
-Installed wheels map ``examples/sequences`` directly to this package path.
-The implementation lives in ``_shim`` so this source-tree package and the
-installed external-source package expose exactly the same public callbacks.
+Each factory takes the sequence's controls as explicit keyword arguments and
+returns an in-memory :class:`pulserver.pypulseq.Sequence`, so a sequence
+designed at a REPL and one designed through the bridge share an implementation.
+
+None are shipped yet: the readout and excitation modules they are written
+against are being rebuilt in :mod:`pulserver.design`.
 """
 
-from . import _shim
-
-__all__ = _shim.__all__
-globals().update({name: getattr(_shim, name) for name in __all__})
+__all__ = []
