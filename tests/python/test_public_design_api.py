@@ -89,11 +89,28 @@ def test_design_factories_are_reachable_only_through_the_design_namespace() -> N
 
 
 def test_pulserver_base_overrides_are_vendor_neutral_and_callable() -> None:
+    """Rasters default to the common multiple of both vendors' hardware."""
     system = pp.Opts()
     assert system.rf_dead_time == system.rf_ringdown_time == system.adc_dead_time == 0.0
+    # RF 1 us (Siemens) and 2 us (GE); ADC 100 ns and 2 us.
     assert system.rf_raster_time == system.adc_raster_time == pytest.approx(2e-6)
-    assert system.grad_raster_time == system.block_duration_raster == pytest.approx(10e-6)
+    # Gradient and block 10 us (Siemens) and 4 us (GE).
+    assert system.grad_raster_time == system.block_duration_raster == pytest.approx(20e-6)
     assert "OFF" in pp.get_supported_labels()
+
+
+def test_opts_takes_exactly_upstreams_arguments() -> None:
+    """Only the defaults differ from upstream, never the signature.
+
+    Anything Pulserver-specific on the system object would break the
+    drop-in promise the moment a PyPulseq script constructed an ``Opts``
+    of its own and passed it in.
+    """
+    import inspect
+
+    import pypulseq
+
+    assert list(inspect.signature(pp.Opts).parameters) == list(inspect.signature(pypulseq.Opts).parameters)
 
 
 def test_upstream_shape_codec_helpers_are_not_re_exported() -> None:

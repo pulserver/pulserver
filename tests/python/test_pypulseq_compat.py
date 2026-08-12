@@ -115,6 +115,41 @@ def test_compat_is_keyword_only_optional_and_last(name):
     assert set(positional) <= upstream_names
 
 
+def _upstream_methods():
+    return sorted(
+        name
+        for name in dir(upstream.Sequence)
+        if not name.startswith("_") and callable(getattr(upstream.Sequence, name, None))
+    )
+
+
+@pytest.mark.parametrize("name", _upstream_methods())
+def test_every_method_takes_upstreams_arguments_before_any_of_ours(name):
+    """Drop-in means a PyPulseq call site keeps working, keywords included.
+
+    Two ways it can break, and this catches both: an upstream argument
+    renamed, so ``seq.get_block(block_index=3)`` raises; and one of ours
+    inserted before upstream's, so a positional call lands on the wrong
+    parameter. Upstream's names have to come first, in upstream's order.
+
+    Variadic names are excluded: ``*args`` cannot be passed by keyword, so
+    what it is called is a readability question rather than a compatibility
+    one.
+    """
+    assert hasattr(pp.Sequence, name), f"pp.Sequence is missing {name}"
+
+    def names(fn):
+        return [
+            p.name
+            for p in inspect.signature(fn).parameters.values()
+            if p.kind not in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD)
+        ]
+
+    theirs = names(getattr(upstream.Sequence, name))
+    ours = names(getattr(pp.Sequence, name))
+    assert ours[: len(theirs)] == theirs
+
+
 @pytest.mark.parametrize("name", sorted(COMPAT_METHODS))
 def test_the_result_object_cannot_be_unpacked(pair, name):
     """The whole point of the flag: results grow fields, never tuple length."""

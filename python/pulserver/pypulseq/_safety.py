@@ -40,7 +40,13 @@ disagreeing: they are drawn from the same array.
 
 from __future__ import annotations
 
-__all__ = ["bands_to_resonances", "chronaxie_pns", "read_asc_bands", "read_esp_bands"]
+__all__ = [
+    "bands_to_hz_per_m",
+    "bands_to_resonances",
+    "chronaxie_pns",
+    "read_asc_bands",
+    "read_esp_bands",
+]
 
 from dataclasses import dataclass
 from pathlib import Path
@@ -208,8 +214,7 @@ def read_asc_bands(path: str | Path) -> list[tuple[float, float, float]]:
     The same tables :meth:`pypulseq.Sequence.calculate_pns` reads for its SAFE
     hardware description also declare the gradient coil's acoustic resonances,
     as a centre frequency and a bandwidth per resonance. This reads them with
-    upstream's own parser and restates them as ``(fmin, fmax)`` bands, the form
-    :class:`~pulserver.pypulseq.Opts` and the C safety core take.
+    upstream's own parser and restates them as ``(fmin, fmax)`` bands.
 
     A Siemens table declares no amplitude limit and no axis, so the limit comes
     back as ``0.0``: the safety core then falls back to its hardware-scaled
@@ -263,6 +268,43 @@ def bands_to_resonances(
         {"frequency": 0.5 * (float(band[0]) + float(band[1])), "bandwidth": float(band[1]) - float(band[0])}
         for band in bands
     ]
+
+
+def bands_to_hz_per_m(
+    bands: list[tuple[float, float, float] | tuple[float, float, float, str]],
+    *,
+    gamma: float | None = None,
+    keep_channel: bool = False,
+) -> list[tuple]:
+    """Restate forbidden bands from mT/m to Hz/m.
+
+    :func:`read_esp_bands` and :func:`read_asc_bands` report amplitude limits
+    in mT/m, which is how both vendors' tables state them. The C safety core
+    and :meth:`~.Sequence.calculate_gradient_spectrum`'s ``bands`` argument
+    want Hz/m. This is the conversion between the two.
+
+    Parameters
+    ----------
+    bands : list of tuple
+        ``(freq_min_hz, freq_max_hz, max_amplitude_mT_per_m[, channel])``.
+    gamma : float, optional
+        Gyromagnetic ratio in Hz/T; defaults to
+        :attr:`pulserver.pypulseq.Opts.default`'s.
+    keep_channel : bool, default False
+        Keep the trailing channel tag on the bands that carry one.
+
+    Returns
+    -------
+    list of tuple
+        ``(freq_min_hz, freq_max_hz, max_amplitude_hz_per_m[, channel])``.
+    """
+    if gamma is None:
+        gamma = float(pp.Opts.default.gamma)
+    out: list[tuple] = []
+    for band in bands:
+        converted = (float(band[0]), float(band[1]), float(band[2]) * 1e-3 * float(gamma))
+        out.append((*converted, str(band[3])) if keep_channel and len(band) > 3 else converted)
+    return out
 
 
 # %% the C safety core's own object

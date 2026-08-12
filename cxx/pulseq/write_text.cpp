@@ -286,6 +286,7 @@ namespace pulseq
         const std::vector<long> ticks = duration_ticks(seq);
 
         seq.set_definition("TotalDuration", Definition(seq.duration()));
+        seq.publish_rasters();
 
         std::string out;
         // Blocks dominate a large file; ~35 characters each is close enough

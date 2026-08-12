@@ -350,6 +350,18 @@ namespace pulseq
         double block_duration_raster() const { return block_raster_; }
         void set_rasters(double rf, double grad, double adc, double block);
 
+        /**
+         * Record the four rasters in `[DEFINITIONS]`, unless already recorded.
+         *
+         * Block durations are serialised as raster ticks, so a reader that
+         * cannot see the raster cannot recover the seconds: it falls back to
+         * a default, and every time in the file comes out scaled. The writers
+         * call this, which is also what makes the trajectory core -- reached
+         * by serialising and reparsing -- see the rasters the sequence was
+         * actually built on.
+         */
+        void publish_rasters();
+
         /* -- definitions ------------------------------------------------ */
 
         /** Sorted by key, which is the order the writers emit them in. */

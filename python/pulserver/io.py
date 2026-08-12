@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-__all__ = ["read", "read_asc_bands", "read_esp_bands", "write"]
+__all__ = ["bands_to_hz_per_m", "read", "read_asc_bands", "read_esp_bands", "write"]
 
 import hashlib
 from pathlib import Path
@@ -13,7 +13,7 @@ from warnings import warn
 import numpy as np
 from pypulseq.supported_labels_rf_use import get_supported_rf_uses
 
-from pulserver.pypulseq._safety import read_asc_bands, read_esp_bands
+from pulserver.pypulseq._safety import bands_to_hz_per_m, read_asc_bands, read_esp_bands
 
 #: Pulseq's numeric RF ``use`` codes and the initial each one is written as:
 #: undefined, excitation, refocusing, inversion, saturation, preparation,

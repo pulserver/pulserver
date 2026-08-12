@@ -48,6 +48,8 @@ import pypulseq as pp
 
 from scipy.spatial.transform import Rotation
 
+from ._opts import default_system
+
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from ._sequence import Sequence
 
@@ -129,9 +131,9 @@ class TransformFOV:
         scale: tuple[float, float, float] | None = None,
         transform: np.ndarray | None = None,
         use_rotation_extension: bool = True,
-        server_mode: bool = False,
         prior_phase_cycle: float = 0.0,
         system: pp.Opts | None = None,
+        server_mode: bool = False,
     ) -> None:
         if transform is not None:
             if rotation is not None or translation is not None:
@@ -169,7 +171,7 @@ class TransformFOV:
         self.use_rotation_extension = use_rotation_extension
         self.server_mode = server_mode
         self.prior_phase_cycle = prior_phase_cycle
-        self.system = system if system is not None else pp.Opts.default
+        self.system = default_system(system)
 
         for name, value in (("translation", self.translation), ("scale", self.scale)):
             if value is not None and len(value) != 3:
@@ -242,6 +244,10 @@ class TransformFOV:
         if self.server_mode and self.translation is not None:
             target._native.attach_base_trajectory()
 
+        # The waveforms moved, so anything derived from them has to be
+        # rebuilt -- the scan structure the safety analyses and plot(tr=)
+        # cache, above all.
+        target._touch()
         return target
 
 

@@ -12,6 +12,7 @@ from pulserver._ext._pulseg_wrapper import (
     _check_safety,
     _PulseqCollection,
 )
+from pulserver.io import bands_to_hz_per_m
 from pulserver.pypulseq import Opts
 
 from .conftest import EXPECTED, build_collection
@@ -157,15 +158,17 @@ def test_mech_resonance_candidates_pair_a_frequency_with_an_amplitude(generated_
 # ── band units ───────────────────────────────────────────────────────
 
 
-def test_opts_converts_public_bands_to_backend_units():
-    opts = Opts(
-        max_grad=40.0, grad_unit="mT/m", max_slew=150.0, slew_unit="T/m/s", forbidden_bands=[(100.0, 200.0, 1.0)]
-    )
+def test_public_bands_convert_to_backend_units():
+    """Vendor tables state mT/m; the C core and ``bands=`` want Hz/m."""
+    opts = Opts(max_grad=40.0, grad_unit="mT/m", max_slew=150.0, slew_unit="T/m/s")
 
-    ((fmin, fmax, amp),) = opts.forbidden_bands_hz_per_m()
+    ((fmin, fmax, amp),) = bands_to_hz_per_m([(100.0, 200.0, 1.0)], gamma=opts.gamma)
     assert np.isclose(fmin, 100.0)
     assert np.isclose(fmax, 200.0)
     assert np.isclose(amp, 1.0e-3 * float(opts.gamma))
+
+    ((*_, channel),) = bands_to_hz_per_m([(100.0, 200.0, 1.0, "gx")], keep_channel=True)
+    assert channel == "gx"
 
 
 def test_multi_sequence_collections_load_from_payloads():

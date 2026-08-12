@@ -37,6 +37,7 @@ __all__ = [
     "KSpace",
     "Pns",
     "RfPower",
+    "RfResponse",
     "RfTimes",
     "SoftDelay",
     "Waveforms",
@@ -262,6 +263,45 @@ class GradientSpectrum:
     times: np.ndarray
     spectrograms_rss: np.ndarray
     resonance_lines: object | None = None
+
+
+@dataclass(frozen=True)
+class RfResponse:
+    """What an RF pulse does to the magnetisation, across off-resonance.
+
+    ``mz_*`` start from ``+z``, which is what an excitation, inversion or
+    saturation profile is read off. ``mx_xy`` and ``my_xy`` start from ``+x``
+    and ``+y``, and ``ref_eff`` combines them: its magnitude is the refocused
+    fraction and its phase the axis of the flip.
+    """
+
+    mz_z: np.ndarray
+    mz_xy: np.ndarray
+    frequency: np.ndarray
+    ref_eff: np.ndarray
+    mx_xy: np.ndarray
+    my_xy: np.ndarray
+
+    @classmethod
+    def of(
+        cls,
+        *,
+        mz_z: np.ndarray,
+        mz_xy: np.ndarray,
+        frequency: np.ndarray,
+        ref_eff: np.ndarray,
+        mx_xy: np.ndarray,
+        my_xy: np.ndarray,
+    ) -> RfResponse:
+        return cls(
+            mz_z=mz_z,
+            mz_xy=mz_xy,
+            frequency=frequency,
+            ref_eff=ref_eff,
+            mx_xy=mx_xy,
+            my_xy=my_xy,
+        )
+
 
 
 @dataclass(frozen=True)

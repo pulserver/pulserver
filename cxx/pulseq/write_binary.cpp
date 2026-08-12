@@ -184,6 +184,7 @@ namespace pulseq
         const double block_raster = seq.block_duration_raster();
 
         seq.set_definition("TotalDuration", Definition(seq.duration()));
+        seq.publish_rasters();
 
         std::string out;
         out.reserve(static_cast<size_t>(n_blocks) * 32 + 8192);

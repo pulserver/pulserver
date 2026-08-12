@@ -139,7 +139,7 @@ class PulseqSequence(ABC):
         protocol: Protocol,
         output_path: str,
         *,
-        mode: str = "server",
+        server_mode: bool = True,
         create_signature: bool = True,
     ) -> None:
         """Position the FOV and write the sequence out.
@@ -158,14 +158,16 @@ class PulseqSequence(ABC):
             The protocol it was built from; the offsets are read out of it.
         output_path : str
             Where to write.
-        mode : {"server", "native"}, default "server"
-            ``"server"`` stores each readout's base k-space trajectory for our
-            own consumer to apply, keeping one shape per distinct trajectory.
-            ``"native"`` bakes the ADC phase into the file, for a ``.seq``
-            shared with another toolbox.
+        server_mode : bool, default True
+            Store each readout's base k-space trajectory for our own consumer
+            to apply, keeping one shape per distinct trajectory. False bakes
+            the ADC phase into the file, for a ``.seq`` shared with another
+            toolbox.
         create_signature : bool, default True
             Append the ``[SIGNATURE]`` section.
         """
+        from pulserver.pypulseq import TransformFOV
+
         from . import _params as params
 
         offset_mm = (
@@ -174,6 +176,8 @@ class PulseqSequence(ABC):
             params.param_float_optional(protocol, UIParam.FOV_OFFSET_Z, 0.0),
         )
         if any(offset_mm):
-            seq.transform_fov(offset_mm, mode=mode)
+            TransformFOV(translation=offset_mm, server_mode=server_mode).apply_to_sequence(
+                seq, in_place=True
+            )
 
         seq.write(output_path, create_signature=create_signature)

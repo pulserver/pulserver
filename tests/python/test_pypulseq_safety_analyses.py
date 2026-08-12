@@ -78,7 +78,7 @@ def seq(system, num_trs):
         built.add_block(gy)
         built.add_block(gx)
         built.add_block(pp.make_delay(5e-3))
-    built.remove_duplicates()
+    built.remove_duplicates(in_place=True)
     return built
 
 
@@ -416,11 +416,10 @@ def test_the_structure_does_not_outlive_the_sequence_it_describes(seq, system):
     [
         ("add_block", ()),
         ("set_block", (1,)),
-        ("remove_duplicates", ()),
+        ("remove_duplicates", (True,)),
         ("set_definition", ("Name", "x")),
         ("register_grad_event", None),
         ("register_adc_event", None),
-        ("transform_fov", ((1.0, 0.0, 0.0),)),
     ],
 )
 def test_every_mutator_bumps_the_revision(seq, system, mutate, arguments):

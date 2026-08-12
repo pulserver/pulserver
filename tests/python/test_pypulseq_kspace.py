@@ -195,6 +195,35 @@ def test_an_unknown_frame_is_refused(gre):
         gre.calculate_kspace(frame="scanner")
 
 
+@pytest.mark.parametrize("raster", [4e-6, 10e-6, 20e-6, 25e-6])
+def test_the_times_do_not_depend_on_which_raster_the_sequence_was_built_on(raster):
+    """A sequence never written to disk still knows its own raster.
+
+    The trajectory core is reached by serialising and reparsing, and block
+    durations cross as raster ticks, so a reader that cannot see the raster
+    recovers seconds scaled by the ratio of the real raster to its default.
+    """
+    import pulserver.pypulseq as pp
+
+    system = pp.Opts(grad_raster_time=raster, block_duration_raster=raster, rf_dead_time=100e-6)
+    seq = pp.Sequence(system=system)
+    excite = pp.make_block_pulse(flip_angle=np.pi / 2, duration=1e-3, system=system, use="excitation")
+    spacing = 40 * raster
+    for _ in range(3):
+        seq.add_block(excite)
+        seq.add_block(pp.make_delay(spacing))
+        seq.add_block(
+            pp.make_trapezoid(channel="x", flat_area=100, flat_time=2e-3, system=system),
+            pp.make_adc(num_samples=32, duration=2e-3, system=system),
+        )
+
+    per_shot = float(np.sum(seq.block_durations[:3]))
+    times = np.asarray(seq.calculate_kspace(dense=False)[2])
+
+    assert len(times) == 3
+    assert np.allclose(np.diff(times), per_shot, rtol=0, atol=1e-12)
+
+
 def test_window_averaging_is_off_by_default_and_only_moves_a_curved_readout():
     """Off by default so the answer stays comparable with PyPulseq and mrpro."""
     flat = load("fse_2d_1sl_1avg")

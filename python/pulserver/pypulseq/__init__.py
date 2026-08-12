@@ -45,11 +45,14 @@ from ._results import (
     KSpace as _KSpace,
     Pns as _Pns,
     RfPower as _RfPower,
+    RfResponse as _RfResponse,
     RfTimes as _RfTimes,
     SoftDelay as _SoftDelay,
     Waveforms as _Waveforms,
     WaveformsAndTimes as _WaveformsAndTimes,
 )
+from ._simulate import bloch as _bloch
+from ._simulate import sim_rf as _sim_rf
 from ._transform_fov import TransformFOV as _TransformFOV
 
 #: Upstream names Pulserver deliberately does not re-export: the adiabatic
@@ -97,6 +100,7 @@ GradientSpectrum = _GradientSpectrum
 KSpace = _KSpace
 Pns = _Pns
 RfPower = _RfPower
+RfResponse = _RfResponse
 RfTimes = _RfTimes
 SoftDelay = _SoftDelay
 Waveforms = _Waveforms
@@ -106,6 +110,8 @@ get_supported_labels = _get_supported_labels
 make_label = _make_label
 make_rf_shim = _make_rf_shim
 make_rotation = _make_rotation
+sim_rf = _sim_rf
+bloch = _bloch
 
 #: Upstream's factories, wrapped so the event they build comes back with its
 #: fields in slots rather than in a dictionary.  Same validation, same
@@ -132,6 +138,7 @@ RESULTS = frozenset(
         "KSpace",
         "Pns",
         "RfPower",
+        "RfResponse",
         "RfTimes",
         "SoftDelay",
         "Waveforms",
@@ -152,6 +159,8 @@ OVERRIDES = frozenset(
         "make_label",
         "make_rf_shim",
         "make_rotation",
+        "sim_rf",
+        "bloch",
         *SLOTTED,
     }
 )
@@ -164,3 +173,24 @@ UPSTREAM = (
 )
 
 __all__ = sorted(UPSTREAM | OVERRIDES)
+
+
+#: Why each withheld upstream name is withheld. Reaching for one gets this
+#: rather than a bare AttributeError, which would read as an oversight.
+_WITHHELD_REASONS = {
+    "make_adiabatic_pulse": (
+        "not re-exported: the preparation modules in pulserver.design build their own "
+        "adiabatic pulses, with the sweep and the spoiling the module needs. Import it "
+        "from pypulseq directly if you want upstream's."
+    ),
+    "compress_shape": "a shape codec, not authoring vocabulary; import it from pypulseq.",
+    "decompress_shape": "a shape codec, not authoring vocabulary; import it from pypulseq.",
+    "convert": "a unit helper, not authoring vocabulary; import it from pypulseq.convert.",
+}
+
+
+def __getattr__(name: str):
+    reason = _WITHHELD_REASONS.get(name)
+    if reason is not None:
+        raise AttributeError(f"pulserver.pypulseq does not export {name!r}: {reason}")
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

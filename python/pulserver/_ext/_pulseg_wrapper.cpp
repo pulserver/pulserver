@@ -473,6 +473,11 @@ static void _check_consistency(_PulseqCollection& pc)
     pc.coll().check_consistency();
 }
 
+static std::string _check_grad_continuity(_PulseqCollection& pc)
+{
+    return pc.coll().check_grad_continuity();
+}
+
 static void _check_safety(
     _PulseqCollection& pc,
     py::list py_bands,
@@ -657,6 +662,8 @@ PYBIND11_MODULE(_pulseg_wrapper, m)
         py::arg("decay_constant_us") = 0.0f,
         py::arg("pns_threshold_percent") = 100.0f,
         py::arg("skip_pns") = true);
+
+    m.def("_check_grad_continuity", &_check_grad_continuity, py::arg("collection"));
 
     m.def("_get_segments", &_get_segments, py::arg("collection"), py::arg("subseq_idx") = 0);
 }

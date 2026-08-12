@@ -60,10 +60,15 @@ first, so what is drawn is what the scanner plays. Unstacked, its two panels
 are laid out as one window of three rows by two columns rather than opened as
 two.
 
-The rest of the analysis half — `waveforms`, `check_timing`, `test_report`
-and the others — is not ported yet and raises `NotImplementedError` with
-upstream's signature. The scan structure those rest on belongs to the module
-and scan-loop layer above this one.
+`check_timing()` is upstream's own checker run over a window of blocks, and
+`check_gradient_continuity()` is the C safety core's — the check `add_block`
+skips because its cost would fall on every block. Both run from `write()` by
+default; a server-mode plugin turns them off, since the scanner repeats them
+at predownload. Continuity is judged **after** each block's rotation is
+applied, in the physical frame the amplifiers slew in.
+
+Two methods still refuse on purpose: `install` (Siemens scanner transfer) and
+`sound` (acoustic preview). Each raises with its reason.
 
 ## K-space and encoding counters
 
@@ -240,7 +245,9 @@ and ADC, computed in C++ from absolute k; a rotation is attached as a
 still serves every orientation; a scale multiplies the amplitude a gradient
 row carries and leaves its shape alone. `NOSCL`, `NOPOS` and `NOROT` exempt
 the blocks that carry them, and a block range confines the whole thing to one
-module. `Sequence.transform_fov()` is the shorthand for its commonest use.
+module. `apply_to_sequence(seq, in_place=True)` transforms a finished sequence
+where it stands; without `in_place` it hands back a transformed copy, which is
+what MATLAB's `applyToSeq` does.
 
 ```{eval-rst}
 .. autosummary::
@@ -300,6 +307,29 @@ events: pass them to `seq.add_block` like any other.
    pulserver.pypulseq.make_rotation
 ```
 
+## Simulation
+
+`sim_rf` is MATLAB Pulseq's `mr.simRf`, which upstream PyPulseq has no
+equivalent of: it rotates the magnetisation through the pulse across a range
+of off-resonance, and reports what the pulse does starting from `+z`, `+x` and
+`+y`. The three together are what separates a refocusing pulse from one that
+merely inverts — `ref_eff` combines the last two. `bloch` is the integrator
+underneath, exposed for a caller simulating something the pulse alone does not
+describe, such as a two-dimensional profile under its own gradients.
+
+It does not use `pypulseq.calc_rf_bandwidth` to choose its frequency axis:
+that function mis-measures a pulse carrying a frequency offset, reporting
+20 Hz for a 2 ms TBW-4 sinc shifted by 1.5 kHz.
+
+```{eval-rst}
+.. autosummary::
+   :toctree: generated/pypulseq
+   :nosignatures:
+
+   pulserver.pypulseq.sim_rf
+   pulserver.pypulseq.bloch
+```
+
 ## Label constants
 
 The Pulseq label set splits in two. **Counters** say where an acquisition
@@ -349,6 +379,7 @@ deliberately **cannot** be unpacked — they have no `__iter__` and no
 | `calculate_gradient_spectrum` | 4-tuple | {class}`~pulserver.pypulseq.GradientSpectrum` |
 | `calc_rf_power` | MATLAB's 4-tuple | {class}`~pulserver.pypulseq.RfPower` |
 | `calc_moments_btensor` | MATLAB's 4-tuple | {class}`~pulserver.pypulseq.BTensor` |
+| `sim_rf` | MATLAB's 6-tuple | {class}`~pulserver.pypulseq.RfResponse` |
 
 What only `compat=False` can tell you:
 
@@ -413,6 +444,7 @@ once the prescription is known.
    pulserver.pypulseq.Pns
    pulserver.pypulseq.GradientSpectrum
    pulserver.pypulseq.RfPower
+   pulserver.pypulseq.RfResponse
    pulserver.pypulseq.SoftDelay
    pulserver.pypulseq.BTensor
    pulserver.pypulseq.DiffusionTable

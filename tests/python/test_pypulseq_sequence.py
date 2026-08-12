@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import inspect
 import io
+import warnings
 
 import matplotlib
 import numpy as np
 import pulserver.pypulseq as pp
 import pypulseq as upstream
 import pytest
-from pulserver.pypulseq._extensions import strip_extensions
 from scipy.spatial.transform import Rotation
 
 matplotlib.use("Agg")
@@ -94,11 +94,11 @@ def test_a_decoded_block_holds_the_events_that_went_into_it(seq, events):
 
 
 def test_deduplication_leaves_the_columns_at_the_precision_the_file_writes(seq, events):
-    seq.remove_duplicates()
+    seq.remove_duplicates(in_place=True)
     # Six significant digits on a gradient amplitude is what `%12g` records, so
     # that -- not double precision -- is what survives a round trip.
     np.testing.assert_allclose(seq.get_block(3).gy.waveform, events["gy"].waveform, rtol=2e-6)
-    seq.remove_duplicates()
+    seq.remove_duplicates(in_place=True)
     assert seq.num_blocks == 16
 
 
@@ -118,7 +118,7 @@ def test_a_clone_and_its_source_diverge_independently(seq):
 
 
 def test_a_written_sequence_reads_back_to_the_same_bytes(seq, tmp_path):
-    seq.remove_duplicates()
+    seq.remove_duplicates(in_place=True)
     seq.set_definition("Name", "round_trip")
     seq.set_definition("FOV", [0.22, 0.22, 0.005])
 
@@ -136,16 +136,65 @@ def test_a_written_sequence_reads_back_to_the_same_bytes(seq, tmp_path):
     assert again.read_bytes() == text
 
 
+def test_write_returns_the_signature_of_the_file_it_wrote(seq, tmp_path):
+    """Upstream returns the hash, and callers store it beside the file.
+
+    Deduplication happens on a copy, so the hash has to belong to the bytes
+    on disk rather than to this object -- which is the case upstream's
+    docstring warns about.
+    """
+    import hashlib
+
+    path = tmp_path / "signed.seq"
+    signature = seq.write(path)
+
+    body = path.read_bytes()
+    # The newline before [SIGNATURE] is not part of what was hashed; the
+    # file's own comment says so.
+    cut = body.rfind(b"\n[SIGNATURE]")
+    assert signature == hashlib.md5(body[:cut]).hexdigest()  # noqa: S324 - Pulseq specifies md5
+    assert seq.write(path, create_signature=False) is None
+
+
+def test_writing_deduplicates_a_copy_and_leaves_the_sequence_alone(seq, tmp_path):
+    before = seq._native.num_shapes()
+    seq.write(tmp_path / "deduped.seq")
+    assert seq._native.num_shapes() == before
+
+    plain = tmp_path / "plain.seq"
+    seq.write(plain, remove_duplicates=False)
+    assert len(plain.read_bytes()) >= len((tmp_path / "deduped.seq").read_bytes())
+
+
+@pytest.mark.parametrize(
+    ("method", "kwargs", "match"),
+    [
+        ("write", {"v141_compat": True}, "1.4.1"),
+        ("read", {"detect_rf_use": True}, "detect_rf_use"),
+    ],
+)
+def test_the_arguments_we_deliberately_do_not_implement_say_so(seq, tmp_path, method, kwargs, match):
+    """Upstream's keyword is accepted, then refused with a reason.
+
+    Silently ignoring it would be the bad outcome: the caller would think
+    they had asked for something.
+    """
+    path = tmp_path / "x.seq"
+    seq.write(path)
+    with pytest.raises(NotImplementedError, match=match):
+        getattr(seq, method)(path, **kwargs)
+
+
 def test_write_is_text_whatever_the_file_is_called(seq, tmp_path):
     """The reference toolbox's write writes .seq text; the suffix decides nothing."""
-    seq.remove_duplicates()
+    seq.remove_duplicates(in_place=True)
     path = tmp_path / "misleading.bin"
     seq.write(path)
     assert path.read_bytes().lstrip().startswith(b"# Pulseq sequence file")
 
 
 def test_the_binary_format_carries_the_same_sequence(seq, tmp_path):
-    seq.remove_duplicates()
+    seq.remove_duplicates(in_place=True)
     path = tmp_path / "sequence.bin"
     seq.write_binary(path)
 
@@ -157,7 +206,7 @@ def test_the_binary_format_carries_the_same_sequence(seq, tmp_path):
 
 def test_only_the_binary_writer_takes_a_stream(seq, tmp_path):
     """It is the format meant to be handed on without touching the filesystem."""
-    seq.remove_duplicates()
+    seq.remove_duplicates(in_place=True)
     path = tmp_path / "sequence.bin"
     seq.write_binary(path)
 
@@ -169,9 +218,41 @@ def test_only_the_binary_writer_takes_a_stream(seq, tmp_path):
         seq.write(io.BytesIO())
 
 
+def strip_extensions(payload: bytes) -> bytes:
+    """Drop the extension region and zero the block EXT column.
+
+    The remaining payload is plain Pulseq that upstream
+    :meth:`pypulseq.Sequence.read` accepts unchanged.
+    """
+    lines: list[str] = []
+    in_blocks = False
+    skipping = False
+    for line in payload.decode("utf-8").splitlines(keepends=True):
+        section = line.strip()
+        if section == "[BLOCKS]":
+            in_blocks, skipping = True, False
+        elif section == "[EXTENSIONS]":
+            in_blocks, skipping = False, True
+            continue
+        elif skipping and section == "[SHAPES]":
+            skipping = False
+        elif skipping:
+            continue
+        elif section.startswith("["):
+            in_blocks = False
+
+        if in_blocks and line.lstrip()[:1].isdigit():
+            fields = line.split()
+            if len(fields) == 8:
+                fields[-1] = "0"
+                line = " ".join(fields) + "\n"
+        lines.append(line)
+    return "".join(lines).encode("utf-8")
+
+
 def test_upstream_pypulseq_reads_what_was_written(seq, tmp_path):
     # Once ROTATIONS is stripped: upstream 1.5.0 has no reader for it.
-    seq.remove_duplicates()
+    seq.remove_duplicates(in_place=True)
     written = tmp_path / "written.seq"
     seq.write(written)
     path = tmp_path / "plain.seq"
@@ -204,7 +285,7 @@ def test_scaling_an_rf_amplitude_costs_no_extra_shape(system):
         for amplitude in amplitudes:
             rf.amplitude = amplitude
             built.add_block(rf)
-        built.remove_duplicates()
+        built.remove_duplicates(in_place=True)
         return built._native.num_shapes(), built._native.num_rf()
 
     one_shape_count, one_row = shapes_for([1e3])
@@ -225,21 +306,150 @@ def test_scaling_an_rf_amplitude_costs_no_extra_shape(system):
         "pns",
         "mech_resonances",
         "grad_spectrum",
-        "plot_kspace",
         "block_range_of",
         "_collection",
     ],
 )
 def test_the_scan_structure_placeholders_are_gone_rather_than_stubbed(name):
-    """They belong to the layer above; this class does not stand in for it.
+    """These name a scan-definition layer that lives elsewhere.
 
-    ``num_trs``, ``tr_size`` and ``num_segments`` were once on this list and
-    are deliberately off it: they answer about the structure the C core
-    *recovered*, which is this class's own knowledge, where the entries above
-    stood in for a scan-definition layer that lives elsewhere. The rest of
-    that layer's vocabulary stays gone.
+    A method belongs here when it would answer about the scan a sequence was
+    built from. Answering about the structure the C core recovered from the
+    blocks -- ``num_trs``, ``tr_size``, ``num_segments`` -- is this class's
+    own knowledge, and so is any view of what it already computes.
     """
     assert not hasattr(pp.Sequence, name)
+
+
+# %% the checks building deliberately skips
+
+
+def _continuity_case(system, *, rotate_middle):
+    """Ramp up, hold, ramp down -- with the held block optionally turned.
+
+    Unturned the three join exactly. Turned 90 degrees about z, the held
+    block plays on y while its neighbours play on x, so in the physical
+    frame the gradient jumps twice even though nothing about the waveforms
+    changed.
+    """
+    amplitude = 0.8 * float(system.max_grad)
+    n = 40
+    seq = pp.Sequence(system=system)
+
+    def grad(waveform):
+        return pp.make_arbitrary_grad(channel="x", waveform=waveform, system=system)
+
+    seq.add_block(grad(np.linspace(0.0, amplitude, n)))
+    held = [grad(np.full(n, amplitude))]
+    if rotate_middle:
+        held.append(pp.make_rotation(Rotation.from_euler("z", 90, degrees=True)))
+    seq.add_block(*held)
+    seq.add_block(grad(np.linspace(amplitude, 0.0, n)))
+    return seq
+
+
+def test_gradient_continuity_is_judged_after_the_rotation_is_applied(system):
+    """The amplifiers slew in the physical frame, so that is where this looks.
+
+    The turned case is the one that matters: every waveform in it is
+    identical to the untured case's, so a check that compared logical
+    endpoints would call both continuous.
+    """
+    assert _continuity_case(system, rotate_middle=False).check_gradient_continuity() == (True, "")
+
+    is_ok, message = _continuity_case(system, rotate_middle=True).check_gradient_continuity()
+    assert not is_ok
+    assert "mT/m" in message
+
+
+def test_a_sequence_that_never_ramps_down_is_refused_before_the_check_runs(system):
+    """Two guards, and the earlier one owns the endpoints.
+
+    Building the scan structure already requires a TR to start and end at
+    zero gradient, so a sequence that trails off never reaches the continuity
+    check -- it is refused while the collection is being built. Worth pinning:
+    the interior-jump case below is what the continuity check is actually
+    left to catch.
+    """
+    amplitude = 0.8 * float(system.max_grad)
+    seq = pp.Sequence(system=system)
+    seq.add_block(pp.make_arbitrary_grad(channel="x", waveform=np.linspace(0.0, amplitude, 40), system=system))
+    seq.add_block(pp.make_arbitrary_grad(channel="x", waveform=np.full(40, amplitude), system=system))
+
+    with pytest.raises(RuntimeError, match="does not end with zero gradient"):
+        seq.check_gradient_continuity()
+
+
+def test_writing_warns_about_a_discontinuity_and_can_be_told_not_to(system, tmp_path):
+    seq = _continuity_case(system, rotate_middle=True)
+
+    with pytest.warns(UserWarning, match="mT/m"):
+        seq.write(tmp_path / "warned.seq")
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        seq.write(tmp_path / "quiet.seq", check_timing=False, check_gradient_continuity=False)
+
+
+def test_check_timing_is_upstreams_answer_over_the_window(seq):
+    """Same checker, same verdict -- ours only chooses the blocks."""
+    ours = seq.check_timing()
+    theirs = seq._upstream_window(1, seq.num_blocks).check_timing()
+    assert ours[0] == theirs[0]
+    assert len(ours[1]) == len(theirs[1])
+
+    half = float(np.sum(seq.block_durations)) / 2.0
+    assert seq.check_timing(time_range=[0.0, half])[0]
+
+
+# %% parity additions
+
+
+def test_str_summarises_the_libraries_and_the_rasters(seq):
+    text = str(seq)
+    assert text.startswith("Sequence:")
+    for line in ("rf_library:", "gradients_library:", "adc_library:", "block_events:"):
+        assert line in text
+    assert f"block_events: {seq.num_blocks}" in text
+
+
+def test_add_trid_names_a_group_and_reuses_its_id(system):
+    """MATLAB's idiom: name the TR groups, let the numbering follow."""
+    built = pp.Sequence(system=system)
+    assert built.add_trid("fat_suppression") == 1
+    assert built.add_trid("readout") == 2
+    assert built.add_trid("fat_suppression") == 1
+
+    assert built.trid_names == {"fat_suppression": 1, "readout": 2}
+    assert built.num_blocks == 3
+    labels = built.get_block(1).labels
+    assert ("SET", "TRID", 1) in [tuple(entry) for entry in labels]
+
+
+@pytest.mark.parametrize("name", ["", None, 3])
+def test_a_trid_needs_a_real_name(system, name):
+    with pytest.raises(ValueError, match="non-empty string"):
+        pp.Sequence(system=system).get_or_create_trid_id(name)
+
+
+def test_the_withheld_upstream_names_say_why_rather_than_vanishing():
+    """A bare AttributeError would read as an oversight, not a decision."""
+    for name in ("make_adiabatic_pulse", "convert", "compress_shape", "decompress_shape"):
+        with pytest.raises(AttributeError, match="does not export"):
+            getattr(pp, name)
+
+    with pytest.raises(AttributeError, match="has no attribute"):
+        pp.a_name_that_was_never_here  # noqa: B018
+
+
+def test_a_default_sequence_uses_pulservers_rasters_not_upstreams():
+    """A sequence built without a system reads Pulserver's defaults.
+
+    ``pypulseq.Opts.default`` is a separate object holding the Siemens
+    table, so resolving the default has to go through ours.
+    """
+    assert pp.Sequence().system.grad_raster_time == pp.Opts.default.grad_raster_time
+    assert pp.Sequence().system.rf_raster_time == pp.Opts.default.rf_raster_time
 
 
 #: Methods that raise on purpose, and the reason each states. A stub here is a
@@ -247,7 +457,6 @@ def test_the_scan_structure_placeholders_are_gone_rather_than_stubbed(name):
 #: on the reason and not merely on the exception type.
 _DELIBERATE_STUBS = [
     ("install", (), {}, "Siemens scanner transfer"),
-    ("check_timing", (), {"print_errors": True}, "predownload"),
     ("sound", (), {}, "acoustic preview"),
 ]
 
@@ -383,7 +592,7 @@ def test_pre_registering_does_not_change_the_sequence(system, events):
         for _ in range(3):
             built.add_block(rf)
             built.add_block(gx, gy, adc)
-        built.remove_duplicates()
+        built.remove_duplicates(in_place=True)
         return built
 
     plain, pre = build(False), build(True)
@@ -461,7 +670,7 @@ def test_pre_registering_an_extension_changes_nothing_in_the_written_file(system
             built.register_control_event(events["trigger"])
         built.add_block(events["gx"], turn)
         built.add_block(events["rf"], shim)
-        built.remove_duplicates()
+        built.remove_duplicates(in_place=True)
         return built
 
     assert build(preregister=True)._to_text(create_signature=False) == build(

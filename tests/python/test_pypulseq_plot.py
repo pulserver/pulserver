@@ -350,7 +350,7 @@ def encoded(system):
         built.add_block(gy)
         built.add_block(gx, adc)
         built.add_block(pp.make_delay(5e-3))
-    built.remove_duplicates()
+    built.remove_duplicates(in_place=True)
     return built
 
 

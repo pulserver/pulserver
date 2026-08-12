@@ -57,6 +57,35 @@ extern "C"
         const pulseg_pns_model *pns_model,
         float pns_threshold_percent);
 
+    /**
+     * @brief Check that gradients are continuous across every block boundary.
+     *
+     * Also run as part of pulseg_check_safety(); exposed separately so a
+     * design tool can ask this one question offline, without a PNS model or
+     * an acoustic band table.  Building a sequence does not check it -- the
+     * cost would fall on every add_block -- so this is what a writer or an
+     * authoring session calls instead.
+     *
+     * The endpoints compared are those of the shape each block instance
+     * actually plays, scaled by that instance's own amplitude, and both are
+     * transformed by the block's rotation first: the comparison is per axis
+     * in the physical frame, which is the frame the amplifiers slew in.  A
+     * step larger than max_slew * grad_raster between two adjacent raster
+     * points is a violation, as is a subsequence ending without ramping to
+     * zero.
+     *
+     * @param[in]  coll  Collection (non-const: cursor dry-run).
+     * @param[out] diag  Diagnostic naming the axis and block on violation.
+     * @param[in]  opts  Scanner limits; max_slew_hz_per_m_per_s is the one
+     *                   that decides.
+     * @return PULSEG_SUCCESS if continuous, PULSEG_ERR_GRAD_DISCONTINUITY if
+     *         not.
+     */
+    int pulseg_check_grad_continuity(
+        pulseg_collection *coll,
+        pulseg_diagnostic *diag,
+        const pulseg_opts *opts);
+
     /* ================================================================== */
     /*  Acoustic spectra (for wrapper-side plotting)                      */
     /* ================================================================== */

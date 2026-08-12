@@ -339,7 +339,7 @@ def test_a_transformed_copy_still_writes(seq, tmp_path):
     moved = pp.TransformFOV(translation=(10.0, 0.0, 0.0), scale=(0.5, 1.0, 1.0)).apply_to_sequence(
         seq
     )
-    moved.remove_duplicates()
+    moved.remove_duplicates(in_place=True)
     path = tmp_path / "moved.seq"
     moved.write(path)
 
@@ -365,18 +365,27 @@ def test_a_homogeneous_transform_is_its_rotation_and_translation():
     np.testing.assert_allclose(combined.rotation, turn.as_matrix(), atol=1e-12)
 
 
-@pytest.mark.parametrize("mode", ["native", "server"])
-def test_sequence_transform_fov_is_the_shorthand_for_a_whole_sequence_shift(seq, mode):
+@pytest.mark.parametrize("server_mode", [False, True])
+def test_applying_in_place_matches_the_copy_it_would_have_returned(seq, server_mode):
     expected = pp.TransformFOV(
-        translation=(0.0, 0.0, 10.0), server_mode=(mode == "server")
+        translation=(0.0, 0.0, 10.0), server_mode=server_mode
     ).apply_to_sequence(seq)
 
-    seq.transform_fov((0.0, 0.0, 10.0), mode=mode)
+    pp.TransformFOV(translation=(0.0, 0.0, 10.0), server_mode=server_mode).apply_to_sequence(
+        seq, in_place=True
+    )
 
     assert _phases(seq) == pytest.approx(_phases(expected))
     assert seq._native.has_base_trajectory() == expected._native.has_base_trajectory()
 
 
-def test_sequence_transform_fov_rejects_an_unknown_mode(seq):
-    with pytest.raises(ValueError, match="'native' or 'server'"):
-        seq.transform_fov((0.0, 0.0, 10.0), mode="elsewhere")
+def test_transforming_in_place_invalidates_what_was_derived_from_the_waveforms(seq):
+    """The scan structure is cached until the sequence changes underneath it.
+
+    A transform changes it -- amplitudes, phases, sometimes a rotation
+    extension -- so a safety view taken afterwards must not be the one
+    computed before.
+    """
+    before = seq._revision
+    pp.TransformFOV(translation=(0.0, 0.0, 10.0)).apply_to_sequence(seq, in_place=True)
+    assert seq._revision > before

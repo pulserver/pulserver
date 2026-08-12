@@ -3838,7 +3838,7 @@ static int check_max_grad(
 /*  Gradient continuity check (cursor dry-run over n repetitions)     */
 /* ================================================================== */
 
-static int check_grad_continuity(
+int pulseg_check_grad_continuity(
     pulseg_collection *coll,
     pulseg_diagnostic *diag,
     const pulseg_opts *opts)
@@ -4280,7 +4280,7 @@ int pulseg__check_safety_profiled(
     /* ---- 2. gradient continuity ---- */
     if (profile_fn)
         profile_fn(profile_ctx, PULSEG__SAFETY_PROFILE_CONTINUITY, 1);
-    rc = check_grad_continuity(coll, diag, opts);
+    rc = pulseg_check_grad_continuity(coll, diag, opts);
     if (profile_fn)
         profile_fn(profile_ctx, PULSEG__SAFETY_PROFILE_CONTINUITY, 0);
     if (PULSEG_FAILED(rc))

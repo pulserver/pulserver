@@ -675,6 +675,24 @@ namespace pulseg
             check(code, diag);
         }
 
+        /**
+         * Gradient continuity alone, without a PNS model or a band table.
+         *
+         * Returns the diagnostic message rather than throwing on violation,
+         * so a caller can report every question it asked instead of stopping
+         * at the first. Empty means continuous.
+         */
+        std::string check_grad_continuity() const
+        {
+            pulseg_diagnostic diag;
+            pulseg_diagnostic_init(&diag);
+            const int code = pulseg_check_grad_continuity(coll_, &diag, &opts_);
+            if (code == PULSEG_ERR_GRAD_DISCONTINUITY)
+                return diag.message[0] ? diag.message : "gradient discontinuity";
+            check(code, diag);
+            return std::string();
+        }
+
         // ── Block cursor ─────────────────────────────────────────────
 
         int cursor_next()

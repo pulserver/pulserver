@@ -101,6 +101,24 @@ namespace pulseq
         block_raster_ = block;
     }
 
+    void Sequence::publish_rasters()
+    {
+        const std::pair<const char*, double> rasters[4] = {
+            {"GradientRasterTime", grad_raster_},
+            {"RadiofrequencyRasterTime", rf_raster_},
+            {"AdcRasterTime", adc_raster_},
+            {"BlockDurationRaster", block_raster_},
+        };
+        for (const auto& entry : rasters)
+        {
+            // A file that already declares one was read with it, so
+            // set_rasters already agrees; leaving it alone keeps the bytes
+            // a round trip produces identical to the ones it read.
+            if (definitions_.find(entry.first) == definitions_.end())
+                definitions_[entry.first] = Definition(entry.second);
+        }
+    }
+
     /* ================================================================== */
     /*  Definitions                                                       */
     /* ================================================================== */
