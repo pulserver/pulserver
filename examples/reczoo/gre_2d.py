@@ -135,11 +135,12 @@ class Gre2DRecon(ReconApp):
                 )(kspace, readout)
             image = coil_combine(coils, coil_axis=0)
 
-        # One magnitude image for the slice. ``reference`` names the acquisition
-        # whose header carries this slice's geometry, which the runtime copies
-        # into the image (and the DICOM); ``dicom=True`` asks it to emit one.
+        # One magnitude image for the slice, transposed to the column/row order
+        # an image (and its DICOM) is read in. ``reference`` names the
+        # acquisition whose header carries this slice's geometry, which the
+        # runtime copies into the image; ``dicom=True`` asks it to emit one.
         return ReconResult(
-            np.abs(_to_numpy(image)),
+            np.abs(_to_numpy(image)).transpose(),
             reference=0,
             image_type="magnitude",
             dicom=True,

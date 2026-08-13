@@ -98,20 +98,30 @@ def relative_error(image, reference):
     return float(np.linalg.norm(image - reference) / np.linalg.norm(reference))
 
 
+def reconstruct(*args, **kwargs):
+    """The reconstructed image, transposed back onto the ``(y, x)`` grid.
+
+    The app transposes its output to the column/row order an image is read in;
+    the phantom and zero-filled fixtures here are defined on the ``(y, x)``
+    grid, so the test transposes back before comparing against them.
+    """
+    return gre_2d.PLUGIN(*args, **kwargs).data.T
+
+
 # ----------------------------------------------------------------------
 # Fully sampled
 # ----------------------------------------------------------------------
 
 
 def test_a_fully_sampled_full_echo_slice_is_the_phantom(kspace, phantom, context):
-    image = gre_2d.PLUGIN(bucket(kspace, list(range(N))), context).data
+    image = reconstruct(bucket(kspace, list(range(N))), context)
     assert image.shape == (N, N)
     assert relative_error(image, phantom) < 1e-5
 
 
 def test_a_truncated_echo_is_filled_rather_than_zero_padded(kspace, phantom, context):
     """POCS recovers what zero-filling would blur."""
-    partial = gre_2d.PLUGIN(bucket(kspace, list(range(N)), n_samples=48), context).data
+    partial = reconstruct(bucket(kspace, list(range(N)), n_samples=48), context)
     zero_filled = _zero_filled(kspace, list(range(N)), n_samples=48)
     assert relative_error(partial, phantom) < 0.5 * relative_error(
         zero_filled, phantom
@@ -134,7 +144,7 @@ def test_the_calibration_block_selects_the_accelerated_branch(kspace, context):
 
 def test_the_accelerated_branch_suppresses_aliasing(kspace, phantom, context):
     lines, calibration = _sampling()
-    image = gre_2d.PLUGIN(bucket(kspace, lines, calibration=calibration), context).data
+    image = reconstruct(bucket(kspace, lines, calibration=calibration), context)
     assert relative_error(image, phantom) < relative_error(
         _zero_filled(kspace, lines), phantom
     )
@@ -144,9 +154,9 @@ def test_an_accelerated_partial_echo_slice_reconstructs_on_the_full_grid(
     kspace, phantom, context
 ):
     lines, calibration = _sampling()
-    image = gre_2d.PLUGIN(
+    image = reconstruct(
         bucket(kspace, lines, n_samples=48, calibration=calibration), context
-    ).data
+    )
     assert image.shape == (N, N)
     assert relative_error(image, phantom) < relative_error(
         _zero_filled(kspace, lines, n_samples=48), phantom
