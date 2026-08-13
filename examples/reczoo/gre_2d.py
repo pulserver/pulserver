@@ -21,17 +21,17 @@ ISMRMRD adapter
 Reconstruction
     Pure arrays, expressed in the framework's DeepInverse-style operator
     vocabulary -- a :class:`~pulserver.recon.physics.Cartesian2D` operator, its
-    inverse transform, :func:`~pulserver.recon.pics`, NLINV and POCS, with the
+    coil-wise adjoint, :func:`~pulserver.recon.pics`, NLINV and POCS, with the
     coils combined by an explicit :func:`~pulserver.recon.postprocessing.coil_combine`.
     This is the layer a sigpy/mrpro/DeepInverse user recognises. It carries no
     hand-written FFT: a Cartesian operator with no sensitivities *is* the
-    centered transform.
+    centered transform, one image per coil.
 
 Which of three reconstructions runs is detected from the bucket, never
 declared:
 
-* fully sampled, full echo -- a centered inverse transform, its coils combined
-  by root-sum-of-squares;
+* fully sampled, full echo -- the coil-wise adjoint (a centered inverse
+  transform per coil), the coils combined by root-sum-of-squares;
 * a readout truncated before the echo -- phase-constrained POCS fills the
   missing edge against a full-width readout axis;
 * uniformly undersampled with a fully sampled centre -- CG-SENSE against NLINV
@@ -39,6 +39,12 @@ declared:
 
 Parallel imaging comes first and partial Fourier second: the phase constraint
 POCS relies on is only meaningful once the image is unaliased.
+
+The result is one magnitude image per slice. The app does not build the image
+header: it returns a :class:`ReconResult` naming the acquisition its geometry
+comes from and asking for DICOM, and the runtime reads that acquisition's
+header (slice position, orientation) and the MRD header's recon field of view
+to make the ``ismrmrd.Image`` and the DICOM series.
 
 Needs the numerical stack: ``pip install "pulserver[recon-cpu]"``.
 """
@@ -97,7 +103,14 @@ class Gre2DRecon(ReconApp):
         bucket: AcquisitionBucket,
         context: ReconContext,
     ) -> ReconResult:
-        """Reconstruct the acquisitions of one slice into one image."""
+        """Reconstruct the acquisitions of one slice into one image.
+
+        The phase-encode matrix comes from the MRD header; the image geometry
+        and the DICOM series come from the runtime, which reads the referenced
+        acquisition's header (slice position and orientation) and the header's
+        recon field of view when it turns the returned :class:`ReconResult` into
+        an ``ismrmrd.Image`` and, because ``dicom=True``, a DICOM.
+        """
         # ISMRMRD adapter: one slice's acquisitions onto a full Cartesian grid.
         n_y = _phase_encode_lines(context.header, bucket)
         kspace, samples = _grid(bucket, n_y)
@@ -111,17 +124,26 @@ class Gre2DRecon(ReconApp):
             image = self._sense(kspace, samples, readout, calibration)
         else:
             # No calibration: root-sum-of-squares of the per-coil images. A
-            # partial echo is filled first (POCS); a full echo is a plain
-            # centered inverse transform. Either way the coil combination is one
+            # partial echo is filled first (POCS); a full echo is the adjoint of
+            # a coil-wise operator. Either way the coil combination is one
             # explicit step, not folded into the transform.
             if readout.all():
-                coil_images = _inverse_transform(kspace, self.device)
+                coils = _coil_images(kspace, samples, self.device)
             else:
-                coil_images = POCS(
+                coils = POCS(
                     dimension=2, partial_axis=-1, iterations=self.pocs_iterations
                 )(kspace, readout)
-            image = coil_combine(coil_images, coil_axis=0)
-        return ReconResult(np.abs(_to_numpy(image)))
+            image = coil_combine(coils, coil_axis=0)
+
+        # One magnitude image for the slice. ``reference`` names the acquisition
+        # whose header carries this slice's geometry, which the runtime copies
+        # into the image (and the DICOM); ``dicom=True`` asks it to emit one.
+        return ReconResult(
+            np.abs(_to_numpy(image)),
+            reference=0,
+            image_type="magnitude",
+            dicom=True,
+        )
 
     def _sense(
         self,
@@ -202,13 +224,13 @@ def _phase_encode_lines(header: Any, bucket: AcquisitionBucket) -> int:
 # %% reconstruction -- operator vocabulary, no hand-written transform
 
 
-def _inverse_transform(kspace: np.ndarray, device: Any) -> Any:
-    """Per-coil centered inverse transform, in the operator vocabulary.
+def _coil_images(kspace: np.ndarray, samples: np.ndarray, device: Any) -> Any:
+    """Per-coil images, from the adjoint of a coil-wise Cartesian operator.
 
-    A Cartesian operator built with no sensitivity maps is exactly the centered
-    transform, so its inverse hands back one zero-filled, inverted image per
-    coil -- ready for an explicit root-sum-of-squares coil combination, and with
-    no hand-written FFT.
+    A Cartesian operator built with no sensitivity maps is coil-wise: its
+    adjoint zero-fills, inverts and hands back one image per coil, without a
+    hand-written FFT and without folding a coil combination into the transform.
+    The caller root-sum-of-squares combines them.
     """
     import torch
 
@@ -216,11 +238,12 @@ def _inverse_transform(kspace: np.ndarray, device: Any) -> Any:
 
     device = "cpu" if device is None else device
     _, n_y, n_x = kspace.shape
-    data = torch.as_tensor(kspace, dtype=torch.complex64, device=device)
-    transform = Cartesian2D(
-        torch.ones((1, 1, n_y, n_x), device=device), None, img_size=(n_y, n_x)
+    mask = torch.as_tensor(samples, dtype=torch.float32, device=device)[None, None]
+    measurement = torch.view_as_real(
+        torch.as_tensor(kspace, dtype=torch.complex64, device=device)[None]
     )
-    return transform.ifft(data[None])[0]
+    coils = Cartesian2D(mask, img_size=(n_y, n_x)).A_adjoint(measurement)
+    return torch.view_as_complex(coils.movedim(1, -1).contiguous())[0]
 
 
 def _to_numpy(array: Any) -> np.ndarray:
