@@ -98,24 +98,32 @@ def relative_error(image, reference):
     return float(np.linalg.norm(image - reference) / np.linalg.norm(reference))
 
 
+def reconstruct(*args, **kwargs):
+    """The reconstructed image, transposed back onto the ``(y, x)`` grid.
+
+    The app transposes its output to the column/row order an image is read in;
+    the phantom and zero-filled fixtures here are defined on the ``(y, x)``
+    grid, so the test transposes back before comparing against them.
+    """
+    return gre_2d.PLUGIN(*args, **kwargs).data.T
+
+
 # ----------------------------------------------------------------------
 # Fully sampled
 # ----------------------------------------------------------------------
 
 
 def test_a_fully_sampled_full_echo_slice_is_the_phantom(kspace, phantom, context):
-    image = gre_2d.PLUGIN(bucket(kspace, list(range(N))), context).data
+    image = reconstruct(bucket(kspace, list(range(N))), context)
     assert image.shape == (N, N)
     assert relative_error(image, phantom) < 1e-5
 
 
 def test_a_truncated_echo_is_filled_rather_than_zero_padded(kspace, phantom, context):
     """POCS recovers what zero-filling would blur."""
-    partial = gre_2d.PLUGIN(bucket(kspace, list(range(N)), n_samples=48), context).data
+    partial = reconstruct(bucket(kspace, list(range(N)), n_samples=48), context)
     zero_filled = _zero_filled(kspace, list(range(N)), n_samples=48)
-    assert relative_error(partial, phantom) < 0.5 * relative_error(
-        zero_filled, phantom
-    )
+    assert relative_error(partial, phantom) < 0.5 * relative_error(zero_filled, phantom)
 
 
 # ----------------------------------------------------------------------
@@ -134,7 +142,7 @@ def test_the_calibration_block_selects_the_accelerated_branch(kspace, context):
 
 def test_the_accelerated_branch_suppresses_aliasing(kspace, phantom, context):
     lines, calibration = _sampling()
-    image = gre_2d.PLUGIN(bucket(kspace, lines, calibration=calibration), context).data
+    image = reconstruct(bucket(kspace, lines, calibration=calibration), context)
     assert relative_error(image, phantom) < relative_error(
         _zero_filled(kspace, lines), phantom
     )
@@ -144,9 +152,9 @@ def test_an_accelerated_partial_echo_slice_reconstructs_on_the_full_grid(
     kspace, phantom, context
 ):
     lines, calibration = _sampling()
-    image = gre_2d.PLUGIN(
+    image = reconstruct(
         bucket(kspace, lines, n_samples=48, calibration=calibration), context
-    ).data
+    )
     assert image.shape == (N, N)
     assert relative_error(image, phantom) < relative_error(
         _zero_filled(kspace, lines, n_samples=48), phantom
@@ -176,6 +184,36 @@ def test_the_sampling_matches_what_the_sequence_would_have_played():
     assert lines == pp.calc_sampled_lines(N, ACCELERATION, N_ACS)
 
 
+# ----------------------------------------------------------------------
+# Streaming: gridding as data arrives
+# ----------------------------------------------------------------------
+
+
+def test_gridding_on_arrival_matches_gridding_the_bucket(kspace, context):
+    """receive() grids each line as it arrives; recon() from that staged grid
+    equals recon() from the same bucket gridded in one go at the trigger."""
+    from pulserver import ExamCache
+    from pulserver.recon._mrd.application import _make_bucket
+
+    lines, calibration = _sampling()
+    acquisitions = _native_slice(kspace, lines, calibration)
+    bucket = _make_bucket(acquisitions, [])
+
+    # Streaming: startup, a line at a time, then recon from the staged grid.
+    streaming = ReconContext(header=context.header, exam=ExamCache("streaming"))
+    gre_2d.PLUGIN.startup(streaming)
+    for acquisition in acquisitions:
+        gre_2d.PLUGIN.receive(acquisition, streaming)
+    streamed = gre_2d.PLUGIN.recon(bucket, streaming).data
+
+    # Offline fallback: the same bucket, a fresh exam so nothing was staged.
+    offline = ReconContext(header=context.header, exam=ExamCache("offline"))
+    reconstructed = gre_2d.PLUGIN.recon(bucket, offline).data
+
+    assert streamed.shape == (N, N)
+    np.testing.assert_allclose(streamed, reconstructed, atol=1e-4)
+
+
 # %% private module subroutines
 
 
@@ -183,6 +221,37 @@ def _sampling():
     calibration = list(range(N // 2 - N_ACS // 2, N // 2 + N_ACS // 2))
     lines = sorted(set(range(0, N, ACCELERATION)) | set(calibration))
     return lines, calibration
+
+
+def _native_slice(kspace, lines, calibration):
+    """One slice's acquisitions as the native ismrmrd objects the server sees.
+
+    ACS lines carry the parallel-calibration flags the sequence's REF/IMA
+    labels become: a line on the acceleration grid is calibration-and-imaging,
+    one off it is calibration only.
+    """
+    import ismrmrd
+
+    coils = kspace.shape[0]
+    reference_lines = set(calibration)
+    acquisitions = []
+    for index, line in enumerate(lines):
+        acquisition = ismrmrd.Acquisition()
+        acquisition.resize(N, coils)
+        acquisition.data[:] = kspace[:, line, :].astype(np.complex64)
+        acquisition.idx.kspace_encode_step_1 = int(line)
+        acquisition.idx.slice = 0
+        acquisition.center_sample = N // 2
+        if line in reference_lines:
+            acquisition.setFlag(
+                ismrmrd.ACQ_IS_PARALLEL_CALIBRATION_AND_IMAGING
+                if line % ACCELERATION == 0
+                else ismrmrd.ACQ_IS_PARALLEL_CALIBRATION
+            )
+        if index == len(lines) - 1:
+            acquisition.setFlag(ismrmrd.ACQ_LAST_IN_SLICE)
+        acquisitions.append(acquisition)
+    return acquisitions
 
 
 def _fft2c(image):

@@ -32,17 +32,10 @@ def run_application(
     waveforms: list[Any] = []
     image_index = 1
     dicom_builder: MrdDicomBuilder | None = None
+    last_bucket: AcquisitionBucket | None = None
 
-    def reconstruct_bucket() -> None:
-        nonlocal acquisitions, image_index, dicom_builder
-        if not acquisitions:
-            return
-        # Waveforms describe the measurement, not the bucket: a scanner sends
-        # them once, ahead of the acquisitions, so every bucket of the scan
-        # sees the same set rather than only the first one.
-        bucket = _make_bucket(acquisitions, waveforms)
-        acquisitions = []
-        output = app.reconstruct(bucket, context)
+    def emit(output: Any, bucket: AcquisitionBucket | None) -> None:
+        nonlocal image_index, dicom_builder
         for item in _outputs(output):
             if isinstance(item, ReconResult):
                 emitted, image_index = _make_image(
@@ -60,12 +53,28 @@ def run_application(
             else:
                 connection.send(item)
 
+    def reconstruct_bucket() -> None:
+        nonlocal acquisitions, last_bucket
+        if not acquisitions:
+            return
+        # Waveforms describe the measurement, not the bucket: a scanner sends
+        # them once, ahead of the acquisitions, so every bucket of the scan
+        # sees the same set rather than only the first one.
+        bucket = _make_bucket(acquisitions, waveforms)
+        acquisitions = []
+        last_bucket = bucket
+        emit(app.recon(bucket, context), bucket)
+
+    app.startup(context)
     for item in connection:
         if isinstance(item, ismrmrd.Acquisition):
             finish = app.split_on is not None and has_acquisition_flag(
                 item, app.split_on
             )
             if _accept(item, app):
+                # Hand each accepted acquisition to the app as it arrives, so
+                # any per-acquisition work overlaps the wait for the next one.
+                app.receive(item, context)
                 acquisitions.append(item)
             if finish:
                 reconstruct_bucket()
@@ -75,6 +84,9 @@ def run_application(
             connection.send(item)
 
     reconstruct_bucket()
+    # Trailing output, if the app aggregates across buckets. It has no bucket of
+    # its own, so it inherits the geometry of the last one reconstructed.
+    emit(app.finalize(context), last_bucket)
 
 
 # %% private module subroutines
@@ -168,13 +180,18 @@ def _make_image(
     next_image_index: int,
     app_name: str,
 ) -> tuple[ismrmrd.Image, int]:
-    if not bucket.data:
-        raise ValueError("ReconResult requires at least one imaging acquisition")
-    if not 0 <= result.reference < len(bucket.data):
-        raise IndexError(
-            f"ReconResult reference {result.reference} is outside a bucket of "
-            f"{len(bucket.data)} acquisitions"
-        )
+    # A bucket-less result comes from finalize() aggregating across the scan; a
+    # bucket-bound one must name a real acquisition for its geometry.
+    acquisition = None
+    if bucket is not None:
+        if not bucket.data:
+            raise ValueError("ReconResult requires at least one imaging acquisition")
+        if not 0 <= result.reference < len(bucket.data):
+            raise IndexError(
+                f"ReconResult reference {result.reference} is outside a bucket of "
+                f"{len(bucket.data)} acquisitions"
+            )
+        acquisition = bucket.data[result.reference]
     data = _as_numpy(result.data)
     image_index = (
         next_image_index if result.image_index is None else int(result.image_index)
@@ -182,7 +199,7 @@ def _make_image(
     field_of_view = _field_of_view(context.header)
     image = ismrmrd.Image.from_array(
         data,
-        acquisition=bucket.data[result.reference],
+        acquisition=acquisition,
         image_index=image_index,
         image_type=_image_type(result.image_type),
         field_of_view=field_of_view,

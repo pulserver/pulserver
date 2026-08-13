@@ -22,7 +22,7 @@ class CartesianFftRecon(ReconApp):
             ),
         )
 
-    def reconstruct(
+    def recon(
         self,
         bucket: AcquisitionBucket,
         context: ReconContext,

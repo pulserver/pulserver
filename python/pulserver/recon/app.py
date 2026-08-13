@@ -2,8 +2,9 @@
 
 A reconstruction plugin is a regular Python module containing one
 :class:`ReconApp` subclass and a module-level ``PLUGIN`` instance. The same
-``reconstruct`` method can be called directly for offline work or discovered
-by Pulserver's private MRD runtime for inline reconstruction.
+``recon`` method can be called directly for offline work or driven, alongside
+the optional ``startup``/``receive``/``finalize`` lifecycle hooks, by
+Pulserver's private MRD runtime for inline reconstruction.
 
 The data model keeps Gadgetron's familiar acquisition-bucket vocabulary while
 adding array conveniences for users concerned only with reconstruction. MRD
@@ -14,7 +15,7 @@ Examples
 >>> import numpy as np
 >>> from pulserver import AcquisitionBucket, ReconApp, ReconContext, ReconResult
 >>> class RootSumOfSquares(ReconApp):
-...     def reconstruct(self, bucket, context):
+...     def recon(self, bucket, context):
 ...         del context
 ...         kspace = bucket.kspace()
 ...         image = np.sqrt(np.sum(np.abs(kspace) ** 2, axis=1))
@@ -368,7 +369,7 @@ class ExamCache(MutableMapping[Hashable, Any]):
 
 @dataclass(frozen=True)
 class ReconContext:
-    """Scan context passed to :meth:`ReconApp.reconstruct`.
+    """Scan context passed to :meth:`ReconApp.recon`.
 
     ``header`` and ``config`` intentionally retain the names used by the
     Gadgetron Python connection. ``exam`` is Pulserver's only addition.
@@ -407,14 +408,34 @@ class ReconContext:
 class ReconApp(ABC):
     """Base class for Pulserver reconstruction plugins.
 
-    A plugin module creates one configured instance named ``PLUGIN``. The
-    private inline runtime discovers that instance, builds Gadgetron-style
-    acquisition buckets, and calls :meth:`reconstruct`; no registration or
-    connection callback is required.
+    A plugin module creates one configured instance named ``PLUGIN``, and the
+    private inline runtime discovers it -- no registration or connection
+    callback is required. Like a sequence plugin, an app is a handful of
+    lifecycle hooks the runtime drives over one MRD stream:
 
-    ``ReconApp`` instances may serve concurrent scanner connections. Keep
-    their attributes immutable after construction and store mutable,
-    exam-specific artifacts in ``context.exam``.
+    :meth:`startup`
+        Once, when the stream opens, before any acquisition. Prepare
+        exam-scoped state. *Optional.*
+    :meth:`receive`
+        For every accepted acquisition, as it arrives. Do the per-acquisition
+        work -- filtering, sorting, gridding -- here, so it overlaps
+        acquisition dead time instead of waiting for the trigger. *Optional.*
+    :meth:`recon`
+        Once per bucket, at the ``split_on`` boundary, on the Gadgetron-style
+        :class:`AcquisitionBucket` the runtime has assembled. Produce the
+        images. **Required** -- it is the reconstruction.
+    :meth:`finalize`
+        Once, when the stream closes, after the last bucket. Emit any trailing
+        output and release exam-scoped state. *Optional.*
+
+    Only :meth:`recon` is mandatory; the default hooks do nothing, so an app
+    that grids at trigger time overrides :meth:`recon` alone. Calling the
+    instance runs :meth:`recon` directly for offline work on a ready bucket.
+
+    ``ReconApp`` instances may serve concurrent scanner connections. Keep their
+    attributes immutable after construction and store mutable, exam-specific
+    state in ``context.exam``, which is where the streaming hooks hand work to
+    one another.
 
     Parameters
     ----------
@@ -439,22 +460,51 @@ class ReconApp(ABC):
         self.require_flags = tuple(require_flags)
         self.reject_flags = tuple(reject_flags)
 
+    def startup(self, context: ReconContext) -> None:
+        """Prepare exam-scoped state before the first acquisition arrives.
+
+        Runs once when the stream opens. The default does nothing; override to
+        allocate buffers or load a reusable calibration into ``context.exam``.
+        """
+        del context
+
+    def receive(self, acquisition: Any, context: ReconContext) -> None:
+        """Fold one acquisition into the reconstruction as it arrives.
+
+        Runs for every accepted acquisition, before its bucket is complete, so
+        per-acquisition work -- filtering, sorting, gridding -- overlaps
+        acquisition dead time rather than waiting for the trigger. State
+        belongs in ``context.exam``. The default does nothing, leaving
+        :meth:`recon` to do the work at the trigger from the assembled bucket.
+        """
+        del acquisition, context
+
     @abstractmethod
-    def reconstruct(
+    def recon(
         self,
         bucket: AcquisitionBucket,
         context: ReconContext,
     ) -> Any:
-        """Reconstruct one acquisition bucket.
+        """Reconstruct one acquisition bucket at its ``split_on`` boundary.
 
         Return a :class:`ReconResult`, a native MRD output, a sequence of
         either, or ``None`` for a data sink.
         """
         ...
 
+    def finalize(self, context: ReconContext) -> Any:
+        """Emit any trailing output once the stream has closed.
+
+        Runs once after the last bucket. The default returns ``None``; override
+        to flush an aggregate result or release exam-scoped state. The return
+        value is emitted exactly as :meth:`recon`'s is.
+        """
+        del context
+        return None
+
     def __call__(self, bucket: AcquisitionBucket, context: ReconContext) -> Any:
-        """Run the same algorithm directly outside the inline server."""
-        return self.reconstruct(bucket, context)
+        """Run :meth:`recon` directly outside the inline server, on a ready bucket."""
+        return self.recon(bucket, context)
 
 
 # %% private module subroutines

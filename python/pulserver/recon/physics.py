@@ -1614,6 +1614,42 @@ def _apply_subspace_off_resonance_toeplitz(
     return result
 
 
+class _CoilwiseCartesianMRI(deepinv.physics.MultiCoilMRI):
+    """A Cartesian MRI operator with no sensitivity maps: the coil axis passes
+    through untouched.
+
+    DeepInverse's :class:`~deepinv.physics.MultiCoilMRI` collapses the coils in
+    its adjoint -- a sensitivity combination when maps are given, and a plain
+    sum when they are not. A coil sum is not a meaningful image, so with no maps
+    this variant keeps the coils instead: the adjoint returns one image per coil
+    and the forward encodes each coil independently. That matches the
+    convention the non-Cartesian (mri-nufft) operators already follow, and
+    leaves the coil combination to the caller as an explicit step.
+    """
+
+    def _spatial_dims(self) -> tuple[int, ...]:
+        return (-3, -2, -1) if self.three_d else (-2, -1)
+
+    def A(self, x: Any, mask: Any = None, **kwargs: Any) -> Any:
+        """Encode each coil independently: a masked FFT, coils untouched."""
+        self.update_parameters(mask=mask, check_coil_maps=False, **kwargs)
+        spectrum = self.fft(self.to_torch_complex(x), dim=self._spatial_dims())
+        return self.mask[:, :, None] * self.from_torch_complex(spectrum)
+
+    def A_adjoint(
+        self, y: Any, mask: Any = None, crop: bool = False, **kwargs: Any
+    ) -> Any:
+        """Return one image per coil, without combining them."""
+        self.update_parameters(mask=mask, check_coil_maps=False, **kwargs)
+        masked = self.to_torch_complex(self.mask[:, :, None] * y)
+        coil_images = self.ifft(masked, dim=self._spatial_dims())
+        return self.crop(self.from_torch_complex(coil_images), crop=crop)
+
+    def A_adjoint_A(self, x: Any, **kwargs: Any) -> Any:
+        """Per-coil normal operator: an exact FFT round trip on each coil."""
+        return self.A_adjoint(self.A(x, **kwargs))
+
+
 def _cartesian(
     mask: Any,
     coil_maps: Any,
@@ -1622,7 +1658,12 @@ def _cartesian(
     toeplitz: bool | dict[str, Any] = False,
     **kwargs: Any,
 ) -> MRIPhysics:
-    """Create Cartesian SENSE physics.
+    """Create Cartesian physics.
+
+    With ``coil_maps`` this is SENSE: the adjoint combines the coils through the
+    sensitivities. With ``coil_maps=None`` it is a coil-wise operator whose
+    adjoint returns one image per coil, for an explicit coil combination
+    afterwards (see :class:`_CoilwiseCartesianMRI`).
 
     Leading dimensions are handled by DeepInverse as batch dimensions, so
     slices, contrasts, and dynamic frames are reconstructed independently.
@@ -1632,7 +1673,10 @@ def _cartesian(
     toeplitz_enabled, options = _toeplitz_request(toeplitz)
     physics_module = _require_deepinv()
     device = getattr(coil_maps, "device", getattr(mask, "device", "cpu"))
-    operator = physics_module.MultiCoilMRI(
+    operator_class = (
+        _CoilwiseCartesianMRI if coil_maps is None else physics_module.MultiCoilMRI
+    )
+    operator = operator_class(
         mask=mask,
         coil_maps=coil_maps,
         three_d=spatial_ndim == 3,
@@ -1655,7 +1699,7 @@ def _cartesian(
 
 
 class Cartesian2D(MRIPhysics):
-    """Two-dimensional Cartesian SENSE physics.
+    """Two-dimensional Cartesian physics.
 
     Parameters
     ----------
@@ -1664,7 +1708,10 @@ class Cartesian2D(MRIPhysics):
         or ``(batch, c, h, w)``. Non-zero marks an acquired position.
     coil_maps
         Complex sensitivities shaped ``(coils, h, w)`` or
-        ``(batch, coils, h, w)``.
+        ``(batch, coils, h, w)``. ``None`` (the default) is a coil-wise
+        operator with no sensitivities: the adjoint returns one image per coil
+        rather than a combined image, ``img_size=(h, w)`` is then required, and
+        the coil combination is the caller's own explicit step.
     toeplitz
         Accepted for symmetry with the non-Cartesian operators. A Cartesian
         normal operator is already an exact FFT, so this only changes what
@@ -1674,11 +1721,12 @@ class Cartesian2D(MRIPhysics):
 
     Notes
     -----
-    Images are ``(batch, 2, h, w)`` with the real and imaginary parts packed
-    into the channel axis; measurements are ``(batch, coils, h, w, 2)`` with
-    them trailing, which is the layout every physics in this package answers
-    in. Leading dimensions beyond the batch are independent problems, so
-    slices, contrasts and frames reconstruct together.
+    A SENSE image is ``(batch, 2, h, w)`` with the real and imaginary parts
+    packed into the channel axis; a coil-wise (no-maps) image keeps its coils,
+    ``(batch, 2, coils, h, w)``. Measurements are ``(batch, coils, h, w, 2)``
+    with the real/imaginary axis trailing, the layout every physics in this
+    package answers in. Leading dimensions beyond the batch are independent
+    problems, so slices, contrasts and frames reconstruct together.
 
     Examples
     --------
@@ -1690,12 +1738,19 @@ class Cartesian2D(MRIPhysics):
     ... )
     >>> physics.A(torch.randn(1, 2, 8, 8)).shape
     torch.Size([1, 3, 8, 8, 2])
+
+    With no maps the adjoint keeps one image per coil, for an explicit
+    combination afterwards:
+
+    >>> coil_wise = Cartesian2D(torch.ones(1, 1, 8, 8), img_size=(8, 8))
+    >>> coil_wise.A_adjoint(torch.randn(1, 4, 8, 8, 2)).shape
+    torch.Size([1, 2, 4, 8, 8])
     """
 
     def __init__(
         self,
         mask: Any,
-        coil_maps: Any,
+        coil_maps: Any = None,
         *,
         toeplitz: bool | dict[str, Any] = False,
         **kwargs: Any,
@@ -1712,7 +1767,7 @@ class Cartesian2D(MRIPhysics):
 
 
 class Cartesian3D(MRIPhysics):
-    """Three-dimensional Cartesian SENSE physics.
+    """Three-dimensional Cartesian physics.
 
     Parameters
     ----------
@@ -1720,7 +1775,8 @@ class Cartesian3D(MRIPhysics):
         Sampling mask over the encoded volume, trailing ``(d, h, w)``.
     coil_maps
         Complex sensitivities shaped ``(coils, d, h, w)`` or with a leading
-        batch.
+        batch. ``None`` (the default) is a coil-wise operator; see
+        :class:`Cartesian2D`.
     toeplitz
         Accepted for symmetry; see :class:`Cartesian2D`.
     **kwargs
@@ -1728,7 +1784,8 @@ class Cartesian3D(MRIPhysics):
 
     Notes
     -----
-    Images are ``(batch, 2, d, h, w)``, measurements
+    A SENSE image is ``(batch, 2, d, h, w)``, a coil-wise image
+    ``(batch, 2, coils, d, h, w)``; measurements are
     ``(batch, coils, d, h, w, 2)``. See :class:`Cartesian2D` for the layout
     convention.
     """
@@ -1736,7 +1793,7 @@ class Cartesian3D(MRIPhysics):
     def __init__(
         self,
         mask: Any,
-        coil_maps: Any,
+        coil_maps: Any = None,
         *,
         toeplitz: bool | dict[str, Any] = False,
         **kwargs: Any,

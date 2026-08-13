@@ -494,6 +494,61 @@ def test_cartesian_factory_returns_uniform_facade(monkeypatch):
     assert calls["device"] == "cuda:0"
 
 
+def test_cartesian_without_coil_maps_keeps_the_coils():
+    """No sensitivities makes a coil-wise operator, not a coil sum.
+
+    The adjoint returns one image per coil -- matching the non-Cartesian
+    convention -- so the caller combines them explicitly rather than being
+    handed a meaningless sum of the coils.
+    """
+    torch = pytest.importorskip("torch")
+    pytest.importorskip("deepinv")
+    from pulserver.recon.postprocessing import coil_combine
+
+    n, coils = 8, 4
+    axes = (-2, -1)
+    coil_images = torch.randn(coils, n, n, dtype=torch.complex64)
+    kspace = torch.fft.fftshift(
+        torch.fft.fftn(
+            torch.fft.ifftshift(coil_images, dim=axes), dim=axes, norm="ortho"
+        ),
+        dim=axes,
+    )
+    operator = physics.Cartesian2D(torch.ones(1, 1, n, n), img_size=(n, n))
+    measurement = torch.view_as_real(kspace[None])  # (1, coils, n, n, 2)
+
+    adjoint = operator.A_adjoint(measurement)
+    assert tuple(adjoint.shape) == (1, 2, coils, n, n)  # coils kept, not summed
+
+    recovered = torch.view_as_complex(adjoint.movedim(1, -1).contiguous())[0]
+    assert torch.allclose(recovered, coil_images, atol=1e-4)
+
+    combined = coil_combine(recovered.numpy(), coil_axis=0)
+    rss = np.sqrt((np.abs(coil_images.numpy()) ** 2).sum(axis=0))
+    assert np.allclose(np.abs(combined), rss, atol=1e-4)
+
+
+def test_cartesian_gridder_matches_grid_cartesian():
+    """Gridding acquisitions one at a time equals gridding them all at once."""
+    from pulserver.recon.preprocessing import CartesianGridder, grid_cartesian
+
+    rng = np.random.default_rng(0)
+    data = (
+        rng.standard_normal((6, 3, 12)) + 1j * rng.standard_normal((6, 3, 12))
+    ).astype(np.complex64)
+    lines = [0, 2, 4, 5, 8, 11]
+    for echo_position in (None, 4):
+        gridder = CartesianGridder(12, echo_position=echo_position)
+        for line, acquisition in zip(lines, data, strict=True):
+            gridder.add(acquisition, line)
+        grid, mask = gridder.result()
+        reference, reference_mask = grid_cartesian(
+            data, lines, 12, echo_position=echo_position
+        )
+        assert np.array_equal(grid, reference)
+        assert np.array_equal(mask, reference_mask)
+
+
 def test_noncartesian_factory_owns_mrinufft_construction(monkeypatch):
     calls = {}
     native = SimpleNamespace(gram_op=lambda value, **_kwargs: value)
