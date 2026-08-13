@@ -3,7 +3,7 @@
 This is a Gadgetron/ISMRMRD-style *bucketed* reconstruction, not an offline
 solver handed a finished k-space array. While the scan runs the runtime streams
 ``Acquisition`` objects, sorts them by their labels, and -- because this app
-declares ``split_on="ACQ_LAST_IN_SLICE"`` -- calls :meth:`Gre2DRecon.reconstruct`
+declares ``split_on="ACQ_LAST_IN_SLICE"`` -- calls :meth:`Gre2DRecon.recon`
 once per slice with that slice's acquisitions as a :class:`AcquisitionBucket`.
 Everything the reconstruction needs it reads back from the data the sequence
 encoded: the phase encode of each acquisition, the calibration block it flagged,
@@ -98,7 +98,7 @@ class Gre2DRecon(ReconApp):
         self.pocs_iterations = int(pocs_iterations)
         self.device = device
 
-    def reconstruct(
+    def recon(
         self,
         bucket: AcquisitionBucket,
         context: ReconContext,

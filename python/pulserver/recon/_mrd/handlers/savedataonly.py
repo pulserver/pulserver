@@ -10,7 +10,7 @@ from ...app import AcquisitionBucket, ReconApp, ReconContext
 class SaveDataOnly(ReconApp):
     """Consume and optionally persist a measurement without emitting images."""
 
-    def reconstruct(
+    def recon(
         self,
         bucket: AcquisitionBucket,
         context: ReconContext,

@@ -132,7 +132,7 @@ def test_interleaved_waveform_is_attached_to_bucket():
     seen = []
 
     class Capture(ReconApp):
-        def reconstruct(self, bucket, context):
+        def recon(self, bucket, context):
             del context
             seen.append(bucket)
 
@@ -153,7 +153,7 @@ def test_bucket_matches_gadgetron_data_and_reference_classification():
     seen = []
 
     class Capture(ReconApp):
-        def reconstruct(self, bucket, context):
+        def recon(self, bucket, context):
             del context
             seen.append(bucket)
 
@@ -181,3 +181,54 @@ def test_savedataonly_consumes_without_output():
     connection = FakeConnection(_make_acquisitions(n_pe=4, n_ro=8, n_channels=1))
     run_application(PLUGIN, connection, _context(_make_header(8, 4)))
     assert connection.sent == []
+
+
+def test_the_runtime_drives_the_lifecycle_hooks_in_order():
+    """startup once, receive per acquisition on arrival, recon per bucket at its
+    split boundary, finalize once at the end -- and finalize's output emitted."""
+    from pulserver import ReconApp, ReconResult
+
+    events = []
+
+    class Lifecycle(ReconApp):
+        def startup(self, context):
+            del context
+            events.append("startup")
+
+        def receive(self, acquisition, context):
+            del context
+            events.append(("receive", int(acquisition.idx.slice)))
+
+        def recon(self, bucket, context):
+            del context
+            events.append(("recon", len(bucket.data)))
+            return None
+
+        def finalize(self, context):
+            del context
+            events.append("finalize")
+            return ReconResult(np.ones((2, 2), dtype=np.float32))
+
+    acquisitions = _make_acquisitions(n_pe=3, n_ro=8, n_channels=1, n_slices=2)
+    connection = FakeConnection(acquisitions)
+    run_application(
+        Lifecycle(split_on="ACQ_LAST_IN_SLICE"),
+        connection,
+        _context(_make_header(8, 3)),
+    )
+
+    assert events == [
+        "startup",
+        ("receive", 0),
+        ("receive", 0),
+        ("receive", 0),
+        ("recon", 3),
+        ("receive", 1),
+        ("receive", 1),
+        ("receive", 1),
+        ("recon", 3),
+        "finalize",
+    ]
+    # finalize has no bucket of its own; its result still emits one image.
+    assert len(connection.sent) == 1
+    assert isinstance(connection.sent[0], ismrmrd.Image)

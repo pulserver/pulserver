@@ -19,7 +19,7 @@ from pulserver.recon._mrd.exam import ExamCacheManager, resolve_exam_id
 
 
 class SumRecon(ReconApp):
-    def reconstruct(self, bucket, context):
+    def recon(self, bucket, context):
         scale = context.exam.get_or_create("scale", lambda: 2.0)
         return ReconResult(bucket.kspace().sum(axis=1) * scale)
 

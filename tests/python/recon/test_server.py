@@ -11,7 +11,7 @@ from pulserver.recon._mrd.server import Server, _NullApp
 
 
 class _TestApp(ReconApp):
-    def reconstruct(self, bucket, context):
+    def recon(self, bucket, context):
         del bucket, context
 
 
@@ -60,7 +60,7 @@ def test_resolve_app_from_handler_dir(tmp_path):
     plugin_file.write_text(
         "from pulserver import ReconApp\n"
         "class CustomRecon(ReconApp):\n"
-        "    def reconstruct(self, bucket, context):\n"
+        "    def recon(self, bucket, context):\n"
         "        return None\n"
         "PLUGIN = CustomRecon()\n"
     )

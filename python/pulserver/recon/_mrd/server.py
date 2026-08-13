@@ -494,5 +494,5 @@ class Server:
 class _NullApp(ReconApp):
     """Consume acquisition buckets without producing output."""
 
-    def reconstruct(self, bucket, context):
+    def recon(self, bucket, context):
         del bucket, context
