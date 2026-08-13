@@ -10,17 +10,22 @@ __all__ = [
     "POCS",
     "EPIPhaseCorrection",
     "Homodyne",
+    "SmsEpiInputs",
     "cartesian_3d_to_2d",
     "coil_compress",
     "correct_epi_eddy_currents",
     "epi_ramp_interpolate",
     "estimate_epi_eddy_phase",
+    "grid_cartesian",
     "noise_prewhiten",
+    "pipe_menon_dcf",
     "remove_readout_oversampling",
 ]
 
 from importlib import import_module
 from typing import Any
+
+from ._sms import SmsEpiInputs
 
 
 class EPIPhaseCorrection:
@@ -737,3 +742,137 @@ def _fit_phase_curves(
             )
         coefficients = filtered
     return coefficients @ design.T
+
+
+def pipe_menon_dcf(
+    trajectory: Any,
+    image_shape: tuple[int, ...],
+    *,
+    backend: str = "finufft",
+    **kwargs: Any,
+) -> Any:
+    """Estimate Pipe--Menon density-compensation weights with MRI-NUFFT.
+
+    ``kwargs`` are passed unchanged to the selected backend's ``pipe``
+    implementation, including options such as ``max_iter`` and
+    normalization. The returned array remains in the array/device ecosystem
+    selected by MRI-NUFFT.
+    """
+    if len(image_shape) not in (2, 3) or any(int(item) < 1 for item in image_shape):
+        raise ValueError("image_shape must contain two or three positive entries")
+    try:
+        density = import_module("mrinufft.density")
+    except ImportError as error:
+        raise ImportError(
+            "Pipe-Menon DCF estimation requires mri-nufft; install "
+            "pulserver[recon-cpu] or pulserver[recon-cuda]."
+        ) from error
+    return density.pipe(
+        trajectory,
+        tuple(int(item) for item in image_shape),
+        backend=backend,
+        **kwargs,
+    )
+
+
+
+def grid_cartesian(
+    acquisitions: Any,
+    encodes: Any,
+    shape: Any,
+    *,
+    partitions: Any = None,
+    echo_position: int | None = None,
+) -> tuple[Any, Any]:
+    """Scatter acquisitions onto a zero-filled Cartesian grid, with their mask.
+
+    Step one of every Cartesian reconstruction: acquisitions arrive ordered by
+    acquisition, each carrying the phase encode it belongs to, and the
+    reconstruction needs them on a grid together with a record of which
+    positions were actually sampled.
+
+    Partial echo is handled by ``echo_position``. Truncating the samples before
+    the echo leaves the acquired window right-aligned against a readout axis
+    twice as wide as the part that follows the echo, which is where this places
+    them.
+
+    Parameters
+    ----------
+    acquisitions
+        K-space shaped ``(acquisition, coil, sample)``.
+    encodes
+        Phase encode of each acquisition, as indices into the first grid axis.
+    shape
+        Phase-encode extent, or ``(n_y, n_z)`` for a 3D acquisition. The
+        readout extent comes from the samples and ``echo_position``.
+    partitions
+        Partition of each acquisition, for a 3D acquisition. Required when
+        ``shape`` has two entries and refused when it has one.
+    echo_position
+        Sample index the echo sits at, as MRD's ``center_sample`` reports it.
+        ``None`` treats the readout as a full echo centred on its midpoint.
+
+    Returns
+    -------
+    grid : numpy.ndarray
+        Zero-filled ``(coil, *shape, n_x)`` k-space.
+    mask : numpy.ndarray
+        Boolean array shaped like ``grid`` without its coil axis, true where a
+        sample was acquired.
+
+    Raises
+    ------
+    ValueError
+        If the acquisitions are ragged, the counters do not match the
+        acquisition count, or ``partitions`` disagrees with ``shape``.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from pulserver.recon.preprocessing import grid_cartesian
+    >>> data = np.ones((4, 2, 16), dtype=complex)
+    >>> grid, mask = grid_cartesian(data, [0, 2, 4, 6], 8)
+    >>> grid.shape, mask.shape, int(mask.sum())
+    ((2, 8, 16), (8, 16), 64)
+
+    A partial echo lands against the full readout width:
+
+    >>> data = np.ones((8, 2, 12), dtype=complex)
+    >>> grid, mask = grid_cartesian(data, range(8), 8, echo_position=4)
+    >>> grid.shape, bool(mask[0, 0]), bool(mask[0, -1])
+    ((2, 8, 16), False, True)
+    """
+    numpy = import_module("numpy")
+
+    acquisitions = numpy.asarray(acquisitions)
+    if acquisitions.ndim != 3:
+        raise ValueError(
+            "acquisitions must be (acquisition, coil, sample); ragged "
+            "acquisitions have to be padded or split first"
+        )
+    extents = (int(shape),) if numpy.isscalar(shape) else tuple(int(s) for s in shape)
+    if len(extents) not in (1, 2):
+        raise ValueError("shape must hold one or two phase-encode extents")
+    if (partitions is None) != (len(extents) == 1):
+        raise ValueError(
+            "partitions is required for a 3D shape and refused for a 2D one"
+        )
+
+    counters = [numpy.asarray(encodes, dtype=int)]
+    if partitions is not None:
+        counters.append(numpy.asarray(partitions, dtype=int))
+    for counter in counters:
+        if counter.shape != (acquisitions.shape[0],):
+            raise ValueError("every counter needs one entry per acquisition")
+
+    n_samples = acquisitions.shape[-1]
+    position = n_samples // 2 if echo_position is None else int(echo_position)
+    n_x = 2 * (n_samples - position)
+    acquired = slice(n_x - n_samples, None)
+
+    grid = numpy.zeros((acquisitions.shape[1], *extents, n_x), dtype=numpy.complex64)
+    grid[(slice(None), *counters, acquired)] = numpy.moveaxis(acquisitions, 0, 1)
+
+    mask = numpy.zeros((*extents, n_x), dtype=bool)
+    mask[(*counters, acquired)] = True
+    return grid, mask

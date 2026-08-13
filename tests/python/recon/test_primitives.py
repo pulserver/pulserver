@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-import pulserver.recon.algorithms as algorithms
+import pulserver.recon.optim as algorithms
 import pulserver.recon.calibration as calibration
 import pulserver.recon._mrd.epi as epi
 from pulserver.recon._mrd.grouping import (
@@ -22,7 +22,7 @@ from pulserver.recon._mrd.metadata import (
     has_acquisition_flag,
     user_parameter,
 )
-from pulserver.recon.sms import SmsEpiInputs
+from pulserver.recon.preprocessing import SmsEpiInputs
 
 
 def test_polynomial_preconditioner_degree_zero_and_call_count():
@@ -218,7 +218,7 @@ def test_sms_inputs_require_caipi_and_a_reconstruction_reference():
 
 
 def test_recon_examples_are_importable_from_pulserver():
-    from pulserver.examples.recon import prepare_sms_epi
+    from pulserver.reczoo.sms_epi import prepare_sms_epi
 
     inputs = prepare_sms_epi(
         imaging=object(),

@@ -14,7 +14,7 @@ from pulserver.recon.learned import (
     as_complex_channels,
     as_real_channels,
 )
-from pulserver.recon.physics import Cartesian2D
+from pulserver.recon.physics import Cartesian2D, measurement_to_channels
 
 
 class _Scale(torch.nn.Module):
@@ -229,8 +229,14 @@ def test_native_reconstructors_accept_pulserver_cartesian_physics(architecture):
         torch.ones(1, 1, *shape, dtype=torch.complex64),
     )
     image = torch.randn(1, 2, *shape)
+    measurement = physics.A(image)
+    if architecture == "varnet":
+        # VarNet is DeepInverse's own class and refines the measurement, so it
+        # reads the channel-first layout rather than Pulserver's trailing one.
+        measurement = measurement_to_channels(measurement)
+        physics = physics.operator.operator
 
-    result = model(physics.A(image), physics)
+    result = model(measurement, physics)
 
     assert result.shape == image.shape
 

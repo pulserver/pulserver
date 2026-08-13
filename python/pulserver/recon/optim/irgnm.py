@@ -29,8 +29,14 @@ class IRGNM(_IterativeOptimizer):
     implementation.
 
     Passing :class:`ConjugateGradient` selects IRGNM-CG. That path solves the
-    damped normal equation directly and regularizes towards the initial
-    estimate (or ``reference``).
+    damped normal equation for the *increment*,
+
+    ``(J_k^H J_k + a I) h = J_k^H (y - F(x_k)) + a (x_ref - x_k)``,
+
+    and takes ``x_{k+1} = x_k + h``, regularizing towards the initial estimate
+    (or ``reference``). Solving for the increment is what makes the inner
+    solver's relative tolerance mean what it says: its right-hand side is the
+    Gauss--Newton gradient, so it shrinks as the outer iteration converges.
 
     Nonlinear physics may implement ``linearize(x)`` and return either a
     Jacobian physics object or ``(prediction, jacobian)`` for a fast analytic
@@ -172,11 +178,17 @@ class IRGNM(_IterativeOptimizer):
             estimate,
             self.linearize,
         )
-        tangent_data = y - prediction + jacobian.A(estimate)
         if isinstance(self.inner, ConjugateGradient):
             damping = self.params_algo.at("damping", index)
             reference = state.variables["reference"]
-            rhs = jacobian.A_adjoint(tangent_data) + damping * reference
+            # Solve for the increment. The right-hand side is then the
+            # Gauss-Newton gradient, which is what the inner solver's relative
+            # tolerance has to be measured against: an absolute solve warm
+            # started at the estimate puts ``J^H J x`` into that norm and makes
+            # the tolerance progressively meaningless as the estimate grows.
+            rhs = jacobian.A_adjoint(y - prediction) + damping * (
+                reference - estimate
+            )
 
             def normal(value: torch.Tensor) -> torch.Tensor:
                 method = getattr(jacobian, "A_adjoint_A", None)
@@ -194,13 +206,14 @@ class IRGNM(_IterativeOptimizer):
                 parameters.append(estimate)
             if operator_parameters is not None:
                 parameters.extend(operator_parameters)
-            updated = self.inner(
+            updated = estimate + self.inner(
                 normal,
                 rhs,
-                init=estimate,
+                init=torch.zeros_like(estimate),
                 parameters=parameters,
             )
         else:
+            tangent_data = y - prediction + jacobian.A(estimate)
             call_kwargs = {**self.inner_kwargs, **(inner_kwargs or {}), **kwargs}
             updated = self.inner(
                 tangent_data,

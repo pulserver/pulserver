@@ -1839,7 +1839,7 @@ class Sequence(AnalysisMixin, SafetyViewsMixin, SoftDelayMixin):
     def sequence_descriptor(self, *, subsequence: int = 0):
         """The state-machine description of one repetition time.
 
-        Returns a :class:`~pulserver.recon.seqdesc.SequenceDescription`: one
+        Returns a :class:`~pulserver.recon.simulation.SequenceDescription`: one
         event per block over the canonical pass, each carrying what a Bloch or
         EPG simulation needs and nothing it does not -- RF use, flip
         amplitude, phase and frequency for the pulses; role, k-space-zero
@@ -1849,7 +1849,7 @@ class Sequence(AnalysisMixin, SafetyViewsMixin, SoftDelayMixin):
         -----
         **This is the same object the reconstruction receives**, not a
         parallel description of it.
-        :func:`~pulserver.recon.seqdesc.decode_sequence_description` builds one
+        :func:`~pulserver.recon.simulation.decode_sequence_description` builds one
         from the SEQDESC waveforms the scanner streams; this builds one from a
         sequence that has not been written yet, let alone run. Both come out of
         ``pulseg_get_sequence_description`` in the C core, so a simulation
@@ -1865,7 +1865,7 @@ class Sequence(AnalysisMixin, SafetyViewsMixin, SoftDelayMixin):
         The description is cached against the sequence's revision, so asking
         repeatedly costs one build.
         """
-        from ..recon.seqdesc import (
+        from ..recon._seqdesc import (
             AdcRole,
             EventType,
             RfDefinition,

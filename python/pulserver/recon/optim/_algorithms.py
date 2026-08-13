@@ -401,7 +401,7 @@ def pics(
 
 def _optim_class(name: str) -> type[Any]:
     try:
-        module = import_module(f"{__package__}.optim")
+        module = import_module(__package__)
     except ImportError as error:
         raise ImportError(
             "PICS reconstruction requires DeepInverse and Torch; install "

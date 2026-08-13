@@ -115,3 +115,55 @@ def test_sms_composes_distinct_slice_operators():
 
     assert first.forward_calls == second.forward_calls == 1
     assert first.adjoint_calls == second.adjoint_calls == 1
+
+
+def _cartesian_base(matrix=12, coils=3):
+    from pulserver.recon.physics import Cartesian2D
+
+    maps = torch.randn(1, coils, matrix, matrix, dtype=torch.complex64)
+    maps = maps / maps.abs().square().sum(1, keepdim=True).sqrt()
+    return Cartesian2D(torch.ones(1, 1, matrix, matrix), maps), matrix, coils
+
+
+def _noncartesian_base(matrix=12, coils=3, samples=64):
+    from pulserver.recon.physics import NonCartesian2D
+
+    maps = torch.randn(coils, matrix, matrix, dtype=torch.complex64)
+    maps = maps / maps.abs().square().sum(0, keepdim=True).sqrt()
+    trajectory = (torch.rand(samples, 2) - 0.5).float()
+    physics = NonCartesian2D(trajectory, (matrix, matrix), coil_maps=maps, n_coils=coils)
+    return physics, matrix, coils
+
+
+@pytest.mark.parametrize("build", [_cartesian_base, _noncartesian_base])
+def test_sms_wraps_any_in_plane_trajectory(build):
+    """An SMS pulse is reconstructable whatever encodes the plane beneath it."""
+    torch.manual_seed(3)
+    base, matrix, _ = build()
+    n_slices = 3
+    physics = SMS(base, torch.rand(n_slices, 1) * 2 * torch.pi)
+
+    image = torch.randn(1, n_slices, 2, matrix, matrix)
+    measurement = physics.A(image)
+    cotangent = torch.randn_like(measurement)
+
+    torch.testing.assert_close(
+        (physics.A(image) * cotangent).sum(),
+        (image * physics.A_adjoint(cotangent)).sum(),
+        atol=2e-4,
+        rtol=2e-4,
+    )
+    torch.testing.assert_close(
+        physics.A_adjoint_A(image),
+        physics.A_adjoint(physics.A(image)),
+    )
+
+
+@pytest.mark.parametrize("build", [_cartesian_base, _noncartesian_base])
+def test_every_physics_answers_in_the_same_measurement_layout(build):
+    """Real and imaginary parts trail a measurement, whoever encoded it."""
+    base, matrix, coils = build()
+    measurement = base.A(torch.randn(1, 2, matrix, matrix))
+    assert measurement.shape[0] == 1
+    assert measurement.shape[1] == coils
+    assert measurement.shape[-1] == 2

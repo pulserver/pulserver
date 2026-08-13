@@ -5,6 +5,8 @@ from __future__ import annotations
 __all__ = ["PLUGIN", "SimpleFftRecon"]
 
 import numpy as np
+
+from ...postprocessing import coil_combine
 import numpy.fft as fft
 
 from ...app import AcquisitionBucket, ReconApp, ReconContext, ReconResult
@@ -53,7 +55,7 @@ def _reconstruct(bucket: AcquisitionBucket, header) -> np.ndarray:
     data = fft.fftshift(data, axes=(1, 2))
     data = fft.ifft2(data, axes=(1, 2))
     data = fft.ifftshift(data, axes=(1, 2))
-    data = np.sqrt(np.sum(np.abs(data) ** 2, axis=0))
+    data = coil_combine(data, coil_axis=0)
 
     maximum = float(data.max(initial=0.0))
     if maximum > 0.0:

@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from .seqdesc import AdcRole, EventType, RfUse, SequenceDescription, SequenceEvent
+from ._seqdesc import AdcRole, EventType, RfUse, SequenceDescription, SequenceEvent
 
 __all__ = [
     "BSSFP",

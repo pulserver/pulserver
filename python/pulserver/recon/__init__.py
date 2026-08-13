@@ -22,13 +22,10 @@ __all__ = [
     "ReconApp",
     "ReconContext",
     "ReconResult",
-    "algorithms",
     "app",
     "calibration",
-    "corrections",
     "datasets",
     "denoisers",
-    "density",
     "diffusion_table",
     "execution",
     "learned",
@@ -37,6 +34,7 @@ __all__ = [
     "optim",
     "physics",
     "pics",
+    "postprocessing",
     "preprocessing",
     "simulation",
     "weights",
@@ -46,19 +44,17 @@ import importlib
 from typing import TYPE_CHECKING, Any
 
 _SUBMODULES = (
-    "algorithms",
     "app",
     "calibration",
-    "corrections",
     "datasets",
     "denoisers",
-    "density",
     "execution",
     "learned",
     "models",
     "motion",
     "optim",
     "physics",
+    "postprocessing",
     "preprocessing",
     "simulation",
     "weights",
@@ -80,7 +76,7 @@ def __getattr__(name: str) -> Any:
     if name in _APP_TYPES:
         return getattr(importlib.import_module(f"{__name__}.app"), name)
     if name == "pics":
-        return importlib.import_module(f"{__name__}.algorithms").pics
+        return importlib.import_module(f"{__name__}.optim").pics
     if name == "diffusion_table":
         # In _mrd because it reads an MRD header, public because reading one
         # is what a diffusion pipeline does first.
@@ -95,22 +91,20 @@ def __dir__() -> list[str]:
 
 if TYPE_CHECKING:
     from . import app as app
-    from . import algorithms as algorithms
     from . import calibration as calibration
-    from . import corrections as corrections
     from . import datasets as datasets
     from . import denoisers as denoisers
-    from . import density as density
     from . import execution as execution
     from . import learned as learned
     from . import models as models
     from . import motion as motion
     from . import optim as optim
     from . import physics as physics
+    from . import postprocessing as postprocessing
     from . import preprocessing as preprocessing
     from . import simulation as simulation
     from . import weights as weights
-    from .algorithms import pics as pics
+    from .optim import pics as pics
     from .app import AcquisitionBucket as AcquisitionBucket
     from .app import AcquisitionBucketStats as AcquisitionBucketStats
     from .app import ExamCache as ExamCache

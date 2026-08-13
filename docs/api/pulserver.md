@@ -19,10 +19,10 @@ re-exported whole, plus Pulserver's replacements for a few of its objects.
 {doc}`pulserver.design <design>` is the toolbox above it — every
 `SequenceModule` Pulserver ships.
 
-Ready-to-run sequence callbacks are intentionally a separate public namespace:
-{doc}`pulserver.sequences <sequences>`.  They accept explicit sequence
-controls and return a `pulserver.pypulseq.Sequence`, while this root namespace
-continues to hold the bridge/plugin contract.
+Complete worked sequences and the reconstructions that match them are two
+further namespaces: {doc}`pulserver.seqzoo <seqzoo>` and
+{doc}`pulserver.reczoo <reczoo>`.  This root namespace holds only the contracts
+they are written against.
 
 ## Plugin contracts
 

@@ -8,9 +8,10 @@ defines them.
 :maxdepth: 1
 
 pulserver
-sequences
 design
 pypulseq
 io
 recon
+seqzoo
+reczoo
 ```

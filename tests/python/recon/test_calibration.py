@@ -85,11 +85,15 @@ def test_nlinv_returns_normalized_maps_and_named_diagnostics():
         ),
         dim=(-2, -1),
     )
+    # White-noise coils lie outside the Sobolev ball the solve searches, so no
+    # factorization reproduces this data. The shapes and the RSS normalization
+    # are still well defined, and they are what this test is about.
     model = NLINV(
         calibration_width=4,
         max_iter=3,
         cg_max_iter=5,
         cg_rtol=1e-3,
+        residual_tolerance=None,
     )
 
     result = model(kspace, return_info=True)
@@ -186,3 +190,84 @@ def test_nlinv_physical_state_roundtrip_supports_gauge_projection():
 
     torch.testing.assert_close(restored_image, image)
     torch.testing.assert_close(restored_coils, coils, atol=2e-6, rtol=2e-6)
+
+
+def _smooth_calibration_case(matrix=64, coils=6):
+    """Noiseless fully sampled data from smooth coils and a smooth object."""
+    axis = torch.linspace(-1.0, 1.0, matrix)
+    y, x = torch.meshgrid(axis, axis, indexing="ij")
+    image = 0.3 + torch.where((x / 0.95) ** 2 + (y / 0.95) ** 2 < 1.0, 0.7, 0.0)
+    angles = torch.linspace(0.0, 2 * torch.pi, coils + 1)[:-1]
+    maps = torch.stack(
+        [
+            torch.exp(-((x - 1.5 * torch.cos(a)) ** 2 + (y - 1.5 * torch.sin(a)) ** 2) / 3.0)
+            * torch.exp(1j * 1.5 * (torch.cos(a) * x + torch.sin(a) * y))
+            for a in angles
+        ]
+    ).to(torch.complex64)
+    maps = maps / maps.abs().square().sum(0, keepdim=True).sqrt()
+    coil_images = maps * image.to(torch.complex64)
+    axes = (-2, -1)
+    kspace = torch.fft.fftshift(
+        torch.fft.fftn(torch.fft.ifftshift(coil_images, dim=axes), dim=axes, norm="ortho"),
+        dim=axes,
+    )
+    return kspace[None].to(torch.complex64), maps
+
+
+def _relative_residual(model, kspace):
+    """The relative data residual the calibration actually left behind."""
+    seen = {}
+    original = type(model)._require_reproduction
+
+    def spy(self, prediction, measured):
+        norm = torch.linalg.vector_norm(measured.flatten(start_dim=1), dim=1)
+        difference = torch.linalg.vector_norm(
+            (prediction - measured).flatten(start_dim=1), dim=1
+        )
+        seen["residual"] = float((difference / norm).max())
+        return original(self, prediction, measured)
+
+    type(model)._require_reproduction = spy
+    try:
+        model(kspace)
+    finally:
+        type(model)._require_reproduction = original
+    return seen["residual"]
+
+
+def test_nlinv_reproduces_the_data_it_was_calibrated_on():
+    """A factorization that cannot re-predict noiseless data is not converged."""
+    kspace, _ = _smooth_calibration_case()
+    assert _relative_residual(NLINV(calibration_width=None), kspace) < 0.15
+
+
+def test_more_newton_steps_leave_a_smaller_residual():
+    """Guards the damping schedule: the outer loop has to keep making progress."""
+    kspace, _ = _smooth_calibration_case()
+    few = _relative_residual(NLINV(calibration_width=None, max_iter=4), kspace)
+    many = _relative_residual(NLINV(calibration_width=None, max_iter=12), kspace)
+    assert many < 0.6 * few
+
+
+def test_a_starved_inner_solve_is_reported_rather_than_returned():
+    kspace, _ = _smooth_calibration_case()
+    starved = NLINV(
+        calibration_width=None,
+        max_iter=1,
+        cg_max_iter=1,
+        residual_tolerance=0.2,
+    )
+    with pytest.raises(RuntimeError, match="relative data residual"):
+        starved(kspace)
+
+
+def test_the_residual_check_can_be_switched_off():
+    kspace, _ = _smooth_calibration_case()
+    permissive = NLINV(
+        calibration_width=None,
+        max_iter=1,
+        cg_max_iter=1,
+        residual_tolerance=None,
+    )
+    assert permissive(kspace).shape == (1, 6, 64, 64)

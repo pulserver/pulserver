@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from pulserver.recon.algorithms import pics
+from pulserver.recon.optim import pics
 from pulserver.recon.denoisers import LLR, TGV, TV, Wavelet
 from pulserver.recon.execution import CudaStreaming
 from pulserver.recon.physics import (

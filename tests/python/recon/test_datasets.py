@@ -35,18 +35,30 @@ def _subject(offset: float = 0.0) -> _Subject:
     )
 
 
-def test_deepinverse_dataset_zoo_is_reexported_by_identity():
-    native = {
-        name: value
-        for name, value in vars(deepinv.datasets).items()
-        if not name.startswith("_")
-        and callable(value)
-        and getattr(value, "__module__", "").startswith("deepinv.datasets")
-    }
+def test_the_selected_deepinverse_datasets_are_reexported_by_identity():
+    """Whatever is re-exported is DeepInverse's own class, never a wrapper."""
+    for name in recon_datasets.__all__:
+        native = getattr(deepinv.datasets, name, None)
+        if native is not None:
+            assert getattr(recon_datasets, name) is native
 
-    assert set(native) <= set(recon_datasets.__all__)
-    for name, value in native.items():
-        assert getattr(recon_datasets, name) is value
+
+def test_natural_image_benchmarks_stay_in_deepinverse():
+    """This namespace is for MRI; a super-resolution set has no place in it."""
+    benchmarks = {
+        "BSDS500",
+        "CBSD68",
+        "DIV2K",
+        "FMD",
+        "Flickr2kHR",
+        "Kohler",
+        "LsdirHR",
+        "NBUDataset",
+        "Set14HR",
+        "Urban100HR",
+    }
+    assert benchmarks.isdisjoint(recon_datasets.__all__)
+    assert all(hasattr(deepinv.datasets, name) for name in benchmarks)
 
 
 def test_multimodal_subjects_follow_native_deepinverse_tuple_contract():

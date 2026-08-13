@@ -109,6 +109,7 @@ class AcquisitionBucket:
         *,
         labels: Mapping[str, Any] | None = None,
         reference: Any | None = None,
+        reference_labels: Mapping[str, Any] | None = None,
     ) -> AcquisitionBucket:
         """Create an offline bucket without requiring an MRD connection.
 
@@ -122,6 +123,11 @@ class AcquisitionBucket:
             Optional arrays of encoding counters. Missing labels are zero.
         reference
             Optional reference k-space with the same trailing dimensions.
+        reference_labels
+            Encoding counters of the reference acquisitions. A parallel-imaging
+            calibration region is a set of specific phase encodes, so a
+            reconstruction that places it on a grid needs these; missing labels
+            are zero, as for ``labels``.
 
         Returns
         -------
@@ -141,9 +147,10 @@ class AcquisitionBucket:
         )
         references: tuple[Any, ...] = ()
         if reference is not None:
+            reference_values = {} if reference_labels is None else dict(reference_labels)
             references = tuple(
-                _ArrayAcquisition(array, None, {})
-                for array in _split_leading(reference)
+                _ArrayAcquisition(array, None, _labels_at(reference_values, index))
+                for index, array in enumerate(_split_leading(reference))
             )
         return cls(data=acquisitions, ref=references)
 

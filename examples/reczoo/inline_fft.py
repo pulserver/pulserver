@@ -7,6 +7,7 @@ __all__ = ["PLUGIN", "CartesianFftRecon"]
 import numpy as np
 
 from pulserver import AcquisitionBucket, ReconApp, ReconContext, ReconResult
+from pulserver.recon.postprocessing import coil_combine
 
 
 class CartesianFftRecon(ReconApp):
@@ -34,7 +35,7 @@ class CartesianFftRecon(ReconApp):
             np.fft.ifft2(np.fft.ifftshift(kspace, axes=(-2, -1)), axes=(-2, -1)),
             axes=(-2, -1),
         )
-        image = np.sqrt(np.sum(np.abs(image) ** 2, axis=0))
+        image = coil_combine(image, coil_axis=0)
         return ReconResult(image.transpose())
 
 

@@ -1,8 +1,8 @@
 """``Sequence.sequence_descriptor()``: the recon's own description, design-side.
 
 The point of these tests is that there is **one** descriptor type and one
-derivation of it. ``pulserver.recon.seqdesc.decode_sequence_description``
-builds a :class:`~pulserver.recon.seqdesc.SequenceDescription` from the
+derivation of it. ``pulserver.recon.simulation.decode_sequence_description``
+builds a :class:`~pulserver.recon.simulation.SequenceDescription` from the
 SEQDESC waveforms a scanner streams; ``Sequence.sequence_descriptor()`` builds
 one from a sequence that has not been written yet. Both come out of
 ``pulseg_get_sequence_description`` in the C core. If they could drift, a
@@ -18,7 +18,7 @@ import numpy as np
 import pytest
 
 import pulserver.pypulseq as pp
-from pulserver.recon.seqdesc import (
+from pulserver.recon.simulation import (
     AdcRole,
     EventType,
     RfUse,
@@ -73,7 +73,7 @@ def test_it_returns_the_recons_own_type(system):
     """Not a parallel dataclass -- the one `recon.simulation` already consumes."""
     description = _gre(system).sequence_descriptor()
     assert isinstance(description, SequenceDescription)
-    assert description.__class__.__module__ == "pulserver.recon.seqdesc"
+    assert description.__class__.__module__ == "pulserver.recon._seqdesc"
 
 
 def test_one_event_per_block_of_the_repetition_time(system):

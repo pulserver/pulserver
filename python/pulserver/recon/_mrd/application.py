@@ -34,12 +34,14 @@ def run_application(
     dicom_builder: MrdDicomBuilder | None = None
 
     def reconstruct_bucket() -> None:
-        nonlocal acquisitions, waveforms, image_index, dicom_builder
+        nonlocal acquisitions, image_index, dicom_builder
         if not acquisitions:
             return
+        # Waveforms describe the measurement, not the bucket: a scanner sends
+        # them once, ahead of the acquisitions, so every bucket of the scan
+        # sees the same set rather than only the first one.
         bucket = _make_bucket(acquisitions, waveforms)
         acquisitions = []
-        waveforms = []
         output = app.reconstruct(bucket, context)
         for item in _outputs(output):
             if isinstance(item, ReconResult):

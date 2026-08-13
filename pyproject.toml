@@ -63,8 +63,8 @@ cmake.source-dir = "."
 sdist.include = [
   "csrc/**",
   "cxx/**",
-  "examples/sequences/**",
-  "examples/recon/**",
+  "examples/seqzoo/**",
+  "examples/reczoo/**",
   "python/**",
   "tests/**",
   "README.rst",
@@ -73,9 +73,10 @@ sdist.include = [
 
 [tool.scikit-build.wheel]
 # scikit-build-core maps package paths to arbitrary source directories.  This
-# installs the self-contained bridge plugins directly as
-# ``pulserver.sequences.<name>`` without copying or moving their source.
-packages = { "pulserver" = "python/pulserver", "pulserver/sequences" = "examples/sequences", "pulserver/examples/recon" = "examples/recon" }
+# installs the self-contained example plugins directly as
+# ``pulserver.seqzoo.<name>`` and ``pulserver.reczoo.<name>`` without copying
+# or moving their source.
+packages = { "pulserver" = "python/pulserver", "pulserver/seqzoo" = "examples/seqzoo", "pulserver/reczoo" = "examples/reczoo" }
 # Source kept in the repository to port physics from, not importable and of no
 # use to an installed package.
 exclude = ["pulserver/design/_disabled/**"]
@@ -161,7 +162,7 @@ convention = "numpy"
 "python/pulserver/recon/_mrd/connection.py" = ["A003", "PTH", "S108", "S110"]
 "python/pulserver/recon/_mrd/constants.py" = ["A001"]
 "python/pulserver/recon/_mrd/dicom2mrd.py" = ["S110"]
-"python/pulserver/recon/distortion.py" = ["S603"]
+"python/pulserver/recon/_distortion.py" = ["S603"]
 "python/pulserver/recon/_mrd/handlers/savedataonly.py" = ["ARG001"]
 "python/pulserver/recon/_mrd/main.py" = ["PTH", "S104", "S108"]
 "python/pulserver/recon/_mrd/mrdhelper.py" = ["A002"]
@@ -170,8 +171,6 @@ convention = "numpy"
 "python/pulserver/recon/_mrd/rtp_connection.py" = ["S104"]
 "python/pulserver/recon/_mrd/server.py" = ["ARG001", "ARG004", "PTH", "S104", "S110"]
 "python/pulserver/recon/_mrd/writers.py" = ["A002"]
-"python/pulserver/sequences/_shim.py" = ["S102"]
-"tests/python/test_sequences_repl.py" = ["S603"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests/python"]

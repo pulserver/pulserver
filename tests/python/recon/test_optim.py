@@ -98,7 +98,9 @@ def test_public_optim_namespace_is_deepinverse_shaped():
         "OptimResult",
         "OptimState",
         "PDHG",
+        "PolynomialPreconditioner",
         "StackedPrior",
+        "pics",
     ]
     assert issubclass(FISTA, deepinv.optim.FISTA)
 

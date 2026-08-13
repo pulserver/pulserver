@@ -11,9 +11,10 @@ import numpy as np
 import pytest
 
 import pulserver.recon as recon
-import pulserver.recon.algorithms as algorithms
+import pulserver.recon.optim as algorithms
+import pulserver.recon.optim._algorithms as _algorithms
 import pulserver.recon.denoisers as denoisers
-import pulserver.recon.density as density
+import pulserver.recon.preprocessing as preprocessing
 import pulserver.recon.physics as physics
 from pulserver.recon._mrd import metadata
 from pulserver.recon.preprocessing import (
@@ -36,13 +37,10 @@ def test_public_namespace_is_small_and_module_oriented():
         "ReconApp",
         "ReconContext",
         "ReconResult",
-        "algorithms",
         "app",
         "calibration",
-        "corrections",
         "datasets",
         "denoisers",
-        "density",
         # A function, like `pics`: reading the diffusion gradient table out of
         # an MRD header is the first thing a diffusion pipeline does, and the
         # reader itself stays private under _mrd with the rest of the
@@ -55,6 +53,7 @@ def test_public_namespace_is_small_and_module_oriented():
         "optim",
         "physics",
         "pics",
+        "postprocessing",
         "preprocessing",
         "simulation",
         "weights",
@@ -83,7 +82,7 @@ def test_importing_algorithm_module_does_not_require_deepinverse():
     code = """
 import sys
 sys.modules["deepinv"] = None
-import pulserver.recon.algorithms
+import pulserver.recon.optim
 """
     subprocess.run([sys.executable, "-c", code], check=True)  # noqa: S603
 
@@ -102,7 +101,7 @@ def test_scientific_apis_expose_only_deepinverse_style_classes():
     assert inspect.isclass(denoisers.LLR)
     assert "noncartesian_2d" not in physics.__all__
     assert "llr" not in denoisers.__all__
-    assert "PipeMenonDCF" not in density.__all__
+    assert "PipeMenonDCF" not in preprocessing.__all__
 
 
 class _IdentityPhysics:
@@ -129,12 +128,12 @@ def test_pics_selects_cg_without_a_denoiser(monkeypatch):
             return rhs
 
     monkeypatch.setattr(
-        algorithms,
+        _algorithms,
         "_optim_class",
         lambda name: ConjugateGradient if name == "ConjugateGradient" else None,
     )
     data = np.ones((1, 2, 4, 4))
-    result = algorithms.pics(
+    result = _algorithms.pics(
         data,
         _IdentityPhysics(),
         regularization=0.25,
@@ -164,15 +163,15 @@ def test_pics_selects_fista_with_a_denoiser(monkeypatch):
         PnP=lambda model: ("pnp", model),
     )
     monkeypatch.setattr(
-        algorithms,
+        _algorithms,
         "_optim_class",
         lambda name: FISTA if name == "FISTA" else None,
     )
-    monkeypatch.setattr(algorithms, "import_module", lambda _name: module)
+    monkeypatch.setattr(_algorithms, "import_module", lambda _name: module)
     model = object()
     selected_physics = _IdentityPhysics()
     assert (
-        algorithms.pics(
+        _algorithms.pics(
             object(),
             selected_physics,
             model,
@@ -211,7 +210,7 @@ def test_polynomial_preconditioned_fista_uses_the_normal_operator():
             return value
 
     selected_physics = CountingPhysics()
-    result = algorithms.pics(
+    result = _algorithms.pics(
         np.ones(4),
         selected_physics,
         lambda value, _sigma: value,
@@ -457,13 +456,13 @@ def test_pipe_menon_dcf_delegates_to_mrinufft(monkeypatch):
         return "weights"
 
     monkeypatch.setattr(
-        density,
+        preprocessing,
         "import_module",
         lambda name: SimpleNamespace(pipe=pipe) if name == "mrinufft.density" else None,
     )
     trajectory = np.zeros((32, 2))
     assert (
-        density.pipe_menon_dcf(
+        preprocessing.pipe_menon_dcf(
             trajectory,
             (64, 64),
             backend="finufft",

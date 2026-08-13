@@ -14,27 +14,28 @@ import deepinv
 
 @dataclass(frozen=True)
 class SmsEpiInputs:
-    """Inputs required by an SMS-EPI reconstruction backend.
+    """Inputs a simultaneous-multislice reconstruction needs, checked together.
 
     Parameters
     ----------
     imaging
-        Multiband EPI data with the acquisition's known CAIPI encoding.
+        Multiband data, encoded by whatever trajectory the sequence played.
     coil_maps
-        Per-slice coil maps for model-based MRPro/DeepInverse SENSE.  Keep
-        this tensor on the selected Torch CPU/CUDA device.
+        Per-slice coil maps for the model-based separation. Keep this tensor
+        on the selected Torch CPU/CUDA device.
     single_band_reference
-        Individual-slice reference data required by Slice-GRAPPA.  It may be
-        ``None`` for model-based SENSE.
+        Single-band prescan the coil maps can be derived from, when they were
+        not estimated another way.
     caipi_encoding
-        The known CAIPI phase/modulation model.  It must be supplied when the
-        multiband factor is greater than one.
+        The CAIPI phase/modulation model that was played. Required whenever
+        the multiband factor is greater than one, since it is what tells the
+        simultaneously excited slices apart.
 
     Notes
     -----
-    This class intentionally does not implement Slice-GRAPPA or SMS unaliasing.
-    It makes the required acquired data explicit and leaves the numerical
-    reconstruction to the selected upstream backend.
+    This class collects and checks the inputs; the separation itself is
+    :class:`pulserver.recon.physics.SMS`, which composes with any in-plane
+    physics and so does not restrict the acquisition to a Cartesian encode.
     """
 
     imaging: Any

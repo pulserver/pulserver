@@ -21,6 +21,8 @@ __all__ = [
     "WaveEncoding",
     "WaveShuffling",
     "available_nufft_backends",
+    "measurement_to_channels",
+    "measurement_to_trailing",
 ]
 
 from collections import OrderedDict
@@ -37,7 +39,7 @@ import deepinv
 from ._toeplitz import CompactToeplitzKernel, as_torch, support_indices
 from ._stacked import _StackedNUFFTLinearPhysics
 from ._wave import _WaveLinearPhysics
-from .sms import _SMSLinearPhysics
+from ._sms import _SMSLinearPhysics
 
 
 def _require_deepinv() -> Any:
@@ -122,6 +124,68 @@ def _kspace_as_cpx(value: Any) -> Any:
     """Restore complex k-space from its trailing real/imaginary dimension."""
     torch = import_module("torch")
     return torch.view_as_complex(value.contiguous())
+
+
+def measurement_to_trailing(value: Any) -> Any:
+    """Move a measurement's real/imaginary axis from channel one to the end.
+
+    Pulserver carries the real and imaginary parts of a *measurement* in a
+    trailing axis, ``(batch, coils, ..., 2)``; DeepInverse carries them in
+    channel position one, ``(batch, 2, coils, ...)``. Images use the packed
+    channel form on both sides, so only measurements cross this boundary.
+
+    Parameters
+    ----------
+    value
+        Measurement in the DeepInverse channel-first layout.
+
+    Returns
+    -------
+    torch.Tensor
+        The same measurement in Pulserver's trailing layout.
+    """
+    return value.movedim(1, -1)
+
+
+def measurement_to_channels(value: Any) -> Any:
+    """Move a measurement's real/imaginary axis from the end to channel one.
+
+    The inverse of :func:`measurement_to_trailing`.
+    """
+    return value.movedim(-1, 1)
+
+
+class _TrailingRealView(deepinv.physics.LinearPhysics):
+    """Present a DeepInverse MRI operator in Pulserver's measurement layout.
+
+    Wraps the operator rather than converting at each call site so that every
+    physics object in the package answers with the same measurement shape,
+    whatever library implements it underneath. It stays a Torch module so that
+    the wrapped operator keeps taking part in ``.to()`` and in the attribute
+    forwarding :class:`MRIPhysics` performs.
+    """
+
+    def __init__(self, operator: Any) -> None:
+        super().__init__()
+        self.operator = operator
+
+    def __getattr__(self, name: str) -> Any:
+        try:
+            return super().__getattr__(name)
+        except AttributeError:
+            return getattr(super().__getattr__("operator"), name)
+
+    def A(self, x: Any, **kwargs: Any) -> Any:
+        """Encode an image, answering in the trailing layout."""
+        return measurement_to_trailing(self.operator.A(x, **kwargs))
+
+    def A_adjoint(self, y: Any, **kwargs: Any) -> Any:
+        """Decode a measurement given in the trailing layout."""
+        return self.operator.A_adjoint(measurement_to_channels(y), **kwargs)
+
+    def A_adjoint_A(self, x: Any, **kwargs: Any) -> Any:
+        """Apply the normal operator, which never leaves image space."""
+        return self.operator.A_adjoint_A(x, **kwargs)
 
 
 def _toeplitz_options(
@@ -391,9 +455,9 @@ class MRIPhysics(deepinv.physics.LinearPhysics):
             return image_as_real(image)
 
         if name == "A":
-            return forward(value)
+            return measurement_to_trailing(forward(value))
         if name == "A_adjoint":
-            result = adjoint(value)
+            result = adjoint(measurement_to_channels(value))
             return self.operator.crop(result, crop=kwargs.get("crop", False))
         if name == "A_adjoint_A":
             return adjoint(forward(value))
@@ -1576,7 +1640,7 @@ def _cartesian(
         **kwargs,
     )
     result = MRIPhysics(
-        operator,
+        _TrailingRealView(operator),
         native_operator=None,
         kind=f"cartesian{spatial_ndim}d",
         spatial_ndim=spatial_ndim,
@@ -1591,7 +1655,42 @@ def _cartesian(
 
 
 class Cartesian2D(MRIPhysics):
-    """Two-dimensional Cartesian SENSE physics."""
+    """Two-dimensional Cartesian SENSE physics.
+
+    Parameters
+    ----------
+    mask
+        Sampling mask over the encoded grid, shaped ``(h, w)``, ``(c, h, w)``
+        or ``(batch, c, h, w)``. Non-zero marks an acquired position.
+    coil_maps
+        Complex sensitivities shaped ``(coils, h, w)`` or
+        ``(batch, coils, h, w)``.
+    toeplitz
+        Accepted for symmetry with the non-Cartesian operators. A Cartesian
+        normal operator is already an exact FFT, so this only changes what
+        ``normal_mode`` reports.
+    **kwargs
+        Forwarded to :class:`deepinv.physics.MultiCoilMRI`.
+
+    Notes
+    -----
+    Images are ``(batch, 2, h, w)`` with the real and imaginary parts packed
+    into the channel axis; measurements are ``(batch, coils, h, w, 2)`` with
+    them trailing, which is the layout every physics in this package answers
+    in. Leading dimensions beyond the batch are independent problems, so
+    slices, contrasts and frames reconstruct together.
+
+    Examples
+    --------
+    >>> import torch
+    >>> from pulserver.recon.physics import Cartesian2D
+    >>> physics = Cartesian2D(
+    ...     torch.ones(1, 1, 8, 8),
+    ...     torch.ones(1, 3, 8, 8, dtype=torch.complex64) / 3 ** 0.5,
+    ... )
+    >>> physics.A(torch.randn(1, 2, 8, 8)).shape
+    torch.Size([1, 3, 8, 8, 2])
+    """
 
     def __init__(
         self,
@@ -1613,7 +1712,26 @@ class Cartesian2D(MRIPhysics):
 
 
 class Cartesian3D(MRIPhysics):
-    """Three-dimensional Cartesian SENSE physics."""
+    """Three-dimensional Cartesian SENSE physics.
+
+    Parameters
+    ----------
+    mask
+        Sampling mask over the encoded volume, trailing ``(d, h, w)``.
+    coil_maps
+        Complex sensitivities shaped ``(coils, d, h, w)`` or with a leading
+        batch.
+    toeplitz
+        Accepted for symmetry; see :class:`Cartesian2D`.
+    **kwargs
+        Forwarded to :class:`deepinv.physics.MultiCoilMRI`.
+
+    Notes
+    -----
+    Images are ``(batch, 2, d, h, w)``, measurements
+    ``(batch, coils, d, h, w, 2)``. See :class:`Cartesian2D` for the layout
+    convention.
+    """
 
     def __init__(
         self,
@@ -2117,7 +2235,39 @@ def _noncartesian_2d(
 
 
 class NonCartesian2D(MRIPhysics):
-    """Two-dimensional non-Cartesian MRI physics."""
+    """Two-dimensional non-Cartesian MRI physics, over MRI-NUFFT.
+
+    Parameters
+    ----------
+    trajectory
+        K-space coordinates shaped ``(samples, 2)`` or ``(shots, samples, 2)``,
+        in MRI-NUFFT's ``[-0.5, 0.5)`` units.
+    image_shape
+        Reconstructed matrix, ``(h, w)``.
+    coil_maps
+        Complex sensitivities shaped ``(coils, h, w)``. ``None`` encodes a
+        single channel.
+    density
+        Density-compensation weights, or a name MRI-NUFFT recognises. See
+        :func:`pulserver.recon.preprocessing.pipe_menon_dcf`.
+    backend
+        MRI-NUFFT backend. ``"auto"`` picks FINUFFT on CPU and Pulserver's
+        Torch-native CUFINUFFT adapter on a CUDA host.
+    n_coils, n_batchs
+        Coil and batch counts the backend plans for.
+    toeplitz
+        Use the Toeplitz normal operator, or a dict of its options.
+    viewed_as_real
+        Exchange images and measurements through real views.
+    streaming
+        Optional :class:`pulserver.recon.execution.CudaStreaming` policy.
+    **kwargs
+        Forwarded to the MRI-NUFFT operator.
+
+    Notes
+    -----
+    Images are ``(batch, 2, h, w)``, measurements ``(batch, coils, k, 2)``.
+    """
 
     def __init__(
         self,
@@ -2196,6 +2346,39 @@ class NonCartesian3D(MRIPhysics):
     trajectories; a 3D-coordinate trajectory is grouped by its Cartesian
     stack coordinate. Shared and plane-specific density layouts follow the
     same convention.
+
+    Parameters
+    ----------
+    trajectory
+        K-space coordinates ending in three components, or -- under
+        ``stacked`` -- one 2D trajectory or a sequence of per-plane ones.
+    image_shape
+        Reconstructed matrix, ``(d, h, w)``.
+    coil_maps
+        Complex sensitivities shaped ``(coils, d, h, w)``.
+    density
+        Density-compensation weights, shared or per plane.
+    backend
+        MRI-NUFFT backend.
+    n_coils, n_batchs
+        Coil and batch counts the backend plans for.
+    stacked
+        Encode a stack of 2D trajectories rather than a full 3D one.
+    z_index
+        Stack-frequency planes to encode. ``"auto"`` takes them from the
+        trajectory.
+    toeplitz
+        Use the Toeplitz normal operator, or a dict of its options.
+    viewed_as_real
+        Exchange images and measurements through real views.
+    streaming
+        Optional :class:`pulserver.recon.execution.CudaStreaming` policy.
+    **kwargs
+        Forwarded to the MRI-NUFFT operator.
+
+    Notes
+    -----
+    Images are ``(batch, 2, d, h, w)``, measurements ``(batch, coils, k, 2)``.
     """
 
     def __init__(
@@ -2644,7 +2827,40 @@ def _subspace(
 
 
 class Subspace(MRIPhysics):
-    """Subspace encoding composed with frame-wise MRI physics."""
+    """Subspace encoding composed with frame-wise MRI physics.
+
+    Solves for a small number of temporal coefficients instead of one image
+    per frame, with the base physics applied to each expanded frame.
+
+    Parameters
+    ----------
+    physics
+        Base MRI physics, applied per frame.
+    basis
+        Temporal basis shaped ``(rank, frames)`` -- rank first. Rows are the
+        retained singular vectors, for example from
+        :func:`pulserver.recon.simulation.simulate_subspace`.
+    **kwargs
+        Forwarded to the base physics wrapper.
+
+    Notes
+    -----
+    Coefficient images are ``(batch, 2 * rank, *image_shape)``: the real view
+    packs each complex coefficient into two channels, so the channel count is
+    twice the rank.
+
+    Examples
+    --------
+    >>> import torch
+    >>> from pulserver.recon.physics import Cartesian2D, Subspace
+    >>> base = Cartesian2D(
+    ...     torch.ones(1, 1, 8, 8),
+    ...     torch.ones(1, 2, 8, 8, dtype=torch.complex64) / 2 ** 0.5,
+    ... )
+    >>> physics = Subspace(base, torch.randn(3, 5, dtype=torch.complex64))
+    >>> physics.A(torch.randn(1, 6, 8, 8)).shape
+    torch.Size([1, 5, 2, 8, 8, 2])
+    """
 
     def __init__(self, physics: MRIPhysics, basis: Any, **kwargs: Any) -> None:
         self.__dict__.update(_subspace(physics, basis, **kwargs).__dict__)
@@ -2862,6 +3078,28 @@ def _off_resonance(
 
 
 class OffResonance(MRIPhysics):
+    """Multi-frequency-interpolation off-resonance correction.
+
+    Parameters
+    ----------
+    physics
+        Base **non-Cartesian** physics. Off-resonance evolves along the
+        readout, which a Cartesian encode samples too briefly for this model
+        to be the right correction; reverse-polarity distortion correction
+        (:func:`pulserver.recon.postprocessing.run_pyhysco`) is the Cartesian
+        EPI route.
+    field_map
+        Off-resonance in Hz over the image grid.
+    readout_time
+        Time of every sample relative to the echo, in seconds.
+    **kwargs
+        Segmentation options forwarded to the interpolation.
+
+    Raises
+    ------
+    TypeError
+        If ``physics`` is Cartesian.
+    """
     """Off-resonance-corrected non-Cartesian MRI physics."""
 
     def __init__(
@@ -2922,6 +3160,16 @@ def _toeplitz(
 
 
 class Toeplitz(MRIPhysics):
+    """A physics object whose normal operator uses a precomputed kernel.
+
+    Parameters
+    ----------
+    physics
+        Base physics to accelerate.
+    **options
+        Toeplitz options: ``support``, ``radius``, ``chunk_size``,
+        ``coil_batch_size`` and the CUDA transfer settings.
+    """
     """MRI physics with an accelerated Toeplitz normal operator."""
 
     def __init__(self, physics: MRIPhysics, **kwargs: Any) -> None:
@@ -2935,8 +3183,21 @@ class WaveShuffling(MRIPhysics):
     follows Pulserver's ``(rank, echoes)`` convention. The forward and adjoint
     gather/scatter only acquired lines. The normal operator uses the exact
     packed temporal kernel in hybrid k-space and never materializes an echo
-    train or a dense ``rank x rank`` field. ``wave_psf`` accepts a tensor or
-    :class:`pulserver.recon.calibration.WavePSFResult`.
+    train or a dense ``rank x rank`` field.
+
+    Parameters
+    ----------
+    sampling
+        Acquired ``(phase, partition, echo)`` indices.
+    coil_maps
+        Complex sensitivities over the reconstructed volume.
+    wave_psf
+        Wave point-spread function: a tensor, or a
+        :class:`pulserver.recon.calibration.WavePSFResult`.
+    basis
+        Temporal basis shaped ``(rank, echoes)``.
+    **kwargs
+        Forwarded to the wave-shuffling operator.
     """
 
     def __init__(
@@ -2975,6 +3236,18 @@ class WaveShuffling(MRIPhysics):
 
 
 class WaveEncoding(MRIPhysics):
+    """Wave-CAIPI encoding: a corkscrew gradient spread along the readout.
+
+    Parameters
+    ----------
+    physics
+        Base Cartesian physics the wave modulation rides on.
+    psf
+        Wave point-spread function, from
+        :class:`pulserver.recon.calibration.WavePSFCalibration`.
+    **kwargs
+        Forwarded to the wave operator.
+    """
     """Three-dimensional Wave encoding physics with a tensor or calibrated PSF."""
 
     def __init__(

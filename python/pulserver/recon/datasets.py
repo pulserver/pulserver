@@ -1,38 +1,35 @@
-"""DeepInverse's dataset zoo extended with volumetric MRI datasets.
+"""MRI datasets, and the DeepInverse dataset machinery they are built on.
 
-DeepInverse datasets are re-exported without wrapping or signature changes.
-``IXI`` and ``IXITiny`` add TorchIO's volumetric MRI subjects using the same
-sample contract as :class:`deepinv.datasets.ImageDataset`.
+The MRI slice datasets and the generic containers, samplers and helpers are
+re-exported from DeepInverse without wrapping or signature changes. ``IXI``
+and ``IXITiny`` add TorchIO's volumetric MRI subjects using the same sample
+contract as :class:`deepinv.datasets.ImageDataset`.
+
+DeepInverse's natural-image benchmarks -- super-resolution, denoising and
+deblurring sets such as ``DIV2K``, ``Set14HR`` and ``Urban100HR`` -- are not
+re-exported here. They are useful for training a denoiser and entirely
+unrelated to a scanner reconstruction, so import them from
+:mod:`deepinv.datasets` directly when that is what you are doing.
 """
 
 from __future__ import annotations
 
 __all__ = [
-    "BSDS500",
-    "CBSD68",
-    "DIV2K",
-    "FMD",
     "IXI",
     "CMRxReconSliceDataset",
     "FastMRISliceDataset",
-    "Flickr2kHR",
     "HDF5Dataset",
     "IXITiny",
     "ImageDataset",
     "ImageFolder",
-    "Kohler",
     "LidcIdriSliceDataset",
-    "LsdirHR",
     "MRISliceTransform",
-    "NBUDataset",
     "PatchDataset",
     "RandomPatchSampler",
     "SKMTEASliceDataset",
-    "Set14HR",
     "SimpleFastMRISliceDataset",
     "TensorDataset",
     "TorchIODataset",
-    "Urban100HR",
     "check_dataset",
     "download_archive",
     "generate_dataset",
@@ -45,28 +42,18 @@ from os import PathLike
 from typing import Any
 
 import torch
-from deepinv.datasets import BSDS500 as BSDS500
-from deepinv.datasets import CBSD68 as CBSD68
 from deepinv.datasets import CMRxReconSliceDataset as CMRxReconSliceDataset
-from deepinv.datasets import DIV2K as DIV2K
-from deepinv.datasets import FMD as FMD
 from deepinv.datasets import FastMRISliceDataset as FastMRISliceDataset
-from deepinv.datasets import Flickr2kHR as Flickr2kHR
 from deepinv.datasets import HDF5Dataset as HDF5Dataset
 from deepinv.datasets import ImageDataset as ImageDataset
 from deepinv.datasets import ImageFolder as ImageFolder
-from deepinv.datasets import Kohler as Kohler
 from deepinv.datasets import LidcIdriSliceDataset as LidcIdriSliceDataset
-from deepinv.datasets import LsdirHR as LsdirHR
 from deepinv.datasets import MRISliceTransform as MRISliceTransform
-from deepinv.datasets import NBUDataset as NBUDataset
 from deepinv.datasets import PatchDataset as PatchDataset
 from deepinv.datasets import RandomPatchSampler as RandomPatchSampler
 from deepinv.datasets import SKMTEASliceDataset as SKMTEASliceDataset
-from deepinv.datasets import Set14HR as Set14HR
 from deepinv.datasets import SimpleFastMRISliceDataset as SimpleFastMRISliceDataset
 from deepinv.datasets import TensorDataset as TensorDataset
-from deepinv.datasets import Urban100HR as Urban100HR
 from deepinv.datasets import check_dataset as check_dataset
 from deepinv.datasets import download_archive as download_archive
 from deepinv.datasets import generate_dataset as generate_dataset

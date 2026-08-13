@@ -6,9 +6,17 @@ problem algorithms, and Pulserver-specific dynamic MRI models.
 
 The API is module-oriented, in the style of DeepInverse, MRI-NUFFT, and SciPy.
 The root namespace exposes the modules below and one convenience entry point,
-`pics` (documented as {func}`pulserver.recon.algorithms.pics`). MRD
-connections, message serialization, server lifecycle, and Gadgetron handlers
-are implementation details and are not part of the public API.
+`pics` (documented as {func}`pulserver.recon.optim.pics`). MRD connections,
+message serialization, server lifecycle, and Gadgetron handlers are
+implementation details and are not part of the public API, and neither are the
+underscored modules the public ones are assembled from.
+
+Data crosses the API in two layouts, and they do not vary by operator: an
+*image* packs its real and imaginary parts into channel position one,
+`(batch, 2, ...)`; a *measurement* carries them trailing,
+`(batch, coils, ..., 2)`. `pulserver.recon.physics.measurement_to_channels`
+converts to DeepInverse's channel-first measurement layout for the few native
+DeepInverse models, such as `VarNet`, that refine k-space directly.
 
 ```python
 import pulserver.recon as recon
@@ -45,13 +53,11 @@ execution, see {doc}`../explanations/reconstruction/model_based`.
 .. autosummary::
    :toctree: generated/recon
 
-   pulserver.recon.algorithms
    pulserver.recon.physics
    pulserver.recon.denoisers
-   pulserver.recon.density
    pulserver.recon.calibration
    pulserver.recon.preprocessing
-   pulserver.recon.corrections
+   pulserver.recon.postprocessing
    pulserver.recon.execution
    pulserver.recon.datasets
    pulserver.recon.learned
@@ -74,8 +80,8 @@ is supplied. The optimizer classes follow DeepInverse's constructor and
    :toctree: generated/recon
    :nosignatures:
 
-   pulserver.recon.algorithms.pics
-   pulserver.recon.algorithms.PolynomialPreconditioner
+   pulserver.recon.optim.pics
+   pulserver.recon.optim.PolynomialPreconditioner
 ```
 
 ### Multiple regularizers
@@ -361,7 +367,8 @@ modules compatible with its plug-and-play optimizers.
    :toctree: generated/recon
    :nosignatures:
 
-   pulserver.recon.density.pipe_menon_dcf
+   pulserver.recon.preprocessing.grid_cartesian
+   pulserver.recon.preprocessing.pipe_menon_dcf
    pulserver.recon.calibration.WavePSF
    pulserver.recon.calibration.WavePSFCalibration
    pulserver.recon.calibration.WavePSFResult
@@ -409,18 +416,19 @@ constant-velocity pose state suitable for prospective motion correction.
    pulserver.recon.motion.RigidMotionEKF
 ```
 
-## Image corrections
+## Postprocessing
 
 ```{eval-rst}
 .. autosummary::
    :toctree: generated/recon
    :nosignatures:
 
-   pulserver.recon.corrections.CoefficientAccessor
-   pulserver.recon.corrections.GradientCoefficients
-   pulserver.recon.corrections.ImageGeometry
-   pulserver.recon.corrections.Gradunwarp
-   pulserver.recon.corrections.run_pyhysco
+   pulserver.recon.postprocessing.coil_combine
+   pulserver.recon.postprocessing.CoefficientAccessor
+   pulserver.recon.postprocessing.GradientCoefficients
+   pulserver.recon.postprocessing.ImageGeometry
+   pulserver.recon.postprocessing.Gradunwarp
+   pulserver.recon.postprocessing.run_pyhysco
 ```
 
 ## Execution policies

@@ -1,6 +1,6 @@
 """Sequence-description decoding and EPG signal simulation."""
 
-from .bloch import (
+from ._bloch import (
     BSSFP,
     FSE,
     SPGR,
@@ -13,7 +13,7 @@ from .bloch import (
     make_interpreter,
     simulate_subspace,
 )
-from .seqdesc import (
+from ._seqdesc import (
     AdcRole,
     EventType,
     RfDefinition,

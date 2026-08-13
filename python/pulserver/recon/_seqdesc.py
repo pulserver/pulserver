@@ -17,6 +17,7 @@ test, a fixture -- without a second encoder existing to drift from
 
 from __future__ import annotations
 
+from contextlib import suppress
 from dataclasses import dataclass, field
 from enum import IntEnum
 from typing import Any, Iterable
@@ -667,10 +668,9 @@ def _waveform(waveform_id: int, words: list[np.uint32], measurement_uid: int, sc
         ("scan_counter", scan_counter),
     ):
         target = header if header is not None and hasattr(header, name) else waveform
-        try:
+        # Which fields a Waveform exposes depends on the ismrmrd build.
+        with suppress(AttributeError):
             setattr(target, name, value)
-        except AttributeError:  # pragma: no cover - depends on the ismrmrd build
-            pass
     return waveform
 
 

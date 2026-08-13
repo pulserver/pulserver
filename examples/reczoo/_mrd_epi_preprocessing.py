@@ -12,7 +12,7 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
-from pulserver.recon.corrections import run_pyhysco
+from pulserver.recon.postprocessing import run_pyhysco
 from pulserver.recon._mrd.epi import EpiAcquisitionGroups, partition_epi_acquisitions
 
 __all__ = ["prepare_epi", "run_epi_distortion_correction"]

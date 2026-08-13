@@ -1,9 +1,15 @@
 """Selected DeepInverse MRI models and MRI-specific model adapters.
 
-``RAM``, ``MoDL``, and ``VarNet`` are their native DeepInverse classes. RAM
-provides a pretrained single-pass option, MoDL is a general physics-aware
-unroll, and VarNet is the Cartesian-oriented unroll. Import other backbones
-and research models directly from :mod:`deepinv.models`.
+``RAM`` and ``MoDL`` are their native DeepInverse classes: RAM is a pretrained
+single-pass option, MoDL a general physics-aware unroll. Both reach the data
+only through the physics adjoint, so they accept a Pulserver measurement
+unchanged.
+
+``VarNet`` refines the measurement itself rather than only pulling it through
+the adjoint, and it is DeepInverse's own class, so it reads measurements in
+DeepInverse's channel-first layout. Convert a Pulserver measurement with
+:func:`pulserver.recon.physics.measurement_to_channels` before handing it over.
+Import other backbones and research models directly from :mod:`deepinv.models`.
 """
 
 from __future__ import annotations

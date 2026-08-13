@@ -236,6 +236,26 @@ class NLINV(torch.nn.Module):
     phase_pole_iteration
         Apply BART-style phase-pole correction after this outer iteration.
         Zero applies it after every iteration and ``None`` disables it.
+    residual_tolerance
+        Largest relative data residual an accepted calibration may leave, as
+        ``||E(s * m) - y|| / ||y||`` over the sampled positions. NLINV is a
+        nonlinear solve with no other cross-check, and a factorization that
+        cannot reproduce its own calibration data yields maps that produce a
+        plausible but wrong image rather than a visible failure. ``None``
+        accepts any residual.
+
+    Notes
+    -----
+    The iteration counts and the damping schedule follow BART's ``nlinv``
+    (``noir2_defaults``: eight Newton steps, ``redu = 2``, ``a = 220``,
+    ``b = 32``, ``cgiter = 100``). Stopping after a few Newton steps *is* the
+    regularization; the damping schedule is what makes those steps meaningful.
+
+    Raises
+    ------
+    RuntimeError
+        If the calibration leaves a relative residual above
+        ``residual_tolerance``.
     """
 
     def __init__(
@@ -244,15 +264,16 @@ class NLINV(torch.nn.Module):
         spatial_ndim: int = 2,
         calibration_width: int | None = 24,
         max_iter: int = 8,
-        cg_max_iter: int = 12,
+        cg_max_iter: int = 100,
         cg_rtol: float = 1e-2,
         damping: float = 1.0,
-        damping_decay: float = 2.0 / 3.0,
-        sobolev_width: float = 200.0,
+        damping_decay: float = 0.5,
+        sobolev_width: float = 220.0,
         sobolev_degree: int = 32,
         toeplitz: bool = True,
         backend: str = "auto",
         phase_pole_iteration: int | None = None,
+        residual_tolerance: float | None = 0.5,
     ) -> None:
         super().__init__()
         if spatial_ndim not in {2, 3}:
@@ -272,6 +293,9 @@ class NLINV(torch.nn.Module):
             and not 0 <= phase_pole_iteration <= max_iter
         ):
             raise ValueError("phase_pole_iteration must lie between zero and max_iter")
+        if residual_tolerance is not None and residual_tolerance <= 0.0:
+            raise ValueError("residual_tolerance must be positive or None")
+        self.residual_tolerance = residual_tolerance
         self.spatial_ndim = spatial_ndim
         self.calibration_width = calibration_width
         self.max_iter = max_iter
@@ -366,6 +390,7 @@ class NLINV(torch.nn.Module):
             iteration_callback=self._phase_pole_callback,
         )
         state = solver(scaled_data, physics, init=initialization)
+        self._require_reproduction(physics.A(state), scaled_data)
         image, coils = physics.physical(state)
         calibration = _fftc(
             image * coils,
@@ -411,6 +436,29 @@ class NLINV(torch.nn.Module):
             image=reconstructed,
             calibration=calibration,
         )
+
+    def _require_reproduction(
+        self,
+        prediction: torch.Tensor,
+        measured: torch.Tensor,
+    ) -> None:
+        """Refuse a factorization that cannot reproduce its own input."""
+        if self.residual_tolerance is None:
+            return
+        measured_norm = torch.linalg.vector_norm(measured.flatten(start_dim=1), dim=1)
+        residual = torch.linalg.vector_norm(
+            (prediction - measured).flatten(start_dim=1),
+            dim=1,
+        )
+        relative = residual / measured_norm.clamp_min(1e-12)
+        worst = float(relative.max())
+        if worst > self.residual_tolerance:
+            raise RuntimeError(
+                f"NLINV left a relative data residual of {worst:.3f}, above the "
+                f"{self.residual_tolerance:.3f} tolerance: the estimated maps do "
+                "not reproduce the calibration data. Raise max_iter or "
+                "cg_max_iter, or relax residual_tolerance to accept the result."
+            )
 
     def _phase_pole_callback(
         self,
