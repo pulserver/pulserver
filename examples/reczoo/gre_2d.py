@@ -21,15 +21,17 @@ ISMRMRD adapter
 Reconstruction
     Pure arrays, expressed in the framework's DeepInverse-style operator
     vocabulary -- a :class:`~pulserver.recon.physics.Cartesian2D` operator, its
-    ``rss`` adjoint, :func:`~pulserver.recon.pics`, NLINV and POCS. This is the
-    layer a sigpy/mrpro/DeepInverse user recognises. It carries no hand-written
-    FFT: a Cartesian operator with no sensitivities *is* the centered transform.
+    inverse transform, :func:`~pulserver.recon.pics`, NLINV and POCS, with the
+    coils combined by an explicit :func:`~pulserver.recon.postprocessing.coil_combine`.
+    This is the layer a sigpy/mrpro/DeepInverse user recognises. It carries no
+    hand-written FFT: a Cartesian operator with no sensitivities *is* the
+    centered transform.
 
 Which of three reconstructions runs is detected from the bucket, never
 declared:
 
-* fully sampled, full echo -- the operator's ``rss`` adjoint (centered inverse
-  transform + root-sum-of-squares coil combination);
+* fully sampled, full echo -- a centered inverse transform, its coils combined
+  by root-sum-of-squares;
 * a readout truncated before the echo -- phase-constrained POCS fills the
   missing edge against a full-width readout axis;
 * uniformly undersampled with a fully sampled centre -- CG-SENSE against NLINV
@@ -107,15 +109,18 @@ class Gre2DRecon(ReconApp):
         # Reconstruction: one operator vocabulary, the branch chosen by the data.
         if calibration is not None:
             image = self._sense(kspace, samples, readout, calibration)
-        elif readout.all():
-            image = _adjoint_rss(kspace, samples, self.device)
         else:
-            image = coil_combine(
-                POCS(dimension=2, partial_axis=-1, iterations=self.pocs_iterations)(
-                    kspace, readout
-                ),
-                coil_axis=0,
-            )
+            # No calibration: root-sum-of-squares of the per-coil images. A
+            # partial echo is filled first (POCS); a full echo is a plain
+            # centered inverse transform. Either way the coil combination is one
+            # explicit step, not folded into the transform.
+            if readout.all():
+                coil_images = _inverse_transform(kspace, self.device)
+            else:
+                coil_images = POCS(
+                    dimension=2, partial_axis=-1, iterations=self.pocs_iterations
+                )(kspace, readout)
+            image = coil_combine(coil_images, coil_axis=0)
         return ReconResult(np.abs(_to_numpy(image)))
 
     def _sense(
@@ -197,13 +202,13 @@ def _phase_encode_lines(header: Any, bucket: AcquisitionBucket) -> int:
 # %% reconstruction -- operator vocabulary, no hand-written transform
 
 
-def _adjoint_rss(kspace: np.ndarray, samples: np.ndarray, device: Any) -> Any:
-    """Reconstruct a fully sampled slice with the operator's ``rss`` adjoint.
+def _inverse_transform(kspace: np.ndarray, device: Any) -> Any:
+    """Per-coil centered inverse transform, in the operator vocabulary.
 
     A Cartesian operator built with no sensitivity maps is exactly the centered
-    transform, so its ``rss`` adjoint zero-fills, inverts and root-sum-of-squares
-    combines the coils in one call -- the whole reconstruction of a fully
-    sampled slice, with no hand-written FFT.
+    transform, so its inverse hands back one zero-filled, inverted image per
+    coil -- ready for an explicit root-sum-of-squares coil combination, and with
+    no hand-written FFT.
     """
     import torch
 
@@ -211,12 +216,11 @@ def _adjoint_rss(kspace: np.ndarray, samples: np.ndarray, device: Any) -> Any:
 
     device = "cpu" if device is None else device
     _, n_y, n_x = kspace.shape
-    mask = torch.as_tensor(samples, dtype=torch.float32, device=device)[None, None]
-    measurement = torch.view_as_real(
-        torch.as_tensor(kspace, dtype=torch.complex64, device=device)[None]
+    data = torch.as_tensor(kspace, dtype=torch.complex64, device=device)
+    transform = Cartesian2D(
+        torch.ones((1, 1, n_y, n_x), device=device), None, img_size=(n_y, n_x)
     )
-    physics = Cartesian2D(mask, None, img_size=(n_y, n_x))
-    return physics.A_adjoint(measurement, rss=True)[0, 0]
+    return transform.ifft(data[None])[0]
 
 
 def _to_numpy(array: Any) -> np.ndarray:
