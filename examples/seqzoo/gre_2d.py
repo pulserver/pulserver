@@ -23,6 +23,8 @@ Two entry points, one implementation:
 from __future__ import annotations
 
 import sys
+from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 
@@ -41,6 +43,82 @@ from pulserver import (
     protocol_to_dict,
     run_cli,
 )
+
+
+@dataclass
+class _Plan:
+    """One designed repetition and the encoding plan that repeats it.
+
+    Whatever both the scan loop and the feasibility check need, designed once:
+    the excitation and readout modules, the phase-encode lines the sampling
+    asks for, and the total scan time they add up to.
+    """
+
+    excitation: Any
+    readout: Any
+    fov: tuple[float, float]
+    sampled_lines: list[int]
+    duration: float
+
+
+def _plan(
+    system: pp.Opts,
+    *,
+    fov: float | tuple[float, float] = 220e-3,
+    n_x: int = 128,
+    n_y: int = 128,
+    n_slices: int = 1,
+    slice_thickness: float = 5e-3,
+    flip_angle_deg: float = 12.0,
+    te: float | None = 8e-3,
+    tr: float | None = 250e-3,
+    readout_bandwidth_hz: float = 250e3,
+    partial_echo: float = 1.0,
+    acceleration: int = 1,
+    n_acs: int = 24,
+    spoiling_cycles: float = 4.0,
+) -> _Plan:
+    """Design one repetition, which is where every parameter is validated.
+
+    Building the excitation and readout *is* the feasibility check: a TE or TR
+    shorter than one repetition can achieve makes :class:`design.LineReadout2D`
+    raise ``ValueError``, as does any out-of-range matrix, fov or fraction. So
+    the same call that the scan loop is built from tells :meth:`Gre2D.validate_protocol`
+    whether the protocol is feasible and, when it is, how long it takes -- there
+    is no second timing path to drift out of step with the sequence.
+    """
+    fov_x, fov_y = (fov, fov) if isinstance(fov, (int, float)) else fov
+
+    excitation = design.SpatialSelectiveExcitation(
+        system, flip_angle_deg, slice_thickness
+    )
+    readout = design.LineReadout2D(
+        system,
+        excitation.rf,
+        excitation.gz,
+        excitation.gz_reph,
+        fov=(fov_x, fov_y),
+        matrix=(n_x, n_y),
+        te=te,
+        tr=None if tr is None else tr / n_slices,
+        partial_echo=partial_echo,
+        readout_bandwidth_hz=readout_bandwidth_hz,
+        spoiling_cycles=spoiling_cycles,
+        labels=("LIN", "SLC", "REF", "IMA"),
+    )
+
+    # One repetition per acquired line per slice; the readout has already
+    # padded itself to the per-slice TR, so the whole scan is simply their sum.
+    sampled_lines = pp.calc_sampled_lines(n_y, acceleration, n_acs)
+    duration = len(sampled_lines) * n_slices * readout.duration
+
+    return _Plan(
+        excitation=excitation,
+        readout=readout,
+        fov=(fov_x, fov_y),
+        sampled_lines=sampled_lines,
+        duration=duration,
+    )
 
 
 def main(
@@ -127,32 +205,34 @@ def main(
         The GRE sequence object.
     """
     system = pp.Opts() if system is None else system
-    fov_x, fov_y = (fov, fov) if isinstance(fov, (int, float)) else fov
 
-    excitation = design.SpatialSelectiveExcitation(
-        system, flip_angle_deg, slice_thickness
-    )
-    readout = design.LineReadout2D(
+    # Design one repetition -- and, in doing so, validate TE, TR and the rest.
+    plan = _plan(
         system,
-        excitation.rf,
-        excitation.gz,
-        excitation.gz_reph,
-        fov=(fov_x, fov_y),
-        matrix=(n_x, n_y),
+        fov=fov,
+        n_x=n_x,
+        n_y=n_y,
+        n_slices=n_slices,
+        slice_thickness=slice_thickness,
+        flip_angle_deg=flip_angle_deg,
         te=te,
-        tr=None if tr is None else tr / n_slices,
-        partial_echo=partial_echo,
+        tr=tr,
         readout_bandwidth_hz=readout_bandwidth_hz,
+        partial_echo=partial_echo,
+        acceleration=acceleration,
+        n_acs=n_acs,
         spoiling_cycles=spoiling_cycles,
-        labels=("LIN", "SLC", "REF", "IMA"),
     )
+    excitation, readout = plan.excitation, plan.readout
+    fov_x, fov_y = plan.fov
+    sampled_lines = plan.sampled_lines
+
     lin_label, slc_label, ref_label, ima_label = readout.adc_labels
     wait_te = getattr(readout, "wait_te", None)
     wait_tr = getattr(readout, "wait_tr", None)
 
-    # The encoding plan: which lines are acquired, in which order the slices are
-    # excited, and the phase every repetition is played with.
-    sampled_lines = pp.calc_sampled_lines(n_y, acceleration, n_acs)
+    # The rest of the encoding plan: in which order the slices are excited, at
+    # what offset, and the RF-spoiling phase every repetition is played with.
     acs_start = max(0, n_y // 2 - n_acs // 2)
     acs_stop = min(n_y, acs_start + n_acs)
     slice_indices = pp.calc_traversal_order(n_slices, slice_order)
@@ -196,9 +276,7 @@ def main(
                     readout.gz_reph,
                 )
             seq.add_block(readout.gx, readout.adc, *readout.adc_labels)
-            seq.add_block(
-                readout.gx_spoil, pp.scale_grad(readout.gy_rew, ky)
-            )
+            seq.add_block(readout.gx_spoil, pp.scale_grad(readout.gy_rew, ky))
             if wait_tr is not None:
                 seq.add_block(wait_tr)
 
@@ -328,7 +406,12 @@ class Gre2D(Sequence):
                     validate=Validate.NONE,
                 ),
                 UIParam.RY: TypeinFloatParam(
-                    value=1.0, min=1.0, max=8.0, incr=1.0, unit="", validate=Validate.NONE
+                    value=1.0,
+                    min=1.0,
+                    max=8.0,
+                    incr=1.0,
+                    unit="",
+                    validate=Validate.NONE,
                 ),
                 UIParam.user_name(0): Description(text="ACS lines"),
                 UIParam.user_value(0): TypeinFloatParam(
@@ -352,23 +435,36 @@ class Gre2D(Sequence):
         )
 
     def validate_protocol(self, opts: pp.Opts, protocol: dict[str, dict]) -> dict:
-        """Report whether the protocol is feasible, and how long it will take."""
+        """Report whether the protocol is feasible, and how long it will take.
+
+        Designing one repetition through :func:`_plan` is the whole check: the
+        same construction the sequence is built from raises ``ValueError`` on an
+        infeasible TE or TR, and otherwise reports the scan duration directly.
+        """
         kwargs = _main_kwargs(opts, protocol)
         try:
-            readout = _design_readout(kwargs)
+            plan = _plan(
+                opts,
+                fov=kwargs["fov"],
+                n_x=kwargs["n_x"],
+                n_y=kwargs["n_y"],
+                n_slices=kwargs["n_slices"],
+                slice_thickness=kwargs["slice_thickness"],
+                flip_angle_deg=kwargs["flip_angle_deg"],
+                te=kwargs["te"],
+                tr=kwargs["tr"],
+                readout_bandwidth_hz=kwargs["readout_bandwidth_hz"],
+                partial_echo=kwargs["partial_echo"],
+                acceleration=kwargs["acceleration"],
+                n_acs=kwargs["n_acs"],
+            )
         except ValueError as error:
             return {"valid": False, "duration": None, "info": str(error)}
 
-        n_shots = len(
-            pp.calc_sampled_lines(
-                kwargs["n_y"], kwargs["acceleration"], kwargs["n_acs"]
-            )
-        )
-        duration = n_shots * kwargs["n_slices"] * readout.duration
         return {
             "valid": True,
-            "duration": duration,
-            "info": f"TA = {duration:.1f} s at {readout.bandwidth_hz * 1e-3:.1f} kHz",
+            "duration": plan.duration,
+            "info": f"TA = {plan.duration:.1f} s at {plan.readout.bandwidth_hz * 1e-3:.1f} kHz",
         }
 
     def make_sequence(
@@ -408,30 +504,11 @@ def _main_kwargs(opts: pp.Opts, protocol: dict[str, dict]) -> dict:
             prot, UIParam.BANDWIDTH, 250e3
         ),
         "partial_echo": params.user_float(prot, 1, 1.0),
-        "acceleration": max(1, round(params.param_float_optional(prot, UIParam.RY, 1.0))),
+        "acceleration": max(
+            1, round(params.param_float_optional(prot, UIParam.RY, 1.0))
+        ),
         "n_acs": params.acs_lines_from_protocol(prot, n_y, 0),
     }
-
-
-def _design_readout(kwargs: dict):
-    """Design just the readout module, which is what constrains TE and TR."""
-    system = kwargs["system"]
-    fov_x, fov_y = kwargs["fov"]
-    excitation = design.SpatialSelectiveExcitation(
-        system, kwargs["flip_angle_deg"], kwargs["slice_thickness"]
-    )
-    return design.LineReadout2D(
-        system,
-        excitation.rf,
-        excitation.gz,
-        excitation.gz_reph,
-        fov=(fov_x, fov_y),
-        matrix=(kwargs["n_x"], kwargs["n_y"]),
-        te=kwargs["te"],
-        tr=kwargs["tr"] / kwargs["n_slices"],
-        partial_echo=kwargs["partial_echo"],
-        readout_bandwidth_hz=kwargs["readout_bandwidth_hz"],
-    )
 
 
 PLUGIN = Gre2D()
@@ -466,7 +543,12 @@ _ARG_MAP = [
     ("--bandwidth-hz", UIParam.BANDWIDTH, float, "Requested receiver bandwidth [Hz]"),
     ("--ry", UIParam.RY, float, "Phase-encode undersampling factor"),
     ("--acs-lines", UIParam.user_value(0), float, "Number of ACS lines"),
-    ("--partial-echo", UIParam.user_value(1), float, "Acquired echo fraction in (0.5, 1]"),
+    (
+        "--partial-echo",
+        UIParam.user_value(1),
+        float,
+        "Acquired echo fraction in (0.5, 1]",
+    ),
 ]
 
 if __name__ == "__main__":
