@@ -29,8 +29,8 @@ import pulserver.pypulseq as pp
 system = pp.Opts()
 excitation = design.SpatialSelectiveExcitation(system, 15.0, 5e-3)
 readout = design.LineReadout2D(
-    system, excitation.rf, excitation.gz_select,
-    fov_m=0.22, matrix=128, te=4e-3, tr=10e-3,
+    system, excitation.rf, excitation.gz,
+    fov=0.22, matrix=128, te=4e-3, tr=10e-3,
 )
 
 phases = pp.make_rf_spoiling_schedule(128)
@@ -38,11 +38,11 @@ phases = pp.make_rf_spoiling_schedule(128)
 seq = pp.Sequence(system)
 for line in range(128):
     readout.rf.phase_offset = readout.adc.phase_offset = phases[line]
-    seq.add_block(readout.rf, readout.gz_select)
+    seq.add_block(readout.rf, readout.gz)
     seq.add_block(readout.wait_te)
-    seq.add_block(readout.gx_pre, pp.scale_grad(readout.gy_phase, (line - 64) / 64))
-    seq.add_block(readout.gx_read, readout.adc)
-    seq.add_block(readout.gx_rew, pp.scale_grad(readout.gy_rew, (line - 64) / 64))
+    seq.add_block(readout.gx_pre, pp.scale_grad(readout.gy_pre, (line - 64) / 64))
+    seq.add_block(readout.gx, readout.adc)
+    seq.add_block(readout.gx_spoil, pp.scale_grad(readout.gy_rew, (line - 64) / 64))
     seq.add_block(readout.wait_tr)
 
 seq.write("gre.seq")

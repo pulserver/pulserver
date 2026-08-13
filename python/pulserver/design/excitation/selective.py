@@ -23,12 +23,12 @@ class SpatialSelectiveExcitation(RfModule):
     ``is_slab`` decides how the rephaser is delivered, and the choice matters
     to whatever plays this module:
 
-    - ``False`` (a 2D slice) publishes ``gz_select`` and ``gz_reph`` and lays
-      out **two** blocks. The rephaser is separable, so a readout can fold its
+    - ``False`` (a 2D slice) publishes ``gz`` and ``gz_reph`` and lays out
+      **two** blocks. The rephaser is separable, so a readout can fold its
       moment into its own prewinder and the excitation can then be played
       without it.
-    - ``True`` (a 3D slab) concatenates the two into a single ``gz_slab`` and
-      lays out **one** block. A slab excitation is played once per TR next to a
+    - ``True`` (a 3D slab) concatenates the two into ``gz`` alone and lays out
+      **one** block. A slab excitation is played once per TR next to a
       partition encode that occupies the same axis anyway, so nothing is saved
       by keeping the rephaser separate, and one gradient is one event for the
       readout to accept.
@@ -67,10 +67,8 @@ class SpatialSelectiveExcitation(RfModule):
     ----------
     rf : RfEvent
         The pulse. Its ``delay`` already places it on the gradient's flat top.
-    gz_slab : GradEvent
-        Selection and rephasing as one waveform. Only when ``is_slab``.
-    gz_select : TrapEvent
-        The selection gradient. Only when not ``is_slab``.
+    gz : TrapEvent or GradEvent
+        The selection gradient; under ``is_slab`` the rephaser is part of it.
     gz_reph : TrapEvent
         The rephaser. Only when not ``is_slab`` and ``rephase``.
 
@@ -93,7 +91,7 @@ class SpatialSelectiveExcitation(RfModule):
     A slab merges it, so the whole excitation is one block and one gradient:
 
     >>> slab = design.SpatialSelectiveExcitation(pp.Opts(), 8.0, 0.12, is_slab=True)
-    >>> len(slab.blocks), slab.gz_slab.type
+    >>> len(slab.blocks), slab.gz.type
     (1, 'grad')
     """
 
@@ -120,7 +118,7 @@ class SpatialSelectiveExcitation(RfModule):
         if axis not in _AXES:
             raise ValueError(f"axis must be one of {_AXES}, got {axis!r}")
 
-        rf, gz_select, gz_reph = pp.make_slr_pulse(
+        rf, gz, gz_reph = pp.make_slr_pulse(
             np.deg2rad(flip_angle_deg),
             duration=duration_s,
             slice_thickness=thickness_m,
@@ -132,7 +130,7 @@ class SpatialSelectiveExcitation(RfModule):
             use=use,
             system=system,
         )
-        gz_select.channel = axis
+        gz.channel = axis
         gz_reph.channel = axis
 
         self.seq = pp.Sequence(system)
@@ -141,13 +139,11 @@ class SpatialSelectiveExcitation(RfModule):
             if rephase:
                 # Concatenated, not summed over one interval: the rephaser
                 # starts where the selection lobe ends.
-                gz_reph.delay = pp.calc_duration(gz_select)
-                gz_slab = pp.add_gradients(grads=[gz_select, gz_reph], system=system)
-            else:
-                gz_slab = gz_select
-            self.seq.add_block(rf, gz_slab)
+                gz_reph.delay = pp.calc_duration(gz)
+                gz = pp.add_gradients(grads=[gz, gz_reph], system=system)
+            self.seq.add_block(rf, gz)
         else:
-            self.seq.add_block(rf, gz_select)
+            self.seq.add_block(rf, gz)
             if rephase:
                 self.seq.add_block(gz_reph)
 

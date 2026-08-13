@@ -231,3 +231,36 @@ def test_an_unknown_name_names_the_module(system):
     module = Arms(system)
     with pytest.raises(AttributeError, match="no attribute or event 'gphase'"):
         module.gphase
+
+
+class Base(SequenceModule):
+    """A family that lays out the blocks, given what a subclass designed."""
+
+    def init_module(self, system, gread):
+        rf = _rf(system)
+        adc = pp.make_adc(num_samples=64, dwell=4e-6, system=system)
+        self.seq = pp.Sequence(system)
+        self.seq.add_block(rf)
+        self.seq.add_block(gread, adc)
+
+
+class Narrowed(Base):
+    """A subclass that designs the waveform and delegates the layout."""
+
+    def init_module(self, system):
+        gspecific = _trap(system, area=1234.0)
+        super().init_module(system, gspecific)
+
+
+def test_publication_reaches_every_init_module_in_the_chain(system):
+    """Both frames are the constructor, so neither needs an explicit publish().
+
+    A subclass that narrows a family builds some events itself and delegates
+    the rest. Reading only the frame the walk stopped at would leave half the
+    module unpublished and make the author say so by hand.
+    """
+    module = Narrowed(system)
+    assert round(module.gspecific.area) == 1234  # the subclass's frame
+    assert module.adc.num_samples == 64  # the base's frame
+    assert getattr(module.rf, "type", None) == "rf"
+    assert module.gread is module.gspecific

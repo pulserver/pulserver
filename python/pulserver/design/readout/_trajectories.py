@@ -27,7 +27,6 @@ import numpy as np
 
 from ... import pypulseq as pp
 from ._common import AXES as _AXES
-from ._common import DEFAULT_BANDWIDTH_HZ as DEFAULT_BANDWIDTH_HZ_PX
 
 _SPIRAL_DIRECTIONS = ("outward", "inward", "in_out")
 _SPIRAL_DENSITIES = ("constant", "variable", "dual")
@@ -454,7 +453,7 @@ class Arbitrary(NonCartesianGradient):
         trajectory,
         *,
         matrix,
-        bandwidth_hz_px=DEFAULT_BANDWIDTH_HZ_PX,
+        bandwidth_hz_px=250e3,
         oversamp=1.0,
         axes=None,
         solver_oversampling=8,
@@ -510,7 +509,7 @@ class Radial(NonCartesianGradient):
         fov,
         matrix,
         *,
-        bandwidth_hz_px=DEFAULT_BANDWIDTH_HZ_PX,
+        bandwidth_hz_px=250e3,
         oversamp=1.0,
         ro_axis="x",
         derate=True,
@@ -583,7 +582,7 @@ class Spiral(NonCartesianGradient):
         transition_radius=0.5,
         transition_speed=12.0,
         num_points=1024,
-        bandwidth_hz_px=DEFAULT_BANDWIDTH_HZ_PX,
+        bandwidth_hz_px=250e3,
         oversamp=1.0,
         axes=("x", "y"),
         solver_oversampling=8,
@@ -621,8 +620,18 @@ class Spiral(NonCartesianGradient):
             start_at_zero=True,
             end_at_zero=False,
         )[:, :2]
-        n_adc = max(2, round(n * oversamp * (2 if direction == "in_out" else 1)))
-        grad_out = _stretch_gradient(grad_out, n_adc / bandwidth_hz_px, system.grad_raster_time)
+        # Sampling more slowly than the time-optimal arm allows is legal only
+        # if the arm is slowed to match. Adjacent samples may be no further
+        # apart than 1 / fov along the path, so at the requested dwell the arm
+        # may traverse k no faster than that -- and where the time-optimal
+        # solve is faster, it is stretched until it is not.
+        speed = float(np.max(np.linalg.norm(grad_out, axis=1)))
+        stretch = max(1.0, speed * fov_m * float(oversamp) / float(bandwidth_hz_px))
+        grad_out = _stretch_gradient(
+            grad_out,
+            stretch * grad_out.shape[0] * system.grad_raster_time,
+            system.grad_raster_time,
+        )
         out_area = np.sum(grad_out, axis=0) * system.grad_raster_time
 
         if direction == "outward":
@@ -644,7 +653,21 @@ class Spiral(NonCartesianGradient):
         prewinders = _moment_bridges(system, pre_area, np.zeros(2), first, axes) if pre_area is not None else ()
         rewinders = _moment_bridges(system, rew_area, last, np.zeros(2), axes) if rew_area is not None else ()
         read_duration = gradient.shape[0] * system.grad_raster_time
-        adc = _make_adc(system, n_adc, read_duration)
+        # Choose the dwell first, then fit whole samples into the arm. Fixing
+        # the sample count instead and letting the dwell fall out of the arm's
+        # duration makes the requested bandwidth unreachable: an arm is as long
+        # as the slew limit says, so `read_duration / n_adc` is whatever it is.
+        # The request is honoured up to the Nyquist ceiling -- adjacent samples
+        # may be no further apart than 1 / fov along the path, or the sampled
+        # field of view is smaller than the one asked for.
+        max_k_speed = float(np.max(np.linalg.norm(gradient, axis=1)))
+        dwell = min(1.0 / float(bandwidth_hz_px), 1.0 / (float(oversamp) * fov_m * max_k_speed))
+        dwell = max(
+            float(system.adc_raster_time),
+            math.floor(dwell / system.adc_raster_time + 1e-12) * system.adc_raster_time,
+        )
+        n_adc = max(2, math.floor(read_duration / dwell + 1e-12))
+        adc = pp.make_adc(num_samples=n_adc, dwell=dwell, system=system)
         super().__init__(
             system=system,
             gradients=gradients,
@@ -725,7 +748,7 @@ class Rosette(NonCartesianGradient):
         petals=5,
         angular_frequency_ratio=3.0 / 5.0,
         echo_spacing_s=None,
-        bandwidth_hz_px=DEFAULT_BANDWIDTH_HZ_PX,
+        bandwidth_hz_px=250e3,
         oversamp=1.0,
         axes=("x", "y"),
         solver_oversampling=8,

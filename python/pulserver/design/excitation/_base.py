@@ -28,11 +28,16 @@ class RfModule(SequenceModule):
     ``duration``, plotting, k-space -- is :class:`~pulserver.SequenceModule`'s.
     """
 
-    def sim_rf(self, **kwargs):
+    def sim_rf(self, pulse=None, **kwargs):
         """Simulate this module's pulse across off-resonance.
 
         Parameters
         ----------
+        pulse : RfEvent, optional
+            Which pulse to simulate. The default is the first one the module
+            plays, found by type rather than by name -- an excitation calls its
+            pulse ``rf`` and a preparation calls it ``rf_prep``, and neither
+            spelling should have to be known here.
         **kwargs
             Forwarded to :func:`pulserver.pypulseq.sim_rf` (``df``,
             ``bandwidth_multiplier``, ``compat``, ...).
@@ -55,4 +60,11 @@ class RfModule(SequenceModule):
         """
         from ... import pypulseq as pp
 
-        return pp.sim_rf(self.events.rf, **kwargs)
+        if pulse is None:
+            pulse = next(
+                event
+                for block in self.blocks
+                for event in block
+                if getattr(event, "type", None) == "rf"
+            )
+        return pp.sim_rf(pulse, **kwargs)

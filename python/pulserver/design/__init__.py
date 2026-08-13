@@ -17,7 +17,7 @@ wants, scales them per shot, and writes plain PyPulseq::
     system = pp.Opts()
     excitation = design.SpatialSelectiveExcitation(system, 15.0, 5e-3, is_slab=True)
     readout = design.LineReadout3D(
-        system, excitation.rf, excitation.gz_slab, fov_m=(0.22, 0.22, 0.12),
+        system, excitation.rf, excitation.gz, fov=(0.22, 0.22, 0.12),
         matrix=(128, 128, 64), te=4e-3, tr=10e-3,
     )
 
@@ -25,9 +25,9 @@ wants, scales them per shot, and writes plain PyPulseq::
     seq = pp.Sequence(system)
     for shot, (ky, kz) in enumerate(plan):
         readout.rf.phase_offset = readout.adc.phase_offset = phases[shot]
-        seq.add_block(readout.rf, readout.gz_slab)
-        seq.add_block(pp.scale_grad(readout.gy_phase, ky), pp.scale_grad(readout.gz_phase, kz), readout.gx_pre)
-        seq.add_block(readout.gx_read, readout.adc)
+        seq.add_block(readout.rf, readout.gz)
+        seq.add_block(pp.scale_grad(readout.gy_pre, ky), pp.scale_grad(readout.gz_pre, kz), readout.gx_pre)
+        seq.add_block(readout.gx, readout.adc)
 
 The encoding plan is the plugin's own. The masks, orderings and angle
 generators it is usually built from are one layer down, in

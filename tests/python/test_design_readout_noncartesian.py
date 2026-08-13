@@ -128,10 +128,10 @@ def test_a_three_axis_interleave_has_no_plane_to_turn_in(system):
 
 
 def _readout(cls, system, excitation, **kwargs):
-    gz = getattr(excitation.events, "gz_select", None) or getattr(
+    gz = getattr(excitation.events, "gz", None) or getattr(
         excitation.events, "gz_slab", None
     )
-    return cls(system, excitation.rf, gz, fov_m=FOV, matrix=MATRIX, **kwargs)
+    return cls(system, excitation.rf, gz, fov=FOV, matrix=MATRIX, **kwargs)
 
 
 FAMILIES = [
@@ -157,16 +157,17 @@ def test_every_family_lays_out_valid_pulseq(system, excitation, cls, kwargs):
 
 @pytest.mark.parametrize(("cls", "kwargs"), STACKS, ids=lambda value: getattr(value, "__name__", ""))
 def test_a_stack_adds_a_partition_encode_and_its_rewinder(system, slab, cls, kwargs):
-    readout = _readout(cls, system, slab, fov_z_m=0.12, matrix_z=32, **kwargs)
-    assert readout.gz_phase.channel == "z"
-    assert readout.gz_phase.area == pytest.approx(1.0 / (2.0 * (0.12 / 32)))
-    assert readout.gz_rew.area == pytest.approx(-readout.gz_phase.area)
+    readout = _readout(cls, system, slab, fov_z=0.12, matrix_z=32, **kwargs)
+    assert readout.gz_pre.channel == "z"
+    assert readout.gz_pre.area == pytest.approx(1.0 / (2.0 * (0.12 / 32)))
+    assert readout.gz_rew.area == pytest.approx(-readout.gz_pre.area)
     assert readout.check_timing()[0]
 
 
 def test_a_projection_readout_has_no_partition_to_encode(system, excitation):
-    with pytest.raises(TypeError):
-        _readout(design.RadialProjectionReadout, system, excitation, fov_z_m=0.12, matrix_z=32)
+    """Dropping the argument would leave a 2D acquisition wearing a 3D protocol."""
+    with pytest.raises(ValueError, match="encodes no partition axis"):
+        _readout(design.RadialProjectionReadout, system, excitation, fov_z=0.12, matrix_z=32)
 
 
 def test_the_echo_time_points_at_the_k_zero_crossing(system, excitation):
@@ -197,15 +198,15 @@ def test_an_outward_spiral_starts_at_the_echo(system, excitation):
 def test_the_default_lays_out_one_interleave_for_the_loop_to_turn(system, excitation):
     """One waveform, however many arms the scan plays: the rotation is an event."""
     readout = _readout(design.SpiralReadout2D, system, excitation, design_interleaves=16)
-    assert not isinstance(readout.gx_read, list)
+    assert not isinstance(readout.gx, list)
 
     seq = pp.Sequence(system)
     angles = pp.calc_golden_angles(4)
     for angle in angles:
-        seq.add_block(readout.rf, readout.gz_select)
+        seq.add_block(readout.rf, readout.gz)
         seq.add_block(
-            readout.gx_read,
-            readout.gy_read,
+            readout.gx,
+            readout.gy,
             readout.adc,
             pp.make_rotation(Rotation.from_euler("z", float(angle))),
         )
@@ -232,8 +233,8 @@ def test_explicit_mode_publishes_one_waveform_per_arm(system, excitation):
         design.SpiralReadout2D, system, excitation,
         design_interleaves=16, explicit=True, angles=angles, tr=10e-3,
     )
-    assert isinstance(readout.gx_read, list)
-    assert len(readout.gx_read) == len(readout.gy_read) == len(angles)
+    assert isinstance(readout.gx, list)
+    assert len(readout.gx) == len(readout.gy) == len(angles)
     assert readout.check_timing()[0]
 
 
@@ -303,9 +304,9 @@ def test_the_spoiler_winds_the_cycles_it_was_asked_for(system, excitation):
         design.SpiralReadout2D, system, excitation,
         design_interleaves=16, spoiling_cycles=cycles, voxel_size_m=voxel,
     )
-    moment = float(np.trapezoid(readout.gspoil.waveform, readout.gspoil.tt))
+    moment = float(np.trapezoid(readout.gz_spoil.waveform, readout.gz_spoil.tt))
     assert moment == pytest.approx(cycles / voxel, rel=1e-3)
-    assert readout.gspoil.channel == "z"
+    assert readout.gz_spoil.channel == "z"
 
 
 def test_a_rewound_shot_ends_where_it_started(system, excitation):
@@ -319,7 +320,7 @@ def test_a_rewound_shot_ends_where_it_started(system, excitation):
 @pytest.mark.parametrize(
     ("kwargs", "message"),
     [
-        ({"num_echoes": 0}, "num_echoes must be >= 1"),
+        ({"n_echoes": 0}, "n_echoes must be >= 1"),
         ({"spoiling_cycles": -1.0}, "spoiling_cycles must be >= 0"),
         ({"spoiling_axis": "w"}, "spoiling_axis must be one of"),
     ],
@@ -337,7 +338,7 @@ def test_an_impossible_readout_is_refused(system, excitation, kwargs, message):
 def test_a_stack_of_spirals_is_a_plain_pypulseq_loop(system, slab, tmp_path):
     readout = _readout(
         design.SpiralStackReadout, system, slab,
-        design_interleaves=16, fov_z_m=0.12, matrix_z=8, tr=12e-3, labels=("LIN", "PAR"),
+        design_interleaves=16, fov_z=0.12, matrix_z=8, tr=12e-3, labels=("LIN", "PAR"),
     )
     arms, partitions = 6, 8
     angles = pp.calc_golden_angles(arms)
@@ -353,9 +354,9 @@ def test_a_stack_of_spirals_is_a_plain_pypulseq_loop(system, slab, tmp_path):
         kz = (partition - partitions / 2) / (partitions / 2)
         rotation = pp.make_rotation(Rotation.from_euler("z", float(angles[arm])))
 
-        seq.add_block(readout.rf, readout.gz_select)
-        seq.add_block(pp.scale_grad(readout.gz_phase, kz))
-        seq.add_block(readout.gx_read, readout.gy_read, readout.adc, *readout.adc_labels, rotation)
+        seq.add_block(readout.rf, readout.gz)
+        seq.add_block(pp.scale_grad(readout.gz_pre, kz))
+        seq.add_block(readout.gx, readout.gy, readout.adc, *readout.adc_labels, rotation)
         seq.add_block(
             readout.gx_rew,
             readout.gy_rew,
@@ -409,7 +410,89 @@ def test_a_rotated_interleave_is_still_playable(system, excitation):
     seq = pp.Sequence(system)
     for angle in np.linspace(0.0, np.pi, 7):
         rotation = pp.make_rotation(Rotation.from_euler("z", float(angle)))
-        seq.add_block(readout.rf, readout.gz_select)
-        seq.add_block(readout.gx_read, readout.gy_read, readout.adc, rotation)
+        seq.add_block(readout.rf, readout.gz)
+        seq.add_block(readout.gx, readout.gy, readout.adc, rotation)
         seq.add_block(readout.gx_rew, readout.gy_rew, rotation)
     assert seq.check_timing()[0]
+
+
+# ----------------------------------------------------------------------
+# Sampling the caller asked for
+# ----------------------------------------------------------------------
+
+
+def test_a_radial_spoke_is_one_continuous_waveform(system, excitation):
+    """Prephaser, readout and rewinder are the same lobe traversed once.
+
+    Three separate blocks would need three consistent rotations to orient one
+    spoke; one waveform needs one.
+    """
+    readout = _readout(design.RadialReadout2D, system, excitation)
+    acquisition = [block for block in readout.blocks if readout.adc in block]
+    assert len(acquisition) == 1
+    assert set(acquisition[0]) == {readout.gx, readout.gy, readout.adc}
+    assert not hasattr(readout.events, "gx_pre")
+    assert not hasattr(readout.events, "gx_rew")
+
+
+def test_the_radial_adc_sits_on_the_readout_plateau(system, excitation):
+    """Shifted past the prephaser, so it acquires the flat part and nothing else."""
+    readout = _readout(design.RadialReadout2D, system, excitation)
+    kx = _first_line(readout)[0][0]
+    half_width = MATRIX / (2 * FOV)
+    assert kx.min() == pytest.approx(-half_width, rel=2e-2)
+    assert kx.max() == pytest.approx(half_width, rel=2e-2)
+    assert readout.adc.delay > 0
+
+
+def _first_line(module):
+    k_traj_adc, _, t_excitation, _, t_adc = module.calculate_kspace()
+    count = int(module.adc.num_samples)
+    return k_traj_adc[:, :count], np.asarray(t_adc)[:count], float(t_excitation[0])
+
+
+@pytest.mark.parametrize(
+    ("cls", "kwargs"),
+    [
+        (design.RadialReadout2D, {}),
+        (design.SpiralReadout2D, {"design_interleaves": 16}),
+    ],
+    ids=["radial", "spiral"],
+)
+def test_a_lower_bandwidth_really_lowers_the_bandwidth(system, excitation, cls, kwargs):
+    """The knob has to move something, or it is not a knob.
+
+    A spiral cannot simply sample more slowly along a time-optimal arm --
+    adjacent samples would land further than 1 / fov apart -- so the arm is
+    stretched until the requested dwell is legal. That is the cost, and it is
+    the caller's to accept.
+    """
+    fast = _readout(cls, system, excitation, readout_bandwidth_hz=250e3, **kwargs)
+    slow = _readout(cls, system, excitation, readout_bandwidth_hz=62.5e3, **kwargs)
+
+    assert slow.bandwidth_hz < fast.bandwidth_hz
+    # At most the bandwidth asked for. It may be less: the dwell has to land on
+    # the ADC raster while the readout duration lands on the gradient raster,
+    # and the nearest pair that does both is sometimes slower than the request.
+    assert slow.bandwidth_hz <= 62.5e3 * 1.05
+    assert slow.bandwidth_hz > 0.5 * 62.5e3
+    assert slow.adc.dwell > fast.adc.dwell
+    assert slow.check_timing()[0]
+
+
+def test_the_dwell_always_lands_on_the_adc_raster(system, excitation):
+    for bandwidth in (250e3, 125e3, 90e3, 62.5e3):
+        readout = _readout(
+            design.SpiralReadout2D, system, excitation,
+            design_interleaves=16, readout_bandwidth_hz=bandwidth,
+        )
+        steps = readout.adc.dwell / system.adc_raster_time
+        assert steps == pytest.approx(round(steps)), bandwidth
+
+
+def test_oversampling_a_spiral_samples_the_same_arm_more_densely(system, excitation):
+    plain = _readout(design.SpiralReadout2D, system, excitation, design_interleaves=16)
+    dense = _readout(
+        design.SpiralReadout2D, system, excitation, design_interleaves=16, oversampling=2.0
+    )
+    assert dense.n_samples > plain.n_samples

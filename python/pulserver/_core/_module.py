@@ -153,23 +153,34 @@ class SequenceModule(ABC):
         self._seq = sequence
 
     def _find_init_frame(self) -> None:
-        """Keep hold of the running ``init_module`` frame, found from ``add_block``.
+        """Keep hold of the running ``init_module`` frames, found from ``add_block``.
 
-        A frame something still refers to keeps its locals after it returns —
+        A frame something still refers to keeps its locals after it returns --
         the same guarantee that lets a traceback be inspected once the stack
-        has unwound — so one reference, taken at the first ``add_block``, is
+        has unwound -- so references taken at the first ``add_block`` are
         enough to read the constructor's *final* namespace in
         :meth:`_finalize`. That costs one stack walk per module rather than a
         dictionary copy per block.
+
+        **Every** ``init_module`` on the stack is kept, not only the innermost.
+        A subclass that narrows a family -- a spiral readout over the general
+        non-Cartesian one -- builds some of its events itself and delegates the
+        rest, so they live in two frames and both are the constructor. Reading
+        one would leave half the module unpublished, and asking the author to
+        say so would be asking them to know which frame the walk stopped at.
         """
-        init = self.init_module
-        target = getattr(getattr(init, "__func__", init), "__code__", None)
+        targets = {
+            getattr(init, "__code__", None)
+            for init in (getattr(klass, "init_module", None) for klass in type(self).__mro__)
+            if init is not None
+        }
+        frames = []
         frame = sys._getframe(2)
         while frame is not None:
-            if frame.f_code is target and frame.f_locals.get("self") is self:
-                self._init_frame = frame
-                return
+            if frame.f_code in targets and frame.f_locals.get("self") is self:
+                frames.append(frame)
             frame = frame.f_back
+        self._init_frame = frames
 
     def _finalize(self) -> None:
         """Check what ``init_module`` owed, and publish what it built."""
@@ -179,8 +190,10 @@ class SequenceModule(ABC):
         if not self._blocks:
             raise TypeError(f"{name}.init_module added no blocks to self.seq")
 
-        if self._init_frame is not None:
-            self._publish_locals(self._init_frame.f_locals)
+        # Innermost frame first, so that where a subclass and its base both
+        # bind a name, the subclass's meaning is the one published.
+        for frame in self._init_frame or ():
+            self._publish_locals(frame.f_locals)
         self._init_frame = None  # the constructor and its locals are free to go
 
         if not vars(self.events):

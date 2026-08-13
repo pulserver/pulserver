@@ -28,15 +28,15 @@ everything else.
 
 ```python
 readout = design.LineReadout2D(
-    system, excitation.rf, excitation.gz_select,
-    fov_m=0.22, matrix=128, te=4e-3, tr=10e-3,
+    system, excitation.rf, excitation.gz,
+    fov=0.22, matrix=128, te=4e-3, tr=10e-3,
 )
 
 for line in lines:
     readout.rf.phase_offset = phases[line]                   # a phase is a write
-    seq.add_block(readout.rf, readout.gz_select)
-    seq.add_block(readout.gx_pre, pp.scale_grad(readout.gy_phase, ky[line]))
-    seq.add_block(readout.gx_read, readout.adc)
+    seq.add_block(readout.rf, readout.gz)
+    seq.add_block(readout.gx_pre, pp.scale_grad(readout.gy_pre, ky[line]))
+    seq.add_block(readout.gx, readout.adc)
 ```
 
 Per-shot variation is ordinary PyPulseq. The events a module publishes are the
@@ -59,11 +59,15 @@ matters: a per-arm list built by repeating a single waveform collapses back to
 that waveform, because a trajectory whose arms are rotations of a base arm has
 one waveform however many times it is played.
 
-Two escape hatches. `self.publish()` reads the caller's frame, for events a
-helper function built where `init_module` never saw them. `self.register(...)`
-publishes the structure it is *given* rather than deducing one, so a one-entry
-list stays a list — which is what label lists need, since a loop should index
-them the same way whatever was asked for.
+Every `init_module` in the class chain is read, not only the innermost, so a
+subclass that narrows a family — a spiral readout over the general
+non-Cartesian one — publishes what it built *and* what its base built, with no
+call of its own. None of the shipped modules asks for publication.
+
+Two escape hatches remain for what the automatic path cannot see.
+`self.publish()` reads the caller's frame, for events a helper function built
+where no `init_module` saw them. `self.register(...)` publishes the structure
+it is *given* rather than deducing one, so a one-entry list stays a list.
 
 An event whose name collides with one the module itself answers to (`duration`,
 `center`, `seq`) warns, and stays reachable as `module.events.<name>`.
@@ -91,14 +95,16 @@ view a sequence-level analysis cannot give.
 
 Counters — `LIN`, `PAR`, `SLC`, `ECO`, `PHS`, `REP`, `SET`, `AVG`, `SEG` — say
 *where an acquisition belongs*, one ISMRMRD `EncodingCounters` field each.
-A module builds a slot per name it is given and the loop writes the values:
+A module builds a slot per name it is given and the loop writes the values.
+One label publishes as the event itself and several as a list, following the
+identity rule above:
 
 ```python
 readout = design.LineReadout3D(..., labels=("LIN", "PAR"))
 lin, par = readout.adc_labels
 ...
 lin.value, par.value = line, partition
-seq.add_block(readout.gx_read, readout.adc, *readout.adc_labels)
+seq.add_block(readout.gx, readout.adc, *readout.adc_labels)
 ```
 
 The module makes the slot; it cannot invent one the loop did not ask for, and

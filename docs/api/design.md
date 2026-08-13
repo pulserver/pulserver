@@ -14,8 +14,8 @@ import pulserver.pypulseq as pp
 system = pp.Opts()
 slab = design.SpatialSelectiveExcitation(system, 8.0, 0.12, is_slab=True)
 readout = design.LineReadout3D(
-    system, slab.rf, slab.gz_slab,
-    fov_m=(0.22, 0.22, 0.12), matrix=(128, 128, 64),
+    system, slab.rf, slab.gz,
+    fov=(0.22, 0.22, 0.12), matrix=(128, 128, 64),
     te=4e-3, tr=10e-3, spoiling_cycles=4.0,
 )
 
@@ -23,15 +23,15 @@ phases = pp.make_rf_spoiling_schedule(lines * partitions)
 seq = pp.Sequence(system)
 for shot, (line, partition) in enumerate(plan):
     readout.rf.phase_offset = readout.adc.phase_offset = phases[shot]
-    seq.add_block(readout.rf, readout.gz_select)
+    seq.add_block(readout.rf, readout.gz)
     seq.add_block(readout.wait_te)
     seq.add_block(
         readout.gx_pre,
-        pp.scale_grad(readout.gy_phase, ky[line]),
-        pp.scale_grad(readout.gz_phase, kz[partition]),
+        pp.scale_grad(readout.gy_pre, ky[line]),
+        pp.scale_grad(readout.gz_pre, kz[partition]),
     )
-    seq.add_block(readout.gx_read, readout.adc, *readout.adc_labels)
-    seq.add_block(readout.gx_rew, readout.gy_rew, readout.gz_rew)
+    seq.add_block(readout.gx, readout.adc, *readout.adc_labels)
+    seq.add_block(readout.gx_spoil, readout.gy_rew, readout.gz_rew)
     seq.add_block(readout.wait_tr)
 ```
 
@@ -99,7 +99,7 @@ giving the second half of a spin echo.
 
 The geometry is what earns a class, because the geometry is what changes the
 blocks. Everything else is an argument: `direction` runs a spiral outward,
-inward or in-out; `num_echoes` and `flyback` choose an echo train; `density`
+inward or in-out; `n_echoes` and `flyback` choose an echo train; `density`
 sets a spiral's pitch profile; `spoiling_cycles` with `spoiling_position`
 picks between balanced, SSFP-FID and SSFP-Echo.
 

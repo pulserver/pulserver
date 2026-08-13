@@ -47,12 +47,13 @@ class InversionPreparation(RfModule):
 
     Attributes
     ----------
-    rf : RfEvent
+    rf_prep : RfEvent
         The inversion pulse.
-    gcrush : GradEvent
+    gz_spoil : GradEvent
         The crusher.
-    prep_labels : list of LabelSetEvent
-        One per name in ``labels``, in order; empty when ``labels`` is.
+    prep_labels : LabelSetEvent or list of LabelSetEvent
+        One per name in ``labels``, in order. Absent when ``labels`` is
+        empty, and a bare event rather than a list when there is one.
 
     Raises
     ------
@@ -96,14 +97,14 @@ class InversionPreparation(RfModule):
         if axis not in _AXES:
             raise ValueError(f"axis must be one of {_AXES}, got {axis!r}")
 
-        rf = pp.make_adiabatic_pulse(
+        rf_prep = pp.make_adiabatic_pulse(
             pulse_type=pulse_type,
             duration=duration_s,
             bandwidth=bandwidth_hz,
             use="inversion",
             system=system,
         )
-        gcrush, _, _ = pp.make_crusher(
+        gz_spoil, _, _ = pp.make_crusher(
             spoiling_cycles, voxel_size_m, axis, system=system
         )
         # A slot per label, so the loop has somewhere to put one. An iteration
@@ -112,11 +113,7 @@ class InversionPreparation(RfModule):
         prep_labels = [pp.make_label(type="SET", label=name, value=0) for name in labels or ()]
 
         self.seq = pp.Sequence(system)
-        self.seq.add_block(rf, *prep_labels)
-        self.seq.add_block(gcrush)
+        self.seq.add_block(rf_prep, *prep_labels)
+        self.seq.add_block(gz_spoil)
 
-        # Registered rather than left to the automatic path, so that one label
-        # is a one-entry list and the loop indexes it the same way whatever
-        # `labels` it asked for.
-        self.register(prep_labels=prep_labels)
-        self.center = rf_reference(rf)
+        self.center = rf_reference(rf_prep)

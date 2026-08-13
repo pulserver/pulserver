@@ -103,7 +103,7 @@ class Inversion(RfModule):
 
     Attributes
     ----------
-    rf : RfEvent
+    rf_prep : RfEvent
         The pulse.
 
     Examples
@@ -125,7 +125,7 @@ class Inversion(RfModule):
         adiabaticity: int = 4,
         use: str = "inversion",
     ) -> None:
-        rf = pp.make_adiabatic_pulse(
+        rf_prep = pp.make_adiabatic_pulse(
             pulse_type=pulse_type,
             duration=duration_s,
             bandwidth=bandwidth_hz,
@@ -135,6 +135,6 @@ class Inversion(RfModule):
         )
 
         self.seq = pp.Sequence(system)
-        self.seq.add_block(rf)
+        self.seq.add_block(rf_prep)
 
-        self.center = rf_reference(rf)
+        self.center = rf_reference(rf_prep)
