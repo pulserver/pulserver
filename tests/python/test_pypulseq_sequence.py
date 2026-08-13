@@ -762,3 +762,90 @@ def test_copy_definitions_takes_another_sequences_definitions(seq, system):
 def test_sound_refuses_and_points_at_the_measured_answer(seq):
     with pytest.raises(NotImplementedError, match="calculate_gradient_spectrum"):
         seq.sound()
+
+
+# ----------------------------------------------------------------------
+# block_to_events
+# ----------------------------------------------------------------------
+
+
+def _rich_sequence(system):
+    """One of everything a block can carry, spread over four blocks."""
+    from scipy.spatial.transform import Rotation
+
+    seq = pp.Sequence(system)
+    rf, gz, _ = pp.make_slr_pulse(
+        0.5, duration=2e-3, slice_thickness=5e-3, return_gz=True,
+        use="excitation", system=system,
+    )
+    seq.add_block(rf, gz)
+    seq.add_block(
+        pp.make_trapezoid(channel="z", area=800.0, system=system),
+        pp.make_label(type="SET", label="LIN", value=3),
+        pp.make_label(type="INC", label="PAR", value=1),
+        pp.make_trigger("physio1", duration=1e-4),
+    )
+    seq.add_block(
+        pp.make_trapezoid(channel="x", area=1000.0, duration=1e-3, system=system),
+        pp.make_adc(num_samples=64, duration=1e-3, system=system),
+        pp.make_rotation(Rotation.from_euler("y", 30, degrees=True)),
+    )
+    seq.add_block(pp.make_delay(5e-3))
+    return seq
+
+
+def test_a_sequence_survives_being_rebuilt_block_by_block(system):
+    original = _rich_sequence(system)
+
+    rebuilt = pp.Sequence(system)
+    for index in range(1, original.num_blocks + 1):
+        rebuilt.add_block(*pp.block_to_events(original.get_block(index)))
+
+    assert rebuilt.num_blocks == original.num_blocks
+    assert np.allclose(rebuilt.block_durations, original.block_durations)
+    for index in range(1, original.num_blocks + 1):
+        before, after = original.get_block(index), rebuilt.get_block(index)
+        assert after.labels == before.labels
+        assert len(after.triggers) == len(before.triggers)
+        if before.rotation is None:
+            assert after.rotation is None
+        else:
+            assert np.allclose(after.rotation, before.rotation)
+    assert np.allclose(
+        np.asarray(rebuilt.get_block(1).rf.signal), np.asarray(original.get_block(1).rf.signal)
+    )
+
+
+def test_a_rebuilt_block_can_be_given_an_event_it_did_not_have(system):
+    """The point of the round trip: editing one block without rebuilding by hand."""
+    original = _rich_sequence(system)
+    flag = pp.make_label(type="SET", label="NOROT", value=1)
+
+    rebuilt = pp.Sequence(system)
+    for index in range(1, original.num_blocks + 1):
+        events = pp.block_to_events(original.get_block(index))
+        rebuilt.add_block(*events, *((flag,) if index == 1 else ()))
+
+    assert rebuilt.get_block(1).labels == [("SET", "NOROT", 1)]
+    assert np.allclose(rebuilt.block_durations, original.block_durations)
+
+
+def test_a_block_held_open_by_nothing_keeps_its_length(system):
+    """A block longer than its events gets the delay that says so."""
+    seq = pp.Sequence(system)
+    seq.add_block(pp.make_trapezoid(channel="x", area=500.0, system=system), pp.make_delay(5e-3))
+
+    events = pp.block_to_events(seq.get_block(1))
+    assert "delay" in {event.type for event in events}
+
+    rebuilt = pp.Sequence(system)
+    rebuilt.add_block(*events)
+    assert rebuilt.block_durations[0] == pytest.approx(5e-3)
+
+
+def test_a_block_whose_events_fill_it_gets_no_padding(system):
+    seq = pp.Sequence(system)
+    seq.add_block(pp.make_trapezoid(channel="x", area=500.0, system=system))
+
+    events = pp.block_to_events(seq.get_block(1))
+    assert "delay" not in {event.type for event in events}

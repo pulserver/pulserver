@@ -3,4 +3,7 @@
 
 .. currentmodule:: pulserver.recon.physics
 
-.. autofunction:: Subspace
+.. autoclass:: Subspace
+   :members:
+   :member-order: groupwise
+   :exclude-members: __new__, count, index

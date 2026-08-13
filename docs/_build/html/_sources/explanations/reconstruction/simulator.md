@@ -38,8 +38,8 @@ subsequence, not with the scan's sample count.
 ## Custom Waveform types: how it travels
 
 `SEQDESC` is not a new ISMRMRD message type. It is emitted as **custom
-`ISMRMRD::Waveform` payloads**, alongside the session's ordinary metadata
-(see {doc}`ismrmrd_session`), by four dedicated builders in
+`ISMRMRD::Waveform` payloads**, alongside the session's ordinary metadata, by
+four dedicated builders in
 `cxx/recon/trajectory_cache_reader.h`: `make_seqdesc_header_waveform`,
 `make_seqdesc_events_waveform`, `make_seqdesc_rf_shapes_waveform` and
 `make_seqdesc_shims_waveform`. Reusing the `Waveform` payload type — rather
@@ -87,7 +87,7 @@ or through `make_interpreter("fse")` and the other lowercase names.
 ```python
 import numpy as np
 
-from pulserver.recon import (
+from pulserver.recon.simulation import (
     TissueProperties,
     decode_sequence_description,
     simulate_subspace,

@@ -53,9 +53,13 @@ execution, see {doc}`../explanations/reconstruction/model_based`.
    pulserver.recon.preprocessing
    pulserver.recon.corrections
    pulserver.recon.execution
+   pulserver.recon.datasets
+   pulserver.recon.learned
+   pulserver.recon.models
    pulserver.recon.motion
    pulserver.recon.optim
    pulserver.recon.simulation
+   pulserver.recon.weights
 ```
 
 ## Reconstruction algorithms
@@ -150,6 +154,161 @@ optimizer = torch.optim.AdamW(model.parameter_groups())
 when only selected intermediate estimates are needed. This protocol is plain
 PyTorch, so Lightning can own the training schedule and TorchIO can own patch
 sampling without either becoming a Pulserver runtime dependency.
+
+## Learned reconstruction
+
+`recon.models` is a selected view of DeepInverse rather than a parallel model
+framework. `RAM`, `MoDL`, and `VarNet` are the native DeepInverse classes with
+their native signatures. RAM is the pretrained single-pass option, MoDL is the
+operator-general learned unroll, and VarNet is the Cartesian-oriented unroll.
+Import other models and backbones directly from `deepinv.models`.
+
+`ContextAgnosticDenoiser` handles the MRI layout work that a pretrained 2D
+model does not own. It applies the model independently over any axes between
+channel and space, can split paired-real coefficient channels into independent
+complex groups, and bounds the flattened batch used by each model call. The
+full multidimensional physics remains in the data-consistency step.
+
+```python
+import pulserver.recon as recon
+
+streaming = recon.execution.CudaStreaming()
+ram = recon.models.RAM(in_channels=(2,), pretrained=True)
+prior = recon.models.ContextAgnosticDenoiser(
+    ram,
+    spatial_ndim=2,
+    channels_per_group=2,
+    max_batch_size=8,
+    streaming=streaming,
+)
+model = recon.learned.UnrolledReconstructor(
+    prior,
+    iterations=6,
+    denoiser_strength=0.01,
+)
+
+# CPU-resident coefficients: [batch, 10 paired-real channels, depth, height, width]
+streaming.configure_physics(subspace_physics)
+model.eval()
+coefficients = model(kspace, subspace_physics)
+```
+
+Channel grouping is an independent-coefficient baseline. A strategy that
+learns correlations between five complex subspace coefficients should use a
+joint ten-channel network, imported or implemented as an ordinary Torch or
+DeepInverse denoiser, in the same unroll.
+
+During evaluation, `CudaStreaming` maps the independent flattened batches
+exactly across every visible GPU and up to two streams on each device. It
+starts from a balanced batch size, bisects a batch on CUDA out-of-memory, and
+caches the successful per-worker limits. If two replicas or their concurrent
+activations do not fit, it retains one worker per GPU for later calls. The
+physics call completes before the denoiser streams begin, and the denoiser
+synchronizes before returning, so its streams do not nest with Toeplitz
+streams. Resident physics plans, Toeplitz kernels, model weights, and
+activations still share VRAM; select compact/host Toeplitz residency when a
+large model needs more headroom. Training remains on the ordinary
+differentiable path, where checkpointing and gradient accumulation control
+memory.
+
+`UnrolledReconstructor` exposes normalized-adjoint initialization, shared,
+grouped, or per-step denoisers, acquisition and iteration conditioning,
+intermediate outputs, activation checkpointing, and truncated backpropagation.
+Its state-wise iterator supports cascade-local supervision for high-memory
+training:
+
+```python
+for state in model.iterate(
+    kspace,
+    physics,
+    checkpoint=True,
+    detach_between=True,
+):
+    local_loss = criterion(state.estimate, target)
+    local_loss.backward()
+```
+
+Gradient accumulation, mixed precision, distributed execution, logging, and
+optimizer scheduling remain ordinary PyTorch or Lightning concerns.
+
+```{eval-rst}
+.. autosummary::
+   :toctree: generated/recon
+   :nosignatures:
+
+   pulserver.recon.models.ContextAgnosticDenoiser
+   pulserver.recon.learned.ComplexAdapter
+   pulserver.recon.learned.ScaledAdjoint
+   pulserver.recon.learned.GradientDataConsistency
+   pulserver.recon.learned.UnrolledReconstructor
+   pulserver.recon.learned.UnrollState
+   pulserver.recon.learned.UnrollResult
+```
+
+### MRI datasets
+
+Every public DeepInverse dataset and dataset utility is re-exported by object
+identity, so `recon.datasets.FastMRISliceDataset` has DeepInverse's class,
+signature, and behavior. `IXI` and `IXITiny` extend that namespace with
+TorchIO's volumetric MRI subjects while returning DeepInverse-native sample
+tuples.
+
+```python
+import torchio as tio
+import pulserver.recon as recon
+
+dataset = recon.datasets.IXI(
+    "/data/IXI",
+    modalities=("T1", "T2"),
+    transform=tio.Compose([tio.ToCanonical(), tio.RescaleIntensity((0, 1))]),
+    patch_sampler=tio.UniformSampler((96, 96, 96)),
+    samples_per_volume=8,
+)
+```
+
+`TorchIODataset` also accepts an existing indexable collection of TorchIO
+subjects, named or callable image selectors, precomputed measurements, and a
+physics-parameter callback. Install `pulserver[recon-torchio]` for the IXI
+helpers.
+
+```{eval-rst}
+.. autosummary::
+   :toctree: generated/recon
+   :nosignatures:
+
+   pulserver.recon.datasets.TorchIODataset
+   pulserver.recon.datasets.IXI
+   pulserver.recon.datasets.IXITiny
+```
+
+### Scanner model bundles
+
+Model bundles contain a weights-only checkpoint, checksum, version, native
+factory arguments, and application metadata. Scanner installations search
+`$PULSERVER_MODEL_PATH` followed by
+`<python-prefix>/share/pulserver/models`, so installing a new model does not
+require rebuilding the reconstruction environment.
+
+```python
+from pulserver.recon.weights import load_model
+
+model = load_model(
+    "mrf-subspace@1.2",
+    factory=build_mrf_model,
+    device="cuda",
+)
+```
+
+```{eval-rst}
+.. autosummary::
+   :toctree: generated/recon
+   :nosignatures:
+
+   pulserver.recon.weights.ModelBundle
+   pulserver.recon.weights.ModelStore
+   pulserver.recon.weights.save_bundle
+   pulserver.recon.weights.load_model
+```
 
 ## Forward operators
 

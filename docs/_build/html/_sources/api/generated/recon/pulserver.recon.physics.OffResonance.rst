@@ -3,4 +3,7 @@
 
 .. currentmodule:: pulserver.recon.physics
 
-.. autofunction:: OffResonance
+.. autoclass:: OffResonance
+   :members:
+   :member-order: groupwise
+   :exclude-members: __new__, count, index

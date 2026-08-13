@@ -34,7 +34,7 @@ explanations/benchmarks
 :caption: Reconstruction
 :maxdepth: 1
 
-explanations/reconstruction/ismrmrd_session
 explanations/reconstruction/trajectory
+explanations/reconstruction/model_based
 explanations/reconstruction/simulator
 ```

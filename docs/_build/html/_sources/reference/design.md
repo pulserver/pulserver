@@ -1,88 +1,148 @@
 # `pulserver.design` — sequence-building blocks
 
-`pulserver.design` collects the reusable building blocks shared by the
-example sequence plugins under [`examples/sequences/`](../../examples/sequences/).
-It replaces the old per-family `_*_common.py` helpers (loaded via a
-`spec_from_file_location` hack) with an installed, importable package: a
-plugin imports module factories and sampling helpers directly from
-`pulserver.design` even when the plugin file itself is exec-loaded
-standalone by the bridge or tests.
-
-Authoring is split across two namespaces by role. `pulserver.design` holds
-every factory that returns a `SequenceModule` or a `ScanLoop`;
-`pulserver.pypulseq` is the event layer beneath it — upstream PyPulseq
-re-exported whole, plus Pulserver's replacements for a few of its objects
-(`Sequence`, `Opts`, `make_label`, `make_rotation`, `make_rf_shim`). The two
-share no names. The `pulserver` root namespace carries the plugin contract
-(base classes, typed protocol parameters, protocol serialisation, `run_cli`)
-and nothing else.
+`pulserver.design` holds reusable sequence modules: the handfuls of Pulseq
+blocks that always travel together, designed once and named. Authoring is
+split across two namespaces by role. `pulserver.design` holds every
+`SequenceModule`; `pulserver.pypulseq` is the event layer beneath it —
+upstream PyPulseq re-exported whole, plus Pulserver's replacements for a few
+of its objects (`Sequence`, `Opts`, `make_label`, `make_rotation`,
+`make_rf_shim`) and the plain-array helpers an encoding plan is built from.
+The two share no names. The `pulserver` root namespace carries the plugin
+contract (base classes, typed protocol parameters, protocol serialisation,
+`run_cli`) and nothing else.
 
 Requires the optional `pypulseq` dependency (same tier as
 `pulserver.pypulseq` / `pulserver.io`).
 
-## Public surface
+## What a module is, and what it is not
 
-| API group | Contents |
-| --- | --- |
-| `pulserver.params` | Protocol-dict getters/setters, phase-FOV and ACS resolution, readout/phase axis resolution. |
-| `pulserver.design.make_*_pulse` | RF excitation and magnetization-preparation module factories. |
-| `pulserver.design.make_*_readout` | Cartesian, EPI, FSE/CPMG, non-Cartesian, and ZTE readout module factories. |
-| `pulserver.design.make_crusher`, `make_phase_encoding`, `make_phase_blip` | Gradient factories. Call `make_crusher` independently on each required axis. |
-| `pulserver.design.make_*_schedule` | RF phase, phase-cycling, and refocusing-flip schedules. |
-| `pulserver.design.make_*_sampling`, `make_slice_loop`, `make_counter_loop` | [Scan-loop factories](sampling.md) for Cartesian, EPI, radial/spherical non-Cartesian, slice, SMS, and counter (frame/contrast/average) loops. |
-| `pulserver.pypulseq.make_label`, `COUNTER_LABELS`, `FLAG_LABELS`, `STICKY_FLAGS` | The Pulseq label set Pulserver understands, split into counters and flags. |
-| `pulserver.run_cli` | Declarative offline CLI shared by every plugin. |
-| `pulserver.SequenceModule`, `pulserver.ScanLoop`, `pulserver.EncodingAxis` | The abstract types those factories return. |
+A module owns a **design**: it solves its gradients, budgets its TE and TR,
+lands its ADC on both time rasters, and publishes the resulting events under
+the names its constructor gave them. It owns nothing else. It does not iterate,
+does not hold state, and never sees a sampling pattern — which shots to play,
+in what order, with which encodes, is the plugin's own `for` statement.
 
-The corresponding implementation modules under `pulserver.design` use
-leading underscores and are not public import locations.
-
-## Counters, flags and triggers
-
-The Pulseq label set splits in two, and the split is the toolbox's division of
-labour.
-
-**Counters** — `LIN`, `PAR`, `SLC`, `ECO`, `PHS`, `REP`, `SET`, `AVG`, `SEG`,
-`ACQ` — say *where an acquisition belongs*. They are one ISMRMRD
-`EncodingCounters` field each, and they come from a scan loop's `EncodingAxis`:
-`loop.labels(shot)` returns the events, `SequenceModule.set_labels` merges them
-into the module's first block. `LIN`/`PAR` reach the readout as `lin_idx`/
-`par_idx` and it emits them itself; `ECO` is the readout's own, because a
-multiecho train's echoes are blocks of one shot rather than iterations of a
-loop.
-
-**Flags** — `NOROT`, `NOPOS`, `NOSCL`, `PMC`, `NAV`, `REV`, `SMS`, `REF`,
-`IMA`, `NOISE`, `OFF`, `ONCE`, `TRID`, `MODULE` — say *how a block is played or
-classified*. They come from `SequenceModule.set_flags`, because they describe
-the module, not the shot:
+That division is why a module is a convenience rather than a requirement. A
+plugin that builds its own events by hand loses the design help and keeps
+everything else.
 
 ```python
-readout.set_flags(OFF=1)                 # play the ADC, discard the data
-excitation.set_flags(ONCE=1, MODULE=2)   # a preparation TR, in safety group 2
-fatsat.set_flags(NOPOS=1, NOROT=1)       # exempt from the FOV transform
+readout = design.LineReadout2D(
+    system, excitation.rf, excitation.gz, excitation.gz_reph,
+    fov=0.22, matrix=128, te=4e-3, tr=10e-3,
+)
+
+for line in lines:
+    readout.rf.phase_offset = phases[line]                   # a phase is a write
+    seq.add_block(readout.rf, readout.gz)
+    seq.add_block(readout.wait_te, readout.gz_reph)
+    seq.add_block(readout.gx_pre, pp.scale_grad(readout.gy_pre, ky[line]))
+    seq.add_block(readout.gx, readout.adc)
 ```
 
-Pulseq labels are sticky — a value set at one block persists until some later
-block sets it again — so a flag has to be *scoped* or it leaks into whatever
-the sequence plays next. `set_flags` scopes by default: the value is emitted on
-the module's first block and `0` on its last. The three flags that deliberately
-outlive their module are exempt, and listed in `STICKY_FLAGS`: `ONCE` delimits
-a whole preparation or cooldown *section*, `MODULE` groups consecutive modules
-under one safety id, `TRID` names a repeating TR. Pass `scope="sticky"` or
-`scope="module"` to override per call.
+Per-shot variation is ordinary PyPulseq. The events a module publishes are the
+very objects its blocks hold, so a write shows through immediately; an encode
+is `scale_grad`; an orientation is a rotation event.
 
-`set_labels`, `set_flags`, `set_triggers` and `set_state` are four independent
-states; each replaces its own and touches none of the others.
+## How events get their names
 
-**Triggers and digital outputs** are ordinary block events, but which block
-they belong on is a property of the module — a cardiac trigger gates the
-excitation that opens a shot, a scope sync pulse marks the readout that must be
-captured:
+Everything a module adds to a block is recorded, and at the end of
+construction the recording is matched against the local variables of
+`init_module`. A name is published as:
+
+- **the object itself**, when only one distinct object ever wore it — a pulse
+  replayed once per arm is still one pulse;
+- **a list**, when several did — one gradient per interleave stays one per
+  interleave.
+
+The rule is identity, not count, which is what makes it right in the case that
+matters: a per-arm list built by repeating a single waveform collapses back to
+that waveform, because a trajectory whose arms are rotations of a base arm has
+one waveform however many times it is played.
+
+Every `init_module` in the class chain is read, not only the innermost, so a
+subclass that narrows a family — a spiral readout over the general
+non-Cartesian one — publishes what it built *and* what its base built, with no
+call of its own. None of the shipped modules asks for publication.
+
+Two escape hatches remain for what the automatic path cannot see.
+`self.publish()` reads the caller's frame, for events a helper function built
+where no `init_module` saw them. `self.register(...)` publishes the structure
+it is *given* rather than deducing one, so a one-entry list stays a list.
+
+An event whose name collides with one the module itself answers to (`duration`,
+`center`, `seq`) warns, and stays reachable as `module.events.<name>`.
+
+## What a module answers
+
+`blocks` is the structural view: one tuple of events per block, in the order
+they were added.
+
+`duration` and `center` are the module's timing — its length, and the point it
+is timed against (an RF isodelay, a readout's echo). A readout also reports
+`echo_time` and the `bandwidth_hz` it actually achieved, which is generally not
+the one requested: `calc_adc_timing` solves the ADC and gradient rasters
+together, and the dwell that satisfies both is the dwell you get.
+
+A module also forwards the sequence-level analyses to the sequence it built
+itself in — `plot`, `plot_kspace`, `calculate_kspace`, `calculate_pns`,
+`calculate_gradient_spectrum`, `check_timing`, `test_report` — so a design can
+be inspected without reaching for `.seq`. PNS and the gradient spectrum answer
+for the module played **once** from rest; for a whole-TR readout that is the
+meaningful single-shot answer. An RF module adds `sim_rf`, which is the one
+view a sequence-level analysis cannot give.
+
+## The slice rephaser
+
+A 2D excitation hands back its rephaser as a separate event, and a readout
+takes it as its third positional argument. It is not simply appended: a
+rephaser has to run straight off the selection lobe, so the readout puts it at
+the **head of the first block after the pulse** — the TE wait when there is
+one, the prewinder block otherwise. Where a prephaser is already running there,
+the two overlap and the rephaser costs no echo time at all; a radial spoke,
+whose prephaser is folded into the spoke itself, carries it inside the
+acquisition block for the same reason.
+
+Two placements are refused rather than fudged. A partition encode already
+occupies the selection axis, so a 3D readout wants the merged form instead
+(`is_slab=True`). And a non-Cartesian readout is oriented by rotating its
+blocks: a rephaser on an axis the rotation mixes would be turned with the
+interleave, silently dephasing the slice by an amount that changes shot to
+shot. An in-plane acquisition therefore takes a rephaser on z and a projection
+takes none.
+
+## Labels and triggers
+
+Counters — `LIN`, `PAR`, `SLC`, `ECO`, `PHS`, `REP`, `SET`, `AVG`, `SEG` — say
+*where an acquisition belongs*, one ISMRMRD `EncodingCounters` field each.
+A module builds a slot per name it is given and the loop writes the values.
+One label publishes as the event itself and several as a list, following the
+identity rule above:
 
 ```python
-excitation.set_triggers(pp.make_trigger("physio1", duration=100e-6))
-readout.set_triggers(pp.make_digital_output_pulse("osc0", duration=100e-6), block=-1)
+readout = design.LineReadout3D(..., labels=("LIN", "PAR"))
+lin, par = readout.adc_labels
+...
+lin.value, par.value = line, partition
+seq.add_block(readout.gx, readout.adc, *readout.adc_labels)
 ```
+
+The module makes the slot; it cannot invent one the loop did not ask for, and
+it does not decide what goes in it.
+
+Flags — `NOROT`, `NOPOS`, `NOSCL`, `PMC`, `NAV`, `REV`, `SMS`, `REF`, `IMA`,
+`NOISE`, `OFF`, `ONCE`, `TRID` — say *how a block is played or classified*.
+Pulseq labels are sticky: a value set at one block persists until some later
+block sets it again, so a flag that should not outlive its blocks has to be
+cleared explicitly by the loop that set it. `pp.make_label` builds them and
+`STICKY_FLAGS` lists the two that deliberately do outlive their module —
+`ONCE`, which delimits a whole preparation or cooldown section, and `TRID`,
+which names a repeating unit and is the group the safety model checks SAR
+over.
+
+Triggers and digital outputs are ordinary block events; a readout takes one
+through `trigger=` because which block it belongs on is a property of the
+design — a cardiac trigger gates the block that opens a shot.
 
 ### First/last-in-axis MRD flags
 
@@ -91,46 +151,26 @@ not written by the sequence. The interpreter derives them by comparing each
 acquisition's counter against the *observed* range of that counter over the
 scan. Emitting the counters is therefore the whole mechanism: a dimension that
 is looped but never labelled collapses to a single index, and both its flags
-fire on every acquisition. `ScanLoop.label_limits()` reports the ranges those
-flags will be derived from.
+fire on every acquisition.
 
-## View orderings
+## Encoding plans
 
-`ScanLoop` separates the positions visited from the order they are visited in,
-and an `EncodingAxis` says what the visited numbers mean. See the [scan-loop
-reference](sampling.md) for absolute FSE trains, relative EPI shifts,
-non-Cartesian tilts, slice/SMS grouping, and frame/contrast counters.
+A plan is plain data, so it lives one layer down, in `pulserver.pypulseq`:
+`make_uniform_mask`, `make_poisson_disc_mask`, `make_caipirinha_mask`,
+`calc_sampled_lines` for what to sample; `make_linear_order`,
+`make_centric_order`, `make_radial_order`, `make_radial_adaptive_order`,
+`make_shuffling_order`, `calc_traversal_order` for the order to visit it in;
+`calc_golden_angles`, `calc_tiny_golden_angles`, `calc_raga_angles`,
+`calc_uniform_angles` for non-Cartesian orientations; and
+`make_rf_spoiling_schedule`, `make_phase_cycling_schedule`,
+`make_traps_schedule` for the per-repetition RF lists. All return arrays, and
+plain NumPy does just as well.
 
-The echo-train / segment view-ordering helpers apply to any acquisition
-with an outer loop and an inner echo train or MPRAGE segment — 2D/3D FSE and
-segmented GRE alike. They take phase-encode locations in the (ky, kz) plane
-and return a list of shots (each an ordered list of view indices; the
-echo/segment index is the position within the shot):
-
-A plugin reaches them through the `ordering=` argument of a scan-loop
-factory — or of {meth}`~pulserver.ScanLoop.from_mask`, when the support is
-hand-built — rather than by calling them:
-
-- `make_linear_order` — raster (kz-major) linear reordering.
-- `make_radial_order` — center-out radial (wedge) reordering.
-- `make_radial_adaptive_order` — adaptive radial reordering with per-shot
-  parameter support.
-- `make_shuffling_order` — randomly shuffled (T2-Shuffling) reordering with
-  spatial clustering to limit gradient switching.
-
-References: Buonincontri et al., *Doubling the repetition time without paying
-the price: 3D TSE with individually parameterized echo trains*, ISMRM
-566-05-007 ([`refcode/Abstract 566-05-007.pdf`](../../../../refcode/)) for the
-linear / radial / adaptive schemes; Tamir et al., *T2 Shuffling*, Magn Reson
-Med 2017;77:180–195 ([`refcode/nihms804984.pdf`](../../../../refcode/)) for
-random shuffling.
-
-## Advanced excitation
-
-Beyond the slice-selective and hard builders,
-`make_frequency_selective_pulse` creates spectrally selective pulses and the
-spatial factories accept existing or generated multidimensional trajectories.
-All return the common `pulserver.SequenceModule` protocol.
+References for the ordering schemes: Buonincontri et al., *Doubling the
+repetition time without paying the price: 3D TSE with individually
+parameterized echo trains*, ISMRM 566-05-007 for the linear / radial /
+adaptive schemes; Tamir et al., *T2 Shuffling*, Magn Reson Med
+2017;77:180–195 for random shuffling.
 
 ## API documentation rendering
 

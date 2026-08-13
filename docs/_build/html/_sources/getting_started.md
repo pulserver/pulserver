@@ -8,43 +8,57 @@ python -m pip install "pulserver[sequence]"
 
 Authoring uses two namespaces. `pulserver.pypulseq` is a drop-in replacement
 for PyPulseq — the whole upstream namespace, plus Pulserver's replacements for
-a few of its objects:
+a few of its objects, including a `Sequence` whose libraries and file formats
+live in C++:
 
 ```python
 import pulserver.pypulseq as pp
 
-seq = pp.Sequence()
+seq = pp.Sequence(pp.Opts())
 seq.add_block(pp.make_delay(1e-3))
 ```
 
-`pulserver.design` is the toolbox on top of it: one factory per RF pulse,
-readout, sampling scheme and phase schedule Pulserver knows how to build. Each
-returns a `SequenceModule` (a reusable multi-block fragment) or a `ScanLoop`
-(a table of encoding positions):
+`pulserver.design` is the toolbox on top of it: reusable modules — an
+excitation, a preparation, one whole readout TR — that design their waveforms
+once and hand them back under the names their constructor gave them.
 
 ```python
 import pulserver.design as design
 import pulserver.pypulseq as pp
 
 system = pp.Opts()
-excitation = design.make_slice_selective_pulse(0.35, 5e-3, system=system)
-readout = design.make_line_readout(system, (0.22, 0.22), (128, 128))
-loop = design.make_cartesian_sampling((128, 128), acceleration=2)
+excitation = design.SpatialSelectiveExcitation(system, 15.0, 5e-3)
+readout = design.LineReadout2D(
+    system, excitation.rf, excitation.gz, excitation.gz_reph,
+    fov=0.22, matrix=128, te=4e-3, tr=10e-3,
+)
+
+phases = pp.make_rf_spoiling_schedule(128)
 
 seq = pp.Sequence(system)
-for shot in loop:
-    for block in excitation:
-        seq.add_block(*block)
-    readout.set_state(lin_idx=int(shot[0, 0]))
-    for block in readout:
-        seq.add_block(*block)
+for line in range(128):
+    readout.rf.phase_offset = readout.adc.phase_offset = phases[line]
+    seq.add_block(readout.rf, readout.gz)
+    seq.add_block(readout.wait_te, readout.gz_reph)
+    seq.add_block(readout.gx_pre, pp.scale_grad(readout.gy_pre, (line - 64) / 64))
+    seq.add_block(readout.gx, readout.adc)
+    seq.add_block(readout.gx_spoil, pp.scale_grad(readout.gy_rew, (line - 64) / 64))
+    seq.add_block(readout.wait_tr)
+
+seq.write("gre.seq")
 ```
 
-The loop nesting stays yours: nothing in `pulserver.design` iterates the
-sequence for you, which is what keeps a preparation, a trigger or a dummy TR
-insertable at any level.
+Nothing in `pulserver.design` iterates the sequence for you. The loop nesting,
+the encoding plan and the order of the shots stay yours, which is what keeps a
+preparation, a trigger or a dummy TR insertable at any level — and a module is
+a convenience, never a requirement. Per-shot variation is ordinary PyPulseq:
+a phase is an attribute write, an encode is `scale_grad`, an orientation is a
+rotation event.
 
-Next, {doc}`build a complete plugin <tutorials/build_a_sequence_plugin>` — one
-sitting, ending with a file you could hand to a scanner. After that,
-{doc}`how_to` has the task-shaped recipes, {doc}`api/index` the grouped public
-interface, and {doc}`explanation` the reasoning underneath both.
+The masks, orderings and angle generators an encoding plan is built from live
+in `pulserver.pypulseq` rather than here, because they return plain arrays:
+`make_uniform_mask`, `make_poisson_disc_mask`, `calc_traversal_order`,
+`calc_golden_angles`. Plain NumPy does just as well.
+
+Next, {doc}`how_to` has the task-shaped recipes, {doc}`api/index` the grouped
+public interface, and {doc}`explanation` the reasoning underneath both.

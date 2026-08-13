@@ -73,6 +73,7 @@ from ._timing import ceil_to_raster as _ceil_to_raster
 from ._timing import quantize_readout_timing as _quantize_readout_timing
 from ._timing import round_to_raster as _round_to_raster
 from ._traj_to_grad import traj_to_grad as _traj_to_grad
+from ._block import block_to_events as _block_to_events
 from ._make_rf_shim import make_rf_shim as _make_rf_shim
 from ._make_rotation import make_rotation as _make_rotation
 from ._opts import Opts as _Opts
@@ -133,6 +134,7 @@ del _name, _value
 
 Sequence = _Sequence
 TransformFOV = _TransformFOV
+block_to_events = _block_to_events
 AdcTimes = _AdcTimes
 BTensor = _BTensor
 DiffusionTable = _DiffusionTable
@@ -312,6 +314,7 @@ OVERRIDES = frozenset(
         "Opts",
         "Sequence",
         "TransformFOV",
+        "block_to_events",
         "get_supported_labels",
         "make_label",
         "make_rf_shim",

@@ -1,8 +1,8 @@
-"""Excitation of one slice or one slab."""
+"""Excitation and refocusing of one slice or one slab."""
 
 from __future__ import annotations
 
-__all__ = ["SpatialSelectiveExcitation"]
+__all__ = ["SpatialSelectiveExcitation", "SpatialSelectiveRefocusing"]
 
 import numpy as np
 
@@ -148,3 +148,152 @@ class SpatialSelectiveExcitation(RfModule):
                 self.seq.add_block(gz_reph)
 
         self.center = rf_reference(rf)
+
+
+class SpatialSelectiveRefocusing(RfModule):
+    """An SLR 180 under a selection gradient, with its crushers bridged on.
+
+    The refocusing half of a slice-selective spin echo. The SLR pulse is
+    designed with the ``"se"`` profile rather than the excitation one, because
+    the two solve different problems: an excitation profile is the transverse
+    magnetisation a pulse produces from equilibrium, a refocusing profile is
+    how completely it inverts, and a pulse optimal for one is not optimal for
+    the other.
+
+    The crushers ride the selection lobe rather than waiting for it to fall to
+    zero. A pair of identical lobes, one each side of the pulse, is invisible
+    to the refocused pathway -- the phase one winds the other unwinds -- and
+    fatal to the FID an imperfect 180 leaves behind, which sees only the second
+    lobe. Bridging them onto the plateau makes the whole thing a single
+    gradient event, which is also what lets a readout accept it as its ``gz``.
+
+    The pulse is phased a quarter turn from the excitation, the CPMG
+    condition.
+
+    Parameters
+    ----------
+    system : pypulseq.Opts
+        System limits.
+    thickness_m : float
+        Slice thickness (m).
+    flip_angle_deg : float, optional
+        Nominal flip angle (degrees).
+    duration_s : float, optional
+        Pulse duration (s).
+    spoiling_cycles : float, optional
+        Cycles of dephasing each crusher winds across ``voxel_size_m``. Zero
+        leaves the bare selection lobe.
+    voxel_size_m : float, optional
+        Length the dephasing is counted over (m).
+    time_bw_product : float, optional
+        Time-bandwidth product.
+    axis : {'z', 'x', 'y'}, optional
+        Selection axis; the crushers share it.
+    phase_offset_rad : float, optional
+        RF phase. The CPMG quarter turn by default.
+    use : str, optional
+        What the pulse is for; the trajectory core negates accumulated k at a
+        refocusing pulse.
+    passband_ripple, stopband_ripple : float, optional
+        Ripple allowed in each band of the slice profile.
+
+    Attributes
+    ----------
+    rf_ref : RfEvent
+        The refocusing pulse, delayed onto the plateau between the crushers.
+    gz : GradEvent
+        Crusher, selection plateau and crusher, as one gradient.
+
+    Raises
+    ------
+    ValueError
+        If a thickness, duration or voxel size is not positive, ``axis`` is not
+        a gradient channel, or ``spoiling_cycles`` is negative.
+
+    Examples
+    --------
+    >>> import pulserver.design as design
+    >>> import pulserver.pypulseq as pp
+    >>> refocusing = design.SpatialSelectiveRefocusing(pp.Opts(), 5e-3)
+    >>> len(refocusing.blocks), refocusing.gz.type
+    (1, 'grad')
+
+    A spin echo is then the same readout an excitation would open, given the
+    refocusing pulse instead::
+
+        readout = design.LineReadout2D(
+            system, refocusing.rf_ref, refocusing.gz,
+            fov=0.22, matrix=128, te=15e-3,
+        )
+    """
+
+    def init_module(
+        self,
+        system: pp.Opts,
+        thickness_m: float,
+        flip_angle_deg: float = 180.0,
+        duration_s: float = 3e-3,
+        *,
+        spoiling_cycles: float = 4.0,
+        voxel_size_m: float = 1e-3,
+        time_bw_product: float = 4.0,
+        axis: str = "z",
+        phase_offset_rad: float = np.pi / 2,
+        use: str = "refocusing",
+        passband_ripple: float = 0.01,
+        stopband_ripple: float = 0.01,
+    ) -> None:
+        if thickness_m <= 0:
+            raise ValueError("thickness_m must be positive")
+        if duration_s <= 0:
+            raise ValueError("duration_s must be positive")
+        if voxel_size_m <= 0:
+            raise ValueError("voxel_size_m must be positive")
+        if spoiling_cycles < 0:
+            raise ValueError("spoiling_cycles must be >= 0")
+        if axis not in _AXES:
+            raise ValueError(f"axis must be one of {_AXES}, got {axis!r}")
+
+        rf_ref, gz, _ = pp.make_slr_pulse(
+            np.deg2rad(flip_angle_deg),
+            duration=duration_s,
+            slice_thickness=thickness_m,
+            time_bw_product=time_bw_product,
+            pulse_type="se",
+            phase_offset=phase_offset_rad,
+            passband_ripple=passband_ripple,
+            stopband_ripple=stopband_ripple,
+            return_gz=True,
+            use=use,
+            system=system,
+        )
+        gz.channel = axis
+
+        if spoiling_cycles:
+            # Each crusher is solved to arrive at, or leave from, the plateau,
+            # so the three pieces share their vertices and become one waveform:
+            # crusher up, selection flat top, crusher down.
+            _, times_pre, amplitudes_pre = pp.make_crusher(
+                spoiling_cycles, voxel_size_m, axis, grad_end=gz.amplitude, system=system
+            )
+            _, times_post, amplitudes_post = pp.make_crusher(
+                spoiling_cycles, voxel_size_m, axis, grad_start=gz.amplitude, system=system
+            )
+            flat_start = float(times_pre[-1])
+            flat_end = flat_start + float(gz.flat_time)
+            rf_ref.delay += flat_start - float(gz.rise_time)
+            gz = pp.make_extended_trapezoid(
+                channel=axis,
+                amplitudes=np.concatenate(
+                    [amplitudes_pre, [gz.amplitude], amplitudes_post[1:]]
+                ),
+                times=np.concatenate(
+                    [times_pre, [flat_end], flat_end + np.asarray(times_post[1:])]
+                ),
+                system=system,
+            )
+
+        self.seq = pp.Sequence(system)
+        self.seq.add_block(rf_ref, gz)
+
+        self.center = rf_reference(rf_ref)

@@ -114,7 +114,7 @@ scan loop** walks the execution stream, setting per-instance amplitudes,
 phases, frequencies and rotations as it goes, so it needs all of it:
 `pulseg_load_scanloop_cache` reads COMMON + INSTANCES + ROTATIONS + SHAPES +
 SCANLOOP. Reconstruction reads the independent `TRAJECTORY` and `SEQDESC`
-sections (see {doc}`../reconstruction/ismrmrd_session`).
+sections.
 
 The split is not a micro-optimisation. Pulse generation runs where memory is
 scarcest, and the sections it does not read are precisely the ones that grow

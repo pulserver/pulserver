@@ -26,16 +26,20 @@ __all__ = [
     "app",
     "calibration",
     "corrections",
+    "datasets",
     "denoisers",
     "density",
     "diffusion_table",
     "execution",
+    "learned",
+    "models",
     "motion",
     "optim",
     "physics",
     "pics",
     "preprocessing",
     "simulation",
+    "weights",
 ]
 
 import importlib
@@ -46,14 +50,18 @@ _SUBMODULES = (
     "app",
     "calibration",
     "corrections",
+    "datasets",
     "denoisers",
     "density",
     "execution",
+    "learned",
+    "models",
     "motion",
     "optim",
     "physics",
     "preprocessing",
     "simulation",
+    "weights",
 )
 _APP_TYPES = {
     "AcquisitionBucket",
@@ -90,14 +98,18 @@ if TYPE_CHECKING:
     from . import algorithms as algorithms
     from . import calibration as calibration
     from . import corrections as corrections
+    from . import datasets as datasets
     from . import denoisers as denoisers
     from . import density as density
     from . import execution as execution
+    from . import learned as learned
+    from . import models as models
     from . import motion as motion
     from . import optim as optim
     from . import physics as physics
     from . import preprocessing as preprocessing
     from . import simulation as simulation
+    from . import weights as weights
     from .algorithms import pics as pics
     from .app import AcquisitionBucket as AcquisitionBucket
     from .app import AcquisitionBucketStats as AcquisitionBucketStats

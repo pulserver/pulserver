@@ -14,7 +14,11 @@ from pulserver.recon.physics import (
     MRIPhysics,
     Subspace,
 )
-from pulserver.recon._cuda_streaming import tensor_nbytes
+from pulserver.recon._cuda_streaming import (
+    CudaBatchDenoiser,
+    _CudaWorkerMemoryError,
+    tensor_nbytes,
+)
 from pulserver.recon._toeplitz import CompactToeplitzKernel, support_indices
 from pulserver.recon.physics import _apply_sense_toeplitz
 
@@ -39,12 +43,66 @@ def test_streaming_policy_discovers_devices_unless_one_is_explicit(monkeypatch):
     assert tuple(map(str, automatic.torch_devices)) == ("cuda:0", "cuda:1")
     assert tuple(map(str, automatic.execution_devices)) == (
         "cuda:0",
-        "cuda:0",
         "cuda:1",
+        "cuda:0",
         "cuda:1",
     )
     assert tuple(map(str, explicit.torch_devices)) == ("cuda:1",)
     assert automatic.for_device("cuda:1").device_count == 1
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA unavailable")
+def test_exact_batch_denoiser_preserves_order_and_tensor_conditions():
+    class Conditioned(torch.nn.Module):
+        def forward(self, value, *, sigma=None, gain=None):
+            sigma = sigma.reshape(-1, 1, 1, 1)
+            return value + sigma + gain
+
+    model = Conditioned().eval()
+    value = torch.arange(7 * 2 * 3 * 4, dtype=torch.float32).reshape(7, 2, 3, 4)
+    sigma = torch.arange(7, dtype=torch.float32)
+    gain = torch.full_like(value, 2.0)
+    executor = CudaStreaming(streams=2).wrap_batch_denoiser(
+        model,
+        max_batch_size=2,
+    )
+
+    result = executor(value, sigma=sigma, gain=gain)
+
+    expected = value + sigma[:, None, None, None] + gain
+    torch.testing.assert_close(result, expected)
+    assert result.device.type == "cpu"
+    assert len(executor._models) == 2
+    assert executor._batch_limits == {}
+
+
+def test_batch_denoiser_retains_single_stream_fallback(monkeypatch):
+    policy = SimpleNamespace(
+        execution_devices=("cuda:0", "cuda:1", "cuda:0", "cuda:1"),
+        torch_devices=("cuda:0", "cuda:1"),
+        ensure_available=lambda: None,
+    )
+    executor = CudaBatchDenoiser(torch.nn.Identity().eval(), policy)
+    calls = []
+
+    def execute(value, *, sigma, kwargs, devices):
+        del sigma, kwargs
+        calls.append(devices)
+        if len(calls) == 1:
+            raise _CudaWorkerMemoryError("concurrent workers exceed VRAM")
+        return value
+
+    monkeypatch.setattr(executor, "_forward_on_devices", execute)
+    monkeypatch.setattr(executor, "_release_worker_models", lambda: None)
+    value = torch.zeros(4, 1, 2, 2)
+
+    assert executor(value) is value
+    assert executor(value) is value
+    assert calls == [
+        policy.execution_devices,
+        policy.torch_devices,
+        policy.torch_devices,
+    ]
 
 
 def test_physics_replicas_split_leading_batch_across_devices():
@@ -165,11 +223,11 @@ def test_streamed_complex_hermitian_toeplitz_matches_in_core_cuda():
     kernel.to("cpu")
     result = kernel.apply_streamed(
         image,
-            CudaStreaming(
-                streams=2,
-                transfer_chunk_size=29,
-                transfer_precision="float32",
-            ),
+        CudaStreaming(
+            streams=2,
+            transfer_chunk_size=29,
+            transfer_precision="float32",
+        ),
     )
 
     torch.testing.assert_close(full_cuda, reference, atol=3e-5, rtol=3e-5)

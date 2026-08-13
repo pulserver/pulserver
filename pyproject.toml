@@ -41,6 +41,7 @@ recon-cuda = [
   # Pulserver registers its private Torch-native adapter at runtime.
   "cufinufft>=2.4; platform_system == 'Linux'",
 ]
+recon-torchio = ["pulserver[recon-cpu]", "torchio>=0.20"]
 recon-sim = ["pulserver[recon]", "torchsim"]
 # PyHySCO is GPL-3.0-only.  It remains an opt-in external executable and is
 # neither imported nor bundled by the MIT-licensed Pulserver package.

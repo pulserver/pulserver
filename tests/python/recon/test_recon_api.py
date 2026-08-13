@@ -40,6 +40,7 @@ def test_public_namespace_is_small_and_module_oriented():
         "app",
         "calibration",
         "corrections",
+        "datasets",
         "denoisers",
         "density",
         # A function, like `pics`: reading the diffusion gradient table out of
@@ -48,12 +49,15 @@ def test_public_namespace_is_small_and_module_oriented():
         # transport.
         "diffusion_table",
         "execution",
+        "learned",
+        "models",
         "motion",
         "optim",
         "physics",
         "pics",
         "preprocessing",
         "simulation",
+        "weights",
     ]
     assert recon.pics is algorithms.pics
     assert recon.diffusion_table is metadata.diffusion_table

@@ -1,429 +1,458 @@
 # `pulserver.recon`
 
-`pulserver.recon` combines the Gadgetron-compatible MRD server with a compact
-Torch-first reconstruction API. Pulserver owns the integration boundary while
-mri-nufft provides non-Cartesian operators and DeepInverse provides linear
-physics, denoisers, CG, and FISTA. Torch owns CPU/CUDA dispatch, so tensors
-remain on the caller-selected device.
+`pulserver.recon` is the Torch-first scientific reconstruction API. It owns
+the small integration layer between MRI-NUFFT operators, DeepInverse inverse
+problem algorithms, and Pulserver-specific dynamic MRI models.
 
-Install `pulserver[recon]` for the server, DICOM, and MRD layers.
-Install `pulserver[recon-cpu]` for FINUFFT, MRPro, and DeepInverse; add
-`pulserver[recon-nlinv]` for PyGROG NLINV calibration or install
-`pulserver[recon-cuda]` for CUFINUFFT on Linux CUDA hosts.
-Install `pulserver[recon-distortion]` only when PyHySCO reverse-polarity
-distortion correction is required. PyHySCO is GPL-3.0-only, so Pulserver does
-not vendor or import it.
-Install `pulserver[recon-sim]` for the LiveSDK sequence-description decoder
-and TorchSim EPG state-machine simulator.
-
-Gradient nonlinearity correction is included in `pulserver[recon]`. It accepts
-a coefficient-file path, serialized coefficient text, or a keyed string
-parameter from the vendor-neutral MRD XML header. It uses the reconstructed
-matrix rather than the acquired matrix when constructing its physical grid:
+The API is module-oriented, in the style of DeepInverse, MRI-NUFFT, and SciPy.
+The root namespace exposes the modules below and one convenience entry point,
+`pics` (documented as {func}`pulserver.recon.algorithms.pics`). MRD
+connections, message serialization, server lifecycle, and Gadgetron handlers
+are implementation details and are not part of the public API.
 
 ```python
-from pulserver.recon import (
-    Gradunwarp,
-    ImageGeometry,
-    MrdCoefficientAccessor,
-)
+import pulserver.recon as recon
 
-geometry = ImageGeometry.from_mrd(
-    image_header,
-    shape=reconstructed_volume.shape[-3:],
-)
-correct = Gradunwarp.from_file(
-    MrdCoefficientAccessor(
-        mrd_xml_header,
-        key=coefficient_parameter_key,
-    ),
-    geometry,
-)
-corrected_volume = correct(reconstructed_volume)
-```
-
-The parameter key belongs to the acquisition-client/MRD transport contract and
-is therefore supplied by the caller. Coefficient contents are excluded from
-object representations. Resampling always uses SimpleITK's native cubic
-B-spline implementation in both 2D and 3D.
-
-The main application surface is one physics factory, optional decorators, one
-denoiser, and `pics`:
-
-```python
-from pulserver.recon import Cartesian2D, NonCartesian3D, Subspace, pics, tv
-
-cartesian = Cartesian2D(mask, coil_maps)
-image = pics(kspace, cartesian, iterations=30)
-
-noncartesian = NonCartesian3D(
+physics = recon.physics.NonCartesian3D(
     trajectory,
     image_shape=(192, 192, 128),
     coil_maps=coil_maps,
-    backend="cufinufft",
 )
-dynamic = Subspace(noncartesian, basis)
-coefficients = pics(
+physics = recon.physics.Subspace(physics, basis)
+
+coefficients = recon.pics(
     dynamic_kspace,
-    physics=dynamic,
-    denoiser=tv(n_it_max=20),
+    physics,
+    denoiser=recon.denoisers.TV(n_it_max=20),
     regularization=0.02,
     iterations=50,
 )
 ```
 
-With no denoiser, `pics` uses CG and solves
-`(AᴴA + λI)x = Aᴴy`. With a denoiser it uses plug-and-play FISTA, where
-`regularization` is the denoiser threshold/noise level.
+Install `pulserver[recon-cpu]` for the portable numerical stack or
+`pulserver[recon-cuda]` for Torch-native CUFINUFFT support without CuPy. The
+default non-Cartesian `backend="auto"` chooses FINUFFT when CUDA is unavailable
+and CUFINUFFT on a CUDA host. NLINV is part of the CPU/CUDA numerical stack;
+the opt-in `recon-distortion` and `recon-sim` extras add reverse-polarity
+distortion correction and TorchSim EPG simulation, respectively.
 
-LLR treats image channels as contrasts or subspace coefficients and applies
-nuclear soft-thresholding to local 2D or 3D blocks. The implementation stays
-entirely in Torch, uses the small channel-channel Gram matrix when channels
-are fewer than block voxels, and bounds its workspace with
-`block_batch_size`:
+For operator composition, Toeplitz behavior, and bounded-memory CUDA
+execution, see {doc}`../explanations/reconstruction/model_based`.
 
-```python
-from pulserver.recon import llr, pics, wavelet
+## API organization
 
-regularizers = [
-    llr(dimension=3, block_size=8, block_batch_size=1024),
-    wavelet(dimension=3, level=3, complex_data=True),
-]
-coefficients = pics(
-    dynamic_kspace,
-    physics=Toeplitz(dynamic),
-    denoiser=regularizers,  # equal-weight proximal average
-    regularization=0.02,
-    polynomial_degree=3,
-    iterations=30,
-)
+```{eval-rst}
+.. autosummary::
+   :toctree: generated/recon
+
+   pulserver.recon.algorithms
+   pulserver.recon.physics
+   pulserver.recon.denoisers
+   pulserver.recon.density
+   pulserver.recon.calibration
+   pulserver.recon.preprocessing
+   pulserver.recon.corrections
+   pulserver.recon.execution
+   pulserver.recon.datasets
+   pulserver.recon.learned
+   pulserver.recon.models
+   pulserver.recon.motion
+   pulserver.recon.optim
+   pulserver.recon.simulation
+   pulserver.recon.weights
 ```
 
-Passing a denoiser sequence is equivalent to wrapping it with
-`AverageDenoiser`. A positive `polynomial_degree` uses the L2-optimal
-polynomial preconditioner for the FISTA gradient. Degree `d` adds `d`
-applications of the normal operator per iteration, making this most useful
-when `AᴴA` is much cheaper than denoising, as with a Toeplitz normal.
+## Reconstruction algorithms
 
-Pipe--Menon density compensation delegates to the installed MRI-NUFFT
-backend:
-
-```python
-from pulserver.recon import pipe_menon_dcf
-
-dcf = pipe_menon_dcf(
-    trajectory,
-    image_shape=(256, 256, 192),
-    backend="cufinufft",
-    max_iter=30,
-)
-```
-
-`Subspace`, `OffResonance`, and `Toeplitz` are composable decorators:
-
-```python
-from pulserver.recon import NonCartesian2D, OffResonance, Subspace, Toeplitz
-
-physics = NonCartesian2D(trajectory, (256, 256), coil_maps=coil_maps)
-physics = OffResonance(physics, field_map, readout_time)
-physics = Subspace(physics, basis)  # off-resonance must precede subspace
-physics = Toeplitz(physics)
-```
-
-Base mri-nufft operators use native Toeplitz kernels. Cartesian FFTs are
-already exact. Stacked, subspace, and off-resonance compositions use a correct
-exact normal operation when mri-nufft has no combined Toeplitz kernel.
-
-## Sequence-description simulation
+`pics` selects implicitly differentiated conjugate gradients for an
+unregularized or quadratic problem and plug-and-play FISTA when one denoiser
+is supplied. The optimizer classes follow DeepInverse's constructor and
+`model(y, physics)` conventions.
 
 ```{eval-rst}
 .. autosummary::
    :toctree: generated/recon
    :nosignatures:
 
-   pulserver.recon.decode_sequence_description
-   pulserver.recon.TissueProperties
-   pulserver.recon.FSE
-   pulserver.recon.SPGR
-   pulserver.recon.SSFPEcho
-   pulserver.recon.SSFPFID
-   pulserver.recon.BSSFP
-   pulserver.recon.simulate_subspace
+   pulserver.recon.algorithms.pics
+   pulserver.recon.algorithms.PolynomialPreconditioner
 ```
 
-See {doc}`../explanations/reconstruction/simulator` for the event contract,
-the independent ADC `echo` attribute, and signal-evolution examples from the
-sequence-zoo policies.
+### Multiple regularizers
 
-## Reconstruction primitives
+`StackedPrior` distinguishes simultaneous regularizers from DeepInverse's
+iteration-wise prior lists. FISTA accepts one proximal prior. PDHG and ADMM
+accept multiple transformed priors without silently replacing their proximal
+sum by an average.
+
+```python
+import deepinv as dinv
+import pulserver.recon as recon
+
+prior = recon.optim.StackedPrior(
+    priors=[dinv.optim.L1Prior(), dinv.optim.L1Prior()],
+    transforms=[wavelet_transform, finite_difference_transform],
+    weights=[1e-3, 2e-4],
+)
+model = recon.optim.PDHG(
+    data_fidelity=dinv.optim.L2(),
+    prior=prior,
+    stepsize=0.2,
+    stepsize_dual=0.2,
+    max_iter=50,
+)
+image = model(kspace, physics)
+```
+
+ADMM uses the physics' fast `A_adjoint_A` method for its image update, so a
+Toeplitz MRI physics remains active underneath the optimizer. Its CG solve has
+a manual implicit backward and does not retain the Krylov history.
+
+`IRGNM(inner=...)` is the nonlinear composition layer. An analytic
+`linearize(x)` is used when available. An ordinary DeepInverse `Physics`
+works without extra glue: Pulserver builds matrix-free JVP/VJP products with
+`torch.func`. The selected FISTA, PDHG, ADMM, or CG instance remains
+responsible for each linearized subproblem.
 
 ```{eval-rst}
 .. autosummary::
    :toctree: generated/recon
    :nosignatures:
 
+   pulserver.recon.optim.FISTA
+   pulserver.recon.optim.IRGNM
+   pulserver.recon.optim.PDHG
+   pulserver.recon.optim.ADMM
+   pulserver.recon.optim.StackedPrior
+   pulserver.recon.optim.ConjugateGradient
+   pulserver.recon.optim.OptimState
+   pulserver.recon.optim.OptimResult
+```
+
+### Advanced training loops
+
+The regular call remains `model(y, physics)`. Training strategies that need
+intermediate losses, truncated backpropagation, alternating data splits, or
+progressive freezing can use the same model one iteration at a time:
+
+```python
+import torch
+
+state = model.init_state(kspace, physics)
+for iteration in range(model.iterations):
+    state = model.step(state, kspace, physics, iteration)
+    if iteration in supervised_iterations:
+        loss = loss + criterion(model.get_output(state), target)
+    if (iteration + 1) % truncate_every == 0:
+        state = state.detach()
+
+model.set_trainable("prior", enabled=False)
+optimizer = torch.optim.AdamW(model.parameter_groups())
+```
+
+`return_info=True` with `record_iterations=(...)` is the concise alternative
+when only selected intermediate estimates are needed. This protocol is plain
+PyTorch, so Lightning can own the training schedule and TorchIO can own patch
+sampling without either becoming a Pulserver runtime dependency.
+
+## Learned reconstruction
+
+`recon.models` is a selected view of DeepInverse rather than a parallel model
+framework. `RAM`, `MoDL`, and `VarNet` are the native DeepInverse classes with
+their native signatures. RAM is the pretrained single-pass option, MoDL is the
+operator-general learned unroll, and VarNet is the Cartesian-oriented unroll.
+Import other models and backbones directly from `deepinv.models`.
+
+`ContextAgnosticDenoiser` handles the MRI layout work that a pretrained 2D
+model does not own. It applies the model independently over any axes between
+channel and space, can split paired-real coefficient channels into independent
+complex groups, and bounds the flattened batch used by each model call. The
+full multidimensional physics remains in the data-consistency step.
+
+```python
+import pulserver.recon as recon
+
+streaming = recon.execution.CudaStreaming()
+ram = recon.models.RAM(in_channels=(2,), pretrained=True)
+prior = recon.models.ContextAgnosticDenoiser(
+    ram,
+    spatial_ndim=2,
+    channels_per_group=2,
+    max_batch_size=8,
+    streaming=streaming,
+)
+model = recon.learned.UnrolledReconstructor(
+    prior,
+    iterations=6,
+    denoiser_strength=0.01,
+)
+
+# CPU-resident coefficients: [batch, 10 paired-real channels, depth, height, width]
+streaming.configure_physics(subspace_physics)
+model.eval()
+coefficients = model(kspace, subspace_physics)
+```
+
+Channel grouping is an independent-coefficient baseline. A strategy that
+learns correlations between five complex subspace coefficients should use a
+joint ten-channel network, imported or implemented as an ordinary Torch or
+DeepInverse denoiser, in the same unroll.
+
+During evaluation, `CudaStreaming` maps the independent flattened batches
+exactly across every visible GPU and up to two streams on each device. It
+starts from a balanced batch size, bisects a batch on CUDA out-of-memory, and
+caches the successful per-worker limits. If two replicas or their concurrent
+activations do not fit, it retains one worker per GPU for later calls. The
+physics call completes before the denoiser streams begin, and the denoiser
+synchronizes before returning, so its streams do not nest with Toeplitz
+streams. Resident physics plans, Toeplitz kernels, model weights, and
+activations still share VRAM; select compact/host Toeplitz residency when a
+large model needs more headroom. Training remains on the ordinary
+differentiable path, where checkpointing and gradient accumulation control
+memory.
+
+`UnrolledReconstructor` exposes normalized-adjoint initialization, shared,
+grouped, or per-step denoisers, acquisition and iteration conditioning,
+intermediate outputs, activation checkpointing, and truncated backpropagation.
+Its state-wise iterator supports cascade-local supervision for high-memory
+training:
+
+```python
+for state in model.iterate(
+    kspace,
+    physics,
+    checkpoint=True,
+    detach_between=True,
+):
+    local_loss = criterion(state.estimate, target)
+    local_loss.backward()
+```
+
+Gradient accumulation, mixed precision, distributed execution, logging, and
+optimizer scheduling remain ordinary PyTorch or Lightning concerns.
+
+```{eval-rst}
+.. autosummary::
+   :toctree: generated/recon
+   :nosignatures:
+
+   pulserver.recon.models.ContextAgnosticDenoiser
+   pulserver.recon.learned.ComplexAdapter
+   pulserver.recon.learned.ScaledAdjoint
+   pulserver.recon.learned.GradientDataConsistency
+   pulserver.recon.learned.UnrolledReconstructor
+   pulserver.recon.learned.UnrollState
+   pulserver.recon.learned.UnrollResult
+```
+
+### MRI datasets
+
+Every public DeepInverse dataset and dataset utility is re-exported by object
+identity, so `recon.datasets.FastMRISliceDataset` has DeepInverse's class,
+signature, and behavior. `IXI` and `IXITiny` extend that namespace with
+TorchIO's volumetric MRI subjects while returning DeepInverse-native sample
+tuples.
+
+```python
+import torchio as tio
+import pulserver.recon as recon
+
+dataset = recon.datasets.IXI(
+    "/data/IXI",
+    modalities=("T1", "T2"),
+    transform=tio.Compose([tio.ToCanonical(), tio.RescaleIntensity((0, 1))]),
+    patch_sampler=tio.UniformSampler((96, 96, 96)),
+    samples_per_volume=8,
+)
+```
+
+`TorchIODataset` also accepts an existing indexable collection of TorchIO
+subjects, named or callable image selectors, precomputed measurements, and a
+physics-parameter callback. Install `pulserver[recon-torchio]` for the IXI
+helpers.
+
+```{eval-rst}
+.. autosummary::
+   :toctree: generated/recon
+   :nosignatures:
+
+   pulserver.recon.datasets.TorchIODataset
+   pulserver.recon.datasets.IXI
+   pulserver.recon.datasets.IXITiny
+```
+
+### Scanner model bundles
+
+Model bundles contain a weights-only checkpoint, checksum, version, native
+factory arguments, and application metadata. Scanner installations search
+`$PULSERVER_MODEL_PATH` followed by
+`<python-prefix>/share/pulserver/models`, so installing a new model does not
+require rebuilding the reconstruction environment.
+
+```python
+from pulserver.recon.weights import load_model
+
+model = load_model(
+    "mrf-subspace@1.2",
+    factory=build_mrf_model,
+    device="cuda",
+)
+```
+
+```{eval-rst}
+.. autosummary::
+   :toctree: generated/recon
+   :nosignatures:
+
+   pulserver.recon.weights.ModelBundle
+   pulserver.recon.weights.ModelStore
+   pulserver.recon.weights.save_bundle
+   pulserver.recon.weights.load_model
+```
+
+## Forward operators
+
+Every class is a DeepInverse `LinearPhysics`, with MRI metadata and execution
+policy supplied by the common `MRIPhysics` base. Start with a Cartesian,
+non-Cartesian, or Wave acquisition operator, then compose dynamic subspace,
+off-resonance, and Toeplitz behavior explicitly.
+
+```{eval-rst}
+.. autosummary::
+   :toctree: generated/recon
+   :nosignatures:
+
+   pulserver.recon.physics.MRIPhysics
    pulserver.recon.physics.Cartesian2D
+   pulserver.recon.physics.Cartesian3D
    pulserver.recon.physics.NonCartesian2D
    pulserver.recon.physics.NonCartesian3D
+   pulserver.recon.physics.SMS
+   pulserver.recon.physics.WaveEncoding
+   pulserver.recon.physics.WaveShuffling
    pulserver.recon.physics.Subspace
    pulserver.recon.physics.OffResonance
    pulserver.recon.physics.Toeplitz
-   pulserver.recon.algorithms.pics
-   pulserver.recon.denoisers.average
-   pulserver.recon.denoisers.llr
-   pulserver.recon.denoisers.wavelet
-   pulserver.recon.denoisers.tv
-   pulserver.recon.denoisers.tgv
+   pulserver.recon.physics.available_nufft_backends
+```
+
+## Denoisers and priors
+
+The CamelCase constructors follow DeepInverse's public style and return
+modules compatible with its plug-and-play optimizers.
+
+```{eval-rst}
+.. autosummary::
+   :toctree: generated/recon
+   :nosignatures:
+
+   pulserver.recon.denoisers.AverageDenoiser
+   pulserver.recon.denoisers.LLR
+   pulserver.recon.denoisers.Positive
+   pulserver.recon.denoisers.Wavelet
+   pulserver.recon.denoisers.TV
+   pulserver.recon.denoisers.TGV
+```
+
+## Density compensation and calibration
+
+```{eval-rst}
+.. autosummary::
+   :toctree: generated/recon
+   :nosignatures:
+
    pulserver.recon.density.pipe_menon_dcf
-   pulserver.recon.optimizers.PolynomialPreconditioner
+   pulserver.recon.calibration.WavePSF
+   pulserver.recon.calibration.WavePSFCalibration
+   pulserver.recon.calibration.WavePSFResult
+   pulserver.recon.calibration.NLINV
+   pulserver.recon.calibration.NLINVPhysics
+   pulserver.recon.calibration.NLINVResult
+   pulserver.recon.calibration.PhasePoleCorrection
+```
+
+## Preprocessing
+
+These functions operate on arrays or tensors and stay independent of an MRD
+connection or streaming server.
+
+```{eval-rst}
+.. autosummary::
+   :toctree: generated/recon
+   :nosignatures:
+
    pulserver.recon.preprocessing.cartesian_3d_to_2d
    pulserver.recon.preprocessing.remove_readout_oversampling
    pulserver.recon.preprocessing.coil_compress
    pulserver.recon.preprocessing.noise_prewhiten
-   pulserver.recon.linops.available_nufft_backends
-   pulserver.recon.calibration.nlinv_sensitivities
-   pulserver.recon.calibration.estimate_sensitivities
-```
-
-## Gadgetron-style MRD helpers
-
-```{eval-rst}
-.. autosummary::
-   :toctree: generated/recon
-   :nosignatures:
-
-   pulserver.recon.metadata.MrdMetadata
-   pulserver.recon.metadata.user_parameter
-   pulserver.recon.metadata.acquisition_label
-   pulserver.recon.metadata.acquisition_labels
-   pulserver.recon.metadata.has_acquisition_flag
-   pulserver.recon.grouping.group_by_labels
-   pulserver.recon.grouping.split_on_flag
-   pulserver.recon.grouping.filter_acquisitions
-   pulserver.recon.serialization.images_to_dicom
-   pulserver.recon.serialization.write_dicom_series
-   pulserver.recon.mrd2dicom.MrdDicomBuilder
-   pulserver.recon.dicom2mrd.dicom_folder_to_mrd
-```
-
-## EPI and SMS preprocessing
-
-The EPI zoo can optionally emit a blip-nulled `NAV`/`REF` navigator for
-odd/even phase calibration, a `SET=1` reverse-phase-encode b=0 reference, and
-a single-band `REF` volume for SMS. `partition_epi_acquisitions` turns those
-standard MRD flags and labels into ordered groups.
-
-`epi_ramp_interpolate` moves ramp-sampled readouts to a uniform grid.
-`estimate_epi_eddy_phase` and `correct_epi_eddy_currents` fit and remove the
-smooth odd/even navigator phase. Reconstructed reverse-polarity image pairs
-can be passed to the opt-in `run_pyhysco` wrapper for distortion correction.
-SMS does not need a separate container-level physics type: the known CAIPI
-encoding belongs in the forward model, while the single-band reference is
-preprocessing/calibration input.
-
-FSE uses its CPMG RF/receiver phase relation and does **not** need EPI's
-alternating-readout navigator or an opposite-PE distortion pair. A
-phase-sensitive FSE application may still acquire its own phase reference.
-
-```{eval-rst}
-.. autosummary::
-   :toctree: generated/recon
-   :nosignatures:
-
-   pulserver.recon.epi.EpiAcquisitionGroups
-   pulserver.recon.epi.partition_epi_acquisitions
    pulserver.recon.preprocessing.epi_ramp_interpolate
    pulserver.recon.preprocessing.estimate_epi_eddy_phase
    pulserver.recon.preprocessing.correct_epi_eddy_currents
-   pulserver.recon.sms.SmsEpiInputs
-   pulserver.recon.distortion.run_pyhysco
-   pulserver.recon.gradunwarp.Gradunwarp
-   pulserver.recon.gradunwarp.ImageGeometry
-   pulserver.recon.gradunwarp.GradientCoefficients
-   pulserver.recon.gradunwarp.MrdCoefficientAccessor
+   pulserver.recon.preprocessing.EPIPhaseCorrection
+   pulserver.recon.preprocessing.Homodyne
+   pulserver.recon.preprocessing.POCS
 ```
 
-## Gadgetron integration
+## Rigid motion tracking
 
-Numerical operators and preprocessing functions remain array-level callables,
-not subclasses of a particular Gadgetron ABI. A Gadgetron/Pulserver handler
-first uses `filter_acquisitions`, `group_by_labels`, `split_on_flag`, or
-`partition_epi_acquisitions`, converts one complete group to tensors, then
-calls the same preprocessing and `pics` functions. This keeps stateful stream
-grouping at the MRD boundary and makes stateless numerical components directly
-testable and reusable offline.
-
-Importable runnable examples mirror the zoo layout:
-
-```python
-from pulserver.examples.recon import prepare_epi, prepare_sms_epi
-
-groups = prepare_epi(acquisitions)
-sms_inputs = prepare_sms_epi(
-    groups.imaging,
-    multiband_factor=2,
-    caipi_encoding=caipi_encoding,
-    coil_maps=coil_maps,
-    single_band_reference=groups.single_band_reference,
-)
-```
-
-## Server submodules
+Registration is a thin SimpleITK wrapper for 2D and 3D magnitude images. The
+EKF uses registration as its nonlinear measurement and maintains a
+constant-velocity pose state suitable for prospective motion correction.
 
 ```{eval-rst}
 .. autosummary::
    :toctree: generated/recon
    :nosignatures:
 
-   pulserver.recon.connection.Connection
-   pulserver.recon.server.Server
-   pulserver.recon.rtp_connection.RtpServer
-   pulserver.recon.main.main
-   pulserver.recon.replay
-   pulserver.recon.readers
-   pulserver.recon.writers
-   pulserver.recon.handlers
-   pulserver.recon.mrdhelper
-   pulserver.recon.constants
-   pulserver.recon.concurrency
+   pulserver.recon.motion.RigidMotionEstimate
+   pulserver.recon.motion.RigidRegistration
+   pulserver.recon.motion.RigidMotionEKF
 ```
 
-## Submodule API reference
+## Image corrections
 
 ```{eval-rst}
-.. automodule:: pulserver.recon.linops
-   :members:
-   :no-index:
+.. autosummary::
+   :toctree: generated/recon
+   :nosignatures:
 
-.. automodule:: pulserver.recon.physics
-   :members:
-   :no-index:
+   pulserver.recon.corrections.CoefficientAccessor
+   pulserver.recon.corrections.GradientCoefficients
+   pulserver.recon.corrections.ImageGeometry
+   pulserver.recon.corrections.Gradunwarp
+   pulserver.recon.corrections.run_pyhysco
+```
 
-.. automodule:: pulserver.recon.denoisers
-   :members:
-   :no-index:
+## Execution policies
 
-.. automodule:: pulserver.recon.density
-   :members:
-   :no-index:
+```{eval-rst}
+.. autosummary::
+   :toctree: generated/recon
+   :nosignatures:
 
-.. automodule:: pulserver.recon.algorithms
-   :members:
-   :no-index:
+   pulserver.recon.execution.CudaStreaming
+```
 
-.. automodule:: pulserver.recon.preprocessing
-   :members:
-   :no-index:
+## Sequence simulation
 
-.. automodule:: pulserver.recon.prox
-   :members:
-   :no-index:
+The simulation module decodes LiveSDK sequence-description waveforms into a
+vendor-neutral event model and estimates TorchSim EPG signal dictionaries and
+temporal subspaces. See {doc}`../explanations/reconstruction/simulator` for
+the event contract.
 
-.. automodule:: pulserver.recon.optimizers
-   :members:
-   :no-index:
+```{eval-rst}
+.. autosummary::
+   :toctree: generated/recon
+   :nosignatures:
 
-.. automodule:: pulserver.recon.calibration
-   :members:
-   :no-index:
-
-.. automodule:: pulserver.recon.epi
-   :members:
-   :no-index:
-
-.. automodule:: pulserver.recon.sms
-   :members:
-   :no-index:
-
-.. automodule:: pulserver.recon.distortion
-   :members:
-   :no-index:
-
-.. automodule:: pulserver.recon.gradunwarp
-   :members:
-   :no-index:
-
-.. automodule:: pulserver.recon.metadata
-   :members:
-   :no-index:
-
-.. automodule:: pulserver.recon.grouping
-   :members:
-   :no-index:
-
-.. automodule:: pulserver.recon.serialization
-   :members:
-   :no-index:
-
-.. automodule:: pulserver.recon.connection
-   :members:
-   :no-index:
-
-.. automodule:: pulserver.recon.server
-   :members:
-   :no-index:
-
-.. automodule:: pulserver.recon.rtp_connection
-   :members:
-   :no-index:
-
-.. automodule:: pulserver.recon.main
-   :members:
-   :no-index:
-
-.. automodule:: pulserver.recon.readers
-   :members:
-   :no-index:
-
-.. automodule:: pulserver.recon.writers
-   :members:
-   :no-index:
-
-.. automodule:: pulserver.recon.mrdhelper
-   :members:
-   :no-index:
-
-.. automodule:: pulserver.recon.mrd2dicom
-   :members:
-   :no-index:
-
-.. automodule:: pulserver.recon.dicom2mrd
-   :members:
-   :no-index:
-
-.. automodule:: pulserver.recon.replay
-   :members:
-   :no-index:
-
-.. automodule:: pulserver.recon.concurrency
-   :members:
-   :no-index:
-
-.. automodule:: pulserver.recon.constants
-   :members:
-   :no-index:
-
-.. automodule:: pulserver.recon.handlers
-   :members:
-   :no-index:
-
-.. automodule:: pulserver.recon.handlers.simplefft
-   :members:
-   :no-index:
-
-.. automodule:: pulserver.recon.handlers.fftrecon
-   :members:
-   :no-index:
-
-.. automodule:: pulserver.recon.handlers.savedataonly
-   :members:
-   :no-index:
-
-.. automodule:: pulserver.recon.seqdesc
-   :members:
-   :no-index:
-
-.. automodule:: pulserver.recon.bloch
-   :members:
-   :no-index:
+   pulserver.recon.simulation.decode_sequence_description
+   pulserver.recon.simulation.SequenceDescription
+   pulserver.recon.simulation.TissueProperties
+   pulserver.recon.simulation.EpgInterpreter
+   pulserver.recon.simulation.FSE
+   pulserver.recon.simulation.SPGR
+   pulserver.recon.simulation.SSFPEcho
+   pulserver.recon.simulation.SSFPFID
+   pulserver.recon.simulation.BSSFP
+   pulserver.recon.simulation.simulate_subspace
 ```

@@ -3,4 +3,7 @@
 
 .. currentmodule:: pulserver.recon.physics
 
-.. autofunction:: NonCartesian3D
+.. autoclass:: NonCartesian3D
+   :members:
+   :member-order: groupwise
+   :exclude-members: __new__, count, index

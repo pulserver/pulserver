@@ -21,7 +21,7 @@ import numpy as np
 
 from ... import pypulseq as pp
 from ..._core._module import SequenceModule
-from ._common import AXES, solve_delay
+from ._common import AXES, left_align_rephaser, present, solve_delay, solve_rephasing
 from ._trajectories import NonCartesianGradient, Rosette, Spiral
 
 _READOUT_GRAD_MARGIN = 0.8
@@ -52,6 +52,11 @@ class _RadialReadout(SequenceModule):
             rotation = pp.make_rotation(Rotation.from_euler("z", angle))
             seq.add_block(readout.gx, readout.adc, rotation)
 
+    A slice rephaser rides that same block, on the axis the rotation turns
+    about, so it comes back unturned::
+
+        seq.add_block(readout.gx, readout.gz_reph, readout.adc, rotation)
+
     ``explicit=True`` with ``angles`` instead writes every spoke out, as a
     cosine and sine scaling of the base waveform, so ``gx`` and ``gy`` come
     back as **lists** with one entry per angle. That costs a registered
@@ -64,6 +69,9 @@ class _RadialReadout(SequenceModule):
         The pulse the module was given.
     gz : GradEvent
         Its selection gradient, if one was given.
+    gz_reph : GradEvent
+        Its rephaser, if one was given, left-aligned in whichever block follows
+        the pulse.
     gx, gy : GradEvent
         The spoke, prephaser through rewinder. ``gy`` is the same waveform at
         zero amplitude, so a block always has a y slot for a rotation to fill.
@@ -87,6 +95,13 @@ class _RadialReadout(SequenceModule):
         The pulse that opens the repetition.
     gz : GradEvent, optional
         A selection gradient played in the same block as ``rf``.
+    gz_reph : GradEvent, optional
+        The rephaser that unwinds ``gz``. Carried left-aligned in the first
+        block after the pulse -- the TE wait when there is one, otherwise
+        alongside the prephaser at the head of the spoke, where it costs no
+        echo time at all. Only an axis the loop's rotation leaves alone can
+        carry one, so an in-plane acquisition takes a rephaser on z and a
+        projection takes none.
     fov : float
         Isotropic in-plane field of view (m).
     matrix : int
@@ -130,11 +145,15 @@ class _RadialReadout(SequenceModule):
     #: Set by the stack variants to the axis they encode partitions on.
     _phase_axis: str | None = None
 
+    #: Axes the loop's rotation mixes, and so cannot carry a slice rephaser.
+    _rotated_axes: tuple[str, ...] = ("x", "y")
+
     def init_module(
         self,
         system: pp.Opts,
         rf: Any,
         gz: Any = None,
+        gz_reph: Any = None,
         *,
         fov: float,
         matrix: int,
@@ -211,6 +230,8 @@ class _RadialReadout(SequenceModule):
         gz_pre, gz_rew = _partition_encode(
             self._phase_axis, fov_z, matrix_z, type(self).__name__, system
         )
+        gz_reph = _accept_rephaser(gz_reph, self, present(self._phase_axis))
+        reph_span = pp.calc_duration(gz_reph) if gz_reph is not None else 0.0
 
         gz_spoil = None
         if spoiling_cycles:
@@ -237,9 +258,19 @@ class _RadialReadout(SequenceModule):
             if gz_pre is not None
             else 0.0
         )
-        te_min = rf_block - rf_center + pre_span + echo_offset
+        # The rephaser has to follow the selection lobe with nothing in
+        # between, so it rides the TE wait when that is long enough to hold it.
+        # Otherwise it sits alongside the prephaser at the head of the spoke,
+        # which costs no echo time at all -- until it outlasts the head room
+        # there, when it has to be given a block of its own before the spoke.
+        head_room = float(adc.delay)
+        reph_alone = reph_span > head_room
+        te_min = rf_block - rf_center + pre_span + (reph_span if reph_alone else 0.0) + echo_offset
         te_delay = solve_delay(te, te_min, "TE", system)
-        wait_te = pp.make_delay(te_delay) if te_delay else None
+
+        reph_on_wait = reph_alone or te_delay >= reph_span > 0
+        wait_span = te_delay + (reph_span if reph_alone else 0.0)
+        wait_te = pp.make_delay(wait_span) if wait_span else None
 
         for i_arm in range(n_arms):
             if gz is not None:
@@ -247,12 +278,13 @@ class _RadialReadout(SequenceModule):
             else:
                 self.seq.add_block(rf)
             if wait_te is not None:
-                self.seq.add_block(wait_te)
+                self.seq.add_block(wait_te, *(present(gz_reph) if reph_on_wait else ()))
             if gz_pre is not None:
                 self.seq.add_block(gz_pre, *_armed(trigger))
-            for _ in range(n_echoes):
+            for i_echo in range(n_echoes):
                 self.seq.add_block(
                     _at(gx, i_arm), _at(gy, i_arm), adc, *adc_labels,
+                    *(present(gz_reph) if not reph_on_wait and i_echo == 0 else ()),
                     *(_armed(trigger) if gz_pre is None else ()),
                 )
             if gz_rew is not None or gz_spoil is not None:
@@ -283,10 +315,17 @@ class RadialReadout2D(_RadialReadout):
     >>> system = pp.Opts()
     >>> excitation = design.SpatialSelectiveExcitation(system, 15.0, 5e-3)
     >>> readout = design.RadialReadout2D(
-    ...     system, excitation.rf, excitation.gz, fov=0.22, matrix=128
+    ...     system, excitation.rf, excitation.gz, excitation.gz_reph,
+    ...     fov=0.22, matrix=128,
     ... )
     >>> len(readout.blocks), readout.gx.channel
     (2, 'x')
+
+    The rephaser costs nothing: it runs under the prephaser at the head of the
+    spoke, in the very block the loop rotates.
+
+    >>> any(event is readout.gz_reph for event in readout.blocks[1])
+    True
     """
 
 
@@ -305,6 +344,8 @@ class RadialProjectionReadout(_RadialReadout):
     partition encode -- which such an acquisition has no place for -- is
     refused rather than quietly accepted.
     """
+
+    _rotated_axes = AXES
 
 
 # ======================================================================
@@ -335,6 +376,9 @@ class NonCartesianReadout(SequenceModule):
         The pulse the module was given.
     gz : GradEvent
         Its selection gradient, if one was given.
+    gz_reph : GradEvent
+        Its rephaser, if one was given, left-aligned in whichever block follows
+        the pulse.
     gx, gy : GradEvent
         The interleave. Lists of one entry per angle when ``explicit``.
     gx_pre, gy_pre : GradEvent
@@ -362,11 +406,14 @@ class NonCartesianReadout(SequenceModule):
 
     _phase_axis: str | None = None
 
+    _rotated_axes: tuple[str, ...] = ("x", "y")
+
     def init_module(
         self,
         system: pp.Opts,
         rf: Any,
         gz: Any = None,
+        gz_reph: Any = None,
         *,
         trajectory: NonCartesianGradient,
         fov_z: float | None = None,
@@ -394,6 +441,7 @@ class NonCartesianReadout(SequenceModule):
         gz_pre, gz_rew = _partition_encode(
             self._phase_axis, fov_z, matrix_z, type(self).__name__, system
         )
+        gz_reph = _accept_rephaser(gz_reph, self, present(self._phase_axis))
 
         gz_spoil = None
         if spoiling_cycles:
@@ -409,10 +457,10 @@ class NonCartesianReadout(SequenceModule):
         # or two. A repetition whose length depended on which arm it played
         # would not have one TR, so every arm is given the longest.
         raster = system.block_duration_raster
-        pre_span = pp.ceil_to_raster(
+        natural_pre_span = pp.ceil_to_raster(
             max(
                 (
-                    pp.calc_duration(*arm.prewinders, *_present(gz_pre))
+                    pp.calc_duration(*arm.prewinders, *present(gz_pre))
                     for arm in arms
                     if arm.prewinders or gz_pre is not None
                 ),
@@ -423,7 +471,7 @@ class NonCartesianReadout(SequenceModule):
         rew_span = pp.ceil_to_raster(
             max(
                 (
-                    pp.calc_duration(*arm.rewinders, *_present(gz_rew), *_present(gz_spoil))
+                    pp.calc_duration(*arm.rewinders, *present(gz_rew), *present(gz_spoil))
                     for arm in arms
                     if arm.rewinders or gz_rew is not None or gz_spoil is not None
                 ),
@@ -431,12 +479,6 @@ class NonCartesianReadout(SequenceModule):
             ),
             raster,
         )
-
-        gx_pre, gy_pre = _bracket(arms, "prewinders", "right", pre_span, system)
-        gx, gy = _bracket(arms, "gradients", None, 0.0, system)
-        gx_rew, gy_rew = _bracket(arms, "rewinders", "left", rew_span, system)
-        _pre_floor = pp.make_delay(pre_span) if pre_span else None
-        _rew_floor = pp.make_delay(rew_span) if rew_span else None
 
         adc = trajectory.adc
         adc_labels = [pp.make_label(type="SET", label=name, value=0) for name in labels or ()]
@@ -447,14 +489,23 @@ class NonCartesianReadout(SequenceModule):
         rf_block = pp.ceil_to_raster(
             pp.calc_duration(rf, gz) if gz is not None else pp.calc_duration(rf), raster
         )
-        te_min = (
-            rf_block
-            - rf_center
-            + pre_span
-            + _echo_offset_of(trajectory, system.grad_raster_time)
+        te_base = (
+            rf_block - rf_center + _echo_offset_of(trajectory, system.grad_raster_time)
         )
-        te_delay = solve_delay(te, te_min, "TE", system)
-        wait_te = pp.make_delay(te_delay) if te_delay else None
+        wait_span, pre_span, echo_time = solve_rephasing(
+            te,
+            te_base,
+            natural_pre_span,
+            pp.calc_duration(gz_reph) if gz_reph is not None else 0.0,
+            system,
+        )
+        wait_te = pp.make_delay(wait_span) if wait_span else None
+
+        gx_pre, gy_pre = _bracket(arms, "prewinders", "right", pre_span, system)
+        gx, gy = _bracket(arms, "gradients", None, 0.0, system)
+        gx_rew, gy_rew = _bracket(arms, "rewinders", "left", rew_span, system)
+        _pre_floor = pp.make_delay(pre_span) if pre_span else None
+        _rew_floor = pp.make_delay(rew_span) if rew_span else None
 
         for i_arm in range(len(arms)):
             if gz is not None:
@@ -462,18 +513,19 @@ class NonCartesianReadout(SequenceModule):
             else:
                 self.seq.add_block(rf)
             if wait_te is not None:
-                self.seq.add_block(wait_te)
+                self.seq.add_block(wait_te, *present(gz_reph))
             if _pre_floor is not None:
                 self.seq.add_block(
-                    *_present(_at(gx_pre, i_arm)), *_present(_at(gy_pre, i_arm)),
-                    *_present(gz_pre), *_armed(trigger), _pre_floor,
+                    *present(_at(gx_pre, i_arm)), *present(_at(gy_pre, i_arm)),
+                    *present(gz_pre), *(() if wait_te else present(gz_reph)),
+                    *_armed(trigger), _pre_floor,
                 )
             for _ in range(n_echoes):
                 self.seq.add_block(_at(gx, i_arm), _at(gy, i_arm), adc, *adc_labels)
             if _rew_floor is not None:
                 self.seq.add_block(
-                    *_present(_at(gx_rew, i_arm)), *_present(_at(gy_rew, i_arm)),
-                    *_present(gz_rew), *_present(gz_spoil), _rew_floor,
+                    *present(_at(gx_rew, i_arm)), *present(_at(gy_rew, i_arm)),
+                    *present(gz_rew), *present(gz_spoil), _rew_floor,
                 )
 
         tr_min = self.seq.duration()[0] / len(arms)
@@ -484,8 +536,8 @@ class NonCartesianReadout(SequenceModule):
                 self.seq.add_block(wait_tr)
 
         self.trajectory = trajectory
-        self.echo_time = te_min + te_delay
-        self.center = self.echo_time + rf_center
+        self.echo_time = echo_time
+        self.center = echo_time + rf_center
         self.duration = tr_min + tr_delay
         self.bandwidth_hz = 1.0 / float(adc.dwell)
         self.n_samples = int(adc.num_samples)
@@ -499,6 +551,7 @@ class _SpiralReadout(NonCartesianReadout):
         system: pp.Opts,
         rf: Any,
         gz: Any = None,
+        gz_reph: Any = None,
         *,
         fov: float,
         matrix: int,
@@ -533,7 +586,7 @@ class _SpiralReadout(NonCartesianReadout):
             oversamp=oversampling,
             derate=derate,
         )
-        super().init_module(system, rf, gz, trajectory=trajectory, **kwargs)
+        super().init_module(system, rf, gz, gz_reph, trajectory=trajectory, **kwargs)
 
 
 class SpiralReadout2D(_SpiralReadout):
@@ -572,6 +625,8 @@ class SpiralStackReadout(_SpiralReadout):
 class SpiralProjectionReadout(_SpiralReadout):
     """Spiral arms turned over a sphere."""
 
+    _rotated_axes = AXES
+
 
 class _RosetteReadout(NonCartesianReadout):
     """One multi-petal rosette interleave."""
@@ -581,6 +636,7 @@ class _RosetteReadout(NonCartesianReadout):
         system: pp.Opts,
         rf: Any,
         gz: Any = None,
+        gz_reph: Any = None,
         *,
         fov: float,
         matrix: int,
@@ -603,7 +659,7 @@ class _RosetteReadout(NonCartesianReadout):
             oversamp=oversampling,
             derate=derate,
         )
-        super().init_module(system, rf, gz, trajectory=trajectory, **kwargs)
+        super().init_module(system, rf, gz, gz_reph, trajectory=trajectory, **kwargs)
 
 
 class RosetteReadout2D(_RosetteReadout):
@@ -618,6 +674,8 @@ class RosetteStackReadout(_RosetteReadout):
 
 class RosetteProjectionReadout(_RosetteReadout):
     """Rosette petals turned over a sphere."""
+
+    _rotated_axes = AXES
 
 
 # ======================================================================
@@ -644,6 +702,34 @@ def _checked_layout(n_echoes, spoiling_cycles, spoiling_axis, explicit, angles) 
     return n_echoes
 
 
+def _accept_rephaser(gz_reph, module, occupied):
+    """A slice rephaser this readout can carry, left-aligned, or ``None``.
+
+    A non-Cartesian readout is oriented by rotating its blocks, and a rotation
+    mixes whichever axes it turns. A rephaser sitting on one of those axes is
+    turned with the interleave: it stops rephasing the slice and starts
+    dephasing it by an amount that changes shot to shot, which nothing
+    downstream would report. So a rephaser is only accepted on an axis the
+    rotation leaves alone -- z for an in-plane acquisition, none at all for a
+    projection.
+    """
+    if gz_reph is None:
+        return None
+    if gz_reph.channel in module._rotated_axes:
+        free = tuple(axis for axis in AXES if axis not in module._rotated_axes)
+        hint = (
+            f"select the slice on {free[0]}"
+            if len(free) == 1
+            else "excite with is_slab=True so the selection gradient carries its own rephaser"
+        )
+        turned = ", ".join(module._rotated_axes[:-1]) + f" and {module._rotated_axes[-1]}"
+        raise ValueError(
+            f"{type(module).__name__} is oriented by rotating {turned}, so a slice rephaser "
+            f"on {gz_reph.channel} would be turned with the interleave; {hint}"
+        )
+    return left_align_rephaser(gz_reph, occupied, type(module).__name__)
+
+
 def _partition_encode(axis, fov_z, matrix_z, owner, system):
     """The partition encode and its rewinder, or a refusal.
 
@@ -662,11 +748,6 @@ def _partition_encode(axis, fov_z, matrix_z, owner, system):
         raise ValueError("a stack needs fov_z and matrix_z")
     gz_pre = pp.make_phase_encoding(axis, float(fov_z) / int(matrix_z), system=system)
     return gz_pre, pp.scale_grad(gz_pre, -1.0)
-
-
-def _present(event):
-    """``(event,)`` when there is one, so it can be splatted into a block."""
-    return () if event is None else (event,)
 
 
 def _armed(trigger):

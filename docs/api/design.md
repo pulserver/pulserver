@@ -64,6 +64,11 @@ filter design problem rather than a windowed sinc, and its `is_slab` flag
 decides how the rephaser is delivered: separable for a 2D slice, merged into
 one gradient for a 3D slab.
 
+The refocusing pulses are their spin-echo counterparts: a nominal 180 phased a
+quarter turn away, between crushers stated in the same cycles-per-voxel
+vocabulary as everything else. They are events like any other, so a readout
+given one instead of an excitation is a spin echo rather than a gradient echo.
+
 ```{eval-rst}
 .. autosummary::
    :toctree: generated/design
@@ -71,6 +76,8 @@ one gradient for a 3D slab.
 
    pulserver.design.NonSelectiveExcitation
    pulserver.design.SpatialSelectiveExcitation
+   pulserver.design.NonSelectiveRefocusing
+   pulserver.design.SpatialSelectiveRefocusing
    pulserver.design.Inversion
 ```
 
@@ -81,12 +88,50 @@ The recovery time is deliberately absent — it is the gap between the
 preparation and the readout that samples it, so it belongs to the loop that
 plays both.
 
+The T2 family stores weighting on the longitudinal axis, so the contrast is
+decoupled from the readout that follows: a bSSFP or a short-TE gradient echo
+can carry T2 contrast it could never generate itself. Every pulse is
+adiabatic, and the refocusing pulses come in pairs — one adiabatic full
+passage leaves a transmit-dependent phase that only a second one undoes, so an
+odd count is refused rather than corrected.
+
+The off-resonance family — magnetization transfer, its inhomogeneous
+difference, and the Bloch–Siegert pulse — shares one shape: a strong pulse
+placed away from water, played a few times, and usually spoiled. Only the
+envelope and the offset differ, which is all
+{class}`~pulserver.design.OffResonanceSaturation` leaves to a subclass.
+`IhMtPreparation` is the one place the multiband wrapper appears: its two
+saturation bands are one envelope modulated into two, matched to the
+single-offset arm on **power** rather than amplitude, so the ihMT difference is
+a difference in inhomogeneous saturation and not in deposited energy.
+
+`DiffusionPreparation` is designed once, along z and at its largest b-value; a
+direction is a rotation the loop applies and a lower b-value is a square-root
+scaling of the same waveform. Its b-value is integrated from the rasterized
+waveform rather than taken from the δ/Δ formula, which the ramps put a few
+percent out.
+
+`FatSaturation` is the one module that positions itself. A band pointed
+somewhere other than the imaging prescription applies its own
+{class}`~pulserver.pypulseq.TransformFOV` at design time, then declares
+`NOPOS` and `NOROT` on the block that carries the pulse — so a transform
+applied to the finished scan moves the imaging volume and leaves the band
+where it was put. The flags are cleared on the module's last block, because
+Pulseq labels are sticky.
+
 ```{eval-rst}
 .. autosummary::
    :toctree: generated/design
    :nosignatures:
 
    pulserver.design.InversionPreparation
+   pulserver.design.T2Preparation
+   pulserver.design.T1T2Preparation
+   pulserver.design.MtPreparation
+   pulserver.design.IhMtPreparation
+   pulserver.design.BlochSiegertPreparation
+   pulserver.design.DiffusionPreparation
+   pulserver.design.FatSaturation
 ```
 
 ## Readouts
@@ -144,4 +189,5 @@ Subclass one of these only to add a family this package does not ship; see
 
    pulserver.design.RfModule
    pulserver.design.NonCartesianReadout
+   pulserver.design.OffResonanceSaturation
 ```

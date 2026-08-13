@@ -1,14 +1,9 @@
 # Tutorials
 
-Lessons for people learning Pulserver. Each one is a single sitting that ends
-with something that runs; follow it in order and you will have met every
-concept the how-to guides then assume.
+Lessons for people learning Pulserver, each a single sitting that ends with
+something that runs.
 
-If instead you have a job to do and know roughly how, go to
-{doc}`how_to`.
+{doc}`getting_started` is the place to begin: it builds a complete GRE
+sequence and writes it to a file.
 
-```{toctree}
-:maxdepth: 1
-
-tutorials/build_a_sequence_plugin
-```
+If instead you have a job to do and know roughly how, go to {doc}`how_to`.

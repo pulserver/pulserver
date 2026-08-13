@@ -10,7 +10,15 @@ import numpy as np
 
 from ... import pypulseq as pp
 from ..._core._module import SequenceModule
-from ._common import as_tuple, bridge, solve_delay
+from ._common import (
+    AXES,
+    as_tuple,
+    bridge,
+    left_align_rephaser,
+    present,
+    solve_delay,
+    solve_rephasing,
+)
 
 #: Fraction of ``max_grad`` the readout lobe may reach, leaving the rest for
 #: the phase encodes riding alongside it.
@@ -64,6 +72,9 @@ class _LineReadout(SequenceModule):
         The pulse the module was given.
     gz : GradEvent
         Its selection gradient, if one was given.
+    gz_reph : GradEvent
+        Its rephaser, if one was given, left-aligned in whichever block follows
+        the pulse.
     gx_pre : GradEvent
         Readout prephaser, right-aligned in the prewinder block.
     gx : GradEvent
@@ -97,6 +108,13 @@ class _LineReadout(SequenceModule):
     gz : GradEvent, optional
         A selection gradient played in the same block as ``rf``. Pass an
         excitation's ``gz``, or nothing for a hard pulse.
+    gz_reph : GradEvent, optional
+        The rephaser that unwinds ``gz``. Pass a 2D excitation's ``gz_reph``
+        and the readout carries it, left-aligned in the first block after the
+        pulse so it runs straight off the selection lobe: the TE wait when
+        there is one, the prewinder block otherwise. A slab excitation
+        (``is_slab=True``) has already merged it into ``gz`` and passes
+        nothing.
     fov : float or sequence of float
         Field of view (m), per encoded axis, readout first.
     matrix : int or sequence of int
@@ -155,6 +173,7 @@ class _LineReadout(SequenceModule):
         system: pp.Opts,
         rf: Any,
         gz: Any = None,
+        gz_reph: Any = None,
         *,
         fov: Any,
         matrix: Any,
@@ -272,20 +291,17 @@ class _LineReadout(SequenceModule):
         if n_echoes > 1 and not flyback:
             gx_rev = pp.scale_grad(gx, -1.0)
 
-        # Align first, register second: aligning writes a delay, and the delay
-        # is part of the event the caller receives.
+        # The prewinder block already carries one gradient per encoded axis, so
+        # a rephaser sharing one of those channels has nowhere to sit.
+        gz_reph = left_align_rephaser(gz_reph, AXES[:ndim], type(self).__name__)
+
+        _prewinder = [gx_pre, gy_pre, gz_pre] if ndim == 3 else [gx_pre, gy_pre]
         if ndim == 3:
-            gx_pre, gy_pre, gz_pre = pp.align(right=[gx_pre, gy_pre, gz_pre])
             gx_spoil, gy_rew, gz_rew = pp.align(left=[gx_spoil, gy_rew, gz_rew])
-            prewinder = [gx_pre, gy_pre, gz_pre]
-            rewinder = [gx_spoil, gy_rew, gz_rew]
+            _rewinder = [gx_spoil, gy_rew, gz_rew]
         else:
-            gx_pre, gy_pre = pp.align(right=[gx_pre, gy_pre])
             gx_spoil, gy_rew = pp.align(left=[gx_spoil, gy_rew])
-            prewinder = [gx_pre, gy_pre]
-            rewinder = [gx_spoil, gy_rew]
-        if trigger is not None:
-            trigger, *prewinder = pp.align(left=[trigger], right=prewinder)
+            _rewinder = [gx_spoil, gy_rew]
 
         adc_labels = [pp.make_label(type="SET", label=name, value=0) for name in labels or ()]
 
@@ -299,25 +315,39 @@ class _LineReadout(SequenceModule):
         # `add_block` rounds a block up onto the block raster, so a span taken
         # from `calc_duration` alone is a raster short of where the block ends.
         rf_center = float(rf.delay) + float(rf.center)
-        prewinder_duration = pp.ceil_to_raster(
-            pp.calc_duration(*prewinder), system.block_duration_raster
+        te_base = self.seq.duration()[0] - rf_center + flat_top_start + n_pre * dwell
+        wait_span, pre_span, echo_time = solve_rephasing(
+            te,
+            te_base,
+            pp.calc_duration(*_prewinder, *present(trigger)),
+            pp.calc_duration(gz_reph) if gz_reph is not None else 0.0,
+            system,
         )
-        te_min = (
-            self.seq.duration()[0]
-            - rf_center
-            + prewinder_duration
-            + flat_top_start
-            + n_pre * dwell
-        )
-        te_delay = solve_delay(te, te_min, "TE", system)
-        if te_delay:
-            wait_te = pp.make_delay(te_delay)
-            self.seq.add_block(wait_te)
 
+        # Align only now that the span is settled, since the delay alignment
+        # writes is part of the event the caller receives. The delay sets the
+        # span everything is right-aligned against and is then dropped: the
+        # aligned gradients already end there, so they hold the block open.
+        _prewinder.append(pp.make_delay(pre_span))
         if trigger is not None:
-            self.seq.add_block(*prewinder, trigger)
+            trigger, *_prewinder = pp.align(left=[trigger], right=_prewinder)
         else:
-            self.seq.add_block(*prewinder)
+            _prewinder = pp.align(right=_prewinder)
+        _prewinder = _prewinder[:-1]
+        if ndim == 3:
+            gx_pre, gy_pre, gz_pre = _prewinder
+        else:
+            gx_pre, gy_pre = _prewinder
+
+        if wait_span:
+            wait_te = pp.make_delay(wait_span)
+            if gz_reph is not None:
+                self.seq.add_block(wait_te, gz_reph)
+            else:
+                self.seq.add_block(wait_te)
+
+        _pre_block = [*_prewinder, *present(None if wait_span else gz_reph), *present(trigger)]
+        self.seq.add_block(*_pre_block)
 
         for i_echo in range(n_echoes):
             if n_echoes > 1 and flyback and i_echo:
@@ -325,7 +355,7 @@ class _LineReadout(SequenceModule):
             lobe = gx if (flyback or i_echo % 2 == 0) else gx_rev
             self.seq.add_block(lobe, adc, *adc_labels)
 
-        self.seq.add_block(*rewinder)
+        self.seq.add_block(*_rewinder)
 
         tr_min = self.seq.duration()[0]
         tr_delay = solve_delay(tr, tr_min, "TR", system)
@@ -333,8 +363,8 @@ class _LineReadout(SequenceModule):
             wait_tr = pp.make_delay(tr_delay)
             self.seq.add_block(wait_tr)
 
-        self.echo_time = te_min + te_delay
-        self.center = self.echo_time + rf_center
+        self.echo_time = echo_time
+        self.center = echo_time + rf_center
         self.bandwidth_hz = 1.0 / dwell
         self.n_samples = n_samples
         self.delta_kx = delta_kx
@@ -385,10 +415,16 @@ class LineReadout2D(_LineReadout):
     >>> system = pp.Opts()
     >>> excitation = design.SpatialSelectiveExcitation(system, 15.0, 5e-3)
     >>> readout = design.LineReadout2D(
-    ...     system, excitation.rf, excitation.gz, fov=0.22, matrix=128
+    ...     system, excitation.rf, excitation.gz, excitation.gz_reph,
+    ...     fov=0.22, matrix=128,
     ... )
     >>> int(readout.adc.num_samples)
     128
+
+    The rephaser rides the prewinder block, at its head:
+
+    >>> readout.blocks[1] == (readout.gx_pre, readout.gy_pre, readout.gz_reph)
+    True
     """
 
     _ndim = 2

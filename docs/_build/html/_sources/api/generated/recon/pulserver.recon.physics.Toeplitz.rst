@@ -3,4 +3,7 @@
 
 .. currentmodule:: pulserver.recon.physics
 
-.. autofunction:: Toeplitz
+.. autoclass:: Toeplitz
+   :members:
+   :member-order: groupwise
+   :exclude-members: __new__, count, index

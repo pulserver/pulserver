@@ -38,8 +38,25 @@ arrays; plain NumPy does just as well.
 
 from __future__ import annotations
 
-from .excitation import Inversion, NonSelectiveExcitation, RfModule, SpatialSelectiveExcitation
-from .preparation import InversionPreparation
+from .excitation import (
+    Inversion,
+    NonSelectiveExcitation,
+    NonSelectiveRefocusing,
+    RfModule,
+    SpatialSelectiveExcitation,
+    SpatialSelectiveRefocusing,
+)
+from .preparation import (
+    BlochSiegertPreparation,
+    DiffusionPreparation,
+    FatSaturation,
+    IhMtPreparation,
+    InversionPreparation,
+    MtPreparation,
+    OffResonanceSaturation,
+    T1T2Preparation,
+    T2Preparation,
+)
 from .readout import (
     LineReadout2D,
     LineReadout3D,
@@ -56,10 +73,25 @@ from .readout import (
 )
 
 #: Modules whose point is an RF pulse: what tips the magnetisation, and where.
-EXCITATION = ("Inversion", "NonSelectiveExcitation", "SpatialSelectiveExcitation")
+EXCITATION = (
+    "Inversion",
+    "NonSelectiveExcitation",
+    "NonSelectiveRefocusing",
+    "SpatialSelectiveExcitation",
+    "SpatialSelectiveRefocusing",
+)
 
 #: Modules that prepare the magnetisation before a readout samples it.
-PREPARATION = ("InversionPreparation",)
+PREPARATION = (
+    "BlochSiegertPreparation",
+    "DiffusionPreparation",
+    "FatSaturation",
+    "IhMtPreparation",
+    "InversionPreparation",
+    "MtPreparation",
+    "T1T2Preparation",
+    "T2Preparation",
+)
 
 #: Modules spanning a whole repetition, from the RF that opens it to the
 #: end of the TR. One class per geometry, because the geometry is what
@@ -79,6 +111,6 @@ READOUT = (
 )
 
 #: Base classes, for a readout family this package does not ship.
-BASES = ("NonCartesianReadout", "RfModule")
+BASES = ("NonCartesianReadout", "OffResonanceSaturation", "RfModule")
 
 __all__ = sorted({*EXCITATION, *PREPARATION, *READOUT, *BASES})

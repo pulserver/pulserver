@@ -28,13 +28,14 @@ everything else.
 
 ```python
 readout = design.LineReadout2D(
-    system, excitation.rf, excitation.gz,
+    system, excitation.rf, excitation.gz, excitation.gz_reph,
     fov=0.22, matrix=128, te=4e-3, tr=10e-3,
 )
 
 for line in lines:
     readout.rf.phase_offset = phases[line]                   # a phase is a write
     seq.add_block(readout.rf, readout.gz)
+    seq.add_block(readout.wait_te, readout.gz_reph)
     seq.add_block(readout.gx_pre, pp.scale_grad(readout.gy_pre, ky[line]))
     seq.add_block(readout.gx, readout.adc)
 ```
@@ -90,6 +91,25 @@ be inspected without reaching for `.seq`. PNS and the gradient spectrum answer
 for the module played **once** from rest; for a whole-TR readout that is the
 meaningful single-shot answer. An RF module adds `sim_rf`, which is the one
 view a sequence-level analysis cannot give.
+
+## The slice rephaser
+
+A 2D excitation hands back its rephaser as a separate event, and a readout
+takes it as its third positional argument. It is not simply appended: a
+rephaser has to run straight off the selection lobe, so the readout puts it at
+the **head of the first block after the pulse** — the TE wait when there is
+one, the prewinder block otherwise. Where a prephaser is already running there,
+the two overlap and the rephaser costs no echo time at all; a radial spoke,
+whose prephaser is folded into the spoke itself, carries it inside the
+acquisition block for the same reason.
+
+Two placements are refused rather than fudged. A partition encode already
+occupies the selection axis, so a 3D readout wants the merged form instead
+(`is_slab=True`). And a non-Cartesian readout is oriented by rotating its
+blocks: a rephaser on an axis the rotation mixes would be turned with the
+interleave, silently dephasing the slice by an amount that changes shot to
+shot. An in-plane acquisition therefore takes a rephaser on z and a projection
+takes none.
 
 ## Labels and triggers
 

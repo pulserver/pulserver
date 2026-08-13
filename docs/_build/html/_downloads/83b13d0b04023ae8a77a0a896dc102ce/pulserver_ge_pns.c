@@ -85,27 +85,56 @@ static int pulserver_ge__required_padding(void *ctx_v, float dt_us)
     return kernel_len;
 }
 
+/* The Irnich response is a plain convolution of dG/dt with the kernel above,
+ * scaled to percent -- exactly what evaluate() computes -- so it is safe to
+ * publish it and let the safety core exploit linearity. */
+static int pulserver_ge__kernel(void *ctx_v,
+                                 float dt_us,
+                                 float **out_kernel, int *out_len, float *out_scale)
+{
+    int rc;
+
+    if (!out_kernel || !out_len || !out_scale)
+        return PULSEG_ERR_NULL_POINTER;
+
+    rc = pulserver_ge__build_kernel((pulserver_ge_pns_ctx *)ctx_v, dt_us, out_kernel, out_len);
+    if (PULSEG_FAILED(rc))
+        return rc;
+
+    *out_scale = 100.0f;
+    return PULSEG_SUCCESS;
+}
+
 static int pulserver_ge__evaluate(void *ctx_v,
                                    const float *dgdt_x, const float *dgdt_y, const float *dgdt_z,
                                    int n, float dt_us,
                                    float *out_x, float *out_y, float *out_z)
 {
     pulserver_ge_pns_ctx *ctx = (pulserver_ge_pns_ctx *)ctx_v;
+    pulseg__conv_fft_plan *plan;
     float *kernel;
     int kernel_len, i, rc;
 
     kernel = NULL;
+    plan = NULL;
     rc = pulserver_ge__build_kernel(ctx, dt_us, &kernel, &kernel_len);
     if (PULSEG_FAILED(rc))
         return rc;
 
-    rc = pulseg__calc_convolution_fft(out_x, dgdt_x, n, kernel, kernel_len);
+    /* One plan for all three axes: same length, same kernel. The kernel
+     * transform and the kiss_fft twiddle tables are built once here
+     * instead of once per axis. */
+    rc = pulseg__conv_fft_plan_create(&plan, n, kernel, kernel_len);
     if (PULSEG_FAILED(rc))
         goto fail;
-    rc = pulseg__calc_convolution_fft(out_y, dgdt_y, n, kernel, kernel_len);
+
+    rc = pulseg__conv_fft_plan_apply(plan, out_x, dgdt_x);
     if (PULSEG_FAILED(rc))
         goto fail;
-    rc = pulseg__calc_convolution_fft(out_z, dgdt_z, n, kernel, kernel_len);
+    rc = pulseg__conv_fft_plan_apply(plan, out_y, dgdt_y);
+    if (PULSEG_FAILED(rc))
+        goto fail;
+    rc = pulseg__conv_fft_plan_apply(plan, out_z, dgdt_z);
     if (PULSEG_FAILED(rc))
         goto fail;
 
@@ -116,10 +145,12 @@ static int pulserver_ge__evaluate(void *ctx_v,
         out_z[i] *= 100.0f;
     }
 
+    pulseg__conv_fft_plan_free(plan);
     PULSEG_FREE(kernel);
     return PULSEG_SUCCESS;
 
 fail:
+    pulseg__conv_fft_plan_free(plan);
     PULSEG_FREE(kernel);
     return rc;
 }
@@ -137,4 +168,5 @@ void pulserver_ge_pns_model_init(pulseg_pns_model *model,
     model->ctx = &s_ctx;
     model->required_padding = pulserver_ge__required_padding;
     model->evaluate = pulserver_ge__evaluate;
+    model->kernel = pulserver_ge__kernel;
 }

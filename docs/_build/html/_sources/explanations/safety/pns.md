@@ -38,10 +38,8 @@ describe, and what upstream PyPulseq implements. Pulserver delegates to
 upstream for this one rather than reimplementing it.
 
 Both are available from
-{meth}`pulserver.pypulseq.Sequence.pns`; `model='chronaxie'` is the default
-because it is the arithmetic the interpreter runs at predownload, and
-`model='safe'` reads its hardware description from `system.pns_hardware` or
-an explicit `hardware=` argument.
+{meth}`pulserver.pypulseq.Sequence.calculate_pns`, selected by the shape of
+the `hardware` argument it is given.
 
 ## The naive algorithm
 
@@ -113,41 +111,49 @@ the measured figures and their scaling against
 
 ## Inspecting PNS while authoring
 
-`Sequence.pns` is a visualisation, not a gate. It draws per-axis and combined
-stimulation against threshold lines so the margin is visible while a
-sequence is being written:
+{meth}`~pulserver.pypulseq.Sequence.calculate_pns` is a visualisation, not a
+gate. It draws per-axis and combined stimulation against threshold lines so
+the margin is visible while a sequence is being written. Which nerve model
+runs is decided by the `hardware` argument — a mapping carrying `chronaxie`
+and `rheobase` selects Irnich, a Siemens `.asc` path or a per-axis namespace
+selects SAFE:
 
 ```python
 import pulserver.pypulseq as pp
 
-system = pp.Opts(chronaxie_us=360.0, rheobase=4.25e8, alpha=0.333)
-seq = build_my_sequence(system)
+seq = build_my_sequence(pp.Opts())
 
-pns_percent, t = seq.pns(tr_index=0)          # Irnich, from the Opts
-pns_percent, t = seq.pns(model="safe")        # SAFE, from system.pns_hardware
+irnich = {"chronaxie_us": 360.0, "rheobase": 4.25e8, "alpha": 0.333}
+ok, norm, components, t = seq.calculate_pns(irnich, tr=0)          # Irnich
+ok, norm, components, t = seq.calculate_pns("scanner.asc", tr=0)   # SAFE
 ```
 
-Scoping it to one TR with `tr_index=` is the right default: it is the window
-the scanner evaluates, and it avoids materialising a whole scan to look at a
+The hardware description is always passed in, never read off `Opts`: a
+sequence author's system limits describe the gradients they are designing
+for, not the coil's nerve-response coefficients, and conflating the two lets
+a plot silently use the wrong model.
+
+Scoping it to one TR with `tr=` is the right default: it is the window the
+scanner evaluates, and it avoids materialising a whole scan to look at a
 quantity that is periodic anyway.
 
-No verdict is returned. The authoritative gate is `pulseg_check_safety` at
-predownload, plus the vendor's own checks — and the reason to keep the
-inspection view non-authoritative is that a sequence author's `Opts` need not
-match the scanner's configuration, so any pass this printed would be a
-promise Pulserver is not in a position to make.
+The verdict returned is the model's, not the scanner's. The authoritative
+gate is `pulseg_check_safety` at predownload, plus the vendor's own checks —
+and the reason to keep the inspection view non-authoritative is that a
+sequence author's `Opts` need not match the scanner's configuration, so any
+pass this printed would be a promise Pulserver is not in a position to make.
 
 ## The SAFE model
 
 The chronaxie plots below all use one nerve model — Irnich, GE's — because
-that is the arithmetic `pulseg_check_safety` actually runs. `model="safe"`
-exists for the other half of the split described above: it delegates the
-*entire* stimulation calculation, waveform included, to upstream PyPulseq's
-own `calculate_pns`, which implements the Szczepankiewicz/Witzel SAFE model
-against a Siemens `.asc` hardware description. Pulserver's contribution here
-is only the plumbing — sourcing the hardware description from
-`system.pns_hardware` or an explicit `hardware=` argument, and scoping the
-call to one TR or segment the same way the Irnich path is scoped.
+that is the arithmetic `pulseg_check_safety` actually runs. Passing a SAFE
+hardware description instead covers the other half of the split described
+above: it delegates the *entire* stimulation calculation, waveform included,
+to upstream PyPulseq's own `calc_pns`, which implements the
+Szczepankiewicz/Witzel SAFE model against a Siemens `.asc` file. Pulserver's
+contribution here is only the plumbing — normalising the hardware
+description, and scoping the call to one TR or segment the same way the
+Irnich path is scoped.
 
 Because SAFE needs a real hardware coefficient set and none ships with
 Pulserver, the figure below uses upstream PyPulseq's own bundled
@@ -161,17 +167,16 @@ and a combined norm, drawn against upstream's own threshold line, from the
 same slice-select/phase-encode/readout events the Irnich plot below draws.
 Read the 66 %/81 % figures as "this is what the SAFE model's output looks
 like", not as a statement about any scanner's real margin — that would need
-that scanner's actual `.asc` file, supplied via `hardware=` or
-`system.pns_hardware`.
+that scanner's actual `.asc` file, passed as `hardware`.
 
 ## Reading the plots
 
 `docs/_bench/waveform_plots.py` drives the plot above across the same
 five-sequence corpus [the mechanical resonance
 page](mechanical_resonance.md#reading-the-plots) uses (representative Irnich
-constants, not any particular scanner's), scoped with `tr_index=` to the
+constants, not any particular scanner's), scoped with `tr=` to the
 first TR that actually plays out an ADC — every corpus fixture opens with a
-handful of non-acquiring dummy TRs to reach steady state, so `tr_index=0`
+handful of non-acquiring dummy TRs to reach steady state, so `tr=0`
 alone would show an unrepresentative shot for several of them.
 
 **GRE**, one isolated readout gradient per TR:
