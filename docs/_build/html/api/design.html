@@ -32,7 +32,7 @@
 
     <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/sphinx-book-theme.css?v=4418a689" />
-    <link rel="stylesheet" type="text/css" href="../_static/plot_directive.css?v=7f9a90b1" />
+    <link rel="stylesheet" type="text/css" href="../_static/plot_directive.css" />
   
   <!-- So that users can add custom icons -->
   <script defer src="../_static/scripts/fontawesome.js?digest=90905a2f556bf617f1a9"></script>
@@ -246,6 +246,11 @@
 <li class="toctree-l2 current active has-children"><a class="current reference internal" href="#"><code class="docutils literal notranslate"><span class="pre">pulserver.design</span></code></a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="generated/design/pulserver.design.NonSelectiveExcitation.html">pulserver.design.NonSelectiveExcitation</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/design/pulserver.design.SpatialSelectiveExcitation.html">pulserver.design.SpatialSelectiveExcitation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/design/pulserver.design.SpatialSelective2DExcitation.html">pulserver.design.SpatialSelective2DExcitation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/design/pulserver.design.FrequencySelectiveExcitation.html">pulserver.design.FrequencySelectiveExcitation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/design/pulserver.design.SpspExcitation.html">pulserver.design.SpspExcitation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/design/pulserver.design.SmsExcitation.html">pulserver.design.SmsExcitation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/design/pulserver.design.MultibandExcitation.html">pulserver.design.MultibandExcitation</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/design/pulserver.design.NonSelectiveRefocusing.html">pulserver.design.NonSelectiveRefocusing</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/design/pulserver.design.SpatialSelectiveRefocusing.html">pulserver.design.SpatialSelectiveRefocusing</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/design/pulserver.design.Inversion.html">pulserver.design.Inversion</a></li>
@@ -263,6 +268,10 @@
 <li class="toctree-l3"><a class="reference internal" href="generated/design/pulserver.design.BssfpReadout3D.html">pulserver.design.BssfpReadout3D</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/design/pulserver.design.FseReadout2D.html">pulserver.design.FseReadout2D</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/design/pulserver.design.FseReadout3D.html">pulserver.design.FseReadout3D</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/design/pulserver.design.EpiReadout2D.html">pulserver.design.EpiReadout2D</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/design/pulserver.design.EpiReadout3D.html">pulserver.design.EpiReadout3D</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/design/pulserver.design.PropellerReadout2D.html">pulserver.design.PropellerReadout2D</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/design/pulserver.design.PropellerStackReadout.html">pulserver.design.PropellerStackReadout</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/design/pulserver.design.RadialReadout2D.html">pulserver.design.RadialReadout2D</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/design/pulserver.design.RadialStackReadout.html">pulserver.design.RadialStackReadout</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/design/pulserver.design.RadialProjectionReadout.html">pulserver.design.RadialProjectionReadout</a></li>
@@ -310,7 +319,9 @@
 <li class="toctree-l3"><a class="reference internal" href="generated/pypulseq/pulserver.pypulseq.make_slr_pulse.html">pulserver.pypulseq.make_slr_pulse</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/pypulseq/pulserver.pypulseq.make_sms_pulse.html">pulserver.pypulseq.make_sms_pulse</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/pypulseq/pulserver.pypulseq.make_spsp_pulse.html">pulserver.pypulseq.make_spsp_pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/pypulseq/pulserver.pypulseq.make_2d_selective_pulse.html">pulserver.pypulseq.make_2d_selective_pulse</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/pypulseq/pulserver.pypulseq.traj_to_grad.html">pulserver.pypulseq.traj_to_grad</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/pypulseq/pulserver.pypulseq.calc_epi_order.html">pulserver.pypulseq.calc_epi_order</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/pypulseq/pulserver.pypulseq.calc_golden_angles.html">pulserver.pypulseq.calc_golden_angles</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/pypulseq/pulserver.pypulseq.calc_raga_angles.html">pulserver.pypulseq.calc_raga_angles</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/pypulseq/pulserver.pypulseq.calc_sampled_lines.html">pulserver.pypulseq.calc_sampled_lines</a></li>
@@ -711,6 +722,18 @@ one gradient for a 3D slab.</p>
 quarter turn away, between crushers stated in the same cycles-per-voxel
 vocabulary as everything else. They are events like any other, so a readout
 given one instead of an excitation is a spin echo rather than a gradient echo.</p>
+<p>The rest are the other things a pulse can be selective <em>in</em>.
+<code class="docutils literal notranslate"><span class="pre">FrequencySelectiveExcitation</span></code> drops the gradient, so the envelope alone picks
+a spectral band. <code class="docutils literal notranslate"><span class="pre">SpspExcitation</span></code> puts one back and alternates it, selecting a
+slice and a band at once. <code class="docutils literal notranslate"><span class="pre">SpatialSelective2DExcitation</span></code> runs two gradients
+along a spiral through excitation k-space and excites a column instead of a
+slice.</p>
+<p><code class="docutils literal notranslate"><span class="pre">SmsExcitation</span></code> and <code class="docutils literal notranslate"><span class="pre">MultibandExcitation</span></code> are the same modulation with and
+without a gradient. With one, frequency is position and the bands are slices;
+without, they are off-resonance saturation, which is what an ihMT experiment
+compares. There the sidebands are matched on <strong>power</strong>, not amplitude: two at
+<code class="docutils literal notranslate"><span class="pre">sqrt(beta/2)</span></code> carry what one at <code class="docutils literal notranslate"><span class="pre">sqrt(beta)</span></code> does, and halving an amplitude
+instead turns the measurement into a power difference.</p>
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table">
 <tbody>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/design/pulserver.design.NonSelectiveExcitation.html#pulserver.design.NonSelectiveExcitation" title="pulserver.design.NonSelectiveExcitation"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.design.NonSelectiveExcitation</span></code></a></p></td>
@@ -719,13 +742,28 @@ given one instead of an excitation is a spin echo rather than a gradient echo.</
 <tr class="row-even"><td><p><a class="reference internal" href="generated/design/pulserver.design.SpatialSelectiveExcitation.html#pulserver.design.SpatialSelectiveExcitation" title="pulserver.design.SpatialSelectiveExcitation"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.design.SpatialSelectiveExcitation</span></code></a></p></td>
 <td><p>An SLR pulse under a selection gradient, with its rephaser.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/design/pulserver.design.NonSelectiveRefocusing.html#pulserver.design.NonSelectiveRefocusing" title="pulserver.design.NonSelectiveRefocusing"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.design.NonSelectiveRefocusing</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/design/pulserver.design.SpatialSelective2DExcitation.html#pulserver.design.SpatialSelective2DExcitation" title="pulserver.design.SpatialSelective2DExcitation"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.design.SpatialSelective2DExcitation</span></code></a></p></td>
+<td><p>A pulse that excites a column rather than a slice.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/design/pulserver.design.FrequencySelectiveExcitation.html#pulserver.design.FrequencySelectiveExcitation" title="pulserver.design.FrequencySelectiveExcitation"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.design.FrequencySelectiveExcitation</span></code></a></p></td>
+<td><p>A pulse that tips one spectral band and leaves the rest alone.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/design/pulserver.design.SpspExcitation.html#pulserver.design.SpspExcitation" title="pulserver.design.SpspExcitation"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.design.SpspExcitation</span></code></a></p></td>
+<td><p>A spectral-spatial pulse: one slice and one spectral band at once.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/design/pulserver.design.SmsExcitation.html#pulserver.design.SmsExcitation" title="pulserver.design.SmsExcitation"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.design.SmsExcitation</span></code></a></p></td>
+<td><p>A slice-selective pulse modulated to excite several slices at once.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/design/pulserver.design.MultibandExcitation.html#pulserver.design.MultibandExcitation" title="pulserver.design.MultibandExcitation"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.design.MultibandExcitation</span></code></a></p></td>
+<td><p>A pulse with off-resonance sidebands and no gradient at all.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/design/pulserver.design.NonSelectiveRefocusing.html#pulserver.design.NonSelectiveRefocusing" title="pulserver.design.NonSelectiveRefocusing"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.design.NonSelectiveRefocusing</span></code></a></p></td>
 <td><p>A hard 180 between two crushers.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/design/pulserver.design.SpatialSelectiveRefocusing.html#pulserver.design.SpatialSelectiveRefocusing" title="pulserver.design.SpatialSelectiveRefocusing"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.design.SpatialSelectiveRefocusing</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/design/pulserver.design.SpatialSelectiveRefocusing.html#pulserver.design.SpatialSelectiveRefocusing" title="pulserver.design.SpatialSelectiveRefocusing"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.design.SpatialSelectiveRefocusing</span></code></a></p></td>
 <td><p>An SLR 180 under a selection gradient, with its crushers bridged on.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/design/pulserver.design.Inversion.html#pulserver.design.Inversion" title="pulserver.design.Inversion"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.design.Inversion</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/design/pulserver.design.Inversion.html#pulserver.design.Inversion" title="pulserver.design.Inversion"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.design.Inversion</span></code></a></p></td>
 <td><p>An adiabatic inversion pulse, alone.</p></td>
 </tr>
 </tbody>
@@ -816,6 +854,11 @@ an area, so the same numbers mean the same thing at any resolution.</p>
 carries the centre of k-space — and so what the effective echo time is —
 follows from the ordering the loop plays, so the module states every echo’s
 time in <code class="docutils literal notranslate"><span class="pre">echo_times</span></code> and names none of them.</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">Epi*</span></code> pair reads a whole train too, but with the phase-encode steps blipped
+onto the read ramps rather than a refocusing pulse between them. There the
+ordering is the argument that matters: it repeats every repetition, and the loop
+moves only its origin. <code class="docutils literal notranslate"><span class="pre">Propeller*</span></code> is that train narrowed to a blade and turned
+about the centre of k-space.</p>
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table">
 <tbody>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/design/pulserver.design.LineReadout2D.html#pulserver.design.LineReadout2D" title="pulserver.design.LineReadout2D"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.design.LineReadout2D</span></code></a></p></td>
@@ -835,6 +878,18 @@ time in <code class="docutils literal notranslate"><span class="pre">echo_times<
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/design/pulserver.design.FseReadout3D.html#pulserver.design.FseReadout3D" title="pulserver.design.FseReadout3D"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.design.FseReadout3D</span></code></a></p></td>
 <td><p>A single-slab CPMG train, phase-encoded along y and partition-encoded along z.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/design/pulserver.design.EpiReadout2D.html#pulserver.design.EpiReadout2D" title="pulserver.design.EpiReadout2D"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.design.EpiReadout2D</span></code></a></p></td>
+<td><p>A single- or multi-shot EPI train, frequency-encoded along x.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/design/pulserver.design.EpiReadout3D.html#pulserver.design.EpiReadout3D" title="pulserver.design.EpiReadout3D"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.design.EpiReadout3D</span></code></a></p></td>
+<td><p>A slab-selective EPI train, phase-encoded along y and partition-encoded along z.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/design/pulserver.design.PropellerReadout2D.html#pulserver.design.PropellerReadout2D" title="pulserver.design.PropellerReadout2D"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.design.PropellerReadout2D</span></code></a></p></td>
+<td><p>A 2D PROPELLER blade set: EPI blades turned about the centre of k-space.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/design/pulserver.design.PropellerStackReadout.html#pulserver.design.PropellerStackReadout" title="pulserver.design.PropellerStackReadout"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.design.PropellerStackReadout</span></code></a></p></td>
+<td><p>A stack of 2D PROPELLER blade sets, partition-encoded along z.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/design/pulserver.design.RadialReadout2D.html#pulserver.design.RadialReadout2D" title="pulserver.design.RadialReadout2D"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pulserver.design.RadialReadout2D</span></code></a></p></td>
 <td><p>A full radial spoke through the centre of a plane.</p></td>

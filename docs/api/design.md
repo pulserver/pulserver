@@ -69,6 +69,20 @@ quarter turn away, between crushers stated in the same cycles-per-voxel
 vocabulary as everything else. They are events like any other, so a readout
 given one instead of an excitation is a spin echo rather than a gradient echo.
 
+The rest are the other things a pulse can be selective *in*.
+`FrequencySelectiveExcitation` drops the gradient, so the envelope alone picks
+a spectral band. `SpspExcitation` puts one back and alternates it, selecting a
+slice and a band at once. `SpatialSelective2DExcitation` runs two gradients
+along a spiral through excitation k-space and excites a column instead of a
+slice.
+
+`SmsExcitation` and `MultibandExcitation` are the same modulation with and
+without a gradient. With one, frequency is position and the bands are slices;
+without, they are off-resonance saturation, which is what an ihMT experiment
+compares. There the sidebands are matched on **power**, not amplitude: two at
+`sqrt(beta/2)` carry what one at `sqrt(beta)` does, and halving an amplitude
+instead turns the measurement into a power difference.
+
 ```{eval-rst}
 .. autosummary::
    :toctree: generated/design
@@ -76,6 +90,11 @@ given one instead of an excitation is a spin echo rather than a gradient echo.
 
    pulserver.design.NonSelectiveExcitation
    pulserver.design.SpatialSelectiveExcitation
+   pulserver.design.SpatialSelective2DExcitation
+   pulserver.design.FrequencySelectiveExcitation
+   pulserver.design.SpspExcitation
+   pulserver.design.SmsExcitation
+   pulserver.design.MultibandExcitation
    pulserver.design.NonSelectiveRefocusing
    pulserver.design.SpatialSelectiveRefocusing
    pulserver.design.Inversion
@@ -159,6 +178,12 @@ carries the centre of k-space — and so what the effective echo time is —
 follows from the ordering the loop plays, so the module states every echo's
 time in `echo_times` and names none of them.
 
+The `Epi*` pair reads a whole train too, but with the phase-encode steps blipped
+onto the read ramps rather than a refocusing pulse between them. There the
+ordering is the argument that matters: it repeats every repetition, and the loop
+moves only its origin. `Propeller*` is that train narrowed to a blade and turned
+about the centre of k-space.
+
 ```{eval-rst}
 .. autosummary::
    :toctree: generated/design
@@ -170,6 +195,10 @@ time in `echo_times` and names none of them.
    pulserver.design.BssfpReadout3D
    pulserver.design.FseReadout2D
    pulserver.design.FseReadout3D
+   pulserver.design.EpiReadout2D
+   pulserver.design.EpiReadout3D
+   pulserver.design.PropellerReadout2D
+   pulserver.design.PropellerStackReadout
    pulserver.design.RadialReadout2D
    pulserver.design.RadialStackReadout
    pulserver.design.RadialProjectionReadout

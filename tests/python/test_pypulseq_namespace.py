@@ -207,6 +207,14 @@ def _factory_calls(system):
         "make_sinc_pulse": lambda: pp.make_sinc_pulse(
             flip_angle=0.5, duration=2e-3, system=system
         ),
+        "make_2d_selective_pulse": lambda: pp.make_2d_selective_pulse(
+            0.5,
+            fov=0.256,
+            matrix=16,
+            selective_size=0.04,
+            n_interleaves=2,
+            system=pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=180, slew_unit="T/m/s"),
+        ),
         "make_slr_pulse": lambda: pp.make_slr_pulse(0.5, system=system),
         "make_sms_pulse": lambda: pp.make_sms_pulse(
             pp.make_sinc_pulse(flip_angle=0.5, duration=2e-3, system=system), 3, 1000.0

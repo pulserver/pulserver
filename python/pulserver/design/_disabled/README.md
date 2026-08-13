@@ -11,9 +11,8 @@ delete it from here.
 
 | Family | Source |
 |---|---|
-| EPI 2D/3D, blipped and flyback | `_readout/epi.py`, `_sampling/epi.py` |
-| SPSP, SMS, PINS, multiband | `_rf/_multiband.py` |
-| 2D/3D spatially selective pulses | `_rf/_spatial.py` |
+| PINS | `_rf/_multiband.py` |
+| 3D and plane-selective pulses | `_rf/_spatial.py` |
 | Sampling masks, orderings, `ScanLoop` | `_sampling/` |
 | The `make_*` factory layer | `_readout/_factories.py`, `_readout/_procedural.py` |
 | `pulserver.sequences` REPL factories | `_shim.py` |
@@ -24,6 +23,22 @@ imports `.bssfp` and `.zte`, which are gone — `design/readout/bssfp.py` and
 `design/readout/zte.py` replace them, and
 `pulserver.pypulseq.calc_projection_shell` replaces the shell generator ZTE
 needed from `_sampling/`.
+
+`_factories.py` also imports `.epi`, which is gone —
+`design/readout/epi.py` and `design/readout/propeller.py` replace it, with the
+flyback variants folded in as `flyback=True` rather than kept as classes of
+their own, and `pulserver.pypulseq.calc_epi_order` replacing its within-shot
+patterns. `_sampling/epi.py` stays: `make_skipped_caipi_order` is
+superseded by `calc_epi_order`, but `_from_shots`,
+`build_from_relative_shifts` and `interleaved` are `ScanLoop` machinery that
+`_sampling/patterns.py` and `_sampling/_scanloop.py` still import.
+
+`_rf/_multiband.py` and `_rf/_spatial.py` are **partial** ports.
+`design/excitation/multiband.py` and `spectral.py` cover SPSP, SMS and the
+ihMT multiband pulse over `pp.make_sms_pulse` / `pp.make_spsp_pulse`, and
+`design/excitation/spatial2d.py` covers the 2D-selective one over the new
+`pp.make_2d_selective_pulse`. What is left in those two files is PINS, and the
+plane- and 3D-selective designs.
 
 Three things every port has to change, because they are why this code cannot
 run as it stands:

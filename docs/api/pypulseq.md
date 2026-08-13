@@ -370,6 +370,7 @@ already-rastered trajectory.
    pulserver.pypulseq.make_slr_pulse
    pulserver.pypulseq.make_sms_pulse
    pulserver.pypulseq.make_spsp_pulse
+   pulserver.pypulseq.make_2d_selective_pulse
    pulserver.pypulseq.traj_to_grad
 ```
 
@@ -387,11 +388,18 @@ says which of the two arithmetic reasons applies — the calibration block alone
 being denser than the request, or the grid being too coarse for one sample to
 land inside `tol`.
 
+`calc_epi_order` is the odd one out: it describes what happens *inside* one
+repetition rather than across them, because an EPI train's blips are hardware
+and have to be designed with the readout. It still returns plain integers, and
+its `'caipi'` scheme reads its partitions off `make_caipirinha_mask` rather
+than restating the lattice.
+
 ```{eval-rst}
 .. autosummary::
    :toctree: generated/pypulseq
    :nosignatures:
 
+   pulserver.pypulseq.calc_epi_order
    pulserver.pypulseq.calc_golden_angles
    pulserver.pypulseq.calc_raga_angles
    pulserver.pypulseq.calc_sampled_lines

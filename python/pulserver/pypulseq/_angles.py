@@ -17,6 +17,7 @@ __all__ = [
 import math
 
 import numpy as np
+from scipy.spatial.transform import Rotation
 
 #: The golden ratio, whose irrationality is what keeps any window of
 #: consecutive spokes near-uniformly distributed.
@@ -351,10 +352,4 @@ def _constant_step_spiral(n_views: int) -> np.ndarray:
 
 def _turns_about_z(angles: np.ndarray) -> np.ndarray:
     """One rotation matrix about ``z`` per angle."""
-    cosine, sine = np.cos(angles), np.sin(angles)
-    turns = np.zeros((len(angles), 3, 3), dtype=float)
-    turns[:, 0, 0] = turns[:, 1, 1] = cosine
-    turns[:, 0, 1] = -sine
-    turns[:, 1, 0] = sine
-    turns[:, 2, 2] = 1.0
-    return turns
+    return Rotation.from_euler("z", np.asarray(angles, dtype=float).reshape(-1, 1)).as_matrix()

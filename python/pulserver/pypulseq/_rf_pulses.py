@@ -7,7 +7,13 @@ gradient makes sense.
 
 from __future__ import annotations
 
-__all__ = ["make_sigpy_pulse", "make_slr_pulse", "make_sms_pulse", "make_spsp_pulse"]
+__all__ = [
+    "make_2d_selective_pulse",
+    "make_sigpy_pulse",
+    "make_slr_pulse",
+    "make_sms_pulse",
+    "make_spsp_pulse",
+]
 
 from typing import Literal, Sequence
 
@@ -487,3 +493,240 @@ def _alternating_extended_trapezoid(event, count: int, system):
     return _events.make_extended_trapezoid(
         channel="z", times=np.asarray(times), amplitudes=np.asarray(amplitudes), system=system
     )
+
+
+def make_2d_selective_pulse(
+    flip_angle: float,
+    fov: float,
+    matrix: int,
+    *,
+    selective_size: float | Sequence[float] | None = None,
+    target: np.ndarray | None = None,
+    n_interleaves: int | None = None,
+    axes: Sequence[str] = ("x", "y"),
+    system=None,
+    use: str = "excitation",
+    freq_offset: float = 0.0,
+    phase_offset: float = 0.0,
+):
+    """A pulse selective in two dimensions, on a spiral excitation trajectory.
+
+    Under the small-tip approximation the transverse magnetisation a pulse
+    leaves behind is the Fourier transform of its envelope sampled along the
+    path the gradients trace through *excitation* k-space. So the design runs
+    backwards: pick the path, evaluate the desired profile's transform along
+    it, and that is the envelope.
+
+    A spiral is the usual path. It covers a disc of excitation k-space in one
+    gradient-efficient shot and ends at the origin, so the pulse refocuses
+    itself and needs no rephaser. Interleaves are traversed centre-out with RF
+    on, then retraced with RF off to bring the path back to the origin before
+    the next one begins -- concatenating bare interleaves instead walks around
+    the outer k-space endpoints and displaces the profile.
+
+    The envelope is compensated for how fast the path moves, since a sum over
+    uniform time steps has to stand in for an integral over k-space. Arc length
+    is the right weight here and the full polar area element is not: the
+    designer's interleaves already fan out radially, so weighting by radius as
+    well over-corrects and leaves a hole in the middle of the excited disc.
+
+    Parameters
+    ----------
+    flip_angle : float
+        Nominal flip angle (rad), reached at the centre of the excited region.
+    fov : float
+        Excitation field of view (m), square. Outside it the profile repeats:
+        the trajectory samples excitation k-space at a finite pitch, so a
+        second excited spot appears one ``fov`` away.
+    matrix : int
+        Excitation grid size, square. It sets how finely the profile is
+        specified, and so how far out the trajectory has to reach.
+    selective_size : float or sequence of float, optional
+        Diameter (m) of the excited disc, one value or one per axis. Half the
+        field of view by default.
+    target : numpy.ndarray, optional
+        Complex desired profile on the ``(matrix, matrix)`` grid, instead of a
+        disc.
+    n_interleaves : int, optional
+        Spiral arms to play. The default is what covers excitation k-space at
+        Nyquist. Fewer is a proportionally shorter pulse and a repeated disc
+        that moves proportionally closer, which is the trade a 2D pulse always
+        makes.
+    axes : sequence of str, optional
+        The two gradient channels the trajectory runs on.
+    system : pypulseq.Opts, optional
+        System limits.
+    use : str, optional
+        Pulseq ``use`` tag.
+    freq_offset, phase_offset : float, optional
+        Carried on the pulse.
+
+    Returns
+    -------
+    rf : RfEvent
+        The pulse, sampled on the gradient raster.
+    gradients : tuple of GradEvent
+        One arbitrary gradient per axis, to be played in the pulse's block.
+    rephasers : tuple of TrapEvent
+        Whatever the trajectory did not return to the origin. Empty for a
+        spiral, which is the point of choosing one.
+
+    Raises
+    ------
+    ValueError
+        If a size is out of range, ``target`` does not match ``matrix``, or the
+        requested profile has no response on the trajectory.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> import pulserver.pypulseq as pp
+    >>> system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+    >>> rf, gradients, rephasers = pp.make_2d_selective_pulse(
+    ...     np.deg2rad(30), fov=0.256, matrix=32, selective_size=0.04, system=system
+    ... )
+    >>> [gradient.channel for gradient in gradients], len(rephasers)
+    (['x', 'y'], 0)
+
+    Half the arms is half the pulse:
+
+    >>> short, _, _ = pp.make_2d_selective_pulse(
+    ...     np.deg2rad(30), fov=0.256, matrix=32, selective_size=0.04,
+    ...     n_interleaves=8, system=system,
+    ... )
+    >>> round(float(short.shape_dur) / float(rf.shape_dur), 3)
+    0.5
+
+    See Also
+    --------
+    make_spsp_pulse : selective in one dimension and in frequency.
+    sim_rf : check the profile a pulse actually produces.
+    """
+    # The compiled trajectory designer stays optional for every other pulse.
+    from . import _arbgrad
+
+    system = default_system(system)
+    axes = tuple(axes)
+    if len(axes) != 2:
+        raise ValueError("axes must name two gradient channels")
+    if fov <= 0 or int(matrix) < 2:
+        raise ValueError("fov must be positive and matrix must be >= 2")
+
+    native = _arbgrad.spiral(
+        fov=fov,
+        n_pix=int(matrix),
+        slew_limit=system.max_slew * fov / int(matrix),
+        grad_limit=system.max_grad * fov / int(matrix),
+        dt=system.grad_raster_time,
+    )
+    arms = native.n_shots if n_interleaves is None else int(n_interleaves)
+    if not 1 <= arms <= native.n_shots:
+        raise ValueError(
+            f"n_interleaves must be between 1 and the {native.n_shots} this trajectory "
+            f"needs for Nyquist coverage, got {arms}"
+        )
+    interleaves = []
+    active = []
+    for angle in _arbgrad.shot_angles(native.n_shots, mode="uniform")[:arms]:
+        cosine, sine = np.cos(angle), np.sin(angle)
+        turned = np.asarray(native.gradient)[:, :2] @ np.array(
+            [[cosine, -sine], [sine, cosine]]
+        ).T
+        interleaves.extend((turned, -turned[::-1]))
+        active.extend((np.ones(len(turned), bool), np.zeros(len(turned), bool)))
+    gradient = _arbgrad.to_gradient_tesla_per_meter(
+        np.concatenate(interleaves, axis=0), fov, int(matrix), system.gamma
+    )[:, :2]
+
+    shape = (int(matrix), int(matrix))
+    extent = (float(fov), float(fov))
+    if selective_size is not None:
+        selective_size = (
+            (float(selective_size),) * 2
+            if np.isscalar(selective_size)
+            else tuple(float(value) for value in selective_size)
+        )
+        if len(selective_size) != 2:
+            raise ValueError("selective_size must be a scalar or two values")
+
+    dwell = system.grad_raster_time
+    # Excitation k-space at a sample is the gradient moment still to come,
+    # which is what puts the final phase in the right place.
+    kspace = -np.cumsum((gradient * system.gamma)[::-1], axis=0)[::-1] * dwell
+    desired, coordinates = _selective_target(shape, extent, selective_size, target)
+    weights = _small_tip_weights(desired, coordinates, kspace)
+    weights *= np.r_[np.linalg.norm(np.diff(kspace, axis=0), axis=1), 0.0]
+    weights[~np.concatenate(active)] = 0.0
+
+    rf = _events.make_arbitrary_rf(
+        signal=weights,
+        flip_angle=flip_angle,
+        dwell=dwell,
+        freq_offset=freq_offset,
+        phase_offset=phase_offset,
+        system=system,
+        use=use,
+    )
+    gradients = []
+    rephasers = []
+    for index, axis in enumerate(axes):
+        waveform = np.ascontiguousarray(gradient[:, index] * system.gamma)
+        if np.allclose(waveform, 0.0):
+            continue
+        event = _events.make_arbitrary_grad(
+            channel=axis,
+            waveform=waveform,
+            first=0.0,
+            last=0.0,
+            # Sample n of the envelope was designed for sample n of the
+            # trajectory, so the transmit dead time has to shift both or the
+            # two come apart and the profile is not the one asked for.
+            delay=float(rf.delay),
+            system=system,
+        )
+        gradients.append(event)
+        area = float(np.trapezoid(waveform, np.arange(len(waveform)) * dwell))
+        if not np.isclose(area, 0.0, atol=1e-6):
+            rephasers.append(
+                _events.make_trapezoid(channel=axis, area=-area, system=system)
+            )
+    return rf, tuple(gradients), tuple(rephasers)
+
+
+def _selective_target(matrix, fov, selective_size, target):
+    """The desired profile and the positions it is specified on."""
+    axes = [
+        (np.arange(n) - (n - 1) / 2.0) * (extent / n)
+        for n, extent in zip(matrix, fov, strict=True)
+    ]
+    coordinates = np.stack(
+        [axis.ravel() for axis in np.meshgrid(*axes, indexing="ij")], axis=1
+    )
+    if target is not None:
+        target = np.asarray(target, dtype=np.complex128)
+        if target.shape != tuple(matrix):
+            raise ValueError(f"target shape {target.shape} does not match matrix {matrix}")
+        return target.ravel(), coordinates
+
+    if selective_size is None:
+        selective_size = tuple(0.5 * extent for extent in fov)
+    radius_squared = np.zeros(len(coordinates))
+    for dim, diameter in enumerate(selective_size):
+        if not 0 < diameter <= fov[dim]:
+            raise ValueError("each selective_size entry must lie in (0, fov]")
+        radius_squared += (coordinates[:, dim] / (0.5 * diameter)) ** 2
+    return (radius_squared <= 1.0).astype(np.complex128), coordinates
+
+
+def _small_tip_weights(target, coordinates, kspace):
+    """The target's Fourier transform, evaluated along an excitation trajectory."""
+    weights = np.empty(len(kspace), dtype=np.complex128)
+    # Bound the temporary to about 64 MiB however long the trajectory runs.
+    chunk = max(1, int(4_000_000 / max(1, len(coordinates))))
+    for start in range(0, len(kspace), chunk):
+        stop = min(start + chunk, len(kspace))
+        phase = coordinates @ kspace[start:stop].T
+        weights[start:stop] = target @ np.exp(-2j * np.pi * phase) / target.size
+    if np.allclose(weights, 0.0):
+        raise ValueError("the requested target has no response on this trajectory")
+    return weights

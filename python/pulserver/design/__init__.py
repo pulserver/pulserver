@@ -39,12 +39,17 @@ arrays; plain NumPy does just as well.
 from __future__ import annotations
 
 from .excitation import (
+    FrequencySelectiveExcitation,
     Inversion,
+    MultibandExcitation,
     NonSelectiveExcitation,
     NonSelectiveRefocusing,
     RfModule,
+    SmsExcitation,
+    SpatialSelective2DExcitation,
     SpatialSelectiveExcitation,
     SpatialSelectiveRefocusing,
+    SpspExcitation,
 )
 from .preparation import (
     BlochSiegertPreparation,
@@ -60,11 +65,15 @@ from .preparation import (
 from .readout import (
     BssfpReadout2D,
     BssfpReadout3D,
+    EpiReadout2D,
+    EpiReadout3D,
     FseReadout2D,
     FseReadout3D,
     LineReadout2D,
     LineReadout3D,
     NonCartesianReadout,
+    PropellerReadout2D,
+    PropellerStackReadout,
     RadialProjectionReadout,
     RadialReadout2D,
     RadialStackReadout,
@@ -79,11 +88,16 @@ from .readout import (
 
 #: Modules whose point is an RF pulse: what tips the magnetisation, and where.
 EXCITATION = (
+    "FrequencySelectiveExcitation",
     "Inversion",
+    "MultibandExcitation",
     "NonSelectiveExcitation",
     "NonSelectiveRefocusing",
+    "SmsExcitation",
+    "SpatialSelective2DExcitation",
     "SpatialSelectiveExcitation",
     "SpatialSelectiveRefocusing",
+    "SpspExcitation",
 )
 
 #: Modules that prepare the magnetisation before a readout samples it.
@@ -104,10 +118,14 @@ PREPARATION = (
 READOUT = (
     "BssfpReadout2D",
     "BssfpReadout3D",
+    "EpiReadout2D",
+    "EpiReadout3D",
     "FseReadout2D",
     "FseReadout3D",
     "LineReadout2D",
     "LineReadout3D",
+    "PropellerReadout2D",
+    "PropellerStackReadout",
     "RadialProjectionReadout",
     "RadialReadout2D",
     "RadialStackReadout",

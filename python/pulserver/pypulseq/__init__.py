@@ -37,6 +37,7 @@ from ._angles import (
     calc_uniform_angles as _calc_uniform_angles,
 )
 from ._gradients import make_crusher as _make_crusher
+from ._epi import calc_epi_order as _calc_epi_order
 from ._gradients import make_phase_blip as _make_phase_blip
 from ._gradients import make_phase_encoding as _make_phase_encoding
 from ._make_label import COUNTER_LABELS, FLAG_LABELS, STICKY_FLAGS  # noqa: F401
@@ -60,6 +61,7 @@ from ._matlab_parity import get_supported_rf_use as _get_supported_rf_use
 from ._matlab_parity import get_supported_rf_uses as _get_supported_rf_uses
 from ._matlab_parity import make_hexagon_gradient_area as _make_hexagon_gradient_area
 from ._matlab_parity import verify_file_signature as _verify_file_signature
+from ._rf_pulses import make_2d_selective_pulse as _make_2d_selective_pulse
 from ._rf_pulses import make_sigpy_pulse as _make_sigpy_pulse
 from ._rf_pulses import make_slr_pulse as _make_slr_pulse
 from ._rf_pulses import make_sms_pulse as _make_sms_pulse
@@ -168,11 +170,13 @@ calc_rf_power = _calc_rf_power
 make_crusher = _make_crusher
 make_phase_blip = _make_phase_blip
 make_phase_encoding = _make_phase_encoding
+make_2d_selective_pulse = _make_2d_selective_pulse
 make_sigpy_pulse = _make_sigpy_pulse
 make_slr_pulse = _make_slr_pulse
 make_sms_pulse = _make_sms_pulse
 make_spsp_pulse = _make_spsp_pulse
 traj_to_grad = _traj_to_grad
+calc_epi_order = _calc_epi_order
 calc_golden_angles = _calc_golden_angles
 calc_projection_shell = _calc_projection_shell
 calc_raga_angles = _calc_raga_angles
@@ -257,6 +261,7 @@ BASE_FACTORIES = frozenset(
         "make_crusher",
         "make_phase_blip",
         "make_phase_encoding",
+        "make_2d_selective_pulse",
         "make_sigpy_pulse",
         "make_slr_pulse",
         "make_sms_pulse",
@@ -270,6 +275,7 @@ BASE_FACTORIES = frozenset(
 #: :mod:`pulserver.design`, which holds only modules.
 SAMPLING = frozenset(
     {
+        "calc_epi_order",
         "calc_golden_angles",
         "calc_projection_shell",
         "calc_raga_angles",

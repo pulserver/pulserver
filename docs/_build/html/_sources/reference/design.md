@@ -150,6 +150,107 @@ rest. Stimulated echoes from the longer first spacing do not rephase with the
 rest of the train, which is why the first refocusing flip angle should stay
 near 180° and keep its crushers.
 
+## Echo-planar trains
+
+An EPI train reads many lines from one excitation, and the arithmetic that
+matters is where the phase-encode steps go. They go on the readout ramps.
+
+Each read lobe has its ramps lengthened by half a blip at either end, and the
+acquisition window is inset by exactly that much, so a step is entirely outside
+the samples it separates: no line drifts in the phase-encode direction while it
+is being read, and the echo spacing is the sampling window plus the ramps that
+were there anyway. Ramp sampling then takes the window out to the full lobe,
+which is what makes the spacing short — at the price of samples that are
+uniform in *time* and so not uniform in k, for the reconstruction to regrid.
+`ramp_sampling=False` keeps a rectangular window and pays a longer train.
+
+Every step is one template scaled, so they all take the same time however far
+they move. That is what keeps the echo spacing constant when the ordering's
+steps are not: a CAIPI train's partition blips alternate between two sizes, and
+a zigzag's turn is half the size of its stride. The spacing is set by the
+widest step in the pattern, which is the real cost of a wide blip.
+
+The read prewinder is **half the line lobe's area**, whatever shape the ramps
+took. The lobe is symmetric and the window is centred in it, so half the total
+puts the first sample at `-k_width/2` without anyone having to know how the
+elongation was distributed. The pad either side is never shorter than the
+receiver's dead time, because an ADC delay below it is silently raised and a
+window shunted forward is a sweep that no longer straddles `k = 0`.
+
+`flyback=True` reads every line in the same direction instead, rewinding
+between them. There is no ramp to hide on, so the step is played whole in the
+rewind block, and the echo spacing grows by the rewind — around 45% for a
+typical train. What it buys is the odd-even inconsistency: a bipolar train
+reads alternate lines through opposite eddy-current and delay histories, and
+the resulting Nyquist ghost is what phase-correction navigators exist to
+remove. A flyback train has nothing to correct.
+
+### The ordering, and who owns it
+
+The pattern repeats every repetition; only its *origin* moves. `order` holds
+offsets from that origin, one row per line, first row always `(0, 0)`, and the
+loop scales one prewinder per axis to place it. So a shot costs two numbers,
+and the blips — which are what the ordering actually costs in hardware — are
+designed once.
+
+The counters say the same thing twice over: `shot_labels` are `SET` counters on
+the prewinder that the loop writes the origin into, and `line_labels` are `INC`
+counters carrying the pattern's own steps. The ordering is baked into the
+labels exactly as it is baked into the blips.
+
+`calc_epi_order` builds three patterns:
+
+| `scheme` | what it is |
+|---|---|
+| `'linear'` | steps by `segments * acceleration` and stays in its partition — plain segmented EPI, and plain single-shot EPI at the defaults |
+| `'caipi'` | adds the partition sawtooth: segmented blipped-CAIPI |
+| `'zigzag'` | walks up and down one phase-encode segment instead of across the matrix |
+
+`'caipi'` is Stirnberg's skipped-CAIPI, and its point is that the segmentation
+factor and the CAIPI pattern stop being the same choice. The blip is
+`S · Ry`, so the train length and the phase-encode bandwidth move freely while
+the sampled lattice does not — the shots still tile exactly the mask
+`make_caipirinha_mask` defines, which is where the partitions are read from
+rather than restated. Two special cases fall out: `S = 1` is blipped-CAIPI, and
+`S` equal to the blip cycle is shot-selective CAIPI, where the partition never
+moves and there are no partition blips at all.
+
+`'zigzag'` is the EPTI traversal. Instead of crossing k-space once it turns
+inside a segment, so the same line is read at many echo times and the train
+resolves a signal evolution rather than one image. The return pass is offset by
+half a stride so temporally adjacent passes sample between each other, and no
+step is ever wider than one stride — which is what keeps the spacing short
+enough for the times to stay correlated.
+
+Nothing here decides which shot goes where. `order` is what happens inside a
+repetition; the origins are an encoding plan, and those live in the loop.
+
+## PROPELLER
+
+A blade is an EPI train a few lines wide and the full matrix long, laid across
+the centre of k-space, and a blade set is that one train turned. So PROPELLER
+is not a separate readout so much as the narrow limit of an EPI one, which is
+why `PropellerReadout2D` is an `EpiReadout2D` with the ordering and the angles
+filled in.
+
+Two things follow from the blade straddling the centre. It never has to be
+placed: `blade_start` is the same for every blade, and only the angle varies.
+And every blade samples the centre, which is what gives PROPELLER the
+self-navigation it is used for.
+
+The blade turns by a `ROTATIONS` extension, with the gradients left on their
+own axes — the same convention the non-Cartesian readouts use, and for the same
+reason: one waveform serves every angle. `PropellerStackReadout` turns about
+`z`, the one axis the rotation leaves alone, so the partition encode rides
+through untouched.
+
+The default blade count is what samples the rim of the disc at Nyquist,
+`ceil(π · matrix / (2 · blade_width))`: adjacent blades have to meet where they
+are furthest apart. Uniform angles divide half a turn, since a blade turned by
+π covers the strip it already covered. Golden angles leave any *prefix* of the
+set near-uniform, which is what a scan that may be cut short — or that discards
+blades to motion — actually needs.
+
 ## Balanced steady state
 
 A bSSFP repetition is three blocks -- rewind, excite, read -- and two things
