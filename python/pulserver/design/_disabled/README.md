@@ -12,20 +12,18 @@ delete it from here.
 | Family | Source |
 |---|---|
 | EPI 2D/3D, blipped and flyback | `_readout/epi.py`, `_sampling/epi.py` |
-| FSE / CPMG trains | `_readout/fse.py` |
-| ZTE | `_readout/zte.py` |
-| bSSFP | `_readout/bssfp.py` |
-| Fat saturation, MT, ihMT | `_rf/_preparation.py` |
-| T2 prep, hybrid T1/T2 prep | `_rf/_preparation.py`, `_rf/_preparation_helpers.py` |
-| Diffusion preparation | `_rf/_preparation.py` |
-| Bloch–Siegert | `_rf/_preparation.py` |
-| Refocusing, hard, adiabatic, frequency-selective pulses | `_rf/_excitation.py`, `_rf/_excitation_helpers.py` |
 | SPSP, SMS, PINS, multiband | `_rf/_multiband.py` |
 | 2D/3D spatially selective pulses | `_rf/_spatial.py` |
 | Sampling masks, orderings, `ScanLoop` | `_sampling/` |
 | The `make_*` factory layer | `_readout/_factories.py`, `_readout/_procedural.py` |
-| Z-channel gradient combination, crushers | `_gradients.py` |
 | `pulserver.sequences` REPL factories | `_shim.py` |
+
+`_readout/fse.py` stays only because `_readout/_factories.py` imports from it;
+the FSE family itself lives in `design/readout/fse.py`. `_factories.py` also
+imports `.bssfp` and `.zte`, which are gone — `design/readout/bssfp.py` and
+`design/readout/zte.py` replace them, and
+`pulserver.pypulseq.calc_projection_shell` replaces the shell generator ZTE
+needed from `_sampling/`.
 
 Three things every port has to change, because they are why this code cannot
 run as it stands:

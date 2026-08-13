@@ -30,14 +30,12 @@ _SPOILING_POSITIONS = ("pre", "post")
 class _LineReadout(SequenceModule):
     """One Cartesian line, from the RF that starts it to the end of the TR.
 
-    A readout module spans a whole repetition rather than only the acquisition
-    window, because TE and TR are the numbers a caller actually has and
-    neither can be budgeted without the pulse. The pulse is passed in as an
-    **event**, not as a module, so the same class serves an excitation --
-    giving a gradient echo -- or a refocusing pulse, giving the second half of
-    a spin echo, where TE is then measured from the refocusing isodelay.
+    The pulse is an event rather than a module, so the same class gives a
+    gradient echo from an excitation or the second half of a spin echo from a
+    refocusing pulse. Phase encoding is designed at full amplitude for the
+    loop to scale::
 
-    Three regimes, from two numbers:
+        seq.add_block(readout.gx_pre, pp.scale_grad(readout.gy_pre, ky))
 
     ============================ ================================================
     ``spoiling_cycles = 0``      balanced: every axis is rewound to k = 0
@@ -45,26 +43,10 @@ class _LineReadout(SequenceModule):
     ``> 0``, ``position='pre'``  SSFP-Echo: it precedes the readout instead
     ============================ ================================================
 
-    Both spoiled regimes leave the same residual moment across the TR; they
-    differ in which side of the acquisition it sits on, and so in which
-    coherence pathway is read. The spoiler is *bridged* -- it rides straight
-    off the readout lobe rather than waiting for it to fall to zero.
-
-    A dephasing lobe placed *before* the readout necessarily offsets this
-    repetition's own k-space by the residual: what such a sequence acquires is
-    not this excitation's FID but the echo refocused from the previous one.
-    :meth:`calculate_kspace` traces the FID from rest, so under
-    ``spoiling_position='pre'`` it reports a trajectory that never crosses
-    k = 0. That is the pathway distinction, not a design error; ``echo_time``
-    remains the interval it says it is.
-
-    Phase encoding is designed at full amplitude and left there. A scan loop
-    scales it per shot::
-
-        seq.add_block(readout.gx_pre, pp.scale_grad(readout.gy_pre, ky))
-
-    where ``ky`` runs over ``(index - n_y / 2) / (n_y / 2)``. Which lines are
-    played, and in what order, is the loop's business.
+    Under ``'pre'`` the residual offsets this repetition's own k-space, so
+    :meth:`calculate_kspace` -- which traces the FID from rest -- reports a
+    trajectory that never crosses k = 0. That is the pathway being read, not a
+    design error; ``echo_time`` is still the interval it says it is.
 
     Attributes
     ----------

@@ -254,6 +254,10 @@
 <li class="toctree-l3"><a class="reference internal" href="api/generated/design/pulserver.design.FatSaturation.html">pulserver.design.FatSaturation</a></li>
 <li class="toctree-l3"><a class="reference internal" href="api/generated/design/pulserver.design.LineReadout2D.html">pulserver.design.LineReadout2D</a></li>
 <li class="toctree-l3"><a class="reference internal" href="api/generated/design/pulserver.design.LineReadout3D.html">pulserver.design.LineReadout3D</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/design/pulserver.design.BssfpReadout2D.html">pulserver.design.BssfpReadout2D</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/design/pulserver.design.BssfpReadout3D.html">pulserver.design.BssfpReadout3D</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/design/pulserver.design.FseReadout2D.html">pulserver.design.FseReadout2D</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/design/pulserver.design.FseReadout3D.html">pulserver.design.FseReadout3D</a></li>
 <li class="toctree-l3"><a class="reference internal" href="api/generated/design/pulserver.design.RadialReadout2D.html">pulserver.design.RadialReadout2D</a></li>
 <li class="toctree-l3"><a class="reference internal" href="api/generated/design/pulserver.design.RadialStackReadout.html">pulserver.design.RadialStackReadout</a></li>
 <li class="toctree-l3"><a class="reference internal" href="api/generated/design/pulserver.design.RadialProjectionReadout.html">pulserver.design.RadialProjectionReadout</a></li>
@@ -263,6 +267,7 @@
 <li class="toctree-l3"><a class="reference internal" href="api/generated/design/pulserver.design.RosetteReadout2D.html">pulserver.design.RosetteReadout2D</a></li>
 <li class="toctree-l3"><a class="reference internal" href="api/generated/design/pulserver.design.RosetteStackReadout.html">pulserver.design.RosetteStackReadout</a></li>
 <li class="toctree-l3"><a class="reference internal" href="api/generated/design/pulserver.design.RosetteProjectionReadout.html">pulserver.design.RosetteProjectionReadout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/generated/design/pulserver.design.ZteReadout.html">pulserver.design.ZteReadout</a></li>
 <li class="toctree-l3"><a class="reference internal" href="api/generated/design/pulserver.design.RfModule.html">pulserver.design.RfModule</a></li>
 <li class="toctree-l3"><a class="reference internal" href="api/generated/design/pulserver.design.NonCartesianReadout.html">pulserver.design.NonCartesianReadout</a></li>
 <li class="toctree-l3"><a class="reference internal" href="api/generated/design/pulserver.design.OffResonanceSaturation.html">pulserver.design.OffResonanceSaturation</a></li>
@@ -606,6 +611,7 @@
  | <a href="#U"><strong>U</strong></a>
  | <a href="#V"><strong>V</strong></a>
  | <a href="#W"><strong>W</strong></a>
+ | <a href="#Z"><strong>Z</strong></a>
  
 </div>
 <h2 id="_">_</h2>
@@ -802,21 +808,29 @@
 </li>
       </ul></li>
       <li><a href="api/generated/design/pulserver.design.NonCartesianReadout.html#pulserver.design.NonCartesianReadout.adc">adc (pulserver.design.NonCartesianReadout attribute)</a>
+
+      <ul>
+        <li><a href="api/generated/design/pulserver.design.ZteReadout.html#pulserver.design.ZteReadout.adc">(pulserver.design.ZteReadout attribute)</a>
 </li>
+      </ul></li>
       <li><a href="api/generated/recon/pulserver.recon.simulation.SequenceDescription.html#pulserver.recon.simulation.SequenceDescription.adc_events">adc_events (pulserver.recon.simulation.SequenceDescription property)</a>
 </li>
       <li><a href="api/generated/design/pulserver.design.NonCartesianReadout.html#pulserver.design.NonCartesianReadout.adc_labels">adc_labels (pulserver.design.NonCartesianReadout attribute)</a>
+
+      <ul>
+        <li><a href="api/generated/design/pulserver.design.ZteReadout.html#pulserver.design.ZteReadout.adc_labels">(pulserver.design.ZteReadout attribute)</a>
 </li>
+      </ul></li>
       <li><a href="api/generated/pulserver.pypulseq.AdcTimes.html#pulserver.pypulseq.AdcTimes">AdcTimes (class in pulserver.pypulseq)</a>
 </li>
       <li><a href="api/generated/pypulseq/pulserver.pypulseq.Sequence.html#pulserver.pypulseq.Sequence.add_block">add_block() (pulserver.pypulseq.Sequence method)</a>
 </li>
       <li><a href="api/generated/pypulseq/pulserver.pypulseq.Sequence.html#pulserver.pypulseq.Sequence.add_trid">add_trid() (pulserver.pypulseq.Sequence method)</a>
 </li>
-      <li><a href="api/generated/recon/pulserver.recon.optim.StackedPrior.html#pulserver.recon.optim.StackedPrior.adjoint">adjoint() (pulserver.recon.optim.StackedPrior method)</a>
-</li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/generated/recon/pulserver.recon.optim.StackedPrior.html#pulserver.recon.optim.StackedPrior.adjoint">adjoint() (pulserver.recon.optim.StackedPrior method)</a>
+</li>
       <li><a href="api/generated/recon/pulserver.recon.optim.ADMM.html#pulserver.recon.optim.ADMM">ADMM (class in pulserver.recon.optim)</a>
 </li>
       <li><a href="api/generated/recon/pulserver.recon.simulation.EpgInterpreter.html#pulserver.recon.simulation.EpgInterpreter.after_adc">after_adc() (pulserver.recon.simulation.EpgInterpreter method)</a>
@@ -865,6 +879,8 @@
 </li>
       <li><a href="api/generated/io/pulserver.io.bands_to_hz_per_m.html#pulserver.io.bands_to_hz_per_m">bands_to_hz_per_m() (in module pulserver.io)</a>
 </li>
+      <li><a href="api/generated/design/pulserver.design.ZteReadout.html#pulserver.design.ZteReadout.bandwidth_hz">bandwidth_hz (pulserver.design.ZteReadout attribute)</a>
+</li>
       <li><a href="api/generated/recon/pulserver.recon.simulation.EpgInterpreter.html#pulserver.recon.simulation.EpgInterpreter.before_adc">before_adc() (pulserver.recon.simulation.EpgInterpreter method)</a>
 
       <ul>
@@ -894,6 +910,10 @@
       <li><a href="api/generated/pulserver/pulserver.BoolParam.html#pulserver.BoolParam">BoolParam (class in pulserver)</a>
 </li>
       <li><a href="api/generated/recon/pulserver.recon.simulation.BSSFP.html#pulserver.recon.simulation.BSSFP">BSSFP (class in pulserver.recon.simulation)</a>
+</li>
+      <li><a href="api/generated/design/pulserver.design.BssfpReadout2D.html#pulserver.design.BssfpReadout2D">BssfpReadout2D (class in pulserver.design)</a>
+</li>
+      <li><a href="api/generated/design/pulserver.design.BssfpReadout3D.html#pulserver.design.BssfpReadout3D">BssfpReadout3D (class in pulserver.design)</a>
 </li>
       <li><a href="api/generated/pulserver.pypulseq.BTensor.html#pulserver.pypulseq.BTensor">BTensor (class in pulserver.pypulseq)</a>
 </li>
@@ -985,6 +1005,8 @@
 </li>
       <li><a href="api/generated/pypulseq/pulserver.pypulseq.Sequence.html#pulserver.pypulseq.Sequence.definitions">definitions (pulserver.pypulseq.Sequence property)</a>
 </li>
+      <li><a href="api/generated/design/pulserver.design.ZteReadout.html#pulserver.design.ZteReadout.delta_k">delta_k (pulserver.design.ZteReadout attribute)</a>
+</li>
       <li><a href="api/generated/recon/pulserver.recon.learned.UnrolledReconstructor.html#pulserver.recon.learned.UnrolledReconstructor.denoise">denoise() (pulserver.recon.learned.UnrolledReconstructor method)</a>
 </li>
       <li><a href="api/generated/pulserver/pulserver.Description.html#pulserver.Description">Description (class in pulserver)</a>
@@ -1010,6 +1032,8 @@
       <li><a href="api/generated/pulserver.pypulseq.DiffusionTable.html#pulserver.pypulseq.DiffusionTable">DiffusionTable (class in pulserver.pypulseq)</a>
 </li>
       <li><a href="api/generated/recon/pulserver.recon.motion.RigidMotionEstimate.html#pulserver.recon.motion.RigidMotionEstimate.dimension">dimension (pulserver.recon.motion.RigidMotionEstimate property)</a>
+</li>
+      <li><a href="api/generated/design/pulserver.design.ZteReadout.html#pulserver.design.ZteReadout.directions">directions (pulserver.design.ZteReadout attribute)</a>
 </li>
       <li><a href="api/generated/pulserver/pulserver.DropdownFloatParam.html#pulserver.DropdownFloatParam">DropdownFloatParam (class in pulserver)</a>
 </li>
@@ -1127,6 +1151,8 @@
 </li>
       <li><a href="api/generated/design/pulserver.design.FatSaturation.html#pulserver.design.FatSaturation.freq_offset_hz">freq_offset_hz (pulserver.design.FatSaturation attribute)</a>
 </li>
+      <li><a href="api/generated/design/pulserver.design.FatSaturation.html#pulserver.design.FatSaturation.freq_offset_ppm">freq_offset_ppm (pulserver.design.FatSaturation attribute)</a>
+</li>
       <li><a href="api/generated/recon/pulserver.recon.corrections.ImageGeometry.html#pulserver.recon.corrections.ImageGeometry.from_affine">from_affine() (pulserver.recon.corrections.ImageGeometry class method)</a>
 </li>
       <li><a href="api/generated/pulserver.pypulseq.DiffusionTable.html#pulserver.pypulseq.DiffusionTable.from_definitions">from_definitions() (pulserver.pypulseq.DiffusionTable class method)</a>
@@ -1147,6 +1173,10 @@
 </li>
       <li><a href="api/generated/recon/pulserver.recon.simulation.FSE.html#pulserver.recon.simulation.FSE">FSE (class in pulserver.recon.simulation)</a>
 </li>
+      <li><a href="api/generated/design/pulserver.design.FseReadout2D.html#pulserver.design.FseReadout2D">FseReadout2D (class in pulserver.design)</a>
+</li>
+      <li><a href="api/generated/design/pulserver.design.FseReadout3D.html#pulserver.design.FseReadout3D">FseReadout3D (class in pulserver.design)</a>
+</li>
   </ul></td>
 </tr></table>
 
@@ -1154,6 +1184,16 @@
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="api/generated/design/pulserver.design.DiffusionPreparation.html#pulserver.design.DiffusionPreparation.g_diff">g_diff (pulserver.design.DiffusionPreparation attribute)</a>
+</li>
+      <li><a href="api/generated/design/pulserver.design.ZteReadout.html#pulserver.design.ZteReadout.g_end">g_end (pulserver.design.ZteReadout attribute)</a>
+</li>
+      <li><a href="api/generated/design/pulserver.design.ZteReadout.html#pulserver.design.ZteReadout.g_hold">g_hold (pulserver.design.ZteReadout attribute)</a>
+</li>
+      <li><a href="api/generated/design/pulserver.design.ZteReadout.html#pulserver.design.ZteReadout.g_ramp">g_ramp (pulserver.design.ZteReadout attribute)</a>
+</li>
+      <li><a href="api/generated/design/pulserver.design.ZteReadout.html#pulserver.design.ZteReadout.g_read">g_read (pulserver.design.ZteReadout attribute)</a>
+</li>
+      <li><a href="api/generated/design/pulserver.design.ZteReadout.html#pulserver.design.ZteReadout.gap">gap (pulserver.design.ZteReadout attribute)</a>
 </li>
       <li><a href="api/generated/pypulseq/pulserver.pypulseq.Sequence.html#pulserver.pypulseq.Sequence.get_block">get_block() (pulserver.pypulseq.Sequence method)</a>
 </li>
@@ -1175,12 +1215,12 @@
       </ul></li>
       <li><a href="api/generated/pypulseq/pulserver.pypulseq.Sequence.html#pulserver.pypulseq.Sequence.get_raw_block_content_IDs">get_raw_block_content_IDs() (pulserver.pypulseq.Sequence method)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="api/generated/pypulseq/pulserver.pypulseq.get_supported_labels.html#pulserver.pypulseq.get_supported_labels">get_supported_labels() (in module pulserver.pypulseq)</a>
 </li>
       <li><a href="api/generated/pypulseq/pulserver.pypulseq.get_supported_rf_use.html#pulserver.pypulseq.get_supported_rf_use">get_supported_rf_use() (in module pulserver.pypulseq)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="api/generated/recon/pulserver.recon.corrections.GradientCoefficients.html#pulserver.recon.corrections.GradientCoefficients">GradientCoefficients (class in pulserver.recon.corrections)</a>
 </li>
       <li><a href="api/generated/recon/pulserver.recon.learned.GradientDataConsistency.html#pulserver.recon.learned.GradientDataConsistency">GradientDataConsistency (class in pulserver.recon.learned)</a>
@@ -1268,6 +1308,8 @@
 </li>
         <li><a href="api/generated/design/pulserver.design.T2Preparation.html#pulserver.design.T2Preparation.init_module">(pulserver.design.T2Preparation method)</a>
 </li>
+        <li><a href="api/generated/design/pulserver.design.ZteReadout.html#pulserver.design.ZteReadout.init_module">(pulserver.design.ZteReadout method)</a>
+</li>
         <li><a href="api/generated/pulserver/pulserver.SequenceModule.html#pulserver.SequenceModule.init_module">(pulserver.SequenceModule method)</a>
 </li>
       </ul></li>
@@ -1331,9 +1373,11 @@
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="api/generated/design/pulserver.design.BlochSiegertPreparation.html#pulserver.design.BlochSiegertPreparation.kbs">kbs (pulserver.design.BlochSiegertPreparation attribute)</a>
 </li>
+      <li><a href="api/generated/design/pulserver.design.BlochSiegertPreparation.html#pulserver.design.BlochSiegertPreparation.kbs_per_gauss2">kbs_per_gauss2 (pulserver.design.BlochSiegertPreparation attribute)</a>
+</li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
-      <li><a href="api/generated/design/pulserver.design.BlochSiegertPreparation.html#pulserver.design.BlochSiegertPreparation.kbs_per_gauss2">kbs_per_gauss2 (pulserver.design.BlochSiegertPreparation attribute)</a>
+      <li><a href="api/generated/design/pulserver.design.ZteReadout.html#pulserver.design.ZteReadout.kmax">kmax (pulserver.design.ZteReadout attribute)</a>
 </li>
       <li><a href="api/generated/pulserver.pypulseq.KSpace.html#pulserver.pypulseq.KSpace">KSpace (class in pulserver.pypulseq)</a>
 </li>
@@ -1837,6 +1881,8 @@
 </li>
         <li><a href="api/generated/design/pulserver.design.SpatialSelectiveExcitation.html#pulserver.design.SpatialSelectiveExcitation.rf">(pulserver.design.SpatialSelectiveExcitation attribute)</a>
 </li>
+        <li><a href="api/generated/design/pulserver.design.ZteReadout.html#pulserver.design.ZteReadout.rf">(pulserver.design.ZteReadout attribute)</a>
+</li>
       </ul></li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
@@ -1966,6 +2012,8 @@
         <li><a href="api/generated/recon/pulserver.recon.simulation.SSFPFID.html#pulserver.recon.simulation.SSFPFID.shifts_per_repetition">(pulserver.recon.simulation.SSFPFID method)</a>
 </li>
       </ul></li>
+      <li><a href="api/generated/design/pulserver.design.ZteReadout.html#pulserver.design.ZteReadout.shot_rotations">shot_rotations (pulserver.design.ZteReadout attribute)</a>
+</li>
       <li><a href="api/generated/pypulseq/pulserver.pypulseq.sim_rf.html#pulserver.pypulseq.sim_rf">sim_rf() (in module pulserver.pypulseq)</a>
 
       <ul>
@@ -2022,6 +2070,8 @@
         <li><a href="api/generated/recon/pulserver.recon.optim.PDHG.html#pulserver.recon.optim.PDHG.step">(pulserver.recon.optim.PDHG method)</a>
 </li>
       </ul></li>
+      <li><a href="api/generated/design/pulserver.design.ZteReadout.html#pulserver.design.ZteReadout.step_rad">step_rad (pulserver.design.ZteReadout attribute)</a>
+</li>
       <li><a href="api/generated/pulserver/pulserver.StringListParam.html#pulserver.StringListParam">StringListParam (class in pulserver)</a>
 </li>
       <li><a href="api/generated/recon/pulserver.recon.physics.Subspace.html#pulserver.recon.physics.Subspace">Subspace (class in pulserver.recon.physics)</a>
@@ -2057,6 +2107,8 @@
       <li><a href="api/generated/recon/pulserver.recon.execution.CudaStreaming.html#pulserver.recon.execution.CudaStreaming.torch_devices">torch_devices (pulserver.recon.execution.CudaStreaming property)</a>
 </li>
       <li><a href="api/generated/recon/pulserver.recon.datasets.TorchIODataset.html#pulserver.recon.datasets.TorchIODataset">TorchIODataset (class in pulserver.recon.datasets)</a>
+</li>
+      <li><a href="api/generated/design/pulserver.design.ZteReadout.html#pulserver.design.ZteReadout.tr">tr (pulserver.design.ZteReadout attribute)</a>
 </li>
       <li><a href="api/generated/pypulseq/pulserver.pypulseq.Sequence.html#pulserver.pypulseq.Sequence.tr_size">tr_size (pulserver.pypulseq.Sequence property)</a>
 </li>
@@ -2138,15 +2190,19 @@
 </li>
       <li><a href="api/generated/recon/pulserver.recon.weights.ModelBundle.html#pulserver.recon.weights.ModelBundle.verify">verify() (pulserver.recon.weights.ModelBundle method)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="api/generated/pypulseq/pulserver.pypulseq.verify_file_signature.html#pulserver.pypulseq.verify_file_signature">verify_file_signature() (in module pulserver.pypulseq)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="api/generated/pypulseq/pulserver.pypulseq.Sequence.html#pulserver.pypulseq.Sequence.version_major">version_major (pulserver.pypulseq.Sequence property)</a>
 </li>
       <li><a href="api/generated/pypulseq/pulserver.pypulseq.Sequence.html#pulserver.pypulseq.Sequence.version_minor">version_minor (pulserver.pypulseq.Sequence property)</a>
 </li>
       <li><a href="api/generated/pypulseq/pulserver.pypulseq.Sequence.html#pulserver.pypulseq.Sequence.version_revision">version_revision (pulserver.pypulseq.Sequence property)</a>
+</li>
+      <li><a href="api/generated/design/pulserver.design.ZteReadout.html#pulserver.design.ZteReadout.view_duration">view_duration (pulserver.design.ZteReadout attribute)</a>
+</li>
+      <li><a href="api/generated/design/pulserver.design.ZteReadout.html#pulserver.design.ZteReadout.view_rotations">view_rotations (pulserver.design.ZteReadout attribute)</a>
 </li>
       <li><a href="api/generated/recon/pulserver.recon.corrections.ImageGeometry.html#pulserver.recon.corrections.ImageGeometry.voxel_size_mm">voxel_size_mm (pulserver.recon.corrections.ImageGeometry property)</a>
 </li>
@@ -2193,6 +2249,14 @@
       <li><a href="api/generated/pypulseq/pulserver.pypulseq.Sequence.html#pulserver.pypulseq.Sequence.write_binary">write_binary() (pulserver.pypulseq.Sequence method)</a>
 </li>
       <li><a href="api/generated/pypulseq/pulserver.pypulseq.Sequence.html#pulserver.pypulseq.Sequence.write_diffusion_definitions">write_diffusion_definitions() (pulserver.pypulseq.Sequence method)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="Z">Z</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/generated/design/pulserver.design.ZteReadout.html#pulserver.design.ZteReadout">ZteReadout (class in pulserver.design)</a>
 </li>
   </ul></td>
 </tr></table>

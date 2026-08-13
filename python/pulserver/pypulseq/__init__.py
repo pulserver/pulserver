@@ -31,6 +31,7 @@ import pypulseq as _pypulseq
 from . import _events
 from ._angles import (
     calc_golden_angles as _calc_golden_angles,
+    calc_projection_shell as _calc_projection_shell,
     calc_raga_angles as _calc_raga_angles,
     calc_tiny_golden_angles as _calc_tiny_golden_angles,
     calc_uniform_angles as _calc_uniform_angles,
@@ -173,6 +174,7 @@ make_sms_pulse = _make_sms_pulse
 make_spsp_pulse = _make_spsp_pulse
 traj_to_grad = _traj_to_grad
 calc_golden_angles = _calc_golden_angles
+calc_projection_shell = _calc_projection_shell
 calc_raga_angles = _calc_raga_angles
 calc_sampled_lines = _calc_sampled_lines
 calc_tiny_golden_angles = _calc_tiny_golden_angles
@@ -269,6 +271,7 @@ BASE_FACTORIES = frozenset(
 SAMPLING = frozenset(
     {
         "calc_golden_angles",
+        "calc_projection_shell",
         "calc_raga_angles",
         "calc_sampled_lines",
         "calc_tiny_golden_angles",

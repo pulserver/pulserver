@@ -16,39 +16,22 @@ from ._common import spoiler_gradients
 class DiffusionPreparation(RfModule):
     """A 90 - G - 180 - G - 90 sandwich that leaves diffusion weighting on z.
 
-    Spins that move between the two gradient lobes are not refocused by the
-    second, so what survives to be stored on ``z`` is attenuated by
-    ``exp(-b D)``. Storing it longitudinally is what makes this a preparation:
-    any readout can follow, and the weighting no longer has to be produced by
-    the readout's own echo, as it is in diffusion-weighted spin-echo EPI.
+    What survives to be stored on ``z`` is attenuated by ``exp(-b D)``, so any
+    readout can follow and the weighting need not come from the readout's own
+    echo. Non-selective: a slice-selective diffusion experiment is a spin-echo
+    readout whose imaging pulses carry the gradients, not a preparation.
 
-    Non-selective, like every other preparation here. A slice-selective
-    diffusion experiment is not this module: it is a spin-echo readout whose
-    own imaging pulses carry the gradients, which belongs to the readout
-    families rather than here.
+    The 90s are hard rather than adiabatic half passages, which cannot survive
+    the single refocusing pulse a diffusion pair needs -- see
+    :class:`~pulserver.design.T2Preparation`, which insists on an even number
+    for the same reason. The cost is B1 robustness.
 
-    **Hard 90s, not adiabatic half passages.** A half-passage pair only
-    restores what it tipped if the transverse phase comes back the way it
-    went, and a single refocusing pulse conjugates it -- see
-    :class:`~pulserver.design.T2Preparation`, which for that reason insists on
-    an even number. A diffusion pair wants exactly one refocusing pulse
-    between its two lobes, so the 90s here are plain rectangles, at the cost of
-    the B1 robustness the adiabatic pulses would have given.
-
-    **One canonical design, scaled and rotated by the loop.** The module is
-    built along z at the b-value asked for. A lower b-value is the same
-    waveform scaled by ``sqrt(b / b_value)`` -- :meth:`scale_for` -- and a
-    direction is a rotation event on the two gradient blocks::
+    One canonical design along z at ``b_value``; the loop scales it with
+    :meth:`scale_for` and turns it with a rotation event::
 
         for direction, b in plan:
             g = pp.scale_grad(prep.g_diff, prep.scale_for(b))
             rotation = pp.make_rotation(direction)
-            ...
-
-    The b-value is integrated from the rasterized waveform, with the sign
-    reversal the refocusing pulse imposes, rather than taken from the
-    ``delta``/``Delta`` formula: the formula assumes ideal rectangles, and the
-    ramps are a percent-level part of a real lobe.
 
     Parameters
     ----------

@@ -39,15 +39,21 @@ def rf_phase_ramp(reference, moved):
 
 def test_it_sits_on_the_fat_resonance(system):
     fatsat = design.FatSaturation(system)
+    assert fatsat.freq_offset_ppm == pytest.approx(FAT_SHIFT_PPM)
+    assert float(fatsat.rf_prep.freq_ppm) == pytest.approx(FAT_SHIFT_PPM)
     assert fatsat.freq_offset_hz == pytest.approx(
         FAT_SHIFT_PPM * 1e-6 * system.B0 * system.gamma
     )
-    assert float(fatsat.rf_prep.freq_offset) == pytest.approx(fatsat.freq_offset_hz)
 
 
-def test_the_offset_can_be_measured_rather_than_assumed(system):
-    fatsat = design.FatSaturation(system, freq_offset_hz=-420.0)
-    assert fatsat.freq_offset_hz == pytest.approx(-420.0)
+def test_the_offset_is_carried_in_ppm_so_it_follows_the_field(system):
+    """Hertz would be wrong at any field but the one it was designed at."""
+    fatsat = design.FatSaturation(system, freq_offset_ppm=-3.2)
+    assert float(fatsat.rf_prep.freq_ppm) == pytest.approx(-3.2)
+    assert fatsat.freq_offset_hz == pytest.approx(-3.2e-6 * system.B0 * system.gamma)
+    stronger = design.FatSaturation(pp.Opts(B0=7.0), freq_offset_ppm=-3.2)
+    assert float(stronger.rf_prep.freq_ppm) == pytest.approx(-3.2)
+    assert abs(stronger.freq_offset_hz) > 2 * abs(fatsat.freq_offset_hz)
 
 
 def test_it_overshoots_the_transverse_plane(system):

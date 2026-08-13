@@ -35,33 +35,18 @@ _READOUT_GRAD_MARGIN = 0.8
 class _RadialReadout(SequenceModule):
     """A full radial spoke, prephaser and rewinder merged into one waveform.
 
-    A spoke runs from -kmax through the centre to +kmax and comes back, so the
-    same lobe serves as prephaser and as rewinder and the whole traversal is
-    one continuous gradient. Building it that way -- rather than as three
-    blocks -- is what lets the scan loop play a spoke as a single
-    ``add_block``, and what lets a rotation event orient it without having to
-    orient three separate things consistently.
-
-    The ADC is shifted onto the readout plateau, so it acquires the flat part
-    and nothing else.
-
-    Orientation is the loop's business. The default publishes one spoke along
-    x for a rotation event to turn::
+    Prephaser, traversal and rewinder are one continuous gradient, so the loop
+    plays a spoke in a single ``add_block`` and one rotation event orients the
+    whole thing. The ADC sits on the plateau. A slice rephaser rides the same
+    block, on the axis the rotation turns about, so it comes back unturned::
 
         for angle in pp.calc_golden_angles(n_spokes):
             rotation = pp.make_rotation(Rotation.from_euler("z", angle))
-            seq.add_block(readout.gx, readout.adc, rotation)
+            seq.add_block(readout.gx, readout.gz_reph, readout.adc, rotation)
 
-    A slice rephaser rides that same block, on the axis the rotation turns
-    about, so it comes back unturned::
-
-        seq.add_block(readout.gx, readout.gz_reph, readout.adc, rotation)
-
-    ``explicit=True`` with ``angles`` instead writes every spoke out, as a
-    cosine and sine scaling of the base waveform, so ``gx`` and ``gy`` come
-    back as **lists** with one entry per angle. That costs a registered
-    waveform per spoke, which is what the rotation extension exists to avoid,
-    so it is opt-in and ``angles`` is then required.
+    ``explicit=True`` with ``angles`` writes every spoke out instead, so ``gx``
+    and ``gy`` come back as **lists** -- one registered waveform per spoke,
+    which is what the rotation extension exists to avoid.
 
     Attributes
     ----------

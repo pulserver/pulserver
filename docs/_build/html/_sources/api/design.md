@@ -151,6 +151,14 @@ picks between balanced, SSFP-FID and SSFP-Echo.
 Spoiling is always stated as cycles of dephasing across a voxel rather than as
 an area, so the same numbers mean the same thing at any resolution.
 
+A repetition is one line for most of these, a whole CPMG train for the
+`Fse*` pair, and a fully rewound line with the echo pinned to TR/2 for the
+`Bssfp*` pair, which take a refocusing pulse alongside the excitation and read
+`etl` lines from it. There the timing argument is `esp`, not `te`: which echo
+carries the centre of k-space — and so what the effective echo time is —
+follows from the ordering the loop plays, so the module states every echo's
+time in `echo_times` and names none of them.
+
 ```{eval-rst}
 .. autosummary::
    :toctree: generated/design
@@ -158,6 +166,10 @@ an area, so the same numbers mean the same thing at any resolution.
 
    pulserver.design.LineReadout2D
    pulserver.design.LineReadout3D
+   pulserver.design.BssfpReadout2D
+   pulserver.design.BssfpReadout3D
+   pulserver.design.FseReadout2D
+   pulserver.design.FseReadout3D
    pulserver.design.RadialReadout2D
    pulserver.design.RadialStackReadout
    pulserver.design.RadialProjectionReadout
@@ -167,6 +179,7 @@ an area, so the same numbers mean the same thing at any resolution.
    pulserver.design.RosetteReadout2D
    pulserver.design.RosetteStackReadout
    pulserver.design.RosetteProjectionReadout
+   pulserver.design.ZteReadout
 ```
 
 The three coverages of one base interleave: the `*2D*` classes rotate it in

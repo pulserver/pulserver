@@ -259,6 +259,10 @@
 <li class="toctree-l3 current active"><a class="current reference internal" href="#">pulserver.design.FatSaturation</a></li>
 <li class="toctree-l3"><a class="reference internal" href="pulserver.design.LineReadout2D.html">pulserver.design.LineReadout2D</a></li>
 <li class="toctree-l3"><a class="reference internal" href="pulserver.design.LineReadout3D.html">pulserver.design.LineReadout3D</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.design.BssfpReadout2D.html">pulserver.design.BssfpReadout2D</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.design.BssfpReadout3D.html">pulserver.design.BssfpReadout3D</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.design.FseReadout2D.html">pulserver.design.FseReadout2D</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.design.FseReadout3D.html">pulserver.design.FseReadout3D</a></li>
 <li class="toctree-l3"><a class="reference internal" href="pulserver.design.RadialReadout2D.html">pulserver.design.RadialReadout2D</a></li>
 <li class="toctree-l3"><a class="reference internal" href="pulserver.design.RadialStackReadout.html">pulserver.design.RadialStackReadout</a></li>
 <li class="toctree-l3"><a class="reference internal" href="pulserver.design.RadialProjectionReadout.html">pulserver.design.RadialProjectionReadout</a></li>
@@ -268,6 +272,7 @@
 <li class="toctree-l3"><a class="reference internal" href="pulserver.design.RosetteReadout2D.html">pulserver.design.RosetteReadout2D</a></li>
 <li class="toctree-l3"><a class="reference internal" href="pulserver.design.RosetteStackReadout.html">pulserver.design.RosetteStackReadout</a></li>
 <li class="toctree-l3"><a class="reference internal" href="pulserver.design.RosetteProjectionReadout.html">pulserver.design.RosetteProjectionReadout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.design.ZteReadout.html">pulserver.design.ZteReadout</a></li>
 <li class="toctree-l3"><a class="reference internal" href="pulserver.design.RfModule.html">pulserver.design.RfModule</a></li>
 <li class="toctree-l3"><a class="reference internal" href="pulserver.design.NonCartesianReadout.html">pulserver.design.NonCartesianReadout</a></li>
 <li class="toctree-l3"><a class="reference internal" href="pulserver.design.OffResonanceSaturation.html">pulserver.design.OffResonanceSaturation</a></li>
@@ -634,6 +639,7 @@
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.design.FatSaturation.gz"><code class="docutils literal notranslate"><span class="pre">FatSaturation.gz</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.design.FatSaturation.prep_labels"><code class="docutils literal notranslate"><span class="pre">FatSaturation.prep_labels</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.design.FatSaturation.reset_labels"><code class="docutils literal notranslate"><span class="pre">FatSaturation.reset_labels</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.design.FatSaturation.freq_offset_ppm"><code class="docutils literal notranslate"><span class="pre">FatSaturation.freq_offset_ppm</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.design.FatSaturation.freq_offset_hz"><code class="docutils literal notranslate"><span class="pre">FatSaturation.freq_offset_hz</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.design.FatSaturation.init_module"><code class="docutils literal notranslate"><span class="pre">FatSaturation.init_module()</span></code></a></li>
 </ul>
@@ -655,35 +661,25 @@
 <dt class="sig sig-object py" id="pulserver.design.FatSaturation">
 <span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pulserver.design.</span></span><span class="sig-name descname"><span class="pre">FatSaturation</span></span><a class="headerlink" href="#pulserver.design.FatSaturation" title="Link to this definition">#</a></dt>
 <dd><p>A fat-selective pulse and the spoiler that discards what it tipped.</p>
-<p>Saturation, not suppression by inversion: the pulse turns fat past the
-transverse plane and the spoiler destroys it, so the imaging excitation
-that follows sees water alone. Past the plane, not onto it – 110 degrees
-by default – because overshooting is what makes the residual longitudinal
-magnetisation insensitive to a transmit field that falls short.</p>
-<p>The pulse is SLR, designed for the <code class="docutils literal notranslate"><span class="pre">&quot;sat&quot;</span></code> profile: the spectral
-passband is stated as a bandwidth and a ripple rather than discovered from
-a window function, which is what keeps the stopband off the water peak
-250 Hz away.</p>
-<p><strong>Pointing it somewhere.</strong> With <code class="docutils literal notranslate"><span class="pre">thickness_m</span></code> the pulse becomes a band
-rather than the whole volume, and <code class="docutils literal notranslate"><span class="pre">position_mm</span></code> and <code class="docutils literal notranslate"><span class="pre">orientation</span></code> say
-where that band goes. They are applied here, at design time, through
-<a class="reference internal" href="../pypulseq/pulserver.pypulseq.TransformFOV.html#pulserver.pypulseq.TransformFOV" title="pulserver.pypulseq.TransformFOV"><code class="xref py py-class docutils literal notranslate"><span class="pre">TransformFOV</span></code></a> – and the module then declares
-<code class="docutils literal notranslate"><span class="pre">NOPOS</span></code> and <code class="docutils literal notranslate"><span class="pre">NOROT</span></code> on its first block, so a transform applied to the
-finished scan moves the imaging volume and leaves this band where it was
-put. The flags are cleared on the last block, because Pulseq labels are
-sticky and an uncleared exemption would follow the rest of the sequence.</p>
-<p>A band that is both fat-selective and slice-selective is displaced along
-its own selection axis by the chemical shift, by <code class="docutils literal notranslate"><span class="pre">freq_offset_hz</span></code> over
-the selection gradient’s amplitude. That is a property of the pulse, not an
-error, and it is why a saturation band is usually made generously thick.</p>
+<p>An SLR <code class="docutils literal notranslate"><span class="pre">&quot;sat&quot;</span></code> pulse tips fat past the transverse plane – 110 degrees by
+default, so the residual is insensitive to a transmit field that falls
+short – and the spoiler destroys what it tipped.</p>
+<p><code class="docutils literal notranslate"><span class="pre">thickness_m</span></code> makes it a band rather than the whole volume;
+<code class="docutils literal notranslate"><span class="pre">position_mm</span></code> and <code class="docutils literal notranslate"><span class="pre">orientation</span></code> place that band here, at design time,
+through <a class="reference internal" href="../pypulseq/pulserver.pypulseq.TransformFOV.html#pulserver.pypulseq.TransformFOV" title="pulserver.pypulseq.TransformFOV"><code class="xref py py-class docutils literal notranslate"><span class="pre">TransformFOV</span></code></a>. The module then sets
+<code class="docutils literal notranslate"><span class="pre">NOPOS</span></code> and <code class="docutils literal notranslate"><span class="pre">NOROT</span></code> on its first block and clears them on its last, so
+a transform applied to the finished scan moves the imaging volume and
+leaves the band where it was put.</p>
+<p>A band that is both fat- and slice-selective is displaced along its own
+selection axis by the chemical shift, which is why one is usually made
+generously thick.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>system</strong> (<a class="reference internal" href="../pypulseq/pulserver.pypulseq.Opts.html#pulserver.pypulseq.Opts" title="pulserver.pypulseq.Opts"><em>pypulseq.Opts</em></a>) – System limits. <code class="docutils literal notranslate"><span class="pre">system.B0</span></code> sets the fat frequency unless
-<code class="docutils literal notranslate"><span class="pre">freq_offset_hz</span></code> overrides it.</p></li>
-<li><p><strong>freq_offset_hz</strong> (<em>float</em><em>, </em><em>optional</em>) – Fat offset from water (Hz). The default is -3.45 ppm of
-<code class="docutils literal notranslate"><span class="pre">system.B0</span></code>, which is the number to override when the offset has been
-measured rather than assumed.</p></li>
+<li><p><strong>system</strong> (<a class="reference internal" href="../pypulseq/pulserver.pypulseq.Opts.html#pulserver.pypulseq.Opts" title="pulserver.pypulseq.Opts"><em>pypulseq.Opts</em></a>) – System limits.</p></li>
+<li><p><strong>freq_offset_ppm</strong> (<em>float</em><em>, </em><em>optional</em>) – Fat offset from water (ppm). Carried on the pulse as a ppm offset
+rather than as hertz, so the interpreter resolves it against the
+field the scan actually runs at.</p></li>
 <li><p><strong>flip_angle_deg</strong> (<em>float</em><em>, </em><em>optional</em>) – Saturation flip angle (degrees).</p></li>
 <li><p><strong>bandwidth_hz</strong> (<em>float</em><em>, </em><em>optional</em>) – Spectral passband (Hz). With <code class="docutils literal notranslate"><span class="pre">time_bw_product</span></code> it fixes the pulse
 duration, which is <code class="docutils literal notranslate"><span class="pre">time_bw_product</span> <span class="pre">/</span> <span class="pre">bandwidth_hz</span></code>.</p></li>
@@ -762,9 +758,21 @@ being destroyed is a full excitation, not a residue.</p>
 </dd></dl>
 
 <dl class="py attribute">
+<dt class="sig sig-object py" id="pulserver.design.FatSaturation.freq_offset_ppm">
+<span class="sig-name descname"><span class="pre">freq_offset_ppm</span></span><a class="headerlink" href="#pulserver.design.FatSaturation.freq_offset_ppm" title="Link to this definition">#</a></dt>
+<dd><p>The fat offset the pulse carries (ppm).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>float</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
 <dt class="sig sig-object py" id="pulserver.design.FatSaturation.freq_offset_hz">
 <span class="sig-name descname"><span class="pre">freq_offset_hz</span></span><a class="headerlink" href="#pulserver.design.FatSaturation.freq_offset_hz" title="Link to this definition">#</a></dt>
-<dd><p>The fat offset actually used (Hz).</p>
+<dd><p>What that comes to at <code class="docutils literal notranslate"><span class="pre">system.B0</span></code> (Hz), for reference; the pulse
+itself is field-independent.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>float</p>
@@ -804,7 +812,7 @@ block of its own:</p>
 </div>
 <dl class="py method">
 <dt class="sig sig-object py" id="pulserver.design.FatSaturation.init_module">
-<span class="sig-name descname"><span class="pre">init_module</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">system</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">freq_offset_hz</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">flip_angle_deg</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">110.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bandwidth_hz</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">250.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time_bw_product</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">2.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">thickness_m</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">axis</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'z'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">position_mm</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">orientation</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_rotation_extension</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">spoiling_cycles</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">4.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">voxel_size_m</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.001</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pulserver.design.FatSaturation.init_module" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">init_module</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">system</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">freq_offset_ppm</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">-3.45</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">flip_angle_deg</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">110.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bandwidth_hz</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">250.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time_bw_product</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">2.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">thickness_m</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">axis</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'z'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">position_mm</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">orientation</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_rotation_extension</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">spoiling_cycles</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">4.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">voxel_size_m</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.001</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pulserver.design.FatSaturation.init_module" title="Link to this definition">#</a></dt>
 <dd><p>Build the module: the part a subclass writes.</p>
 <p>Assign <code class="docutils literal notranslate"><span class="pre">self.seq</span></code>, add blocks to it, and set <code class="xref py py-attr docutils literal notranslate"><span class="pre">center</span></code> if the
 module is timed against something other than its own start. Events are
@@ -867,6 +875,7 @@ published automatically; nothing has to be returned.</p>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.design.FatSaturation.gz"><code class="docutils literal notranslate"><span class="pre">FatSaturation.gz</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.design.FatSaturation.prep_labels"><code class="docutils literal notranslate"><span class="pre">FatSaturation.prep_labels</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.design.FatSaturation.reset_labels"><code class="docutils literal notranslate"><span class="pre">FatSaturation.reset_labels</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.design.FatSaturation.freq_offset_ppm"><code class="docutils literal notranslate"><span class="pre">FatSaturation.freq_offset_ppm</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.design.FatSaturation.freq_offset_hz"><code class="docutils literal notranslate"><span class="pre">FatSaturation.freq_offset_hz</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.design.FatSaturation.init_module"><code class="docutils literal notranslate"><span class="pre">FatSaturation.init_module()</span></code></a></li>
 </ul>

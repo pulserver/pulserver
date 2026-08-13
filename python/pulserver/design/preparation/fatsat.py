@@ -24,37 +24,29 @@ FOV_EXEMPT_FLAGS = ("NOPOS", "NOROT")
 class FatSaturation(RfModule):
     """A fat-selective pulse and the spoiler that discards what it tipped.
 
-    Saturation, not suppression by inversion: the pulse turns fat past the
-    transverse plane and the spoiler destroys it, so the imaging excitation
-    that follows sees water alone. Past the plane, not onto it -- 110 degrees
-    by default -- because overshooting is what makes the residual longitudinal
-    magnetisation insensitive to a transmit field that falls short.
+    An SLR ``"sat"`` pulse tips fat past the transverse plane -- 110 degrees by
+    default, so the residual is insensitive to a transmit field that falls
+    short -- and the spoiler destroys what it tipped.
 
-    The pulse is SLR, designed for the ``"sat"`` profile: the spectral
-    passband is stated as a bandwidth and a ripple rather than discovered from
-    a window function, which is what keeps the stopband off the water peak
-    250 Hz away.
+    ``thickness_m`` makes it a band rather than the whole volume;
+    ``position_mm`` and ``orientation`` place that band here, at design time,
+    through :class:`~pulserver.pypulseq.TransformFOV`. The module then sets
+    ``NOPOS`` and ``NOROT`` on its first block and clears them on its last, so
+    a transform applied to the finished scan moves the imaging volume and
+    leaves the band where it was put.
 
-    **Pointing it somewhere.** With ``thickness_m`` the pulse becomes a band
-    rather than the whole volume, and ``position_mm`` and ``orientation`` say
-    where that band goes. They are applied here, at design time, through
-    :class:`~pulserver.pypulseq.TransformFOV` -- and the module then declares
-    ``NOPOS`` and ``NOROT`` on its first block, so a transform applied to the
-    finished scan moves the imaging volume and leaves this band where it was
-    put. The flags are cleared on the last block, because Pulseq labels are
-    sticky and an uncleared exemption would follow the rest of the sequence.
-
-    A band that is both fat-selective and slice-selective is displaced along
-    its own selection axis by the chemical shift, by ``freq_offset_ppm`` over
-    the selection gradient's amplitude. That is a property of the pulse, not an
-    error, and it is why a saturation band is usually made generously thick.
+    A band that is both fat- and slice-selective is displaced along its own
+    selection axis by the chemical shift, which is why one is usually made
+    generously thick.
 
     Parameters
     ----------
     system : pypulseq.Opts
         System limits.
     freq_offset_ppm : float, optional
-        Fat offset from water (ppm). The default is -3.5 ppm.
+        Fat offset from water (ppm). Carried on the pulse as a ppm offset
+        rather than as hertz, so the interpreter resolves it against the
+        field the scan actually runs at.
     flip_angle_deg : float, optional
         Saturation flip angle (degrees).
     bandwidth_hz : float, optional
@@ -97,8 +89,11 @@ class FatSaturation(RfModule):
         ``NOPOS`` and ``NOROT``, set on the first block.
     reset_labels : list of LabelSetEvent
         The same two cleared, on the last.
+    freq_offset_ppm : float
+        The fat offset the pulse carries (ppm).
     freq_offset_hz : float
-        The fat offset actually used (Hz).
+        What that comes to at ``system.B0`` (Hz), for reference; the pulse
+        itself is field-independent.
 
     Raises
     ------
@@ -135,7 +130,7 @@ class FatSaturation(RfModule):
         self,
         system: pp.Opts,
         *,
-        freq_offset_ppm: float | None = None,
+        freq_offset_ppm: float = FAT_SHIFT_PPM,
         flip_angle_deg: float = 110.0,
         bandwidth_hz: float = 250.0,
         time_bw_product: float = 2.0,
@@ -165,9 +160,6 @@ class FatSaturation(RfModule):
                 "a saturation without a thickness covers the whole transmit volume, so it "
                 "has nowhere to be put; give thickness_m to make it a band"
             )
-
-        if freq_offset_hz is None:
-            freq_offset_hz = FAT_SHIFT_PPM * 1e-6 * system.B0 * system.gamma
 
         designed = pp.make_slr_pulse(
             np.deg2rad(flip_angle_deg),
@@ -236,6 +228,7 @@ class FatSaturation(RfModule):
             )
 
         self.center = rf_reference(rf_prep)
+        self.freq_offset_ppm = float(freq_offset_ppm)
         self.freq_offset_hz = float(1e-6 * system.gamma * system.B0 * freq_offset_ppm)
 
 

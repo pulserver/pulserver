@@ -259,6 +259,10 @@
 <li class="toctree-l3"><a class="reference internal" href="../api/generated/design/pulserver.design.FatSaturation.html">pulserver.design.FatSaturation</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../api/generated/design/pulserver.design.LineReadout2D.html">pulserver.design.LineReadout2D</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../api/generated/design/pulserver.design.LineReadout3D.html">pulserver.design.LineReadout3D</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/generated/design/pulserver.design.BssfpReadout2D.html">pulserver.design.BssfpReadout2D</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/generated/design/pulserver.design.BssfpReadout3D.html">pulserver.design.BssfpReadout3D</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/generated/design/pulserver.design.FseReadout2D.html">pulserver.design.FseReadout2D</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/generated/design/pulserver.design.FseReadout3D.html">pulserver.design.FseReadout3D</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../api/generated/design/pulserver.design.RadialReadout2D.html">pulserver.design.RadialReadout2D</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../api/generated/design/pulserver.design.RadialStackReadout.html">pulserver.design.RadialStackReadout</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../api/generated/design/pulserver.design.RadialProjectionReadout.html">pulserver.design.RadialProjectionReadout</a></li>
@@ -268,6 +272,7 @@
 <li class="toctree-l3"><a class="reference internal" href="../api/generated/design/pulserver.design.RosetteReadout2D.html">pulserver.design.RosetteReadout2D</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../api/generated/design/pulserver.design.RosetteStackReadout.html">pulserver.design.RosetteStackReadout</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../api/generated/design/pulserver.design.RosetteProjectionReadout.html">pulserver.design.RosetteProjectionReadout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/generated/design/pulserver.design.ZteReadout.html">pulserver.design.ZteReadout</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../api/generated/design/pulserver.design.RfModule.html">pulserver.design.RfModule</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../api/generated/design/pulserver.design.NonCartesianReadout.html">pulserver.design.NonCartesianReadout</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../api/generated/design/pulserver.design.OffResonanceSaturation.html">pulserver.design.OffResonanceSaturation</a></li>
@@ -633,6 +638,12 @@
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#how-events-get-their-names">How events get their names</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#what-a-module-answers">What a module answers</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#the-slice-rephaser">The slice rephaser</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#echo-trains">Echo trains</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#balanced-steady-state">Balanced steady state</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#zero-echo-time">Zero echo time</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#the-shell-and-its-shots">The shell and its shots</a></li>
+</ul>
+</li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#labels-and-triggers">Labels and triggers</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#first-last-in-axis-mrd-flags">First/last-in-axis MRD flags</a></li>
 </ul>
@@ -752,6 +763,140 @@ interleave, silently dephasing the slice by an amount that changes shot to
 shot. An in-plane acquisition therefore takes a rephaser on z and a projection
 takes none.</p>
 </section>
+<section id="echo-trains">
+<h2>Echo trains<a class="headerlink" href="#echo-trains" title="Link to this heading">#</a></h2>
+<p>An FSE readout spans a CPMG train rather than a line, and everything about its
+layout follows from one rule: every interval between an RF centre and the echo
+it makes is half an echo spacing.</p>
+<p>Nothing inside the train varies. One refocusing pulse at one amplitude, one
+readout lobe, one encode per axis, replayed <code class="docutils literal notranslate"><span class="pre">etl</span></code> times — because what varies
+between echoes is a <em>number</em>, and numbers belong to the scan loop. A variable
+flip schedule is <code class="docutils literal notranslate"><span class="pre">rf_ref.amplitude</span></code> moved before each <code class="docutils literal notranslate"><span class="pre">add_block</span></code>; a line is
+<code class="docutils literal notranslate"><span class="pre">pp.scale_grad(gy_pre,</span> <span class="pre">ky)</span></code>. Neither needs the module rebuilt, and both are the
+same mechanism a single-line readout already uses for RF spoiling.</p>
+<p>Phase encoding is a trapezoid of its own on every axis, including the partition
+encode of a 3D train, which shares the slab axis with the refocusing pulse’s
+gradients but not a block with them. Scaling a trapezoid gives one registered
+waveform played at many amplitudes; summing an encode onto a crusher gives an
+arbitrary waveform, and then every line of the scan is a distinct shape — a
+cost the interpreter pays per view and a trajectory it can no longer recognise
+as one repeating unit.</p>
+<p>The read axis carries the crushers instead. Between the refocusing pulse and
+the acquisition it has to reach the readout plateau and come back, and the
+refocusing pulse negates the accumulated moment in between, so an echo’s own
+dephasing prephases the next one and those two lobes need carry only the
+plateau’s ramps. That is the minimum, and it is what <code class="docutils literal notranslate"><span class="pre">spoiling_cycles</span> <span class="pre">=</span> <span class="pre">0</span></code>
+builds. Raising it lengthens both lobes symmetrically, which is what displaces
+the FID that an imperfect refocusing pulse leaves behind out of the sampled
+window — the phase-encode axes are rewound over the spacing and displace
+nothing, so a train whose flip angles fall well below 180° wants some.</p>
+<p>The first echo spacing is its own number. A slab-selective excitation is far
+longer than a hard refocusing pulse, and the excitation-to-first-pulse interval
+is by definition half a spacing, so a long pulse would otherwise stretch every
+spacing in the train; <code class="docutils literal notranslate"><span class="pre">esp_first</span></code> covers the excitation and <code class="docutils literal notranslate"><span class="pre">esp</span></code> governs the
+rest. Stimulated echoes from the longer first spacing do not rephase with the
+rest of the train, which is why the first refocusing flip angle should stay
+near 180° and keep its crushers.</p>
+</section>
+<section id="balanced-steady-state">
+<h2>Balanced steady state<a class="headerlink" href="#balanced-steady-state" title="Link to this heading">#</a></h2>
+<p>A bSSFP repetition is three blocks – rewind, excite, read – and two things
+shape all of it.</p>
+<p>Every axis returns to k = 0 between one pulse centre and the next, which is why
+the module builds the slice rephasers itself instead of taking the excitation’s:
+their areas are fixed by the balance condition, a pair that cancels the
+selection lobe outright, not by the pulse alone. Pass the excitation with
+<code class="docutils literal notranslate"><span class="pre">rephase=False</span></code>.</p>
+<p>The echo sits at TR/2, and that is one equation relating the two windows either
+side of the excitation block. The module solves it by sizing those windows, so
+a longer <code class="docutils literal notranslate"><span class="pre">tr</span></code> is padding split evenly and TE follows it. It also sets a floor:
+half the acquisition block has to cover what follows the pulse centre in the
+excitation block, or no half-flip pulse can sit half a repetition before the
+first excitation. <code class="docutils literal notranslate"><span class="pre">half_flip_prep=False</span></code> lifts the floor for a loop that ramps
+in with dummy repetitions instead.</p>
+<p>The read axis never falls to zero between repetitions – the closing lobe
+leaves the plateau amplitude and the opening one arrives back at it – so the
+two share ramps a separate rewinder and prephaser would each have paid for. The
+plateau runs to the end of its block, past the last sample by the receiver’s
+dead time, because otherwise there is nothing for the next lobe to leave from.</p>
+<p>In 3D the partition encode shares the rephasers’ window and is added onto them.
+That stays a single trapezoid, and so a single registered shape at many
+amplitudes, only because both are built on the same ramp time – <code class="docutils literal notranslate"><span class="pre">make_trapezoid</span></code>
+solves a shorter ramp for a smaller area otherwise, and the sum of two lobes
+with different vertex times is an arbitrary waveform.</p>
+<p>The half-flip pulse must be <strong>opposite in phase</strong> to the first excitation. It
+leaves the magnetisation on one side of the steady-state cone and the first
+full pulse has to carry it to the other side, which is a rotation the other
+way; the same phase is worse than no preparation at all. <code class="docutils literal notranslate"><span class="pre">ONCE</span></code> marks the three
+regimes for the interpreter: 1 on the entry transient, 0 on the steady state,
+2 on the ramp-down.</p>
+</section>
+<section id="zero-echo-time">
+<h2>Zero echo time<a class="headerlink" href="#zero-echo-time" title="Link to this heading">#</a></h2>
+<p>A ZTE view inverts the usual order: the readout gradient is already at full
+amplitude when the pulse fires, so encoding starts at the pulse and the spoke
+runs from the centre of k-space outward. Between views the gradient does not
+come down — it slews straight from one direction to the next — so a whole shell
+costs one ramp up and one ramp down however many views it holds.</p>
+<p>That is only affordable if the views share a waveform, and they can: view <em>k</em>
+is the designed view under a rotation, provided consecutive views subtend the
+<strong>same angle</strong>. This is much weaker than a circle — any constant-step walk on
+the sphere qualifies, a pole-to-pole spiral included — but it does rule out
+orderings whose step wanders, phyllotaxis among them.</p>
+<p><strong>A ZTE view is two blocks</strong> — pulse and hold, then acquire and turn. A block
+carries at most one of an RF and an ADC, so the split is forced, and it costs
+nothing: gradients are not obliged to reach zero at a block boundary, so the
+plateau runs straight through and the two blocks play as one continuous
+segment. The boundary is placed exactly where the acquisition starts, past
+ringdown and receiver dead time, which leaves <code class="docutils literal notranslate"><span class="pre">adc.delay</span></code> at zero — an ADC
+delayed by <code class="docutils literal notranslate"><span class="pre">rf.center</span> <span class="pre">+</span> <span class="pre">gap</span></code> would generally miss the RF raster and fail
+<code class="docutils literal notranslate"><span class="pre">check_timing</span></code>. It also puts the excitation at a block boundary, where the
+trajectory core takes its k-space reset; k then carries a fixed offset of half
+the pulse duration, because the reset lands at the pulse’s start rather than
+its centre.</p>
+<p>The centre of k-space is not acquired. Transmit ringdown and receiver dead time
+run into the spoke and the samples inside them are dropped rather than
+squeezed, so what survives stays on the radial grid — <code class="docutils literal notranslate"><span class="pre">n_missing</span></code> says how many
+went, and filling the gap (PETRA, WASPI, algebraic) is a reconstruction’s job.</p>
+<section id="the-shell-and-its-shots">
+<h3>The shell and its shots<a class="headerlink" href="#the-shell-and-its-shots" title="Link to this heading">#</a></h3>
+<p>The ordering is the one piece of sampling a readout has to own, because the
+transition is solved from its step. <code class="docutils literal notranslate"><span class="pre">ZteReadout</span></code> measures the step of a
+supplied <code class="docutils literal notranslate"><span class="pre">directions=</span></code> and refuses one that wanders; left alone, it asks
+<code class="docutils literal notranslate"><span class="pre">calc_projection_shell</span></code> for a shell that qualifies.</p>
+<p>A generated shell runs <strong>pole to pole</strong>, <code class="docutils literal notranslate"><span class="pre">+z</span></code> to <code class="docutils literal notranslate"><span class="pre">−z</span></code>, visiting every polar
+ring once, and a shot is that shell turned about <code class="docutils literal notranslate"><span class="pre">z</span></code> by <code class="docutils literal notranslate"><span class="pre">2π/n_shots</span></code>. Each ring
+then carries <code class="docutils literal notranslate"><span class="pre">n_shots</span></code> spokes at even azimuth — full spherical coverage, and
+every shot congruent with every other, so one set of waveforms and one set of
+<code class="docutils literal notranslate"><span class="pre">view_rotations</span></code> serves them all. The two poles lie on the rotation axis and
+are the one thing the shots share.</p>
+<p><code class="docutils literal notranslate"><span class="pre">n_views</span></code> defaults to a Nyquist-matched sphere, <code class="docutils literal notranslate"><span class="pre">ceil(π·matrix²)</span></code>, divided by
+<code class="docutils literal notranslate"><span class="pre">n_shots</span></code>, so <code class="docutils literal notranslate"><span class="pre">n_shots</span></code> sets segment length without changing the total spoke
+count. Playing a subset of the shots is angular undersampling; playing every
+<code class="docutils literal notranslate"><span class="pre">n</span></code>-th keeps it uniform, playing a contiguous run leaves a wedge.</p>
+<p><strong><code class="docutils literal notranslate"><span class="pre">n_shots</span></code> and <code class="docutils literal notranslate"><span class="pre">n_views</span></code> are not independent, and they set the angular step
+between them.</strong> The shell holds the rings and the shots fill each one, so the
+two spacings are reciprocal — ring to ring is <code class="docutils literal notranslate"><span class="pre">2/((n_views−1)·sin</span> <span class="pre">θ)</span></code>, within a
+ring is <code class="docutils literal notranslate"><span class="pre">2π·sin</span> <span class="pre">θ/n_shots</span></code>. They agree at the equator only when</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>n_shots = π · n_views
+</pre></div>
+</div>
+<p>which, against a Nyquist-matched total, puts <code class="docutils literal notranslate"><span class="pre">n_views</span></code> at the matrix size and
+<code class="docutils literal notranslate"><span class="pre">n_shots</span></code> at <code class="docutils literal notranslate"><span class="pre">π·matrix</span></code>. That is the default. Move away from it and the
+sampling goes anisotropic in one direction or the other: fewer shots
+undersamples azimuth, more shots undersamples polar. Nothing forbids it —
+<code class="docutils literal notranslate"><span class="pre">n_shots</span></code> is exactly the knob for trading segment length and angular
+acceleration — but it is a trade, not a free choice.</p>
+<p>The step follows, at <code class="docutils literal notranslate"><span class="pre">arccos(1</span> <span class="pre">−</span> <span class="pre">2/(n_views−1))</span> <span class="pre">≈</span> <span class="pre">2/√n_views</span></code>, so there is no
+separate knob for it: it is the polar gap <em>at the pole</em>, where <code class="docutils literal notranslate"><span class="pre">sin</span> <span class="pre">θ</span> <span class="pre">=</span> <span class="pre">0</span></code> and
+no amount of azimuth buys any angle. Every other gap has slack, and that is
+what the azimuth increments are solved to absorb — which is why one view to the
+next strides across many rings’ worth of azimuth while the shots, not the
+shell, sample a ring.</p>
+<p><code class="docutils literal notranslate"><span class="pre">scheme='meridian'</span></code> is a half great circle at equal polar steps instead:
+simpler, and it oversamples the poles.</p>
+</section>
+</section>
 <section id="labels-and-triggers">
 <h2>Labels and triggers<a class="headerlink" href="#labels-and-triggers" title="Link to this heading">#</a></h2>
 <p>Counters — <code class="docutils literal notranslate"><span class="pre">LIN</span></code>, <code class="docutils literal notranslate"><span class="pre">PAR</span></code>, <code class="docutils literal notranslate"><span class="pre">SLC</span></code>, <code class="docutils literal notranslate"><span class="pre">ECO</span></code>, <code class="docutils literal notranslate"><span class="pre">PHS</span></code>, <code class="docutils literal notranslate"><span class="pre">REP</span></code>, <code class="docutils literal notranslate"><span class="pre">SET</span></code>, <code class="docutils literal notranslate"><span class="pre">AVG</span></code>, <code class="docutils literal notranslate"><span class="pre">SEG</span></code> — say
@@ -866,6 +1011,12 @@ adaptive schemes; Tamir et al., <em>T2 Shuffling</em>, Magn Reson Med
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#how-events-get-their-names">How events get their names</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#what-a-module-answers">What a module answers</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#the-slice-rephaser">The slice rephaser</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#echo-trains">Echo trains</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#balanced-steady-state">Balanced steady state</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#zero-echo-time">Zero echo time</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#the-shell-and-its-shots">The shell and its shots</a></li>
+</ul>
+</li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#labels-and-triggers">Labels and triggers</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#first-last-in-axis-mrd-flags">First/last-in-axis MRD flags</a></li>
 </ul>

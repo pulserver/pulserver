@@ -8,6 +8,7 @@ from __future__ import annotations
 
 __all__ = [
     "calc_golden_angles",
+    "calc_projection_shell",
     "calc_raga_angles",
     "calc_tiny_golden_angles",
     "calc_uniform_angles",
@@ -239,3 +240,121 @@ def calc_uniform_angles(n: int) -> np.ndarray:
     if n < 0:
         raise ValueError("n must be nonnegative")
     return _accumulated(n, 0.0 if n == 0 else 2.0 * np.pi / n)
+
+def calc_projection_shell(n_views: int, n_shots: int = 1, *, scheme: str = "spiral"):
+    """Cover the sphere with one base shell of spokes and a rotation per shot.
+
+    A continuous-gradient readout cannot afford a waveform per spoke, so the
+    shell is designed once and replayed rigidly rotated. Two properties make
+    that work. Consecutive views inside the shell subtend a **constant angle**,
+    which lets one designed transition carry any view onto the next under a
+    rotation of its own. And the shell runs from ``+z`` to ``-z``, visiting
+    every polar ring once, so turning it about ``z`` by ``2 * pi / n_shots``
+    puts ``n_shots`` evenly spaced spokes on each ring: full coverage, and
+    every shot congruent with every other.
+
+    The two poles are the exception -- they sit on the rotation axis, so all
+    shots share them.
+
+    Parameters
+    ----------
+    n_views : int
+        Spokes in the base shell, at least three.
+    n_shots : int, optional
+        Rotated replays of that shell.
+    scheme : {'spiral', 'meridian'}, optional
+        ``'spiral'`` winds pole to pole across equal-area rings, so the shell
+        alone is already near-uniform. ``'meridian'`` is a half great circle in
+        the x-z plane at equal polar steps, which is simpler and oversamples
+        the poles.
+
+    Returns
+    -------
+    directions : numpy.ndarray
+        Unit spoke directions of the base shell, shape ``(n_views, 3)``.
+    rotations : numpy.ndarray
+        Rotation matrices, shape ``(n_shots, 3, 3)``, each turning the whole
+        shell to where that shot samples.
+
+    Raises
+    ------
+    ValueError
+        If a count is out of range or ``scheme`` is unknown.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> import pulserver.pypulseq as pp
+    >>> directions, rotations = pp.calc_projection_shell(32, n_shots=13)
+    >>> directions.shape, rotations.shape
+    ((32, 3), (13, 3, 3))
+
+    The shell runs pole to pole, so the shot rotations leave its ends alone:
+
+    >>> bool(np.allclose(directions[[0, -1]], [[0, 0, 1], [0, 0, -1]]))
+    True
+
+    Consecutive views are exactly one step apart, which is the condition a
+    rotation-encoded readout depends on:
+
+    >>> steps = np.arccos(np.clip(np.sum(directions[:-1] * directions[1:], axis=1), -1, 1))
+    >>> bool(np.ptp(steps) < 1e-9)
+    True
+
+    See Also
+    --------
+    calc_golden_angles : in-plane spoke angles, one per shot, for 2D radial.
+    """
+    n_views, n_shots = int(n_views), int(n_shots)
+    if n_views < 3:
+        raise ValueError("a pole-to-pole shell needs at least three views")
+    if n_shots < 1:
+        raise ValueError("n_shots must be positive")
+
+    if scheme == "spiral":
+        directions = _constant_step_spiral(n_views)
+    elif scheme == "meridian":
+        polar = np.linspace(0.0, np.pi, n_views)
+        directions = np.column_stack((np.sin(polar), np.zeros(n_views), np.cos(polar)))
+    else:
+        raise ValueError(f"scheme must be 'spiral' or 'meridian', got {scheme!r}")
+    return directions, _turns_about_z(2.0 * np.pi * np.arange(n_shots, dtype=float) / n_shots)
+
+
+def _constant_step_spiral(n_views: int) -> np.ndarray:
+    """A pole-to-pole spiral whose consecutive views are a constant angle apart.
+
+    The polar ladder is fixed first, at equal-area heights from ``+1`` to
+    ``-1``, and each azimuth increment is then *solved* rather than chosen,
+    from ``cos(step) = cos(t_k) cos(t_k+1) + sin(t_k) sin(t_k+1) cos(dphi)``.
+
+    The step itself is not free: at the poles ``sin(t) = 0``, so no azimuth
+    increment buys any angle there and the whole step has to be polar. That
+    fixes it at the polar gap next to the pole, which is the widest of them;
+    every other gap has slack, and the azimuth increments take it up.
+    """
+    height = np.linspace(1.0, -1.0, n_views)
+    polar = np.arccos(np.clip(height, -1.0, 1.0))
+    step = float(np.max(np.diff(polar)))
+
+    numerator = math.cos(step) - np.cos(polar[:-1]) * np.cos(polar[1:])
+    denominator = np.sin(polar[:-1]) * np.sin(polar[1:])
+    increment = np.zeros(n_views - 1)
+    turning = denominator > 1e-12
+    increment[turning] = np.arccos(
+        np.clip(numerator[turning] / denominator[turning], -1.0, 1.0)
+    )
+    azimuth = np.concatenate(([0.0], np.cumsum(increment)))
+    radius = np.sqrt(np.maximum(0.0, 1.0 - height**2))
+    return np.column_stack((radius * np.cos(azimuth), radius * np.sin(azimuth), height))
+
+
+def _turns_about_z(angles: np.ndarray) -> np.ndarray:
+    """One rotation matrix about ``z`` per angle."""
+    cosine, sine = np.cos(angles), np.sin(angles)
+    turns = np.zeros((len(angles), 3, 3), dtype=float)
+    turns[:, 0, 0] = turns[:, 1, 1] = cosine
+    turns[:, 0, 1] = -sine
+    turns[:, 1, 0] = sine
+    turns[:, 2, 2] = 1.0
+    return turns

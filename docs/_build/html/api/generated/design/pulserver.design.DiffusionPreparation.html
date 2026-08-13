@@ -259,6 +259,10 @@
 <li class="toctree-l3"><a class="reference internal" href="pulserver.design.FatSaturation.html">pulserver.design.FatSaturation</a></li>
 <li class="toctree-l3"><a class="reference internal" href="pulserver.design.LineReadout2D.html">pulserver.design.LineReadout2D</a></li>
 <li class="toctree-l3"><a class="reference internal" href="pulserver.design.LineReadout3D.html">pulserver.design.LineReadout3D</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.design.BssfpReadout2D.html">pulserver.design.BssfpReadout2D</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.design.BssfpReadout3D.html">pulserver.design.BssfpReadout3D</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.design.FseReadout2D.html">pulserver.design.FseReadout2D</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.design.FseReadout3D.html">pulserver.design.FseReadout3D</a></li>
 <li class="toctree-l3"><a class="reference internal" href="pulserver.design.RadialReadout2D.html">pulserver.design.RadialReadout2D</a></li>
 <li class="toctree-l3"><a class="reference internal" href="pulserver.design.RadialStackReadout.html">pulserver.design.RadialStackReadout</a></li>
 <li class="toctree-l3"><a class="reference internal" href="pulserver.design.RadialProjectionReadout.html">pulserver.design.RadialProjectionReadout</a></li>
@@ -268,6 +272,7 @@
 <li class="toctree-l3"><a class="reference internal" href="pulserver.design.RosetteReadout2D.html">pulserver.design.RosetteReadout2D</a></li>
 <li class="toctree-l3"><a class="reference internal" href="pulserver.design.RosetteStackReadout.html">pulserver.design.RosetteStackReadout</a></li>
 <li class="toctree-l3"><a class="reference internal" href="pulserver.design.RosetteProjectionReadout.html">pulserver.design.RosetteProjectionReadout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pulserver.design.ZteReadout.html">pulserver.design.ZteReadout</a></li>
 <li class="toctree-l3"><a class="reference internal" href="pulserver.design.RfModule.html">pulserver.design.RfModule</a></li>
 <li class="toctree-l3"><a class="reference internal" href="pulserver.design.NonCartesianReadout.html">pulserver.design.NonCartesianReadout</a></li>
 <li class="toctree-l3"><a class="reference internal" href="pulserver.design.OffResonanceSaturation.html">pulserver.design.OffResonanceSaturation</a></li>
@@ -659,36 +664,21 @@
 <dt class="sig sig-object py" id="pulserver.design.DiffusionPreparation">
 <span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pulserver.design.</span></span><span class="sig-name descname"><span class="pre">DiffusionPreparation</span></span><a class="headerlink" href="#pulserver.design.DiffusionPreparation" title="Link to this definition">#</a></dt>
 <dd><p>A 90 - G - 180 - G - 90 sandwich that leaves diffusion weighting on z.</p>
-<p>Spins that move between the two gradient lobes are not refocused by the
-second, so what survives to be stored on <code class="docutils literal notranslate"><span class="pre">z</span></code> is attenuated by
-<code class="docutils literal notranslate"><span class="pre">exp(-b</span> <span class="pre">D)</span></code>. Storing it longitudinally is what makes this a preparation:
-any readout can follow, and the weighting no longer has to be produced by
-the readout’s own echo, as it is in diffusion-weighted spin-echo EPI.</p>
-<p>Non-selective, like every other preparation here. A slice-selective
-diffusion experiment is not this module: it is a spin-echo readout whose
-own imaging pulses carry the gradients, which belongs to the readout
-families rather than here.</p>
-<p><strong>Hard 90s, not adiabatic half passages.</strong> A half-passage pair only
-restores what it tipped if the transverse phase comes back the way it
-went, and a single refocusing pulse conjugates it – see
-<a class="reference internal" href="pulserver.design.T2Preparation.html#pulserver.design.T2Preparation" title="pulserver.design.T2Preparation"><code class="xref py py-class docutils literal notranslate"><span class="pre">T2Preparation</span></code></a>, which for that reason insists on
-an even number. A diffusion pair wants exactly one refocusing pulse
-between its two lobes, so the 90s here are plain rectangles, at the cost of
-the B1 robustness the adiabatic pulses would have given.</p>
-<p><strong>One canonical design, scaled and rotated by the loop.</strong> The module is
-built along z at the b-value asked for. A lower b-value is the same
-waveform scaled by <code class="docutils literal notranslate"><span class="pre">sqrt(b</span> <span class="pre">/</span> <span class="pre">b_value)</span></code> – <a class="reference internal" href="#pulserver.design.DiffusionPreparation.scale_for" title="pulserver.design.DiffusionPreparation.scale_for"><code class="xref py py-meth docutils literal notranslate"><span class="pre">scale_for()</span></code></a> – and a
-direction is a rotation event on the two gradient blocks:</p>
+<p>What survives to be stored on <code class="docutils literal notranslate"><span class="pre">z</span></code> is attenuated by <code class="docutils literal notranslate"><span class="pre">exp(-b</span> <span class="pre">D)</span></code>, so any
+readout can follow and the weighting need not come from the readout’s own
+echo. Non-selective: a slice-selective diffusion experiment is a spin-echo
+readout whose imaging pulses carry the gradients, not a preparation.</p>
+<p>The 90s are hard rather than adiabatic half passages, which cannot survive
+the single refocusing pulse a diffusion pair needs – see
+<a class="reference internal" href="pulserver.design.T2Preparation.html#pulserver.design.T2Preparation" title="pulserver.design.T2Preparation"><code class="xref py py-class docutils literal notranslate"><span class="pre">T2Preparation</span></code></a>, which insists on an even number
+for the same reason. The cost is B1 robustness.</p>
+<p>One canonical design along z at <code class="docutils literal notranslate"><span class="pre">b_value</span></code>; the loop scales it with
+<a class="reference internal" href="#pulserver.design.DiffusionPreparation.scale_for" title="pulserver.design.DiffusionPreparation.scale_for"><code class="xref py py-meth docutils literal notranslate"><span class="pre">scale_for()</span></code></a> and turns it with a rotation event:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="k">for</span> <span class="n">direction</span><span class="p">,</span> <span class="n">b</span> <span class="ow">in</span> <span class="n">plan</span><span class="p">:</span>
     <span class="n">g</span> <span class="o">=</span> <span class="n">pp</span><span class="o">.</span><span class="n">scale_grad</span><span class="p">(</span><span class="n">prep</span><span class="o">.</span><span class="n">g_diff</span><span class="p">,</span> <span class="n">prep</span><span class="o">.</span><span class="n">scale_for</span><span class="p">(</span><span class="n">b</span><span class="p">))</span>
     <span class="n">rotation</span> <span class="o">=</span> <span class="n">pp</span><span class="o">.</span><span class="n">make_rotation</span><span class="p">(</span><span class="n">direction</span><span class="p">)</span>
-    <span class="o">...</span>
 </pre></div>
 </div>
-<p>The b-value is integrated from the rasterized waveform, with the sign
-reversal the refocusing pulse imposes, rather than taken from the
-<code class="docutils literal notranslate"><span class="pre">delta</span></code>/<code class="docutils literal notranslate"><span class="pre">Delta</span></code> formula: the formula assumes ideal rectangles, and the
-ramps are a percent-level part of a real lobe.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">

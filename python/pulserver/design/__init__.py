@@ -58,6 +58,10 @@ from .preparation import (
     T2Preparation,
 )
 from .readout import (
+    BssfpReadout2D,
+    BssfpReadout3D,
+    FseReadout2D,
+    FseReadout3D,
     LineReadout2D,
     LineReadout3D,
     NonCartesianReadout,
@@ -70,6 +74,7 @@ from .readout import (
     SpiralProjectionReadout,
     SpiralReadout2D,
     SpiralStackReadout,
+    ZteReadout,
 )
 
 #: Modules whose point is an RF pulse: what tips the magnetisation, and where.
@@ -97,6 +102,10 @@ PREPARATION = (
 #: end of the TR. One class per geometry, because the geometry is what
 #: changes the blocks; direction, echo count and density are arguments.
 READOUT = (
+    "BssfpReadout2D",
+    "BssfpReadout3D",
+    "FseReadout2D",
+    "FseReadout3D",
     "LineReadout2D",
     "LineReadout3D",
     "RadialProjectionReadout",
@@ -108,6 +117,7 @@ READOUT = (
     "SpiralProjectionReadout",
     "SpiralReadout2D",
     "SpiralStackReadout",
+    "ZteReadout",
 )
 
 #: Base classes, for a readout family this package does not ship.
