@@ -12,11 +12,14 @@ and the echo position it recorded.
 The method has two layers, kept visibly apart so each is legible on its own:
 
 ISMRMRD adapter
-    Turns one slice's bucket into the arrays the numerics speak -- the phase
-    encodes (``kspace_encode_step_1``) gridded onto a full Cartesian grid, the
-    echo position (``center_sample``) that places a partial echo, and the
-    matrix size from the header. This is the layer a Gadgetron/ISMRMRD user
-    recognises and an offline-recon user has to learn.
+    Turns one slice's acquisitions into the arrays the numerics speak -- the
+    phase encodes (``kspace_encode_step_1``) gridded onto a full Cartesian
+    grid, the echo position (``center_sample``) that places a partial echo, and
+    the matrix size from the header. This is the layer a Gadgetron/ISMRMRD user
+    recognises and an offline-recon user has to learn. It grids each line in
+    ``receive`` as it arrives, so a slice is ready the moment its last line
+    lands; called offline it grids the whole bucket in ``recon`` instead, to
+    the same result.
 
 Reconstruction
     Pure arrays, expressed in the framework's DeepInverse-style operator
@@ -59,7 +62,10 @@ import numpy as np
 
 from pulserver import AcquisitionBucket, ReconApp, ReconContext, ReconResult
 from pulserver.recon.postprocessing import coil_combine
-from pulserver.recon.preprocessing import POCS, grid_cartesian
+from pulserver.recon.preprocessing import CartesianGridder, POCS, grid_cartesian
+
+#: Key under which the on-arrival grid for the current slice lives in the exam.
+_STAGED = "gre_2d.staged"
 
 
 class Gre2DRecon(ReconApp):
@@ -98,6 +104,26 @@ class Gre2DRecon(ReconApp):
         self.pocs_iterations = int(pocs_iterations)
         self.device = device
 
+    def startup(self, context: ReconContext) -> None:
+        """Drop any staging left behind by a previous scan on a reused exam."""
+        context.exam.pop(_STAGED, None)
+
+    def receive(self, acquisition: Any, context: ReconContext) -> None:
+        """Grid one line as it arrives, so the slice is gridded the moment its
+        last line lands and :meth:`recon` only runs the maths.
+
+        Needs the phase-encode matrix, which the streamed header carries. With
+        no such header -- an offline call, where :meth:`recon` is invoked
+        directly -- nothing is staged and :meth:`recon` grids the assembled
+        bucket instead.
+        """
+        try:
+            n_y = int(context.header.encoding[0].encodedSpace.matrixSize.y)
+        except (AttributeError, IndexError, TypeError):
+            return
+        staged = context.exam.get_or_create(_STAGED, lambda: _Staged(n_y, acquisition))
+        staged.add(acquisition)
+
     def recon(
         self,
         bucket: AcquisitionBucket,
@@ -111,13 +137,22 @@ class Gre2DRecon(ReconApp):
         recon field of view when it turns the returned :class:`ReconResult` into
         an ``ismrmrd.Image`` and, because ``dicom=True``, a DICOM.
         """
-        # ISMRMRD adapter: one slice's acquisitions onto a full Cartesian grid.
+        # ISMRMRD adapter: the slice, on a full Cartesian grid. receive() grids
+        # each line as it arrives and leaves the result in the exam; offline, or
+        # without a header, nothing was staged and the whole bucket is gridded
+        # now instead. Either way the grids are identical.
         n_y = _phase_encode_lines(context.header, bucket)
-        kspace, samples = _grid(bucket, n_y)
+        staged = context.exam.pop(_STAGED, None)
+        if staged is not None:
+            kspace, samples, calibration = staged.result()
+        else:
+            kspace, samples = _grid(bucket, n_y)
+            calibration = (
+                _grid(bucket, n_y, reference=True)[0] if len(bucket.ref) else None
+            )
         # The readout sampling profile, shared by every acquired line: full when
         # the whole echo was read, truncated for a partial echo.
         readout = samples.any(axis=0)
-        calibration = _grid(bucket, n_y, reference=True)[0] if len(bucket.ref) else None
 
         # Reconstruction: one operator vocabulary, the branch chosen by the data.
         if calibration is not None:
@@ -187,6 +222,46 @@ class Gre2DRecon(ReconApp):
 
 
 # %% ISMRMRD adapter -- reads what the sequence encoded
+
+
+class _Staged:
+    """One slice's data and calibration grids, filled line by line on arrival.
+
+    A pair of :class:`~pulserver.recon.preprocessing.CartesianGridder`s, split
+    exactly as the runtime splits a bucket: a parallel-calibration line feeds
+    the reference grid, and every line that is not calibration-only feeds the
+    data grid (a calibration-and-imaging line feeds both). :meth:`result`
+    returns what :func:`_grid` would from the finished bucket.
+    """
+
+    def __init__(self, n_y: int, first: Any) -> None:
+        # The echo position fixes the readout width, so it is read once, from
+        # the first line, and shared by both grids.
+        echo_position = int(getattr(first, "center_sample", 0) or 0) or None
+        self.data = CartesianGridder(n_y, echo_position=echo_position)
+        self.reference = CartesianGridder(n_y, echo_position=echo_position)
+        self._has_reference = False
+
+    def add(self, acquisition: Any) -> None:
+        """Grid one arriving line into the data grid, the reference grid, or both."""
+        import ismrmrd
+
+        line = int(acquisition.idx.kspace_encode_step_1)
+        kspace = np.asarray(acquisition.data)
+        calibration = acquisition.is_flag_set(ismrmrd.ACQ_IS_PARALLEL_CALIBRATION)
+        if not calibration:
+            self.data.add(kspace, line)
+        if calibration or acquisition.is_flag_set(
+            ismrmrd.ACQ_IS_PARALLEL_CALIBRATION_AND_IMAGING
+        ):
+            self.reference.add(kspace, line)
+            self._has_reference = True
+
+    def result(self) -> tuple[np.ndarray, np.ndarray, np.ndarray | None]:
+        """Return ``(kspace, samples, calibration)``, calibration ``None`` if unseen."""
+        kspace, samples = self.data.result()
+        calibration = self.reference.result()[0] if self._has_reference else None
+        return kspace, samples, calibration
 
 
 def _grid(

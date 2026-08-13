@@ -8,6 +8,7 @@ from __future__ import annotations
 
 __all__ = [
     "POCS",
+    "CartesianGridder",
     "EPIPhaseCorrection",
     "Homodyne",
     "SmsEpiInputs",
@@ -775,7 +776,6 @@ def pipe_menon_dcf(
     )
 
 
-
 def grid_cartesian(
     acquisitions: Any,
     encodes: Any,
@@ -865,10 +865,7 @@ def grid_cartesian(
         if counter.shape != (acquisitions.shape[0],):
             raise ValueError("every counter needs one entry per acquisition")
 
-    n_samples = acquisitions.shape[-1]
-    position = n_samples // 2 if echo_position is None else int(echo_position)
-    n_x = 2 * (n_samples - position)
-    acquired = slice(n_x - n_samples, None)
+    n_x, acquired = _cartesian_extent(acquisitions.shape[-1], echo_position)
 
     grid = numpy.zeros((acquisitions.shape[1], *extents, n_x), dtype=numpy.complex64)
     grid[(slice(None), *counters, acquired)] = numpy.moveaxis(acquisitions, 0, 1)
@@ -876,3 +873,111 @@ def grid_cartesian(
     mask = numpy.zeros((*extents, n_x), dtype=bool)
     mask[(*counters, acquired)] = True
     return grid, mask
+
+
+def _cartesian_extent(n_samples: int, echo_position: int | None) -> tuple[int, slice]:
+    """Full readout width, and where the acquired samples land in it.
+
+    Truncating the samples before the echo leaves the acquired window
+    right-aligned against a readout axis twice as wide as the part that follows
+    the echo. :func:`grid_cartesian` and :class:`CartesianGridder` share this so
+    batch and streaming gridding place a line identically.
+    """
+    n_samples = int(n_samples)
+    position = n_samples // 2 if echo_position is None else int(echo_position)
+    n_x = 2 * (n_samples - position)
+    return n_x, slice(n_x - n_samples, None)
+
+
+class CartesianGridder:
+    """Scatter Cartesian acquisitions onto a grid as they arrive.
+
+    The streaming companion to :func:`grid_cartesian`: it places one acquisition
+    at a time by the same rule, so gridding overlaps acquisition instead of
+    waiting for the whole set to land. Feed each acquisition to :meth:`add`;
+    :meth:`result` returns the same ``(grid, mask)`` :func:`grid_cartesian`
+    would from those acquisitions.
+
+    Parameters
+    ----------
+    shape
+        Phase-encode extent, or ``(n_y, n_z)`` for a 3D acquisition, exactly as
+        :func:`grid_cartesian` takes it.
+    partitions
+        Whether a partition index accompanies each :meth:`add`. Required for a
+        3D ``shape`` and refused for a 2D one.
+    echo_position
+        Sample index the echo sits at, as MRD's ``center_sample`` reports it.
+        ``None`` treats every readout as a full echo centred on its midpoint.
+        It fixes the readout width, so it is set once, for the whole grid.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from pulserver.recon.preprocessing import CartesianGridder, grid_cartesian
+    >>> data = np.ones((4, 2, 16), dtype=complex)
+    >>> gridder = CartesianGridder(8)
+    >>> for line, acquisition in zip([0, 2, 4, 6], data):
+    ...     gridder.add(acquisition, line)
+    >>> grid, mask = gridder.result()
+    >>> reference, reference_mask = grid_cartesian(data, [0, 2, 4, 6], 8)
+    >>> bool(np.array_equal(grid, reference)), bool(np.array_equal(mask, reference_mask))
+    (True, True)
+    """
+
+    def __init__(
+        self,
+        shape: Any,
+        *,
+        partitions: bool = False,
+        echo_position: int | None = None,
+    ) -> None:
+        extents = (
+            tuple(int(s) for s in shape)
+            if hasattr(shape, "__iter__")
+            else (int(shape),)
+        )
+        if len(extents) not in (1, 2):
+            raise ValueError("shape must hold one or two phase-encode extents")
+        if bool(partitions) != (len(extents) == 2):
+            raise ValueError(
+                "partitions is required for a 3D shape and refused for a 2D one"
+            )
+        self._extents = extents
+        self._partitioned = bool(partitions)
+        self._echo_position = None if echo_position is None else int(echo_position)
+        self._grid: Any = None
+        self._mask: Any = None
+        self._acquired: slice | None = None
+
+    def add(
+        self, acquisition: Any, encode: int, *, partition: int | None = None
+    ) -> None:
+        """Place one acquisition, shaped ``(coil, sample)``, at its phase encode."""
+        numpy = import_module("numpy")
+        acquisition = numpy.asarray(acquisition)
+        if acquisition.ndim != 2:
+            raise ValueError("each acquisition must be (coil, sample)")
+        if (partition is None) == self._partitioned:
+            raise ValueError(
+                "partition is required for a 3D grid and refused for a 2D one"
+            )
+        if self._grid is None:
+            n_x, self._acquired = _cartesian_extent(
+                acquisition.shape[-1], self._echo_position
+            )
+            self._grid = numpy.zeros(
+                (acquisition.shape[0], *self._extents, n_x), dtype=numpy.complex64
+            )
+            self._mask = numpy.zeros((*self._extents, n_x), dtype=bool)
+        index = (
+            (int(encode),) if not self._partitioned else (int(encode), int(partition))
+        )
+        self._grid[(slice(None), *index, self._acquired)] = acquisition
+        self._mask[(*index, self._acquired)] = True
+
+    def result(self) -> tuple[Any, Any]:
+        """Return the ``(grid, mask)`` accumulated so far."""
+        if self._grid is None:
+            raise ValueError("CartesianGridder received no acquisitions")
+        return self._grid, self._mask

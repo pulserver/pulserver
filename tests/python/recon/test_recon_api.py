@@ -528,6 +528,27 @@ def test_cartesian_without_coil_maps_keeps_the_coils():
     assert np.allclose(np.abs(combined), rss, atol=1e-4)
 
 
+def test_cartesian_gridder_matches_grid_cartesian():
+    """Gridding acquisitions one at a time equals gridding them all at once."""
+    from pulserver.recon.preprocessing import CartesianGridder, grid_cartesian
+
+    rng = np.random.default_rng(0)
+    data = (
+        rng.standard_normal((6, 3, 12)) + 1j * rng.standard_normal((6, 3, 12))
+    ).astype(np.complex64)
+    lines = [0, 2, 4, 5, 8, 11]
+    for echo_position in (None, 4):
+        gridder = CartesianGridder(12, echo_position=echo_position)
+        for line, acquisition in zip(lines, data, strict=True):
+            gridder.add(acquisition, line)
+        grid, mask = gridder.result()
+        reference, reference_mask = grid_cartesian(
+            data, lines, 12, echo_position=echo_position
+        )
+        assert np.array_equal(grid, reference)
+        assert np.array_equal(mask, reference_mask)
+
+
 def test_noncartesian_factory_owns_mrinufft_construction(monkeypatch):
     calls = {}
     native = SimpleNamespace(gram_op=lambda value, **_kwargs: value)
