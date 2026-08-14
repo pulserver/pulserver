@@ -43,6 +43,15 @@ from scipy.spatial.transform import Rotation
 from pulserver.seqzoo.gre_spiral_2d import ANGLE_SCHEMES, arm_angles
 from pulserver.seqzoo.gre_stack_of_stars_3d import play_stack
 
+#: Per-plugin ceilings on the gradient and slew limits, in mT/m and T/m/s. The
+#: sequence is held below the smaller of these and what the scanner reports, so
+#: lowering them here -- on the scanner console, even -- reruns the whole script
+#: under gentler gradients (for PNS headroom, acoustic comfort, eddy currents)
+#: without touching anything else. Defaults sit above typical hardware, so they
+#: cap nothing until you lower them.
+MAX_GRAD = 80.0
+MAX_SLEW = 200.0
+
 
 def main(
     plot: bool = False,
@@ -125,6 +134,7 @@ def main(
         The stack-of-spirals sequence object.
     """
     system = pp.Opts() if system is None else system
+    system = pp.cap_system(system, max_grad=MAX_GRAD, max_slew=MAX_SLEW)
 
     kernel = StackOfSpiralsKernel(
         system,
@@ -358,6 +368,7 @@ class GreStackOfSpirals3D(SequencePlugin):
 
     def validate_protocol(self, system: pp.Opts, protocol: dict[str, dict]) -> dict:
         """Report whether the protocol is feasible, and how long it will take."""
+        system = pp.cap_system(system, max_grad=MAX_GRAD, max_slew=MAX_SLEW)
         kwargs = _main_kwargs(system, protocol)
         try:
             kernel = StackOfSpiralsKernel(
