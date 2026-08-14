@@ -618,8 +618,109 @@ TEST(PulseqFovShift, ReconstructedPhaseMatchesTheShiftTimesK)
     }
 }
 
-TEST(PulseqFovShift, RfPhaseGainsTheShiftReferencedToItsCentre)
+namespace
 {
+    /* An 8-sample hard pulse under a slice-select trapezoid.  `delay` places
+     * it: 200 us puts every sample on the flat top, 0 puts it on the ramp. */
+    int add_selective_pulse(Sequence& seq, double delay, int phase_shape_or_zero)
+    {
+        seq.set_rasters(1e-6, 10e-6, 100e-9, 10e-6);
+
+        const std::vector<double> mag(8, 1.0);
+        const int m = seq.register_raw_shape(mag.data(), 8);
+        int p = phase_shape_or_zero;
+        if (p < 0)
+        {
+            const std::vector<double> phase(8, 0.0);
+            p = seq.register_raw_shape(phase.data(), 8);
+        }
+
+        const auto g = trap(20000.0, 800e-6);
+        const auto r = rf_row(m, p, 4e-6, delay);
+
+        Block b;
+        b.gx = seq.register_trap(g.data());
+        b.rf = seq.register_rf(r.data(), 'e');
+        b.duration = 1000e-6;
+        return seq.add_block(b);
+    }
+}  // namespace
+
+TEST(PulseqFovShift, RfUnderAConstantGradientCostsTwoScalarsAndNoShape)
+{
+    Sequence seq;
+    const int blk = add_selective_pulse(seq, 200e-6, -1);
+    const double* before = seq.rf_library().row(seq.get_block(blk).rf);
+    const int phase_id = static_cast<int>(before[2]);
+    const int shapes_before = seq.shape_library().size();
+
+    pulseq::apply_fov_shift(seq, {0.01, 0.0, 0.0}, pulseq::FovShiftScope::RfOnly);
+
+    const double* row = seq.rf_library().row(seq.get_block(blk).rf);
+    EXPECT_EQ(static_cast<int>(row[2]), phase_id) << "the phase shape is untouched";
+    EXPECT_EQ(seq.shape_library().size(), shapes_before);
+
+    /* freq = shift . g = 0.01 m * 20000 Hz/m, and the phase backs the centre
+     * out so the pulse's effective phase there is unchanged. */
+    constexpr double two_pi = 6.283185307179586476925286766559;
+    EXPECT_NEAR(row[8], 200.0, 1e-9);
+    EXPECT_NEAR(row[9], -two_pi * 200.0 * 4e-6, 1e-12);
+}
+
+TEST(PulseqFovShift, RfScalarsReproduceTheBakedPhaseExactly)
+{
+    /* The pair must give every sample the phase the shape path would have
+     * baked: `phase + 2*pi*freq*t`, t from the shape's start, equal to
+     * `2*pi * dr . (k(t) - k(centre))`. */
+    Sequence seq;
+    const int blk = add_selective_pulse(seq, 200e-6, -1);
+
+    pulseq::apply_fov_shift(seq, {0.01, 0.0, 0.0}, pulseq::FovShiftScope::RfOnly);
+
+    const double* row = seq.rf_library().row(seq.get_block(blk).rf);
+    constexpr double two_pi = 6.283185307179586476925286766559;
+    constexpr double shift = 0.01;
+
+    /* k under trap(20000, 800e-6) at a time on the flat top, from block
+     * start: full ramp area plus the flat run so far. */
+    const auto k_at = [](double t) {
+        return 20000.0 * (0.5 * 100e-6 + (t - 100e-6));
+    };
+    for (int i = 0; i < 8; ++i)
+    {
+        const double tau = (static_cast<double>(i) + 0.5) * 1e-6;  // from shape start
+        const double from_scalars = row[9] + two_pi * row[8] * tau;
+        const double baked = two_pi * shift * (k_at(200e-6 + tau) - k_at(200e-6 + 4e-6));
+        EXPECT_NEAR(from_scalars, baked, 1e-9) << "sample " << i;
+    }
+}
+
+TEST(PulseqFovShift, RfOverlappingTheRampStillBakesAShape)
+{
+    Sequence seq;
+    const int blk = add_selective_pulse(seq, 0.0, -1);
+    const double* before = seq.rf_library().row(seq.get_block(blk).rf);
+    const int phase_id = static_cast<int>(before[2]);
+
+    pulseq::apply_fov_shift(seq, {0.01, 0.0, 0.0}, pulseq::FovShiftScope::RfOnly);
+
+    const double* row = seq.rf_library().row(seq.get_block(blk).rf);
+    EXPECT_NE(static_cast<int>(row[2]), phase_id) << "a varying gradient needs the shape";
+    EXPECT_EQ(row[8], 0.0);
+
+    /* The pulse centre is at 4 us, inside the first sample, and the phase is
+     * referenced there -- so the shape passes through ~0 near the start and
+     * varies away from it. */
+    const double* samples = seq.shape_library().samples(static_cast<int>(row[2]));
+    EXPECT_NEAR(samples[0], 0.0, 2e-3);
+    EXPECT_NE(samples[7], samples[0]);
+}
+
+TEST(PulseqFovShift, RepeatedRfContextsDedupOntoOneRow)
+{
+    /* Two blocks, same pulse and gradient, different k origins: because the
+     * centre's share is subtracted, the scalar pair is origin-independent and
+     * both blocks land on one new rf row -- the footprint claim. */
     Sequence seq;
     seq.set_rasters(1e-6, 10e-6, 100e-9, 10e-6);
 
@@ -627,31 +728,38 @@ TEST(PulseqFovShift, RfPhaseGainsTheShiftReferencedToItsCentre)
     const std::vector<double> phase(8, 0.0);
     const int m = seq.register_raw_shape(mag.data(), 8);
     const int p = seq.register_raw_shape(phase.data(), 8);
-
-    /* A slice-select gradient under the pulse. */
     const auto g = trap(20000.0, 800e-6);
-    const auto r = rf_row(m, p, 4e-6, 0.0);
+    const auto r = rf_row(m, p, 4e-6, 200e-6);
 
     Block b;
     b.gx = seq.register_trap(g.data());
-    b.rf = seq.register_rf(r.data(), 'e');
+    b.rf = seq.register_rf(r.data(), 'i');  // leaves k alone, so origins differ
     b.duration = 1000e-6;
-    const int blk = seq.add_block(b);
+    const int first = seq.add_block(b);
+    const int second = seq.add_block(b);
+
+    const int shapes_before = seq.shape_library().size();
+
+    pulseq::apply_fov_shift(seq, {0.01, 0.0, 0.0}, pulseq::FovShiftScope::RfOnly);
+
+    EXPECT_EQ(seq.shape_library().size(), shapes_before);
+
+    /* Registration appends; the collapse is remove_duplicates' job, and the
+     * pair being origin-independent is what makes the rows equal to collapse. */
+    seq.remove_duplicates();
+    EXPECT_EQ(seq.get_block(first).rf, seq.get_block(second).rf);
+}
+
+TEST(PulseqFovShift, AnRfWithoutAPhaseShapeStillGetsTheScalars)
+{
+    Sequence seq;
+    const int blk = add_selective_pulse(seq, 200e-6, 0);
 
     pulseq::apply_fov_shift(seq, {0.01, 0.0, 0.0}, pulseq::FovShiftScope::RfOnly);
 
     const double* row = seq.rf_library().row(seq.get_block(blk).rf);
-    const int new_phase = static_cast<int>(row[2]);
-    EXPECT_NE(new_phase, p) << "a new phase shape was registered";
-
-    const auto& shapes = seq.shape_library();
-    const double* samples = shapes.samples(new_phase);
-
-    /* The pulse centre is at 4 us, inside the first sample, and the phase is
-     * referenced there -- so the shape passes through ~0 near the start and
-     * varies away from it. */
-    EXPECT_NEAR(samples[0], 0.0, 2e-3);
-    EXPECT_NE(samples[7], samples[0]);
+    EXPECT_EQ(static_cast<int>(row[2]), 0) << "still no phase shape";
+    EXPECT_NEAR(row[8], 200.0, 1e-9);
 }
 
 TEST(PulseqFovShift, RfOnlyLeavesTheAdcUntouched)
@@ -664,6 +772,65 @@ TEST(PulseqFovShift, RfOnlyLeavesTheAdcUntouched)
 
     EXPECT_EQ(seq.get_block(blk).adc, before);
     EXPECT_EQ(seq.adc_library().row(before)[5], 0.0);
+}
+
+TEST(PulseqFovShift, ServerScopeBakesACartesianReadoutLikeNative)
+{
+    Sequence server;
+    const int blk = add_readout(server, 50000.0, 640e-6, 10e-6, 64);
+    Sequence native;
+    add_readout(native, 50000.0, 640e-6, 10e-6, 64);
+
+    pulseq::apply_fov_shift(server, {0.01, 0.0, 0.0}, pulseq::FovShiftScope::Server);
+    pulseq::apply_fov_shift(native, {0.01, 0.0, 0.0}, pulseq::FovShiftScope::RfAndAdc);
+
+    const double* s = server.adc_library().row(server.get_block(blk).adc);
+    const double* n = native.adc_library().row(native.get_block(blk).adc);
+    for (int c = 0; c < pulseq::ADC_WIDTH; ++c)
+        EXPECT_DOUBLE_EQ(s[c], n[c]) << "column " << c;
+    EXPECT_NEAR(s[5], 500.0, 1e-9);
+    EXPECT_EQ(s[7], 0.0) << "no phase modulation of any kind";
+}
+
+TEST(PulseqFovShift, ServerScopeDefersARotatedReadout)
+{
+    Sequence seq;
+    const int blk = add_readout(seq, 50000.0, 640e-6, 10e-6, 64);
+    {
+        const int rotations = seq.extension_type_id("ROTATIONS");
+        const double q[4] = {1.0, 0.0, 0.0, 0.0};
+        Block b = seq.get_block(blk);
+        b.ext = seq.chain_extension(rotations, seq.register_rotation(q), b.ext);
+        seq.set_block(blk, b);
+    }
+    const int32_t adc_before = seq.get_block(blk).adc;
+
+    pulseq::apply_fov_shift(seq, {0.01, 0.0, 0.0}, pulseq::FovShiftScope::Server);
+
+    /* Under a rotation the shift phase is orientation-dependent, so the
+     * consumer of the base trajectory applies it -- nothing is baked here. */
+    EXPECT_EQ(seq.get_block(blk).adc, adc_before);
+    EXPECT_DOUBLE_EQ(seq.adc_library().row(adc_before)[5], 0.0);
+}
+
+TEST(PulseqFovShift, ServerScopeDefersARampSampledReadout)
+{
+    Sequence seq;
+    const auto g = trap(50000.0, 640e-6);
+    const auto a = adc(64, 10e-6, 0.0);  // starts on the ramp
+
+    Block b;
+    b.gx = seq.register_trap(g.data());
+    b.adc = seq.register_adc(a.data());
+    b.duration = 840e-6;
+    const int blk = seq.add_block(b);
+    const int32_t adc_before = seq.get_block(blk).adc;
+
+    pulseq::apply_fov_shift(seq, {0.01, 0.0, 0.0}, pulseq::FovShiftScope::Server);
+
+    EXPECT_EQ(seq.get_block(blk).adc, adc_before);
+    EXPECT_DOUBLE_EQ(seq.adc_library().row(adc_before)[5], 0.0)
+        << "a varying gradient defers with the rotated ones";
 }
 
 TEST(PulseqFovShift, ZeroShiftIsANoOp)
@@ -857,10 +1024,25 @@ TEST(PulseqSequenceCopy, TheCopyAndTheOriginalDivergeIndependently)
 /*  Carrying the base trajectory in a .seq                             */
 /* ================================================================== */
 
+namespace
+{
+    /* Attach a ROTATIONS extension, making the block one whose readout the
+     * consumer has to finish -- the kind that stores a base trajectory. */
+    void rotate_block(Sequence& seq, int blk)
+    {
+        const int rotations = seq.extension_type_id("ROTATIONS");
+        const double q[4] = {1.0, 0.0, 0.0, 0.0};
+        const int rot = seq.register_rotation(q);
+        Block b = seq.get_block(blk);
+        b.ext = seq.chain_extension(rotations, rot, b.ext);
+        seq.set_block(blk, b);
+    }
+}  // namespace
+
 TEST(PulseqBaseTrajectoryCarrier, MarkerSaysTheFileCarriesThem)
 {
     Sequence seq;
-    add_readout(seq, 50000.0, 640e-6, 10e-6, 64);
+    rotate_block(seq, add_readout(seq, 50000.0, 640e-6, 10e-6, 64));
 
     EXPECT_FALSE(pulseq::has_base_trajectory(seq));
     pulseq::attach_base_trajectory(seq);
@@ -870,6 +1052,36 @@ TEST(PulseqBaseTrajectoryCarrier, MarkerSaysTheFileCarriesThem)
     Sequence native;
     add_readout(native, 50000.0, 640e-6, 10e-6, 64);
     EXPECT_FALSE(pulseq::has_base_trajectory(native));
+}
+
+TEST(PulseqBaseTrajectoryCarrier, CartesianUnrotatedReadoutStoresNothing)
+{
+    /* Its shift is two scalars on the ADC row and its k comes from the
+     * encoding counters, so storing a trajectory would be pure weight --
+     * and with nothing stored, the marker must stay off the file. */
+    Sequence seq;
+    const int blk = add_readout(seq, 50000.0, 640e-6, 10e-6, 64);
+    const int shapes_before = seq.shape_library().size();
+
+    pulseq::attach_base_trajectory(seq);
+
+    EXPECT_EQ(static_cast<int>(seq.adc_library().row(seq.get_block(blk).adc)[7]), 0);
+    EXPECT_EQ(seq.shape_library().size(), shapes_before);
+    EXPECT_FALSE(pulseq::has_base_trajectory(seq));
+}
+
+TEST(PulseqBaseTrajectoryCarrier, OnlyTheDeferringReadoutStores)
+{
+    Sequence seq;
+    const int cartesian = add_readout(seq, 50000.0, 640e-6, 10e-6, 64);
+    const int rotated = add_readout(seq, 50000.0, 640e-6, 10e-6, 64);
+    rotate_block(seq, rotated);
+
+    pulseq::attach_base_trajectory(seq);
+
+    EXPECT_EQ(static_cast<int>(seq.adc_library().row(seq.get_block(cartesian).adc)[7]), 0);
+    EXPECT_GT(static_cast<int>(seq.adc_library().row(seq.get_block(rotated).adc)[7]), 0);
+    EXPECT_TRUE(pulseq::has_base_trajectory(seq));
 }
 
 TEST(PulseqBaseTrajectoryCarrier, RoundTripsThroughTheAdcRow)
@@ -888,6 +1100,7 @@ TEST(PulseqBaseTrajectoryCarrier, RoundTripsThroughTheAdcRow)
     b.adc = seq.register_adc(a.data());
     b.duration = 840e-6;
     const int blk = seq.add_block(b);
+    rotate_block(seq, blk);
 
     const BaseTrajectory before = pulseq::base_trajectory(seq, blk);
     pulseq::attach_base_trajectory(seq);
@@ -914,6 +1127,7 @@ TEST(PulseqBaseTrajectoryCarrier, StoredSamplesRescaleToRealKSpace)
 {
     Sequence seq;
     const int blk = add_readout(seq, 50000.0, 640e-6, 10e-6, 64);
+    rotate_block(seq, blk);
 
     const BaseTrajectory truth = pulseq::base_trajectory(seq, blk);
     pulseq::attach_base_trajectory(seq);
@@ -944,6 +1158,7 @@ TEST(PulseqBaseTrajectoryCarrier, AxesAreAxisMajorAndAbsentOnesAreFlatZero)
 {
     Sequence seq;
     const int blk = add_readout(seq, 50000.0, 640e-6, 10e-6, 64);
+    rotate_block(seq, blk);
     pulseq::attach_base_trajectory(seq);
 
     const Block block = seq.get_block(blk);
@@ -961,6 +1176,7 @@ TEST(PulseqBaseTrajectoryCarrier, ReadBackDerivesConstantFromTheSamples)
     Sequence seq;
     /* ADC on the flat top: k still climbs, so the axis is NOT constant... */
     const int flat_top = add_readout(seq, 50000.0, 640e-6, 10e-6, 64);
+    rotate_block(seq, flat_top);
     pulseq::attach_base_trajectory(seq);
 
     const BaseTrajectory t = pulseq::read_base_trajectory(seq, flat_top);
@@ -1000,7 +1216,7 @@ TEST(PulseqBaseTrajectoryCarrier, ReadoutsDifferingOnlyInAmplitudeShareOneShape)
         b.gy = seq.register_trap(gy.data());
         b.adc = seq.register_adc(a.data());
         b.duration = 840e-6;
-        seq.add_block(b);
+        rotate_block(seq, seq.add_block(b));
     }
 
     pulseq::attach_base_trajectory(seq);
@@ -1021,8 +1237,8 @@ TEST(PulseqBaseTrajectoryCarrier, DistinctTrajectoriesKeepDistinctShapes)
     seq.set_rasters(1e-6, 10e-6, 100e-9, 10e-6);
 
     /* Same amplitude, different flat times -- so different k sweeps. */
-    add_readout(seq, 50000.0, 640e-6, 10e-6, 64);
-    add_readout(seq, 50000.0, 640e-6, 20e-6, 64);
+    rotate_block(seq, add_readout(seq, 50000.0, 640e-6, 10e-6, 64));
+    rotate_block(seq, add_readout(seq, 50000.0, 640e-6, 20e-6, 64));
 
     pulseq::attach_base_trajectory(seq);
     seq.remove_duplicates();
@@ -1058,6 +1274,8 @@ TEST(PulseqBaseTrajectoryCarrier, SharedAdcRowIsSplitWhenItsUsersDisagree)
     two.adc = shared;
     two.duration = 840e-6;
     const int blk_two = seq.add_block(two);
+    rotate_block(seq, blk_one);
+    rotate_block(seq, blk_two);
 
     pulseq::attach_base_trajectory(seq);
 
@@ -1099,6 +1317,7 @@ TEST(PulseqBaseTrajectoryCarrier, SurvivesAWriteAndReadOfTheFile)
     b.adc = seq.register_adc(a.data());
     b.duration = 840e-6;
     const int blk = seq.add_block(b);
+    rotate_block(seq, blk);
 
     pulseq::attach_base_trajectory(seq);
     const BaseTrajectory truth = pulseq::base_trajectory(seq, blk);

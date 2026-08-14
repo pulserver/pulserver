@@ -598,16 +598,29 @@ PYBIND11_MODULE(_pulseqpp_wrapper, m)
         // `first`/`last` are 1-based inclusive and bound only which blocks are
         // modified; `last=0` means "to the end".  Absolute k is accumulated
         // from block 1 either way.
+        // `scope` picks who finishes the ADC side: "native" bakes every
+        // readout, "server" bakes only the Cartesian unrotated ones and
+        // leaves the rest to the consumer of the base trajectory, "rf_only"
+        // bakes none.
         .def(
             "apply_fov_shift",
-            [](Sequence& self, double dx, double dy, double dz, bool bake_adc, int first,
-               int last) {
-                pulseq::apply_fov_shift(self, {dx, dy, dz},
-                                        bake_adc ? pulseq::FovShiftScope::RfAndAdc
-                                                 : pulseq::FovShiftScope::RfOnly,
-                                        first, last);
+            [](Sequence& self, double dx, double dy, double dz, const std::string& scope,
+               int first, int last) {
+                pulseq::FovShiftScope value;
+                if (scope == "native")
+                    value = pulseq::FovShiftScope::RfAndAdc;
+                else if (scope == "server")
+                    value = pulseq::FovShiftScope::Server;
+                else if (scope == "rf_only")
+                    value = pulseq::FovShiftScope::RfOnly;
+                else
+                    throw py::value_error(
+                        "apply_fov_shift(): scope must be 'native', 'server' or "
+                        "'rf_only', got '" +
+                        scope + "'");
+                pulseq::apply_fov_shift(self, {dx, dy, dz}, value, first, last);
             },
-            py::arg("dx"), py::arg("dy"), py::arg("dz"), py::arg("bake_adc") = true,
+            py::arg("dx"), py::arg("dy"), py::arg("dz"), py::arg("scope") = "native",
             py::arg("first") = 1, py::arg("last") = 0,
             py::call_guard<py::gil_scoped_release>())
 

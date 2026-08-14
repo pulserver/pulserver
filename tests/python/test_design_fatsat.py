@@ -123,12 +123,16 @@ def test_the_exemption_is_cleared_on_the_way_out(system):
 # ----------------------------------------------------------------------
 
 
-def test_an_offset_band_carries_the_phase_that_moves_it(system):
-    """A slab moves by a linear phase ramp of gamma * G * dz across the pulse."""
+def test_an_offset_band_carries_the_frequency_that_moves_it(system):
+    """A slab under its constant gradient moves by the slice-offset pair --
+    a frequency of gamma * G * dz, with the waveform itself untouched."""
     here = design.FatSaturation(system, thickness_m=0.08)
     moved = design.FatSaturation(system, thickness_m=0.08, position_mm=(0.0, 0.0, 25.0))
-    assert rf_phase_ramp(here.rf_prep, moved.rf_prep) == pytest.approx(
+    assert float(moved.rf_prep.freq_offset) - float(here.rf_prep.freq_offset) == pytest.approx(
         float(here.gz.amplitude) * 0.025
+    )
+    np.testing.assert_allclose(
+        np.asarray(moved.rf_prep.signal), np.asarray(here.rf_prep.signal), atol=1e-12
     )
 
 
@@ -186,7 +190,10 @@ def test_a_later_transform_moves_the_imaging_pulse_and_not_the_band(system):
     imaging_before, imaging_after = scan.get_block(3).rf, moved.get_block(3).rf
 
     assert rf_phase_ramp(saturation_before, saturation_after) == pytest.approx(0.0, abs=1e-9)
-    assert rf_phase_ramp(imaging_before, imaging_after) != pytest.approx(0.0, abs=1.0)
+    assert float(saturation_after.freq_offset) == pytest.approx(
+        float(saturation_before.freq_offset)
+    )
+    assert float(imaging_after.freq_offset) != pytest.approx(float(imaging_before.freq_offset))
 
 
 def test_a_later_rotation_turns_the_imaging_pulse_and_not_the_band(system):

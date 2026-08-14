@@ -146,19 +146,79 @@ def test_a_ranged_shift_gives_the_same_phase_as_shifting_everything(seq):
     assert part.get_block(3).adc.phase_offset == pytest.approx(whole.get_block(3).adc.phase_offset)
 
 
-def test_server_mode_leaves_the_adc_alone_and_attaches_the_trajectory(seq):
-    before = _phases(seq)
-    pp.TransformFOV(translation=(10.0, 0.0, 0.0), server_mode=True).apply_to_sequence(
-        seq, in_place=True
+def test_server_mode_on_a_cartesian_sequence_equals_native_mode(seq):
+    """Unrotated constant-gradient readouts are exact as two scalars, so
+    server mode bakes them like native and has nothing to defer."""
+    server = pp.TransformFOV(translation=(10.0, 0.0, 0.0), server_mode=True).apply_to_sequence(seq)
+    native = pp.TransformFOV(translation=(10.0, 0.0, 0.0)).apply_to_sequence(seq)
+
+    assert _phases(server) == pytest.approx(_phases(native))
+    assert server.get_block(1).adc.freq_offset == native.get_block(1).adc.freq_offset != 0.0
+    assert not server._native.has_base_trajectory()
+
+
+def test_server_mode_defers_a_rotated_readout_and_attaches_its_trajectory(seq):
+    """Under a rotation the shift phase is orientation-dependent, so the ADC
+    side is left to the consumer, which gets the trajectory to do it with."""
+    turn = Rotation.from_euler("z", 45.0, degrees=True)
+    rotated = pp.TransformFOV(rotation=turn.as_matrix()).apply_to_sequence(seq)
+    before = _phases(rotated)
+
+    shifted = pp.TransformFOV(translation=(10.0, 0.0, 0.0), server_mode=True).apply_to_sequence(
+        rotated
     )
-    assert _phases(seq) == before
-    assert seq._native.has_base_trajectory()
+
+    assert _phases(shifted) == before
+    assert shifted.get_block(1).adc.freq_offset == 0.0
+    assert shifted._native.has_base_trajectory()
+
+
+def test_a_rotation_carried_by_the_same_server_transform_still_defers(seq):
+    """The rotation is composed before the shift looks, so a transform that
+    both turns and moves does not bake scalars the consumer would repeat."""
+    turn = Rotation.from_euler("y", 30.0, degrees=True)
+    out = pp.TransformFOV(
+        rotation=turn.as_matrix(), translation=(10.0, 0.0, 0.0), server_mode=True
+    ).apply_to_sequence(seq)
+
+    assert out.get_block(1).adc.freq_offset == 0.0
+    assert out._native.has_base_trajectory()
 
 
 def test_native_mode_bakes_the_adc_and_attaches_nothing(seq):
     pp.TransformFOV(translation=(10.0, 0.0, 0.0)).apply_to_sequence(seq, in_place=True)
     assert seq.get_block(1).adc.freq_offset != 0.0
     assert not seq._native.has_base_trajectory()
+
+
+def test_a_shift_through_a_slice_select_becomes_an_rf_frequency(system):
+    """The gradient is constant across the pulse, so the shift is the classic
+    slice-offset pair -- a frequency, a phase zeroed at the centre, no shape."""
+    rf, gz, gzr = pp.make_sinc_pulse(
+        flip_angle=np.pi / 2,
+        duration=1e-3,
+        slice_thickness=5e-3,
+        apodization=0.5,
+        time_bw_product=4,
+        delay=1e-4,
+        system=system,
+        return_gz=True,
+        use="excitation",
+    )
+    built = pp.Sequence(system=system)
+    built.add_block(rf, gz)
+    built.add_block(gzr)
+
+    shift_mm = 10.0
+    shapes_before = built._native.num_shapes()
+    pp.TransformFOV(translation=(0.0, 0.0, shift_mm)).apply_to_sequence(built, in_place=True)
+
+    expected_hz = gz.amplitude * shift_mm * 1e-3
+    assert built.get_block(1).rf.freq_offset == pytest.approx(expected_hz)
+    assert built.get_block(1).rf.phase_offset == pytest.approx(
+        -2.0 * np.pi * expected_hz * rf.center
+    )
+    assert built._native.num_shapes() == shapes_before
 
 
 # %% scale

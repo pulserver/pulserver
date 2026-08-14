@@ -204,8 +204,8 @@ namespace pulseq
     enum class FovShiftScope
     {
         /**
-         * RF only -- the ADC side is left to a consumer that will apply it
-         * from the base trajectory.  Server mode.
+         * RF only -- every readout's ADC side is left to a consumer that
+         * will apply it from the base trajectory.
          */
         RfOnly,
         /**
@@ -213,7 +213,17 @@ namespace pulseq
          * downstream.  Native mode, and what a `.seq` shared with another
          * toolbox has to be.
          */
-        RfAndAdc
+        RfAndAdc,
+        /**
+         * Server mode: RF always; the ADC side is baked as two scalars for
+         * readouts where that is exact -- constant gradient across the
+         * window, no ROTATIONS extension -- and left to the consumer for the
+         * rest, which keep the base-trajectory path (the consumer applies
+         * the centering phase modulation *and* wants the trajectory for its
+         * metadata).  @ref attach_base_trajectory draws the same line, so a
+         * fully Cartesian sequence in server mode equals its native twin.
+         */
+        Server
     };
 
     /**
@@ -238,14 +248,22 @@ namespace pulseq
      * with no factor of 2*pi anywhere -- which is also why the RF phase shape,
      * which the file stores in turns, takes it unscaled.
      *
-     * - **RF**: the phase shape gains `dr . k(t)`, referenced to the pulse's
-     *   own centre so its effective phase is untouched.  Always applied: there
-     *   is no downstream consumer that could do it instead.
-     * - **ADC** (`RfAndAdc` only): the shift is split the way Pulseq splits
-     *   it -- a frequency offset, a phase offset, and whatever residual is
-     *   left over into `phase_modulation`.  Under a constant gradient the
-     *   residual is identically zero and a Cartesian readout costs two
-     *   scalars, which is what keeps native mode compact.
+     * - **RF**: always applied -- there is no downstream consumer that could
+     *   do it instead.  Under a gradient that is constant across the pulse
+     *   (the slice-select flat top, i.e. nearly every pulse) the shift is a
+     *   scalar frequency and phase offset on the RF row itself: no shape is
+     *   registered, and the pair is independent of the block's k origin, so
+     *   repeated (pulse, gradient) contexts dedup onto one row.  Otherwise
+     *   the phase shape gains `dr . k(t)`, referenced to the pulse's own
+     *   centre so its effective phase is untouched.
+     * - **ADC** (`RfAndAdc`, and `Server` where exact): the shift is split
+     *   the way Pulseq splits it -- a frequency offset, a phase offset, and
+     *   whatever residual is left over into `phase_modulation`.  Under a
+     *   constant gradient the residual is identically zero and a Cartesian
+     *   readout costs two scalars, which is what keeps native mode compact.
+     *   `Server` bakes exactly the readouts for which no residual is
+     *   possible and no ROTATIONS extension applies, and defers the rest to
+     *   the consumer of the base trajectory.
      *
      * Blocks flagged `NOROT` are not handled here; a rotation-exempt block
      * needs its gradients counter-rotated at design time, which is a
@@ -311,8 +329,18 @@ namespace pulseq
     inline constexpr const char* PHASE_MODULATION_MODE_BASE_TRAJECTORY = "base_trajectory";
 
     /**
-     * Store each readout's base trajectory in its ADC's `phase_modulation`,
-     * and stamp the sequence as carrying them.
+     * Store the base trajectory of each readout that needs one in its ADC's
+     * `phase_modulation`, and stamp the sequence as carrying them.
+     *
+     * ### Which readouts get one
+     *
+     * The ones a consumer cannot finish from scalars and encoding counters:
+     * a block carrying a ROTATIONS extension, or a gradient that varies
+     * across the ADC window.  A Cartesian, unrotated readout stores nothing
+     * -- its shift is two scalars on the ADC row and its k comes from the
+     * labels -- and a sequence in which *no* readout stores a trajectory is
+     * not stamped at all.  The line is drawn by the same predicate
+     * `FovShiftScope::Server` bakes by, so the two cannot disagree.
      *
      * ### The layout
      *

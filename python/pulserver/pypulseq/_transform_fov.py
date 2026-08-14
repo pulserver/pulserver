@@ -2,10 +2,11 @@
 
 A port of Pulseq's MATLAB ``mr.TransformFOV``: an object that carries a
 scaling, a translation and a rotation, and applies them to a sequence that
-has already been designed. The three are applied in that order -- scale,
-translate, rotate -- because scaling changes the gradient amplitudes the
-translation's phase math reads, while a rotation, expressed as an extension,
-changes nothing either of them sees.
+has already been designed. They are applied as scale, then rotate, then
+translate: scaling changes the gradient amplitudes the translation's phase
+math reads, and the translation in server mode reads each block's rotation
+state to decide whether its ADC side can be baked as scalars, so both must
+already be in place when it runs.
 
 **A translation is a phase, and the phase is computed in C++.** MATLAB walks
 the sequence a block at a time, building a piecewise polynomial per gradient
@@ -92,9 +93,13 @@ class TransformFOV:
         Where the ADC's share of the shift is applied. ``False`` bakes it
         into the ADC alongside the RF, so the file needs nothing downstream --
         what to write when sharing a ``.seq`` with another toolbox. ``True``
-        bakes only the RF and instead stores each readout's base k-space
-        trajectory, leaving the ADC side to a consumer of ours; that keeps one
-        shape per distinct trajectory rather than one per readout.
+        bakes what is exactly expressible as scalars -- a Cartesian,
+        unrotated readout -- and, for the rest (a rotation extension, or a
+        gradient that varies across the window), stores the readout's base
+        k-space trajectory and leaves its ADC side to a consumer of ours;
+        that keeps one shape per distinct trajectory rather than one per
+        readout, and a fully Cartesian sequence comes out identical in both
+        modes.
     prior_phase_cycle : float, default 0.0
         Accepted for signature parity with MATLAB, where it lets a caller
         chain two transform objects by hand. It is not used: the phase this
@@ -242,21 +247,26 @@ class TransformFOV:
             for run_first, run_last in _runs(exempt[_NOSCL], first, last):
                 target._native.apply_fov_scale(*scale, first=run_first, last=run_last)
 
-        if translation is not None:
-            shift_m = tuple(value * 1e-3 for value in translation)
-            for run_first, run_last in _runs(exempt[_NOPOS], first, last):
-                target._native.apply_fov_shift(
-                    *shift_m,
-                    bake_adc=not self.server_mode,
-                    first=run_first,
-                    last=run_last,
-                )
-
+        # Rotation before translation: the server-mode shift reads each
+        # block's rotation state to decide whether its ADC side can be baked
+        # as scalars or must be left to the consumer, so a rotation this
+        # transform itself carries has to be on the blocks before the shift
+        # looks. Native mode reads no extensions and is order-blind.
         if rotation is not None:
             turn = Rotation.from_matrix(rotation)
             for block in range(first, last + 1):
                 if not exempt[_NOROT][block - first]:
                     _compose_rotation(target._native, block, turn)
+
+        if translation is not None:
+            shift_m = tuple(value * 1e-3 for value in translation)
+            for run_first, run_last in _runs(exempt[_NOPOS], first, last):
+                target._native.apply_fov_shift(
+                    *shift_m,
+                    scope="server" if self.server_mode else "native",
+                    first=run_first,
+                    last=run_last,
+                )
 
         if self.server_mode and translation is not None:
             target._native.attach_base_trajectory()

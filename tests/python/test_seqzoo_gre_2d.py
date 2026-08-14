@@ -322,11 +322,13 @@ def test_no_offset_leaves_the_sequence_exactly_as_it_was():
     )
 
 
-def test_an_offset_is_baked_into_the_phase_of_what_is_played():
-    """A shift is a phase, on the pulse that excites and the window that reads."""
+def test_an_offset_moves_the_pulse_that_excites_and_the_window_that_reads():
+    """Under constant gradients the shift is scalar offsets on both -- the
+    waveforms themselves are shared with the unshifted scan."""
     plain = design(n_slices=1, tr=30e-3, n_dummy=0)
     slab = design(n_slices=1, tr=30e-3, n_dummy=0, fov_offset=(0.0, 0.0, 20e-3))
-    assert not np.array_equal(slab.get_block(1).rf.signal, plain.get_block(1).rf.signal)
+    assert slab.get_block(1).rf.freq_offset != plain.get_block(1).rf.freq_offset
+    assert np.array_equal(slab.get_block(1).rf.signal, plain.get_block(1).rf.signal)
 
     in_plane = design(n_slices=1, tr=30e-3, n_dummy=0, fov_offset=(20e-3, 0.0, 0.0))
     assert in_plane.get_block(4).adc.phase_offset != plain.get_block(4).adc.phase_offset
