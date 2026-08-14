@@ -1,13 +1,11 @@
-"""RF-spoiled 2D radial gradient echo, multi-slice.
+"""RF-spoiled 2D spiral gradient echo, multi-slice.
 
-One full spoke per repetition -- :class:`design.RadialReadout2D`, whose
-prephaser, traversal and rewinder are one continuous waveform -- turned per
-shot by a ``ROTATIONS`` extension rather than by re-registering gradients:
-one waveform however many spokes the scan plays, which is the mechanism this
-slot exists to stress. The FOV offset goes through ``TransformFOV`` in
-server mode, where a rotated readout defers its ADC shift to the consumer of
-the base trajectory. :mod:`pulserver.reczoo.gre_radial_2d` reconstructs by
-NUFFT against the trajectory the file itself carries.
+One solved spiral interleave -- :class:`design.SpiralReadout2D` -- turned per
+shot by a ``ROTATIONS`` extension: one registered waveform however many arms
+the scan plays. The FOV offset goes through ``TransformFOV`` in server mode,
+where a rotated readout defers its ADC shift to the consumer of the base
+trajectory. :mod:`pulserver.reczoo.gre_spiral_2d` reconstructs by NUFFT
+against the trajectory the file itself carries.
 
 ``main`` returns the :class:`pulserver.pypulseq.Sequence`; ``PLUGIN`` is the
 same sequence behind the scanner protocol contract, and running this module
@@ -41,49 +39,72 @@ from pulserver import (
 )
 from scipy.spatial.transform import Rotation
 
-#: The spoke-angle schemes on offer.
+#: The arm-angle schemes on offer. A spiral covers a full turn, so golden is
+#: the 2*pi golden angle and uniform divides the whole circle.
 ANGLE_SCHEMES = ("golden", "uniform")
 
+#: The golden angle over a full turn, pi * (3 - sqrt(5)).
+GOLDEN_ANGLE = np.pi * (3.0 - np.sqrt(5.0))
 
-def spoke_angles(n_spokes: int, scheme: str) -> np.ndarray:
-    """The in-plane angle of every spoke, in radians.
 
-    ``golden`` increments by the golden angle, so any prefix of the scan is
-    close to uniformly distributed -- what an interrupted or dynamic scan
-    wants. ``uniform`` spaces the spokes evenly over half a turn, which a
-    full spoke covers.
+def arm_angles(n_arms: int, scheme: str) -> np.ndarray:
+    """The rotation of every arm, in radians.
 
     Parameters
     ----------
-    n_spokes : int
-        How many spokes the scan plays.
+    n_arms : int
+        How many arms the scan plays.
     scheme : str
         One of :data:`ANGLE_SCHEMES`.
 
     Returns
     -------
     numpy.ndarray
-        One angle per spoke.
+        One angle per arm.
     """
     if scheme not in ANGLE_SCHEMES:
         raise ValueError(f"scheme must be one of {ANGLE_SCHEMES}, got {scheme!r}")
     if scheme == "golden":
-        return np.asarray(pp.calc_golden_angles(n_spokes))
-    return np.arange(n_spokes) * np.pi / n_spokes
+        return np.arange(n_arms) * GOLDEN_ANGLE
+    return np.arange(n_arms) * 2.0 * np.pi / n_arms
+
+
+def play(seq, readout, rotation, *, acquire: bool, labels=(), first_extra=()) -> None:
+    """Replay the module's blocks with the shot's orientation injected.
+
+    Every block that drives an in-plane gradient gains the rotation; the
+    acquisition block gains the labels; a dummy drops the ADC. The blocks are
+    replayed as the module laid them out, delays included, so the TE budget
+    the module solved survives the loop untouched.
+    """
+    extra_first = list(first_extra)
+    for block in readout.blocks:
+        events = [
+            event
+            for event in block
+            if acquire or getattr(event, "type", "") != "adc"
+        ]
+        additions = list(extra_first)
+        extra_first = []
+        if any(getattr(event, "channel", "") in ("x", "y") for event in events):
+            additions.append(rotation)
+        if acquire and any(getattr(event, "type", "") == "adc" for event in events):
+            additions.extend(labels)
+        seq.add_block(*events, *additions)
 
 
 def main(
     plot: bool = False,
     test_report: bool = False,
     write_seq: bool = False,
-    seq_filename: str = "gre_radial_2d.seq",
+    seq_filename: str = "gre_spiral_2d.seq",
     *,
     system: pp.Opts | None = None,
     fov: float = 220e-3,
     fov_offset: tuple[float, float, float] = (0.0, 0.0, 0.0),
     n_x: int = 128,
-    n_spokes: int | None = None,
-    angle_scheme: str = "golden",
+    n_arms: int = 16,
+    angle_scheme: str = "uniform",
     n_slices: int = 1,
     slice_thickness: float = 5e-3,
     slice_gap: float = 0.0,
@@ -97,7 +118,7 @@ def main(
     rf_spoiling_increment_deg: float = 117.0,
     spoiling_cycles: float = 4.0,
 ) -> pp.Sequence:
-    """Create an RF-spoiled 2D radial gradient-echo sequence.
+    """Create an RF-spoiled 2D spiral gradient-echo sequence.
 
     Parameters
     ----------
@@ -108,24 +129,22 @@ def main(
     write_seq : bool, optional
         Write the sequence to a .seq file. Default is False.
     seq_filename : str, optional
-        Output filename for the .seq file. Default is 'gre_radial_2d.seq'.
+        Output filename for the .seq file. Default is 'gre_spiral_2d.seq'.
     system : pypulseq.Opts, optional
         System limits. Default is `pp.Opts()`.
     fov : float, optional
         Isotropic in-plane field of view in meters. Default is 220e-3.
     fov_offset : tuple of float, optional
         Where the prescribed volume sits, in meters along the logical
-        readout, phase and slice axes. Applied in server mode: the rotated
-        readouts defer their ADC shift to the consumer. Default is
+        readout, phase and slice axes. Applied in server mode. Default is
         (0.0, 0.0, 0.0).
     n_x : int, optional
-        In-plane matrix size; a spoke reads this many samples edge to edge.
-        Default is 128.
-    n_spokes : int or None, optional
-        How many spokes to play. None is the radial Nyquist count,
-        ``ceil(pi/2 * n_x)``. Default is None.
+        In-plane matrix size. Default is 128.
+    n_arms : int, optional
+        Interleaves played, which is also the pitch the spiral is designed
+        for. Default is 16.
     angle_scheme : str, optional
-        ``golden`` or ``uniform``. Default is 'golden'.
+        ``uniform`` or ``golden``. Default is 'uniform'.
     n_slices : int, optional
         Number of slices. Default is 1.
     slice_thickness : float, optional
@@ -138,7 +157,7 @@ def main(
     flip_angle_deg : float, optional
         Excitation flip angle in degrees. Default is 12.0.
     te : float or None, optional
-        Echo time in seconds, to the spoke's centre crossing. None is as
+        Echo time in seconds, to the start of the outward path. None is as
         short as possible. Default is None.
     tr : float or None, optional
         Repetition time in seconds, between successive excitations of the
@@ -146,8 +165,8 @@ def main(
     readout_bandwidth_hz : float, optional
         Requested receiver bandwidth in Hz. Default is 250e3.
     n_dummy : int, optional
-        Repetitions played without acquiring, before the first spoke of
-        each pass. Default is 16.
+        Repetitions played without acquiring, before the first arm of each
+        pass. Default is 16.
     n_gain_calibration_readouts : int or None, optional
         Written as the ``NumGainCalibrationReadouts`` definition. None is
         one per slice. Default is None.
@@ -160,15 +179,15 @@ def main(
     Returns
     -------
     seq : pulserver.pypulseq.Sequence
-        The radial GRE sequence object.
+        The spiral GRE sequence object.
     """
     system = pp.Opts() if system is None else system
 
-    kernel = RadialKernel(
+    kernel = SpiralKernel(
         system,
         fov=fov,
         n_x=n_x,
-        n_spokes=n_spokes,
+        n_arms=n_arms,
         angle_scheme=angle_scheme,
         n_slices=n_slices,
         slice_thickness=slice_thickness,
@@ -195,15 +214,9 @@ def main(
 
     seq = pp.Sequence(system)
     spoiling_phase = iter(rf_phases)
-    # A radial scan has no Cartesian counters for `auto_label` to derive --
-    # the rotations are the encoding -- so the slice counter is written by
-    # hand on every acquisition.
     slc_label = pp.make_label("SLC", "SET", 0)
 
     def repetition(readout, slices, rotation, acquire: bool, mark=None) -> None:
-        """Play one spoke of every slice of a pass, acquiring or not."""
-        wait_te = getattr(readout, "wait_te", None)
-        wait_tr = getattr(readout, "wait_tr", None)
         for i_slice in slices:
             rf_phase = next(spoiling_phase)
             readout.rf.freq_offset = excitation.gz.amplitude * slice_positions[i_slice]
@@ -211,23 +224,17 @@ def main(
                 rf_phase - 2 * np.pi * readout.rf.freq_offset * readout.rf.center
             )
             readout.adc.phase_offset = rf_phase
+            slc_label.value = int(i_slice)
 
-            seq.add_block(readout.rf, readout.gz, *([mark] if mark is not None else []))
+            play(
+                seq,
+                readout,
+                rotation,
+                acquire=acquire,
+                labels=(slc_label,),
+                first_extra=() if mark is None else (mark,),
+            )
             mark = None
-            if wait_te is not None:
-                seq.add_block(wait_te, readout.gz_reph)
-            spoke = [readout.gx, readout.gy]
-            if wait_te is None:
-                spoke.append(readout.gz_reph)
-            if acquire:
-                slc_label.value = int(i_slice)
-                seq.add_block(*spoke, readout.adc, rotation, slc_label)
-            else:
-                seq.add_block(*spoke, rotation)
-            if readout.gz_spoil is not None:
-                seq.add_block(readout.gz_spoil)
-            if wait_tr is not None:
-                seq.add_block(wait_tr)
 
     for slices in kernel.passes:
         readout = kernel.readouts[len(slices)]
@@ -244,8 +251,6 @@ def main(
             repetition(readout, slices, rotation, acquire=True, mark=clear_once)
             clear_once = None
 
-    # Server mode: the rotated readouts defer their ADC shift to the consumer
-    # of the base trajectory, which is the mechanism this family demonstrates.
     pp.TransformFOV(
         translation=tuple(offset * 1e3 for offset in fov_offset),
         system=system,
@@ -261,11 +266,11 @@ def main(
     slab_thickness = n_slices * (slice_thickness + slice_gap) - slice_gap
     seq.set_definition(key="FOV", value=[fov, fov, slab_thickness])
     seq.set_definition(key="Matrix", value=[n_x, n_x, n_slices])
-    seq.set_definition(key="Name", value="gre_radial_2d")
+    seq.set_definition(key="Name", value="gre_spiral_2d")
     seq.set_definition(key="TE", value=kernel.echo_time)
     seq.set_definition(key="TR", value=kernel.repetition_time)
-    seq.set_definition(key="Trajectory", value="radial")
-    seq.set_definition(key="NumSpokes", value=len(angles))
+    seq.set_definition(key="Trajectory", value="spiral")
+    seq.set_definition(key="NumArms", value=len(angles))
     seq.set_definition(key="AngleScheme", value=angle_scheme)
     seq.set_definition(
         key="NumGainCalibrationReadouts",
@@ -278,13 +283,13 @@ def main(
     return seq
 
 
-def RadialKernel(
+def SpiralKernel(
     system: pp.Opts,
     *,
     fov: float = 220e-3,
     n_x: int = 128,
-    n_spokes: int | None = None,
-    angle_scheme: str = "golden",
+    n_arms: int = 16,
+    angle_scheme: str = "uniform",
     n_slices: int = 1,
     slice_thickness: float = 5e-3,
     slice_order: str = "interleaved",
@@ -295,15 +300,14 @@ def RadialKernel(
     n_dummy: int = 16,
     spoiling_cycles: float = 4.0,
 ) -> SimpleNamespace:
-    """Design the spoke, and the plan that turns it.
+    """Design the interleave, and the plan that turns it.
 
     Parameters
     ----------
     system : pypulseq.Opts
         System limits.
-    fov, n_x, n_spokes, angle_scheme, n_slices, slice_thickness, \
-slice_order, flip_angle_deg, te, tr, readout_bandwidth_hz, n_dummy, \
-spoiling_cycles
+    fov, n_x, n_arms, angle_scheme, n_slices, slice_thickness, slice_order, \
+flip_angle_deg, te, tr, readout_bandwidth_hz, n_dummy, spoiling_cycles
         As for :func:`main`.
 
     Returns
@@ -318,13 +322,14 @@ spoiling_cycles
     )
 
     def readout(module_tr: float | None):
-        return design.RadialReadout2D(
+        return design.SpiralReadout2D(
             system,
             excitation.rf,
             excitation.gz,
             excitation.gz_reph,
             fov=fov,
             matrix=n_x,
+            design_interleaves=n_arms,
             te=te,
             tr=module_tr,
             readout_bandwidth_hz=readout_bandwidth_hz,
@@ -347,9 +352,7 @@ spoiling_cycles
         for size in {len(group) for group in passes}
     }
 
-    count = -(-int(np.pi / 2 * n_x)) if n_spokes is None else int(n_spokes)
-    angles = spoke_angles(count, angle_scheme)
-
+    angles = arm_angles(n_arms, angle_scheme)
     pass_time = sum(len(group) * readouts[len(group)].duration for group in passes)
     duration = (n_dummy + len(angles)) * pass_time
 
@@ -367,8 +370,8 @@ spoiling_cycles
     )
 
 
-class GreRadial2D(SequencePlugin):
-    """The 2D radial gradient echo behind the scanner protocol contract."""
+class GreSpiral2D(SequencePlugin):
+    """The 2D spiral gradient echo behind the scanner protocol contract."""
 
     def get_default_protocol(self, system: pp.Opts) -> dict[str, dict]:
         """Return the protocol the scanner UI is built from."""
@@ -434,11 +437,11 @@ class GreRadial2D(SequencePlugin):
                 UIParam.FOV_OFFSET_X: OffFloatParam(value=0.0, min=-500.0, max=500.0, unit="mm"),
                 UIParam.FOV_OFFSET_Y: OffFloatParam(value=0.0, min=-500.0, max=500.0, unit="mm"),
                 UIParam.FOV_OFFSET_Z: OffFloatParam(value=0.0, min=-500.0, max=500.0, unit="mm"),
-                UIParam.user_name(0): Description(text="Spokes (0 = Nyquist)"),
+                UIParam.user_name(0): Description(text="Arms"),
                 UIParam.user_value(0): TypeinFloatParam(
-                    value=0.0, min=0.0, max=4096.0, incr=1.0, unit=""
+                    value=16.0, min=1.0, max=512.0, incr=1.0, unit=""
                 ),
-                UIParam.user_name(1): Description(text="Angles 0=golden 1=uniform"),
+                UIParam.user_name(1): Description(text="Angles 0=uniform 1=golden"),
                 UIParam.user_value(1): TypeinFloatParam(
                     value=0.0, min=0.0, max=1.0, incr=1.0, unit=""
                 ),
@@ -453,7 +456,7 @@ class GreRadial2D(SequencePlugin):
         """Report whether the protocol is feasible, and how long it will take."""
         kwargs = _main_kwargs(system, protocol)
         try:
-            kernel = RadialKernel(
+            kernel = SpiralKernel(
                 system,
                 **{name: value for name, value in kwargs.items() if name in _KERNEL_ARGUMENTS},
             )
@@ -464,7 +467,7 @@ class GreRadial2D(SequencePlugin):
             "valid": True,
             "duration": kernel.duration,
             "info": (
-                f"TA = {kernel.duration:.1f} s over {len(kernel.angles)} spokes, "
+                f"TA = {kernel.duration:.1f} s over {len(kernel.angles)} arms, "
                 f"{len(kernel.passes)} pass(es)"
             ),
         }
@@ -486,7 +489,7 @@ _KERNEL_ARGUMENTS = frozenset(
     (
         "fov",
         "n_x",
-        "n_spokes",
+        "n_arms",
         "angle_scheme",
         "n_slices",
         "slice_thickness",
@@ -504,19 +507,18 @@ _KERNEL_ARGUMENTS = frozenset(
 def _main_kwargs(system: pp.Opts, protocol: dict[str, dict]) -> dict:
     """The prescribed quantities, plus this sequence's own user slots."""
     prot = dict_to_protocol(protocol)
-    requested = round(params.user_float(prot, 0, 0.0))
     return main_kwargs(
         main,
         system,
         protocol,
         fov=params.param_float(prot, UIParam.FOV) * 1e-3,
-        n_spokes=None if requested <= 0 else requested,
-        angle_scheme=ANGLE_SCHEMES[int(np.clip(round(params.user_float(prot, 1, 0.0)), 0, 1))],
+        n_arms=max(1, round(params.user_float(prot, 0, 16.0))),
+        angle_scheme="golden" if round(params.user_float(prot, 1, 0.0)) else "uniform",
         n_dummy=max(0, round(params.user_float(prot, 2, 16.0))),
     )
 
 
-PLUGIN = GreRadial2D()
+PLUGIN = GreSpiral2D()
 
 
 def get_default_protocol(system):
@@ -547,8 +549,8 @@ _ARG_MAP = [
     ("--offset-x-mm", UIParam.FOV_OFFSET_X, float, "Volume offset along readout [mm]"),
     ("--offset-y-mm", UIParam.FOV_OFFSET_Y, float, "Volume offset along phase encode [mm]"),
     ("--offset-z-mm", UIParam.FOV_OFFSET_Z, float, "Volume offset along slice [mm]"),
-    ("--spokes", UIParam.user_value(0), float, "Spokes to play (0 = Nyquist count)"),
-    ("--angles", UIParam.user_value(1), float, "Angle scheme: 0 golden, 1 uniform"),
+    ("--arms", UIParam.user_value(0), float, "Interleaves to play"),
+    ("--angles", UIParam.user_value(1), float, "Angle scheme: 0 uniform, 1 golden"),
     ("--dummies", UIParam.user_value(2), float, "Unacquired repetitions per pass"),
 ]
 
@@ -558,7 +560,7 @@ if __name__ == "__main__":
             PLUGIN,
             sys.argv[1:],
             arg_map=_ARG_MAP,
-            description="Generate a 2D radial gradient-echo .seq offline.",
-            default_output="gre_radial_2d.seq",
+            description="Generate a 2D spiral gradient-echo .seq offline.",
+            default_output="gre_spiral_2d.seq",
         )
     )

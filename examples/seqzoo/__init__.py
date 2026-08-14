@@ -33,15 +33,24 @@ import importlib
 __all__ = [
     "bssfp_2d",
     "bssfp_3d",
+    "epi_2d",
+    "epi_3d",
     "fse_2d",
     "fse_3d",
     "gre_2d",
     "gre_3d",
     "gre_multiecho_2d",
     "gre_multiecho_3d",
+    "gre_radial_2d",
+    "gre_spiral_2d",
+    "gre_stack_of_spirals_3d",
+    "gre_stack_of_stars_3d",
     "mprage_3d",
+    "mprage_stack_of_spirals_3d",
     "se_2d",
     "se_3d",
+    "se_propeller_2d",
+    "zte_3d",
 ]
 
 

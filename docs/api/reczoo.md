@@ -36,15 +36,23 @@ branches need.
 
    pulserver.reczoo.bssfp_2d
    pulserver.reczoo.bssfp_3d
+   pulserver.reczoo.epi_2d
+   pulserver.reczoo.epi_3d
    pulserver.reczoo.fse_2d
    pulserver.reczoo.fse_3d
    pulserver.reczoo.gre_2d
    pulserver.reczoo.gre_3d
    pulserver.reczoo.gre_multiecho_2d
    pulserver.reczoo.gre_multiecho_3d
+   pulserver.reczoo.gre_radial_2d
+   pulserver.reczoo.gre_spiral_2d
+   pulserver.reczoo.gre_stack_of_spirals_3d
+   pulserver.reczoo.gre_stack_of_stars_3d
    pulserver.reczoo.inline_fft
    pulserver.reczoo.mprage_3d
+   pulserver.reczoo.mprage_stack_of_spirals_3d
    pulserver.reczoo.se_2d
+   pulserver.reczoo.se_propeller_2d
    pulserver.reczoo.se_3d
    pulserver.reczoo.sms_epi
    pulserver.reczoo.subspace_basis

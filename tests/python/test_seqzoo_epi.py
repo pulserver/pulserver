@@ -1,0 +1,114 @@
+"""The EPI modules of the sequence zoo.
+
+What the family owes: valid trains with the blips on the ramps, ``REV`` on
+every reversed line, counters that agree with k-space, and -- the export
+this slot exists to exercise -- the navigator and main written as a
+``NextSequence``-linked pair the interpreter's collection reader follows.
+"""
+
+from __future__ import annotations
+
+import numpy as np
+import pytest
+
+import pulserver.pypulseq as pp
+from pulserver.seqzoo import epi_2d, epi_3d
+
+BANDWIDTH = 250e3
+
+
+def design_2d(**kwargs):
+    kwargs.setdefault("readout_bandwidth_hz", BANDWIDTH)
+    return epi_2d.main(n_x=32, n_y=16, **kwargs)
+
+
+def design_3d(**kwargs):
+    kwargs.setdefault("readout_bandwidth_hz", BANDWIDTH)
+    return epi_3d.main(n_x=32, n_y=16, n_z=4, slab_thickness=32e-3, **kwargs)
+
+
+@pytest.mark.parametrize("design", [design_2d, design_3d], ids=["2d", "3d"])
+def test_the_sequence_is_valid_pulseq(design):
+    is_ok, error_report = design().check_timing()
+    assert is_ok, error_report
+
+
+def test_the_line_counter_agrees_with_where_the_line_actually_is():
+    seq = design_2d()
+    labels = seq.evaluate_labels(evolution="adc")
+    k_adc, *_ = seq.calculate_kspace(dense=False)
+    n_samples = k_adc.shape[1] // len(labels["LIN"])
+    ky = k_adc[1].reshape(-1, n_samples).mean(axis=1)
+    lines = np.rint(ky * 0.22).astype(int) + 8
+    assert np.array_equal(lines, labels["LIN"])
+
+
+@pytest.mark.parametrize("design", [design_2d, design_3d], ids=["2d", "3d"])
+def test_every_other_line_is_marked_reversed(design):
+    labels = design().evaluate_labels(evolution="adc")
+    rev = labels["REV"].reshape(-1, 16)
+    assert np.array_equal(rev[0], np.arange(16) % 2)
+
+
+def test_a_3d_train_covers_every_partition():
+    labels = design_3d().evaluate_labels(evolution="adc")
+    assert sorted(set(labels["PAR"].tolist())) == [0, 1, 2, 3]
+
+
+def test_a_time_series_carries_its_repetition_counter():
+    labels = design_2d(n_repetitions=3).evaluate_labels(evolution="adc")
+    assert sorted(set(labels["REP"].tolist())) == [0, 1, 2]
+
+
+@pytest.mark.parametrize("module,build", [(epi_2d, design_2d), (epi_3d, design_3d)], ids=["2d", "3d"])
+def test_the_pair_is_written_linked_navigator_first(tmp_path, module, build):
+    """The Sequence Collection contract: the navigator carries NextSequence,
+    the main file sits beside it under that name."""
+    path = tmp_path / "scan.seq"
+    build(write_seq=True, seq_filename=str(path))
+
+    main_path = tmp_path / "scan_main.seq"
+    assert path.exists() and main_path.exists()
+
+    lead = pp.Sequence()
+    lead.read(str(path))
+    assert lead.get_definition("NextSequence") == "scan_main.seq"
+
+    labels = lead.evaluate_labels(evolution="adc")
+    assert set(labels["NAV"].tolist()) <= {0, 1} and 1 in labels["NAV"].tolist()
+    assert 1 in labels["SET"].tolist()
+
+    body = pp.Sequence()
+    body.read(str(main_path))
+    assert body.get_definition("NextSequence") is None
+
+
+def test_the_navigator_lines_are_blip_nulled():
+    nav = epi_2d.navigator(n_x=32, n_y=16, readout_bandwidth_hz=BANDWIDTH)
+    labels = nav.evaluate_labels(evolution="adc")
+    k_adc, *_ = nav.calculate_kspace(dense=False)
+    n_samples = k_adc.shape[1] // len(labels["NAV"])
+    ky = k_adc[1].reshape(-1, n_samples)
+    nav_rows = [row for row, flag in enumerate(labels["NAV"].tolist()) if flag == 1]
+    for row in nav_rows:
+        assert np.abs(ky[row]).max() == pytest.approx(0.0, abs=1e-9)
+
+
+def test_the_opposite_reference_walks_k_space_backwards():
+    nav = epi_2d.navigator(n_x=32, n_y=16, readout_bandwidth_hz=BANDWIDTH)
+    labels = nav.evaluate_labels(evolution="adc")
+    k_adc, *_ = nav.calculate_kspace(dense=False)
+    n_samples = k_adc.shape[1] // len(labels["SET"])
+    ky = k_adc[1].reshape(-1, n_samples).mean(axis=1)
+    reference = ky[np.asarray(labels["SET"]) == 1]
+    assert reference[0] > reference[-1]
+
+
+def test_the_default_protocol_is_feasible():
+    system = pp.Opts()
+    for module in (epi_2d, epi_3d):
+        report = module.PLUGIN.validate_protocol(
+            system, module.PLUGIN.get_default_protocol(system)
+        )
+        assert report["valid"] is True, report["info"]
+        assert "ESP" in report["info"]
