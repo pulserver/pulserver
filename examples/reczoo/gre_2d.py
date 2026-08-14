@@ -1,61 +1,20 @@
 """Reconstruction for :mod:`pulserver.seqzoo.gre_2d`.
 
-This is a Gadgetron/ISMRMRD-style *streamed* reconstruction, not an offline
-solver handed a finished k-space array. The runtime hands over ``Acquisition``
-objects while the scan runs, and the plugin is three hooks over them:
+A streamed reconstruction in three hooks: ``startup`` allocates the encoded
+grid the MRD header describes, ``receive`` places each line where its counters
+say, and ``recon`` runs at every boundary the sequence flags -- estimating coil
+sensitivities when the calibration segment closes, reconstructing when the
+slice does. The calibration lines are imaging data too, so there is one buffer
+and no second grid.
 
-Allocate, once
-    :meth:`~Gre2DRecon.startup` reads the encoded grid out of the MRD header
-    and allocates the whole scan's k-space --
-    ``(slices, coils, phase encodes, readout)``. The grid is the encoded one,
-    so the readout axis is the oversampled width the scanner digitises and the
-    phase-encode axis spans the prescribed matrix rather than the lines this
-    acceleration happens to sample.
+Which of three reconstructions runs is read off the sampling mask rather than
+declared: the coil-wise adjoint when everything is there, POCS when the readout
+is truncated, CG-SENSE against NLINV maps when phase encodes are missing.
+Parallel imaging comes first, because the phase constraint POCS relies on only
+means something once the image is unaliased.
 
-Place, per acquisition
-    :meth:`~Gre2DRecon.receive` puts each line where its counters say it
-    belongs. A partial echo is right-aligned in the readout axis by the buffer
-    itself, so nothing downstream has to know the echo was truncated.
-
-Reconstruct, at each boundary
-    The sequence acquires its autocalibration block first and flags the end of
-    it, and flags the end of each slice. :meth:`~Gre2DRecon.recon` runs at both
-    and decides which it is: the earlier one estimates the coil sensitivities
-    and produces no image, so the calibration is done while the rest of the
-    slice is still arriving; the later one reconstructs.
-
-Those calibration lines are imaging data as well as calibration data, so there
-is one buffer and no second grid -- the calibration region is the fully sampled
-block at the centre of it, which the sampling mask already says where to find.
-
-Which of three reconstructions runs is read off the sampling mask, never
-declared:
-
-* fully sampled, full echo -- the coil-wise adjoint (a centered inverse
-  transform per coil), the coils combined by root-sum-of-squares;
-* a readout truncated before the echo -- phase-constrained POCS fills the
-  missing edge against a full-width readout axis;
-* phase encodes missing -- CG-SENSE against the NLINV coil maps.
-
-Parallel imaging comes first and partial Fourier second: the phase constraint
-POCS relies on is only meaningful once the image is unaliased.
-
-The numerics are standalone functions, expressed in the framework's
-DeepInverse-style operator vocabulary -- a
-:class:`~pulserver.recon.physics.Cartesian2D` operator, its coil-wise adjoint,
-:func:`~pulserver.recon.pics`, NLINV and POCS, with the coils combined by an
-explicit :func:`~pulserver.recon.postprocessing.coil_combine`. There is no
-hand-written FFT anywhere: a Cartesian operator with no sensitivities *is* the
-centered transform, one image per coil.
-
-The result is one magnitude image per slice, cropped from the encoded grid to
-the prescribed matrix. The plugin does not build the image header: it returns a
-:class:`ReconResult` naming the acquisition its geometry comes from and asking
-for DICOM, and the runtime reads that acquisition's header (slice position,
-orientation) and the MRD header's recon field of view to make the
-``ismrmrd.Image`` and the DICOM series.
-
-Needs the numerical stack: ``pip install "pulserver[recon-cpu]"``.
+One magnitude image per slice, cropped to the prescribed matrix. Needs the
+numerical stack: ``pip install "pulserver[recon-cpu]"``.
 """
 
 from __future__ import annotations
@@ -143,12 +102,15 @@ class Gre2DRecon(ReconPlugin):
         index = int(bucket.labels("slice")[-1])
         kspace, mask = self.buffer[index]
 
-        # A segment that ends without ending its slice is the calibration
-        # block: estimate the sensitivities now, and let the rest of the slice
-        # keep arriving. There is no image to send yet.
+        # A segment that ends without ending its slice, or the scan, is the
+        # calibration block: estimate the sensitivities now, and let the rest
+        # of the slice keep arriving. There is no image to send yet. A
+        # single-slice scan carries no slice counter and so no slice boundary,
+        # which is why the end of the measurement has to be asked about too.
         last = bucket.acquisitions[-1]
         if has_acquisition_flag(last, "ACQ_LAST_IN_SEGMENT") and not (
             has_acquisition_flag(last, "ACQ_LAST_IN_SLICE")
+            or has_acquisition_flag(last, "ACQ_LAST_IN_MEASUREMENT")
         ):
             self.coil_maps[index] = sensitivities(kspace, mask, device=self.device)
             return None

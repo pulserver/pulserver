@@ -59,6 +59,8 @@ __all__ = [
     "ImagingMode",
     "InputMode",
     "IntKey",
+    "OffFloatParam",
+    "OffIntParam",
     "ParamKind",
     "PreparationType",
     "Protocol",
@@ -70,6 +72,8 @@ __all__ = [
     "SequencePlugin",
     "SequenceType",
     "StringListParam",
+    "TEPreset",
+    "TRPreset",
     "TriggerType",
     "TypeinFloatParam",
     "TypeinIntParam",
@@ -78,6 +82,7 @@ __all__ = [
     "design",
     "dict_to_protocol",
     "io",
+    "main_kwargs",
     "make_enum_param",
     "params",
     "protocol_to_dict",
@@ -86,6 +91,7 @@ __all__ = [
     "run_cli",
     "seqzoo",
     "validate_protocol",
+    "write_sequence",
 ]
 
 

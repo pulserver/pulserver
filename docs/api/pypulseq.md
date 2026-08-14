@@ -47,6 +47,7 @@ documents every label and what it means.
 
    pulserver.pypulseq.Opts
    pulserver.pypulseq.Sequence
+   pulserver.pypulseq.canonical_label
    pulserver.pypulseq.get_supported_labels
    pulserver.pypulseq.make_label
 ```
@@ -60,12 +61,20 @@ first, so what is drawn is what the scanner plays. Unstacked, its two panels
 are laid out as one window of three rows by two columns rather than opened as
 two.
 
-`check_timing()` is upstream's own checker run over a window of blocks, and
-`check_gradient_continuity()` is the C safety core's — the check `add_block`
-skips because its cost would fall on every block. Both run from `write()` by
-default; a server-mode plugin turns them off, since the scanner repeats them
-at predownload. Continuity is judged **after** each block's rotation is
-applied, in the physical frame the amplifiers slew in.
+Three checks are available on a finished sequence. `check_timing()` is
+upstream's own, run over a window of blocks; `check_gradient_continuity()` is
+the C safety core's — the check `add_block` skips because its cost would fall
+on every block, judged **after** each block's rotation is applied, in the
+physical frame the amplifiers slew in; and `check_hardware_limits()` compares
+every gradient in the library against `system.max_grad` and `system.max_slew`,
+per axis and unrotated, which is enough to catch a design asking for more
+gradient than the system has.
+
+`write()` runs the first two by default. Which of the three a plugin runs is
+not its decision to make one at a time — {func}`pulserver.write_sequence` runs
+all of them for a file going anywhere but a scanner, and none of them for one
+going straight to it, where the interpreter repeats every one at predownload
+against its own rasters and its own limits.
 
 Two methods still refuse on purpose: `install` (Siemens scanner transfer) and
 `sound` (acoustic preview). Each raises with its reason.
@@ -121,7 +130,8 @@ as MATLAB's does.
 Every `autoLabel` parameter is accepted, under the Python spelling of its name
 and in its own order — `time_range`, `use_labels`, `use_aux`, `skip_apply`,
 `mirror_fourier`, `reflect`, `reorder`, `sort_slices`, `no_plots` — with
-Pulserver's additions (`trajectory_delay`, `repeat_dims`, `skip`) after them
+Pulserver's additions (`trajectory_delay`, `repeat_dims`, `skip`,
+`boundary_flags`, `overwrite`) after them
 rather than mixed in. `use_labels` and `use_aux` skip detection and apply a
 result computed elsewhere, which is how one detection serves several variants
 of a sequence, or how a counter gets corrected by hand without recomputing the
@@ -185,11 +195,45 @@ whole count, which is `REP` under a name that means something.
 
 The other way round works too: label the axes only your design loop knows as
 you build, then run one `auto_label()` pass to fill in the geometric ones
-around them. Labels it does not derive — `ECO`, `SET`, `AVG`, anything custom
-— survive that pass untouched, because the extension chain is rebuilt keeping
-every link that is not one of its own. `REP` is the exception, since it *is*
-derived by default: pass `skip=["REP"]` to hand it back, or your own
-separation of contrasts and frames is overwritten by a bare count of revisits.
+around them. Nothing the sequence already sets is written over — that is what
+`overwrite` is for, and it defaults to writing none of them — so the pass adds
+what is missing and leaves the rest as authored. Everything is still *derived*
+and returned either way, so reading a counter back to compare it against the
+one a design authored costs nothing and changes nothing.
+
+`auto_label()` also derives the `FIRST`/`LAST` boundary flags, from the
+counters and the order the scan acquires them in rather than from the
+trajectory — so it derives them for counters the sequence authored just as
+readily as for ones it detected. A frame is one setting of every frame counter
+(`SLC`, `ECO`, `PHS`, `REP`, `AVG`, `SET`) at once, and is complete when every
+encoding position (`LIN`, `PAR`, `SEG`) inside it has arrived; within a frame,
+the first and last acquisition carrying each counter value are its boundary.
+`boundary_flags` restricts or refuses them, in either spelling.
+
+Reading them off the loop nesting instead would be wrong, and visibly so: a
+scan looping lines outer and slices inner visits every `(LIN, SLC)` pair
+exactly once, so a nesting-derived `LASTSLC` would fire on every acquisition
+rather than at the places a slice actually finishes.
+
+### The counters are positions, not counts
+
+`LIN` and `PAR` say which line of the prescribed matrix an acquisition is, not
+how many lines preceded it. Those are the same number only for a scan that
+reaches the grid on its own, and a `.seq` does not have to: an accelerated scan
+with no autocalibration block has no two adjacent lines to read the encoding
+step off, and a partial-Fourier scan never visits the low edge, so the step
+inferred from the trajectory is the accelerated one and index zero lands on the
+lowest line that happened to be sampled.
+
+So `auto_label()` reads the prescription when the file states one. `FOV` and
+`Matrix` together give the step as `1/FOV` and the origin as `Matrix // 2`, and
+the counters come back placed rather than counted — `kSpaceCenterLine` with
+them. Both definitions are required, and a prescription the readouts do not
+land on is ignored, so a non-Cartesian sequence is unaffected and a file
+carrying only `FOV` behaves exactly as before.
+
+The practical consequence for a design: **set `FOV` and `Matrix` before calling
+`auto_label()`**.
 
 ## Repetitions
 
@@ -248,6 +292,12 @@ the blocks that carry them, and a block range confines the whole thing to one
 module. `apply_to_sequence(seq, in_place=True)` transforms a finished sequence
 where it stands; without `in_place` it hands back a transformed copy, which is
 what MATLAB's `applyToSeq` does.
+
+A zero translation and a unit scale are recognised as the nothing they are and
+skipped, so a plugin can hand on whatever offset the scanner prescribed without
+checking it first — the common case, an unshifted volume, costs nothing. An
+identity *rotation* is not skipped: it attaches a `ROTATIONS` extension, and
+that extension is part of a block's identity.
 
 ```{eval-rst}
 .. autosummary::
@@ -477,28 +527,54 @@ Use `traj_to_grad`, which solves the same problem under the same limits.
    pulserver.pypulseq.verify_file_signature
 ```
 
-## Label constants
+## Labels
 
-The Pulseq label set splits in two. **Counters** say where an acquisition
-belongs; a module builds a slot per counter it is asked for and the scan
-loop writes the value. **Flags** say how a block is played or classified.
-Both are `make_label` events, and both are sticky in the file -- a value
-set at one block holds until another block sets it again -- so a flag that
-should not outlive its blocks has to be cleared by the loop that set it.
+The label set splits in two. **Counters** say where an acquisition belongs; a
+module builds a slot per counter it is asked for and the scan loop writes the
+value. **Flags** say how a block is played or classified. Both are
+`make_label` events, and both are sticky in the file — a value set at one
+block holds until another block sets it again — so a flag that should not
+outlive its blocks has to be cleared by the loop that set it.
 
-`COUNTER_LABELS`, `FLAG_LABELS` and `STICKY_FLAGS` are that split as module
-constants: the ten ISMRMRD `EncodingCounters` fields, everything else, and the
-flags that outlive the module which set them.
+The set is ISMRMRD's, under Pulseq's spellings: every counter is an
+`EncodingCounters` field and every flag but `SMS` is an `ismrmrd.ACQ_*` bit,
+alongside the handful of names that steer the interpreter and mean nothing to
+ISMRMRD. `MRD_COUNTERS` and `MRD_FLAGS` are the map, and
+{func}`~pulserver.pypulseq.canonical_label` is the translation.
 
-A third distinction cuts across the second, and it is the one to check before
-choosing a label: whether it **maps to data**. Every counter does. Among the
-flags, `NAV`, `REV`, `SMS`, `REF`, `IMA`, `NOISE` and `OFF` classify an
-acquisition and become fields a reconstruction reads; `NOROT`, `NOPOS`,
-`NOSCL`, `PMC`, `ONCE` and `TRID` are instructions to the
-interpreter and stop at the scanner. Nothing downstream ever sees the second
-group, so a sequence with something to tell its own reconstruction cannot say
-it with one of them. {func}`~pulserver.pypulseq.get_supported_labels`
-tabulates all three groups with what each label means.
+**Any spelling works.** A sequence may say `LIN` or `kspace_encode_step_1` or
+MRPro's `k1`, `LASTSLC` or `ACQ_LAST_IN_SLICE`; `make_label` translates, and
+the canonical name is what the file carries. A name the vocabulary does not
+know passes through untouched, which is what lets a sequence carry bookkeeping
+of its own. On the reconstruction side
+{func}`~pulserver.recon.has_acquisition_flag` takes both too, so a plugin can
+wait for a flag in the words the sequence used.
+
+`k0` is the exception, and is refused. The readout direction is the samples
+inside one acquisition rather than something counted across them, so it has no
+counter in ISMRMRD and none in MRPro's `AcqIdx` either — its extent is stated
+once in the header as `encodingLimits.kspace_encoding_step_0`. Letting it
+through as a custom label would give someone writing `k0, k1, k2` two counters
+and one name that quietly does nothing.
+
+`COUNTER_LABELS`, `FLAG_LABELS`, `SCANNER_FLAGS` and `STICKY_FLAGS` are the
+splits as module constants, and `FRAME_COUNTERS`/`ENCODING_COUNTERS` divide the
+counters into the ones that say *which image* an acquisition belongs to and the
+ones that say *where inside it*.
+
+The distinction to check before choosing a label is whether it **maps to
+data**. Every counter does, and so does every flag with an ISMRMRD constant
+beside it. `NOROT`, `NOPOS`, `NOSCL`, `PMC`, `OFF`, `ONCE` and `TRID` are the
+rest: instructions the interpreter consumes, which stop at the scanner.
+Nothing downstream ever sees them, so a sequence with something to tell its own
+reconstruction cannot say it with one of those.
+
+The `FIRST`/`LAST` flags need not be authored at all.
+{meth}`~pulserver.pypulseq.Sequence.auto_label` derives every one whose counter
+it can see and writes the ones the sequence has not already set itself.
+
+{func}`~pulserver.pypulseq.get_supported_labels` tabulates every group with
+what each label means and the ISMRMRD field or constant it maps to.
 
 ## Analysis results
 

@@ -47,6 +47,7 @@ from __future__ import annotations
 
 import sys
 from dataclasses import asdict, dataclass, field
+from enum import IntEnum
 
 try:
     from enum import StrEnum
@@ -55,6 +56,52 @@ except ImportError:  # Python 3.10 scanner/bundled runtime
 
     class StrEnum(str, Enum):
         __str__ = str.__str__
+
+
+class TEPreset(IntEnum):
+    """Echo-time dropdown entries the UI shows as words rather than numbers.
+
+    A TE control offers presets alongside the type-in field, and picking one
+    sends its value through in place of a time. The values are GE's, from
+    ``epic_ui_control.h``; a plugin puts them in a dropdown's ``options``.
+
+    Every one of them is a request for a TE the sequence works out for itself,
+    so :func:`pulserver.main_kwargs` passes them on as ``te=None`` -- which is
+    what a readout module reads as "as short as possible".
+
+    Examples
+    --------
+    >>> from pulserver import DropdownFloatParam, TEPreset
+    >>> te = DropdownFloatParam(value=8.0, min=1.0, max=80.0, unit="ms",
+    ...                         options=[TEPreset.MINIMUM, 5.0, 8.0, 15.0])
+    >>> te.options[0]
+    -2.0
+    """
+
+    MIN_FULL = -1
+    MINIMUM = -2
+    IN_PHASE = -3
+    OUT_PHASE = -4
+    MAXIMUM = -5
+
+
+class TRPreset(IntEnum):
+    """Repetition-time dropdown entries the UI shows as words.
+
+    :class:`TEPreset` for TR, and separate from it because the numbers mean
+    different things: ``-1`` is the shortest TR here and the shortest *full*
+    TE there.
+
+    Examples
+    --------
+    >>> from pulserver import DropdownFloatParam, TRPreset
+    >>> tr = DropdownFloatParam(value=250.0, min=5.0, max=5000.0, unit="ms",
+    ...                         options=[TRPreset.MINIMUM, 250.0, 500.0])
+    >>> tr.options[0]
+    -1.0
+    """
+
+    MINIMUM = -1
 
 
 class Validate(StrEnum):
@@ -495,6 +542,9 @@ class FloatParam:
     def __post_init__(self) -> None:
         self.validate = Validate(self.validate)
         self.mode = InputMode(self.mode)
+        # A TEPreset or TRPreset entry is an int subclass; the wire format is
+        # plain numbers, so it becomes one here rather than at every reader.
+        self.options = [float(option) for option in self.options]
         self._fill_numeric_defaults()
         self._maybe_infer_dropdown_options()
         if self.mode == InputMode.DROPDOWN and not (1 <= len(self.options) <= MAX_DROPDOWN_OPTIONS):

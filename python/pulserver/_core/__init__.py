@@ -11,7 +11,7 @@ Examples
 from __future__ import annotations
 
 from ._base import SequencePlugin
-from ._cli import run_cli
+from ._cli import run_cli, write_sequence
 from ._module import SequenceModule
 from ._params import (
     BoolKey,
@@ -24,13 +24,17 @@ from ._params import (
     ImagingMode,
     InputMode,
     IntKey,
+    OffFloatParam,
+    OffIntParam,
     ParamKind,
     PreparationType,
     Protocol,
     ProtocolValue,
     SequenceType,
     StringListParam,
+    TEPreset,
     TriggerType,
+    TRPreset,
     TypeinFloatParam,
     TypeinIntParam,
     UIParam,
@@ -47,10 +51,15 @@ from ._params import (
     validate_protocol_entry,
 )
 
+# Last: it reads `pulserver.UIParam`, which resolves back through this module.
+from ._protocol import main_kwargs
+
 __all__ = [
     "SequencePlugin",
     "SequenceModule",
     "run_cli",
+    "write_sequence",
+    "main_kwargs",
     "UIParam",
     "Validate",
     "ParamKind",
@@ -63,10 +72,14 @@ __all__ = [
     "ImagingMode",
     "PreparationType",
     "TriggerType",
+    "TEPreset",
+    "TRPreset",
     "TypeinFloatParam",
     "DropdownFloatParam",
     "TypeinIntParam",
     "DropdownIntParam",
+    "OffFloatParam",
+    "OffIntParam",
     "BoolParam",
     "StringListParam",
     "Description",

@@ -4,12 +4,12 @@ Examples
 --------
 >>> from pulserver import SequencePlugin, TypeinFloatParam, UIParam
 >>> class DemoSequence(SequencePlugin):
-...     def get_default_protocol(self, opts):
+...     def get_default_protocol(self, system):
 ...         return {UIParam.TR: TypeinFloatParam(value=500.0, unit="ms")}
-...     def validate_protocol(self, opts, protocol):
+...     def validate_protocol(self, system, protocol):
 ...         return {"valid": True, "duration": None, "info": None}
-...     def make_sequence(self, opts, protocol, output_path):
-...         _ = (opts, protocol, output_path)
+...     def make_sequence(self, system, protocol, output_path, *, offline=False):
+...         _ = (system, protocol, output_path, offline)
 """
 
 from __future__ import annotations
@@ -40,18 +40,20 @@ class SequencePlugin(ABC):
     A complete, minimal plugin:
 
     >>> import pulserver.pypulseq as pp
-    >>> from pulserver import SequencePlugin, TypeinFloatParam, UIParam, params
+    >>> from pulserver import (
+    ...     SequencePlugin, TypeinFloatParam, UIParam, params, write_sequence
+    ... )
     >>> class DemoSequence(SequencePlugin):
-    ...     def get_default_protocol(self, opts):
+    ...     def get_default_protocol(self, system):
     ...         return {UIParam.TR: TypeinFloatParam(value=500.0, unit="ms")}
-    ...     def validate_protocol(self, opts, protocol):
+    ...     def validate_protocol(self, system, protocol):
     ...         tr_ms = params.param_float(protocol, UIParam.TR)
     ...         return {"valid": tr_ms >= 10.0, "duration": None, "info": None}
-    ...     def make_sequence(self, opts, protocol, output_path):
+    ...     def make_sequence(self, system, protocol, output_path, *, offline=False):
     ...         delay = pp.make_delay(1e-3)
-    ...         seq = pp.Sequence(opts)
+    ...         seq = pp.Sequence(system)
     ...         seq.add_block(delay)
-    ...         seq.write(output_path)
+    ...         write_sequence(seq, output_path, offline=offline)
     >>> plugin = DemoSequence()
     >>> plugin.get_default_protocol(pp.Opts())[UIParam.TR].value
     500.0
@@ -65,12 +67,12 @@ class SequencePlugin(ABC):
     """
 
     @abstractmethod
-    def get_default_protocol(self, opts: pp.Opts) -> Protocol:
+    def get_default_protocol(self, system: pp.Opts) -> Protocol:
         """Return the default protocol for this sequence.
 
         Parameters
         ----------
-        opts : pypulseq.Opts
+        system : pypulseq.Opts
             Scanner/system limits passed in by the bridge.
 
         Returns
@@ -89,12 +91,12 @@ class SequencePlugin(ABC):
         ...
 
     @abstractmethod
-    def validate_protocol(self, opts: pp.Opts, protocol: Protocol) -> dict:
+    def validate_protocol(self, system: pp.Opts, protocol: Protocol) -> dict:
         """Validate a protocol against hardware constraints.
 
         Parameters
         ----------
-        opts : pypulseq.Opts
+        system : pypulseq.Opts
             Scanner/system limits passed in by the bridge.
         protocol : Protocol
             Current protocol mapping to validate.
@@ -112,16 +114,29 @@ class SequencePlugin(ABC):
         ...
 
     @abstractmethod
-    def make_sequence(self, opts: pp.Opts, protocol: Protocol, output_path: str) -> None:
+    def make_sequence(
+        self,
+        system: pp.Opts,
+        protocol: Protocol,
+        output_path: str,
+        *,
+        offline: bool = False,
+    ) -> None:
         """Build the full sequence and write it to disk.
 
         Parameters
         ----------
-        opts : pypulseq.Opts
+        system : pypulseq.Opts
             Scanner/system limits passed in by the bridge.
         protocol : Protocol
             Final validated protocol mapping.
         output_path : str
             Destination path for the generated ``.seq`` file.
+        offline : bool, default False
+            Whether the file is going somewhere other than a scanner, which
+            decides the form it is written in. Hand it to
+            :func:`pulserver.write_sequence` rather than reading it: the
+            default is the scanner's form, and :func:`pulserver.run_cli`
+            passes ``True``.
         """
         ...

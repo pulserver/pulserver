@@ -70,6 +70,31 @@ namespace pulseq
             return orient(v, o, false);
         }
 
+        /**
+         * A three-number definition, per axis and oriented like k.
+         *
+         * Zero where the definition is absent, too short, or non-positive on
+         * that axis -- every caller reads zero as "nothing stated", so a file
+         * that gives only some of the numbers is no worse than one that gives
+         * none.  Only `reorder` applies: these are lengths and counts, so a
+         * reflected axis is the same axis.
+         */
+        std::array<double, 3> oriented_definition(
+            const Sequence& seq, const char* key, const AutoLabelOptions& o)
+        {
+            std::array<double, 3> out{{0.0, 0.0, 0.0}};
+            const Definition* def = seq.definition(key);
+            if (def == nullptr || def->numbers().size() < 3)
+                return out;
+            for (int a = 0; a < 3; ++a)
+            {
+                const double v =
+                    def->numbers()[static_cast<size_t>(o.reorder[static_cast<size_t>(a)])];
+                out[static_cast<size_t>(a)] = (v > 0.0) ? v : 0.0;
+            }
+            return out;
+        }
+
         double norm3(const Vec3& v)
         {
             return std::sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
@@ -874,6 +899,10 @@ namespace pulseq
         std::vector<int> par(static_cast<size_t>(n_adc), 0);
         std::vector<std::vector<int>> index(axes.size());
 
+        /* The prescription, if the file states one -- see the grid branch. */
+        const std::array<double, 3> fov = oriented_definition(seq, "FOV", options);
+        const std::array<double, 3> matrix = oriented_definition(seq, "Matrix", options);
+
         for (size_t ax = 0; ax < axes.size(); ++ax)
         {
             const int a = axes[ax];
@@ -920,6 +949,51 @@ namespace pulseq
             }
 
             index[ax].assign(static_cast<size_t>(n_adc), 0);
+
+            /*
+             * The prescribed grid, when `FOV` and `Matrix` are both stated:
+             * the step is 1/FOV and the counter is a position on a matrix of
+             * that size, so index 0 is the edge of k-space whether or not
+             * anything was sampled there.
+             *
+             * Inferring the step from the sampled positions instead cannot
+             * see past the sampling.  The smallest gap in an accelerated
+             * scan *is* the accelerated step, and the lowest position sampled
+             * becomes index zero, so R = 2 counts 0, 1, 2 where it should
+             * count 0, 2, 4, and a partial-Fourier scan starts at zero
+             * wherever it really starts.  Both hand a reconstruction a
+             * counter that no longer says which line of the prescribed
+             * matrix this is.
+             */
+            const double dk_grid =
+                (fov[static_cast<size_t>(a)] > 0.0) ? 1.0 / fov[static_cast<size_t>(a)] : 0.0;
+            const int n_grid = static_cast<int>(matrix[static_cast<size_t>(a)]);
+            if (dk_grid > 0.0 && n_grid > 0)
+            {
+                std::vector<int> grid(static_cast<size_t>(n_adc), 0);
+                bool fits = true;
+                for (int i = first_signal; i < n_adc && fits; ++i)
+                {
+                    const double steps =
+                        k_echo[static_cast<size_t>(i)][static_cast<size_t>(a)] / dk_grid;
+                    const double rounded = std::floor(steps + 0.5);
+                    const int idx = static_cast<int>(rounded) + n_grid / 2;
+                    /* A readout that lands between grid points, or outside
+                     * the matrix, means the definitions describe something
+                     * other than what is being sampled -- a non-Cartesian
+                     * trajectory above all.  Trust the trajectory. */
+                    if (std::fabs(steps - rounded) * dk_grid > k_threshold || idx < 0 ||
+                        idx >= n_grid)
+                        fits = false;
+                    grid[static_cast<size_t>(i)] = idx;
+                }
+                if (fits)
+                {
+                    index[ax] = grid;
+                    continue;
+                }
+            }
+
             if (dk == 0.0)
                 continue;
 

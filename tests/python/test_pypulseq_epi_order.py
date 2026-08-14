@@ -191,3 +191,37 @@ def test_a_count_out_of_range_is_refused(kwargs):
     etl = kwargs.pop("etl", 8)
     with pytest.raises(ValueError, match="positive"):
         pp.calc_epi_order(etl, **kwargs)
+
+
+# --------------------------------------------------------------------------
+# Uniform undersampling, an ACS block, and partial Fourier
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("partial_fourier", [1.0, 0.75, 0.6])
+def test_partial_fourier_keeps_the_far_side_of_k_space(partial_fourier):
+    """The centre stays in; conjugate symmetry covers what is dropped."""
+    lines = pp.calc_sampled_lines(32, 1, 0, partial_fourier=partial_fourier)
+
+    assert lines == list(range(32 - round(partial_fourier * 32), 32))
+    assert 16 in lines
+
+
+def test_partial_fourier_truncates_the_calibration_block_with_everything_else():
+    """A view that is not played is not in the list, whoever asked for it."""
+    lines = pp.calc_sampled_lines(32, 2, 32, partial_fourier=0.75)
+
+    assert min(lines) == 8
+    assert lines == sorted(lines)
+
+
+def test_partial_fourier_and_acceleration_compose():
+    lines = pp.calc_sampled_lines(32, 2, 0, partial_fourier=0.75)
+
+    assert lines == [line for line in range(8, 32) if line % 2 == 0]
+
+
+@pytest.mark.parametrize("partial_fourier", [0.5, 0.0, 1.5])
+def test_a_fraction_that_loses_the_centre_is_refused(partial_fourier):
+    with pytest.raises(ValueError, match=r"partial_fourier must be in \(0.5, 1\]"):
+        pp.calc_sampled_lines(32, 1, 0, partial_fourier=partial_fourier)

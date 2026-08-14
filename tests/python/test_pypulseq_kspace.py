@@ -271,7 +271,7 @@ def test_a_scalar_delay_means_the_same_on_every_axis(gre):
 
 def test_it_recovers_the_encoding_counters(gre):
     """Three slices inside eight lines, acquired slice-inner."""
-    labels, aux = gre.auto_label(skip_apply=True)
+    labels, aux = gre.auto_label(skip_apply=True, boundary_flags=False)
 
     assert set(labels) == {"SLC", "LIN"}
     assert np.array_equal(labels["SLC"], np.tile([0, 1, 2], 8))
@@ -280,6 +280,131 @@ def test_it_recovers_the_encoding_counters(gre):
     assert aux["kSpaceCenterLine"] == 4
     assert aux["kSpaceCenterSample"] == 32
     assert np.allclose(aux["SlicePositions"], [-5e-3, 0.0, 5e-3])
+
+
+def test_the_boundaries_come_with_the_counters(gre):
+    """A slice ends where its last line is, wherever the loop put it.
+
+    Slices are the inner loop here, so every ``(LIN, SLC)`` pair occurs once
+    and the three slices each finish in the last three acquisitions -- which is
+    what a boundary read off the loop nesting would get wrong.
+    """
+    labels, _ = gre.auto_label(skip_apply=True)
+
+    assert np.array_equal(np.flatnonzero(labels["LASTSLC"]), [21, 22, 23])
+    assert np.array_equal(np.flatnonzero(labels["FIRSTSLC"]), [0, 1, 2])
+    # A line is one acquisition per slice, so it both starts and ends there.
+    assert np.array_equal(labels["FIRSTLIN"], np.ones(24, dtype=int))
+    assert np.array_equal(np.flatnonzero(labels["LASTSCAN"]), [23])
+
+
+def test_the_counters_are_grid_positions_when_the_file_says_what_the_grid_is(gre):
+    """``FOV`` and ``Matrix`` together say what one step of the counter is.
+
+    The fixture is fully sampled, so both routes agree on it. What changes is
+    where zero is: without ``Matrix`` the lowest line acquired becomes line 0,
+    and with it the counter is a position on the prescribed matrix.
+    """
+    gre.set_definition(key="Matrix", value=[64, 16, 3])
+
+    labels, aux = gre.auto_label(skip_apply=True, boundary_flags=False)
+
+    assert np.array_equal(labels["LIN"], np.repeat(np.arange(8), 3) + 4)
+    assert aux["kSpaceCenterLine"] == 8
+
+
+@pytest.mark.parametrize(
+    ("acceleration", "first_line"),
+    [(2, 0), (4, 0), (1, 6)],
+    ids=["R=2", "R=4", "partial-fourier"],
+)
+def test_a_scan_that_skips_lines_is_still_placed_on_the_grid(acceleration, first_line):
+    """The case the prescription is needed for.
+
+    An accelerated scan has no adjacent pair to read the step off, so the step
+    inferred from the data is the accelerated one and the counter steps by one
+    where it should step by ``acceleration``. A partial-Fourier scan never
+    reaches the low edge, so the lowest line it did acquire becomes line 0.
+    """
+    lines = list(range(first_line, 16, acceleration))
+    scan = _cartesian_scan(lines)
+
+    inferred, _ = scan.auto_label(skip_apply=True, boundary_flags=False)
+    assert np.array_equal(inferred["LIN"], np.arange(len(lines)))
+
+    scan.set_definition(key="Matrix", value=[32, 16, 1])
+    placed, aux = scan.auto_label(skip_apply=True, boundary_flags=False)
+
+    assert np.array_equal(placed["LIN"], lines)
+    assert aux["kSpaceCenterLine"] == 8
+
+
+def test_a_matrix_the_readouts_do_not_land_on_is_not_believed(gre):
+    """The guard: a prescription that disagrees with the trajectory loses.
+
+    A grid three times too coarse puts every readout between its points, which
+    is what a non-Cartesian sequence carrying a ``Matrix`` would look like.
+    """
+    gre.set_definition(key="FOV", value=[0.22, 0.22 / 3.0, 0.015])
+    gre.set_definition(key="Matrix", value=[64, 16, 3])
+
+    labels, _ = gre.auto_label(skip_apply=True, boundary_flags=False)
+
+    assert np.array_equal(labels["LIN"], np.repeat(np.arange(8), 3))
+
+
+def test_the_grid_is_only_read_when_both_definitions_are_there(gre):
+    """`FOV` alone is what every fixture here has, and it changes nothing."""
+    assert gre.get_definition("FOV") is not None
+    assert gre.get_definition("Matrix") is None
+
+    labels, aux = gre.auto_label(skip_apply=True, boundary_flags=False)
+
+    assert np.array_equal(labels["LIN"], np.repeat(np.arange(8), 3))
+    assert aux["kSpaceCenterLine"] == 4
+
+
+def _cartesian_scan(lines, n_y: int = 16, fov: float = 0.22) -> Sequence:
+    """A single-slice gradient echo acquiring exactly ``lines``, and no others."""
+    import pulserver.pypulseq as pp
+
+    system = pp.Opts(
+        max_grad=32,
+        grad_unit="mT/m",
+        max_slew=130,
+        slew_unit="T/m/s",
+        rf_ringdown_time=20e-6,
+        rf_dead_time=100e-6,
+        adc_dead_time=10e-6,
+    )
+    rf, gz, gz_reph = pp.make_sinc_pulse(
+        flip_angle=np.deg2rad(10),
+        duration=1e-3,
+        slice_thickness=5e-3,
+        system=system,
+        return_gz=True,
+        use="excitation",
+        delay=system.rf_dead_time,
+    )
+    gx = pp.make_trapezoid(
+        channel="x", flat_area=32 / fov, flat_time=1.6e-3, system=system
+    )
+    gx_pre = pp.make_trapezoid(channel="x", area=-gx.area / 2, system=system)
+    adc = pp.make_adc(
+        num_samples=32, duration=gx.flat_time, delay=gx.rise_time, system=system
+    )
+
+    seq = pp.Sequence(system=system)
+    seq.set_definition(key="FOV", value=[fov, fov, 5e-3])
+    for line in lines:
+        gy = pp.make_trapezoid(
+            channel="y", area=(line - n_y // 2) / fov, system=system
+        )
+        seq.add_block(rf, gz)
+        seq.add_block(gz_reph)
+        seq.add_block(gx_pre, gy)
+        seq.add_block(gx, adc)
+    return seq
 
 
 def test_the_slice_thickness_matches_the_prescription(gre):

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import warnings
+
 import pulserver
 import pytest
 from pulserver import (
@@ -282,3 +284,124 @@ def test_typed_key_sets_are_disjoint():
     for idx, left in enumerate(key_sets):
         for right in key_sets[idx + 1 :]:
             assert left.isdisjoint(right)
+
+
+# ----------------------------------------------------------------------
+# main() arguments from a protocol
+# ----------------------------------------------------------------------
+
+
+def test_main_kwargs_fills_only_what_main_declares():
+    """A plugin's signature decides; the protocol only supplies."""
+    from pulserver import main_kwargs
+
+    def main(*, system=None, te=8e-3, n_x=128, n_acs=24): ...
+
+    protocol = protocol_to_dict(
+        {
+            UIParam.TE: TypeinFloatParam(value=5.0, unit="ms"),
+            UIParam.NX: TypeinIntParam(value=64),
+            UIParam.NY: TypeinIntParam(value=96),
+            UIParam.FLIP: TypeinFloatParam(value=12.0, unit="deg"),
+        }
+    )
+    kwargs = main_kwargs(main, "the-system", protocol)
+
+    assert kwargs == {"system": "the-system", "te": 0.005, "n_x": 64}
+
+
+def test_main_kwargs_lets_the_plugin_have_the_last_word():
+    from pulserver import main_kwargs
+
+    def main(*, n_x=128, n_acs=24): ...
+
+    protocol = protocol_to_dict({UIParam.NX: TypeinIntParam(value=64)})
+    assert main_kwargs(main, None, protocol, n_x=32, n_acs=8) == {"n_x": 32, "n_acs": 8}
+
+
+def test_main_kwargs_refuses_an_override_main_cannot_take():
+    from pulserver import main_kwargs
+
+    def main(*, n_x=128): ...
+
+    with pytest.raises(TypeError, match="names no parameter"):
+        main_kwargs(main, None, {}, n_slices=3)
+
+
+def test_a_timing_preset_asks_for_whatever_the_sequence_can_reach():
+    """Both presets are negative, and `None` is what a readout module reads."""
+    from pulserver import TEPreset, TRPreset, main_kwargs
+
+    def main(*, te=8e-3, tr=250e-3): ...
+
+    protocol = protocol_to_dict(
+        {
+            UIParam.TE: TypeinFloatParam(value=float(TEPreset.MINIMUM), unit="ms"),
+            UIParam.TR: TypeinFloatParam(value=float(TRPreset.MINIMUM), unit="ms"),
+        }
+    )
+    assert main_kwargs(main, None, protocol) == {"te": None, "tr": None}
+
+
+def test_a_preset_survives_a_dropdown_round_trip():
+    from pulserver import DropdownFloatParam, TEPreset
+
+    te = DropdownFloatParam(
+        value=8.0, min=1.0, max=80.0, unit="ms", options=[TEPreset.MINIMUM, 5.0, 8.0]
+    )
+    wire = protocol_to_dict({UIParam.TE: te})
+    assert wire["TE"]["options"][0] == float(TEPreset.MINIMUM)
+    assert dict_to_protocol(wire)["TE"].options[0] == float(TEPreset.MINIMUM)
+
+
+# ----------------------------------------------------------------------
+# Writing, in the form the destination reads
+# ----------------------------------------------------------------------
+
+
+def test_the_scanner_form_is_binary_and_unchecked(tmp_path):
+    """Everything skipped here the interpreter does at predownload."""
+    import pulserver.pypulseq as pp
+    from pulserver import write_sequence
+
+    seq = pp.Sequence()
+    seq.add_block(pp.make_trapezoid(channel="x", area=1000, system=pp.Opts()))
+
+    path = tmp_path / "scanner.seq"
+    assert write_sequence(seq, str(path), offline=False) is None
+    assert path.read_bytes().startswith(b"\x01pulseq")
+
+
+def test_the_offline_form_is_text_and_signed(tmp_path):
+    import pulserver.pypulseq as pp
+    from pulserver import write_sequence
+
+    seq = pp.Sequence()
+    seq.add_block(pp.make_trapezoid(channel="x", area=1000, system=pp.Opts()))
+
+    path = tmp_path / "offline.seq"
+    signature = write_sequence(seq, str(path), offline=True)
+    text = path.read_text()
+
+    assert signature
+    assert text.startswith("# Pulseq sequence file")
+    assert "[SIGNATURE]" in text
+
+
+def test_the_offline_form_says_when_a_gradient_is_beyond_the_system(tmp_path):
+    """The check nothing downstream will run, because nothing downstream is."""
+    import pulserver.pypulseq as pp
+    from pulserver import write_sequence
+
+    modest = pp.Opts(max_grad=10, grad_unit="mT/m", max_slew=100, slew_unit="T/m/s")
+    seq = pp.Sequence(modest)
+    seq.add_block(pp.make_trapezoid(channel="x", area=8000, system=pp.Opts()))
+
+    assert not seq.check_hardware_limits()[0]
+    with pytest.warns(UserWarning, match="exceeds the system limit"):
+        write_sequence(seq, str(tmp_path / "loud.seq"), offline=True)
+
+    # The same file goes to the scanner without a word: it checks it itself.
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        write_sequence(seq, str(tmp_path / "quiet.seq"), offline=False)

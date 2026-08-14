@@ -24,7 +24,6 @@ schedules — live in :mod:`pulserver.design`::
 
 from __future__ import annotations
 
-# ruff: noqa: I001
 
 import pypulseq as _pypulseq
 
@@ -40,7 +39,17 @@ from ._gradients import make_crusher as _make_crusher
 from ._epi import calc_epi_order as _calc_epi_order
 from ._gradients import make_phase_blip as _make_phase_blip
 from ._gradients import make_phase_encoding as _make_phase_encoding
-from ._make_label import COUNTER_LABELS, FLAG_LABELS, STICKY_FLAGS  # noqa: F401
+from ._make_label import (  # noqa: F401
+    COUNTER_LABELS,
+    ENCODING_COUNTERS,
+    FLAG_LABELS,
+    FRAME_COUNTERS,
+    MRD_COUNTERS,
+    MRD_FLAGS,
+    SCANNER_FLAGS,
+    STICKY_FLAGS,
+    canonical_label,
+)
 from ._masks import (
     calc_sampled_lines as _calc_sampled_lines,
     make_caipirinha_mask as _make_caipirinha_mask,
@@ -318,12 +327,18 @@ OVERRIDES = frozenset(
         *SAMPLING,
         *SYSTEM,
         "COUNTER_LABELS",
+        "ENCODING_COUNTERS",
         "FLAG_LABELS",
+        "FRAME_COUNTERS",
+        "MRD_COUNTERS",
+        "MRD_FLAGS",
+        "SCANNER_FLAGS",
         "STICKY_FLAGS",
         "Opts",
         "Sequence",
         "TransformFOV",
         "block_to_events",
+        "canonical_label",
         "get_supported_labels",
         "make_label",
         "make_rf_shim",

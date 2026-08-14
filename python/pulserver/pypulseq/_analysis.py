@@ -10,9 +10,98 @@ import numpy as np
 import pypulseq as pp
 
 from . import _results
+from .._labels import COUNTER_LABELS, FRAME_COUNTERS, MRD_FLAGS, canonical_label
 from ._common import _per_axis, _rf_use
 from ._pulseqpp import to_upstream
 from ._results import AdcTimes, RfTimes, Waveforms, WaveformsAndTimes
+
+#: The boundary flags, as the counter each pair belongs to.
+BOUNDARY_FLAGS = {
+    name: (f"FIRST{name}", f"LAST{name}")
+    for name in (*FRAME_COUNTERS, "LIN", "PAR", "SEG")
+    if f"LAST{name}" in MRD_FLAGS
+}
+
+#: Every flag :func:`_boundary_flags` can produce.
+BOUNDARY_NAMES = {flag for pair in BOUNDARY_FLAGS.values() for flag in pair} | {"LASTSCAN"}
+
+#: The labels detection writes, and so the only ones it can be told to skip.
+DETECTED_LABELS = frozenset({"NOISE", "SLC", "REV", "LIN", "PAR", "REP"})
+
+
+def _boundary_flags(counters: dict, wanted: set[str], n_adc: int) -> dict:
+    """Derive the boundary flags a set of per-ADC counters implies.
+
+    Parameters
+    ----------
+    counters : dict
+        Counter name to one value per ADC, in acquisition order.
+    wanted : set of str
+        Canonical flag names to derive. Anything else is left out.
+    n_adc : int
+        Number of ADCs, so ``LASTSCAN`` can be placed without a counter.
+
+    Returns
+    -------
+    dict
+        Flag name to a 0/1 ``numpy`` array, one value per ADC.
+
+    Notes
+    -----
+    A frame -- one image -- is a setting of every frame counter at once, and it
+    is complete when every encoding position inside it has arrived. So a frame
+    counter's boundary is read within the other frame counters, and an encoding
+    counter's within all of them; inside that group the first and last
+    occurrence of each value are the boundary.
+
+    Deliberately not read off the loop nesting. A scan looping lines outer and
+    slices inner visits every ``(LIN, SLC)`` pair exactly once, so a nesting-
+    derived ``LASTSLC`` would fire on every acquisition rather than at the four
+    places a four-slice scan finishes a slice.
+    """
+    frames = [name for name in FRAME_COUNTERS if name in counters]
+    flags = {}
+
+    for name, (first_flag, last_flag) in BOUNDARY_FLAGS.items():
+        if name not in counters or not ({first_flag, last_flag} & wanted):
+            continue
+        enclosing = [other for other in frames if other != name]
+        keys = list(zip(*[counters[other] for other in enclosing], counters[name], strict=True))
+
+        first_at: dict = {}
+        last_at: dict = {}
+        for index, key in enumerate(keys):
+            first_at.setdefault(key, index)
+            last_at[key] = index
+
+        for flag, positions in ((first_flag, first_at), (last_flag, last_at)):
+            if flag in wanted:
+                values = np.zeros(len(keys), dtype=int)
+                values[list(positions.values())] = 1
+                flags[flag] = values
+
+    if "LASTSCAN" in wanted and n_adc:
+        values = np.zeros(n_adc, dtype=int)
+        values[-1] = 1
+        flags["LASTSCAN"] = values
+
+    return flags
+
+
+def _label_names(value: bool | list[str] | None, argument: str, allowed: set[str]) -> set[str]:
+    """Resolve a ``True``/``False``/list-of-names argument into a set of names."""
+    if value is True:
+        return set(allowed)
+    if not value:
+        return set()
+    names = {canonical_label(str(name)) for name in value}
+    unknown = names - allowed
+    if unknown:
+        raise ValueError(
+            f"auto_label(): {argument} does not name {sorted(unknown)}; it takes "
+            f"{sorted(allowed)}"
+        )
+    return names
 
 
 class AnalysisMixin:
@@ -204,6 +293,8 @@ class AnalysisMixin:
         trajectory_delay: float | list[float] | np.ndarray = 0.0,
         repeat_dims: list[str | tuple[str, int]] | None = None,
         skip: list[str] | None = None,
+        boundary_flags: bool | list[str] = True,
+        overwrite: bool | list[str] = False,
     ) -> tuple[dict, dict]:
         """Recover the encoding counters from the sequence's own trajectory.
 
@@ -216,6 +307,18 @@ class AnalysisMixin:
         one walks every ADC sample three times over, and here the echo search
         is memoized per distinct readout and the rest reduces to one point per
         readout, so nothing scales with the number of samples.
+
+        **The prescription is read when the file states one.** ``FOV`` and
+        ``Matrix``, together, say what one step of ``LIN`` and ``PAR`` is and
+        how many of them the encoded axis holds, so the counters come back as
+        positions on that matrix. Without them the step has to be inferred
+        from the sampled positions and index zero from the lowest one sampled,
+        which is right only for a scan that reaches the grid on its own: an
+        accelerated scan with no autocalibration block has no adjacent pair to
+        read the step off, and a partial-Fourier scan never visits the low
+        edge. Set both definitions *before* calling this if the sequence
+        states them; a prescription the readouts do not land on is ignored, so
+        a non-Cartesian scan is unaffected either way.
 
         Every ``autoLabel`` parameter is accepted, under the Python spelling
         of its name and in its own order; Pulserver's additions come after
@@ -308,21 +411,39 @@ class AnalysisMixin:
             Counters to leave alone -- derived neither into the answer nor
             onto the sequence.
 
-            For a sequence that labelled some of its own axes as it was
-            built and wants the geometric ones filled in around them.
-            Labels this does not derive at all (``ECO``, ``SET``, ``AVG``,
-            anything custom) already survive an ``auto_label`` pass
-            untouched and need no mention. ``REP`` is the one that does:
-            it is derived by default, so a design loop that separated its
-            own contrasts or frames should pass ``skip=["REP"]`` or its own
-            labelling is overwritten by a bare repeat count.
+            A counter the sequence already sets is protected without being
+            named here, so this is for suppressing one the sequence does not
+            set and does not want: deriving ``REP`` on a scan whose repeats
+            mean nothing, say.
+        boundary_flags : bool or list of str, optional
+            Which ``FIRST``/``LAST`` flags to derive. ``True``, the default,
+            derives every one whose counter is known; a list restricts it, and
+            ``False`` derives none. Names may be given in either spelling, so
+            ``["LASTSLC"]`` and ``["ACQ_LAST_IN_SLICE"]`` ask the same thing.
+
+            They come from the counters and the order the scan acquires them
+            in, so nothing about the trajectory is needed and they are derived
+            for authored counters as readily as for detected ones.
+        overwrite : bool or list of str, optional
+            Labels to write over even though the sequence already sets them.
+            ``False``, the default, writes none of them; a list names the
+            exceptions, and ``True`` writes them all.
+
+            This decides what is *written*, not what is derived: everything is
+            derived and returned either way, so reading a counter back to
+            compare it against the one a design authored costs nothing and
+            changes nothing. Leaving it alone is what makes this safe to run on
+            a sequence that labelled itself -- detection fills the gaps and
+            leaves the rest as authored.
 
         Returns
         -------
         labels : dict
-            Counter name to an array with one value per ADC, in acquisition
-            order. Only the counters that vary are present -- a single-slice
-            scan has no ``SLC``.
+            Counter or flag name to an array with one value per ADC, in
+            acquisition order. Only the counters that vary are present -- a
+            single-slice scan has no ``SLC``. Everything derived is here,
+            including labels that were not written because the sequence
+            already carries them.
         aux : dict
             The derived definitions.
 
@@ -357,7 +478,23 @@ class AnalysisMixin:
                 f"'acquisition', got {sort_slices!r}"
             )
 
+        wanted = _label_names(boundary_flags, "boundary_flags", BOUNDARY_NAMES)
+        forced = _label_names(
+            overwrite, "overwrite", BOUNDARY_NAMES | set(COUNTER_LABELS) | DETECTED_LABELS
+        )
+
+        # The definitions are kept on this side until a write needs them, and
+        # detection reads `FOV` and `Matrix` to place the counters on the grid
+        # the sequence was prescribed on.
+        self._publish_definitions()
+
         first, last = self._window_for(time_range)
+
+        # What the sequence says about itself, which nothing here may
+        # contradict: a design that labelled its own axes and boundaries knows
+        # things a trajectory cannot be read for.
+        authored = self._authored_labels(time_range)
+        protected = set(authored) - forced
 
         # Detection-only options against a caller who has skipped detection.
         # MATLAB raises on the same combination, and for the same reason: it
@@ -371,30 +508,22 @@ class AnalysisMixin:
             )
 
         if use_labels is not None or use_aux is not None:
-            labels = dict(use_labels or {})
+            labels = {name: np.atleast_1d(values) for name, values in (use_labels or {}).items()}
             aux = dict(use_aux or {})
+            counters = {**{n: v for n, v in authored.items() if n in COUNTER_LABELS}, **labels}
+            labels.update(_boundary_flags(counters, wanted, self._num_adc(time_range)))
             if not skip_apply:
-                blocks = [
-                    index
-                    for index in range(first, (last or self._native.num_blocks()) + 1)
-                    if self._native.block_events()[index - 1][4] != 0
-                ]
-                ordered = [
-                    (name, [int(v) for v in np.atleast_1d(values)])
-                    for name, values in labels.items()
-                ]
-                for name, values in ordered:
-                    if len(values) != len(blocks):
-                        raise ValueError(
-                            f"auto_label(): use_labels['{name}'] has {len(values)} values "
-                            f"for {len(blocks)} ADCs in range"
-                        )
-                self._native.apply_labels(blocks, ordered, aux)
-                for key, value in aux.items():
-                    self.set_definition(
-                        key, value.tolist() if hasattr(value, "tolist") else value
-                    )
-                self._touch()
+                # What was passed in is an instruction and goes down as given;
+                # only the flags derived around it answer to `overwrite`.
+                self._write_labels(
+                    {
+                        name: values
+                        for name, values in labels.items()
+                        if name in (use_labels or {}) or name not in protected
+                    },
+                    time_range,
+                    aux,
+                )
             return labels, aux
 
         reflect_mask = [False, False, False]
@@ -432,23 +561,75 @@ class AnalysisMixin:
             reflect_mask,
             order,
             _per_axis(trajectory_delay, "trajectory_delay"),
-            not skip_apply,
+            # Detect, never write: what gets written is decided here, where
+            # what the sequence already says is known. Protection cannot be a
+            # `skip`, because a counter that is not derived takes the
+            # definitions read off it down with it -- `kSpaceCenterLine` is
+            # the line of the central readout, and there is no central readout
+            # without `LIN`.
+            False,
             dims,
-            [str(name) for name in (skip or ())],
+            [canonical_label(str(name)) for name in (skip or ())],
             bool(mirror_fourier),
             sort_slices,
         )
         aux = result["aux"]
+        labels = result["labels"]
+
+        # A boundary is read off every counter the scan has, whoever wrote it,
+        # so detection and authorship are one picture here.
+        counters = {**{n: v for n, v in authored.items() if n in COUNTER_LABELS}, **labels}
+        labels.update(_boundary_flags(counters, wanted, self._num_adc(time_range)))
+
         if not skip_apply:
-            # The C++ side wrote these onto the native sequence, which is right
-            # for a C++ caller and invisible here: this class keeps its own
-            # definitions and pushes them across when the sequence is written,
-            # so anything only the native side knows would be overwritten on
-            # the way out. Mirroring them is what makes them survive.
-            for key, value in aux.items():
-                self.set_definition(key, value.tolist() if hasattr(value, "tolist") else value)
-            self._touch()
-        return result["labels"], aux
+            self._write_labels(
+                {name: values for name, values in labels.items() if name not in protected},
+                time_range,
+                aux,
+            )
+        return labels, aux
+
+    def _num_adc(self, time_range: list[float] | None) -> int:
+        """How many blocks in the window hold an ADC."""
+        return len(self._adc_blocks(time_range))
+
+    def _adc_blocks(self, time_range: list[float] | None) -> list[int]:
+        """The 1-based indices of the blocks in the window that hold an ADC."""
+        first, last = self._window_for(time_range)
+        events = self._native.block_events()
+        return [
+            index
+            for index in range(first, (last or self._native.num_blocks()) + 1)
+            if events[index - 1][4] != 0
+        ]
+
+    def _authored_labels(self, time_range: list[float] | None) -> dict:
+        """One value per ADC for every label the sequence already sets.
+
+        Empty when it sets none, which is the usual state of a ``.seq`` written
+        elsewhere -- and the cheap check for it, so that case never pays for a
+        walk over the blocks.
+        """
+        if not (self._native.num_label_set() or self._native.num_label_inc()):
+            return {}
+        return self.evaluate_labels(evolution="adc", time_range=time_range)
+
+    def _write_labels(self, labels: dict, time_range: list[float] | None, aux: dict) -> None:
+        """Write one value per ADC for each named label onto the blocks."""
+        blocks = self._adc_blocks(time_range)
+        ordered = [
+            (name, [int(v) for v in np.atleast_1d(values)]) for name, values in labels.items()
+        ]
+        for name, values in ordered:
+            if len(values) != len(blocks):
+                raise ValueError(
+                    f"auto_label(): use_labels['{name}'] has {len(values)} values "
+                    f"for {len(blocks)} ADCs in range"
+                )
+        self._native.apply_labels(blocks, ordered, aux)
+        for key, value in aux.items():
+            self.set_definition(key, value.tolist() if hasattr(value, "tolist") else value)
+        self._touch()
 
     def plot_kspace(
         self,

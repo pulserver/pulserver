@@ -13,13 +13,13 @@ EXPECTED_VENV_NAME = "EnvPulserver"
 
 
 class DemoSequencePlugin(SequencePlugin):
-    def get_default_protocol(self, _opts):
+    def get_default_protocol(self, _system):
         return _default_protocol()
 
-    def validate_protocol(self, _opts, protocol):
+    def validate_protocol(self, _system, protocol):
         return _validate(protocol)
 
-    def make_sequence(self, _opts, protocol, output_path):
+    def make_sequence(self, _system, protocol, output_path, *, offline=False):
         _make_sequence(protocol, output_path)
 
 
@@ -32,17 +32,17 @@ def _assert_envpulserver() -> None:
         raise RuntimeError(f"Expected EnvPulserver virtual env, got: {virtual_env}")
 
 
-def get_default_protocol(_opts):
+def get_default_protocol(_system):
     _assert_envpulserver()
     return _default_protocol()
 
 
-def validate_protocol(_opts, protocol):
+def validate_protocol(_system, protocol):
     _assert_envpulserver()
     return _validate(protocol)
 
 
-def make_sequence(_opts, protocol, output_path):
+def make_sequence(_system, protocol, output_path, *, offline=False):
     _assert_envpulserver()
     _make_sequence(protocol, output_path)
 

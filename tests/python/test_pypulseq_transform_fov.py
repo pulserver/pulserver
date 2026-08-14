@@ -389,3 +389,38 @@ def test_transforming_in_place_invalidates_what_was_derived_from_the_waveforms(s
     before = seq._revision
     pp.TransformFOV(translation=(0.0, 0.0, 10.0)).apply_to_sequence(seq, in_place=True)
     assert seq._revision > before
+
+
+# %% nothing to do
+
+
+def test_a_zero_shift_leaves_every_block_exactly_as_it_was(seq):
+    """The ordinary case for a prescription, so it has to cost nothing."""
+    before = (_phases(seq), _amplitudes(seq), seq._native.num_shapes())
+
+    pp.TransformFOV(translation=(0.0, 0.0, 0.0)).apply_to_sequence(seq, in_place=True)
+
+    assert (_phases(seq), _amplitudes(seq), seq._native.num_shapes()) == before
+
+
+def test_a_unit_scale_leaves_every_block_exactly_as_it_was(seq):
+    before = _amplitudes(seq)
+
+    pp.TransformFOV(scale=(1.0, 1.0, 1.0)).apply_to_sequence(seq, in_place=True)
+
+    assert _amplitudes(seq) == before
+
+
+def test_a_zero_shift_beside_a_real_scale_still_scales(seq):
+    pp.TransformFOV(translation=(0.0, 0.0, 0.0), scale=(2.0, 1.0, 1.0)).apply_to_sequence(
+        seq, in_place=True
+    )
+
+    assert _amplitudes(seq)[0] == pytest.approx(2.0 * 581.8 / 3.2e-3)
+
+
+def test_an_identity_rotation_is_still_attached(seq):
+    """Not the same kind of nothing: the extension is part of a block's identity."""
+    pp.TransformFOV(rotation=np.eye(3)).apply_to_sequence(seq, in_place=True)
+
+    assert seq.get_block(1).rotation is not None

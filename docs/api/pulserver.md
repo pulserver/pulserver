@@ -40,7 +40,38 @@ reconstruction side.
    pulserver.SequencePlugin
    pulserver.ReconPlugin
    pulserver.run_cli
+   pulserver.write_sequence
 ```
+
+A finished sequence is written differently depending on where it is going, and
+`write_sequence` is the one place that knows which is which. `make_sequence`
+takes an `offline` flag and hands it straight on:
+
+| | `offline=False` — the scanner | `offline=True` — anywhere else |
+|---|---|---|
+| format | binary | `.seq` text |
+| timing / gradient / limit checks | no | yes |
+| signature | no | yes |
+
+Both are deduplicated: it costs a millisecond or two and takes several times
+the size off the file, which the interpreter then does not have to parse.
+
+The scanner form skips the checks because the interpreter runs its own at
+predownload, against its real rasters and its real limits — the authoritative
+pass — and it parses the binary format far faster than the text one. The
+offline form runs everything, because a bench file, a foreign toolbox or a
+reader has nothing downstream to catch anything. `run_cli` passes
+`offline=True`; the bridge takes the default.
+
+The two sides meet at the labels: what a sequence writes with
+{func}`~pulserver.pypulseq.make_label` is what arrives on an acquisition, and
+the vocabulary maps one-to-one onto ISMRMRD. A `ReconPlugin` names the flag it
+splits on in either spelling — `split_on="LASTSLC"` and
+`split_on="ACQ_LAST_IN_SLICE"` mean the same bit — so a plugin can wait for a
+boundary in the words the sequence used to mark it. See
+{doc}`pulserver.pypulseq <pypulseq>` for the map and for how
+`Sequence.auto_label` derives the `FIRST`/`LAST` flags rather than making a
+sequence compute them.
 
 ## Abstract types
 
@@ -75,7 +106,9 @@ phase schedules — are plain arrays and live in {doc}`pulserver.pypulseq
 
 One class per scanner UI control. Each carries the value, its display unit,
 and the bounds the interpreter enforces, so a single object drives both the UI
-and the offline default protocol.
+and the offline default protocol. The `Off*` pair is for what the protocol
+carries without showing: the prescribed volume offset, which the scanner fills
+in from where the operator put the slab rather than from a widget.
 
 ```{eval-rst}
 .. autosummary::
@@ -86,6 +119,8 @@ and the offline default protocol.
    pulserver.Description
    pulserver.DropdownFloatParam
    pulserver.DropdownIntParam
+   pulserver.OffFloatParam
+   pulserver.OffIntParam
    pulserver.StringListParam
    pulserver.TypeinFloatParam
    pulserver.TypeinIntParam
@@ -111,10 +146,26 @@ enumerations are the fixed option sets behind dropdown controls.
    pulserver.ParamKind
    pulserver.PreparationType
    pulserver.SequenceType
+   pulserver.TEPreset
+   pulserver.TRPreset
    pulserver.TriggerType
    pulserver.UIParam
    pulserver.Validate
 ```
+
+`TEPreset` and `TRPreset` are the TE and TR dropdown entries a scanner UI shows
+as words rather than numbers — "Minimum", "Min Full". They are negative, which
+is what marks them as requests rather than times, and they go in a dropdown's
+`options` beside the real values:
+
+```python
+UIParam.TE: DropdownFloatParam(value=8.0, min=1.0, max=80.0, unit="ms",
+                               options=[TEPreset.MINIMUM, 5.0, 8.0, 15.0])
+```
+
+`main_kwargs` turns any of them into `te=None` or `tr=None`, which is what every
+readout module already reads as "as short as possible" — so offering the preset
+costs a plugin nothing beyond listing it.
 
 `Protocol` and `ProtocolValue` are the mapping and value type aliases used by
 the helpers below.
@@ -150,4 +201,30 @@ plugins would otherwise each recompute.
    :nosignatures:
 
    pulserver.params
+```
+
+`main_kwargs` sits above them and does the whole translation at once. It reads
+the signature of the sequence's `main` and fills in every keyword-only
+parameter that names a quantity the scanner prescribes — matrix, FOV, slice
+geometry, flip angle, TE, TR, bandwidth, acceleration, volume offset — each in
+the unit `main` states it in rather than the millimetres and milliseconds the
+protocol carries. Parameters it does not recognise keep their own defaults, and
+a plugin's own controls, the ones living in its user slots, are passed through
+as overrides:
+
+```python
+def make_sequence(self, system, protocol, output_path):
+    prot = dict_to_protocol(protocol)
+    seq = main(**main_kwargs(main, system, protocol,
+                             n_acs=params.acs_lines_from_protocol(prot, n_y, 0),
+                             partial_echo=params.user_float(prot, 1, 1.0)))
+    seq.write(output_path)
+```
+
+```{eval-rst}
+.. autosummary::
+   :toctree: generated/pulserver
+   :nosignatures:
+
+   pulserver.main_kwargs
 ```

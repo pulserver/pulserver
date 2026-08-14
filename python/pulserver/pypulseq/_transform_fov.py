@@ -61,6 +61,10 @@ _NOSCL, _NOPOS, _NOROT = "NOSCL", "NOPOS", "NOROT"
 class TransformFOV:
     """A scaling, translation and rotation to apply to a built sequence.
 
+    A translation of zero and a scaling of one are recognised as the nothing
+    they are and cost nothing, so a caller can pass on whatever the scanner
+    prescribed without checking it first.
+
     Parameters
     ----------
     rotation : numpy.ndarray, optional
@@ -215,18 +219,31 @@ class TransformFOV:
         count = target.num_blocks
         first, last = (1, count) if count == 0 else target._window_for(time_range)
 
-        if count == 0:
+        # A prescription that asks for no shift and no scaling is the ordinary
+        # case, and neither changes anything, so both are compared against
+        # their identity rather than walked over the blocks: a caller can pass
+        # on whatever the scanner prescribed without checking it first. An
+        # identity *rotation* is not the same kind of nothing -- it attaches a
+        # ROTATIONS extension, which is part of a block's identity -- so it is
+        # applied as asked.
+        scale = self.scale if self.scale not in (None, (1.0, 1.0, 1.0)) else None
+        translation = (
+            self.translation if self.translation is not None and any(self.translation) else None
+        )
+        rotation = self.rotation
+
+        if count == 0 or (scale is None and translation is None and rotation is None):
             return target
 
         exempt = _label_gates(target, first, last)
 
         # Scale first: it changes the amplitudes the translation integrates.
-        if self.scale is not None:
+        if scale is not None:
             for run_first, run_last in _runs(exempt[_NOSCL], first, last):
-                target._native.apply_fov_scale(*self.scale, first=run_first, last=run_last)
+                target._native.apply_fov_scale(*scale, first=run_first, last=run_last)
 
-        if self.translation is not None:
-            shift_m = tuple(value * 1e-3 for value in self.translation)
+        if translation is not None:
+            shift_m = tuple(value * 1e-3 for value in translation)
             for run_first, run_last in _runs(exempt[_NOPOS], first, last):
                 target._native.apply_fov_shift(
                     *shift_m,
@@ -235,13 +252,13 @@ class TransformFOV:
                     last=run_last,
                 )
 
-        if self.rotation is not None:
-            turn = Rotation.from_matrix(self.rotation)
+        if rotation is not None:
+            turn = Rotation.from_matrix(rotation)
             for block in range(first, last + 1):
                 if not exempt[_NOROT][block - first]:
                     _compose_rotation(target._native, block, turn)
 
-        if self.server_mode and self.translation is not None:
+        if self.server_mode and translation is not None:
             target._native.attach_base_trajectory()
 
         # The waveforms moved, so anything derived from them has to be

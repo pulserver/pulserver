@@ -1271,6 +1271,61 @@ class Sequence(AnalysisMixin, SafetyViewsMixin, SoftDelayMixin):
         message = _check_grad_continuity(self._structure_for("check_gradient_continuity").collection)
         return not message, message
 
+    def check_hardware_limits(self) -> tuple[bool, str]:
+        """Check every gradient against the system's amplitude and slew limits.
+
+        Over the gradient library rather than the block table, so it costs one
+        pass per distinct waveform however many times the scan plays it.
+
+        Judged per axis, in the frame the gradients are stored in. A block
+        carrying a ``ROTATIONS`` extension plays a combination of them, and a
+        combination can exceed on one physical axis what each logical axis
+        respects; the scanner's predownload check is the one that sees that,
+        and is authoritative either way. What this catches is the design
+        asking for more gradient than the system has.
+
+        Returns
+        -------
+        is_ok : bool
+        message : str
+            Names the peak and the limit it passed; empty when there is none.
+
+        See Also
+        --------
+        check_gradient_continuity : the other check :meth:`write` runs.
+        """
+        from ._block import _grad_event
+
+        peak_grad = 0.0
+        peak_slew = 0.0
+        for grad_id in range(1, self._native.num_gradients() + 1):
+            event = _grad_event(self._native, grad_id, "x")
+            if event.type == "trap":
+                amplitude = abs(event.amplitude)
+                ramps = [event.rise_time, event.fall_time]
+                slew = max(amplitude / ramp for ramp in ramps if ramp > 0.0)
+            else:
+                amplitude = float(np.max(np.abs(event.waveform))) if event.waveform.size else 0.0
+                steps = np.diff(event.tt)
+                slew = (
+                    float(np.max(np.abs(np.diff(event.waveform) / steps)))
+                    if steps.size and np.all(steps > 0.0)
+                    else 0.0
+                )
+            peak_grad = max(peak_grad, amplitude)
+            peak_slew = max(peak_slew, slew)
+
+        for name, peak, limit, unit in (
+            ("gradient", peak_grad, self.system.max_grad, "Hz/m"),
+            ("slew rate", peak_slew, self.system.max_slew, "Hz/m/s"),
+        ):
+            if limit and peak > limit * (1 + 1e-6):
+                return False, (
+                    f"peak {name} {peak:.4g} {unit} exceeds the system limit "
+                    f"{limit:.4g} {unit}"
+                )
+        return True, ""
+
     def test_report(self) -> str:
         """Upstream PyPulseq's text report on the sequence.
 
@@ -1866,11 +1921,9 @@ class Sequence(AnalysisMixin, SafetyViewsMixin, SoftDelayMixin):
         repeatedly costs one build.
         """
         from ..recon._seqdesc import (
-            AdcRole,
             EventType,
             RfDefinition,
             RfShape,
-            RfUse,
             SequenceDescription,
             SequenceEvent,
         )

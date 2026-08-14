@@ -155,7 +155,12 @@ convention = "numpy"
 # scanner configuration, where converting every intermediate value to Path
 # would not improve safety or clarity.
 [tool.ruff.lint.per-file-ignores]
-"bridge/tests/test_plugin.py" = ["ARG001", "PTH123"]
+# Reference plugins: they satisfy the contract without needing every
+# argument it hands them.
+"bridge/tests/**" = ["ARG001", "ARG002", "PTH123"]
+# A plugin's protocol is a declaration, and most of them do not need the
+# system limits to write one down; the contract passes them regardless.
+"examples/seqzoo/**" = ["ARG002"]
 "python/pulserver/design/_disabled/_readout/_surgery.py" = ["ARG001"]
 "python/pulserver/design/_disabled/_readout/fse.py" = ["ARG002"]
 "python/pulserver/io.py" = ["S324"]

@@ -22,7 +22,7 @@ Examples
 
 Use it inside a plugin's two protocol-reading methods::
 
-    def make_sequence(self, opts, protocol, output_path):
+    def make_sequence(self, system, protocol, output_path):
         tr_s = params.param_float(protocol, UIParam.TR) * 1e-3
         ro_axis, pe_axis = params.resolve_readout_phase_axes(protocol)
 
@@ -33,6 +33,8 @@ pulserver.set_protocol_value : write a value back, dropdowns included.
 """
 
 from __future__ import annotations
+
+import inspect
 
 from pulserver import UIParam
 
@@ -327,3 +329,149 @@ def set_protocol_value(protocol: dict, key: UIParam | str, value) -> None:
     7.0
     """
     _set_protocol_value(protocol, key, value)
+
+
+# ---------------------------------------------------------------------------
+# Protocol to main() arguments
+# ---------------------------------------------------------------------------
+
+#: How to read each argument name a sequence's ``main`` might declare, in the
+#: unit ``main`` states it in -- metres and seconds, against the protocol's
+#: millimetres and milliseconds.
+#:
+#: One entry per quantity the scanner prescribes, which is what makes this
+#: shared: a plugin's own controls live in its user slots and are passed to
+#: :func:`main_kwargs` as overrides instead.
+_PROTOCOL_ARGUMENTS = {
+    "fov": lambda p: (
+        param_float(p, UIParam.FOV) * 1e-3,
+        phase_fov_mm_from_protocol(p) * 1e-3,
+    ),
+    "fov_offset": lambda p: tuple(
+        param_float_optional(p, key, 0.0) * 1e-3
+        for key in (UIParam.FOV_OFFSET_X, UIParam.FOV_OFFSET_Y, UIParam.FOV_OFFSET_Z)
+    ),
+    "n_x": lambda p: param_int(p, UIParam.NX),
+    "n_y": lambda p: param_int(p, UIParam.NY),
+    "n_slices": lambda p: param_int(p, UIParam.NSLICES),
+    "n_slabs": lambda p: param_int(p, UIParam.NUM_SLABS),
+    "n_echoes": lambda p: param_int(p, UIParam.NUM_ECHOES),
+    "n_frames": lambda p: param_int(p, UIParam.NUM_FRAMES),
+    "n_shots": lambda p: param_int(p, UIParam.NUM_SHOTS),
+    "etl": lambda p: param_int(p, UIParam.ETL),
+    "n_averages": lambda p: max(1, round(param_float_optional(p, UIParam.NEX, 1.0))),
+    "slice_thickness": lambda p: param_float(p, UIParam.SLICE_THICKNESS) * 1e-3,
+    "slice_gap": lambda p: max(
+        0.0,
+        (
+            param_float(p, UIParam.SLICE_SPACING)
+            - param_float(p, UIParam.SLICE_THICKNESS)
+        )
+        * 1e-3,
+    ),
+    "flip_angle_deg": lambda p: param_float(p, UIParam.FLIP),
+    "te": lambda p: _time_or_preset(param_float(p, UIParam.TE)),
+    "te2": lambda p: _time_or_preset(param_float(p, UIParam.TE2)),
+    "tr": lambda p: _time_or_preset(param_float(p, UIParam.TR)),
+    "recovery_time": lambda p: _time_or_preset(param_float(p, UIParam.TRECOVERY)),
+    "readout_bandwidth_hz": lambda p: param_float_optional(p, UIParam.BANDWIDTH, 250e3),
+    "acceleration": lambda p: max(1, round(param_float_optional(p, UIParam.RY, 1.0))),
+    "acceleration_z": lambda p: max(1, round(param_float_optional(p, UIParam.RZ, 1.0))),
+    "swap_phase_freq": lambda p: param_bool_optional(p, UIParam.SWAP_PHASE_FREQ, False),
+}
+
+
+def _typed(protocol: dict) -> dict:
+    """The protocol as parameter objects, whichever form it arrived in.
+
+    The bridge hands over the serialized form and a plugin building its own
+    protocol holds the typed one; the accessors here take the typed one.
+    """
+    from ._params import dict_to_param
+
+    return {
+        key: dict_to_param(value) if isinstance(value, dict) else value
+        for key, value in protocol.items()
+    }
+
+
+def _time_or_preset(milliseconds: float) -> float | None:
+    """Seconds, or ``None`` for the presets a UI shows as words.
+
+    :class:`pulserver.TEPreset` and :class:`pulserver.TRPreset` are negative
+    numbers standing for "whatever the sequence can reach", which is what every
+    readout module means by ``None``.
+    """
+    return None if milliseconds <= 0.0 else milliseconds * 1e-3
+
+
+def main_kwargs(main, system, protocol: dict, **overrides) -> dict:
+    """Translate a scanner protocol into keyword arguments for ``main``.
+
+    Reads what ``main`` declares rather than what the protocol carries: every
+    keyword-only parameter whose name names a prescribed quantity is filled in
+    from the protocol, in the unit ``main`` states it in, and every other
+    parameter is left to its own default. A plugin's own controls -- the ones
+    living in its user slots, which only it can interpret -- are passed as
+    ``**overrides``.
+
+    Parameters
+    ----------
+    main : callable
+        The sequence's entry point, read for its signature.
+    system : pypulseq.Opts
+        System limits, passed on as ``system`` if ``main`` takes one.
+    protocol : dict
+        The protocol as the bridge hands it over, or as
+        :func:`pulserver.protocol_to_dict` produces it.
+    **overrides
+        Values that win over anything read from the protocol. Names ``main``
+        does not declare raise, rather than being passed to a call that would
+        reject them further down.
+
+    Returns
+    -------
+    dict
+        Keyword arguments to call ``main`` with.
+
+    Raises
+    ------
+    TypeError
+        If an override names a parameter ``main`` does not take.
+
+    Examples
+    --------
+    >>> import pulserver.pypulseq as pp
+    >>> from pulserver import TypeinFloatParam, UIParam, main_kwargs, protocol_to_dict
+    >>> def main(*, system=None, te=8e-3, n_acs=24): ...
+    >>> protocol = protocol_to_dict({UIParam.TE: TypeinFloatParam(value=5.0, unit="ms")})
+    >>> kwargs = main_kwargs(main, pp.Opts(), protocol, n_acs=8)
+    >>> kwargs["te"], kwargs["n_acs"]
+    (0.005, 8)
+
+    See Also
+    --------
+    pulserver.run_cli : the offline entry point that feeds this a protocol.
+    """
+    declared = set(inspect.signature(main).parameters)
+    unknown = set(overrides) - declared
+    if unknown:
+        raise TypeError(
+            f"main_kwargs(): {sorted(unknown)} names no parameter of "
+            f"{getattr(main, '__name__', main)}; it takes {sorted(declared)}"
+        )
+
+    values = _typed(protocol)
+    kwargs: dict = {}
+    if "system" in declared:
+        kwargs["system"] = system
+    for name, read in _PROTOCOL_ARGUMENTS.items():
+        if name in declared and name not in overrides:
+            try:
+                kwargs[name] = read(values)
+            except KeyError:
+                # The protocol does not carry it, so `main`'s own default is
+                # the best answer available.
+                continue
+    kwargs.update(overrides)
+    return kwargs

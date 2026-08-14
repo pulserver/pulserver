@@ -9,6 +9,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from ..._labels import MRD_FLAGS, canonical_label
+
 __all__ = [
     "MrdMetadata",
     "acquisition_label",
@@ -136,9 +138,12 @@ def acquisition_labels(acquisition: Any) -> dict[str, Any]:
 def has_acquisition_flag(acquisition: Any, flag: int | str) -> bool:
     """Return whether an MRD acquisition has a numeric or named flag set.
 
-    Named flags use the ``ismrmrd.ACQ_*`` constant names, for example
-    ``"ACQ_LAST_IN_MEASUREMENT"``.  This helper does not import ISMRMRD unless
-    a named flag is requested.
+    A named flag may be written either way round: the ``ismrmrd.ACQ_*``
+    constant name, as in ``"ACQ_LAST_IN_MEASUREMENT"``, or the name the
+    sequence set the label under, as in ``"LASTSCAN"``.  Both reach the same
+    bit, so a plugin can say what it is waiting for in the same words the
+    sequence used.  This helper does not import ISMRMRD unless a named flag is
+    requested.
     """
     if isinstance(flag, str):
         try:
@@ -146,7 +151,7 @@ def has_acquisition_flag(acquisition: Any, flag: int | str) -> bool:
         except ImportError as error:
             raise ImportError("Named acquisition flags require ismrmrd.") from error
         try:
-            flag = getattr(ismrmrd, flag)
+            flag = getattr(ismrmrd, MRD_FLAGS.get(canonical_label(flag), flag))
         except AttributeError as error:
             raise ValueError(f"Unknown ISMRMRD acquisition flag {flag!r}") from error
     is_set = getattr(acquisition, "is_flag_set", None)

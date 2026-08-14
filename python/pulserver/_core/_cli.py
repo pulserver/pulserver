@@ -1,13 +1,66 @@
-"""Generic offline CLI runner for sequence plugins."""
+"""Generic offline CLI runner for sequence plugins, and the writer it shares."""
 
 from __future__ import annotations
 
 import argparse
 import sys
+import warnings
 
 import pulserver.pypulseq as pp
 
 from ._params import set_protocol_value
+
+
+def write_sequence(seq: pp.Sequence, output_path: str, *, offline: bool) -> str | None:
+    """Write a finished sequence in the form its destination reads.
+
+    The two destinations want opposite things, and a plugin should not have to
+    remember which is which.
+
+    ``offline=False`` -- straight to the scanner. The binary format, which the
+    interpreter parses an order of magnitude faster than the text one and
+    which loses none of the precision the text one rounds away. No checks and
+    no signature: the interpreter checks the timing against its own rasters
+    and the gradients against its own limits at predownload, which is the
+    authoritative pass.
+
+    ``offline=True`` -- anywhere else: a bench, a foreign toolbox, a file
+    someone will read. ``.seq`` text, signed, and with every check run here
+    because nothing downstream will run them.
+
+    Both are deduplicated. It costs a millisecond or two and takes several
+    times the size off the file, which the interpreter then does not have to
+    parse.
+
+    Parameters
+    ----------
+    seq : pulserver.pypulseq.Sequence
+        The finished sequence.
+    output_path : str
+        Where to write.
+    offline : bool
+        Which of the two forms to write.
+
+    Returns
+    -------
+    str or None
+        The signature, when one was created.
+
+    Warns
+    -----
+    UserWarning
+        Under ``offline``, once per failed check.
+    """
+    if not offline:
+        seq.remove_duplicates().write_binary(output_path)
+        return None
+
+    for is_ok, message in (seq.check_gradient_continuity(), seq.check_hardware_limits()):
+        if not is_ok:
+            warnings.warn(f"write_sequence(): {message}", stacklevel=2)
+    # `write` deduplicates and runs the timing check itself, and the gradient
+    # continuity one this has just run.
+    return seq.write(output_path, check_gradient_continuity=False)
 
 
 def run_cli(
@@ -24,8 +77,12 @@ def run_cli(
     ``--max-slew-tm-s``, ``--validate-only``), protocol defaulting, per-flag
     overrides via :func:`pulserver.set_protocol_value`,
     validation (prints ``info``, returns 2 when invalid), and the final
-    ``make_sequence`` + "Wrote sequence" print — exactly the behavior of the
-    per-plugin ``_cli`` functions it replaces.
+    ``make_sequence`` + "Wrote sequence" print.
+
+    ``make_sequence`` is called with ``offline=True``: a file written here is
+    not going straight to a scanner, so it is written as `.seq` text with
+    every check run and a signature appended. See
+    :func:`pulserver.write_sequence`.
 
     Parameters
     ----------
@@ -83,16 +140,16 @@ def run_cli(
 
     args = parser.parse_args(argv)
 
-    opts_kwargs = {}
+    system_kwargs = {}
     if args.max_grad_mtm is not None:
-        opts_kwargs["max_grad"] = args.max_grad_mtm
-        opts_kwargs["grad_unit"] = "mT/m"
+        system_kwargs["max_grad"] = args.max_grad_mtm
+        system_kwargs["grad_unit"] = "mT/m"
     if args.max_slew_tm_s is not None:
-        opts_kwargs["max_slew"] = args.max_slew_tm_s
-        opts_kwargs["slew_unit"] = "T/m/s"
-    opts = pp.Opts(**opts_kwargs)
+        system_kwargs["max_slew"] = args.max_slew_tm_s
+        system_kwargs["slew_unit"] = "T/m/s"
+    system = pp.Opts(**system_kwargs)
 
-    protocol = plugin.get_default_protocol(opts)
+    protocol = plugin.get_default_protocol(system)
 
     for dest, key, kind in dests:
         value = getattr(args, dest)
@@ -104,7 +161,7 @@ def run_cli(
                 value = kind[value]
             set_protocol_value(protocol, key, value)
 
-    result = plugin.validate_protocol(opts, protocol)
+    result = plugin.validate_protocol(system, protocol)
     if not result.get("valid", False):
         print(f"ERROR: {result.get('info', 'Protocol invalid')}", file=sys.stderr)
         return 2
@@ -113,6 +170,6 @@ def run_cli(
     if args.validate_only:
         return 0
 
-    plugin.make_sequence(opts, protocol, args.output)
+    plugin.make_sequence(system, protocol, args.output, offline=True)
     print(f"Wrote sequence: {args.output}")
     return 0

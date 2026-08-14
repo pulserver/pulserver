@@ -33,7 +33,12 @@ from ._ordering import calc_chunk_indices
 
 
 def calc_sampled_lines(
-    n: int, r: int, acs_lines: int, *, order: str = "ascending"
+    n: int,
+    r: int,
+    acs_lines: int,
+    *,
+    order: str = "ascending",
+    partial_fourier: float = 1.0,
 ) -> list[int]:
     """Return the sampled view indices for uniform undersampling + ACS block.
 
@@ -56,6 +61,12 @@ def calc_sampled_lines(
         the centre of k-space before the magnetisation has reached steady
         state, so a sequence using it wants dummy repetitions first. Default is
         ``'ascending'``.
+    partial_fourier : float, optional
+        Fraction of the phase-encode extent acquired, in ``(0.5, 1]``. The
+        views dropped are the leading ones, so the centre stays in and the
+        conjugate symmetry of k-space covers what is missing. It applies to
+        the calibration block as well: a view that is not played is not in the
+        list, whatever else would have asked for it. Default is 1.0.
 
     Returns
     -------
@@ -65,7 +76,8 @@ def calc_sampled_lines(
     Raises
     ------
     ValueError
-        If ``order`` is neither ``'ascending'`` nor ``'calibration_first'``.
+        If ``order`` is neither ``'ascending'`` nor ``'calibration_first'``, or
+        ``partial_fourier`` is outside ``(0.5, 1]``.
 
     Examples
     --------
@@ -77,17 +89,25 @@ def calc_sampled_lines(
 
     >>> pp.calc_sampled_lines(8, 2, 4, order='calibration_first')
     [2, 3, 4, 5, 0, 6]
+
+    Three quarters of the extent, counted from the far edge:
+
+    >>> pp.calc_sampled_lines(8, 1, 0, partial_fourier=0.75)
+    [2, 3, 4, 5, 6, 7]
     """
     if order not in ("ascending", "calibration_first"):
         raise ValueError("order must be 'ascending' or 'calibration_first'")
+    if not 0.5 < partial_fourier <= 1.0:
+        raise ValueError("partial_fourier must be in (0.5, 1]")
 
-    sampled = {i for i in range(n) if (i % r) == 0}
+    first = n - round(partial_fourier * n)
+    sampled = {i for i in range(first, n) if (i % r) == 0}
     calibration: list[int] = []
     if acs_lines > 0:
         center = n // 2
         start = max(0, center - acs_lines // 2)
         stop = min(n, start + acs_lines)
-        calibration = list(range(start, stop))
+        calibration = [i for i in range(start, stop) if i >= first]
         sampled.update(calibration)
     if order == "ascending":
         return sorted(sampled)
