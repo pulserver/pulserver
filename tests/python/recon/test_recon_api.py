@@ -141,7 +141,9 @@ def test_pics_selects_cg_without_a_denoiser(monkeypatch):
         iterations=7,
         init=np.zeros_like(data),
     )
-    assert result is data
+    # NumPy in, NumPy back out through the native-complex boundary.
+    assert isinstance(result, np.ndarray)
+    np.testing.assert_array_equal(result, data)
     np.testing.assert_allclose(calls["normal"], 1.25)
     assert calls["max_iter"] == 7
 
@@ -182,10 +184,17 @@ def test_pics_selects_fista_with_a_denoiser(monkeypatch):
         )
         == "reconstructed"
     )
+    from pulserver.recon.learned import ComplexAdapter
+
     assert calls["g_param"] == 0.05
     assert calls["stepsize"] == 0.2
     assert calls["max_iter"] == 9
-    assert calls["prior"] == ("pnp", model)
+    # The denoiser is routed through the one ComplexAdapter so it can act on
+    # the native-complex image; the wrapped model is the one that was passed.
+    tag, wrapped = calls["prior"]
+    assert tag == "pnp"
+    assert isinstance(wrapped, ComplexAdapter)
+    assert wrapped.model is model
 
 
 def test_pics_rejects_ambiguous_denoiser_sequences():

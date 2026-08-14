@@ -28,6 +28,7 @@ __all__ = [
 from collections import OrderedDict
 from collections.abc import Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor
+from functools import wraps
 from importlib import import_module
 from itertools import product
 from math import prod
@@ -143,6 +144,50 @@ def _cartesian_image_as_cpx(value: Any) -> Any:
     """Restore a complex Cartesian image from the channel-one real layout."""
     torch = import_module("torch")
     return torch.view_as_complex(value.movedim(1, -1).contiguous())
+
+
+def _operator_device(physics: Any) -> Any:
+    """Best-effort device of a physics object, defaulting to the CPU."""
+    torch = import_module("torch")
+    for tensor in physics.buffers():
+        return tensor.device
+    for tensor in physics.parameters():
+        return tensor.device
+    return torch.device("cpu")
+
+
+def _mirror_array_namespace(method: Callable) -> Callable:
+    """Let a physics method accept NumPy and answer in the caller's namespace.
+
+    Torch tensors pass straight through, so the operator's internal recursion
+    is untouched and there is no per-call overhead once inside the stack. A
+    NumPy array is moved onto the operator's device in its complex or real
+    working dtype -- a no-op, and hence zero-copy, when it already is that
+    dtype on the host -- and the Torch result is handed back as NumPy. This is
+    what lets a reconstruction pass raw arrays straight to ``A``/``A_adjoint``
+    without shuttling them across the boundary by hand.
+    """
+
+    @wraps(method)
+    def wrapper(self: Any, value: Any, *args: Any, **kwargs: Any) -> Any:
+        torch = import_module("torch")
+        if isinstance(value, torch.Tensor):
+            return method(self, value, *args, **kwargs)
+        numpy = import_module("numpy")
+        if not isinstance(value, numpy.ndarray):
+            return method(self, value, *args, **kwargs)
+        tensor = torch.as_tensor(value)
+        if tensor.is_complex():
+            tensor = tensor.to(torch.complex64)
+        elif tensor.dtype.is_floating_point:
+            tensor = tensor.to(torch.float32)
+        tensor = tensor.to(_operator_device(self))
+        result = method(self, tensor, *args, **kwargs)
+        if isinstance(result, torch.Tensor):
+            return result.detach().to("cpu").numpy()
+        return result
+
+    return wrapper
 
 
 def measurement_to_trailing(value: Any) -> Any:
@@ -346,10 +391,12 @@ class MRIPhysics(deepinv.physics.LinearPhysics):
                 return "toeplitz"
         return "exact"
 
+    @_mirror_array_namespace
     def A(self, x: Any, **kwargs: Any) -> Any:
         """Apply the forward encoding operator."""
         return self._stream_call("A", self.operator.A, x, **kwargs)
 
+    @_mirror_array_namespace
     def A_adjoint(self, y: Any, **kwargs: Any) -> Any:
         """Apply the adjoint encoding operator."""
         return self._stream_call(
@@ -359,6 +406,7 @@ class MRIPhysics(deepinv.physics.LinearPhysics):
             **kwargs,
         )
 
+    @_mirror_array_namespace
     def A_adjoint_A(self, x: Any, **kwargs: Any) -> Any:
         """Apply the normal operator, using Toeplitz acceleration when valid."""
         return self._stream_call(
