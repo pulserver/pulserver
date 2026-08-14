@@ -138,7 +138,7 @@ class GreStackOfStars3DRecon(ReconPlugin):
                 iterations=self.iterations,
                 device=self.device,
             )
-            volume.append(np.abs(_to_numpy(image)))
+            volume.append(np.abs(_asnumpy(image)))
 
         return ReconResult(
             np.stack(volume).transpose(0, 2, 1),
@@ -148,7 +148,7 @@ class GreStackOfStars3DRecon(ReconPlugin):
         )
 
 
-def _to_numpy(array: Any) -> np.ndarray:
+def _asnumpy(array: Any) -> np.ndarray:
     """Bring a reconstruction back to NumPy, whether it is Torch or already so."""
     return array.cpu().numpy() if hasattr(array, "cpu") else np.asarray(array)
 

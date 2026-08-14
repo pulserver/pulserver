@@ -128,7 +128,7 @@ class GreMultiecho3DRecon(ReconPlugin):
                     device=self.device,
                 )
 
-            image = center_crop(np.abs(_to_numpy(image)), self.image_shape)
+            image = center_crop(np.abs(image), self.image_shape)
             results.append(
                 ReconResult(
                     image.transpose(0, 2, 1),
@@ -139,11 +139,6 @@ class GreMultiecho3DRecon(ReconPlugin):
                 )
             )
         return results
-
-
-def _to_numpy(array: Any) -> np.ndarray:
-    """Bring a reconstruction back to NumPy, whether it is Torch or already so."""
-    return array.cpu().numpy() if hasattr(array, "cpu") else np.asarray(array)
 
 
 PLUGIN = GreMultiecho3DRecon()
