@@ -10,7 +10,7 @@ Examples
 
 from __future__ import annotations
 
-from ._base import PulseqSequence
+from ._base import SequencePlugin
 from ._cli import run_cli
 from ._module import SequenceModule
 from ._params import (
@@ -47,11 +47,8 @@ from ._params import (
     validate_protocol_entry,
 )
 
-Sequence = PulseqSequence
-
 __all__ = [
-    "PulseqSequence",
-    "Sequence",
+    "SequencePlugin",
     "SequenceModule",
     "run_cli",
     "UIParam",

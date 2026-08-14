@@ -26,7 +26,7 @@ from typing import TYPE_CHECKING, Any
 import ismrmrd
 import ismrmrd.xsd
 
-from ..app import ReconContext
+from ..plugin import ReconContext
 from .application import run_application
 
 if TYPE_CHECKING:

@@ -250,6 +250,46 @@ def test_more_newton_steps_leave_a_smaller_residual():
     assert many < 0.6 * few
 
 
+def test_the_calibration_square_is_read_off_a_cartesian_mask():
+    """A Cartesian acquisition states its calibration region; nothing to choose."""
+    from pulserver.recon.calibration import calibration_extent
+
+    mask = torch.zeros(64, 64, dtype=torch.bool)
+    mask[24:40] = True
+    assert calibration_extent(mask) == 16
+
+    # An accelerated line just outside the block must not widen it.
+    mask[0:64:2] = True
+    assert calibration_extent(mask) == 16
+
+    # The square fits inside the acquired data on every axis, so a partial echo
+    # narrows it.
+    partial = torch.zeros(64, 64, dtype=torch.bool)
+    partial[24:40, 16:] = True
+    assert calibration_extent(partial) == 16
+
+
+def test_an_unsampled_centre_leaves_no_calibration_square():
+    from pulserver.recon.calibration import calibration_extent
+
+    mask = torch.zeros(16, 16, dtype=torch.bool)
+    mask[0:16:2] = True
+    assert calibration_extent(mask) == 0
+
+    kspace = torch.zeros(1, 2, 16, 16, dtype=torch.complex64)
+    kspace[:, :, 0:16:2] = 1.0
+    with pytest.raises(ValueError, match="no fully sampled block"):
+        NLINV()(kspace)
+
+
+def test_a_non_cartesian_calibration_needs_an_explicit_width():
+    """A spiral does not state a calibration region, so it has to be given one."""
+    trajectory = torch.rand(64, 2) - 0.5
+    kspace = torch.ones(1, 2, 64, dtype=torch.complex64)
+    with pytest.raises(ValueError, match="has to be given as a number"):
+        NLINV()(kspace, trajectory=trajectory, image_shape=(16, 16))
+
+
 def test_a_starved_inner_solve_is_reported_rather_than_returned():
     kspace, _ = _smooth_calibration_case()
     starved = NLINV(

@@ -9,11 +9,11 @@ import numpy as np
 from ...postprocessing import coil_combine
 import numpy.fft as fft
 
-from ...app import AcquisitionBucket, ReconApp, ReconContext, ReconResult
+from ...plugin import AcquisitionBucket, ReconPlugin, ReconContext, ReconResult
 from .. import mrdhelper
 
 
-class SimpleFftRecon(ReconApp):
+class SimpleFftRecon(ReconPlugin):
     """Reconstruct one Cartesian slice whenever its final line arrives."""
 
     def __init__(self) -> None:

@@ -10,6 +10,7 @@ __all__ = [
     "WavePSF",
     "WavePSFCalibration",
     "WavePSFResult",
+    "calibration_extent",
 ]
 
 from dataclasses import dataclass
@@ -24,6 +25,64 @@ from .optim import IRGNM, ConjugateGradient
 from .physics import NonCartesian2D, NonCartesian3D
 from ._phase_poles import PhasePoleCorrection
 from ._wave_psf import WavePSF, WavePSFCalibration, WavePSFResult
+
+
+def calibration_extent(mask: Any) -> int:
+    """Width of the fully sampled square at the centre of a sampling mask.
+
+    A Cartesian acquisition states which positions it took, so the calibration
+    region is not a choice: it is the block around the centre of k-space where
+    nothing is missing. Along each axis this is the run of sampled positions
+    through the centre, made symmetric about it; the square is the narrowest of
+    them, so it fits inside the acquired data on every axis.
+
+    Symmetry is what makes the answer stable. The run on one side may reach
+    further than the other -- an accelerated line just outside an
+    autocalibration block extends it by one -- and taking the smaller half
+    means the same block is found whether the mask holds the calibration lines
+    alone or the whole finished scan.
+
+    Parameters
+    ----------
+    mask
+        Boolean sampling mask over the encoded grid, one entry per position.
+
+    Returns
+    -------
+    int
+        The square's width, zero when the centre itself was not sampled.
+
+    Examples
+    --------
+    >>> import torch
+    >>> from pulserver.recon.calibration import calibration_extent
+    >>> mask = torch.zeros(16, 16, dtype=torch.bool)
+    >>> mask[6:10] = True
+    >>> calibration_extent(mask)
+    4
+
+    Accelerated lines around the block do not widen it:
+
+    >>> mask[0:16:2] = True
+    >>> calibration_extent(mask)
+    4
+    """
+    sampled = torch.as_tensor(mask).bool()
+    widths = []
+    for axis in range(sampled.ndim):
+        moved = sampled.movedim(axis, 0)
+        along = moved.reshape(moved.shape[0], -1).any(dim=1)
+        centre = len(along) // 2
+        if not bool(along[centre]):
+            return 0
+        start = centre
+        while start > 0 and bool(along[start - 1]):
+            start -= 1
+        stop = centre + 1
+        while stop < len(along) and bool(along[stop]):
+            stop += 1
+        widths.append(2 * min(centre - start, stop - centre))
+    return min(widths)
 
 
 @dataclass(frozen=True)
@@ -220,7 +279,13 @@ class NLINV(torch.nn.Module):
     spatial_ndim
         Cartesian or non-Cartesian spatial dimensionality.
     calibration_width
-        Centered calibration width. ``None`` uses the full input matrix.
+        Width of the centred square the maps are solved over. ``"auto"``, the
+        default, reads it off the sampling: a Cartesian acquisition states
+        which positions it took, so the fully sampled block around the centre
+        of k-space is the calibration region and there is nothing to choose. An
+        acquisition that does not state it -- a spiral, where the samples are
+        coordinates rather than a grid -- has to be given a number. ``None``
+        uses the full input matrix.
     max_iter
         Number of IRGNM outer iterations.
     cg_max_iter, cg_rtol
@@ -262,7 +327,7 @@ class NLINV(torch.nn.Module):
         self,
         *,
         spatial_ndim: int = 2,
-        calibration_width: int | None = 24,
+        calibration_width: int | str | None = "auto",
         max_iter: int = 8,
         cg_max_iter: int = 100,
         cg_rtol: float = 1e-2,
@@ -278,8 +343,15 @@ class NLINV(torch.nn.Module):
         super().__init__()
         if spatial_ndim not in {2, 3}:
             raise ValueError("spatial_ndim must be 2 or 3")
-        if calibration_width is not None and calibration_width <= 0:
-            raise ValueError("calibration_width must be positive or None")
+        if (
+            (calibration_width not in ("auto", None)
+            and not isinstance(calibration_width, int))
+            or (isinstance(calibration_width, int)
+            and calibration_width <= 0)
+        ):
+            raise ValueError(
+                "calibration_width must be a positive integer, 'auto', or None"
+            )
         if max_iter <= 0 or cg_max_iter <= 0:
             raise ValueError("iteration counts must be positive")
         if cg_rtol < 0.0:
@@ -505,25 +577,26 @@ class NLINV(torch.nn.Module):
                 int(size) for size in kspace.shape[-self.spatial_ndim :]
             )
             leading_shape, data = _flatten_batches(kspace, self.spatial_ndim + 1)
+            if mask is None:
+                sampled = data.abs().square().sum(dim=(0, 1)) > 0
+            else:
+                sampled = torch.as_tensor(mask, device=data.device).bool()
+                if sampled.ndim > self.spatial_ndim:
+                    sampled = sampled.reshape(-1, *output_shape)[0]
+            width = self.calibration_width
+            if width == "auto":
+                width = calibration_extent(sampled)
+                if width == 0:
+                    raise ValueError(
+                        "no fully sampled block at the centre of k-space to "
+                        "calibrate from; pass calibration_width explicitly"
+                    )
             solve_shape = tuple(
-                min(self.calibration_width, size)
-                if self.calibration_width is not None
-                else size
+                min(width, size) if width is not None else size
                 for size in output_shape
             )
             data = _resize_centered(data, solve_shape)
-            if mask is None:
-                selected_mask = data.abs().square().sum(dim=(0, 1)) > 0
-            else:
-                selected_mask = _resize_centered(
-                    torch.as_tensor(mask, device=data.device),
-                    solve_shape,
-                )
-                if selected_mask.ndim > self.spatial_ndim:
-                    selected_mask = selected_mask.reshape(
-                        -1,
-                        *solve_shape,
-                    )[0]
+            selected_mask = _resize_centered(sampled, solve_shape)
             selected_encoding = _CartesianCalibrationEncoding(selected_mask)
             return data, selected_encoding, solve_shape, output_shape, leading_shape
 
@@ -542,6 +615,11 @@ class NLINV(torch.nn.Module):
         data = data.reshape(data.shape[0], data.shape[1], -1)
         trajectory = trajectory.reshape(-1, self.spatial_ndim)
         selected_density = None if density is None else density.reshape(-1)
+        if self.calibration_width == "auto":
+            raise ValueError(
+                "a non-Cartesian acquisition does not state its calibration "
+                "region, so calibration_width has to be given as a number"
+            )
         solve_shape = output_shape
         if self.calibration_width is not None:
             solve_shape = tuple(

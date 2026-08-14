@@ -13,9 +13,9 @@ from types import SimpleNamespace
 from ._events import convert as _convert
 
 #: Counters: per-acquisition integer indices, one ISMRMRD ``EncodingCounters``
-#: field each. These are what a :class:`~pulserver.ScanLoop` axis emits — the
-#: reconstruction sorts data by them, and the interpreter derives the
-#: ``FIRST_IN_*``/``LAST_IN_*`` MRD flags from their observed range.
+#: field each. These are what a :class:`~pulserver.ScanLoop` axis emits, and
+#: what the reconstruction sorts data by. A counter says which unit an
+#: acquisition belongs to; the ``LAST*`` flags below say when a unit ends.
 #:
 #: Every one of them maps to data. That is what separates them from the flags
 #: below, half of which are directives to the interpreter and never reach a
@@ -39,11 +39,11 @@ COUNTER_LABELS = (
 #: :meth:`~pulserver.SequenceModule.set_state`.
 #:
 #: They divide again, and the division matters more than it looks. ``NAV``,
-#: ``REV``, ``SMS``, ``REF``, ``IMA``, ``NOISE`` and ``OFF`` **classify the
-#: data** and become acquisition flags a reconstruction reads. ``PMC``,
-#: ``NOROT``, ``NOPOS``, ``NOSCL``, ``ONCE`` and ``TRID``
-#: **instruct the interpreter** and stop there: nothing downstream of the
-#: scanner ever sees them, so a sequence cannot use one to say something to
+#: ``REV``, ``SMS``, ``REF``, ``IMA``, ``NOISE``, ``OFF``, ``LASTSLC`` and
+#: ``LASTSEG`` **classify the data** and become acquisition flags a
+#: reconstruction reads. ``PMC``, ``NOROT``, ``NOPOS``, ``NOSCL``, ``ONCE`` and
+#: ``TRID`` **instruct the interpreter** and stop there: nothing downstream of
+#: the scanner ever sees them, so a sequence cannot use one to say something to
 #: its own reconstruction.
 FLAG_LABELS = (
     "NAV",
@@ -52,6 +52,8 @@ FLAG_LABELS = (
     "REF",
     "IMA",
     "NOISE",
+    "LASTSLC",
+    "LASTSEG",
     "PMC",
     "NOROT",
     "NOPOS",
@@ -73,9 +75,10 @@ _SUPPORTED_LABELS = COUNTER_LABELS + FLAG_LABELS
 def get_supported_labels() -> tuple[str, ...]:
     """Return every counter and flag understood by Pulserver.
 
-    This extends the Pulseq/PyPulseq set with ``OFF`` (discard an
-    acquisition), which Pulserver's interpreter consumes and which is the one
-    name here that Pulseq does not define.
+    This extends the Pulseq/PyPulseq set with three names Pulseq does not
+    define: ``OFF`` (discard an acquisition), which Pulserver's interpreter
+    consumes, and ``LASTSLC``/``LASTSEG``, which mark the end of a slice or of
+    a segment for the reconstruction.
 
     The set splits in two, and the split is the design toolbox's division of
     labour: :data:`COUNTER_LABELS` say *where an acquisition belongs* and come
@@ -146,6 +149,14 @@ def get_supported_labels() -> tuple[str, ...]:
        * - ``OFF``
          - Pulserver's own: discard the acquisition downstream — an ADC that
            is played, so timing is unchanged, but whose data is dropped.
+       * - ``LASTSLC``
+         - This acquisition is the last one of its ``SLC``, so everything the
+           slice will ever contain has arrived.
+       * - ``LASTSEG``
+         - This acquisition is the last one of its ``SEG``. A reconstruction
+           that has work to do the moment a block of acquisitions is complete —
+           calibrating coil sensitivities from an autocalibration block, say —
+           triggers on this rather than waiting for the scan.
 
     .. list-table:: Flags that instruct the interpreter — these stop at the scanner
        :header-rows: 1

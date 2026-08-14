@@ -11,7 +11,7 @@ carries two entry points over one implementation:
     This is the whole sequence, written in the style of a PyPulseq example
     script, and it is what to read, copy and edit.
 ``PLUGIN``
-    A :class:`pulserver.Sequence` wrapping that same ``main`` in the scanner
+    A :class:`pulserver.SequencePlugin` wrapping that same ``main`` in the scanner
     protocol contract, so the bridge can offer it in the UI. Running the module
     as a script builds a ``.seq`` offline from the same controls.
 

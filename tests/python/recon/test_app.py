@@ -11,14 +11,14 @@ import pytest
 from pulserver import (
     AcquisitionBucket,
     ExamCache,
-    ReconApp,
+    ReconPlugin,
     ReconContext,
     ReconResult,
 )
 from pulserver.recon._mrd.exam import ExamCacheManager, resolve_exam_id
 
 
-class SumRecon(ReconApp):
+class SumRecon(ReconPlugin):
     def recon(self, bucket, context):
         scale = context.exam.get_or_create("scale", lambda: 2.0)
         return ReconResult(bucket.kspace().sum(axis=1) * scale)

@@ -373,6 +373,7 @@ modules compatible with its plug-and-play optimizers.
    pulserver.recon.calibration.WavePSFCalibration
    pulserver.recon.calibration.WavePSFResult
    pulserver.recon.calibration.NLINV
+   pulserver.recon.calibration.calibration_extent
    pulserver.recon.calibration.NLINVPhysics
    pulserver.recon.calibration.NLINVResult
    pulserver.recon.calibration.PhasePoleCorrection
@@ -388,6 +389,10 @@ connection or streaming server.
    :toctree: generated/recon
    :nosignatures:
 
+   pulserver.recon.preprocessing.encoded_shape
+   pulserver.recon.preprocessing.recon_shape
+   pulserver.recon.preprocessing.receiver_channels
+   pulserver.recon.preprocessing.CartesianGridder
    pulserver.recon.preprocessing.cartesian_3d_to_2d
    pulserver.recon.preprocessing.remove_readout_oversampling
    pulserver.recon.preprocessing.coil_compress
@@ -423,6 +428,7 @@ constant-velocity pose state suitable for prospective motion correction.
    :toctree: generated/recon
    :nosignatures:
 
+   pulserver.recon.postprocessing.center_crop
    pulserver.recon.postprocessing.coil_combine
    pulserver.recon.postprocessing.CoefficientAccessor
    pulserver.recon.postprocessing.GradientCoefficients

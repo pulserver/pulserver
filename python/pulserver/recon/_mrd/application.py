@@ -11,10 +11,10 @@ from typing import Any
 import ismrmrd
 import numpy as np
 
-from ..app import (
+from ..plugin import (
     AcquisitionBucket,
     AcquisitionBucketStats,
-    ReconApp,
+    ReconPlugin,
     ReconContext,
     ReconResult,
 )
@@ -23,18 +23,23 @@ from .mrd2dicom import MrdDicomBuilder
 
 
 def run_application(
-    app: ReconApp,
+    plugin: ReconPlugin,
     connection: Any,
     context: ReconContext,
 ) -> None:
-    """Consume one MRD stream through ``app`` and emit its outputs."""
+    """Consume one MRD stream through ``plugin`` and emit its outputs.
+
+    The stream reconstructs through its own instance, so the configured
+    ``PLUGIN`` a module exposes stays a template that concurrent connections
+    cannot write to.
+    """
+    app = plugin.spawn()
     acquisitions: list[Any] = []
     waveforms: list[Any] = []
     image_index = 1
     dicom_builder: MrdDicomBuilder | None = None
-    last_bucket: AcquisitionBucket | None = None
 
-    def emit(output: Any, bucket: AcquisitionBucket | None) -> None:
+    def emit(output: Any, bucket: AcquisitionBucket) -> None:
         nonlocal image_index, dicom_builder
         for item in _outputs(output):
             if isinstance(item, ReconResult):
@@ -54,7 +59,7 @@ def run_application(
                 connection.send(item)
 
     def reconstruct_bucket() -> None:
-        nonlocal acquisitions, last_bucket
+        nonlocal acquisitions
         if not acquisitions:
             return
         # Waveforms describe the measurement, not the bucket: a scanner sends
@@ -62,17 +67,16 @@ def run_application(
         # sees the same set rather than only the first one.
         bucket = _make_bucket(acquisitions, waveforms)
         acquisitions = []
-        last_bucket = bucket
         emit(app.recon(bucket, context), bucket)
 
     app.startup(context)
     for item in connection:
         if isinstance(item, ismrmrd.Acquisition):
-            finish = app.split_on is not None and has_acquisition_flag(
-                item, app.split_on
+            finish = any(
+                has_acquisition_flag(item, flag) for flag in app.split_on
             )
             if _accept(item, app):
-                # Hand each accepted acquisition to the app as it arrives, so
+                # Hand each accepted acquisition to the plugin as it arrives, so
                 # any per-acquisition work overlaps the wait for the next one.
                 app.receive(item, context)
                 acquisitions.append(item)
@@ -84,15 +88,12 @@ def run_application(
             connection.send(item)
 
     reconstruct_bucket()
-    # Trailing output, if the app aggregates across buckets. It has no bucket of
-    # its own, so it inherits the geometry of the last one reconstructed.
-    emit(app.finalize(context), last_bucket)
 
 
 # %% private module subroutines
 
 
-def _accept(acquisition: Any, app: ReconApp) -> bool:
+def _accept(acquisition: Any, app: ReconPlugin) -> bool:
     return all(
         has_acquisition_flag(acquisition, flag) for flag in app.require_flags
     ) and not any(has_acquisition_flag(acquisition, flag) for flag in app.reject_flags)
@@ -121,6 +122,7 @@ def _make_bucket(
         ref=tuple(reference),
         refstats=_bucket_stats(reference),
         waveforms=tuple(waveforms),
+        acquisitions=tuple(acquisitions),
     )
 
 
@@ -180,18 +182,18 @@ def _make_image(
     next_image_index: int,
     app_name: str,
 ) -> tuple[ismrmrd.Image, int]:
-    # A bucket-less result comes from finalize() aggregating across the scan; a
-    # bucket-bound one must name a real acquisition for its geometry.
-    acquisition = None
-    if bucket is not None:
-        if not bucket.data:
-            raise ValueError("ReconResult requires at least one imaging acquisition")
-        if not 0 <= result.reference < len(bucket.data):
-            raise IndexError(
-                f"ReconResult reference {result.reference} is outside a bucket of "
-                f"{len(bucket.data)} acquisitions"
-            )
-        acquisition = bucket.data[result.reference]
+    # A result must name a real acquisition for its geometry.
+    if not bucket.data:
+        raise ValueError("ReconResult requires at least one imaging acquisition")
+    # Negative indices count from the end, so -1 names the acquisition that
+    # triggered the bucket -- which is the one belonging to the unit just
+    # completed when the bucket also carries earlier units.
+    if not -len(bucket.data) <= result.reference < len(bucket.data):
+        raise IndexError(
+            f"ReconResult reference {result.reference} is outside a bucket of "
+            f"{len(bucket.data)} acquisitions"
+        )
+    acquisition = bucket.data[result.reference]
     data = _as_numpy(result.data)
     image_index = (
         next_image_index if result.image_index is None else int(result.image_index)

@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import pytest
-from pulserver import PulseqSequence
+from pulserver import SequencePlugin
 
 
-class _EmptySequence(PulseqSequence):
+class _EmptySequence(SequencePlugin):
     pass
 
 

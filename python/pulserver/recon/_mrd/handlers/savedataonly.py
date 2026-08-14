@@ -4,10 +4,10 @@ from __future__ import annotations
 
 __all__ = ["PLUGIN", "SaveDataOnly"]
 
-from ...app import AcquisitionBucket, ReconApp, ReconContext
+from ...plugin import AcquisitionBucket, ReconPlugin, ReconContext
 
 
-class SaveDataOnly(ReconApp):
+class SaveDataOnly(ReconPlugin):
     """Consume and optionally persist a measurement without emitting images."""
 
     def recon(

@@ -12,6 +12,7 @@ __all__ = [
     "GradientCoefficients",
     "Gradunwarp",
     "ImageGeometry",
+    "center_crop",
     "coil_combine",
     "run_pyhysco",
 ]
@@ -25,6 +26,58 @@ from ._gradunwarp import (
     Gradunwarp,
     ImageGeometry,
 )
+
+
+def center_crop(image: Any, shape: Any) -> Any:
+    """Crop an image's trailing axes to a centred window.
+
+    The last step of a Cartesian reconstruction: the image comes off the
+    encoded grid, which carries readout oversampling and whatever field-of-view
+    oversampling the phase-encode direction was prescribed with, and the
+    prescribed matrix is the centred part of it.
+
+    Parameters
+    ----------
+    image
+        Image, NumPy or Torch, with any number of leading axes.
+    shape
+        Extent of the trailing axes to keep. Shorter than ``image.ndim``, so
+        coils, slices and contrasts pass through untouched.
+
+    Returns
+    -------
+    array
+        A view of ``image`` cropped to ``shape``.
+
+    Raises
+    ------
+    ValueError
+        If ``shape`` has more axes than the image, or asks for more samples
+        than an axis holds.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from pulserver.recon.postprocessing import center_crop
+    >>> image = np.arange(2 * 8).reshape(2, 8)
+    >>> center_crop(image, (4,)).shape
+    (2, 4)
+    >>> center_crop(np.arange(8), (4,))
+    array([2, 3, 4, 5])
+    """
+    extents = tuple(int(size) for size in shape)
+    if len(extents) > image.ndim:
+        raise ValueError(
+            f"shape has {len(extents)} axes, image has {image.ndim}"
+        )
+    selection = [slice(None)] * image.ndim
+    for axis, size in enumerate(extents, start=image.ndim - len(extents)):
+        current = image.shape[axis]
+        if not 0 < size <= current:
+            raise ValueError(f"cannot crop axis {axis} of {current} samples to {size}")
+        start = (current - size) // 2
+        selection[axis] = slice(start, start + size)
+    return image[tuple(selection)]
 
 
 def coil_combine(

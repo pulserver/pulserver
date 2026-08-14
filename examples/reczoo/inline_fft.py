@@ -6,11 +6,11 @@ __all__ = ["PLUGIN", "CartesianFftRecon"]
 
 import numpy as np
 
-from pulserver import AcquisitionBucket, ReconApp, ReconContext, ReconResult
+from pulserver import AcquisitionBucket, ReconPlugin, ReconContext, ReconResult
 from pulserver.recon.postprocessing import coil_combine
 
 
-class CartesianFftRecon(ReconApp):
+class CartesianFftRecon(ReconPlugin):
     """Reconstruct one Cartesian slice without handling an MRD connection."""
 
     def __init__(self) -> None:

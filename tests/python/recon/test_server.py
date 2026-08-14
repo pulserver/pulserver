@@ -6,11 +6,11 @@ import sys
 import types
 from unittest.mock import patch
 
-from pulserver import ReconApp
+from pulserver import ReconPlugin
 from pulserver.recon._mrd.server import Server, _NullApp
 
 
-class _TestApp(ReconApp):
+class _TestApp(ReconPlugin):
     def recon(self, bucket, context):
         del bucket, context
 
@@ -37,7 +37,7 @@ def test_resolve_app_from_importable_module():
 
 def test_resolve_app_from_private_built_in_package():
     result = _server()._resolve_app("simplefft")
-    assert isinstance(result, ReconApp)
+    assert isinstance(result, ReconPlugin)
     assert type(result).__name__ == "SimpleFftRecon"
 
 
@@ -58,8 +58,8 @@ def test_null_config_uses_default_app():
 def test_resolve_app_from_handler_dir(tmp_path):
     plugin_file = tmp_path / "custom_recon.py"
     plugin_file.write_text(
-        "from pulserver import ReconApp\n"
-        "class CustomRecon(ReconApp):\n"
+        "from pulserver import ReconPlugin\n"
+        "class CustomRecon(ReconPlugin):\n"
         "    def recon(self, bucket, context):\n"
         "        return None\n"
         "PLUGIN = CustomRecon()\n"
@@ -69,7 +69,7 @@ def test_resolve_app_from_handler_dir(tmp_path):
 
     result = server._resolve_app("custom_recon.py")
 
-    assert isinstance(result, ReconApp)
+    assert isinstance(result, ReconPlugin)
     assert type(result).__name__ == "CustomRecon"
 
 

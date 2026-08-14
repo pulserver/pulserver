@@ -34,10 +34,9 @@ def test_public_namespace_is_small_and_module_oriented():
         "AcquisitionBucket",
         "AcquisitionBucketStats",
         "ExamCache",
-        "ReconApp",
         "ReconContext",
+        "ReconPlugin",
         "ReconResult",
-        "app",
         "calibration",
         "datasets",
         "denoisers",
@@ -47,12 +46,14 @@ def test_public_namespace_is_small_and_module_oriented():
         # transport.
         "diffusion_table",
         "execution",
+        "has_acquisition_flag",
         "learned",
         "models",
         "motion",
         "optim",
         "physics",
         "pics",
+        "plugin",
         "postprocessing",
         "preprocessing",
         "simulation",
@@ -63,7 +64,7 @@ def test_public_namespace_is_small_and_module_oriented():
     assert "Connection" not in dir(recon)
     assert "Server" not in dir(recon)
     assert "MrdMetadata" not in dir(recon)
-    assert recon.ReconApp is recon.app.ReconApp
+    assert recon.ReconPlugin is recon.plugin.ReconPlugin
 
 
 def test_importing_public_root_does_not_load_private_mrd_stack():
@@ -529,7 +530,7 @@ def test_cartesian_without_coil_maps_keeps_the_coils():
 
 
 def test_cartesian_gridder_matches_grid_cartesian():
-    """Gridding acquisitions one at a time equals gridding them all at once."""
+    """Placing acquisitions one at a time equals gridding them all at once."""
     from pulserver.recon.preprocessing import CartesianGridder, grid_cartesian
 
     rng = np.random.default_rng(0)
@@ -537,16 +538,60 @@ def test_cartesian_gridder_matches_grid_cartesian():
         rng.standard_normal((6, 3, 12)) + 1j * rng.standard_normal((6, 3, 12))
     ).astype(np.complex64)
     lines = [0, 2, 4, 5, 8, 11]
-    for echo_position in (None, 4):
-        gridder = CartesianGridder(12, echo_position=echo_position)
-        for line, acquisition in zip(lines, data, strict=True):
-            gridder.add(acquisition, line)
-        grid, mask = gridder.result()
-        reference, reference_mask = grid_cartesian(
-            data, lines, 12, echo_position=echo_position
-        )
-        assert np.array_equal(grid, reference)
-        assert np.array_equal(mask, reference_mask)
+    buffer = CartesianGridder((12, 12), coils=3)
+    for line, acquisition in zip(lines, data, strict=True):
+        buffer.add(acquisition, line)
+    grid, mask = buffer.result()
+    reference, reference_mask = grid_cartesian(data, lines, 12)
+    assert np.array_equal(grid, reference)
+    assert np.array_equal(mask, reference_mask)
+
+
+def test_cartesian_gridder_right_aligns_a_partial_echo():
+    """A readout shorter than the grid ends where a full one would."""
+    from pulserver.recon.preprocessing import CartesianGridder
+
+    buffer = CartesianGridder((4, 16), coils=2)
+    buffer.add(np.ones((2, 12), dtype=np.complex64), 1)
+    assert not buffer.mask[1, :4].any()
+    assert buffer.mask[1, 4:].all()
+    assert not buffer.mask[0].any()
+
+
+def test_cartesian_gridder_indexes_one_position_of_the_volume():
+    """Indexing returns one slice's k-space and mask, without its leading axis."""
+    from pulserver.recon.preprocessing import CartesianGridder
+
+    buffer = CartesianGridder((3, 8, 16), coils=2)
+    buffer.add(np.full((2, 16), 2.0, dtype=np.complex64), 2, 5)
+    kspace, mask = buffer[2]
+    assert kspace.shape == (2, 8, 16)
+    assert mask.shape == (8, 16)
+    assert mask[5].all()
+    assert not buffer[0][1].any()
+
+
+def test_cartesian_gridder_refuses_what_does_not_fit():
+    from pulserver.recon.preprocessing import CartesianGridder
+
+    buffer = CartesianGridder((3, 8, 16), coils=2)
+    with pytest.raises(ValueError, match="coils"):
+        buffer.add(np.ones((3, 16)), 0, 0)
+    with pytest.raises(ValueError, match="index values"):
+        buffer.add(np.ones((2, 16)), 0)
+    with pytest.raises(ValueError, match="readout axis holds"):
+        buffer.add(np.ones((2, 20)), 0, 0)
+
+
+def test_center_crop_takes_the_middle_of_the_trailing_axes():
+    from pulserver.recon.postprocessing import center_crop
+
+    image = np.arange(2 * 4 * 8).reshape(2, 4, 8)
+    cropped = center_crop(image, (2, 4))
+    assert cropped.shape == (2, 2, 4)
+    assert np.array_equal(cropped, image[:, 1:3, 2:6])
+    with pytest.raises(ValueError, match="cannot crop"):
+        center_crop(image, (16,))
 
 
 def test_noncartesian_factory_owns_mrinufft_construction(monkeypatch):

@@ -9,10 +9,10 @@ point.
 Everything used to *build* a sequence is deliberately **not** re-exported
 here, so that the three roles stay visibly separate::
 
-    import pulserver.pypulseq as pp          # events, Sequence, Opts
-    import pulserver.design as design        # reusable sequence modules
-    from pulserver import Sequence, UIParam  # plugin contract
-    from pulserver import ReconApp           # reconstruction plugin contract
+    import pulserver.pypulseq as pp       # events, Sequence, Opts
+    import pulserver.design as design     # reusable sequence modules
+    from pulserver import SequencePlugin  # sequence plugin contract
+    from pulserver import ReconPlugin     # reconstruction plugin contract
 
 :mod:`pulserver.pypulseq` is the event layer — upstream PyPulseq re-exported
 whole, plus Pulserver's replacements for a few of its objects.
@@ -27,7 +27,7 @@ module name.
 
 Examples
 --------
->>> from pulserver import Sequence, UIParam, TypeinFloatParam
+>>> from pulserver import SequencePlugin, UIParam, TypeinFloatParam
 >>> protocol = {UIParam.TR: TypeinFloatParam(value=500.0, unit="ms")}
 >>> UIParam.TR in protocol
 True
@@ -63,12 +63,11 @@ __all__ = [
     "PreparationType",
     "Protocol",
     "ProtocolValue",
-    "PulseqSequence",
-    "ReconApp",
     "ReconContext",
+    "ReconPlugin",
     "ReconResult",
-    "Sequence",
     "SequenceModule",
+    "SequencePlugin",
     "SequenceType",
     "StringListParam",
     "TriggerType",
@@ -91,12 +90,12 @@ __all__ = [
 
 
 _CORE_MODULES = {"params"}
-_RECON_APP_TYPES = {
+_RECON_PLUGIN_TYPES = {
     "AcquisitionBucket",
     "AcquisitionBucketStats",
     "ExamCache",
-    "ReconApp",
     "ReconContext",
+    "ReconPlugin",
     "ReconResult",
 }
 _SUBMODULES = {"io", "pypulseq", "design", "seqzoo", "reczoo"}
@@ -107,8 +106,8 @@ def __getattr__(name: str):
         return importlib.import_module(f"{__name__}.{name}")
     if name in _CORE_MODULES:
         return importlib.import_module(f"{__name__}._core._protocol")
-    if name in _RECON_APP_TYPES:
-        return getattr(importlib.import_module(f"{__name__}.recon.app"), name)
+    if name in _RECON_PLUGIN_TYPES:
+        return getattr(importlib.import_module(f"{__name__}.recon.plugin"), name)
     try:
         return getattr(importlib.import_module(f"{__name__}._core"), name)
     except AttributeError:

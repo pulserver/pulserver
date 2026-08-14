@@ -127,11 +127,11 @@ def test_fftrecon_emits_one_dicom_per_slice(monkeypatch):
 
 
 def test_interleaved_waveform_is_attached_to_bucket():
-    from pulserver import ReconApp
+    from pulserver import ReconPlugin
 
     seen = []
 
-    class Capture(ReconApp):
+    class Capture(ReconPlugin):
         def recon(self, bucket, context):
             del context
             seen.append(bucket)
@@ -148,11 +148,11 @@ def test_interleaved_waveform_is_attached_to_bucket():
 
 
 def test_bucket_matches_gadgetron_data_and_reference_classification():
-    from pulserver import ReconApp
+    from pulserver import ReconPlugin
 
     seen = []
 
-    class Capture(ReconApp):
+    class Capture(ReconPlugin):
         def recon(self, bucket, context):
             del context
             seen.append(bucket)
@@ -185,12 +185,12 @@ def test_savedataonly_consumes_without_output():
 
 def test_the_runtime_drives_the_lifecycle_hooks_in_order():
     """startup once, receive per acquisition on arrival, recon per bucket at its
-    split boundary, finalize once at the end -- and finalize's output emitted."""
-    from pulserver import ReconApp, ReconResult
+    split boundary."""
+    from pulserver import ReconPlugin, ReconResult
 
     events = []
 
-    class Lifecycle(ReconApp):
+    class Lifecycle(ReconPlugin):
         def startup(self, context):
             del context
             events.append("startup")
@@ -202,11 +202,6 @@ def test_the_runtime_drives_the_lifecycle_hooks_in_order():
         def recon(self, bucket, context):
             del context
             events.append(("recon", len(bucket.data)))
-            return None
-
-        def finalize(self, context):
-            del context
-            events.append("finalize")
             return ReconResult(np.ones((2, 2), dtype=np.float32))
 
     acquisitions = _make_acquisitions(n_pe=3, n_ro=8, n_channels=1, n_slices=2)
@@ -227,8 +222,80 @@ def test_the_runtime_drives_the_lifecycle_hooks_in_order():
         ("receive", 1),
         ("receive", 1),
         ("recon", 3),
-        "finalize",
     ]
-    # finalize has no bucket of its own; its result still emits one image.
-    assert len(connection.sent) == 1
-    assert isinstance(connection.sent[0], ismrmrd.Image)
+    assert len(connection.sent) == 2
+    assert all(isinstance(item, ismrmrd.Image) for item in connection.sent)
+
+
+def test_several_flags_each_end_a_bucket():
+    """recon runs at every boundary and decides what that boundary meant."""
+    from pulserver import ReconPlugin
+
+    seen = []
+
+    class Splitting(ReconPlugin):
+        def recon(self, bucket, context):
+            del context
+            last = bucket.acquisitions[-1]
+            seen.append(
+                (
+                    int(last.idx.kspace_encode_step_1),
+                    last.is_flag_set(ismrmrd.ACQ_LAST_IN_SEGMENT),
+                )
+            )
+            return None
+
+    acquisitions = _make_acquisitions(n_pe=6, n_ro=8, n_channels=1)
+    acquisitions[1].setFlag(ismrmrd.ACQ_LAST_IN_SEGMENT)
+    run_application(
+        Splitting(split_on=("ACQ_LAST_IN_SEGMENT", "ACQ_LAST_IN_SLICE")),
+        FakeConnection(acquisitions),
+        _context(_make_header(8, 6)),
+    )
+
+    # The segment closes at line 1 and the slice at line 5.
+    assert seen == [(1, True), (5, False)]
+
+
+def test_one_flag_may_be_given_without_wrapping_it():
+    from pulserver import ReconPlugin
+
+    class Nothing(ReconPlugin):
+        def recon(self, bucket, context):
+            del bucket, context
+            return None
+
+    assert Nothing(split_on="ACQ_LAST_IN_SLICE").split_on == ("ACQ_LAST_IN_SLICE",)
+    assert Nothing(split_on=None).split_on == ()
+
+
+def test_each_stream_reconstructs_through_its_own_instance():
+    """The configured plugin is a template; two streams cannot see each other."""
+    from pulserver import ReconPlugin
+
+    seen = []
+
+    class Stateful(ReconPlugin):
+        def startup(self, context):
+            del context
+            self.lines = []
+
+        def receive(self, acquisition, context):
+            del context
+            self.lines.append(int(acquisition.idx.kspace_encode_step_1))
+
+        def recon(self, bucket, context):
+            del bucket, context
+            seen.append(tuple(self.lines))
+            return None
+
+    template = Stateful(split_on=None)
+    for _ in range(2):
+        run_application(
+            template,
+            FakeConnection(_make_acquisitions(n_pe=3, n_ro=8, n_channels=1)),
+            _context(_make_header(8, 3)),
+        )
+
+    assert seen == [(0, 1, 2), (0, 1, 2)]
+    assert not hasattr(template, "lines")

@@ -2,8 +2,8 @@
 
 Examples
 --------
->>> from pulserver import PulseqSequence, TypeinFloatParam, UIParam
->>> class DemoSequence(PulseqSequence):
+>>> from pulserver import SequencePlugin, TypeinFloatParam, UIParam
+>>> class DemoSequence(SequencePlugin):
 ...     def get_default_protocol(self, opts):
 ...         return {UIParam.TR: TypeinFloatParam(value=500.0, unit="ms")}
 ...     def validate_protocol(self, opts, protocol):
@@ -21,7 +21,7 @@ import pypulseq as pp
 from ._params import Protocol
 
 
-class PulseqSequence(ABC):
+class SequencePlugin(ABC):
     """Base class that every pulserver sequence plugin must satisfy.
 
     A plugin is one file declaring three things: the protocol it exposes to
@@ -35,15 +35,13 @@ class PulseqSequence(ABC):
     ``make_sequence`` runs once, at download, and is where the waveforms are
     actually built.
 
-    ``pulserver.Sequence`` is an alias for this class.
-
     Examples
     --------
     A complete, minimal plugin:
 
     >>> import pulserver.pypulseq as pp
-    >>> from pulserver import PulseqSequence, TypeinFloatParam, UIParam, params
-    >>> class DemoSequence(PulseqSequence):
+    >>> from pulserver import SequencePlugin, TypeinFloatParam, UIParam, params
+    >>> class DemoSequence(SequencePlugin):
     ...     def get_default_protocol(self, opts):
     ...         return {UIParam.TR: TypeinFloatParam(value=500.0, unit="ms")}
     ...     def validate_protocol(self, opts, protocol):

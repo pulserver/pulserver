@@ -1,24 +1,27 @@
 # `pulserver.reczoo`
 
 The reconstruction each {doc}`seqzoo <seqzoo>` sequence is designed for, under
-the same module name. A module holds one `pulserver.ReconApp` subclass and the
+the same module name. A module holds one `pulserver.ReconPlugin` subclass and the
 module-level `PLUGIN` instance the inline runtime discovers, so the same code
 runs offline on arrays and online on an MRD stream.
 
 ```python
-import numpy as np
 from pulserver import AcquisitionBucket, ReconContext
 from pulserver.reczoo import gre_2d
 
 bucket = AcquisitionBucket.from_arrays(
-    kspace, labels={"kspace_encode_step_1": lines, "center_sample": centers}
+    kspace, labels={"kspace_encode_step_1": lines}
 )
-image = gre_2d.PLUGIN(bucket, ReconContext.offline()).data
+image = gre_2d.PLUGIN(bucket, ReconContext.offline(header)).data
 ```
 
-A paired reconstruction reads what its sequence encoded — its counters, its
-calibration flags, the echo position it recorded — rather than being told
-separately. The remaining modules are single-purpose examples of one
+Calling the plugin replays the bucket through the lifecycle the inline runtime
+drives, so the offline result is the streamed one. The MRD header comes along
+because that is what sizes the buffers a plugin allocates in `startup`.
+
+A paired reconstruction reads what its sequence encoded — its counters and the
+flags marking where its calibration block and its slices end — rather than
+being told separately. The remaining modules are single-purpose examples of one
 reconstruction primitive.
 
 Install `pulserver[recon-cpu]` for the numerical stack the model-based

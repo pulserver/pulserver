@@ -32,7 +32,9 @@ import numpy as np
 from ._ordering import calc_chunk_indices
 
 
-def calc_sampled_lines(n: int, r: int, acs_lines: int) -> list[int]:
+def calc_sampled_lines(
+    n: int, r: int, acs_lines: int, *, order: str = "ascending"
+) -> list[int]:
     """Return the sampled view indices for uniform undersampling + ACS block.
 
     Every ``r``-th view is sampled, plus a centered block of ``acs_lines``
@@ -46,26 +48,51 @@ def calc_sampled_lines(n: int, r: int, acs_lines: int) -> list[int]:
         Acceleration factor (view ``i`` is sampled when ``i % r == 0``).
     acs_lines : int
         Number of fully sampled center views.
+    order : str, optional
+        ``'ascending'`` traverses k-space from one edge to the other.
+        ``'calibration_first'`` puts the autocalibration block ahead of
+        everything else, so a reconstruction can estimate coil sensitivities
+        from it while the remaining views are still being acquired. It acquires
+        the centre of k-space before the magnetisation has reached steady
+        state, so a sequence using it wants dummy repetitions first. Default is
+        ``'ascending'``.
 
     Returns
     -------
     list of int
-        Sorted sampled view indices.
+        Sampled view indices, in acquisition order.
+
+    Raises
+    ------
+    ValueError
+        If ``order`` is neither ``'ascending'`` nor ``'calibration_first'``.
 
     Examples
     --------
     >>> import pulserver.pypulseq as pp
     >>> pp.calc_sampled_lines(8, 2, 0)
     [0, 2, 4, 6]
+
+    The calibration block first, then what is left of the ascending traversal:
+
+    >>> pp.calc_sampled_lines(8, 2, 4, order='calibration_first')
+    [2, 3, 4, 5, 0, 6]
     """
+    if order not in ("ascending", "calibration_first"):
+        raise ValueError("order must be 'ascending' or 'calibration_first'")
+
     sampled = {i for i in range(n) if (i % r) == 0}
+    calibration: list[int] = []
     if acs_lines > 0:
         center = n // 2
         start = max(0, center - acs_lines // 2)
         stop = min(n, start + acs_lines)
-        for i in range(start, stop):
-            sampled.add(i)
-    return sorted(sampled)
+        calibration = list(range(start, stop))
+        sampled.update(calibration)
+    if order == "ascending":
+        return sorted(sampled)
+    return calibration + sorted(sampled.difference(calibration))
+
 
 def _as_coords(coords) -> np.ndarray:
     """Normalize a coordinate argument to an ``(N, 2)`` float array."""

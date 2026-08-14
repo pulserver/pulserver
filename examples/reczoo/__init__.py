@@ -1,21 +1,24 @@
 """Pulserver's reconstruction zoo: the recon each sequence is designed for.
 
 ``pyproject.toml`` packages this directory as :mod:`pulserver.reczoo`. A module
-here holds one :class:`pulserver.ReconApp` subclass and the module-level
+here holds one :class:`pulserver.ReconPlugin` subclass and the module-level
 ``PLUGIN`` instance the inline runtime discovers, so the same code runs offline
 on arrays and online on an MRD stream::
 
-    import numpy as np
     from pulserver import AcquisitionBucket, ReconContext
     from pulserver.reczoo import gre_2d
 
     bucket = AcquisitionBucket.from_arrays(kspace, labels={"kspace_encode_step_1": lines})
-    image = gre_2d.PLUGIN(bucket, ReconContext.offline()).data
+    image = gre_2d.PLUGIN(bucket, ReconContext.offline(header)).data
+
+Calling the plugin replays the bucket through the lifecycle the inline runtime
+drives, so the offline result is the streamed one. The MRD header comes along
+because that is what sizes the buffers a plugin allocates.
 
 Modules named after a :mod:`pulserver.seqzoo` sequence reconstruct that
-sequence and read what it encoded — its counters, its calibration flags, the
-echo position it recorded. The rest are single-purpose examples of one
-reconstruction primitive.
+sequence and read what it encoded — its counters and the flags marking where
+its calibration block and its slices end. The rest are single-purpose examples
+of one reconstruction primitive.
 """
 
 from __future__ import annotations

@@ -17,7 +17,7 @@ from typing import Any
 import ismrmrd
 import ismrmrd.xsd
 
-from ..app import ReconApp, ReconContext
+from ..plugin import ReconPlugin, ReconContext
 from .application import run_application
 from .concurrency import compute_max_concurrent
 from .connection import Connection, DataSaver, build_save_path
@@ -29,7 +29,7 @@ class Server:
     """TCP server that accepts ISMRMRD/MRD streaming connections.
 
     Each incoming connection is handled in a separate thread.  The server
-    reads the config message to determine which :class:`~pulserver.ReconApp`
+    reads the config message to determine which :class:`~pulserver.ReconPlugin`
     plugin to load, then privately adapts the MRD stream to acquisition buckets.
 
     Parameters
@@ -353,7 +353,7 @@ class Server:
     # Reconstruction-app resolution
     # ------------------------------------------------------------------
 
-    def _resolve_app(self, config: str) -> ReconApp:
+    def _resolve_app(self, config: str) -> ReconPlugin:
         """Resolve a ``PLUGIN`` reconstruction app from a *config* string.
 
         Resolution order:
@@ -361,7 +361,7 @@ class Server:
         1. ``importlib.import_module(config)`` (installed packages / sys.path),
            then Pulserver's private built-in app package.
         2. Search ``handler_dirs`` for ``<config>.py`` with a ``PLUGIN``
-           :class:`~pulserver.ReconApp` instance.
+           :class:`~pulserver.ReconPlugin` instance.
         3. Fall back to ``self.default_handler``.
 
         Parameters
@@ -371,7 +371,7 @@ class Server:
 
         Returns
         -------
-        ReconApp
+        ReconPlugin
             Configured reconstruction application.
         """
         # Direct absolute file path — load without the import system.
@@ -434,7 +434,7 @@ class Server:
         return _NullApp()
 
     @staticmethod
-    def _try_import_app(name: str) -> ReconApp | None:
+    def _try_import_app(name: str) -> ReconPlugin | None:
         """Import *name* and return its configured ``PLUGIN`` app."""
         candidates = (name, f"{__package__}.handlers.{name}")
         for candidate in candidates:
@@ -443,12 +443,12 @@ class Server:
             except ImportError:
                 continue
             app = getattr(module, "PLUGIN", None)
-            if isinstance(app, ReconApp):
+            if isinstance(app, ReconPlugin):
                 return app
         return None
 
     @staticmethod
-    def _load_app_from_file(name: str, path: str) -> ReconApp | None:
+    def _load_app_from_file(name: str, path: str) -> ReconPlugin | None:
         """Load *path* and return its configured ``PLUGIN`` app."""
         try:
             spec = importlib.util.spec_from_file_location(name, path)
@@ -457,9 +457,9 @@ class Server:
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
             app = getattr(module, "PLUGIN", None)
-            if isinstance(app, ReconApp):
+            if isinstance(app, ReconPlugin):
                 return app
-            logging.error("Recon plugin %s has no ReconApp PLUGIN instance", path)
+            logging.error("Recon plugin %s has no ReconPlugin PLUGIN instance", path)
         except Exception as exc:
             logging.error("Failed to load '%s' from %s: %s", name, path, exc)
         return None
@@ -491,7 +491,7 @@ class Server:
         return None
 
 
-class _NullApp(ReconApp):
+class _NullApp(ReconPlugin):
     """Consume acquisition buckets without producing output."""
 
     def recon(self, bucket, context):

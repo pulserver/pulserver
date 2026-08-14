@@ -1,24 +1,27 @@
 """The 2D Cartesian gradient-echo reconstruction of the recon zoo.
 
-Driven offline, on k-space sampled from an analytic phantom exactly the way
-:mod:`pulserver.seqzoo.gre_2d` samples it: the acquired phase encodes, the
-calibration block it flags, and a readout truncated before the echo.
+Driven over the acquisitions the runtime would stream, sampled from an analytic
+phantom exactly the way :mod:`pulserver.seqzoo.gre_2d` samples it: the
+calibration block first, then the remaining phase encodes, with a readout that
+may be truncated before the echo.
 """
 
 from __future__ import annotations
 
 from types import SimpleNamespace
 
+import ismrmrd
 import numpy as np
 import pytest
 
 import pulserver.pypulseq as pp
-from pulserver import AcquisitionBucket, ReconContext
+from pulserver import ReconContext
 from pulserver.reczoo import gre_2d
 
 N = 64
 N_ACS = 16
 ACCELERATION = 2
+COILS = 8
 
 
 @pytest.fixture(scope="module")
@@ -41,7 +44,7 @@ def coil_maps():
     """
     axis = np.linspace(-1.0, 1.0, N)
     y, x = np.meshgrid(axis, axis, indexing="ij")
-    angles = np.linspace(0.0, 2 * np.pi, 8, endpoint=False)
+    angles = np.linspace(0.0, 2 * np.pi, COILS, endpoint=False)
     maps = np.stack(
         [
             np.exp(-((x - 1.5 * np.cos(a)) ** 2 + (y - 1.5 * np.sin(a)) ** 2) / 3.0)
@@ -59,36 +62,67 @@ def kspace(phantom, coil_maps):
     return _fft2c(coil_maps * phantom).astype(np.complex64)
 
 
-@pytest.fixture
-def context():
-    matrix = SimpleNamespace(x=N, y=N, z=1)
-    space = SimpleNamespace(matrixSize=matrix)
-    return ReconContext.offline(
-        SimpleNamespace(encoding=[SimpleNamespace(encodedSpace=space)])
+def header(n_slices=1):
+    """The encoded and reconstructed spaces the plugin sizes its buffer from."""
+    return SimpleNamespace(
+        encoding=[
+            SimpleNamespace(
+                encodedSpace=SimpleNamespace(matrixSize=SimpleNamespace(x=N, y=N, z=1)),
+                reconSpace=SimpleNamespace(matrixSize=SimpleNamespace(x=N, y=N, z=1)),
+                encodingLimits=SimpleNamespace(
+                    slice=SimpleNamespace(minimum=0, maximum=n_slices - 1, center=0)
+                ),
+            )
+        ],
+        acquisitionSystemInformation=SimpleNamespace(receiverChannels=COILS),
     )
 
 
-def bucket(kspace, lines, n_samples=N, calibration=None):
-    """One slice's acquisitions, as the runtime would hand them over."""
-    center = n_samples - N // 2
+@pytest.fixture
+def context():
+    return ReconContext.offline(header())
 
-    def acquisitions(selected):
-        window = kspace[:, selected, N - n_samples :]
-        labels = {
-            "kspace_encode_step_1": np.asarray(selected),
-            "center_sample": np.full(len(selected), center),
-        }
-        return np.moveaxis(window, 1, 0), labels
 
-    data, labels = acquisitions(lines)
-    if calibration is None:
-        return AcquisitionBucket.from_arrays(data, labels=labels)
-    reference, reference_labels = acquisitions(calibration)
-    return AcquisitionBucket.from_arrays(
-        data,
-        labels=labels,
-        reference=reference,
-        reference_labels=reference_labels,
+def acquisitions(kspace, lines, *, n_samples=N, calibration=(), n_slices=1, slice_=0):
+    """One slice's acquisitions as the native objects the server sees.
+
+    The sequence acquires its calibration block first and flags the last line
+    of it, the last line of the scan closes both the trailing segment and the
+    slice, and a calibration line on the acceleration grid is imaging data too.
+    """
+    calibration = list(calibration)
+    ordered = calibration + [line for line in lines if line not in calibration]
+    stream = []
+    for index, line in enumerate(ordered):
+        acquisition = ismrmrd.Acquisition()
+        acquisition.resize(n_samples, kspace.shape[0])
+        acquisition.data[:] = kspace[:, line, N - n_samples :].astype(np.complex64)
+        acquisition.idx.kspace_encode_step_1 = int(line)
+        acquisition.idx.slice = int(slice_)
+        acquisition.idx.segment = int(index >= len(calibration))
+        acquisition.center_sample = n_samples - N // 2
+        if line in calibration:
+            acquisition.setFlag(
+                ismrmrd.ACQ_IS_PARALLEL_CALIBRATION_AND_IMAGING
+                if line % ACCELERATION == 0
+                else ismrmrd.ACQ_IS_PARALLEL_CALIBRATION
+            )
+        if calibration and index == len(calibration) - 1:
+            acquisition.setFlag(ismrmrd.ACQ_LAST_IN_SEGMENT)
+        if index == len(ordered) - 1:
+            acquisition.setFlag(ismrmrd.ACQ_LAST_IN_SEGMENT)
+            acquisition.setFlag(ismrmrd.ACQ_LAST_IN_SLICE)
+        stream.append(acquisition)
+    del n_slices
+    return stream
+
+
+def bucket(kspace, lines, n_samples=N, calibration=()):
+    """One slice's acquisitions, classified as the runtime classifies them."""
+    from pulserver.recon._mrd.application import _make_bucket
+
+    return _make_bucket(
+        acquisitions(kspace, lines, n_samples=n_samples, calibration=calibration), []
     )
 
 
@@ -101,8 +135,8 @@ def relative_error(image, reference):
 def reconstruct(*args, **kwargs):
     """The reconstructed image, transposed back onto the ``(y, x)`` grid.
 
-    The app transposes its output to the column/row order an image is read in;
-    the phantom and zero-filled fixtures here are defined on the ``(y, x)``
+    The plugin transposes its output to the column/row order an image is read
+    in; the phantom and zero-filled fixtures here are defined on the ``(y, x)``
     grid, so the test transposes back before comparing against them.
     """
     return gre_2d.PLUGIN(*args, **kwargs).data.T
@@ -131,11 +165,11 @@ def test_a_truncated_echo_is_filled_rather_than_zero_padded(kspace, phantom, con
 # ----------------------------------------------------------------------
 
 
-def test_the_calibration_block_selects_the_accelerated_branch(kspace, context):
-    """A bucket with reference acquisitions is unaliased, not just gridded."""
+def test_the_missing_lines_select_the_accelerated_branch(kspace, context):
+    """A slice with phase encodes missing is unaliased, not just gridded."""
     lines, calibration = _sampling()
     accelerated = gre_2d.PLUGIN(bucket(kspace, lines, calibration=calibration), context)
-    gridded = gre_2d.PLUGIN(bucket(kspace, lines), context)
+    gridded = gre_2d.PLUGIN(bucket(kspace, list(range(N))), context)
     assert accelerated.data.shape == gridded.data.shape == (N, N)
     assert not np.allclose(accelerated.data, gridded.data)
 
@@ -162,7 +196,7 @@ def test_an_accelerated_partial_echo_slice_reconstructs_on_the_full_grid(
 
 
 # ----------------------------------------------------------------------
-# What it reads out of the acquisitions
+# What it reads out of the header and the acquisitions
 # ----------------------------------------------------------------------
 
 
@@ -174,44 +208,114 @@ def test_the_matrix_comes_from_the_header_not_from_the_last_line(kspace, context
     assert image.shape == (N, N)
 
 
-def test_without_a_header_the_matrix_falls_back_to_what_arrived(kspace):
-    image = gre_2d.PLUGIN(bucket(kspace, list(range(N))), ReconContext.offline()).data
-    assert image.shape == (N, N)
+def test_without_a_header_the_buffer_cannot_be_sized(kspace):
+    with pytest.raises(ValueError, match="no encoding 0"):
+        gre_2d.PLUGIN(bucket(kspace, list(range(N))), ReconContext.offline())
+
+
+def test_the_image_is_cropped_to_the_reconstructed_matrix(kspace):
+    """The encoded grid carries readout oversampling; the image does not."""
+    oversampled = header()
+    oversampled.encoding[0].reconSpace.matrixSize.x = N // 2
+    result = gre_2d.PLUGIN(
+        bucket(kspace, list(range(N))), ReconContext.offline(oversampled)
+    )
+    assert result.data.shape == (N // 2, N)
 
 
 def test_the_sampling_matches_what_the_sequence_would_have_played():
-    lines, _ = _sampling()
+    lines, calibration = _sampling()
     assert lines == pp.calc_sampled_lines(N, ACCELERATION, N_ACS)
+    assert (
+        calibration + [line for line in lines if line not in calibration]
+        == pp.calc_sampled_lines(N, ACCELERATION, N_ACS, order="calibration_first")
+    )
 
 
 # ----------------------------------------------------------------------
-# Streaming: gridding as data arrives
+# Streaming: the lifecycle the runtime drives
 # ----------------------------------------------------------------------
 
 
-def test_gridding_on_arrival_matches_gridding_the_bucket(kspace, context):
-    """receive() grids each line as it arrives; recon() from that staged grid
-    equals recon() from the same bucket gridded in one go at the trigger."""
-    from pulserver import ExamCache
+def test_the_calibration_boundary_produces_maps_and_no_image(kspace, context):
+    """The ACS block closes a segment without closing the slice."""
+    lines, calibration = _sampling()
+    stream = acquisitions(kspace, lines, calibration=calibration)
+    boundary = len(calibration)
+
+    plugin = gre_2d.PLUGIN.spawn()
+    plugin.startup(context)
+    for acquisition in stream[:boundary]:
+        plugin.receive(acquisition, context)
     from pulserver.recon._mrd.application import _make_bucket
 
+    assert plugin.recon(_make_bucket(stream[:boundary], []), context) is None
+    assert 0 in plugin.coil_maps
+    assert boundary < len(stream)
+
+
+def test_calibrating_early_and_late_give_the_same_maps(kspace, context):
+    """Which boundary ran the calibration cannot change what it produced."""
     lines, calibration = _sampling()
-    acquisitions = _native_slice(kspace, lines, calibration)
-    bucket = _make_bucket(acquisitions, [])
+    stream = acquisitions(kspace, lines, calibration=calibration)
+    boundary = len(calibration)
 
-    # Streaming: startup, a line at a time, then recon from the staged grid.
-    streaming = ReconContext(header=context.header, exam=ExamCache("streaming"))
-    gre_2d.PLUGIN.startup(streaming)
-    for acquisition in acquisitions:
-        gre_2d.PLUGIN.receive(acquisition, streaming)
-    streamed = gre_2d.PLUGIN.recon(bucket, streaming).data
+    plugin = gre_2d.PLUGIN.spawn()
+    plugin.startup(context)
+    for acquisition in stream[:boundary]:
+        plugin.receive(acquisition, context)
+    early = gre_2d.sensitivities(*plugin.buffer[0])
+    for acquisition in stream[boundary:]:
+        plugin.receive(acquisition, context)
+    late = gre_2d.sensitivities(*plugin.buffer[0])
 
-    # Offline fallback: the same bucket, a fresh exam so nothing was staged.
-    offline = ReconContext(header=context.header, exam=ExamCache("offline"))
-    reconstructed = gre_2d.PLUGIN.recon(bucket, offline).data
+    np.testing.assert_allclose(early.numpy(), late.numpy(), atol=1e-5)
+
+
+def test_driving_the_lifecycle_by_hand_matches_calling_the_plugin(kspace, context):
+    """Calling the plugin replays the bucket through the very same hooks."""
+    lines, calibration = _sampling()
+    stream = acquisitions(kspace, lines, calibration=calibration)
+    from pulserver.recon._mrd.application import _make_bucket
+
+    plugin = gre_2d.PLUGIN.spawn()
+    plugin.startup(context)
+    for acquisition in stream[: len(calibration)]:
+        plugin.receive(acquisition, context)
+    plugin.recon(_make_bucket(stream[: len(calibration)], []), context)
+    for acquisition in stream[len(calibration) :]:
+        plugin.receive(acquisition, context)
+    streamed = plugin.recon(_make_bucket(stream, []), context).data
+
+    called = gre_2d.PLUGIN(bucket(kspace, lines, calibration=calibration), context).data
 
     assert streamed.shape == (N, N)
-    np.testing.assert_allclose(streamed, reconstructed, atol=1e-4)
+    np.testing.assert_allclose(streamed, called, atol=1e-4)
+
+
+def test_each_call_starts_from_a_clean_buffer(kspace, context):
+    """The module-level PLUGIN is a template, so nothing leaks between scans."""
+    first = reconstruct(bucket(kspace, list(range(N))), context)
+    second = reconstruct(bucket(kspace, list(range(N))), context)
+    np.testing.assert_allclose(first, second)
+    assert not hasattr(gre_2d.PLUGIN, "buffer")
+
+
+def test_a_second_slice_reconstructs_its_own_data(kspace, phantom):
+    """The buffer spans the volume, and recon picks the slice that just closed."""
+    lines = list(range(N))
+    stream = acquisitions(kspace, lines, slice_=1)
+    plugin = gre_2d.PLUGIN.spawn()
+    plugin.startup(ReconContext.offline(header(n_slices=2)))
+    for acquisition in stream:
+        plugin.receive(acquisition, ReconContext.offline(header(n_slices=2)))
+    from pulserver.recon._mrd.application import _make_bucket
+
+    image = plugin.recon(
+        _make_bucket(stream, []), ReconContext.offline(header(n_slices=2))
+    ).data.T
+    assert relative_error(image, phantom) < 1e-5
+    assert not plugin.buffer.mask[0].any()
 
 
 # %% private module subroutines
@@ -221,37 +325,6 @@ def _sampling():
     calibration = list(range(N // 2 - N_ACS // 2, N // 2 + N_ACS // 2))
     lines = sorted(set(range(0, N, ACCELERATION)) | set(calibration))
     return lines, calibration
-
-
-def _native_slice(kspace, lines, calibration):
-    """One slice's acquisitions as the native ismrmrd objects the server sees.
-
-    ACS lines carry the parallel-calibration flags the sequence's REF/IMA
-    labels become: a line on the acceleration grid is calibration-and-imaging,
-    one off it is calibration only.
-    """
-    import ismrmrd
-
-    coils = kspace.shape[0]
-    reference_lines = set(calibration)
-    acquisitions = []
-    for index, line in enumerate(lines):
-        acquisition = ismrmrd.Acquisition()
-        acquisition.resize(N, coils)
-        acquisition.data[:] = kspace[:, line, :].astype(np.complex64)
-        acquisition.idx.kspace_encode_step_1 = int(line)
-        acquisition.idx.slice = 0
-        acquisition.center_sample = N // 2
-        if line in reference_lines:
-            acquisition.setFlag(
-                ismrmrd.ACQ_IS_PARALLEL_CALIBRATION_AND_IMAGING
-                if line % ACCELERATION == 0
-                else ismrmrd.ACQ_IS_PARALLEL_CALIBRATION
-            )
-        if index == len(lines) - 1:
-            acquisition.setFlag(ismrmrd.ACQ_LAST_IN_SLICE)
-        acquisitions.append(acquisition)
-    return acquisitions
 
 
 def _fft2c(image):
@@ -271,7 +344,7 @@ def _ifft2c(kspace):
 
 
 def _zero_filled(kspace, lines, n_samples=N):
-    """What gridding alone would give, as the bar every branch has to clear."""
+    """What placing alone would give, as the bar every branch has to clear."""
     grid = np.zeros_like(kspace)
     grid[:, lines, N - n_samples :] = kspace[:, lines, N - n_samples :]
     return np.sqrt(np.sum(np.abs(_ifft2c(grid)) ** 2, axis=0))

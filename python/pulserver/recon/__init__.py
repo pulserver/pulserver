@@ -19,21 +19,22 @@ __all__ = [
     "AcquisitionBucket",
     "AcquisitionBucketStats",
     "ExamCache",
-    "ReconApp",
     "ReconContext",
+    "ReconPlugin",
     "ReconResult",
-    "app",
     "calibration",
     "datasets",
     "denoisers",
     "diffusion_table",
     "execution",
+    "has_acquisition_flag",
     "learned",
     "models",
     "motion",
     "optim",
     "physics",
     "pics",
+    "plugin",
     "postprocessing",
     "preprocessing",
     "simulation",
@@ -44,7 +45,6 @@ import importlib
 from typing import TYPE_CHECKING, Any
 
 _SUBMODULES = (
-    "app",
     "calibration",
     "datasets",
     "denoisers",
@@ -54,17 +54,19 @@ _SUBMODULES = (
     "motion",
     "optim",
     "physics",
+    "plugin",
     "postprocessing",
     "preprocessing",
     "simulation",
     "weights",
 )
-_APP_TYPES = {
+_PLUGIN_TYPES = {
     "AcquisitionBucket",
+    "has_acquisition_flag",
     "AcquisitionBucketStats",
     "ExamCache",
-    "ReconApp",
     "ReconContext",
+    "ReconPlugin",
     "ReconResult",
 }
 
@@ -73,8 +75,8 @@ def __getattr__(name: str) -> Any:
     """Lazily resolve public reconstruction modules and entry points."""
     if name in _SUBMODULES:
         return importlib.import_module(f"{__name__}.{name}")
-    if name in _APP_TYPES:
-        return getattr(importlib.import_module(f"{__name__}.app"), name)
+    if name in _PLUGIN_TYPES:
+        return getattr(importlib.import_module(f"{__name__}.plugin"), name)
     if name == "pics":
         return importlib.import_module(f"{__name__}.optim").pics
     if name == "diffusion_table":
@@ -90,7 +92,6 @@ def __dir__() -> list[str]:
 
 
 if TYPE_CHECKING:
-    from . import app as app
     from . import calibration as calibration
     from . import datasets as datasets
     from . import denoisers as denoisers
@@ -100,14 +101,16 @@ if TYPE_CHECKING:
     from . import motion as motion
     from . import optim as optim
     from . import physics as physics
+    from . import plugin as plugin
     from . import postprocessing as postprocessing
     from . import preprocessing as preprocessing
     from . import simulation as simulation
     from . import weights as weights
     from .optim import pics as pics
-    from .app import AcquisitionBucket as AcquisitionBucket
-    from .app import AcquisitionBucketStats as AcquisitionBucketStats
-    from .app import ExamCache as ExamCache
-    from .app import ReconApp as ReconApp
-    from .app import ReconContext as ReconContext
-    from .app import ReconResult as ReconResult
+    from .plugin import AcquisitionBucket as AcquisitionBucket
+    from .plugin import AcquisitionBucketStats as AcquisitionBucketStats
+    from .plugin import ExamCache as ExamCache
+    from .plugin import has_acquisition_flag as has_acquisition_flag
+    from .plugin import ReconContext as ReconContext
+    from .plugin import ReconPlugin as ReconPlugin
+    from .plugin import ReconResult as ReconResult

@@ -56,6 +56,7 @@ def test_nlinv_public_api_is_class_based():
         "WavePSF",
         "WavePSFCalibration",
         "WavePSFResult",
+        "calibration_extent",
     ]
     assert not hasattr(calibration, "nlinv_sensitivities")
     assert not hasattr(calibration, "estimate_sensitivities")

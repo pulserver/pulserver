@@ -5,6 +5,12 @@ excitation. Phase encoding may be uniformly undersampled with a fully sampled
 autocalibration block, and the readout may be a partial echo; both are what
 :mod:`pulserver.reczoo.gre_2d` reads back.
 
+The autocalibration block is acquired ahead of everything else and the last
+line of it is flagged, so the reconstruction can estimate coil sensitivities
+from it while the rest of the scan is still running. That puts the centre of
+k-space -- which sets the image contrast -- at the very start, so ``n_dummy``
+repetitions are played first to reach the steady state.
+
 Transverse magnetisation is destroyed by quadratic RF spoiling together with
 the residual dephasing the readout leaves on its own axis, so the readout's
 ``spoiling_cycles`` is the whole gradient spoiling: adding a second spoiler
@@ -27,14 +33,13 @@ from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
-
 import pulserver.design as design
 import pulserver.pypulseq as pp
 from pulserver import (
     Description,
     DropdownFloatParam,
     DropdownIntParam,
-    Sequence,
+    SequencePlugin,
     TypeinFloatParam,
     UIParam,
     Validate,
@@ -58,6 +63,7 @@ class _Plan:
     readout: Any
     fov: tuple[float, float]
     sampled_lines: list[int]
+    n_calibration: int
     duration: float
 
 
@@ -76,6 +82,7 @@ def _plan(
     partial_echo: float = 1.0,
     acceleration: int = 1,
     n_acs: int = 24,
+    n_dummy: int = 16,
     spoiling_cycles: float = 4.0,
 ) -> _Plan:
     """Design one repetition, which is where every parameter is validated.
@@ -104,19 +111,29 @@ def _plan(
         partial_echo=partial_echo,
         readout_bandwidth_hz=readout_bandwidth_hz,
         spoiling_cycles=spoiling_cycles,
-        labels=("LIN", "SLC", "REF", "IMA"),
+        labels=("LIN", "SLC", "REF", "IMA", "SEG", "LASTSEG", "LASTSLC"),
     )
 
-    # One repetition per acquired line per slice; the readout has already
-    # padded itself to the per-slice TR, so the whole scan is simply their sum.
-    sampled_lines = pp.calc_sampled_lines(n_y, acceleration, n_acs)
-    duration = len(sampled_lines) * n_slices * readout.duration
+    # The autocalibration block is acquired first, so the reconstruction can
+    # estimate coil sensitivities from it while the rest of the scan is still
+    # running. It leads the traversal, so its length is where it ends.
+    sampled_lines = pp.calc_sampled_lines(
+        n_y, acceleration, n_acs, order="calibration_first"
+    )
+    n_calibration = min(n_acs, n_y) if n_acs > 0 else 0
+
+    # One repetition per acquired line per slice, plus the dummies that bring
+    # the magnetisation to steady state before the first of them; the readout
+    # has already padded itself to the per-slice TR, so the whole scan is
+    # simply their sum.
+    duration = (len(sampled_lines) + n_dummy) * n_slices * readout.duration
 
     return _Plan(
         excitation=excitation,
         readout=readout,
         fov=(fov_x, fov_y),
         sampled_lines=sampled_lines,
+        n_calibration=n_calibration,
         duration=duration,
     )
 
@@ -142,6 +159,7 @@ def main(
     partial_echo: float = 1.0,
     acceleration: int = 1,
     n_acs: int = 24,
+    n_dummy: int = 16,
     rf_spoiling_increment_deg: float = 117.0,
     spoiling_cycles: float = 4.0,
 ) -> pp.Sequence:
@@ -192,7 +210,12 @@ def main(
         Uniform phase-encode undersampling factor. Default is 1.
     n_acs : int, optional
         Number of fully sampled autocalibration lines at the center of
-        k-space. Default is 24.
+        k-space, acquired ahead of the rest of the scan. Default is 24.
+    n_dummy : int, optional
+        Repetitions played without acquiring, before the first line, to bring
+        the magnetisation to steady state. The autocalibration block leads the
+        traversal, so these are what keeps the centre of k-space -- which sets
+        the image contrast -- out of the transient. Default is 16.
     rf_spoiling_increment_deg : float, optional
         Quadratic RF spoiling phase increment in degrees. Default is 117.0.
     spoiling_cycles : float, optional
@@ -221,41 +244,46 @@ def main(
         partial_echo=partial_echo,
         acceleration=acceleration,
         n_acs=n_acs,
+        n_dummy=n_dummy,
         spoiling_cycles=spoiling_cycles,
     )
     excitation, readout = plan.excitation, plan.readout
     fov_x, fov_y = plan.fov
     sampled_lines = plan.sampled_lines
 
-    lin_label, slc_label, ref_label, ima_label = readout.adc_labels
+    (
+        lin_label,
+        slc_label,
+        ref_label,
+        ima_label,
+        seg_label,
+        last_seg_label,
+        last_slc_label,
+    ) = readout.adc_labels
     wait_te = getattr(readout, "wait_te", None)
     wait_tr = getattr(readout, "wait_tr", None)
 
     # The rest of the encoding plan: in which order the slices are excited, at
     # what offset, and the RF-spoiling phase every repetition is played with.
+    # The dummies share the schedule, so the spoiling phase the first acquired
+    # line sees is the one it would have seen mid-scan.
     acs_start = max(0, n_y // 2 - n_acs // 2)
     acs_stop = min(n_y, acs_start + n_acs)
+    last_line = len(sampled_lines) - 1
+    last_calibration_line = plan.n_calibration - 1
     slice_indices = pp.calc_traversal_order(n_slices, slice_order)
     slice_positions = (np.arange(n_slices) - (n_slices - 1) / 2) * (
         slice_thickness + slice_gap
     )
     rf_phases = pp.make_rf_spoiling_schedule(
-        len(sampled_lines) * n_slices,
+        (len(sampled_lines) + n_dummy) * n_slices,
         increment=np.deg2rad(rf_spoiling_increment_deg),
     )
 
     seq = pp.Sequence(system)
-    for i_phase, line in enumerate(sampled_lines):
-        ky = (line - n_y / 2) / (n_y / 2)
-        is_calibration = acs_start <= line < acs_stop
-        on_grid = line % acceleration == 0
-        # A calibration line that also lies on the acceleration grid is both
-        # reference and imaging data; one that does not is reference only.
-        # Label state persists, so both flags are written every repetition.
-        lin_label.value = line
-        ref_label.value = int(is_calibration and not on_grid)
-        ima_label.value = int(is_calibration and on_grid)
 
+    def repetition(i_phase: int, ky: float, acquire: bool) -> None:
+        """Play one TR of every slice, acquiring or not."""
         for i_slice in slice_indices:
             rf_phase = rf_phases[i_phase * n_slices + i_slice]
             readout.rf.freq_offset = excitation.gz.amplitude * slice_positions[i_slice]
@@ -275,10 +303,39 @@ def main(
                     pp.scale_grad(readout.gy_pre, ky),
                     readout.gz_reph,
                 )
-            seq.add_block(readout.gx, readout.adc, *readout.adc_labels)
+            if acquire:
+                seq.add_block(readout.gx, readout.adc, *readout.adc_labels)
+            else:
+                seq.add_block(readout.gx)
             seq.add_block(readout.gx_spoil, pp.scale_grad(readout.gy_rew, ky))
             if wait_tr is not None:
                 seq.add_block(wait_tr)
+
+    # Steady state first: the same repetition without its ADC, so the
+    # magnetisation the first acquired line sees is the one every later line
+    # sees. The centre of k-space is acquired first and sets the contrast, so
+    # this is what the ordering costs.
+    for i_dummy in range(n_dummy):
+        repetition(i_dummy, 0.0, acquire=False)
+
+    for i_phase, line in enumerate(sampled_lines):
+        ky = (line - n_y / 2) / (n_y / 2)
+        is_calibration = acs_start <= line < acs_stop
+        on_grid = line % acceleration == 0
+        # A calibration line that also lies on the acceleration grid is both
+        # reference and imaging data; one that does not is reference only.
+        # Label state persists, so every flag is written every repetition.
+        lin_label.value = line
+        ref_label.value = int(is_calibration and not on_grid)
+        ima_label.value = int(is_calibration and on_grid)
+        # The calibration block is segment zero and the rest segment one; the
+        # last line of each says so, which is what lets a reconstruction
+        # calibrate the moment the block is complete rather than at the end.
+        seg_label.value = int(i_phase > last_calibration_line)
+        last_seg_label.value = int(i_phase in (last_calibration_line, last_line))
+        last_slc_label.value = int(i_phase == last_line)
+
+        repetition(n_dummy + i_phase, ky, acquire=True)
 
     is_ok, error_report = seq.check_timing()
     if not is_ok:
@@ -302,7 +359,7 @@ def main(
     return seq
 
 
-class Gre2D(Sequence):
+class Gre2D(SequencePlugin):
     """The 2D gradient echo behind the scanner protocol contract."""
 
     def get_default_protocol(self, opts: pp.Opts) -> dict[str, dict]:
@@ -431,6 +488,15 @@ class Gre2D(Sequence):
                     unit="",
                     validate=Validate.NONE,
                 ),
+                UIParam.user_name(2): Description(text="Dummy scans"),
+                UIParam.user_value(2): TypeinFloatParam(
+                    value=16.0,
+                    min=0.0,
+                    max=128.0,
+                    incr=1.0,
+                    unit="TR",
+                    validate=Validate.NONE,
+                ),
             }
         )
 
@@ -457,6 +523,7 @@ class Gre2D(Sequence):
                 partial_echo=kwargs["partial_echo"],
                 acceleration=kwargs["acceleration"],
                 n_acs=kwargs["n_acs"],
+                n_dummy=kwargs["n_dummy"],
             )
         except ValueError as error:
             return {"valid": False, "duration": None, "info": str(error)}
@@ -508,6 +575,7 @@ def _main_kwargs(opts: pp.Opts, protocol: dict[str, dict]) -> dict:
             1, round(params.param_float_optional(prot, UIParam.RY, 1.0))
         ),
         "n_acs": params.acs_lines_from_protocol(prot, n_y, 0),
+        "n_dummy": max(0, round(params.user_float(prot, 2, 16.0))),
     }
 
 

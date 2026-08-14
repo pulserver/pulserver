@@ -136,6 +136,33 @@ def test_a_written_sequence_reads_back_to_the_same_bytes(seq, tmp_path):
     assert again.read_bytes() == text
 
 
+def test_the_acquisition_boundary_flags_survive_a_file_round_trip(tmp_path):
+    """LASTSLC and LASTSEG are names Pulseq does not define.
+
+    They reach a reconstruction through the file rather than through the
+    interpreter, so what matters is that a writer puts them back exactly as it
+    read them -- and that using one raises the file to the revision that says
+    it carries a label Pulseq did not name.
+    """
+    assert {"LASTSLC", "LASTSEG"} <= set(pp.get_supported_labels())
+
+    seq = pp.Sequence()
+    seq.add_block(pp.make_delay(1e-3), pp.make_label("LASTSEG", "SET", 1))
+    seq.add_block(pp.make_delay(1e-3), pp.make_label("LASTSLC", "SET", 1))
+
+    path = tmp_path / "boundaries.seq"
+    seq.write(path)
+    text = path.read_text()
+    assert "LASTSEG" in text and "LASTSLC" in text
+    assert "revision 2" in text
+
+    back = pp.Sequence()
+    back.read(path)
+    again = tmp_path / "again.seq"
+    back.write(again)
+    assert again.read_text() == text
+
+
 def test_write_returns_the_signature_of_the_file_it_wrote(seq, tmp_path):
     """Upstream returns the hash, and callers store it beside the file.
 

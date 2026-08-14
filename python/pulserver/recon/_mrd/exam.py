@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from threading import RLock
 from typing import Any
 
-from ..app import ExamCache
+from ..plugin import ExamCache
 from .metadata import user_parameter
 
 

@@ -56,14 +56,23 @@ def test_one_repetition_per_acquired_line_and_slice():
 
 def test_the_repetition_time_is_per_slice_not_per_slice_group():
     """Successive excitations of the *same* slice are one TR apart."""
-    seq = design(n_slices=4, tr=40e-3, n_acs=0)
+    seq = design(n_slices=4, tr=40e-3, n_acs=0, n_dummy=0)
     assert seq.duration()[0] == pytest.approx(N_Y * 40e-3)
 
 
 def test_the_acquired_lines_are_the_ones_the_sampling_plan_asked_for():
     seq = design(acceleration=2, n_acs=8)
-    expected = np.asarray(pp.calc_sampled_lines(N_Y, 2, 8))
+    expected = np.asarray(
+        pp.calc_sampled_lines(N_Y, 2, 8, order="calibration_first")
+    )
     assert np.array_equal(acquired_lines(seq), expected)
+
+
+def test_the_calibration_block_is_acquired_before_anything_else():
+    """The reconstruction calibrates from it while the scan is still running."""
+    seq = design(acceleration=2, n_acs=8)
+    lines = acquired_lines(seq)
+    assert set(lines[:8].tolist()) == set(range(N_Y // 2 - 4, N_Y // 2 + 4))
 
 
 def test_the_line_counter_agrees_with_where_the_line_actually_is():
@@ -99,6 +108,37 @@ def test_a_calibration_line_on_the_grid_is_imaging_data_too():
 def test_an_unaccelerated_scan_flags_nothing():
     labels = design(acceleration=1, n_acs=8).evaluate_labels(evolution="adc")
     assert not labels["REF"].any()
+
+
+def test_the_calibration_block_closes_a_segment_of_its_own():
+    """SEG separates calibration from the rest; LASTSEG says where it ends."""
+    seq = design(n_slices=2, tr=60e-3, acceleration=2, n_acs=8)
+    labels = seq.evaluate_labels(evolution="adc")
+    calibration = _in_calibration(labels["LIN"], 8)
+    assert np.array_equal(labels["SEG"] == 0, calibration)
+
+    # Once per slice at the end of the calibration block, and once per slice at
+    # the end of the scan -- a segment closes for every slice it spans.
+    closing = labels["LIN"][labels["LASTSEG"] == 1]
+    assert sorted(closing.tolist()) == sorted([N_Y // 2 + 3] * 2 + [N_Y - 2] * 2)
+
+
+def test_the_last_line_of_each_slice_says_so():
+    """LASTSLC is what tells a reconstruction the slice is complete."""
+    seq = design(n_slices=3, tr=90e-3, acceleration=2, n_acs=8)
+    labels = seq.evaluate_labels(evolution="adc")
+    assert int((labels["LASTSLC"] == 1).sum()) == 3
+    assert sorted(labels["SLC"][labels["LASTSLC"] == 1].tolist()) == [0, 1, 2]
+
+
+def test_dummy_repetitions_are_played_without_acquiring():
+    """They cost time and reach the steady state, and carry no data."""
+    acquired = len(design(n_dummy=0).evaluate_labels(evolution="adc")["LIN"])
+    with_dummies = design(n_dummy=5)
+    assert len(with_dummies.evaluate_labels(evolution="adc")["LIN"]) == acquired
+    assert with_dummies.duration()[0] == pytest.approx(
+        design(n_dummy=0).duration()[0] + 5 * 30e-3
+    )
 
 
 def _in_calibration(lines, n_acs):
@@ -176,7 +216,7 @@ def test_a_feasible_protocol_reports_its_scan_time():
     protocol = gre_2d.PLUGIN.get_default_protocol(opts)
     result = gre_2d.PLUGIN.validate_protocol(opts, protocol)
     assert result["valid"]
-    assert result["duration"] == pytest.approx(128 * 0.25)
+    assert result["duration"] == pytest.approx((128 + 16) * 0.25)
 
 
 def test_an_impossible_echo_time_is_refused_by_name():

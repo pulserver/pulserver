@@ -9,9 +9,10 @@ It deliberately exports *no* authoring helpers. Those are split across two
 namespaces by role, so a plugin's parts stay visibly separate:
 
 ```python
-import pulserver.pypulseq as pp           # events, Sequence, Opts
-import pulserver.design as design         # modules and scan loops
-from pulserver import Sequence, UIParam   # plugin contract
+import pulserver.pypulseq as pp             # events, Sequence, Opts
+import pulserver.design as design           # modules and scan loops
+from pulserver import SequencePlugin        # sequence plugin contract
+from pulserver import ReconPlugin           # reconstruction plugin contract
 ```
 
 {doc}`pulserver.pypulseq <pypulseq>` is the event layer: upstream PyPulseq
@@ -26,17 +27,18 @@ they are written against.
 
 ## Plugin contracts
 
-The base class a plugin builds on, plus the entry point that turns one into a
-command-line tool. `Sequence` (alias `PulseqSequence`) declares the default
-protocol and synthesises the `.seq` file.
+The base classes a plugin builds on, plus the entry point that turns one into a
+command-line tool. `SequencePlugin` declares the default protocol and
+synthesises the `.seq` file; `ReconPlugin` is its counterpart on the
+reconstruction side.
 
 ```{eval-rst}
 .. autosummary::
    :toctree: generated/pulserver
    :nosignatures:
 
-   pulserver.PulseqSequence
-   pulserver.Sequence
+   pulserver.SequencePlugin
+   pulserver.ReconPlugin
    pulserver.run_cli
 ```
 

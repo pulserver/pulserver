@@ -1,10 +1,11 @@
-"""Public contract for offline and inline reconstruction applications.
+"""Public contract for offline and inline reconstruction plugins.
 
 A reconstruction plugin is a regular Python module containing one
-:class:`ReconApp` subclass and a module-level ``PLUGIN`` instance. The same
-``recon`` method can be called directly for offline work or driven, alongside
-the optional ``startup``/``receive``/``finalize`` lifecycle hooks, by
-Pulserver's private MRD runtime for inline reconstruction.
+:class:`ReconPlugin` subclass and a module-level ``PLUGIN`` instance.
+Pulserver's private MRD runtime drives its lifecycle hooks over an inline
+stream; calling the instance replays a ready bucket through the very same
+hooks, so a plugin has one behaviour rather than an online one and an offline
+one.
 
 The data model keeps Gadgetron's familiar acquisition-bucket vocabulary while
 adding array conveniences for users concerned only with reconstruction. MRD
@@ -13,8 +14,8 @@ connections, framing, close handling, and output serialization remain private.
 Examples
 --------
 >>> import numpy as np
->>> from pulserver import AcquisitionBucket, ReconApp, ReconContext, ReconResult
->>> class RootSumOfSquares(ReconApp):
+>>> from pulserver import AcquisitionBucket, ReconPlugin, ReconContext, ReconResult
+>>> class RootSumOfSquares(ReconPlugin):
 ...     def recon(self, bucket, context):
 ...         del context
 ...         kspace = bucket.kspace()
@@ -34,11 +35,13 @@ __all__ = [
     "AcquisitionBucket",
     "AcquisitionBucketStats",
     "ExamCache",
-    "ReconApp",
     "ReconContext",
+    "ReconPlugin",
     "ReconResult",
+    "has_acquisition_flag",
 ]
 
+import copy
 import logging
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Hashable, Iterator, Mapping, MutableMapping
@@ -48,6 +51,8 @@ from types import SimpleNamespace
 from typing import Any
 
 import numpy as np
+
+from ._mrd.metadata import has_acquisition_flag
 
 
 @dataclass(frozen=True)
@@ -87,6 +92,12 @@ class AcquisitionBucket:
         One stats object per encoding space in ``ref``.
     waveforms
         Scanner waveforms associated with this bucket.
+    acquisitions
+        Every acquisition in the order it arrived, which is the order a
+        reconstruction replaying the bucket has to see them in, and whose last
+        entry is the one that ended the bucket. ``data`` and ``ref`` are
+        classified views over this. Left empty, it is derived from them, and
+        reference-only acquisitions then follow the imaging ones.
 
     Notes
     -----
@@ -101,6 +112,18 @@ class AcquisitionBucket:
     ref: tuple[Any, ...] = ()
     refstats: tuple[AcquisitionBucketStats, ...] = ()
     waveforms: tuple[Any, ...] = ()
+    acquisitions: tuple[Any, ...] = ()
+
+    def __post_init__(self) -> None:
+        """Derive the arrival order from the classified views when unset."""
+        if self.acquisitions:
+            return
+        extra = tuple(
+            acquisition
+            for acquisition in self.ref
+            if not any(acquisition is item for item in self.data)
+        )
+        object.__setattr__(self, "acquisitions", self.data + extra)
 
     @classmethod
     def from_arrays(
@@ -369,7 +392,7 @@ class ExamCache(MutableMapping[Hashable, Any]):
 
 @dataclass(frozen=True)
 class ReconContext:
-    """Scan context passed to :meth:`ReconApp.recon`.
+    """Scan context passed to :meth:`ReconPlugin.recon`.
 
     ``header`` and ``config`` intentionally retain the names used by the
     Gadgetron Python connection. ``exam`` is Pulserver's only addition.
@@ -405,66 +428,110 @@ class ReconContext:
         return self.exam.exam_id
 
 
-class ReconApp(ABC):
+class ReconPlugin(ABC):
     """Base class for Pulserver reconstruction plugins.
 
     A plugin module creates one configured instance named ``PLUGIN``, and the
     private inline runtime discovers it -- no registration or connection
-    callback is required. Like a sequence plugin, an app is a handful of
-    lifecycle hooks the runtime drives over one MRD stream:
+    callback is required. Like a sequence plugin, a reconstruction plugin is a
+    handful of lifecycle hooks the runtime drives over one MRD stream:
 
     :meth:`startup`
-        Once, when the stream opens, before any acquisition. Prepare
-        exam-scoped state. *Optional.*
+        Once, when the stream opens, before any acquisition. Allocate the
+        buffers the scan will fill. *Optional.*
     :meth:`receive`
         For every accepted acquisition, as it arrives. Do the per-acquisition
-        work -- filtering, sorting, gridding -- here, so it overlaps
+        work -- filtering, sorting, placing -- here, so it overlaps
         acquisition dead time instead of waiting for the trigger. *Optional.*
     :meth:`recon`
-        Once per bucket, at the ``split_on`` boundary, on the Gadgetron-style
+        Once per bucket, at each ``split_on`` boundary, on the Gadgetron-style
         :class:`AcquisitionBucket` the runtime has assembled. Produce the
         images. **Required** -- it is the reconstruction.
-    :meth:`finalize`
-        Once, when the stream closes, after the last bucket. Emit any trailing
-        output and release exam-scoped state. *Optional.*
 
-    Only :meth:`recon` is mandatory; the default hooks do nothing, so an app
-    that grids at trigger time overrides :meth:`recon` alone. Calling the
-    instance runs :meth:`recon` directly for offline work on a ready bucket.
+    Only :meth:`recon` is mandatory; the default hooks do nothing, so a plugin
+    that does everything at trigger time overrides :meth:`recon` alone.
 
-    ``ReconApp`` instances may serve concurrent scanner connections. Keep their
-    attributes immutable after construction and store mutable, exam-specific
-    state in ``context.exam``, which is where the streaming hooks hand work to
-    one another.
+    Triggers
+    --------
+    ``split_on`` may name several flags rather than one, and then
+    :meth:`recon` runs at each of them and decides for itself what that
+    boundary meant. A scan whose autocalibration block completes long before
+    the slice does is the case this exists for: the earlier trigger arrives
+    with the calibration data in hand, so :meth:`recon` estimates the coil
+    sensitivities and returns ``None``, and the later one reconstructs the
+    image. :func:`has_acquisition_flag` on the last acquisition of the bucket
+    is what tells them apart.
+
+    Nothing forces the split to mean anything in particular: a bucket that
+    produces no image simply returns ``None``, exactly as a data sink does.
+
+    State
+    -----
+    Each stream reconstructs through its own instance, which :meth:`spawn`
+    produces from the module-level ``PLUGIN`` -- so a buffer allocated in
+    :meth:`startup` and filled in :meth:`receive` belongs on ``self``, and two
+    concurrent scanner connections cannot see each other's. ``context.exam``
+    is the separate, *exam*-scoped cache: it outlives the stream and is how
+    successive sequences of one exam share an artifact. A plugin reads and adds
+    to it, and never clears it.
+
+    Calling the instance drives the same lifecycle offline over a ready bucket,
+    so a plugin needs no second code path for data it did not stream.
+
+    Buffers
+    -------
+    Acquisitions the scanner marks as calibration are usually imaging data too,
+    and then one buffer holds everything: the autocalibration region is its
+    fully sampled centre, and a calibration reads a portion of it. A sequence
+    whose calibration is genuinely excluded from the imaging k-space is the
+    other arrangement -- allocate two buffers in :meth:`startup`, route each
+    acquisition in :meth:`receive` on ``ACQ_IS_PARALLEL_CALIBRATION``, and
+    select between them by which trigger fired.
 
     Parameters
     ----------
     split_on
-        Named acquisition flag ending one bucket. ``None`` produces one bucket
-        at end of stream.
+        Named acquisition flag ending one bucket, or several of them. ``None``
+        produces one bucket at end of stream.
     require_flags
         Flags every acquisition entering the bucket must contain.
     reject_flags
         Flags that exclude an acquisition. A rejected acquisition may still
-        end a bucket when it contains ``split_on``.
+        end a bucket when it contains one of ``split_on``.
+
+    Attributes
+    ----------
+    split_on : tuple
+        The flags as a tuple, whatever form they were given in. Empty when the
+        stream is one bucket.
     """
 
     def __init__(
         self,
         *,
-        split_on: int | str | None = "ACQ_LAST_IN_MEASUREMENT",
+        split_on: int | str | tuple[int | str, ...] | None = "ACQ_LAST_IN_MEASUREMENT",
         require_flags: tuple[int | str, ...] = (),
         reject_flags: tuple[int | str, ...] = (),
     ) -> None:
-        self.split_on = split_on
+        self.split_on = _flags(split_on)
         self.require_flags = tuple(require_flags)
         self.reject_flags = tuple(reject_flags)
 
+    def spawn(self) -> ReconPlugin:
+        """Return the working instance one stream reconstructs through.
+
+        A shallow copy, so anything expensive the configured plugin holds -- a
+        loaded network, a compiled operator -- is shared rather than duplicated,
+        while whatever the lifecycle hooks assign stays private to the stream.
+        Override to isolate something a shallow copy would still share.
+        """
+        return copy.copy(self)
+
     def startup(self, context: ReconContext) -> None:
-        """Prepare exam-scoped state before the first acquisition arrives.
+        """Allocate what the scan will fill, before the first acquisition.
 
         Runs once when the stream opens. The default does nothing; override to
-        allocate buffers or load a reusable calibration into ``context.exam``.
+        size buffers from ``context.header`` and put them on ``self``.
         """
         del context
 
@@ -472,10 +539,10 @@ class ReconApp(ABC):
         """Fold one acquisition into the reconstruction as it arrives.
 
         Runs for every accepted acquisition, before its bucket is complete, so
-        per-acquisition work -- filtering, sorting, gridding -- overlaps
-        acquisition dead time rather than waiting for the trigger. State
-        belongs in ``context.exam``. The default does nothing, leaving
-        :meth:`recon` to do the work at the trigger from the assembled bucket.
+        per-acquisition work -- filtering, sorting, placing -- overlaps
+        acquisition dead time rather than waiting for the trigger. The default
+        does nothing, leaving :meth:`recon` to do the work at the trigger from
+        the assembled bucket.
         """
         del acquisition, context
 
@@ -492,19 +559,23 @@ class ReconApp(ABC):
         """
         ...
 
-    def finalize(self, context: ReconContext) -> Any:
-        """Emit any trailing output once the stream has closed.
-
-        Runs once after the last bucket. The default returns ``None``; override
-        to flush an aggregate result or release exam-scoped state. The return
-        value is emitted exactly as :meth:`recon`'s is.
-        """
-        del context
-        return None
-
     def __call__(self, bucket: AcquisitionBucket, context: ReconContext) -> Any:
-        """Run :meth:`recon` directly outside the inline server, on a ready bucket."""
-        return self.recon(bucket, context)
+        """Reconstruct a ready bucket outside the inline server.
+
+        Replays the bucket's acquisitions through the same lifecycle the
+        runtime drives -- :meth:`startup`, then :meth:`receive` per
+        acquisition, then :meth:`recon` -- on a fresh :meth:`spawn`. A plugin
+        therefore reconstructs assembled data exactly as it reconstructs
+        streamed data, and this instance is left untouched.
+
+        The bucket is one boundary, whatever number of them the stream would
+        have had, so a plugin that splits several ways sees only the last.
+        """
+        plugin = self.spawn()
+        plugin.startup(context)
+        for acquisition in bucket.acquisitions:
+            plugin.receive(acquisition, context)
+        return plugin.recon(bucket, context)
 
 
 # %% private module subroutines
@@ -540,8 +611,25 @@ def _split_optional_leading(value: Any | None, length: int) -> tuple[Any | None,
     return values
 
 
+def _flags(value: Any) -> tuple[Any, ...]:
+    """Normalise one flag, several, or none into a tuple."""
+    if value is None:
+        return ()
+    if isinstance(value, (str, int)):
+        return (value,)
+    return tuple(value)
+
+
 def _labels_at(labels: Mapping[str, Any], index: int) -> dict[str, int]:
-    return {name: int(value[index]) for name, value in labels.items()}
+    """Return one acquisition's counters, every encoding counter present.
+
+    Counters the caller did not supply read as zero rather than being absent,
+    so ``acquisition.idx.slice`` answers for an offline acquisition the same
+    way it answers for a streamed one.
+    """
+    counters = dict.fromkeys(AcquisitionBucketStats.__dataclass_fields__, 0)
+    counters.update({name: int(value[index]) for name, value in labels.items()})
+    return counters
 
 
 def _stack_or_tuple(values: tuple[Any, ...]) -> Any:

@@ -265,7 +265,7 @@ def test_protocol_validation_rejects_invalid_key_value_pairs():
 
 
 def test_top_level_package_re_exports_core_api():
-    assert pulserver.PulseqSequence is not None
+    assert pulserver.SequencePlugin is not None
     assert pulserver.UIParam.TE == UIParam.TE
     assert pulserver.TypeinFloatParam is TypeinFloatParam
     assert not hasattr(pulserver, "FloatParam")
