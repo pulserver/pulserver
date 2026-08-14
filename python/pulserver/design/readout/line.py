@@ -224,7 +224,13 @@ class _LineReadout(SequenceModule):
         pre_area = -n_pre * delta_kx
         post_area = -n_post * delta_kx
 
-        if spoiling_position == "pre" and spoil_area:
+        # A bridge replaces a ramp the readout lobe then does not play, which
+        # is only coherent when that lobe is the one the spoiler joins: an
+        # echo train reuses one lobe -- and one ADC delay -- per echo, so
+        # every ramp must stay and the spoiler keeps its own.
+        bridged = bool(spoil_area) and n_echoes == 1
+
+        if spoiling_position == "pre" and bridged:
             # Bridged into the readout lobe: the prewinder climbs to the
             # plateau itself, so its area *is* the k the flat top starts at and
             # the lobe keeps a ramp only on the far side.
@@ -235,20 +241,22 @@ class _LineReadout(SequenceModule):
             # half a ramp of k while it does. Uncompensated, that offsets the
             # whole line -- which a reconstruction sees as a first-order phase
             # rather than as an error, so nothing downstream would report it.
-            gx_pre = pp.make_trapezoid(
-                channel="x", area=pre_area - 0.5 * rise_time * amplitude, system=system
-            )
+            area = pre_area - 0.5 * rise_time * amplitude
+            if spoiling_position == "pre" and spoil_area:
+                area -= spoil_area
+            gx_pre = pp.make_trapezoid(channel="x", area=area, system=system)
             flat_top_start = rise_time
 
-        if spoiling_position == "post" and spoil_area:
+        if spoiling_position == "post" and bridged:
             gx_spoil = bridge(system, "x", post_area + spoil_area, amplitude, 0.0)
         else:
-            gx_spoil = pp.make_trapezoid(
-                channel="x", area=post_area - 0.5 * fall_time * amplitude, system=system
-            )
+            area = post_area - 0.5 * fall_time * amplitude
+            if spoiling_position == "post" and spoil_area:
+                area += spoil_area
+            gx_spoil = pp.make_trapezoid(channel="x", area=area, system=system)
 
         # A bridge already supplies the ramp on the side it joins.
-        if spoil_area:
+        if bridged:
             gx = _reshape_readout(
                 system, gx, spoiling_position == "pre", spoiling_position == "post"
             )

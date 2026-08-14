@@ -25,7 +25,22 @@ from __future__ import annotations
 
 import importlib
 
-__all__ = ["gre_2d", "inline_fft", "sms_epi", "subspace_basis"]
+__all__ = [
+    "bssfp_2d",
+    "bssfp_3d",
+    "fse_2d",
+    "fse_3d",
+    "gre_2d",
+    "gre_3d",
+    "gre_multiecho_2d",
+    "gre_multiecho_3d",
+    "inline_fft",
+    "mprage_3d",
+    "se_2d",
+    "se_3d",
+    "sms_epi",
+    "subspace_basis",
+]
 
 
 def __getattr__(name: str):

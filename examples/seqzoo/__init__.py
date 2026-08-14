@@ -30,7 +30,19 @@ from __future__ import annotations
 
 import importlib
 
-__all__ = ["gre_2d"]
+__all__ = [
+    "bssfp_2d",
+    "bssfp_3d",
+    "fse_2d",
+    "fse_3d",
+    "gre_2d",
+    "gre_3d",
+    "gre_multiecho_2d",
+    "gre_multiecho_3d",
+    "mprage_3d",
+    "se_2d",
+    "se_3d",
+]
 
 
 def __getattr__(name: str):

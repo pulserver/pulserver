@@ -34,8 +34,18 @@ branches need.
    :toctree: generated/reczoo
    :nosignatures:
 
+   pulserver.reczoo.bssfp_2d
+   pulserver.reczoo.bssfp_3d
+   pulserver.reczoo.fse_2d
+   pulserver.reczoo.fse_3d
    pulserver.reczoo.gre_2d
+   pulserver.reczoo.gre_3d
+   pulserver.reczoo.gre_multiecho_2d
+   pulserver.reczoo.gre_multiecho_3d
    pulserver.reczoo.inline_fft
+   pulserver.reczoo.mprage_3d
+   pulserver.reczoo.se_2d
+   pulserver.reczoo.se_3d
    pulserver.reczoo.sms_epi
    pulserver.reczoo.subspace_basis
 ```

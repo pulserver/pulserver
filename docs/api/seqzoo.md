@@ -34,5 +34,15 @@ sequence, under the same module name.
    :toctree: generated/seqzoo
    :nosignatures:
 
+   pulserver.seqzoo.bssfp_2d
+   pulserver.seqzoo.bssfp_3d
+   pulserver.seqzoo.fse_2d
+   pulserver.seqzoo.fse_3d
    pulserver.seqzoo.gre_2d
+   pulserver.seqzoo.gre_3d
+   pulserver.seqzoo.gre_multiecho_2d
+   pulserver.seqzoo.gre_multiecho_3d
+   pulserver.seqzoo.mprage_3d
+   pulserver.seqzoo.se_2d
+   pulserver.seqzoo.se_3d
 ```
