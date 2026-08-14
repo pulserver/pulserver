@@ -51,7 +51,9 @@ from ._make_label import (  # noqa: F401
     canonical_label,
 )
 from ._masks import (
+    calc_calibration_lines as _calc_calibration_lines,
     calc_sampled_lines as _calc_sampled_lines,
+    calc_sampled_pairs as _calc_sampled_pairs,
     make_caipirinha_mask as _make_caipirinha_mask,
     make_centric_order as _make_centric_order,
     make_linear_order as _make_linear_order,
@@ -90,6 +92,7 @@ from ._make_rf_shim import make_rf_shim as _make_rf_shim
 from ._make_rotation import make_rotation as _make_rotation
 from ._opts import Opts as _Opts
 from ._opts import apply_system_derates as _apply_system_derates
+from ._opts import cap_system as _cap_system
 from ._sequence import Sequence as _Sequence
 from ._results import (
     AdcTimes as _AdcTimes,
@@ -161,6 +164,7 @@ Waveforms = _Waveforms
 WaveformsAndTimes = _WaveformsAndTimes
 Opts = _Opts
 apply_system_derates = _apply_system_derates
+cap_system = _cap_system
 ceil_to_raster = _ceil_to_raster
 round_to_raster = _round_to_raster
 quantize_readout_timing = _quantize_readout_timing
@@ -189,7 +193,9 @@ calc_epi_order = _calc_epi_order
 calc_golden_angles = _calc_golden_angles
 calc_projection_shell = _calc_projection_shell
 calc_raga_angles = _calc_raga_angles
+calc_calibration_lines = _calc_calibration_lines
 calc_sampled_lines = _calc_sampled_lines
+calc_sampled_pairs = _calc_sampled_pairs
 calc_tiny_golden_angles = _calc_tiny_golden_angles
 calc_traversal_order = _calc_traversal_order
 calc_uniform_angles = _calc_uniform_angles
@@ -284,11 +290,13 @@ BASE_FACTORIES = frozenset(
 #: :mod:`pulserver.design`, which holds only modules.
 SAMPLING = frozenset(
     {
+        "calc_calibration_lines",
         "calc_epi_order",
         "calc_golden_angles",
         "calc_projection_shell",
         "calc_raga_angles",
         "calc_sampled_lines",
+        "calc_sampled_pairs",
         "calc_tiny_golden_angles",
         "calc_traversal_order",
         "calc_uniform_angles",
@@ -310,6 +318,7 @@ SAMPLING = frozenset(
 SYSTEM = frozenset(
     {
         "apply_system_derates",
+        "cap_system",
         "ceil_to_raster",
         "make_phase_cycling_schedule",
         "make_rf_spoiling_schedule",
