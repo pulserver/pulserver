@@ -135,13 +135,14 @@ def reconstruct_plane(
         n_coils=n_coils,
     )
     # The measurement goes in as NumPy and the unaliased complex image comes
-    # straight back the same way.
+    # straight back the same way; the SENSE solve keeps a singleton coil axis,
+    # so index past both batch and channel to the plane.
     return pics(
         data[None],
         sense,
         regularization=regularization,
         iterations=iterations,
-    )[0]
+    )[0, 0]
 
 
 class GreRadial2DRecon(ReconPlugin):

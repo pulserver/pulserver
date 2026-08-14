@@ -113,14 +113,15 @@ class Zte3DRecon(ReconPlugin):
                 n_coils=n_coils,
             )
             # NumPy in, NumPy out: the unaliased complex volume comes straight
-            # back from the solve.
+            # back from the solve, which keeps a singleton coil axis, so index
+            # past both batch and channel to the volume.
             image = np.abs(
                 pics(
                     data[None],
                     sense,
                     regularization=self.regularization,
                     iterations=self.iterations,
-                )[0]
+                )[0, 0]
             )
 
         return ReconResult(
