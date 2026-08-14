@@ -25,7 +25,7 @@ class _WaveLinearPhysics(deepinv.physics.LinearPhysics):
         basis: Any,
         *,
         line_weights: Any | None = None,
-        viewed_as_real: bool = True,
+        viewed_as_real: bool = False,
         coil_batch_size: int = 1,
         cuda_transfer_precision: str = "auto",
     ) -> None:

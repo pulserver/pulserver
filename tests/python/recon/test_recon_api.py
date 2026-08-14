@@ -516,12 +516,13 @@ def test_cartesian_without_coil_maps_keeps_the_coils():
         dim=axes,
     )
     operator = physics.Cartesian2D(torch.ones(1, 1, n, n), img_size=(n, n))
-    measurement = torch.view_as_real(kspace[None])  # (1, coils, n, n, 2)
+    measurement = kspace[None]  # complex (1, coils, n, n)
 
     adjoint = operator.A_adjoint(measurement)
-    assert tuple(adjoint.shape) == (1, 2, coils, n, n)  # coils kept, not summed
+    assert adjoint.is_complex()
+    assert tuple(adjoint.shape) == (1, coils, n, n)  # coils kept, not summed
 
-    recovered = torch.view_as_complex(adjoint.movedim(1, -1).contiguous())[0]
+    recovered = adjoint[0]
     assert torch.allclose(recovered, coil_images, atol=1e-4)
 
     combined = coil_combine(recovered.numpy(), coil_axis=0)

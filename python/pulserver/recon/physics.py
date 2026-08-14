@@ -126,6 +126,25 @@ def _kspace_as_cpx(value: Any) -> Any:
     return torch.view_as_complex(value.contiguous())
 
 
+def _cartesian_image_as_real(value: Any) -> Any:
+    """Pack a complex Cartesian image into DeepInverse's channel-one real layout.
+
+    The Cartesian operators are DeepInverse ``MultiCoilMRI`` objects, which
+    carry the real and imaginary parts of an image in a dedicated axis at
+    position one -- ``(batch, 2, ...)`` -- rather than interleaved into the
+    channel axis the way :func:`_image_as_real` does for the mri-nufft path.
+    This is the single conversion the complex-native Cartesian boundary uses.
+    """
+    torch = import_module("torch")
+    return torch.view_as_real(value).movedim(-1, 1)
+
+
+def _cartesian_image_as_cpx(value: Any) -> Any:
+    """Restore a complex Cartesian image from the channel-one real layout."""
+    torch = import_module("torch")
+    return torch.view_as_complex(value.movedim(1, -1).contiguous())
+
+
 def measurement_to_trailing(value: Any) -> Any:
     """Move a measurement's real/imaginary axis from channel one to the end.
 
@@ -186,6 +205,44 @@ class _TrailingRealView(deepinv.physics.LinearPhysics):
     def A_adjoint_A(self, x: Any, **kwargs: Any) -> Any:
         """Apply the normal operator, which never leaves image space."""
         return self.operator.A_adjoint_A(x, **kwargs)
+
+
+class _CartesianComplexView(deepinv.physics.LinearPhysics):
+    """Present a trailing-real Cartesian operator as complex-native.
+
+    Wraps a :class:`_TrailingRealView` so images and measurements cross the
+    boundary as native complex tensors -- image ``(batch, [coils,] *spatial)``,
+    measurement ``(batch, coils, *kspace)`` -- packing to the two-channel real
+    layout DeepInverse's ``MultiCoilMRI`` works in only for the duration of one
+    call. It is the complex-facing dual of :class:`_TrailingRealView`, and the
+    only place the Cartesian real/complex conversion happens once the whole
+    stack is complex by default.
+    """
+
+    def __init__(self, operator: Any) -> None:
+        super().__init__()
+        self.operator = operator
+
+    def __getattr__(self, name: str) -> Any:
+        try:
+            return super().__getattr__(name)
+        except AttributeError:
+            return getattr(super().__getattr__("operator"), name)
+
+    def A(self, x: Any, **kwargs: Any) -> Any:
+        """Encode a complex image, answering with complex k-space."""
+        real = self.operator.A(_cartesian_image_as_real(x), **kwargs)
+        return _kspace_as_cpx(real)
+
+    def A_adjoint(self, y: Any, **kwargs: Any) -> Any:
+        """Decode complex k-space, answering with a complex image."""
+        image = self.operator.A_adjoint(_kspace_as_real(y), **kwargs)
+        return _cartesian_image_as_cpx(image)
+
+    def A_adjoint_A(self, x: Any, **kwargs: Any) -> Any:
+        """Apply the exact FFT normal operator, staying in complex image space."""
+        result = self.operator.A_adjoint_A(_cartesian_image_as_real(x), **kwargs)
+        return _cartesian_image_as_cpx(result)
 
 
 def _toeplitz_options(
@@ -253,7 +310,7 @@ class MRIPhysics(deepinv.physics.LinearPhysics):
         native_operator: Any | None,
         kind: str,
         spatial_ndim: int,
-        viewed_as_real: bool = True,
+        viewed_as_real: bool = False,
         modifiers: tuple[str, ...] = (),
         trajectory: Any | None = None,
         rebuild: Callable[[Any, int | None], MRIPhysics] | None = None,
@@ -430,14 +487,19 @@ class MRIPhysics(deepinv.physics.LinearPhysics):
         coil_maps: Any,
         kwargs: dict[str, Any],
     ) -> Any:
-        """Apply one bounded Cartesian SENSE batch without mutating DeepInv."""
-        torch = import_module("torch")
+        """Apply one bounded Cartesian SENSE batch without mutating DeepInv.
 
-        def image_as_complex(image: Any) -> Any:
-            return torch.view_as_complex(image.movedim(1, -1).contiguous())
+        The kernel below works in the two-channel real layout throughout. When
+        the physics is complex-native (the default), the complex image or
+        measurement is packed to that layout on the way in and unpacked on the
+        way out, so the one arithmetic path serves both representations.
+        """
+        image_as_complex = _cartesian_image_as_cpx
+        image_as_real = _cartesian_image_as_real
+        real_view = self.viewed_as_real
 
-        def image_as_real(image: Any) -> Any:
-            return torch.view_as_real(image).movedim(-1, 1)
+        if not real_view:
+            value = image_as_real(value) if name != "A_adjoint" else _kspace_as_real(value)
 
         def forward(image: Any) -> Any:
             coil_images = coil_maps * image_as_complex(image)[:, None]
@@ -455,12 +517,15 @@ class MRIPhysics(deepinv.physics.LinearPhysics):
             return image_as_real(image)
 
         if name == "A":
-            return measurement_to_trailing(forward(value))
+            result = measurement_to_trailing(forward(value))
+            return result if real_view else _kspace_as_cpx(result)
         if name == "A_adjoint":
             result = adjoint(measurement_to_channels(value))
-            return self.operator.crop(result, crop=kwargs.get("crop", False))
+            result = self.operator.crop(result, crop=kwargs.get("crop", False))
+            return result if real_view else image_as_complex(result)
         if name == "A_adjoint_A":
-            return adjoint(forward(value))
+            result = adjoint(forward(value))
+            return result if real_view else image_as_complex(result)
         raise ValueError(f"unsupported streamed Cartesian method {name!r}")
 
     @staticmethod
@@ -1656,6 +1721,7 @@ def _cartesian(
     *,
     spatial_ndim: int,
     toeplitz: bool | dict[str, Any] = False,
+    viewed_as_real: bool = False,
     **kwargs: Any,
 ) -> MRIPhysics:
     """Create Cartesian physics.
@@ -1683,11 +1749,15 @@ def _cartesian(
         device=device,
         **kwargs,
     )
+    boundary = _TrailingRealView(operator)
+    if not viewed_as_real:
+        boundary = _CartesianComplexView(boundary)
     result = MRIPhysics(
-        _TrailingRealView(operator),
+        boundary,
         native_operator=None,
         kind=f"cartesian{spatial_ndim}d",
         spatial_ndim=spatial_ndim,
+        viewed_as_real=viewed_as_real,
         modifiers=("toeplitz",) if toeplitz_enabled else (),
         toeplitz_options=options if toeplitz_enabled else None,
     )
@@ -1721,12 +1791,11 @@ class Cartesian2D(MRIPhysics):
 
     Notes
     -----
-    A SENSE image is ``(batch, 2, h, w)`` with the real and imaginary parts
-    packed into the channel axis; a coil-wise (no-maps) image keeps its coils,
-    ``(batch, 2, coils, h, w)``. Measurements are ``(batch, coils, h, w, 2)``
-    with the real/imaginary axis trailing, the layout every physics in this
-    package answers in. Leading dimensions beyond the batch are independent
-    problems, so slices, contrasts and frames reconstruct together.
+    Everything is native complex: a SENSE image is ``(batch, h, w)``, a
+    coil-wise (no-maps) image keeps its coils, ``(batch, coils, h, w)``, and a
+    measurement is ``(batch, coils, h, w)`` -- the complex layout every physics
+    in this package answers in. Leading dimensions beyond the batch are
+    independent problems, so slices, contrasts and frames reconstruct together.
 
     Examples
     --------
@@ -1736,15 +1805,15 @@ class Cartesian2D(MRIPhysics):
     ...     torch.ones(1, 1, 8, 8),
     ...     torch.ones(1, 3, 8, 8, dtype=torch.complex64) / 3 ** 0.5,
     ... )
-    >>> physics.A(torch.randn(1, 2, 8, 8)).shape
-    torch.Size([1, 3, 8, 8, 2])
+    >>> physics.A(torch.randn(1, 8, 8, dtype=torch.complex64)).shape
+    torch.Size([1, 3, 8, 8])
 
     With no maps the adjoint keeps one image per coil, for an explicit
     combination afterwards:
 
     >>> coil_wise = Cartesian2D(torch.ones(1, 1, 8, 8), img_size=(8, 8))
-    >>> coil_wise.A_adjoint(torch.randn(1, 4, 8, 8, 2)).shape
-    torch.Size([1, 2, 4, 8, 8])
+    >>> coil_wise.A_adjoint(torch.randn(1, 4, 8, 8, dtype=torch.complex64)).shape
+    torch.Size([1, 4, 8, 8])
     """
 
     def __init__(
@@ -1784,9 +1853,9 @@ class Cartesian3D(MRIPhysics):
 
     Notes
     -----
-    A SENSE image is ``(batch, 2, d, h, w)``, a coil-wise image
-    ``(batch, 2, coils, d, h, w)``; measurements are
-    ``(batch, coils, d, h, w, 2)``. See :class:`Cartesian2D` for the layout
+    Native complex throughout: a SENSE image is ``(batch, d, h, w)``, a
+    coil-wise image ``(batch, coils, d, h, w)``, and a measurement
+    ``(batch, coils, d, h, w)``. See :class:`Cartesian2D` for the layout
     convention.
     """
 
@@ -2266,7 +2335,7 @@ def _noncartesian_2d(
     n_coils: int = 1,
     n_batchs: int = 1,
     toeplitz: bool | dict[str, Any] = False,
-    viewed_as_real: bool = True,
+    viewed_as_real: bool = False,
     streaming: Any | None = None,
     **kwargs: Any,
 ) -> MRIPhysics:
@@ -2337,7 +2406,7 @@ class NonCartesian2D(MRIPhysics):
         n_coils: int = 1,
         n_batchs: int = 1,
         toeplitz: bool | dict[str, Any] = False,
-        viewed_as_real: bool = True,
+        viewed_as_real: bool = False,
         streaming: Any | None = None,
         **kwargs: Any,
     ) -> None:
@@ -2370,7 +2439,7 @@ def _noncartesian_3d(
     stacked: bool = False,
     z_index: Any = "auto",
     toeplitz: bool | dict[str, Any] = False,
-    viewed_as_real: bool = True,
+    viewed_as_real: bool = False,
     streaming: Any | None = None,
     **kwargs: Any,
 ) -> MRIPhysics:
@@ -2451,7 +2520,7 @@ class NonCartesian3D(MRIPhysics):
         stacked: bool = False,
         z_index: Any = "auto",
         toeplitz: bool | dict[str, Any] = False,
-        viewed_as_real: bool = True,
+        viewed_as_real: bool = False,
         streaming: Any | None = None,
         **kwargs: Any,
     ) -> None:
@@ -2610,6 +2679,8 @@ def _subspace_linear_physics(
                     ).sum(dim=1, keepdim=True)
                     if frame_physics_item.viewed_as_real:
                         frame = self._image_as_real(frame)
+                    else:
+                        frame = frame[:, 0]
                     measurement = frame_physics_item.A(frame)
                     if measurements is None:
                         measurements = torch.empty(
@@ -2631,6 +2702,10 @@ def _subspace_linear_physics(
                 frame = frames[:, index : index + 1]
                 if physics.viewed_as_real:
                     frame = self._image_as_real(frame)
+                else:
+                    # A complex frame physics takes the image without the
+                    # subspace coefficient axis, ``(batch, *spatial)``.
+                    frame = frame[:, 0]
                 measurements.append(physics.A(frame))
             return torch.stack(measurements, dim=1)
 
@@ -2677,6 +2752,8 @@ def _subspace_linear_physics(
                     frame = frame_physics_item.A_adjoint(staged[slot])
                     if frame_physics_item.viewed_as_real:
                         frame = self._image_as_cpx(frame)
+                    else:
+                        frame = frame[:, None]
                     frame = frame.to("cpu")
                     if coefficients is None:
                         coefficients = torch.zeros(
@@ -2706,6 +2783,9 @@ def _subspace_linear_physics(
                 frame = physics.A_adjoint(y[:, index])
                 if physics.viewed_as_real:
                     frame = self._image_as_cpx(frame)
+                else:
+                    # Restore the coefficient axis a complex frame physics drops.
+                    frame = frame[:, None]
                 frames.append(frame)
             coefficients = self._project(torch.cat(frames, dim=1))
             return (
@@ -2796,9 +2876,10 @@ def _subspace_linear_physics(
                     ).sum(dim=1, keepdim=True)
                     if frame_physics_item.viewed_as_real:
                         frame = self._image_as_real(frame)
-                    normal = frame_physics_item.A_adjoint_A(frame)
-                    if frame_physics_item.viewed_as_real:
+                        normal = frame_physics_item.A_adjoint_A(frame)
                         normal = self._image_as_cpx(normal)
+                    else:
+                        normal = frame_physics_item.A_adjoint_A(frame[:, 0])[:, None]
                     result += basis_cpu[:, index].reshape(
                         1, -1, *([1] * (normal.ndim - 2))
                     ) * normal.to("cpu")
@@ -2809,9 +2890,10 @@ def _subspace_linear_physics(
                 frame = frames[:, index : index + 1]
                 if physics.viewed_as_real:
                     frame = self._image_as_real(frame)
-                normal = physics.A_adjoint_A(frame)
-                if physics.viewed_as_real:
+                    normal = physics.A_adjoint_A(frame)
                     normal = self._image_as_cpx(normal)
+                else:
+                    normal = physics.A_adjoint_A(frame[:, 0])[:, None]
                 normal_frames.append(normal)
             result = self._project(torch.cat(normal_frames, dim=1))
             return self._image_as_real(result) if self.viewed_as_real else result
@@ -2902,9 +2984,8 @@ class Subspace(MRIPhysics):
 
     Notes
     -----
-    Coefficient images are ``(batch, 2 * rank, *image_shape)``: the real view
-    packs each complex coefficient into two channels, so the channel count is
-    twice the rank.
+    Coefficient images are native complex, ``(batch, rank, *image_shape)`` --
+    one complex channel per retained coefficient.
 
     Examples
     --------
@@ -2915,8 +2996,8 @@ class Subspace(MRIPhysics):
     ...     torch.ones(1, 2, 8, 8, dtype=torch.complex64) / 2 ** 0.5,
     ... )
     >>> physics = Subspace(base, torch.randn(3, 5, dtype=torch.complex64))
-    >>> physics.A(torch.randn(1, 6, 8, 8)).shape
-    torch.Size([1, 5, 2, 8, 8, 2])
+    >>> physics.A(torch.randn(1, 3, 8, 8, dtype=torch.complex64)).shape
+    torch.Size([1, 5, 2, 8, 8])
     """
 
     def __init__(self, physics: MRIPhysics, basis: Any, **kwargs: Any) -> None:
@@ -3265,7 +3346,7 @@ class WaveShuffling(MRIPhysics):
         basis: Any,
         *,
         line_weights: Any | None = None,
-        viewed_as_real: bool = True,
+        viewed_as_real: bool = False,
         coil_batch_size: int = 1,
         cuda_transfer_precision: str = "auto",
         streaming: Any | None = None,
@@ -3314,7 +3395,7 @@ class WaveEncoding(MRIPhysics):
         wave_psf: Any,
         *,
         line_weights: Any | None = None,
-        viewed_as_real: bool = True,
+        viewed_as_real: bool = False,
         coil_batch_size: int = 1,
         cuda_transfer_precision: str = "auto",
         streaming: Any | None = None,

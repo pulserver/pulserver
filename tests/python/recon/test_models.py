@@ -224,9 +224,12 @@ def test_native_reconstructors_accept_pulserver_cartesian_physics(architecture):
     else:
         model = VarNet(denoiser, num_cascades=2, mode="varnet")
     shape = (8, 8)
+    # DeepInverse's own reconstructors work in the two-channel real layout, so
+    # this opts the physics back into it; the package default is now complex.
     physics = Cartesian2D(
         torch.ones(1, 1, *shape),
         torch.ones(1, 1, *shape, dtype=torch.complex64),
+        viewed_as_real=True,
     )
     image = torch.randn(1, 2, *shape)
     measurement = physics.A(image)
