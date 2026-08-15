@@ -232,11 +232,10 @@ def _play_sms_shot(
         seq.add_block(epi.wait_tr)
 
 
-def _sms_main(
+def _sms_calibration(
     system: pp.Opts,
     *,
     fov,
-    fov_offset: tuple[float, float, float] = (0.0, 0.0, 0.0),
     n_x: int,
     n_y: int,
     slice_thickness: float,
@@ -246,21 +245,20 @@ def _sms_main(
     flip_angle_deg: float,
     te: float | None = None,
     tr: float | None = None,
-    n_repetitions: int = 1,
     segments: int = 1,
     acceleration: int = 1,
     readout_bandwidth_hz: float = 500e3,
     slice_order: str = "interleaved",
     spoiling_cycles: float = 4.0,
 ) -> pp.Sequence:
-    """The multiband EPI acquisition: reference pass, then blipped-CAIPI shots.
+    """The multiband calibration file: phase navigator, then single-band reference.
 
-    A single-band reference is played one slice at a time (``REF``) so a
-    reconstruction can estimate each slice's coil sensitivities, three
-    blip-nulled navigator lines (``NAV``) carry the odd/even phase, and the
-    imaging shots are multiband (``SMS``), one per ``(segment, group)``, the
-    group in ``SLC``. The blipped-CAIPI gz encoding is what a model-based
-    separation inverts against the reference; ``MultibandFactor`` records it.
+    Three blip-nulled navigator lines (``NAV``) carry the odd/even phase, then a
+    single-band reference is played one slice at a time (``REF`` ->
+    ``ACQ_IS_PARALLEL_CALIBRATION``) so a reconstruction estimates each slice's
+    coil sensitivities from it. Its own sequence in the linked collection, kept
+    out of the imaging repeating unit, and played once for the whole time
+    series.
     """
     slice_step = slice_thickness + slice_gap
     kernel = _sms_kernel(
@@ -291,8 +289,6 @@ def _sms_main(
     seq = pp.Sequence(system)
     rev_label = pp.make_label("REV", "SET", 0)
     slc_label = pp.make_label("SLC", "SET", 0)
-    rep_label = pp.make_label("REP", "SET", 0)
-    sms_on = pp.make_label("SMS", "SET", 1)
     sms_off = pp.make_label("SMS", "SET", 0)
     ref_on = pp.make_label("REF", "SET", 1)
     ref_off = pp.make_label("REF", "SET", 0)
@@ -317,9 +313,7 @@ def _sms_main(
     # Single-band reference: each slice on its own, the plain 2D train, marked
     # REF so the reconstruction reads it as parallel-imaging calibration.
     for i_slice in (int(i) for i in pp.calc_traversal_order(n_slices, slice_order)):
-        reference.rf.freq_offset = (
-            ref_excitation.gz.amplitude * slice_positions[i_slice]
-        )
+        reference.rf.freq_offset = ref_excitation.gz.amplitude * slice_positions[i_slice]
         reference.rf.phase_offset = (
             -2 * np.pi * reference.rf.freq_offset * reference.rf.center
         )
@@ -332,6 +326,73 @@ def _sms_main(
             rev_label=rev_label,
             extra_line_labels=(slc_label, ref_on, nav_off, sms_off),
         )
+
+    seq.set_definition(key="FOV", value=[fov_x, fov_y, slice_thickness * n_slices])
+    seq.set_definition(key="Matrix", value=[n_x, n_y, n_slices])
+    seq.set_definition(key="Name", value="sms_epi_2d_calibration")
+    seq.set_definition(key="EchoSpacing", value=epi.esp)
+    return seq
+
+
+def _sms_main(
+    system: pp.Opts,
+    *,
+    fov,
+    fov_offset: tuple[float, float, float] = (0.0, 0.0, 0.0),
+    n_x: int,
+    n_y: int,
+    slice_thickness: float,
+    slice_gap: float,
+    n_slices: int,
+    n_bands: int,
+    flip_angle_deg: float,
+    te: float | None = None,
+    tr: float | None = None,
+    n_repetitions: int = 1,
+    segments: int = 1,
+    acceleration: int = 1,
+    readout_bandwidth_hz: float = 500e3,
+    slice_order: str = "interleaved",
+    spoiling_cycles: float = 4.0,
+) -> pp.Sequence:
+    """The multiband imaging file: blipped-CAIPI shots, one per (segment, group).
+
+    Imaging only -- the shots are multiband (``SMS``), the group in ``SLC``,
+    and the blipped-CAIPI gz encoding is what a model-based separation inverts
+    against the calibration. The phase navigator and the single-band reference
+    are their own sequences in the linked collection (:func:`_sms_calibration`),
+    so this file is one clean repeating unit; ``MultibandFactor`` records it.
+    """
+    slice_step = slice_thickness + slice_gap
+    kernel = _sms_kernel(
+        system,
+        fov=fov,
+        n_x=n_x,
+        n_y=n_y,
+        slice_thickness=slice_thickness,
+        slice_step=slice_step,
+        n_slices=n_slices,
+        n_bands=n_bands,
+        flip_angle_deg=flip_angle_deg,
+        te=te,
+        tr=tr,
+        segments=segments,
+        acceleration=acceleration,
+        readout_bandwidth_hz=readout_bandwidth_hz,
+        spoiling_cycles=spoiling_cycles,
+    )
+    epi = kernel.epi
+    gz_amplitude = float(kernel.sms.gz.amplitude)
+    fov_x, fov_y = kernel.fov
+    n_groups = kernel.n_groups
+
+    seq = pp.Sequence(system)
+    rev_label = pp.make_label("REV", "SET", 0)
+    slc_label = pp.make_label("SLC", "SET", 0)
+    rep_label = pp.make_label("REP", "SET", 0)
+    sms_on = pp.make_label("SMS", "SET", 1)
+    ref_off = pp.make_label("REF", "SET", 0)
+    nav_off = pp.make_label("NAV", "SET", 0)
 
     # Multiband imaging: one shot per (segment, group), the group in SLC.
     groups = [int(g) for g in pp.calc_traversal_order(n_groups, slice_order)]
@@ -655,29 +716,33 @@ def main(
     system = pp.Opts() if system is None else system
     system = pp.cap_system(system, max_grad=MAX_GRAD, max_slew=MAX_SLEW)
 
-    # The multiband path is a different acquisition -- reference pass plus
-    # blipped-CAIPI shots -- written as a single file rather than a linked
-    # pair, so it branches off before the plain train is built.
+    # The multiband path is a different acquisition -- a calibration file
+    # (phase navigator plus single-band reference) then the blipped-CAIPI
+    # imaging -- written as a linked collection, so it branches off before the
+    # plain train is built.
     if SMS_EXCITATION and n_bands > 1:
+        sms_kwargs = {
+            "fov": fov,
+            "n_x": n_x,
+            "n_y": n_y,
+            "slice_thickness": slice_thickness,
+            "slice_gap": slice_gap,
+            "n_slices": n_slices,
+            "n_bands": n_bands,
+            "flip_angle_deg": flip_angle_deg,
+            "te": te,
+            "tr": tr,
+            "segments": segments,
+            "acceleration": acceleration,
+            "readout_bandwidth_hz": readout_bandwidth_hz,
+            "slice_order": slice_order,
+            "spoiling_cycles": spoiling_cycles,
+        }
         seq = _sms_main(
             system,
-            fov=fov,
             fov_offset=fov_offset,
-            n_x=n_x,
-            n_y=n_y,
-            slice_thickness=slice_thickness,
-            slice_gap=slice_gap,
-            n_slices=n_slices,
-            n_bands=n_bands,
-            flip_angle_deg=flip_angle_deg,
-            te=te,
-            tr=tr,
             n_repetitions=n_repetitions,
-            segments=segments,
-            acceleration=acceleration,
-            readout_bandwidth_hz=readout_bandwidth_hz,
-            slice_order=slice_order,
-            spoiling_cycles=spoiling_cycles,
+            **sms_kwargs,
         )
         if test_report:
             print(seq.test_report())
@@ -688,7 +753,7 @@ def main(
             value=n_slices if n_gain_calibration_readouts is None else n_gain_calibration_readouts,
         )
         if write_seq:
-            write_sequence(seq, seq_filename, offline=True)
+            _write_sms_collection(seq, seq_filename, system, sms_kwargs)
         return seq
 
     kernel = _shared_kernel(
@@ -815,6 +880,50 @@ def write_pair(main_seq: pp.Sequence, seq_filename: str, **navigator_kwargs) -> 
     lead = navigator(**navigator_kwargs)
     lead.set_definition(key="NextSequence", value=main_path.name)
     write_sequence(lead, str(path), offline=True)
+    write_sequence(main_seq, str(main_path), offline=True)
+    return str(path), str(main_path)
+
+
+#: What :func:`_sms_calibration` takes of :func:`main`'s keywords.
+_SMS_CALIBRATION_ARGUMENTS = frozenset(
+    (
+        "fov",
+        "n_x",
+        "n_y",
+        "slice_thickness",
+        "slice_gap",
+        "n_slices",
+        "n_bands",
+        "flip_angle_deg",
+        "te",
+        "tr",
+        "segments",
+        "acceleration",
+        "readout_bandwidth_hz",
+        "slice_order",
+        "spoiling_cycles",
+    )
+)
+
+
+def _write_sms_collection(
+    main_seq: pp.Sequence, seq_filename: str, system: pp.Opts, kwargs: dict
+) -> tuple[str, str]:
+    """Write the multiband collection: calibration first, then imaging.
+
+    The calibration -- phase navigator plus single-band reference -- leads the
+    chain at ``seq_filename`` and points ``NextSequence`` at the imaging file
+    beside it, so the interpreter plays them in order while each stays its own
+    repeating unit.
+    """
+    path = Path(seq_filename)
+    main_path = path.with_name(path.stem + "_main.seq")
+    calib = _sms_calibration(
+        system,
+        **{name: value for name, value in kwargs.items() if name in _SMS_CALIBRATION_ARGUMENTS},
+    )
+    calib.set_definition(key="NextSequence", value=main_path.name)
+    write_sequence(calib, str(path), offline=True)
     write_sequence(main_seq, str(main_path), offline=True)
     return str(path), str(main_path)
 
@@ -977,13 +1086,14 @@ class Epi2D(SequencePlugin):
         *,
         offline: bool = False,
     ) -> None:
-        """Write the acquisition: a linked navigator+main pair, or the single
-        multiband file when the SMS path is on."""
+        """Write the acquisition as a linked collection: a navigator+main pair,
+        or a calibration+main pair when the SMS path is on."""
         del offline  # the chain is followed from files, so both are written
         kwargs = _main_kwargs(system, protocol)
         seq = main(**kwargs)
         if SMS_EXCITATION and kwargs.get("n_bands", 1) > 1:
-            write_sequence(seq, output_path, offline=True)
+            system = pp.cap_system(system, max_grad=MAX_GRAD, max_slew=MAX_SLEW)
+            _write_sms_collection(seq, output_path, system, kwargs)
             return
         write_pair(
             seq,

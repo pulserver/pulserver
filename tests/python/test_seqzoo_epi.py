@@ -55,14 +55,15 @@ def test_a_3d_train_covers_every_partition():
     assert sorted(set(labels["PAR"].tolist())) == [0, 1, 2, 3]
 
 
-def test_the_multiband_epi_builds_a_valid_blipped_caipi_acquisition(monkeypatch):
-    """With SMS_EXCITATION set, epi_2d becomes a multiband acquisition: a
-    single-band reference pass (REF, one shot per slice), blip-nulled phase
-    navigator (NAV), and blipped-CAIPI multiband shots (SMS, one per group)
-    whose partition label walks the CAIPI slice-phase sawtooth."""
+def test_the_multiband_epi_splits_calibration_from_imaging(monkeypatch):
+    """With SMS_EXCITATION set, epi_2d becomes a linked collection: a
+    calibration file (blip-nulled phase navigator NAV, single-band reference
+    REF one shot per slice) and an imaging file of blipped-CAIPI multiband
+    shots (SMS, one per group) whose partition label walks the CAIPI slice-phase
+    sawtooth. Neither file mixes the two, so no repeating unit is malformed."""
     monkeypatch.setattr(epi_2d, "SMS_EXCITATION", True)
     n_slices, n_bands, n_y = 9, 3, 15
-    seq = epi_2d.main(
+    common = dict(
         n_x=32,
         n_y=n_y,
         n_slices=n_slices,
@@ -70,19 +71,33 @@ def test_the_multiband_epi_builds_a_valid_blipped_caipi_acquisition(monkeypatch)
         n_bands=n_bands,
         readout_bandwidth_hz=250e3,
     )
-    is_ok, error_report = seq.check_timing()
-    assert is_ok, error_report
-    assert seq.get_definition("MultibandFactor") == n_bands
+    main_seq = epi_2d.main(**common)
+    calibration = epi_2d._sms_calibration(
+        pp.Opts(),
+        fov=220e-3,
+        slice_gap=0.0,
+        flip_angle_deg=70.0,
+        **common,
+    )
+    for seq in (main_seq, calibration):
+        is_ok, error_report = seq.check_timing()
+        assert is_ok, error_report
+    assert main_seq.get_definition("MultibandFactor") == n_bands
 
-    labels = seq.evaluate_labels(evolution="adc")
-    sms = np.asarray(labels["SMS"])
-    ref = np.asarray(labels["REF"])
-    par = np.asarray(labels["PAR"])
-    # single-band reference: one full train per slice; multiband: one per group.
-    assert int(ref.sum()) == n_slices * n_y
+    # Imaging file: multiband shots only, no calibration lines.
+    main_labels = main_seq.evaluate_labels(evolution="adc")
+    sms = np.asarray(main_labels["SMS"])
+    par = np.asarray(main_labels["PAR"])
     assert int(sms.sum()) == (n_slices // n_bands) * n_y
+    assert int(np.asarray(main_labels.get("REF", np.zeros(1))).sum()) == 0
     # the CAIPI slice-phase index on the multiband lines is the sawtooth.
     assert par[sms == 1][: 2 * n_bands].tolist() == [k % n_bands for k in range(2 * n_bands)]
+
+    # Calibration file: the navigator and one reference train per slice.
+    cal_labels = calibration.evaluate_labels(evolution="adc")
+    assert int(np.asarray(cal_labels["NAV"]).sum()) == 3
+    assert int(np.asarray(cal_labels["REF"]).sum()) == n_slices * n_y
+    assert int(np.asarray(cal_labels.get("SMS", np.zeros(1))).sum()) == 0
 
 
 def test_the_water_only_excitation_builds_a_valid_train(monkeypatch):
