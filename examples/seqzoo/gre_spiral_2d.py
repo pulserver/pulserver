@@ -39,12 +39,9 @@ from pulserver import (
 )
 from scipy.spatial.transform import Rotation
 
-#: The arm-angle schemes on offer. A spiral covers a full turn, so golden is
-#: the 2*pi golden angle and uniform divides the whole circle.
+#: The arm-angle schemes on offer. A spiral covers a full turn, so both come
+#: from the full-circle convention of the pypulseq angle builtins.
 ANGLE_SCHEMES = ("golden", "uniform")
-
-#: The golden angle over a full turn, pi * (3 - sqrt(5)).
-GOLDEN_ANGLE = np.pi * (3.0 - np.sqrt(5.0))
 
 #: Per-plugin ceilings on the gradient and slew limits, in mT/m and T/m/s. The
 #: sequence is held below the smaller of these and what the scanner reports, so
@@ -74,8 +71,8 @@ def arm_angles(n_arms: int, scheme: str) -> np.ndarray:
     if scheme not in ANGLE_SCHEMES:
         raise ValueError(f"scheme must be one of {ANGLE_SCHEMES}, got {scheme!r}")
     if scheme == "golden":
-        return np.arange(n_arms) * GOLDEN_ANGLE
-    return np.arange(n_arms) * 2.0 * np.pi / n_arms
+        return np.asarray(pp.calc_golden_angles(n_arms, full_circle=True))
+    return np.asarray(pp.calc_uniform_angles(n_arms))
 
 
 def play(seq, readout, rotation, *, acquire: bool, labels=(), first_extra=()) -> None:

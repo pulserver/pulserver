@@ -41,7 +41,6 @@ from pulserver import (
     write_sequence,
 )
 
-from pulserver.seqzoo.gre_spiral_2d import GOLDEN_ANGLE
 
 #: Per-plugin ceilings on the gradient and slew limits, in mT/m and T/m/s. The
 #: sequence is held below the smaller of these and what the scanner reports, so
@@ -284,7 +283,7 @@ flip_angle_deg, ti, tr_outer, te, readout_bandwidth_hz, spoiling_cycles
     excitation = design.SpatialSelectiveExcitation(
         system, flip_angle_deg, slab_thickness, is_slab=True
     )
-    angles = np.arange(n_arms) * GOLDEN_ANGLE
+    angles = np.asarray(pp.calc_golden_angles(n_arms, full_circle=True))
     readout = design.SpiralStackReadout(
         system,
         excitation.rf,

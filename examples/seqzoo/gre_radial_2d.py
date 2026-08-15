@@ -78,7 +78,7 @@ def spoke_angles(n_spokes: int, scheme: str) -> np.ndarray:
         raise ValueError(f"scheme must be one of {ANGLE_SCHEMES}, got {scheme!r}")
     if scheme == "golden":
         return np.asarray(pp.calc_golden_angles(n_spokes))
-    return np.arange(n_spokes) * np.pi / n_spokes
+    return np.asarray(pp.calc_uniform_angles(n_spokes, span=np.pi))
 
 
 def main(
