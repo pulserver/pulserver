@@ -114,8 +114,9 @@ def _sms_kernel(
     multiband factor: its partition axis is not a spatial encode but the CAIPI
     slice phase, so the ``'caipi'`` sawtooth's gz blips give band ``j`` the
     ``exp(i 2*pi*ky*j / n_bands)`` modulation a model-based separation inverts.
-    The single-band reference is the plain 2D train, played one slice at a time
-    so a reconstruction can estimate each slice's coil sensitivities.
+    Coil sensitivities come from the separate low-resolution gradient-echo
+    calibration (:func:`_add_gre_calibration`), the same block the plain
+    accelerated scan uses, so the maps carry no EPI distortion.
     """
     fov_x, fov_y = (fov, fov) if isinstance(fov, (int, float)) else fov
     n_groups, band_spacing, sms_fov_z = _sms_geometry(n_slices, n_bands, slice_step)
@@ -148,24 +149,9 @@ def _sms_kernel(
         labels=("LIN", "PAR"),
     )
 
-    reference = _shared_kernel(
-        system,
-        fov=fov,
-        n_x=n_x,
-        n_y=n_y,
-        slice_thickness=slice_thickness,
-        flip_angle_deg=flip_angle_deg,
-        te=te,
-        tr=tr,
-        segments=segments,
-        acceleration=acceleration,
-        readout_bandwidth_hz=readout_bandwidth_hz,
-        spoiling_cycles=spoiling_cycles,
-    )
     return SimpleNamespace(
         sms=sms,
         epi=epi,
-        reference=reference,
         n_groups=n_groups,
         band_spacing=band_spacing,
         fov=(fov_x, fov_y),
@@ -250,6 +236,7 @@ def _sms_calibration(
     n_slices: int,
     n_bands: int,
     flip_angle_deg: float,
+    n_acs: int = 24,
     te: float | None = None,
     tr: float | None = None,
     segments: int = 1,
@@ -258,14 +245,15 @@ def _sms_calibration(
     slice_order: str = "interleaved",
     spoiling_cycles: float = 4.0,
 ) -> pp.Sequence:
-    """The multiband calibration file: phase navigator, then single-band reference.
+    """The multiband calibration file: phase navigator, then the GRE calibration.
 
-    Three blip-nulled navigator lines (``NAV``) carry the odd/even phase, then a
-    single-band reference is played one slice at a time (``REF`` ->
-    ``ACQ_IS_PARALLEL_CALIBRATION``) so a reconstruction estimates each slice's
-    coil sensitivities from it. Its own sequence in the linked collection, kept
-    out of the imaging repeating unit, and played once for the whole time
-    series.
+    Three blip-nulled navigator lines (``NAV``) carry the odd/even phase, then
+    the same low-resolution slice-selective gradient echo the plain accelerated
+    scan calibrates from (:func:`_add_gre_calibration`) is played, a central
+    ``n_acs`` block per slice marked ``REF`` (``ACQ_IS_PARALLEL_CALIBRATION``) so
+    a reconstruction estimates each slice's coil sensitivities free of EPI
+    distortion. Its own sequence in the linked collection, kept out of the
+    imaging repeating unit, and played once for the whole time series.
     """
     slice_step = slice_thickness + slice_gap
     kernel = _sms_kernel(
@@ -286,18 +274,13 @@ def _sms_calibration(
         spoiling_cycles=spoiling_cycles,
     )
     epi = kernel.epi
-    reference = kernel.reference.epi
-    ref_excitation = kernel.reference.excitation
     gz_amplitude = float(kernel.sms.gz.amplitude)
     fov_x, fov_y = kernel.fov
     n_groups = kernel.n_groups
-    slice_positions = (np.arange(n_slices) - (n_slices - 1) / 2) * slice_step
 
     seq = pp.Sequence(system)
     rev_label = pp.make_label("REV", "SET", 0)
-    slc_label = pp.make_label("SLC", "SET", 0)
     sms_off = pp.make_label("SMS", "SET", 0)
-    ref_on = pp.make_label("REF", "SET", 1)
     ref_off = pp.make_label("REF", "SET", 0)
     nav_on = pp.make_label("NAV", "SET", 1)
     nav_off = pp.make_label("NAV", "SET", 0)
@@ -317,22 +300,25 @@ def _sms_calibration(
         n_lines=_NAV_LINES,
     )
 
-    # Single-band reference: each slice on its own, the plain 2D train, marked
-    # REF so the reconstruction reads it as parallel-imaging calibration.
-    for i_slice in (int(i) for i in pp.calc_traversal_order(n_slices, slice_order)):
-        reference.rf.freq_offset = ref_excitation.gz.amplitude * slice_positions[i_slice]
-        reference.rf.phase_offset = (
-            -2 * np.pi * reference.rf.freq_offset * reference.rf.center
-        )
-        slc_label.value = int(i_slice)
-        _play_shot(
-            seq,
-            reference,
-            origin_line=0,
-            n_y=n_y,
-            rev_label=rev_label,
-            extra_line_labels=(slc_label, ref_on, nav_off, sms_off),
-        )
+    # Coil calibration: the shared low-res GRE, one slice at a time, marked REF.
+    # ``nav_off``/``sms_off`` reset the labels the navigator set on the file.
+    _add_gre_calibration(
+        seq,
+        system,
+        fov_x=fov_x,
+        fov_y=fov_y,
+        n_x=n_x,
+        n_y=n_y,
+        n_slices=n_slices,
+        slice_thickness=slice_thickness,
+        slice_gap=slice_gap,
+        flip_angle_deg=flip_angle_deg,
+        n_acs=n_acs,
+        readout_bandwidth_hz=readout_bandwidth_hz,
+        slice_order=slice_order,
+        spoiling_cycles=spoiling_cycles,
+        extra_labels=(nav_off, sms_off),
+    )
 
     seq.set_definition(key="FOV", value=[fov_x, fov_y, slice_thickness * n_slices])
     seq.set_definition(key="Matrix", value=[n_x, n_y, n_slices])
@@ -353,6 +339,7 @@ def _sms_main(
     n_slices: int,
     n_bands: int,
     flip_angle_deg: float,
+    n_acs: int = 24,
     te: float | None = None,
     tr: float | None = None,
     n_repetitions: int = 1,
@@ -366,10 +353,13 @@ def _sms_main(
 
     Imaging only -- the shots are multiband (``SMS``), the group in ``SLC``,
     and the blipped-CAIPI gz encoding is what a model-based separation inverts
-    against the calibration. The phase navigator and the single-band reference
-    are their own sequences in the linked collection (:func:`_sms_calibration`),
-    so this file is one clean repeating unit; ``MultibandFactor`` records it.
+    against the calibration. The phase navigator and the coil calibration are
+    their own sequence in the linked collection (:func:`_sms_calibration`), so
+    this file is one clean repeating unit; ``MultibandFactor`` records it.
+    ``n_acs`` is accepted for a uniform call from :func:`main` but unused here,
+    the imaging carrying no calibration lines.
     """
+    del n_acs
     slice_step = slice_thickness + slice_gap
     kernel = _sms_kernel(
         system,
@@ -625,6 +615,76 @@ def navigator(
     return seq
 
 
+def _add_gre_calibration(
+    seq: pp.Sequence,
+    system: pp.Opts,
+    *,
+    fov_x: float,
+    fov_y: float,
+    n_x: int,
+    n_y: int,
+    n_slices: int,
+    slice_thickness: float,
+    slice_gap: float,
+    flip_angle_deg: float,
+    n_acs: int,
+    readout_bandwidth_hz: float,
+    slice_order: str,
+    spoiling_cycles: float,
+    extra_labels: tuple = (),
+) -> list[int]:
+    """Add a per-slice low-resolution slice-selective gradient echo to ``seq``.
+
+    A fully sampled central ``n_acs`` block per slice, one line per repetition,
+    marked ``REF`` (``ACQ_IS_PARALLEL_CALIBRATION``, coil calibration only) and
+    ``SLC``/``LIN``. A plain gradient echo rather than an EPI train keeps EPI
+    distortion out of the coil maps. ``extra_labels`` are appended to every ADC
+    block, so a caller sharing the file with other data (the multiband
+    calibration's phase navigator) can reset the labels those lines set.
+
+    Returns the acquired calibration lines (empty when none are asked for), so
+    the caller can decide whether the block was laid down at all.
+    """
+    acs_lines = pp.calc_calibration_lines(n_y, n_acs)
+    if not acs_lines:
+        return []
+
+    excitation = design.SpatialSelectiveExcitation(system, flip_angle_deg, slice_thickness)
+    readout = design.LineReadout2D(
+        system,
+        excitation.rf,
+        excitation.gz,
+        excitation.gz_reph,
+        fov=(fov_x, fov_y),
+        matrix=(n_x, n_y),
+        readout_bandwidth_hz=readout_bandwidth_hz,
+        spoiling_cycles=spoiling_cycles,
+    )
+    slice_positions = (np.arange(n_slices) - (n_slices - 1) / 2) * (
+        slice_thickness + slice_gap
+    )
+
+    ref_label = pp.make_label("REF", "SET", 1)
+    slc_label = pp.make_label("SLC", "SET", 0)
+    lin_label = pp.make_label("LIN", "SET", 0)
+    for i_slice in (int(i) for i in pp.calc_traversal_order(n_slices, slice_order)):
+        readout.rf.freq_offset = excitation.gz.amplitude * slice_positions[i_slice]
+        readout.rf.phase_offset = -2 * np.pi * readout.rf.freq_offset * readout.rf.center
+        slc_label.value = int(i_slice)
+        for line in acs_lines:
+            ky = (line - n_y / 2) / (n_y / 2)
+            lin_label.value = int(line)
+            seq.add_block(readout.rf, readout.gz)
+            seq.add_block(
+                readout.gx_pre, pp.scale_grad(readout.gy_pre, ky), readout.gz_reph
+            )
+            seq.add_block(
+                readout.gx, readout.adc, ref_label, slc_label, lin_label, *extra_labels
+            )
+            seq.add_block(readout.gx_spoil, pp.scale_grad(readout.gy_rew, ky))
+    return acs_lines
+
+
 def calibration(
     *,
     system: pp.Opts | None = None,
@@ -642,15 +702,14 @@ def calibration(
 ) -> pp.Sequence:
     """A low-resolution slice-selective gradient echo, one slice at a time.
 
-    The autocalibration for the parallel-imaging reconstruction of an
-    accelerated non-multiband scan: a fully sampled central ``n_acs`` block per
-    slice, one line per repetition, marked ``REF``
-    (``ACQ_IS_PARALLEL_CALIBRATION``, coil calibration only) and ``SLC``. A
-    plain gradient echo rather than an EPI train keeps EPI distortion out of the
-    coil maps, and its own sequence in the linked collection so the imaging
-    stays one clean repeating unit. Parameters mirror :func:`main`. (The
-    multiband path calibrates from its own single-band reference in
-    :func:`_sms_calibration`.)
+    The autocalibration for the parallel-imaging reconstruction: a fully sampled
+    central ``n_acs`` block per slice, every line ``REF``
+    (``ACQ_IS_PARALLEL_CALIBRATION``, coil calibration only). A plain gradient
+    echo rather than an EPI train keeps EPI distortion out of the coil maps, and
+    its own sequence in the linked collection so the imaging stays one clean
+    repeating unit. Both the accelerated plain scan and the multiband
+    (:func:`_sms_calibration`) path calibrate from this block. Parameters mirror
+    :func:`main`.
 
     Returns
     -------
@@ -661,42 +720,25 @@ def calibration(
     system = pp.cap_system(system, max_grad=MAX_GRAD, max_slew=MAX_SLEW)
     fov_x, fov_y = (fov, fov) if isinstance(fov, (int, float)) else fov
 
-    acs_lines = pp.calc_calibration_lines(n_y, n_acs)
-    if not acs_lines:
-        return None
-
-    excitation = design.SpatialSelectiveExcitation(system, flip_angle_deg, slice_thickness)
-    readout = design.LineReadout2D(
+    seq = pp.Sequence(system)
+    acs_lines = _add_gre_calibration(
+        seq,
         system,
-        excitation.rf,
-        excitation.gz,
-        excitation.gz_reph,
-        fov=(fov_x, fov_y),
-        matrix=(n_x, n_y),
+        fov_x=fov_x,
+        fov_y=fov_y,
+        n_x=n_x,
+        n_y=n_y,
+        n_slices=n_slices,
+        slice_thickness=slice_thickness,
+        slice_gap=slice_gap,
+        flip_angle_deg=flip_angle_deg,
+        n_acs=n_acs,
         readout_bandwidth_hz=readout_bandwidth_hz,
+        slice_order=slice_order,
         spoiling_cycles=spoiling_cycles,
     )
-    slice_positions = (np.arange(n_slices) - (n_slices - 1) / 2) * (
-        slice_thickness + slice_gap
-    )
-
-    seq = pp.Sequence(system)
-    ref_label = pp.make_label("REF", "SET", 1)
-    slc_label = pp.make_label("SLC", "SET", 0)
-    lin_label = pp.make_label("LIN", "SET", 0)
-    for i_slice in (int(i) for i in pp.calc_traversal_order(n_slices, slice_order)):
-        readout.rf.freq_offset = excitation.gz.amplitude * slice_positions[i_slice]
-        readout.rf.phase_offset = -2 * np.pi * readout.rf.freq_offset * readout.rf.center
-        slc_label.value = int(i_slice)
-        for line in acs_lines:
-            ky = (line - n_y / 2) / (n_y / 2)
-            lin_label.value = int(line)
-            seq.add_block(readout.rf, readout.gz)
-            seq.add_block(
-                readout.gx_pre, pp.scale_grad(readout.gy_pre, ky), readout.gz_reph
-            )
-            seq.add_block(readout.gx, readout.adc, ref_label, slc_label, lin_label)
-            seq.add_block(readout.gx_spoil, pp.scale_grad(readout.gy_rew, ky))
+    if not acs_lines:
+        return None
 
     seq.set_definition(key="FOV", value=[fov_x, fov_y, slice_thickness * n_slices])
     seq.set_definition(key="Matrix", value=[n_x, n_y, n_slices])
@@ -823,6 +865,7 @@ def main(
             "n_slices": n_slices,
             "n_bands": n_bands,
             "flip_angle_deg": flip_angle_deg,
+            "n_acs": n_acs,
             "te": te,
             "tr": tr,
             "segments": segments,
@@ -1026,6 +1069,7 @@ _SMS_CALIBRATION_ARGUMENTS = frozenset(
         "n_slices",
         "n_bands",
         "flip_angle_deg",
+        "n_acs",
         "te",
         "tr",
         "segments",
@@ -1196,10 +1240,13 @@ class Epi2D(SequencePlugin):
         if multiband:
             imaging = kwargs.get("segments", 1) * kernel.n_groups
             per_rep = imaging * kernel.epi.seq.duration()[0]
-            duration = (
-                n_slices * kernel.reference.epi.seq.duration()[0]
-                + kwargs.get("n_repetitions", 1) * per_rep
+            # The coil calibration is the shared low-res GRE, played once.
+            calib = calibration(
+                system=system,
+                **{name: value for name, value in kwargs.items() if name in _CALIBRATION_ARGUMENTS},
             )
+            calib_duration = calib.duration()[0] if calib is not None else 0.0
+            duration = calib_duration + kwargs.get("n_repetitions", 1) * per_rep
             info = (
                 f"TA = {duration:.1f} s, MB = {n_bands}, ETL = {kernel.epi.etl}, "
                 f"ESP = {kernel.epi.esp * 1e3:.2f} ms"

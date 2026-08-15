@@ -57,18 +57,20 @@ def test_a_3d_train_covers_every_partition():
 
 def test_the_multiband_epi_splits_calibration_from_imaging(monkeypatch):
     """With SMS_EXCITATION set, epi_2d becomes a linked collection: a
-    calibration file (blip-nulled phase navigator NAV, single-band reference
-    REF one shot per slice) and an imaging file of blipped-CAIPI multiband
-    shots (SMS, one per group) whose partition label walks the CAIPI slice-phase
-    sawtooth. Neither file mixes the two, so no repeating unit is malformed."""
+    calibration file (blip-nulled phase navigator NAV, then the low-resolution
+    GRE calibration REF, a central block per slice) and an imaging file of
+    blipped-CAIPI multiband shots (SMS, one per group) whose partition label
+    walks the CAIPI slice-phase sawtooth. Neither file mixes the two, so no
+    repeating unit is malformed."""
     monkeypatch.setattr(epi_2d, "SMS_EXCITATION", True)
-    n_slices, n_bands, n_y = 9, 3, 15
+    n_slices, n_bands, n_y, n_acs = 9, 3, 15, 8
     common = dict(
         n_x=32,
         n_y=n_y,
         n_slices=n_slices,
         slice_thickness=3e-3,
         n_bands=n_bands,
+        n_acs=n_acs,
         readout_bandwidth_hz=250e3,
     )
     main_seq = epi_2d.main(**common)
@@ -93,10 +95,12 @@ def test_the_multiband_epi_splits_calibration_from_imaging(monkeypatch):
     # the CAIPI slice-phase index on the multiband lines is the sawtooth.
     assert par[sms == 1][: 2 * n_bands].tolist() == [k % n_bands for k in range(2 * n_bands)]
 
-    # Calibration file: the navigator and one reference train per slice.
+    # Calibration file: the navigator, then the GRE calibration block per slice.
     cal_labels = calibration.evaluate_labels(evolution="adc")
+    n_acs_lines = len(pp.calc_calibration_lines(n_y, n_acs))
     assert int(np.asarray(cal_labels["NAV"]).sum()) == 3
-    assert int(np.asarray(cal_labels["REF"]).sum()) == n_slices * n_y
+    assert int(np.asarray(cal_labels["REF"]).sum()) == n_slices * n_acs_lines
+    assert sorted(set(cal_labels["SLC"].tolist())) == list(range(n_slices))
     assert int(np.asarray(cal_labels.get("SMS", np.zeros(1))).sum()) == 0
 
 

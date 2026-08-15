@@ -1,10 +1,11 @@
 """The multiband (SMS) branch of the 2D EPI reconstruction.
 
 Driven over the acquisitions the runtime would stream from
-:mod:`pulserver.seqzoo.epi_2d` under ``SMS_EXCITATION``: a single-band
-reference for each slice, then the blipped-CAIPI multiband shots whose slices
+:mod:`pulserver.seqzoo.epi_2d` under ``SMS_EXCITATION``: a low-resolution GRE
+calibration for each slice, then the blipped-CAIPI multiband shots whose slices
 collapse with the CAIPI phase the sequence played. The reconstruction has to
-unfold each group back into its bands and place them at the right slices.
+estimate each slice's coil maps from the calibration and unfold each group back
+into its bands, placing them at the right slices.
 """
 
 from __future__ import annotations
@@ -25,6 +26,7 @@ N_SLICES = 6
 N_BANDS = 3
 N_GROUPS = N_SLICES // N_BANDS
 COILS = 8
+N_ACS = 24
 
 
 @pytest.fixture(scope="module")
@@ -112,12 +114,19 @@ def _caipi(n_bands):
     return np.exp(1j * 2 * np.pi * (np.arange(n_bands)[:, None] / n_bands) * ky[None, :])
 
 
+def _calibration_lines():
+    """The fully sampled central ``N_ACS`` window, centre-anchored."""
+    start = (N - N_ACS) // 2
+    return list(range(start, start + N_ACS))
+
+
 def stream(kspace):
-    """Reference lines (one slice at a time) then the collapsed multiband shots."""
+    """GRE calibration (central lines per slice) then the collapsed shots."""
     acquisitions = []
-    # Single-band reference: every slice, fully sampled, marked calibration.
+    # Low-resolution GRE calibration: a central block per slice, marked
+    # calibration -- the same block the plain accelerated scan uses.
     for slice_index in range(N_SLICES):
-        for line in range(N):
+        for line in _calibration_lines():
             acquisitions.append(
                 _line(
                     kspace[slice_index, :, line, :],

@@ -19,11 +19,12 @@ per slice and reused for every frame; the imaging file itself carries no
 autocalibration lines, so an undersampled slice is unaliased against those maps
 rather than a self-calibrated fit.
 
-When the sequence ran multiband (``SMS_EXCITATION``), the stream carries a
-single-band reference (``ACQ_IS_PARALLEL_CALIBRATION``) and blipped-CAIPI
-multiband shots instead. The reference gives each slice its coil sensitivities,
-and a model-based solve (:class:`pulserver.recon.physics.SMS`) unfolds every
-group back into its bands against the CAIPI phase the gz blips played.
+When the sequence ran multiband (``SMS_EXCITATION``), the stream carries the
+same low-resolution GRE calibration (``ACQ_IS_PARALLEL_CALIBRATION``) plus its
+phase navigator, then blipped-CAIPI multiband shots. The calibration gives each
+slice its coil sensitivities, and a model-based solve
+(:class:`pulserver.recon.physics.SMS`) unfolds every group back into its bands
+against the CAIPI phase the gz blips played.
 
 Needs the numerical stack: ``pip install "pulserver[recon-cpu]"``; the
 distortion step additionally needs the external ``recon-distortion`` extra.
@@ -65,12 +66,14 @@ from pulserver.reczoo.gre_2d import (
 
 
 def coil_maps_from_reference(kspace: Any) -> np.ndarray:
-    """Per-slice coil sensitivities from a fully sampled single-band reference.
+    """Per-slice coil sensitivities from a low-resolution reference k-space.
 
-    The reference slice is fully sampled, so its coil images are the
-    sensitivities up to the object they share; dividing by the root
-    sum-of-squares removes that common magnitude and leaves unit-norm maps a
-    model-based separation can solve against.
+    The reference is a low-resolution gradient echo, so its coil images are
+    smooth and, up to the object they share, are the sensitivities; dividing by
+    the root sum-of-squares removes that common magnitude and leaves unit-norm
+    maps a model-based separation can solve against. The unsampled outer k-space
+    reads as zero, which band-limits the images -- exactly the smoothing a
+    sensitivity map wants.
 
     Parameters
     ----------
@@ -371,28 +374,36 @@ class Epi2DRecon(ReconPlugin):
         calibrated = {int(item.idx.slice) for item in groups.single_band_reference}
         return len(calibrated) > len(imaged)
 
+    def _by_slice(self, items: list[Any]) -> dict[int, list[Any]]:
+        """Group acquisitions by their slice counter."""
+        grouped: dict[int, list[Any]] = {}
+        for item in items:
+            grouped.setdefault(int(item.idx.slice), []).append(item)
+        return grouped
+
+    def _grid_calibration(self, items: list[Any]) -> Any:
+        """Grid one slice's GRE calibration into a k-space -- no phase correction.
+
+        A plain gradient echo, so its lines carry no ``REV`` and want no odd/even
+        correction; they grid straight into one 2D k-space with only the central
+        block filled.
+        """
+        _, n_y, n_x = self.grid
+        buffer = CartesianGridder((1, n_y, n_x), coils=self.coils)
+        for item in items:
+            buffer.add(np.asarray(item.data), 0, int(item.idx.kspace_encode_step_1))
+        return buffer[0]
+
     def _calibration_maps(self, reference: list[Any]) -> dict[int, Any]:
         """Per-slice coil sensitivities from the low-resolution GRE calibration.
 
-        A plain gradient echo, so its lines carry no ``REV`` and want no
-        odd/even correction; they grid straight into one k-space per slice and
-        NLINV reads the fully sampled centre off the mask, resampling the maps to
-        the full matrix. Estimated once for the whole time series.
+        NLINV reads the fully sampled centre off the mask and resamples the maps
+        to the full matrix. Estimated once for the whole time series.
         """
-        by_slice: dict[int, list[Any]] = {}
-        for item in reference:
-            by_slice.setdefault(int(item.idx.slice), []).append(item)
-        _, n_y, n_x = self.grid
-        maps: dict[int, Any] = {}
-        for index, items in by_slice.items():
-            buffer = CartesianGridder((1, n_y, n_x), coils=self.coils)
-            for item in items:
-                buffer.add(
-                    np.asarray(item.data), 0, int(item.idx.kspace_encode_step_1)
-                )
-            kspace, mask = buffer[0]
-            maps[index] = sensitivities(kspace, mask, device=self.device)
-        return maps
+        return {
+            index: sensitivities(*self._grid_calibration(items), device=self.device)
+            for index, items in self._by_slice(reference).items()
+        }
 
     def _grid_train(self, items: list[Any], fit: tuple[float, float]) -> Any:
         """Phase-correct a train's lines and grid them into one 2D k-space."""
@@ -409,24 +420,24 @@ class Epi2DRecon(ReconPlugin):
     def _reconstruct_sms(
         self, groups: Any, fits: dict[int, tuple[float, float]]
     ) -> list[ReconResult]:
-        """Separate the collapsed multiband slices against the reference maps.
+        """Separate the collapsed multiband slices against the calibration maps.
 
-        The single-band reference gives each slice its coil sensitivities; the
-        blipped-CAIPI phase the imaging shots carry, together with those maps,
-        is what a model-based solve unfolds a group's bands with. A group's
-        bands are its slice and every ``n_groups``-th slice above it, matching
-        how the sequence spaced the excited comb.
+        The low-resolution GRE calibration gives each slice its coil
+        sensitivities; the blipped-CAIPI phase the imaging shots carry, together
+        with those maps, is what a model-based solve unfolds a group's bands
+        with. A group's bands are its slice and every ``n_groups``-th slice above
+        it, matching how the sequence spaced the excited comb.
         """
         n_slices, n_y, _ = self.grid
         # One odd/even fit serves the whole multiband readout: the blip-nulled
         # navigator measured the readout, which every shot shares.
         fit = next(iter(fits.values()), (0.0, 0.0))
 
-        reference: dict[int, list[Any]] = {}
-        for item in groups.single_band_reference:
-            reference.setdefault(int(item.idx.slice), []).append(item)
+        # The calibration is a plain gradient echo: grid it without the EPI
+        # odd/even correction, then read the smooth per-slice maps off it.
+        reference = self._by_slice(groups.single_band_reference)
         coil_maps = {
-            index: coil_maps_from_reference(self._grid_train(items, fit)[0])
+            index: coil_maps_from_reference(self._grid_calibration(items)[0])
             for index, items in reference.items()
         }
 
