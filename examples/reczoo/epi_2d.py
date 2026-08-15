@@ -13,6 +13,12 @@ distortion correction needs -- PyHySCO, through
 :func:`pulserver.recon.postprocessing.run_pyhysco` on the two exported
 volumes -- leaves the scanner together.
 
+When the scan is accelerated, its coil sensitivities come from a separate
+low-resolution gradient echo (``ACQ_IS_PARALLEL_CALIBRATION``), estimated once
+per slice and reused for every frame; the imaging file itself carries no
+autocalibration lines, so an undersampled slice is unaliased against those maps
+rather than a self-calibrated fit.
+
 When the sequence ran multiband (``SMS_EXCITATION``), the stream carries a
 single-band reference (``ACQ_IS_PARALLEL_CALIBRATION``) and blipped-CAIPI
 multiband shots instead. The reference gives each slice its coil sensitivities,
@@ -267,10 +273,18 @@ class Epi2DRecon(ReconPlugin):
             ]
             fits[index] = odd_even_fit(lines)
 
-        # A single-band reference means multiband data: separate the collapsed
-        # slices rather than reconstructing each slice on its own.
-        if groups.single_band_reference:
+        # Multiband data collapses bands into fewer imaged groups than the
+        # calibration has slices, and is separated model-based against the
+        # single-band reference; a plain accelerated scan instead calibrates
+        # slice-for-slice from the low-resolution gradient echo.
+        if groups.single_band_reference and self._is_multiband(groups):
             return self._reconstruct_sms(groups, fits)
+
+        # Coil sensitivities from the separate low-resolution GRE calibration
+        # (ACQ_IS_PARALLEL_CALIBRATION), estimated once per slice and reused for
+        # every frame; absent it, an undersampled slice falls back to a
+        # self-calibrated NLINV solve.
+        calibration_maps = self._calibration_maps(groups.single_band_reference)
 
         results = []
         for series, group in enumerate(
@@ -318,7 +332,9 @@ class Epi2DRecon(ReconPlugin):
                         )
                         image = coil_combine(coils, coil_axis=0)
                     else:
-                        maps = sensitivities(kspace, mask, device=self.device)
+                        maps = calibration_maps.get(index)
+                        if maps is None:
+                            maps = sensitivities(kspace, mask, device=self.device)
                         image = sense(
                             kspace,
                             mask,
@@ -342,6 +358,41 @@ class Epi2DRecon(ReconPlugin):
                         )
                     )
         return results
+
+    def _is_multiband(self, groups: Any) -> bool:
+        """Whether the imaging collapses bands.
+
+        The multiband imaging excites ``n_groups`` combs, so it carries fewer
+        distinct slice labels than the single-band reference, which visits every
+        slice on its own. A plain accelerated scan images and calibrates the
+        same slices, so the two counts match and this is False.
+        """
+        imaged = {int(item.idx.slice) for item in groups.imaging}
+        calibrated = {int(item.idx.slice) for item in groups.single_band_reference}
+        return len(calibrated) > len(imaged)
+
+    def _calibration_maps(self, reference: list[Any]) -> dict[int, Any]:
+        """Per-slice coil sensitivities from the low-resolution GRE calibration.
+
+        A plain gradient echo, so its lines carry no ``REV`` and want no
+        odd/even correction; they grid straight into one k-space per slice and
+        NLINV reads the fully sampled centre off the mask, resampling the maps to
+        the full matrix. Estimated once for the whole time series.
+        """
+        by_slice: dict[int, list[Any]] = {}
+        for item in reference:
+            by_slice.setdefault(int(item.idx.slice), []).append(item)
+        _, n_y, n_x = self.grid
+        maps: dict[int, Any] = {}
+        for index, items in by_slice.items():
+            buffer = CartesianGridder((1, n_y, n_x), coils=self.coils)
+            for item in items:
+                buffer.add(
+                    np.asarray(item.data), 0, int(item.idx.kspace_encode_step_1)
+                )
+            kspace, mask = buffer[0]
+            maps[index] = sensitivities(kspace, mask, device=self.device)
+        return maps
 
     def _grid_train(self, items: list[Any], fit: tuple[float, float]) -> Any:
         """Phase-correct a train's lines and grid them into one 2D k-space."""

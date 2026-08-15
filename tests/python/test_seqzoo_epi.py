@@ -189,6 +189,71 @@ def test_the_imaging_file_carries_no_calibration():
     assert int(np.asarray(labels.get("REF", np.zeros(1))).sum()) == 0
 
 
+def test_the_2d_calibration_is_a_per_slice_low_res_gradient_echo():
+    """The 2D autocalibration is its own slice-selective gradient echo: a fully
+    sampled central ``n_acs`` block per slice, every line ``REF`` (coil
+    calibration, never imaging) and carrying its ``SLC`` counter, at the
+    ``calc_calibration_lines`` window the reconstruction reads."""
+    n_slices, n_y, n_acs = 3, 24, 8
+    seq = epi_2d.calibration(
+        n_x=32,
+        n_y=n_y,
+        n_slices=n_slices,
+        n_acs=n_acs,
+        readout_bandwidth_hz=BANDWIDTH,
+    )
+    is_ok, error_report = seq.check_timing()
+    assert is_ok, error_report
+    labels = seq.evaluate_labels(evolution="adc")
+    acs_y = pp.calc_calibration_lines(n_y, n_acs)
+    assert (np.asarray(labels["REF"]) == 1).all()
+    assert sorted(set(labels["SLC"].tolist())) == list(range(n_slices))
+    # every slice acquires exactly the calibration window, and nothing else.
+    for slc in range(n_slices):
+        window = np.asarray(labels["LIN"])[np.asarray(labels["SLC"]) == slc]
+        assert sorted(window.tolist()) == sorted(acs_y)
+
+
+def test_the_accelerated_2d_epi_leads_with_a_calibration(tmp_path):
+    """An accelerated non-SMS 2D EPI writes a three-file collection --
+    calibration, then navigator, then main -- each linked to the next; the
+    imaging file itself carries no ``REF`` lines."""
+    path = tmp_path / "scan.seq"
+    design_2d(n_slices=2, acceleration=2, n_acs=8, write_seq=True, seq_filename=str(path))
+
+    calib_path = path
+    nav_path = tmp_path / "scan_navigator.seq"
+    main_path = tmp_path / "scan_main.seq"
+    assert calib_path.exists() and nav_path.exists() and main_path.exists()
+
+    calib = pp.Sequence()
+    calib.read(str(calib_path))
+    assert calib.get_definition("Name") == "epi_2d_calibration"
+    assert calib.get_definition("NextSequence") == nav_path.name
+
+    nav = pp.Sequence()
+    nav.read(str(nav_path))
+    assert nav.get_definition("NextSequence") == main_path.name
+
+    body = pp.Sequence()
+    body.read(str(main_path))
+    assert body.get_definition("NextSequence") is None
+    labels = body.evaluate_labels(evolution="adc")
+    assert int(np.asarray(labels.get("REF", np.zeros(1))).sum()) == 0
+
+
+def test_the_fully_sampled_2d_epi_writes_no_calibration(tmp_path):
+    """A fully sampled scan reconstructs from itself, so the chain is the plain
+    navigator-then-main pair with no calibration file."""
+    path = tmp_path / "scan.seq"
+    design_2d(n_slices=2, acceleration=1, write_seq=True, seq_filename=str(path))
+    assert path.exists() and (tmp_path / "scan_main.seq").exists()
+    assert not (tmp_path / "scan_navigator.seq").exists()
+    lead = pp.Sequence()
+    lead.read(str(path))
+    assert lead.get_definition("Name") == "epi_2d_navigator"
+
+
 @pytest.mark.parametrize(
     "partial_fourier,partial_fourier_z", [(0.75, 1.0), (1.0, 0.75), (0.75, 0.75)]
 )

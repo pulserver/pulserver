@@ -69,6 +69,13 @@ MAX_SLEW = 200.0
 #: be a whole multiple of the multiband factor.
 SMS_EXCITATION = False
 
+#: Offer the fMRI multiphase mode: a time series of ``UIParam.NUM_FRAMES``
+#: frames, each carrying its ``REP`` counter. A script-level toggle because a
+#: multiphase scan is a different study than a single volume. When ``False`` the
+#: frame count is forced to one and the multiphase control is dropped from the
+#: protocol, so the console never shows it.
+ENABLE_MULTIPHASE = False
+
 
 def _sms_geometry(n_slices: int, n_bands: int, slice_step: float):
     """Group count, band spacing and slice FOV for a multiband acquisition.
@@ -618,6 +625,85 @@ def navigator(
     return seq
 
 
+def calibration(
+    *,
+    system: pp.Opts | None = None,
+    fov: float | tuple[float, float] = 220e-3,
+    n_x: int = 128,
+    n_y: int = 128,
+    n_slices: int = 1,
+    slice_thickness: float = 5e-3,
+    slice_gap: float = 0.0,
+    flip_angle_deg: float = 70.0,
+    n_acs: int = 24,
+    readout_bandwidth_hz: float = 500e3,
+    slice_order: str = "interleaved",
+    spoiling_cycles: float = 4.0,
+) -> pp.Sequence:
+    """A low-resolution slice-selective gradient echo, one slice at a time.
+
+    The autocalibration for the parallel-imaging reconstruction of an
+    accelerated non-multiband scan: a fully sampled central ``n_acs`` block per
+    slice, one line per repetition, marked ``REF``
+    (``ACQ_IS_PARALLEL_CALIBRATION``, coil calibration only) and ``SLC``. A
+    plain gradient echo rather than an EPI train keeps EPI distortion out of the
+    coil maps, and its own sequence in the linked collection so the imaging
+    stays one clean repeating unit. Parameters mirror :func:`main`. (The
+    multiband path calibrates from its own single-band reference in
+    :func:`_sms_calibration`.)
+
+    Returns
+    -------
+    seq : pulserver.pypulseq.Sequence
+        The calibration sequence, or ``None`` when no calibration is asked for.
+    """
+    system = pp.Opts() if system is None else system
+    system = pp.cap_system(system, max_grad=MAX_GRAD, max_slew=MAX_SLEW)
+    fov_x, fov_y = (fov, fov) if isinstance(fov, (int, float)) else fov
+
+    acs_lines = pp.calc_calibration_lines(n_y, n_acs)
+    if not acs_lines:
+        return None
+
+    excitation = design.SpatialSelectiveExcitation(system, flip_angle_deg, slice_thickness)
+    readout = design.LineReadout2D(
+        system,
+        excitation.rf,
+        excitation.gz,
+        excitation.gz_reph,
+        fov=(fov_x, fov_y),
+        matrix=(n_x, n_y),
+        readout_bandwidth_hz=readout_bandwidth_hz,
+        spoiling_cycles=spoiling_cycles,
+    )
+    slice_positions = (np.arange(n_slices) - (n_slices - 1) / 2) * (
+        slice_thickness + slice_gap
+    )
+
+    seq = pp.Sequence(system)
+    ref_label = pp.make_label("REF", "SET", 1)
+    slc_label = pp.make_label("SLC", "SET", 0)
+    lin_label = pp.make_label("LIN", "SET", 0)
+    for i_slice in (int(i) for i in pp.calc_traversal_order(n_slices, slice_order)):
+        readout.rf.freq_offset = excitation.gz.amplitude * slice_positions[i_slice]
+        readout.rf.phase_offset = -2 * np.pi * readout.rf.freq_offset * readout.rf.center
+        slc_label.value = int(i_slice)
+        for line in acs_lines:
+            ky = (line - n_y / 2) / (n_y / 2)
+            lin_label.value = int(line)
+            seq.add_block(readout.rf, readout.gz)
+            seq.add_block(
+                readout.gx_pre, pp.scale_grad(readout.gy_pre, ky), readout.gz_reph
+            )
+            seq.add_block(readout.gx, readout.adc, ref_label, slc_label, lin_label)
+            seq.add_block(readout.gx_spoil, pp.scale_grad(readout.gy_rew, ky))
+
+    seq.set_definition(key="FOV", value=[fov_x, fov_y, slice_thickness * n_slices])
+    seq.set_definition(key="Matrix", value=[n_x, n_y, n_slices])
+    seq.set_definition(key="Name", value="epi_2d_calibration")
+    return seq
+
+
 def main(
     plot: bool = False,
     test_report: bool = False,
@@ -639,6 +725,7 @@ def main(
     segments: int = 1,
     acceleration: int = 1,
     n_bands: int = 1,
+    n_acs: int = 24,
     readout_bandwidth_hz: float = 500e3,
     opposite_reference: bool = True,
     slice_order: str = "interleaved",
@@ -693,6 +780,12 @@ def main(
         Interleaved shots the train is split into. Default is 1.
     acceleration : int, optional
         Uniform phase-encode undersampling factor. Default is 1.
+    n_acs : int, optional
+        Autocalibration extent along y, in lines. Bounds the fully sampled
+        central block a separate low-resolution gradient echo
+        (:func:`calibration`) lays down per slice ahead of the imaging
+        whenever the scan is accelerated, so a parallel reconstruction has
+        coil sensitivities to solve against. Default is 24.
     readout_bandwidth_hz : float, optional
         Requested receiver bandwidth in Hz. Default is 500e3.
     opposite_reference : bool, optional
@@ -844,44 +937,82 @@ def main(
             tr=tr,
             segments=segments,
             acceleration=acceleration,
+            n_acs=n_acs,
             readout_bandwidth_hz=readout_bandwidth_hz,
             opposite_reference=opposite_reference,
+            slice_order=slice_order,
             spoiling_cycles=spoiling_cycles,
         )
 
     return seq
 
 
-def write_pair(main_seq: pp.Sequence, seq_filename: str, **navigator_kwargs) -> tuple[str, str]:
-    """Write navigator and main as a linked pair.
+def _needs_calibration(kwargs: dict) -> bool:
+    """Whether the scan is undersampled enough to want a coil calibration."""
+    return kwargs.get("acceleration", 1) > 1
 
-    The navigator goes to ``seq_filename`` carrying ``NextSequence`` with the
-    main file's name; the main goes beside it as ``<stem>_main.seq``. The
-    chain is what the interpreter's sequence collection follows, one file per
-    subsequence.
+
+def write_pair(main_seq: pp.Sequence, seq_filename: str, **kwargs) -> tuple[str, ...]:
+    """Write the linked collection: calibration, then navigator, then main.
+
+    Each sequence in the chain points ``NextSequence`` at the next, so the
+    interpreter's Sequence Collection plays them in order as one scan while
+    keeping each -- the low-resolution coil calibration, the phase navigator,
+    the imaging -- its own well-formed repeating unit. The calibration leads
+    only when the scan is accelerated enough to ask for one; otherwise the
+    chain is navigator then main, as it was.
 
     Parameters
     ----------
     main_seq : pulserver.pypulseq.Sequence
-        The main acquisition.
+        The imaging acquisition.
     seq_filename : str
-        Where the navigator is written.
-    **navigator_kwargs
-        Forwarded to :func:`navigator`.
+        Where the chain's first sequence is written; the others go beside it as
+        ``<stem>_navigator.seq`` and ``<stem>_main.seq``.
+    **kwargs
+        Forwarded to :func:`calibration` and :func:`navigator`, each taking the
+        subset it declares.
 
     Returns
     -------
     tuple of str
-        The navigator and main paths, in chain order.
+        The written paths, in chain order.
     """
     path = Path(seq_filename)
     main_path = path.with_name(path.stem + "_main.seq")
+    nav_path = path.with_name(path.stem + "_navigator.seq")
 
-    lead = navigator(**navigator_kwargs)
-    lead.set_definition(key="NextSequence", value=main_path.name)
-    write_sequence(lead, str(path), offline=True)
-    write_sequence(main_seq, str(main_path), offline=True)
-    return str(path), str(main_path)
+    # The calibration leads the chain only when the imaging is undersampled; a
+    # fully sampled scan reconstructs from itself and needs no coil maps.
+    system = kwargs.get("system")
+    calib = (
+        calibration(
+            system=system,
+            **{name: value for name, value in kwargs.items() if name in _CALIBRATION_ARGUMENTS},
+        )
+        if _needs_calibration(kwargs)
+        else None
+    )
+    nav = navigator(
+        system=system,
+        **{name: value for name, value in kwargs.items() if name in _NAVIGATOR_ARGUMENTS},
+    )
+
+    # calibration -> navigator -> main; the calibration drops out when absent,
+    # and the chain's first sequence is written at ``seq_filename``.
+    chain: list[tuple[pp.Sequence, Path]] = []
+    if calib is not None:
+        chain.append((calib, path))
+        chain.append((nav, nav_path))
+    else:
+        chain.append((nav, path))
+    chain.append((main_seq, main_path))
+
+    for index, (seq, seq_path) in enumerate(chain):
+        if index + 1 < len(chain):
+            seq.set_definition(key="NextSequence", value=chain[index + 1][1].name)
+        write_sequence(seq, str(seq_path), offline=True)
+    return tuple(str(seq_path) for _, seq_path in chain)
 
 
 #: What :func:`_sms_calibration` takes of :func:`main`'s keywords.
@@ -933,8 +1064,7 @@ class Epi2D(SequencePlugin):
 
     def get_default_protocol(self, system: pp.Opts) -> dict[str, dict]:
         """Return the protocol the scanner UI is built from."""
-        return protocol_to_dict(
-            {
+        controls = {
                 UIParam.TE: DropdownFloatParam(
                     value=-1.0,
                     min=-1.0,
@@ -1023,8 +1153,15 @@ class Epi2D(SequencePlugin):
                 UIParam.user_value(1): TypeinFloatParam(
                     value=1.0, min=0.0, max=1.0, incr=1.0, unit=""
                 ),
-            }
-        )
+                UIParam.user_name(2): Description(text="ACS lines (y)"),
+                UIParam.user_value(2): TypeinFloatParam(
+                    value=24.0, min=0.0, max=256.0, incr=1.0, unit="lines"
+                ),
+        }
+        # The multiphase control is shown only when the fMRI time series is on.
+        if not ENABLE_MULTIPHASE:
+            controls.pop(UIParam.NUM_FRAMES, None)
+        return protocol_to_dict(controls)
 
     def validate_protocol(self, system: pp.Opts, protocol: dict[str, dict]) -> dict:
         """Report whether the protocol is feasible, and how long it will take."""
@@ -1095,16 +1232,9 @@ class Epi2D(SequencePlugin):
             system = pp.cap_system(system, max_grad=MAX_GRAD, max_slew=MAX_SLEW)
             _write_sms_collection(seq, output_path, system, kwargs)
             return
-        write_pair(
-            seq,
-            output_path,
-            system=system,
-            **{
-                name: value
-                for name, value in kwargs.items()
-                if name in _NAVIGATOR_ARGUMENTS
-            },
-        )
+        # write_pair filters to what the calibration and navigator each take;
+        # pass everything so it can also read the undersampling flag.
+        write_pair(seq, output_path, system=system, **kwargs)
 
 
 _KERNEL_ARGUMENTS = frozenset(
@@ -1119,6 +1249,22 @@ _KERNEL_ARGUMENTS = frozenset(
         "segments",
         "acceleration",
         "readout_bandwidth_hz",
+        "spoiling_cycles",
+    )
+)
+
+_CALIBRATION_ARGUMENTS = frozenset(
+    (
+        "fov",
+        "n_x",
+        "n_y",
+        "n_slices",
+        "slice_thickness",
+        "slice_gap",
+        "flip_angle_deg",
+        "n_acs",
+        "readout_bandwidth_hz",
+        "slice_order",
         "spoiling_cycles",
     )
 )
@@ -1138,6 +1284,7 @@ _NAVIGATOR_ARGUMENTS = frozenset(
         "acceleration",
         "readout_bandwidth_hz",
         "opposite_reference",
+        "slice_order",
         "spoiling_cycles",
     )
 )
@@ -1152,8 +1299,11 @@ def _main_kwargs(system: pp.Opts, protocol: dict[str, dict]) -> dict:
         protocol,
         segments=max(1, round(params.user_float(prot, 0, 1.0))),
         opposite_reference=bool(round(params.user_float(prot, 1, 1.0))),
+        n_acs=max(0, round(params.user_float(prot, 2, 24.0))),
         n_bands=max(1, round(params.param_float_optional(prot, UIParam.MULTIBAND, 1.0))),
-        n_repetitions=params.param_int(prot, UIParam.NUM_FRAMES),
+        n_repetitions=(
+            params.param_int(prot, UIParam.NUM_FRAMES) if ENABLE_MULTIPHASE else 1
+        ),
     )
 
 
@@ -1200,6 +1350,7 @@ _ARG_MAP = [
         lambda value: 0.0 if float(value) else 1.0,
         "Pass 1 to drop the opposite-PE reference from the navigator",
     ),
+    ("--acs-lines", UIParam.user_value(2), float, "Autocalibration lines along y"),
 ]
 
 if __name__ == "__main__":
