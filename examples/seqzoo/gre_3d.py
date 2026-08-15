@@ -3,9 +3,9 @@
 One frequency-encoded line per repetition, phase-encoded along y and z from a
 slab-selective SLR excitation — :class:`design.LineReadout3D` with both encode
 axes scaled per shot. Phase encoding may be undersampled on either axis, with
-a fully sampled autocalibration rectangle and partial Fourier along y; the
-readout may be a partial echo. :mod:`pulserver.reczoo.gre_3d` reads all of it
-back.
+a fully sampled autocalibration rectangle and partial Fourier along y and z;
+the readout may be a partial echo. :mod:`pulserver.reczoo.gre_3d` reads all of
+it back.
 
 The autocalibration rectangle — the ``(ky, kz)`` pairs inside both ACS bands —
 leads the traversal and closes a segment of its own, so the reconstruction can
@@ -43,6 +43,15 @@ from pulserver import (
     write_sequence,
 )
 
+#: Per-plugin ceilings on the gradient and slew limits, in mT/m and T/m/s. The
+#: sequence is held below the smaller of these and what the scanner reports, so
+#: lowering them here -- on the scanner console, even -- reruns the whole script
+#: under gentler gradients (for PNS headroom, acoustic comfort, eddy currents)
+#: without touching anything else. Defaults sit above typical hardware, so they
+#: cap nothing until you lower them.
+MAX_GRAD = 80.0
+MAX_SLEW = 200.0
+
 
 def main(
     plot: bool = False,
@@ -63,6 +72,7 @@ def main(
     readout_bandwidth_hz: float = 250e3,
     partial_echo: float = 1.0,
     partial_fourier: float = 1.0,
+    partial_fourier_z: float = 1.0,
     acceleration: int = 1,
     acceleration_z: int = 1,
     n_acs: int = 24,
@@ -121,6 +131,9 @@ def main(
         Fraction of the phase-encode extent acquired along y, in (0.5, 1].
         Truncates the lines before the centre, which shortens the scan.
         Default is 1.0.
+    partial_fourier_z : float, optional
+        Fraction of the partition-encode extent acquired along z, in (0.5, 1].
+        Truncates the partitions before the centre. Default is 1.0.
     acceleration : int, optional
         Uniform phase-encode undersampling factor along y. Default is 1.
     acceleration_z : int, optional
@@ -157,6 +170,7 @@ def main(
         The GRE sequence object.
     """
     system = pp.Opts() if system is None else system
+    system = pp.cap_system(system, max_grad=MAX_GRAD, max_slew=MAX_SLEW)
 
     # Designing the repetition is also what validates TE, TR and the rest.
     kernel = GRE3DKernel(
@@ -172,6 +186,7 @@ def main(
         readout_bandwidth_hz=readout_bandwidth_hz,
         partial_echo=partial_echo,
         partial_fourier=partial_fourier,
+        partial_fourier_z=partial_fourier_z,
         acceleration=acceleration,
         acceleration_z=acceleration_z,
         n_acs=n_acs,
@@ -313,6 +328,7 @@ def GRE3DKernel(
     readout_bandwidth_hz: float = 250e3,
     partial_echo: float = 1.0,
     partial_fourier: float = 1.0,
+    partial_fourier_z: float = 1.0,
     acceleration: int = 1,
     acceleration_z: int = 1,
     n_acs: int = 24,
@@ -346,8 +362,8 @@ def GRE3DKernel(
     system : pypulseq.Opts
         System limits.
     fov, n_x, n_y, n_z, slab_thickness, flip_angle_deg, te, tr, \
-readout_bandwidth_hz, partial_echo, partial_fourier, acceleration, \
-acceleration_z, n_acs, n_acs_z, n_averages, n_dummy, spoiling_cycles
+readout_bandwidth_hz, partial_echo, partial_fourier, partial_fourier_z, \
+acceleration, acceleration_z, n_acs, n_acs_z, n_averages, n_dummy, spoiling_cycles
         As for :func:`main`.
 
     Returns
@@ -378,32 +394,13 @@ acceleration_z, n_acs, n_acs_z, n_averages, n_dummy, spoiling_cycles
         labels=("IMA", "SEG"),
     )
 
-    sampled_lines = pp.calc_sampled_lines(
-        n_y, acceleration, n_acs, order="ascending", partial_fourier=partial_fourier
+    pairs, n_calibration = pp.calc_sampled_pairs(
+        (n_y, n_z),
+        (acceleration, acceleration_z),
+        (n_acs, n_acs_z),
+        partial_fourier=(partial_fourier, partial_fourier_z),
+        order="calibration_first",
     )
-    sampled_partitions = pp.calc_sampled_lines(n_z, acceleration_z, n_acs_z)
-
-    acs_y = range(max(0, n_y // 2 - n_acs // 2), min(n_y, n_y // 2 + -(-n_acs // 2)))
-    acs_z = range(
-        max(0, n_z // 2 - n_acs_z // 2), min(n_z, n_z // 2 + -(-n_acs_z // 2))
-    )
-
-    def calibrates(line: int, partition: int) -> bool:
-        return line in acs_y and partition in acs_z
-
-    rectangle = [
-        (line, partition)
-        for partition in sampled_partitions
-        for line in sampled_lines
-        if calibrates(line, partition)
-    ]
-    body = [
-        (line, partition)
-        for partition in sampled_partitions
-        for line in sampled_lines
-        if not calibrates(line, partition)
-    ]
-    pairs = rectangle + body
 
     duration = (n_dummy + n_averages * len(pairs)) * readout.duration
 
@@ -412,7 +409,7 @@ acceleration_z, n_acs, n_acs_z, n_averages, n_dummy, spoiling_cycles
         readout=readout,
         fov=(fov_x, fov_y),
         pairs=pairs,
-        n_calibration=len(rectangle),
+        n_calibration=n_calibration,
         n_averages=n_averages,
         echo_time=readout.echo_time,
         repetition_time=readout.duration,
@@ -511,6 +508,13 @@ class Gre3D(SequencePlugin):
                     incr=1.0,
                     unit="",
                 ),
+                UIParam.RZ: TypeinFloatParam(
+                    value=1.0,
+                    min=1.0,
+                    max=8.0,
+                    incr=1.0,
+                    unit="",
+                ),
                 UIParam.NEX: DropdownFloatParam(
                     value=1.0,
                     min=1.0,
@@ -556,12 +560,12 @@ class Gre3D(SequencePlugin):
                     incr=0.05,
                     unit="",
                 ),
-                UIParam.user_name(4): Description(text="Acceleration (z)"),
+                UIParam.user_name(4): Description(text="Partial Fourier (z)"),
                 UIParam.user_value(4): TypeinFloatParam(
                     value=1.0,
-                    min=1.0,
-                    max=8.0,
-                    incr=1.0,
+                    min=0.75,
+                    max=1.0,
+                    incr=0.05,
                     unit="",
                 ),
                 UIParam.user_name(5): Description(text="ACS partitions (z)"),
@@ -583,6 +587,7 @@ class Gre3D(SequencePlugin):
         ``ValueError`` on an infeasible TE, and otherwise reports the scan
         duration directly.
         """
+        system = pp.cap_system(system, max_grad=MAX_GRAD, max_slew=MAX_SLEW)
         kwargs = _main_kwargs(system, protocol)
         try:
             kernel = GRE3DKernel(
@@ -630,6 +635,7 @@ _KERNEL_ARGUMENTS = frozenset(
         "readout_bandwidth_hz",
         "partial_echo",
         "partial_fourier",
+        "partial_fourier_z",
         "acceleration",
         "acceleration_z",
         "n_acs",
@@ -658,9 +664,9 @@ def _main_kwargs(system: pp.Opts, protocol: dict[str, dict]) -> dict:
         slab_thickness=n_z * partition_thickness,
         partial_echo=params.user_float(prot, 1, 1.0),
         partial_fourier=params.user_float(prot, 3, 1.0),
+        partial_fourier_z=params.user_float(prot, 4, 1.0),
         n_acs=params.acs_lines_from_protocol(prot, params.param_int(prot, UIParam.NY), 0),
         n_dummy=max(0, round(params.user_float(prot, 2, 64.0))),
-        acceleration_z=max(1, round(params.user_float(prot, 4, 1.0))),
         n_acs_z=max(0, round(params.user_float(prot, 5, 16.0))),
     )
 
@@ -699,7 +705,8 @@ _ARG_MAP = [
     ("--ny", UIParam.NY, int, "Phase-encode matrix size"),
     ("--nz", UIParam.NSLICES, int, "Partition count"),
     ("--bandwidth-hz", UIParam.BANDWIDTH, float, "Requested receiver bandwidth [Hz]"),
-    ("--ry", UIParam.RY, float, "Phase-encode undersampling factor"),
+    ("--ry", UIParam.RY, float, "Phase-encode undersampling factor along y"),
+    ("--rz", UIParam.RZ, float, "Partition-encode undersampling factor along z"),
     ("--nex", UIParam.NEX, float, "Number of signal averages"),
     ("--offset-x-mm", UIParam.FOV_OFFSET_X, float, "Volume offset along readout [mm]"),
     ("--offset-y-mm", UIParam.FOV_OFFSET_Y, float, "Volume offset along phase encode [mm]"),
@@ -717,7 +724,12 @@ _ARG_MAP = [
         float,
         "Acquired phase-encode fraction along y in (0.5, 1]",
     ),
-    ("--rz", UIParam.user_value(4), float, "Partition-encode undersampling factor"),
+    (
+        "--partial-fourier-z",
+        UIParam.user_value(4),
+        float,
+        "Acquired partition-encode fraction along z in (0.5, 1]",
+    ),
     ("--acs-partitions", UIParam.user_value(5), float, "Number of ACS partitions along z"),
 ]
 

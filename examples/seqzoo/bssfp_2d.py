@@ -40,6 +40,15 @@ from pulserver import (
     write_sequence,
 )
 
+#: Per-plugin ceilings on the gradient and slew limits, in mT/m and T/m/s. The
+#: sequence is held below the smaller of these and what the scanner reports, so
+#: lowering them here -- on the scanner console, even -- reruns the whole script
+#: under gentler gradients (for PNS headroom, acoustic comfort, eddy currents)
+#: without touching anything else. Defaults sit above typical hardware, so they
+#: cap nothing until you lower them.
+MAX_GRAD = 80.0
+MAX_SLEW = 200.0
+
 
 def main(
     plot: bool = False,
@@ -125,6 +134,7 @@ def main(
         The bSSFP sequence object.
     """
     system = pp.Opts() if system is None else system
+    system = pp.cap_system(system, max_grad=MAX_GRAD, max_slew=MAX_SLEW)
 
     kernel = Bssfp2DKernel(
         system,
@@ -310,13 +320,9 @@ readout_bandwidth_hz, partial_fourier, acceleration, n_acs, n_dummy
         order="calibration_first",
         partial_fourier=partial_fourier,
     )
-    acs_start = max(0, n_y // 2 - n_acs // 2)
-    acs_stop = min(n_y, acs_start + n_acs)
-    n_calibration = 0
-    for line in sampled_lines:
-        if not acs_start <= line < acs_stop:
-            break
-        n_calibration += 1
+    n_calibration = len(
+        pp.calc_calibration_lines(n_y, n_acs, partial_fourier=partial_fourier)
+    )
 
     # Catalyst, settle, one repetition per acquired line, closing rewind --
     # per slice, since every slice is its own train.
@@ -458,6 +464,7 @@ class Bssfp2D(SequencePlugin):
 
     def validate_protocol(self, system: pp.Opts, protocol: dict[str, dict]) -> dict:
         """Report whether the protocol is feasible, and how long it will take."""
+        system = pp.cap_system(system, max_grad=MAX_GRAD, max_slew=MAX_SLEW)
         kwargs = _main_kwargs(system, protocol)
         try:
             kernel = Bssfp2DKernel(

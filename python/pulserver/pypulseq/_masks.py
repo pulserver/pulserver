@@ -16,7 +16,9 @@ ported from SigPy's ``sigpy.mri.samp.poisson`` (BSD 3-Clause).
 from __future__ import annotations
 
 __all__ = [
+    "calc_calibration_lines",
     "calc_sampled_lines",
+    "calc_sampled_pairs",
     "make_caipirinha_mask",
     "make_centric_order",
     "make_linear_order",
@@ -97,21 +99,169 @@ def calc_sampled_lines(
     """
     if order not in ("ascending", "calibration_first"):
         raise ValueError("order must be 'ascending' or 'calibration_first'")
-    if not 0.5 < partial_fourier <= 1.0:
-        raise ValueError("partial_fourier must be in (0.5, 1]")
 
-    first = n - round(partial_fourier * n)
+    first = n - round(_checked_partial_fourier(partial_fourier) * n)
     sampled = {i for i in range(first, n) if (i % r) == 0}
-    calibration: list[int] = []
-    if acs_lines > 0:
-        center = n // 2
-        start = max(0, center - acs_lines // 2)
-        stop = min(n, start + acs_lines)
-        calibration = [i for i in range(start, stop) if i >= first]
-        sampled.update(calibration)
+    calibration = calc_calibration_lines(n, acs_lines, partial_fourier=partial_fourier)
+    sampled.update(calibration)
     if order == "ascending":
         return sorted(sampled)
     return calibration + sorted(sampled.difference(calibration))
+
+
+def calc_calibration_lines(
+    n: int,
+    acs_lines: int,
+    *,
+    partial_fourier: float = 1.0,
+) -> list[int]:
+    """Return the autocalibration view indices for a phase-encode axis.
+
+    The fully sampled block at the centre of k-space that
+    :func:`calc_sampled_lines` acquires whatever the acceleration is -- the
+    subset a reconstruction calibrates its coil sensitivities from. It is the
+    single source of truth for *which* views are autocalibration views, so the
+    count a 2D sequence needs and the rectangle a 3D sequence carves both read
+    the same window rather than each re-deriving it.
+
+    Parameters
+    ----------
+    n : int
+        Total number of views.
+    acs_lines : int
+        Number of fully sampled centre views. Zero (or fewer) means no block.
+    partial_fourier : float, optional
+        Fraction of the phase-encode extent acquired, in ``(0.5, 1]``. A
+        calibration view the partial-Fourier truncation drops is not returned,
+        matching :func:`calc_sampled_lines`. Default is 1.0.
+
+    Returns
+    -------
+    list of int
+        The autocalibration view indices, ascending.
+
+    Raises
+    ------
+    ValueError
+        If ``partial_fourier`` is outside ``(0.5, 1]``.
+
+    Examples
+    --------
+    >>> import pulserver.pypulseq as pp
+    >>> pp.calc_calibration_lines(8, 4)
+    [2, 3, 4, 5]
+    """
+    first = n - round(_checked_partial_fourier(partial_fourier) * n)
+    if acs_lines <= 0:
+        return []
+    center = n // 2
+    start = max(0, center - acs_lines // 2)
+    stop = min(n, start + acs_lines)
+    return [i for i in range(start, stop) if i >= first]
+
+
+def calc_sampled_pairs(
+    shape: tuple[int, int],
+    acceleration: tuple[int, int],
+    calibration: tuple[int, int],
+    *,
+    partial_fourier: tuple[float, float] = (1.0, 1.0),
+    order: str = "calibration_first",
+) -> tuple[list[tuple[int, int]], int]:
+    """Return the ``(line, partition)`` pairs a 2D phase-encode grid samples.
+
+    The 3D counterpart of :func:`calc_sampled_lines`: uniform undersampling on
+    each of the two phase-encode axes, a fully sampled autocalibration
+    *rectangle* at the centre of k-space, and partial Fourier on either axis.
+
+    ``'calibration_first'`` leads the traversal with the rectangle -- every
+    sampled pair whose line *and* partition are both autocalibration views --
+    partitions outer and lines inner, then the remaining pairs in the same
+    nesting. This is what lets a reconstruction calibrate the moment the
+    rectangle is complete rather than at the end of the scan. The rectangle is
+    carved out explicitly because a product of two per-axis calibration-first
+    orders would interleave autocalibration and non-autocalibration pairs.
+
+    Parameters
+    ----------
+    shape : tuple of int
+        ``(n_y, n_z)``, the phase-encode and partition-encode counts.
+    acceleration : tuple of int
+        ``(r_y, r_z)``, the uniform undersampling factor on each axis.
+    calibration : tuple of int
+        ``(acs_y, acs_z)``, the autocalibration extent on each axis, in views.
+    partial_fourier : tuple of float, optional
+        ``(pf_y, pf_z)``, the acquired fraction of each axis in ``(0.5, 1]``.
+        Default is ``(1.0, 1.0)``.
+    order : str, optional
+        ``'calibration_first'`` (the default) leads with the rectangle;
+        ``'ascending'`` traverses the whole grid partitions-outer,
+        lines-inner without pulling the rectangle forward.
+
+    Returns
+    -------
+    pairs : list of tuple of int
+        ``(line, partition)`` in acquisition order.
+    n_calibration : int
+        How many leading pairs make up the autocalibration rectangle. With
+        ``order='ascending'`` this still reports the rectangle's size, though
+        those pairs are not contiguous at the front.
+
+    Raises
+    ------
+    ValueError
+        If ``order`` is not one of the two recognised values, or a
+        ``partial_fourier`` entry is outside ``(0.5, 1]``.
+
+    Examples
+    --------
+    >>> import pulserver.pypulseq as pp
+    >>> pairs, n_cal = pp.calc_sampled_pairs((4, 4), (2, 2), (2, 2))
+    >>> n_cal
+    4
+    >>> pairs[:n_cal]
+    [(1, 1), (2, 1), (1, 2), (2, 2)]
+    """
+    if order not in ("ascending", "calibration_first"):
+        raise ValueError("order must be 'ascending' or 'calibration_first'")
+    n_y, n_z = shape
+    r_y, r_z = acceleration
+    acs_y, acs_z = calibration
+    pf_y, pf_z = partial_fourier
+
+    lines = calc_sampled_lines(n_y, r_y, acs_y, partial_fourier=pf_y)
+    partitions = calc_sampled_lines(n_z, r_z, acs_z, partial_fourier=pf_z)
+    acs_lines = set(calc_calibration_lines(n_y, acs_y, partial_fourier=pf_y))
+    acs_partitions = set(calc_calibration_lines(n_z, acs_z, partial_fourier=pf_z))
+
+    def calibrates(line: int, partition: int) -> bool:
+        return line in acs_lines and partition in acs_partitions
+
+    rectangle = [
+        (line, partition)
+        for partition in partitions
+        for line in lines
+        if calibrates(line, partition)
+    ]
+    if order == "ascending":
+        pairs = [
+            (line, partition) for partition in partitions for line in lines
+        ]
+        return pairs, len(rectangle)
+    body = [
+        (line, partition)
+        for partition in partitions
+        for line in lines
+        if not calibrates(line, partition)
+    ]
+    return rectangle + body, len(rectangle)
+
+
+def _checked_partial_fourier(partial_fourier: float) -> float:
+    """Return ``partial_fourier`` if it is a valid fraction, else raise."""
+    if not 0.5 < partial_fourier <= 1.0:
+        raise ValueError("partial_fourier must be in (0.5, 1]")
+    return partial_fourier
 
 
 def _as_coords(coords) -> np.ndarray:

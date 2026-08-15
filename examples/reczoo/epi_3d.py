@@ -108,7 +108,7 @@ class Epi3DRecon(ReconPlugin):
                 results.append(
                     ReconResult(
                         center_crop(
-                            np.abs(_to_numpy(image)), self.image_shape
+                            np.abs(image), self.image_shape
                         ).transpose(0, 2, 1),
                         reference=-1,
                         series_index=series * 1000 + repetition,
@@ -117,11 +117,6 @@ class Epi3DRecon(ReconPlugin):
                     )
                 )
         return results
-
-
-def _to_numpy(array: Any) -> np.ndarray:
-    """Bring a reconstruction back to NumPy, whether it is Torch or already so."""
-    return array.cpu().numpy() if hasattr(array, "cpu") else np.asarray(array)
 
 
 PLUGIN = Epi3DRecon()

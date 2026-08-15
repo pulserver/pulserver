@@ -41,6 +41,15 @@ from pulserver import (
 )
 from pulserver.seqzoo.fse_3d import ORDERINGS, order_views
 
+#: Per-plugin ceilings on the gradient and slew limits, in mT/m and T/m/s. The
+#: sequence is held below the smaller of these and what the scanner reports, so
+#: lowering them here -- on the scanner console, even -- reruns the whole script
+#: under gentler gradients (for PNS headroom, acoustic comfort, eddy currents)
+#: without touching anything else. Defaults sit above typical hardware, so they
+#: cap nothing until you lower them.
+MAX_GRAD = 80.0
+MAX_SLEW = 200.0
+
 
 def main(
     plot: bool = False,
@@ -147,6 +156,7 @@ def main(
         The MPRAGE sequence object.
     """
     system = pp.Opts() if system is None else system
+    system = pp.cap_system(system, max_grad=MAX_GRAD, max_slew=MAX_SLEW)
 
     kernel = Mprage3DKernel(
         system,
@@ -479,6 +489,9 @@ class Mprage3D(SequencePlugin):
                 UIParam.RY: TypeinFloatParam(
                     value=1.0, min=1.0, max=8.0, incr=1.0, unit=""
                 ),
+                UIParam.RZ: TypeinFloatParam(
+                    value=1.0, min=1.0, max=8.0, incr=1.0, unit=""
+                ),
                 UIParam.FOV_OFFSET_X: OffFloatParam(value=0.0, min=-500.0, max=500.0, unit="mm"),
                 UIParam.FOV_OFFSET_Y: OffFloatParam(value=0.0, min=-500.0, max=500.0, unit="mm"),
                 UIParam.FOV_OFFSET_Z: OffFloatParam(value=0.0, min=-500.0, max=500.0, unit="mm"),
@@ -496,10 +509,6 @@ class Mprage3D(SequencePlugin):
                 UIParam.user_value(2): TypeinFloatParam(
                     value=0.0, min=0.0, max=3.0, incr=1.0, unit=""
                 ),
-                UIParam.user_name(4): Description(text="Acceleration (z)"),
-                UIParam.user_value(4): TypeinFloatParam(
-                    value=1.0, min=1.0, max=8.0, incr=1.0, unit=""
-                ),
                 UIParam.user_name(5): Description(text="ACS partitions (z)"),
                 UIParam.user_value(5): TypeinFloatParam(
                     value=16.0, min=0.0, max=256.0, incr=1.0, unit="lines"
@@ -509,6 +518,7 @@ class Mprage3D(SequencePlugin):
 
     def validate_protocol(self, system: pp.Opts, protocol: dict[str, dict]) -> dict:
         """Report whether the protocol is feasible, and how long it will take."""
+        system = pp.cap_system(system, max_grad=MAX_GRAD, max_slew=MAX_SLEW)
         kwargs = _main_kwargs(system, protocol)
         try:
             kernel = Mprage3DKernel(
@@ -585,7 +595,6 @@ def _main_kwargs(system: pp.Opts, protocol: dict[str, dict]) -> dict:
         views_per_segment=max(1, round(params.user_float(prot, 1, 64.0))),
         ordering=ORDERINGS[int(np.clip(round(params.user_float(prot, 2, 0.0)), 0, 3))],
         n_acs=params.acs_lines_from_protocol(prot, params.param_int(prot, UIParam.NY), 0),
-        acceleration_z=max(1, round(params.user_float(prot, 4, 1.0))),
         n_acs_z=max(0, round(params.user_float(prot, 5, 16.0))),
     )
 
@@ -624,7 +633,8 @@ _ARG_MAP = [
     ("--ny", UIParam.NY, int, "Phase-encode matrix size"),
     ("--nz", UIParam.NSLICES, int, "Partition count"),
     ("--bandwidth-hz", UIParam.BANDWIDTH, float, "Requested receiver bandwidth [Hz]"),
-    ("--ry", UIParam.RY, float, "Phase-encode undersampling factor"),
+    ("--ry", UIParam.RY, float, "Phase-encode undersampling factor along y"),
+    ("--rz", UIParam.RZ, float, "Partition-encode undersampling factor along z"),
     ("--offset-x-mm", UIParam.FOV_OFFSET_X, float, "Volume offset along readout [mm]"),
     ("--offset-y-mm", UIParam.FOV_OFFSET_Y, float, "Volume offset along phase encode [mm]"),
     ("--offset-z-mm", UIParam.FOV_OFFSET_Z, float, "Volume offset along slab [mm]"),
@@ -636,7 +646,6 @@ _ARG_MAP = [
         float,
         "View ordering: 0 linear, 1 radial, 2 radial-adaptive, 3 shuffling",
     ),
-    ("--rz", UIParam.user_value(4), float, "Partition-encode undersampling factor"),
     ("--acs-partitions", UIParam.user_value(5), float, "Number of ACS partitions along z"),
 ]
 

@@ -203,7 +203,7 @@ class Gre3DRecon(ReconPlugin):
         # order an image is read in. ``reference`` names the acquisition that
         # ended the bucket, so the runtime copies the slab's geometry into the
         # image; ``dicom=True`` asks it to emit one.
-        image = center_crop(np.abs(_to_numpy(image)), self.image_shape)
+        image = center_crop(np.abs(_asnumpy(image)), self.image_shape)
         return ReconResult(
             image.transpose(0, 2, 1),
             reference=-1,
@@ -244,13 +244,11 @@ def sensitivities(kspace: Any, mask: Any, *, device: Any = None) -> Any:
     ValueError
         If no fully sampled block surrounds the centre of k-space.
     """
-    import torch
-
     from pulserver.recon.calibration import NLINV
 
     return NLINV(spatial_ndim=3)(
-        _tensor(kspace, torch.complex64, device)[None],
-        mask=_tensor(mask, torch.bool, device),
+        _tensor(kspace, "complex64", device)[None],
+        mask=_tensor(mask, "bool", device),
     )
 
 
@@ -268,21 +266,17 @@ def coil_volumes(kspace: Any, mask: Any, *, device: Any = None) -> Any:
 
     Returns
     -------
-    torch.Tensor
+    numpy.ndarray
         Complex coil volumes, ``(coil, partition, phase encode, readout)``.
     """
-    import torch
-
     from pulserver.recon.physics import Cartesian3D
 
     _, n_z, n_y, n_x = kspace.shape
-    physics = Cartesian3D(
-        _tensor(mask, torch.float32, device)[None, None], img_size=(n_z, n_y, n_x)
-    )
-    coils = physics.A_adjoint(
-        torch.view_as_real(_tensor(kspace, torch.complex64, device)[None])
-    )
-    return torch.view_as_complex(coils.movedim(1, -1).contiguous())[0]
+    physics = Cartesian3D(_device_mask(mask, device)[None, None], img_size=(n_z, n_y, n_x))
+    # Native complex throughout: the coil-wise adjoint takes the measurement and
+    # answers with one complex volume per coil, and the NumPy in, NumPy out
+    # boundary means no hand conversion around it.
+    return physics.A_adjoint(kspace[None])[0]
 
 
 def sense(
@@ -317,28 +311,28 @@ def sense(
 
     Returns
     -------
-    torch.Tensor
+    numpy.ndarray
         The complex volume, ``(partition, phase encode, readout)``.
     """
-    import torch
-
     from pulserver.recon import pics
     from pulserver.recon.physics import Cartesian3D
 
-    physics = Cartesian3D(_tensor(mask, torch.float32, device)[None], coil_maps)
-    solution = pics(
-        torch.view_as_real(_tensor(kspace, torch.complex64, device)[None]),
+    physics = Cartesian3D(_device_mask(mask, device)[None], coil_maps)
+    # The measurement crosses the boundary as NumPy and the unaliased volume
+    # comes straight back the same way -- no real/complex view juggling.
+    image = pics(
+        kspace[None],
         physics,
         regularization=regularization,
         iterations=iterations,
-    )
-    image = torch.view_as_complex(solution.movedim(1, -1).contiguous())[0]
+    )[0]
     if readout.all():
         return image
     # The same operator supplies the centered k-space POCS needs, and the
     # phase constraint is meaningful only now that the aliasing is gone.
-    return fill_partial_echo(
-        physics.fft(image), readout, pocs_iterations, device=device
+    centered = physics.fft(_tensor(image, "complex64", device))
+    return _asnumpy(
+        fill_partial_echo(centered, readout, pocs_iterations, device=device)
     )
 
 
@@ -360,26 +354,34 @@ def fill_partial_echo(
 
     Returns
     -------
-    torch.Tensor
-        The filled volume, one per input channel.
+    array
+        The filled volume, one per input channel, in the namespace of ``kspace``.
+    """
+    return POCS(dimension=3, partial_axis=-1, iterations=iterations)(
+        kspace, _tensor(readout, "bool", device)
+    )
+
+
+def _tensor(array: Any, dtype: str, device: Any) -> Any:
+    """Put one array on the reconstruction's device, in the dtype named.
+
+    Only the calibration and POCS helpers -- which are not MRI physics and so
+    do not carry the automatic array boundary -- still build tensors by hand;
+    ``dtype`` is a Torch dtype name so nothing here imports Torch itself.
     """
     import torch
 
-    return POCS(dimension=3, partial_axis=-1, iterations=iterations)(
-        kspace, _tensor(readout, torch.bool, device)
-    )
-
-
-def _tensor(array: Any, dtype: Any, device: Any) -> Any:
-    """Put one array on the reconstruction's device, in the dtype asked for."""
-    import torch
-
     return torch.as_tensor(
-        array, dtype=dtype, device="cpu" if device is None else device
+        array, dtype=getattr(torch, dtype), device="cpu" if device is None else device
     )
 
 
-def _to_numpy(array: Any) -> np.ndarray:
+def _device_mask(mask: Any, device: Any) -> Any:
+    """The sampling mask as a float tensor the Cartesian physics reads its device from."""
+    return _tensor(mask, "float32", device)
+
+
+def _asnumpy(array: Any) -> np.ndarray:
     """Bring a reconstruction back to NumPy, whether it is Torch or already so."""
     return array.cpu().numpy() if hasattr(array, "cpu") else np.asarray(array)
 

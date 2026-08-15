@@ -200,7 +200,7 @@ class Epi2DRecon(ReconPlugin):
                     results.append(
                         ReconResult(
                             center_crop(
-                                np.abs(_to_numpy(image)), self.image_shape
+                                np.abs(image), self.image_shape
                             ).transpose(),
                             reference=-1,
                             series_index=series * 1000 + repetition,
@@ -215,11 +215,6 @@ class Epi2DRecon(ReconPlugin):
 def _reversed(acquisition: Any) -> bool:
     """Whether the line was read backwards, by its MRD flag."""
     return has_acquisition_flag(acquisition, "ACQ_IS_REVERSE")
-
-
-def _to_numpy(array: Any) -> np.ndarray:
-    """Bring a reconstruction back to NumPy, whether it is Torch or already so."""
-    return array.cpu().numpy() if hasattr(array, "cpu") else np.asarray(array)
 
 
 PLUGIN = Epi2DRecon()

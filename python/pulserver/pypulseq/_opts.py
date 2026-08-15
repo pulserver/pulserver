@@ -136,3 +136,86 @@ def apply_system_derates(
 
     opts.max_grad = opts._pulserver_base_max_grad * float(grad_derate)
     opts.max_slew = opts._pulserver_base_max_slew * float(slew_derate)
+
+
+def cap_system(
+    opts: _pp.Opts,
+    *,
+    max_grad: float | None = None,
+    max_slew: float | None = None,
+    grad_unit: str = "mT/m",
+    slew_unit: str = "T/m/s",
+) -> _pp.Opts:
+    """Return a copy of ``opts`` whose gradient and slew limits are capped.
+
+    A sequence never has to run its gradients as hard as the scanner allows.
+    This lowers ``max_grad`` and/or ``max_slew`` to the smaller of the value
+    the system reports and the ceiling asked for, so a plugin can hold a
+    sequence below the hardware limits -- for peripheral-nerve-stimulation
+    headroom, acoustic comfort, or eddy-current control -- while still
+    honouring a scanner that is *less* capable than the ceiling.
+
+    The limits are only ever lowered: a cap above what ``opts`` already allows
+    leaves that axis untouched, so the same ceiling is safe across scanners of
+    different gradient performance. ``None`` on either axis leaves it alone.
+
+    A fresh :class:`Opts` is returned rather than mutating ``opts`` in place,
+    because the offline CLI shares one system object across a plugin's
+    ``get_default_protocol``, ``validate_protocol`` and ``make_sequence``
+    calls, and an in-place cap would leak from one into the next.
+
+    Parameters
+    ----------
+    opts : pypulseq.Opts
+        System limits to cap. Not modified.
+    max_grad : float or None, optional
+        Gradient-amplitude ceiling, in ``grad_unit``. ``None`` leaves the
+        gradient limit untouched. Default is ``None``.
+    max_slew : float or None, optional
+        Slew-rate ceiling, in ``slew_unit``. ``None`` leaves the slew limit
+        untouched. Default is ``None``.
+    grad_unit : str, optional
+        Unit ``max_grad`` is given in, e.g. ``"mT/m"`` or ``"Hz/m"``. Default
+        is ``"mT/m"``.
+    slew_unit : str, optional
+        Unit ``max_slew`` is given in, e.g. ``"T/m/s"`` or ``"Hz/m/s"``.
+        Default is ``"T/m/s"``.
+
+    Returns
+    -------
+    pypulseq.Opts
+        A copy of ``opts`` with the capped limits.
+
+    Examples
+    --------
+    >>> import pulserver.pypulseq as pp
+    >>> from pypulseq.convert import convert
+    >>> system = pp.Opts(max_grad=80, grad_unit="mT/m", max_slew=200, slew_unit="T/m/s")
+    >>> capped = pp.cap_system(system, max_grad=40, max_slew=150)
+    >>> capped is system
+    False
+    >>> round(convert(from_value=capped.max_grad, from_unit="Hz/m", to_unit="mT/m", gamma=capped.gamma))
+    40
+    """
+    import copy
+
+    from pypulseq.convert import convert
+
+    capped = copy.copy(opts)
+    if max_grad is not None:
+        ceiling = convert(
+            from_value=float(max_grad),
+            from_unit=grad_unit,
+            to_unit="Hz/m",
+            gamma=opts.gamma,
+        )
+        capped.max_grad = min(float(opts.max_grad), ceiling)
+    if max_slew is not None:
+        ceiling = convert(
+            from_value=float(max_slew),
+            from_unit=slew_unit,
+            to_unit="Hz/m/s",
+            gamma=opts.gamma,
+        )
+        capped.max_slew = min(float(opts.max_slew), ceiling)
+    return capped

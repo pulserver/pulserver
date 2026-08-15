@@ -81,15 +81,9 @@ class Zte3DRecon(ReconPlugin):
         if not has_acquisition_flag(last, "ACQ_LAST_IN_MEASUREMENT"):
             return None
 
-        import torch
-
         from pulserver.recon.physics import NonCartesian3D
 
-        data = torch.as_tensor(
-            np.concatenate([spoke for spoke, _ in self.spokes], axis=-1),
-            dtype=torch.complex64,
-            device="cpu" if self.device is None else self.device,
-        )
+        data = np.concatenate([spoke for spoke, _ in self.spokes], axis=-1)
         points = np.concatenate(
             [trajectory[:, :3] for _, trajectory in self.spokes], axis=0
         ).astype(np.float32)
@@ -99,15 +93,13 @@ class Zte3DRecon(ReconPlugin):
         coil_wise = NonCartesian3D(
             points, self.volume_shape, density=density, n_coils=n_coils
         )
-        coils = coil_wise.A_adjoint(torch.view_as_real(data[None]))
-        coil_images = torch.view_as_complex(
-            coils.reshape(1, 2, n_coils, *self.volume_shape)
-            .movedim(1, -1)
-            .contiguous()
-        )[0]
+        # Native complex throughout: the measurement crosses the NumPy boundary
+        # and the coil-wise adjoint answers with one complex volume per coil, so
+        # there is no real/complex view juggling to unpack the channel axis.
+        coil_images = coil_wise.A_adjoint(data[None])[0]
 
         if self.mode == "direct":
-            image = torch.sqrt(torch.sum(torch.abs(coil_images) ** 2, dim=0))
+            image = np.sqrt(np.sum(np.abs(coil_images) ** 2, axis=0))
         else:
             from pulserver.recon import pics
             from pulserver.reczoo.gre_radial_2d import smooth_sensitivities
@@ -120,25 +112,27 @@ class Zte3DRecon(ReconPlugin):
                 density=density,
                 n_coils=n_coils,
             )
-            solution = pics(
-                torch.view_as_real(data[None]),
-                sense,
-                regularization=self.regularization,
-                iterations=self.iterations,
-            )
-            image = torch.abs(
-                torch.view_as_complex(solution.movedim(1, -1).contiguous())[0]
+            # NumPy in, NumPy out: the unaliased complex volume comes straight
+            # back from the solve, which keeps a singleton coil axis, so index
+            # past both batch and channel to the volume.
+            image = np.abs(
+                pics(
+                    data[None],
+                    sense,
+                    regularization=self.regularization,
+                    iterations=self.iterations,
+                )[0, 0]
             )
 
         return ReconResult(
-            _to_numpy(image).transpose(0, 2, 1),
+            _asnumpy(image).transpose(0, 2, 1),
             reference=-1,
             image_type="magnitude",
             dicom=True,
         )
 
 
-def _to_numpy(array: Any) -> np.ndarray:
+def _asnumpy(array: Any) -> np.ndarray:
     """Bring a reconstruction back to NumPy, whether it is Torch or already so."""
     return array.cpu().numpy() if hasattr(array, "cpu") else np.asarray(array)
 

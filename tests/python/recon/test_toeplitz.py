@@ -359,10 +359,9 @@ def test_cartesian_subspace_public_factory_handles_batched_sensitivity_maps():
         physics.Subspace(physics.Cartesian2D(mask, smaps), basis),
         support="full",
     )
-    real_coefficients = exact.operator._image_as_real(coefficients)
 
-    reference = exact.A_adjoint_A(real_coefficients)
-    result = compact.A_adjoint_A(real_coefficients)
+    reference = exact.A_adjoint_A(coefficients)
+    result = compact.A_adjoint_A(coefficients)
 
     torch.testing.assert_close(result, reference, atol=3e-5, rtol=3e-5)
     assert compact.normal_mode == "exact-fft"

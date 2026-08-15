@@ -143,13 +143,13 @@ def test_sms_wraps_any_in_plane_trajectory(build):
     n_slices = 3
     physics = SMS(base, torch.rand(n_slices, 1) * 2 * torch.pi)
 
-    image = torch.randn(1, n_slices, 2, matrix, matrix)
+    image = torch.randn(1, n_slices, matrix, matrix, dtype=torch.complex64)
     measurement = physics.A(image)
     cotangent = torch.randn_like(measurement)
 
     torch.testing.assert_close(
-        (physics.A(image) * cotangent).sum(),
-        (image * physics.A_adjoint(cotangent)).sum(),
+        (physics.A(image) * cotangent.conj()).sum(),
+        (image * physics.A_adjoint(cotangent).conj()).sum(),
         atol=2e-4,
         rtol=2e-4,
     )
@@ -161,9 +161,9 @@ def test_sms_wraps_any_in_plane_trajectory(build):
 
 @pytest.mark.parametrize("build", [_cartesian_base, _noncartesian_base])
 def test_every_physics_answers_in_the_same_measurement_layout(build):
-    """Real and imaginary parts trail a measurement, whoever encoded it."""
+    """Every physics answers with the same native-complex measurement layout."""
     base, matrix, coils = build()
-    measurement = base.A(torch.randn(1, 2, matrix, matrix))
+    measurement = base.A(torch.randn(1, matrix, matrix, dtype=torch.complex64))
+    assert measurement.is_complex()
     assert measurement.shape[0] == 1
     assert measurement.shape[1] == coils
-    assert measurement.shape[-1] == 2

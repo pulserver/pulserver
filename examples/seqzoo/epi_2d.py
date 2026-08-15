@@ -50,6 +50,15 @@ from pulserver import (
 #: Blip-nulled lines in the navigator: odd, even, odd.
 _NAV_LINES = 3
 
+#: Per-plugin ceilings on the gradient and slew limits, in mT/m and T/m/s. The
+#: sequence is held below the smaller of these and what the scanner reports, so
+#: lowering them here -- on the scanner console, even -- reruns the whole script
+#: under gentler gradients (for PNS headroom, acoustic comfort, eddy currents)
+#: without touching anything else. Defaults sit above typical hardware, so they
+#: cap nothing until you lower them.
+MAX_GRAD = 80.0
+MAX_SLEW = 200.0
+
 
 def _shared_kernel(
     system: pp.Opts,
@@ -173,6 +182,7 @@ def navigator(
         The navigator sequence.
     """
     system = pp.Opts() if system is None else system
+    system = pp.cap_system(system, max_grad=MAX_GRAD, max_slew=MAX_SLEW)
     kernel = _shared_kernel(
         system,
         fov=fov,
@@ -326,6 +336,7 @@ def main(
         The main EPI sequence object.
     """
     system = pp.Opts() if system is None else system
+    system = pp.cap_system(system, max_grad=MAX_GRAD, max_slew=MAX_SLEW)
     kernel = _shared_kernel(
         system,
         fov=fov,
@@ -547,6 +558,7 @@ class Epi2D(SequencePlugin):
 
     def validate_protocol(self, system: pp.Opts, protocol: dict[str, dict]) -> dict:
         """Report whether the protocol is feasible, and how long it will take."""
+        system = pp.cap_system(system, max_grad=MAX_GRAD, max_slew=MAX_SLEW)
         kwargs = _main_kwargs(system, protocol)
         try:
             kernel = _shared_kernel(

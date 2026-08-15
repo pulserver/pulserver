@@ -46,6 +46,15 @@ ANGLE_SCHEMES = ("golden", "uniform")
 #: The golden angle over a full turn, pi * (3 - sqrt(5)).
 GOLDEN_ANGLE = np.pi * (3.0 - np.sqrt(5.0))
 
+#: Per-plugin ceilings on the gradient and slew limits, in mT/m and T/m/s. The
+#: sequence is held below the smaller of these and what the scanner reports, so
+#: lowering them here -- on the scanner console, even -- reruns the whole script
+#: under gentler gradients (for PNS headroom, acoustic comfort, eddy currents)
+#: without touching anything else. Defaults sit above typical hardware, so they
+#: cap nothing until you lower them.
+MAX_GRAD = 80.0
+MAX_SLEW = 200.0
+
 
 def arm_angles(n_arms: int, scheme: str) -> np.ndarray:
     """The rotation of every arm, in radians.
@@ -182,6 +191,7 @@ def main(
         The spiral GRE sequence object.
     """
     system = pp.Opts() if system is None else system
+    system = pp.cap_system(system, max_grad=MAX_GRAD, max_slew=MAX_SLEW)
 
     kernel = SpiralKernel(
         system,
@@ -454,6 +464,7 @@ class GreSpiral2D(SequencePlugin):
 
     def validate_protocol(self, system: pp.Opts, protocol: dict[str, dict]) -> dict:
         """Report whether the protocol is feasible, and how long it will take."""
+        system = pp.cap_system(system, max_grad=MAX_GRAD, max_slew=MAX_SLEW)
         kwargs = _main_kwargs(system, protocol)
         try:
             kernel = SpiralKernel(

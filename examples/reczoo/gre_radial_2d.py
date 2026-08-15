@@ -97,17 +97,16 @@ def reconstruct_plane(
 
     Returns
     -------
-    torch.Tensor
+    numpy.ndarray
         The image, ``(h, w)`` -- complex from the solve, magnitude from the
         direct path's coil combination.
     """
-    import torch
+    del device
 
     from pulserver.recon import pics
     from pulserver.recon.physics import NonCartesian2D
 
-    device = "cpu" if device is None else device
-    data = torch.as_tensor(np.asarray(kspace), dtype=torch.complex64, device=device)
+    data = np.asarray(kspace)
     points = np.asarray(trajectory, dtype=np.float32)
 
     density = pipe_menon_dcf(points, image_shape)
@@ -119,15 +118,13 @@ def reconstruct_plane(
         density=density,
         n_coils=n_coils,
     )
-    coils = coil_wise.A_adjoint(torch.view_as_real(data[None]))
-    # Coil-wise images come back (batch, 2, coils, h, w) flattened into the
-    # channel axis.
-    coil_images = torch.view_as_complex(
-        coils.reshape(1, 2, n_coils, *image_shape).movedim(1, -1).contiguous()
-    )[0]
+    # Native complex throughout: the measurement crosses the NumPy boundary and
+    # the coil-wise adjoint answers with one complex image per coil, so there is
+    # no real/complex view juggling to unpack the channel axis.
+    coil_images = coil_wise.A_adjoint(data[None])[0]
 
     if direct:
-        return torch.sqrt(torch.sum(torch.abs(coil_images) ** 2, dim=0))
+        return np.sqrt(np.sum(np.abs(coil_images) ** 2, axis=0))
 
     maps = smooth_sensitivities(coil_images)
     sense = NonCartesian2D(
@@ -137,13 +134,15 @@ def reconstruct_plane(
         density=density,
         n_coils=n_coils,
     )
-    solution = pics(
-        torch.view_as_real(data[None]),
+    # The measurement goes in as NumPy and the unaliased complex image comes
+    # straight back the same way; the SENSE solve keeps a singleton coil axis,
+    # so index past both batch and channel to the plane.
+    return pics(
+        data[None],
         sense,
         regularization=regularization,
         iterations=iterations,
-    )
-    return torch.view_as_complex(solution.movedim(1, -1).contiguous())[0]
+    )[0, 0]
 
 
 class GreRadial2DRecon(ReconPlugin):
@@ -227,7 +226,7 @@ class GreRadial2DRecon(ReconPlugin):
             )
             results.append(
                 ReconResult(
-                    np.abs(_to_numpy(image)).transpose(),
+                    np.abs(_asnumpy(image)).transpose(),
                     reference=-1,
                     image_index=index,
                     image_type="magnitude",
@@ -237,7 +236,7 @@ class GreRadial2DRecon(ReconPlugin):
         return results
 
 
-def _to_numpy(array: Any) -> np.ndarray:
+def _asnumpy(array: Any) -> np.ndarray:
     """Bring a reconstruction back to NumPy, whether it is Torch or already so."""
     return array.cpu().numpy() if hasattr(array, "cpu") else np.asarray(array)
 

@@ -141,7 +141,9 @@ def test_pics_selects_cg_without_a_denoiser(monkeypatch):
         iterations=7,
         init=np.zeros_like(data),
     )
-    assert result is data
+    # NumPy in, NumPy back out through the native-complex boundary.
+    assert isinstance(result, np.ndarray)
+    np.testing.assert_array_equal(result, data)
     np.testing.assert_allclose(calls["normal"], 1.25)
     assert calls["max_iter"] == 7
 
@@ -182,10 +184,17 @@ def test_pics_selects_fista_with_a_denoiser(monkeypatch):
         )
         == "reconstructed"
     )
+    from pulserver.recon.learned import ComplexAdapter
+
     assert calls["g_param"] == 0.05
     assert calls["stepsize"] == 0.2
     assert calls["max_iter"] == 9
-    assert calls["prior"] == ("pnp", model)
+    # The denoiser is routed through the one ComplexAdapter so it can act on
+    # the native-complex image; the wrapped model is the one that was passed.
+    tag, wrapped = calls["prior"]
+    assert tag == "pnp"
+    assert isinstance(wrapped, ComplexAdapter)
+    assert wrapped.model is model
 
 
 def test_pics_rejects_ambiguous_denoiser_sequences():
@@ -516,12 +525,13 @@ def test_cartesian_without_coil_maps_keeps_the_coils():
         dim=axes,
     )
     operator = physics.Cartesian2D(torch.ones(1, 1, n, n), img_size=(n, n))
-    measurement = torch.view_as_real(kspace[None])  # (1, coils, n, n, 2)
+    measurement = kspace[None]  # complex (1, coils, n, n)
 
     adjoint = operator.A_adjoint(measurement)
-    assert tuple(adjoint.shape) == (1, 2, coils, n, n)  # coils kept, not summed
+    assert adjoint.is_complex()
+    assert tuple(adjoint.shape) == (1, coils, n, n)  # coils kept, not summed
 
-    recovered = torch.view_as_complex(adjoint.movedim(1, -1).contiguous())[0]
+    recovered = adjoint[0]
     assert torch.allclose(recovered, coil_images, atol=1e-4)
 
     combined = coil_combine(recovered.numpy(), coil_axis=0)
