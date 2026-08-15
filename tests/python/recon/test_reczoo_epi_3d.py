@@ -13,7 +13,6 @@ block NLINV reads off the mask.
 from __future__ import annotations
 
 import numpy as np
-import pytest
 
 import pulserver.pypulseq as pp
 from pulserver.reczoo import gre_3d
@@ -36,6 +35,23 @@ def _sampling_mask(acceleration, acceleration_z, caipi_shift):
         acceleration=acceleration,
         acceleration_z=acceleration_z,
         caipi_shift=caipi_shift,
+        n_acs=N_ACS,
+        n_acs_z=N_ACS_Z,
+        readout_bandwidth_hz=120e3,
+    )
+    labels = seq.evaluate_labels(evolution="adc")
+    plane = np.zeros((N, N_Z), dtype=bool)
+    plane[labels["LIN"], labels["PAR"]] = True
+    return np.broadcast_to(plane.T[:, :, None], (N_Z, N, N)).astype(bool)
+
+
+def _calibration_mask():
+    """The ``(kz, ky, kx)`` mask the separate low-res GRE calibration samples."""
+    seq = epi_3d.calibration(
+        n_x=N,
+        n_y=N,
+        n_z=N_Z,
+        slab_thickness=32e-3,
         n_acs=N_ACS,
         n_acs_z=N_ACS_Z,
         readout_bandwidth_hz=120e3,
@@ -71,19 +87,12 @@ def _smooth_kspace():
     ).astype(np.complex64)
 
 
-@pytest.mark.parametrize(
-    "acceleration,acceleration_z,caipi_shift",
-    [(2, 1, 0), (1, 2, 1), (2, 2, 1)],
-    ids=["Ry", "Rz", "RyRz"],
-)
-def test_calibration_succeeds_on_the_sequence_mask(
-    acceleration, acceleration_z, caipi_shift
-):
-    """NLINV reproduces the calibration data from the rectangle the accelerated
-    EPI sequence lays down -- the seqzoo ACS and the reczoo calibration read the
-    same central block."""
-    mask = _sampling_mask(acceleration, acceleration_z, caipi_shift)
-    assert not mask.all()  # genuinely undersampled
+def test_calibration_succeeds_on_the_calibration_mask():
+    """NLINV reproduces coil sensitivities from the separate low-resolution GRE
+    calibration -- the block the reczoo estimates maps from once and reuses for
+    every frame."""
+    mask = _calibration_mask()
+    assert not mask.all()  # a central block only
 
     kspace = _smooth_kspace() * mask[None]
     maps = gre_3d.sensitivities(kspace, mask)
@@ -94,12 +103,21 @@ def test_calibration_succeeds_on_the_sequence_mask(
     assert np.abs(maps).max() > 0.0
 
 
-def test_the_acs_rectangle_matches_the_calibration_window():
-    """The fully sampled block the sequence acquires is exactly the window
-    ``calc_calibration_lines`` describes on each axis, so NLINV finds it where
-    it expects it."""
-    mask = _sampling_mask(2, 2, 1)
+def test_the_imaging_mask_is_undersampled_and_holds_no_calibration():
+    """The main file's own mask is the undersampled imaging lattice -- the
+    centre is not fully sampled there, because the calibration is a separate
+    sequence."""
+    imaging = _sampling_mask(2, 2, 1)
+    assert not imaging.all()
+
+
+def test_the_calibration_rectangle_matches_the_window():
+    """The calibration acquires exactly the ``calc_calibration_lines`` window on
+    each axis, so NLINV finds the fully sampled block where it expects it."""
+    mask = _calibration_mask()
     acs_y = pp.calc_calibration_lines(N, N_ACS)
     acs_z = pp.calc_calibration_lines(N_Z, N_ACS_Z)
     rectangle = mask[:, :, 0].T  # (ky, kz)
     assert rectangle[np.ix_(acs_y, acs_z)].all()
+    # and nothing outside it.
+    assert int(rectangle.sum()) == len(acs_y) * len(acs_z)

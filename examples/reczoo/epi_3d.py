@@ -96,6 +96,23 @@ class Epi3DRecon(ReconPlugin):
         ]
         slope, intercept = odd_even_fit(navigator) if len(navigator) == 3 else (0.0, 0.0)
 
+        # Coil sensitivities come from the separate low-resolution calibration
+        # (ACQ_IS_PARALLEL_CALIBRATION), estimated once and reused for every
+        # frame; NLINV reads the fully sampled centre off its mask and resamples
+        # to the full matrix. Absent it, an undersampled scan cannot be solved.
+        coil_maps = None
+        if groups.single_band_reference:
+            calibration = CartesianGridder(self.grid, coils=self.coils)
+            for item in groups.single_band_reference:
+                calibration.add(
+                    np.asarray(item.data),
+                    int(item.idx.kspace_encode_step_2),
+                    int(item.idx.kspace_encode_step_1),
+                )
+            coil_maps = sensitivities(
+                calibration.kspace, calibration.mask, device=self.device
+            )
+
         results = []
         for series, group in enumerate(
             (groups.imaging, groups.reverse_polarity)
@@ -141,7 +158,11 @@ class Epi3DRecon(ReconPlugin):
                     )
                     image = coil_combine(coils, coil_axis=0)
                 else:
-                    maps = sensitivities(kspace, mask, device=self.device)
+                    maps = (
+                        coil_maps
+                        if coil_maps is not None
+                        else sensitivities(kspace, mask, device=self.device)
+                    )
                     image = sense(
                         kspace,
                         mask,

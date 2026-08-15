@@ -118,8 +118,6 @@ def _shared_kernel(
     caipi_shift: int = 1,
     partial_fourier: float = 1.0,
     partial_fourier_z: float = 1.0,
-    n_acs: int = 24,
-    n_acs_z: int = 16,
     readout_bandwidth_hz: float = 500e3,
     spoiling_cycles: float = 4.0,
 ) -> SimpleNamespace:
@@ -137,13 +135,11 @@ def _shared_kernel(
     of k-space, which the two fractions keep, is what the reconstruction fills
     from.
 
-    An undersampled scan -- accelerated or partial Fourier -- also builds a
-    ``calibration`` train: a short linear, fully sampled EPI train over the
-    central ``n_acs`` lines, played once per central partition to lay down the
-    autocalibration rectangle a parallel reconstruction estimates its coil
-    sensitivities from. The rectangle's lines and partitions come from
-    :func:`pp.calc_calibration_lines`, so the sequence and
-    :mod:`pulserver.reczoo.epi_3d` read the same window.
+    Coil sensitivities are calibrated from a separate low-resolution Cartesian
+    gradient echo -- :func:`calibration`, a standalone sequence in the linked
+    collection -- rather than from an autocalibration block folded into this
+    train, so the imaging file is one clean repeating unit and the calibration
+    keeps EPI distortion out of the maps.
     """
     fov_x, fov_y = (fov, fov) if isinstance(fov, (int, float)) else fov
     scheme = "caipi" if acceleration_z > 1 else "linear"
@@ -180,40 +176,9 @@ def _shared_kernel(
         spoiling_cycles=spoiling_cycles,
         labels=("LIN", "PAR"),
     )
-
-    # The autocalibration rectangle, acquired only when the sampling misses the
-    # centre's surroundings -- a fully sampled scan calibrates from itself. Its
-    # extent is the same builtin window the reconstruction reads off the mask.
-    accelerated = (
-        acceleration > 1
-        or acceleration_z > 1
-        or partial_fourier < 1.0
-        or partial_fourier_z < 1.0
-    )
-    acs_lines = pp.calc_calibration_lines(n_y, n_acs) if accelerated else []
-    acs_partitions = pp.calc_calibration_lines(n_z, n_acs_z) if accelerated else []
-    calibration = None
-    if acs_lines and acs_partitions:
-        calibration = design.EpiReadout3D(
-            system,
-            exc_rf,
-            exc_gz,
-            fov=(fov_x, fov_y, slab_thickness),
-            matrix=(n_x, n_y, n_z),
-            scheme="linear",
-            etl=len(acs_lines),
-            te=te,
-            tr=tr,
-            readout_bandwidth_hz=readout_bandwidth_hz,
-            spoiling_cycles=spoiling_cycles,
-            labels=("LIN", "PAR"),
-        )
     return SimpleNamespace(
         excitation=excitation,
         epi=epi,
-        calibration=calibration,
-        acs_lines=acs_lines,
-        acs_partitions=acs_partitions,
         first_y=first_y,
         first_shell=first_shell,
         n_shells=n_shells,
@@ -319,8 +284,6 @@ def navigator(
         acceleration=acceleration,
         acceleration_z=acceleration_z,
         caipi_shift=caipi_shift,
-        n_acs=0,
-        n_acs_z=0,
         readout_bandwidth_hz=readout_bandwidth_hz,
         spoiling_cycles=spoiling_cycles,
     )
@@ -360,6 +323,93 @@ def navigator(
     seq.set_definition(key="Matrix", value=[n_x, n_y, n_z])
     seq.set_definition(key="Name", value="epi_3d_navigator")
     seq.set_definition(key="EchoSpacing", value=epi.esp)
+    return seq
+
+
+def calibration(
+    *,
+    system: pp.Opts | None = None,
+    fov: float | tuple[float, float] = 220e-3,
+    n_x: int = 128,
+    n_y: int = 128,
+    n_z: int = 32,
+    slab_thickness: float = 96e-3,
+    flip_angle_deg: float = 20.0,
+    n_acs: int = 24,
+    n_acs_z: int = 16,
+    readout_bandwidth_hz: float = 500e3,
+    spoiling_cycles: float = 4.0,
+) -> pp.Sequence:
+    """A low-resolution Cartesian gradient echo over the centre of k-space.
+
+    The autocalibration scan for the parallel-imaging reconstruction: a fully
+    sampled ``n_acs x n_acs_z`` block, one line per repetition, marked ``REF``
+    (``ACQ_IS_PARALLEL_CALIBRATION``) so a reconstruction reads it as coil
+    calibration only -- it never becomes imaging data. A plain gradient echo
+    rather than an EPI train, so the maps carry no EPI distortion, and its own
+    sequence in the linked collection so the imaging file stays one clean
+    repeating unit. Parameters mirror :func:`main`.
+
+    Returns
+    -------
+    seq : pulserver.pypulseq.Sequence
+        The calibration sequence, or ``None`` when no calibration is asked for.
+    """
+    system = pp.Opts() if system is None else system
+    system = pp.cap_system(system, max_grad=MAX_GRAD, max_slew=MAX_SLEW)
+    fov_x, fov_y = (fov, fov) if isinstance(fov, (int, float)) else fov
+
+    acs_lines = pp.calc_calibration_lines(n_y, n_acs)
+    acs_partitions = pp.calc_calibration_lines(n_z, n_acs_z)
+    if not acs_lines or not acs_partitions:
+        return None
+
+    _, exc_rf, exc_gz = _build_slab_excitation(
+        system, flip_angle_deg, slab_thickness
+    )
+    readout = design.LineReadout3D(
+        system,
+        exc_rf,
+        exc_gz,
+        fov=(fov_x, fov_y, slab_thickness),
+        matrix=(n_x, n_y, n_z),
+        readout_bandwidth_hz=readout_bandwidth_hz,
+        spoiling_cycles=spoiling_cycles,
+        labels=("LIN", "PAR"),
+    )
+
+    seq = pp.Sequence(system)
+    ref_label = pp.make_label("REF", "SET", 1)
+    lin_label, par_label = readout.adc_labels
+    wait_te = getattr(readout, "wait_te", None)
+    wait_tr = getattr(readout, "wait_tr", None)
+    # Partitions outer, lines inner: a standard centre-block raster.
+    for partition in acs_partitions:
+        kz = (partition - n_z / 2) / (n_z / 2)
+        for line in acs_lines:
+            ky = (line - n_y / 2) / (n_y / 2)
+            lin_label.value = int(line)
+            par_label.value = int(partition)
+            seq.add_block(readout.rf, readout.gz)
+            if wait_te is not None:
+                seq.add_block(wait_te)
+            seq.add_block(
+                readout.gx_pre,
+                pp.scale_grad(readout.gy_pre, ky),
+                pp.scale_grad(readout.gz_pre, kz),
+            )
+            seq.add_block(readout.gx, readout.adc, ref_label, lin_label, par_label)
+            seq.add_block(
+                readout.gx_spoil,
+                pp.scale_grad(readout.gy_rew, ky),
+                pp.scale_grad(readout.gz_rew, kz),
+            )
+            if wait_tr is not None:
+                seq.add_block(wait_tr)
+
+    seq.set_definition(key="FOV", value=[fov_x, fov_y, slab_thickness])
+    seq.set_definition(key="Matrix", value=[n_x, n_y, n_z])
+    seq.set_definition(key="Name", value="epi_3d_calibration")
     return seq
 
 
@@ -500,8 +550,6 @@ def main(
         caipi_shift=caipi_shift,
         partial_fourier=partial_fourier,
         partial_fourier_z=partial_fourier_z,
-        n_acs=n_acs,
-        n_acs_z=n_acs_z,
         readout_bandwidth_hz=readout_bandwidth_hz,
         spoiling_cycles=spoiling_cycles,
     )
@@ -524,19 +572,8 @@ def main(
     shells = [kept[i] for i in pp.calc_traversal_order(len(kept), partition_order)]
     for repetition in range(n_repetitions):
         rep_label.value = int(repetition)
-        # The autocalibration rectangle leads each repetition: a fully sampled
-        # centre every reconstructed volume can estimate its own coil maps
-        # from. It is present only when the imaging lattice is undersampled.
-        if kernel.calibration is not None:
-            for partition in kernel.acs_partitions:
-                _play_shot(
-                    seq,
-                    kernel.calibration,
-                    origin=(kernel.acs_lines[0], partition),
-                    grid=(n_y, n_z),
-                    rev_label=rev_label,
-                    extra_line_labels=(rep_label,),
-                )
+        # Imaging only: coil maps come from the separate calibration sequence,
+        # so this file is one clean repeating unit.
         for segment in range(segments):
             for shell in shells:
                 _play_shot(
@@ -585,6 +622,10 @@ def main(
             acceleration=acceleration,
             acceleration_z=acceleration_z,
             caipi_shift=caipi_shift,
+            partial_fourier=partial_fourier,
+            partial_fourier_z=partial_fourier_z,
+            n_acs=n_acs,
+            n_acs_z=n_acs_z,
             readout_bandwidth_hz=readout_bandwidth_hz,
             opposite_reference=opposite_reference,
             spoiling_cycles=spoiling_cycles,
@@ -593,32 +634,77 @@ def main(
     return seq
 
 
-def write_pair(main_seq: pp.Sequence, seq_filename: str, **navigator_kwargs) -> tuple[str, str]:
-    """Write navigator and main as a linked pair, navigator first.
+def _needs_calibration(kwargs: dict) -> bool:
+    """Whether the scan is undersampled enough to want a coil calibration."""
+    return (
+        kwargs.get("acceleration", 1) > 1
+        or kwargs.get("acceleration_z", 1) > 1
+        or kwargs.get("partial_fourier", 1.0) < 1.0
+        or kwargs.get("partial_fourier_z", 1.0) < 1.0
+    )
+
+
+def write_pair(main_seq: pp.Sequence, seq_filename: str, **kwargs) -> tuple[str, ...]:
+    """Write the linked collection: calibration, then navigator, then main.
+
+    Each sequence in the chain points ``NextSequence`` at the next, so the
+    interpreter's Sequence Collection plays them in order as one scan while
+    keeping each -- the low-resolution coil calibration, the phase navigator,
+    the imaging -- its own well-formed repeating unit. The calibration leads
+    only when the scan is accelerated enough to ask for one; otherwise the
+    chain is navigator then main, as it was.
 
     Parameters
     ----------
     main_seq : pulserver.pypulseq.Sequence
-        The main acquisition.
+        The imaging acquisition.
     seq_filename : str
-        Where the navigator is written; the main goes beside it as
-        ``<stem>_main.seq`` and the navigator's ``NextSequence`` names it.
-    **navigator_kwargs
-        Forwarded to :func:`navigator`.
+        Where the chain's first sequence is written; the others go beside it as
+        ``<stem>_navigator.seq`` and ``<stem>_main.seq``.
+    **kwargs
+        Forwarded to :func:`calibration` and :func:`navigator`, each taking the
+        subset it declares.
 
     Returns
     -------
     tuple of str
-        The navigator and main paths, in chain order.
+        The written paths, in chain order.
     """
     path = Path(seq_filename)
     main_path = path.with_name(path.stem + "_main.seq")
+    nav_path = path.with_name(path.stem + "_navigator.seq")
 
-    lead = navigator(**navigator_kwargs)
-    lead.set_definition(key="NextSequence", value=main_path.name)
-    write_sequence(lead, str(path), offline=True)
-    write_sequence(main_seq, str(main_path), offline=True)
-    return str(path), str(main_path)
+    # The calibration leads the chain only when the imaging is undersampled; a
+    # fully sampled scan reconstructs from itself and needs no coil maps.
+    system = kwargs.get("system")
+    calib = (
+        calibration(
+            system=system,
+            **{name: value for name, value in kwargs.items() if name in _CALIBRATION_ARGUMENTS},
+        )
+        if _needs_calibration(kwargs)
+        else None
+    )
+    nav = navigator(
+        system=system,
+        **{name: value for name, value in kwargs.items() if name in _NAVIGATOR_ARGUMENTS},
+    )
+
+    # calibration -> navigator -> main; the calibration drops out when absent,
+    # and the chain's first sequence is written at ``seq_filename``.
+    chain: list[tuple[pp.Sequence, Path]] = []
+    if calib is not None:
+        chain.append((calib, path))
+        chain.append((nav, nav_path))
+    else:
+        chain.append((nav, path))
+    chain.append((main_seq, main_path))
+
+    for index, (seq, seq_path) in enumerate(chain):
+        if index + 1 < len(chain):
+            seq.set_definition(key="NextSequence", value=chain[index + 1][1].name)
+        write_sequence(seq, str(seq_path), offline=True)
+    return tuple(str(seq_path) for _, seq_path in chain)
 
 
 class Epi3D(SequencePlugin):
@@ -746,9 +832,14 @@ class Epi3D(SequencePlugin):
         n_kept = kernel.n_shells - kernel.first_shell
         shots = kwargs.get("segments", 1) * n_kept
         per_rep = shots * kernel.epi.seq.duration()[0]
-        if kernel.calibration is not None:
-            per_rep += len(kernel.acs_partitions) * kernel.calibration.seq.duration()[0]
         duration = kwargs.get("n_repetitions", 1) * per_rep
+        if _needs_calibration(kwargs):
+            calib = calibration(
+                system=system,
+                **{name: value for name, value in kwargs.items() if name in _CALIBRATION_ARGUMENTS},
+            )
+            if calib is not None:
+                duration += calib.duration()[0]
         return {
             "valid": True,
             "duration": duration,
@@ -770,16 +861,9 @@ class Epi3D(SequencePlugin):
         del offline
         kwargs = _main_kwargs(system, protocol)
         seq = main(**kwargs)
-        write_pair(
-            seq,
-            output_path,
-            system=system,
-            **{
-                name: value
-                for name, value in kwargs.items()
-                if name in _NAVIGATOR_ARGUMENTS
-            },
-        )
+        # write_pair filters to what the calibration and navigator each take;
+        # pass everything so it can also read the undersampling flags.
+        write_pair(seq, output_path, system=system, **kwargs)
 
 
 _KERNEL_ARGUMENTS = frozenset(
@@ -798,6 +882,19 @@ _KERNEL_ARGUMENTS = frozenset(
         "caipi_shift",
         "partial_fourier",
         "partial_fourier_z",
+        "readout_bandwidth_hz",
+        "spoiling_cycles",
+    )
+)
+
+_CALIBRATION_ARGUMENTS = frozenset(
+    (
+        "fov",
+        "n_x",
+        "n_y",
+        "n_z",
+        "slab_thickness",
+        "flip_angle_deg",
         "n_acs",
         "n_acs_z",
         "readout_bandwidth_hz",

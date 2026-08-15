@@ -130,34 +130,48 @@ def test_blipped_caipi_tiles_the_caipirinha_lattice(
     assert np.array_equal(sampled, expected)
 
 
-@pytest.mark.parametrize(
-    "acceleration,acceleration_z", [(2, 1), (1, 2), (2, 2)]
-)
-def test_an_accelerated_scan_lays_down_a_full_calibration_rectangle(
-    acceleration, acceleration_z
-):
-    """Whenever the imaging lattice is undersampled, a short linear train fills
-    the central ACS rectangle -- the fully sampled block ``calc_calibration_lines``
-    describes and :mod:`pulserver.reczoo.epi_3d` calibrates coil maps from."""
+def test_the_calibration_is_a_full_low_res_rectangle_marked_reference():
+    """The autocalibration is its own low-resolution gradient echo, a fully
+    sampled central ``n_acs x n_acs_z`` block whose lines all carry ``REF``
+    (coil calibration, never imaging) at the ``calc_calibration_lines`` window
+    the reconstruction reads."""
     n_y, n_z, n_acs, n_acs_z = 24, 8, 8, 4
-    seq = epi_3d.main(
+    seq = epi_3d.calibration(
         n_x=48,
         n_y=n_y,
         n_z=n_z,
         slab_thickness=32e-3,
-        acceleration=acceleration,
-        acceleration_z=acceleration_z,
-        caipi_shift=1,
         n_acs=n_acs,
         n_acs_z=n_acs_z,
         readout_bandwidth_hz=180e3,
     )
+    is_ok, error_report = seq.check_timing()
+    assert is_ok, error_report
     labels = seq.evaluate_labels(evolution="adc")
-    sampled = np.zeros((n_y, n_z), dtype=bool)
-    sampled[labels["LIN"], labels["PAR"]] = True
     acs_y = pp.calc_calibration_lines(n_y, n_acs)
     acs_z = pp.calc_calibration_lines(n_z, n_acs_z)
-    assert sampled[np.ix_(acs_y, acs_z)].all()
+    # every acquired line is a reference line, and they tile the whole rectangle.
+    assert (np.asarray(labels["REF"]) == 1).all()
+    sampled = set(zip(labels["LIN"].tolist(), labels["PAR"].tolist(), strict=True))
+    assert sampled == {(y, z) for y in acs_y for z in acs_z}
+
+
+def test_the_imaging_file_carries_no_calibration():
+    """The main file is imaging only -- no ``REF`` lines -- so it is one clean
+    repeating unit; the calibration lives in its own linked sequence."""
+    seq = epi_3d.main(
+        n_x=48,
+        n_y=24,
+        n_z=8,
+        slab_thickness=32e-3,
+        acceleration=2,
+        acceleration_z=2,
+        n_acs=8,
+        n_acs_z=4,
+        readout_bandwidth_hz=180e3,
+    )
+    labels = seq.evaluate_labels(evolution="adc")
+    assert int(np.asarray(labels.get("REF", np.zeros(1))).sum()) == 0
 
 
 @pytest.mark.parametrize(
@@ -165,9 +179,8 @@ def test_an_accelerated_scan_lays_down_a_full_calibration_rectangle(
 )
 def test_partial_fourier_drops_the_leading_edge(partial_fourier, partial_fourier_z):
     """Partial Fourier keeps the trailing fraction of each phase-encode axis and
-    the centre, leaving the leading edge for conjugate symmetry -- and still
-    lays down the calibration rectangle so the missing lines are fillable."""
-    n_y, n_z, n_acs, n_acs_z = 32, 8, 8, 4
+    the centre, leaving the leading edge for conjugate symmetry."""
+    n_y, n_z = 32, 8
     seq = epi_3d.main(
         n_x=48,
         n_y=n_y,
@@ -175,8 +188,6 @@ def test_partial_fourier_drops_the_leading_edge(partial_fourier, partial_fourier
         slab_thickness=32e-3,
         partial_fourier=partial_fourier,
         partial_fourier_z=partial_fourier_z,
-        n_acs=n_acs,
-        n_acs_z=n_acs_z,
         readout_bandwidth_hz=150e3,
     )
     labels = seq.evaluate_labels(evolution="adc")
@@ -185,13 +196,10 @@ def test_partial_fourier_drops_the_leading_edge(partial_fourier, partial_fourier
     sampled[lin, par] = True
 
     # The leading edge of each axis is dropped in proportion to the fraction,
-    # the centre is kept, and the calibration rectangle is fully sampled.
+    # and the centre is kept.
     assert lin.min() >= round((1.0 - partial_fourier) * n_y) - 1
     assert par.min() >= round((1.0 - partial_fourier_z) * n_z) - 1
     assert sampled[n_y // 2, n_z // 2]
-    acs_y = pp.calc_calibration_lines(n_y, n_acs)
-    acs_z = pp.calc_calibration_lines(n_z, n_acs_z)
-    assert sampled[np.ix_(acs_y, acs_z)].all()
 
 
 def test_a_time_series_carries_its_repetition_counter():
