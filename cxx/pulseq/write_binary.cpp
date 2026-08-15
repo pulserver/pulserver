@@ -26,6 +26,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <map>
 #include <stdexcept>
 #include <vector>
 
@@ -56,6 +57,7 @@ namespace pulseq
             SEC_SOFTDELAYS = SECTION_PREFIX | 13,
             SEC_RFSHIMS = SECTION_PREFIX | 14,
             SEC_ROTATIONS = SECTION_PREFIX | 15,
+            SEC_LABELNAMES = SECTION_PREFIX | 16,
         };
 
         /** Seconds to integer picoseconds, rounding halves to even as Python does. */
@@ -401,6 +403,38 @@ namespace pulseq
                 {SEC_LABELINC, &seq.label_inc_library()},
             };
             const char* names[2] = {"LABELSET", "LABELINC"};
+
+            /* The file's label-id space is defined by the file itself: a
+             * LABELNAMES section maps every id the label rows use onto its
+             * name, so a reader in any process resolves them -- names
+             * outside the builtin table included.  Ids are the writer's
+             * registry ids, which the section makes self-describing. */
+            std::map<int, std::string> used;
+            for (int s = 0; s < 2; ++s)
+            {
+                for (int id = 1; id <= label_sections[s].second->size(); ++id)
+                {
+                    const int32_t* row = label_sections[s].second->row(id);
+                    const std::string& label = seq.label_name(row[1]);
+                    const int file_id = raw::pulseq_label_register_name(label.c_str());
+                    if (file_id <= 0)
+                        throw std::runtime_error(
+                            "cannot encode label '" + label + "' in the binary format");
+                    used.emplace(file_id, label);
+                }
+            }
+            if (!used.empty())
+            {
+                put_section(out, SEC_LABELNAMES);
+                put_i64(out, static_cast<int64_t>(used.size()));
+                for (const auto& entry : used)
+                {
+                    put_i32(out, entry.first);
+                    out.append(entry.second);
+                    out.push_back('\0');
+                }
+            }
+
             for (int s = 0; s < 2; ++s)
             {
                 if (label_sections[s].second->empty())
@@ -411,20 +445,10 @@ namespace pulseq
                 for (int id = 1; id <= label_sections[s].second->size(); ++id)
                 {
                     const int32_t* row = label_sections[s].second->row(id);
-                    /* The file carries the C reader's label ids, not this
-                     * sequence's: the binary format has no name table, so the
-                     * number written must be one the reader's registry
-                     * resolves.  Registering here keeps names outside the
-                     * builtin table readable in this process; the format
-                     * itself cannot yet carry them across processes. */
                     const std::string& label = seq.label_name(row[1]);
-                    const int file_id = raw::pulseq_label_register_name(label.c_str());
-                    if (file_id <= 0)
-                        throw std::runtime_error(
-                            "cannot encode label '" + label + "' in the binary format");
                     put_i32(out, id);
                     put_i32(out, row[0]);
-                    put_i32(out, file_id);
+                    put_i32(out, raw::pulseq_label_register_name(label.c_str()));
                 }
             }
         }

@@ -68,8 +68,11 @@ namespace
             ASSERT_EQ(ours.numbers().size(), theirs.numbers().size()) << entry.first;
             for (size_t i = 0; i < theirs.numbers().size(); ++i)
             {
+                /* The full parse round-trips definition values through
+                 * 9-significant-digit strings; the lazy read takes the
+                 * stored float64 as written. Compare at string precision. */
                 EXPECT_NEAR(ours.numbers()[i], theirs.numbers()[i],
-                            1e-9 * std::max(1.0, std::fabs(theirs.numbers()[i])))
+                            1e-8 * std::max(1.0, std::fabs(theirs.numbers()[i])))
                     << entry.first << "[" << i << "]";
             }
         }

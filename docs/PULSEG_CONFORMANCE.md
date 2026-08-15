@@ -132,11 +132,24 @@ as a *convenience/debug view*, and it should stay one:
 - A PulSeg **virtual segment** is pulserver's SEGMENT: a reusable unit with
   no periodicity assumption. TR is a *safety/efficiency* concept layered on
   top and stays out of the IR core.
-- **TRID** marks segment-instance boundaries (§4.2) and, in pulserver,
-  additionally allows the optional refinement of isolating TRs inside
-  hyperTRs for the RF safety checks (coil protection, SAR). Absent TRID,
-  the conservative check runs and the hyperTR-level guard plus the
-  hardware monitor still stand — TRID is never load-bearing for safety.
+- **Segmentation authority — a declared divergence from §4.2.** The spec
+  makes `TRID` annotation the segment-boundary convention. Pulserver's
+  segmentation is derived from **TR content alone**: the interpreter
+  detects the repeating structure and partitions it structurally, with no
+  annotation required or consulted. The partitions satisfy the same
+  constraints §4.2 exists to guarantee (every instance of a segment has
+  the same block count and the same normalized base-block structure), so
+  conformance here is semantic: the same virtual segments, arrived at by
+  detection rather than declaration.
+- **TRID's actual role in pulserver** is an optional *safety refinement*
+  label: when a hyperTR is composed of **interleaved** subsequences, TRID
+  lets the RF checks (SAR, coil heating) isolate the constituent TRs
+  inside it. **Concatenated** subsequences never need it — they are split
+  into individual `.seq` objects serialized as a `NextSequence` linked
+  list, which the interpreter loads as a collection and evaluates
+  independently. Absent TRID, the conservative check runs and the
+  hyperTR-level guard plus the hardware monitor still stand — TRID is
+  never load-bearing for safety or for segmentation.
 - **`TRSize` definition (proposed convention):** the design side MAY write
   the structural TR's block count into `[DEFINITIONS]` (pulserver's writer
   does, automatically, whenever detection succeeds; one value per file of a
@@ -149,6 +162,19 @@ as a *convenience/debug view*, and it should stay one:
   is being removed from pulserver's TR descriptor.
 
 ## 5. Documented deviations (version-bump candidates)
+
+0. **Segment-level event identity is looser than §3.1 in two ways.**
+   *Acquisition presence is instance metadata*: a dummy shot is the same
+   structural unit played without acquiring (`has_adc` is OR-reduced per
+   position; the window's count/dwell/delay must still agree across the
+   instances that do acquire). *Sampled-gradient timing is per-instance*:
+   pulserver extends the spec's co-timed shot-variant model to variants
+   with their own time structures — an explicit-arm stack's per-arm
+   rewinders differ in vertex times, and each instance selects its shape
+   through the instance table. The spec's multishot redefinition should
+   either adopt per-shot time structures or state the co-timed restriction
+   as deliberate; pulserver's oracle validates the former.
+
 
 1. **Granularity**: pulserver stores times as integer microseconds (the
    32-bit scanner target), where the spec speaks seconds. Lossless for any

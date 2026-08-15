@@ -46,6 +46,7 @@ namespace pulseq
                 case 13: return "SOFTDELAYS";
                 case 14: return "RFSHIMS";
                 case 15: return "ROTATIONS";
+                case 16: return "LABELNAMES";
                 default: return nullptr;
             }
         }
@@ -227,6 +228,18 @@ namespace pulseq
                 {
                     const uint64_t samples = get_u64(cursor + 4 + 8);
                     cursor += 4 + 8 + 8 + samples * 4;
+                }
+            }
+            else if (code == 16) /* LABELNAMES: entry walk (id + NUL name) */
+            {
+                const uint64_t count = get_u64(cursor);
+                cursor += 8;
+                for (uint64_t i = 0; i < count; ++i)
+                {
+                    const size_t nul = bytes_.find('\0', cursor + 4);
+                    if (nul == std::string::npos)
+                        throw std::runtime_error("truncated label-names section");
+                    cursor = nul + 1;
                 }
             }
             else if (code == 13) /* SOFTDELAYS: entry walk */

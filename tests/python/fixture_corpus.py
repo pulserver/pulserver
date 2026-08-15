@@ -273,12 +273,19 @@ CORPUS = {
 }
 
 #: Corpus entries that also get a `.bin` twin, one per binary-format feature:
-#: rotation extensions (radial), explicit arbitrary arms (stack of spirals),
-#: echo-train labels (propeller), continuous gradients (zte). Only slots whose
-#: labels are all in the builtin table qualify: the binary format stores
-#: numeric label ids with no name section, so a name outside that table does
-#: not survive into a fresh process.
-BINARY_TWINS = ("gre_radial_2d", "mprage_stack_of_spirals_3d", "se_propeller_2d", "zte_3d")
+#: boundary labels + partial Fourier (gre_2d), rotation extensions (radial),
+#: explicit arbitrary arms (stack of spirals), echo-train labels (propeller,
+#: fse), continuous gradients (zte). The binary format's LABELNAMES section
+#: makes every label name self-describing, so label-heavy slots roundtrip
+#: across processes like any other.
+BINARY_TWINS = (
+    "gre_2d",
+    "fse_3d",
+    "gre_radial_2d",
+    "mprage_stack_of_spirals_3d",
+    "se_propeller_2d",
+    "zte_3d",
+)
 
 
 def write_epi_collections(directory: Path) -> list[Path]:

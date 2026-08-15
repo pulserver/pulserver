@@ -58,6 +58,11 @@
 #define PULSEQ_BIN_SOFTDELAYS 13
 #define PULSEQ_BIN_RFSHIMS 14
 #define PULSEQ_BIN_ROTATIONS 15
+#define PULSEQ_BIN_LABELNAMES 16
+
+/* Largest file label id the LABELNAMES remap covers; ids past it read
+ * unmapped, exactly as a file without the section reads. */
+#define PULSEQ_BIN_MAX_LABEL_REMAP 256
 
 /* Blocks are decoded in batches rather than one fread per record; at two
  * million blocks the per-call overhead is otherwise the dominant cost. */
@@ -88,6 +93,12 @@ typedef struct
     FILE *f;
     int file_is_big;  /**< byte order of the file itself */
     int reverse_real; /**< file and host disagree, so IEEE real bytes need flipping */
+
+    /* LABELNAMES remap: the file's label ids resolved through the names it
+     * declares, so a name outside the builtin table reads back as itself in
+     * any process. Zero entries mean "no remap" (section absent, or the id
+     * was not declared) and the id passes through unchanged. */
+    int label_remap[PULSEQ_BIN_MAX_LABEL_REMAP];
 } bin_reader;
 
 static int host_is_big_endian(void)
@@ -1159,6 +1170,53 @@ static int read_binary_triggers(bin_reader *r, pulseq_file *seq)
     return PULSEQ_SUCCESS;
 }
 
+/** @brief LABELNAMES: the file's own label-id space, defined by name.
+ *
+ * Each entry pairs a file label id with its name; registering the name
+ * gives this process's id for it, and the difference becomes the remap the
+ * label rows are read through. Ids past the remap's bound, and files
+ * without the section, pass through unchanged. */
+static int read_binary_label_names(bin_reader *r, pulseq_file *seq)
+{
+    long count, i;
+    int rc;
+
+    (void)seq;
+    rc = rd_count(r, &count);
+    if (PULSEQ_FAILED(rc))
+        return rc;
+
+    for (i = 0; i < count; ++i)
+    {
+        char name[PULSEQ_LABEL_NAME_LENGTH];
+        int file_id, registered;
+        size_t at;
+        int ch;
+
+        rc = rd_i32(r, &file_id);
+        if (PULSEQ_FAILED(rc))
+            return rc;
+
+        at = 0;
+        for (;;)
+        {
+            ch = fgetc(r->f);
+            if (ch == EOF)
+                return PULSEQ_ERR_FILE_READ_FAILED;
+            if (ch == '\0')
+                break;
+            if (at + 1 < sizeof(name))
+                name[at++] = (char)ch;
+        }
+        name[at] = '\0';
+
+        registered = pulseq_label_register_name(name);
+        if (registered > 0 && file_id > 0 && file_id <= PULSEQ_BIN_MAX_LABEL_REMAP)
+            r->label_remap[file_id - 1] = registered;
+    }
+    return PULSEQ_SUCCESS;
+}
+
 static int read_binary_labels(bin_reader *r, pulseq_file *seq, int is_inc)
 {
     long count, i;
@@ -1196,6 +1254,9 @@ static int read_binary_labels(bin_reader *r, pulseq_file *seq, int is_inc)
         rc = rd_i32(r, &label_index);
         if (PULSEQ_FAILED(rc))
             return rc;
+        if (label_index > 0 && label_index <= PULSEQ_BIN_MAX_LABEL_REMAP &&
+            r->label_remap[label_index - 1] > 0)
+            label_index = r->label_remap[label_index - 1];
 
         rc = lib_reserve(rows, &cap, size, 2, id);
         if (PULSEQ_FAILED(rc))
@@ -1514,7 +1575,8 @@ static int next_section(bin_reader *r, int *code, int *at_eof)
     if (got != 8)
         return PULSEQ_ERR_FILE_READ_FAILED;
     dec_i64(b, r->file_is_big, &raw);
-    if (raw.hi != PULSEQ_BIN_SECTION_HI || raw.lo == 0UL || raw.lo > 15UL)
+    if (raw.hi != PULSEQ_BIN_SECTION_HI || raw.lo == 0UL ||
+        raw.lo > (unsigned long)PULSEQ_BIN_LABELNAMES)
         return PULSEQ_ERR_FILE_READ_FAILED;
     *code = (int)raw.lo;
     return PULSEQ_SUCCESS;
@@ -1532,6 +1594,7 @@ static int read_binary_stream(pulseq_file *seq, FILE *f, int definitions_only)
     r.f = f;
     r.file_is_big = 0;
     r.reverse_real = 0;
+    memset(r.label_remap, 0, sizeof(r.label_remap));
 
     pulseq__file_reset(seq);
 
@@ -1597,6 +1660,9 @@ static int read_binary_stream(pulseq_file *seq, FILE *f, int definitions_only)
             break;
         case PULSEQ_BIN_TRIGGERS:
             rc = read_binary_triggers(&r, seq);
+            break;
+        case PULSEQ_BIN_LABELNAMES:
+            rc = read_binary_label_names(&r, seq);
             break;
         case PULSEQ_BIN_LABELSET:
             rc = read_binary_labels(&r, seq, 0);
