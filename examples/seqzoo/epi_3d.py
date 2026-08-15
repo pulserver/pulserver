@@ -65,6 +65,13 @@ SPSP_EXCITATION = False
 #: same script targets fat at 1.5 T and 3 T alike.
 FAT_SHIFT_PPM = -3.4
 
+#: Offer the fMRI multiphase mode: a time series of ``UIParam.NUM_FRAMES``
+#: frames, each carrying its ``REP`` counter. A script-level toggle because a
+#: multiphase scan is a different study than a single volume. When ``False`` the
+#: frame count is forced to one and the multiphase control is dropped from the
+#: protocol, so the console never shows it.
+ENABLE_MULTIPHASE = False
+
 
 def _build_slab_excitation(
     system: pp.Opts, flip_angle_deg: float, thickness_m: float
@@ -712,8 +719,7 @@ class Epi3D(SequencePlugin):
 
     def get_default_protocol(self, system: pp.Opts) -> dict[str, dict]:
         """Return the protocol the scanner UI is built from."""
-        return protocol_to_dict(
-            {
+        controls = {
                 UIParam.TE: DropdownFloatParam(
                     value=-1.0,
                     min=-1.0,
@@ -814,8 +820,11 @@ class Epi3D(SequencePlugin):
                 UIParam.user_value(6): TypeinFloatParam(
                     value=1.0, min=0.75, max=1.0, incr=0.05, unit=""
                 ),
-            }
-        )
+        }
+        # The multiphase control is shown only when the fMRI time series is on.
+        if not ENABLE_MULTIPHASE:
+            controls.pop(UIParam.NUM_FRAMES, None)
+        return protocol_to_dict(controls)
 
     def validate_protocol(self, system: pp.Opts, protocol: dict[str, dict]) -> dict:
         """Report whether the protocol is feasible, and how long it will take."""
@@ -941,7 +950,9 @@ def _main_kwargs(system: pp.Opts, protocol: dict[str, dict]) -> dict:
         n_acs_z=max(0, round(params.user_float(prot, 4, 16.0))),
         partial_fourier=params.user_float(prot, 5, 1.0),
         partial_fourier_z=params.user_float(prot, 6, 1.0),
-        n_repetitions=params.param_int(prot, UIParam.NUM_FRAMES),
+        n_repetitions=(
+            params.param_int(prot, UIParam.NUM_FRAMES) if ENABLE_MULTIPHASE else 1
+        ),
     )
 
 
