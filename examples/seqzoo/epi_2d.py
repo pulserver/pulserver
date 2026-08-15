@@ -164,6 +164,7 @@ def navigator(
     acceleration: int = 1,
     readout_bandwidth_hz: float = 500e3,
     opposite_reference: bool = True,
+    slice_order: str = "interleaved",
     spoiling_cycles: float = 4.0,
 ) -> pp.Sequence:
     """Build the navigator sequence: blip-nulled lines, and the reference.
@@ -212,7 +213,9 @@ def navigator(
     set_label = pp.make_label("SET", "SET", 1)
     slc_label = pp.make_label("SLC", "SET", 0)
 
-    for i_slice in range(n_slices):
+    # Match the main scan's slice order so the navigator's phase estimate is
+    # acquired under the same slice-to-slice timing.
+    for i_slice in (int(i) for i in pp.calc_traversal_order(n_slices, slice_order)):
         epi.rf.freq_offset = excitation.gz.amplitude * slice_positions[i_slice]
         epi.rf.phase_offset = -2 * np.pi * epi.rf.freq_offset * epi.rf.center
         slc_label.value = int(i_slice)
@@ -268,6 +271,7 @@ def main(
     acceleration: int = 1,
     readout_bandwidth_hz: float = 500e3,
     opposite_reference: bool = True,
+    slice_order: str = "interleaved",
     n_gain_calibration_readouts: int | None = None,
     spoiling_cycles: float = 4.0,
 ) -> pp.Sequence:
@@ -324,6 +328,10 @@ def main(
     opposite_reference : bool, optional
         Include the opposite-phase-encode reference in the navigator when
         writing the pair. Default is True.
+    slice_order : str, optional
+        Order the slices are acquired in, one of ``pp.calc_traversal_order``'s
+        schemes. ``'interleaved'`` (the default) maximises the time between
+        neighbouring slices.
     n_gain_calibration_readouts : int or None, optional
         Written as the ``NumGainCalibrationReadouts`` definition. None is
         one per slice. Default is None.
@@ -363,10 +371,14 @@ def main(
     slc_label = pp.make_label("SLC", "SET", 0)
     rep_label = pp.make_label("REP", "SET", 0)
 
+    # Slices interleave by default so neighbours are excited as far apart in
+    # time as the ordering allows; the frequency offset stays tied to the
+    # physical slice, so only the acquisition order changes.
+    slices = [int(i) for i in pp.calc_traversal_order(n_slices, slice_order)]
     for repetition in range(n_repetitions):
         rep_label.value = int(repetition)
         for segment in range(segments):
-            for i_slice in range(n_slices):
+            for i_slice in slices:
                 epi.rf.freq_offset = (
                     excitation.gz.amplitude * slice_positions[i_slice]
                 )

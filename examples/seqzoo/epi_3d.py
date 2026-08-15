@@ -246,6 +246,7 @@ def main(
     acceleration: int = 1,
     readout_bandwidth_hz: float = 500e3,
     opposite_reference: bool = True,
+    partition_order: str = "center_out",
     n_gain_calibration_readouts: int = 1,
     spoiling_cycles: float = 4.0,
 ) -> pp.Sequence:
@@ -295,6 +296,10 @@ def main(
         Uniform phase-encode undersampling factor along y. Default is 1.
     readout_bandwidth_hz : float, optional
         Requested receiver bandwidth in Hz. Default is 500e3.
+    partition_order : str, optional
+        Order the partitions are encoded in, one of
+        ``pp.calc_traversal_order``'s schemes. ``'center_out'`` (the default)
+        puts the centre of k-space on the first, steady-state echoes.
     opposite_reference : bool, optional
         Include the opposite-phase-encode reference when writing the pair.
         Default is True.
@@ -333,10 +338,14 @@ def main(
     rev_label = pp.make_label("REV", "SET", 0)
     rep_label = pp.make_label("REP", "SET", 0)
 
+    # Partitions run centre-out by default, so the first echoes -- the ones the
+    # steady state and the contrast follow -- sit at the centre of k-space; the
+    # partition's kz placement stays tied to its physical index.
+    partitions = [int(p) for p in pp.calc_traversal_order(n_z, partition_order)]
     for repetition in range(n_repetitions):
         rep_label.value = int(repetition)
         for segment in range(segments):
-            for partition in range(n_z):
+            for partition in partitions:
                 _play_shot(
                     seq,
                     epi,
