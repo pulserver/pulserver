@@ -23,7 +23,14 @@ from pulserver.recon._mrd.epi import partition_epi_acquisitions
 from pulserver.recon.postprocessing import center_crop, coil_combine
 from pulserver.recon.preprocessing import CartesianGridder, receiver_channels
 from pulserver.reczoo.epi_2d import correct_lines, odd_even_fit
-from pulserver.reczoo.gre_3d import coil_volumes, encoded_volume, recon_volume
+from pulserver.reczoo.gre_3d import (
+    coil_volumes,
+    encoded_volume,
+    fill_partial_echo,
+    recon_volume,
+    sense,
+    sensitivities,
+)
 
 
 class Epi3DRecon(ReconPlugin):
@@ -31,15 +38,31 @@ class Epi3DRecon(ReconPlugin):
 
     Parameters
     ----------
+    regularization
+        Tikhonov weight of the CG-SENSE solve.
+    iterations
+        Maximum CG iterations.
+    pocs_iterations
+        Partial-echo POCS iterations.
     device
         Torch device the reconstruction runs on. ``None`` is the CPU.
     """
 
-    def __init__(self, *, device: Any = None) -> None:
+    def __init__(
+        self,
+        *,
+        regularization: float = 1e-3,
+        iterations: int = 40,
+        pocs_iterations: int = 12,
+        device: Any = None,
+    ) -> None:
         super().__init__(
             split_on=("ACQ_LAST_IN_MEASUREMENT",),
             reject_flags=("ACQ_IS_NOISE_MEASUREMENT",),
         )
+        self.regularization = float(regularization)
+        self.iterations = int(iterations)
+        self.pocs_iterations = int(pocs_iterations)
         self.device = device
 
     def startup(self, context: ReconContext) -> None:
@@ -100,11 +123,35 @@ class Epi3DRecon(ReconPlugin):
                         int(item.idx.kspace_encode_step_2),
                         int(item.idx.kspace_encode_step_1),
                     )
-                kspace = buffer.kspace
-                image = coil_combine(
-                    coil_volumes(kspace, np.ones(kspace.shape[1:], bool)),
-                    coil_axis=0,
-                )
+                kspace, mask = buffer.kspace, buffer.mask
+
+                # What the scan sampled selects the reconstruction: a phase
+                # encode with no samples was skipped, and a readout sample
+                # missing from every line is echo never acquired.
+                encodes = mask.any(axis=-1)
+                readout = mask.reshape(-1, mask.shape[-1]).any(axis=0)
+
+                if encodes.all():
+                    coils = (
+                        coil_volumes(kspace, mask, device=self.device)
+                        if readout.all()
+                        else fill_partial_echo(
+                            kspace, readout, self.pocs_iterations, device=self.device
+                        )
+                    )
+                    image = coil_combine(coils, coil_axis=0)
+                else:
+                    maps = sensitivities(kspace, mask, device=self.device)
+                    image = sense(
+                        kspace,
+                        mask,
+                        maps,
+                        readout,
+                        regularization=self.regularization,
+                        iterations=self.iterations,
+                        pocs_iterations=self.pocs_iterations,
+                        device=self.device,
+                    )
                 results.append(
                     ReconResult(
                         center_crop(

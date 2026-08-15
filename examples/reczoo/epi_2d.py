@@ -40,7 +40,12 @@ from pulserver.recon.preprocessing import (
     receiver_channels,
     recon_shape,
 )
-from pulserver.reczoo.gre_2d import coil_images
+from pulserver.reczoo.gre_2d import (
+    coil_images,
+    fill_partial_echo,
+    sense,
+    sensitivities,
+)
 
 
 def _hybrid(rows: Any) -> np.ndarray:
@@ -120,15 +125,31 @@ class Epi2DRecon(ReconPlugin):
 
     Parameters
     ----------
+    regularization
+        Tikhonov weight of the CG-SENSE solve.
+    iterations
+        Maximum CG iterations.
+    pocs_iterations
+        Partial-echo POCS iterations.
     device
         Torch device the reconstruction runs on. ``None`` is the CPU.
     """
 
-    def __init__(self, *, device: Any = None) -> None:
+    def __init__(
+        self,
+        *,
+        regularization: float = 1e-3,
+        iterations: int = 40,
+        pocs_iterations: int = 12,
+        device: Any = None,
+    ) -> None:
         super().__init__(
             split_on=("ACQ_LAST_IN_MEASUREMENT",),
             reject_flags=("ACQ_IS_NOISE_MEASUREMENT",),
         )
+        self.regularization = float(regularization)
+        self.iterations = int(iterations)
+        self.pocs_iterations = int(pocs_iterations)
         self.device = device
 
     def startup(self, context: ReconContext) -> None:
@@ -192,11 +213,38 @@ class Epi2DRecon(ReconPlugin):
                         row, index, int(item.idx.kspace_encode_step_1)
                     )
                 for index in range(self.grid[0]):
-                    kspace, _ = buffer[index]
-                    image = coil_combine(
-                        coil_images(kspace, np.ones(kspace.shape[1:], bool)),
-                        coil_axis=0,
-                    )
+                    kspace, mask = buffer[index]
+
+                    # What the scan sampled selects the reconstruction: a phase
+                    # encode with no samples was skipped, and a readout sample
+                    # missing from every line is echo never acquired.
+                    lines = mask.any(axis=-1)
+                    readout = mask.any(axis=0)
+
+                    if lines.all():
+                        coils = (
+                            coil_images(kspace, mask, device=self.device)
+                            if readout.all()
+                            else fill_partial_echo(
+                                kspace,
+                                readout,
+                                self.pocs_iterations,
+                                device=self.device,
+                            )
+                        )
+                        image = coil_combine(coils, coil_axis=0)
+                    else:
+                        maps = sensitivities(kspace, mask, device=self.device)
+                        image = sense(
+                            kspace,
+                            mask,
+                            maps,
+                            readout,
+                            regularization=self.regularization,
+                            iterations=self.iterations,
+                            pocs_iterations=self.pocs_iterations,
+                            device=self.device,
+                        )
                     results.append(
                         ReconResult(
                             center_crop(
