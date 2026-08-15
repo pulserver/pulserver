@@ -166,13 +166,17 @@ def calc_sampled_pairs(
     calibration: tuple[int, int],
     *,
     partial_fourier: tuple[float, float] = (1.0, 1.0),
+    caipi_shift: int = 0,
     order: str = "calibration_first",
 ) -> tuple[list[tuple[int, int]], int]:
     """Return the ``(line, partition)`` pairs a 2D phase-encode grid samples.
 
-    The 3D counterpart of :func:`calc_sampled_lines`: uniform undersampling on
-    each of the two phase-encode axes, a fully sampled autocalibration
-    *rectangle* at the centre of k-space, and partial Fourier on either axis.
+    The 3D counterpart of :func:`calc_sampled_lines`: a CAIPIRINHA lattice
+    (:func:`make_caipirinha_mask`) on the two phase-encode axes, a fully
+    sampled autocalibration *rectangle* at the centre of k-space, and partial
+    Fourier on either axis. ``caipi_shift`` is the per-``ky``-block shift the
+    lattice applies along kz; ``0`` degenerates to a plain ``r_y x r_z``
+    grid.
 
     ``'calibration_first'`` leads the traversal with the rectangle -- every
     sampled pair whose line *and* partition are both autocalibration views --
@@ -193,6 +197,10 @@ def calc_sampled_pairs(
     partial_fourier : tuple of float, optional
         ``(pf_y, pf_z)``, the acquired fraction of each axis in ``(0.5, 1]``.
         Default is ``(1.0, 1.0)``.
+    caipi_shift : int, optional
+        CAIPIRINHA shift along kz per sampled-ky block, ``0 <= caipi_shift <
+        r_z``. ``0`` (the default) is a regular lattice; a non-zero shift
+        spreads the aliasing into both phase-encode directions. Default is 0.
     order : str, optional
         ``'calibration_first'`` (the default) leads with the rectangle;
         ``'ascending'`` traverses the whole grid partitions-outer,
@@ -229,31 +237,35 @@ def calc_sampled_pairs(
     acs_y, acs_z = calibration
     pf_y, pf_z = partial_fourier
 
-    lines = calc_sampled_lines(n_y, r_y, acs_y, partial_fourier=pf_y)
-    partitions = calc_sampled_lines(n_z, r_z, acs_z, partial_fourier=pf_z)
-    acs_lines = set(calc_calibration_lines(n_y, acs_y, partial_fourier=pf_y))
-    acs_partitions = set(calc_calibration_lines(n_z, acs_z, partial_fourier=pf_z))
+    first_y = n_y - round(_checked_partial_fourier(pf_y) * n_y)
+    first_z = n_z - round(_checked_partial_fourier(pf_z) * n_z)
+
+    # The CAIPI lattice within the partial-Fourier region, plus the fully
+    # sampled autocalibration rectangle.
+    sampled = make_caipirinha_mask((n_y, n_z), r_y, r_z, delta=caipi_shift)
+    sampled[:first_y, :] = False
+    sampled[:, :first_z] = False
+    acs_lines = calc_calibration_lines(n_y, acs_y, partial_fourier=pf_y)
+    acs_partitions = calc_calibration_lines(n_z, acs_z, partial_fourier=pf_z)
+    if acs_lines and acs_partitions:
+        sampled[np.ix_(acs_lines, acs_partitions)] = True
+
+    acs_line_set = set(acs_lines)
+    acs_partition_set = set(acs_partitions)
 
     def calibrates(line: int, partition: int) -> bool:
-        return line in acs_lines and partition in acs_partitions
+        return line in acs_line_set and partition in acs_partition_set
 
-    rectangle = [
-        (line, partition)
-        for partition in partitions
-        for line in lines
-        if calibrates(line, partition)
+    pairs = [
+        (int(line), int(partition))
+        for partition in range(n_z)
+        for line in range(n_y)
+        if sampled[line, partition]
     ]
+    rectangle = [pair for pair in pairs if calibrates(*pair)]
     if order == "ascending":
-        pairs = [
-            (line, partition) for partition in partitions for line in lines
-        ]
         return pairs, len(rectangle)
-    body = [
-        (line, partition)
-        for partition in partitions
-        for line in lines
-        if not calibrates(line, partition)
-    ]
+    body = [pair for pair in pairs if not calibrates(*pair)]
     return rectangle + body, len(rectangle)
 
 
