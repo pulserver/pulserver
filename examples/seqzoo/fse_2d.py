@@ -5,8 +5,8 @@ A CPMG train per excitation -- :class:`design.FseReadout2D`: one SLR 90, then
 and unwound before the next 180, which is what survives the train's sign
 flips. The phase-encode lines are dealt across shots so that the centre of
 k-space is acquired at the echo whose time is the requested effective TE --
-the rolled-linear ordering, whose wrap every product FSE accepts for the
-same reason. Slices are dealt into passes exactly as the gradient echo deals
+the rolled-linear ordering, delegated to :func:`pulserver.pypulseq.make_linear_order`,
+whose wrap every product FSE accepts for the same reason. Slices are dealt into passes exactly as the gradient echo deals
 them. :mod:`pulserver.reczoo.fse_2d` reads the result back.
 
 ``main`` returns the :class:`pulserver.pypulseq.Sequence`; ``PLUGIN`` is the
@@ -273,56 +273,6 @@ def main(
     return seq
 
 
-def rolled_linear_shots(
-    sampled_lines: list[int], etl: int, n_center: int, n_y: int
-) -> list[list[int | None]]:
-    """Deal lines into shots so the k-space centre lands on echo ``n_center``.
-
-    The sampled lines, sorted, are cut into ``etl`` groups of one line per
-    shot; group ``g`` would naturally play at echo ``g``, which pins the
-    effective TE wherever the geometry puts the centre. Rolling the echo
-    assignment cyclically moves the centre group to ``n_center`` instead,
-    at the cost of one signal-modulation seam where the roll wraps -- the
-    trade every product FSE makes.
-
-    Parameters
-    ----------
-    sampled_lines : list of int
-        The lines the sampling plan asks for.
-    etl : int
-        Echo train length.
-    n_center : int
-        Zero-based echo index the centre of k-space should be acquired at.
-    n_y : int
-        Phase-encode matrix size, locating the centre line.
-
-    Returns
-    -------
-    list of list
-        One list of lines per shot, indexed by echo; ``None`` pads the
-        echoes of the last shot that have nothing left to encode.
-    """
-    ordered = sorted(sampled_lines)
-    n_shots = -(-len(ordered) // etl)
-
-    groups: list[list[int | None]] = [
-        list(ordered[group * n_shots : (group + 1) * n_shots])
-        for group in range(etl)
-    ]
-    for group in groups:
-        group.extend([None] * (n_shots - len(group)))
-
-    # Which group holds the centre line -- the sampled line nearest n_y/2.
-    center_line = min(ordered, key=lambda line: abs(line - n_y / 2))
-    holds_center = next(
-        index for index, group in enumerate(groups) if center_line in group
-    )
-    roll = (holds_center - n_center) % etl
-    groups = groups[roll:] + groups[:roll]
-
-    return [[groups[echo][shot] for echo in range(etl)] for shot in range(n_shots)]
-
-
 def FSE2DKernel(
     system: pp.Opts,
     *,
@@ -348,7 +298,8 @@ def FSE2DKernel(
 
     Building :class:`design.FseReadout2D` *is* the feasibility check; the
     requested effective TE is then rounded onto the train's echo grid and
-    the lines rolled so the centre of k-space is acquired at that echo.
+    the lines rolled -- by :func:`pulserver.pypulseq.make_linear_order` -- so
+    the centre of k-space is acquired at that echo.
 
     Parameters
     ----------
@@ -449,7 +400,15 @@ n_dummy, crusher_cycles, readout_crusher_cycles
     sampled_lines = pp.calc_sampled_lines(
         n_y, acceleration, n_acs, partial_fourier=partial_fourier
     )
-    shots = rolled_linear_shots(sampled_lines, etl, n_center, n_y)
+    # Deal the ky lines into echo trains with the k-space centre placed at echo
+    # ``n_center`` (effective-TE control), delegated to the linear-ordering
+    # builtin, whose shots of indices we map back onto the sampled lines.
+    shots = pp.make_linear_order(
+        sampled_lines, etl, center=(n_y / 2, 0.0), center_echo=n_center, pad=True
+    )
+    shots = [
+        [sampled_lines[i] if i is not None else None for i in shot] for shot in shots
+    ]
 
     pass_time = sum(
         len(group) * repetitions[len(group)][1].length for group in passes

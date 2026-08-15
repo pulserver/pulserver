@@ -5,7 +5,8 @@ The refocusing k-flip on a volume: a slab-selective SLR excitation, one SLR
 phase-encoded along y and z at the echo -- :class:`design.LineReadout3D`
 opened by the refocusing pulse. The autocalibration rectangle leads the
 ``(ky, kz)`` traversal exactly as :mod:`pulserver.seqzoo.gre_3d` orders it,
-and :mod:`pulserver.reczoo.se_3d` reads it back.
+regular undersampling laying a CAIPIRINHA lattice with a selectable kz shift
+per ky block, and :mod:`pulserver.reczoo.se_3d` reads it back.
 
 TE spans excitation centre to echo, with the 180 at its midpoint: the readout
 solves the second half (``te = TE/2`` from the refocusing pulse), and a delay
@@ -76,6 +77,7 @@ def main(
     partial_fourier_z: float = 1.0,
     acceleration: int = 1,
     acceleration_z: int = 1,
+    caipi_shift: int = 0,
     n_acs: int = 24,
     n_acs_z: int = 16,
     n_averages: int = 1,
@@ -134,6 +136,10 @@ def main(
         Uniform phase-encode undersampling factor along y. Default is 1.
     acceleration_z : int, optional
         Uniform partition-encode undersampling factor along z. Default is 1.
+    caipi_shift : int, optional
+        CAIPIRINHA shift along kz per sampled-ky block,
+        0 <= caipi_shift < acceleration_z. 0 is a regular lattice. Default
+        is 0.
     n_acs : int, optional
         Autocalibration extent along y, in lines. Default is 24.
     n_acs_z : int, optional
@@ -177,6 +183,7 @@ def main(
         partial_fourier_z=partial_fourier_z,
         acceleration=acceleration,
         acceleration_z=acceleration_z,
+        caipi_shift=caipi_shift,
         n_acs=n_acs,
         n_acs_z=n_acs_z,
         n_averages=n_averages,
@@ -284,6 +291,7 @@ def SE3DKernel(
     partial_fourier_z: float = 1.0,
     acceleration: int = 1,
     acceleration_z: int = 1,
+    caipi_shift: int = 0,
     n_acs: int = 24,
     n_acs_z: int = 16,
     n_averages: int = 1,
@@ -306,7 +314,7 @@ def SE3DKernel(
         System limits.
     fov, n_x, n_y, n_z, slab_thickness, te, tr, readout_bandwidth_hz, \
 partial_echo, partial_fourier, partial_fourier_z, acceleration, acceleration_z, \
-n_acs, n_acs_z, n_averages, n_dummy, crusher_cycles, spoiling_cycles
+caipi_shift, n_acs, n_acs_z, n_averages, n_dummy, crusher_cycles, spoiling_cycles
         As for :func:`main`.
 
     Returns
@@ -395,6 +403,7 @@ n_acs, n_acs_z, n_averages, n_dummy, crusher_cycles, spoiling_cycles
         (acceleration, acceleration_z),
         (n_acs, n_acs_z),
         partial_fourier=(partial_fourier, partial_fourier_z),
+        caipi_shift=caipi_shift,
         order="calibration_first",
     )
 
@@ -564,6 +573,14 @@ class Se3D(SequencePlugin):
                     incr=1.0,
                     unit="lines",
                 ),
+                UIParam.user_name(6): Description(text="CAIPI shift (kz per ky)"),
+                UIParam.user_value(6): TypeinFloatParam(
+                    value=0.0,
+                    min=0.0,
+                    max=8.0,
+                    incr=1.0,
+                    unit="",
+                ),
             }
         )
 
@@ -617,6 +634,7 @@ _KERNEL_ARGUMENTS = frozenset(
         "partial_fourier_z",
         "acceleration",
         "acceleration_z",
+        "caipi_shift",
         "n_acs",
         "n_acs_z",
         "n_averages",
@@ -644,6 +662,7 @@ def _main_kwargs(system: pp.Opts, protocol: dict[str, dict]) -> dict:
         n_acs=params.acs_lines_from_protocol(prot, params.param_int(prot, UIParam.NY), 0),
         n_dummy=max(0, round(params.user_float(prot, 2, 0.0))),
         n_acs_z=max(0, round(params.user_float(prot, 5, 16.0))),
+        caipi_shift=max(0, round(params.user_float(prot, 6, 0.0))),
     )
 
 
@@ -701,6 +720,7 @@ _ARG_MAP = [
         "Acquired partition-encode fraction along z in (0.5, 1]",
     ),
     ("--acs-partitions", UIParam.user_value(5), float, "Number of ACS partitions along z"),
+    ("--caipi-shift", UIParam.user_value(6), float, "CAIPIRINHA kz shift per ky block"),
 ]
 
 if __name__ == "__main__":
