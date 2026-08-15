@@ -158,9 +158,6 @@ extern "C"
 
     /**
      * @brief Fill a pulseg_subseq_info for one subsequence.
-     *
-     * Replaces ~18 individual per-subsequence getters (TR structure,
-     * prep/cooldown counts, degenerate flags, segment counts, label info).
      */
     int pulseg_get_subseq_info(
         const pulseg_collection *coll,
@@ -242,9 +239,9 @@ extern "C"
     /**
      * @brief Compute scan-time info from a fully loaded collection.
      *
-     * Uses the accurate formula that accounts for prep/cooldown block
-     * durations, degenerate TR folding, and the number-of-averages
-     * multiplier (controlled by @c IgnoreAverages per subsequence).
+     * Accounts for every block duration in each pass and the
+     * number-of-averages multiplier (controlled by @c IgnoreAverages per
+     * subsequence).
      *
      * @c num_reps is the number of repetitions the consumer intends to
      * play (>= 1).  For subsequences whose @c IgnoreAverages flag is
@@ -268,35 +265,10 @@ extern "C"
     /* ================================================================== */
 
     /**
-     * @brief Copy prep segment IDs into caller-supplied buffer.
-     * @param[out] out_ids   Buffer of at least num_prep_segments ints.
-     * @return Number of IDs written, or negative error code.
-     */
-    int pulseg_get_prep_segment_table(const pulseg_collection *coll, int *out_ids, int subseq_idx);
-
-    /**
-     * @brief Copy main segment IDs into caller-supplied buffer.
-     * @param[out] out_ids   Buffer of at least num_main_segments ints.
-     * @return Number of IDs written, or negative error code.
-     */
-    int pulseg_get_main_segment_table(const pulseg_collection *coll, int *out_ids, int subseq_idx);
-
-    /**
-     * @brief Copy cooldown segment IDs into caller-supplied buffer.
-     * @param[out] out_ids   Buffer of at least num_cooldown_segments ints.
-     * @return Number of IDs written, or negative error code.
-     */
-    int pulseg_get_cooldown_segment_table(
-        const pulseg_collection *coll,
-        int *out_ids,
-        int subseq_idx);
-
-    /**
      * @brief Get canonical segment-ID sequence for vendor gradient-heating checks.
      *
-     * Canonical-sequence rules:
-     *   - Non-degenerate prep/cooldown: prep + (main repeated num_passes) + cooldown.
-     *   - Degenerate prep/cooldown: main only (no pass expansion).
+     * One entry per segment position of the canonical playback unit (the
+     * TR window's segments, in playback order).
      *
      * If @p out_ids is NULL, the function returns the required count only.
      * Otherwise, @p out_ids must point to a buffer of at least that many ints.
@@ -343,10 +315,9 @@ extern "C"
      * amplitude at that block position, and sets num_instances to the
      * repetition count for that canonical unit.
      *
-     * Canonical-unit rules:
-     *   - Standard / degenerate prep-cooldown subsequences use one imaging TR.
-     *   - Non-degenerate prep/cooldown subsequences use one full pass including
-     *     average expansion.
+     * Canonical-unit rules: one imaging TR when every unit is a structural
+     * TR, one full pass (average expansion included) when a non-TR-shaped
+     * section folds the pass into the unit of analysis.
      *
      * The library allocates @p *out_pulses via PULSEG_ALLOC(); the caller
      * must release it with PULSEG_FREE() when done.  On return @p *out_pulses is NULL if the canonical
@@ -688,8 +659,7 @@ extern "C"
 
     /**
      * @brief Return the number of deduplicated segment definitions for a
-     * subsequence (<= num_prep_segments + num_main_segments +
-     * num_cooldown_segments, which count pre-dedup positions).
+     * subsequence (<= the pre-dedup segment position count).
      *
      * @param[in]  coll        Loaded collection.
      * @param[in]  subseq_idx  0-based subsequence index.

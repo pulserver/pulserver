@@ -2,10 +2,11 @@
  * @file pulseg_cache.h
  * @brief Binary sequence cache: whole-file save/load plus per-section loads.
  *
- * The cache sits beside the .seq file and holds everything derived from it
- * that is expensive to recompute (dedup tables, segmentation, trajectory,
- * freq-mod, sequence description). Its extension is vendor-selectable via
- * pulseg_opts.cache_ext -- .pseg by default, .pge on GE.
+ * The cache sits beside the .seq file and holds the PSD-side structures
+ * that are expensive to recompute (dedup tables, segmentation, the
+ * execution stream). Its extension is vendor-selectable via
+ * pulseg_opts.cache_ext -- .pseg by default, .pge on GE. The recon side
+ * reads the seqfile directly and never touches the cache.
  *
  * pulseg_save_cache() writes every section; the per-section loaders exist so
  * a consumer can pay only for what it needs (the pulse-generation pass reads

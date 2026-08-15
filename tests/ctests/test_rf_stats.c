@@ -155,33 +155,10 @@ MU_TEST(test_rf_array_basic_canonical_tr)
     pulseg_collection_free(coll);
 }
 
-MU_TEST(test_rf_array_nondegenerate_fullpass_expanded)
-{
-    pulseg_opts opts;
-    pulseg_collection *coll = NULL;
-    pulseg_rf_stats *pulses = NULL;
-    int rc, npulses, i;
-
-    default_opts_init(&opts);
-    rc = load_seq_with_averages(&coll, "05_rfprep_ok_canonical_fullpass.seq", &opts, 3);
-    mu_assert(PULSEG_SUCCEEDED(rc), "load_seq_with_averages failed");
-
-    npulses = pulseg_get_rf_array(coll, &pulses, 0);
-    mu_assert_int_eq(8, npulses);
-    mu_assert_float_near("prep act_amp_hz", 125.0f, pulses[0].act_amplitude_hz, 1.0f);
-    mu_assert_float_near("cooldown act_amp_hz", 500.0f, pulses[npulses - 1].act_amplitude_hz, 1.0f);
-    for (i = 0; i < npulses; ++i)
-        mu_assert_int_eq(1, pulses[i].num_instances);
-
-    free(pulses);
-    pulseg_collection_free(coll);
-}
-
 MU_TEST_SUITE(suite_rf_stats)
 {
     MU_RUN_TEST(test_rf180_block_pulse_stats);
     MU_RUN_TEST(test_rf_array_basic_canonical_tr);
-    MU_RUN_TEST(test_rf_array_nondegenerate_fullpass_expanded);
 }
 
 /* ================================================================== */
@@ -278,10 +255,7 @@ static int run_structural_tr_mismatch_probe(void)
     desc.num_unique_blocks = 3;
     desc.base_blocks = defs;
     desc.num_blocks = 6;
-    desc.pass_len = 6;
     desc.block_table = table;
-    desc.num_prep_blocks = 0;
-    desc.num_cooldown_blocks = 0;
 
     return pulseg__get_tr_in_sequence(&desc, &diag);
 }
@@ -542,13 +516,6 @@ static int build_divergent_variable_rf_collection(pulseg_collection *coll, pulse
     desc->num_averages = 1;
     desc->tr_descriptor.tr_size = 2;
     desc->tr_descriptor.num_trs = 2;
-    desc->tr_descriptor.num_prep_blocks = 0;
-    desc->tr_descriptor.num_cooldown_blocks = 0;
-    desc->tr_descriptor.degenerate_prep = 1;
-    desc->tr_descriptor.degenerate_cooldown = 1;
-    desc->tr_descriptor.imaging_tr_start = 0;
-    desc->tr_descriptor.num_prep_trs = 0;
-    desc->tr_descriptor.num_cooldown_trs = 0;
 
     coll->num_subsequences = 1;
     coll->descriptors = desc;

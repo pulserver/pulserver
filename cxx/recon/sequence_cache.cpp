@@ -114,11 +114,10 @@ namespace mrdserver
                 first.kz_shot_id >= 0 && first.kz_shot_id < static_cast<int>(cache.kshots.size()))
                 nsamples = static_cast<int>(cache.kshots[first.kz_shot_id].k.size());
 
-            // Stage 1.5c: the synthetic-radial fallback is gone. The radial
-            // classifier in compute_block_kspace (pulseg_trajectory.c) now
-            // stores a REAL base shot for every active, rotated axis instead
-            // of collapsing it to cartesian (-1), so nsamples == 0 here means
-            // there is genuinely no trajectory data for this encoding space.
+            // The reader stores a real base shot for every active, rotated
+            // axis instead of collapsing it to cartesian (-1), so
+            // nsamples == 0 here means there is genuinely no trajectory
+            // data for this encoding space.
             if (nsamples == 0)
                 continue;
 

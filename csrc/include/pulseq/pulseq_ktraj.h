@@ -6,13 +6,8 @@
  *
  * Non-Cartesian recon needs an absolute k for each acquired sample, and it
  * needs to know which sample of each readout is the echo.  Neither is
- * available today for a `.seq` this project did not author:
- *
- *  - pulseg's trajectory (`pulseg_trajectory.h`) takes `center_sample` from a
- *    design-time anchor.  A foreign file has no anchors, so the echo position
- *    defaults to the middle of the readout and is simply wrong for anything
- *    partial-Fourier or asymmetric.
- *  - PyPulseq's `calculate_kspace` does not compute an echo position at all.
+ * written into a `.seq`: nothing in the format marks the echo sample, and
+ * PyPulseq's `calculate_kspace` does not compute an echo position at all.
  *
  * So this derives both, from nothing but the file.
  *
@@ -273,8 +268,7 @@ extern "C"
      * samples, so the echo search runs once per distinct readout rather than
      * once per TR.  The rotation id has to be in the key: gradient ids alone
      * are shape-and-amplitude only, and two blocks that differ solely by a
-     * per-slice rotation would otherwise collide -- the trap
-     * `pulseg_trajectory.c` documents at its own memo.
+     * per-slice rotation would otherwise collide.
      *
      * @return PULSEQ_SUCCESS, or a negative error code.
      */

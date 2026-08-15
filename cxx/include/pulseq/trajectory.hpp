@@ -84,9 +84,7 @@ namespace pulseq
          * rotation extension: logically as constant as a Cartesian line,
          * physically a line at an arbitrary angle, and with no encoding
          * counter that locates it.  A consumer taking the trivial-shot route
-         * must carry the block's rotation with the amplitude and apply it --
-         * which is what the cache's `rotation_id` column is for, and what
-         * `pulseg_trajectory.c` means by "and applies any rotation".
+         * must carry the block's rotation with the amplitude and apply it.
          * `pulseq_ktraj_readout::constant_axes` answers the same question in
          * the frame its k is reported in, and says physically-not-constant
          * for the same spoke.

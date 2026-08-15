@@ -234,33 +234,6 @@ namespace pulseg
             check(pulseg_check_consistency(coll_, &diag), diag);
         }
 
-        // ── Segment tables ───────────────────────────────────────────
-
-        std::vector<int> prep_segment_table(int ss = 0) const
-        {
-            pulseg_subseq_info si = subseq_info(ss);
-            std::vector<int> ids(si.num_prep_segments);
-            if (si.num_prep_segments > 0)
-                pulseg_get_prep_segment_table(coll_, ids.data(), ss);
-            return ids;
-        }
-        std::vector<int> main_segment_table(int ss = 0) const
-        {
-            pulseg_subseq_info si = subseq_info(ss);
-            std::vector<int> ids(si.num_main_segments);
-            if (si.num_main_segments > 0)
-                pulseg_get_main_segment_table(coll_, ids.data(), ss);
-            return ids;
-        }
-        std::vector<int> cooldown_segment_table(int ss = 0) const
-        {
-            pulseg_subseq_info si = subseq_info(ss);
-            std::vector<int> ids(si.num_cooldown_segments);
-            if (si.num_cooldown_segments > 0)
-                pulseg_get_cooldown_segment_table(coll_, ids.data(), ss);
-            return ids;
-        }
-
         // ── RF queries (waveform access – still individual) ─────────
 
         RfStats get_rf_stats(int ss, int rf_idx) const

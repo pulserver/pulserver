@@ -39,49 +39,14 @@ static void select_canonical_tr_window_idx(
     int canonical_tr_idx)
 {
     const struct pulseg_tr_descriptor *trd = &desc->tr_descriptor;
-    int has_nd_prep = (trd->num_prep_blocks > 0 && !trd->degenerate_prep);
-    int has_nd_cool = (trd->num_cooldown_blocks > 0 && !trd->degenerate_cooldown);
+    int num_avgs = (desc->num_averages > 1) ? desc->num_averages : 1;
 
-    if (has_nd_prep || has_nd_cool)
-    {
-        /* Non-degenerate: canonical_tr_idx selects pass.
-         * Pass-expanded waveform already bakes in num_averages via
-         * _build_pass_expanded_block_order; num_instances counts how
-         * many times this pass-expanded waveform repeats. */
-        int pass_len = desc->pass_len;
-        *start_block = canonical_tr_idx * pass_len;
-        *block_count = pass_len;
-        *amplitude_mode = PULSEG_AMP_MAX_POS;
-        *num_instances = (desc->num_passes > 1) ? desc->num_passes : 1;
-        *tr_duration_us = 0.0f;
-        {
-            int n;
-            for (n = 0; n < pass_len; ++n)
-            {
-                int idx;
-                const struct pulseg_block_table_element *bte;
-                const struct pulseg_base_block *bdef;
-                idx = *start_block + n;
-                bte = &desc->block_table[idx];
-                bdef = &desc->base_blocks[bte->id];
-                *tr_duration_us +=
-                    (bte->duration_us >= 0) ? (float)bte->duration_us : (float)bdef->duration_us;
-            }
-        }
-        return;
-    }
-
-    /* Degenerate: canonical_tr_idx selects imaging TR.
-     * No pass expansion occurs, so averages must be accounted for here. */
-    {
-        int num_avgs = (desc->num_averages > 1) ? desc->num_averages : 1;
-        *start_block =
-            trd->num_prep_blocks + trd->imaging_tr_start + canonical_tr_idx * trd->tr_size;
-        *block_count = trd->tr_size;
-        *amplitude_mode = PULSEG_AMP_MAX_POS;
-        *num_instances = trd->num_trs * num_avgs;
-        *tr_duration_us = trd->tr_duration_us;
-    }
+    /* canonical_tr_idx selects a TR; averages are accounted for here. */
+    *start_block = canonical_tr_idx * trd->tr_size;
+    *block_count = trd->tr_size;
+    *amplitude_mode = PULSEG_AMP_MAX_POS;
+    *num_instances = trd->num_trs * num_avgs;
+    *tr_duration_us = trd->tr_duration_us;
 }
 
 static int build_pass_expanded_block_order(
@@ -102,9 +67,9 @@ static int build_pass_expanded_block_order(
     }
 
     trd = &desc->tr_descriptor;
-    prep_blk = trd->num_prep_blocks;
+    prep_blk = 0;
     img_len = trd->num_trs * trd->tr_size;
-    cool_blk = trd->num_cooldown_blocks;
+    cool_blk = 0;
     num_avgs = (desc->num_averages > 0) ? desc->num_averages : 1;
     exp_count = prep_blk + num_avgs * img_len + cool_blk;
 
@@ -2276,7 +2241,7 @@ static int sa_check_structural_violations(
     if (num_avgs > 1)
     {
         const struct pulseg_tr_descriptor *trd = &desc->tr_descriptor;
-        int prep_blk = trd->num_prep_blocks;
+        int prep_blk = 0;
         int img_len = trd->num_trs * trd->tr_size;
         /* double, to match the exact whole-us accumulation in
          * sa_extract_raw_occurrences() -- these bounds are compared against
@@ -3167,31 +3132,10 @@ static void select_canonical_tr_window(
     float *tr_duration_us)
 {
     const pulseg_tr_descriptor *trd;
-    int has_nd_prep, has_nd_cool, n;
 
     trd = &desc->tr_descriptor;
-    has_nd_prep = (trd->num_prep_blocks > 0 && !trd->degenerate_prep);
-    has_nd_cool = (trd->num_cooldown_blocks > 0 && !trd->degenerate_cooldown);
 
-    if (has_nd_prep || has_nd_cool)
-    {
-        *start_block = 0;
-        *block_count = desc->pass_len;
-        *amplitude_mode = PULSEG_AMP_MAX_POS;
-        *num_instances = (desc->num_passes > 1) ? desc->num_passes : 1;
-
-        *tr_duration_us = 0.0f;
-        for (n = 0; n < desc->pass_len; ++n)
-        {
-            const pulseg_block_table_element *bte = &desc->block_table[n];
-            const pulseg_base_block *bdef = &desc->base_blocks[bte->id];
-            *tr_duration_us +=
-                (bte->duration_us >= 0) ? (float)bte->duration_us : (float)bdef->duration_us;
-        }
-        return;
-    }
-
-    *start_block = trd->num_prep_blocks + trd->imaging_tr_start;
+    *start_block = 0;
     *block_count = trd->tr_size;
     *amplitude_mode = PULSEG_AMP_MAX_POS;
     /* F8.2: align with select_canonical_tr_window_idx's degenerate
@@ -3291,25 +3235,6 @@ int pulseg_calc_mech_resonances(
     sa_start_block = start_block;
     sa_block_count = block_count;
     num_avgs = 1;
-
-    has_nd_prep = (trd->num_prep_blocks > 0 && !trd->degenerate_prep);
-    has_nd_cool = (trd->num_cooldown_blocks > 0 && !trd->degenerate_cooldown);
-    if (has_nd_prep || has_nd_cool)
-    {
-        num_avgs = (desc->num_averages > 1) ? desc->num_averages : 1;
-        rc = build_pass_expanded_block_order(
-            desc,
-            &block_order,
-            &block_count,
-            &tr_duration_us,
-            start_block);
-        if (PULSEG_FAILED(rc))
-        {
-            diag->code = rc;
-            return rc;
-        }
-        start_block = 0;
-    }
 
     rc = pulseg__get_gradient_waveforms_range(
         desc,
@@ -3676,18 +3601,6 @@ int pulseg_calc_pns(
     (void)num_instances;
     (void)tr_duration_us;
 
-    has_nd_prep = (trd->num_prep_blocks > 0 && !trd->degenerate_prep);
-    has_nd_cool = (trd->num_cooldown_blocks > 0 && !trd->degenerate_cooldown);
-    if (has_nd_prep || has_nd_cool)
-    {
-        rc = build_pass_expanded_block_order(desc, &block_order, &block_count, NULL, start_block);
-        if (PULSEG_FAILED(rc))
-        {
-            diag->code = rc;
-            return rc;
-        }
-        start_block = 0;
-    }
 
     rc = pulseg__get_gradient_waveforms_range(
         desc,
@@ -4357,44 +4270,11 @@ int pulseg__check_safety_profiled(
         sa_block_count = block_count;
         num_avgs = 1;
         block_order = NULL;
-        has_nd_prep = (trd->num_prep_blocks > 0 && !trd->degenerate_prep);
-        has_nd_cool = (trd->num_cooldown_blocks > 0 && !trd->degenerate_cooldown);
-        if (has_nd_prep || has_nd_cool)
-        {
-            num_avgs = (desc->num_averages > 1) ? desc->num_averages : 1;
-            rc = build_pass_expanded_block_order(
-                desc,
-                &block_order,
-                &block_count,
-                &tr_duration_us,
-                start_block);
-            if (PULSEG_FAILED(rc))
-            {
-                if (unique_tr_indices)
-                    PULSEG_FREE(unique_tr_indices);
-                if (tr_group_labels)
-                    PULSEG_FREE(tr_group_labels);
-                if (block_order)
-                    PULSEG_FREE(block_order);
-                return rc;
-            }
-            start_block = 0;
-        }
 
         /* Evaluate one canonical TR per shot-ID combination. */
         unique_tr_indices = NULL;
         tr_group_labels = NULL;
-        if ((trd->num_prep_blocks > 0 && !trd->degenerate_prep) ||
-            (trd->num_cooldown_blocks > 0 && !trd->degenerate_cooldown))
-        {
-            num_unique_trs =
-                0 /* one canonical TR; representatives carry the worst case */;
-        }
-        else
-        {
-            num_unique_trs =
-                0 /* one canonical TR; representatives carry the worst case */;
-        }
+        num_unique_trs = 0 /* one canonical TR; representatives carry the worst case */;
         if (num_unique_trs <= 0)
             num_unique_trs = 1;
 

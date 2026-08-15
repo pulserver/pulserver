@@ -18,7 +18,7 @@ RadiofrequencyRasterTime 2e-06
 SliceThickness 0.0309094125 
 TE 0.00146 
 TR 0.00292 
-TRSize 76 
+TRSize 78 
 TotalDuration 0.07446 
 kSpaceCenterLine 4 
 kSpaceCenterPartition 2 
@@ -605,4 +605,4 @@ num_samples 3
 # It can be reproduced/verified with md5sum if the file trimmed to the position right above [SIGNATURE]
 # The new line character preceding [SIGNATURE] BELONGS to the signature (and needs to be stripped away for recalculating/verification)
 Type md5
-Hash 2469e5f941320fe28a96bd47a22630b5
+Hash 7106a0cb231356807a065c6919c737d5

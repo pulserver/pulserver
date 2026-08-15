@@ -1599,9 +1599,8 @@ int pulseg__get_unique_blocks(
 
     pulseq_raw_block raw;
     pulseq_raw_extension ext;
-    int norot_flag, nopos_flag, once_flag, pmc_flag, nav_flag, once_counter;
+    int norot_flag, nopos_flag, pmc_flag, nav_flag;
     int trid;
-    int has_prep, has_cooldown, ctrl;
 
     if (!seq || !desc)
         return PULSEG_ERR_INVALID_ARGUMENT;
@@ -1610,8 +1609,6 @@ int pulseg__get_unique_blocks(
     if (num_blocks <= 0 || !seq->block_library)
         return PULSEG_ERR_INVALID_ARGUMENT;
 
-    desc->num_prep_blocks = 0;
-    desc->num_cooldown_blocks = 0;
     desc->num_unique_rfs = 0;
     desc->num_unique_grads = 0;
     desc->num_unique_adcs = 0;
@@ -1660,43 +1657,6 @@ int pulseg__get_unique_blocks(
         desc->nav_matrix,
         seq->reserved_definitions_library.nav_matrix,
         sizeof(desc->nav_matrix));
-
-    /* deep-copy generic definitions */
-    desc->num_definitions = seq->num_definitions;
-    desc->definitions = NULL;
-    if (seq->num_definitions > 0 && seq->definitions_library)
-    {
-        int di;
-        desc->definitions = (pulseq_definition *)PULSEG_ALLOC(
-            (size_t)seq->num_definitions * sizeof(pulseq_definition));
-        if (!desc->definitions)
-            goto fail;
-        for (di = 0; di < seq->num_definitions; ++di)
-        {
-            strncpy(
-                desc->definitions[di].name,
-                seq->definitions_library[di].name,
-                PULSEQ_DEFINITION_NAME_LENGTH);
-            desc->definitions[di].value_size = seq->definitions_library[di].value_size;
-            desc->definitions[di].value = NULL;
-            if (seq->definitions_library[di].value_size > 0)
-            {
-                int dj;
-                desc->definitions[di].value = (char **)PULSEG_ALLOC(
-                    (size_t)seq->definitions_library[di].value_size * sizeof(char *));
-                if (!desc->definitions[di].value)
-                    goto fail;
-                for (dj = 0; dj < seq->definitions_library[di].value_size; ++dj)
-                {
-                    int slen = (int)strlen(seq->definitions_library[di].value[dj]);
-                    desc->definitions[di].value[dj] = (char *)PULSEG_ALLOC((size_t)(slen + 1));
-                    if (!desc->definitions[di].value[dj])
-                        goto fail;
-                    strcpy(desc->definitions[di].value[dj], seq->definitions_library[di].value[dj]);
-                }
-            }
-        }
-    }
 
     /* verify system and sequence raster times are integer multiples */
     {
@@ -1806,13 +1766,9 @@ int pulseg__get_unique_blocks(
 
     norot_flag = 0;
     nopos_flag = 0;
-    once_flag = 0;
     pmc_flag = 1;
     nav_flag = 0;
-    once_counter = 0;
     trid = 0;
-    has_prep = 0;
-    has_cooldown = 0;
 
     for (n = 0; n < num_blocks; ++n)
     {
@@ -1848,16 +1804,6 @@ int pulseg__get_unique_blocks(
             nopos_flag = (ext.flag.nopos >= 0) ? ext.flag.nopos : nopos_flag;
             pmc_flag = (ext.flag.pmc >= 0) ? ext.flag.pmc : pmc_flag;
             nav_flag = (ext.flag.nav >= 0) ? ext.flag.nav : nav_flag;
-            once_flag = (ext.flag.once >= 0) ? ext.flag.once : once_flag;
-            if (ext.flag.once > 0)
-                ++once_counter;
-            /* Step 6 below needs to know only whether a prep and/or a cooldown
-             * marker exists anywhere; every block's extension is already in
-             * hand here, so record it now rather than rescanning the file. */
-            if (ext.flag.once == 1)
-                has_prep = 1;
-            else if (ext.flag.once == 2)
-                has_cooldown = 1;
             /* TRID: sticky (pulseq LABEL semantics) -- SET at a block
              * persists until the next SET, exactly like norot/nopos/pmc/nav
              * above. 0 = ungrouped (no TRID seen yet). Lives on the
@@ -1875,7 +1821,6 @@ int pulseg__get_unique_blocks(
         tmp_blk_tab[n].norot_flag = norot_flag;
         tmp_blk_tab[n].nopos_flag = nopos_flag;
         tmp_blk_tab[n].pmc_flag = pmc_flag;
-        tmp_blk_tab[n].once_flag = once_flag;
         tmp_blk_tab[n].nav_flag = nav_flag;
         tmp_blk_tab[n].trid = trid;
     }
@@ -2044,208 +1989,6 @@ int pulseg__get_unique_blocks(
     {
         pulseg_sequence_descriptor_free(desc);
         return result;
-    }
-
-    /* ---- step 6: prep/cooldown ---- */
-    /* has_prep / has_cooldown were accumulated during the step-2 block scan. */
-    if (!has_prep && !has_cooldown)
-    {
-        desc->pass_len = desc->num_blocks;
-        return PULSEG_SUCCESS;
-    }
-
-    if (has_prep)
-    {
-        pulseq_get_raw_block_content_ids(seq, &raw, 0, 1);
-        pulseq_get_raw_extension(seq, &ext, &raw);
-        if (ext.flag.once != 1)
-        {
-            pulseg_sequence_descriptor_free(desc);
-            return PULSEG_ERR_INVALID_PREP_POSITION;
-        }
-        ctrl = 0;
-        desc->num_prep_blocks = 1;
-        while (ctrl == 0 && desc->num_prep_blocks < num_blocks)
-        {
-            pulseq_get_raw_block_content_ids(seq, &raw, desc->num_prep_blocks, 1);
-            pulseq_get_raw_extension(seq, &ext, &raw);
-            if (ext.flag.once != 0)
-                desc->num_prep_blocks++;
-            else
-                ctrl = 1;
-        }
-    }
-    if (has_cooldown)
-    {
-        ctrl = 0;
-        desc->num_cooldown_blocks = 0;
-        while (ctrl == 0 && desc->num_cooldown_blocks < num_blocks)
-        {
-            pulseq_get_raw_block_content_ids(
-                seq,
-                &raw,
-                num_blocks - 1 - desc->num_cooldown_blocks,
-                1);
-            pulseq_get_raw_extension(seq, &ext, &raw);
-            desc->num_cooldown_blocks++;
-            if (ext.flag.once == 2)
-                ctrl = 1;
-        }
-        if (ctrl == 0)
-        {
-            pulseg_sequence_descriptor_free(desc);
-            return PULSEG_ERR_INVALID_COOLDOWN_POSITION;
-        }
-    }
-    if (once_counter !=
-        (desc->num_prep_blocks > 0 ? 1 : 0) + (desc->num_cooldown_blocks > 0 ? 1 : 0))
-    {
-        /* Multi-pass detection with per-section verification.
-         *
-         * A pass boundary is where the once_flag transitions back to
-         * the value of the first block (e.g. 2->1 or 0->1).  We split
-         * the block table at every such transition, verify per-section
-         * structural identity across passes, and set pass_len.
-         * No folding — the full block table is preserved so that
-         * per-instance RF/ADC freq/phase data is retained.
-         * No period-finding here — that is get_tr's responsibility. */
-        int first_once, prev_once_val;
-        int *pass_starts;
-        int num_passes_found, pass_len;
-        int num_prep_in_pass, num_cool_in_pass, num_main_in_pass;
-        int i, j, p, ok;
-
-        first_once = desc->block_table[0].once_flag;
-
-        /* --- Phase A: Find pass boundaries --- */
-        pass_starts = (int *)PULSEG_ALLOC((size_t)(num_blocks + 1) * sizeof(int));
-        if (!pass_starts)
-        {
-            pulseg_sequence_descriptor_free(desc);
-            return PULSEG_ERR_ALLOC_FAILED;
-        }
-
-        num_passes_found = 1;
-        pass_starts[0] = 0;
-        prev_once_val = first_once;
-        for (i = 1; i < num_blocks; ++i)
-        {
-            int cur = desc->block_table[i].once_flag;
-            if (cur == first_once && prev_once_val != first_once)
-                pass_starts[num_passes_found++] = i;
-            prev_once_val = cur;
-        }
-        pass_starts[num_passes_found] = num_blocks; /* sentinel */
-
-        /* --- Phase B: Reject uneven passes --- */
-        pass_len = pass_starts[1] - pass_starts[0];
-        if (num_passes_found < 2 || num_blocks != num_passes_found * pass_len)
-        {
-            PULSEG_FREE(pass_starts);
-            pulseg_sequence_descriptor_free(desc);
-            return PULSEG_ERR_INVALID_ONCE_FLAGS;
-        }
-
-        /* Verify every pass has the same length */
-        ok = 1;
-        for (i = 1; i < num_passes_found && ok; ++i)
-        {
-            if (pass_starts[i + 1] - pass_starts[i] != pass_len)
-                ok = 0;
-        }
-        if (!ok)
-        {
-            PULSEG_FREE(pass_starts);
-            pulseg_sequence_descriptor_free(desc);
-            return PULSEG_ERR_INVALID_ONCE_FLAGS;
-        }
-
-        /* --- Phase C: Count section sizes within first pass --- */
-        num_prep_in_pass = 0;
-        for (i = pass_starts[0]; i < pass_starts[0] + pass_len; ++i)
-        {
-            if (desc->block_table[i].once_flag != 1)
-                break;
-            num_prep_in_pass++;
-        }
-
-        num_cool_in_pass = 0;
-        for (i = pass_starts[0] + pass_len - 1; i >= pass_starts[0]; --i)
-        {
-            if (desc->block_table[i].once_flag != 2)
-                break;
-            num_cool_in_pass++;
-        }
-
-        num_main_in_pass = pass_len - num_prep_in_pass - num_cool_in_pass;
-        if (num_main_in_pass < 0)
-        {
-            PULSEG_FREE(pass_starts);
-            pulseg_sequence_descriptor_free(desc);
-            return PULSEG_ERR_INVALID_ONCE_FLAGS;
-        }
-
-        /* --- Phase D+E: Compare passes 1..N-1 per section --- */
-        for (p = 1; p < num_passes_found && ok; ++p)
-        {
-            int base_ref = pass_starts[0];
-            int base_chk = pass_starts[p];
-
-            /* Prep section */
-            for (j = 0; j < num_prep_in_pass && ok; ++j)
-            {
-                if (desc->block_table[base_chk + j].id != desc->block_table[base_ref + j].id ||
-                    desc->block_table[base_chk + j].once_flag !=
-                        desc->block_table[base_ref + j].once_flag)
-                {
-                    ok = 0;
-                }
-            }
-
-            /* Main section */
-            for (j = 0; j < num_main_in_pass && ok; ++j)
-            {
-                int off = num_prep_in_pass + j;
-                if (desc->block_table[base_chk + off].id != desc->block_table[base_ref + off].id ||
-                    desc->block_table[base_chk + off].once_flag !=
-                        desc->block_table[base_ref + off].once_flag)
-                {
-                    ok = 0;
-                }
-            }
-
-            /* Cooldown section */
-            for (j = 0; j < num_cool_in_pass && ok; ++j)
-            {
-                int off = num_prep_in_pass + num_main_in_pass + j;
-                if (desc->block_table[base_chk + off].id != desc->block_table[base_ref + off].id ||
-                    desc->block_table[base_chk + off].once_flag !=
-                        desc->block_table[base_ref + off].once_flag)
-                {
-                    ok = 0;
-                }
-            }
-        }
-
-        PULSEG_FREE(pass_starts);
-
-        if (!ok)
-        {
-            pulseg_sequence_descriptor_free(desc);
-            return PULSEG_ERR_INVALID_ONCE_FLAGS;
-        }
-
-        /* --- Phase F: Set descriptor fields (NO folding) --- */
-        desc->num_passes = num_passes_found;
-        desc->pass_len = pass_len;
-        desc->num_prep_blocks = num_prep_in_pass;
-        desc->num_cooldown_blocks = num_cool_in_pass;
-        /* num_blocks stays as-is — full unfolded block table preserved */
-    }
-    else
-    {
-        /* Single-pass: pass_len equals num_blocks */
-        desc->pass_len = desc->num_blocks;
     }
 
     return PULSEG_SUCCESS;

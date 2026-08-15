@@ -61,12 +61,6 @@ const char *pulseg_get_error_message(int code)
         return "Error reading from sequence file";
     case PULSEG_ERR_UNSUPPORTED_VERSION:
         return "Unsupported sequence file version (requires >= 1.5.0)";
-    case PULSEG_ERR_INVALID_PREP_POSITION:
-        return "Invalid preparation block position";
-    case PULSEG_ERR_INVALID_COOLDOWN_POSITION:
-        return "Invalid cooldown block position";
-    case PULSEG_ERR_INVALID_ONCE_FLAGS:
-        return "ONCE flags define non-identical inner-loop repetitions";
     case PULSEG_ERR_RASTER_MISMATCH:
         return "System and sequence raster times are not integer multiples";
     case PULSEG_ERR_SIGNATURE_MISMATCH:
@@ -145,16 +139,6 @@ const char *pulseg_get_error_hint(int code)
     {
     case PULSEG_SUCCESS:
         return "";
-    case PULSEG_ERR_INVALID_PREP_POSITION:
-        return "Ensure that the preparation section is marked with ONCE labels "
-               "and starts at the first block of the sequence.";
-    case PULSEG_ERR_INVALID_COOLDOWN_POSITION:
-        return "Ensure that the cooldown section is marked with ONCE labels "
-               "and ends at the last block of the sequence.";
-    case PULSEG_ERR_INVALID_ONCE_FLAGS:
-        return "Ensure that ONCE flags define structurally identical inner-loop "
-               "repetitions. All periods delimited by ONCE sections must have the "
-               "same block structure.";
     case PULSEG_ERR_RASTER_MISMATCH:
         return "System raster times and sequence-defined raster times must be "
                "integer multiples of each other for piecewise-constant "

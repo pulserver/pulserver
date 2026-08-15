@@ -30,7 +30,6 @@
 #include "pulseg_safety.h"
 #include "pulseg_waveforms.h"
 #include "pulseg_chunk.h"
-#include "pulseg_trajectory.h"
 #include "pulseg_cache.h"
 
 #include "pulseg_protocol.h"

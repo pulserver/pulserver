@@ -96,7 +96,7 @@ literals). Pulserver would register:
 
 | Class | user_int positions | user_float positions |
 |---|---|---|
-| SegmentInstance (per block row) | `ONCE`, `NOROT`, `NOPOS`, `PMC`, `NAV` flags; `digitalout_id`; `rf_shim_id`; `TRID`; MRD label columns | — |
+| SegmentInstance (per block row) | `NOROT`, `NOPOS`, `PMC`, `NAV` flags; `digitalout_id`; `rf_shim_id`; `TRID`; MRD label columns | — |
 | VirtualSegment | `is_nav`; input `trigger_id` | — |
 | BaseBlock (per gradient definition) | — | representative `energy`, `slew_rate`, aggregate amplitude/slew bounds |
 
@@ -157,9 +157,13 @@ as a *convenience/debug view*, and it should stay one:
   its sequence description only when it is present; an interpreter may
   read base definitions off the first TR and verify the pattern repeats —
   or ignore it outright, with full detection as the fallback and the check.
-- With repeats and averages materialized by the designer, prep/cooldown
-  bookkeeping is not information an interpreter needs from the stream and
-  is being removed from pulserver's TR descriptor.
+- **`ONCE` carries no structural meaning in pulserver's IR.** With repeats
+  and averages materialized by the designer (`expand_repeats`), the
+  interpreter's event stream is the block table as written, played once
+  per average; there is no preparation/cooldown region, no pass concept,
+  and the TR descriptor is exactly `(tr_size, num_trs, tr_duration)`.
+  Files carrying `ONCE` still parse — the label is simply ignored, like
+  any label the interpreter does not consume.
 
 ## 5. Documented deviations (version-bump candidates)
 

@@ -128,8 +128,8 @@ static void check_pair(const char *stem)
             b.reserved_definitions_library.next_sequence) == 0,
         "NextSequence definition differs");
 
-    /* The generic definition strings are stored verbatim in the .pge cache,
-     * so they have to match as strings and not merely as numbers. */
+    /* The generic definitions are exchanged as strings, so the two parses
+     * have to agree on them as strings and not merely as numbers. */
     for (i = 0; i < t.num_definitions; ++i)
     {
         mu_assert(

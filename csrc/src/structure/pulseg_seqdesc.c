@@ -27,20 +27,8 @@ static void seqdesc__select_canonical_window(
     int *start_block,
     int *block_count)
 {
-    const pulseg_tr_descriptor *trd = &desc->tr_descriptor;
-    int has_nd_prep = (trd->num_prep_blocks > 0 && !trd->degenerate_prep);
-    int has_nd_cool = (trd->num_cooldown_blocks > 0 && !trd->degenerate_cooldown);
-
-    if (has_nd_prep || has_nd_cool)
-    {
-        *start_block = 0;
-        *block_count = desc->pass_len;
-    }
-    else
-    {
-        *start_block = trd->num_prep_blocks + trd->imaging_tr_start;
-        *block_count = trd->tr_size;
-    }
+    *start_block = 0;
+    *block_count = desc->tr_descriptor.tr_size;
 
     if (*block_count > desc->num_blocks)
         *block_count = desc->num_blocks;
@@ -570,8 +558,6 @@ static int seqdesc__build_adc_echo_flags(
     float canonical_floor = 1.0e30f;
     float global_scale = 0.0f;
     int num_instances;
-    int has_nd_prep;
-    int has_nd_cool;
     int variant;
     int i;
     int rc = PULSEG_SUCCESS;
@@ -593,14 +579,7 @@ static int seqdesc__build_adc_echo_flags(
     for (i = 0; i < n_walk; ++i)
         min_krss_by_position[i] = 1.0e30f;
 
-    has_nd_prep = desc->tr_descriptor.num_prep_blocks > 0 &&
-        !desc->tr_descriptor.degenerate_prep;
-    has_nd_cool = desc->tr_descriptor.num_cooldown_blocks > 0 &&
-        !desc->tr_descriptor.degenerate_cooldown;
-
-    num_instances = (has_nd_prep || has_nd_cool)
-        ? desc->num_passes
-        : desc->tr_descriptor.num_trs;
+    num_instances = desc->tr_descriptor.num_trs;
     if (num_instances < 1)
         num_instances = 1;
 
@@ -644,9 +623,7 @@ static int seqdesc__build_adc_echo_flags(
         int j;
 
         rep_idx = variant;
-        actual_start = (has_nd_prep || has_nd_cool)
-            ? rep_idx * desc->pass_len
-            : block_start + rep_idx * desc->tr_descriptor.tr_size;
+        actual_start = block_start + rep_idx * desc->tr_descriptor.tr_size;
 
         pulseg_diagnostic_init(&diag);
         rc = pulseg__get_gradient_waveforms_range(

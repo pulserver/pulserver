@@ -31,7 +31,7 @@ target_include_directories(pulseq PRIVATE
 
 # ---------------------------------------------------------------------------
 #  pulseg -- the vendor-neutral intermediate representation, safety analysis,
-#  waveform/trajectory derivation and binary cache built on top of pulseq.
+#  waveform derivation and binary cache built on top of pulseq.
 # ---------------------------------------------------------------------------
 set(PULSEG_SOURCES
     src/core/pulseg_error.c
@@ -48,8 +48,6 @@ set(PULSEG_SOURCES
     src/safety/pulseg_safety.c
     src/safety/pulseg_pns_memo.c
     src/cache/pulseg_cache.c
-    src/cache/pulseg_cache_seqdesc.c
-    src/cache/pulseg_trajectory.c
 )
 
 add_library(pulseg STATIC ${PULSEG_SOURCES})

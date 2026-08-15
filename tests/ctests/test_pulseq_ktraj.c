@@ -289,10 +289,6 @@ static void check_centers_are_minimal(const char *fixture)
  * against the answer the slow, obvious, unmemoized search gives, over
  * fixtures chosen to exercise the split: Cartesian, an echo train, a blipped
  * EPI, and a rotated non-Cartesian one.
- *
- * It is also the replacement for a number pulseg does not have.
- * pulseg_trajectory.c takes center_sample from a design-time anchor, and a
- * .seq authored anywhere else carries no anchors at all.
  */
 MU_TEST(test_center_sample_is_derived_not_assumed)
 {

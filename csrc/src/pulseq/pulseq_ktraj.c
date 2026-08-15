@@ -479,9 +479,9 @@ done:
  *
  * The rotation id is load-bearing.  Gradient ids carry shape *and* amplitude
  * here, but not orientation, so two blocks differing only by a per-slice
- * rotation share every gradient id -- the collision pulseg_trajectory.c warns
- * about at its own memo.  The entry k is in the key because the echo index
- * depends on where the readout starts, not only on its shape.
+ * rotation share every gradient id and would collide without it.  The entry
+ * k is in the key because the echo index depends on where the readout
+ * starts, not only on its shape.
  */
 typedef struct ktraj_repeat_key
 {

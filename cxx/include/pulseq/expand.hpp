@@ -41,18 +41,10 @@
  * ### On removing the flags
  *
  * @ref ExpandOptions::strip_once drops the `ONCE` labels once they have been
- * resolved, which is what a foreign interpreter wants: the flags now say
- * something that is no longer true of the table they sit in.
- *
- * Against a Pulserver interpreter, keeping them is worth considering, and
- * costs nothing at playback -- an expanded scan is `1` at the front, `0`
- * through the middle and `2` at the end, which is exactly the shape a
- * single-pass sequence has, and `IgnoreAverages` already stops it being
- * replayed.  What is lost by dropping them is that `pulseg` reads
- * `num_prep_blocks` and `num_cooldown_blocks` from these flags and hands them
- * to the TR descriptor; without them the preparation is indistinguishable from
- * the steady state, and period detection is left looking for a repeat in a
- * table whose first blocks do not participate in one.
+ * resolved: the flags would otherwise say something that is no longer true
+ * of the table they sit in.  A Pulserver interpreter gives `ONCE` no
+ * structural meaning -- its segmentation and TR detection read only the
+ * block content -- so nothing downstream depends on keeping them.
  */
 
 #ifndef PULSEQ_CXX_EXPAND_HPP

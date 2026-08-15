@@ -132,16 +132,10 @@ static py::dict _find_tr(_PulseqCollection& pc, int subsequence_idx = 0)
     py::dict out;
     out["tr_size"] = si.tr_size;
     out["num_trs"] = si.num_trs;
-    out["num_prep_blocks"] = si.num_prep_blocks;
-    out["num_cooldown_blocks"] = si.num_cooldown_blocks;
-    out["degenerate_prep"] = si.degenerate_prep;
-    out["degenerate_cooldown"] = si.degenerate_cooldown;
-    out["num_prep_trs"] = si.num_prep_trs;
-    out["num_cooldown_trs"] = si.num_cooldown_trs;
     out["tr_duration_us"] = si.tr_duration_us;
-    out["num_passes"] = si.num_passes;
     out["num_averages"] = si.num_averages;
     out["num_canonical_trs"] = si.num_canonical_trs;
+    out["num_tr_instances"] = si.num_tr_instances;
     return out;
 }
 

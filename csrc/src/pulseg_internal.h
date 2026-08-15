@@ -33,8 +33,6 @@
 
 #define PULSEG_MAX_RF_SHIM_CHANNELS 64
 
-#define PULSEG_TR_REGION_ALL (-1)
-
 /* pulseq_definition and pulseq_trigger_event (used below by pointer in
  * pulseg_sequence_descriptor) are defined in pulseg_io.h, included above. */
 
@@ -256,7 +254,6 @@ typedef struct pulseg_block_table_element
     int adc_id;
     int digitalout_id;
     int rotation_id;
-    int once_flag;
     int norot_flag;
     int nopos_flag;
     int pmc_flag;
@@ -272,20 +269,13 @@ typedef struct pulseg_block_table_element
 /* ================================================================== */
 typedef struct pulseg_tr_descriptor
 {
-    int num_prep_blocks;
-    int num_cooldown_blocks;
     int tr_size;
     int num_trs;
-    int num_prep_trs;
-    int degenerate_prep;
-    int num_cooldown_trs;
-    int degenerate_cooldown;
-    int imaging_tr_start;
     float tr_duration_us;
 } pulseg_tr_descriptor;
 
 /* clang-format off */
-#define PULSEG_TR_DESCRIPTOR_INIT {0, 0, 0, 0, 0, 0, 0, 0, 0, 0.0f}
+#define PULSEG_TR_DESCRIPTOR_INIT {0, 0, 0.0f}
 /* clang-format on */
 
 /* Per-segment timing summary */
@@ -394,30 +384,23 @@ typedef struct pulseg_virtual_segment
 typedef struct pulseg_segment_table_result
 {
     int num_unique_segments;
-    int num_prep_segments;
-    int *prep_segment_table;
     int num_main_segments;
     int *main_segment_table;
-    int num_cooldown_segments;
-    int *cooldown_segment_table;
 } pulseg_segment_table_result;
 
 /* clang-format off */
-#define PULSEG_SEGMENT_TABLE_RESULT_INIT {0, 0, NULL, 0, NULL, 0, NULL}
+#define PULSEG_SEGMENT_TABLE_RESULT_INIT {0, 0, NULL}
 /* clang-format on */
 
 /* ================================================================== */
 /*  Compact execution stream                                          */
 /* ================================================================== */
-/* The stream pulseg__build_exec_stream emits is a concatenation of
- * contiguous runs: within one (pass, average) chunk it walks the per-pass
- * block table in order and keeps the positions whose once_flag class is
- * being played, so the block_table index advances by exactly 1 until the
- * once class changes.  Storing (emit_start, block_start, length, tr_id,
- * avg_id) per run therefore reproduces exec_stream_block_idx / _tr_id /
- * _avg_id exactly, at a handful of runs instead of one int per block.
+/* The stream pulseg__build_exec_stream emits is one full walk of the
+ * block table per average, in table order, so the block_table index
+ * advances by exactly 1 within an average.  Storing (emit_start,
+ * block_start, length, avg_id) per run reproduces exec_stream_block_idx /
+ * _avg_id exactly, at one run per average instead of one int per block.
  *
- * exec_stream_tr_start is derived from tr_id (see pulseg__exec_tr_start);
  * exec_stream_seg_id is piecewise-constant over segment instances and is
  * run-length encoded separately below. */
 typedef struct pulseg_exec_run
@@ -425,7 +408,6 @@ typedef struct pulseg_exec_run
     int emit_start;  /* first execution-stream position in this run     */
     int block_start; /* block_table index at emit_start                 */
     int length;      /* number of stream positions covered              */
-    int tr_id;       /* TR region id, constant over the run             */
     int avg_id;      /* average index, constant over the run            */
 } pulseg_exec_run;
 
@@ -434,8 +416,6 @@ typedef struct pulseg_exec_run
 /* ================================================================== */
 typedef struct pulseg_sequence_descriptor
 {
-    int num_prep_blocks;
-    int num_cooldown_blocks;
     float rf_raster_us;
     float grad_raster_us;
     float adc_raster_us;
@@ -444,8 +424,6 @@ typedef struct pulseg_sequence_descriptor
     int enable_pmc;
     int ignore_averages;
     int num_gain_cal_readouts; /**< calibration readouts for APS2 receive gain (pislquant) */
-    int num_passes;
-    int pass_len;            /**< blocks per pass (= num_blocks when single-pass) */
     int num_averages;        /**< number of averages (1 if ignore_averages)       */
     int vendor;              /**< PULSEG_VENDOR_* runtime constant */
     int label_column_map[3]; /**< copy of pulseg_opts.label_column_map at dedup time */
@@ -520,17 +498,15 @@ typedef struct pulseg_sequence_descriptor
     pulseg_virtual_segment *segment_definitions;
     pulseg_segment_table_result segment_table;
 
-    /* Scan table (expanded playback order).
-     * Each row has 3 columns: block_table_idx, tr_id, seg_id.
-     * Stored as 3 parallel arrays of length exec_stream_len. */
+    /* Scan table (expanded playback order), stored as parallel arrays of
+     * length exec_stream_len. */
     int exec_stream_len;
     int *exec_stream_block_idx; /* [exec_stream_len] index into block_table */
-    int *exec_stream_tr_id;     /* [exec_stream_len] TR region id           */
     int *exec_stream_seg_id;    /* [exec_stream_len] segment id             */
     int *exec_stream_avg_id;    /* [exec_stream_len] average (rep) index 0..num_averages-1 */
-    int *exec_stream_tr_start;  /* [exec_stream_len] 1 at first block of each main-region TR */
+    int *exec_stream_tr_start;  /* [exec_stream_len] 1 at the first block of each TR */
 
-    /* Compact form of the four arrays above. Built by
+    /* Compact form of the arrays above. Built by
      * pulseg__build_exec_stream alongside them; pulseg__verify_exec_runs
      * checks the two agree position by position. */
     int num_exec_runs;
@@ -559,11 +535,8 @@ typedef struct pulseg_sequence_descriptor
     int exec_run_hint;
     int seg_run_hint;
 
-    /* Cached main-region TR anchor for pulseg__exec_tr_start:
-     * tr_start_main_id is the tr_id that carries imaging TRs and
-     * tr_start_first is the stream position of the first such block
-     * (-1 when the sequence has no main region). */
-    int tr_start_main_id;
+    /* Cached TR anchor for pulseg__exec_tr_start: the stream position of
+     * the first TR block (-1 when no TR was detected). */
     int tr_start_first;
 
     /* Per-position variable-gradient flags  [tr_size * 3].
@@ -583,24 +556,6 @@ typedef struct pulseg_sequence_descriptor
      * downstream (LiveSDK), 0 = keep. NULL when no LABELSET OFF is present. */
     int *off_table;
 
-    /* generic [DEFINITIONS] key-value pairs (all keys, not just reserved) */
-    int num_definitions;
-    pulseq_definition *definitions;
-
-    /* Full-TR canonical (PULSEG_AMP_ZERO_VAR) k-space trajectory,
-     * retained by pulseg__calc_segment_timing (pulseg_structure.c)
-     * over the whole main TR (num_prep..num_prep+tr_size) with excitation-
-     * reset + refocus-negation already applied. TRAJECTORY (section 6)
-     * base shots are SLICED from this array instead of being
-     * re-integrated + re-centered per block. NULL/0 if has_canonical_kspace
-     * is 0 (e.g. zero-length TR). */
-    int has_canonical_kspace;
-    int canonical_kspace_num_samples;
-    float canonical_kspace_dt_us; /* raster period of kx/ky/kz below (us) */
-    float *canonical_kx;
-    float *canonical_ky;
-    float *canonical_kz;
-
     /* Copy of pulseg_opts.cache_ext at dedup time. Not part of the
      * cache payload itself (it only names the cache FILE, not its
      * contents) -- deliberately placed after all cache-serialized fields
@@ -611,15 +566,15 @@ typedef struct pulseg_sequence_descriptor
 /* clang-format off */
 #define PULSEG_SEQUENCE_DESCRIPTOR_INIT \
     { \
-    0, 0, 0.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0, 1, 0, 1, 0, {0, 1, 2}, {0, 0, 0}, {0, 0, \
+    0.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0, 1, 0, {0, 1, 2}, {0, 0, 0}, {0, 0, \
     0}, {0, 0, 0}, {0, 0, 0}, 0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, /* rf_amplitude_variable */ \
     0, NULL, 0, NULL, /* grad shape stats */ 0, NULL, NULL, \
     0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, NULL, \
     PULSEG_TR_DESCRIPTOR_INIT, 0, NULL, PULSEG_SEGMENT_TABLE_RESULT_INIT, 0, NULL, NULL, \
-    NULL, NULL, NULL, /* exec_runs */ 0, NULL, /* seg runs */ 0, 0, NULL, NULL, \
-    /* hints */ 0, 0, /* tr_start anchor */ 0, -1, NULL, 0, 0, NULL, \
+    NULL, NULL, /* exec_runs */ 0, NULL, /* seg runs */ 0, 0, NULL, NULL, \
+    /* hints */ 0, 0, /* tr_start anchor */ -1, NULL, 0, 0, NULL, \
     {{0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, \
-    {0, 0}, {0, 0}, {0, 0}, {0, 0}}, NULL, 0, NULL, 0, 0, 0.0f, NULL, NULL, NULL, \
+    {0, 0}, {0, 0}, {0, 0}, {0, 0}}, NULL, \
     PULSEG_CACHE_EXT_DEFAULT \
     }
 /* clang-format on */
@@ -723,8 +678,7 @@ typedef struct pulseg__uniform_grad_waveforms
 /* --- pulseg_error.c --- */
 void pulseg__diag_printf(pulseg_diagnostic *diag, const char *fmt, ...);
 
-/* --- pulseg_cache.c: binary-cache IO primitives shared by every .pge
- * section writer/reader (cache, cache_seqdesc, trajectory).
+/* --- pulseg_cache.c: binary-cache IO primitives.
  * All cache words are 4 bytes; swap on an endianness mismatch. --- */
 void pulseg__swap4(void *p);
 void pulseg__swap4_array(void *p, int count);
@@ -893,7 +847,6 @@ void pulseg__compute_exec_stream_tr_start(pulseg_sequence_descriptor *desc);
 /* Compact execution stream: O(log num_exec_runs) equivalents of the
  * exec_stream_* arrays (see pulseg_exec_run). */
 int pulseg__exec_block_idx(const pulseg_sequence_descriptor *desc, int n);
-int pulseg__exec_tr_id(const pulseg_sequence_descriptor *desc, int n);
 int pulseg__exec_avg_id(const pulseg_sequence_descriptor *desc, int n);
 int pulseg__exec_seg_id(const pulseg_sequence_descriptor *desc, int n);
 int pulseg__exec_tr_start(const pulseg_sequence_descriptor *desc, int n);
@@ -1038,13 +991,5 @@ int pulseg__load_scanloop_cache_ext(
  * post-cache-load).  Returns PULSEG_SUCCESS or an error code (on error the
  * collection is left with the identity map so it stays usable).            */
 int pulseg__build_segment_remap(pulseg_collection *coll);
-
-/* Free the derived remap arrays (identity-safe; sets them to NULL). */
-
-/* --- pulseg_cache.c / pulseg_cache_seqdesc.c: .pge section writers --- *
- * Plumbing of pulseg_save_cache(); each appends one section to the cache
- * file already on disk and patches the section index. */
-int pulseg__save_seqdesc_cache_section(const pulseg_collection *coll, const char *seq_path);
-int pulseg__save_trajectory_cache_section(const pulseg_collection *coll, const char *seq_path);
 
 #endif /* PULSEG_INTERNAL_H */

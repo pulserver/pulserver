@@ -74,36 +74,13 @@ class _Structure:
         return int(self.tr["num_trs"])
 
     @property
-    def folded_prep_or_cooldown(self) -> bool:
-        """bool : Whether a leading or trailing section is *not* just another TR.
-
-        A prep or cooldown region that repeats the TR pattern is folded away
-        by the C core -- its blocks are TR instances like any other, merely
-        discarded downstream. Only a genuinely different one survives here,
-        and when it does the core's unit of analysis stops being the TR and
-        becomes the whole pass it sits in.
-        """
-        return bool(self.tr["num_prep_blocks"] and not self.tr["degenerate_prep"]) or bool(
-            self.tr["num_cooldown_blocks"] and not self.tr["degenerate_cooldown"]
-        )
-
-    @property
     def num_instances(self) -> int:
         """int : How many things ``tr=<int>`` can name.
 
-        Passes when a non-degenerate section folds prep and cooldown into the
-        unit of analysis (see :attr:`folded_prep_or_cooldown`), and otherwise
-        every TR the scanner plays -- the prep and cooldown TRs included, and
-        counted once per average, which is how the C core indexes them.
+        Every TR the scanner plays, counted once per average, which is how
+        the C core indexes them.
         """
-        if self.folded_prep_or_cooldown:
-            return max(int(self.tr["num_passes"]), 1)
-        averages = max(int(self.tr["num_averages"]), 1)
-        return (
-            int(self.tr["num_prep_trs"])
-            + averages * self.num_trs
-            + int(self.tr["num_cooldown_trs"])
-        )
+        return max(int(self.tr["num_tr_instances"]), 1)
 
     @property
     def segments(self) -> list:
@@ -159,13 +136,12 @@ class _Structure:
             return _safety.AMPLITUDE_MODES[tr], 0
 
         index = int(tr)
-        # The core's own bound, which is passes when prep or cooldown is
-        # folded into the unit of analysis and TR instances otherwise --
-        # not num_trs, which counts only the structural repeat.
+        # The core's own bound: every played TR instance, averages included
+        # -- not num_trs, which counts only the structural repeat.
         if not 0 <= index < self.num_instances:
-            named = "passes" if self.folded_prep_or_cooldown else "TR instances"
             raise ValueError(
-                f"tr={index} is out of range; the sequence holds {self.num_instances} {named}"
+                f"tr={index} is out of range; the sequence holds "
+                f"{self.num_instances} TR instances"
             )
         return _safety.AMPLITUDE_MODES["actual"], index
 

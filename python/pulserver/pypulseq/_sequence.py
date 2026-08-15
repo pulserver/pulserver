@@ -636,8 +636,8 @@ class Sequence(AnalysisMixin, SafetyViewsMixin, SoftDelayMixin):
 
         A ``.seq`` describes one pass; playing it several times is normally
         left to the interpreter, which takes the count from outside the file
-        (on a GE scanner, ``opnex``) and uses the ``ONCE`` flag to decide what
-        belongs to a single pass:
+        (on a GE scanner, ``opnex``). The ``ONCE`` flag says what belongs to
+        a single pass:
 
         =========  ======================================================
         ``ONCE``   plays
@@ -674,10 +674,9 @@ class Sequence(AnalysisMixin, SafetyViewsMixin, SoftDelayMixin):
             where it changes, so it costs one extension per repetition.
         strip_once : bool, default True
             Drop the ``ONCE`` labels once resolved — they now describe a
-            table they no longer fit, which is what a foreign interpreter
-            needs. Against Pulserver's own interpreter, keeping them costs
-            nothing at playback and preserves the preparation/cooldown split
-            that ``pulseg`` hands to its TR descriptor.
+            table they no longer fit. Pulserver's own interpreter gives
+            ``ONCE`` no structural meaning, so nothing is lost by dropping
+            them.
         ignore_averages : bool, default True
             Write ``IgnoreAverages 1`` into ``[DEFINITIONS]``, so a Pulserver
             interpreter does not repeat what is already written out.

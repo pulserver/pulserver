@@ -129,10 +129,6 @@ void pulseg_sequence_descriptor_free(pulseg_sequence_descriptor *d)
     }
     d->num_shapes = 0;
 
-    d->num_prep_blocks = 0;
-    d->num_cooldown_blocks = 0;
-    d->num_passes = 1;
-
     if (d->segment_definitions)
     {
         for (i = 0; i < d->num_unique_segments; ++i)
@@ -170,11 +166,6 @@ void pulseg_sequence_descriptor_free(pulseg_sequence_descriptor *d)
     {
         PULSEG_FREE(d->exec_stream_block_idx);
         d->exec_stream_block_idx = NULL;
-    }
-    if (d->exec_stream_tr_id)
-    {
-        PULSEG_FREE(d->exec_stream_tr_id);
-        d->exec_stream_tr_id = NULL;
     }
     if (d->exec_stream_seg_id)
     {
@@ -229,42 +220,6 @@ void pulseg_sequence_descriptor_free(pulseg_sequence_descriptor *d)
     }
     d->label_num_columns = 0;
     d->label_num_entries = 0;
-
-    /* generic definitions */
-    if (d->definitions)
-    {
-        for (i = 0; i < d->num_definitions; ++i)
-        {
-            int j;
-            for (j = 0; j < d->definitions[i].value_size; ++j)
-                if (d->definitions[i].value[j])
-                    PULSEG_FREE(d->definitions[i].value[j]);
-            if (d->definitions[i].value)
-                PULSEG_FREE(d->definitions[i].value);
-        }
-        PULSEG_FREE(d->definitions);
-        d->definitions = NULL;
-    }
-    d->num_definitions = 0;
-
-    if (d->canonical_kx)
-    {
-        PULSEG_FREE(d->canonical_kx);
-        d->canonical_kx = NULL;
-    }
-    if (d->canonical_ky)
-    {
-        PULSEG_FREE(d->canonical_ky);
-        d->canonical_ky = NULL;
-    }
-    if (d->canonical_kz)
-    {
-        PULSEG_FREE(d->canonical_kz);
-        d->canonical_kz = NULL;
-    }
-    d->has_canonical_kspace = 0;
-    d->canonical_kspace_num_samples = 0;
-    d->canonical_kspace_dt_us = 0.0f;
 }
 
 void pulseg_collection_free(pulseg_collection *c)
@@ -300,18 +255,10 @@ static void segment_table_result_free(pulseg_segment_table_result *r)
 {
     if (!r)
         return;
-    if (r->prep_segment_table)
-        PULSEG_FREE(r->prep_segment_table);
     if (r->main_segment_table)
         PULSEG_FREE(r->main_segment_table);
-    if (r->cooldown_segment_table)
-        PULSEG_FREE(r->cooldown_segment_table);
-    r->prep_segment_table = NULL;
     r->main_segment_table = NULL;
-    r->cooldown_segment_table = NULL;
-    r->num_prep_segments = 0;
     r->num_main_segments = 0;
-    r->num_cooldown_segments = 0;
     r->num_unique_segments = 0;
 }
 
@@ -347,10 +294,9 @@ static int get_block_rf_shim_id(const pulseg_sequence_descriptor *desc, int bloc
 /*
  * check_rf_amplitude_periodicity --
  *   Verify that the RF amplitude pattern within a TR is identical
- *   across the "pure main" TR instances (excluding those adjacent
- *   to non-degenerate prep/cooldown).
+ *   across TR instances.
  *
- *   ref_tr:   index of the reference TR (0-based within main TRs)
+ *   ref_tr:   index of the reference TR
  *   first_tr: first TR index to check (inclusive)
  *   last_tr:  last TR index to check (inclusive)
  *
@@ -365,22 +311,20 @@ static int check_rf_amplitude_periodicity(
     pulseg_diagnostic *diag)
 {
     const pulseg_tr_descriptor *trd;
-    int tr_size, prep_blocks;
+    int tr_size;
     int ref_start, tr_idx, chk_start;
     int j;
     float ref_amp, chk_amp;
 
     trd = &desc->tr_descriptor;
     tr_size = trd->tr_size;
-    prep_blocks = trd->num_prep_blocks;
-
-    ref_start = prep_blocks + ref_tr * tr_size;
+    ref_start = ref_tr * tr_size;
 
     for (tr_idx = first_tr; tr_idx <= last_tr; ++tr_idx)
     {
         if (tr_idx == ref_tr)
             continue;
-        chk_start = prep_blocks + tr_idx * tr_size;
+        chk_start = tr_idx * tr_size;
         for (j = 0; j < tr_size; ++j)
         {
             ref_amp = get_block_rf_amplitude(desc, ref_start + j);
@@ -442,22 +386,20 @@ static int check_rf_shim_periodicity(
     pulseg_diagnostic *diag)
 {
     const pulseg_tr_descriptor *trd;
-    int tr_size, prep_blocks;
+    int tr_size;
     int ref_start, tr_idx, chk_start;
     int j;
     int ref_shim, chk_shim;
 
     trd = &desc->tr_descriptor;
     tr_size = trd->tr_size;
-    prep_blocks = trd->num_prep_blocks;
-
-    ref_start = prep_blocks + ref_tr * tr_size;
+    ref_start = ref_tr * tr_size;
 
     for (tr_idx = first_tr; tr_idx <= last_tr; ++tr_idx)
     {
         if (tr_idx == ref_tr)
             continue;
-        chk_start = prep_blocks + tr_idx * tr_size;
+        chk_start = tr_idx * tr_size;
         for (j = 0; j < tr_size; ++j)
         {
             ref_shim = get_block_rf_shim_id(desc, ref_start + j);
@@ -475,96 +417,6 @@ static int check_rf_shim_periodicity(
                         chk_shim,
                         ref_shim,
                         ref_tr);
-                }
-                return PULSEG_ERR_CONSISTENCY_RF_SHIM_PERIODIC;
-            }
-        }
-    }
-
-    return PULSEG_SUCCESS;
-}
-
-/*
- * check_cross_pass_rf_consistency --
- *   Verify that scan-table-expanded pass waveforms have identical RF
- *   amplitude and shim-ID patterns. For non-degenerate prep/cooldown
- *   subsequences, one expanded pass is the canonical RF unit.
- */
-static int check_cross_pass_rf_consistency(
-    pulseg_sequence_descriptor *desc,
-    int allow_variable,
-    pulseg_diagnostic *diag)
-{
-    int num_passes, pass_size, p, j;
-    int ref_bt, chk_bt;
-    float ref_amp, chk_amp;
-    int ref_shim, chk_shim;
-
-    num_passes = (desc->num_passes > 1) ? desc->num_passes : 1;
-    if (num_passes <= 1)
-        return PULSEG_SUCCESS;
-
-    pass_size = desc->exec_stream_len / num_passes;
-    if (pass_size <= 0)
-        return PULSEG_SUCCESS;
-
-    for (p = 1; p < num_passes; ++p)
-    {
-        for (j = 0; j < pass_size; ++j)
-        {
-            ref_bt = pulseg__exec_block_idx(desc, j);
-            chk_bt = pulseg__exec_block_idx(desc, p * pass_size + j);
-
-            /* RF amplitude */
-            ref_amp = get_block_rf_amplitude(desc, ref_bt);
-            chk_amp = get_block_rf_amplitude(desc, chk_bt);
-            if (ref_amp != chk_amp)
-            {
-                if (!allow_variable)
-                {
-                    if (diag)
-                    {
-                        pulseg__diag_printf(
-                            diag,
-                            "Cross-pass RF amplitude mismatch: pass %d "
-                            "pos %d has %.6g, pass 0 has %.6g\n",
-                            p,
-                            j,
-                            (double)chk_amp,
-                            (double)ref_amp);
-                    }
-                    return PULSEG_ERR_CONSISTENCY_RF_PERIODIC;
-                }
-                if (!desc->rf_amplitude_variable && diag)
-                {
-                    pulseg__diag_printf(
-                        diag,
-                        "Cross-pass RF amplitude varies (pass %d pos %d: %.6g "
-                        "vs %.6g at pass 0); using positional-max safety "
-                        "envelope\n",
-                        p,
-                        j,
-                        (double)chk_amp,
-                        (double)ref_amp);
-                }
-                desc->rf_amplitude_variable = 1;
-            }
-
-            /* RF shim ID */
-            ref_shim = get_block_rf_shim_id(desc, ref_bt);
-            chk_shim = get_block_rf_shim_id(desc, chk_bt);
-            if (ref_shim != chk_shim)
-            {
-                if (diag)
-                {
-                    pulseg__diag_printf(
-                        diag,
-                        "Cross-pass RF shim mismatch: pass %d "
-                        "pos %d has shim_id %d, pass 0 has %d\n",
-                        p,
-                        j,
-                        chk_shim,
-                        ref_shim);
                 }
                 return PULSEG_ERR_CONSISTENCY_RF_SHIM_PERIODIC;
             }
@@ -656,8 +508,7 @@ static int check_exec_stream_segments(
                                bdef_expected->gz_id == -1 && bdef_expected->adc_id == -1)
                 ? 1
                 : 0;
-            if (!both_pure_delay && desc->tr_descriptor.num_prep_blocks == 0 &&
-                desc->tr_descriptor.num_cooldown_blocks == 0)
+            if (!both_pure_delay)
             {
                 structural_match =
                     pulseg__block_defs_structurally_equal(desc, bdef_id, expected_id);
@@ -693,7 +544,6 @@ static int check_consistency(pulseg_collection *coll, int allow_variable_rf, pul
     pulseg_sequence_descriptor *desc;
     const pulseg_tr_descriptor *trd;
     int ref_tr, first_check, last_check;
-    int has_nd_prep, has_nd_cool;
 
     if (!coll)
         return PULSEG_ERR_NULL_POINTER;
@@ -702,8 +552,6 @@ static int check_consistency(pulseg_collection *coll, int allow_variable_rf, pul
     {
         desc = &coll->descriptors[subseq_idx];
         trd = &desc->tr_descriptor;
-        has_nd_prep = (trd->num_prep_blocks > 0 && !trd->degenerate_prep);
-        has_nd_cool = (trd->num_cooldown_blocks > 0 && !trd->degenerate_cooldown);
 
         /* (a) Scan-table segment consistency: walk the scan table and
          *     verify that each entry's block definition ID matches what
@@ -725,28 +573,8 @@ static int check_consistency(pulseg_collection *coll, int allow_variable_rf, pul
             }
         }
 
-        /* (b) RF periodicity on canonical units.
-         *
-         * Standard / degenerate subsequences use imaging TRs as the
-         * canonical RF unit. Non-degenerate prep/cooldown subsequences
-         * use one full expanded pass (including average expansion). */
-        if (has_nd_prep || has_nd_cool)
-        {
-            rc = check_cross_pass_rf_consistency(desc, allow_variable_rf, diag);
-            if (PULSEG_FAILED(rc))
-            {
-                if (diag)
-                {
-                    pulseg__diag_printf(
-                        diag,
-                        "Consistency check failed: canonical RF "
-                        "mismatch in subsequence %d\n",
-                        subseq_idx);
-                }
-                return rc;
-            }
-        }
-        else if (trd->num_trs > 1)
+        /* (b) RF periodicity across TR instances. */
+        if (trd->num_trs > 1)
         {
             ref_tr = 0;
             first_check = 1;
@@ -1351,30 +1179,7 @@ int pulseg_convert_collection(
         if (PULSEG_FAILED(diag->code))
             goto fail;
 
-        /* Non-degenerate pass TR duration:
-         * For any sequence with non-degenerate prep or cooldown (once==1 / once==2
-         * blocks that are structurally distinct from the imaging TR), the canonical
-         * TR equals one full per-slice pass (prep + all averages of imaging +
-         * cooldown), computed as total scan-table duration divided by num_passes.
-         * This applies to both single-pass (e.g. bSSFP 1sl) and multi-pass
-         * (e.g. bSSFP 3sl) sequences. */
-        if ((!desc.tr_descriptor.degenerate_prep || !desc.tr_descriptor.degenerate_cooldown) &&
-            (desc.tr_descriptor.num_prep_blocks > 0 || desc.tr_descriptor.num_cooldown_blocks > 0))
-        {
-            float total_dur = 0.0f;
-            int n;
-            for (n = 0; n < desc.exec_stream_len; ++n)
-            {
-                int bt_idx = pulseg__exec_block_idx(&desc, n);
-                const pulseg_block_table_element *bte = &desc.block_table[bt_idx];
-                const pulseg_base_block *bdef = &desc.base_blocks[bte->id];
-                total_dur +=
-                    (bte->duration_us >= 0) ? (float)bte->duration_us : (float)bdef->duration_us;
-            }
-            desc.tr_descriptor.tr_duration_us = total_dur / (float)desc.num_passes;
-        }
-
-        /* Scan-table-only segmentation (prep / main / cooldown) */
+        /* Scan-table-only segmentation */
         result = pulseg__get_exec_stream_segments(&desc, diag, opts);
         if (PULSEG_FAILED(diag->code))
             goto fail;
@@ -1416,12 +1221,8 @@ int pulseg_convert_collection(
         /* apply offsets */
         if (seg_off > 0)
         {
-            for (j = 0; j < desc.segment_table.num_prep_segments; ++j)
-                desc.segment_table.prep_segment_table[j] += seg_off;
             for (j = 0; j < desc.segment_table.num_main_segments; ++j)
                 desc.segment_table.main_segment_table[j] += seg_off;
-            for (j = 0; j < desc.segment_table.num_cooldown_segments; ++j)
-                desc.segment_table.cooldown_segment_table[j] += seg_off;
         }
         if (adc_off > 0)
         {

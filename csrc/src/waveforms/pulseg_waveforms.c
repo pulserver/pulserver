@@ -155,7 +155,7 @@ static int compute_position_max_amplitudes_filtered(
     const pulseg_tr_descriptor *tr;
     int tr_start, tr_size, num_trs;
     int tr_idx, pos, block_idx;
-    int use_full_pass_layout, num_passes, pass_size, pass_idx, st_pos;
+    int use_full_pass_layout, st_pos;
     const pulseg_block_table_element *bte;
     const pulseg_grad_table_element *gte;
     int raw_id, n;
@@ -163,10 +163,7 @@ static int compute_position_max_amplitudes_filtered(
     tr = &desc->tr_descriptor;
     tr_size = tr->tr_size;
     num_trs = tr->num_trs;
-    use_full_pass_layout =
-        !(block_start == (tr->num_prep_blocks + tr->imaging_tr_start) && block_count == tr_size);
-    num_passes = (desc->num_passes > 1) ? desc->num_passes : 1;
-    pass_size = (num_passes > 0) ? (desc->exec_stream_len / num_passes) : 0;
+    use_full_pass_layout = !(block_start == 0 && block_count == tr_size);
 
     for (n = 0; n < block_count; ++n)
     {
@@ -175,16 +172,13 @@ static int compute_position_max_amplitudes_filtered(
         pos_max_gz[n] = 0.0f;
     }
 
-    if (use_full_pass_layout && pass_size > 0 && desc->exec_runs)
+    if (use_full_pass_layout && desc->exec_stream_len > 0 && desc->exec_runs)
     {
-        for (pass_idx = 0; pass_idx < num_passes; ++pass_idx)
+        if (!tr_group_labels || tr_group_labels[0] == target_group)
         {
-            if (tr_group_labels && tr_group_labels[pass_idx] != target_group)
-                continue;
-
             for (pos = 0; pos < block_count; ++pos)
             {
-                st_pos = pass_idx * pass_size + block_start + pos;
+                st_pos = block_start + pos;
                 if (st_pos < 0 || st_pos >= desc->exec_stream_len)
                     continue;
 
@@ -227,7 +221,7 @@ static int compute_position_max_amplitudes_filtered(
         if (tr_group_labels && tr_group_labels[tr_idx] != target_group)
             continue;
 
-        tr_start = tr->num_prep_blocks + tr->imaging_tr_start + tr_idx * tr_size;
+        tr_start = tr_idx * tr_size;
         for (pos = 0; pos < tr_size; ++pos)
         {
             block_idx = tr_start + pos;
@@ -1051,7 +1045,6 @@ int pulseg_get_tr_gradient_waveforms(
     const pulseg_sequence_descriptor *desc;
     pulseg__uniform_grad_waveforms uw;
     int num_unique;
-    int has_nd_prep, has_nd_cool;
     int rep_idx;
     int start_block, block_count;
     int rc, i;
@@ -1072,81 +1065,22 @@ int pulseg_get_tr_gradient_waveforms(
 
     desc = &coll->descriptors[subseq_idx];
 
-    has_nd_prep = (desc->tr_descriptor.num_prep_blocks > 0 && !desc->tr_descriptor.degenerate_prep);
-    has_nd_cool =
-        (desc->tr_descriptor.num_cooldown_blocks > 0 && !desc->tr_descriptor.degenerate_cooldown);
-
-    if (has_nd_prep || has_nd_cool)
+    /* Exactly one canonical TR.  A definition names its own worst
+     * instance (pulseg_grad_representative), so shot combinations are no
+     * longer enumerated and there is nothing to index past. */
+    num_unique = 1;
+    if (canonical_tr_idx >= num_unique)
     {
-        /* Exactly one canonical TR.  A definition names its own worst
-         * instance (pulseg_grad_representative), so shot combinations are no
-         * longer enumerated and there is nothing to index past. */
-        num_unique = 1;
-        if (canonical_tr_idx >= num_unique)
+        if (diag)
         {
-            if (diag)
-            {
-                pulseg_diagnostic_init(diag);
-                diag->code = PULSEG_ERR_INVALID_ARGUMENT;
-            }
-            return PULSEG_ERR_INVALID_ARGUMENT;
+            pulseg_diagnostic_init(diag);
+            diag->code = PULSEG_ERR_INVALID_ARGUMENT;
         }
-        rep_idx = 0;
-        /* Render the representative pass with average expansion:
-         * prep + num_averages * imaging + cooldown. */
-        {
-            int pass_base = rep_idx * desc->pass_len;
-            int prep_blk = desc->tr_descriptor.num_prep_blocks;
-            int img_len = desc->tr_descriptor.num_trs * desc->tr_descriptor.tr_size;
-            int cool_blk = desc->tr_descriptor.num_cooldown_blocks;
-            int num_avgs = (desc->num_averages > 0) ? desc->num_averages : 1;
-            int exp_count = prep_blk + num_avgs * img_len + cool_blk;
-            int avg_i;
-            int pos_i;
-
-            block_order = (int *)PULSEG_ALLOC((size_t)exp_count * sizeof(int));
-            if (!block_order)
-            {
-                if (diag)
-                {
-                    pulseg_diagnostic_init(diag);
-                    diag->code = PULSEG_ERR_ALLOC_FAILED;
-                }
-                return PULSEG_ERR_ALLOC_FAILED;
-            }
-
-            block_count = exp_count;
-            i = 0;
-            for (pos_i = 0; pos_i < prep_blk; ++pos_i)
-                block_order[i++] = pass_base + pos_i;
-            for (avg_i = 0; avg_i < num_avgs; ++avg_i)
-                for (pos_i = 0; pos_i < img_len; ++pos_i)
-                    block_order[i++] = pass_base + prep_blk + pos_i;
-            for (pos_i = 0; pos_i < cool_blk; ++pos_i)
-                block_order[i++] = pass_base + prep_blk + img_len + pos_i;
-            start_block = 0;
-        }
+        return PULSEG_ERR_INVALID_ARGUMENT;
     }
-    else
-    {
-        /* Exactly one canonical TR.  A definition names its own worst
-         * instance (pulseg_grad_representative), so shot combinations are no
-         * longer enumerated and there is nothing to index past. */
-        num_unique = 1;
-        if (canonical_tr_idx >= num_unique)
-        {
-            if (diag)
-            {
-                pulseg_diagnostic_init(diag);
-                diag->code = PULSEG_ERR_INVALID_ARGUMENT;
-            }
-            return PULSEG_ERR_INVALID_ARGUMENT;
-        }
-        rep_idx = 0;
-        start_block = desc->tr_descriptor.num_prep_blocks + desc->tr_descriptor.imaging_tr_start +
-            rep_idx * desc->tr_descriptor.tr_size;
-        block_count = desc->tr_descriptor.tr_size;
-    }
+    rep_idx = 0;
+    start_block = rep_idx * desc->tr_descriptor.tr_size;
+    block_count = desc->tr_descriptor.tr_size;
 
     rc = pulseg__get_gradient_waveforms_range(
         desc,
@@ -1492,8 +1426,6 @@ int pulseg_get_tr_waveforms(
     desc = &coll->descriptors[subseq_idx];
     tr = &desc->tr_descriptor;
     eff_num_averages = (num_averages > 0) ? num_averages : desc->num_averages;
-    has_nd_prep = (tr->num_prep_blocks > 0 && !tr->degenerate_prep);
-    has_nd_cool = (tr->num_cooldown_blocks > 0 && !tr->degenerate_cooldown);
 
     if (tr->tr_size <= 0)
     {
@@ -1504,78 +1436,20 @@ int pulseg_get_tr_waveforms(
     /* ---- determine block range ---- */
     if (amplitude_mode == PULSEG_AMP_ACTUAL)
     {
-        if (has_nd_prep || has_nd_cool)
+        /* Flat TR index with average expansion: TRs wrap modulo num_trs
+         * so repeated averages map back to canonical block positions. */
+        int num_avgs = eff_num_averages;
+        int total_actual_trs = num_avgs * tr->num_trs;
+        int canonical_idx;
+        if (tr_index < 0 || tr_index >= total_actual_trs)
         {
-            /* Non-degenerate: tr_index selects a pass (0..num_passes-1).
-             * Return the full pass with average expansion. */
-            int num_avgs = eff_num_averages;
-            if (tr_index < 0 || tr_index >= desc->num_passes)
-            {
-                diag->code = PULSEG_ERR_INVALID_ARGUMENT;
-                return diag->code;
-            }
-            pass_base = tr_index * desc->pass_len;
-            tr_block_start = pass_base + tr->num_prep_blocks + tr->imaging_tr_start;
-            if (num_avgs > 1)
-            {
-                int prep_blk = tr->num_prep_blocks;
-                int img_len = tr->num_trs * tr->tr_size;
-                int cool_blk = tr->num_cooldown_blocks;
-                int exp_count = prep_blk + num_avgs * img_len + cool_blk;
-                int avg_i;
-                block_order = (int *)PULSEG_ALLOC((size_t)exp_count * sizeof(int));
-                if (!block_order)
-                    goto alloc_fail;
-                n = 0;
-                for (k = 0; k < prep_blk; ++k)
-                    block_order[n++] = pass_base + k;
-                for (avg_i = 0; avg_i < num_avgs; ++avg_i)
-                    for (k = 0; k < img_len; ++k)
-                        block_order[n++] = pass_base + prep_blk + k;
-                for (k = 0; k < cool_blk; ++k)
-                    block_order[n++] = pass_base + prep_blk + img_len + k;
-                block_start = 0;
-                block_count = exp_count;
-                /* scan-table position for output slot 0 of this pass:
-                 * each pass occupies exp_count consecutive scan entries. */
-                pass_scan_start = (pass_base / desc->pass_len) * block_count;
-            }
-            else
-            {
-                block_start = pass_base;
-                block_count = desc->pass_len;
-            }
+            diag->code = PULSEG_ERR_INVALID_ARGUMENT;
+            return diag->code;
         }
-        else
-        {
-            /* Degenerate / no prep: flat TR index with average expansion.
-             * Imaging TRs wrap modulo num_trs so repeated averages map
-             * back to canonical block positions. */
-            int num_avgs = eff_num_averages;
-            int total_actual_trs = tr->num_prep_trs + num_avgs * tr->num_trs + tr->num_cooldown_trs;
-            int canonical_idx;
-            if (tr_index < 0 || tr_index >= total_actual_trs)
-            {
-                diag->code = PULSEG_ERR_INVALID_ARGUMENT;
-                return diag->code;
-            }
-            if (tr_index < tr->num_prep_trs)
-            {
-                canonical_idx = tr_index;
-            }
-            else if (tr_index < tr->num_prep_trs + num_avgs * tr->num_trs)
-            {
-                canonical_idx = tr->num_prep_trs + (tr_index - tr->num_prep_trs) % tr->num_trs;
-            }
-            else
-            {
-                canonical_idx = tr->num_prep_trs + tr->num_trs +
-                    (tr_index - tr->num_prep_trs - num_avgs * tr->num_trs);
-            }
-            tr_block_start = canonical_idx * tr->tr_size;
-            block_start = tr_block_start;
-            block_count = tr->tr_size;
-        }
+        canonical_idx = tr_index % tr->num_trs;
+        tr_block_start = canonical_idx * tr->tr_size;
+        block_start = tr_block_start;
+        block_count = tr->tr_size;
     }
     else
     {
@@ -1590,95 +1464,30 @@ int pulseg_get_tr_waveforms(
          * group so geometry (RF/ADC placement, delays, etc.) matches the
          * same canonical TR used for amplitude filtering.
          */
-        if (has_nd_prep || has_nd_cool)
-        {
-            num_canonical = 0 /* one canonical TR; representatives carry the worst case */;
-        }
-        else
-        {
-            num_canonical = 0 /* one canonical TR; representatives carry the worst case */;
-        }
+        num_canonical = 0 /* one canonical TR; representatives carry the worst case */;
 
         if (num_canonical > 0 && tr_index >= 0 && tr_index < num_canonical && can_unique_indices)
         {
             rep_idx = can_unique_indices[tr_index];
         }
 
-        if (has_nd_prep || has_nd_cool)
-        {
-            int num_avgs_c = eff_num_averages;
-            pass_base = rep_idx * desc->pass_len;
-            tr_block_start = pass_base + tr->num_prep_blocks + tr->imaging_tr_start;
+        tr_block_start = 0;
+        block_start = 0;
+        block_count = tr->tr_size;
 
-            if (num_avgs_c > 1)
-            {
-                /* Average-expanded canonical pass:
-                 * prep + num_avgs × imaging + cooldown. */
-                int prep_blk_c = tr->num_prep_blocks;
-                int img_len_c = tr->num_trs * tr->tr_size;
-                int cool_blk_c = tr->num_cooldown_blocks;
-                int exp_count_c = prep_blk_c + num_avgs_c * img_len_c + cool_blk_c;
-                int avg_i_c;
-                block_order = (int *)PULSEG_ALLOC((size_t)exp_count_c * sizeof(int));
-                if (!block_order)
-                {
-                    if (can_group_labels)
-                        PULSEG_FREE(can_group_labels);
-                    if (can_unique_indices)
-                        PULSEG_FREE(can_unique_indices);
-                    goto alloc_fail;
-                }
-                n = 0;
-                for (k = 0; k < prep_blk_c; ++k)
-                    block_order[n++] = pass_base + k;
-                for (avg_i_c = 0; avg_i_c < num_avgs_c; ++avg_i_c)
-                    for (k = 0; k < img_len_c; ++k)
-                        block_order[n++] = pass_base + prep_blk_c + k;
-                for (k = 0; k < cool_blk_c; ++k)
-                    block_order[n++] = pass_base + prep_blk_c + img_len_c + k;
-                block_start = 0;
-                block_count = exp_count_c;
-                /* scan-table position for output slot 0 of this canonical pass */
-                pass_scan_start = (pass_base / desc->pass_len) * block_count;
-            }
-            else
-            {
-                block_order = (int *)PULSEG_ALLOC((size_t)desc->pass_len * sizeof(int));
-                if (!block_order)
-                {
-                    if (can_group_labels)
-                        PULSEG_FREE(can_group_labels);
-                    if (can_unique_indices)
-                        PULSEG_FREE(can_unique_indices);
-                    goto alloc_fail;
-                }
-                for (n = 0; n < desc->pass_len; ++n)
-                    block_order[n] = pass_base + n;
-                block_start = 0;
-                block_count = desc->pass_len;
-            }
-        }
-        else
+        if (rep_idx > 0)
         {
-            int base_start = tr->num_prep_blocks + tr->imaging_tr_start;
-            tr_block_start = base_start;
-            block_start = base_start;
-            block_count = tr->tr_size;
-
-            if (rep_idx > 0)
+            block_order = (int *)PULSEG_ALLOC((size_t)tr->tr_size * sizeof(int));
+            if (!block_order)
             {
-                block_order = (int *)PULSEG_ALLOC((size_t)tr->tr_size * sizeof(int));
-                if (!block_order)
-                {
-                    if (can_group_labels)
-                        PULSEG_FREE(can_group_labels);
-                    if (can_unique_indices)
-                        PULSEG_FREE(can_unique_indices);
-                    goto alloc_fail;
-                }
-                for (n = 0; n < tr->tr_size; ++n)
-                    block_order[n] = base_start + rep_idx * tr->tr_size + n;
+                if (can_group_labels)
+                    PULSEG_FREE(can_group_labels);
+                if (can_unique_indices)
+                    PULSEG_FREE(can_unique_indices);
+                goto alloc_fail;
             }
+            for (n = 0; n < tr->tr_size; ++n)
+                block_order[n] = rep_idx * tr->tr_size + n;
         }
 
         if (can_group_labels)
@@ -1712,14 +1521,7 @@ int pulseg_get_tr_waveforms(
         /* If tr_index > 0, filter max-pos to that canonical TR group. */
         if (tr_index >= 0)
         {
-            if (has_nd_prep || has_nd_cool)
-            {
-                num_canonical = 0 /* one canonical TR; representatives carry the worst case */;
-            }
-            else
-            {
-                num_canonical = 0 /* one canonical TR; representatives carry the worst case */;
-            }
+            num_canonical = 0 /* one canonical TR; representatives carry the worst case */;
         }
 
         if (num_canonical > 1 && tr_index >= 0 && tr_index < num_canonical)
@@ -1758,20 +1560,16 @@ int pulseg_get_tr_waveforms(
          * each back to its TR-relative position for the flag lookup. */
         if (amplitude_mode == PULSEG_AMP_ZERO_VAR && desc->variable_grad_flags)
         {
-            int vp, local_pos, abs_pos;
-            int zv_prep = (has_nd_prep || has_nd_cool) ? tr->num_prep_blocks : 0;
-            int zv_cool = (has_nd_prep || has_nd_cool) ? tr->num_cooldown_blocks : 0;
-            int zv_img = block_count - zv_prep - zv_cool;
-            for (vp = 0; vp < zv_img; ++vp)
+            int vp, local_pos;
+            for (vp = 0; vp < block_count; ++vp)
             {
                 local_pos = vp % tr->tr_size;
-                abs_pos = zv_prep + vp;
                 if (desc->variable_grad_flags[local_pos * 3 + 0])
-                    pos_max_gx[abs_pos] = 0.0f;
+                    pos_max_gx[vp] = 0.0f;
                 if (desc->variable_grad_flags[local_pos * 3 + 1])
-                    pos_max_gy[abs_pos] = 0.0f;
+                    pos_max_gy[vp] = 0.0f;
                 if (desc->variable_grad_flags[local_pos * 3 + 2])
-                    pos_max_gz[abs_pos] = 0.0f;
+                    pos_max_gz[vp] = 0.0f;
             }
         }
     }

@@ -4,8 +4,6 @@
  *        native or uniform raster for safety analysis and wrapper-side plotting.
  *
  * These getters read a loaded pulseg_collection; they do not touch the cache.
- * The k-space trajectory (a recon-side data product persisted in the cache) is
- * a separate concern -- see pulseg_trajectory.h.
  */
 
 #ifndef PULSEG_WAVEFORMS_H

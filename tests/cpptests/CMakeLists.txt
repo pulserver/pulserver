@@ -32,17 +32,6 @@ add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../../csrc ${CMAKE_CURRENT_BINARY_D
 set(MRDSERVER_CSRC ${CMAKE_CURRENT_SOURCE_DIR}/../../cxx/recon)
 
 # ------------------------------------------------------------------
-# Section 5 (SEQUENCEDESCRIPTION) byte-exact truth test.
-# Validates that the C-side cache writer (pulseg_cache_seqdesc.c)
-# and the MATLAB TruthBuilder.exportSequenceDescription emit the
-# identical Section 5 wire format.
-# ------------------------------------------------------------------
-add_executable(test_seq_desc_truth test_seq_desc_truth.cpp)
-target_compile_definitions(test_seq_desc_truth PRIVATE
-    MRDSERVER_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../utils/expected")
-target_link_libraries(test_seq_desc_truth PRIVATE GTest::gtest_main)
-
-# ------------------------------------------------------------------
 # pulseq::File / pulseq::FileSet C++ wrapper (cxx/include/pulseq).
 # pulseq (csrc) is already built unconditionally above (pulseg depends on it).
 # ------------------------------------------------------------------
@@ -124,7 +113,6 @@ add_executable(test_pulseq_shape test_pulseq_shape.cpp)
 target_link_libraries(test_pulseq_shape PRIVATE pulseqpp GTest::gtest_main)
 
 include(GoogleTest)
-gtest_discover_tests(test_seq_desc_truth)
 gtest_discover_tests(test_pulseq_file)
 gtest_discover_tests(test_pulseq_sequence)
 gtest_discover_tests(test_sequence_file)

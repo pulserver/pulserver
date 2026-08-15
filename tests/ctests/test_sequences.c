@@ -243,18 +243,13 @@ static void run_check_case(const seq_case *tc)
     /* 3. Nominal TR */
     fprintf(
         stderr,
-        "[check][%s] tr=%.3f meta_tr=%d num_trs=%d tr_size=%d prep_blk=%d cool_blk=%d deg_prep=%d "
-        "deg_cool=%d num_passes=%d\n",
+        "[check][%s] tr=%.3f meta_tr=%d num_trs=%d tr_size=%d num_tr_instances=%d\n",
         tc->name,
         sinfo.tr_duration_us,
         meta.tr_duration_us,
         sinfo.num_trs,
         sinfo.tr_size,
-        sinfo.num_prep_blocks,
-        sinfo.num_cooldown_blocks,
-        sinfo.degenerate_prep,
-        sinfo.degenerate_cooldown,
-        sinfo.num_passes);
+        sinfo.num_tr_instances);
     mu_assert_float_near("TR duration", (float)meta.tr_duration_us, sinfo.tr_duration_us, 1.0f);
 
     /* 4. Num segments — verify segment count matches truth */
@@ -510,7 +505,7 @@ static void run_sequences_uieval_case(const seq_case *tc)
     {
         rc = pulseg_get_subseq_info(coll, &sinfo, subseq_idx);
         mu_assert(PULSEG_SUCCEEDED(rc), "pulseg_get_subseq_info failed");
-        mu_assert(sinfo.num_passes > 0, "invalid num_passes from library");
+        mu_assert(sinfo.num_tr_instances > 0, "invalid num_tr_instances from library");
 
         /* Build ground truth path for this subsequence if needed (here assumed single ground truth for all, adjust if needed) */
         build_case_path(tr_path, sizeof(tr_path), tc, "_tr_waveform.truth");
@@ -2243,10 +2238,7 @@ MU_TEST(test_seqdesc_echo_uses_actual_instances_not_zero_var)
     for (i = 0; i < desc->num_blocks; ++i)
     {
         pulseg_block_table_element *bte = &desc->block_table[i];
-        int tr_pos = (i - desc->tr_descriptor.num_prep_blocks) %
-            desc->tr_descriptor.tr_size;
-        if (tr_pos < 0)
-            tr_pos += desc->tr_descriptor.tr_size;
+        int tr_pos = i % desc->tr_descriptor.tr_size;
         if (desc->variable_grad_flags &&
             desc->variable_grad_flags[tr_pos * 3 + 1] &&
             bte->gy_id >= 0 &&

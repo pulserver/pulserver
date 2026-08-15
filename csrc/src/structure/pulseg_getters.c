@@ -171,47 +171,11 @@ static int get_tr_size(const pulseg_collection *coll, int subseq_idx)
     return coll->descriptors[subseq_idx].tr_descriptor.tr_size;
 }
 
-static int get_num_prep_blocks(const pulseg_collection *coll, int subseq_idx)
-{
-    if (!coll || subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
-        return 0;
-    return coll->descriptors[subseq_idx].tr_descriptor.num_prep_blocks;
-}
 
-static int get_num_cooldown_blocks(const pulseg_collection *coll, int subseq_idx)
-{
-    if (!coll || subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
-        return 0;
-    return coll->descriptors[subseq_idx].tr_descriptor.num_cooldown_blocks;
-}
 
-static int get_degenerate_prep(const pulseg_collection *coll, int subseq_idx)
-{
-    if (!coll || subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
-        return 0;
-    return coll->descriptors[subseq_idx].tr_descriptor.degenerate_prep;
-}
 
-static int get_degenerate_cooldown(const pulseg_collection *coll, int subseq_idx)
-{
-    if (!coll || subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
-        return 0;
-    return coll->descriptors[subseq_idx].tr_descriptor.degenerate_cooldown;
-}
 
-static int get_num_prep_trs(const pulseg_collection *coll, int subseq_idx)
-{
-    if (!coll || subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
-        return 0;
-    return coll->descriptors[subseq_idx].tr_descriptor.num_prep_trs;
-}
 
-static int get_num_cooldown_trs(const pulseg_collection *coll, int subseq_idx)
-{
-    if (!coll || subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
-        return 0;
-    return coll->descriptors[subseq_idx].tr_descriptor.num_cooldown_trs;
-}
 
 static int get_num_unique_adcs(const pulseg_collection *coll, int subseq_idx)
 {
@@ -347,7 +311,7 @@ int pulseg_get_tr_rf_ids(const pulseg_collection *coll, int *out_rf_ids, int sub
 
     for (i = 0; i < tr_size; ++i)
     {
-        block_idx = trd->num_prep_blocks + i;
+        block_idx = i;
         bte = &desc->block_table[block_idx];
         if (bte->rf_id >= 0 && bte->rf_id < desc->rf_table_size)
             out_rf_ids[i] = desc->rf_table[bte->rf_id].id;
@@ -523,14 +487,12 @@ int pulseg_get_rf_array(const pulseg_collection *coll, pulseg_rf_stats **out_pul
     const pulseg_rf_definition *rfdef;
     int start, count, num_instances;
     int use_exec_stream;
-    int num_passes, pass_size;
     int i, n, num_rf;
     /* Variable-RF-amplitude instance walk (only used when
      * rf_amplitude_variable): the u-th instance's position p lives at
      * env_base + u*env_stride + p. env_base == start (u=0 IS the canonical
      * instance already extracted below), so the walk and the canonical
-     * fill stay position-aligned regardless of any prep/imaging_tr_start
-     * offset baked into start. */
+     * fill stay position-aligned. */
     int env_base, env_stride, env_units;
     int winner_u;
 
@@ -544,29 +506,12 @@ int pulseg_get_rf_array(const pulseg_collection *coll, pulseg_rf_stats **out_pul
     trd = &desc->tr_descriptor;
 
     use_exec_stream = 0;
-    if ((!trd->degenerate_prep || !trd->degenerate_cooldown) &&
-        (trd->num_prep_blocks > 0 || trd->num_cooldown_blocks > 0))
-    {
-        num_passes = (desc->num_passes > 1) ? desc->num_passes : 1;
-        pass_size = (num_passes > 0) ? (desc->exec_stream_len / num_passes) : 0;
-
-        start = 0;
-        count = pass_size;
-        num_instances = num_passes;
-        use_exec_stream = 1;
-
-        env_base = start;
-        env_stride = pass_size;
-        env_units = num_passes;
-    }
-    else
     {
         int num_avgs = (desc->num_averages > 1) ? desc->num_averages : 1;
-        start = trd->num_prep_blocks + trd->imaging_tr_start;
+        start = 0;
         count = trd->tr_size;
-        /* Total TR instances: imaging TRs replicated by NEX,
-         * plus degenerate prep/cooldown TRs (played once each). */
-        num_instances = num_avgs * trd->num_trs + trd->num_prep_trs + trd->num_cooldown_trs;
+        /* Total TR instances: TRs replicated by NEX. */
+        num_instances = num_avgs * trd->num_trs;
         if (num_instances < 0)
             num_instances = 0;
 
@@ -699,7 +644,6 @@ int pulseg_get_rf_event_array(
     const pulseg_rf_definition *rfdef;
     int start, count, num_instances;
     int use_exec_stream;
-    int num_passes, pass_size;
     int i, n, num_rf;
 
     if (!coll || !out_events)
@@ -712,25 +656,12 @@ int pulseg_get_rf_event_array(
     trd = &desc->tr_descriptor;
 
     use_exec_stream = 0;
-    if ((!trd->degenerate_prep || !trd->degenerate_cooldown) &&
-        (trd->num_prep_blocks > 0 || trd->num_cooldown_blocks > 0))
-    {
-        num_passes = (desc->num_passes > 1) ? desc->num_passes : 1;
-        pass_size = (num_passes > 0) ? (desc->exec_stream_len / num_passes) : 0;
-
-        start = 0;
-        count = pass_size;
-        num_instances = num_passes;
-        use_exec_stream = 1;
-    }
-    else
     {
         int num_avgs = (desc->num_averages > 1) ? desc->num_averages : 1;
-        start = trd->num_prep_blocks + trd->imaging_tr_start;
+        start = 0;
         count = trd->tr_size;
-        /* Total TR instances: imaging TRs replicated by NEX,
-         * plus degenerate prep/cooldown TRs (played once each). */
-        num_instances = num_avgs * trd->num_trs + trd->num_prep_trs + trd->num_cooldown_trs;
+        /* Total TR instances: TRs replicated by NEX. */
+        num_instances = num_avgs * trd->num_trs;
         if (num_instances < 0)
             num_instances = 0;
     }
@@ -1178,71 +1109,11 @@ static int get_segment_start_block(const pulseg_collection *coll, int seg_idx)
 /*  Segment table queries                                             */
 /* ================================================================== */
 
-static int get_num_prep_segments(const pulseg_collection *coll, int subseq_idx)
-{
-    if (!coll || subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
-        return 0;
-    return coll->descriptors[subseq_idx].segment_table.num_prep_segments;
-}
 
-static int get_num_main_segments(const pulseg_collection *coll, int subseq_idx)
-{
-    if (!coll || subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
-        return 0;
-    return coll->descriptors[subseq_idx].segment_table.num_main_segments;
-}
 
-static int get_num_cooldown_segments(const pulseg_collection *coll, int subseq_idx)
-{
-    if (!coll || subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
-        return 0;
-    return coll->descriptors[subseq_idx].segment_table.num_cooldown_segments;
-}
 
-int pulseg_get_prep_segment_table(const pulseg_collection *coll, int *out_ids, int subseq_idx)
-{
-    const pulseg_sequence_descriptor *desc;
-    int n;
-    if (!coll || !out_ids)
-        return PULSEG_ERR_NULL_POINTER;
-    if (subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
-        return PULSEG_ERR_INVALID_ARGUMENT;
-    desc = &coll->descriptors[subseq_idx];
-    n = desc->segment_table.num_prep_segments;
-    if (n > 0 && desc->segment_table.prep_segment_table)
-        memcpy(out_ids, desc->segment_table.prep_segment_table, n * sizeof(int));
-    return n;
-}
 
-int pulseg_get_main_segment_table(const pulseg_collection *coll, int *out_ids, int subseq_idx)
-{
-    const pulseg_sequence_descriptor *desc;
-    int n;
-    if (!coll || !out_ids)
-        return PULSEG_ERR_NULL_POINTER;
-    if (subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
-        return PULSEG_ERR_INVALID_ARGUMENT;
-    desc = &coll->descriptors[subseq_idx];
-    n = desc->segment_table.num_main_segments;
-    if (n > 0 && desc->segment_table.main_segment_table)
-        memcpy(out_ids, desc->segment_table.main_segment_table, n * sizeof(int));
-    return n;
-}
 
-int pulseg_get_cooldown_segment_table(const pulseg_collection *coll, int *out_ids, int subseq_idx)
-{
-    const pulseg_sequence_descriptor *desc;
-    int n;
-    if (!coll || !out_ids)
-        return PULSEG_ERR_NULL_POINTER;
-    if (subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
-        return PULSEG_ERR_INVALID_ARGUMENT;
-    desc = &coll->descriptors[subseq_idx];
-    n = desc->segment_table.num_cooldown_segments;
-    if (n > 0 && desc->segment_table.cooldown_segment_table)
-        memcpy(out_ids, desc->segment_table.cooldown_segment_table, n * sizeof(int));
-    return n;
-}
 
 int pulseg_get_canonical_segment_sequence(
     const pulseg_collection *coll,
@@ -1250,10 +1121,7 @@ int pulseg_get_canonical_segment_sequence(
     int subseq_idx)
 {
     const pulseg_sequence_descriptor *desc;
-    const pulseg_tr_descriptor *trd;
-    int n_prep, n_main, n_cool, num_passes;
-    int has_nd_prep, has_nd_cool;
-    int total, w, p, i;
+    int n_main, w, i;
 
     if (!coll)
         return PULSEG_ERR_NULL_POINTER;
@@ -1261,47 +1129,14 @@ int pulseg_get_canonical_segment_sequence(
         return PULSEG_ERR_INVALID_ARGUMENT;
 
     desc = &coll->descriptors[subseq_idx];
-    trd = &desc->tr_descriptor;
-
-    n_prep = desc->segment_table.num_prep_segments;
     n_main = desc->segment_table.num_main_segments;
-    n_cool = desc->segment_table.num_cooldown_segments;
-
-    has_nd_prep = (trd->num_prep_blocks > 0 && !trd->degenerate_prep);
-    has_nd_cool = (trd->num_cooldown_blocks > 0 && !trd->degenerate_cooldown);
-
-    if (has_nd_prep || has_nd_cool)
-    {
-        num_passes = (desc->num_passes > 1) ? desc->num_passes : 1;
-        total = n_prep + n_main * num_passes + n_cool;
-    }
-    else
-    {
-        num_passes = 1;
-        total = n_main;
-    }
 
     if (!out_ids)
-        return total;
+        return n_main;
 
     w = 0;
-    if (has_nd_prep || has_nd_cool)
-    {
-        for (i = 0; i < n_prep; ++i)
-            out_ids[w++] = desc->segment_table.prep_segment_table[i];
-
-        for (p = 0; p < num_passes; ++p)
-            for (i = 0; i < n_main; ++i)
-                out_ids[w++] = desc->segment_table.main_segment_table[i];
-
-        for (i = 0; i < n_cool; ++i)
-            out_ids[w++] = desc->segment_table.cooldown_segment_table[i];
-    }
-    else
-    {
-        for (i = 0; i < n_main; ++i)
-            out_ids[w++] = desc->segment_table.main_segment_table[i];
-    }
+    for (i = 0; i < n_main; ++i)
+        out_ids[w++] = desc->segment_table.main_segment_table[i];
 
     return w;
 }
@@ -3161,42 +2996,31 @@ int pulseg_get_subseq_info(const pulseg_collection *coll, pulseg_subseq_info *in
     info->tr_duration_us = get_tr_duration_us(coll, subseq_idx);
     info->num_trs = get_num_trs(coll, subseq_idx);
     info->tr_size = get_tr_size(coll, subseq_idx);
-    info->num_prep_blocks = get_num_prep_blocks(coll, subseq_idx);
-    info->num_cooldown_blocks = get_num_cooldown_blocks(coll, subseq_idx);
-    info->num_prep_trs = get_num_prep_trs(coll, subseq_idx);
-    info->num_cooldown_trs = get_num_cooldown_trs(coll, subseq_idx);
-    info->degenerate_prep = get_degenerate_prep(coll, subseq_idx);
-    info->degenerate_cooldown = get_degenerate_cooldown(coll, subseq_idx);
     info->num_unique_adcs = get_num_unique_adcs(coll, subseq_idx);
     info->num_unique_rf = get_num_unique_rf(coll, subseq_idx);
     info->pmc_enabled = is_pmc_enabled(coll, subseq_idx);
     info->segment_offset = get_subseq_segment_offset(coll, subseq_idx);
-    info->num_prep_segments = get_num_prep_segments(coll, subseq_idx);
-    info->num_main_segments = get_num_main_segments(coll, subseq_idx);
-    info->num_cooldown_segments = get_num_cooldown_segments(coll, subseq_idx);
     info->num_adc_occurrences = get_num_adc_occurrences(coll, subseq_idx);
     info->num_label_columns = get_num_label_columns(coll, subseq_idx);
-    info->num_passes = coll->descriptors[subseq_idx].num_passes;
     info->num_averages = coll->descriptors[subseq_idx].num_averages;
     info->num_gain_cal_readouts = coll->descriptors[subseq_idx].num_gain_cal_readouts;
 
+    /* The TR-instance contract of pulseg_get_tr_waveforms: every played
+     * TR (averages included) is a unit. */
+    {
+        const pulseg_tr_descriptor *trd = &coll->descriptors[subseq_idx].tr_descriptor;
+        int navg = (info->num_averages > 1) ? info->num_averages : 1;
+        info->num_tr_instances = navg * trd->num_trs;
+        if (info->num_tr_instances < 1)
+            info->num_tr_instances = 1;
+    }
+
     /* Compute num_canonical_trs (unique shot-ID combinations). */
     {
-        const pulseg_sequence_descriptor *d = &coll->descriptors[subseq_idx];
-        const pulseg_tr_descriptor *trd = &d->tr_descriptor;
-        int has_nd_p = (trd->num_prep_blocks > 0 && !trd->degenerate_prep);
-        int has_nd_c = (trd->num_cooldown_blocks > 0 && !trd->degenerate_cooldown);
         int *can_idx = NULL;
         int *can_lbl = NULL;
         int nc;
-        if (has_nd_p || has_nd_c)
-        {
-            nc = 0 /* one canonical TR; representatives carry the worst case */;
-        }
-        else
-        {
-            nc = 0 /* one canonical TR; representatives carry the worst case */;
-        }
+        nc = 0 /* one canonical TR; representatives carry the worst case */;
         info->num_canonical_trs = (nc > 0) ? nc : 1;
         if (can_idx)
             PULSEG_FREE(can_idx);

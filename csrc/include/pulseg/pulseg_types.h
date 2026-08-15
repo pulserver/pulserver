@@ -879,31 +879,25 @@ typedef struct pulseg_subseq_info
     float tr_duration_us;      /**< TR duration (us)                    */
     int num_trs;               /**< number of TRs                       */
     int tr_size;               /**< blocks per TR                       */
-    int num_prep_blocks;       /**< preparation blocks before first TR  */
-    int num_cooldown_blocks;   /**< cooldown blocks after last TR       */
-    int num_prep_trs;          /**< preparation TRs                     */
-    int num_cooldown_trs;      /**< cooldown TRs                        */
-    int degenerate_prep;       /**< 1 if prep == first TR               */
-    int degenerate_cooldown;   /**< 1 if cooldown == last TR            */
     int num_unique_adcs;       /**< unique ADC definitions              */
     int num_unique_rf;         /**< unique RF definitions               */
     int pmc_enabled;           /**< 1 if PMC (prospective motion corr)  */
     int segment_offset;        /**< global segment index offset         */
-    int num_prep_segments;     /**< segments in prep region             */
-    int num_main_segments;     /**< segments in main TR region          */
-    int num_cooldown_segments; /**< segments in cooldown region         */
     int num_adc_occurrences;   /**< ADC entries in label table          */
     int num_label_columns;     /**< label columns (vendor-dependent)    */
-    int num_passes;            /**< number of inner-loop passes (>=1)   */
     int num_averages;          /**< number of averages (>=1)            */
     int num_canonical_trs;     /**< unique shot-ID combinations (>=1)   */
     int num_gain_cal_readouts; /**< calibration readouts for APS2 gain cal (pislquant) */
+    /** How many TR instances pulseg_get_tr_waveforms() can name for this
+     *  subsequence: every TR the scanner plays, averages included.
+     *  Always >= 1. */
+    int num_tr_instances;
 } pulseg_subseq_info;
 
 /* clang-format off */
 #define PULSEG_SUBSEQ_INFO_INIT \
     { \
-    0.0f, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0 \
+    0.0f, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 1 \
     }
 /* clang-format on */
 
@@ -1105,79 +1099,7 @@ typedef struct pulseg_rf_event
 } pulseg_rf_event;
 
 /* ================================================================== */
-/*  K-space trajectory types                                          */
-/* ================================================================== */
-
-/** @brief Single k-space shot: one axis, ADC-sampled, ABSOLUTE k.
- *
- * Not centred on the echo -- k=0 is where the excitation reset put it, so the
- * samples carry their own DC.  Anything that needs the echo position reads
- * pulseg_traj_table_entry::center_sample instead. */
-typedef struct pulseg_kshot
-{
-    int num_samples;
-    float *k; /**< k-space values [num_samples], Hz·s/m */
-} pulseg_kshot;
-
-/** @brief Library of unique per-axis k-space shots. */
-typedef struct pulseg_kshot_library
-{
-    int num_shots;
-    pulseg_kshot *shots;
-} pulseg_kshot_library;
-
-/** @brief Per-ADC-event trajectory table entry. */
-typedef struct pulseg_traj_table_entry
-{
-    int kx_shot_id;     /**< kshot index for X axis (-1 = trivial) */
-    int ky_shot_id;     /**< kshot index for Y axis (-1 = trivial) */
-    int kz_shot_id;     /**< kshot index for Z axis (-1 = trivial) */
-    float gx_amplitude; /**< gradient amplitude for X (Hz/m)      */
-    float gy_amplitude; /**< gradient amplitude for Y (Hz/m)      */
-    float gz_amplitude; /**< gradient amplitude for Z (Hz/m)      */
-    int rotation_id;    /**< index into rotation_matrices          */
-    int slc, seg, rep, avg, set, eco, phs, lin, par, acq;
-    unsigned long flags;    /**< ISMRMRD-compatible flag bitmask       */
-    int center_sample;      /**< k-zero sample index within readout   */
-    float sample_time_us;   /**< ADC dwell time in microseconds       */
-    int encoding_space_ref; /**< encoding space index                  */
-    int off;                /**< Pulseq LABELSET OFF flag (1=discard) */
-} pulseg_traj_table_entry;
-
-/** @brief Per-subsequence encoding-space descriptor.
- *
- * fov/matrix/nav_fov/nav_matrix dropped -- geometry is sourced
- * from the DEFINITIONS section (id 0) by subseq_idx, not duplicated here.
- * geometry_tag distinguishes the primary encoding space from a navigator
- * one sharing the same subsequence (DEFINITIONS' NavFOV/NavMatrix kv apply
- * when geometry_tag == 1). */
-typedef struct pulseg_encoding_space
-{
-    int subseq_idx;                   /**< owning subsequence index              */
-    int nav_subseq_offset;            /**< navigator subseq offset, 0 if none    */
-    int geometry_tag;                 /**< 0 = primary, 1 = navigator            */
-    pulseg_label_limits label_limits; /**< per-encoding-space label limits */
-} pulseg_encoding_space;
-
-/** @brief Complete trajectory description for a collection. */
-typedef struct pulseg_trajectory
-{
-    pulseg_kshot_library kshots;
-    int num_encoding_spaces;
-    pulseg_encoding_space *encoding_spaces;
-    int num_adc_events;
-    pulseg_traj_table_entry *table;
-    /* rotation-matrix library folded into TRAJECTORY itself
-     * (copied from the owning descriptor's rotation_matrices[]) so the
-     * recon reader is self-contained and never reads the PSD-internal
-     * ROTATIONS section. table[].rotation_id indexes this array;
-     * pulseg_merge_trajectory offsets it like the kshot ids. */
-    int num_rotations;
-    float (*rotation_matrices)[9];
-} pulseg_trajectory;
-
-/* ================================================================== */
-/*  Sequence description (Section 5 — compact canonical-TR table)     */
+/*  Sequence description (compact canonical-TR table)                 */
 /* ================================================================== */
 
 /** ADC role codes for sequence-description rows. */
