@@ -74,6 +74,8 @@ def test_blipped_caipi_tiles_the_caipirinha_lattice(
         acceleration=acceleration,
         acceleration_z=acceleration_z,
         caipi_shift=caipi_shift,
+        n_acs=0,  # isolate the imaging lattice from the ACS rectangle
+        n_acs_z=0,
         readout_bandwidth_hz=180e3,
     )
     labels = seq.evaluate_labels(evolution="adc")
@@ -83,6 +85,36 @@ def test_blipped_caipi_tiles_the_caipirinha_lattice(
         (n_y, n_z), acceleration, acceleration_z, delta=caipi_shift
     )
     assert np.array_equal(sampled, expected)
+
+
+@pytest.mark.parametrize(
+    "acceleration,acceleration_z", [(2, 1), (1, 2), (2, 2)]
+)
+def test_an_accelerated_scan_lays_down_a_full_calibration_rectangle(
+    acceleration, acceleration_z
+):
+    """Whenever the imaging lattice is undersampled, a short linear train fills
+    the central ACS rectangle -- the fully sampled block ``calc_calibration_lines``
+    describes and :mod:`pulserver.reczoo.epi_3d` calibrates coil maps from."""
+    n_y, n_z, n_acs, n_acs_z = 24, 8, 8, 4
+    seq = epi_3d.main(
+        n_x=48,
+        n_y=n_y,
+        n_z=n_z,
+        slab_thickness=32e-3,
+        acceleration=acceleration,
+        acceleration_z=acceleration_z,
+        caipi_shift=1,
+        n_acs=n_acs,
+        n_acs_z=n_acs_z,
+        readout_bandwidth_hz=180e3,
+    )
+    labels = seq.evaluate_labels(evolution="adc")
+    sampled = np.zeros((n_y, n_z), dtype=bool)
+    sampled[labels["LIN"], labels["PAR"]] = True
+    acs_y = pp.calc_calibration_lines(n_y, n_acs)
+    acs_z = pp.calc_calibration_lines(n_z, n_acs_z)
+    assert sampled[np.ix_(acs_y, acs_z)].all()
 
 
 def test_a_time_series_carries_its_repetition_counter():

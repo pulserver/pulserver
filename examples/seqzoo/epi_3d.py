@@ -67,6 +67,8 @@ def _shared_kernel(
     acceleration: int = 1,
     acceleration_z: int = 1,
     caipi_shift: int = 1,
+    n_acs: int = 24,
+    n_acs_z: int = 16,
     readout_bandwidth_hz: float = 500e3,
     spoiling_cycles: float = 4.0,
 ) -> SimpleNamespace:
@@ -76,6 +78,13 @@ def _shared_kernel(
     sawtooth of :func:`pp.calc_epi_order`: with no z acceleration the train is
     plain segmented EPI, and above it the ``'caipi'`` shell that tiles a
     :func:`pp.make_caipirinha_mask` lattice.
+
+    An accelerated scan also builds a ``calibration`` train: a short linear,
+    fully sampled EPI train over the central ``n_acs`` lines, played once per
+    central partition to lay down the autocalibration rectangle a parallel
+    reconstruction estimates its coil sensitivities from. The rectangle's
+    lines and partitions come from :func:`pp.calc_calibration_lines`, so the
+    sequence and :mod:`pulserver.reczoo.epi_3d` read the same window.
     """
     fov_x, fov_y = (fov, fov) if isinstance(fov, (int, float)) else fov
     scheme = "caipi" if acceleration_z > 1 else "linear"
@@ -99,7 +108,37 @@ def _shared_kernel(
         spoiling_cycles=spoiling_cycles,
         labels=("LIN", "PAR"),
     )
-    return SimpleNamespace(excitation=excitation, epi=epi, fov=(fov_x, fov_y))
+
+    # The autocalibration rectangle, acquired only when the imaging lattice is
+    # undersampled -- a fully sampled scan calibrates from itself. Its extent
+    # is the same builtin window the reconstruction reads off the mask.
+    accelerated = acceleration > 1 or acceleration_z > 1
+    acs_lines = pp.calc_calibration_lines(n_y, n_acs) if accelerated else []
+    acs_partitions = pp.calc_calibration_lines(n_z, n_acs_z) if accelerated else []
+    calibration = None
+    if acs_lines and acs_partitions:
+        calibration = design.EpiReadout3D(
+            system,
+            excitation.rf,
+            excitation.gz,
+            fov=(fov_x, fov_y, slab_thickness),
+            matrix=(n_x, n_y, n_z),
+            scheme="linear",
+            etl=len(acs_lines),
+            te=te,
+            tr=tr,
+            readout_bandwidth_hz=readout_bandwidth_hz,
+            spoiling_cycles=spoiling_cycles,
+            labels=("LIN", "PAR"),
+        )
+    return SimpleNamespace(
+        excitation=excitation,
+        epi=epi,
+        calibration=calibration,
+        acs_lines=acs_lines,
+        acs_partitions=acs_partitions,
+        fov=(fov_x, fov_y),
+    )
 
 
 def _play_shot(
@@ -200,6 +239,8 @@ def navigator(
         acceleration=acceleration,
         acceleration_z=acceleration_z,
         caipi_shift=caipi_shift,
+        n_acs=0,
+        n_acs_z=0,
         readout_bandwidth_hz=readout_bandwidth_hz,
         spoiling_cycles=spoiling_cycles,
     )
@@ -263,6 +304,8 @@ def main(
     acceleration: int = 1,
     acceleration_z: int = 1,
     caipi_shift: int = 1,
+    n_acs: int = 24,
+    n_acs_z: int = 16,
     readout_bandwidth_hz: float = 500e3,
     opposite_reference: bool = True,
     partition_order: str = "center_out",
@@ -321,6 +364,14 @@ def main(
     caipi_shift : int, optional
         Partitions the CAIPI sawtooth climbs per acquired line, ``delta_z``.
         Used only when ``acceleration_z`` is above 1. Default is 1.
+    n_acs : int, optional
+        Autocalibration extent along y, in lines. With ``n_acs_z`` it bounds
+        the fully sampled central rectangle a short linear train lays down
+        ahead of the imaging shots whenever the scan is accelerated, so a
+        parallel reconstruction has coil sensitivities to solve against.
+        Default is 24.
+    n_acs_z : int, optional
+        Autocalibration extent along z, in partitions. Default is 16.
     readout_bandwidth_hz : float, optional
         Requested receiver bandwidth in Hz. Default is 500e3.
     partition_order : str, optional
@@ -357,6 +408,8 @@ def main(
         acceleration=acceleration,
         acceleration_z=acceleration_z,
         caipi_shift=caipi_shift,
+        n_acs=n_acs,
+        n_acs_z=n_acs_z,
         readout_bandwidth_hz=readout_bandwidth_hz,
         spoiling_cycles=spoiling_cycles,
     )
@@ -377,6 +430,19 @@ def main(
     shells = [int(s) for s in pp.calc_traversal_order(n_shells, partition_order)]
     for repetition in range(n_repetitions):
         rep_label.value = int(repetition)
+        # The autocalibration rectangle leads each repetition: a fully sampled
+        # centre every reconstructed volume can estimate its own coil maps
+        # from. It is present only when the imaging lattice is undersampled.
+        if kernel.calibration is not None:
+            for partition in kernel.acs_partitions:
+                _play_shot(
+                    seq,
+                    kernel.calibration,
+                    origin=(kernel.acs_lines[0], partition),
+                    grid=(n_y, n_z),
+                    rev_label=rev_label,
+                    extra_line_labels=(rep_label,),
+                )
         for segment in range(segments):
             for shell in shells:
                 _play_shot(
@@ -552,6 +618,14 @@ class Epi3D(SequencePlugin):
                 UIParam.user_value(2): TypeinFloatParam(
                     value=1.0, min=0.0, max=8.0, incr=1.0, unit=""
                 ),
+                UIParam.user_name(3): Description(text="ACS lines (y)"),
+                UIParam.user_value(3): TypeinFloatParam(
+                    value=24.0, min=0.0, max=256.0, incr=1.0, unit="lines"
+                ),
+                UIParam.user_name(4): Description(text="ACS partitions (z)"),
+                UIParam.user_value(4): TypeinFloatParam(
+                    value=16.0, min=0.0, max=128.0, incr=1.0, unit="lines"
+                ),
             }
         )
 
@@ -569,9 +643,10 @@ class Epi3D(SequencePlugin):
 
         n_shells = kwargs.get("n_z", 32) // max(1, kwargs.get("acceleration_z", 1))
         shots = kwargs.get("segments", 1) * n_shells
-        duration = (
-            kwargs.get("n_repetitions", 1) * shots * kernel.epi.seq.duration()[0]
-        )
+        per_rep = shots * kernel.epi.seq.duration()[0]
+        if kernel.calibration is not None:
+            per_rep += len(kernel.acs_partitions) * kernel.calibration.seq.duration()[0]
+        duration = kwargs.get("n_repetitions", 1) * per_rep
         return {
             "valid": True,
             "duration": duration,
@@ -619,6 +694,8 @@ _KERNEL_ARGUMENTS = frozenset(
         "acceleration",
         "acceleration_z",
         "caipi_shift",
+        "n_acs",
+        "n_acs_z",
         "readout_bandwidth_hz",
         "spoiling_cycles",
     )
@@ -659,6 +736,8 @@ def _main_kwargs(system: pp.Opts, protocol: dict[str, dict]) -> dict:
         segments=max(1, round(params.user_float(prot, 0, 1.0))),
         opposite_reference=bool(round(params.user_float(prot, 1, 1.0))),
         caipi_shift=max(0, round(params.user_float(prot, 2, 1.0))),
+        n_acs=max(0, round(params.user_float(prot, 3, 24.0))),
+        n_acs_z=max(0, round(params.user_float(prot, 4, 16.0))),
         n_repetitions=params.param_int(prot, UIParam.NUM_FRAMES),
     )
 
@@ -711,6 +790,8 @@ _ARG_MAP = [
         "Pass 1 to drop the opposite-PE reference from the navigator",
     ),
     ("--caipi-shift", UIParam.user_value(2), float, "CAIPIRINHA kz shift per ky block"),
+    ("--acs-lines", UIParam.user_value(3), float, "Autocalibration lines along y"),
+    ("--acs-partitions", UIParam.user_value(4), float, "Autocalibration partitions along z"),
 ]
 
 if __name__ == "__main__":
