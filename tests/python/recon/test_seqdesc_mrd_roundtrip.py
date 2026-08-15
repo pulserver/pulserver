@@ -1,6 +1,6 @@
 """``to_mrd`` is the inverse of ``from_mrd``, word for word.
 
-The authority for the wire format is ``cxx/recon/trajectory_cache_reader.cpp``
+The authority for the wire format is ``cxx/recon/sequence_cache.cpp``
 -- what the scanner actually emits. These tests pin the Python encoder to the
 Python decoder, which is what catches a drift on either side; they cannot catch
 the two drifting together away from the C++, so the field order in

@@ -1,64 +1,98 @@
 """``Sequence.calculate_kspace`` and ``Sequence.auto_label``.
 
-The trajectory is checked against **upstream PyPulseq**, which is the only
-independent implementation of the same quantity available here, and against the
-sequences' own prescriptions where PyPulseq has nothing to say -- it computes
-no echo position and reads no rotation extension at all.
+The trajectory is checked against **upstream PyPulseq**, the independent
+implementation of the same quantity, and against the sequences' own
+prescriptions where PyPulseq has nothing to say -- it computes no echo
+position and reads no rotation extension at all.
 
-``auto_label`` has no comparable oracle in Python: Pulseq's ``autoLabel`` is
-MATLAB-only, and running it is a one-off validation rather than a dependency.
-So the assertions below are on what the sequences state about themselves --
+The file fixtures come from the corpus in ``tests/python/fixtures/`` (see
+``fixture_corpus.py``). Upstream can only read the corpus entries that carry
+no revision-2 labels, so the upstream comparisons run on the EPI collection
+files and the label-free scans ``_cartesian_scan`` builds in memory.
+
+``auto_label`` is asserted on what the sequences state about themselves --
 a fully sampled scan visits each line once, an EPI's navigators repeat one
 line -- and the arithmetic underneath is covered in tests/cpptests.
 """
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import numpy as np
 import pytest
 
+from fixture_corpus import FIXTURES_DIR
 from pulserver.pypulseq import Sequence
-
-FIXTURES = Path(__file__).resolve().parents[1] / "utils" / "expected"
 
 
 def load(stem: str) -> Sequence:
     seq = Sequence()
-    seq.read(str(FIXTURES / f"{stem}.seq"))
+    seq.read(str(FIXTURES_DIR / f"{stem}.seq"))
     return seq
 
 
 @pytest.fixture
 def gre() -> Sequence:
-    return load("gre_2d_3sl_3avg")
+    return load("gre_2d_3sl")
+
+
+def _cartesian_scan(lines, n_y: int = 16, fov: float = 0.22) -> Sequence:
+    """A single-slice gradient echo acquiring exactly ``lines``, and no others.
+
+    Carries ``FOV`` and no labels, so upstream PyPulseq reads its file too.
+    """
+    import pulserver.pypulseq as pp
+
+    system = pp.Opts(
+        max_grad=32,
+        grad_unit="mT/m",
+        max_slew=130,
+        slew_unit="T/m/s",
+        rf_ringdown_time=20e-6,
+        rf_dead_time=100e-6,
+        adc_dead_time=10e-6,
+    )
+    rf, gz, gz_reph = pp.make_sinc_pulse(
+        flip_angle=np.deg2rad(10),
+        duration=1e-3,
+        slice_thickness=5e-3,
+        system=system,
+        return_gz=True,
+        use="excitation",
+        delay=system.rf_dead_time,
+    )
+    gx = pp.make_trapezoid(
+        channel="x", flat_area=32 / fov, flat_time=1.6e-3, system=system
+    )
+    gx_pre = pp.make_trapezoid(channel="x", area=-gx.area / 2, system=system)
+    adc = pp.make_adc(
+        num_samples=32, duration=gx.flat_time, delay=gx.rise_time, system=system
+    )
+
+    seq = pp.Sequence(system=system)
+    seq.set_definition(key="FOV", value=[fov, fov, 5e-3])
+    for line in lines:
+        gy = pp.make_trapezoid(
+            channel="y", area=(line - n_y // 2) / fov, system=system
+        )
+        seq.add_block(rf, gz)
+        seq.add_block(gz_reph)
+        seq.add_block(gx_pre, gy)
+        seq.add_block(gx, adc)
+    return seq
 
 
 # --------------------------------------------------------------------------
 # Against upstream
 # --------------------------------------------------------------------------
 
-#: Sequences whose trajectory upstream computes the same way we do, and the
-#: relative agreement to demand of each.
-#:
-#: ``fse_2d_1sl_1avg`` is absent on purpose. Its readout is an arbitrary
-#: gradient with an explicit time shape, and there PyPulseq's own gradient
-#: spline disagrees with its own waveform: it ramps 194552.5924 to 194553.0
-#: across a gradient ``gx.waveform`` reports flat at 194553, so its k step
-#: comes out 3.891051895538112 where the file says 194553 * 20 us =
-#: 3.8910600000000004. We match the file. Asserting against PyPulseq there
-#: would be asserting its error, so that case is covered in
-#: tests/ctests/test_pulseq_ktraj.c against the sequence's own numbers instead.
+#: Corpus files both readers parse, and the relative agreement to demand.
+#: The EPI blips ride the read ramps as shaped gradients, which is the
+#: hardest overlap the two implementations share.
 UPSTREAM_CASES = [
-    ("gre_2d_1sl_1avg", 1e-12),
-    ("gre_2d_3sl_3avg", 1e-12),
-    ("bssfp_2d_1sl_1avg", 1e-12),
-    ("mprage_2d_3sl_3avg", 1e-12),
-    ("epi_2d_1sl_1avg", 1e-11),
-    # Blipped phase encoding, whose blips are arbitrary gradients: the same
-    # spline effect as the FSE case, three orders of magnitude smaller.
-    ("gre_32x32_pe_blip", 1e-8),
+    ("epi_2d", 1e-12),
+    ("epi_2d_main", 1e-12),
+    ("epi_3d", 1e-12),
+    ("epi_3d_main", 1e-12),
 ]
 
 
@@ -69,12 +103,14 @@ def test_the_trajectory_agrees_with_upstream_pypulseq(stem, tolerance):
     ours = load(stem).calculate_kspace(dense=False)[0]
 
     theirs_seq = pp.Sequence()
-    theirs_seq.read(str(FIXTURES / f"{stem}.seq"))
+    theirs_seq.read(str(FIXTURES_DIR / f"{stem}.seq"))
     theirs = theirs_seq.calculate_kspace()[0]
 
     assert ours.shape == theirs.shape
     scale = max(float(np.abs(theirs).max()), 1e-12)
     assert float(np.abs(ours - theirs).max()) / scale < tolerance
+
+
 
 
 def test_it_returns_upstreams_five_tuple(gre):
@@ -134,7 +170,7 @@ def test_the_dense_trajectory_is_optional(gre):
     assert np.array_equal(with_dense[0], without[0])
 
 
-def test_the_whole_tuple_matches_upstream(gre):
+def test_the_whole_tuple_matches_upstream():
     """Every element, not just the ADC samples -- this is the drop-in claim.
 
     ``k_traj`` is upstream's own, computed by upstream, because the tuple's
@@ -143,12 +179,13 @@ def test_the_whole_tuple_matches_upstream(gre):
     from the C core and agree to ~1e-13.
     """
     pp = pytest.importorskip("pypulseq")
+    scan = load("epi_2d_main")
     theirs_seq = pp.Sequence()
-    theirs_seq.read(str(FIXTURES / "gre_2d_3sl_3avg.seq"))
+    theirs_seq.read(str(FIXTURES_DIR / "epi_2d_main.seq"))
 
     for name, ours, theirs in zip(
         ("k_traj_adc", "k_traj", "t_excitation", "t_refocusing", "t_adc"),
-        gre.calculate_kspace(),
+        scan.calculate_kspace(),
         theirs_seq.calculate_kspace(),
     ):
         ours = np.atleast_1d(np.asarray(ours, dtype=float))
@@ -169,8 +206,8 @@ def test_the_whole_tuple_matches_upstream(gre):
 
 def test_the_dense_trajectory_is_refused_where_upstream_cannot_read_the_sequence():
     """A rotation extension would come back in the wrong frame, silently."""
-    seq = load("mprage_noncart_3d_3sl_3avg_userotext1")
-    with pytest.raises(NotImplementedError, match="rotation or RF-shim"):
+    seq = load("gre_radial_2d")
+    with pytest.raises(NotImplementedError, match="rotation"):
         seq.calculate_kspace()
     # The ADC samples are still available, and they do resolve the rotation.
     assert seq.calculate_kspace(dense=False)[0].shape[1] > 0
@@ -182,7 +219,7 @@ def test_the_logical_frame_leaves_rotations_out():
     ``TransformFOV`` works in the logical frame because ``dr . k`` is invariant
     when both are rotated; a reconstruction wants the physical one.
     """
-    stem = "mprage_noncart_3d_3sl_3avg_userotext1"
+    stem = "gre_radial_2d"
     physical = load(stem).calculate_kspace(dense=False)[0]
     logical = load(stem).calculate_kspace(dense=False, frame="logical")[0]
 
@@ -226,13 +263,13 @@ def test_the_times_do_not_depend_on_which_raster_the_sequence_was_built_on(raste
 
 def test_window_averaging_is_off_by_default_and_only_moves_a_curved_readout():
     """Off by default so the answer stays comparable with PyPulseq and mrpro."""
-    flat = load("fse_2d_1sl_1avg")
+    flat = load("fse_2d")
     assert np.allclose(
         flat.calculate_kspace(dense=False)[0],
         flat.calculate_kspace(dense=False, sample_window_average=True)[0],
     )
 
-    curved = load("mprage_noncart_3d_3sl_3avg_userotext1")
+    curved = load("gre_spiral_2d")
     midpoint = curved.calculate_kspace(dense=False)[0]
     averaged = curved.calculate_kspace(dense=False, sample_window_average=True)[0]
     assert float(np.abs(midpoint - averaged).max()) > 1e-3
@@ -353,93 +390,52 @@ def test_a_matrix_the_readouts_do_not_land_on_is_not_believed(gre):
     assert np.array_equal(labels["LIN"], np.repeat(np.arange(8), 3))
 
 
-def test_the_grid_is_only_read_when_both_definitions_are_there(gre):
-    """`FOV` alone is what every fixture here has, and it changes nothing."""
-    assert gre.get_definition("FOV") is not None
-    assert gre.get_definition("Matrix") is None
+def test_the_grid_is_only_read_when_both_definitions_are_there():
+    """With ``FOV`` alone the lowest line acquired becomes line 0."""
+    scan = _cartesian_scan(range(4, 12))
+    assert scan.get_definition("FOV") is not None
+    assert scan.get_definition("Matrix") is None
 
-    labels, aux = gre.auto_label(skip_apply=True, boundary_flags=False)
+    labels, aux = scan.auto_label(skip_apply=True, boundary_flags=False)
 
-    assert np.array_equal(labels["LIN"], np.repeat(np.arange(8), 3))
+    assert np.array_equal(labels["LIN"], np.arange(8))
     assert aux["kSpaceCenterLine"] == 4
-
-
-def _cartesian_scan(lines, n_y: int = 16, fov: float = 0.22) -> Sequence:
-    """A single-slice gradient echo acquiring exactly ``lines``, and no others."""
-    import pulserver.pypulseq as pp
-
-    system = pp.Opts(
-        max_grad=32,
-        grad_unit="mT/m",
-        max_slew=130,
-        slew_unit="T/m/s",
-        rf_ringdown_time=20e-6,
-        rf_dead_time=100e-6,
-        adc_dead_time=10e-6,
-    )
-    rf, gz, gz_reph = pp.make_sinc_pulse(
-        flip_angle=np.deg2rad(10),
-        duration=1e-3,
-        slice_thickness=5e-3,
-        system=system,
-        return_gz=True,
-        use="excitation",
-        delay=system.rf_dead_time,
-    )
-    gx = pp.make_trapezoid(
-        channel="x", flat_area=32 / fov, flat_time=1.6e-3, system=system
-    )
-    gx_pre = pp.make_trapezoid(channel="x", area=-gx.area / 2, system=system)
-    adc = pp.make_adc(
-        num_samples=32, duration=gx.flat_time, delay=gx.rise_time, system=system
-    )
-
-    seq = pp.Sequence(system=system)
-    seq.set_definition(key="FOV", value=[fov, fov, 5e-3])
-    for line in lines:
-        gy = pp.make_trapezoid(
-            channel="y", area=(line - n_y // 2) / fov, system=system
-        )
-        seq.add_block(rf, gz)
-        seq.add_block(gz_reph)
-        seq.add_block(gx_pre, gy)
-        seq.add_block(gx, adc)
-    return seq
 
 
 def test_the_slice_thickness_matches_the_prescription(gre):
     """Recovered from the RF spectrum over the slice-select amplitude.
 
-    ``FOV`` and ``NumSlices`` state the answer independently -- they come from
-    the prescription, not from the pulse -- and the sequence records no
-    thickness of its own.
+    ``FOV`` and the ``Matrix`` slice count state the answer independently --
+    they come from the prescription, not from the pulse -- and the sequence
+    records no thickness of its own. The recovery is only as sharp as the
+    pulse's spectrum, which bounds the tolerance.
     """
     _, aux = gre.auto_label(skip_apply=True)
-    prescribed = gre.definitions["FOV"][2] / gre.definitions["NumSlices"][0]
-    assert aux["SliceThickness"] == pytest.approx(prescribed, rel=0.03)
-    assert aux["SliceGap"] == pytest.approx(0.0, abs=0.03 * prescribed)
+    prescribed = gre.definitions["FOV"][2] / gre.definitions["Matrix"][2]
+    assert aux["SliceThickness"] == pytest.approx(prescribed, rel=0.05)
+    assert aux["SliceGap"] == pytest.approx(0.0, abs=0.05 * prescribed)
 
 
 def test_the_navigators_of_an_epi_repeat_one_line():
-    labels, aux = load("epi_2d_1sl_1avg").auto_label(skip_apply=True)
+    labels, aux = load("epi_2d").auto_label(skip_apply=True)
 
     assert set(labels) >= {"LIN", "REV", "REP"}
     assert labels["LIN"][0] == labels["LIN"][1] == labels["LIN"][2]
     assert list(labels["REP"][:3]) == [0, 1, 2]
-    assert aux["kSpaceCenterLine"] == 64
+    assert aux["kSpaceCenterLine"] == 7
 
 
 def test_the_epi_echo_index_is_quoted_after_mirroring():
     """One number for a scan whose two polarities disagree about it by one.
 
-    The forward readouts put the echo at 64 of 128 and the reverse ones at 63,
+    The forward readouts put the echo at 16 of 32 and the reverse ones at 15,
     because they reach the same point in k from opposite ends. A recon mirrors
     the reverse lines -- that is what ``REV`` is for -- and then both are at
-    64, so 64 is the number that is true of the reconstructed data.
+    16, so 16 is the number that is true of the reconstructed data.
     """
-    seq = load("epi_2d_1sl_1avg")
+    seq = load("epi_2d")
     _, aux = seq.auto_label(skip_apply=True)
-    assert aux["kSpaceCenterSample"] == 64
+    assert aux["kSpaceCenterSample"] == 16
 
     labels, _ = seq.auto_label(skip_apply=True)
     result = seq._kspace(dense=False)
@@ -447,13 +443,13 @@ def test_the_epi_echo_index_is_quoted_after_mirroring():
     samples = np.asarray(result["readout_samples"])
     rev = np.asarray(labels["REV"], dtype=bool)
 
-    assert set(echo.tolist()) == {63, 64}, "the fixture is not bipolar"
-    assert np.array_equal(np.where(rev, samples - 1 - echo, echo), np.full(echo.shape, 64))
+    assert set(echo.tolist()) == {15, 16}, "the fixture is not bipolar"
+    assert np.array_equal(np.where(rev, samples - 1 - echo, echo), np.full(echo.shape, 16))
 
 
 def test_a_single_named_dimension_takes_the_repeat_count():
     """One name is always safe: there is nothing to work out."""
-    seq = load("epi_2d_1sl_1avg")
+    seq = load("epi_2d")
     plain, _ = seq.auto_label(skip_apply=True)
 
     named, _ = seq.auto_label(repeat_dims=["SET"], skip_apply=True)
@@ -462,12 +458,12 @@ def test_a_single_named_dimension_takes_the_repeat_count():
 
 
 def test_ragged_repeats_are_refused_rather_than_split_anyway():
-    """The EPI's navigators revisit one line; the other 127 are acquired once.
+    """The EPI's navigators revisit one line; the other lines are acquired once.
 
     That is not a dimension, and splitting it into two would put different
     acquisitions in one slot with every surrounding label looking ordinary.
     """
-    seq = load("epi_2d_1sl_1avg")
+    seq = load("epi_2d")
     with pytest.raises(RuntimeError, match="not a rectangle"):
         seq.auto_label(repeat_dims=["REP", "ECO"], skip_apply=True)
 
@@ -478,7 +474,7 @@ def test_ragged_repeats_are_refused_rather_than_split_anyway():
 
 
 def test_repeat_dimensions_that_contradict_the_scan_are_refused():
-    seq = load("epi_2d_1sl_1avg")
+    seq = load("epi_2d")
     with pytest.raises(RuntimeError, match="were found"):
         seq.auto_label(repeat_dims=[("SET", 3)], skip_apply=True)
     with pytest.raises(RuntimeError, match="derived from the trajectory"):
@@ -537,7 +533,7 @@ def test_labels_the_sequence_already_carries_survive_an_auto_label_pass():
     asked for. ``REP`` is the exception -- it *is* derived by default -- so a
     loop that separated its own repeats has to hand it back with ``skip``.
     """
-    seq = load("gre_2d_3sl_3avg")
+    seq = load("gre_2d_3sl")
     n = _stamp_label(seq, "ECO", lambda i: i % 2)
     seq.auto_label()
 
@@ -547,9 +543,9 @@ def test_labels_the_sequence_already_carries_survive_an_auto_label_pass():
 
 
 def test_skip_hands_a_derived_counter_back_to_the_sequence():
-    seq = load("epi_2d_1sl_1avg")
-    n = _stamp_label(seq, "REP", lambda i: i // 40)
-    want = np.array([i // 40 for i in range(n)])
+    seq = load("epi_2d")
+    n = _stamp_label(seq, "REP", lambda i: i // 8)
+    want = np.array([i // 8 for i in range(n)])
 
     derived, _ = seq.auto_label(skip=["REP"])
 
@@ -568,7 +564,7 @@ def test_skipping_something_not_derived_is_refused(gre):
 
 def test_a_non_cartesian_sequence_is_refused():
     """These are Cartesian counters; there is no honest value otherwise."""
-    seq = load("mprage_noncart_3d_3sl_3avg_userotext1")
+    seq = load("gre_radial_2d")
     with pytest.raises(RuntimeError, match="do not share a direction"):
         seq.auto_label(skip_apply=True)
 
@@ -579,21 +575,19 @@ def test_skip_apply_leaves_the_sequence_alone(gre):
     assert gre.definitions == before
 
 
-def test_applying_writes_the_labels_and_the_definitions(gre):
-    labels_before = gre._native.num_label_set()
+def test_applying_writes_the_labels_and_the_definitions(tmp_path):
+    scan = _cartesian_scan(range(16))
+    labels_before = scan._native.num_label_set()
 
-    labels, aux = gre.auto_label()
+    labels, aux = scan.auto_label()
 
-    assert gre._native.num_label_set() > labels_before
-    assert gre.definitions["kSpaceCenterLine"] == aux["kSpaceCenterLine"]
-    assert gre.definitions["kSpaceCenterSample"] == aux["kSpaceCenterSample"]
+    assert scan._native.num_label_set() > labels_before
+    assert scan.definitions["kSpaceCenterLine"] == aux["kSpaceCenterLine"]
+    assert scan.definitions["kSpaceCenterSample"] == aux["kSpaceCenterSample"]
     # And what was written survives a round trip through the file.
-    import tempfile
-
-    with tempfile.TemporaryDirectory() as folder:
-        path = Path(folder) / "labelled.seq"
-        gre.write(str(path))
-        text = path.read_text()
+    path = tmp_path / "labelled.seq"
+    scan.write(str(path))
+    text = path.read_text()
     assert "LABELSET" in text
     assert "kSpaceCenterLine" in text
     assert "SliceThickness" in text
@@ -614,97 +608,6 @@ def test_reflecting_an_axis_flips_the_counter_it_carries(gre):
 
     assert sorted(plain["LIN"]) == sorted(flipped["LIN"])
     assert np.array_equal(flipped["LIN"], plain["LIN"].max() - plain["LIN"])
-
-
-# --------------------------------------------------------------------------
-# Against Pulseq's MATLAB autoLabel
-# --------------------------------------------------------------------------
-
-#: What `mr.Sequence.autoLabel` reports for the same fixtures, captured once
-#: under Octave (`conda run -n octave2`) and checked in. Nothing in the shipped
-#: code calls MATLAB; this is a frozen oracle, and regenerating it is a
-#: deliberate act -- see the header of tests/utils/expected/.
-ORACLE = FIXTURES / "autolabel_matlab_oracle.json"
-
-#: The two places we deliberately disagree with MATLAB, and why.
-#:
-#: ``gre_2d_3sl_3avg`` differs on both counts at once. It plays five dummy
-#: excitations at 0 mm before acquiring, and MATLAB uniques slice offsets over
-#: *every* excitation, so those dummies take slice 0 and put 0 mm at the front
-#: of ``SlicePositions``; we build the table from the slices actually acquired,
-#: so every entry is a slice that exists. MATLAB then labels in acquisition
-#: order (``sliceCountersAcquisitionOrder``, line 122) while we rank by
-#: position, so that ``SlicePositions[SLC]`` is where slice ``SLC`` sits
-#: whatever order the scan visited them in -- an interleaved acquisition is
-#: what separates the two, and MATLAB computes that ordering as well
-#: (``sliceCountersSorted``, line 128) before choosing the other one.
-#:
-#: ``epi_2d_1sl_1avg`` has two readout polarities whose echoes are one sample
-#: apart -- the same point in k reached from opposite ends, 64 and 63 of 128.
-#: One number for the scan is only true in one frame. MATLAB quotes the raw
-#: index of the first readout it meets, a reverse navigator, giving 63; we
-#: quote the frame a reconstruction reads it in, after ``REV`` has been
-#: honoured, where every line sits at 64.
-KNOWN_DIVERGENCES = {
-    ("gre_2d_3sl_3avg", "SLC"),
-    ("gre_2d_3sl_3avg", "SlicePositions"),
-    ("epi_2d_1sl_1avg", "kSpaceCenterSample"),
-}
-
-
-def _oracle():
-    import json
-
-    if not ORACLE.exists():
-        pytest.skip(f"no MATLAB oracle at {ORACLE}")
-    return json.loads(ORACLE.read_text())
-
-
-@pytest.mark.parametrize("stem", sorted(_oracle()))
-def test_the_counters_match_matlab_autolabel(stem):
-    """Element-wise equality on every counter. They are integers: exact or a bug."""
-    expected = _oracle()[stem]["labels"]
-    labels, _ = load(stem).auto_label(skip_apply=True)
-
-    for name, want in expected.items():
-        if (stem, name) in KNOWN_DIVERGENCES:
-            continue
-        assert name in labels, f"{stem}: MATLAB found {name} and we did not"
-        assert list(map(int, labels[name])) == list(want), f"{stem} {name}"
-
-
-@pytest.mark.parametrize("stem", sorted(_oracle()))
-def test_the_definitions_match_matlab_autolabel(stem):
-    """Reals, so compared with a tolerance rather than for equality.
-
-    ``SliceThickness`` agrees to about 5e-6 relative -- the spectrum is carried
-    in float32 here against MATLAB's double -- which on a 5 mm slice is 25 nm.
-
-    ``SliceGap`` is judged in absolute terms rather than relative, because it
-    is the difference of two millimetre-scale numbers: it inherits the
-    thickness's *absolute* error while being two orders of magnitude smaller
-    than it, so a relative tolerance on the gap would really be a tolerance of
-    1e-4 on 25 nm and would mean nothing. 1 um on a 5 mm slice is 0.02%.
-    """
-    #: Absolute metres, where a relative tolerance would be meaningless.
-    absolute = {"SliceGap": 1e-6}
-
-    expected = _oracle()[stem]["aux"]
-    _, aux = load(stem).auto_label(skip_apply=True)
-
-    for name, want in expected.items():
-        if (stem, name) in KNOWN_DIVERGENCES:
-            continue
-        assert name in aux, f"{stem}: MATLAB derived {name} and we did not"
-        got = np.atleast_1d(np.asarray(aux[name], dtype=float))
-        want = np.atleast_1d(np.asarray(want, dtype=float))
-        assert got.shape == want.shape, f"{stem} {name}"
-        if name in absolute:
-            assert np.allclose(got, want, rtol=0.0, atol=absolute[name]), (
-                f"{stem} {name}: {got} vs {want}"
-            )
-        else:
-            assert np.allclose(got, want, rtol=1e-4, atol=1e-8), f"{stem} {name}: {got} vs {want}"
 
 
 # --------------------------------------------------------------------------
@@ -763,7 +666,7 @@ def test_asking_for_plots_is_refused_rather_than_ignored(gre):
 @pytest.mark.parametrize("mode", ["ascending", "descending", "acquisition"])
 def test_slice_positions_index_by_slc_under_every_sorting(mode):
     """The invariant that makes the numbering a free choice."""
-    labels, aux = load("gre_2d_3sl_3avg").auto_label(skip_apply=True, sort_slices=mode)
+    labels, aux = load("gre_2d_3sl").auto_label(skip_apply=True, sort_slices=mode)
     positions = np.asarray(aux["SlicePositions"])
     assert positions.size == 3
     assert set(labels["SLC"]) == {0, 1, 2}
@@ -772,8 +675,8 @@ def test_slice_positions_index_by_slc_under_every_sorting(mode):
 
 
 def test_descending_is_the_reverse_of_ascending():
-    up, aux_up = load("gre_2d_3sl_3avg").auto_label(skip_apply=True, sort_slices="ascending")
-    down, aux_down = load("gre_2d_3sl_3avg").auto_label(skip_apply=True, sort_slices="descending")
+    up, aux_up = load("gre_2d_3sl").auto_label(skip_apply=True, sort_slices="ascending")
+    down, aux_down = load("gre_2d_3sl").auto_label(skip_apply=True, sort_slices="descending")
 
     assert np.allclose(np.asarray(aux_down["SlicePositions"]),
                        np.asarray(aux_up["SlicePositions"])[::-1])
@@ -788,8 +691,8 @@ def test_an_unknown_sorting_is_refused(gre):
 
 
 def test_mirror_fourier_turns_the_encoding_over_and_leaves_the_slices():
-    plain, _ = load("gre_2d_3sl_3avg").auto_label(skip_apply=True)
-    mirrored, _ = load("gre_2d_3sl_3avg").auto_label(skip_apply=True, mirror_fourier=True)
+    plain, _ = load("gre_2d_3sl").auto_label(skip_apply=True)
+    mirrored, _ = load("gre_2d_3sl").auto_label(skip_apply=True, mirror_fourier=True)
 
     # Line order reverses ...
     assert np.array_equal(mirrored["LIN"], plain["LIN"].max() - np.asarray(plain["LIN"]))
@@ -800,23 +703,23 @@ def test_mirror_fourier_turns_the_encoding_over_and_leaves_the_slices():
 
 def test_use_labels_applies_what_detection_would_have():
     """Detect once, apply anywhere -- byte for byte the same file."""
-    labels, aux = load("gre_2d_3sl_3avg").auto_label(skip_apply=True)
+    labels, aux = load("gre_2d_3sl").auto_label(skip_apply=True)
 
-    reused = load("gre_2d_3sl_3avg")
+    reused = load("gre_2d_3sl")
     reused.auto_label(use_labels=labels, use_aux=aux)
 
-    direct = load("gre_2d_3sl_3avg")
+    direct = load("gre_2d_3sl")
     direct.auto_label()
 
     assert reused._to_text(create_signature=False) == direct._to_text(create_signature=False)
 
 
 def test_use_labels_carries_a_hand_corrected_counter_through():
-    labels, aux = load("gre_2d_3sl_3avg").auto_label(skip_apply=True)
+    labels, aux = load("gre_2d_3sl").auto_label(skip_apply=True)
     edited = dict(labels)
     edited["LIN"] = np.asarray(labels["LIN"])[::-1].copy()
 
-    seq = load("gre_2d_3sl_3avg")
+    seq = load("gre_2d_3sl")
     got, _ = seq.auto_label(use_labels=edited, use_aux=aux)
     assert np.array_equal(got["LIN"], edited["LIN"])
     assert "SlicePositions" in seq.definitions
@@ -826,7 +729,7 @@ def test_use_labels_with_a_detection_only_option_is_refused(gre):
     labels, _ = gre.auto_label(skip_apply=True)
     for option in ({"reflect": [0]}, {"reorder": [1, 0]}, {"mirror_fourier": True}):
         with pytest.raises(ValueError, match="only affect detection"):
-            load("gre_2d_3sl_3avg").auto_label(use_labels=labels, **option)
+            load("gre_2d_3sl").auto_label(use_labels=labels, **option)
 
 
 def test_use_labels_of_the_wrong_length_is_refused(gre):

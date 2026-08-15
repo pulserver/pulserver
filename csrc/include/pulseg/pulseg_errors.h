@@ -6,7 +6,7 @@
  * the diagnostic message string rather than matching individual values -- the
  * specific numbers are not a stability promise.  They live in a public header
  * because public entry points return them, and because modules layered on the
- * core (e.g. pulseg_recon) need to produce them without reaching into the
+ * * core need to produce them without reaching into the
  * library's private headers.
  */
 

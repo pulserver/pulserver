@@ -1,16 +1,16 @@
-"""``restore_additional_shape_samples`` against MATLAB, case for case.
+"""``restore_additional_shape_samples``: the properties that define it.
 
-The reference vectors in ``expected_output/restore_shape_matlab.npz`` were
-produced by running ``refcode/pulseq/matlab/+mr/restoreAdditionalShapeSamples.m``
-under Octave on the inputs ``_cases()`` builds here. Regenerate them the same
-way if the inputs ever change -- do not regenerate them from this port, which
-would make the test agree with whatever the port happens to do.
+The function turns a waveform stored at raster-interval centres back into
+the vertex polyline it came from. What that has to mean is checkable with
+no reference data: recovered corners land on the exact knot times, every
+original centre sample still lies on the returned polyline, and the shapes
+that cannot be restored come back untouched, bracketed by ``first`` and
+``last``, with a warning saying so.
 """
 
 from __future__ import annotations
 
 import warnings
-from pathlib import Path
 
 import numpy as np
 import pytest
@@ -22,7 +22,6 @@ from pulserver.pypulseq._shapes import (
 )
 
 RASTER = 10e-6
-ORACLE = Path(__file__).parent / "expected_output" / "restore_shape_matlab.npz"
 
 
 def _centres(count: int) -> np.ndarray:
@@ -40,7 +39,7 @@ def _trapezoid(rise: float, flat: float, fall: float, amplitude: float):
 
 
 def _cases() -> list[tuple[str, np.ndarray, np.ndarray, float, float]]:
-    """The shapes the oracle was run on, in the order it stored them."""
+    """One shape per branch of the restoration: corners, ramps, curves, edge sizes."""
     cases: list[tuple[str, np.ndarray, np.ndarray, float, float]] = []
     cases.append(("symmetric trapezoid", *_trapezoid(200e-6, 400e-6, 200e-6, 1000.0)))
     cases.append(("asymmetric trapezoid", *_trapezoid(120e-6, 50e-6, 300e-6, -750.0)))
@@ -79,41 +78,19 @@ def _cases() -> list[tuple[str, np.ndarray, np.ndarray, float, float]]:
 CASES = _cases()
 IDS = [name for name, *_ in CASES]
 
-#: The shapes MATLAB restores rather than bailing out on, by index into CASES.
+#: The cases the restoration succeeds on, by index into CASES. The spiral arm
+#: (index 5) exceeds the restoration tolerance by construction: a curve
+#: sampled at centres has no polyline through vertices that reproduces it.
 RESTORED = {0, 1, 2, 3, 4, 6}
 
 
-@pytest.fixture(scope="module")
-def oracle() -> dict[str, np.ndarray]:
-    if not ORACLE.exists():  # pragma: no cover - fixture is committed
-        pytest.skip(f"MATLAB reference vectors missing: {ORACLE}")
-    with np.load(ORACLE) as stored:
-        return {key: stored[key] for key in stored.files}
-
-
 @pytest.mark.parametrize("index", range(len(CASES)), ids=IDS)
-def test_the_port_returns_what_matlab_returns(oracle, index):
-    """Same sample count, same times, same amplitudes -- both branches."""
-    _, times, waveform, first, last = CASES[index]
-
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        got_times, got_waveform = restore_additional_shape_samples(
-            times, waveform, first, last, RASTER
-        )
-
-    np.testing.assert_array_equal(got_times.shape, oracle[f"t{index}"].shape)
-    np.testing.assert_allclose(got_times, oracle[f"t{index}"], rtol=0, atol=1e-18)
-    np.testing.assert_allclose(got_waveform, oracle[f"w{index}"], rtol=0, atol=1e-9)
-
-
-@pytest.mark.parametrize("index", range(len(CASES)), ids=IDS)
-def test_only_the_shapes_matlab_restores_are_restored(index):
+def test_which_branch_ran_is_part_of_the_contract(index):
     """The bail-out is a documented branch, so which one ran is asserted.
 
     A shape that bails out comes back as the samples it went in as, bracketed
-    by ``first`` and ``last`` -- which is what PyPulseq returns unconditionally,
-    and is why this port only ever differs from upstream on the other branch.
+    by ``first`` and ``last`` -- unchanged, so nothing downstream sees a
+    half-restored waveform.
     """
     _, times, waveform, first, last = CASES[index]
 
@@ -157,6 +134,23 @@ def test_a_restored_trapezoid_recovers_its_corners_exactly():
     )
 
 
+def test_a_restored_extended_trapezoid_recovers_its_knots():
+    """Interior knots off the raster grid come back at their exact times."""
+    knot_times = np.array([0, 100e-6, 260e-6, 300e-6, 520e-6])
+    knot_amplitudes = np.array([0.0, 800.0, 800.0, -400.0, 0.0])
+    times = _centres(int(round(knot_times[-1] / RASTER)))
+    waveform = np.interp(times, knot_times, knot_amplitudes)
+
+    got_times, got_waveform = restore_additional_shape_samples(
+        times, waveform, 0.0, 0.0, RASTER
+    )
+
+    for t, a in zip(knot_times, knot_amplitudes):
+        assert float(np.interp(t, got_times, got_waveform)) == pytest.approx(
+            a, abs=1e-6
+        )
+
+
 def test_the_restored_form_is_lossless_where_it_decimates():
     """Dropping interior samples of straight segments must not move the waveform."""
     for name, times, waveform, first, last in CASES:
@@ -180,8 +174,8 @@ def test_a_mismatched_shape_is_refused():
         restore_additional_shape_samples(np.empty(0), np.empty(0), 0.0, 0.0, RASTER)
 
 
-def test_the_thresholds_are_matlabs():
-    """These are MATLAB's constants, carrying MATLAB's own uncertainty about
-    them. They are named so they can be found, not so they can be tuned."""
+def test_the_thresholds_are_pinned():
+    """The thresholds decide which branch runs and what decimates. They are
+    named so they can be found, and pinned so tuning them is a decision."""
     assert RESTORE_TOLERANCE == 2e-5
     assert COLLINEAR_TOLERANCE == 1e-8

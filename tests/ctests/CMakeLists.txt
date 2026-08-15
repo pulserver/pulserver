@@ -23,7 +23,7 @@ set_target_properties(run_tests PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 # Link the test executable with the libraries under test
-target_link_libraries(run_tests PRIVATE pulseg_recon pulseg pulseq m)
+target_link_libraries(run_tests PRIVATE pulseg pulseq m)
 
 # Public API headers live in csrc/include; csrc/src is added because the C
 # tests deliberately exercise internals declared in pulseg_internal.h.

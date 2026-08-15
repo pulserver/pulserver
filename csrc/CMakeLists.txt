@@ -66,14 +66,6 @@ target_include_directories(pulseg PRIVATE
 )
 
 # ---------------------------------------------------------------------------
-#  pulseg_recon -- standalone reader for the recon-relevant cache sections.
-#  A leaf consumer: the PSD never compiles it, and nothing in pulseg core
-#  calls into it.
-# ---------------------------------------------------------------------------
-add_library(pulseg_recon STATIC src/recon/pulseg_recon.c)
-target_link_libraries(pulseg_recon PUBLIC pulseg)
-
-# ---------------------------------------------------------------------------
 #  pulseg_bridge -- out-of-process sequence-generation bridge (server infra).
 # ---------------------------------------------------------------------------
 add_library(pulseg_bridge STATIC src/bridge/pulseg_bridge.c)

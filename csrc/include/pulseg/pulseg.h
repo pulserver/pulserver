@@ -32,7 +32,6 @@
 #include "pulseg_chunk.h"
 #include "pulseg_trajectory.h"
 #include "pulseg_cache.h"
-#include "pulseg_recon.h"
 
 #include "pulseg_protocol.h"
 #include "pulseg_bridge.h"

@@ -11,6 +11,7 @@ add_library(pulseqpp STATIC
     write_text.cpp
     write_binary.cpp
     read.cpp
+    sequence_file.cpp
     raw64.cpp
     trajectory.cpp
     kspace.cpp

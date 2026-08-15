@@ -74,301 +74,189 @@ def minimal_mrd_image() -> ismrmrd.Image:
     return img
 
 
-# ---------------------------------------------------------------------------
-# Tests: helper functions
-# ---------------------------------------------------------------------------
-
-
-class TestToDicomDate:
-    """Tests for to_dicom_date()."""
-
-    def test_string_passthrough(self) -> None:
-        """Passing a pre-formatted string should return it unchanged."""
-        result = to_dicom_date("20260505")
-        assert result == "20260505"
-
-    def test_isoformat_string(self) -> None:
-        """ISO-format date strings should be normalized to YYYYMMDD."""
-        result = to_dicom_date("2026-05-05")
-        assert result == "2026-05-05"  # returned as-is, not normalized
-
-    def test_python_date(self) -> None:
-        """Python date objects should be converted to YYYYMMDD."""
-        d = date(2026, 5, 5)
-        result = to_dicom_date(d)
-        assert result == "2026-05-05"  # str(date) → YYYY-MM-DD
-
-
-class TestToDicomTime:
-    """Tests for to_dicom_time()."""
-
-    def test_string_passthrough(self) -> None:
-        """Passing a pre-formatted string should return it unchanged."""
-        result = to_dicom_time("120000")
-        assert result == "120000"
-
-    def test_python_time(self) -> None:
-        """Python time objects should be converted to HHMMSS."""
-        t = time(12, 30, 45)
-        result = to_dicom_time(t)
-        assert result == "12:30:45"  # str(time) → HH:MM:SS
-
-
-class TestConvertStringVrs:
-    """Tests for convert_string_vrs()."""
-
-    def test_numeric_to_string(self) -> None:
-        """Numeric values in string-type VRs should be converted to strings."""
-        ds = pydicom.Dataset()
-        ds.add(pydicom.DataElement((0x0008, 0x0020), "DA", 20260505))  # StudyDate
-        ds.add(pydicom.DataElement((0x0008, 0x0030), "TM", 120000))  # StudyTime
-
-        result = convert_string_vrs(ds)
-
-        assert result.StudyDate == "20260505"
-        assert result.StudyTime == "120000"
-        assert isinstance(result.StudyDate, str)
-        assert isinstance(result.StudyTime, str)
-
-    def test_string_unchanged(self) -> None:
-        """String values should remain unchanged."""
-        ds = pydicom.Dataset()
-        ds.add(pydicom.DataElement((0x0008, 0x0020), "DA", "20260505"))
-
-        result = convert_string_vrs(ds)
-
-        assert result.StudyDate == "20260505"
-
-    def test_multi_valued_string(self) -> None:
-        """Multi-valued numeric elements should be converted per-value."""
-        ds = pydicom.Dataset()
-        ds.add(
-            pydicom.DataElement((0x0008, 0x0008), "CS", ["1", "2", "3"])
-        )  # ImageType
-
-        result = convert_string_vrs(ds)
-
-        # Verify multi-valued element is preserved
-        assert result.ImageType == ["1", "2", "3"]
-
-    def test_sequence_recursion(self) -> None:
-        """Conversion should recurse into sequences."""
-        ds = pydicom.Dataset()
-        seq_item = pydicom.Dataset()
-        seq_item.add(pydicom.DataElement((0x0008, 0x0020), "DA", "20260505"))
-        seq_elem = pydicom.DataElement(
-            (0x0040, 0x0100), "SQ", pydicom.Sequence([seq_item])
+def _bare_header(**sections) -> ismrmrd.xsd.ismrmrdHeader:
+    """A header with only the required fields, plus the given sections."""
+    header = ismrmrd.xsd.ismrmrdHeader(
+        experimentalConditions=ismrmrd.xsd.experimentalConditionsType(
+            H1resonanceFrequency_Hz=63_750_000
         )
-        ds.add(seq_elem)
-
-        result = convert_string_vrs(ds)
-
-        assert result[(0x0040, 0x0100)][0].StudyDate == "20260505"
-
-    def test_returns_same_object(self) -> None:
-        """Function should return the same object (modified in-place)."""
-        ds = pydicom.Dataset()
-        ds.add(pydicom.DataElement((0x0008, 0x0020), "DA", 20260505))
-
-        result = convert_string_vrs(ds)
-
-        assert result is ds
+    )
+    header.acquisitionSystemInformation = (
+        ismrmrd.xsd.acquisitionSystemInformationType()
+    )
+    header.sequenceParameters = ismrmrd.xsd.sequenceParametersType()
+    for name, value in sections.items():
+        setattr(header, name, value)
+    return header
 
 
 # ---------------------------------------------------------------------------
-# Tests: DicomWithName dataclass
+# Helper functions
 # ---------------------------------------------------------------------------
 
 
-class TestDicomWithName:
-    """Tests for DicomWithName dataclass."""
-
-    def test_construction(self) -> None:
-        """Should construct with dataset and filename."""
-        ds = pydicom.Dataset()
-        result = DicomWithName(dset=ds, filename="test.dcm")
-        assert result.dset is ds
-        assert result.filename == "test.dcm"
-
-    def test_none_dataset(self) -> None:
-        """Should allow None dataset (for failed conversions)."""
-        result = DicomWithName(dset=None, filename="")
-        assert result.dset is None
-        assert result.filename == ""
+def test_to_dicom_date_passes_a_preformatted_string_through():
+    assert to_dicom_date("20260505") == "20260505"
 
 
-# ---------------------------------------------------------------------------
-# Tests: MrdDicomBuilder
-# ---------------------------------------------------------------------------
+def test_to_dicom_date_returns_an_isoformat_string_as_is():
+    assert to_dicom_date("2026-05-05") == "2026-05-05"
 
 
-class TestMrdDicomBuilderInit:
-    """Tests for MrdDicomBuilder.__init__()."""
-
-    def test_initialization(
-        self, minimal_mrd_header: ismrmrd.xsd.ismrmrdHeader
-    ) -> None:
-        """Should initialize with MRD header and create DICOM template."""
-        builder = MrdDicomBuilder(minimal_mrd_header)
-
-        assert builder.dicomDset is not None
-        assert builder.mrdHead is minimal_mrd_header
-        # DICOM InstanceNumber is 1-based (see MrdDicomBuilder.__init__).
-        assert builder.instanceNumber == 1
-        assert builder.dicomDset.SamplesPerPixel == 1
-        assert builder.dicomDset.PhotometricInterpretation == "MONOCHROME2"
-        assert builder.dicomDset.PixelRepresentation == 0
-
-    def test_uids_generated(
-        self, minimal_mrd_header: ismrmrd.xsd.ismrmrdHeader
-    ) -> None:
-        """Should generate UIDs if not present."""
-        builder = MrdDicomBuilder(minimal_mrd_header)
-
-        assert builder.dicomDset.StudyInstanceUID
-        assert builder.dicomDset.SeriesInstanceUID
-        assert builder.dicomDset.FrameOfReferenceUID
-        assert len(builder.dicomDset.StudyInstanceUID) > 0
-
-    def test_acq_sys_info_mapped(
-        self, minimal_mrd_header: ismrmrd.xsd.ismrmrdHeader
-    ) -> None:
-        """Acquisition system info should be mapped to DICOM fields."""
-        builder = MrdDicomBuilder(minimal_mrd_header)
-
-        assert builder.dicomDset.Manufacturer == "GE"
-        assert builder.dicomDset.ManufacturerModelName == "SIGNA"
-        assert builder.dicomDset.MagneticFieldStrength == 1.5
-        assert builder.dicomDset.InstitutionName == "Test Hospital"
+def test_to_dicom_date_stringifies_a_python_date():
+    assert to_dicom_date(date(2026, 5, 5)) == "2026-05-05"
 
 
-class TestMrdDicomBuilderCall:
-    """Tests for MrdDicomBuilder.__call__()."""
-
-    def test_instance_numbering_increments(
-        self,
-        minimal_mrd_header: ismrmrd.xsd.ismrmrdHeader,
-    ) -> None:
-        """Instance counter should increment after each call attempt."""
-        builder = MrdDicomBuilder(minimal_mrd_header)
-        # DICOM InstanceNumber is 1-based (see MrdDicomBuilder.__init__).
-        assert builder.instanceNumber == 1
-
-        # Note: __call__ with complex data will fail, but we're testing the counter initialization
-        # In production, magnitude images (real-valued) are used, not complex data
-
-    def test_dicom_template_attributes(
-        self,
-        minimal_mrd_header: ismrmrd.xsd.ismrmrdHeader,
-    ) -> None:
-        """DICOM template should have expected attributes after initialization."""
-        builder = MrdDicomBuilder(minimal_mrd_header)
-        ds = builder.dicomDset
-
-        # Check basic DICOM attributes
-        assert ds.SamplesPerPixel == 1
-        assert ds.PhotometricInterpretation == "MONOCHROME2"
-        assert ds.PixelRepresentation == 0
-
-        # Check metadata from header
-        assert ds.Manufacturer == "GE"
-        assert ds.ManufacturerModelName == "SIGNA"
-        assert ds.MagneticFieldStrength == 1.5
-        assert ds.InstitutionName == "Test Hospital"
+def test_to_dicom_time_passes_a_preformatted_string_through():
+    assert to_dicom_time("120000") == "120000"
 
 
-class TestMrdDicomBuilderWithMetadata:
-    """Tests for MrdDicomBuilder with rich metadata."""
+def test_to_dicom_time_stringifies_a_python_time():
+    assert to_dicom_time(time(12, 30, 45)) == "12:30:45"
 
-    def test_subject_information_mapped(self) -> None:
-        """Subject information (patient details) should be mapped."""
-        header = ismrmrd.xsd.ismrmrdHeader(
-            experimentalConditions=ismrmrd.xsd.experimentalConditionsType(
-                H1resonanceFrequency_Hz=63_750_000
-            )
-        )
 
-        header.subjectInformation = ismrmrd.xsd.subjectInformationType()
-        header.subjectInformation.patientName = "Doe^John"
-        header.subjectInformation.patientID = "12345"
-        header.subjectInformation.patientWeight_kg = 75.0
-        header.subjectInformation.patientGender = "M"
+def test_convert_string_vrs_turns_numeric_values_into_strings():
+    ds = pydicom.Dataset()
+    ds.add(pydicom.DataElement((0x0008, 0x0020), "DA", 20260505))  # StudyDate
+    ds.add(pydicom.DataElement((0x0008, 0x0030), "TM", 120000))  # StudyTime
 
-        header.acquisitionSystemInformation = (
-            ismrmrd.xsd.acquisitionSystemInformationType()
-        )
-        header.sequenceParameters = ismrmrd.xsd.sequenceParametersType()
+    result = convert_string_vrs(ds)
 
-        builder = MrdDicomBuilder(header)
+    assert result.StudyDate == "20260505"
+    assert result.StudyTime == "120000"
+    assert isinstance(result.StudyDate, str)
+    assert isinstance(result.StudyTime, str)
 
-        assert builder.dicomDset.PatientName == "Doe^John"
-        assert builder.dicomDset.PatientID == "12345"
-        assert builder.dicomDset.PatientWeight == 75.0
-        assert builder.dicomDset.PatientSex == "M"
 
-    def test_study_information_mapped(self) -> None:
-        """Study information should be mapped."""
-        header = ismrmrd.xsd.ismrmrdHeader(
-            experimentalConditions=ismrmrd.xsd.experimentalConditionsType(
-                H1resonanceFrequency_Hz=63_750_000
-            )
-        )
+def test_convert_string_vrs_leaves_strings_unchanged():
+    ds = pydicom.Dataset()
+    ds.add(pydicom.DataElement((0x0008, 0x0020), "DA", "20260505"))
 
-        header.studyInformation = ismrmrd.xsd.studyInformationType()
-        header.studyInformation.studyID = "STUDY001"
-        header.studyInformation.studyDescription = "Test Study"
-        header.studyInformation.accessionNumber = "ACC12345"
+    assert convert_string_vrs(ds).StudyDate == "20260505"
 
-        header.acquisitionSystemInformation = (
-            ismrmrd.xsd.acquisitionSystemInformationType()
-        )
-        header.sequenceParameters = ismrmrd.xsd.sequenceParametersType()
 
-        builder = MrdDicomBuilder(header)
+def test_convert_string_vrs_preserves_multi_valued_elements():
+    ds = pydicom.Dataset()
+    ds.add(pydicom.DataElement((0x0008, 0x0008), "CS", ["1", "2", "3"]))  # ImageType
 
-        assert builder.dicomDset.StudyID == "STUDY001"
-        assert builder.dicomDset.StudyDescription == "Test Study"
-        assert builder.dicomDset.AccessionNumber == "ACC12345"
+    assert convert_string_vrs(ds).ImageType == ["1", "2", "3"]
+
+
+def test_convert_string_vrs_recurses_into_sequences():
+    ds = pydicom.Dataset()
+    seq_item = pydicom.Dataset()
+    seq_item.add(pydicom.DataElement((0x0008, 0x0020), "DA", "20260505"))
+    ds.add(pydicom.DataElement((0x0040, 0x0100), "SQ", pydicom.Sequence([seq_item])))
+
+    result = convert_string_vrs(ds)
+
+    assert result[(0x0040, 0x0100)][0].StudyDate == "20260505"
+
+
+def test_convert_string_vrs_modifies_in_place_and_returns_the_same_object():
+    ds = pydicom.Dataset()
+    ds.add(pydicom.DataElement((0x0008, 0x0020), "DA", 20260505))
+
+    assert convert_string_vrs(ds) is ds
 
 
 # ---------------------------------------------------------------------------
-# Integration tests
+# DicomWithName
 # ---------------------------------------------------------------------------
 
 
-class TestIntegration:
-    """Integration tests for mrd2dicom components."""
+def test_dicom_with_name_carries_dataset_and_filename():
+    ds = pydicom.Dataset()
+    result = DicomWithName(dset=ds, filename="test.dcm")
+    assert result.dset is ds
+    assert result.filename == "test.dcm"
 
-    def test_builder_initialization_with_all_metadata(self) -> None:
-        """Test that builder properly initializes with complete metadata."""
-        header = ismrmrd.xsd.ismrmrdHeader(
-            experimentalConditions=ismrmrd.xsd.experimentalConditionsType(
-                H1resonanceFrequency_Hz=63_750_000
-            )
-        )
 
-        # Add complete metadata
-        header.subjectInformation = ismrmrd.xsd.subjectInformationType()
-        header.subjectInformation.patientName = "Doe^John"
-        header.subjectInformation.patientID = "12345"
-        header.subjectInformation.patientWeight_kg = 75.0
-        header.subjectInformation.patientGender = "M"
+def test_dicom_with_name_allows_a_none_dataset_for_failed_conversions():
+    result = DicomWithName(dset=None, filename="")
+    assert result.dset is None
+    assert result.filename == ""
 
-        header.studyInformation = ismrmrd.xsd.studyInformationType()
-        header.studyInformation.studyID = "STUDY001"
-        header.studyInformation.accessionNumber = "ACC12345"
 
-        header.acquisitionSystemInformation = (
-            ismrmrd.xsd.acquisitionSystemInformationType()
-        )
-        header.acquisitionSystemInformation.systemVendor = "Siemens"
-        header.sequenceParameters = ismrmrd.xsd.sequenceParametersType()
+# ---------------------------------------------------------------------------
+# MrdDicomBuilder
+# ---------------------------------------------------------------------------
 
-        # Create builder
-        builder = MrdDicomBuilder(header)
 
-        # Verify all metadata was transferred
-        assert builder.dicomDset.PatientName == "Doe^John"
-        assert builder.dicomDset.PatientID == "12345"
-        assert builder.dicomDset.StudyID == "STUDY001"
-        assert builder.dicomDset.Manufacturer == "Siemens"
+def test_the_builder_initializes_the_dicom_template(minimal_mrd_header):
+    builder = MrdDicomBuilder(minimal_mrd_header)
+
+    assert builder.dicomDset is not None
+    assert builder.mrdHead is minimal_mrd_header
+    # DICOM InstanceNumber is 1-based (see MrdDicomBuilder.__init__).
+    assert builder.instanceNumber == 1
+    assert builder.dicomDset.SamplesPerPixel == 1
+    assert builder.dicomDset.PhotometricInterpretation == "MONOCHROME2"
+    assert builder.dicomDset.PixelRepresentation == 0
+
+
+def test_the_builder_generates_uids_when_none_are_present(minimal_mrd_header):
+    builder = MrdDicomBuilder(minimal_mrd_header)
+
+    assert builder.dicomDset.StudyInstanceUID
+    assert builder.dicomDset.SeriesInstanceUID
+    assert builder.dicomDset.FrameOfReferenceUID
+
+
+def test_the_builder_maps_acquisition_system_information(minimal_mrd_header):
+    builder = MrdDicomBuilder(minimal_mrd_header)
+
+    assert builder.dicomDset.Manufacturer == "GE"
+    assert builder.dicomDset.ManufacturerModelName == "SIGNA"
+    assert builder.dicomDset.MagneticFieldStrength == 1.5
+    assert builder.dicomDset.InstitutionName == "Test Hospital"
+
+
+def test_the_builder_maps_subject_information():
+    subject = ismrmrd.xsd.subjectInformationType()
+    subject.patientName = "Doe^John"
+    subject.patientID = "12345"
+    subject.patientWeight_kg = 75.0
+    subject.patientGender = "M"
+
+    builder = MrdDicomBuilder(_bare_header(subjectInformation=subject))
+
+    assert builder.dicomDset.PatientName == "Doe^John"
+    assert builder.dicomDset.PatientID == "12345"
+    assert builder.dicomDset.PatientWeight == 75.0
+    assert builder.dicomDset.PatientSex == "M"
+
+
+def test_the_builder_maps_study_information():
+    study = ismrmrd.xsd.studyInformationType()
+    study.studyID = "STUDY001"
+    study.studyDescription = "Test Study"
+    study.accessionNumber = "ACC12345"
+
+    builder = MrdDicomBuilder(_bare_header(studyInformation=study))
+
+    assert builder.dicomDset.StudyID == "STUDY001"
+    assert builder.dicomDset.StudyDescription == "Test Study"
+    assert builder.dicomDset.AccessionNumber == "ACC12345"
+
+
+def test_the_builder_maps_subject_study_and_system_together():
+    subject = ismrmrd.xsd.subjectInformationType()
+    subject.patientName = "Doe^John"
+    subject.patientID = "12345"
+    subject.patientWeight_kg = 75.0
+    subject.patientGender = "M"
+
+    study = ismrmrd.xsd.studyInformationType()
+    study.studyID = "STUDY001"
+    study.accessionNumber = "ACC12345"
+
+    header = _bare_header(subjectInformation=subject, studyInformation=study)
+    header.acquisitionSystemInformation.systemVendor = "Siemens"
+
+    builder = MrdDicomBuilder(header)
+
+    assert builder.dicomDset.PatientName == "Doe^John"
+    assert builder.dicomDset.PatientID == "12345"
+    assert builder.dicomDset.StudyID == "STUDY001"
+    assert builder.dicomDset.Manufacturer == "Siemens"

@@ -509,6 +509,13 @@ class AnalysisMixin:
 
         if use_labels is not None or use_aux is not None:
             labels = {name: np.atleast_1d(values) for name, values in (use_labels or {}).items()}
+            n_adc = self._num_adc(time_range)
+            for name, values in labels.items():
+                if len(values) != n_adc:
+                    raise ValueError(
+                        f"auto_label(): use_labels['{name}'] has {len(values)} values "
+                        f"for {n_adc} ADCs in range"
+                    )
             aux = dict(use_aux or {})
             counters = {**{n: v for n, v in authored.items() if n in COUNTER_LABELS}, **labels}
             labels.update(_boundary_flags(counters, wanted, self._num_adc(time_range)))

@@ -12,7 +12,7 @@ its output decodes back through :func:`decode_sequence_description` to an equal
 object.  That matters because it lets a description built at design time be
 handed to anything that expects a scanner stream -- a simulator, a recon under
 test, a fixture -- without a second encoder existing to drift from
-``cxx/recon/trajectory_cache_reader.cpp``, which is what the scanner runs.
+``cxx/recon/sequence_cache.cpp``, which is what the scanner runs.
 """
 
 from __future__ import annotations
@@ -626,7 +626,7 @@ def _decode_shims(
 # ── Encoding ────────────────────────────────────────────────────────────
 #
 # The inverse of the decoders above, word for word. The authority for this
-# wire format is `cxx/recon/trajectory_cache_reader.cpp` -- what the scanner
+# wire format is `cxx/recon/sequence_cache.cpp` -- what the scanner
 # actually emits -- so when the two disagree, that file is right and this is
 # the bug. Keep the field order here matched to `_decode_*` below it; a test
 # asserts the round trip, which is what catches a drift in either direction.

@@ -24,44 +24,12 @@ set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 
 # ------------------------------------------------------------------
-# Build the pulseg C library once, unconditionally (trajectory_cache_reader
-# now calls into it -- Stage 4 recon-cache-to-C port -- so it is no longer
-# needed only inside the pulseq-adapter block below).
+# Build the pulseg C library (the scanner-side model several tests
+# exercise, and the cache writer the parity staging uses).
 # ------------------------------------------------------------------
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../../csrc ${CMAKE_CURRENT_BINARY_DIR}/csrc_build)
 
-# ------------------------------------------------------------------
-# Build trajectory_cache_reader as an OBJECT library to reuse here
-# without depending on the full GadgetronClient build.
-# ------------------------------------------------------------------
 set(MRDSERVER_CSRC ${CMAKE_CURRENT_SOURCE_DIR}/../../cxx/recon)
-
-add_library(trajectory_cache_reader_obj OBJECT
-    ${MRDSERVER_CSRC}/trajectory_cache_reader.cpp)
-target_include_directories(trajectory_cache_reader_obj PUBLIC
-    ${MRDSERVER_CSRC}
-    ${ISMRMRD_INCLUDE_DIRS}
-    ${Boost_INCLUDE_DIRS})
-target_link_libraries(trajectory_cache_reader_obj PUBLIC pulseg_recon ISMRMRD::ISMRMRD)
-
-# ------------------------------------------------------------------
-# Test executable.
-# ------------------------------------------------------------------
-add_executable(test_trajectory_cache_loader test_trajectory_cache_loader.cpp)
-
-target_include_directories(test_trajectory_cache_loader PRIVATE
-    ${MRDSERVER_CSRC}
-    ${ISMRMRD_INCLUDE_DIRS}
-    ${Boost_INCLUDE_DIRS})
-
-# Path to the .pge fixtures, baked in at configure time.
-target_compile_definitions(test_trajectory_cache_loader PRIVATE
-    MRDSERVER_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../utils/expected")
-
-target_link_libraries(test_trajectory_cache_loader PRIVATE
-    trajectory_cache_reader_obj
-    GTest::gtest_main
-    ISMRMRD::ISMRMRD)
 
 # ------------------------------------------------------------------
 # Section 5 (SEQUENCEDESCRIPTION) byte-exact truth test.
@@ -91,8 +59,35 @@ target_link_libraries(test_pulseq_file PRIVATE pulseq GTest::gtest_main)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../../cxx/pulseq
                  ${CMAKE_CURRENT_BINARY_DIR}/pulseqpp_build)
 
+# The recon-side reader: SequenceCache from the .seq chain plus its
+# format-agnostic consumers. No cache file involved.
+add_library(sequence_reader_obj OBJECT
+    ${MRDSERVER_CSRC}/sequence_file_reader.cpp
+    ${MRDSERVER_CSRC}/sequence_cache.cpp)
+target_include_directories(sequence_reader_obj PUBLIC
+    ${MRDSERVER_CSRC}
+    ${ISMRMRD_INCLUDE_DIRS}
+    ${Boost_INCLUDE_DIRS}
+    PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../csrc/include/pulseq)
+target_link_libraries(sequence_reader_obj PUBLIC
+    pulseqpp ISMRMRD::ISMRMRD)
+
+add_executable(test_sequence_reader test_sequence_reader.cpp)
+target_compile_definitions(test_sequence_reader PRIVATE
+    PULSEQ_CORPUS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../python/fixtures")
+target_link_libraries(test_sequence_reader PRIVATE
+    sequence_reader_obj
+    GTest::gtest_main
+    ISMRMRD::ISMRMRD)
+
 add_executable(test_pulseq_sequence test_pulseq_sequence.cpp)
 target_link_libraries(test_pulseq_sequence PRIVATE pulseqpp GTest::gtest_main)
+
+add_executable(test_sequence_file test_sequence_file.cpp)
+target_compile_definitions(test_sequence_file PRIVATE
+    PULSEQ_CORPUS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../python/fixtures")
+target_link_libraries(test_sequence_file PRIVATE pulseqpp GTest::gtest_main)
 
 add_executable(test_pulseq_dedup test_pulseq_dedup.cpp)
 target_compile_definitions(test_pulseq_dedup PRIVATE
@@ -129,10 +124,11 @@ add_executable(test_pulseq_shape test_pulseq_shape.cpp)
 target_link_libraries(test_pulseq_shape PRIVATE pulseqpp GTest::gtest_main)
 
 include(GoogleTest)
-gtest_discover_tests(test_trajectory_cache_loader)
 gtest_discover_tests(test_seq_desc_truth)
 gtest_discover_tests(test_pulseq_file)
 gtest_discover_tests(test_pulseq_sequence)
+gtest_discover_tests(test_sequence_file)
+gtest_discover_tests(test_sequence_reader)
 gtest_discover_tests(test_pulseq_dedup)
 gtest_discover_tests(test_pulseq_roundtrip)
 gtest_discover_tests(test_pulseq_trajectory)
@@ -141,19 +137,6 @@ gtest_discover_tests(test_pulseq_moments)
 gtest_discover_tests(test_pulseq_autolabel)
 gtest_discover_tests(test_pulseq_expand)
 gtest_discover_tests(test_pulseq_shape)
-
-# ------------------------------------------------------------------
-# Stage 4 (recon-cache-to-C) Step 0: golden-dump CLI tool. Dumps every
-# field trajectory_cache_reader parses from a .pge/.pseg fixture to a
-# deterministic text file; used to capture pre-port golden dumps and,
-# later, to prove the C-ported reader is byte-for-byte equivalent.
-# ------------------------------------------------------------------
-add_executable(dump_recon_cache dump_recon_cache.cpp)
-target_include_directories(dump_recon_cache PRIVATE
-    ${MRDSERVER_CSRC}
-    ${ISMRMRD_INCLUDE_DIRS}
-    ${Boost_INCLUDE_DIRS})
-target_link_libraries(dump_recon_cache PRIVATE trajectory_cache_reader_obj ISMRMRD::ISMRMRD)
 
 # ------------------------------------------------------------------
 # Pulseq adapter equivalence test (Stage 3, D4): loads a fixture .seq

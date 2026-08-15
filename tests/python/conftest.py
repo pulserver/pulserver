@@ -1,10 +1,16 @@
 from __future__ import annotations
 
 import importlib.util
+import sys
 from pathlib import Path
 
 import pytest
 from pulserver import Protocol, TypeinFloatParam, UIParam
+
+# Shared helper modules beside the tests (fixture_corpus, comparison helpers
+# in test modules) import by bare name whatever directory pytest runs from.
+if str(Path(__file__).resolve().parent) not in sys.path:
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 
 @pytest.fixture

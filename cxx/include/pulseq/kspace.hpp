@@ -293,9 +293,9 @@ namespace pulseq
      *
      * Decided over **every** readout, not one: a readout whose rotation
      * leaves an axis silent would otherwise pack one axis fewer and shift
-     * every sample after it.  This is the same rule
-     * `trajectory_cache_reader.h` states for `PrecomputedTrajectory::
-     * axis_active`, and it exists so the two paths pack identically.
+     * every sample after it.  This is the same rule `sequence_cache.h`
+     * states for `PrecomputedTrajectory::axis_active`, and it exists so
+     * the two paths pack identically.
      */
     std::array<bool, 3> active_axes(const KSpace& ks, double tolerance = 1e-6);
 

@@ -88,10 +88,8 @@ static int kshot_library_add(pulseg_kshot_library *lib, const float *k, int n)
  * 600us with raster 20us puts the fall transition between samples 29
  * and 30, so a sample at 600us reads ~2/3 amp instead of amp), giving
  * a false non-constant classification on plain trapezoid readouts.
- * Returns 0 outside the active gradient window.
- *
- * Mirrors testutils.TruthBuilder.sampleGradAtTimes (analytic trap +
- * linear interp ARB with zero outside). */
+ * Returns 0 outside the active gradient window. Trapezoids are
+ * evaluated analytically; ARB gradients by linear interpolation. */
 static float sample_grad_axis_at(
     const pulseg_sequence_descriptor *desc,
     int grad_event_id,

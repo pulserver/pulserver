@@ -92,7 +92,6 @@ extend-exclude = [
   # Not imported, and written against a module protocol that no longer exists.
   # Linting it would rewrite code whose only job is to be read while porting.
   "python/pulserver/design/_disabled/**",
-  "tests/utils/pulseq/**",
 ]
 exclude = ["docs/**"]
 

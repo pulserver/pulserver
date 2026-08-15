@@ -18,6 +18,8 @@
  * MATLAB's `bitshift` produces and `readBinary` switches on.
  */
 
+#include "pulseq/raw64.hpp"
+
 #include "pulseq/sequence.hpp"
 #include "pulseq/write.hpp"
 
@@ -32,6 +34,7 @@ namespace pulseq
 
     namespace
     {
+        namespace raw = ::pulseq::raw64;
         /** Magic bytes.  Byte-order free -- the version fields reveal the order. */
         const char FILE_HEADER[8] = {1, 'p', 'u', 'l', 's', 'e', 'q', 2};
 
@@ -408,9 +411,20 @@ namespace pulseq
                 for (int id = 1; id <= label_sections[s].second->size(); ++id)
                 {
                     const int32_t* row = label_sections[s].second->row(id);
+                    /* The file carries the C reader's label ids, not this
+                     * sequence's: the binary format has no name table, so the
+                     * number written must be one the reader's registry
+                     * resolves.  Registering here keeps names outside the
+                     * builtin table readable in this process; the format
+                     * itself cannot yet carry them across processes. */
+                    const std::string& label = seq.label_name(row[1]);
+                    const int file_id = raw::pulseq_label_register_name(label.c_str());
+                    if (file_id <= 0)
+                        throw std::runtime_error(
+                            "cannot encode label '" + label + "' in the binary format");
                     put_i32(out, id);
                     put_i32(out, row[0]);
-                    put_i32(out, row[1]);
+                    put_i32(out, file_id);
                 }
             }
         }

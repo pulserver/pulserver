@@ -93,7 +93,7 @@ def get_sequence_resource_paths(metadata):
     """Return the pulserver sequence-resource paths from the MRD XMLHeader.
 
     These are written by the VRE OnPrep stage of the pulserver-interpreter
-    (see ``mrdserver/csrc/trajectory_cache_reader.cpp::add_sequence_resource_paths``)
+    (see ``cxx/recon/sequence_cache.cpp::add_sequence_resource_paths``)
     based on the rhuser6/7 raw-header slots set by the PSD:
 
     * ``tensor_dat_path``: absolute path to a diffusion tensor file

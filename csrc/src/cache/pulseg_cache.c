@@ -5,8 +5,9 @@
  * One file beside the .seq holds every derived structure, split into
  * independently-loadable sections so a consumer pays only for what it reads:
  * the pulse-generation pass takes COMMON+SHAPES, the scan loop additionally
- * takes INSTANCES, ROTATIONS and SCANLOOP, and recon reads DEFINITIONS,
- * TRAJECTORY and SEQDESC through pulseg_recon.c.
+ * takes INSTANCES, ROTATIONS and SCANLOOP; the recon side reads the
+ * seqfile directly (cxx/recon/sequence_file_reader.cpp) rather than any
+ * cache section.
  *
  * All integer and float fields are 4 bytes. Endianness is recorded in the
  * header, and a reader on the opposite endianness byte-swaps on the way in --

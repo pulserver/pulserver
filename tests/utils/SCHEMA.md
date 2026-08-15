@@ -519,9 +519,10 @@ Readers should:
 # Truth file formats (TruthBuilder ground truth)
 
 These `.bin` files sit alongside each `.seq` fixture under `expected/` and
-are produced by `+testutils/TruthBuilder.m` from the official Pulseq
-toolbox. They are the **independent** ground truth that pulseg output
-is compared against; they are NOT pulseg cache sections.
+were computed with the reference MATLAB Pulseq toolbox, independently of
+pulseg. They are the **independent** ground truth that pulseg output is
+compared against; they are NOT pulseg cache sections. They are frozen
+checked-in artifacts — no in-repo generator exists.
 
 ## `<base>_trajectory.bin` (Phase A MVP)
 
@@ -559,8 +560,8 @@ averages; the per-average trajectory is tiled `num_averages` times.
                                 `.pge` here reflects the GE-configured
                                 `write_cache_cli` used to produce these
                                 fixtures, D10 -- public default is `.pseg`)
-                                produced by the `write_cache` CLI as a
-                                post-pass to `run_generators.m`. Listed
+                                produced by the `write_cache` CLI
+                                (`tests/cpptests/write_cache_cli`). Listed
                                 under each entry's `companion_files` in
                                 `MANIFEST.json`.
 - `<base>_meta.txt`           — human-readable summary
@@ -571,4 +572,6 @@ averages; the per-average trajectory is tiled `num_averages` times.
 - `<base>_scan_table.bin`     — per-block scan-loop entries
 - `<base>_label_state.bin`    — per-scan / per-ADC label state truth
 
-See `+testutils/TruthBuilder.m` for the field-by-field layout of each.
+The field-by-field layout of each is encoded in the test readers:
+`tests/ctests/test_seg_helpers.h` and
+`tests/cpptests/test_seq_desc_truth.cpp`.

@@ -1,8 +1,7 @@
 /*
  * write_cache_cli/main.c
  *
- * Test-only helper for the mrdserver C++ trajectory_cache_loader test
- * (and the analogous TruthBuilder run_generators step).
+ * Test-only helper for the mrdserver C++ trajectory_cache_loader test.
  *
  * Given a path to a Pulseq .seq file, produces the matching pulseg
  * binary cache <base>.pge. pulseg_read (cache_binary=1) emits the whole

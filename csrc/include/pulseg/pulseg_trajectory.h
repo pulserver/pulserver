@@ -27,7 +27,7 @@ extern "C"
      * @brief Load trajectory from the TRAJECTORY cache section, given the
      *        cache file path directly (no .seq -> cache-path derivation).
      *
-     * For standalone recon consumers (e.g. pulseg_recon) that only have
+     * For standalone consumers that only have
      * the .pseg/.pge cache file on disk, not the original .seq path.
      *
      * @param[out] out         Trajectory output (caller-allocated struct).

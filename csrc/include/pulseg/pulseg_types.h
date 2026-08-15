@@ -1230,7 +1230,7 @@ typedef struct pulseg_trajectory
  *
  *   OTHER: [0..6] = 0
  *
- * The C++ reader (trajectory_cache_reader) dedups the
+ * The C++ reader (cxx/recon/sequence_cache.h) dedups the
  * (rf_def_id, rf_shim_id, ss_grad_amp_hz_per_m) triplets over all rows to
  * form a unique-tuple library. For each unique tuple it computes
  * slice_thickness_mm = bandwidth_hz / |ss_grad_amp_hz_per_m| * 1e3 and sets

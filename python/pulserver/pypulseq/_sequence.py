@@ -253,6 +253,34 @@ class Sequence(AnalysisMixin, SafetyViewsMixin, SoftDelayMixin):
         self._touch()
         self._definitions[key] = value
 
+    def declare_tr(self) -> int | None:
+        """Record the structural TR as the ``TRSize`` definition.
+
+        Runs the safety core's TR detection and writes the number of blocks
+        in one structural TR into ``[DEFINITIONS]``. Called by :meth:`write`
+        and :meth:`write_binary`, so every written file carries the
+        declaration; calling it directly only matters for a sequence handed
+        on in memory. Downstream consumers may use it or ignore it: a
+        reconstruction derives its sequence description only when the
+        definition is present, and an interpreter may take it as a verified
+        hint for pattern detection while keeping full detection as the
+        check. Each file of a ``NextSequence`` chain declares its own.
+
+        Returns
+        -------
+        int or None
+            The declared blocks-per-TR, or ``None`` when detection finds no
+            repeating structure (nothing is written then).
+        """
+        try:
+            tr_size = int(self._structure_for("declare_tr").tr["tr_size"])
+        except Exception:
+            return None
+        if tr_size <= 0:
+            return None
+        self.set_definition("TRSize", tr_size)
+        return tr_size
+
     def get_definition(self, key: str) -> object | None:
         """The value recorded for ``key``, or ``None`` if there is none.
 
@@ -758,6 +786,9 @@ class Sequence(AnalysisMixin, SafetyViewsMixin, SoftDelayMixin):
         Text, to a file, always -- the reference toolbox's ``write``. The
         binary format has its own method, and it is the only one of the two
         that will write anywhere but a file.
+
+        Writing declares the structural TR: :meth:`declare_tr` runs first,
+        so the file carries ``TRSize`` whenever detection succeeds.
         """
         if v141_compat:
             raise NotImplementedError(
@@ -776,6 +807,7 @@ class Sequence(AnalysisMixin, SafetyViewsMixin, SoftDelayMixin):
             is_ok, message = self.check_gradient_continuity()
             if not is_ok:
                 warnings.warn(f"write(): {message}", stacklevel=2)
+        self.declare_tr()
 
         target = self.remove_duplicates() if remove_duplicates else self
         payload = target._to_text(create_signature=create_signature)
@@ -797,6 +829,7 @@ class Sequence(AnalysisMixin, SafetyViewsMixin, SoftDelayMixin):
         --------
         write : the same sequence as ``.seq`` text.
         """
+        self.declare_tr()
         payload = self._to_binary()
         writer = getattr(target, "write", None)
         if callable(writer):
