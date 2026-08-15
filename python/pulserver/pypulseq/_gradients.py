@@ -8,10 +8,89 @@ area.
 
 from __future__ import annotations
 
-__all__ = ["make_crusher", "make_phase_blip", "make_phase_encoding"]
+__all__ = [
+    "concatenate_gradients",
+    "make_crusher",
+    "make_phase_blip",
+    "make_phase_encoding",
+]
+
+from typing import Any
 
 from . import _events
 from ._opts import default_system
+
+
+def concatenate_gradients(*grads: Any, system=None):
+    """Lay gradients on one channel end to end and sum them into one event.
+
+    Each gradient after the first is delayed to begin where the previous one
+    ends, so the result plays them back to back on the shared channel. This is
+    what folds a slice rephaser onto its selection gradient -- exactly what a
+    slab excitation does internally -- so a spectral-spatial or multiband pulse,
+    whose rephaser is a separate event, can hand a 3D or SMS readout one merged
+    ``z`` lobe rather than a second gradient the readout has no block for. The
+    inputs are not modified; ``None`` entries are dropped.
+
+    Parameters
+    ----------
+    *grads : GradEvent or TrapEvent or None
+        Gradients on the **same** channel, in play order. ``None`` is skipped.
+    system : pypulseq.Opts, optional
+        System limits.
+
+    Returns
+    -------
+    GradEvent
+        The gradients concatenated into a single event, or the sole gradient
+        unchanged when only one is given.
+
+    Raises
+    ------
+    ValueError
+        If no gradient is given, or they are not all on one channel.
+
+    Examples
+    --------
+    >>> import pulserver.pypulseq as pp
+    >>> system = pp.Opts()
+    >>> select = pp.make_trapezoid("z", area=200.0, duration=2e-3, system=system)
+    >>> rephase = pp.make_trapezoid("z", area=-100.0, duration=1e-3, system=system)
+    >>> merged = pp.concatenate_gradients(select, rephase, system=system)
+    >>> round(pp.calc_duration(merged), 6) == round(
+    ...     pp.calc_duration(select) + pp.calc_duration(rephase), 6
+    ... )
+    True
+
+    The rephaser starts where the selection lobe ends, so the inputs are left
+    as they were:
+
+    >>> float(rephase.delay)
+    0.0
+    """
+    from . import add_gradients, calc_duration, scale_grad
+
+    events = [grad for grad in grads if grad is not None]
+    if not events:
+        raise ValueError("concatenate_gradients needs at least one gradient")
+    channels = {grad.channel for grad in events}
+    if len(channels) != 1:
+        raise ValueError(
+            f"all gradients must be on one channel, got {sorted(channels)}"
+        )
+    if len(events) == 1:
+        return events[0]
+
+    system = default_system(system)
+    placed = [events[0]]
+    offset = calc_duration(events[0])
+    for grad in events[1:]:
+        # scale_grad(1.0) is a copy; the input keeps its own delay.
+        shifted = scale_grad(grad, 1.0, system=system)
+        shifted.delay = float(shifted.delay) + offset
+        placed.append(shifted)
+        offset += calc_duration(grad)
+    return add_gradients(placed, system=system)
 
 
 def make_phase_encoding(channel: str, resolution: float, system=None, duration: float | None = None):

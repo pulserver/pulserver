@@ -88,9 +88,9 @@ def _build_slab_excitation(
         )
         # Concatenate the rephaser onto the alternating selection gradient, the
         # way is_slab does, and hand the readout one merged z lobe.
-        gz_reph = excitation.gz_reph
-        gz_reph.delay = pp.calc_duration(excitation.gz)
-        gz = pp.add_gradients(grads=[excitation.gz, gz_reph], system=system)
+        gz = pp.concatenate_gradients(
+            excitation.gz, excitation.gz_reph, system=system
+        )
         return excitation, excitation.rf, gz
     excitation = design.SpatialSelectiveExcitation(
         system, flip_angle_deg, thickness_m, is_slab=True

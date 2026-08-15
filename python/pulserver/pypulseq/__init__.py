@@ -35,6 +35,7 @@ from ._angles import (
     calc_tiny_golden_angles as _calc_tiny_golden_angles,
     calc_uniform_angles as _calc_uniform_angles,
 )
+from ._gradients import concatenate_gradients as _concatenate_gradients
 from ._gradients import make_crusher as _make_crusher
 from ._epi import calc_epi_order as _calc_epi_order
 from ._gradients import make_phase_blip as _make_phase_blip
@@ -180,6 +181,7 @@ bloch = _bloch
 calc_adc_timing = _calc_adc_timing
 calc_rf_bandwidth = _calc_rf_bandwidth
 calc_rf_power = _calc_rf_power
+concatenate_gradients = _concatenate_gradients
 make_crusher = _make_crusher
 make_phase_blip = _make_phase_blip
 make_phase_encoding = _make_phase_encoding
@@ -273,6 +275,7 @@ MATLAB_PARITY = frozenset(
 BASE_FACTORIES = frozenset(
     {
         "calc_adc_timing",
+        "concatenate_gradients",
         "make_crusher",
         "make_phase_blip",
         "make_phase_encoding",

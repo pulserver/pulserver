@@ -83,17 +83,6 @@ def _sms_geometry(n_slices: int, n_bands: int, slice_step: float):
     return n_groups, band_spacing, n_bands * band_spacing
 
 
-def _fold_rephaser(system: pp.Opts, gz, gz_reph):
-    """Concatenate a slice rephaser onto its selection gradient, is_slab style.
-
-    The multiband EPI train carries a gz blip in the block a separate slice
-    rephaser would occupy, so the rephaser rides the selection lobe instead --
-    exactly what :class:`design.SpatialSelectiveExcitation` does for a slab.
-    """
-    gz_reph.delay = pp.calc_duration(gz)
-    return pp.add_gradients(grads=[gz, gz_reph], system=system)
-
-
 def _sms_kernel(
     system: pp.Opts,
     *,
@@ -131,7 +120,9 @@ def _sms_kernel(
         slice_gap_m=band_spacing,
         n_bands=n_bands,
     )
-    gz = _fold_rephaser(system, sms.gz, sms.gz_reph)
+    # Fold the rephaser onto the selection gradient, is_slab style, so the SMS
+    # train's z prewinder block never holds a second z lobe.
+    gz = pp.concatenate_gradients(sms.gz, sms.gz_reph, system=system)
     epi = design.EpiReadout3D(
         system,
         sms.rf,
