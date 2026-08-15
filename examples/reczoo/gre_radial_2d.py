@@ -28,7 +28,13 @@ import numpy as np
 
 from pulserver import AcquisitionBucket, ReconContext, ReconPlugin, ReconResult
 from pulserver.recon import has_acquisition_flag
-from pulserver.recon.preprocessing import pipe_menon_dcf, recon_shape, receiver_channels
+from pulserver.recon.preprocessing import (
+    fftc,
+    ifftc,
+    pipe_menon_dcf,
+    recon_shape,
+    receiver_channels,
+)
 
 
 def smooth_sensitivities(coil_images: Any) -> Any:
@@ -47,16 +53,12 @@ def smooth_sensitivities(coil_images: Any) -> Any:
     import torch
 
     images = torch.as_tensor(coil_images)
-    spectrum = torch.fft.fftshift(
-        torch.fft.fft2(torch.fft.ifftshift(images, dim=(-2, -1))), dim=(-2, -1)
-    )
+    spectrum = fftc(images, axes=(-2, -1))
     height, width = spectrum.shape[-2:]
     window_h = torch.hann_window(height, dtype=spectrum.real.dtype)
     window_w = torch.hann_window(width, dtype=spectrum.real.dtype)
     spectrum = spectrum * (window_h[:, None] * window_w[None, :]) ** 4
-    smoothed = torch.fft.fftshift(
-        torch.fft.ifft2(torch.fft.ifftshift(spectrum, dim=(-2, -1))), dim=(-2, -1)
-    )
+    smoothed = ifftc(spectrum, axes=(-2, -1))
     norm = torch.sqrt(torch.sum(torch.abs(smoothed) ** 2, dim=0, keepdim=True))
     return smoothed / torch.clamp(norm, min=1e-12 * float(norm.max()))
 

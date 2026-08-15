@@ -18,7 +18,9 @@ __all__ = [
     "encoded_shape",
     "epi_ramp_interpolate",
     "estimate_epi_eddy_phase",
+    "fftc",
     "grid_cartesian",
+    "ifftc",
     "noise_prewhiten",
     "pipe_menon_dcf",
     "receiver_channels",
@@ -299,6 +301,57 @@ def _centered_fft(
         transform(shifted, axis=axis, norm="ortho"),
         axes=axis,
     )
+
+
+def fftc(data: Any, *, axes: int | tuple[int, ...] = (-2, -1)) -> Any:
+    """Centered orthonormal FFT over one or more axes.
+
+    The ``ifftshift -> fft(norm="ortho") -> fftshift`` an MRI reconstruction
+    means by "the Fourier transform", so a plugin states the transform once
+    rather than re-deriving the shifts. Torch tensors (device preserved) and
+    NumPy arrays both pass through.
+
+    Parameters
+    ----------
+    data
+        The array to transform.
+    axes
+        Axis or axes to transform over. Default is the last two.
+
+    Returns
+    -------
+    array
+        The transform, in the namespace of ``data``.
+
+    See Also
+    --------
+    ifftc : the inverse.
+    cartesian_3d_to_2d : the readout-decoupling this builds on.
+    """
+    axes = (axes,) if isinstance(axes, int) else tuple(axes)
+    return _centered_fftn(data, axes=axes, inverse=False)
+
+
+def ifftc(data: Any, *, axes: int | tuple[int, ...] = (-2, -1)) -> Any:
+    """Centered orthonormal inverse FFT over one or more axes.
+
+    The inverse of :func:`fftc`; see it for the convention. A single-axis call
+    along the readout is the decoupling :func:`cartesian_3d_to_2d` performs.
+
+    Parameters
+    ----------
+    data
+        The array to transform.
+    axes
+        Axis or axes to transform over. Default is the last two.
+
+    Returns
+    -------
+    array
+        The inverse transform, in the namespace of ``data``.
+    """
+    axes = (axes,) if isinstance(axes, int) else tuple(axes)
+    return _centered_fftn(data, axes=axes, inverse=True)
 
 
 def cartesian_3d_to_2d(

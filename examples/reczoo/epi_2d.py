@@ -45,6 +45,8 @@ from pulserver.recon.postprocessing import center_crop, coil_combine
 from pulserver.recon.preprocessing import (
     CartesianGridder,
     encoded_shape,
+    fftc,
+    ifftc,
     receiver_channels,
     recon_shape,
 )
@@ -54,15 +56,6 @@ from pulserver.reczoo.gre_2d import (
     sense,
     sensitivities,
 )
-
-
-def _ifft2c(kspace: Any) -> np.ndarray:
-    """Centred 2D inverse FFT over the last two axes."""
-    axes = (-2, -1)
-    return np.fft.fftshift(
-        np.fft.ifftn(np.fft.ifftshift(kspace, axes=axes), axes=axes, norm="ortho"),
-        axes=axes,
-    )
 
 
 def coil_maps_from_reference(kspace: Any) -> np.ndarray:
@@ -83,7 +76,7 @@ def coil_maps_from_reference(kspace: Any) -> np.ndarray:
     numpy.ndarray
         Coil maps, ``(coil, ky, kx)``, root sum-of-squares one.
     """
-    images = _ifft2c(np.asarray(kspace))
+    images = ifftc(np.asarray(kspace), axes=(-2, -1))
     rss = np.sqrt(np.sum(np.abs(images) ** 2, axis=0, keepdims=True))
     return (images / np.maximum(rss, 1e-8 * rss.max())).astype(np.complex64)
 
@@ -142,10 +135,7 @@ def separate_slices(
 
 def _hybrid(rows: Any) -> np.ndarray:
     """Rows into hybrid space: inverse FFT along the readout."""
-    return np.fft.fftshift(
-        np.fft.ifft(np.fft.ifftshift(np.asarray(rows), axes=-1), axis=-1, norm="ortho"),
-        axes=-1,
-    )
+    return ifftc(np.asarray(rows), axes=-1)
 
 
 def odd_even_fit(navigator_lines: list[np.ndarray]) -> tuple[float, float]:
@@ -204,10 +194,7 @@ def correct_lines(
             hybrid = _hybrid(row)
             ramp = slope * np.arange(hybrid.shape[-1]) + intercept
             hybrid = hybrid * np.exp(1j * ramp)
-            row = np.fft.fftshift(
-                np.fft.fft(np.fft.ifftshift(hybrid, axes=-1), axis=-1, norm="ortho"),
-                axes=-1,
-            )
+            row = fftc(hybrid, axes=-1)
         corrected.append(row.astype(np.complex64))
     return corrected
 

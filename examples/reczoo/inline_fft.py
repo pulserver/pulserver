@@ -8,6 +8,7 @@ import numpy as np
 
 from pulserver import AcquisitionBucket, ReconPlugin, ReconContext, ReconResult
 from pulserver.recon.postprocessing import coil_combine
+from pulserver.recon.preprocessing import ifftc
 
 
 class CartesianFftRecon(ReconPlugin):
@@ -31,10 +32,7 @@ class CartesianFftRecon(ReconPlugin):
         del context
         # AcquisitionBucket.kspace() is [acquisition, coil, readout].
         kspace = np.moveaxis(bucket.kspace(), 0, -1)
-        image = np.fft.fftshift(
-            np.fft.ifft2(np.fft.ifftshift(kspace, axes=(-2, -1)), axes=(-2, -1)),
-            axes=(-2, -1),
-        )
+        image = ifftc(kspace, axes=(-2, -1))
         image = coil_combine(image, coil_axis=0)
         return ReconResult(image.transpose())
 
