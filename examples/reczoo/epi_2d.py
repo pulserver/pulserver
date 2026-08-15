@@ -13,6 +13,12 @@ distortion correction needs -- PyHySCO, through
 :func:`pulserver.recon.postprocessing.run_pyhysco` on the two exported
 volumes -- leaves the scanner together.
 
+When the sequence ran multiband (``SMS_EXCITATION``), the stream carries a
+single-band reference (``ACQ_IS_PARALLEL_CALIBRATION``) and blipped-CAIPI
+multiband shots instead. The reference gives each slice its coil sensitivities,
+and a model-based solve (:class:`pulserver.recon.physics.SMS`) unfolds every
+group back into its bands against the CAIPI phase the gz blips played.
+
 Needs the numerical stack: ``pip install "pulserver[recon-cpu]"``; the
 distortion step additionally needs the external ``recon-distortion`` extra.
 """
@@ -22,8 +28,10 @@ from __future__ import annotations
 __all__ = [
     "PLUGIN",
     "Epi2DRecon",
+    "coil_maps_from_reference",
     "correct_lines",
     "odd_even_fit",
+    "separate_slices",
 ]
 
 from typing import Any
@@ -46,6 +54,90 @@ from pulserver.reczoo.gre_2d import (
     sense,
     sensitivities,
 )
+
+
+def _ifft2c(kspace: Any) -> np.ndarray:
+    """Centred 2D inverse FFT over the last two axes."""
+    axes = (-2, -1)
+    return np.fft.fftshift(
+        np.fft.ifftn(np.fft.ifftshift(kspace, axes=axes), axes=axes, norm="ortho"),
+        axes=axes,
+    )
+
+
+def coil_maps_from_reference(kspace: Any) -> np.ndarray:
+    """Per-slice coil sensitivities from a fully sampled single-band reference.
+
+    The reference slice is fully sampled, so its coil images are the
+    sensitivities up to the object they share; dividing by the root
+    sum-of-squares removes that common magnitude and leaves unit-norm maps a
+    model-based separation can solve against.
+
+    Parameters
+    ----------
+    kspace
+        One slice's reference k-space, ``(coil, ky, kx)``.
+
+    Returns
+    -------
+    numpy.ndarray
+        Coil maps, ``(coil, ky, kx)``, root sum-of-squares one.
+    """
+    images = _ifft2c(np.asarray(kspace))
+    rss = np.sqrt(np.sum(np.abs(images) ** 2, axis=0, keepdims=True))
+    return (images / np.maximum(rss, 1e-8 * rss.max())).astype(np.complex64)
+
+
+def separate_slices(
+    collapsed: Any,
+    coil_maps: Any,
+    caipi_encoding: Any,
+    *,
+    regularization: float = 1e-3,
+    iterations: int = 40,
+    device: Any = None,
+) -> np.ndarray:
+    """Unfold one multiband group into its bands (model-based SMS).
+
+    Parameters
+    ----------
+    collapsed
+        The group's multiband k-space, ``(coil, ky, kx)``.
+    coil_maps
+        Per-band coil maps, ``(band, coil, ky, kx)``.
+    caipi_encoding
+        The CAIPI slice phase played, ``(band, ky, 1)``.
+    regularization, iterations
+        Tikhonov weight and iteration ceiling of the CG solve.
+    device
+        Torch device. ``None`` is the CPU.
+
+    Returns
+    -------
+    numpy.ndarray
+        One complex image per band, ``(band, ky, kx)``.
+    """
+    import torch
+
+    from pulserver.recon import pics
+    from pulserver.recon.physics import SMS, Cartesian2D
+
+    device = "cpu" if device is None else device
+    coil_maps = np.asarray(coil_maps)
+    n_bands, _, n_y, n_x = coil_maps.shape
+    mask = torch.ones((1, 1, n_y, n_x), dtype=torch.float32, device=device)
+    per_band = [
+        Cartesian2D(mask, torch.as_tensor(coil_maps[band], device=device)[None])
+        for band in range(n_bands)
+    ]
+    physics = SMS(per_band, torch.as_tensor(np.asarray(caipi_encoding), device=device))
+    image = pics(
+        torch.as_tensor(np.asarray(collapsed), device=device)[None],
+        physics,
+        regularization=regularization,
+        iterations=iterations,
+    )[0]
+    return image.cpu().numpy() if hasattr(image, "cpu") else np.asarray(image)
 
 
 def _hybrid(rows: Any) -> np.ndarray:
@@ -188,6 +280,11 @@ class Epi2DRecon(ReconPlugin):
             ]
             fits[index] = odd_even_fit(lines)
 
+        # A single-band reference means multiband data: separate the collapsed
+        # slices rather than reconstructing each slice on its own.
+        if groups.single_band_reference:
+            return self._reconstruct_sms(groups, fits)
+
         results = []
         for series, group in enumerate(
             (groups.imaging, groups.reverse_polarity)
@@ -253,6 +350,90 @@ class Epi2DRecon(ReconPlugin):
                             reference=-1,
                             series_index=series * 1000 + repetition,
                             image_index=index,
+                            image_type="magnitude",
+                            dicom=True,
+                        )
+                    )
+        return results
+
+    def _grid_train(self, items: list[Any], fit: tuple[float, float]) -> Any:
+        """Phase-correct a train's lines and grid them into one 2D k-space."""
+        _, n_y, n_x = self.grid
+        buffer = CartesianGridder((1, n_y, n_x), coils=self.coils)
+        slope, intercept = fit
+        for item in items:
+            (row,) = correct_lines(
+                [(np.asarray(item.data), _reversed(item))], slope, intercept
+            )
+            buffer.add(row, 0, int(item.idx.kspace_encode_step_1))
+        return buffer[0]
+
+    def _reconstruct_sms(
+        self, groups: Any, fits: dict[int, tuple[float, float]]
+    ) -> list[ReconResult]:
+        """Separate the collapsed multiband slices against the reference maps.
+
+        The single-band reference gives each slice its coil sensitivities; the
+        blipped-CAIPI phase the imaging shots carry, together with those maps,
+        is what a model-based solve unfolds a group's bands with. A group's
+        bands are its slice and every ``n_groups``-th slice above it, matching
+        how the sequence spaced the excited comb.
+        """
+        n_slices, n_y, _ = self.grid
+        # One odd/even fit serves the whole multiband readout: the blip-nulled
+        # navigator measured the readout, which every shot shares.
+        fit = next(iter(fits.values()), (0.0, 0.0))
+
+        reference: dict[int, list[Any]] = {}
+        for item in groups.single_band_reference:
+            reference.setdefault(int(item.idx.slice), []).append(item)
+        coil_maps = {
+            index: coil_maps_from_reference(self._grid_train(items, fit)[0])
+            for index, items in reference.items()
+        }
+
+        group_ids = sorted({int(item.idx.slice) for item in groups.imaging})
+        n_groups = len(group_ids)
+        n_bands = n_slices // max(n_groups, 1)
+
+        # The CAIPI slice phase played: band j shifted j / n_bands of the FOV,
+        # a linear ramp along ky. The trailing unit axis lands the phase on the
+        # phase-encode axis of the (coil, ky, kx) measurement.
+        ky = np.arange(n_y)
+        caipi = np.exp(
+            1j * 2 * np.pi * (np.arange(n_bands)[:, None] / n_bands) * ky[None, :]
+        )[..., None].astype(np.complex64)
+
+        results: list[ReconResult] = []
+        repetitions = sorted({int(item.idx.repetition) for item in groups.imaging})
+        for repetition in repetitions:
+            for group in group_ids:
+                shots = [
+                    item
+                    for item in groups.imaging
+                    if int(item.idx.repetition) == repetition
+                    and int(item.idx.slice) == group
+                ]
+                collapsed, _ = self._grid_train(shots, fit)
+                bands = [group + band * n_groups for band in range(n_bands)]
+                maps = np.stack([coil_maps[index] for index in bands])
+                images = separate_slices(
+                    collapsed,
+                    maps,
+                    caipi,
+                    regularization=self.regularization,
+                    iterations=self.iterations,
+                    device=self.device,
+                )
+                for band, slice_index in enumerate(bands):
+                    results.append(
+                        ReconResult(
+                            center_crop(
+                                np.abs(images[band]), self.image_shape
+                            ).transpose(),
+                            reference=-1,
+                            series_index=repetition,
+                            image_index=slice_index,
                             image_type="magnitude",
                             dicom=True,
                         )
