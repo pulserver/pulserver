@@ -59,6 +59,323 @@ _NAV_LINES = 3
 MAX_GRAD = 80.0
 MAX_SLEW = 200.0
 
+#: Excite several slices at once with a multiband pulse instead of one at a
+#: time. A script-level toggle rather than a UI control, because it changes the
+#: shape of the acquisition -- a single-band reference pass, then multiband
+#: shots whose blipped-CAIPI gz encoding lets a model-based reconstruction tell
+#: the collapsed slices apart. The multiband factor itself is a protocol field
+#: (``UIParam.MULTIBAND``), so the operator still sets it from the console; this
+#: only decides whether the multiband path is taken at all. The slice count must
+#: be a whole multiple of the multiband factor.
+SMS_EXCITATION = False
+
+
+def _sms_geometry(n_slices: int, n_bands: int, slice_step: float):
+    """Group count, band spacing and slice FOV for a multiband acquisition.
+
+    The ``n_slices`` slices split into ``n_slices // n_bands`` groups; the bands
+    of one group are a whole group-count apart, so the excited comb interleaves
+    the slices across the slab. ``slice_step`` is the slice-to-slice distance
+    (thickness plus gap).
+    """
+    n_groups = n_slices // n_bands
+    band_spacing = n_groups * slice_step
+    return n_groups, band_spacing, n_bands * band_spacing
+
+
+def _fold_rephaser(system: pp.Opts, gz, gz_reph):
+    """Concatenate a slice rephaser onto its selection gradient, is_slab style.
+
+    The multiband EPI train carries a gz blip in the block a separate slice
+    rephaser would occupy, so the rephaser rides the selection lobe instead --
+    exactly what :class:`design.SpatialSelectiveExcitation` does for a slab.
+    """
+    gz_reph.delay = pp.calc_duration(gz)
+    return pp.add_gradients(grads=[gz, gz_reph], system=system)
+
+
+def _sms_kernel(
+    system: pp.Opts,
+    *,
+    fov,
+    n_x: int,
+    n_y: int,
+    slice_thickness: float,
+    slice_step: float,
+    n_slices: int,
+    n_bands: int,
+    flip_angle_deg: float,
+    te: float | None = None,
+    tr: float | None = None,
+    segments: int = 1,
+    acceleration: int = 1,
+    readout_bandwidth_hz: float = 500e3,
+    spoiling_cycles: float = 4.0,
+) -> SimpleNamespace:
+    """The multiband excitation, its blipped-CAIPI train, and the reference.
+
+    The imaging train is a :class:`design.EpiReadout3D` whose ``n_z`` is the
+    multiband factor: its partition axis is not a spatial encode but the CAIPI
+    slice phase, so the ``'caipi'`` sawtooth's gz blips give band ``j`` the
+    ``exp(i 2*pi*ky*j / n_bands)`` modulation a model-based separation inverts.
+    The single-band reference is the plain 2D train, played one slice at a time
+    so a reconstruction can estimate each slice's coil sensitivities.
+    """
+    fov_x, fov_y = (fov, fov) if isinstance(fov, (int, float)) else fov
+    n_groups, band_spacing, sms_fov_z = _sms_geometry(n_slices, n_bands, slice_step)
+
+    sms = design.SmsExcitation(
+        system,
+        flip_angle_deg,
+        thickness_m=slice_thickness,
+        slice_gap_m=band_spacing,
+        n_bands=n_bands,
+    )
+    gz = _fold_rephaser(system, sms.gz, sms.gz_reph)
+    epi = design.EpiReadout3D(
+        system,
+        sms.rf,
+        gz,
+        fov=(fov_x, fov_y, sms_fov_z),
+        matrix=(n_x, n_y, n_bands),
+        scheme="caipi",
+        segments=segments,
+        acceleration=acceleration,
+        partition_acceleration=n_bands,
+        caipi_shift=1,
+        te=te,
+        tr=tr,
+        readout_bandwidth_hz=readout_bandwidth_hz,
+        spoiling_cycles=spoiling_cycles,
+        labels=("LIN", "PAR"),
+    )
+
+    reference = _shared_kernel(
+        system,
+        fov=fov,
+        n_x=n_x,
+        n_y=n_y,
+        slice_thickness=slice_thickness,
+        flip_angle_deg=flip_angle_deg,
+        te=te,
+        tr=tr,
+        segments=segments,
+        acceleration=acceleration,
+        readout_bandwidth_hz=readout_bandwidth_hz,
+        spoiling_cycles=spoiling_cycles,
+    )
+    return SimpleNamespace(
+        sms=sms,
+        epi=epi,
+        reference=reference,
+        n_groups=n_groups,
+        band_spacing=band_spacing,
+        fov=(fov_x, fov_y),
+    )
+
+
+def _sms_group_center(group: int, n_slices: int, n_bands: int, slice_step: float) -> float:
+    """Where the multiband comb sits to excite one group's slices (m).
+
+    Group ``g`` holds slices ``g, g + n_groups, ...``; their midpoint is where
+    the band comb -- symmetric about its own centre -- has to be placed.
+    """
+    n_groups = n_slices // n_bands
+    first = (group - (n_slices - 1) / 2) * slice_step
+    return first + (n_bands - 1) / 2 * n_groups * slice_step
+
+
+def _play_sms_shot(
+    seq,
+    epi,
+    *,
+    n_y: int,
+    center_m: float,
+    gz_amplitude: float,
+    origin_line: int,
+    rev_label,
+    extra_line_labels=(),
+    blip_nulled: bool = False,
+    n_lines: int | None = None,
+) -> None:
+    """One multiband excitation and its blipped-CAIPI train.
+
+    The comb is placed on the group's slices by the excitation frequency
+    offset. The partition prewinder is skipped: the shot starts at ``kz = 0``
+    and the gz blips walk the CAIPI sawtooth from there, so the partition label
+    is the pure slice-phase index a reconstruction reads the modulation from.
+    ``blip_nulled`` drops both blips for the phase-correction navigator, and
+    ``n_lines`` truncates the train to the leading few those lines need.
+    """
+    count = epi.etl if n_lines is None else n_lines
+    epi.rf.freq_offset = gz_amplitude * center_m
+    epi.rf.phase_offset = -2 * np.pi * epi.rf.freq_offset * epi.rf.center
+
+    seq.add_block(epi.rf, epi.gz)
+    if getattr(epi, "wait_te", None) is not None:
+        seq.add_block(epi.wait_te)
+
+    if blip_nulled:
+        seq.add_block(epi.gx_pre)
+    else:
+        ky_scale = (origin_line - n_y / 2) / (n_y / 2)
+        epi.shot_labels[0].value = int(origin_line)
+        epi.shot_labels[1].value = 0
+        seq.add_block(epi.gx_pre, pp.scale_grad(epi.gy_pre, ky_scale), *epi.shot_labels)
+    for line in range(count):
+        rev_label.value = int(line % 2)
+        events = [epi.gx[line], epi.adc, rev_label]
+        if not blip_nulled:
+            for blip in (epi.gy_blips[line], epi.gz_blips[line]):
+                if blip is not None:
+                    events.append(blip)
+            events.extend(epi.line_labels[line])
+        events.extend(extra_line_labels)
+        seq.add_block(*events)
+    if blip_nulled:
+        seq.add_block(epi.gx_spoil)
+    else:
+        ky_scale = (origin_line - n_y / 2) / (n_y / 2)
+        seq.add_block(epi.gx_spoil, pp.scale_grad(epi.gy_rew, ky_scale))
+    if getattr(epi, "wait_tr", None) is not None:
+        seq.add_block(epi.wait_tr)
+
+
+def _sms_main(
+    system: pp.Opts,
+    *,
+    fov,
+    fov_offset: tuple[float, float, float] = (0.0, 0.0, 0.0),
+    n_x: int,
+    n_y: int,
+    slice_thickness: float,
+    slice_gap: float,
+    n_slices: int,
+    n_bands: int,
+    flip_angle_deg: float,
+    te: float | None = None,
+    tr: float | None = None,
+    n_repetitions: int = 1,
+    segments: int = 1,
+    acceleration: int = 1,
+    readout_bandwidth_hz: float = 500e3,
+    slice_order: str = "interleaved",
+    spoiling_cycles: float = 4.0,
+) -> pp.Sequence:
+    """The multiband EPI acquisition: reference pass, then blipped-CAIPI shots.
+
+    A single-band reference is played one slice at a time (``REF``) so a
+    reconstruction can estimate each slice's coil sensitivities, three
+    blip-nulled navigator lines (``NAV``) carry the odd/even phase, and the
+    imaging shots are multiband (``SMS``), one per ``(segment, group)``, the
+    group in ``SLC``. The blipped-CAIPI gz encoding is what a model-based
+    separation inverts against the reference; ``MultibandFactor`` records it.
+    """
+    slice_step = slice_thickness + slice_gap
+    kernel = _sms_kernel(
+        system,
+        fov=fov,
+        n_x=n_x,
+        n_y=n_y,
+        slice_thickness=slice_thickness,
+        slice_step=slice_step,
+        n_slices=n_slices,
+        n_bands=n_bands,
+        flip_angle_deg=flip_angle_deg,
+        te=te,
+        tr=tr,
+        segments=segments,
+        acceleration=acceleration,
+        readout_bandwidth_hz=readout_bandwidth_hz,
+        spoiling_cycles=spoiling_cycles,
+    )
+    epi = kernel.epi
+    reference = kernel.reference.epi
+    ref_excitation = kernel.reference.excitation
+    gz_amplitude = float(kernel.sms.gz.amplitude)
+    fov_x, fov_y = kernel.fov
+    n_groups = kernel.n_groups
+    slice_positions = (np.arange(n_slices) - (n_slices - 1) / 2) * slice_step
+
+    seq = pp.Sequence(system)
+    rev_label = pp.make_label("REV", "SET", 0)
+    slc_label = pp.make_label("SLC", "SET", 0)
+    rep_label = pp.make_label("REP", "SET", 0)
+    sms_on = pp.make_label("SMS", "SET", 1)
+    sms_off = pp.make_label("SMS", "SET", 0)
+    ref_on = pp.make_label("REF", "SET", 1)
+    ref_off = pp.make_label("REF", "SET", 0)
+    nav_on = pp.make_label("NAV", "SET", 1)
+    nav_off = pp.make_label("NAV", "SET", 0)
+
+    # Phase-correction navigator: the multiband readout, blips nulled, at the
+    # centre group -- its odd/even fit is the readout's, blips or not.
+    _play_sms_shot(
+        seq,
+        epi,
+        n_y=n_y,
+        center_m=_sms_group_center(n_groups // 2, n_slices, n_bands, slice_step),
+        gz_amplitude=gz_amplitude,
+        origin_line=0,
+        rev_label=rev_label,
+        extra_line_labels=(nav_on, ref_off, sms_off),
+        blip_nulled=True,
+        n_lines=_NAV_LINES,
+    )
+
+    # Single-band reference: each slice on its own, the plain 2D train, marked
+    # REF so the reconstruction reads it as parallel-imaging calibration.
+    for i_slice in (int(i) for i in pp.calc_traversal_order(n_slices, slice_order)):
+        reference.rf.freq_offset = (
+            ref_excitation.gz.amplitude * slice_positions[i_slice]
+        )
+        reference.rf.phase_offset = (
+            -2 * np.pi * reference.rf.freq_offset * reference.rf.center
+        )
+        slc_label.value = int(i_slice)
+        _play_shot(
+            seq,
+            reference,
+            origin_line=0,
+            n_y=n_y,
+            rev_label=rev_label,
+            extra_line_labels=(slc_label, ref_on, nav_off, sms_off),
+        )
+
+    # Multiband imaging: one shot per (segment, group), the group in SLC.
+    groups = [int(g) for g in pp.calc_traversal_order(n_groups, slice_order)]
+    for repetition in range(n_repetitions):
+        rep_label.value = int(repetition)
+        for segment in range(segments):
+            for group in groups:
+                slc_label.value = int(group)
+                _play_sms_shot(
+                    seq,
+                    epi,
+                    n_y=n_y,
+                    center_m=_sms_group_center(
+                        group, n_slices, n_bands, slice_step
+                    ),
+                    gz_amplitude=gz_amplitude,
+                    origin_line=segment,
+                    rev_label=rev_label,
+                    extra_line_labels=(slc_label, rep_label, sms_on, ref_off, nav_off),
+                )
+
+    pp.TransformFOV(
+        translation=tuple(offset * 1e3 for offset in fov_offset), system=system
+    ).apply_to_sequence(seq, in_place=True)
+
+    slab_thickness = n_slices * slice_step - slice_gap
+    seq.set_definition(key="FOV", value=[fov_x, fov_y, slab_thickness])
+    seq.set_definition(key="Matrix", value=[n_x, n_y, n_slices])
+    seq.set_definition(key="Name", value="sms_epi_2d")
+    seq.set_definition(key="TE", value=epi.echo_times[len(epi.order) // 2])
+    seq.set_definition(key="EchoSpacing", value=epi.esp)
+    seq.set_definition(key="EPIFactor", value=epi.etl)
+    seq.set_definition(key="MultibandFactor", value=n_bands)
+    return seq
+
 
 def _shared_kernel(
     system: pp.Opts,
@@ -269,6 +586,7 @@ def main(
     n_repetitions: int = 1,
     segments: int = 1,
     acceleration: int = 1,
+    n_bands: int = 1,
     readout_bandwidth_hz: float = 500e3,
     opposite_reference: bool = True,
     slice_order: str = "interleaved",
@@ -345,6 +663,43 @@ def main(
     """
     system = pp.Opts() if system is None else system
     system = pp.cap_system(system, max_grad=MAX_GRAD, max_slew=MAX_SLEW)
+
+    # The multiband path is a different acquisition -- reference pass plus
+    # blipped-CAIPI shots -- written as a single file rather than a linked
+    # pair, so it branches off before the plain train is built.
+    if SMS_EXCITATION and n_bands > 1:
+        seq = _sms_main(
+            system,
+            fov=fov,
+            fov_offset=fov_offset,
+            n_x=n_x,
+            n_y=n_y,
+            slice_thickness=slice_thickness,
+            slice_gap=slice_gap,
+            n_slices=n_slices,
+            n_bands=n_bands,
+            flip_angle_deg=flip_angle_deg,
+            te=te,
+            tr=tr,
+            n_repetitions=n_repetitions,
+            segments=segments,
+            acceleration=acceleration,
+            readout_bandwidth_hz=readout_bandwidth_hz,
+            slice_order=slice_order,
+            spoiling_cycles=spoiling_cycles,
+        )
+        if test_report:
+            print(seq.test_report())
+        if plot:
+            seq.plot()
+        seq.set_definition(
+            key="NumGainCalibrationReadouts",
+            value=n_slices if n_gain_calibration_readouts is None else n_gain_calibration_readouts,
+        )
+        if write_seq:
+            write_sequence(seq, seq_filename, offline=True)
+        return seq
+
     kernel = _shared_kernel(
         system,
         fov=fov,
@@ -551,6 +906,9 @@ class Epi2D(SequencePlugin):
                 UIParam.RY: TypeinFloatParam(
                     value=1.0, min=1.0, max=8.0, incr=1.0, unit=""
                 ),
+                UIParam.MULTIBAND: TypeinFloatParam(
+                    value=1.0, min=1.0, max=8.0, incr=1.0, unit=""
+                ),
                 UIParam.NUM_FRAMES: DropdownIntParam(
                     value=1, min=1, max=1024, incr=1, options=[1, 10, 100, 300, 600]
                 ),
@@ -572,26 +930,53 @@ class Epi2D(SequencePlugin):
         """Report whether the protocol is feasible, and how long it will take."""
         system = pp.cap_system(system, max_grad=MAX_GRAD, max_slew=MAX_SLEW)
         kwargs = _main_kwargs(system, protocol)
+        n_bands = kwargs.get("n_bands", 1)
+        multiband = SMS_EXCITATION and n_bands > 1
+        n_slices = kwargs.get("n_slices", 1)
+        if multiband and n_slices % n_bands:
+            return {
+                "valid": False,
+                "duration": None,
+                "info": f"slice count {n_slices} is not a multiple of the multiband factor {n_bands}",
+            }
         try:
-            kernel = _shared_kernel(
-                system,
-                **{name: value for name, value in kwargs.items() if name in _KERNEL_ARGUMENTS},
-            )
+            if multiband:
+                kernel = _sms_kernel(
+                    system,
+                    slice_step=kwargs["slice_thickness"] + kwargs.get("slice_gap", 0.0),
+                    n_slices=n_slices,
+                    n_bands=n_bands,
+                    **{name: value for name, value in kwargs.items() if name in _KERNEL_ARGUMENTS},
+                )
+            else:
+                kernel = _shared_kernel(
+                    system,
+                    **{name: value for name, value in kwargs.items() if name in _KERNEL_ARGUMENTS},
+                )
         except ValueError as error:
             return {"valid": False, "duration": None, "info": str(error)}
 
-        shots = kwargs.get("segments", 1) * kwargs.get("n_slices", 1)
-        duration = (
-            kwargs.get("n_repetitions", 1) * shots * kernel.epi.seq.duration()[0]
-        )
-        return {
-            "valid": True,
-            "duration": duration,
-            "info": (
+        if multiband:
+            imaging = kwargs.get("segments", 1) * kernel.n_groups
+            per_rep = imaging * kernel.epi.seq.duration()[0]
+            duration = (
+                n_slices * kernel.reference.epi.seq.duration()[0]
+                + kwargs.get("n_repetitions", 1) * per_rep
+            )
+            info = (
+                f"TA = {duration:.1f} s, MB = {n_bands}, ETL = {kernel.epi.etl}, "
+                f"ESP = {kernel.epi.esp * 1e3:.2f} ms"
+            )
+        else:
+            shots = kwargs.get("segments", 1) * n_slices
+            duration = (
+                kwargs.get("n_repetitions", 1) * shots * kernel.epi.seq.duration()[0]
+            )
+            info = (
                 f"TA = {duration:.1f} s, ETL = {kernel.epi.etl}, "
                 f"ESP = {kernel.epi.esp * 1e3:.2f} ms"
-            ),
-        }
+            )
+        return {"valid": True, "duration": duration, "info": info}
 
     def make_sequence(
         self,
@@ -601,10 +986,14 @@ class Epi2D(SequencePlugin):
         *,
         offline: bool = False,
     ) -> None:
-        """Build both sequences and write the linked pair at ``output_path``."""
+        """Write the acquisition: a linked navigator+main pair, or the single
+        multiband file when the SMS path is on."""
         del offline  # the chain is followed from files, so both are written
         kwargs = _main_kwargs(system, protocol)
         seq = main(**kwargs)
+        if SMS_EXCITATION and kwargs.get("n_bands", 1) > 1:
+            write_sequence(seq, output_path, offline=True)
+            return
         write_pair(
             seq,
             output_path,
@@ -662,6 +1051,7 @@ def _main_kwargs(system: pp.Opts, protocol: dict[str, dict]) -> dict:
         protocol,
         segments=max(1, round(params.user_float(prot, 0, 1.0))),
         opposite_reference=bool(round(params.user_float(prot, 1, 1.0))),
+        n_bands=max(1, round(params.param_float_optional(prot, UIParam.MULTIBAND, 1.0))),
         n_repetitions=params.param_int(prot, UIParam.NUM_FRAMES),
     )
 
@@ -697,6 +1087,7 @@ _ARG_MAP = [
     ("--nslices", UIParam.NSLICES, int, "Number of slices"),
     ("--bandwidth-hz", UIParam.BANDWIDTH, float, "Requested receiver bandwidth [Hz]"),
     ("--ry", UIParam.RY, float, "Phase-encode undersampling factor"),
+    ("--multiband", UIParam.MULTIBAND, float, "Simultaneous-multislice band count (SMS)"),
     ("--frames", UIParam.NUM_FRAMES, int, "Volumes in the time series"),
     ("--offset-x-mm", UIParam.FOV_OFFSET_X, float, "Volume offset along readout [mm]"),
     ("--offset-y-mm", UIParam.FOV_OFFSET_Y, float, "Volume offset along phase encode [mm]"),
