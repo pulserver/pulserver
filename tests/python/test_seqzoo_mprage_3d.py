@@ -26,6 +26,9 @@ def design(**kwargs):
     kwargs.setdefault("views_per_segment", 8)
     kwargs.setdefault("ti", TI)
     kwargs.setdefault("tr_outer", TR_OUTER)
+    # The ordering tests want the full rectangle; the elliptical crop is a
+    # separate sampling toggle exercised on its own.
+    kwargs.setdefault("elliptical", False)
     return mprage_3d.main(n_x=32, n_y=N_Y, n_z=N_Z, slab_thickness=64e-3, **kwargs)
 
 

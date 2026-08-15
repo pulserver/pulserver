@@ -5,9 +5,9 @@ centre-of-k-space view at the requested TI, a train of spoiled low-flip
 :class:`design.LineReadout3D` repetitions, and a recovery wait that makes
 every inversion-to-inversion interval the outer TR. The ``(ky, kz)`` views
 are dealt into segments by the same orderings the 3D fast spin echo uses --
-``linear``, ``radial``, ``radial_adaptive`` (coherent, TI-targeted) or
-``shuffling`` (incoherent, for a subspace reconstruction) -- with each
-acquisition carrying its within-segment index as ``ECO``.
+``linear``, ``centric``, ``radial``, ``radial_adaptive`` (coherent,
+TI-targeted) or ``shuffling`` (incoherent, for a subspace reconstruction) --
+with each acquisition carrying its within-segment index as ``ECO``.
 :mod:`pulserver.reczoo.mprage_3d` reads the result back.
 
 ``main`` returns the :class:`pulserver.pypulseq.Sequence`; ``PLUGIN`` is the
@@ -74,6 +74,8 @@ def main(
     readout_bandwidth_hz: float = 250e3,
     acceleration: int = 1,
     acceleration_z: int = 1,
+    caipi_shift: int = 0,
+    elliptical: bool = True,
     n_acs: int = 24,
     n_acs_z: int = 16,
     shuffle_seed: int = 0,
@@ -121,8 +123,8 @@ def main(
     views_per_segment : int, optional
         Views acquired per inversion. Default is 64.
     ordering : str, optional
-        How views are dealt into segments: ``linear``, ``radial``,
-        ``radial_adaptive`` or ``shuffling``. Default is 'linear'.
+        How views are dealt into segments: ``linear``, ``centric``,
+        ``radial``, ``radial_adaptive`` or ``shuffling``. Default is 'linear'.
     te : float or None, optional
         Readout echo time in seconds. None is as short as possible. Default
         is None.
@@ -135,6 +137,13 @@ def main(
         Uniform phase-encode undersampling factor along y. Default is 1.
     acceleration_z : int, optional
         Uniform partition-encode undersampling factor along z. Default is 1.
+    caipi_shift : int, optional
+        CAIPIRINHA shift along kz per sampled-ky block, for the regular
+        (non-shuffling) orderings. ``0`` is a plain lattice. Ignored by
+        ``shuffling``, which draws a Poisson-disc set instead. Default is 0.
+    elliptical : bool, optional
+        Restrict the phase-encode support to the inscribed ky-kz ellipse,
+        dropping the corners a round object never fills. Default is True.
     n_acs : int, optional
         Autocalibration extent along y, in lines. Default is 24.
     n_acs_z : int, optional
@@ -175,6 +184,8 @@ def main(
         readout_bandwidth_hz=readout_bandwidth_hz,
         acceleration=acceleration,
         acceleration_z=acceleration_z,
+        caipi_shift=caipi_shift,
+        elliptical=elliptical,
         n_acs=n_acs,
         n_acs_z=n_acs_z,
         shuffle_seed=shuffle_seed,
@@ -294,6 +305,8 @@ def Mprage3DKernel(
     readout_bandwidth_hz: float = 250e3,
     acceleration: int = 1,
     acceleration_z: int = 1,
+    caipi_shift: int = 0,
+    elliptical: bool = True,
     n_acs: int = 24,
     n_acs_z: int = 16,
     shuffle_seed: int = 0,
@@ -314,7 +327,7 @@ def Mprage3DKernel(
         System limits.
     fov, n_x, n_y, n_z, slab_thickness, flip_angle_deg, ti, tr_outer, \
 views_per_segment, ordering, te, tr, readout_bandwidth_hz, acceleration, \
-acceleration_z, n_acs, n_acs_z, shuffle_seed, spoiling_cycles
+acceleration_z, caipi_shift, elliptical, n_acs, n_acs_z, shuffle_seed, spoiling_cycles
         As for :func:`main`.
 
     Returns
@@ -347,13 +360,32 @@ acceleration_z, n_acs, n_acs_z, shuffle_seed, spoiling_cycles
     )
     inner_tr = readout.duration
 
-    sampled_lines = pp.calc_sampled_lines(n_y, acceleration, n_acs)
-    sampled_partitions = pp.calc_sampled_lines(n_z, acceleration_z, n_acs_z)
-    views = [
-        (line, partition)
-        for partition in sampled_partitions
-        for line in sampled_lines
-    ]
+    # Regular orderings sample the CAIPIRINHA lattice with its fully sampled
+    # rectangle; shuffling draws an incoherent variable-density Poisson set for
+    # a subspace reconstruction (Tamir et al., "T2 Shuffling"). At R = 1 both
+    # are the full grid, and Poisson needs acceleration to have something to
+    # thin, so shuffling falls back to the full grid there.
+    if ordering == "shuffling":
+        total_acceleration = acceleration * acceleration_z
+        if total_acceleration > 1:
+            mask = pp.make_poisson_disc_mask(
+                (n_y, n_z),
+                float(total_acceleration),
+                calib=(n_acs, n_acs_z),
+                seed=shuffle_seed,
+            )
+            views = [(int(line), int(partition)) for line, partition in np.argwhere(mask)]
+        else:
+            views = [(line, partition) for partition in range(n_z) for line in range(n_y)]
+    else:
+        views, _ = pp.calc_sampled_pairs(
+            (n_y, n_z),
+            (acceleration, acceleration_z),
+            (n_acs, n_acs_z),
+            caipi_shift=caipi_shift,
+            elliptical=elliptical,
+            order="ascending",
+        )
 
     # The centre sits mid-segment for the coherent orderings: TI is defined
     # at the centre view, and mid-segment splits the transient evenly around
@@ -504,15 +536,21 @@ class Mprage3D(SequencePlugin):
                     value=64.0, min=1.0, max=1024.0, incr=1.0, unit=""
                 ),
                 UIParam.user_name(2): Description(
-                    text="Ordering 0=lin 1=rad 2=adaptive 3=shuffle"
+                    text="Order 0=lin 1=centric 2=rad 3=adaptive 4=shuffle"
                 ),
                 UIParam.user_value(2): TypeinFloatParam(
-                    value=0.0, min=0.0, max=3.0, incr=1.0, unit=""
+                    value=0.0, min=0.0, max=4.0, incr=1.0, unit=""
+                ),
+                UIParam.user_name(3): Description(text="CAIPI shift (kz per ky)"),
+                UIParam.user_value(3): TypeinFloatParam(
+                    value=0.0, min=0.0, max=8.0, incr=1.0, unit=""
                 ),
                 UIParam.user_name(5): Description(text="ACS partitions (z)"),
                 UIParam.user_value(5): TypeinFloatParam(
                     value=16.0, min=0.0, max=256.0, incr=1.0, unit="lines"
                 ),
+                UIParam.user_name(6): Description(text="Elliptical sampling"),
+                UIParam.user_value(6): TypeinFloatParam(value=1.0, min=0.0, max=1.0, incr=1.0, unit=""),
             }
         )
 
@@ -567,6 +605,8 @@ _KERNEL_ARGUMENTS = frozenset(
         "readout_bandwidth_hz",
         "acceleration",
         "acceleration_z",
+        "caipi_shift",
+        "elliptical",
         "n_acs",
         "n_acs_z",
         "shuffle_seed",
@@ -593,9 +633,13 @@ def _main_kwargs(system: pp.Opts, protocol: dict[str, dict]) -> dict:
         # every readout to seconds.
         tr=None,
         views_per_segment=max(1, round(params.user_float(prot, 1, 64.0))),
-        ordering=ORDERINGS[int(np.clip(round(params.user_float(prot, 2, 0.0)), 0, 3))],
+        ordering=ORDERINGS[
+            int(np.clip(round(params.user_float(prot, 2, 0.0)), 0, len(ORDERINGS) - 1))
+        ],
+        caipi_shift=max(0, round(params.user_float(prot, 3, 0.0))),
         n_acs=params.acs_lines_from_protocol(prot, params.param_int(prot, UIParam.NY), 0),
         n_acs_z=max(0, round(params.user_float(prot, 5, 16.0))),
+        elliptical=bool(round(params.user_float(prot, 6, 1.0))),
     )
 
 
@@ -644,9 +688,16 @@ _ARG_MAP = [
         "--ordering",
         UIParam.user_value(2),
         float,
-        "View ordering: 0 linear, 1 radial, 2 radial-adaptive, 3 shuffling",
+        "View ordering: 0 linear, 1 centric, 2 radial, 3 radial-adaptive, 4 shuffling",
     ),
+    ("--caipi-shift", UIParam.user_value(3), float, "CAIPIRINHA kz shift per ky block"),
     ("--acs-partitions", UIParam.user_value(5), float, "Number of ACS partitions along z"),
+    (
+        "--no-elliptical",
+        UIParam.user_value(6),
+        lambda value: 0.0 if float(value) else 1.0,
+        "Pass 1 to sample the full ky-kz rectangle instead of the ellipse",
+    ),
 ]
 
 if __name__ == "__main__":

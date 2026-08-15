@@ -124,9 +124,9 @@ class _PropellerReadout(_EpiReadout):
             if n_blades < 1:
                 raise ValueError("n_blades must be positive")
             blade_angles = (
-                np.arange(n_blades, dtype=float) * np.pi / n_blades
+                np.asarray(pp.calc_uniform_angles(n_blades, span=np.pi))
                 if scheme == "uniform"
-                else pp.calc_golden_angles(n_blades)
+                else np.asarray(pp.calc_golden_angles(n_blades))
             )
         else:
             if n_blades is not None:

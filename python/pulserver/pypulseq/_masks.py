@@ -166,13 +166,20 @@ def calc_sampled_pairs(
     calibration: tuple[int, int],
     *,
     partial_fourier: tuple[float, float] = (1.0, 1.0),
+    caipi_shift: int = 0,
+    elliptical: bool = False,
     order: str = "calibration_first",
 ) -> tuple[list[tuple[int, int]], int]:
     """Return the ``(line, partition)`` pairs a 2D phase-encode grid samples.
 
-    The 3D counterpart of :func:`calc_sampled_lines`: uniform undersampling on
-    each of the two phase-encode axes, a fully sampled autocalibration
-    *rectangle* at the centre of k-space, and partial Fourier on either axis.
+    The 3D counterpart of :func:`calc_sampled_lines`: a CAIPIRINHA lattice
+    (:func:`make_caipirinha_mask`) on the two phase-encode axes, a fully
+    sampled autocalibration *rectangle* at the centre of k-space, and partial
+    Fourier on either axis. ``caipi_shift`` is the per-``ky``-block shift the
+    lattice applies along kz; ``0`` degenerates to a plain ``r_y x r_z``
+    grid. ``elliptical`` drops the pairs outside the inscribed ``ky``-``kz``
+    ellipse -- the corners a Cartesian grid samples but a round object never
+    fills -- which is a disk when ``n_y == n_z``.
 
     ``'calibration_first'`` leads the traversal with the rectangle -- every
     sampled pair whose line *and* partition are both autocalibration views --
@@ -193,6 +200,15 @@ def calc_sampled_pairs(
     partial_fourier : tuple of float, optional
         ``(pf_y, pf_z)``, the acquired fraction of each axis in ``(0.5, 1]``.
         Default is ``(1.0, 1.0)``.
+    caipi_shift : int, optional
+        CAIPIRINHA shift along kz per sampled-ky block, ``0 <= caipi_shift <
+        r_z``. ``0`` (the default) is a regular lattice; a non-zero shift
+        spreads the aliasing into both phase-encode directions. Default is 0.
+    elliptical : bool, optional
+        Restrict the sampled support to the inscribed ``(ky, kz)`` ellipse,
+        dropping the corners of k-space a round object never occupies. The
+        autocalibration rectangle, being central, is kept whatever this is.
+        Default is False.
     order : str, optional
         ``'calibration_first'`` (the default) leads with the rectangle;
         ``'ascending'`` traverses the whole grid partitions-outer,
@@ -221,6 +237,13 @@ def calc_sampled_pairs(
     4
     >>> pairs[:n_cal]
     [(1, 1), (2, 1), (1, 2), (2, 2)]
+
+    The corners fall away when the support is the inscribed ellipse:
+
+    >>> full, _ = pp.calc_sampled_pairs((8, 8), (1, 1), (0, 0))
+    >>> disk, _ = pp.calc_sampled_pairs((8, 8), (1, 1), (0, 0), elliptical=True)
+    >>> (0, 0) in full, (0, 0) in disk
+    (True, False)
     """
     if order not in ("ascending", "calibration_first"):
         raise ValueError("order must be 'ascending' or 'calibration_first'")
@@ -229,32 +252,53 @@ def calc_sampled_pairs(
     acs_y, acs_z = calibration
     pf_y, pf_z = partial_fourier
 
-    lines = calc_sampled_lines(n_y, r_y, acs_y, partial_fourier=pf_y)
-    partitions = calc_sampled_lines(n_z, r_z, acs_z, partial_fourier=pf_z)
-    acs_lines = set(calc_calibration_lines(n_y, acs_y, partial_fourier=pf_y))
-    acs_partitions = set(calc_calibration_lines(n_z, acs_z, partial_fourier=pf_z))
+    first_y = n_y - round(_checked_partial_fourier(pf_y) * n_y)
+    first_z = n_z - round(_checked_partial_fourier(pf_z) * n_z)
+
+    # The CAIPI lattice within the partial-Fourier region, cropped to the
+    # inscribed ellipse if asked, plus the fully sampled autocalibration
+    # rectangle -- which stays whole, being central.
+    sampled = make_caipirinha_mask((n_y, n_z), r_y, r_z, delta=caipi_shift)
+    sampled[:first_y, :] = False
+    sampled[:, :first_z] = False
+    if elliptical:
+        sampled &= _elliptical_support((n_y, n_z))
+    acs_lines = calc_calibration_lines(n_y, acs_y, partial_fourier=pf_y)
+    acs_partitions = calc_calibration_lines(n_z, acs_z, partial_fourier=pf_z)
+    if acs_lines and acs_partitions:
+        sampled[np.ix_(acs_lines, acs_partitions)] = True
+
+    acs_line_set = set(acs_lines)
+    acs_partition_set = set(acs_partitions)
 
     def calibrates(line: int, partition: int) -> bool:
-        return line in acs_lines and partition in acs_partitions
+        return line in acs_line_set and partition in acs_partition_set
 
-    rectangle = [
-        (line, partition)
-        for partition in partitions
-        for line in lines
-        if calibrates(line, partition)
+    pairs = [
+        (int(line), int(partition))
+        for partition in range(n_z)
+        for line in range(n_y)
+        if sampled[line, partition]
     ]
+    rectangle = [pair for pair in pairs if calibrates(*pair)]
     if order == "ascending":
-        pairs = [
-            (line, partition) for partition in partitions for line in lines
-        ]
         return pairs, len(rectangle)
-    body = [
-        (line, partition)
-        for partition in partitions
-        for line in lines
-        if not calibrates(line, partition)
-    ]
+    body = [pair for pair in pairs if not calibrates(*pair)]
     return rectangle + body, len(rectangle)
+
+
+def _elliptical_support(shape: tuple[int, int]) -> np.ndarray:
+    """The inscribed ``(ky, kz)`` ellipse as a boolean mask.
+
+    A point is inside when its distance from the centre, normalised by each
+    axis' half-extent, is within one -- so the ellipse touches the middle of
+    every edge and drops the four corners. A disk when the two counts match.
+    The centre is at ``n // 2``, where the sequences place ``k = 0``.
+    """
+    n_y, n_z = shape
+    ky = (np.arange(n_y) - n_y // 2) / (n_y / 2)
+    kz = (np.arange(n_z) - n_z // 2) / (n_z / 2)
+    return (ky[:, None] ** 2 + kz[None, :] ** 2) <= 1.0
 
 
 def _checked_partial_fourier(partial_fourier: float) -> float:
@@ -280,12 +324,79 @@ def _as_coords(coords) -> np.ndarray:
 def _split_into_shots(order: list[int], etl: int) -> list[list[int]]:
     return calc_chunk_indices(order, etl)
 
-def make_linear_order(coords, train_length: int) -> list[list[int]]:
+
+def _polar(pts: np.ndarray, center) -> tuple[np.ndarray, np.ndarray]:
+    """Return per-point radius and angle about ``center`` (mean when ``None``)."""
+    origin = pts.mean(axis=0) if center is None else np.asarray(center, dtype=float)
+    rel = pts - origin
+    return np.hypot(rel[:, 0], rel[:, 1]), np.arctan2(rel[:, 1], rel[:, 0])
+
+
+def _finish_trains(
+    trains: list[list[int | None]], etl: int, pad: bool
+) -> list[list[int | None]]:
+    """Pad each train to ``etl`` with ``None`` (``pad``), or drop the gaps."""
+    if pad:
+        return [train + [None] * (etl - len(train)) for train in trains]
+    return [[index for index in train if index is not None] for train in trains]
+
+
+def _deal_echo_major(
+    order: list[int],
+    secondary: np.ndarray,
+    n_trains: int,
+    etl: int,
+    radius: np.ndarray,
+    *,
+    center_echo: int | None,
+    adaptive: bool,
+) -> list[list[int | None]]:
+    """Deal a ranked index list into echo-major echo trains.
+
+    ``order`` is the primary ranking. It is cut into ``etl`` groups of up to
+    ``n_trains`` views; group ``g`` becomes one echo, and within a group the
+    views are dealt across trains in ``secondary`` order so successive echoes
+    of one train stay neighbours. ``center_echo`` places the group holding the
+    k-space centre at that echo -- rolled for a monotone ranking, folded
+    (``adaptive``) so the radius grows away from the target echo in both
+    directions. This is the shared machinery behind the Cartesian echo-train
+    orderings (566-05-007, Fig. 2).
+    """
+    groups = [order[g * n_trains : (g + 1) * n_trains] for g in range(etl)]
+    echo_of_group = list(range(etl))
+    if center_echo is not None:
+        if adaptive:
+            # Innermost group (rank 0) at the target echo, then outward.
+            echo_of_group = sorted(range(etl), key=lambda echo: abs(echo - center_echo))
+        else:
+            centre = int(np.argmin(radius))
+            holds_centre = next(
+                index for index, group in enumerate(groups) if centre in group
+            )
+            roll = (holds_centre - center_echo) % etl
+            groups = groups[roll:] + groups[:roll]
+
+    trains: list[list[int | None]] = [[None] * etl for _ in range(n_trains)]
+    for rank, group in enumerate(groups):
+        echo = echo_of_group[rank]
+        for train, index in enumerate(sorted(group, key=lambda i: secondary[i])):
+            trains[train][echo] = index
+    return trains
+
+def make_linear_order(
+    coords,
+    train_length: int,
+    *,
+    center=None,
+    center_echo: int | None = None,
+    pad: bool = False,
+) -> list[list[int | None]]:
     """Linear (raster) train ordering over a Cartesian point set.
 
-    Views are sorted in raster order (kz major, ky minor) and chunked into
-    echo trains. This is scheme A ("linear reordering") of ISMRM abstract
-    566-05-007, Fig. 2.
+    Views are ranked in raster order and dealt echo-major into trains: each
+    echo is a raster band, and successive echoes of one train stay neighbours.
+    This is scheme A ("linear reordering") of ISMRM abstract 566-05-007,
+    Fig. 2.
 
     Parameters
     ----------
@@ -294,6 +405,18 @@ def make_linear_order(coords, train_length: int) -> list[list[int]]:
         ``(N,)`` (ky only) or ``(N, 2)`` (ky, kz).
     train_length : int
         Echo-train or segment length.
+    center : tuple of float or None, optional
+        The k-space centre the target echo is placed on. ``None`` uses the
+        centroid of ``coords``; a caller with a fixed grid passes its centre.
+    center_echo : int or None, optional
+        Echo the k-space centre is acquired at. ``None`` leaves the raster
+        bands in order (centre wherever it falls); an integer rolls the bands
+        so the one holding the centre plays at that echo -- the effective-TE
+        control an echo train wants.
+    pad : bool, optional
+        When True every train is padded to ``train_length`` with ``None`` so
+        the echo index is the position in the train; when False (the default)
+        the gaps are dropped and each train holds only its real views.
 
     Returns
     -------
@@ -322,18 +445,42 @@ def make_linear_order(coords, train_length: int) -> list[list[int]]:
         count = int(coords)
         if count < 0:
             raise ValueError("coords must be nonnegative when given as a count")
-        return _split_into_shots(list(range(count)), train_length)
+        return _finish_trains(
+            _split_into_shots(list(range(count)), train_length), train_length, pad
+        )
     pts = _as_coords(coords)
-    order = sorted(range(len(pts)), key=lambda i: (pts[i, 1], pts[i, 0]))
-    return _split_into_shots(order, train_length)
+    n = len(pts)
+    if n == 0:
+        return []
+    n_trains = int(np.ceil(n / train_length))
+    radius, _ = _polar(pts, center)
+    order = sorted(range(n), key=lambda i: (pts[i, 1], pts[i, 0]))
+    trains = _deal_echo_major(
+        order,
+        pts[:, 0],
+        n_trains,
+        train_length,
+        radius,
+        center_echo=center_echo,
+        adaptive=False,
+    )
+    return _finish_trains(trains, train_length, pad)
 
-def make_centric_order(coords, train_length: int) -> list[list[int]]:
-    """Globally center-out Cartesian ordering, chunked into trains.
+def make_centric_order(
+    coords,
+    train_length: int,
+    *,
+    center=None,
+    center_echo: int | None = None,
+    pad: bool = False,
+) -> list[list[int | None]]:
+    """Globally center-out Cartesian ordering, dealt into trains.
 
     This is the conventional centric segmented-GRE/MPRAGE ordering: sampled
-    locations are sorted by distance from the encoded k-space centre before
-    being split into segments.  Unlike :func:`make_radial_order`, it does not
-    form angular wedges whose individual trains each start near the centre.
+    locations are ranked by distance from the encoded k-space centre, so the
+    earliest echo of every train clusters near the centre. Unlike
+    :func:`make_radial_adaptive_order` the echo bands stay in radius order
+    unless ``center_echo`` rolls them to a later effective TE.
 
     Parameters
     ----------
@@ -342,6 +489,14 @@ def make_centric_order(coords, train_length: int) -> list[list[int]]:
     train_length : int
         Echo-train or segment length; the number of shots is
         ``ceil(N / train_length)``.
+    center : tuple of float or None, optional
+        k-space centre; ``None`` uses the centroid of ``coords``.
+    center_echo : int or None, optional
+        Echo the k-space centre is acquired at; ``None`` keeps it at the first
+        echo.
+    pad : bool, optional
+        Pad each train to ``train_length`` with ``None`` (see
+        :func:`make_linear_order`).
 
     Returns
     -------
@@ -377,16 +532,30 @@ def make_centric_order(coords, train_length: int) -> list[list[int]]:
     make_radial_order, make_linear_order, make_radial_adaptive_order
     """
     pts = _as_coords(coords)
-    if not len(pts):
+    n = len(pts)
+    if n == 0:
         return []
-    center = pts.mean(axis=0)
-    relative = pts - center
-    radius = np.hypot(relative[:, 0], relative[:, 1])
-    angle = np.arctan2(relative[:, 1], relative[:, 0])
-    order = sorted(range(len(pts)), key=lambda index: (radius[index], angle[index]))
-    return _split_into_shots(order, train_length)
+    n_trains = int(np.ceil(n / train_length))
+    radius, angle = _polar(pts, center)
+    order = sorted(range(n), key=lambda index: (radius[index], angle[index]))
+    trains = _deal_echo_major(
+        order,
+        angle,
+        n_trains,
+        train_length,
+        radius,
+        center_echo=center_echo,
+        adaptive=False,
+    )
+    return _finish_trains(trains, train_length, pad)
 
-def make_radial_order(coords, train_length: int) -> list[list[int]]:
+def make_radial_order(
+    coords,
+    train_length: int,
+    *,
+    center=None,
+    pad: bool = False,
+) -> list[list[int | None]]:
     """Center-out radial (wedge) echo-train ordering.
 
     k-space is partitioned into angular wedges (one per shot). Within each
@@ -394,6 +563,7 @@ def make_radial_order(coords, train_length: int) -> list[list[int]]:
     so every echo train samples the center first and the periphery last —
     scheme B ("radial wedge reordering") of 566-05-007, Fig. 2, and the
     conventional proton-density 3D FSE center-out ordering (Busse et al.).
+    The centre of k-space is therefore always at the first echo.
 
     Parameters
     ----------
@@ -402,6 +572,11 @@ def make_radial_order(coords, train_length: int) -> list[list[int]]:
     train_length : int
         Echo-train or segment length; the number of wedges is
         ``ceil(N / train_length)``.
+    center : tuple of float or None, optional
+        k-space centre; ``None`` uses the centroid of ``coords``.
+    pad : bool, optional
+        Pad each train to ``train_length`` with ``None`` (see
+        :func:`make_linear_order`).
 
     Returns
     -------
@@ -439,29 +614,34 @@ def make_radial_order(coords, train_length: int) -> list[list[int]]:
     n = len(pts)
     if n == 0:
         return []
-    center = pts.mean(axis=0)
-    rel = pts - center
-    radius = np.hypot(rel[:, 0], rel[:, 1])
-    angle = np.arctan2(rel[:, 1], rel[:, 0])
+    radius, angle = _polar(pts, center)
     n_shots = int(np.ceil(n / train_length))
     # Angular wedges of equal view count keep every echo train the same length.
     by_angle = sorted(range(n), key=lambda i: angle[i])
-    shots: list[list[int]] = []
+    shots: list[list[int | None]] = []
     for s in range(n_shots):
         wedge = by_angle[s * train_length : (s + 1) * train_length]
         wedge.sort(key=lambda i: radius[i])
         shots.append(wedge)
-    return shots
+    return _finish_trains(shots, train_length, pad)
 
-def make_radial_adaptive_order(coords, train_length: int, *, n_sections: int = 3) -> list[list[int]]:
+def make_radial_adaptive_order(
+    coords,
+    train_length: int,
+    *,
+    center=None,
+    center_echo: int | None = None,
+    pad: bool = False,
+) -> list[list[int | None]]:
     """Adaptive radial echo-train ordering (individually parameterized trains).
 
-    k-space is divided into ``n_sections`` concentric radial sections; the
-    echo index of each view is set by its section (center sections get early
-    echoes to enforce the UI-defined target TE at the k-space center), and
-    within a section views are sorted angularly. This is scheme C ("modified
-    radial / adaptive reordering") of 566-05-007, Fig. 2C-D, which supports
-    per-shot parameter variation without central-k-space discontinuities.
+    Views are ranked by radius and dealt echo-major into trains, but the echo
+    a radius band plays at *folds* around ``center_echo``: the innermost band
+    lands on the target echo and the radius grows away from it in both echo
+    directions. This is scheme C ("modified radial / adaptive reordering") of
+    566-05-007, Fig. 2C-D, which enforces a UI-defined target TE at the centre
+    of k-space without a central-k-space discontinuity, and within a band the
+    views are ordered angularly so successive echoes stay neighbours.
 
     Parameters
     ----------
@@ -470,14 +650,20 @@ def make_radial_adaptive_order(coords, train_length: int, *, n_sections: int = 3
     train_length : int
         Echo-train or segment length; the number of shots is
         ``ceil(N / train_length)``.
-    n_sections : int, optional
-        Number of radial sections.
+    center : tuple of float or None, optional
+        k-space centre; ``None`` uses the centroid of ``coords``.
+    center_echo : int or None, optional
+        Echo the k-space centre is acquired at; ``None`` keeps the innermost
+        band at the first echo (equivalent to a plain radial ordering).
+    pad : bool, optional
+        Pad each train to ``train_length`` with ``None`` (see
+        :func:`make_linear_order`).
 
     Returns
     -------
     list of list of int
-        Shots of view indices; within each shot the echo order runs from the
-        innermost section outward.
+        Shots of view indices; the echo order runs outward from the target
+        echo in both directions.
 
     Examples
     --------
@@ -485,18 +671,11 @@ def make_radial_adaptive_order(coords, train_length: int, *, n_sections: int = 3
     >>> import pulserver.pypulseq as pp
     >>> ky, kz = np.meshgrid(np.arange(-3, 4), np.arange(-3, 4))
     >>> coords = np.column_stack([ky.ravel(), kz.ravel()])
-    >>> shots = pp.make_radial_adaptive_order(coords, 7, n_sections=3)
+    >>> shots = pp.make_radial_adaptive_order(coords, 7)
     >>> len(shots)
     7
     >>> sum(len(shot) for shot in shots) == len(coords)
     True
-
-    Train lengths vary by a view or two: sections are dealt round-robin across
-    shots, so a section whose size is not a multiple of the shot count leaves
-    some trains one view longer.
-
-    >>> sorted({len(shot) for shot in shots})
-    [6, 7, 9]
 
     .. plot::
        :include-source: false
@@ -512,32 +691,28 @@ def make_radial_adaptive_order(coords, train_length: int, *, n_sections: int = 3
     n = len(pts)
     if n == 0:
         return []
-    n_sections = max(1, int(n_sections))
-    center = pts.mean(axis=0)
-    rel = pts - center
-    radius = np.hypot(rel[:, 0], rel[:, 1])
-    angle = np.arctan2(rel[:, 1], rel[:, 0])
-    n_shots = int(np.ceil(n / train_length))
-
-    # Assign each view to a radial section by equal-count quantile so the
-    # innermost views reliably land in the earliest echoes.
-    radial_rank = np.argsort(np.argsort(radius))
-    section = (radial_rank * n_sections // max(1, n)).astype(int)
-    section = np.clip(section, 0, n_sections - 1)
-
-    # Within each section, sort angularly and deal views round-robin across
-    # shots so every shot draws one angular ray per section (center outward).
-    shots: list[list[int]] = [[] for _ in range(n_shots)]
-    for sec in range(n_sections):
-        members = [i for i in range(n) if section[i] == sec]
-        members.sort(key=lambda i: angle[i])
-        for j, idx in enumerate(members):
-            shots[j % n_shots].append(idx)
-    return [s for s in shots if s]
+    n_trains = int(np.ceil(n / train_length))
+    radius, angle = _polar(pts, center)
+    order = sorted(range(n), key=lambda index: (radius[index], angle[index]))
+    trains = _deal_echo_major(
+        order,
+        angle,
+        n_trains,
+        train_length,
+        radius,
+        center_echo=0 if center_echo is None else center_echo,
+        adaptive=True,
+    )
+    return _finish_trains(trains, train_length, pad)
 
 def make_shuffling_order(
-    coords, train_length: int, *, seed: int | None = None, cluster: bool = True
-) -> list[list[int]]:
+    coords,
+    train_length: int,
+    *,
+    seed: int | None = None,
+    cluster: bool = True,
+    pad: bool = False,
+) -> list[list[int | None]]:
     """Randomly shuffled echo-train ordering (T2 Shuffling).
 
     Phase encodes are randomly assigned to echo positions so that k-t space
@@ -558,6 +733,9 @@ def make_shuffling_order(
     cluster : bool, optional
         When True, group spatially nearby views into the same train before
         randomizing echo order; when False, assign views to trains at random.
+    pad : bool, optional
+        Pad each train to ``train_length`` with ``None`` (see
+        :func:`make_linear_order`).
 
     Returns
     -------
@@ -596,12 +774,12 @@ def make_shuffling_order(
     # spatially compact region; the alternative starts from a random order.
     base_order = sorted(range(n), key=lambda i: (pts[i, 1], pts[i, 0])) if cluster else list(rng.permutation(n))
 
-    shots: list[list[int]] = []
+    shots: list[list[int | None]] = []
     for s in range(n_shots):
         train = base_order[s * train_length : (s + 1) * train_length]
         train = list(rng.permutation(train))
         shots.append(train)
-    return shots
+    return _finish_trains(shots, train_length, pad)
 
 def make_random_mask(
     shape: tuple[int, int],

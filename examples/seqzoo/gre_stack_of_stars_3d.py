@@ -41,7 +41,7 @@ from pulserver import (
 )
 from scipy.spatial.transform import Rotation
 
-from pulserver.seqzoo.gre_radial_2d import ANGLE_SCHEMES, spoke_angles
+from pulserver.seqzoo.gre_radial_2d import spoke_angles
 
 #: Per-plugin ceilings on the gradient and slew limits, in mT/m and T/m/s. The
 #: sequence is held below the smaller of these and what the scanner reports, so
@@ -51,6 +51,51 @@ from pulserver.seqzoo.gre_radial_2d import ANGLE_SCHEMES, spoke_angles
 #: cap nothing until you lower them.
 MAX_GRAD = 80.0
 MAX_SLEW = 200.0
+
+#: Swap the slab excitation for a spectral-spatial, slab- *and* water-selective
+#: pulse. A long readout lets fat -- a few ppm off water -- shift and blur; the
+#: non-Cartesian trajectories here spread that shift into a swirl rather than a
+#: clean displacement, so exciting water only removes the source. A script-level
+#: toggle rather than a UI control: it reshapes the excitation the whole
+#: sequence is timed around, so it belongs to whoever runs the script.
+SPSP_EXCITATION = False
+
+#: Chemical shift of the fat methylene resonance from water, in ppm. Held in
+#: ppm rather than hertz so it is field-strength independent: the water-only
+#: excitation converts it against ``system.B0`` when the pulse is built, so the
+#: same script targets fat at 1.5 T and 3 T alike.
+FAT_SHIFT_PPM = -3.4
+
+
+def _build_slab_excitation(
+    system: pp.Opts, flip_angle_deg: float, thickness_m: float
+):
+    """The slab excitation, spectral-spatial when ``SPSP_EXCITATION`` is set.
+
+    Returns ``(excitation, rf, gz)``. The selection gradient carries its own
+    rephaser folded onto the end -- as a slab excitation does -- so the stack's
+    partition prewinder block, which already encodes z, never holds a second
+    z gradient.
+    """
+    if SPSP_EXCITATION:
+        fat_offset_hz = FAT_SHIFT_PPM * 1e-6 * system.gamma * system.B0
+        excitation = design.SpspExcitation(
+            system,
+            flip_angle_deg,
+            thickness_m=thickness_m,
+            spectral_bandwidth_hz=abs(fat_offset_hz),
+            freq_offset_hz=0.0,
+        )
+        # Concatenate the rephaser onto the alternating selection gradient, the
+        # way is_slab does, and hand the readout one merged z lobe.
+        gz = pp.concatenate_gradients(
+            excitation.gz, excitation.gz_reph, system=system
+        )
+        return excitation, excitation.rf, gz
+    excitation = design.SpatialSelectiveExcitation(
+        system, flip_angle_deg, thickness_m, is_slab=True
+    )
+    return excitation, excitation.rf, excitation.gz
 
 
 def play_stack(seq, readout, rotation, kz: float, *, acquire: bool, labels=(), first_extra=()) -> None:
@@ -287,13 +332,13 @@ te, tr, readout_bandwidth_hz, n_dummy, spoiling_cycles
         ``excitation``, ``readout``, ``angles``, ``echo_time``,
         ``repetition_time``, ``bandwidth_hz`` and ``duration``.
     """
-    excitation = design.SpatialSelectiveExcitation(
-        system, flip_angle_deg, slab_thickness, is_slab=True
+    excitation, exc_rf, exc_gz = _build_slab_excitation(
+        system, flip_angle_deg, slab_thickness
     )
     readout = design.RadialStackReadout(
         system,
-        excitation.rf,
-        excitation.gz,
+        exc_rf,
+        exc_gz,
         None,
         fov=fov,
         matrix=n_x,

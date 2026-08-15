@@ -2,7 +2,8 @@
 
 One frequency-encoded line per repetition, phase-encoded along y and z from a
 slab-selective SLR excitation — :class:`design.LineReadout3D` with both encode
-axes scaled per shot. Phase encoding may be undersampled on either axis, with
+axes scaled per shot. Phase encoding may be undersampled on either axis, its
+regular lattice a CAIPIRINHA one with a selectable kz shift per ky block, with
 a fully sampled autocalibration rectangle and partial Fourier along y and z;
 the readout may be a partial echo. :mod:`pulserver.reczoo.gre_3d` reads all of
 it back.
@@ -75,6 +76,8 @@ def main(
     partial_fourier_z: float = 1.0,
     acceleration: int = 1,
     acceleration_z: int = 1,
+    caipi_shift: int = 0,
+    elliptical: bool = True,
     n_acs: int = 24,
     n_acs_z: int = 16,
     n_averages: int = 1,
@@ -138,6 +141,13 @@ def main(
         Uniform phase-encode undersampling factor along y. Default is 1.
     acceleration_z : int, optional
         Uniform partition-encode undersampling factor along z. Default is 1.
+    caipi_shift : int, optional
+        CAIPIRINHA shift along kz per sampled-ky block,
+        0 <= caipi_shift < acceleration_z. 0 is a regular lattice. Default
+        is 0.
+    elliptical : bool, optional
+        Restrict the phase-encode support to the inscribed ky-kz ellipse,
+        dropping the corners a round object never fills. Default is True.
     n_acs : int, optional
         Autocalibration extent along y, in lines. With ``n_acs_z`` it bounds
         the fully sampled rectangle acquired ahead of the rest of the scan.
@@ -189,6 +199,8 @@ def main(
         partial_fourier_z=partial_fourier_z,
         acceleration=acceleration,
         acceleration_z=acceleration_z,
+        caipi_shift=caipi_shift,
+        elliptical=elliptical,
         n_acs=n_acs,
         n_acs_z=n_acs_z,
         n_averages=n_averages,
@@ -331,6 +343,8 @@ def GRE3DKernel(
     partial_fourier_z: float = 1.0,
     acceleration: int = 1,
     acceleration_z: int = 1,
+    caipi_shift: int = 0,
+    elliptical: bool = True,
     n_acs: int = 24,
     n_acs_z: int = 16,
     n_averages: int = 1,
@@ -363,7 +377,8 @@ def GRE3DKernel(
         System limits.
     fov, n_x, n_y, n_z, slab_thickness, flip_angle_deg, te, tr, \
 readout_bandwidth_hz, partial_echo, partial_fourier, partial_fourier_z, \
-acceleration, acceleration_z, n_acs, n_acs_z, n_averages, n_dummy, spoiling_cycles
+acceleration, acceleration_z, caipi_shift, elliptical, n_acs, n_acs_z, n_averages, \
+n_dummy, spoiling_cycles
         As for :func:`main`.
 
     Returns
@@ -399,6 +414,8 @@ acceleration, acceleration_z, n_acs, n_acs_z, n_averages, n_dummy, spoiling_cycl
         (acceleration, acceleration_z),
         (n_acs, n_acs_z),
         partial_fourier=(partial_fourier, partial_fourier_z),
+        caipi_shift=caipi_shift,
+        elliptical=elliptical,
         order="calibration_first",
     )
 
@@ -576,6 +593,22 @@ class Gre3D(SequencePlugin):
                     incr=1.0,
                     unit="lines",
                 ),
+                UIParam.user_name(6): Description(text="CAIPI shift (kz per ky)"),
+                UIParam.user_value(6): TypeinFloatParam(
+                    value=0.0,
+                    min=0.0,
+                    max=8.0,
+                    incr=1.0,
+                    unit="",
+                ),
+                UIParam.user_name(7): Description(text="Elliptical sampling"),
+                UIParam.user_value(7): TypeinFloatParam(
+                    value=1.0,
+                    min=0.0,
+                    max=1.0,
+                    incr=1.0,
+                    unit="",
+                ),
             }
         )
 
@@ -638,6 +671,8 @@ _KERNEL_ARGUMENTS = frozenset(
         "partial_fourier_z",
         "acceleration",
         "acceleration_z",
+        "caipi_shift",
+        "elliptical",
         "n_acs",
         "n_acs_z",
         "n_averages",
@@ -668,6 +703,8 @@ def _main_kwargs(system: pp.Opts, protocol: dict[str, dict]) -> dict:
         n_acs=params.acs_lines_from_protocol(prot, params.param_int(prot, UIParam.NY), 0),
         n_dummy=max(0, round(params.user_float(prot, 2, 64.0))),
         n_acs_z=max(0, round(params.user_float(prot, 5, 16.0))),
+        caipi_shift=max(0, round(params.user_float(prot, 6, 0.0))),
+        elliptical=bool(round(params.user_float(prot, 7, 1.0))),
     )
 
 
@@ -731,6 +768,13 @@ _ARG_MAP = [
         "Acquired partition-encode fraction along z in (0.5, 1]",
     ),
     ("--acs-partitions", UIParam.user_value(5), float, "Number of ACS partitions along z"),
+    ("--caipi-shift", UIParam.user_value(6), float, "CAIPIRINHA kz shift per ky block"),
+    (
+        "--no-elliptical",
+        UIParam.user_value(7),
+        lambda value: 0.0 if float(value) else 1.0,
+        "Pass 1 to sample the full ky-kz rectangle instead of the ellipse",
+    ),
 ]
 
 if __name__ == "__main__":

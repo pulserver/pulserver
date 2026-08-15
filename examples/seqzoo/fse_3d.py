@@ -4,17 +4,23 @@ One long CPMG train per excitation over a ``(ky, kz)`` grid --
 :class:`design.FseReadout3D` -- with the two decisions a long train forces
 made explicit, after Busse et al. 2008 (MRM 60:640), followed loosely:
 
-**View ordering** maps the train's signal modulation into k-space. The
+**View ordering** maps the train's signal modulation into k-space, and is
+delegated to the :mod:`pulserver.pypulseq` echo-train ordering builtins. The
 *coherent* orderings sort views so successive echoes stay close in k-space
 and the centre lands at the echo whose time is the requested effective TE:
-``linear`` (sorted along ky, echo groups rolled onto the target echo, kz
-sorted within a group), ``radial`` (centre-out by k-space radius, effective
-TE at the first echo), and ``radial_adaptive`` (by radius, but echo groups
-assigned outward from the target echo, so the centre is late without a
-seam). The *incoherent* ordering, ``shuffling``, scatters views across
-echoes for a subspace reconstruction -- pair it with
+``linear`` (raster bands rolled onto the target echo), ``centric`` (global
+centre-out radius bands, rolled onto the target echo), ``radial`` (centre-out
+by radius, effective TE at the first echo), and ``radial_adaptive`` (by
+radius, but the bands assigned outward from the target echo, so the centre is
+late without a seam). The *incoherent* ordering, ``shuffling``, scatters views
+across echoes for a subspace reconstruction -- pair it with
 :mod:`pulserver.reczoo.subspace_basis`. Every acquisition carries its echo
 index as ``ECO``, which is what any of them reconstruct from.
+
+**Sampling** is undersampled through the same builtins: the regular orderings
+lay a CAIPIRINHA lattice (``caipi_shift`` staggers kz per ky block) around a
+fully sampled autocalibration rectangle, while ``shuffling`` draws an
+incoherent variable-density Poisson-disc set when accelerated.
 
 **Refocusing flip modulation** trades signal for blur over long trains. The
 optional variable train is a TRAPS-style piecewise ramp in flip space --
@@ -67,8 +73,9 @@ _TIME_BW_PRODUCT = 4.0
 MAX_GRAD = 80.0
 MAX_SLEW = 200.0
 
-#: The selectable view orderings; see the module docstring.
-ORDERINGS = ("linear", "radial", "radial_adaptive", "shuffling")
+#: The selectable view orderings; see the module docstring. Each dispatches to
+#: the matching :mod:`pulserver.pypulseq` echo-train ordering builtin.
+ORDERINGS = ("linear", "centric", "radial", "radial_adaptive", "shuffling")
 
 
 def traps_flip_schedule(
@@ -162,63 +169,27 @@ def order_views(
     if ordering not in ORDERINGS:
         raise ValueError(f"ordering must be one of {ORDERINGS}, got {ordering!r}")
     n_y, n_z = grid
-    n_trains = -(-len(views) // etl)
-
-    def padded(ordered: list) -> list:
-        return ordered + [None] * (etl * n_trains - len(ordered))
-
+    # The ordering builtins rank on the coordinates they are given, so pass the
+    # views centred on the k-space middle and normalised by the matrix -- what
+    # makes the radius isotropic in fractional k-space -- and index the shots of
+    # positions they return back into the original ``(line, partition)`` views.
+    coords = [((line - n_y / 2) / n_y, (partition - n_z / 2) / n_z) for line, partition in views]
     if ordering == "shuffling":
-        permuted = list(views)
-        np.random.default_rng(seed).shuffle(permuted)
-        flat = padded(permuted)
-        return [flat[train * etl : (train + 1) * etl] for train in range(n_trains)]
-
-    def radius(view):
-        line, partition = view
-        return ((line - n_y / 2) / n_y) ** 2 + ((partition - n_z / 2) / n_z) ** 2
-
-    def angle(view):
-        line, partition = view
-        return np.arctan2((partition - n_z / 2) / n_z, (line - n_y / 2) / n_y)
-
-    if ordering == "linear":
-        ranked = sorted(views, key=lambda view: (view[0], view[1]))
-        groups = [
-            ranked[group * n_trains : (group + 1) * n_trains] for group in range(etl)
-        ]
-        # Roll so the group holding the centre plays at the target echo; the
-        # wrap seam is the price of a late effective TE, as in 2D.
-        centre = min(views, key=radius)
-        holds_centre = next(
-            index for index, group in enumerate(groups) if centre in group
+        shots = pp.make_shuffling_order(coords, etl, seed=seed, pad=True)
+    elif ordering == "linear":
+        shots = pp.make_linear_order(coords, etl, center=(0.0, 0.0), center_echo=n_center, pad=True)
+    elif ordering == "centric":
+        shots = pp.make_centric_order(coords, etl, center=(0.0, 0.0), center_echo=n_center, pad=True)
+    elif ordering == "radial":
+        shots = pp.make_radial_order(coords, etl, center=(0.0, 0.0), pad=True)
+    else:  # radial_adaptive
+        shots = pp.make_radial_adaptive_order(
+            coords, etl, center=(0.0, 0.0), center_echo=n_center, pad=True
         )
-        roll = (holds_centre - n_center) % etl
-        groups = groups[roll:] + groups[:roll]
-        echo_of_group = list(range(etl))
-    else:
-        ranked = sorted(views, key=radius)
-        groups = [
-            ranked[group * n_trains : (group + 1) * n_trains] for group in range(etl)
-        ]
-        if ordering == "radial":
-            echo_of_group = list(range(etl))
-        else:  # radial_adaptive: nearest radii at the target echo, outward
-            echo_of_group = sorted(range(etl), key=lambda echo: abs(echo - n_center))
-
-    trains: list[list[tuple[int, int] | None]] = [
-        [None] * etl for _ in range(n_trains)
+    return [
+        [views[index] if index is not None else None for index in shot]
+        for shot in shots
     ]
-    for rank, group in enumerate(groups):
-        echo = echo_of_group[rank]
-        # Within a group, sort by the orthogonal coordinate (linear) or by
-        # angle (radial), so successive echoes of one train stay neighbours.
-        keyed = sorted(
-            (view for view in group if view is not None),
-            key=(lambda view: view[1]) if ordering == "linear" else angle,
-        )
-        for train, view in enumerate(keyed):
-            trains[train][echo] = view
-    return trains
 
 
 def main(
@@ -245,6 +216,8 @@ def main(
     readout_bandwidth_hz: float = 250e3,
     acceleration: int = 1,
     acceleration_z: int = 1,
+    caipi_shift: int = 0,
+    elliptical: bool = True,
     n_acs: int = 24,
     n_acs_z: int = 16,
     n_dummy: int = 0,
@@ -306,6 +279,13 @@ def main(
         Uniform phase-encode undersampling factor along y. Default is 1.
     acceleration_z : int, optional
         Uniform partition-encode undersampling factor along z. Default is 1.
+    caipi_shift : int, optional
+        CAIPIRINHA shift along kz per sampled-ky block, for the regular
+        (non-shuffling) orderings. ``0`` is a plain lattice. Ignored by
+        ``shuffling``, which draws a Poisson-disc set instead. Default is 0.
+    elliptical : bool, optional
+        Restrict the phase-encode support to the inscribed ky-kz ellipse,
+        dropping the corners a round object never fills. Default is True.
     n_acs : int, optional
         Autocalibration extent along y, in lines. Default is 24.
     n_acs_z : int, optional
@@ -349,6 +329,8 @@ def main(
         readout_bandwidth_hz=readout_bandwidth_hz,
         acceleration=acceleration,
         acceleration_z=acceleration_z,
+        caipi_shift=caipi_shift,
+        elliptical=elliptical,
         n_acs=n_acs,
         n_acs_z=n_acs_z,
         n_dummy=n_dummy,
@@ -470,6 +452,8 @@ def FSE3DKernel(
     readout_bandwidth_hz: float = 250e3,
     acceleration: int = 1,
     acceleration_z: int = 1,
+    caipi_shift: int = 0,
+    elliptical: bool = True,
     n_acs: int = 24,
     n_acs_z: int = 16,
     n_dummy: int = 0,
@@ -485,7 +469,7 @@ def FSE3DKernel(
         System limits.
     fov, n_x, n_y, n_z, slab_thickness, etl, te, tr, ordering, \
 variable_flip, alpha_min_deg, alpha_center_deg, alpha_max_deg, \
-readout_bandwidth_hz, acceleration, acceleration_z, n_acs, n_acs_z, \
+readout_bandwidth_hz, acceleration, acceleration_z, caipi_shift, elliptical, n_acs, n_acs_z, \
 n_dummy, shuffle_seed, crusher_cycles, readout_crusher_cycles
         As for :func:`main`.
 
@@ -531,9 +515,7 @@ n_dummy, shuffle_seed, crusher_cycles, readout_crusher_cycles
     )
     esp = fse.esp
 
-    if ordering == "radial":
-        n_center = 0
-    elif te is None:
+    if ordering == "radial" or te is None:
         n_center = 0
     else:
         n_center = int(np.clip(round(te / esp) - 1, 0, etl - 1))
@@ -565,13 +547,32 @@ n_dummy, shuffle_seed, crusher_cycles, readout_crusher_cycles
         else np.full(etl, 180.0)
     )
 
-    sampled_lines = pp.calc_sampled_lines(n_y, acceleration, n_acs)
-    sampled_partitions = pp.calc_sampled_lines(n_z, acceleration_z, n_acs_z)
-    views = [
-        (line, partition)
-        for partition in sampled_partitions
-        for line in sampled_lines
-    ]
+    # Regular orderings sample the CAIPIRINHA lattice with its fully sampled
+    # rectangle; shuffling draws an incoherent variable-density Poisson set for
+    # a subspace reconstruction (Tamir et al., "T2 Shuffling"). At R = 1 both
+    # are the full grid, and Poisson needs acceleration to have something to
+    # thin, so shuffling falls back to the full grid there.
+    if ordering == "shuffling":
+        total_acceleration = acceleration * acceleration_z
+        if total_acceleration > 1:
+            mask = pp.make_poisson_disc_mask(
+                (n_y, n_z),
+                float(total_acceleration),
+                calib=(n_acs, n_acs_z),
+                seed=shuffle_seed,
+            )
+            views = [(int(line), int(partition)) for line, partition in np.argwhere(mask)]
+        else:
+            views = [(line, partition) for partition in range(n_z) for line in range(n_y)]
+    else:
+        views, _ = pp.calc_sampled_pairs(
+            (n_y, n_z),
+            (acceleration, acceleration_z),
+            (n_acs, n_acs_z),
+            caipi_shift=caipi_shift,
+            elliptical=elliptical,
+            order="ascending",
+        )
     trains = order_views(
         views, etl, n_center, ordering, (n_y, n_z), seed=shuffle_seed
     )
@@ -696,14 +697,18 @@ class Fse3D(SequencePlugin):
                     value=32.0, min=1.0, max=256.0, incr=1.0, unit=""
                 ),
                 UIParam.user_name(2): Description(
-                    text="Ordering 0=lin 1=rad 2=adaptive 3=shuffle"
+                    text="Order 0=lin 1=centric 2=rad 3=adaptive 4=shuffle"
                 ),
                 UIParam.user_value(2): TypeinFloatParam(
-                    value=2.0, min=0.0, max=3.0, incr=1.0, unit=""
+                    value=3.0, min=0.0, max=4.0, incr=1.0, unit=""
                 ),
                 UIParam.user_name(3): Description(text="Variable flip train"),
                 UIParam.user_value(3): TypeinFloatParam(
                     value=1.0, min=0.0, max=1.0, incr=1.0, unit=""
+                ),
+                UIParam.user_name(4): Description(text="CAIPI shift (kz per ky)"),
+                UIParam.user_value(4): TypeinFloatParam(
+                    value=0.0, min=0.0, max=8.0, incr=1.0, unit=""
                 ),
                 UIParam.user_name(5): Description(text="ACS partitions (z)"),
                 UIParam.user_value(5): TypeinFloatParam(
@@ -717,6 +722,8 @@ class Fse3D(SequencePlugin):
                 UIParam.user_value(7): TypeinFloatParam(
                     value=100.0, min=10.0, max=180.0, incr=1.0, unit="deg"
                 ),
+                UIParam.user_name(8): Description(text="Elliptical sampling"),
+                UIParam.user_value(8): TypeinFloatParam(value=1.0, min=0.0, max=1.0, incr=1.0, unit=""),
             }
         )
 
@@ -773,6 +780,8 @@ _KERNEL_ARGUMENTS = frozenset(
         "readout_bandwidth_hz",
         "acceleration",
         "acceleration_z",
+        "caipi_shift",
+        "elliptical",
         "n_acs",
         "n_acs_z",
         "n_dummy",
@@ -795,12 +804,16 @@ def _main_kwargs(system: pp.Opts, protocol: dict[str, dict]) -> dict:
         n_z=n_z,
         slab_thickness=n_z * partition_thickness,
         etl=max(1, round(params.user_float(prot, 1, 32.0))),
-        ordering=ORDERINGS[int(np.clip(round(params.user_float(prot, 2, 2.0)), 0, 3))],
+        ordering=ORDERINGS[
+            int(np.clip(round(params.user_float(prot, 2, 3.0)), 0, len(ORDERINGS) - 1))
+        ],
         variable_flip=bool(round(params.user_float(prot, 3, 1.0))),
+        caipi_shift=max(0, round(params.user_float(prot, 4, 0.0))),
         n_acs=params.acs_lines_from_protocol(prot, params.param_int(prot, UIParam.NY), 0),
         n_acs_z=max(0, round(params.user_float(prot, 5, 16.0))),
         alpha_min_deg=params.user_float(prot, 6, 60.0),
         alpha_center_deg=params.user_float(prot, 7, 100.0),
+        elliptical=bool(round(params.user_float(prot, 8, 1.0))),
     )
 
 
@@ -848,13 +861,20 @@ _ARG_MAP = [
         "--ordering",
         UIParam.user_value(2),
         float,
-        "View ordering: 0 linear, 1 radial, 2 radial-adaptive, 3 shuffling",
+        "View ordering: 0 linear, 1 centric, 2 radial, 3 radial-adaptive, 4 shuffling",
     ),
     ("--constant-flip", UIParam.user_value(3), lambda value: 0.0 if float(value) else 1.0,
      "Pass 1 for constant 180s (0, the default value, keeps the variable train)"),
+    ("--caipi-shift", UIParam.user_value(4), float, "CAIPIRINHA kz shift per ky block"),
     ("--acs-partitions", UIParam.user_value(5), float, "Number of ACS partitions along z"),
     ("--alpha-min-deg", UIParam.user_value(6), float, "Variable train's floor flip [deg]"),
     ("--alpha-centre-deg", UIParam.user_value(7), float, "Variable train's centre flip [deg]"),
+    (
+        "--no-elliptical",
+        UIParam.user_value(8),
+        lambda value: 0.0 if float(value) else 1.0,
+        "Pass 1 to sample the full ky-kz rectangle instead of the ellipse",
+    ),
 ]
 
 if __name__ == "__main__":

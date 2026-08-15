@@ -314,6 +314,20 @@ def sense(
     numpy.ndarray
         The complex volume, ``(partition, phase encode, readout)``.
     """
+    # A fully sampled readout makes the volume separable along it: a centered
+    # inverse FFT turns the 3D solve into one 2D solve per readout position, all
+    # sharing the phase-encode lattice, which is cheaper and better conditioned.
+    # A partial echo couples the readout, so that case keeps the 3D solve.
+    if readout.all():
+        return _sense_by_readout_plane(
+            kspace,
+            mask,
+            coil_maps,
+            regularization=regularization,
+            iterations=iterations,
+            device=device,
+        )
+
     from pulserver.recon import pics
     from pulserver.recon.physics import Cartesian3D
 
@@ -326,14 +340,59 @@ def sense(
         regularization=regularization,
         iterations=iterations,
     )[0]
-    if readout.all():
-        return image
     # The same operator supplies the centered k-space POCS needs, and the
     # phase constraint is meaningful only now that the aliasing is gone.
     centered = physics.fft(_tensor(image, "complex64", device))
     return _asnumpy(
         fill_partial_echo(centered, readout, pocs_iterations, device=device)
     )
+
+
+def _sense_by_readout_plane(
+    kspace: Any,
+    mask: Any,
+    coil_maps: Any,
+    *,
+    regularization: float,
+    iterations: int,
+    device: Any,
+) -> np.ndarray:
+    """CG-SENSE decoupled over a fully sampled readout: one 2D solve per column.
+
+    The centered inverse FFT along the readout
+    (:func:`pulserver.recon.preprocessing.ifftc`) takes the volume to
+    ``(coil, partition, line, x)`` hybrid space, where every
+    readout position ``x`` is an independent 2D ``(partition, line)`` parallel-
+    imaging problem sharing the one phase-encode lattice. Stacking the columns
+    on the batch axis solves them together against a batched
+    :class:`~pulserver.recon.physics.Cartesian2D`.
+    """
+    import torch
+
+    from pulserver.recon import pics
+    from pulserver.recon.physics import Cartesian2D
+    from pulserver.recon.preprocessing import ifftc
+
+    hybrid = ifftc(np.asarray(kspace), axes=-1)
+    _, n_z, n_y, n_x = hybrid.shape
+    data = np.moveaxis(hybrid, -1, 0)  # (x, coil, partition, line)
+
+    maps = torch.as_tensor(_asnumpy(coil_maps)[0])  # (coil, partition, line, x)
+    maps = maps.movedim(-1, 0).contiguous()  # (x, coil, partition, line)
+    plane = np.asarray(mask).any(axis=-1).astype(np.float32)  # (partition, line)
+    lattice = _tensor(
+        np.broadcast_to(plane, (n_x, 1, n_z, n_y)).copy(), "float32", device
+    )
+    if device is not None:
+        maps = maps.to(device)
+
+    image = pics(
+        data,
+        Cartesian2D(lattice, maps),
+        regularization=regularization,
+        iterations=iterations,
+    )
+    return np.moveaxis(_asnumpy(image), 0, -1)  # (partition, line, x)
 
 
 def fill_partial_echo(

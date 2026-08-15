@@ -245,3 +245,19 @@ def test_a_written_sequence_reads_back_with_its_grid(tmp_path):
     back.read(str(path))
     assert back.get_definition("Matrix") == pytest.approx([N_X, N_Y, N_Z])
     assert back.num_blocks == seq.num_blocks
+
+
+# ----------------------------------------------------------------------
+# Elliptical sampling
+# ----------------------------------------------------------------------
+
+
+def test_elliptical_sampling_drops_the_corners():
+    """The default elliptical support omits the ky-kz corners a round object
+    never fills; turning it off samples the full rectangle."""
+    corners = {(0, 0), (0, N_Z - 1), (N_Y - 1, 0), (N_Y - 1, N_Z - 1)}
+    disk = set(kernel(elliptical=True).pairs)
+    rectangle = set(kernel(elliptical=False).pairs)
+    assert not (corners & disk)
+    assert corners <= rectangle
+    assert disk < rectangle

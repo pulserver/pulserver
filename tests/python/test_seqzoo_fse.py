@@ -34,6 +34,9 @@ def design_3d(**kwargs):
     kwargs.setdefault("tr", 250e-3)
     kwargs.setdefault("readout_bandwidth_hz", BANDWIDTH)
     kwargs.setdefault("readout_crusher_cycles", 1.0)
+    # The ordering tests want the full rectangle; the elliptical crop is a
+    # separate sampling toggle exercised on its own.
+    kwargs.setdefault("elliptical", False)
     return fse_3d.main(n_x=32, n_y=8, n_z=4, slab_thickness=64e-3, **kwargs)
 
 

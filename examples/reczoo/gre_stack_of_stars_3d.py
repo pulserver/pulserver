@@ -20,7 +20,7 @@ import numpy as np
 
 from pulserver import AcquisitionBucket, ReconContext, ReconPlugin, ReconResult
 from pulserver.recon import has_acquisition_flag
-from pulserver.recon.preprocessing import receiver_channels
+from pulserver.recon.preprocessing import ifftc, receiver_channels
 from pulserver.reczoo.gre_3d import recon_volume
 from pulserver.reczoo.gre_radial_2d import reconstruct_plane
 
@@ -109,12 +109,10 @@ class GreStackOfStars3DRecon(ReconPlugin):
                 for view in views
             ]
         )
-        planes = np.fft.fftshift(
-            np.fft.ifft(
-                np.fft.ifftshift(stacked, axes=2), axis=2, norm="ortho"
-            ),
-            axes=2,
-        )
+        # A stack of 2D non-Cartesian planes decouples along the fully sampled
+        # partition axis: a centered inverse FFT there turns the volume into
+        # independent planes the in-plane recon handles one at a time.
+        planes = ifftc(stacked, axes=2)
 
         trajectory = np.concatenate(
             [self.trajectories[view][:, :2] for view in views], axis=0

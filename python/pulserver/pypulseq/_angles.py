@@ -38,25 +38,34 @@ def _generalized_fibonacci(order, index):
         previous, current = current, previous + current
     return current
 
-def calc_golden_angles(n: int) -> np.ndarray:
+def calc_golden_angles(n: int, *, full_circle: bool = False) -> np.ndarray:
     """Return ``n`` golden-angle spoke rotations, in radians.
 
-    Consecutive spokes advance by the MRI golden angle ``pi / phi`` (111.246
-    degrees), so any contiguous temporal window of spokes stays
-    near-uniformly distributed over the circle — the property that makes
-    golden-angle radial the default for retrospectively binned and
+    Consecutive spokes advance by a golden increment, so any contiguous
+    temporal window of spokes stays near-uniformly distributed — the property
+    that makes golden-angle ordering the default for retrospectively binned and
     free-breathing acquisitions.
 
-    A flat angle array rather than a :class:`~pulserver.ScanLoop`, in
-    the full-circle (``2 * pi``) convention: pair it directly with a base
-    waveform and :func:`pulserver.pypulseq.make_rotation`. Use
-    :func:`make_radial_tilt` when the angular period or the segmentation
-    matters.
+    Two conventions, selected by ``full_circle``, for the two geometries a
+    rotated readout comes in. A diametric spoke -- a radial line, a PROPELLER
+    blade -- is ``pi``-periodic, so its golden angle is the MRI golden angle
+    ``pi / phi`` (111.25 degrees; Winkelmann). A one-sided arm -- a spiral
+    interleaf -- covers the whole turn, so its golden angle is the classic
+    full-circle ``2 * pi / phi**2`` (137.51 degrees).
+
+    A flat angle array rather than a :class:`~pulserver.ScanLoop`, accumulated
+    modulo ``2 * pi``: pair it directly with a base waveform and
+    :func:`pulserver.pypulseq.make_rotation`. Use :func:`make_radial_tilt` when
+    the angular period or the segmentation matters.
 
     Parameters
     ----------
     n : int
         Number of angles.
+    full_circle : bool, optional
+        ``False`` (the default) is the ``pi``-periodic radial/blade golden
+        angle ``pi / phi``; ``True`` is the full-turn spiral golden angle
+        ``2 * pi / phi**2``. Default is False.
 
     Returns
     -------
@@ -69,6 +78,12 @@ def calc_golden_angles(n: int) -> np.ndarray:
     >>> import pulserver.pypulseq as pp
     >>> np.rad2deg(pp.calc_golden_angles(4)).round(2)
     array([  0.  , 111.25, 222.49, 333.74])
+
+    The full-circle convention advances by the classic 137.51-degree golden
+    angle instead:
+
+    >>> np.rad2deg(pp.calc_golden_angles(3, full_circle=True)).round(2)
+    array([  0.  , 137.51, 275.02])
 
     Where each increment puts the first 34 spokes — golden angle spreads them in any window, tiny golden angle does the same in smaller steps, RAGA snaps them to a fixed equidistant support:
 
@@ -103,7 +118,8 @@ def calc_golden_angles(n: int) -> np.ndarray:
     calc_raga_angles : rational, exactly repeatable approximation.
     make_radial_tilt : full spoke tilt schedule with period and segmentation control.
     """
-    return _accumulated(n, np.pi / _PHI)
+    step = 2.0 * np.pi / _PHI**2 if full_circle else np.pi / _PHI
+    return _accumulated(n, step)
 
 def calc_raga_angles(n: int, *, tiny_index: int = 1, approximation_order: int = 13) -> np.ndarray:
     """Return ``n`` RAGA (rational approximate golden-angle) spoke rotations.
@@ -208,23 +224,30 @@ def calc_tiny_golden_angles(n: int, *, index: int = 2) -> np.ndarray:
         raise ValueError("index must be >= 1")
     return _accumulated(n, np.pi / (_PHI + index - 1))
 
-def calc_uniform_angles(n: int) -> np.ndarray:
-    """Return ``n`` equally spaced full-circle spoke rotations, in radians.
+def calc_uniform_angles(n: int, *, span: float = 2.0 * np.pi) -> np.ndarray:
+    """Return ``n`` equally spaced spoke rotations, in radians.
 
-    The uniform counterpart of :func:`calc_golden_angles`, in the same
-    flat-array, full-circle convention. Optimal coverage for a *fixed*,
-    known-in-advance spoke count — and only then, since any partial window of
-    the acquisition leaves an angular gap.
+    The uniform counterpart of :func:`calc_golden_angles`. Optimal coverage for
+    a *fixed*, known-in-advance count — and only then, since any partial window
+    of the acquisition leaves an angular gap.
+
+    ``span`` selects the geometry the same way ``full_circle`` does for the
+    golden angle: ``pi`` spreads ``pi``-periodic diametric spokes (radial
+    lines, PROPELLER blades) over a half turn, and the default ``2 * pi``
+    spreads one-sided arms (spiral interleaves) over the whole turn.
 
     Parameters
     ----------
     n : int
         Number of angles.
+    span : float, optional
+        Angular range the spokes are spread across, in radians. ``pi`` for
+        diametric spokes, ``2 * pi`` (the default) for full-turn arms.
 
     Returns
     -------
     numpy.ndarray
-        Angles (rad), length ``n``, spaced by ``2 * pi / n``.
+        Angles (rad), length ``n``, spaced by ``span / n``.
 
     Examples
     --------
@@ -233,6 +256,12 @@ def calc_uniform_angles(n: int) -> np.ndarray:
     >>> np.rad2deg(pp.calc_uniform_angles(4))
     array([  0.,  90., 180., 270.])
 
+    A half-turn span spaces diametric spokes without covering a direction
+    twice:
+
+    >>> np.rad2deg(pp.calc_uniform_angles(4, span=np.pi))
+    array([  0.,  45.,  90., 135.])
+
     See Also
     --------
     calc_golden_angles : uniform in any temporal window instead.
@@ -240,7 +269,7 @@ def calc_uniform_angles(n: int) -> np.ndarray:
     n = int(n)
     if n < 0:
         raise ValueError("n must be nonnegative")
-    return _accumulated(n, 0.0 if n == 0 else 2.0 * np.pi / n)
+    return _accumulated(n, 0.0 if n == 0 else float(span) / n)
 
 def calc_projection_shell(n_views: int, n_shots: int = 1, *, scheme: str = "spiral"):
     """Cover the sphere with one base shell of spokes and a rotation per shot.

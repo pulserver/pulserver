@@ -5,7 +5,8 @@ One steady-state train over the whole ``(ky, kz)`` traversal --
 rephasers' windows and is added onto them, so a partition costs an amplitude
 rather than a waveform. Entry through the half-flip catalyst, alternating
 phase, TE at exactly TR/2, the autocalibration rectangle leading the
-traversal as every 3D Cartesian module orders it.
+traversal as every 3D Cartesian module orders it. Regular undersampling lays a
+CAIPIRINHA lattice with a selectable kz shift per ky block.
 :mod:`pulserver.reczoo.bssfp_3d` reads the result back.
 
 ``main`` returns the :class:`pulserver.pypulseq.Sequence`; ``PLUGIN`` is the
@@ -68,6 +69,8 @@ def main(
     partial_fourier_z: float = 1.0,
     acceleration: int = 1,
     acceleration_z: int = 1,
+    caipi_shift: int = 0,
+    elliptical: bool = True,
     n_acs: int = 24,
     n_acs_z: int = 16,
     n_dummy: int = 10,
@@ -121,6 +124,13 @@ def main(
         Uniform phase-encode undersampling factor along y. Default is 1.
     acceleration_z : int, optional
         Uniform partition-encode undersampling factor along z. Default is 1.
+    caipi_shift : int, optional
+        CAIPIRINHA shift along kz per sampled-ky block,
+        0 <= caipi_shift < acceleration_z. 0 is a regular lattice. Default
+        is 0.
+    elliptical : bool, optional
+        Restrict the phase-encode support to the inscribed ky-kz ellipse,
+        dropping the corners a round object never fills. Default is True.
     n_acs : int, optional
         Autocalibration extent along y, in lines. Default is 24.
     n_acs_z : int, optional
@@ -154,6 +164,8 @@ def main(
         partial_fourier_z=partial_fourier_z,
         acceleration=acceleration,
         acceleration_z=acceleration_z,
+        caipi_shift=caipi_shift,
+        elliptical=elliptical,
         n_acs=n_acs,
         n_acs_z=n_acs_z,
         n_dummy=n_dummy,
@@ -272,6 +284,8 @@ def Bssfp3DKernel(
     partial_fourier_z: float = 1.0,
     acceleration: int = 1,
     acceleration_z: int = 1,
+    caipi_shift: int = 0,
+    elliptical: bool = True,
     n_acs: int = 24,
     n_acs_z: int = 16,
     n_dummy: int = 10,
@@ -288,7 +302,7 @@ def Bssfp3DKernel(
         System limits.
     fov, n_x, n_y, n_z, slab_thickness, flip_angle_deg, tr, \
 readout_bandwidth_hz, partial_fourier, partial_fourier_z, acceleration, \
-acceleration_z, n_acs, n_acs_z, n_dummy
+acceleration_z, caipi_shift, elliptical, n_acs, n_acs_z, n_dummy
         As for :func:`main`.
 
     Returns
@@ -319,6 +333,8 @@ acceleration_z, n_acs, n_acs_z, n_dummy
         (acceleration, acceleration_z),
         (n_acs, n_acs_z),
         partial_fourier=(partial_fourier, partial_fourier_z),
+        caipi_shift=caipi_shift,
+        elliptical=elliptical,
         order="calibration_first",
     )
 
@@ -437,6 +453,14 @@ class Bssfp3D(SequencePlugin):
                     incr=1.0,
                     unit="lines",
                 ),
+                UIParam.user_name(1): Description(text="CAIPI shift (kz per ky)"),
+                UIParam.user_value(1): TypeinFloatParam(
+                    value=0.0,
+                    min=0.0,
+                    max=8.0,
+                    incr=1.0,
+                    unit="",
+                ),
                 UIParam.user_name(2): Description(text="Dummy repetitions"),
                 UIParam.user_value(2): TypeinFloatParam(
                     value=10.0,
@@ -469,6 +493,8 @@ class Bssfp3D(SequencePlugin):
                     incr=1.0,
                     unit="lines",
                 ),
+                UIParam.user_name(6): Description(text="Elliptical sampling"),
+                UIParam.user_value(6): TypeinFloatParam(value=1.0, min=0.0, max=1.0, incr=1.0, unit=""),
             }
         )
 
@@ -521,6 +547,8 @@ _KERNEL_ARGUMENTS = frozenset(
         "partial_fourier_z",
         "acceleration",
         "acceleration_z",
+        "caipi_shift",
+        "elliptical",
         "n_acs",
         "n_acs_z",
         "n_dummy",
@@ -544,6 +572,8 @@ def _main_kwargs(system: pp.Opts, protocol: dict[str, dict]) -> dict:
         n_acs=params.acs_lines_from_protocol(prot, params.param_int(prot, UIParam.NY), 0),
         n_dummy=max(0, round(params.user_float(prot, 2, 10.0))),
         n_acs_z=max(0, round(params.user_float(prot, 5, 16.0))),
+        caipi_shift=max(0, round(params.user_float(prot, 1, 0.0))),
+        elliptical=bool(round(params.user_float(prot, 6, 1.0))),
     )
 
 
@@ -586,6 +616,7 @@ _ARG_MAP = [
     ("--offset-y-mm", UIParam.FOV_OFFSET_Y, float, "Volume offset along phase encode [mm]"),
     ("--offset-z-mm", UIParam.FOV_OFFSET_Z, float, "Volume offset along slab [mm]"),
     ("--acs-lines", UIParam.user_value(0), float, "Number of ACS lines along y"),
+    ("--caipi-shift", UIParam.user_value(1), float, "CAIPIRINHA kz shift per ky block"),
     ("--dummies", UIParam.user_value(2), float, "Unacquired repetitions after the catalyst"),
     (
         "--partial-fourier",
@@ -600,6 +631,12 @@ _ARG_MAP = [
         "Acquired partition-encode fraction along z in (0.5, 1]",
     ),
     ("--acs-partitions", UIParam.user_value(5), float, "Number of ACS partitions along z"),
+    (
+        "--no-elliptical",
+        UIParam.user_value(6),
+        lambda value: 0.0 if float(value) else 1.0,
+        "Pass 1 to sample the full ky-kz rectangle instead of the ellipse",
+    ),
 ]
 
 if __name__ == "__main__":

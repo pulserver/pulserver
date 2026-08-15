@@ -88,6 +88,30 @@ def test_partial_fourier_on_z_drops_leading_partitions():
     assert min(partitions_trunc) >= 64 - round(0.75 * 64)
 
 
+def test_caipi_shift_staggers_kz_without_changing_the_count():
+    # A non-zero shift keeps the same number of samples but moves them.
+    plain, _ = calc_sampled_pairs((16, 16), (2, 2), (0, 0), caipi_shift=0)
+    shifted, _ = calc_sampled_pairs((16, 16), (2, 2), (0, 0), caipi_shift=1)
+    assert len(plain) == len(shifted)
+    assert set(plain) != set(shifted)
+
+
+def test_no_acceleration_samples_the_whole_grid():
+    pairs, n_cal = calc_sampled_pairs((8, 8), (1, 1), (0, 0), caipi_shift=1)
+    assert len(pairs) == 64  # a shift is a no-op when nothing is skipped
+    assert n_cal == 0
+
+
+def test_caipi_lattice_carries_the_acs_rectangle():
+    shape, accel, calib = (32, 32), (2, 2), (8, 8)
+    pairs, n_cal = calc_sampled_pairs(shape, accel, calib, caipi_shift=1)
+    lines = set(calc_calibration_lines(32, 8))
+    partitions = set(calc_calibration_lines(32, 8))
+    rectangle = pairs[:n_cal]
+    assert n_cal == len(lines) * len(partitions)
+    assert all(line in lines and part in partitions for line, part in rectangle)
+
+
 def test_bad_order_and_fraction_are_rejected():
     with pytest.raises(ValueError):
         calc_sampled_pairs((32, 32), (1, 1), (0, 0), order="nonsense")
