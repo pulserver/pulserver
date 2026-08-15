@@ -167,6 +167,7 @@ def calc_sampled_pairs(
     *,
     partial_fourier: tuple[float, float] = (1.0, 1.0),
     caipi_shift: int = 0,
+    elliptical: bool = False,
     order: str = "calibration_first",
 ) -> tuple[list[tuple[int, int]], int]:
     """Return the ``(line, partition)`` pairs a 2D phase-encode grid samples.
@@ -176,7 +177,9 @@ def calc_sampled_pairs(
     sampled autocalibration *rectangle* at the centre of k-space, and partial
     Fourier on either axis. ``caipi_shift`` is the per-``ky``-block shift the
     lattice applies along kz; ``0`` degenerates to a plain ``r_y x r_z``
-    grid.
+    grid. ``elliptical`` drops the pairs outside the inscribed ``ky``-``kz``
+    ellipse -- the corners a Cartesian grid samples but a round object never
+    fills -- which is a disk when ``n_y == n_z``.
 
     ``'calibration_first'`` leads the traversal with the rectangle -- every
     sampled pair whose line *and* partition are both autocalibration views --
@@ -201,6 +204,11 @@ def calc_sampled_pairs(
         CAIPIRINHA shift along kz per sampled-ky block, ``0 <= caipi_shift <
         r_z``. ``0`` (the default) is a regular lattice; a non-zero shift
         spreads the aliasing into both phase-encode directions. Default is 0.
+    elliptical : bool, optional
+        Restrict the sampled support to the inscribed ``(ky, kz)`` ellipse,
+        dropping the corners of k-space a round object never occupies. The
+        autocalibration rectangle, being central, is kept whatever this is.
+        Default is False.
     order : str, optional
         ``'calibration_first'`` (the default) leads with the rectangle;
         ``'ascending'`` traverses the whole grid partitions-outer,
@@ -229,6 +237,13 @@ def calc_sampled_pairs(
     4
     >>> pairs[:n_cal]
     [(1, 1), (2, 1), (1, 2), (2, 2)]
+
+    The corners fall away when the support is the inscribed ellipse:
+
+    >>> full, _ = pp.calc_sampled_pairs((8, 8), (1, 1), (0, 0))
+    >>> disk, _ = pp.calc_sampled_pairs((8, 8), (1, 1), (0, 0), elliptical=True)
+    >>> (0, 0) in full, (0, 0) in disk
+    (True, False)
     """
     if order not in ("ascending", "calibration_first"):
         raise ValueError("order must be 'ascending' or 'calibration_first'")
@@ -240,11 +255,14 @@ def calc_sampled_pairs(
     first_y = n_y - round(_checked_partial_fourier(pf_y) * n_y)
     first_z = n_z - round(_checked_partial_fourier(pf_z) * n_z)
 
-    # The CAIPI lattice within the partial-Fourier region, plus the fully
-    # sampled autocalibration rectangle.
+    # The CAIPI lattice within the partial-Fourier region, cropped to the
+    # inscribed ellipse if asked, plus the fully sampled autocalibration
+    # rectangle -- which stays whole, being central.
     sampled = make_caipirinha_mask((n_y, n_z), r_y, r_z, delta=caipi_shift)
     sampled[:first_y, :] = False
     sampled[:, :first_z] = False
+    if elliptical:
+        sampled &= _elliptical_support((n_y, n_z))
     acs_lines = calc_calibration_lines(n_y, acs_y, partial_fourier=pf_y)
     acs_partitions = calc_calibration_lines(n_z, acs_z, partial_fourier=pf_z)
     if acs_lines and acs_partitions:
@@ -267,6 +285,20 @@ def calc_sampled_pairs(
         return pairs, len(rectangle)
     body = [pair for pair in pairs if not calibrates(*pair)]
     return rectangle + body, len(rectangle)
+
+
+def _elliptical_support(shape: tuple[int, int]) -> np.ndarray:
+    """The inscribed ``(ky, kz)`` ellipse as a boolean mask.
+
+    A point is inside when its distance from the centre, normalised by each
+    axis' half-extent, is within one -- so the ellipse touches the middle of
+    every edge and drops the four corners. A disk when the two counts match.
+    The centre is at ``n // 2``, where the sequences place ``k = 0``.
+    """
+    n_y, n_z = shape
+    ky = (np.arange(n_y) - n_y // 2) / (n_y / 2)
+    kz = (np.arange(n_z) - n_z // 2) / (n_z / 2)
+    return (ky[:, None] ** 2 + kz[None, :] ** 2) <= 1.0
 
 
 def _checked_partial_fourier(partial_fourier: float) -> float:

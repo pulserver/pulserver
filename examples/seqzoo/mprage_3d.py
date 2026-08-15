@@ -75,6 +75,7 @@ def main(
     acceleration: int = 1,
     acceleration_z: int = 1,
     caipi_shift: int = 0,
+    elliptical: bool = True,
     n_acs: int = 24,
     n_acs_z: int = 16,
     shuffle_seed: int = 0,
@@ -140,6 +141,9 @@ def main(
         CAIPIRINHA shift along kz per sampled-ky block, for the regular
         (non-shuffling) orderings. ``0`` is a plain lattice. Ignored by
         ``shuffling``, which draws a Poisson-disc set instead. Default is 0.
+    elliptical : bool, optional
+        Restrict the phase-encode support to the inscribed ky-kz ellipse,
+        dropping the corners a round object never fills. Default is True.
     n_acs : int, optional
         Autocalibration extent along y, in lines. Default is 24.
     n_acs_z : int, optional
@@ -181,6 +185,7 @@ def main(
         acceleration=acceleration,
         acceleration_z=acceleration_z,
         caipi_shift=caipi_shift,
+        elliptical=elliptical,
         n_acs=n_acs,
         n_acs_z=n_acs_z,
         shuffle_seed=shuffle_seed,
@@ -301,6 +306,7 @@ def Mprage3DKernel(
     acceleration: int = 1,
     acceleration_z: int = 1,
     caipi_shift: int = 0,
+    elliptical: bool = True,
     n_acs: int = 24,
     n_acs_z: int = 16,
     shuffle_seed: int = 0,
@@ -321,7 +327,7 @@ def Mprage3DKernel(
         System limits.
     fov, n_x, n_y, n_z, slab_thickness, flip_angle_deg, ti, tr_outer, \
 views_per_segment, ordering, te, tr, readout_bandwidth_hz, acceleration, \
-acceleration_z, caipi_shift, n_acs, n_acs_z, shuffle_seed, spoiling_cycles
+acceleration_z, caipi_shift, elliptical, n_acs, n_acs_z, shuffle_seed, spoiling_cycles
         As for :func:`main`.
 
     Returns
@@ -377,6 +383,7 @@ acceleration_z, caipi_shift, n_acs, n_acs_z, shuffle_seed, spoiling_cycles
             (acceleration, acceleration_z),
             (n_acs, n_acs_z),
             caipi_shift=caipi_shift,
+            elliptical=elliptical,
             order="ascending",
         )
 
@@ -542,6 +549,8 @@ class Mprage3D(SequencePlugin):
                 UIParam.user_value(5): TypeinFloatParam(
                     value=16.0, min=0.0, max=256.0, incr=1.0, unit="lines"
                 ),
+                UIParam.user_name(6): Description(text="Elliptical sampling"),
+                UIParam.user_value(6): TypeinFloatParam(value=1.0, min=0.0, max=1.0, incr=1.0, unit=""),
             }
         )
 
@@ -597,6 +606,7 @@ _KERNEL_ARGUMENTS = frozenset(
         "acceleration",
         "acceleration_z",
         "caipi_shift",
+        "elliptical",
         "n_acs",
         "n_acs_z",
         "shuffle_seed",
@@ -629,6 +639,7 @@ def _main_kwargs(system: pp.Opts, protocol: dict[str, dict]) -> dict:
         caipi_shift=max(0, round(params.user_float(prot, 3, 0.0))),
         n_acs=params.acs_lines_from_protocol(prot, params.param_int(prot, UIParam.NY), 0),
         n_acs_z=max(0, round(params.user_float(prot, 5, 16.0))),
+        elliptical=bool(round(params.user_float(prot, 6, 1.0))),
     )
 
 
@@ -681,6 +692,12 @@ _ARG_MAP = [
     ),
     ("--caipi-shift", UIParam.user_value(3), float, "CAIPIRINHA kz shift per ky block"),
     ("--acs-partitions", UIParam.user_value(5), float, "Number of ACS partitions along z"),
+    (
+        "--no-elliptical",
+        UIParam.user_value(6),
+        lambda value: 0.0 if float(value) else 1.0,
+        "Pass 1 to sample the full ky-kz rectangle instead of the ellipse",
+    ),
 ]
 
 if __name__ == "__main__":

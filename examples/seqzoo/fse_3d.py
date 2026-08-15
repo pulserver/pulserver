@@ -217,6 +217,7 @@ def main(
     acceleration: int = 1,
     acceleration_z: int = 1,
     caipi_shift: int = 0,
+    elliptical: bool = True,
     n_acs: int = 24,
     n_acs_z: int = 16,
     n_dummy: int = 0,
@@ -282,6 +283,9 @@ def main(
         CAIPIRINHA shift along kz per sampled-ky block, for the regular
         (non-shuffling) orderings. ``0`` is a plain lattice. Ignored by
         ``shuffling``, which draws a Poisson-disc set instead. Default is 0.
+    elliptical : bool, optional
+        Restrict the phase-encode support to the inscribed ky-kz ellipse,
+        dropping the corners a round object never fills. Default is True.
     n_acs : int, optional
         Autocalibration extent along y, in lines. Default is 24.
     n_acs_z : int, optional
@@ -326,6 +330,7 @@ def main(
         acceleration=acceleration,
         acceleration_z=acceleration_z,
         caipi_shift=caipi_shift,
+        elliptical=elliptical,
         n_acs=n_acs,
         n_acs_z=n_acs_z,
         n_dummy=n_dummy,
@@ -448,6 +453,7 @@ def FSE3DKernel(
     acceleration: int = 1,
     acceleration_z: int = 1,
     caipi_shift: int = 0,
+    elliptical: bool = True,
     n_acs: int = 24,
     n_acs_z: int = 16,
     n_dummy: int = 0,
@@ -463,7 +469,7 @@ def FSE3DKernel(
         System limits.
     fov, n_x, n_y, n_z, slab_thickness, etl, te, tr, ordering, \
 variable_flip, alpha_min_deg, alpha_center_deg, alpha_max_deg, \
-readout_bandwidth_hz, acceleration, acceleration_z, caipi_shift, n_acs, n_acs_z, \
+readout_bandwidth_hz, acceleration, acceleration_z, caipi_shift, elliptical, n_acs, n_acs_z, \
 n_dummy, shuffle_seed, crusher_cycles, readout_crusher_cycles
         As for :func:`main`.
 
@@ -564,6 +570,7 @@ n_dummy, shuffle_seed, crusher_cycles, readout_crusher_cycles
             (acceleration, acceleration_z),
             (n_acs, n_acs_z),
             caipi_shift=caipi_shift,
+            elliptical=elliptical,
             order="ascending",
         )
     trains = order_views(
@@ -715,6 +722,8 @@ class Fse3D(SequencePlugin):
                 UIParam.user_value(7): TypeinFloatParam(
                     value=100.0, min=10.0, max=180.0, incr=1.0, unit="deg"
                 ),
+                UIParam.user_name(8): Description(text="Elliptical sampling"),
+                UIParam.user_value(8): TypeinFloatParam(value=1.0, min=0.0, max=1.0, incr=1.0, unit=""),
             }
         )
 
@@ -772,6 +781,7 @@ _KERNEL_ARGUMENTS = frozenset(
         "acceleration",
         "acceleration_z",
         "caipi_shift",
+        "elliptical",
         "n_acs",
         "n_acs_z",
         "n_dummy",
@@ -803,6 +813,7 @@ def _main_kwargs(system: pp.Opts, protocol: dict[str, dict]) -> dict:
         n_acs_z=max(0, round(params.user_float(prot, 5, 16.0))),
         alpha_min_deg=params.user_float(prot, 6, 60.0),
         alpha_center_deg=params.user_float(prot, 7, 100.0),
+        elliptical=bool(round(params.user_float(prot, 8, 1.0))),
     )
 
 
@@ -858,6 +869,12 @@ _ARG_MAP = [
     ("--acs-partitions", UIParam.user_value(5), float, "Number of ACS partitions along z"),
     ("--alpha-min-deg", UIParam.user_value(6), float, "Variable train's floor flip [deg]"),
     ("--alpha-centre-deg", UIParam.user_value(7), float, "Variable train's centre flip [deg]"),
+    (
+        "--no-elliptical",
+        UIParam.user_value(8),
+        lambda value: 0.0 if float(value) else 1.0,
+        "Pass 1 to sample the full ky-kz rectangle instead of the ellipse",
+    ),
 ]
 
 if __name__ == "__main__":

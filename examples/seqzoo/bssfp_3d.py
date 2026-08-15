@@ -70,6 +70,7 @@ def main(
     acceleration: int = 1,
     acceleration_z: int = 1,
     caipi_shift: int = 0,
+    elliptical: bool = True,
     n_acs: int = 24,
     n_acs_z: int = 16,
     n_dummy: int = 10,
@@ -127,6 +128,9 @@ def main(
         CAIPIRINHA shift along kz per sampled-ky block,
         0 <= caipi_shift < acceleration_z. 0 is a regular lattice. Default
         is 0.
+    elliptical : bool, optional
+        Restrict the phase-encode support to the inscribed ky-kz ellipse,
+        dropping the corners a round object never fills. Default is True.
     n_acs : int, optional
         Autocalibration extent along y, in lines. Default is 24.
     n_acs_z : int, optional
@@ -161,6 +165,7 @@ def main(
         acceleration=acceleration,
         acceleration_z=acceleration_z,
         caipi_shift=caipi_shift,
+        elliptical=elliptical,
         n_acs=n_acs,
         n_acs_z=n_acs_z,
         n_dummy=n_dummy,
@@ -280,6 +285,7 @@ def Bssfp3DKernel(
     acceleration: int = 1,
     acceleration_z: int = 1,
     caipi_shift: int = 0,
+    elliptical: bool = True,
     n_acs: int = 24,
     n_acs_z: int = 16,
     n_dummy: int = 10,
@@ -296,7 +302,7 @@ def Bssfp3DKernel(
         System limits.
     fov, n_x, n_y, n_z, slab_thickness, flip_angle_deg, tr, \
 readout_bandwidth_hz, partial_fourier, partial_fourier_z, acceleration, \
-acceleration_z, caipi_shift, n_acs, n_acs_z, n_dummy
+acceleration_z, caipi_shift, elliptical, n_acs, n_acs_z, n_dummy
         As for :func:`main`.
 
     Returns
@@ -328,6 +334,7 @@ acceleration_z, caipi_shift, n_acs, n_acs_z, n_dummy
         (n_acs, n_acs_z),
         partial_fourier=(partial_fourier, partial_fourier_z),
         caipi_shift=caipi_shift,
+        elliptical=elliptical,
         order="calibration_first",
     )
 
@@ -486,6 +493,8 @@ class Bssfp3D(SequencePlugin):
                     incr=1.0,
                     unit="lines",
                 ),
+                UIParam.user_name(6): Description(text="Elliptical sampling"),
+                UIParam.user_value(6): TypeinFloatParam(value=1.0, min=0.0, max=1.0, incr=1.0, unit=""),
             }
         )
 
@@ -539,6 +548,7 @@ _KERNEL_ARGUMENTS = frozenset(
         "acceleration",
         "acceleration_z",
         "caipi_shift",
+        "elliptical",
         "n_acs",
         "n_acs_z",
         "n_dummy",
@@ -563,6 +573,7 @@ def _main_kwargs(system: pp.Opts, protocol: dict[str, dict]) -> dict:
         n_dummy=max(0, round(params.user_float(prot, 2, 10.0))),
         n_acs_z=max(0, round(params.user_float(prot, 5, 16.0))),
         caipi_shift=max(0, round(params.user_float(prot, 1, 0.0))),
+        elliptical=bool(round(params.user_float(prot, 6, 1.0))),
     )
 
 
@@ -620,6 +631,12 @@ _ARG_MAP = [
         "Acquired partition-encode fraction along z in (0.5, 1]",
     ),
     ("--acs-partitions", UIParam.user_value(5), float, "Number of ACS partitions along z"),
+    (
+        "--no-elliptical",
+        UIParam.user_value(6),
+        lambda value: 0.0 if float(value) else 1.0,
+        "Pass 1 to sample the full ky-kz rectangle instead of the ellipse",
+    ),
 ]
 
 if __name__ == "__main__":
