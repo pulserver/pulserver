@@ -1,8 +1,10 @@
 """3D gradient-echo EPI, slab-selective, exported as a linked pair.
 
 The volume counterpart of :mod:`pulserver.seqzoo.epi_2d`: one
-:class:`design.EpiReadout3D` train per ``(segment, partition)``, blips on
-the read ramps, ``REV`` on every line, the partition carried as ``PAR``. The
+:class:`design.EpiReadout3D` train per ``(segment, shell)``, blips on the
+read ramps, ``REV`` on every line, the partition carried as ``PAR``. A shell
+is one partition for a plain stack of trains, or a band of ``Rz`` partitions
+the CAIPI sawtooth walks for segmented blipped-CAIPI. The
 navigator -- blip-nulled ``NAV``/``REF`` lines at the centre partition plus
 the opposite-phase-encode ``SET = 1`` reference -- is its own sequence,
 linked ahead of the main file through ``NextSequence``, exercising the
@@ -18,7 +20,6 @@ import sys
 from pathlib import Path
 from types import SimpleNamespace
 
-import numpy as np
 import pulserver.design as design
 import pulserver.pypulseq as pp
 from pulserver import (
@@ -64,11 +65,20 @@ def _shared_kernel(
     tr: float | None = None,
     segments: int = 1,
     acceleration: int = 1,
+    acceleration_z: int = 1,
+    caipi_shift: int = 1,
     readout_bandwidth_hz: float = 500e3,
     spoiling_cycles: float = 4.0,
 ) -> SimpleNamespace:
-    """The slab excitation and train both sequences are built from."""
+    """The slab excitation and train both sequences are built from.
+
+    The partition axis is undersampled by ``acceleration_z`` with the CAIPI
+    sawtooth of :func:`pp.calc_epi_order`: with no z acceleration the train is
+    plain segmented EPI, and above it the ``'caipi'`` shell that tiles a
+    :func:`pp.make_caipirinha_mask` lattice.
+    """
     fov_x, fov_y = (fov, fov) if isinstance(fov, (int, float)) else fov
+    scheme = "caipi" if acceleration_z > 1 else "linear"
     excitation = design.SpatialSelectiveExcitation(
         system, flip_angle_deg, slab_thickness, is_slab=True
     )
@@ -78,8 +88,11 @@ def _shared_kernel(
         excitation.gz,
         fov=(fov_x, fov_y, slab_thickness),
         matrix=(n_x, n_y, n_z),
+        scheme=scheme,
         segments=segments,
         acceleration=acceleration,
+        partition_acceleration=acceleration_z,
+        caipi_shift=caipi_shift,
         te=te,
         tr=tr,
         readout_bandwidth_hz=readout_bandwidth_hz,
@@ -155,6 +168,8 @@ def navigator(
     tr: float | None = None,
     segments: int = 1,
     acceleration: int = 1,
+    acceleration_z: int = 1,
+    caipi_shift: int = 1,
     readout_bandwidth_hz: float = 500e3,
     opposite_reference: bool = True,
     spoiling_cycles: float = 4.0,
@@ -183,6 +198,8 @@ def navigator(
         tr=tr,
         segments=segments,
         acceleration=acceleration,
+        acceleration_z=acceleration_z,
+        caipi_shift=caipi_shift,
         readout_bandwidth_hz=readout_bandwidth_hz,
         spoiling_cycles=spoiling_cycles,
     )
@@ -244,6 +261,8 @@ def main(
     n_repetitions: int = 1,
     segments: int = 1,
     acceleration: int = 1,
+    acceleration_z: int = 1,
+    caipi_shift: int = 1,
     readout_bandwidth_hz: float = 500e3,
     opposite_reference: bool = True,
     partition_order: str = "center_out",
@@ -294,6 +313,14 @@ def main(
         Interleaved shots per partition. Default is 1.
     acceleration : int, optional
         Uniform phase-encode undersampling factor along y. Default is 1.
+    acceleration_z : int, optional
+        Partition undersampling factor along z, ``Rz``. Above 1 the train
+        becomes segmented blipped-CAIPI: each shot walks a shell of ``Rz``
+        partitions with the CAIPI sawtooth, and ``n_z // Rz`` shells tile the
+        :func:`pp.make_caipirinha_mask` lattice. Default is 1.
+    caipi_shift : int, optional
+        Partitions the CAIPI sawtooth climbs per acquired line, ``delta_z``.
+        Used only when ``acceleration_z`` is above 1. Default is 1.
     readout_bandwidth_hz : float, optional
         Requested receiver bandwidth in Hz. Default is 500e3.
     partition_order : str, optional
@@ -328,6 +355,8 @@ def main(
         tr=tr,
         segments=segments,
         acceleration=acceleration,
+        acceleration_z=acceleration_z,
+        caipi_shift=caipi_shift,
         readout_bandwidth_hz=readout_bandwidth_hz,
         spoiling_cycles=spoiling_cycles,
     )
@@ -338,18 +367,22 @@ def main(
     rev_label = pp.make_label("REV", "SET", 0)
     rep_label = pp.make_label("REP", "SET", 0)
 
-    # Partitions run centre-out by default, so the first echoes -- the ones the
-    # steady state and the contrast follow -- sit at the centre of k-space; the
-    # partition's kz placement stays tied to its physical index.
-    partitions = [int(p) for p in pp.calc_traversal_order(n_z, partition_order)]
+    # One shot per (segment, shell): a shell is a band of ``acceleration_z``
+    # partitions the CAIPI sawtooth walks within the train, so ``n_z // Rz``
+    # shells tile the lattice. With no z acceleration a shell is one partition
+    # and this is a plain stack of EPI trains. Shells run centre-out by
+    # default, so the first echoes -- the ones the steady state and the
+    # contrast follow -- sit at the centre of k-space.
+    n_shells = n_z // acceleration_z
+    shells = [int(s) for s in pp.calc_traversal_order(n_shells, partition_order)]
     for repetition in range(n_repetitions):
         rep_label.value = int(repetition)
         for segment in range(segments):
-            for partition in partitions:
+            for shell in shells:
                 _play_shot(
                     seq,
                     epi,
-                    origin=(segment, partition),
+                    origin=(segment, shell * acceleration_z),
                     grid=(n_y, n_z),
                     rev_label=rev_label,
                     extra_line_labels=(rep_label,),
@@ -390,6 +423,8 @@ def main(
             tr=tr,
             segments=segments,
             acceleration=acceleration,
+            acceleration_z=acceleration_z,
+            caipi_shift=caipi_shift,
             readout_bandwidth_hz=readout_bandwidth_hz,
             opposite_reference=opposite_reference,
             spoiling_cycles=spoiling_cycles,
@@ -496,6 +531,9 @@ class Epi3D(SequencePlugin):
                 UIParam.RY: TypeinFloatParam(
                     value=1.0, min=1.0, max=8.0, incr=1.0, unit=""
                 ),
+                UIParam.RZ: TypeinFloatParam(
+                    value=1.0, min=1.0, max=8.0, incr=1.0, unit=""
+                ),
                 UIParam.NUM_FRAMES: DropdownIntParam(
                     value=1, min=1, max=1024, incr=1, options=[1, 10, 100, 300, 600]
                 ),
@@ -509,6 +547,10 @@ class Epi3D(SequencePlugin):
                 UIParam.user_name(1): Description(text="Opposite-PE reference"),
                 UIParam.user_value(1): TypeinFloatParam(
                     value=1.0, min=0.0, max=1.0, incr=1.0, unit=""
+                ),
+                UIParam.user_name(2): Description(text="CAIPI shift (kz per ky)"),
+                UIParam.user_value(2): TypeinFloatParam(
+                    value=1.0, min=0.0, max=8.0, incr=1.0, unit=""
                 ),
             }
         )
@@ -525,7 +567,8 @@ class Epi3D(SequencePlugin):
         except ValueError as error:
             return {"valid": False, "duration": None, "info": str(error)}
 
-        shots = kwargs.get("segments", 1) * kwargs.get("n_z", 32)
+        n_shells = kwargs.get("n_z", 32) // max(1, kwargs.get("acceleration_z", 1))
+        shots = kwargs.get("segments", 1) * n_shells
         duration = (
             kwargs.get("n_repetitions", 1) * shots * kernel.epi.seq.duration()[0]
         )
@@ -574,6 +617,8 @@ _KERNEL_ARGUMENTS = frozenset(
         "tr",
         "segments",
         "acceleration",
+        "acceleration_z",
+        "caipi_shift",
         "readout_bandwidth_hz",
         "spoiling_cycles",
     )
@@ -591,6 +636,8 @@ _NAVIGATOR_ARGUMENTS = frozenset(
         "tr",
         "segments",
         "acceleration",
+        "acceleration_z",
+        "caipi_shift",
         "readout_bandwidth_hz",
         "opposite_reference",
         "spoiling_cycles",
@@ -611,6 +658,7 @@ def _main_kwargs(system: pp.Opts, protocol: dict[str, dict]) -> dict:
         slab_thickness=n_z * partition_thickness,
         segments=max(1, round(params.user_float(prot, 0, 1.0))),
         opposite_reference=bool(round(params.user_float(prot, 1, 1.0))),
+        caipi_shift=max(0, round(params.user_float(prot, 2, 1.0))),
         n_repetitions=params.param_int(prot, UIParam.NUM_FRAMES),
     )
 
@@ -649,7 +697,8 @@ _ARG_MAP = [
     ("--ny", UIParam.NY, int, "Phase-encode matrix size"),
     ("--nz", UIParam.NSLICES, int, "Partition count"),
     ("--bandwidth-hz", UIParam.BANDWIDTH, float, "Requested receiver bandwidth [Hz]"),
-    ("--ry", UIParam.RY, float, "Phase-encode undersampling factor"),
+    ("--ry", UIParam.RY, float, "Phase-encode undersampling factor along y"),
+    ("--rz", UIParam.RZ, float, "Partition-encode undersampling factor along z"),
     ("--frames", UIParam.NUM_FRAMES, int, "Volumes in the time series"),
     ("--offset-x-mm", UIParam.FOV_OFFSET_X, float, "Volume offset along readout [mm]"),
     ("--offset-y-mm", UIParam.FOV_OFFSET_Y, float, "Volume offset along phase encode [mm]"),
@@ -661,6 +710,7 @@ _ARG_MAP = [
         lambda value: 0.0 if float(value) else 1.0,
         "Pass 1 to drop the opposite-PE reference from the navigator",
     ),
+    ("--caipi-shift", UIParam.user_value(2), float, "CAIPIRINHA kz shift per ky block"),
 ]
 
 if __name__ == "__main__":

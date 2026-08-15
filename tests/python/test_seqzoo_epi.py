@@ -55,6 +55,36 @@ def test_a_3d_train_covers_every_partition():
     assert sorted(set(labels["PAR"].tolist())) == [0, 1, 2, 3]
 
 
+@pytest.mark.parametrize(
+    "acceleration,acceleration_z,caipi_shift",
+    [(1, 2, 1), (2, 2, 1), (1, 4, 1), (2, 2, 0)],
+)
+def test_blipped_caipi_tiles_the_caipirinha_lattice(
+    acceleration, acceleration_z, caipi_shift
+):
+    """Above ``acceleration_z = 1`` each shot walks a CAIPI shell, and the
+    ``n_z // Rz`` shells tile exactly the lattice ``make_caipirinha_mask``
+    describes -- the built-in mask and the sequence cannot drift apart."""
+    n_y, n_z = 24, 8
+    seq = epi_3d.main(
+        n_x=48,
+        n_y=n_y,
+        n_z=n_z,
+        slab_thickness=32e-3,
+        acceleration=acceleration,
+        acceleration_z=acceleration_z,
+        caipi_shift=caipi_shift,
+        readout_bandwidth_hz=180e3,
+    )
+    labels = seq.evaluate_labels(evolution="adc")
+    sampled = np.zeros((n_y, n_z), dtype=bool)
+    sampled[labels["LIN"], labels["PAR"]] = True
+    expected = pp.make_caipirinha_mask(
+        (n_y, n_z), acceleration, acceleration_z, delta=caipi_shift
+    )
+    assert np.array_equal(sampled, expected)
+
+
 def test_a_time_series_carries_its_repetition_counter():
     labels = design_2d(n_repetitions=3).evaluate_labels(evolution="adc")
     assert sorted(set(labels["REP"].tolist())) == [0, 1, 2]
