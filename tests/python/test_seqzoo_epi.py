@@ -55,6 +55,19 @@ def test_a_3d_train_covers_every_partition():
     assert sorted(set(labels["PAR"].tolist())) == [0, 1, 2, 3]
 
 
+def test_the_water_only_excitation_builds_a_valid_train(monkeypatch):
+    """With SPSP_EXCITATION set, the slab pulse becomes spectral-spatial
+    (water only): the train stays valid pulseq and, the pulse being longer,
+    the repetition is longer than the plain slab excitation's."""
+    plain = design_3d()
+    monkeypatch.setattr(epi_3d, "SPSP_EXCITATION", True)
+    water = design_3d()
+
+    is_ok, error_report = water.check_timing()
+    assert is_ok, error_report
+    assert water.duration()[0] > plain.duration()[0]
+
+
 @pytest.mark.parametrize(
     "acceleration,acceleration_z,caipi_shift",
     [(1, 2, 1), (2, 2, 1), (1, 4, 1), (2, 2, 0)],

@@ -51,6 +51,55 @@ _NAV_LINES = 3
 MAX_GRAD = 80.0
 MAX_SLEW = 200.0
 
+#: Swap the slab excitation for a spectral-spatial, slab- *and* water-selective
+#: pulse. An EPI train reads for a long time, so fat -- a few ppm off water --
+#: shifts far along the phase-encode axis and ghosts the image; exciting water
+#: only removes the source rather than correcting for it. A script-level toggle
+#: rather than a UI control: it reshapes the excitation the whole sequence is
+#: timed around, so it belongs to whoever runs the script.
+SPSP_EXCITATION = False
+
+#: Chemical shift of the fat methylene resonance from water, in ppm. Held in
+#: ppm rather than hertz so it is field-strength independent: the water-only
+#: excitation converts it against ``system.B0`` when the pulse is built, so the
+#: same script targets fat at 1.5 T and 3 T alike.
+FAT_SHIFT_PPM = -3.4
+
+
+def _build_slab_excitation(
+    system: pp.Opts, flip_angle_deg: float, thickness_m: float
+):
+    """The slab excitation, spectral-spatial when ``SPSP_EXCITATION`` is set.
+
+    Returns ``(excitation, rf, gz)``. The selection gradient carries its own
+    rephaser folded onto the end -- as a slab excitation does -- so the 3D
+    train's z prewinder block, which already encodes the partition, never
+    holds a second z gradient.
+    """
+    if SPSP_EXCITATION:
+        # Fat's offset is a frequency, so it is field dependent; ppm times the
+        # Larmor frequency is what makes the script B0 independent. A spectral
+        # passband about that wide leaves water in the passband and fat in the
+        # stopband.
+        fat_offset_hz = FAT_SHIFT_PPM * 1e-6 * system.gamma * system.B0
+        excitation = design.SpspExcitation(
+            system,
+            flip_angle_deg,
+            thickness_m=thickness_m,
+            spectral_bandwidth_hz=abs(fat_offset_hz),
+            freq_offset_hz=0.0,
+        )
+        # Concatenate the rephaser onto the alternating selection gradient, the
+        # way is_slab does, and hand the readout one merged z lobe.
+        gz_reph = excitation.gz_reph
+        gz_reph.delay = pp.calc_duration(excitation.gz)
+        gz = pp.add_gradients(grads=[excitation.gz, gz_reph], system=system)
+        return excitation, excitation.rf, gz
+    excitation = design.SpatialSelectiveExcitation(
+        system, flip_angle_deg, thickness_m, is_slab=True
+    )
+    return excitation, excitation.rf, excitation.gz
+
 
 def _shared_kernel(
     system: pp.Opts,
@@ -110,13 +159,13 @@ def _shared_kernel(
     n_shells = n_z // acceleration_z
     first_shell = n_shells - max(1, round(partial_fourier_z * n_shells))
 
-    excitation = design.SpatialSelectiveExcitation(
-        system, flip_angle_deg, slab_thickness, is_slab=True
+    excitation, exc_rf, exc_gz = _build_slab_excitation(
+        system, flip_angle_deg, slab_thickness
     )
     epi = design.EpiReadout3D(
         system,
-        excitation.rf,
-        excitation.gz,
+        exc_rf,
+        exc_gz,
         fov=(fov_x, fov_y, slab_thickness),
         matrix=(n_x, n_y, n_z),
         scheme=scheme,
@@ -147,8 +196,8 @@ def _shared_kernel(
     if acs_lines and acs_partitions:
         calibration = design.EpiReadout3D(
             system,
-            excitation.rf,
-            excitation.gz,
+            exc_rf,
+            exc_gz,
             fov=(fov_x, fov_y, slab_thickness),
             matrix=(n_x, n_y, n_z),
             scheme="linear",
