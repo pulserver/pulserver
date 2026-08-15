@@ -117,6 +117,40 @@ def test_an_accelerated_scan_lays_down_a_full_calibration_rectangle(
     assert sampled[np.ix_(acs_y, acs_z)].all()
 
 
+@pytest.mark.parametrize(
+    "partial_fourier,partial_fourier_z", [(0.75, 1.0), (1.0, 0.75), (0.75, 0.75)]
+)
+def test_partial_fourier_drops_the_leading_edge(partial_fourier, partial_fourier_z):
+    """Partial Fourier keeps the trailing fraction of each phase-encode axis and
+    the centre, leaving the leading edge for conjugate symmetry -- and still
+    lays down the calibration rectangle so the missing lines are fillable."""
+    n_y, n_z, n_acs, n_acs_z = 32, 8, 8, 4
+    seq = epi_3d.main(
+        n_x=48,
+        n_y=n_y,
+        n_z=n_z,
+        slab_thickness=32e-3,
+        partial_fourier=partial_fourier,
+        partial_fourier_z=partial_fourier_z,
+        n_acs=n_acs,
+        n_acs_z=n_acs_z,
+        readout_bandwidth_hz=150e3,
+    )
+    labels = seq.evaluate_labels(evolution="adc")
+    lin, par = np.asarray(labels["LIN"]), np.asarray(labels["PAR"])
+    sampled = np.zeros((n_y, n_z), dtype=bool)
+    sampled[lin, par] = True
+
+    # The leading edge of each axis is dropped in proportion to the fraction,
+    # the centre is kept, and the calibration rectangle is fully sampled.
+    assert lin.min() >= round((1.0 - partial_fourier) * n_y) - 1
+    assert par.min() >= round((1.0 - partial_fourier_z) * n_z) - 1
+    assert sampled[n_y // 2, n_z // 2]
+    acs_y = pp.calc_calibration_lines(n_y, n_acs)
+    acs_z = pp.calc_calibration_lines(n_z, n_acs_z)
+    assert sampled[np.ix_(acs_y, acs_z)].all()
+
+
 def test_a_time_series_carries_its_repetition_counter():
     labels = design_2d(n_repetitions=3).evaluate_labels(evolution="adc")
     assert sorted(set(labels["REP"].tolist())) == [0, 1, 2]

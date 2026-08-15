@@ -67,6 +67,8 @@ def _shared_kernel(
     acceleration: int = 1,
     acceleration_z: int = 1,
     caipi_shift: int = 1,
+    partial_fourier: float = 1.0,
+    partial_fourier_z: float = 1.0,
     n_acs: int = 24,
     n_acs_z: int = 16,
     readout_bandwidth_hz: float = 500e3,
@@ -79,15 +81,35 @@ def _shared_kernel(
     plain segmented EPI, and above it the ``'caipi'`` shell that tiles a
     :func:`pp.make_caipirinha_mask` lattice.
 
-    An accelerated scan also builds a ``calibration`` train: a short linear,
-    fully sampled EPI train over the central ``n_acs`` lines, played once per
-    central partition to lay down the autocalibration rectangle a parallel
-    reconstruction estimates its coil sensitivities from. The rectangle's
-    lines and partitions come from :func:`pp.calc_calibration_lines`, so the
-    sequence and :mod:`pulserver.reczoo.epi_3d` read the same window.
+    Partial Fourier drops the leading (early) end of each phase-encode axis and
+    lets conjugate symmetry cover it: ``partial_fourier`` shortens the train and
+    slides its ``ky`` origin (``first_y``) up to the retained trailing fraction,
+    ``partial_fourier_z`` drops the leading shells (``first_shell``). The centre
+    of k-space, which the two fractions keep, is what the reconstruction fills
+    from.
+
+    An undersampled scan -- accelerated or partial Fourier -- also builds a
+    ``calibration`` train: a short linear, fully sampled EPI train over the
+    central ``n_acs`` lines, played once per central partition to lay down the
+    autocalibration rectangle a parallel reconstruction estimates its coil
+    sensitivities from. The rectangle's lines and partitions come from
+    :func:`pp.calc_calibration_lines`, so the sequence and
+    :mod:`pulserver.reczoo.epi_3d` read the same window.
     """
     fov_x, fov_y = (fov, fov) if isinstance(fov, (int, float)) else fov
     scheme = "caipi" if acceleration_z > 1 else "linear"
+
+    # Partial Fourier along y shortens the train and shifts its origin: keep the
+    # trailing fraction of the echoes, dropping whole lattice steps so the
+    # retained lattice stays aligned.
+    etl_full = -(-n_y // (acceleration * segments))
+    etl = max(1, round(partial_fourier * etl_full))
+    first_y = max(0, n_y - etl * acceleration * segments)
+
+    # Partial Fourier along z drops the leading shells.
+    n_shells = n_z // acceleration_z
+    first_shell = n_shells - max(1, round(partial_fourier_z * n_shells))
+
     excitation = design.SpatialSelectiveExcitation(
         system, flip_angle_deg, slab_thickness, is_slab=True
     )
@@ -98,6 +120,7 @@ def _shared_kernel(
         fov=(fov_x, fov_y, slab_thickness),
         matrix=(n_x, n_y, n_z),
         scheme=scheme,
+        etl=etl,
         segments=segments,
         acceleration=acceleration,
         partition_acceleration=acceleration_z,
@@ -109,10 +132,15 @@ def _shared_kernel(
         labels=("LIN", "PAR"),
     )
 
-    # The autocalibration rectangle, acquired only when the imaging lattice is
-    # undersampled -- a fully sampled scan calibrates from itself. Its extent
-    # is the same builtin window the reconstruction reads off the mask.
-    accelerated = acceleration > 1 or acceleration_z > 1
+    # The autocalibration rectangle, acquired only when the sampling misses the
+    # centre's surroundings -- a fully sampled scan calibrates from itself. Its
+    # extent is the same builtin window the reconstruction reads off the mask.
+    accelerated = (
+        acceleration > 1
+        or acceleration_z > 1
+        or partial_fourier < 1.0
+        or partial_fourier_z < 1.0
+    )
     acs_lines = pp.calc_calibration_lines(n_y, n_acs) if accelerated else []
     acs_partitions = pp.calc_calibration_lines(n_z, n_acs_z) if accelerated else []
     calibration = None
@@ -137,6 +165,9 @@ def _shared_kernel(
         calibration=calibration,
         acs_lines=acs_lines,
         acs_partitions=acs_partitions,
+        first_y=first_y,
+        first_shell=first_shell,
+        n_shells=n_shells,
         fov=(fov_x, fov_y),
     )
 
@@ -304,6 +335,8 @@ def main(
     acceleration: int = 1,
     acceleration_z: int = 1,
     caipi_shift: int = 1,
+    partial_fourier: float = 1.0,
+    partial_fourier_z: float = 1.0,
     n_acs: int = 24,
     n_acs_z: int = 16,
     readout_bandwidth_hz: float = 500e3,
@@ -364,6 +397,14 @@ def main(
     caipi_shift : int, optional
         Partitions the CAIPI sawtooth climbs per acquired line, ``delta_z``.
         Used only when ``acceleration_z`` is above 1. Default is 1.
+    partial_fourier : float, optional
+        Fraction of the phase-encode extent acquired along y, in ``(0.5, 1]``.
+        The train is shortened and its origin slid to the trailing lines, so
+        the leading (early) lines are dropped and conjugate symmetry covers
+        them. Default is 1.0.
+    partial_fourier_z : float, optional
+        Fraction of the partition extent acquired along z, in ``(0.5, 1]``.
+        The leading shells are dropped. Default is 1.0.
     n_acs : int, optional
         Autocalibration extent along y, in lines. With ``n_acs_z`` it bounds
         the fully sampled central rectangle a short linear train lays down
@@ -408,6 +449,8 @@ def main(
         acceleration=acceleration,
         acceleration_z=acceleration_z,
         caipi_shift=caipi_shift,
+        partial_fourier=partial_fourier,
+        partial_fourier_z=partial_fourier_z,
         n_acs=n_acs,
         n_acs_z=n_acs_z,
         readout_bandwidth_hz=readout_bandwidth_hz,
@@ -423,11 +466,13 @@ def main(
     # One shot per (segment, shell): a shell is a band of ``acceleration_z``
     # partitions the CAIPI sawtooth walks within the train, so ``n_z // Rz``
     # shells tile the lattice. With no z acceleration a shell is one partition
-    # and this is a plain stack of EPI trains. Shells run centre-out by
-    # default, so the first echoes -- the ones the steady state and the
-    # contrast follow -- sit at the centre of k-space.
-    n_shells = n_z // acceleration_z
-    shells = [int(s) for s in pp.calc_traversal_order(n_shells, partition_order)]
+    # and this is a plain stack of EPI trains. Partial Fourier along z keeps the
+    # trailing shells only; the retained shells run centre-out by default, so
+    # the first echoes -- the ones the steady state and the contrast follow --
+    # sit at the centre of k-space. Partial Fourier along y rode into the train
+    # length, so it needs only its origin ``first_y`` here.
+    kept = list(range(kernel.first_shell, kernel.n_shells))
+    shells = [kept[i] for i in pp.calc_traversal_order(len(kept), partition_order)]
     for repetition in range(n_repetitions):
         rep_label.value = int(repetition)
         # The autocalibration rectangle leads each repetition: a fully sampled
@@ -448,7 +493,7 @@ def main(
                 _play_shot(
                     seq,
                     epi,
-                    origin=(segment, shell * acceleration_z),
+                    origin=(kernel.first_y + segment, shell * acceleration_z),
                     grid=(n_y, n_z),
                     rev_label=rev_label,
                     extra_line_labels=(rep_label,),
@@ -626,6 +671,14 @@ class Epi3D(SequencePlugin):
                 UIParam.user_value(4): TypeinFloatParam(
                     value=16.0, min=0.0, max=128.0, incr=1.0, unit="lines"
                 ),
+                UIParam.user_name(5): Description(text="Partial Fourier (y)"),
+                UIParam.user_value(5): TypeinFloatParam(
+                    value=1.0, min=0.75, max=1.0, incr=0.05, unit=""
+                ),
+                UIParam.user_name(6): Description(text="Partial Fourier (z)"),
+                UIParam.user_value(6): TypeinFloatParam(
+                    value=1.0, min=0.75, max=1.0, incr=0.05, unit=""
+                ),
             }
         )
 
@@ -641,8 +694,8 @@ class Epi3D(SequencePlugin):
         except ValueError as error:
             return {"valid": False, "duration": None, "info": str(error)}
 
-        n_shells = kwargs.get("n_z", 32) // max(1, kwargs.get("acceleration_z", 1))
-        shots = kwargs.get("segments", 1) * n_shells
+        n_kept = kernel.n_shells - kernel.first_shell
+        shots = kwargs.get("segments", 1) * n_kept
         per_rep = shots * kernel.epi.seq.duration()[0]
         if kernel.calibration is not None:
             per_rep += len(kernel.acs_partitions) * kernel.calibration.seq.duration()[0]
@@ -694,6 +747,8 @@ _KERNEL_ARGUMENTS = frozenset(
         "acceleration",
         "acceleration_z",
         "caipi_shift",
+        "partial_fourier",
+        "partial_fourier_z",
         "n_acs",
         "n_acs_z",
         "readout_bandwidth_hz",
@@ -738,6 +793,8 @@ def _main_kwargs(system: pp.Opts, protocol: dict[str, dict]) -> dict:
         caipi_shift=max(0, round(params.user_float(prot, 2, 1.0))),
         n_acs=max(0, round(params.user_float(prot, 3, 24.0))),
         n_acs_z=max(0, round(params.user_float(prot, 4, 16.0))),
+        partial_fourier=params.user_float(prot, 5, 1.0),
+        partial_fourier_z=params.user_float(prot, 6, 1.0),
         n_repetitions=params.param_int(prot, UIParam.NUM_FRAMES),
     )
 
@@ -792,6 +849,8 @@ _ARG_MAP = [
     ("--caipi-shift", UIParam.user_value(2), float, "CAIPIRINHA kz shift per ky block"),
     ("--acs-lines", UIParam.user_value(3), float, "Autocalibration lines along y"),
     ("--acs-partitions", UIParam.user_value(4), float, "Autocalibration partitions along z"),
+    ("--partial-fourier", UIParam.user_value(5), float, "Acquired y fraction in (0.5, 1]"),
+    ("--partial-fourier-z", UIParam.user_value(6), float, "Acquired z fraction in (0.5, 1]"),
 ]
 
 if __name__ == "__main__":
