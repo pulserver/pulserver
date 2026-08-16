@@ -11,7 +11,7 @@
 
 #include "test_helpers.h"
 
-#define CHUNK_SEQ "gre_2d_1sl_1avg.seq"
+#define CHUNK_SEQ "gre_2d.seq"
 
 /* mu_assert expands to a bare `return`, so the load has to hand its result
  * back through a parameter rather than a return value. */
@@ -22,7 +22,7 @@ static void chunk_load(pulseg_collection **coll)
 
     *coll = NULL;
     gre_opts_init(&opts);
-    rc = load_seq(coll, CHUNK_SEQ, &opts);
+    rc = load_corpus_seq(coll, CHUNK_SEQ, &opts);
     mu_assert(PULSEG_SUCCEEDED(rc), "load_seq failed for the chunk fixture");
 }
 

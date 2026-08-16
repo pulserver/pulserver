@@ -32,7 +32,7 @@ TEST(PulseqFile, ReadsBlocksAndDefinitions)
     raster.grad_us = 20.0f;
     raster.block_us = 20.0f;
 
-    pulseq::File file = pulseq::File::read(fixture_path("mprage_nav_2d_1sl_1avg.seq"), raster);
+    pulseq::File file = pulseq::File::read(fixture_path("gre_2d.seq"), raster);
 
     EXPECT_GT(file.num_blocks(), 0);
     EXPECT_GT(file.version_combined(), 0);

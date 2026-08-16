@@ -11,6 +11,7 @@ AdcRasterTime 1e-07
 BlockDurationRaster 1e-05 
 GradientRasterTime 1e-05 
 RadiofrequencyRasterTime 1e-06 
+TRSize 1 
 TotalDuration 0.001 
 
 # Format of blocks:
@@ -35,7 +36,7 @@ TotalDuration 0.001
 # Extension specification for RF shimming:
 # id num_chan factor magn_c1 phase_c1 magn_c2 phase_c2 ...
 extension RF_SHIMS 1
-1 8 0.353553 -0 0.353553 -0.785398 0.353553 -1.5708 0.353553 -2.35619 0.353553 -3.14159 0.353553 2.35619 0.353553 1.5708 0.353553 0.785398
+1 8 0.353553 0 0.353553 -0.785398 0.353553 -1.5708 0.353553 -2.35619 0.353553 -3.14159 0.353553 2.35619 0.353553 1.5708 0.353553 0.785398
 
 # Sequence Shapes
 [SHAPES]
@@ -55,3 +56,10 @@ num_samples 2
 0
 1000
 
+
+[SIGNATURE]
+# This is the hash of the Pulseq file, calculated right before the [SIGNATURE] section was added
+# It can be reproduced/verified with md5sum if the file trimmed to the position right above [SIGNATURE]
+# The new line character preceding [SIGNATURE] BELONGS to the signature (and needs to be stripped away for recalculating/verification)
+Type md5
+Hash ffd003f0439db4dcd5b2b4321284a438

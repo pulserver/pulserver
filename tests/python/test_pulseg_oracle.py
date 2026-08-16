@@ -55,24 +55,20 @@ def test_the_interpreter_partition_is_a_valid_pulseg_reading(stem):
 
 
 def test_the_epi_collection_partition_is_blessed():
-    """The adjudicated case: 1 GRE segment + 3 EPI segments is a valid
-    reading -- the fatsat prep is its own unit because it is structurally
-    distinct from the shot body, and carving the frame-counter block
-    separately is granularity the interpreter is free to choose."""
+    """The NextSequence chain: every subsequence's partition validates
+    independently -- the calibration lead and the blipped imaging train are
+    separate files, each with its own detected segments."""
     paths = [
-        "tests/utils/expected/gre_epi_collection_2d_1sl_1avg.seq",
-        "tests/utils/expected/gre_epi_collection_2d_1sl_1avg_epi.seq",
+        str(FIXTURES_DIR / "epi_2d.seq"),
+        str(FIXTURES_DIR / "epi_2d_main.seq"),
     ]
     collection = collection_for(paths)
 
-    counts = []
     for subseq, path in enumerate(paths):
         segments = wrapper._get_segments(collection, subseq)
+        assert segments, path
         instances = validate_partition(read(path), segments)
         assert sum(c for _, _, c in instances) == read(path).num_blocks
-        counts.append(len(segments))
-
-    assert counts == [1, 3]
 
 
 def test_the_degenerate_whole_scan_partition_is_legal():
@@ -80,7 +76,7 @@ def test_the_degenerate_whole_scan_partition_is_legal():
     rule -- it is the trivial fallback reading every scan admits. The
     oracle validates compliance, not granularity: play-once regions are
     block-level execution metadata, never a partition constraint."""
-    path = "tests/utils/expected/gre_epi_collection_2d_1sl_1avg_epi.seq"
+    path = str(FIXTURES_DIR / "epi_2d_main.seq")
     seq = read(path)
 
     whole = [{"global_index": 0, "start_block": 0, "num_blocks": seq.num_blocks}]

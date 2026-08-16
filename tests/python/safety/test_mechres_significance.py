@@ -20,7 +20,7 @@ import pytest
 from pulserver._ext._pulseg_wrapper import _check_consistency, _check_safety
 from pulserver.pypulseq import Opts
 
-from .conftest import EXPECTED, build_collection
+from .conftest import CORPUS, EXPECTED, build_collection
 
 GAM_HZ_PER_G = 4257.6  # GE EPIC GAM; matches CVInit amp_gcm*GAM*100
 
@@ -45,7 +45,8 @@ def _check(name: str, raster: float, bands) -> None:
         grad_raster_time=raster,
         block_duration_raster=raster,
     )
-    collection = build_collection(EXPECTED / name, system)
+    root = EXPECTED if (EXPECTED / name).exists() else CORPUS
+    collection = build_collection(root / name, system)
     _check_consistency(collection)
     _check_safety(collection, forbidden_bands=bands, skip_pns=True)
 
@@ -57,19 +58,20 @@ def test_gre32_pe_blip_ghost_passes():
 
 
 @pytest.mark.parametrize(
-    "name", ["gre_2d_1sl_1avg.seq", "epi_2d_1sl_1avg.seq", "fse_2d_1sl_1avg.seq", "mprage_2d_1sl_1avg.seq"]
+    "name", ["gre_2d.seq", "gre_2d_3sl.seq", "fse_2d.seq", "mprage_3d.seq"]
 )
 def test_representative_fixtures_pass(name):
-    """No sustained readout-scale gradient drive inside the HRMbUHP bands. mprage
-    (GRE-family + IR dead delay) belongs here: it drives the bands less than gre
-    -- the ratified corpus verdict is PASS."""
+    """No sustained readout-scale gradient drive inside the HRMbUHP bands.
+    mprage (GRE-family + IR dead delay) belongs here: it drives the bands
+    less than gre -- the corpus verdict is PASS."""
     _check(name, 20e-6, HRMB_BANDS)  # must not raise
 
 
-@pytest.mark.parametrize("name", ["bssfp_2d_1sl_1avg.seq"])
+@pytest.mark.parametrize("name", ["bssfp_2d.seq", "epi_2d_main.seq"])
 def test_real_readout_combs_still_flagged(name):
-    """A genuine sustained balanced-readout comb harmonic landing in a
-    zero-tolerance band MUST still be caught (bSSFP is the corpus true positive:
-    A_eq ~= 7.8 mT/m at ~1233 Hz)."""
+    """A genuine sustained readout comb harmonic landing in a zero-tolerance
+    band MUST still be caught: the corpus true positives are bSSFP
+    (A_eq ~= 7.9 mT/m at ~1176 Hz) and the EPI train (~5.5 mT/m at
+    ~1158 Hz)."""
     with pytest.raises(RuntimeError, match="mech"):
         _check(name, 20e-6, HRMB_BANDS)

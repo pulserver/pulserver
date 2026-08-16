@@ -152,7 +152,7 @@ static void assert_pulsegen_view_equal(
 
 /* Parse @p filename twice: once fully in memory, once through the cache the
  * predownload pass writes, loaded with the pulsegen section set only. */
-static void check_fixture(const char *filename)
+static void check_fixture_in(const char *dir, const char *filename)
 {
     pulseg_opts opts;
     pulseg_diagnostic diag = PULSEG_DIAGNOSTIC_INIT;
@@ -162,7 +162,7 @@ static void check_fixture(const char *filename)
     int rc;
 
     default_opts_init(&opts);
-    (void)snprintf(seq_path, sizeof(seq_path), "%s%s", TEST_DATA_DIR, filename);
+    (void)snprintf(seq_path, sizeof(seq_path), "%s%s", dir, filename);
 
     /* cache_binary = 1: writes the sectioned cache beside the .seq, at the
      * DEFAULT extension (.pseg) -- the committed fixtures use the GE .pge
@@ -190,17 +190,17 @@ static void check_fixture(const char *filename)
 
 MU_TEST(test_pulsegen_cache_matches_full_parse_gre)
 {
-    check_fixture("gre_2d_3sl_3avg.seq");
+    check_fixture_in(TEST_CORPUS_DIR, "gre_2d_3sl.seq");
 }
 
 MU_TEST(test_pulsegen_cache_matches_full_parse_epi)
 {
-    check_fixture("epi_2d_3sl_3avg.seq");
+    check_fixture_in(TEST_CORPUS_DIR, "epi_2d_main.seq");
 }
 
 MU_TEST(test_pulsegen_cache_matches_full_parse_rotated)
 {
-    check_fixture("mprage_noncart_3d_3sl_3avg_userotext1.seq");
+    check_fixture_in(TEST_CORPUS_DIR, "mprage_stack_of_spirals_3d.seq");
 }
 
 /* Cross-subsequence chain: the dedup remap is rebuilt from COMMON + SHAPES on
@@ -208,7 +208,7 @@ MU_TEST(test_pulsegen_cache_matches_full_parse_rotated)
  * must match the full parse's. */
 MU_TEST(test_pulsegen_cache_matches_full_parse_chained)
 {
-    check_fixture("dedup_gre_pair.seq");
+    check_fixture_in(TEST_DATA_DIR, "dedup_gre_pair.seq");
 }
 
 MU_TEST_SUITE(suite_pulsegen_cache)

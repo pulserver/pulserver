@@ -1,5 +1,5 @@
 # Pulseq sequence file
-# One 500 us block pulse at 500 Hz: the single-channel RF-statistics baseline.
+# An RF amplitude ladder (125/250/500 Hz) with slice gradients and no ADC anywhere.
 # Written by tests/utils/synthetic_fixtures.py
 
 [VERSION]
@@ -15,9 +15,17 @@ RadiofrequencyRasterTime 1e-06
 
 [BLOCKS]
 1 100   1   0   0   0  0  0
+2 100   2   1   0   0  0  0
+3 100   2   1   0   0  0  0
+4 100   3   0   0   0  0  0
 
 [RF]
-1          500 1 2 3 500 0 0 0 0 0 e
+1          125 1 2 3 500 0 0 0 0 0 e
+2          250 1 2 3 500 0 0 0 0 0 e
+3          500 1 2 3 500 0 0 0 0 0 r
+
+[TRAP]
+ 1  1.20482e+06 170  660 170   0
 
 [SHAPES]
 shape_id 1

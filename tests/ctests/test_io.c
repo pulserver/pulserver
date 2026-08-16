@@ -11,7 +11,7 @@
 
 static void build_seq_path(char *out_path, size_t out_size, const char *filename)
 {
-    (void)snprintf(out_path, out_size, "%s%s", TEST_DATA_DIR, filename);
+    (void)snprintf(out_path, out_size, "%s%s", TEST_CORPUS_DIR, filename);
 }
 
 static void build_cache_path(char *out_path, size_t out_size, const char *seq_path)
@@ -53,7 +53,7 @@ MU_TEST(test_signature_valid_gre)
     int rc;
 
     gre_opts_init(&opts);
-    rc = load_seq_with_signature_check(&coll, "gre_2d_1sl_1avg.seq", &opts);
+    rc = load_corpus_seq_with_signature_check(&coll, "gre_2d.seq", &opts);
 
     mu_assert(PULSEG_SUCCEEDED(rc), "signature check failed on valid sequence");
     mu_assert(coll != NULL, "collection must be allocated on valid signature");
@@ -69,7 +69,7 @@ MU_TEST(test_signature_mismatch_gre)
 
     gre_opts_init(&opts);
     rc = load_seq_with_signature_check(
-        &coll, "gre_2d_1sl_1avg_corrupted.seq", &opts);
+        &coll, "gre_2d_corrupted.seq", &opts);
 
     mu_assert_int_eq(PULSEG_ERR_SIGNATURE_MISMATCH, rc);
     mu_assert(coll == NULL, "collection must remain NULL on signature mismatch");
@@ -87,7 +87,7 @@ MU_TEST(test_cache_stage_loaders_and_clear)
     int rc;
 
     gre_opts_init(&opts);
-    build_seq_path(seq_path, sizeof(seq_path), "gre_2d_1sl_1avg.seq");
+    build_seq_path(seq_path, sizeof(seq_path), "gre_2d.seq");
     build_cache_path(cache_path, sizeof(cache_path), seq_path);
 
     rc = pulseg_clear_cache(seq_path);

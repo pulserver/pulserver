@@ -31,10 +31,16 @@
 namespace
 {
     const std::string kData = std::string(PULSEQ_FIXTURES_DIR) + "/";
+    const std::string kCorpus = std::string(PULSEQ_CORPUS_DIR) + "/";
 
     pulseq::Sequence load(const std::string& stem)
     {
         return pulseq::read_file(kData + stem + ".seq");
+    }
+
+    pulseq::Sequence load_corpus(const std::string& stem)
+    {
+        return pulseq::read_file(kCorpus + stem + ".seq");
     }
 
 }  // namespace
@@ -55,10 +61,11 @@ namespace
  */
 TEST(PulseqKSpace, SymmetricCartesianEchoIsAtHalfN)
 {
-    for (const char* stem : {"gre_2d_1sl_1avg", "gre_2d_3sl_3avg", "fse_2d_1sl_1avg",
-                             "gre_32x32_pe_blip", "bssfp_2d_1sl_1avg"})
+    for (const std::string& stem : {kCorpus + "gre_2d", kCorpus + "gre_2d_3sl",
+                                    kCorpus + "fse_2d", kData + "gre_32x32_pe_blip",
+                                    kCorpus + "bssfp_2d"})
     {
-        pulseq::Sequence seq = load(stem);
+        pulseq::Sequence seq = pulseq::read_file(stem + ".seq");
         const pulseq::KSpace ks = pulseq::calculate_kspace(seq);
         ASSERT_FALSE(ks.readouts.empty()) << stem;
 
@@ -82,7 +89,7 @@ TEST(PulseqKSpace, SymmetricCartesianEchoIsAtHalfN)
  */
 TEST(PulseqKSpace, EpiPolaritiesHaveMirroredEchoes)
 {
-    pulseq::Sequence seq = load("epi_2d_1sl_1avg");
+    pulseq::Sequence seq = load_corpus("epi_2d_main");
     const pulseq::KSpace ks = pulseq::calculate_kspace(seq);
     ASSERT_GT(ks.readouts.size(), 4u);
 
@@ -121,7 +128,7 @@ TEST(PulseqKSpace, EpiPolaritiesHaveMirroredEchoes)
  */
 TEST(PulseqKSpace, DenseTrajectoryAgreesWithTheAdcSamples)
 {
-    pulseq::Sequence seq = load("gre_2d_1sl_1avg");
+    pulseq::Sequence seq = load_corpus("gre_2d");
     pulseq::KSpaceOptions options;
     options.dense = true;
     const pulseq::KSpace ks = pulseq::calculate_kspace(seq, options);
@@ -189,7 +196,7 @@ TEST(PulseqKSpace, DenseTrajectoryAgreesWithTheAdcSamples)
  */
 TEST(PulseqKSpace, MrdLayoutIsInterleavedAndPrunedConsistently)
 {
-    pulseq::Sequence seq = load("gre_2d_1sl_1avg");
+    pulseq::Sequence seq = load_corpus("gre_2d");
     const pulseq::KSpace ks = pulseq::calculate_kspace(seq);
     const std::array<bool, 3> axes = pulseq::active_axes(ks);
 
@@ -232,7 +239,7 @@ TEST(PulseqKSpace, MrdLayoutIsInterleavedAndPrunedConsistently)
 /* A block range bounds what comes back. */
 TEST(PulseqKSpace, BlockRangeBoundsTheResult)
 {
-    pulseq::Sequence seq = load("gre_2d_1sl_1avg");
+    pulseq::Sequence seq = load_corpus("gre_2d");
     const pulseq::KSpace all = pulseq::calculate_kspace(seq);
 
     pulseq::KSpaceOptions options;
@@ -253,7 +260,7 @@ TEST(PulseqKSpace, BlockRangeBoundsTheResult)
  */
 TEST(PulseqKSpace, TheRepeatMemoSurvivesTheBridge)
 {
-    pulseq::Sequence seq = load("gre_2d_3sl_3avg");
+    pulseq::Sequence seq = load_corpus("gre_2d_3sl");
     const pulseq::KSpace ks = pulseq::calculate_kspace(seq);
 
     ASSERT_GT(ks.readouts.size(), 4u);
@@ -365,13 +372,14 @@ TEST(PulseqKSpace, ARadialSpokeIsConstantGradientButNotCartesian)
  */
 TEST(PulseqKSpace, BlockKOriginsIsTheCoreReindexedFromOne)
 {
-    for (const char* stem : {"gre_2d_1sl_1avg", "gre_2d_3sl_3avg", "epi_2d_3sl_3avg",
-                             "fse_2d_1sl_1avg", "gre_32x32_pe_blip", "bssfp_2d_3sl_3avg",
-                             "mprage_2d_3sl_3avg", "mprage_nav_2d_3sl_3avg",
-                             "mprage_noncart_3d_3sl_3avg_userotext1",
-                             "qalas_noncart_3d_3sl_3avg_userotext1"})
+    for (const std::string& stem : {kCorpus + "gre_2d", kCorpus + "gre_2d_3sl",
+                                    kCorpus + "epi_2d_main", kCorpus + "fse_2d",
+                                    kData + "gre_32x32_pe_blip", kCorpus + "bssfp_2d",
+                                    kCorpus + "mprage_3d",
+                                    kCorpus + "gre_stack_of_stars_3d",
+                                    kCorpus + "mprage_stack_of_spirals_3d"})
     {
-        pulseq::Sequence seq = load(stem);
+        pulseq::Sequence seq = pulseq::read_file(stem + ".seq");
         const std::vector<std::array<double, 3>> theirs = pulseq::block_k_origins(seq);
 
         pulseq::KSpaceOptions options;
@@ -381,7 +389,7 @@ TEST(PulseqKSpace, BlockKOriginsIsTheCoreReindexedFromOne)
         options.block_origins = true;
         options.derive_center_sample = false;
         options.materialize_samples = false;
-        pulseq::Sequence again = load(stem);
+        pulseq::Sequence again = pulseq::read_file(stem + ".seq");
         const pulseq::KSpace ks = pulseq::calculate_kspace(again, options);
 
         ASSERT_EQ(static_cast<int>(theirs.size()), seq.num_blocks() + 1) << stem;
@@ -407,21 +415,21 @@ TEST(PulseqKSpace, BlockKOriginsIsTheCoreReindexedFromOne)
 /* Window averaging leaves a flat readout alone and moves a curved one. */
 TEST(PulseqKSpace, WindowAveragingIsOptInAndOnlyMovesCurvedReadouts)
 {
-    pulseq::Sequence flat = load("fse_2d_1sl_1avg");
+    pulseq::Sequence flat = load_corpus("fse_2d");
     const pulseq::KSpace midpoint = pulseq::calculate_kspace(flat);
 
     pulseq::KSpaceOptions options;
     options.sample_window_average = true;
-    pulseq::Sequence flat_again = load("fse_2d_1sl_1avg");
+    pulseq::Sequence flat_again = load_corpus("fse_2d");
     const pulseq::KSpace averaged = pulseq::calculate_kspace(flat_again, options);
 
     ASSERT_EQ(midpoint.k_adc.size(), averaged.k_adc.size());
     for (size_t i = 0; i < midpoint.k_adc.size(); ++i)
         EXPECT_NEAR(midpoint.k_adc[i], averaged.k_adc[i], 1e-9);
 
-    pulseq::Sequence curved = load("mprage_noncart_3d_3sl_3avg_userotext1");
+    pulseq::Sequence curved = load_corpus("gre_spiral_2d");
     const pulseq::KSpace curved_mid = pulseq::calculate_kspace(curved);
-    pulseq::Sequence curved_again = load("mprage_noncart_3d_3sl_3avg_userotext1");
+    pulseq::Sequence curved_again = load_corpus("gre_spiral_2d");
     const pulseq::KSpace curved_avg = pulseq::calculate_kspace(curved_again, options);
 
     double biggest = 0.0;

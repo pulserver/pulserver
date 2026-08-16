@@ -134,8 +134,7 @@ extern "C"
      * @brief Heap-allocate and zero-initialize an empty collection, ready to
      * be populated by pulseg_convert_collection(). This is the same
      * allocation pulseg_read() / pulseg_read_from_buffers() perform
-     * internally; exposed so external producers of pulseq_file (e.g.
-     * the ExternalSequence adapter, cxx/pulseq_adapter) that call
+     * internally; exposed so external producers of pulseq_file that call
      * pulseg_convert_collection() directly don't need to know
      * pulseg_collection's (intentionally opaque) internal layout.
      * @return A freshly allocated collection, or NULL on allocation failure.

@@ -31,10 +31,16 @@
 namespace
 {
     const std::string kData = std::string(PULSEQ_FIXTURES_DIR) + "/";
+    const std::string kCorpus = std::string(PULSEQ_CORPUS_DIR) + "/";
 
     pulseq::Sequence load(const std::string& stem)
     {
         return pulseq::read_file(kData + stem + ".seq");
+    }
+
+    pulseq::Sequence load_corpus(const std::string& stem)
+    {
+        return pulseq::read_file(kCorpus + stem + ".seq");
     }
 
     pulseq::Matrix3 total(const pulseq::BTensorParts& parts)
@@ -85,9 +91,10 @@ namespace
  */
 TEST(PulseqMoments, TheSplitSumsToTheTensor)
 {
-    for (const char* stem : {"gre_2d_1sl_1avg", "fse_2d_1sl_1avg", "epi_2d_3sl_1avg"})
+    for (const std::string& stem : {kCorpus + "gre_2d", kCorpus + "fse_2d",
+                                    kCorpus + "epi_2d_main"})
     {
-        pulseq::Sequence seq = load(stem);
+        pulseq::Sequence seq = pulseq::read_file(stem + ".seq");
         const pulseq::Moments moments = pulseq::calc_moments(seq);
         ASSERT_GT(moments.num_shots(), 0) << stem;
 
@@ -169,7 +176,7 @@ TEST(PulseqMoments, ComposingAPrescriptionTurnsTheTensor)
  */
 TEST(PulseqMoments, TheBValueDoesNotDependOnThePrescription)
 {
-    pulseq::Sequence seq = load("fse_2d_1sl_1avg");
+    pulseq::Sequence seq = load_corpus("fse_2d");
     const pulseq::Moments moments = pulseq::calc_moments(seq);
     ASSERT_GT(moments.num_shots(), 0);
 
@@ -220,7 +227,7 @@ TEST(PulseqMoments, TheTableHasOneRowPerDistinctEncoding)
  */
 TEST(PulseqMoments, SkippingDummiesLeavesTheRestAlone)
 {
-    pulseq::Sequence seq = load("gre_2d_1sl_1avg");
+    pulseq::Sequence seq = load_corpus("gre_2d");
 
     const pulseq::Moments all = pulseq::calc_moments(seq);
     ASSERT_GT(all.num_shots(), 3);
@@ -249,7 +256,7 @@ TEST(PulseqMoments, SkippingDummiesLeavesTheRestAlone)
  */
 TEST(PulseqMoments, AShotWithNoEchoReportsNaNAndIntegratesNothing)
 {
-    pulseq::Sequence seq = load("05_rfprep_ok_canonical_fullpass");
+    pulseq::Sequence seq = load("05_rf_ladder_no_adc");
     const pulseq::Moments moments = pulseq::calc_moments(seq);
     ASSERT_GT(moments.num_shots(), 0);
 

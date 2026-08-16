@@ -20,46 +20,45 @@ script only needs re-running when the writers change.
 from __future__ import annotations
 
 import pathlib
-import sys
 import warnings
 
+warnings.filterwarnings("ignore")
+
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT))
-
-warnings.filterwarnings('ignore')
-
-from fastseq.binary import write_binary  # noqa: E402
-from fastseq.sequence import read, write  # noqa: E402
 
 #: One fixture per feature the binary format has its own encoding for.
+#: Sources are the synthetic corpus (tests/utils/expected) and, for the
+#: label-heavy pairs, the zoo corpus (tests/python/fixtures).
 SOURCES = [
-    ('basic', '00_basic_rfstat.seq'),                  # rf, trap, shapes
-    ('arbgrad', '05_ok_extended_with_delay.seq'),      # arbitrary gradients
-    ('rotations', '09_fail_rot_identity.seq'),         # rotation quaternions
-    ('rfshims', '07_rfstat_cp_8ch_180.seq'),           # pTx shim vectors
-    ('labelset', 'gre_2d_1sl_3avg.seq'),               # LABELSET + chains
-    ('labelinc', 'epi_2d_3sl_1avg.seq'),               # LABELINC + triggers
+    ("basic", "tests/utils/expected/00_basic_rfstat.seq"),        # rf, shapes
+    ("arbgrad", "tests/utils/expected/05_ok_extended_with_delay.seq"),  # arbitrary gradients
+    ("rotations", "tests/utils/expected/09_fail_rot_identity.seq"),     # rotation quaternions
+    ("rfshims", "tests/utils/expected/07_rfstat_cp_8ch_180.seq"),       # pTx shim vectors
+    ("labelset", "tests/python/fixtures/gre_2d.seq"),             # LABELSET + custom names
+    ("labelinc", "tests/python/fixtures/epi_2d_main.seq"),        # LABELINC + triggers
 ]
 
-SOURCE_DIR = ROOT / 'tests' / 'utils' / 'expected'
-OUT_DIR = SOURCE_DIR / 'binary'
+OUT_DIR = ROOT / "tests" / "utils" / "expected" / "binary"
 
 
 def main() -> int:
+    import pulserver.pypulseq as pp
+
     OUT_DIR.mkdir(exist_ok=True)
     for name, source in SOURCES:
-        path = SOURCE_DIR / source
+        path = ROOT / source
         if not path.exists():
-            print(f'SKIP {name}: {source} not found')
+            print(f"SKIP {name}: {source} not found")
             continue
-        seq = read(path)
-        write(seq, OUT_DIR / f'{name}.seq')
-        write_binary(seq, OUT_DIR / f'{name}.bin')
-        text_size = (OUT_DIR / f'{name}.seq').stat().st_size
-        bin_size = (OUT_DIR / f'{name}.bin').stat().st_size
-        print(f'{name:12s} from {source:44s} text {text_size:8d}  binary {bin_size:8d}')
+        seq = pp.Sequence()
+        seq.read(str(path))
+        seq.write(OUT_DIR / f"{name}.seq")
+        seq.write_binary(OUT_DIR / f"{name}.bin")
+        text_size = (OUT_DIR / f"{name}.seq").stat().st_size
+        bin_size = (OUT_DIR / f"{name}.bin").stat().st_size
+        print(f"{name:12s} from {source:44s} text {text_size:8d}  binary {bin_size:8d}")
     return 0
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     raise SystemExit(main())

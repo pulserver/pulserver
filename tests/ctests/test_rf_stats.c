@@ -325,17 +325,17 @@ MU_TEST_SUITE(suite_rf_consistency)
 }
 
 /* ================================================================== */
-/*  Suite C — Canonical full-pass RF periodicity                      */
+/*  Suite C — RF amplitude varying ACROSS TRs                          */
 /* ================================================================== */
 
-/* test case 06: two-pass sequence where pass-2 uses a different RF
- * amplitude than pass-1. Default opts accept it (rf_amplitude_variable is
- * raised, no error) -- same relaxation as suite_rf_consistency's VFA case,
- * cross-pass variant (check_cross_pass_rf_consistency). */
+/* test case 06: two structurally identical TRs whose RF amplitude differs
+ * (150 vs 225 Hz). Default opts accept it (rf_amplitude_variable is
+ * raised, no error) -- same relaxation as suite_rf_consistency's VFA
+ * case, applied across TR instances. */
 MU_TEST(test_rf_multipass_variable_structure)
 {
     run_consistency_check(
-        "06_rfprep_fail_multipass_variable.seq",
+        "06_rfamp_two_tier_trs.seq",
         PULSEG_SUCCESS);
 }
 
@@ -345,22 +345,22 @@ MU_TEST(test_rf_multipass_variable_flag_off)
     int rc;
 
     s_rf_opts.allow_variable_rf_amplitude = 0;
-    rc = load_seq(&coll, "06_rfprep_fail_multipass_variable.seq", &s_rf_opts);
+    rc = load_seq(&coll, "06_rfamp_two_tier_trs.seq", &s_rf_opts);
     mu_assert_int_eq(PULSEG_ERR_CONSISTENCY_RF_PERIODIC, rc);
 }
 
-/* pulseg_get_rf_array over the accepted cross-pass-variable case: the
- * worst-B1rms pass (pass 2, 0.45*pi > pass 1's 0.30*pi -- uniform within
- * each pass, so B1rms ranking reduces to plain amplitude here) supplies the
- * REAL act_amplitude_hz; peak_amplitude_hz is the positional max, which
- * coincides with it since amplitude is uniform within each pass. */
+/* pulseg_get_rf_array over the accepted variable-amplitude case: the
+ * worst-B1rms TR (the 225 Hz tier -- amplitude is uniform within each TR,
+ * so B1rms ranking reduces to plain amplitude) supplies the REAL
+ * act_amplitude_hz; peak_amplitude_hz is the positional max, which
+ * coincides with it since the 225 Hz tier dominates every position. */
 MU_TEST(test_rf_multipass_variable_array_uses_worst_pass)
 {
     pulseg_collection *coll = NULL;
     pulseg_rf_stats *pulses = NULL;
     int rc, npulses, i;
 
-    rc = load_seq(&coll, "06_rfprep_fail_multipass_variable.seq", &s_rf_opts);
+    rc = load_seq(&coll, "06_rfamp_two_tier_trs.seq", &s_rf_opts);
     mu_assert(PULSEG_SUCCEEDED(rc), "load_seq failed");
 
     npulses = pulseg_get_rf_array(coll, &pulses, 0);
@@ -368,8 +368,8 @@ MU_TEST(test_rf_multipass_variable_array_uses_worst_pass)
 
     for (i = 0; i < npulses; ++i)
     {
-        mu_assert_float_near("act_amplitude_hz (pass-2 winner)", 225.0f, pulses[i].act_amplitude_hz, 1.0f);
-        mu_assert_float_near("peak_amplitude_hz (uniform-per-pass envelope)", 225.0f, pulses[i].peak_amplitude_hz, 1.0f);
+        mu_assert_float_near("act_amplitude_hz (225 Hz tier winner)", 225.0f, pulses[i].act_amplitude_hz, 1.0f);
+        mu_assert_float_near("peak_amplitude_hz (uniform-per-TR envelope)", 225.0f, pulses[i].peak_amplitude_hz, 1.0f);
     }
 
     free(pulses);

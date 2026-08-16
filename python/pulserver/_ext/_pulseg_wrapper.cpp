@@ -24,6 +24,16 @@ namespace py = pybind11;
 
 // ─── Thin holder for the C++ Collection ─────────────────────────────
 
+static void apply_label_column_map(pulseg::Opts& opts, const std::vector<int>& map)
+{
+    if (map.empty())
+        return;
+    if (map.size() != 3)
+        throw std::invalid_argument("label_column_map must have exactly 3 entries");
+    for (int i = 0; i < 3; ++i)
+        opts.label_column_map[i] = map[static_cast<size_t>(i)];
+}
+
 class _PulseqCollection
 {
 public:
@@ -38,7 +48,8 @@ public:
         float adc_raster_time,
         float block_duration_raster,
         bool parse_labels,
-        int num_averages)
+        int num_averages,
+        const std::vector<int>& label_column_map)
     {
         pulseg::Opts opts;
         opts.gamma_hz_per_t = gamma;
@@ -49,6 +60,7 @@ public:
         opts.grad_raster_us = grad_raster_time * 1e6f;
         opts.adc_raster_us = adc_raster_time * 1e6f;
         opts.block_raster_us = block_duration_raster * 1e6f;
+        apply_label_column_map(opts, label_column_map);
 
         int n = static_cast<int>(seq_bytes_list.size());
         std::vector<std::string> buffers(n);
@@ -83,7 +95,8 @@ public:
         float adc_raster_time,
         float block_duration_raster,
         bool parse_labels,
-        int num_averages)
+        int num_averages,
+        const std::vector<int>& label_column_map)
     {
         pulseg::Opts opts;
         opts.gamma_hz_per_t = gamma;
@@ -94,6 +107,7 @@ public:
         opts.grad_raster_us = grad_raster_time * 1e6f;
         opts.adc_raster_us = adc_raster_time * 1e6f;
         opts.block_raster_us = block_duration_raster * 1e6f;
+        apply_label_column_map(opts, label_column_map);
 
         coll_ = std::unique_ptr<pulseg::Collection>(new pulseg::Collection(
             file_path.c_str(),
@@ -541,13 +555,288 @@ static py::list _get_segments(_PulseqCollection& pc, int subseq_idx)
     return out;
 }
 
+// ─── Conformance projections ────────────────────────────────────────
+//
+// Read-only views of the two PulSeg IR classes the id-indexed layout
+// factors apart: the virtual-segment content (spec 3.0/3.2, per-segment
+// per-block event definitions with hydrated waveforms) and the instance
+// table (spec 3.3, one resolved row per executed block).
+
+static py::array_t<float> _own_float_array(float* data, int n)
+{
+    py::array_t<float> out(n);
+    std::memcpy(out.mutable_data(), data, sizeof(float) * static_cast<size_t>(n));
+    PULSEG_FREE(data);
+    return out;
+}
+
+static py::array_t<float> _own_float_matrix(float** rows, int nrows, int ncols)
+{
+    py::array_t<float> out({nrows, ncols});
+    for (int r = 0; r < nrows; ++r)
+    {
+        std::memcpy(
+            out.mutable_data(r, 0), rows[r], sizeof(float) * static_cast<size_t>(ncols));
+        PULSEG_FREE(rows[r]);
+    }
+    PULSEG_FREE(rows);
+    return out;
+}
+
+static py::list _get_segment_blocks(_PulseqCollection& pc)
+{
+    const pulseg_collection* coll = pc.coll().handle();
+    py::list segments;
+
+    pulseg_collection_info cinfo = PULSEG_COLLECTION_INFO_INIT;
+    if (!PULSEG_SUCCEEDED(pulseg_get_collection_info(coll, &cinfo)))
+        throw std::runtime_error("pulseg_get_collection_info failed");
+    const int num_segments = cinfo.num_segments;
+    for (int s = 0; s < num_segments; ++s)
+    {
+        pulseg_segment_info segi = PULSEG_SEGMENT_INFO_INIT;
+        if (!PULSEG_SUCCEEDED(pulseg_get_segment_info(coll, &segi, s)))
+            throw std::runtime_error("pulseg_get_segment_info failed");
+
+        py::dict seg;
+        seg["duration_us"] = segi.duration_us;
+        seg["num_blocks"] = segi.num_blocks;
+        seg["start_block"] = segi.start_block;
+        seg["pure_delay"] = segi.pure_delay;
+        seg["is_nav"] = segi.is_nav;
+        seg["has_trigger"] = segi.has_trigger;
+        seg["trigger_type"] = segi.trigger_type;
+
+        py::list blocks;
+        for (int b = 0; b < segi.num_blocks; ++b)
+        {
+            pulseg_block_info bi = PULSEG_BLOCK_INFO_INIT;
+            if (!PULSEG_SUCCEEDED(pulseg_get_block_info(coll, &bi, s, b)))
+                throw std::runtime_error("pulseg_get_block_info failed");
+
+            py::dict blk;
+            blk["duration_us"] = bi.duration_us;
+            blk["start_time_us"] = bi.start_time_us;
+            blk["has_rf"] = bi.has_rf;
+            blk["has_adc"] = bi.has_adc;
+            blk["has_rotation"] = bi.has_rotation;
+            blk["has_digitalout"] = bi.has_digitalout;
+            blk["is_variable_delay"] = bi.is_variable_delay;
+            blk["norot_flag"] = bi.norot_flag;
+            blk["nopos_flag"] = bi.nopos_flag;
+            blk["rf_grad_constant"] = bi.rf_grad_constant;
+
+            if (bi.has_rf)
+            {
+                blk["rf_delay_us"] = bi.rf_delay_us;
+                blk["rf_num_channels"] = bi.rf_num_channels;
+                blk["rf_duration_us"] = bi.rf_duration_us;
+                blk["rf_initial_amplitude_hz"] =
+                    pulseg_get_rf_initial_amplitude_hz(coll, s, b);
+                blk["rf_max_amplitude_hz"] = pulseg_get_rf_max_amplitude_hz(coll, s, b);
+
+                int nch = 0;
+                int ns = 0;
+                float** mag = pulseg_get_rf_magnitude(coll, &nch, &ns, s, b);
+                if (mag != NULL)
+                    blk["rf_magnitude"] = _own_float_matrix(mag, nch, ns);
+                nch = 0;
+                ns = 0;
+                float** phase = pulseg_get_rf_phase(coll, &nch, &ns, s, b);
+                if (phase != NULL)
+                    blk["rf_phase"] = _own_float_matrix(phase, nch, ns);
+                float* time = pulseg_get_rf_time_us(coll, s, b);
+                if (time != NULL && ns > 0)
+                    blk["rf_time_us"] = _own_float_array(time, ns);
+                else if (time != NULL)
+                    PULSEG_FREE(time);
+            }
+
+            py::list grads;
+            for (int axis = 0; axis < 3; ++axis)
+            {
+                if (!bi.has_grad[axis])
+                {
+                    grads.append(py::none());
+                    continue;
+                }
+                py::dict g;
+                g["is_trapezoid"] = bi.grad_is_trapezoid[axis];
+                g["delay_us"] = bi.grad_delay_us[axis];
+                g["num_shots"] = bi.grad_num_shots[axis];
+                g["initial_amplitude_hz_per_m"] =
+                    pulseg_get_grad_initial_amplitude_hz_per_m(coll, s, b, axis);
+                g["max_amplitude_hz_per_m"] =
+                    pulseg_get_grad_max_amplitude_hz_per_m(coll, s, b, axis);
+
+                int nshots = 0;
+                int ns = 0;
+                float** amp = pulseg_get_grad_amplitude(coll, &nshots, &ns, s, b, axis);
+                if (amp != NULL)
+                    g["amplitude"] = _own_float_matrix(amp, nshots, ns);
+                float* time = pulseg_get_grad_time_us(coll, s, b, axis);
+                if (time != NULL && ns > 0)
+                    g["time_us"] = _own_float_array(time, ns);
+                else if (time != NULL)
+                    PULSEG_FREE(time);
+                grads.append(g);
+            }
+            blk["grads"] = grads;
+
+            if (bi.has_adc)
+            {
+                blk["adc_delay_us"] = bi.adc_delay_us;
+                blk["adc_def_id"] = bi.adc_def_id;
+            }
+            if (bi.has_digitalout)
+            {
+                blk["digitalout_delay_us"] = bi.digitalout_delay_us;
+                blk["digitalout_duration_us"] = bi.digitalout_duration_us;
+                blk["digitalout_channel"] = bi.digitalout_channel;
+            }
+            blocks.append(blk);
+        }
+        seg["blocks"] = blocks;
+        segments.append(seg);
+    }
+    return segments;
+}
+
+static py::dict _get_scan_table(_PulseqCollection& pc)
+{
+    pulseg_collection* coll = pc.coll().handle();
+
+    std::vector<int> subseq_idx, scan_pos, segment_id, segment_start, segment_end;
+    std::vector<int> duration_us, rf_shim_id, gx_shape, gy_shape, gz_shape;
+    std::vector<int> norot, nopos, digitalout_flag, digitalout_channel, adc_flag, trid;
+    std::vector<float> rf_amp, rf_freq, rf_phase;
+    std::vector<float> gx_amp, gy_amp, gz_amp, adc_freq, adc_phase;
+    std::vector<float> rotmat;
+
+    pulseg_cursor_reset(coll);
+    pulseg_cursor_info info;
+    int rc;
+    while ((rc = pulseg_cursor_advance(coll, &info)) == PULSEG_CURSOR_BLOCK)
+    {
+        pulseg_block_instance inst = PULSEG_BLOCK_INSTANCE_INIT;
+        if (!PULSEG_SUCCEEDED(pulseg_get_block_instance(coll, &inst)))
+            throw std::runtime_error("pulseg_get_block_instance failed");
+
+        subseq_idx.push_back(info.subseq_idx);
+        scan_pos.push_back(info.scan_pos);
+        segment_id.push_back(info.segment_id);
+        segment_start.push_back(info.segment_start);
+        segment_end.push_back(info.segment_end);
+        duration_us.push_back(inst.duration_us);
+        rf_amp.push_back(inst.rf_amp_hz);
+        rf_freq.push_back(inst.rf_freq_hz);
+        rf_phase.push_back(inst.rf_phase_rad);
+        rf_shim_id.push_back(inst.rf_shim_id);
+        gx_amp.push_back(inst.gx_amp_hz_per_m);
+        gy_amp.push_back(inst.gy_amp_hz_per_m);
+        gz_amp.push_back(inst.gz_amp_hz_per_m);
+        gx_shape.push_back(inst.gx_shape_id);
+        gy_shape.push_back(inst.gy_shape_id);
+        gz_shape.push_back(inst.gz_shape_id);
+        norot.push_back(inst.norot_flag);
+        nopos.push_back(inst.nopos_flag);
+        digitalout_flag.push_back(inst.digitalout_flag);
+        digitalout_channel.push_back(inst.digitalout_channel);
+        adc_flag.push_back(inst.adc_flag);
+        adc_freq.push_back(inst.adc_freq_hz);
+        adc_phase.push_back(inst.adc_phase_rad);
+        trid.push_back(inst.trid);
+        rotmat.insert(rotmat.end(), inst.rotmat, inst.rotmat + 9);
+    }
+    pulseg_cursor_reset(coll);
+    if (rc != PULSEG_CURSOR_DONE)
+        throw std::runtime_error("cursor walk failed before the end of the stream");
+
+    const int n = static_cast<int>(subseq_idx.size());
+    auto ints = [n](const std::vector<int>& v) {
+        py::array_t<int> out(n);
+        std::memcpy(out.mutable_data(), v.data(), sizeof(int) * static_cast<size_t>(n));
+        return out;
+    };
+    auto floats = [n](const std::vector<float>& v) {
+        py::array_t<float> out(n);
+        std::memcpy(out.mutable_data(), v.data(), sizeof(float) * static_cast<size_t>(n));
+        return out;
+    };
+
+    py::dict out;
+    out["subseq_idx"] = ints(subseq_idx);
+    out["scan_pos"] = ints(scan_pos);
+    out["segment_id"] = ints(segment_id);
+    out["segment_start"] = ints(segment_start);
+    out["segment_end"] = ints(segment_end);
+    out["duration_us"] = ints(duration_us);
+    out["rf_amp_hz"] = floats(rf_amp);
+    out["rf_freq_hz"] = floats(rf_freq);
+    out["rf_phase_rad"] = floats(rf_phase);
+    out["rf_shim_id"] = ints(rf_shim_id);
+    out["gx_amp_hz_per_m"] = floats(gx_amp);
+    out["gy_amp_hz_per_m"] = floats(gy_amp);
+    out["gz_amp_hz_per_m"] = floats(gz_amp);
+    out["gx_shape_id"] = ints(gx_shape);
+    out["gy_shape_id"] = ints(gy_shape);
+    out["gz_shape_id"] = ints(gz_shape);
+    out["norot_flag"] = ints(norot);
+    out["nopos_flag"] = ints(nopos);
+    out["digitalout_flag"] = ints(digitalout_flag);
+    out["digitalout_channel"] = ints(digitalout_channel);
+    out["adc_flag"] = ints(adc_flag);
+    out["adc_freq_hz"] = floats(adc_freq);
+    out["adc_phase_rad"] = floats(adc_phase);
+    out["trid"] = ints(trid);
+    {
+        py::array_t<float> rm({n, 9});
+        std::memcpy(
+            rm.mutable_data(), rotmat.data(), sizeof(float) * static_cast<size_t>(n) * 9);
+        out["rotmat"] = rm;
+    }
+    return out;
+}
+
+static py::array_t<int> _get_adc_labels(_PulseqCollection& pc, int subseq_idx)
+{
+    const pulseg_collection* coll = pc.coll().handle();
+
+    pulseg_subseq_info sinfo = PULSEG_SUBSEQ_INFO_INIT;
+    if (!PULSEG_SUCCEEDED(pulseg_get_subseq_info(coll, &sinfo, subseq_idx)))
+        throw std::runtime_error("pulseg_get_subseq_info failed");
+
+    const int rows = sinfo.num_adc_occurrences;
+    const int cols = sinfo.num_label_columns;
+    py::array_t<int> out({rows, cols});
+    for (int r = 0; r < rows; ++r)
+    {
+        if (!PULSEG_SUCCEEDED(
+                pulseg_get_adc_label(coll, out.mutable_data(r, 0), subseq_idx, r)))
+            throw std::runtime_error("pulseg_get_adc_label failed");
+    }
+    return out;
+}
+
 // ─── Module ─────────────────────────────────────────────────────────
 
 PYBIND11_MODULE(_pulseg_wrapper, m)
 {
     py::class_<_PulseqCollection>(m, "_PulseqCollection")
         .def(
-            py::init<py::list, float, float, float, float, float, float, float, float, bool, int>(),
+            py::init<
+                py::list,
+                float,
+                float,
+                float,
+                float,
+                float,
+                float,
+                float,
+                float,
+                bool,
+                int,
+                std::vector<int>>(),
             py::arg("seq_bytes_list"),
             py::arg("gamma"),
             py::arg("B0"),
@@ -558,7 +847,8 @@ PYBIND11_MODULE(_pulseg_wrapper, m)
             py::arg("adc_raster_time"),
             py::arg("block_duration_raster"),
             py::arg("parse_labels") = true,
-            py::arg("num_averages") = 1)
+            py::arg("num_averages") = 1,
+            py::arg("label_column_map") = std::vector<int>())
         .def(
             py::init<
                 std::string,
@@ -571,7 +861,8 @@ PYBIND11_MODULE(_pulseg_wrapper, m)
                 float,
                 float,
                 bool,
-                int>(),
+                int,
+                std::vector<int>>(),
             py::arg("file_path"),
             py::arg("gamma"),
             py::arg("B0"),
@@ -582,7 +873,8 @@ PYBIND11_MODULE(_pulseg_wrapper, m)
             py::arg("adc_raster_time"),
             py::arg("block_duration_raster"),
             py::arg("parse_labels") = true,
-            py::arg("num_averages") = 1);
+            py::arg("num_averages") = 1,
+            py::arg("label_column_map") = std::vector<int>());
 
     m.def("_find_tr", &_find_tr, py::arg("collection"), py::arg("subsequence_idx") = 0);
 
@@ -660,4 +952,11 @@ PYBIND11_MODULE(_pulseg_wrapper, m)
     m.def("_check_grad_continuity", &_check_grad_continuity, py::arg("collection"));
 
     m.def("_get_segments", &_get_segments, py::arg("collection"), py::arg("subseq_idx") = 0);
+    m.def("_get_segment_blocks", &_get_segment_blocks, py::arg("collection"));
+    m.def("_get_scan_table", &_get_scan_table, py::arg("collection"));
+    m.def(
+        "_get_adc_labels",
+        &_get_adc_labels,
+        py::arg("collection"),
+        py::arg("subseq_idx") = 0);
 }

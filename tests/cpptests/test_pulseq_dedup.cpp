@@ -836,12 +836,12 @@ namespace
 
     TEST(PulseqDedupCorpus, ABlockPointingAtAChainThatIsNotThereIsRejected)
     {
-        // The corrupted fixture is a copy of gre_2d_1sl_1avg whose first block
-        // names extension chain 11 in a file that has two.  Reading and writing
+        // The corrupted fixture is a copy of the corpus gre_2d whose first
+        // block names a dangling extension chain id.  Reading and writing
         // both carry it through -- neither resolves the reference -- so
         // deduplication, which does, is where it has to be noticed.
         const std::string path =
-            std::string(PULSEQ_FIXTURES_DIR) + "/gre_2d_1sl_1avg_corrupted.seq";
+            std::string(PULSEQ_FIXTURES_DIR) + "/gre_2d_corrupted.seq";
         Sequence seq = pulseq::read_file(path);
         try
         {

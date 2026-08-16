@@ -26,10 +26,13 @@ def _rf_key(rf) -> tuple:
         return ()
     signal = np.asarray(rf.signal, dtype=complex)
     peak = float(np.abs(signal).max()) or 1.0
+    # 5 decimals on the normalized shape: coarser than any physical shape
+    # distinction, coarse enough that float noise from amplitude scaling
+    # cannot flip a rounding tie between two scaled copies of one envelope.
     return (
         "rf",
-        _shape_key(np.round(np.abs(signal) / peak, 6)),
-        _shape_key(np.round(np.angle(signal), 6)),
+        _shape_key(np.round(np.abs(signal) / peak, 5)),
+        _shape_key(np.round(np.angle(signal), 5)),
         _shape_key(rf.t),
         round(float(rf.delay), 9),
     )

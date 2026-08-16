@@ -11,6 +11,7 @@ import pytest
 from pulserver._ext._pulseg_wrapper import _PulseqCollection
 
 EXPECTED = Path(__file__).resolve().parents[2] / "utils" / "expected"
+CORPUS = Path(__file__).resolve().parents[1] / "fixtures"
 
 
 def build_collection(seq_path, system, *, num_averages: int = 1) -> _PulseqCollection:

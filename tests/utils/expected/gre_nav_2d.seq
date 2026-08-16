@@ -1,0 +1,85 @@
+# Pulseq sequence file
+# Created by PyPulseq
+
+[VERSION]
+major 1
+minor 5
+revision 0
+
+[DEFINITIONS]
+AdcRasterTime 2e-06 
+BlockDurationRaster 2e-05 
+GradientRasterTime 2e-05 
+Name gre_nav_2d 
+RadiofrequencyRasterTime 2e-06 
+TRSize 4 
+TotalDuration 0.00624 
+
+# Format of blocks:
+# NUM DUR RF  GX  GY  GZ  ADC  EXT
+[BLOCKS]
+ 1  10   1   0   0   0  0  0
+ 2  20   0   0   1   0  0  0
+ 3  24   0   2   0   0  1  0
+ 4  24   0   0   0   2  1  0
+ 5  10   1   0   0   0  0  0
+ 6  20   0   0   3   0  0  0
+ 7  24   0   2   0   0  1  0
+ 8  24   0   0   0   2  1  0
+ 9  10   1   0   0   0  0  0
+10  20   0   0   4   0  0  0
+11  24   0   2   0   0  1  0
+12  24   0   0   0   2  1  0
+13  10   1   0   0   0  0  0
+14  20   0   0   5   0  0  0
+15  24   0   2   0   0  1  0
+16  24   0   0   0   2  1  0
+
+# Format of RF events:
+# id ampl. mag_id phase_id time_shape_id center delay freqPPm phasePPM freq phase use
+# ..   Hz      ..       ..            ..     us    us     ppm  rad/MHz   Hz   rad  ..
+# Field "use" is the initial of: excitation refocusing inversion saturation preparation other undefined
+[RF]
+1      159.155 1 2 3 100 0 0 0 0 0 u
+
+# Format of trapezoid gradients:
+# id amplitude rise flat fall delay
+# ..      Hz/m   us   us   us    us
+[TRAP]
+ 1     -25252.5  40  320  40   0
+ 2       454545  80  320  80   0
+ 3     -12626.3  40  320  40   0
+ 4            0  20  360  20   0
+ 5      12626.3  40  320  40   0
+
+# Format of ADC events:
+# id num dwell delay freqPPM phasePPM freq phase phase_id
+# ..  ..    ns    us     ppm  rad/MHz   Hz   rad       ..
+[ADC]
+1 32 10000 80 0 0 0 0 0
+
+# Sequence Shapes
+[SHAPES]
+
+shape_id 1
+num_samples 2
+1
+1
+
+shape_id 2
+num_samples 2
+0
+0
+
+shape_id 3
+num_samples 2
+0
+100
+
+
+[SIGNATURE]
+# This is the hash of the Pulseq file, calculated right before the [SIGNATURE] section was added
+# It can be reproduced/verified with md5sum if the file trimmed to the position right above [SIGNATURE]
+# The new line character preceding [SIGNATURE] BELONGS to the signature (and needs to be stripped away for recalculating/verification)
+Type md5
+Hash 3c2082670464de2cb163c115a2ac8d11

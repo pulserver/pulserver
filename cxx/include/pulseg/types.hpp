@@ -30,6 +30,11 @@ namespace pulseg
         float peak_norm_scale = PULSEG_PEAK_NORM_SCALE_DEFAULT;
         float peak_eps = PULSEG_PEAK_EPS_DEFAULT;
 
+        /** Which label-state indices fill the 3 ADC label-table columns
+         *  (0=SLC 1=PHS 2=REP 3=AVG 4=SEG 5=SET 6=ECO 7=PAR 8=LIN 9=ACQ).
+         *  The GE console injects {8, 0, 6} = [LIN, SLC, ECO]. */
+        int label_column_map[3] = {0, 1, 2};
+
         /** Convert to the C struct, calling pulseg_opts_init. */
         pulseg_opts to_c() const
         {
@@ -47,6 +52,9 @@ namespace pulseg
                 peak_log10_threshold,
                 peak_norm_scale,
                 peak_eps);
+            o.label_column_map[0] = label_column_map[0];
+            o.label_column_map[1] = label_column_map[1];
+            o.label_column_map[2] = label_column_map[2];
             return o;
         }
     };

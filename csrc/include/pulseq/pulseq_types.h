@@ -47,8 +47,7 @@
 
 /* ================================================================== */
 /*  Extension type codes for a block's extension chain, and for any    */
-/*  extensions_library row written by an external raw-model producer   */
-/*  (e.g. the ExternalSequence adapter, cxx/pulseq_adapter).           */
+/*  extensions_library row written by an external raw-model producer.  */
 /*  These values are load-bearing wire values: pulseq_get_raw_block_-  */
 /*  content_ids() and pulseq_get_raw_extension() switch on them.       */
 /* ================================================================== */

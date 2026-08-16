@@ -14,10 +14,10 @@
  * figures where the binary format carries float32 -- so amplitudes are compared
  * to a tolerance and structure exactly.)
  *
- * The fixtures were written by MATLAB and by several versions of PyPulseq, so
- * the *first* write generally differs from the file on disk: it is this
- * writer's rendering of that sequence, not a reproduction of the original
- * bytes.  Byte-equality against a reference writer is checked on the Python
+ * The fixtures mix writer-produced files and hand-specified event-table
+ * text, so the *first* write generally differs from the file on disk: it is
+ * this writer's rendering of that sequence, not a reproduction of the
+ * original bytes.  Byte-equality against a reference writer is checked on the Python
  * side, where a reference writer exists to compare against.
  */
 

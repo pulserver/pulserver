@@ -30,7 +30,7 @@ matplotlib.use("Agg")
 
 #: Recorded sequences with a real repetition structure, shared with the C
 #: engine's own tests.
-EXPECTED = Path(__file__).resolve().parents[1] / "utils" / "expected"
+EXPECTED = Path(__file__).resolve().parent / "fixtures"
 
 #: An Irnich model in the form ``calculate_pns`` recognises, with GE-shaped
 #: constants. Not a calibrated table -- it exists to exercise the branch.
@@ -248,7 +248,7 @@ def test_a_band_over_a_strong_line_is_flagged_and_one_over_nothing_is_not(seq):
 
 
 @pytest.mark.parametrize(
-    "name", ["epi_2d_1sl_1avg", "bssfp_2d_1sl_1avg", "gre_2d_1sl_1avg"]
+    "name", ["epi_2d_main", "bssfp_2d", "fse_2d"]
 )
 def test_the_drawn_lines_and_the_predownload_gate_reach_the_same_verdict(name):
     """The whole point of ``resonance_lines``, on recorded sequences.

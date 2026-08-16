@@ -181,9 +181,8 @@ extern "C"
      * label id used in pulseq_file.labelset_library / .labelinc_library raw
      * rows (column 1) and decoded by pulseq_get_raw_extension().
      *
-     * Needed by any external producer of a pulseq_file (e.g. the
-     * ExternalSequence adapter, cxx/pulseq_adapter) that cannot re-derive
-     * this id itself.
+     * Needed by any external producer of a pulseq_file that cannot
+     * re-derive this id itself.
      *
      * @return The numeric id, or -1 if @p name is not a recognized label/flag.
      */

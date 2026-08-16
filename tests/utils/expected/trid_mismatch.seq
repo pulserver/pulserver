@@ -1,9 +1,6 @@
 # Pulseq sequence file
-# Hand-authored fixture for pulserver TRID safety-group ctests (test_trid_labels.c)
-# TRID 1 appears twice (blocks 1 and 3) with DIFFERENT durations (100us vs
-# 200us) -- an intentionally ill-formed label placement that
-# pulseg_get_tr_groups() must hard-fail with PULSEG_ERR_TRID_STRUCTURAL_MISMATCH,
-# not silently average/dedup.
+# TRID 1 appears twice (blocks 1 and 3) with different durations: ill-formed labeling that pulseg_get_tr_groups() must reject with PULSEG_ERR_TRID_STRUCTURAL_MISMATCH.
+# Written by tests/utils/synthetic_fixtures.py
 
 [VERSION]
 major 1
@@ -16,14 +13,11 @@ BlockDurationRaster 1e-05
 GradientRasterTime 1e-05
 RadiofrequencyRasterTime 1e-06
 
-# Format of blocks:
-# NUM DUR RF  GX  GY  GZ  ADC  EXT
 [BLOCKS]
 1 10   0   0   0   0  0  1
 2 5    0   0   0   0  0  2
 3 20   0   0   0   0  0  3
 
-# id type ref next_id
 [EXTENSIONS]
 1 1 1 0
 2 1 2 0
@@ -33,7 +27,3 @@ extension LABELSET 1
 1 1 TRID
 2 2 TRID
 3 1 TRID
-
-[SIGNATURE]
-Type md5
-Hash 0000000000000000000000000000000

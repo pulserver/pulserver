@@ -3,22 +3,12 @@
  * @brief RAII C++11 wrapper around pulseq_file / pulseq_file_set.
  *
  * pulseg ships its own from-scratch Pulseq `.seq` parser (csrc/src/pulseq,
- * self-contained, no pulseg dependency) because it predates the
- * `external/pulseq` (ExternalSequence) integration and needs a couple of
- * pulserver-specific custom LABELSET names (PMC, TRID). File/FileSet expose
+ * self-contained, no pulseg dependency), including the pulserver-specific
+ * custom LABELSET names (PMC, TRID). File/FileSet expose
  * that native reader as a first-class C++ citizen, for consumers that want
  * the raw Pulseq file model directly -- inspecting blocks/definitions,
  * writing tooling -- without building the full pulseg::Collection
  * intermediate representation.
- *
- * A platform that already has its own Pulseq interpreter (built on the
- * standard toolkit's ExternalSequence, external/pulseq/src/ExternalSequence.h)
- * has a different, complementary path instead: adapt its already-loaded
- * ExternalSequence into a pulseg::Collection via pulseg::adapter::
- * from_external_sequence() (cxx/pulseq_adapter/pulseq_adapter.h) or the
- * pulseg::Collection(ExternalSequence&, ...) constructor
- * (cxx/include/pulseg/collection.hpp), run Collection::check_safety(), and
- * discard the Collection -- no cache serialization required.
  */
 
 #ifndef PULSEQ_CXX_FILE_HPP

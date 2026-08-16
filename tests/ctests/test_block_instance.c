@@ -140,7 +140,7 @@ static void check_fixture(const char *filename)
     int rc, pos;
 
     default_opts_init(&opts);
-    rc = load_seq(&coll, filename, &opts);
+    rc = load_corpus_seq(&coll, filename, &opts);
     mu_assert(PULSEG_SUCCEEDED(rc), "load_seq failed");
 
     desc = &coll->descriptors[0];
@@ -180,13 +180,13 @@ static void check_fixture(const char *filename)
  * identity rotation. */
 MU_TEST(test_block_instance_view_cartesian)
 {
-    check_fixture("gre_2d_3sl_3avg.seq");
+    check_fixture("gre_2d_3sl.seq");
 }
 
 /* Rotated fixture: exercises the rotation_matrices lookup path. */
 MU_TEST(test_block_instance_view_rotated)
 {
-    check_fixture("mprage_noncart_3d_3sl_1avg_userotext1.seq");
+    check_fixture("gre_stack_of_stars_3d.seq");
 }
 
 /* Out-of-range indices are rejected rather than reading past a table. */
@@ -198,7 +198,7 @@ MU_TEST(test_block_instance_at_rejects_bad_indices)
     int rc;
 
     default_opts_init(&opts);
-    rc = load_seq(&coll, "gre_2d_3sl_3avg.seq", &opts);
+    rc = load_corpus_seq(&coll, "gre_2d_3sl.seq", &opts);
     mu_assert(PULSEG_SUCCEEDED(rc), "load_seq failed");
 
     mu_assert(

@@ -12,6 +12,7 @@ BlockDurationRaster 1e-05
 GradientRasterTime 1e-05 
 RadiofrequencyRasterTime 1e-06 
 RequiredExtensions ROTATIONS 
+TRSize 2 
 TotalDuration 0.0012 
 
 # Format of blocks:
@@ -60,3 +61,10 @@ num_samples 3
 10
 20
 
+
+[SIGNATURE]
+# This is the hash of the Pulseq file, calculated right before the [SIGNATURE] section was added
+# It can be reproduced/verified with md5sum if the file trimmed to the position right above [SIGNATURE]
+# The new line character preceding [SIGNATURE] BELONGS to the signature (and needs to be stripped away for recalculating/verification)
+Type md5
+Hash 47bb1c9f1d28fdd58a6892ba66fd4c06

@@ -59,65 +59,37 @@ int main(int argc, char **argv)
     const char *seq_path;
 
     int num_averages = 1;
-    if (argc != 2)
+    if (argc != 2 && argc != 3)
     {
         fprintf(stderr,
-                "usage: %s <path/to/sequence.seq>\n"
+                "usage: %s <path/to/sequence.seq> [num_averages]\n"
                 "\n"
-                "Produces <base>.pge in the same directory.\n"
-                "If <base>_meta.txt exists alongside the .seq and contains a\n"
-                "'num_averages N' line, that NEX is honoured (matches truth).\n",
+                "Produces <base>.pge in the same directory.\n",
                 argv[0]);
         return 2;
     }
     seq_path = argv[1];
-
-    /* Optional: discover NEX from the companion <base>_meta.txt that
-     * TruthBuilder writes. .seq files have no NEX field, so without this
-     * hint we would always cache only one average and disagree with truth
-     * on _Navg_ fixtures. */
+    if (argc == 3)
     {
-        const char *dot = strrchr(seq_path, '.');
-        size_t base_len = dot ? (size_t)(dot - seq_path) : strlen(seq_path);
-        char meta_path[1024];
-        if (base_len + sizeof("_meta.txt") < sizeof(meta_path))
-        {
-            memcpy(meta_path, seq_path, base_len);
-            memcpy(meta_path + base_len, "_meta.txt", sizeof("_meta.txt"));
-            FILE *mf = fopen(meta_path, "r");
-            if (mf)
-            {
-                char line[256];
-                while (fgets(line, sizeof(line), mf))
-                {
-                    int nv;
-                    if (sscanf(line, "num_averages %d", &nv) == 1 && nv > 0)
-                    {
-                        num_averages = nv;
-                        break;
-                    }
-                }
-                fclose(mf);
-            }
-        }
+        num_averages = atoi(argv[2]);
+        if (num_averages < 1)
+            num_averages = 1;
     }
 
-    /* Vendor-neutral defaults consistent with TruthBuilder fixtures.
-     * Limits are intentionally generous so any fixture passes safety;
+    /* Limits are intentionally generous so any fixture passes safety;
      * we are not validating the .seq, only producing the cache.
      * vendor = GEHC: only GEHC label-parsing is currently implemented. */
     opts.vendor = PULSEG_VENDOR_GEHC;
     opts.vendor_rf_stats_fn = write_cache_stub_rf_stats_cb;
-    /* GE label->column convention (D3): col0=LIN, col1=SLC, col2=ECO
+    /* GE label->column convention: col0=LIN, col1=SLC, col2=ECO
      * (state-array indices 8,0,6). The public default is identity
-     * {0,1,2}; this CLI reproduces GEHC-flavored truth fixtures, so it
-     * sets the GE mapping explicitly rather than relying on the default. */
+     * {0,1,2}; this CLI produces GEHC-flavored caches, so it sets the GE
+     * mapping explicitly rather than relying on the default. */
     opts.label_column_map[0] = 8;
     opts.label_column_map[1] = 0;
     opts.label_column_map[2] = 6;
-    /* Truth fixtures were produced under the historical hardcoded ".pge"
-     * suffix; keep reproducing that exact name (D10 public default is
-     * now ".pseg"). */
+    /* GE consumers expect the ".pge" suffix (the public default is
+     * ".pseg"). */
     strcpy(opts.cache_ext, ".pge");
     opts.gamma_hz_per_t = 42577478.0f;
     opts.b0_t = 3.0f;

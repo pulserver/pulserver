@@ -377,7 +377,7 @@ static void run_mech_resonances_check(const char* filename, int num_bands,
     pulseg_collection* coll = NULL;
     int rc;
 
-    rc = load_seq(&coll, filename, &s_opts);
+    rc = load_corpus_seq(&coll, filename, &s_opts);
     mu_assert(PULSEG_SUCCEEDED(rc), "load_seq failed for acoustic test");
 
     pulseg_diagnostic_init(&s_diag);
@@ -396,10 +396,9 @@ static void run_mech_resonances_check(const char* filename, int num_bands,
 
 /*
  * EPI readout produces a peaked acoustic spectrum at 1/ESP and harmonics.
- * For this EPI sequence: readoutTime = 580 us, ESP ~ 640 us,
- * giving a fundamental at ~1560 Hz.  Forbid a band spanning
- * 800–2500 Hz (covers 1/ESP for ESP in 400–1250 us range) at zero
- * amplitude and expect an acoustic violation.
+ * This fixture's readout train drives GX at ~1236 Hz (~10.4 mT/m).
+ * Forbid a band spanning 800–2500 Hz at zero amplitude and expect an
+ * acoustic violation.
  */
 MU_TEST(test_epi_forbidden_readout_peak)
 {
@@ -415,7 +414,7 @@ MU_TEST(test_epi_forbidden_readout_peak)
     bands[1].freq_max_hz           = 4500.0f;
     bands[1].max_amplitude_hz_per_m = 0.0f;
 
-    run_mech_resonances_check("epi_2d_1sl_1avg.seq", 2, bands,
+    run_mech_resonances_check("epi_2d_main.seq", 2, bands,
                        PULSEG_ERR_MECH_RESONANCES_VIOLATION);
 }
 
@@ -437,7 +436,7 @@ MU_TEST(test_epi_forbidden_band_amplitude_above_train_passes)
     bands[1].freq_max_hz           = 4500.0f;
     bands[1].max_amplitude_hz_per_m = 1.0e9f;
 
-    run_mech_resonances_check("epi_2d_1sl_1avg.seq", 2, bands, 1 /* pass */);
+    run_mech_resonances_check("epi_2d_main.seq", 2, bands, 1 /* pass */);
 }
 
 /*
@@ -448,64 +447,63 @@ MU_TEST(test_epi_forbidden_band_amplitude_above_train_passes)
  */
 MU_TEST(test_epi_no_bands_skips_mech_resonance_check)
 {
-    run_mech_resonances_check("epi_2d_1sl_1avg.seq", 0, NULL, 1 /* pass */);
+    run_mech_resonances_check("epi_2d_main.seq", 0, NULL, 1 /* pass */);
 }
 
 /*
  * No cross-band masking: each forbidden band is evaluated independently on its
- * own in-band spectral lines, so the strong off-band EPI readout (~760 Hz)
+ * own in-band spectral lines, so the strong off-band EPI readout (~1236 Hz)
  * cannot influence a band elsewhere. This band brackets the first TR harmonic
- * (f1 = 1/TR ~= 10.14 Hz for this fixture's TR=0.09866s).
+ * (f1 = 1/TR ~= 96.5 Hz for this fixture's TR = 10.36 ms).
  *
- * A_eq criterion (PLAN_mechres_aeq_FINAL.md, decisions 5-6): the drive at the
- * TR fundamental is the sequence's slow envelope, ~0.67 mT/m here -- far below
- * the readout-scale floor eps = k*G_max (k=0.08 -> ~6.4 mT/m at G_max=80 mT/m).
- * It is NOT a readout-scale sustained line, so it correctly PASSES. (Under the
- * superseded zero-tolerance-per-harmonic detector this asserted a violation;
- * eps=0 was ratified as unusable -- every periodic gradient sprinkles weak
- * harmonics into any band wider than its comb spacing.)
+ * A_eq criterion: the drive at the TR fundamental is the sequence's slow
+ * envelope, ~3.2 mT/m here -- below the readout-scale floor
+ * eps = k*G_max (k=0.08 -> ~6.4 mT/m at G_max=80 mT/m). It is NOT a
+ * readout-scale sustained line, so it PASSES: every periodic gradient
+ * sprinkles weak harmonics into any band wider than its comb spacing, and
+ * only readout-scale lines count.
  */
 MU_TEST(test_epi_tr_fundamental_below_readout_floor_passes)
 {
     pulseg_forbidden_band band;
 
-    band.freq_min_hz            = 8.0f;
-    band.freq_max_hz            = 12.0f;
+    band.freq_min_hz            = 90.0f;
+    band.freq_max_hz            = 103.0f;
     band.max_amplitude_hz_per_m = 0.0f;
 
-    run_mech_resonances_check("epi_2d_1sl_1avg.seq", 1, &band, 1 /* pass */);
+    run_mech_resonances_check("epi_2d_main.seq", 1, &band, 1 /* pass */);
 }
 
 /*
  * A_eq guard + eps behaviour on split bands (this fixture's dominant EPI
- * readout line is ~760 Hz at ~11.4 mT/m; its 3rd harmonic ~2280 Hz is weak,
- * ~3.7 mT/m). With G_max=80 mT/m the readout floor is eps = k*G_max ~= 6.4 mT/m.
+ * readout line is ~1236 Hz at ~10.4 mT/m on GX). With G_max=80 mT/m the
+ * readout floor is eps = k*G_max ~= 6.4 mT/m.
  *
- *  - band_lo [800,1650]: the 760 Hz readout line sits 40 Hz below the edge but
- *    within the frequency guard (HWHM = min_band_width/2 = 425 Hz), so it counts
- *    at full 11.4 mT/m > eps  -> VIOLATION. (Covers the guard picking up a strong
- *    line just outside a band edge.)
- *  - band_hi [1650,2500]: the readout fundamental is out of range; only the weak
- *    3rd harmonic (~3.7 mT/m) is in-band, below eps -> PASS. (Ratified decision 6:
- *    weak harmonics in a wide band are not readout-scale lines. This verdict is
- *    G_max-dependent by design -- a coil with a smaller G_max, hence smaller eps,
- *    would flag it.)
+ *  - band_lo [1500,2350]: the 1236 Hz readout line sits ~264 Hz below the
+ *    edge but within the frequency guard (HWHM = min_band_width/2 = 425 Hz),
+ *    so it counts at full amplitude > eps -> VIOLATION. (Covers the guard
+ *    picking up a strong line just outside a band edge.)
+ *  - band_hi [2600,3450]: the readout fundamental is out of guard range and
+ *    only weak harmonics (< 1 mT/m) are in-band, below eps -> PASS. (Weak
+ *    harmonics in a wide band are not readout-scale lines. This verdict is
+ *    G_max-dependent by design -- a coil with a smaller G_max, hence smaller
+ *    eps, would flag it.)
  */
 MU_TEST(test_epi_guard_catches_edge_line_weak_harmonic_passes)
 {
     pulseg_forbidden_band band_lo, band_hi;
 
-    band_lo.freq_min_hz            = 800.0f;
-    band_lo.freq_max_hz            = 1650.0f;
+    band_lo.freq_min_hz            = 1500.0f;
+    band_lo.freq_max_hz            = 2350.0f;
     band_lo.max_amplitude_hz_per_m = 0.0f;
 
-    band_hi.freq_min_hz            = 1650.0f;
-    band_hi.freq_max_hz            = 2500.0f;
+    band_hi.freq_min_hz            = 2600.0f;
+    band_hi.freq_max_hz            = 3450.0f;
     band_hi.max_amplitude_hz_per_m = 0.0f;
 
-    run_mech_resonances_check("epi_2d_1sl_1avg.seq", 1, &band_lo,
+    run_mech_resonances_check("epi_2d_main.seq", 1, &band_lo,
                        PULSEG_ERR_MECH_RESONANCES_VIOLATION);
-    run_mech_resonances_check("epi_2d_1sl_1avg.seq", 1, &band_hi, 1 /* pass */);
+    run_mech_resonances_check("epi_2d_main.seq", 1, &band_hi, 1 /* pass */);
 }
 
 static void mech_resonances_setup(void)
@@ -650,7 +648,7 @@ static void run_pns_memo_equivalence(const char* filename)
     double peak_exact, peak_memo;
     int rc;
 
-    rc = load_seq(&coll, filename, &s_opts);
+    rc = load_corpus_seq(&coll, filename, &s_opts);
     mu_assert(PULSEG_SUCCEEDED(rc), "load_seq failed for PNS memo test");
 
     memset(&exact, 0, sizeof(exact));
@@ -681,25 +679,25 @@ static void run_pns_memo_equivalence(const char* filename)
 MU_TEST(test_pns_memo_matches_exact_gre)
 {
     gre_opts_init(&s_opts);
-    run_pns_memo_equivalence("gre_2d_3sl_3avg.seq");
+    run_pns_memo_equivalence("gre_2d_3sl.seq");
 }
 
 MU_TEST(test_pns_memo_matches_exact_epi)
 {
     mech_resonances_opts_init(&s_opts);
-    run_pns_memo_equivalence("epi_2d_3sl_1avg.seq");
+    run_pns_memo_equivalence("epi_2d_main.seq");
 }
 
 MU_TEST(test_pns_memo_matches_exact_fse)
 {
     mech_resonances_opts_init(&s_opts);
-    run_pns_memo_equivalence("fse_2d_1sl_1avg.seq");
+    run_pns_memo_equivalence("fse_2d.seq");
 }
 
 MU_TEST(test_pns_memo_matches_exact_mprage)
 {
     mech_resonances_opts_init(&s_opts);
-    run_pns_memo_equivalence("mprage_2d_1sl_1avg.seq");
+    run_pns_memo_equivalence("mprage_3d.seq");
 }
 
 /* Arbitrary (uniformly rastered) gradients rather than trapezoids: the
@@ -707,7 +705,7 @@ MU_TEST(test_pns_memo_matches_exact_mprage)
 MU_TEST(test_pns_memo_matches_exact_noncart)
 {
     mech_resonances_opts_init(&s_opts);
-    run_pns_memo_equivalence("mprage_noncart_3d_1sl_1avg_userotext0.seq");
+    run_pns_memo_equivalence("gre_stack_of_stars_3d.seq");
 }
 
 /* A model that does not publish a kernel must never take the memoized
@@ -723,7 +721,7 @@ MU_TEST(test_pns_no_kernel_is_deterministic_exact_path)
     int rc, i, differing = 0;
 
     mech_resonances_opts_init(&s_opts);
-    rc = load_seq(&coll, "epi_2d_3sl_1avg.seq", &s_opts);
+    rc = load_corpus_seq(&coll, "epi_2d_main.seq", &s_opts);
     mu_assert(PULSEG_SUCCEEDED(rc), "load_seq failed");
 
     memset(&a, 0, sizeof(a));

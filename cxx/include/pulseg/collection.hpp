@@ -18,12 +18,6 @@
 #include "error.hpp"
 #include "types.hpp"
 
-// Forward-declared only: consumers that don't use the ExternalSequence ctor
-// (below) need not have external/pulseq's ExternalSequence.h on their
-// include path. Its definition lives in pulseq_adapter/collection_ext_seq.cpp
-// (links against the pulseg_pulseq_adapter target).
-class ExternalSequence;
-
 namespace pulseg
 {
     /**
@@ -85,26 +79,6 @@ namespace pulseg
             check(code, diag);
             opts_ = copts;
         }
-
-        /**
-         * Load from an already-loaded standard-toolkit ExternalSequence
-         * (external/pulseq submodule), via the pulseq_adapter (Stage 3).
-         * Out-of-line: defined in
-         * cxx/pulseq_adapter/collection_ext_seq.cpp (see that file, and
-         * cxx/pulseq_adapter/pulseq_adapter.h, for the known limitations of
-         * this path relative to the two constructors above).
-         *
-         * @param source_path  Optional path @p seq was loaded from; enables
-         *                     the PMC/TRID label recovery fallback (see
-         *                     pulseq_adapter.h). Pass nullptr if @p seq was
-         *                     loaded from an in-memory buffer.
-         */
-        Collection(
-            ExternalSequence& seq,
-            const Opts& opts,
-            bool parse_labels = true,
-            int num_averages = 1,
-            const char* source_path = nullptr);
 
         ~Collection()
         {

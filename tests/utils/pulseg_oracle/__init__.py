@@ -20,13 +20,23 @@ segmentation role (it is an optional SAR/coil-heating refinement label
 for interleaved-subsequence hyperTRs, nothing more).
 """
 
+from .content import (
+    adc_label_table,
+    instance_table,
+    quaternion_matrix,
+    tr_window_waveforms,
+)
 from .identity import block_signature, sequence_signatures
 from .validate import PartitionError, tile_partition, validate_partition
 
 __all__ = [
     "PartitionError",
+    "adc_label_table",
     "block_signature",
+    "instance_table",
+    "quaternion_matrix",
     "sequence_signatures",
     "tile_partition",
+    "tr_window_waveforms",
     "validate_partition",
 ]

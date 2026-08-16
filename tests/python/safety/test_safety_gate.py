@@ -15,33 +15,32 @@ from pulserver._ext._pulseg_wrapper import (
 from pulserver.io import bands_to_hz_per_m
 from pulserver.pypulseq import Opts
 
-from .conftest import EXPECTED, build_collection
+from .conftest import CORPUS, build_collection
 
 GENERATED_SEQUENCES = [
-    "gre_2d_1sl_1avg.seq",
-    "gre_2d_3sl_1avg.seq",
-    "epi_2d_1sl_1avg.seq",
-    "epi_2d_3sl_1avg.seq",
-    "fse_2d_1sl_1avg.seq",
-    "fse_2d_3sl_1avg.seq",
-    "bssfp_2d_1sl_1avg.seq",
-    "bssfp_2d_3sl_1avg.seq",
-    "mprage_2d_1sl_1avg.seq",
-    "mprage_2d_3sl_1avg.seq",
-    "mprage_nav_2d_1sl_1avg.seq",
-    "mprage_nav_2d_3sl_1avg.seq",
-    "mprage_noncart_3d_1sl_1avg_userotext0.seq",
-    "mprage_noncart_3d_3sl_1avg_userotext0.seq",
+    "gre_2d.seq",
+    "gre_2d_3sl.seq",
+    "epi_2d_main.seq",
+    "epi_3d_main.seq",
+    "fse_2d.seq",
+    "fse_3d.seq",
+    "bssfp_2d.seq",
+    "bssfp_3d.seq",
+    "mprage_3d.seq",
+    "mprage_stack_of_spirals_3d.seq",
+    "gre_radial_2d.seq",
+    "gre_spiral_2d.seq",
+    "gre_stack_of_stars_3d.seq",
 ]
 
 REPRESENTATIVE_SEQUENCES = [
-    "gre_2d_1sl_1avg.seq",
-    "epi_2d_1sl_1avg.seq",
-    "fse_2d_1sl_1avg.seq",
-    "bssfp_2d_1sl_1avg.seq",
-    "mprage_2d_1sl_1avg.seq",
-    "mprage_nav_2d_1sl_1avg.seq",
-    "mprage_noncart_3d_1sl_1avg_userotext0.seq",
+    "gre_2d.seq",
+    "epi_2d_main.seq",
+    "fse_2d.seq",
+    "bssfp_2d.seq",
+    "mprage_3d.seq",
+    "gre_stack_of_stars_3d.seq",
+    "gre_spiral_2d.seq",
 ]
 
 
@@ -63,12 +62,12 @@ def _opts(*, max_grad: float = 50.0, max_slew: float = 350.0, raster: float = 20
 
 @pytest.fixture(params=GENERATED_SEQUENCES, ids=_id)
 def generated_seq_path(request):
-    return EXPECTED / request.param
+    return CORPUS / request.param
 
 
 @pytest.fixture(params=REPRESENTATIVE_SEQUENCES, ids=_id)
 def representative_seq_path(request):
-    return EXPECTED / request.param
+    return CORPUS / request.param
 
 
 # ── the gate ─────────────────────────────────────────────────────────
@@ -172,7 +171,7 @@ def test_public_bands_convert_to_backend_units():
 
 
 def test_multi_sequence_collections_load_from_payloads():
-    payloads = [(EXPECTED / name).read_bytes() for name in ("gre_2d_1sl_1avg.seq", "epi_2d_1sl_1avg.seq")]
+    payloads = [(CORPUS / name).read_bytes() for name in ("gre_2d.seq", "epi_2d_main.seq")]
     system = _opts()
     collection = _PulseqCollection(
         payloads,

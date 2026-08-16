@@ -1,0 +1,49 @@
+# Pulseq sequence file
+# Two structurally identical 6-block TRs whose RF amplitude differs (150 vs 225 Hz): accepted only when variable RF amplitude is allowed, and the 225 Hz tier is the worst-B1rms envelope.
+# Written by tests/utils/synthetic_fixtures.py
+
+[VERSION]
+major 1
+minor 5
+revision 1
+
+[DEFINITIONS]
+AdcRasterTime 1e-07
+BlockDurationRaster 1e-05
+GradientRasterTime 1e-05
+RadiofrequencyRasterTime 1e-06
+
+[BLOCKS]
+ 1 100   0   0   0   0  0  0
+ 2 100   1   1   0   0  0  0
+ 3 100   1   1   0   0  0  0
+ 4 100   1   1   0   0  0  0
+ 5 100   1   1   0   0  0  0
+ 6 1000   0   0   0   0  0  0
+ 7 100   0   0   0   0  0  0
+ 8 100   2   1   0   0  0  0
+ 9 100   2   1   0   0  0  0
+10 100   2   1   0   0  0  0
+11 100   2   1   0   0  0  0
+12 1000   0   0   0   0  0  0
+
+[RF]
+1          150 1 2 3 500 0 0 0 0 0 e
+2          225 1 2 3 500 0 0 0 0 0 e
+
+[TRAP]
+ 1  1.20482e+06 170  660 170   0
+
+[SHAPES]
+shape_id 1
+num_samples 2
+1
+1
+shape_id 2
+num_samples 2
+0
+0
+shape_id 3
+num_samples 2
+0
+1000

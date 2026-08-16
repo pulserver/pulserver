@@ -17,7 +17,7 @@ import pytest
 import pulserver.pypulseq as pp
 from pulserver.pypulseq import Sequence
 
-FIXTURES = Path(__file__).resolve().parents[1] / "utils" / "expected"
+FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
 
 def load(stem: str) -> Sequence:
@@ -190,7 +190,7 @@ def test_the_expansion_survives_a_write_and_a_read(tmp_path):
 def test_a_real_scan_grows_only_its_block_table():
     """The reason this belongs on the design side: repeats are free but for
     the block rows, so a materialised average costs no events at all."""
-    seq = load("gre_2d_3sl_3avg")
+    seq = load("bssfp_2d")
     blocks = seq._native.num_blocks()  # noqa: SLF001
     before = (
         seq._native.num_gradients(),  # noqa: SLF001
@@ -201,8 +201,8 @@ def test_a_real_scan_grows_only_its_block_table():
 
     report = seq.expand_repeats(2)
 
-    # The fixture carries a preparation and a cooldown of its own, so the
-    # table is not simply doubled -- only the body is.
+    # The fixture opens with a ONCE=1 catalyst and closes with a ONCE=2
+    # rewind, so the table is not simply doubled -- only the body is.
     assert report["prep_blocks"] + report["body_blocks"] + report["cooldown_blocks"] == blocks
     assert report["blocks_after"] == (
         report["prep_blocks"] + 2 * report["body_blocks"] + report["cooldown_blocks"]
@@ -218,12 +218,15 @@ def test_a_real_scan_grows_only_its_block_table():
 def test_the_geometric_counters_can_still_be_derived_afterwards():
     """An expanded scan is still a scan: ``auto_label`` reads it the same way,
     and now has two visits per k-space position to account for."""
-    seq = load("gre_2d_3sl_3avg")
+    seq = load("bssfp_2d")
     plain, _ = seq.auto_label(skip_apply=True)
 
-    expanded = load("gre_2d_3sl_3avg")
+    expanded = load("bssfp_2d")
     expanded.expand_repeats(2, label="")
     doubled, _ = expanded.auto_label(skip_apply=True)
 
-    assert np.array_equal(doubled["LIN"], np.concatenate([plain["LIN"]] * 2))
-    assert np.array_equal(doubled["SLC"], np.concatenate([plain["SLC"]] * 2))
+    for name, values in plain.items():
+        if name.startswith(("FIRST", "LAST")):
+            # Scan-boundary flags mark the whole doubled scan, not each half.
+            continue
+        assert np.array_equal(doubled[name], np.concatenate([values] * 2)), name

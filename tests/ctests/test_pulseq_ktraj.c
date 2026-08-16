@@ -89,7 +89,7 @@ MU_TEST(test_flat_arbitrary_gradient_is_exact)
     int rc, j, n, off;
     double expected_step;
 
-    ktraj_open(&seq, TEST_DATA_DIR "fse_2d_1sl_1avg.seq");
+    ktraj_open(&seq, TEST_CORPUS_DIR "fse_2d.seq");
 
     pulseq_ktraj_opts_init(&opts);
     rc = pulseq_ktraj_all(&seq, &opts, &traj);
@@ -98,9 +98,9 @@ MU_TEST(test_flat_arbitrary_gradient_is_exact)
 
     n = traj.readouts[0].num_samples;
     off = traj.sample_offset[0];
-    mu_assert_int_eq(256, n);
+    mu_assert_int_eq(32, n);
 
-    expected_step = 194553.0 * (double)traj.readouts[0].dwell;
+    expected_step = 227273.0 * (double)traj.readouts[0].dwell;
     for (j = 1; j < n; ++j)
     {
         double a = (double)traj.k[(size_t)off * 3 + 0 * n + j];
@@ -130,7 +130,7 @@ MU_TEST(test_refocusing_negates_k)
     pulseq_ktraj_opts opts;
     int rc, i, n, off;
 
-    ktraj_open(&seq, TEST_DATA_DIR "fse_2d_1sl_1avg.seq");
+    ktraj_open(&seq, TEST_CORPUS_DIR "fse_2d.seq");
 
     pulseq_ktraj_opts_init(&opts);
     rc = pulseq_ktraj_all(&seq, &opts, &traj);
@@ -292,12 +292,12 @@ static void check_centers_are_minimal(const char *fixture)
  */
 MU_TEST(test_center_sample_is_derived_not_assumed)
 {
-    check_centers_are_minimal(TEST_DATA_DIR "gre_2d_1sl_1avg.seq");
-    check_centers_are_minimal(TEST_DATA_DIR "gre_2d_3sl_3avg.seq");
-    check_centers_are_minimal(TEST_DATA_DIR "epi_2d_1sl_1avg.seq");
-    check_centers_are_minimal(TEST_DATA_DIR "fse_2d_1sl_1avg.seq");
+    check_centers_are_minimal(TEST_CORPUS_DIR "gre_2d.seq");
+    check_centers_are_minimal(TEST_CORPUS_DIR "gre_2d_3sl.seq");
+    check_centers_are_minimal(TEST_CORPUS_DIR "epi_2d_main.seq");
+    check_centers_are_minimal(TEST_CORPUS_DIR "fse_2d.seq");
     check_centers_are_minimal(TEST_DATA_DIR "gre_32x32_pe_blip.seq");
-    check_centers_are_minimal(TEST_DATA_DIR "mprage_noncart_3d_3sl_3avg_userotext1.seq");
+    check_centers_are_minimal(TEST_CORPUS_DIR "gre_stack_of_stars_3d.seq");
 }
 
 /*
@@ -314,7 +314,7 @@ MU_TEST(test_center_sample_can_be_declined)
     pulseq_ktraj_opts opts;
     int rc, i;
 
-    ktraj_open(&seq, TEST_DATA_DIR "gre_2d_1sl_1avg.seq");
+    ktraj_open(&seq, TEST_CORPUS_DIR "gre_2d.seq");
 
     pulseq_ktraj_opts_init(&opts);
     rc = pulseq_ktraj_all(&seq, &opts, &with);
@@ -351,7 +351,7 @@ MU_TEST(test_rotation_extension_composes)
     pulseq_ktraj_opts opts;
     int rc, i, differs = 0;
 
-    ktraj_open(&seq, TEST_DATA_DIR "mprage_noncart_3d_1sl_1avg_userotext1.seq");
+    ktraj_open(&seq, TEST_CORPUS_DIR "gre_stack_of_stars_3d.seq");
     mu_assert(seq.rotation_library_size > 0, "fixture carries no rotations");
 
     pulseq_ktraj_opts_init(&opts);
@@ -424,11 +424,11 @@ static void check_memo_fires(const char *fixture, int max_groups)
 MU_TEST(test_the_repeat_memo_fires)
 {
     /* One readout shape, many phase-encode lines. */
-    check_memo_fires(TEST_DATA_DIR "gre_2d_1sl_1avg.seq", 2);
-    check_memo_fires(TEST_DATA_DIR "gre_2d_3sl_3avg.seq", 3);
+    check_memo_fires(TEST_CORPUS_DIR "gre_2d.seq", 2);
+    check_memo_fires(TEST_CORPUS_DIR "gre_2d_3sl.seq", 3);
     /* Two alternating readout polarities. */
-    check_memo_fires(TEST_DATA_DIR "epi_2d_1sl_1avg.seq", 4);
-    check_memo_fires(TEST_DATA_DIR "fse_2d_3sl_3avg.seq", 4);
+    check_memo_fires(TEST_CORPUS_DIR "epi_2d_main.seq", 4);
+    check_memo_fires(TEST_CORPUS_DIR "fse_3d.seq", 4);
     /* Library deduplication switched off: 32 ids for one readout. */
     check_memo_fires(TEST_DATA_DIR "gre_32x32_pe_blip.seq", 3);
 }
@@ -448,7 +448,7 @@ MU_TEST(test_block_range_bounds_the_walk)
     pulseq_ktraj_opts opts;
     int rc;
 
-    ktraj_open(&seq, TEST_DATA_DIR "gre_2d_1sl_1avg.seq");
+    ktraj_open(&seq, TEST_CORPUS_DIR "gre_2d.seq");
 
     pulseq_ktraj_opts_init(&opts);
     rc = pulseq_ktraj_all(&seq, &opts, &all);
@@ -479,7 +479,7 @@ MU_TEST(test_gradient_offset_moves_k)
     pulseq_ktraj_opts opts;
     int rc, off, n;
 
-    ktraj_open(&seq, TEST_DATA_DIR "gre_2d_1sl_1avg.seq");
+    ktraj_open(&seq, TEST_CORPUS_DIR "gre_2d.seq");
 
     pulseq_ktraj_opts_init(&opts);
     rc = pulseq_ktraj_all(&seq, &opts, &plain);
@@ -516,7 +516,7 @@ MU_TEST(test_streaming_matches_materialised)
     PULSEQ_REAL *buf;
     int rc, i, longest = 0;
 
-    ktraj_open(&seq, TEST_DATA_DIR "epi_2d_1sl_1avg.seq");
+    ktraj_open(&seq, TEST_CORPUS_DIR "epi_2d_main.seq");
 
     pulseq_ktraj_opts_init(&opts);
     rc = pulseq_ktraj_all(&seq, &opts, &traj);
@@ -566,7 +566,7 @@ MU_TEST(test_undefined_rf_use_resets_k)
     pulseq_ktraj_opts opts;
     int rc, i, undefined = 0;
 
-    ktraj_open(&seq, TEST_DATA_DIR "gre_2d_1sl_1avg.seq");
+    ktraj_open(&seq, TEST_CORPUS_DIR "gre_2d.seq");
 
     for (i = 0; i < seq.rf_library_size; ++i)
     {
@@ -608,7 +608,7 @@ MU_TEST(test_window_average_is_a_no_op_on_a_flat_gradient)
     pulseq_ktraj_opts opts;
     int rc, n, off, j;
 
-    ktraj_open(&seq, TEST_DATA_DIR "fse_2d_1sl_1avg.seq");
+    ktraj_open(&seq, TEST_CORPUS_DIR "fse_2d.seq");
 
     pulseq_ktraj_opts_init(&opts);
     rc = pulseq_ktraj_all(&seq, &opts, &midpoint);
@@ -670,7 +670,7 @@ MU_TEST(test_window_average_matches_an_independent_quadrature)
     double dwell;
     int rc, i, a, j, m, moved = 0;
 
-    ktraj_open(&seq, TEST_DATA_DIR "mprage_noncart_3d_3sl_3avg_userotext1.seq");
+    ktraj_open(&seq, TEST_CORPUS_DIR "gre_spiral_2d.seq");
 
     pulseq_ktraj_opts_init(&opts);
     opts.sample_window_average = 1;
@@ -734,7 +734,7 @@ MU_TEST(test_bad_arguments_are_refused)
     pulseq_ktraj_readout info;
     int rc;
 
-    ktraj_open(&seq, TEST_DATA_DIR "gre_2d_1sl_1avg.seq");
+    ktraj_open(&seq, TEST_CORPUS_DIR "gre_2d.seq");
     pulseq_ktraj_opts_init(&opts);
 
     mu_assert(PULSEQ_FAILED(pulseq_ktraj_plan_create(NULL, &seq, &opts)), "NULL out accepted");
@@ -779,7 +779,7 @@ MU_TEST(test_a_centre_out_readout_puts_its_echo_at_the_first_sample)
     pulseq_ktraj_opts opts;
     int rc, i;
 
-    ktraj_open(&seq, TEST_DATA_DIR "mprage_noncart_3d_3sl_3avg_userotext1.seq");
+    ktraj_open(&seq, TEST_CORPUS_DIR "zte_3d.seq");
 
     pulseq_ktraj_opts_init(&opts);
     rc = pulseq_ktraj_all(&seq, &opts, &traj);
@@ -855,7 +855,7 @@ MU_TEST(test_a_bipolar_train_puts_every_echo_at_one_place_once_mirrored)
     int seen_forward = 0;
     int seen_reverse = 0;
 
-    ktraj_open(&seq, TEST_DATA_DIR "epi_2d_1sl_1avg.seq");
+    ktraj_open(&seq, TEST_CORPUS_DIR "epi_2d_main.seq");
 
     pulseq_ktraj_opts_init(&opts);
     rc = pulseq_ktraj_all(&seq, &opts, &traj);
@@ -902,8 +902,8 @@ MU_TEST(test_a_bipolar_train_puts_every_echo_at_one_place_once_mirrored)
 
     mu_assert(seen_forward && seen_reverse,
               "the fixture is not bipolar, so this proves nothing");
-    /* 128 samples spanning the origin: the echo belongs at N/2. */
-    mu_assert_int_eq(64, mirrored);
+    /* 32 samples spanning the origin: the echo belongs at N/2. */
+    mu_assert_int_eq(16, mirrored);
 
     pulseq_ktraj_free(&traj);
     pulseq_file_free(&seq);

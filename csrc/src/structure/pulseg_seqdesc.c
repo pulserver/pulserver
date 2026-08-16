@@ -22,18 +22,44 @@
 /*  Internal helpers                                                  */
 /* ================================================================== */
 
+/* The canonical TR window: the first TR whose instance ACQUIRES, so the
+ * description carries ADC rows even when the scan opens with dummy TRs.
+ * Falls back to the first window when nothing acquires (RF-only scans). */
 static void seqdesc__select_canonical_window(
     const pulseg_sequence_descriptor *desc,
     int *start_block,
     int *block_count)
 {
+    int tr_size = desc->tr_descriptor.tr_size;
+    int start, i, acquires;
+
     *start_block = 0;
-    *block_count = desc->tr_descriptor.tr_size;
+    *block_count = tr_size;
 
     if (*block_count > desc->num_blocks)
         *block_count = desc->num_blocks;
     if (*block_count < 0)
         *block_count = 0;
+    if (tr_size <= 0)
+        return;
+
+    for (start = 0; start + tr_size <= desc->num_blocks; start += tr_size)
+    {
+        acquires = 0;
+        for (i = start; i < start + tr_size; ++i)
+        {
+            if (desc->block_table[i].adc_id >= 0)
+            {
+                acquires = 1;
+                break;
+            }
+        }
+        if (acquires)
+        {
+            *start_block = start;
+            return;
+        }
+    }
 }
 
 /*
@@ -622,8 +648,10 @@ static int seqdesc__build_adc_echo_flags(
         float max_krss;
         int j;
 
+        /* Instance windows are anchored at block 0 whatever window was
+         * chosen as canonical: every TR of the table is an instance. */
         rep_idx = variant;
-        actual_start = block_start + rep_idx * desc->tr_descriptor.tr_size;
+        actual_start = rep_idx * desc->tr_descriptor.tr_size;
 
         pulseg_diagnostic_init(&diag);
         rc = pulseg__get_gradient_waveforms_range(
