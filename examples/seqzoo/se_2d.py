@@ -206,6 +206,9 @@ def main(
         """Play one TR of every slice of a pass, acquiring or not."""
         wait_te = getattr(readout, "wait_te", None)
         for i_slice in slices:
+            # `slice_positions` is in ascending order, so the loop index is the
+            # geometric index a reconstruction stacks by.
+            slc_label.value = i_slice
             position = slice_positions[i_slice]
             exc_hz = excitation.gz.amplitude * position
             ref_hz = kernel.refocusing_amplitude * position
@@ -240,7 +243,7 @@ def main(
 
     for slices in kernel.passes:
         readout, timing = kernel.repetitions[len(slices)]
-        ima_label, seg_label = readout.adc_labels
+        lin_label, slc_label, ima_label, seg_label = readout.adc_labels
 
         for i_dummy in range(n_dummy):
             repetition(
@@ -255,6 +258,7 @@ def main(
         clear_once = pp.make_label("ONCE", "SET", 0) if n_dummy else None
         for i_phase, line in enumerate(sampled_lines):
             ky = (line - n_y / 2) / (n_y / 2)
+            lin_label.value = line
             ima_label.value = int(acs_start <= line < acs_stop)
             seg_label.value = int(i_phase > last_calibration_line)
 
@@ -282,7 +286,15 @@ def main(
         value=n_slices if n_gain_calibration_readouts is None else n_gain_calibration_readouts,
     )
 
-    seq.auto_label()
+    seq.set_definition(key="kSpaceCenterLine", value=n_y // 2)
+    seq.set_definition(key="kSpaceCenterSample", value=kernel.repetitions[len(kernel.passes[0])][0].center_sample)
+    seq.set_definition(key="SlicePositions", value=slice_positions.tolist())
+    seq.set_definition(key="SliceThickness", value=kernel.excitation.slice_thickness)
+    seq.set_definition(
+        key="SliceGap",
+        value=slice_thickness + slice_gap - kernel.excitation.slice_thickness,
+    )
+
     seq.expand_repeats(n_averages)
 
     if write_seq:
@@ -378,7 +390,7 @@ n_averages, n_dummy, crusher_cycles, spoiling_cycles
             partial_echo=partial_echo,
             readout_bandwidth_hz=readout_bandwidth_hz,
             spoiling_cycles=spoiling_cycles,
-            labels=("IMA", "SEG"),
+            labels=("LIN", "SLC", "IMA", "SEG"),
         )
         achieved_half = readout.echo_time
         if half_te is not None and achieved_half > half_te + 1e-9:

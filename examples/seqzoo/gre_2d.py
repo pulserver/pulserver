@@ -226,6 +226,10 @@ def main(
             )
             readout.adc.phase_offset = rf_phase
 
+            # Which slice this excitation is, by position: `slice_positions`
+            # is in ascending order, so the loop index is the geometric index
+            # a reconstruction stacks by, whatever order the passes visit.
+            slc_label.value = i_slice
             seq.add_block(readout.rf, readout.gz, *([mark] if mark is not None else []))
             mark = None
             if wait_te is not None:
@@ -247,7 +251,7 @@ def main(
 
     for slices in kernel.passes:
         readout = kernel.readouts[len(slices)]
-        ima_label, seg_label = readout.adc_labels
+        lin_label, slc_label, ima_label, seg_label = readout.adc_labels
 
         # Steady state first: the same repetition without its ADC, so the
         # magnetisation the first acquired line sees is the one every later
@@ -273,6 +277,7 @@ def main(
             # fully sampled centre of the same k-space rather than a separate
             # acquisition. Label state persists, so the flag is written every
             # repetition.
+            lin_label.value = line
             ima_label.value = int(acs_start <= line < acs_stop)
             # The calibration block is segment zero and the rest segment one,
             # which is what lets a reconstruction calibrate the moment the
@@ -303,13 +308,17 @@ def main(
         value=n_slices if n_gain_calibration_readouts is None else n_gain_calibration_readouts,
     )
 
-    # Which line, which slice, and where each of those ends: all of it is
-    # written into where the readouts sit in k-space, so the loop above says
-    # only what a trajectory cannot be read for. The definitions have to be
-    # in place first -- `FOV` and `Matrix` are the grid the line counter
-    # counts on, without which an accelerated scan would be counted rather
-    # than placed.
-    seq.auto_label()
+    # Where the centre of k-space is, and the slice geometry the excitation
+    # actually produces: the gap is the prescribed spacing less one measured
+    # thickness.
+    seq.set_definition(key="kSpaceCenterLine", value=n_y // 2)
+    seq.set_definition(key="kSpaceCenterSample", value=kernel.readouts[len(kernel.passes[0])].center_sample)
+    seq.set_definition(key="SlicePositions", value=slice_positions.tolist())
+    seq.set_definition(key="SliceThickness", value=kernel.excitation.slice_thickness)
+    seq.set_definition(
+        key="SliceGap",
+        value=slice_thickness + slice_gap - kernel.excitation.slice_thickness,
+    )
 
     # Last, because it multiplies the block table: the averages are written
     # out rather than left to the interpreter's repeat count, so every
@@ -403,7 +412,7 @@ n_averages, n_dummy, spoiling_cycles
             partial_echo=partial_echo,
             readout_bandwidth_hz=readout_bandwidth_hz,
             spoiling_cycles=spoiling_cycles,
-            labels=("IMA", "SEG"),
+            labels=("LIN", "SLC", "IMA", "SEG"),
         )
 
     # The shortest repetition the prescription admits says how many slices one

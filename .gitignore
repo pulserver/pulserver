@@ -43,3 +43,4 @@ docs/_bench/results.json
 docs/_bench/safety.json
 fastseq/*.pge
 fastseq/*.pseg
+docs/_build/

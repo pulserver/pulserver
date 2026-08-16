@@ -219,7 +219,7 @@ def main(
 
     seq = pp.Sequence(system)
     spoiling_phase = iter(rf_phases)
-    ima_label, seg_label = readout.adc_labels
+    lin_label, par_label, ima_label, seg_label = readout.adc_labels
 
     # Present only when a TE or TR longer than the minimum was asked for.
     wait_te = getattr(readout, "wait_te", None)
@@ -245,7 +245,7 @@ def main(
             seq.add_block(wait_te)
         seq.add_block(*encodes)
         if acquire:
-            seq.add_block(readout.gx, readout.adc, ima_label, seg_label)
+            seq.add_block(readout.gx, readout.adc, *readout.adc_labels)
         else:
             seq.add_block(readout.gx)
         seq.add_block(
@@ -276,6 +276,12 @@ def main(
     for index, (line, partition) in enumerate(pairs):
         ky = (line - n_y / 2) / (n_y / 2)
         kz = (partition - n_z / 2) / (n_z / 2)
+        # Which line and partition this readout encodes. The loop is what
+        # decides them, so it is what writes them; the first/last flags a
+        # reconstruction wants are set by the client from these and the
+        # encoding limits, and are deliberately not in the file.
+        lin_label.value = line
+        par_label.value = partition
         # Every calibration pair is imaging data too: the rectangle is a fully
         # sampled centre of the same k-space rather than a separate
         # acquisition. Label state persists, so the flag is written every
@@ -308,11 +314,12 @@ def main(
         key="NumGainCalibrationReadouts", value=n_gain_calibration_readouts
     )
 
-    # Which line, which partition, and where each of those ends: all of it is
-    # written into where the readouts sit in k-space, so the loop above says
-    # only what a trajectory cannot be read for. The definitions have to be
-    # in place first -- `FOV` and `Matrix` are the grid the counters count on.
-    seq.auto_label()
+    # Where the centre of k-space is, which the counters above are indices
+    # into, and the thickness the pulse and its gradient actually produce.
+    seq.set_definition(key="kSpaceCenterLine", value=n_y // 2)
+    seq.set_definition(key="kSpaceCenterPartition", value=n_z // 2)
+    seq.set_definition(key="kSpaceCenterSample", value=readout.center_sample)
+    seq.set_definition(key="SliceThickness", value=kernel.excitation.slice_thickness)
 
     # Last, because it multiplies the block table: the averages are written
     # out rather than left to the interpreter's repeat count, so every
@@ -406,7 +413,7 @@ n_dummy, spoiling_cycles
         partial_echo=partial_echo,
         readout_bandwidth_hz=readout_bandwidth_hz,
         spoiling_cycles=spoiling_cycles,
-        labels=("IMA", "SEG"),
+        labels=("LIN", "PAR", "IMA", "SEG"),
     )
 
     pairs, n_calibration = pp.calc_sampled_pairs(

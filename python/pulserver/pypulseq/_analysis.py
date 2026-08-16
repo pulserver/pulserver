@@ -604,11 +604,10 @@ class AnalysisMixin:
         """The 1-based indices of the blocks in the window that hold an ADC."""
         first, last = self._window_for(time_range)
         events = self._native.block_events()
-        return [
-            index
-            for index in range(first, (last or self._native.num_blocks()) + 1)
-            if events[index - 1][4] != 0
-        ]
+        stop = last or self._native.num_blocks()
+        if not events.size or stop < first:
+            return []
+        return (np.nonzero(events[first - 1 : stop, 4])[0] + first).tolist()
 
     def _authored_labels(self, time_range: list[float] | None) -> dict:
         """One value per ADC for every label the sequence already sets.
@@ -625,7 +624,8 @@ class AnalysisMixin:
         """Write one value per ADC for each named label onto the blocks."""
         blocks = self._adc_blocks(time_range)
         ordered = [
-            (name, [int(v) for v in np.atleast_1d(values)]) for name, values in labels.items()
+            (name, np.atleast_1d(values).astype(np.int64).tolist())
+            for name, values in labels.items()
         ]
         for name, values in ordered:
             if len(values) != len(blocks):

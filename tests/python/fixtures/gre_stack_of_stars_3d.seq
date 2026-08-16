@@ -128,8 +128,8 @@ Trajectory stack_of_stars
 [GRADIENTS]
 1       393229            0            0 3 4 0
 3      -757576            0            0 5 6 0
-4            0            0            0 7 6 0
-5  1.61616e+06            0            0 8 9 0
+4            0            0            0 5 6 0
+5  1.61616e+06            0            0 7 8 0
 
 # Format of trapezoid gradients:
 # id amplitude rise flat fall delay
@@ -1770,19 +1770,13 @@ num_samples 8
 48
 
 shape_id 7
-num_samples 8
-0
-0
-6
-
-shape_id 8
 num_samples 4
 0
 1
 1
 0
 
-shape_id 9
+shape_id 8
 num_samples 4
 0
 12
@@ -1795,4 +1789,4 @@ num_samples 4
 # It can be reproduced/verified with md5sum if the file trimmed to the position right above [SIGNATURE]
 # The new line character preceding [SIGNATURE] BELONGS to the signature (and needs to be stripped away for recalculating/verification)
 Type md5
-Hash 706e2b87fcc13ff6b63febc47599adad
+Hash 229f4eb7cd6178d8a07123423b1fe7c9

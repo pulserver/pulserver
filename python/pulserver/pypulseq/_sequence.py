@@ -624,6 +624,15 @@ class Sequence(AnalysisMixin, SafetyViewsMixin, SoftDelayMixin):
         target._native.remove_duplicates()
         return target
 
+    def _writes_once(self) -> bool:
+        """Whether any block sets the ``ONCE`` flag.
+
+        Reads the LABELSET library rather than walking the blocks, in C++
+        because that library holds a row per use until deduplication runs.
+        """
+        once = self._native.find_label_id("ONCE")
+        return once >= 0 and self._native.label_set_writes(once)
+
     def expand_repeats(
         self,
         repeats: int,
@@ -719,7 +728,25 @@ class Sequence(AnalysisMixin, SafetyViewsMixin, SoftDelayMixin):
         if repeats < 1:
             raise ValueError(f"expand_repeats(): repeats must be at least 1, got {repeats}")
         self._touch()
-        report = self._native.expand_repeats(int(repeats), label, strip_once, ignore_averages)
+        if repeats == 1 and not self._writes_once():
+            # One repetition of a sequence that flags nothing plays exactly the
+            # blocks it already holds: there is no order to resolve and no flag
+            # to strip, so the table is left alone and only the definition is
+            # written. On a million-block scan that is the difference between
+            # a rebuild and nothing.
+            blocks = self._native.num_blocks()
+            report = {
+                "repeats": 1,
+                "blocks_before": blocks,
+                "blocks_after": blocks,
+                "prep_blocks": 0,
+                "body_blocks": blocks,
+                "cooldown_blocks": 0,
+            }
+        else:
+            report = self._native.expand_repeats(
+                int(repeats), label, strip_once, ignore_averages
+            )
         if ignore_averages:
             # Mirrored, not duplicated work: the C++ side writes it so a
             # non-Python caller gets it too, and this is what makes it show up
@@ -1739,28 +1766,22 @@ class Sequence(AnalysisMixin, SafetyViewsMixin, SoftDelayMixin):
             )
 
         first, last = self._window_for(time_range)
-        labels: dict[str, float] = dict(init or {})
-        evolutions: list[dict] = []
+        recorded = self._native.label_evolution(first, last, evolution)
+        if not init:
+            return recorded
 
-        for index in range(first, last + 1):
-            block = self.get_block(index)
-            if block.labels:
-                for kind, name, value in block.labels:
-                    if kind == "SET":
-                        labels[name] = value
-                    else:
-                        labels[name] = labels.get(name, 0) + value
-                if evolution == "label":
-                    evolutions.append(dict(labels))
-
-            if evolution == "blocks" or (evolution == "adc" and block.adc is not None):
-                evolutions.append(dict(labels))
-
-        if evolutions:
-            return {
-                name: np.array([step.get(name, 0) for step in evolutions]) for name in labels
-            }
-        return labels
+        # ``init`` seeds the running state, for evaluating a sequence a window
+        # at a time. The walk itself starts from zero, so seeded labels are
+        # offset here rather than inside it.
+        seeded = dict(recorded)
+        for name, value in init.items():
+            if name in seeded:
+                seeded[name] = seeded[name] + value if evolution == "none" else np.asarray(
+                    seeded[name]
+                ) + value
+            else:
+                seeded[name] = value
+        return seeded
 
     def flip_grad_axis(self, axis: str) -> None:
         """Invert every gradient on ``axis``, in place.

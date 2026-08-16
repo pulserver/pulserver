@@ -164,7 +164,7 @@ def main(
     )
 
     seq = pp.Sequence(system)
-    ima_label, seg_label = bssfp.adc_labels
+    lin_label, slc_label, ima_label, seg_label = bssfp.adc_labels
     nominal_amplitude = bssfp.rf.amplitude
     rf_center = float(bssfp.rf.center)
 
@@ -172,6 +172,9 @@ def main(
     # of every shot is remembered because the next repetition's rewind undoes
     # it.
     for i_slice in range(n_slices):
+        # `slice_positions` is in ascending order, so the loop index is the
+        # geometric index a reconstruction stacks by.
+        slc_label.value = i_slice
         freq_hz = excitation.gz.amplitude * slice_positions[i_slice]
         bssfp.rf.freq_offset = freq_hz
 
@@ -210,6 +213,7 @@ def main(
                     bssfp.gz_pre,
                 )
             else:
+                lin_label.value = line
                 ima_label.value = int(acs_start <= line < acs_stop)
                 seg_label.value = int(
                     shots.index(line) - n_dummy > last_calibration_line
@@ -219,8 +223,7 @@ def main(
                     bssfp.adc,
                     pp.scale_grad(bssfp.gy_pre, ky),
                     bssfp.gz_pre,
-                    ima_label,
-                    seg_label,
+                    *bssfp.adc_labels,
                 )
             previous_ky = ky
 
@@ -252,7 +255,14 @@ def main(
         value=n_slices if n_gain_calibration_readouts is None else n_gain_calibration_readouts,
     )
 
-    seq.auto_label()
+    seq.set_definition(key="kSpaceCenterLine", value=n_y // 2)
+    seq.set_definition(key="kSpaceCenterSample", value=bssfp.center_sample)
+    seq.set_definition(key="SlicePositions", value=slice_positions.tolist())
+    seq.set_definition(key="SliceThickness", value=kernel.excitation.slice_thickness)
+    seq.set_definition(
+        key="SliceGap",
+        value=slice_thickness + slice_gap - kernel.excitation.slice_thickness,
+    )
 
     if write_seq:
         write_sequence(seq, seq_filename, offline=True)
@@ -310,7 +320,7 @@ readout_bandwidth_hz, partial_fourier, acceleration, n_acs, n_dummy
         matrix=(n_x, n_y),
         tr=tr,
         readout_bandwidth_hz=readout_bandwidth_hz,
-        labels=("IMA", "SEG"),
+        labels=("LIN", "SLC", "IMA", "SEG"),
     )
 
     sampled_lines = pp.calc_sampled_lines(

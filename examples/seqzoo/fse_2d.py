@@ -193,9 +193,12 @@ def main(
 
     def train(fse, timing, slices, lines, acquire: bool, mark=None) -> None:
         """Play one shot's train for every slice of a pass."""
-        ima_label, seg_label = fse.adc_labels
+        lin_label, slc_label, ima_label, seg_label = fse.adc_labels
         seg_label.value = 0
         for i_slice in slices:
+            # `slice_positions` is in ascending order, so the loop index is the
+            # geometric index a reconstruction stacks by.
+            slc_label.value = i_slice
             position = slice_positions[i_slice]
             exc_hz = excitation.gz.amplitude * position
             ref_hz = kernel.refocusing_amplitude * position
@@ -216,8 +219,9 @@ def main(
                     seq.add_block(fse.wait_esp1)
                 seq.add_block(fse.gx_bridge_pre, pp.scale_grad(fse.gy_pre, ky))
                 if acquire and line is not None:
+                    lin_label.value = line
                     ima_label.value = int(acs_start <= line < acs_stop)
-                    seq.add_block(fse.gx, fse.adc, ima_label, seg_label)
+                    seq.add_block(fse.gx, fse.adc, *fse.adc_labels)
                 else:
                     seq.add_block(fse.gx)
                 seq.add_block(fse.gx_bridge_post, pp.scale_grad(fse.gy_rew, ky))
@@ -264,7 +268,18 @@ def main(
         value=n_slices if n_gain_calibration_readouts is None else n_gain_calibration_readouts,
     )
 
-    seq.auto_label()
+    seq.set_definition(key="kSpaceCenterLine", value=n_y // 2)
+    seq.set_definition(
+        key="kSpaceCenterSample",
+        value=kernel.repetitions[len(kernel.passes[0])][0].center_sample,
+    )
+    seq.set_definition(key="SlicePositions", value=slice_positions.tolist())
+    seq.set_definition(key="SliceThickness", value=kernel.excitation.slice_thickness)
+    seq.set_definition(
+        key="SliceGap",
+        value=slice_thickness + slice_gap - kernel.excitation.slice_thickness,
+    )
+
     seq.expand_repeats(n_averages)
 
     if write_seq:
@@ -351,7 +366,7 @@ n_dummy, crusher_cycles, readout_crusher_cycles
             etl=etl,
             readout_bandwidth_hz=readout_bandwidth_hz,
             spoiling_cycles=readout_crusher_cycles,
-            labels=("IMA", "SEG"),
+            labels=("LIN", "SLC", "IMA", "SEG"),
         )
         length = fse.seq.duration()[0]
         wait_tr = None

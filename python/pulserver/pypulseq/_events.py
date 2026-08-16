@@ -149,6 +149,13 @@ def _trigger_channel(event: Any) -> str:
     return _TRIGGER_NAMES.get(key, "")
 
 
+#: The readable fields of each event type, discovered once. ``dir()`` on an
+#: instance is a sorted list build plus a per-name filter, and this conversion
+#: runs once per event on every interop call -- millions of times over a large
+#: design.
+_FIELD_NAMES: dict[type, tuple[str, ...]] = {}
+
+
 def as_namespace(event: Any) -> Any:
     """One slotted event as the :class:`~types.SimpleNamespace` upstream reads.
 
@@ -166,10 +173,18 @@ def as_namespace(event: Any) -> Any:
     if not isinstance(event, _cxx.Event):
         return event
 
+    kind = type(event)
+    names = _FIELD_NAMES.get(kind)
+    if names is None:
+        names = tuple(
+            name
+            for name in dir(event)
+            if not name.startswith("_") and name not in ("id", "shape_IDs")
+        )
+        _FIELD_NAMES[kind] = names
+
     fields = {}
-    for name in dir(event):
-        if name.startswith("_") or name in ("id", "shape_IDs"):
-            continue
+    for name in names:
         try:
             fields[name] = getattr(event, name)
         except AttributeError:
@@ -288,3 +303,8 @@ make_sinc_pulse = _converting(_pp.make_sinc_pulse)
 make_soft_delay = _converting(_pp.make_soft_delay)
 make_trapezoid = _converting(_pp.make_trapezoid)
 make_trigger = _converting(_pp.make_trigger)
+
+#: ``_scale_grad(grad, scale)``: a copy of the event with its amplitude
+#: multiplied, done in C++ so a phase-encode loop does not walk fields.
+#: Raises TypeError on anything that is not a slotted gradient.
+scaled_gradient = _cxx._scale_grad

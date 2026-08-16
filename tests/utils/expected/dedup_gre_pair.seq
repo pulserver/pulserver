@@ -4,7 +4,7 @@
 [VERSION]
 major 1
 minor 5
-revision 2
+revision 0
 
 [DEFINITIONS]
 AdcRasterTime 2e-06 
@@ -17,7 +17,9 @@ Name gre_2d
 NextSequence dedup_gre_pair_b.seq 
 NumGainCalibrationReadouts 1 
 RadiofrequencyRasterTime 2e-06 
-SliceThickness 0.00483392349 
+SliceGap 0.00016625 
+SlicePositions 0 
+SliceThickness 0.00483375 
 TE 0.005 
 TR 0.03 
 TRSize 6 
@@ -43,49 +45,49 @@ kSpaceCenterSample 16
 13 154   2   0   0   1  0  0
 14 149   0   0   0   2  0  0
 15  12   0   3   8   0  0  0
-16  20   0   5   0   0  1  7
+16  20   0   5   0   0  1  6
 17  25   0   6   9   0  0  0
 18 1140   0   0   0   0  0  0
 19 154   3   0   0   1  0  0
 20 149   0   0   0   2  0  0
 21  12   0   3  10   0  0  0
-22  20   0   5   0   0  2  9
+22  20   0   5   0   0  2  7
 23  25   0   6  11   0  0  0
 24 1140   0   0   0   0  0  0
 25 154   4   0   0   1  0  0
 26 149   0   0   0   2  0  0
 27  12   0   3  12   0  0  0
-28  20   0   5   0   0  3 10
+28  20   0   5   0   0  3  8
 29  25   0   6  13   0  0  0
 30 1140   0   0   0   0  0  0
 31 154   5   0   0   1  0  0
 32 149   0   0   0   2  0  0
 33  12   0   3  14   0  0  0
-34  20   0   5   0   0  4 11
+34  20   0   5   0   0  4  9
 35  25   0   6  15   0  0  0
 36 1140   0   0   0   0  0  0
 37 154   6   0   0   1  0  0
 38 149   0   0   0   2  0  0
 39  12   0   3   4   0  0  0
-40  20   0   5   0   0  5 12
+40  20   0   5   0   0  5 10
 41  25   0   6   7   0  0  0
 42 1140   0   0   0   0  0  0
 43 154   7   0   0   1  0  0
 44 149   0   0   0   2  0  0
 45  12   0   3  16   0  0  0
-46  20   0   5   0   0  6 13
+46  20   0   5   0   0  6 11
 47  25   0   6  17   0  0  0
 48 1140   0   0   0   0  0  0
 49 154   8   0   0   1  0  0
 50 149   0   0   0   2  0  0
 51  12   0   3  18   0  0  0
-52  20   0   5   0   0  7 14
+52  20   0   5   0   0  7 12
 53  25   0   6  19   0  0  0
 54 1140   0   0   0   0  0  0
 55 154   9   0   0   1  0  0
 56 149   0   0   0   2  0  0
 57  12   0   3  20   0  0  0
-58  20   0   5   0   0  8 17
+58  20   0   5   0   0  8 13
 59  25   0   6  21   0  0  0
 60 1140   0   0   0   0  0  0
 
@@ -156,42 +158,34 @@ kSpaceCenterSample 16
 [EXTENSIONS]
 1 1 1 0
 2 1 2 0
-3 1 4 0
-4 1 3 3
-5 1 5 4
-6 1 6 5
-7 1 7 6
-8 1 8 4
-9 1 9 8
-10 1 10 4
-11 1 11 4
-12 1 12 4
-13 1 13 4
-14 1 14 4
-15 1 15 4
-16 1 16 15
-17 1 17 16
+3 1 6 0
+4 1 5 3
+5 1 4 4
+6 1 3 5
+7 1 7 5
+8 1 8 5
+9 1 9 5
+10 1 10 5
+11 1 11 5
+12 1 12 5
+13 1 13 5
 
 # Extension specification for setting labels:
 # id set labelstring
 extension LABELSET 1
 1 1 ONCE
 2 0 ONCE
-3 1 IMA
-4 0 SEG
-5 1 FIRSTSEG
-6 1 LASTLIN
-7 1 FIRSTLIN
-8 0 FIRSTSEG
-9 1 LIN
-10 2 LIN
-11 3 LIN
-12 4 LIN
-13 5 LIN
-14 6 LIN
-15 1 LASTSCAN
-16 1 LASTSEG
-17 7 LIN
+3 0 LIN
+4 0 SLC
+5 1 IMA
+6 0 SEG
+7 1 LIN
+8 2 LIN
+9 3 LIN
+10 4 LIN
+11 5 LIN
+12 6 LIN
+13 7 LIN
 
 # Sequence Shapes
 [SHAPES]
@@ -1746,4 +1740,4 @@ num_samples 4
 # It can be reproduced/verified with md5sum if the file trimmed to the position right above [SIGNATURE]
 # The new line character preceding [SIGNATURE] BELONGS to the signature (and needs to be stripped away for recalculating/verification)
 Type md5
-Hash 134d9f878bb064eb9f4194c1443c75ee
+Hash d346c44eb725a3f03f3dd816c01d8450

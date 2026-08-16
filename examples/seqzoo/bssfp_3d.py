@@ -176,7 +176,7 @@ def main(
     last_calibration_pair = kernel.n_calibration - 1
 
     seq = pp.Sequence(system)
-    ima_label, seg_label = bssfp.adc_labels
+    lin_label, par_label, ima_label, seg_label = bssfp.adc_labels
     nominal_amplitude = bssfp.rf.amplitude
 
     def rephaser(base, rewind, kz: float):
@@ -223,6 +223,8 @@ def main(
             ky = (line - n_y / 2) / (n_y / 2)
             kz = (partition - n_z / 2) / (n_z / 2)
             index = shot - n_dummy
+            lin_label.value = line
+            par_label.value = partition
             ima_label.value = int(index <= last_calibration_pair)
             seg_label.value = int(index > last_calibration_pair)
             seq.add_block(
@@ -230,8 +232,7 @@ def main(
                 bssfp.adc,
                 pp.scale_grad(bssfp.gy_pre, ky),
                 rephaser(bssfp.gz_pre, False, kz),
-                ima_label,
-                seg_label,
+                *bssfp.adc_labels,
             )
         previous = (ky, kz)
 
@@ -261,7 +262,10 @@ def main(
         key="NumGainCalibrationReadouts", value=n_gain_calibration_readouts
     )
 
-    seq.auto_label()
+    seq.set_definition(key="kSpaceCenterLine", value=n_y // 2)
+    seq.set_definition(key="kSpaceCenterPartition", value=n_z // 2)
+    seq.set_definition(key="kSpaceCenterSample", value=bssfp.center_sample)
+    seq.set_definition(key="SliceThickness", value=kernel.excitation.slice_thickness)
 
     if write_seq:
         write_sequence(seq, seq_filename, offline=True)
@@ -325,7 +329,7 @@ acceleration_z, caipi_shift, elliptical, n_acs, n_acs_z, n_dummy
         matrix=(n_x, n_y, n_z),
         tr=tr,
         readout_bandwidth_hz=readout_bandwidth_hz,
-        labels=("IMA", "SEG"),
+        labels=("LIN", "PAR", "IMA", "SEG"),
     )
 
     pairs, n_calibration = pp.calc_sampled_pairs(

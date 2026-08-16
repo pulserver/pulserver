@@ -18,6 +18,18 @@ N_X = 32
 N_Y = 32
 
 
+def labels_and_flags(seq):
+    """The authored counters, plus the boundary flags they imply.
+
+    The flags are not in the file: they follow from the counters and the
+    encoding limits, and the ISMRMRD client sets them there. Deriving them
+    here is how a test asserts on a boundary the file does not spell out.
+    """
+    authored = seq.evaluate_labels(evolution="adc")
+    derived, _ = seq.auto_label(skip_apply=True)
+    return {**derived, **authored}
+
+
 def design(**kwargs):
     kwargs.setdefault("te", 5e-3)
     kwargs.setdefault("tr", 30e-3)
@@ -108,7 +120,7 @@ def test_every_calibration_line_is_imaging_data_too():
 def test_the_calibration_block_closes_a_segment_of_its_own():
     """SEG separates calibration from the rest; LASTSEG says where it ends."""
     seq = design(n_slices=2, tr=60e-3, acceleration=2, n_acs=8)
-    labels = seq.evaluate_labels(evolution="adc")
+    labels = labels_and_flags(seq)
     calibration = _in_calibration(labels["LIN"], 8)
     assert np.array_equal(labels["SEG"] == 0, calibration)
 
@@ -121,7 +133,7 @@ def test_the_calibration_block_closes_a_segment_of_its_own():
 def test_the_last_line_of_each_slice_says_so():
     """LASTSLC is what tells a reconstruction the slice is complete."""
     seq = design(n_slices=3, tr=90e-3, acceleration=2, n_acs=8)
-    labels = seq.evaluate_labels(evolution="adc")
+    labels = labels_and_flags(seq)
     assert int((labels["LASTSLC"] == 1).sum()) == 3
     assert sorted(labels["SLC"][labels["LASTSLC"] == 1].tolist()) == [0, 1, 2]
 
@@ -286,7 +298,7 @@ def test_the_line_counter_is_a_position_on_the_prescribed_grid(prescription):
 
 def test_the_calibration_block_is_flagged_across_the_split():
     seq = design(n_slices=10, tr=25e-3, n_acs=8, acceleration=2, n_dummy=0)
-    labels = seq.evaluate_labels(evolution="adc")
+    labels = labels_and_flags(seq)
     assert np.array_equal(labels["SEG"] == 0, _in_calibration(labels["LIN"], 8))
     assert labels["LASTSEG"].sum() == 2 * 10
     assert labels["LASTSLC"].sum() == 10

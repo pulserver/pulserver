@@ -133,6 +133,17 @@ class SpatialSelectiveExcitation(RfModule):
         gz.channel = axis
         gz_reph.channel = axis
 
+        # The thickness the pulse and its selection gradient actually produce,
+        # which is the pulse's measured bandwidth over the gradient it is
+        # played on. It differs from `thickness_m` by however much the
+        # designed envelope's spectrum differs from its nominal time-bandwidth
+        # product, so it is what a reconstruction should be told. Taken before
+        # a slab's rephaser is concatenated onto the lobe.
+        # Half a hertz, because the flanks are found by interpolating the
+        # spectrum and the default 10 Hz grid moves the answer by 0.7%. This
+        # runs once per module, so the resolution costs nothing that matters.
+        self.slice_thickness = float(pp.calc_rf_bandwidth(rf, dw=0.5) / abs(gz.amplitude))
+
         self.seq = pp.Sequence(system)
 
         if is_slab:

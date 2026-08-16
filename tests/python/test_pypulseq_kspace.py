@@ -702,7 +702,13 @@ def test_mirror_fourier_turns_the_encoding_over_and_leaves_the_slices():
 
 
 def test_use_labels_applies_what_detection_would_have():
-    """Detect once, apply anywhere -- byte for byte the same file."""
+    """Detect once, apply anywhere -- the same counters and definitions.
+
+    Compared as labels rather than as bytes: where a sequence already sets a
+    counter itself, applying a detection leaves that one alone and detecting
+    rewrites it, so the two files can number their extension chains
+    differently while saying exactly the same thing.
+    """
     labels, aux = load("gre_2d_3sl").auto_label(skip_apply=True)
 
     reused = load("gre_2d_3sl")
@@ -711,7 +717,13 @@ def test_use_labels_applies_what_detection_would_have():
     direct = load("gre_2d_3sl")
     direct.auto_label()
 
-    assert reused._to_text(create_signature=False) == direct._to_text(create_signature=False)
+    from_reused = reused.evaluate_labels(evolution="adc")
+    from_direct = direct.evaluate_labels(evolution="adc")
+    assert set(from_reused) == set(from_direct)
+    for name, values in from_direct.items():
+        assert np.array_equal(from_reused[name], values), name
+    for name in aux:
+        assert reused.get_definition(name) == direct.get_definition(name), name
 
 
 def test_use_labels_carries_a_hand_corrected_counter_through():

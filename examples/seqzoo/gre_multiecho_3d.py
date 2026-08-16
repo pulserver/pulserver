@@ -208,7 +208,7 @@ def main(
 
     seq = pp.Sequence(system)
     spoiling_phase = iter(rf_phases)
-    ima_label, seg_label, eco_label = readout.adc_labels
+    lin_label, par_label, ima_label, seg_label, eco_label = readout.adc_labels
     wait_te = getattr(readout, "wait_te", None)
     wait_tr = getattr(readout, "wait_tr", None)
 
@@ -232,7 +232,7 @@ def main(
             lobe = readout.gx if monopolar or i_echo % 2 == 0 else readout.gx_rev
             if acquire:
                 eco_label.value = i_echo
-                seq.add_block(lobe, readout.adc, ima_label, seg_label, eco_label)
+                seq.add_block(lobe, readout.adc, *readout.adc_labels)
             else:
                 seq.add_block(lobe)
         seq.add_block(
@@ -255,6 +255,8 @@ def main(
     for index, (line, partition) in enumerate(pairs):
         ky = (line - n_y / 2) / (n_y / 2)
         kz = (partition - n_z / 2) / (n_z / 2)
+        lin_label.value = line
+        par_label.value = partition
         ima_label.value = int(index <= last_calibration_pair)
         seg_label.value = int(index > last_calibration_pair)
 
@@ -280,7 +282,10 @@ def main(
         key="NumGainCalibrationReadouts", value=n_gain_calibration_readouts
     )
 
-    seq.auto_label()
+    seq.set_definition(key="kSpaceCenterLine", value=n_y // 2)
+    seq.set_definition(key="kSpaceCenterPartition", value=n_z // 2)
+    seq.set_definition(key="kSpaceCenterSample", value=kernel.readout.center_sample)
+    seq.set_definition(key="SliceThickness", value=kernel.excitation.slice_thickness)
     seq.expand_repeats(n_averages)
 
     if write_seq:
@@ -356,7 +361,7 @@ n_averages, n_dummy, spoiling_cycles
         flyback=monopolar,
         readout_bandwidth_hz=readout_bandwidth_hz,
         spoiling_cycles=spoiling_cycles,
-        labels=("IMA", "SEG", "ECO"),
+        labels=("LIN", "PAR", "IMA", "SEG", "ECO"),
     )
 
     echo_spacing = pp.calc_duration(readout.gx)

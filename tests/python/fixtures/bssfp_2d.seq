@@ -4,7 +4,7 @@
 [VERSION]
 major 1
 minor 5
-revision 2
+revision 0
 
 [DEFINITIONS]
 AdcRasterTime 2e-06 
@@ -15,7 +15,9 @@ Matrix 32 8 1
 Name bssfp_2d 
 NumGainCalibrationReadouts 1 
 RadiofrequencyRasterTime 2e-06 
-SliceThickness 0.0048295957 
+SliceGap 0.00017075 
+SlicePositions 0 
+SliceThickness 0.00482925 
 TE 0.0017 
 TR 0.0034 
 TRSize 33 
@@ -36,29 +38,29 @@ kSpaceCenterSample 16
  8  92   0   3   4   2  0  0
  9  28   0   5   4   2  0  0
 10  50   2   0   0   1  0  0
-11  92   0   3   6   2  1 11
+11  92   0   3   6   2  1  6
 12  28   0   5   7   2  0  0
 13  50   3   0   0   1  0  0
-14  92   0   3   8   2  2 13
+14  92   0   3   8   2  2  7
 15  28   0   5   9   2  0  0
 16  50   2   0   0   1  0  0
-17  92   0   3   4   2  1 14
+17  92   0   3   4   2  1  8
 18  28   0   5   4   2  0  0
 19  50   3   0   0   1  0  0
-20  92   0   3   9   2  2 16
+20  92   0   3   9   2  2  9
 21  28   0   5   8   2  0  0
 22  50   2   0   0   1  0  0
-23  92   0   3  10   2  1 19
+23  92   0   3  10   2  1 13
 24  28   0   5  11   2  0  0
 25  50   3   0   0   1  0  0
-26  92   0   3  12   2  2 21
+26  92   0   3  12   2  2 14
 27  28   0   5  13   2  0  0
 28  50   2   0   0   1  0  0
-29  92   0   3   7   2  1 22
+29  92   0   3   7   2  1 15
 30  28   0   5   6   2  0  0
 31  50   3   0   0   1  0  0
-32  92   0   3  13   2  2 25
-33  28   0   5  12   2  0  7
+32  92   0   3  13   2  2 16
+33  28   0   5  12   2  0 17
 
 # Format of RF events:
 # id ampl. mag_id phase_id time_shape_id center delay freqPPm phasePPM freq phase use
@@ -107,55 +109,41 @@ kSpaceCenterSample 16
 [EXTENSIONS]
 1 1 1 0
 2 1 2 0
-3 1 4 0
-4 1 3 3
-5 1 6 0
-6 1 5 5
-7 1 7 0
-8 1 8 4
-9 1 9 8
-10 1 10 9
+3 1 6 0
+4 1 5 3
+5 1 4 4
+6 1 3 5
+7 1 7 5
+8 1 8 5
+9 1 9 5
+10 1 12 0
 11 1 11 10
-12 1 12 4
-13 1 13 12
-14 1 14 4
-15 1 15 4
-16 1 16 15
-17 1 17 6
-18 1 8 17
-19 1 18 18
-20 1 12 6
-21 1 19 20
-22 1 20 6
-23 1 21 6
-24 1 15 23
-25 1 22 24
+12 1 4 11
+13 1 10 12
+14 1 13 12
+15 1 14 12
+16 1 15 12
+17 1 16 0
 
 # Extension specification for setting labels:
 # id set labelstring
 extension LABELSET 1
 1 1 ONCE
 2 0 ONCE
-3 1 IMA
-4 0 SEG
-5 0 IMA
-6 1 SEG
-7 2 ONCE
-8 1 FIRSTSEG
-9 1 LASTLIN
-10 1 FIRSTLIN
-11 2 LIN
-12 0 FIRSTSEG
-13 3 LIN
-14 4 LIN
-15 1 LASTSEG
-16 5 LIN
-17 0 LASTSEG
-18 0 LIN
-19 1 LIN
-20 6 LIN
-21 1 LASTSCAN
-22 7 LIN
+3 2 LIN
+4 0 SLC
+5 1 IMA
+6 0 SEG
+7 3 LIN
+8 4 LIN
+9 5 LIN
+10 0 LIN
+11 0 IMA
+12 1 SEG
+13 1 LIN
+14 6 LIN
+15 7 LIN
+16 2 ONCE
 
 # Sequence Shapes
 [SHAPES]
@@ -510,4 +498,4 @@ num_samples 3
 # It can be reproduced/verified with md5sum if the file trimmed to the position right above [SIGNATURE]
 # The new line character preceding [SIGNATURE] BELONGS to the signature (and needs to be stripped away for recalculating/verification)
 Type md5
-Hash 37124c81c9a2fb7e5ba21eb6bb56a6ff
+Hash ebb9183fbe00531af7bcbb341814d603

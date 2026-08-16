@@ -86,12 +86,46 @@ def test_the_calibration_rectangle_is_acquired_before_anything_else():
 
 def test_the_counters_agree_with_where_the_readout_actually_is():
     """LIN and PAR are what the reconstruction grids by, so they must match
-    k-space."""
+    k-space.
+
+    The loop writes them, so this reads them back out of the gradients and
+    checks the two agree. That is the whole safety argument for authoring
+    them: a prephaser that does not reach the line the loop believed it
+    encoded shows up here, where asserting the loop against itself would not
+    see it.
+    """
     seq = design(acceleration=2)
-    labels = seq.evaluate_labels(evolution="adc")
+    authored = seq.evaluate_labels(evolution="adc")
+    derived, _ = seq.auto_label(skip_apply=True)
+    assert authored["LIN"].tolist() == derived["LIN"].tolist()
+    assert authored["PAR"].tolist() == derived["PAR"].tolist()
+
     pairs = acquired_pairs(seq)
-    assert labels["LIN"].tolist() == [line for line, _ in pairs]
-    assert labels["PAR"].tolist() == [partition for _, partition in pairs]
+    assert authored["LIN"].tolist() == [line for line, _ in pairs]
+    assert authored["PAR"].tolist() == [partition for _, partition in pairs]
+
+
+def test_the_derived_definitions_are_what_reading_the_sequence_back_says():
+    """`kSpaceCenterSample` and `SliceThickness` are stated, not detected.
+
+    The readout designed the prephaser and the excitation knows its own
+    bandwidth, so each states what it built; this checks the statement against
+    what the trajectory and the pulse spectrum say.
+    """
+    seq = design()
+    _, aux = seq.auto_label(skip_apply=True)
+    assert seq.get_definition("kSpaceCenterSample") == aux["kSpaceCenterSample"]
+    assert seq.get_definition("SliceThickness") == pytest.approx(
+        aux["SliceThickness"], rel=1e-3
+    )
+
+
+def test_the_first_and_last_flags_are_left_to_the_client():
+    """They are derivable from the counters and the encoding limits, and the
+    ISMRMRD client sets them there. Writing them here would put an extension
+    row on every acquisition to say something already known."""
+    labels = design().evaluate_labels(evolution="adc")
+    assert not {"FIRSTLIN", "LASTLIN", "FIRSTPAR", "LASTPAR"} & set(labels)
 
 
 # ----------------------------------------------------------------------
@@ -116,7 +150,10 @@ def test_the_calibration_rectangle_closes_a_segment_of_its_own():
     in_rectangle = np.asarray([pair in _rectangle() for pair in pairs])
     assert np.array_equal(labels["SEG"] == 0, in_rectangle)
 
-    closing = np.flatnonzero(labels["LASTSEG"] == 1)
+    # Where each segment closes -- the boundary the client turns into
+    # LAST_IN_SEGMENT, from the counter and its limits.
+    segments = np.asarray(labels["SEG"])
+    closing = np.flatnonzero(np.diff(segments, append=segments[-1] + 1) != 0)
     n_calibration = int(in_rectangle.sum())
     assert closing.tolist() == [n_calibration - 1, len(pairs) - 1]
 

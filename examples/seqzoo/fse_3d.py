@@ -349,7 +349,7 @@ def main(
     )
 
     seq = pp.Sequence(system)
-    ima_label, seg_label, eco_label = fse.adc_labels
+    lin_label, par_label, ima_label, seg_label, eco_label = fse.adc_labels
     seg_label.value = 0
     nominal = fse.rf_ref.amplitude
 
@@ -376,9 +376,11 @@ def main(
             )
             if acquire and view is not None:
                 line, partition = view
+                lin_label.value = line
+                par_label.value = partition
                 ima_label.value = int(line in acs_y and partition in acs_z)
                 eco_label.value = echo
-                seq.add_block(fse.gx, fse.adc, ima_label, seg_label, eco_label)
+                seq.add_block(fse.gx, fse.adc, *fse.adc_labels)
             else:
                 seq.add_block(fse.gx)
             seq.add_block(
@@ -425,7 +427,10 @@ def main(
         key="NumGainCalibrationReadouts", value=n_gain_calibration_readouts
     )
 
-    seq.auto_label()
+    seq.set_definition(key="kSpaceCenterLine", value=n_y // 2)
+    seq.set_definition(key="kSpaceCenterPartition", value=n_z // 2)
+    seq.set_definition(key="kSpaceCenterSample", value=kernel.readout.center_sample)
+    seq.set_definition(key="SliceThickness", value=kernel.excitation.slice_thickness)
 
     if write_seq:
         write_sequence(seq, seq_filename, offline=True)
@@ -511,7 +516,7 @@ n_dummy, shuffle_seed, crusher_cycles, readout_crusher_cycles
         etl=etl,
         readout_bandwidth_hz=readout_bandwidth_hz,
         spoiling_cycles=readout_crusher_cycles,
-        labels=("IMA", "SEG", "ECO"),
+        labels=("LIN", "PAR", "IMA", "SEG", "ECO"),
     )
     esp = fse.esp
 

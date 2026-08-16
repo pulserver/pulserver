@@ -18,7 +18,7 @@ import pulserver.design as design
 import pulserver.pypulseq as pp
 from pulserver import SequenceModule
 
-API_PAGE = Path(__file__).resolve().parents[2] / "docs" / "api" / "design.md"
+API_PAGE = Path(__file__).resolve().parents[2] / "docs" / "api" / "python" / "design.md"
 
 
 def test_everything_exported_is_a_sequence_module():
@@ -45,15 +45,27 @@ def test_every_shipped_module_can_actually_be_built():
     assert inspect.isabstract(design.RfModule)
 
 
-def test_every_public_class_is_on_its_api_reference_page():
+def _listed_on_the_page() -> set[str]:
+    """The classes the reference page files under its category headings.
+
+    The page sets ``currentmodule`` once and lists bare class names in
+    ``autosummary`` blocks, so an entry is an indented identifier on its own
+    line -- the same shape whether or not the module prefix is spelled out.
+    """
     page = API_PAGE.read_text()
-    listed = set(re.findall(r"pulserver\.design\.(\w+)", page))
+    return {
+        name.rpartition(".")[2]
+        for name in re.findall(r"^\s+((?:pulserver\.design\.)?[A-Z]\w+)\s*$", page, re.M)
+    }
+
+
+def test_every_public_class_is_on_its_api_reference_page():
+    listed = _listed_on_the_page()
     assert set(design.__all__) <= listed, sorted(set(design.__all__) - listed)
 
 
 def test_the_reference_page_names_nothing_that_is_gone():
-    page = API_PAGE.read_text()
-    listed = set(re.findall(r"^\s+pulserver\.design\.(\w+)\s*$", page, flags=re.MULTILINE))
+    listed = _listed_on_the_page()
     assert listed <= set(design.__all__), sorted(listed - set(design.__all__))
 
 

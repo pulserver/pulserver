@@ -114,6 +114,7 @@ class SequenceModule(ABC):
         self._played: dict[int, Any] = {}
         self._init_frame = None
         self._named: set[str] = set()
+        self._mirrored: set[str] = set()
         self._duration: float | None = None
         self.events = SimpleNamespace()
         self.center = 0.0
@@ -239,18 +240,32 @@ class SequenceModule(ABC):
         a single event repeated; a caller naming something has already said.
         """
         for name, event in events.items():
-            self._warn_if_shadowed(name)
-            setattr(self.events, name, event)
+            self._publish(name, event)
             self._named.add(name)
 
     def _set_event(self, name: str, played: tuple) -> None:
         """Publish ``played`` under ``name``, collapsed to one object if it is one."""
         unique = _unique(played)
+        self._publish(name, unique[0] if len(unique) == 1 else unique)
+
+    def _publish(self, name: str, event: Any) -> None:
+        """Put ``event`` on ``self.events``, and beside it on the module.
+
+        The copy in the instance dictionary is what makes ``readout.gx_pre`` an
+        ordinary attribute read. A design loop takes a dozen of them per shot,
+        and reaching every one through :meth:`__getattr__` -- which Python
+        calls only after the normal lookup has already failed -- costs more
+        than the block it is building.
+        """
         self._warn_if_shadowed(name)
-        setattr(self.events, name, unique[0] if len(unique) == 1 else unique)
+        setattr(self.events, name, event)
+        vars(self)[name] = event
+        self._mirrored.add(name)
 
     def _warn_if_shadowed(self, name: str) -> None:
         """Say when a published name is one the module itself already answers to."""
+        if name in self._mirrored:
+            return  # published before: this is a re-publication, not a clash
         if name in vars(self) or hasattr(type(self), name) or name in SEQUENCE_VIEWS:
             warnings.warn(
                 f"{type(self).__name__} publishes an event called {name!r}, which is also a "

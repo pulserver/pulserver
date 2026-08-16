@@ -181,7 +181,11 @@ def test_a_boundary_lands_on_the_last_acquisition_of_its_unit(prescription):
     has to fire twice per slice and ``LASTSLC`` once.
     """
     seq = gre_2d.main(n_x=32, n_y=32, n_dummy=0, **prescription)
-    labels = seq.evaluate_labels(evolution="adc")
+    # The boundary flags are not written into the file -- the ISMRMRD client
+    # derives them from the counters and the encoding limits -- so the
+    # property is asserted against the derivation.
+    derived, _ = seq.auto_label(skip_apply=True)
+    labels = {**derived, **seq.evaluate_labels(evolution="adc")}
     n_slices = prescription["n_slices"]
     n_adc = len(labels["LIN"])
     slices = labels["SLC"] if "SLC" in labels else np.zeros(n_adc, dtype=int)
@@ -224,6 +228,7 @@ def test_auto_label_leaves_a_counter_the_sequence_wrote_alone():
 
 def test_running_it_twice_changes_nothing_the_first_run_decided():
     seq = gre_2d.main(n_x=32, n_y=32, n_slices=3, acceleration=2, n_acs=8, n_dummy=0)
+    seq.auto_label()
     once = seq.evaluate_labels(evolution="adc")
 
     seq.auto_label()

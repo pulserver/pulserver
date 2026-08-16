@@ -207,7 +207,7 @@ def main(
 
     seq = pp.Sequence(system)
     spoiling_phase = iter(rf_phases)
-    ima_label, seg_label, eco_label = readout.adc_labels
+    lin_label, par_label, ima_label, seg_label, eco_label = readout.adc_labels
     seg_label.value = 0
     wait_te = getattr(readout, "wait_te", None)
     wait_tr = getattr(readout, "wait_tr", None)
@@ -235,9 +235,13 @@ def main(
         )
         if view is not None:
             line, partition = view
+            # The view being played is the counter; the client derives the
+            # first/last flags from these and the encoding limits.
+            lin_label.value = line
+            par_label.value = partition
             ima_label.value = int(line in acs_y and partition in acs_z)
             eco_label.value = index
-            seq.add_block(readout.gx, readout.adc, ima_label, seg_label, eco_label)
+            seq.add_block(readout.gx, readout.adc, *readout.adc_labels)
         else:
             seq.add_block(readout.gx)
         seq.add_block(
@@ -279,7 +283,12 @@ def main(
         key="NumGainCalibrationReadouts", value=n_gain_calibration_readouts
     )
 
-    seq.auto_label()
+    # Where the centre of k-space is, which the counters index into, and the
+    # thickness the pulse and its gradient actually produce.
+    seq.set_definition(key="kSpaceCenterLine", value=n_y // 2)
+    seq.set_definition(key="kSpaceCenterPartition", value=n_z // 2)
+    seq.set_definition(key="kSpaceCenterSample", value=kernel.readout.center_sample)
+    seq.set_definition(key="SliceThickness", value=kernel.excitation.slice_thickness)
 
     if write_seq:
         write_sequence(seq, seq_filename, offline=True)
@@ -356,7 +365,7 @@ acceleration_z, caipi_shift, elliptical, n_acs, n_acs_z, shuffle_seed, spoiling_
         tr=tr,
         readout_bandwidth_hz=readout_bandwidth_hz,
         spoiling_cycles=spoiling_cycles,
-        labels=("IMA", "SEG", "ECO"),
+        labels=("LIN", "PAR", "IMA", "SEG", "ECO"),
     )
     inner_tr = readout.duration
 

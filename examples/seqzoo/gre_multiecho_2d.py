@@ -200,8 +200,11 @@ def main(
         """Play one TR of every slice of a pass, acquiring or not."""
         wait_te = getattr(readout, "wait_te", None)
         wait_tr = getattr(readout, "wait_tr", None)
-        ima_label, seg_label, eco_label = readout.adc_labels
+        lin_label, slc_label, ima_label, seg_label, eco_label = readout.adc_labels
         for i_slice in slices:
+            # `slice_positions` is in ascending order, so the loop index is the
+            # geometric index a reconstruction stacks by.
+            slc_label.value = i_slice
             rf_phase = next(spoiling_phase)
             readout.rf.freq_offset = excitation.gz.amplitude * slice_positions[i_slice]
             readout.rf.phase_offset = (
@@ -230,7 +233,7 @@ def main(
                 )
                 if acquire:
                     eco_label.value = i_echo
-                    seq.add_block(lobe, readout.adc, ima_label, seg_label, eco_label)
+                    seq.add_block(lobe, readout.adc, *readout.adc_labels)
                 else:
                     seq.add_block(lobe)
             seq.add_block(readout.gx_spoil, pp.scale_grad(readout.gy_rew, ky))
@@ -239,7 +242,7 @@ def main(
 
     for slices in kernel.passes:
         readout = kernel.readouts[len(slices)]
-        ima_label, seg_label, _ = readout.adc_labels
+        lin_label, _, ima_label, seg_label, _ = readout.adc_labels
 
         for i_dummy in range(n_dummy):
             repetition(
@@ -253,6 +256,7 @@ def main(
         clear_once = pp.make_label("ONCE", "SET", 0) if n_dummy else None
         for i_phase, line in enumerate(sampled_lines):
             ky = (line - n_y / 2) / (n_y / 2)
+            lin_label.value = line
             ima_label.value = int(acs_start <= line < acs_stop)
             seg_label.value = int(i_phase > last_calibration_line)
 
@@ -280,7 +284,18 @@ def main(
         value=n_slices if n_gain_calibration_readouts is None else n_gain_calibration_readouts,
     )
 
-    seq.auto_label()
+    seq.set_definition(key="kSpaceCenterLine", value=n_y // 2)
+    seq.set_definition(
+        key="kSpaceCenterSample",
+        value=kernel.readouts[len(kernel.passes[0])].center_sample,
+    )
+    seq.set_definition(key="SlicePositions", value=slice_positions.tolist())
+    seq.set_definition(key="SliceThickness", value=kernel.excitation.slice_thickness)
+    seq.set_definition(
+        key="SliceGap",
+        value=slice_thickness + slice_gap - kernel.excitation.slice_thickness,
+    )
+
     seq.expand_repeats(n_averages)
 
     if write_seq:
@@ -354,7 +369,7 @@ acceleration, n_acs, n_averages, n_dummy, spoiling_cycles
             flyback=monopolar,
             readout_bandwidth_hz=readout_bandwidth_hz,
             spoiling_cycles=spoiling_cycles,
-            labels=("IMA", "SEG", "ECO"),
+            labels=("LIN", "SLC", "IMA", "SEG", "ECO"),
         )
 
     shortest = readout(None)

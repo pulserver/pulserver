@@ -278,6 +278,8 @@ class _BssfpReadout(SequenceModule):
         self.center = excite_span + encode_span + 0.5 * readout_duration
         self.bandwidth_hz = 1.0 / dwell
         self.n_samples = n_samples
+        # Balanced and never a partial echo, so k crosses zero at the midpoint.
+        self.center_sample = n_samples // 2
         self.delta_kx = delta_kx
         self.readout_duration = readout_duration
 

@@ -98,8 +98,8 @@ Trajectory radial
 # ..      Hz/m  Hz/m Hz/m        ..         ..          us
 [GRADIENTS]
 3      -757576            0            0 3 4 0
-4            0            0            0 5 4 0
-5  1.61616e+06            0            0 6 7 0
+4            0            0            0 3 4 0
+5  1.61616e+06            0            0 5 6 0
 
 # Format of trapezoid gradients:
 # id amplitude rise flat fall delay
@@ -1702,19 +1702,13 @@ num_samples 8
 48
 
 shape_id 5
-num_samples 8
-0
-0
-6
-
-shape_id 6
 num_samples 4
 0
 1
 1
 0
 
-shape_id 7
+shape_id 6
 num_samples 4
 0
 12
@@ -1727,4 +1721,4 @@ num_samples 4
 # It can be reproduced/verified with md5sum if the file trimmed to the position right above [SIGNATURE]
 # The new line character preceding [SIGNATURE] BELONGS to the signature (and needs to be stripped away for recalculating/verification)
 Type md5
-Hash c6ce6815f5d41cfd13918dabf78a413f
+Hash eba9ff2b47b8cbbf05b0a3d726999783

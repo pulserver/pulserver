@@ -606,7 +606,7 @@ namespace pulseqpp_events
      * Whether the block is then appended or written over an existing one is
      * the caller's business; the registration is the same either way.
      */
-    inline pulseq::Block build_block(BoundSequence& seq, const py::args& events)
+    inline pulseq::Block build_block(BoundSequence& seq, PyObject* const* items, Py_ssize_t count)
     {
         const Names& n = names();
         const double rf_raster = seq.rf_raster_time();
@@ -619,8 +619,9 @@ namespace pulseqpp_events
         int32_t chain[8][2];
         int chained = 0;
 
-        for (const py::handle& event : events)
+        for (Py_ssize_t taken = 0; taken < count; ++taken)
         {
+            const py::handle event = py::handle(items[taken]);
             // Already unpacked?  One comparison, one offset and a switch,
             // rather than a dictionary lookup per field.
             if (pulseqpp_types::is_event(event.ptr()))

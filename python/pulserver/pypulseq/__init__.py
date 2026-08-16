@@ -27,6 +27,8 @@ from __future__ import annotations
 
 import pypulseq as _pypulseq
 
+import functools as _functools
+
 from . import _events
 from ._angles import (
     calc_golden_angles as _calc_golden_angles,
@@ -147,6 +149,33 @@ for _name in dir(_pypulseq):
         _value = _events.interoperating(_value)
     globals()[_name] = _value
 del _name, _value
+
+
+def _fast_scale_grad(_upstream):
+    """``scale_grad`` that stays in the slotted form for the common case.
+
+    The hot one: a phase-encode loop scales the same prewinder once per shot,
+    and the generic interoperation decorator would convert the event to a
+    namespace and back on every call. A slotted gradient with no system to
+    re-check against is scaled in place of that; anything else is upstream's,
+    unchanged.
+    """
+
+    _scaled = _events.scaled_gradient
+
+    @_functools.wraps(_upstream)
+    def scale_grad(grad, scale, system=None):
+        if system is None:
+            try:
+                return _scaled(grad, scale)
+            except TypeError:
+                pass
+        return _upstream(grad, scale, system=system)
+
+    return scale_grad
+
+
+scale_grad = _fast_scale_grad(globals()["scale_grad"])
 
 Sequence = _Sequence
 TransformFOV = _TransformFOV

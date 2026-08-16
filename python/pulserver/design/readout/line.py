@@ -357,6 +357,7 @@ class _LineReadout(SequenceModule):
         self.center = echo_time + rf_center
         self.bandwidth_hz = 1.0 / dwell
         self.n_samples = n_samples
+        self.center_sample = n_pre
         self.delta_kx = delta_kx
         self.readout_duration = readout_duration
 

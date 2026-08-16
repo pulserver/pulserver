@@ -18,6 +18,8 @@
  */
 
 #include <array>
+#include <map>
+#include <vector>
 #include <pybind11/pybind11.h>
 #include <pybind11/numpy.h>
 #include <pybind11/stl.h>
@@ -101,6 +103,39 @@ namespace
     // empty case -- which is Python's job, done in Python, where getting it
     // wrong raises instead of corrupting the heap.
 
+    /**
+     * `add_block(*events)`, called without building a tuple.
+     *
+     * The one call a design loop makes per block, so it is the one place
+     * where pybind11's argument handling is worth going around: METH_FASTCALL
+     * hands the arguments over as a C array, which is what `build_block`
+     * wanted in the first place.
+     */
+    PyObject* add_block_fast(PyObject* self, PyObject* const* args, Py_ssize_t nargs)
+    {
+        try
+        {
+            Sequence& seq = py::cast<Sequence&>(py::handle(self));
+            const int index = seq.add_block(pulseqpp_events::build_block(seq, args, nargs));
+            return PyLong_FromLong(index);
+        }
+        catch (py::error_already_set& raised)
+        {
+            raised.restore();
+            return nullptr;
+        }
+        catch (const std::exception& raised)
+        {
+            PyErr_SetString(PyExc_ValueError, raised.what());
+            return nullptr;
+        }
+    }
+
+    PyMethodDef add_block_fast_def = {
+        "add_block_events",
+        reinterpret_cast<PyCFunction>(reinterpret_cast<void*>(add_block_fast)), METH_FASTCALL,
+        PyDoc_STR("add_block_events(*events) -> int")};
+
     py::object definition_to(const pulseq::Definition& def)
     {
         if (def.kind() == pulseq::Definition::Kind::Text)
@@ -125,7 +160,7 @@ PYBIND11_MODULE(_pulseqpp_wrapper, m)
 
     pulseqpp_types::bind(m);
 
-    py::class_<Sequence>(m, "Sequence")
+    auto sequence_class = py::class_<Sequence>(m, "Sequence")
         .def(py::init<>())
 
         /* -- copying ---------------------------------------------------- */
@@ -390,17 +425,17 @@ PYBIND11_MODULE(_pulseqpp_wrapper, m)
         //
         // `add_block(*events)` with the objects PyPulseq's `make_*` return.
         // Every event is unpacked and registered here, so a block costs one
-        // call rather than one per event.  See _pulseqpp_events.h.
-        .def("add_block_events",
-             [](Sequence& self, const py::args& events) {
-                 return self.add_block(pulseqpp_events::build_block(self, events));
-             })
+        // call rather than one per event.  See _pulseqpp_events.h.  It is
+        // attached below rather than here, because it is METH_FASTCALL.
+        //
         // The same registration, written over a block that already exists.
         // Rows the old block referred to are left where they are: they may be
         // shared, and deduplication is what decides what survives.
         .def("set_block_events",
              [](Sequence& self, int index, const py::args& events) {
-                 self.set_block(index, pulseqpp_events::build_block(self, events));
+                 PyObject* const* items = &PyTuple_GET_ITEM(events.ptr(), 0);
+                 self.set_block(index,
+                                pulseqpp_events::build_block(self, items, PyTuple_GET_SIZE(events.ptr())));
              })
         // Register one event's shapes without adding a block; returns the
         // shape ids.  Backs Sequence.register_*_event -- see _pulseqpp_events.h.
@@ -409,9 +444,10 @@ PYBIND11_MODULE(_pulseqpp_wrapper, m)
                  return pulseqpp_events::warm_event(self, event);
              })
 
-        // Measurement only: the same call signature as add_block_events with
-        // none of the work, so the difference is exactly what unpacking the
-        // event objects costs.
+        // Measurement only: takes events and does nothing with them, so the
+        // difference against add_block_events is what unpacking and
+        // registering them costs.  Deliberately a py::args binding, which is
+        // also what it measures the cost of.
         .def("_bench_noop", [](Sequence&, const py::args& events) {
             return static_cast<int>(events.size());
         })
@@ -522,6 +558,95 @@ PYBIND11_MODULE(_pulseqpp_wrapper, m)
              [](const Sequence& s, int id) {
                  return py::array_t<double>(s.rf_shim_library().length(id),
                                             s.rf_shim_library().row(id));
+             })
+        .def(
+            "label_evolution",
+            [](const Sequence& s, int first, int last, const std::string& mode) {
+                /* Replay the sticky label state across a block range, in C++.
+                 * The Python equivalent rebuilt every block as a namespace to
+                 * read two integers off its extension chain, which is a walk
+                 * the size of the scan for an answer the size of the ADC
+                 * count. */
+                const int labelset = s.find_extension_type_id("LABELSET");
+                const int labelinc = s.find_extension_type_id("LABELINC");
+                const bool per_adc = (mode == "adc");
+                const bool per_block = (mode == "blocks");
+                const bool per_label = (mode == "label");
+
+                std::map<int, int> state;
+                std::map<int, std::vector<int>> evolution;
+                std::vector<int> order;
+                int steps = 0;
+
+                auto record = [&]() {
+                    for (const auto& entry : state)
+                    {
+                        std::vector<int>& column = evolution[entry.first];
+                        if (column.empty())
+                            order.push_back(entry.first);
+                        column.resize(static_cast<size_t>(steps), 0);
+                        column.push_back(entry.second);
+                    }
+                    ++steps;
+                };
+
+                for (int index = first; index <= last; ++index)
+                {
+                    const int32_t* block =
+                        s.block_events() + static_cast<size_t>(index - 1) * pulseq::BLOCK_WIDTH;
+                    bool touched = false;
+                    int32_t link = block[5]; /* ext */
+                    while (link > 0)
+                    {
+                        const int32_t* ext = s.extensions_library().row(link);
+                        if (ext[0] == labelset && ext[1] > 0)
+                        {
+                            const int32_t* row = s.label_set_library().row(ext[1]);
+                            state[row[1]] = row[0];
+                            touched = true;
+                        }
+                        else if (ext[0] == labelinc && ext[1] > 0)
+                        {
+                            const int32_t* row = s.label_inc_library().row(ext[1]);
+                            state[row[1]] += row[0];
+                            touched = true;
+                        }
+                        link = ext[2];
+                    }
+                    if (per_block || (per_label && touched) ||
+                        (per_adc && block[4] > 0)) /* adc */
+                        record();
+                }
+
+                py::dict out;
+                if (steps == 0)
+                {
+                    for (const auto& entry : state)
+                        out[py::str(s.label_name(entry.first))] = entry.second;
+                    return out;
+                }
+                for (int id : order)
+                {
+                    std::vector<int>& column = evolution[id];
+                    column.resize(static_cast<size_t>(steps), 0);
+                    out[py::str(s.label_name(id))] =
+                        py::array_t<int>(steps, column.data());
+                }
+                return out;
+            },
+            py::arg("first"),
+            py::arg("last"),
+            py::arg("mode"))
+        // Does any LABELSET row write this label?  A library holds one row
+        // per *use* until deduplication runs, so asking from Python would be
+        // a call per shot on a sequence that has not been collapsed yet.
+        .def("label_set_writes",
+             [](const Sequence& s, int32_t label_id) {
+                 const auto& library = s.label_set_library();
+                 for (int id = 1; id <= library.size(); ++id)
+                     if (library.row(id)[1] == label_id)
+                         return true;
+                 return false;
              })
         .def("label_set_row",
              [](const Sequence& s, int id) {
@@ -996,6 +1121,15 @@ PYBIND11_MODULE(_pulseqpp_wrapper, m)
                  py::gil_scoped_release unlocked;
                  pulseq::apply_labels(self, out, a);
              });
+
+    {
+        PyTypeObject* type = reinterpret_cast<PyTypeObject*>(sequence_class.ptr());
+        py::object descriptor =
+            py::reinterpret_steal<py::object>(PyDescr_NewMethod(type, &add_block_fast_def));
+        if (!descriptor)
+            throw py::error_already_set();
+        sequence_class.attr("add_block_events") = descriptor;
+    }
 
     m.def(
         "read_file",

@@ -644,6 +644,85 @@ namespace pulseqpp_types
             return py::reinterpret_steal<py::object>(made);
         }
 
+        /* ============================================================== */
+        /*  Scaling a gradient                                            */
+        /* ============================================================== */
+
+        /** Hand a copy the shape ids upstream's registration protocol set. */
+        template <typename T>
+        void carry_shape_ids(PyObject* source, PyObject* made)
+        {
+            PyObject* ids = reinterpret_cast<Holder<T>*>(source)->compat_shape_ids;
+            if (ids)
+                reinterpret_cast<Holder<T>*>(made)->compat_shape_ids = Py_NewRef(ids);
+        }
+
+        /**
+         * `scale_grad(grad, scale)` for an event that is already unpacked.
+         *
+         * A trapezoid's area and flat area are computed from its amplitude,
+         * and an arbitrary gradient stores its waveform normalised with the
+         * peak beside it, so scaling either one is a copy of the struct and a
+         * multiply -- no field-by-field walk, and for the arbitrary case no
+         * touching of the samples at all.
+         *
+         * The copy keeps `registered`, which names the *shape* the sequence
+         * already holds: scaling does not change a normalised waveform, so
+         * the scaled event registers against the same shape and differs only
+         * in the amplitude its row carries.  `id` is dropped, as upstream
+         * drops it, because the row it named was the unscaled one.
+         *
+         * METH_FASTCALL: the caller's arguments arrive as a C array, so a
+         * call that does two multiplies does not first build a tuple.
+         */
+        PyObject* scale_grad_fast(PyObject*, PyObject* const* args, Py_ssize_t nargs)
+        {
+            if (nargs != 2)
+            {
+                PyErr_SetString(PyExc_TypeError, "_scale_grad(grad, scale) takes two arguments");
+                return nullptr;
+            }
+            const double scale = PyFloat_AsDouble(args[1]);
+            if (scale == -1.0 && PyErr_Occurred())
+                return nullptr;
+
+            PyObject* source = args[0];
+            PyTypeObject* kind = Py_TYPE(source);
+            if (kind == &TrapType)
+            {
+                PyObject* made = generic_new<TrapEvent>(&TrapType, nullptr, nullptr);
+                if (!made)
+                    return nullptr;
+                TrapEvent& out = unwrap<TrapEvent>(made);
+                out = unwrap<TrapEvent>(source);
+                out.amplitude *= scale;
+                carry_shape_ids<TrapEvent>(source, made);
+                return made;
+            }
+            if (kind == &GradType)
+            {
+                PyObject* made = generic_new<GradEvent>(&GradType, nullptr, nullptr);
+                if (!made)
+                    return nullptr;
+                GradEvent& out = unwrap<GradEvent>(made);
+                out = unwrap<GradEvent>(source);
+                out.amplitude *= scale;
+                out.first *= scale;
+                out.last *= scale;
+                carry_shape_ids<GradEvent>(source, made);
+                return made;
+            }
+            PyErr_Format(PyExc_TypeError, "_scale_grad() wants a gradient event, not %s",
+                         kind->tp_name);
+            return nullptr;
+        }
+
+        PyMethodDef scale_grad_def = {"_scale_grad",
+                                      reinterpret_cast<PyCFunction>(
+                                          reinterpret_cast<void*>(scale_grad_fast)),
+                                      METH_FASTCALL,
+                                      PyDoc_STR("_scale_grad(grad, scale) -> scaled copy")};
+
     }  // namespace
 
     void bind(py::module_& m)
@@ -677,6 +756,11 @@ namespace pulseqpp_types
                               soft_delay_members, soft_delay_getset);
         ready<DelayEvent>(m, DelayType, "pulserver._ext._pulseqpp_wrapper.DelayEvent",
                           delay_members, delay_getset);
+
+        PyObject* scaler = PyCFunction_NewEx(&scale_grad_def, nullptr, m.ptr());
+        if (!scaler)
+            throw py::error_already_set();
+        m.add_object("_scale_grad", py::reinterpret_steal<py::object>(scaler));
 
         /* -- construction from PyPulseq's namespaces ----------------------- */
         //
