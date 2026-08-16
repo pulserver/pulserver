@@ -101,12 +101,15 @@ def test_a_blade_is_an_epi_train_as_wide_as_it_was_asked_for(system, excitation)
     assert blade.check_timing()[0]
 
 
-def test_a_blade_straddles_the_centre_of_k_space(system, excitation):
-    """Which is why nothing places it: only the angle varies."""
+def test_a_blade_samples_the_centre_of_k_space(system, excitation):
+    """Every blade acquires the ky = 0 line, which is what makes it
+    self-navigating -- and why nothing places a blade: only the angle varies.
+    The lines follow the EPI convention, from -floor(w / 2) upward."""
     blade = readout(system, excitation)
     seq = play(system, blade, [0.0])
     offsets = blades(blade, seq, [0.0])[0, :, 0, 1] * FOV
-    assert offsets == pytest.approx(np.arange(WIDTH) - (WIDTH - 1) / 2, abs=1e-6)
+    assert offsets == pytest.approx(np.arange(WIDTH) - WIDTH // 2, abs=1e-6)
+    assert np.min(np.abs(offsets)) == pytest.approx(0.0, abs=1e-6)
 
 
 def test_a_blade_is_read_across_its_full_width(system, excitation):
@@ -119,7 +122,7 @@ def test_a_blade_is_read_across_its_full_width(system, excitation):
 
 def test_the_blade_start_is_the_same_for_every_blade(system, excitation):
     blade = readout(system, excitation)
-    assert blade.blade_start == pytest.approx(-(WIDTH - 1) / WIDTH)
+    assert blade.blade_start == pytest.approx(-(WIDTH // 2) / (WIDTH / 2))
 
 
 # ----------------------------------------------------------------------
@@ -135,7 +138,7 @@ def test_a_rotation_turns_the_whole_blade(system, excitation):
     for index, angle in enumerate(angles):
         across = np.array([-np.sin(angle), np.cos(angle)])
         offsets = traced[index, :, 0, :2] @ across * FOV
-        assert offsets == pytest.approx(np.arange(WIDTH) - (WIDTH - 1) / 2, abs=1e-5)
+        assert offsets == pytest.approx(np.arange(WIDTH) - WIDTH // 2, abs=1e-5)
 
 
 def test_the_blades_point_where_their_angles_say(system, excitation):

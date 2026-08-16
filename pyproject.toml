@@ -88,12 +88,13 @@ fix = true
 extend-exclude = [
   "__init__.py",
   "docs/**",
+  "_docs/**",
   "external/**",
   # Not imported, and written against a module protocol that no longer exists.
   # Linting it would rewrite code whose only job is to be read while porting.
   "python/pulserver/design/_disabled/**",
 ]
-exclude = ["docs/**"]
+exclude = ["docs/**", "_docs/**"]
 
 [tool.ruff.format]
 quote-style = "double"

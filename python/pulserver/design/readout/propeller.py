@@ -137,10 +137,13 @@ class _PropellerReadout(_EpiReadout):
             if not len(blade_angles):
                 raise ValueError("angles must hold at least one blade")
 
-        # A blade straddles k = 0, so its lines run from -(w - 1) / 2 upward
-        # and the prewinder is the same for every blade. Against a template
-        # built at w / 2, that is the fraction below.
-        blade_start = -(blade_width - 1) / blade_width
+        # Every blade must SAMPLE k = 0, not merely straddle it: the centre
+        # line is what makes a blade self-navigating, and it is the line the
+        # echo sits on. So the lines run from -floor(w / 2) upward in steps
+        # of one, the same convention an EPI blade of w lines follows, which
+        # puts line floor(w / 2) exactly on the centre. Against a prewinder
+        # template built at w / 2 lines, that is the fraction below.
+        blade_start = -(blade_width // 2) / (blade_width / 2)
 
         ndim = self._ndim
         if ndim == 3:

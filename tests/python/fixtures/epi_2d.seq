@@ -17,36 +17,36 @@ Name epi_2d_navigator
 NextSequence epi_2d_main.seq 
 RadiofrequencyRasterTime 2e-06 
 TRSize 25 
-TotalDuration 0.01552 
+TotalDuration 0.016 
 
 # Format of blocks:
 # NUM DUR RF  GX  GY  GZ  ADC  EXT
 [BLOCKS]
  1 154   1   0   0   1  0  0
- 2  12   0   2   3   0  0  0
- 3  20   0   4   0   0  1  4
- 4  20   0   5   0   0  1  5
- 5  20   0   4   0   0  1  4
- 6  32   0   6   3   0  0  0
+ 2  24   0   2   3   4  0  0
+ 3  20   0   5   0   0  1  4
+ 4  20   0   6   0   0  1  5
+ 5  20   0   5   0   0  1  4
+ 6  32   0   7   3   0  0  0
  7 154   1   0   0   1  0  0
- 8  12   0   2   7   0  0  6
- 9  20   0   4   8   0  1 10
-10  20   0   5   9   0  1 12
-11  20   0   4   9   0  1 13
-12  20   0   5   9   0  1 12
-13  20   0   4   9   0  1 13
-14  20   0   5   9   0  1 12
-15  20   0   4   9   0  1 13
-16  20   0   5   9   0  1 12
-17  20   0   4   9   0  1 13
-18  20   0   5   9   0  1 12
-19  20   0   4   9   0  1 13
-20  20   0   5   9   0  1 12
-21  20   0   4   9   0  1 13
-22  20   0   5   9   0  1 12
-23  20   0   4   9   0  1 13
-24  20   0   5  10   0  1 12
-25  32   0   6  11   0  0  0
+ 8  24   0   2   8   4  0  6
+ 9  20   0   5   9   0  1 10
+10  20   0   6  10   0  1 12
+11  20   0   5  10   0  1 13
+12  20   0   6  10   0  1 12
+13  20   0   5  10   0  1 13
+14  20   0   6  10   0  1 12
+15  20   0   5  10   0  1 13
+16  20   0   6  10   0  1 12
+17  20   0   5  10   0  1 13
+18  20   0   6  10   0  1 12
+19  20   0   5  10   0  1 13
+20  20   0   6  10   0  1 12
+21  20   0   5  10   0  1 13
+22  20   0   6  10   0  1 12
+23  20   0   5  10   0  1 13
+24  20   0   6  11   0  1 12
+25  32   0   7  12   0  0  0
 
 # Format of RF events:
 # id ampl. mag_id phase_id time_shape_id center delay freqPPm phasePPM freq phase use
@@ -60,9 +60,9 @@ TotalDuration 0.01552
 # id amplitude first last amp_shape_id time_shape_id delay
 # ..      Hz/m  Hz/m Hz/m        ..         ..          us
 [GRADIENTS]
-8      -113636            0      -113636 3 4 360
-9      -113636      -113636      -113636 5 6 0
-10      -113636      -113636            0 7 4 0
+9      -113636            0      -113636 3 4 360
+10      -113636      -113636      -113636 5 6 0
+11      -113636      -113636            0 7 4 0
 
 # Format of trapezoid gradients:
 # id amplitude rise flat fall delay
@@ -71,11 +71,12 @@ TotalDuration 0.01552
  1       266667  40 3000  40   0
  2      -632411 120    0 120   0
  3            0  80   80  80   0
- 4       632411 160   80 160   0
- 5      -632411 160   80 160   0
- 6  1.64427e+06 240  160 240   0
- 7       227273  80   80  80   0
-11      -227273  80   80  80   0
+ 4 -1.68889e+06 240    0 240   0
+ 5       632411 160   80 160   0
+ 6      -632411 160   80 160   0
+ 7  1.64427e+06 240  160 240   0
+ 8       227273  80   80  80   0
+12      -227273  80   80  80   0
 
 # Format of ADC events:
 # id num dwell delay freqPPM phasePPM freq phase phase_id
@@ -1676,4 +1677,4 @@ num_samples 2
 # It can be reproduced/verified with md5sum if the file trimmed to the position right above [SIGNATURE]
 # The new line character preceding [SIGNATURE] BELONGS to the signature (and needs to be stripped away for recalculating/verification)
 Type md5
-Hash 415d93f05fffee7c0a4ff0bf0d58867e
+Hash 9a9cf173372b1e1a2cecaceb35574429

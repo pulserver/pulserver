@@ -3,7 +3,7 @@
 The point of these tests is that there is **one** descriptor type and one
 derivation of it. ``pulserver.recon.simulation.decode_sequence_description``
 builds a :class:`~pulserver.recon.simulation.SequenceDescription` from the
-SEQDESC waveforms a scanner streams; ``Sequence.sequence_descriptor()`` builds
+description a reconstruction consumes; ``Sequence.sequence_descriptor()`` builds
 one from a sequence that has not been written yet. Both come out of
 ``pulseg_get_sequence_description`` in the C core. If they could drift, a
 simulation driven from a design script and a simulation driven from a scan

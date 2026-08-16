@@ -349,9 +349,7 @@ MU_TEST_SUITE(suite_grad_canonical_sequence)
  * runs check_max_slew() before the per-subsequence mech-resonance loop, so a
  * tight slew limit here would fail every test in this suite before the
  * acoustic analysis is ever reached). Use generous grad/slew limits so this
- * suite exercises only the mech-resonance path, matching the same
- * "intentionally generous, not validating the .seq" pattern used by
- * write_cache_cli/main.c for the same reason.
+ * suite exercises only the mech-resonance path.
  */
 static TEST_MAYBE_UNUSED void mech_resonances_opts_init(pulseg_opts* opts)
 {

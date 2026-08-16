@@ -121,12 +121,12 @@ Trajectory stack_of_spirals
 9  1.45455e+06            0            0 3 14 0
 13      -542658            0       505921 15 0 0
 14      -555288            0      -253606 16 0 0
-15       505921       505921            0 17 18 0
-16      -537358      -253606            0 19 18 0
-17       549198            0      -201742 20 0 0
-18      -560528            0       528746 21 0 0
-19      -488814      -201742            0 22 12 0
-20       543807       528746            0 23 12 0
+15       505921       505921            0 17 12 0
+16      -352922      -253606            0 18 12 0
+17       549198            0      -201742 19 0 0
+18      -560528            0       528746 20 0 0
+19      -542003      -201742            0 21 12 0
+20       528746       528746            0 22 12 0
 
 # Format of trapezoid gradients:
 # id amplitude rise flat fall delay
@@ -12354,27 +12354,22 @@ num_samples 145
 0.456710106
 
 shape_id 17
-num_samples 4
+num_samples 5
 1
--0.254531498
-0
+0.860272442
+-0.631912103
+-0.761485089
 0
 
 shape_id 18
-num_samples 4
-0
-7
-9
-17
-
-shape_id 19
-num_samples 4
-0.471949094
--0.672900201
+num_samples 5
+0.718588769
+-0.92735633
+-0.82984173
 -1
 0
 
-shape_id 20
+shape_id 19
 num_samples 145
 0
 0.0956822616
@@ -12522,7 +12517,7 @@ num_samples 145
 -0.217916243
 -0.367340292
 
-shape_id 21
+shape_id 20
 num_samples 145
 0
 0.0395145008
@@ -12670,20 +12665,20 @@ num_samples 145
 -0.982529996
 -0.94329901
 
-shape_id 22
+shape_id 21
 num_samples 5
-0.412718023
+0.37221665
 1
-0
-0
+-0.0699346968
+-0.084274741
 0
 
-shape_id 23
+shape_id 22
 num_samples 5
-0.972304671
-0.150511058
--0.835641277
--1
+1
+0.0996024813
+-0.816848883
+-0.984342982
 0
 
 
@@ -12692,4 +12687,4 @@ num_samples 5
 # It can be reproduced/verified with md5sum if the file trimmed to the position right above [SIGNATURE]
 # The new line character preceding [SIGNATURE] BELONGS to the signature (and needs to be stripped away for recalculating/verification)
 Type md5
-Hash 3b6e499a1602a76dc10f56f7330ffa83
+Hash edea77e3870f4fd9acd50355a55a9aa1

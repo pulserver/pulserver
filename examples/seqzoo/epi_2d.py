@@ -488,9 +488,15 @@ def _play_shot(
     sign = -1.0 if invert_phase else 1.0
     count = epi.etl if n_lines is None else n_lines
 
+    # The slice rephaser runs straight off the selection lobe: with the TE
+    # wait when there is one, in the prewinder block otherwise -- the block
+    # the module itself puts it in. Without it the slice never refocuses.
+    rephaser = [epi.gz_reph] if getattr(epi, "gz_reph", None) is not None else []
+
     seq.add_block(epi.rf, epi.gz)
     if getattr(epi, "wait_te", None) is not None:
-        seq.add_block(epi.wait_te)
+        seq.add_block(epi.wait_te, *rephaser)
+        rephaser = []
 
     scale = 0.0 if origin_line is None else sign * (origin_line - n_y / 2) / (n_y / 2)
     if origin_line is not None:
@@ -498,6 +504,7 @@ def _play_shot(
     seq.add_block(
         epi.gx_pre,
         pp.scale_grad(epi.gy_pre, scale),
+        *rephaser,
         *(epi.shot_labels if origin_line is not None else ()),
     )
     for line in range(count):

@@ -441,6 +441,9 @@ TEST(PulseqAutoLabel, EpiNavigatorsRepeatOneLineAndThePolarityAlternates)
     for (size_t i = 4; i < r.labels.rev.size(); ++i)
         EXPECT_NE(r.labels.rev[i], r.labels.rev[i - 1]) << "polarity at readout " << i;
 
+    /* The lead sweeps ky from +8dk down to -7dk (the standard even-N
+     * asymmetry), so zero-based from ky_min the ky=0 line -- the one the
+     * navigators repeat -- is index 7. */
     ASSERT_TRUE(r.aux.has_center_line);
     EXPECT_EQ(r.aux.center_line, 7);
 }

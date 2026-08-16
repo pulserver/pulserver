@@ -1,19 +1,16 @@
-"""Corpus verdict regression tests for the A_eq mechanical-resonance criterion.
+"""Corpus verdicts of the A_eq mechanical-resonance criterion.
 
-The A_eq criterion (PLAN_mechres_aeq_FINAL.md) reports, at each TR-harmonic line
-inside a guarded forbidden band, the equivalent-sustained gradient amplitude
-A_eq = (2/T_TR)|S_ax(f_L)|, and flags iff it exceeds the readout-scale floor
-eps = max(vendor_limit, k*G_max) (k=0.08). This inherently rejects the on-scanner
-FALSE POSITIVE (a 32x32 GRE PE-blip: a broadband transient whose sustained
-in-band drive is negligible) without a separate significance heuristic, while
-keeping a genuine sustained readout comb (bSSFP) flagged.
+At each TR-harmonic line inside a guarded forbidden band the engine reports
+the equivalent-sustained gradient amplitude A_eq = (2/T_TR)|S_ax(f_L)| and
+flags iff it exceeds the readout-scale floor eps = max(vendor_limit, k*G_max)
+(k=0.08). Two properties are held here, on the corpus, against the C engine
+itself (no Python wrapper in between):
 
-Corpus verdicts (ratified 2026-07-13): gre / gre_32x32 / epi / fse / mprage PASS;
-only bSSFP FAILs. mprage = GRE-family + a dead IR delay, so it drives the bands
-LESS than plain GRE -- the earlier mprage-FAIL was a sharp-comb artifact.
-
-See the ``mechres_plots/`` survey and the ``mechres-aeq-*`` project notes.
-The gate is the C engine itself; there is no Python wrapper in between.
+* a broadband transient (the 32x32 GRE PE-blip) whose sustained in-band
+  drive is negligible must NOT trip a zero-tolerance band, and neither must
+  scans whose readout combs fall outside the bands;
+* a genuine sustained readout comb landing inside a band (bSSFP, the EPI
+  train) MUST be flagged.
 """
 
 import pytest
@@ -22,16 +19,14 @@ from pulserver.pypulseq import Opts
 
 from .conftest import CORPUS, EXPECTED, build_collection
 
-GAM_HZ_PER_G = 4257.6  # GE EPIC GAM; matches CVInit amp_gcm*GAM*100
-
-# HRMbUHP ESP lockout table (epiespHRMbUHP.dat), all bands zero-tolerance.
-# (esp_min_us, esp_max_us, amp_G_per_cm); freq band = (5e5/esp_max, 5e5/esp_min).
-_ESP_TRIPLES = [
-    (350, 445, 0.0),  # X/Y: 1124-1429 Hz
-    (481, 488, 0.0),  # X/Y: 1025-1040 Hz
-    (418, 426, 0.0),  # Z:   1174-1196 Hz
+#: A plausible zero-tolerance mechanical-resonance lockout: a forbidden band
+#: in the low-kHz range a gradient coil could resonate in. Synthetic -- no
+#: vendor table ships with (or is quoted by) this repository. The band
+#: brackets the corpus readout combs (bSSFP ~1176 Hz, EPI ~1158 Hz), so the
+#: true-positive cases below land inside it.
+SYNTHETIC_BANDS = [
+    (1100.0, 1250.0, 0.0),
 ]
-HRMB_BANDS = [(5.0e5 / esp_max, 5.0e5 / esp_min, amp * GAM_HZ_PER_G * 100.0) for esp_min, esp_max, amp in _ESP_TRIPLES]
 
 
 def _check(name: str, raster: float, bands) -> None:
@@ -54,17 +49,17 @@ def _check(name: str, raster: float, bands) -> None:
 def test_gre32_pe_blip_ghost_passes():
     """The 32x32 GRE PE-blip transient must NOT trip a zero-tolerance band:
     its sustained in-band A_eq is far below the readout-scale floor."""
-    _check("gre_32x32_pe_blip.seq", 4e-6, HRMB_BANDS)  # must not raise
+    _check("gre_32x32_pe_blip.seq", 4e-6, SYNTHETIC_BANDS)  # must not raise
 
 
 @pytest.mark.parametrize(
     "name", ["gre_2d.seq", "gre_2d_3sl.seq", "fse_2d.seq", "mprage_3d.seq"]
 )
 def test_representative_fixtures_pass(name):
-    """No sustained readout-scale gradient drive inside the HRMbUHP bands.
+    """No sustained readout-scale gradient drive inside the forbidden bands.
     mprage (GRE-family + IR dead delay) belongs here: it drives the bands
     less than gre -- the corpus verdict is PASS."""
-    _check(name, 20e-6, HRMB_BANDS)  # must not raise
+    _check(name, 20e-6, SYNTHETIC_BANDS)  # must not raise
 
 
 @pytest.mark.parametrize("name", ["bssfp_2d.seq", "epi_2d_main.seq"])
@@ -74,4 +69,4 @@ def test_real_readout_combs_still_flagged(name):
     (A_eq ~= 7.9 mT/m at ~1176 Hz) and the EPI train (~5.5 mT/m at
     ~1158 Hz)."""
     with pytest.raises(RuntimeError, match="mech"):
-        _check(name, 20e-6, HRMB_BANDS)
+        _check(name, 20e-6, SYNTHETIC_BANDS)

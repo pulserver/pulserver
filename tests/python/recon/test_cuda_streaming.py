@@ -489,7 +489,9 @@ def test_streamed_dynamic_subspace_uses_bounded_frame_operator_lru():
     result = streamed.A(coefficients)
     provider = streamed.operator.frame_physics[0].provider
 
-    assert result.shape == (1, 5, 1, 6, 6)
+    # The frame operator here is an identity stub, so a frame's image comes
+    # back as it went in: five frames of one 6x6 image.
+    assert result.shape == (1, 5, 6, 6)
     assert rebuilds == [0, 1, 2, 3, 4]
     assert list(provider.cache) == [3, 4]
 
@@ -508,7 +510,9 @@ def test_streamed_cartesian_physics_chunks_multislice_batch():
         dtype=torch.complex64,
     )
     maps /= torch.linalg.vector_norm(maps, dim=1, keepdim=True)
-    image = torch.randn(batch, 2, *shape, generator=generator)
+    image = torch.randn(
+        batch, *shape, generator=generator, dtype=torch.complex64
+    )
     physics = Cartesian2D(mask, maps)
 
     forward_reference = physics.A(image)

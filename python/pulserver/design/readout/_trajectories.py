@@ -376,8 +376,10 @@ class NonCartesianGradient:
         The waveform samples are rotated directly rather than the path
         re-solved, so the result is the same gradient seen from a turned frame
         -- identical duration, identical slew, exactly the intended geometry.
-        The prewinder and rewinder are re-solved, because they are one bridge
-        per axis and their split between the axes changes with the angle.
+        The prewinder and rewinder pairs are rotated the same way, on the
+        union of the base pair's vertex times, so every angle plays identical
+        timing corners: exactly what an interpreter applying the rotation
+        extension to the base events would play.
 
         Parameters
         ----------
@@ -405,11 +407,6 @@ class NonCartesianGradient:
         rotated = waveforms @ turn.T
         first, last = rotated[0], rotated[-1]
 
-        moments = np.array([_bridge_area(g, axes) for g in self.prewinders]).sum(axis=0)
-        pre_area = moments @ turn.T if self.prewinders else None
-        moments = np.array([_bridge_area(g, axes) for g in self.rewinders]).sum(axis=0)
-        rew_area = moments @ turn.T if self.rewinders else None
-
         turned = object.__new__(type(self))
         NonCartesianGradient.__init__(
             turned,
@@ -419,15 +416,11 @@ class NonCartesianGradient:
             trajectory=self.trajectory[:, :2] @ turn.T,
             design_interleaves=self.design_interleaves,
             recommended_rotations=self.recommended_rotations,
-            prewinders=(
-                ()
-                if pre_area is None
-                else _moment_bridges(self.system, pre_area, np.zeros(2), first, axes)
+            prewinders=_rotated_bridge_pair(
+                self.prewinders, axes, turn, self.system, anchor="right"
             ),
-            rewinders=(
-                ()
-                if rew_area is None
-                else _moment_bridges(self.system, rew_area, last, np.zeros(2), axes)
+            rewinders=_rotated_bridge_pair(
+                self.rewinders, axes, turn, self.system, anchor="left"
             ),
             kind=self.kind,
         )
@@ -442,6 +435,67 @@ def _bridge_area(event, axes) -> np.ndarray:
     moment = np.zeros(len(axes))
     moment[axes.index(event.channel)] = float(np.trapezoid(event.waveform, event.tt))
     return moment
+
+
+def _rotated_bridge_pair(events, axes, turn, system, *, anchor):
+    """The base bridge pair under an in-plane rotation, corners shared.
+
+    A rotation event mixes the two axes sample by sample, so the explicit
+    path materializes exactly that: both base bridges are evaluated on the
+    union of their vertex times and the amplitude pair is turned at every
+    vertex. Every angle therefore plays the base's timing corners -- the
+    same corners an interpreter applying the rotation extension would play.
+
+    `anchor` places a shorter bridge inside the pair's span the way the
+    played block does: a rewinder starts with the readout's end ("left"), a
+    prewinder ends at the readout's start ("right"). Outside its own extent
+    a bridge holds its boundary value, which for a bridge that starts or
+    ends the repetition is zero.
+
+    Feasibility is rotation-invariant by construction for slew (the base
+    solve derates by the root of the axis count), and checked here for
+    amplitude: the vector magnitude, which no rotation changes, must fit
+    the per-axis ceiling.
+    """
+    if not events:
+        return ()
+    span = max(float(event.tt[-1]) for event in events)
+    vertex_times: set[float] = {0.0, span}
+    shifted = {}
+    for event in events:
+        offset = 0.0 if anchor == "left" else span - float(event.tt[-1])
+        tt = np.asarray(event.tt, dtype=float) + offset
+        shifted[event.channel] = (tt, np.asarray(event.waveform, dtype=float))
+        vertex_times.update(tt.tolist())
+    times = np.array(sorted(vertex_times))
+
+    columns = np.zeros((times.size, 2))
+    for index, axis in enumerate(axes):
+        if axis in shifted:
+            tt, wave = shifted[axis]
+            columns[:, index] = np.interp(times, tt, wave, left=wave[0], right=wave[-1])
+    rotated = columns @ turn.T
+
+    peak = float(np.linalg.norm(rotated, axis=1).max())
+    if peak > float(system.max_grad) * (1.0 + 1e-6):
+        raise ValueError(
+            f"rotated bridge reaches {peak:.0f} Hz/m vector amplitude, above the "
+            f"{float(system.max_grad):.0f} Hz/m per-axis ceiling a rotation may land it on"
+        )
+
+    events_out = []
+    for index, axis in enumerate(axes):
+        if np.allclose(rotated[:, index], 0.0):
+            continue
+        events_out.append(
+            pp.make_extended_trapezoid(
+                channel=axis,
+                amplitudes=rotated[:, index],
+                times=times,
+                system=system,
+            )
+        )
+    return tuple(events_out)
 
 
 class Arbitrary(NonCartesianGradient):

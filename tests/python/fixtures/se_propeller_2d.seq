@@ -100,7 +100,7 @@ Trajectory propeller
  1       266667  40 3000  40   0
  2 -1.68889e+06 240    0 240   0
  4      -632411 120    0 120   0
- 5     -34090.9  40  160  40   0
+ 5     -45454.5  40  160  40   0
  6       632411 160   80 160   0
  8      -632411 160   80 160   0
 11       632411 120    0 120   0
@@ -3306,4 +3306,4 @@ num_samples 2
 # It can be reproduced/verified with md5sum if the file trimmed to the position right above [SIGNATURE]
 # The new line character preceding [SIGNATURE] BELONGS to the signature (and needs to be stripped away for recalculating/verification)
 Type md5
-Hash caa2b89911f6adb3fb9115c392f5e832
+Hash c8fac10b560cc2093740b62dc6f18eba

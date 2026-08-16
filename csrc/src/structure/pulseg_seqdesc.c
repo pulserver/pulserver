@@ -398,8 +398,31 @@ static int seqdesc__build_adc_anchors_from_canonical(
     {
         int n_acq = 0, n_center = 0;
         float max_krss = 0.0f, min_krss_overall = 1e30f, rel_tol = 1e-3f;
+        int group_acq = 0, largest_group = 0;
 
+        /* ECHO_CENTER and NON_CENTER describe positions WITHIN one echo
+         * group -- the acquisitions of a single excitation. A scan that
+         * excites once per readout (a GRE, a radial or ZTE view) has one
+         * acquisition per group, and each is its own centre: comparing it
+         * against the readouts of other shots would rank separate shots
+         * against each other and demote all but one of them. */
         for (i = 0; i < n_walk; ++i)
+        {
+            const pulseg_block_table_element *grp = &desc->block_table[block_start + i];
+            if (grp->rf_id >= 0 && grp->rf_id < desc->rf_table_size &&
+                desc->rf_table[grp->rf_id].rf_use == PULSEG_RF_USE_EXCITATION)
+            {
+                if (group_acq > largest_group)
+                    largest_group = group_acq;
+                group_acq = 0;
+            }
+            if (roles[i] > PULSEG_ADC_ROLE_NON_ACQUIRED && kzero_us[i] >= 0.0f)
+                group_acq++;
+        }
+        if (group_acq > largest_group)
+            largest_group = group_acq;
+
+        for (i = 0; largest_group > 1 && i < n_walk; ++i)
         {
             if (roles[i] > PULSEG_ADC_ROLE_NON_ACQUIRED && kzero_us[i] >= 0.0f)
             {
@@ -581,6 +604,7 @@ static int seqdesc__build_adc_echo_flags(
 {
     int *echoes = NULL;
     float *min_krss_by_position = NULL;
+    int *opens_at_closest = NULL;
     float canonical_floor = 1.0e30f;
     float global_scale = 0.0f;
     int num_instances;
@@ -595,12 +619,15 @@ static int seqdesc__build_adc_echo_flags(
     echoes = (int *)PULSEG_ALLOC((size_t)n_walk * sizeof(int));
     min_krss_by_position =
         (float *)PULSEG_ALLOC((size_t)n_walk * sizeof(float));
-    if (!echoes || !min_krss_by_position)
+    opens_at_closest = (int *)PULSEG_ALLOC((size_t)n_walk * sizeof(int));
+    if (!echoes || !min_krss_by_position || !opens_at_closest)
     {
         PULSEG_FREE(echoes);
         PULSEG_FREE(min_krss_by_position);
+        PULSEG_FREE(opens_at_closest);
         return PULSEG_ERR_ALLOC_FAILED;
     }
+    memset(opens_at_closest, 0, (size_t)n_walk * sizeof(int));
     memset(echoes, 0, (size_t)n_walk * sizeof(int));
     for (i = 0; i < n_walk; ++i)
         min_krss_by_position[i] = 1.0e30f;
@@ -738,7 +765,7 @@ static int seqdesc__build_adc_echo_flags(
             }
         }
 
-        krss = (float *)PULSEG_ALLOC((size_t)n_samples * sizeof(float));
+        krss = (float *)PULSEG_ALLOC((size_t)n_samples * 3U * sizeof(float));
         if (!krss)
         {
             rc = PULSEG_ERR_ALLOC_FAILED;
@@ -753,6 +780,8 @@ static int seqdesc__build_adc_echo_flags(
             int ref_cursor = 0;
 
             krss[0] = 0.0f;
+            krss[n_samples] = 0.0f;
+            krss[2 * n_samples] = 0.0f;
             for (j = 1; j < n_samples; ++j)
             {
                 kx += 0.5f * (uw.gx[j - 1] + uw.gx[j]) * dt;
@@ -773,16 +802,22 @@ static int seqdesc__build_adc_echo_flags(
                     kz = -kz;
                     ref_cursor++;
                 }
-                krss[j] =
-                    (float)sqrt((double)kx * kx + (double)ky * ky + (double)kz * kz);
+                krss[j] = kx;
+                krss[n_samples + j] = ky;
+                krss[2 * n_samples + j] = kz;
             }
         }
 
         max_krss = 0.0f;
         for (j = 0; j < n_samples; ++j)
         {
-            if (krss[j] > max_krss)
-                max_krss = krss[j];
+            float kx = krss[j];
+            float ky = krss[n_samples + j];
+            float kz = krss[2 * n_samples + j];
+            float mag =
+                (float)sqrt((double)kx * kx + (double)ky * ky + (double)kz * kz);
+            if (mag > max_krss)
+                max_krss = mag;
         }
         if (max_krss > global_scale)
             global_scale = max_krss;
@@ -816,14 +851,96 @@ static int seqdesc__build_adc_echo_flags(
                         re = n_samples - 1;
                     if (rs <= re)
                     {
-                        min_krss = krss[rs];
-                        for (j = rs + 1; j <= re; ++j)
+                        /* The echo is where the readout reaches the centre of
+                         * the space IT sweeps. A window tracing a planar (or
+                         * 3D) path -- a spiral or rosette arm -- is a
+                         * self-contained acquisition of that plane, and an
+                         * axis held constant across it (a stack's partition
+                         * encode) is an outer encode that must not veto the
+                         * in-plane echo. A one-dimensional window (a Cartesian
+                         * or EPI line, a radial spoke) keeps the full-|k|
+                         * criterion: there the held offsets are coordinates of
+                         * the very plane the train assembles, and only the
+                         * centre line is the echo. */
+                        float ex0 = krss[rs];
+                        float ey0 = krss[n_samples + rs];
+                        float ez0 = krss[2 * n_samples + rs];
+                        float ux = krss[re] - ex0;
+                        float uy = krss[n_samples + re] - ey0;
+                        float uz = krss[2 * n_samples + re] - ez0;
+                        float span_x_min = 0.0f, span_x_max = 0.0f;
+                        float span_y_min = 0.0f, span_y_max = 0.0f;
+                        float span_z_min = 0.0f, span_z_max = 0.0f;
+                        float cross_max = 0.0f;
+                        float u_norm =
+                            (float)sqrt((double)ux * ux + (double)uy * uy + (double)uz * uz);
+                        int planar;
+
+                        for (j = rs; j <= re; ++j)
                         {
-                            if (krss[j] < min_krss)
-                                min_krss = krss[j];
+                            float dx = krss[j] - ex0;
+                            float dy = krss[n_samples + j] - ey0;
+                            float dz = krss[2 * n_samples + j] - ez0;
+                            float cx = dy * uz - dz * uy;
+                            float cy = dz * ux - dx * uz;
+                            float cz = dx * uy - dy * ux;
+                            float cross =
+                                (float)sqrt((double)cx * cx + (double)cy * cy + (double)cz * cz);
+                            if (cross > cross_max)
+                                cross_max = cross;
+                            if (dx < span_x_min) span_x_min = dx;
+                            if (dx > span_x_max) span_x_max = dx;
+                            if (dy < span_y_min) span_y_min = dy;
+                            if (dy > span_y_max) span_y_max = dy;
+                            if (dz < span_z_min) span_z_min = dz;
+                            if (dz > span_z_max) span_z_max = dz;
                         }
-                        if (min_krss < min_krss_by_position[i])
-                            min_krss_by_position[i] = min_krss;
+                        planar = (max_krss > 0.0f && u_norm > 0.0f &&
+                                  cross_max > 1e-3f * u_norm * max_krss);
+
+                        {
+                            float span_scale = span_x_max - span_x_min;
+                            float sy = span_y_max - span_y_min;
+                            float sz = span_z_max - span_z_min;
+                            int use_x = 1, use_y = 1, use_z = 1;
+
+                            if (sy > span_scale)
+                                span_scale = sy;
+                            if (sz > span_scale)
+                                span_scale = sz;
+                            if (planar && span_scale > 0.0f)
+                            {
+                                use_x = (span_x_max - span_x_min) > 1e-3f * span_scale;
+                                use_y = (span_y_max - span_y_min) > 1e-3f * span_scale;
+                                use_z = (span_z_max - span_z_min) > 1e-3f * span_scale;
+                            }
+
+                            int arg_min = rs;
+                            min_krss = 0.0f;
+                            for (j = rs; j <= re; ++j)
+                            {
+                                double acc = 0.0;
+                                float mag;
+                                if (use_x)
+                                    acc += (double)krss[j] * krss[j];
+                                if (use_y)
+                                    acc += (double)krss[n_samples + j] * krss[n_samples + j];
+                                if (use_z)
+                                    acc += (double)krss[2 * n_samples + j] *
+                                           krss[2 * n_samples + j];
+                                mag = (float)sqrt(acc);
+                                if (j == rs || mag < min_krss)
+                                {
+                                    min_krss = mag;
+                                    arg_min = j;
+                                }
+                            }
+                            if (min_krss < min_krss_by_position[i])
+                            {
+                                min_krss_by_position[i] = min_krss;
+                                opens_at_closest[i] = (arg_min == rs);
+                            }
+                        }
                     }
                 }
             }
@@ -851,25 +968,54 @@ echo_variant_done:
     {
         PULSEG_FREE(echoes);
         PULSEG_FREE(min_krss_by_position);
+        PULSEG_FREE(opens_at_closest);
         return rc;
     }
 
     {
         /*
-         * Raster integration rarely lands on mathematical zero exactly.
-         * ZERO_VAR supplies the error floor already accepted by the canonical
-         * anchor calculation; the scale term absorbs accumulated float error
-         * without allowing a finite phase-encoding offset to count as zero.
+         * Two ways a readout carries the echo.
+         *
+         * It crosses the centre. Raster integration rarely lands on
+         * mathematical zero exactly, so the canonical anchor supplies the
+         * error already accepted there -- capped at error scale, because a
+         * real distance from the centre is the physics of the sequence and
+         * must not be normalised away as if it were integration error.
+         *
+         * Or it OPENS at its closest approach and only recedes: a
+         * centre-out acquisition. A ZTE cannot sample k = 0 at all -- the
+         * acquisition opens at |k| = G*t_dead, after the dead time -- yet
+         * its first sample is still the k-space anchor everything
+         * downstream needs: the phase reference an FOV shift demodulates
+         * against, and the time origin a simulation gives the echo. So the
+         * first sample is quoted as the echo, provided this window comes as
+         * close to the centre as the TR ever does; a readout that opens at
+         * its own closest approach far out (an outer line of a centre-out
+         * train) is not the train's echo and stays unflagged.
          */
-        float threshold =
-            canonical_floor + 1.0e-5f * global_scale + 1.0e-6f;
+        float error_scale = 1.0e-3f * global_scale;
+        float floor = canonical_floor < error_scale ? canonical_floor : error_scale;
+        float threshold = floor + 1.0e-5f * global_scale + 1.0e-6f;
+        float closest = 1.0e30f;
+
         for (i = 0; i < n_walk; ++i)
         {
+            if (min_krss_by_position[i] < closest)
+                closest = min_krss_by_position[i];
+        }
+        for (i = 0; i < n_walk; ++i)
+        {
+            if (min_krss_by_position[i] > 1.0e29f)
+                continue;
             if (min_krss_by_position[i] <= threshold)
+                echoes[i] = 1;
+            else if (opens_at_closest[i] &&
+                     min_krss_by_position[i] <= 1.1f * closest + threshold)
                 echoes[i] = 1;
         }
     }
     PULSEG_FREE(min_krss_by_position);
+    PULSEG_FREE(opens_at_closest);
     *out_echoes = echoes;
     return PULSEG_SUCCESS;
 }

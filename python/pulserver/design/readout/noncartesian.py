@@ -438,9 +438,9 @@ class NonCartesianReadout(SequenceModule):
                 spoiling_cycles, voxel_size_m, spoiling_axis, system=system
             )
 
-        # Rotating re-solves the bridges, so arm to arm they differ by a raster
-        # or two. A repetition whose length depended on which arm it played
-        # would not have one TR, so every arm is given the longest.
+        # Every explicit arm plays the base bridges' timing corners (rotation
+        # turns the amplitude pair, never the timing), so these spans agree
+        # across arms by construction; the max() is the shared value.
         raster = system.block_duration_raster
         natural_pre_span = pp.ceil_to_raster(
             max(

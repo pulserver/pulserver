@@ -125,6 +125,19 @@ def _cartesian_base(matrix=12, coils=3):
     return Cartesian2D(torch.ones(1, 1, matrix, matrix), maps), matrix, coils
 
 
+def _base_image_shape(physics, matrix):
+    """The image layout a base physics answers in.
+
+    DeepInverse Cartesian physics keeps images at ``(batch, h, w)``; MRI-NUFFT
+    hands its SENSE adjoint back as ``(batch, 1, h, w)``. Either is a valid
+    trailing shape for SMS to stack slices onto -- what matters is that a
+    caller hands the base the layout that base speaks, which is what an
+    adjoint round trip reports.
+    """
+    probe = torch.zeros(1, matrix, matrix, dtype=torch.complex64)
+    return tuple(physics.A_adjoint(physics.A(probe)).shape[1:])
+
+
 def _noncartesian_base(matrix=12, coils=3, samples=64):
     from pulserver.recon.physics import NonCartesian2D
 
@@ -143,7 +156,9 @@ def test_sms_wraps_any_in_plane_trajectory(build):
     n_slices = 3
     physics = SMS(base, torch.rand(n_slices, 1) * 2 * torch.pi)
 
-    image = torch.randn(1, n_slices, matrix, matrix, dtype=torch.complex64)
+    image = torch.randn(
+        1, n_slices, *_base_image_shape(base, matrix), dtype=torch.complex64
+    )
     measurement = physics.A(image)
     cotangent = torch.randn_like(measurement)
 
