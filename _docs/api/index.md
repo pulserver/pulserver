@@ -12,6 +12,6 @@ design
 pypulseq
 io
 recon
-seqzoo
-reczoo
+app_sequence
+app_recon
 ```

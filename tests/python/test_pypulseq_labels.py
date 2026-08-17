@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 import pulserver.pypulseq as pp
-from pulserver.seqzoo import gre_2d
+from pulserver.app import gre2D_sequence
 from pulserver._labels import (
     COUNTER_LABELS,
     FLAG_LABELS,
@@ -176,11 +176,11 @@ def test_a_boundary_lands_on_the_last_acquisition_of_its_unit(prescription):
     """The rule, stated as the property rather than as the derivation.
 
     A frame boundary closes a slice, an encoding boundary closes a segment
-    *within* a slice. ``gre_2d`` is a scan where both are known from the
+    *within* a slice. ``gre2D_sequence`` is a scan where both are known from the
     outside: it acquires a calibration block and then the rest, so ``LASTSEG``
     has to fire twice per slice and ``LASTSLC`` once.
     """
-    seq = gre_2d.main(n_x=32, n_y=32, n_dummy=0, **prescription)
+    seq = gre2D_sequence.main(n_x=32, n_y=32, n_dummy=0, **prescription)
     # The boundary flags are not written into the file -- the ISMRMRD client
     # derives them from the counters and the encoding limits -- so the
     # property is asserted against the derivation.
@@ -212,7 +212,7 @@ def test_a_boundary_lands_on_the_last_acquisition_of_its_unit(prescription):
 
 def test_auto_label_leaves_a_counter_the_sequence_wrote_alone():
     """Detection fills the gaps around what is there; it does not correct it."""
-    seq = gre_2d.main(n_x=32, n_y=32, n_slices=2, acceleration=2, n_acs=8, n_dummy=0)
+    seq = gre2D_sequence.main(n_x=32, n_y=32, n_slices=2, acceleration=2, n_acs=8, n_dummy=0)
     detected = seq.evaluate_labels(evolution="adc")["LIN"]
 
     # Something the trajectory plainly disagrees with, written as a counter.
@@ -227,7 +227,7 @@ def test_auto_label_leaves_a_counter_the_sequence_wrote_alone():
 
 
 def test_running_it_twice_changes_nothing_the_first_run_decided():
-    seq = gre_2d.main(n_x=32, n_y=32, n_slices=3, acceleration=2, n_acs=8, n_dummy=0)
+    seq = gre2D_sequence.main(n_x=32, n_y=32, n_slices=3, acceleration=2, n_acs=8, n_dummy=0)
     seq.auto_label()
     once = seq.evaluate_labels(evolution="adc")
 
@@ -240,14 +240,14 @@ def test_running_it_twice_changes_nothing_the_first_run_decided():
 
 
 def test_the_scan_ends_once():
-    seq = gre_2d.main(n_x=32, n_y=32, n_slices=4, acceleration=2, n_acs=8, n_dummy=0)
+    seq = gre2D_sequence.main(n_x=32, n_y=32, n_slices=4, acceleration=2, n_acs=8, n_dummy=0)
     seq.auto_label()
     last_scan = seq.evaluate_labels(evolution="adc")["LASTSCAN"]
     assert np.array_equal(np.flatnonzero(last_scan), [len(last_scan) - 1])
 
 
 def test_boundary_flags_can_be_restricted_or_refused():
-    seq = gre_2d.main(n_x=32, n_y=32, n_slices=2, acceleration=1, n_acs=8, n_dummy=0)
+    seq = gre2D_sequence.main(n_x=32, n_y=32, n_slices=2, acceleration=1, n_acs=8, n_dummy=0)
 
     none, _ = seq.auto_label(skip_apply=True, boundary_flags=False)
     assert not set(none) & set(MRD_FLAGS)

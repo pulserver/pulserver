@@ -9,7 +9,9 @@ revision 0
 [DEFINITIONS]
 AdcRasterTime 2e-06 
 AngleScheme golden 
+AngularIncrement 137.507764 
 BlockDurationRaster 2e-05 
+EchoTrainLength 3 
 ExplicitArms 1 
 FOV 0.22 0.22 0.064 
 GradientRasterTime 2e-05 
@@ -18,77 +20,85 @@ Matrix 32 32 4
 Name mprage_stack_of_spirals_3d 
 NumArms 3 
 NumGainCalibrationReadouts 1 
+PartitionAngleOffset 0 
 RadiofrequencyRasterTime 2e-06 
+SliceThickness 0.064 
 TE 0.00184 
 TI 0.2 
 TR 0.5 
-TRSize 20 
-TotalDuration 1.5 
+TRSize 16 
+TotalDuration 2 
 Trajectory stack_of_spirals 
+kSpaceCenterPartition 2 
+kSpaceCenterSample 0 
 
 # Format of blocks:
 # NUM DUR RF  GX  GY  GZ  ADC  EXT
 [BLOCKS]
  1 500   1   0   0   0  0  0
  2  30   0   0   0   1  0  0
- 3 8954   0   0   0   0  0  0
+ 3 9552   0   0   0   0  0  0
  4 160   2   0   0   2  0  0
  5   8   0   0   0   3  0  0
- 6 145   0   4   5   0  1  2
+ 6 145   0   4   5   0  1  3
  7  32   0   6   7   9  0  0
  8 160   2   0   0   2  0  0
- 9   8   0   0   0  10  0  0
-10 145   0   4   5   0  1  3
-11  32   0   6   7   9  0  0
+ 9   8   0   0   0   3  0  0
+10 145   0  10  11   0  1  4
+11  32   0  12  13   9  0  0
 12 160   3   0   0   2  0  0
-13   8   0   0   0  12  0  0
-14 145   0   4   5   0  2  4
-15  32   0   6   7   9  0  0
-16 160   4   0   0   2  0  0
-17   8   0   0   0  11  0  0
-18 145   0   4   5   0  3  5
-19  32   0   6   7   9  0  0
-20 14136   0   0   0   0  0  0
-21 500   1   0   0   0  0  0
-22  30   0   0   0   1  0  0
-23 8954   0   0   0   0  0  0
+13   8   0   0   0   3  0  0
+14 145   0  14  15   0  2  5
+15  32   0  16  17   9  0  0
+16 13883   0   0   0   0  0  0
+17 500   1   0   0   0  0  0
+18  30   0   0   0   1  0  0
+19 9552   0   0   0   0  0  0
+20 160   4   0   0   2  0  0
+21   8   0   0   0  18  0  0
+22 145   0   4   5   0  3  8
+23  32   0   6   7   9  0  0
 24 160   5   0   0   2  0  0
-25   8   0   0   0   3  0  0
-26 145   0  13  14   0  4  7
-27  32   0  15  16   9  0  0
+25   8   0   0   0  18  0  0
+26 145   0  10  11   0  4  9
+27  32   0  12  13   9  0  0
 28 160   6   0   0   2  0  0
-29   8   0   0   0  10  0  0
-30 145   0  13  14   0  5  8
-31  32   0  15  16   9  0  0
-32 160   7   0   0   2  0  0
-33   8   0   0   0  12  0  0
-34 145   0  13  14   0  6  9
-35  32   0  15  16   9  0  0
-36 160   8   0   0   2  0  0
-37   8   0   0   0  11  0  0
-38 145   0  13  14   0  7 10
-39  32   0  15  16   9  0  0
-40 14136   0   0   0   0  0  0
-41 500   1   0   0   0  0  0
-42  30   0   0   0   1  0  0
-43 8954   0   0   0   0  0  0
+29   8   0   0   0  18  0  0
+30 145   0  14  15   0  5 10
+31  32   0  16  17   9  0  0
+32 13883   0   0   0   0  0  0
+33 500   1   0   0   0  0  0
+34  30   0   0   0   1  0  0
+35 9552   0   0   0   0  0  0
+36 160   7   0   0   2  0  0
+37   8   0   0   0  20  0  0
+38 145   0   4   5   0  6 13
+39  32   0   6   7   9  0  0
+40 160   8   0   0   2  0  0
+41   8   0   0   0  20  0  0
+42 145   0  10  11   0  7 14
+43  32   0  12  13   9  0  0
 44 160   9   0   0   2  0  0
-45   8   0   0   0   3  0  0
-46 145   0  17  18   0  8 12
-47  32   0  19  20   9  0  0
-48 160  10   0   0   2  0  0
-49   8   0   0   0  10  0  0
-50 145   0  17  18   0  9 13
-51  32   0  19  20   9  0  0
-52 160  11   0   0   2  0  0
-53   8   0   0   0  12  0  0
-54 145   0  17  18   0 10 14
-55  32   0  19  20   9  0  0
-56 160   7   0   0   2  0  0
-57   8   0   0   0  11  0  0
-58 145   0  17  18   0  6 15
-59  32   0  19  20   9  0  0
-60 14136   0   0   0   0  0  0
+45   8   0   0   0  20  0  0
+46 145   0  14  15   0  8 15
+47  32   0  16  17   9  0  0
+48 13883   0   0   0   0  0  0
+49 500   1   0   0   0  0  0
+50  30   0   0   0   1  0  0
+51 9552   0   0   0   0  0  0
+52 160  10   0   0   2  0  0
+53   8   0   0   0  19  0  0
+54 145   0   4   5   0  9 18
+55  32   0   6   7   9  0  0
+56 160  11   0   0   2  0  0
+57   8   0   0   0  19  0  0
+58 145   0  10  11   0 10 19
+59  32   0  12  13   9  0  0
+60 160   7   0   0   2  0  0
+61   8   0   0   0  19  0  0
+62 145   0  14  15   0  6 20
+63  32   0  16  17   9  0  0
+64 13883   0   0   0   0  0  0
 
 # Format of RF events:
 # id ampl. mag_id phase_id time_shape_id center delay freqPPm phasePPM freq phase use
@@ -119,14 +129,14 @@ Trajectory stack_of_spirals
 6      -544359      -544359            0 11 12 0
 7      -535323      -154744            0 13 12 0
 9  1.45455e+06            0            0 3 14 0
-13      -542658            0       505921 15 0 0
-14      -555288            0      -253606 16 0 0
-15       505921       505921            0 17 12 0
-16      -352922      -253606            0 18 12 0
-17       549198            0      -201742 19 0 0
-18      -560528            0       528746 20 0 0
-19      -542003      -201742            0 21 12 0
-20       528746       528746            0 22 12 0
+10      -542658            0       505921 15 0 0
+11      -555288            0      -253606 16 0 0
+12       505921       505921            0 17 12 0
+13      -352922      -253606            0 18 12 0
+14       549198            0      -201742 19 0 0
+15      -560528            0       528746 20 0 0
+16      -542003      -201742            0 21 12 0
+17       528746       528746            0 22 12 0
 
 # Format of trapezoid gradients:
 # id amplitude rise flat fall delay
@@ -134,9 +144,9 @@ Trajectory stack_of_spirals
 [TRAP]
  3      -390625  80    0  80   0
  8       390625  80    0  80   0
-10      -195312  80    0  80   0
-11       195312  80    0  80   0
-12            0  80    0  80   0
+18      -195312  80    0  80   0
+19       195312  80    0  80   0
+20            0  80    0  80   0
 
 # Format of ADC events:
 # id num dwell delay freqPPM phasePPM freq phase phase_id
@@ -158,32 +168,41 @@ Trajectory stack_of_spirals
 # next_id of 0 terminates the list
 # Extension list is followed by extension specifications
 [EXTENSIONS]
-1 1 2 0
-2 1 1 1
-3 1 3 1
-4 1 4 1
-5 1 5 1
-6 1 6 0
-7 1 1 6
-8 1 3 6
-9 1 4 6
-10 1 5 6
-11 1 7 0
-12 1 1 11
-13 1 3 11
-14 1 4 11
-15 1 5 11
+1 1 3 0
+2 1 2 1
+3 1 1 2
+4 1 4 2
+5 1 5 2
+6 1 7 0
+7 1 6 6
+8 1 1 7
+9 1 4 7
+10 1 5 7
+11 1 9 0
+12 1 8 11
+13 1 1 12
+14 1 4 12
+15 1 5 12
+16 1 11 0
+17 1 10 16
+18 1 1 17
+19 1 4 17
+20 1 5 17
 
 # Extension specification for setting labels:
 # id set labelstring
 extension LABELSET 1
-1 0 PAR
-2 0 SEG
-3 1 PAR
-4 2 PAR
-5 3 PAR
-6 1 SEG
-7 2 SEG
+1 0 LIN
+2 0 PAR
+3 0 SEG
+4 1 LIN
+5 2 LIN
+6 1 PAR
+7 1 SEG
+8 2 PAR
+9 2 SEG
+10 3 PAR
+11 3 SEG
 
 # Sequence Shapes
 [SHAPES]
@@ -12687,4 +12706,4 @@ num_samples 5
 # It can be reproduced/verified with md5sum if the file trimmed to the position right above [SIGNATURE]
 # The new line character preceding [SIGNATURE] BELONGS to the signature (and needs to be stripped away for recalculating/verification)
 Type md5
-Hash edea77e3870f4fd9acd50355a55a9aa1
+Hash 60c79c19789d9e188c5a9c7f99cd2257

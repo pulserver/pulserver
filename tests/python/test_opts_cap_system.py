@@ -1,6 +1,6 @@
 """Capping a system's gradient and slew limits below what it reports.
 
-The seqzoo plugins hold their sequences under a per-plugin ceiling with
+The sequence plugins hold their sequences under a per-plugin ceiling with
 :func:`cap_system`. These pin the contract that ceiling relies on: a copy is
 returned so the offline CLI's shared system object is never mutated, the
 limits are only ever lowered, and a ceiling above the hardware is a no-op.

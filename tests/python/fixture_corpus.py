@@ -21,9 +21,9 @@ FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures"
 
 
 def _gre_2d():
-    from pulserver.seqzoo import gre_2d
+    from pulserver.app import gre2D_sequence
 
-    return gre_2d.main(n_x=32, n_y=32, te=5e-3, tr=30e-3)
+    return gre2D_sequence.main(n_x=32, n_y=32, te=5e-3, tr=30e-3)
 
 
 def _gre_2d_3sl():
@@ -33,9 +33,9 @@ def _gre_2d_3sl():
     slice-inner in position order; 64 symmetric readout samples put the echo
     at sample 32, and 8 fully-sampled lines put the centre line at 4.
     """
-    from pulserver.seqzoo import gre_2d
+    from pulserver.app import gre2D_sequence
 
-    return gre_2d.main(
+    return gre2D_sequence.main(
         n_x=64,
         n_y=8,
         n_slices=3,
@@ -49,23 +49,23 @@ def _gre_2d_3sl():
 
 
 def _gre_3d():
-    from pulserver.seqzoo import gre_3d
+    from pulserver.app import gre3D_sequence
 
-    return gre_3d.main(
+    return gre3D_sequence.main(
         n_x=16, n_y=16, n_z=8, slab_thickness=64e-3, n_acs=6, n_acs_z=4, n_dummy=2
     )
 
 
 def _se_2d():
-    from pulserver.seqzoo import se_2d
+    from pulserver.app import se2D_sequence
 
-    return se_2d.main(n_x=32, n_y=16, te=20e-3, tr=100e-3, n_acs=6)
+    return se2D_sequence.main(n_x=32, n_y=16, te=20e-3, tr=100e-3, n_acs=6)
 
 
 def _se_3d():
-    from pulserver.seqzoo import se_3d
+    from pulserver.app import se3D_sequence
 
-    return se_3d.main(
+    return se3D_sequence.main(
         n_x=16,
         n_y=16,
         n_z=8,
@@ -78,17 +78,17 @@ def _se_3d():
 
 
 def _gre_multiecho_2d():
-    from pulserver.seqzoo import gre_multiecho_2d
+    from pulserver.app import gre_multiecho2D_sequence
 
-    return gre_multiecho_2d.main(
+    return gre_multiecho2D_sequence.main(
         n_x=32, n_y=8, n_echoes=3, n_acs=4, n_dummy=1, tr=40e-3
     )
 
 
 def _gre_multiecho_3d():
-    from pulserver.seqzoo import gre_multiecho_3d
+    from pulserver.app import gre_multiecho3D_sequence
 
-    return gre_multiecho_3d.main(
+    return gre_multiecho3D_sequence.main(
         n_x=32,
         n_y=8,
         n_z=4,
@@ -102,17 +102,17 @@ def _gre_multiecho_3d():
 
 
 def _bssfp_2d():
-    from pulserver.seqzoo import bssfp_2d
+    from pulserver.app import bssfp2D_sequence
 
-    return bssfp_2d.main(
+    return bssfp2D_sequence.main(
         n_x=32, n_y=8, n_acs=4, n_dummy=2, readout_bandwidth_hz=25e3
     )
 
 
 def _bssfp_3d():
-    from pulserver.seqzoo import bssfp_3d
+    from pulserver.app import bssfp3D_sequence
 
-    return bssfp_3d.main(
+    return bssfp3D_sequence.main(
         n_x=32,
         n_y=8,
         n_z=4,
@@ -125,9 +125,9 @@ def _bssfp_3d():
 
 
 def _fse_2d():
-    from pulserver.seqzoo import fse_2d
+    from pulserver.app import fse2D_sequence
 
-    return fse_2d.main(
+    return fse2D_sequence.main(
         n_x=32,
         n_y=16,
         n_acs=6,
@@ -139,9 +139,9 @@ def _fse_2d():
 
 
 def _fse_3d():
-    from pulserver.seqzoo import fse_3d
+    from pulserver.app import fse3D_sequence
 
-    return fse_3d.main(
+    return fse3D_sequence.main(
         n_x=32,
         n_y=8,
         n_z=4,
@@ -158,9 +158,9 @@ def _fse_3d():
 
 
 def _mprage_3d():
-    from pulserver.seqzoo import mprage_3d
+    from pulserver.app import mprage3D_sequence
 
-    return mprage_3d.main(
+    return mprage3D_sequence.main(
         n_x=32,
         n_y=8,
         n_z=4,
@@ -175,25 +175,25 @@ def _mprage_3d():
 
 
 def _gre_radial_2d():
-    from pulserver.seqzoo import gre_radial_2d
+    from pulserver.app import gre_radial2D_sequence
 
-    return gre_radial_2d.main(
+    return gre_radial2D_sequence.main(
         n_x=32, n_spokes=8, n_dummy=2, tr=20e-3, readout_bandwidth_hz=125e3
     )
 
 
 def _gre_spiral_2d():
-    from pulserver.seqzoo import gre_spiral_2d
+    from pulserver.app import gre_spiral2D_sequence
 
-    return gre_spiral_2d.main(
+    return gre_spiral2D_sequence.main(
         n_x=32, n_arms=4, n_dummy=2, tr=20e-3, readout_bandwidth_hz=125e3
     )
 
 
 def _gre_stack_of_stars_3d():
-    from pulserver.seqzoo import gre_stack_of_stars_3d
+    from pulserver.app import gre_stack_of_stars3D_sequence
 
-    return gre_stack_of_stars_3d.main(
+    return gre_stack_of_stars3D_sequence.main(
         n_x=32,
         n_z=4,
         slab_thickness=64e-3,
@@ -204,9 +204,9 @@ def _gre_stack_of_stars_3d():
 
 
 def _gre_stack_of_spirals_3d():
-    from pulserver.seqzoo import gre_stack_of_spirals_3d
+    from pulserver.app import gre_stack_of_spirals3D_sequence
 
-    return gre_stack_of_spirals_3d.main(
+    return gre_stack_of_spirals3D_sequence.main(
         n_x=32,
         n_z=4,
         slab_thickness=64e-3,
@@ -217,9 +217,9 @@ def _gre_stack_of_spirals_3d():
 
 
 def _se_propeller_2d():
-    from pulserver.seqzoo import se_propeller_2d
+    from pulserver.app import se_propeller2D_sequence
 
-    return se_propeller_2d.main(
+    return se_propeller2D_sequence.main(
         n_x=32,
         blade_width=4,
         n_blades=4,
@@ -230,9 +230,9 @@ def _se_propeller_2d():
 
 
 def _mprage_stack_of_spirals_3d():
-    from pulserver.seqzoo import mprage_stack_of_spirals_3d
+    from pulserver.app import mprage_stack_of_spirals3D_sequence
 
-    return mprage_stack_of_spirals_3d.main(
+    return mprage_stack_of_spirals3D_sequence.main(
         n_x=32,
         n_z=4,
         slab_thickness=64e-3,
@@ -240,13 +240,17 @@ def _mprage_stack_of_spirals_3d():
         ti=200e-3,
         tr_outer=500e-3,
         readout_bandwidth_hz=125e3,
+        # The corpus's untemplatable-waveform case: every arm written out as
+        # its own gradient, which is the path waveform streaming has to
+        # survive and the one no rotation can stand in for.
+        use_rotation_ext=False,
     )
 
 
 def _zte_3d():
-    from pulserver.seqzoo import zte_3d
+    from pulserver.app import zte3D_sequence
 
-    return zte_3d.main(n_x=32, n_views=16, n_shots=4, readout_bandwidth_hz=125e3)
+    return zte3D_sequence.main(n_x=32, n_views=16, n_shots=4, readout_bandwidth_hz=125e3)
 
 
 #: name -> builder for the single-file fixtures.
@@ -273,7 +277,7 @@ CORPUS = {
 }
 
 #: Corpus entries that also get a `.bin` twin, one per binary-format feature:
-#: boundary labels + partial Fourier (gre_2d), rotation extensions (radial),
+#: boundary labels + partial Fourier (gre2D_sequence), rotation extensions (radial),
 #: explicit arbitrary arms (stack of spirals), echo-train labels (propeller,
 #: fse), continuous gradients (zte). The binary format's LABELNAMES section
 #: makes every label name self-describing, so label-heavy slots roundtrip
@@ -290,17 +294,17 @@ BINARY_TWINS = (
 
 def write_epi_collections(directory: Path) -> list[Path]:
     """Write the EPI NextSequence chains and return every file they created."""
-    from pulserver.seqzoo import epi_2d, epi_3d
+    from pulserver.app import epi2D_sequence, epi3D_sequence
 
     before = set(directory.glob("*.seq"))
-    epi_2d.main(
+    epi2D_sequence.main(
         n_x=32,
         n_y=16,
         readout_bandwidth_hz=250e3,
         write_seq=True,
         seq_filename=str(directory / "epi_2d.seq"),
     )
-    epi_3d.main(
+    epi3D_sequence.main(
         n_x=32,
         n_y=16,
         n_z=4,

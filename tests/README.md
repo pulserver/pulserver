@@ -17,7 +17,7 @@ machinery, and each lane tests a *different* body of code:
 | `cxx/recon` seqfile reader | C++ | `cpptests/test_sequence_*.cpp` |
 | Python surface over pulseqpp (`pulserver.pypulseq`) | Python | `python/test_pypulseq_*.py` |
 | fastseq compiled kernels (vs their kept `_py` twins) | Python differential | `python/test_fastseq_*.py` |
-| design / sampling / seqzoo / reczoo / recon stacks | Python | remaining `python/` |
+| design / sampling / app.sequence / app.recon / recon stacks | Python | remaining `python/` |
 | Nim bridge (host binary + bundle) | Nim via pytest | `python/native/test_nimtests.py` |
 
 So "k-space appears three times" is three implementations: `test_pulseq_ktraj.c`

@@ -27,12 +27,58 @@ from ._trajectories import NonCartesianGradient, Rosette, Spiral
 _READOUT_GRAD_MARGIN = 0.8
 
 
+class _ArmedReadout(SequenceModule):
+    """Arm bookkeeping for the readouts that sample outwards from k-space centre.
+
+    A scan of these plays one arm per repetition, and there are two ways to
+    hold the set. The compact one keeps a single arm and lets the loop turn it
+    with a ``ROTATIONS`` extension, so the waveform is stored once however many
+    arms there are. The explicit one writes every arm out as its own waveform,
+    which any reader can play without composing a rotation.
+
+    :meth:`arm` covers both, so a loop asks for arm *i* and plays what comes
+    back: with one base arm every index is that arm, and the rotation the loop
+    supplies is what distinguishes them.
+    """
+
+    def arm(self, index: int) -> list[tuple]:
+        """The blocks of one arm, as the module laid them out.
+
+        Parameters
+        ----------
+        index : int
+            Which arm, counting from zero.
+
+        Returns
+        -------
+        list of tuple
+            One tuple of events per block.
+        """
+        return self._arms[index if len(self._arms) > 1 else 0]
+
+    def _lay_out_arms(self, n_arms: int, tail: Any = None) -> None:
+        """Split what has been laid out so far into one block layout per arm.
+
+        The TR wait cannot be laid out with its arm -- the minimum TR is only
+        known once every arm is -- so it is passed here and closes each one.
+        """
+        blocks = self.blocks
+        if tail is not None:
+            blocks = blocks[: len(blocks) - n_arms]
+        span = len(blocks) // n_arms
+        self._arms = [
+            [*blocks[i * span : (i + 1) * span], *(((tail,),) if tail is not None else ())]
+            for i in range(n_arms)
+        ]
+        self.n_arms = n_arms
+
+
 # ======================================================================
 # Radial
 # ======================================================================
 
 
-class _RadialReadout(SequenceModule):
+class _RadialReadout(_ArmedReadout):
     """A full radial spoke, prephaser and rewinder merged into one waveform.
 
     Prephaser, traversal and rewinder are one continuous gradient, so the loop
@@ -277,10 +323,12 @@ class _RadialReadout(SequenceModule):
 
         tr_min = self.seq.duration()[0] / n_arms
         tr_delay = solve_delay(tr, tr_min, "TR", system)
+        wait_tr = None
         if tr_delay:
             wait_tr = pp.make_delay(tr_delay)
             for _ in range(n_arms):
                 self.seq.add_block(wait_tr)
+        self._lay_out_arms(n_arms, wait_tr)
 
         self.echo_time = te_min + te_delay
         self.center = self.echo_time + rf_center
@@ -288,6 +336,8 @@ class _RadialReadout(SequenceModule):
         self.bandwidth_hz = 1.0 / dwell
         self.n_samples = n_samples
         self.readout_duration = readout_duration
+        # A full spoke runs edge to edge, so it crosses the centre halfway.
+        self.center_sample = n_samples // 2
 
 
 class RadialReadout2D(_RadialReadout):
@@ -338,7 +388,7 @@ class RadialProjectionReadout(_RadialReadout):
 # ======================================================================
 
 
-class NonCartesianReadout(SequenceModule):
+class NonCartesianReadout(_ArmedReadout):
     """A solved interleave, bracketed by the bridges that reach it and leave it.
 
     Where a radial spoke is one continuous lobe, a spiral or a rosette is a
@@ -515,10 +565,12 @@ class NonCartesianReadout(SequenceModule):
 
         tr_min = self.seq.duration()[0] / len(arms)
         tr_delay = solve_delay(tr, tr_min, "TR", system)
+        wait_tr = None
         if tr_delay:
             wait_tr = pp.make_delay(tr_delay)
             for _ in arms:
                 self.seq.add_block(wait_tr)
+        self._lay_out_arms(len(arms), wait_tr)
 
         self.trajectory = trajectory
         self.echo_time = echo_time
@@ -526,6 +578,12 @@ class NonCartesianReadout(SequenceModule):
         self.duration = tr_min + tr_delay
         self.bandwidth_hz = 1.0 / float(adc.dwell)
         self.n_samples = int(adc.num_samples)
+        # Where in the window k passes through zero: the first sample of a
+        # centre-out arm, halfway along one that runs in and back out.
+        crossing = _echo_offset_of(trajectory, system.grad_raster_time) - float(adc.delay)
+        self.center_sample = int(
+            min(max(round(crossing / float(adc.dwell)), 0), self.n_samples - 1)
+        )
 
 
 class _SpiralReadout(NonCartesianReadout):

@@ -17,11 +17,13 @@ Name gre_spiral_2d
 NumArms 4 
 NumGainCalibrationReadouts 1 
 RadiofrequencyRasterTime 2e-06 
+SliceThickness 0.00483375 
 TE 0.00202 
 TR 0.02 
 TRSize 5 
 TotalDuration 0.12 
 Trajectory spiral 
+kSpaceCenterSample 0 
 
 # Format of blocks:
 # NUM DUR RF  GX  GY  GZ  ADC  EXT
@@ -43,18 +45,18 @@ Trajectory spiral
 15 680   0   0   0   0  0  0
 16 154   3   0   0   1  0  0
 17  24   0   0   0   2  0  0
-18 110   0   3   4   0  2  6
-19  32   0   5   6   7  0  7
+18 110   0   3   4   0  2  8
+19  32   0   5   6   7  0  6
 20 680   0   0   0   0  0  0
 21 154   4   0   0   1  0  0
 22  24   0   0   0   2  0  0
-23 110   0   3   4   0  3  8
+23 110   0   3   4   0  3 11
 24  32   0   5   6   7  0  9
 25 680   0   0   0   0  0  0
 26 154   5   0   0   1  0  0
 27  24   0   0   0   2  0  0
-28 110   0   3   4   0  4 10
-29  32   0   5   6   7  0 11
+28 110   0   3   4   0  4 14
+29  32   0   5   6   7  0 12
 30 680   0   0   0   0  0  0
 
 # Format of RF events:
@@ -103,21 +105,28 @@ Trajectory spiral
 1 1 1 0
 2 2 1 0
 3 1 2 0
-4 1 3 0
-5 2 1 4
-6 2 2 4
-7 2 2 0
-8 2 3 4
+4 1 4 2
+5 1 3 4
+6 2 2 0
+7 1 4 6
+8 1 5 7
 9 2 3 0
-10 2 4 4
-11 2 4 0
+10 1 4 9
+11 1 6 10
+12 2 4 0
+13 1 4 12
+14 1 7 13
 
 # Extension specification for setting labels:
 # id set labelstring
 extension LABELSET 1
 1 1 ONCE
 2 0 ONCE
-3 0 SLC
+3 0 LIN
+4 0 SLC
+5 1 LIN
+6 2 LIN
+7 3 LIN
 
 # Extension specification for rotation events:
 # id RotQuat0 RotQuatX RotQuatY RotQuatZ
@@ -1918,4 +1927,4 @@ num_samples 4
 # It can be reproduced/verified with md5sum if the file trimmed to the position right above [SIGNATURE]
 # The new line character preceding [SIGNATURE] BELONGS to the signature (and needs to be stripped away for recalculating/verification)
 Type md5
-Hash 2dac3441827cf24d821a99f96e938e65
+Hash eb6f07fe279928acc889db56608f8dbc

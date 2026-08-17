@@ -40,6 +40,7 @@ extern "C"
 #include <cstring>
 #include <filesystem>
 #include <map>
+#include <set>
 #include <stdexcept>
 #include <vector>
 
@@ -142,6 +143,100 @@ namespace mrdserver
                     out.push_back(state);
             }
             return out;
+        }
+
+        /** Every counter a sequence writes, over the whole scan.
+         *
+         * A label absent here was never set, so it has no unit to bound and
+         * gets no boundary flag -- as opposed to one written and left at zero,
+         * which is a single unit that still begins and ends. */
+        std::set<std::string> written_labels(const std::vector<LabelState>& states)
+        {
+            std::set<std::string> names;
+            for (const LabelState& state : states)
+                for (const auto& entry : state.values)
+                    names.insert(entry.first);
+            return names;
+        }
+
+        /** One counter and the ISMRMRD flag bits that bound it.
+         *
+         * The bit is the `ISMRMRD_ACQ_*` enum value less one, the same
+         * convention as the flag constants above. */
+        struct BoundaryCounter
+        {
+            const char* name;
+            int TrajTableEntry::* field;
+            uint64_t first_bit;
+            uint64_t last_bit;
+            bool is_frame; /**< names a whole image rather than a place in one */
+        };
+
+        constexpr BoundaryCounter BOUNDARY_COUNTERS[] = {
+            {"SLC", &TrajTableEntry::slc, 1ULL << 6, 1ULL << 7, true},
+            {"ECO", &TrajTableEntry::eco, 1ULL << 8, 1ULL << 9, true},
+            {"PHS", &TrajTableEntry::phs, 1ULL << 10, 1ULL << 11, true},
+            {"REP", &TrajTableEntry::rep, 1ULL << 12, 1ULL << 13, true},
+            {"AVG", &TrajTableEntry::avg, 1ULL << 4, 1ULL << 5, true},
+            {"SET", &TrajTableEntry::set, 1ULL << 14, 1ULL << 15, true},
+            {"LIN", &TrajTableEntry::lin, 1ULL << 0, 1ULL << 1, false},
+            {"PAR", &TrajTableEntry::par, 1ULL << 2, 1ULL << 3, false},
+            {"SEG", &TrajTableEntry::seg, 1ULL << 16, 1ULL << 17, false},
+        };
+
+        /** Set the first/last boundary flag of every counter the scan writes.
+         *
+         * A frame -- one image -- is a setting of every frame counter at once,
+         * and it is complete when every encoding position inside it has
+         * arrived. So a frame counter's boundary is read within the other
+         * frame counters, and an encoding counter's within all of them; inside
+         * that group the first and last occurrence of each value are the
+         * boundary. Encoding spaces are bounded separately, so a navigator
+         * never closes an imaging slice.
+         *
+         * Reading the boundary off the counter's extent instead would fire
+         * `LAST_IN_SLICE` on every acquisition of the highest-numbered slice
+         * and on none of the others.
+         *
+         * The pulseq interpreter tracks the same boundary by remembering the
+         * last acquisition of each slice and matching on its whole counter
+         * tuple less REP, which agrees with this wherever the remaining frame
+         * counters do not vary -- the usual case. Where they do, a scan of
+         * several echoes say, that match lands on whichever echo happened to
+         * be played last and this closes the slice once per echo, which is
+         * the unit a reconstruction buffers.
+         */
+        void set_boundary_flags(
+            std::vector<TrajTableEntry>& table, const std::set<std::string>& written)
+        {
+            std::vector<int> key;
+            for (const BoundaryCounter& counter : BOUNDARY_COUNTERS)
+            {
+                if (written.count(counter.name) == 0)
+                    continue;
+
+                std::vector<const BoundaryCounter*> enclosing;
+                for (const BoundaryCounter& other : BOUNDARY_COUNTERS)
+                    if (other.is_frame && &other != &counter && written.count(other.name))
+                        enclosing.push_back(&other);
+
+                std::map<std::vector<int>, size_t> first_at, last_at;
+                for (size_t i = 0; i < table.size(); ++i)
+                {
+                    key.clear();
+                    key.push_back(table[i].encoding_space_ref);
+                    for (const BoundaryCounter* other : enclosing)
+                        key.push_back(table[i].*(other->field));
+                    key.push_back(table[i].*(counter.field));
+                    first_at.emplace(key, i);
+                    last_at[key] = i;
+                }
+
+                for (const auto& entry : first_at)
+                    table[entry.second].flags |= counter.first_bit;
+                for (const auto& entry : last_at)
+                    table[entry.second].flags |= counter.last_bit;
+            }
         }
 
         /** The gradient's value at time `t` (seconds) from block start, Hz/m.
@@ -435,6 +530,11 @@ namespace mrdserver
             }
             if (!out.table.empty())
                 out.table.back().flags |= FLAG_LAST_IN_MEASUREMENT;
+
+            std::set<std::string> written = written_labels(labels);
+            if (averages > 1)
+                written.insert("AVG");
+            set_boundary_flags(out.table, written);
 
             bool has_nav = false;
             for (const TrajTableEntry& entry : out.table)

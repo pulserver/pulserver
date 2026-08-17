@@ -1,6 +1,7 @@
 """Standalone Pulserver example modules.
 
-``seqzoo`` and ``reczoo`` are packaged as :mod:`pulserver.seqzoo` and
-:mod:`pulserver.reczoo` by ``pyproject.toml``. This package marker also makes
-the same modules directly importable from an uninstalled source checkout.
+``sequence`` and ``recon`` are packaged as :mod:`pulserver.app.sequence` and
+:mod:`pulserver.app.recon` by ``pyproject.toml``, and :mod:`pulserver.app`
+re-exports both families flat. This package marker also makes them importable
+from an uninstalled source checkout.
 """

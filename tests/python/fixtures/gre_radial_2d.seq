@@ -17,11 +17,13 @@ Name gre_radial_2d
 NumGainCalibrationReadouts 1 
 NumSpokes 8 
 RadiofrequencyRasterTime 2e-06 
+SliceThickness 0.00483375 
 TE 0.0025 
 TR 0.02 
 TRSize 5 
 TotalDuration 0.2 
 Trajectory radial 
+kSpaceCenterSample 16 
 
 # Format of blocks:
 # NUM DUR RF  GX  GY  GZ  ADC  EXT
@@ -43,37 +45,37 @@ Trajectory radial
 15 744   0   0   0   0  0  0
 16 154   3   0   0   1  0  0
 17  24   0   0   0   2  0  0
-18  48   0   3   4   0  2  6
+18  48   0   3   4   0  2  8
 19  30   0   0   0   5  0  0
 20 744   0   0   0   0  0  0
 21 154   4   0   0   1  0  0
 22  24   0   0   0   2  0  0
-23  48   0   3   4   0  3  7
+23  48   0   3   4   0  3 11
 24  30   0   0   0   5  0  0
 25 744   0   0   0   0  0  0
 26 154   5   0   0   1  0  0
 27  24   0   0   0   2  0  0
-28  48   0   3   4   0  4  8
+28  48   0   3   4   0  4 14
 29  30   0   0   0   5  0  0
 30 744   0   0   0   0  0  0
 31 154   6   0   0   1  0  0
 32  24   0   0   0   2  0  0
-33  48   0   3   4   0  5  9
+33  48   0   3   4   0  5 17
 34  30   0   0   0   5  0  0
 35 744   0   0   0   0  0  0
 36 154   7   0   0   1  0  0
 37  24   0   0   0   2  0  0
-38  48   0   3   4   0  6 10
+38  48   0   3   4   0  6 20
 39  30   0   0   0   5  0  0
 40 744   0   0   0   0  0  0
 41 154   8   0   0   1  0  0
 42  24   0   0   0   2  0  0
-43  48   0   3   4   0  7 11
+43  48   0   3   4   0  7 23
 44  30   0   0   0   5  0  0
 45 744   0   0   0   0  0  0
 46 154   9   0   0   1  0  0
 47  24   0   0   0   2  0  0
-48  48   0   3   4   0  8 12
+48  48   0   3   4   0  8 26
 49  30   0   0   0   5  0  0
 50 744   0   0   0   0  0  0
 
@@ -129,22 +131,44 @@ Trajectory radial
 1 1 1 0
 2 2 1 0
 3 1 2 0
-4 1 3 0
-5 2 1 4
-6 2 2 4
-7 2 3 4
-8 2 4 4
-9 2 5 4
-10 2 6 4
-11 2 7 4
-12 2 8 4
+4 1 4 2
+5 1 3 4
+6 2 2 0
+7 1 4 6
+8 1 5 7
+9 2 3 0
+10 1 4 9
+11 1 6 10
+12 2 4 0
+13 1 4 12
+14 1 7 13
+15 2 5 0
+16 1 4 15
+17 1 8 16
+18 2 6 0
+19 1 4 18
+20 1 9 19
+21 2 7 0
+22 1 4 21
+23 1 10 22
+24 2 8 0
+25 1 4 24
+26 1 11 25
 
 # Extension specification for setting labels:
 # id set labelstring
 extension LABELSET 1
 1 1 ONCE
 2 0 ONCE
-3 0 SLC
+3 0 LIN
+4 0 SLC
+5 1 LIN
+6 2 LIN
+7 3 LIN
+8 4 LIN
+9 5 LIN
+10 6 LIN
+11 7 LIN
 
 # Extension specification for rotation events:
 # id RotQuat0 RotQuatX RotQuatY RotQuatZ
@@ -1721,4 +1745,4 @@ num_samples 4
 # It can be reproduced/verified with md5sum if the file trimmed to the position right above [SIGNATURE]
 # The new line character preceding [SIGNATURE] BELONGS to the signature (and needs to be stripped away for recalculating/verification)
 Type md5
-Hash eba9ff2b47b8cbbf05b0a3d726999783
+Hash 3fb066f5bad2f9c8d90eb7ce05f9ca48

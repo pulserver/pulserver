@@ -832,9 +832,9 @@ def build_pe_blip():
     derivation) need a file where one physical readout appears under many
     gradient ids -- the dedup-off write is the point of the fixture.
     """
-    from pulserver.seqzoo import gre_2d
+    from pulserver.app import gre2D_sequence
 
-    return gre_2d.main(
+    return gre2D_sequence.main(
         fov=0.256,
         n_x=32,
         n_y=32,
@@ -897,7 +897,7 @@ def write_built_cases(directory: Path, corpus_dir: Path) -> list[str]:
         The zoo corpus (``tests/python/fixtures``); source of the
         corrupted-signature specimen.
     """
-    from pulserver.seqzoo import gre_2d
+    from pulserver.app import gre2D_sequence
 
     written: list[str] = []
 
@@ -911,7 +911,7 @@ def write_built_cases(directory: Path, corpus_dir: Path) -> list[str]:
     # A NextSequence chain of two identical small GREs: the cross-subsequence
     # dedup case (test_pulsegen_cache).  The same sequence is written twice;
     # only the lead file carries the chain pointer.
-    pair = gre_2d.main(n_x=32, n_y=8, te=5e-3, tr=30e-3, n_dummy=2)
+    pair = gre2D_sequence.main(n_x=32, n_y=8, te=5e-3, tr=30e-3, n_dummy=2)
     pair.write(directory / "dedup_gre_pair_b.seq")
     pair.set_definition("NextSequence", "dedup_gre_pair_b.seq")
     pair.write(directory / "dedup_gre_pair.seq")

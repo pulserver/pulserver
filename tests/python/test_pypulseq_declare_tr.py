@@ -9,11 +9,11 @@ the definition is present; an interpreter may take it as a hint and verify.
 from __future__ import annotations
 
 import pulserver.pypulseq as pp
-from pulserver.seqzoo import gre_2d
+from pulserver.app import gre2D_sequence
 
 
 def build():
-    return gre_2d.main(n_x=32, n_y=32, te=5e-3, tr=30e-3)
+    return gre2D_sequence.main(n_x=32, n_y=32, te=5e-3, tr=30e-3)
 
 
 def test_declare_writes_the_detected_blocks_per_tr():

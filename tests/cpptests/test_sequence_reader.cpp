@@ -15,6 +15,7 @@
 
 #include <cmath>
 #include <filesystem>
+#include <map>
 #include <set>
 #include <string>
 #include <vector>
@@ -32,6 +33,23 @@ namespace
 
     constexpr uint64_t kNavFlag = 1ULL << 22;
     constexpr uint64_t kLastFlag = 1ULL << 24;
+    constexpr uint64_t kFirstInLine = 1ULL << 0;
+    constexpr uint64_t kLastInLine = 1ULL << 1;
+    constexpr uint64_t kLastInPartition = 1ULL << 3;
+    constexpr uint64_t kFirstInAverage = 1ULL << 4;
+    constexpr uint64_t kLastInAverage = 1ULL << 5;
+    constexpr uint64_t kFirstInSlice = 1ULL << 6;
+    constexpr uint64_t kLastInSlice = 1ULL << 7;
+
+    /** The positions carrying `flag`. */
+    std::set<size_t> flagged(const SequenceCache& cache, uint64_t flag)
+    {
+        std::set<size_t> out;
+        for (size_t i = 0; i < cache.table.size(); ++i)
+            if (cache.table[i].flags & flag)
+                out.insert(i);
+        return out;
+    }
 
 }  // namespace
 
@@ -156,6 +174,88 @@ INSTANTIATE_TEST_SUITE_P(Corpus, SequenceReader,
                                            "bssfp_2d", "gre_radial_2d", "gre_spiral_2d",
                                            "gre_stack_of_stars_3d", "se_propeller_2d",
                                            "mprage_stack_of_spirals_3d", "zte_3d"));
+
+TEST(SequenceReaderBoundaries, EachSliceOpensAndClosesAtItsOwnAcquisitions)
+{
+    const SequenceCache cache = mrdserver::read_sequence_files(corpus("gre_2d_3sl.seq"));
+
+    std::map<int, size_t> first_of, last_of;
+    for (size_t i = 0; i < cache.table.size(); ++i)
+    {
+        first_of.emplace(cache.table[i].slc, i);
+        last_of[cache.table[i].slc] = i;
+    }
+    ASSERT_EQ(first_of.size(), 3u);
+
+    std::set<size_t> expect_first, expect_last;
+    for (const auto& entry : first_of)
+        expect_first.insert(entry.second);
+    for (const auto& entry : last_of)
+        expect_last.insert(entry.second);
+
+    EXPECT_EQ(flagged(cache, kFirstInSlice), expect_first);
+    EXPECT_EQ(flagged(cache, kLastInSlice), expect_last);
+}
+
+TEST(SequenceReaderBoundaries, AnEncodingCounterIsBoundedInsideEachFrame)
+{
+    // A line belongs to one image, so its boundary is read within the frame
+    // counters: every acquisition is the last of its own line in its own
+    // slice, and there are as many closures as there are acquisitions.
+    const SequenceCache cache = mrdserver::read_sequence_files(corpus("gre_2d_3sl.seq"));
+
+    std::set<std::pair<int, int>> pairs;
+    for (const auto& entry : cache.table)
+        pairs.insert({entry.slc, entry.lin});
+    ASSERT_EQ(pairs.size(), cache.table.size());
+
+    EXPECT_EQ(flagged(cache, kLastInLine).size(), cache.table.size());
+    EXPECT_EQ(flagged(cache, kFirstInLine).size(), cache.table.size());
+}
+
+TEST(SequenceReaderBoundaries, ACounterTheScanNeverWritesIsNeverBounded)
+{
+    // A 2D scan has no partition axis, so nothing closes one.
+    const SequenceCache cache = mrdserver::read_sequence_files(corpus("gre_2d.seq"));
+
+    for (const auto& entry : cache.table)
+        ASSERT_EQ(entry.par, 0);
+    EXPECT_TRUE(flagged(cache, kLastInPartition).empty());
+    EXPECT_FALSE(flagged(cache, kLastInLine).empty());
+}
+
+TEST(SequenceReaderBoundaries, AnAverageIsAFrameCounterLikeTheOthers)
+{
+    // AVG carries the NEX replay index and nothing else. A replay is a whole
+    // image, so its boundary is read within the other frame counters: an
+    // average closes once per slice, where that slice's share of the replay
+    // ends -- and a scan of one average closes none, because there was no
+    // replay to bound.
+    const std::string path = corpus("gre_2d_3sl.seq");
+    const SequenceCache once = mrdserver::read_sequence_files(path, 1);
+    const SequenceCache thrice = mrdserver::read_sequence_files(path, 3);
+
+    EXPECT_TRUE(flagged(once, kLastInAverage).empty());
+    EXPECT_EQ(flagged(thrice, kLastInSlice).size(), 3 * flagged(once, kLastInSlice).size());
+
+    std::map<std::pair<int, int>, size_t> first_of, last_of;
+    for (size_t i = 0; i < thrice.table.size(); ++i)
+    {
+        const std::pair<int, int> unit{thrice.table[i].slc, thrice.table[i].avg};
+        first_of.emplace(unit, i);
+        last_of[unit] = i;
+    }
+    ASSERT_EQ(last_of.size(), 9u);
+
+    std::set<size_t> expect_first, expect_last;
+    for (const auto& entry : first_of)
+        expect_first.insert(entry.second);
+    for (const auto& entry : last_of)
+        expect_last.insert(entry.second);
+
+    EXPECT_EQ(flagged(thrice, kFirstInAverage), expect_first);
+    EXPECT_EQ(flagged(thrice, kLastInAverage), expect_last);
+}
 
 TEST(SequenceReaderChain, TheEpiChainBecomesOneCacheOfSubsequences)
 {

@@ -21,8 +21,8 @@ re-exported whole, plus Pulserver's replacements for a few of its objects.
 `SequenceModule` Pulserver ships.
 
 Complete worked sequences and the reconstructions that match them are two
-further namespaces: {doc}`pulserver.seqzoo <seqzoo>` and
-{doc}`pulserver.reczoo <reczoo>`.  This root namespace holds only the contracts
+further namespaces: {doc}`pulserver.app <app_sequence>` and
+{doc}`pulserver.app <app_recon>`.  This root namespace holds only the contracts
 they are written against.
 
 ## Plugin contracts

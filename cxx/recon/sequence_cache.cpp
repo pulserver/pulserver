@@ -587,41 +587,6 @@ namespace mrdserver
 
         const int es = entry.encoding_space_ref;
 
-        // FIRST_IN / LAST_IN flags: compare each idx field against the actual
-        // per-encoding-space min/max from label_limits.  min is the real observed
-        // minimum (not zero-filled), so flags fire at the correct boundary values.
-        if (es >= 0 && es < static_cast<int>(cache.encoding_spaces.size()))
-        {
-            const auto& ll = cache.encoding_spaces[es].label_limits;
-            // helper: OR in ISMRMRD first/last flag when idx field hits the limit
-#define SETFL(idxf, llf, fst, lst) \
-    do \
-    { \
-        if (static_cast<int>(idx.idxf) == ll.llf.min) \
-            acq.setFlag(fst); \
-        if (static_cast<int>(idx.idxf) == ll.llf.max) \
-            acq.setFlag(lst); \
-    } while (0)
-            SETFL(
-                kspace_encode_step_1,
-                lin,
-                ISMRMRD_ACQ_FIRST_IN_ENCODE_STEP1,
-                ISMRMRD_ACQ_LAST_IN_ENCODE_STEP1);
-            SETFL(
-                kspace_encode_step_2,
-                par,
-                ISMRMRD_ACQ_FIRST_IN_ENCODE_STEP2,
-                ISMRMRD_ACQ_LAST_IN_ENCODE_STEP2);
-            SETFL(average, acq, ISMRMRD_ACQ_FIRST_IN_AVERAGE, ISMRMRD_ACQ_LAST_IN_AVERAGE);
-            SETFL(slice, slc, ISMRMRD_ACQ_FIRST_IN_SLICE, ISMRMRD_ACQ_LAST_IN_SLICE);
-            SETFL(contrast, eco, ISMRMRD_ACQ_FIRST_IN_CONTRAST, ISMRMRD_ACQ_LAST_IN_CONTRAST);
-            SETFL(phase, phs, ISMRMRD_ACQ_FIRST_IN_PHASE, ISMRMRD_ACQ_LAST_IN_PHASE);
-            SETFL(repetition, rep, ISMRMRD_ACQ_FIRST_IN_REPETITION, ISMRMRD_ACQ_LAST_IN_REPETITION);
-            SETFL(set, set, ISMRMRD_ACQ_FIRST_IN_SET, ISMRMRD_ACQ_LAST_IN_SET);
-            SETFL(segment, seg, ISMRMRD_ACQ_FIRST_IN_SEGMENT, ISMRMRD_ACQ_LAST_IN_SEGMENT);
-#undef SETFL
-        }
-
         if (es < 0 || es >= static_cast<int>(trajectories.size()))
             return;
 

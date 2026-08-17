@@ -17,8 +17,8 @@ cpp/index
 | I want to… | Use |
 |---|---|
 | build a sequence, write a `.seq`, check it | {doc}`python/design`, {doc}`python/pypulseq` |
-| run a ready-made protocol | {doc}`python/seqzoo` |
-| reconstruct, or write a reconstruction plugin | {doc}`python/recon`, {doc}`python/reczoo` |
+| run a ready-made protocol | {doc}`python/app_sequence` |
+| reconstruct, or write a reconstruction plugin | {doc}`python/recon`, {doc}`python/app_recon` |
 | declare what the scanner UI shows | {doc}`python/protocol` |
 | write an interpreter that plays `.seq` on hardware | {doc}`c/index` |
 | add safety checking to an interpreter I already have | {doc}`cpp/pulseg` |

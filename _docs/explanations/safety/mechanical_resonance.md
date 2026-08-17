@@ -303,8 +303,8 @@ when you want the individual phasors; nothing else changes.
 ## Reading the plots
 
 `docs/_bench/mechres_plots.py` drives the same compiled engine across the
-five-sequence reference corpus (`gre_2d`, `epi_2d`, `fse_2d`, `mprage_2d`
-PASS; `bssfp_2d` the one genuine FAIL):
+five-sequence reference corpus (`gre2D_sequence`, `epi2D_sequence`, `fse2D_sequence`, `mprage_2d`
+PASS; `bssfp2D_sequence` the one genuine FAIL):
 
 ```bash
 <venv>/bin/python docs/_bench/mechres_plots.py --esp <vendor_esp_table>.dat

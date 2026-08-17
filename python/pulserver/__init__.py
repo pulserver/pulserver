@@ -19,11 +19,10 @@ whole, plus Pulserver's replacements for a few of its objects.
 :mod:`pulserver.design` is the toolbox above it: every
 :class:`SequenceModule` — an excitation, a preparation, one readout TR.
 
-The two zoos are the worked examples built on those contracts:
-:mod:`pulserver.seqzoo` holds one module per sequence, each with a ``main``
-that returns a :class:`~pulserver.pypulseq.Sequence`, and
-:mod:`pulserver.reczoo` the reconstruction that matches it, module name for
-module name.
+:mod:`pulserver.app` is the worked examples built on those contracts: one
+module per sequence, each callable and each with a ``main`` that returns a
+:class:`~pulserver.pypulseq.Sequence`, beside the reconstruction that matches
+it under the same name.
 
 Examples
 --------
@@ -79,6 +78,7 @@ __all__ = [
     "TypeinIntParam",
     "UIParam",
     "Validate",
+    "app",
     "design",
     "dict_to_protocol",
     "io",
@@ -87,9 +87,7 @@ __all__ = [
     "params",
     "protocol_to_dict",
     "pypulseq",
-    "reczoo",
     "run_cli",
-    "seqzoo",
     "validate_protocol",
     "write_sequence",
 ]
@@ -104,7 +102,7 @@ _RECON_PLUGIN_TYPES = {
     "ReconPlugin",
     "ReconResult",
 }
-_SUBMODULES = {"io", "pypulseq", "design", "seqzoo", "reczoo"}
+_SUBMODULES = {"io", "pypulseq", "design", "app"}
 
 
 def __getattr__(name: str):

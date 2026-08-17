@@ -55,9 +55,11 @@ protocol build — and that is where the zoo runs it, asserting the authored
 counters against the derived ones sequence by sequence.
 
 The first/last boundary flags are not in the file at all. They follow from the
-counters and the encoding limits, and the ISMRMRD client sets them from those
-when it builds the acquisition — so writing them would put an extension row on
-every acquisition to state something the reader already knows.
+counters and the order the acquisitions arrive in — a unit is open until the
+last acquisition carrying its counter value has been seen — and the ISMRMRD
+client derives them there when it builds the acquisition, so writing them would
+put an extension row on every acquisition to state something the reader already
+knows.
 
 ## Why the interpreter side is cheap
 
@@ -130,9 +132,9 @@ separate library entry.
 ## Reproducing it
 
 ```python
-from pulserver.seqzoo import gre_3d
+from pulserver.app import gre3D_sequence
 
-seq = gre_3d.main(n_x=256, n_y=256, n_z=192, slab_thickness=0.19, n_dummy=0)
+seq = gre3D_sequence.main(n_x=256, n_y=256, n_z=192, slab_thickness=0.19, n_dummy=0)
 seq.write("scan.seq")
 ```
 

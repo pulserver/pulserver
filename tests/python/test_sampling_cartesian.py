@@ -1,6 +1,6 @@
 """Cartesian view sampling: the ACS block, its count, and the 3D rectangle.
 
-These pin the invariants the seqzoo Cartesian plugins lean on now that they
+These pin the invariants the Cartesian sequence plugins lean on now that they
 build their traversals from the builtins rather than by hand: the
 autocalibration lines are a subset of the sampled lines, the rectangle
 :func:`calc_sampled_pairs` carves is exactly the pairs whose line and

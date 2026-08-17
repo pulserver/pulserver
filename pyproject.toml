@@ -63,8 +63,8 @@ cmake.source-dir = "."
 sdist.include = [
   "csrc/**",
   "cxx/**",
-  "examples/seqzoo/**",
-  "examples/reczoo/**",
+  "examples/sequence/**",
+  "examples/recon/**",
   "python/**",
   "tests/**",
   "README.rst",
@@ -74,9 +74,9 @@ sdist.include = [
 [tool.scikit-build.wheel]
 # scikit-build-core maps package paths to arbitrary source directories.  This
 # installs the self-contained example plugins directly as
-# ``pulserver.seqzoo.<name>`` and ``pulserver.reczoo.<name>`` without copying
-# or moving their source.
-packages = { "pulserver" = "python/pulserver", "pulserver/seqzoo" = "examples/seqzoo", "pulserver/reczoo" = "examples/reczoo" }
+# ``pulserver.app.sequence.<name>`` and ``pulserver.app.recon.<name>``, which
+# ``pulserver.app`` re-exports flat, without copying or moving their source.
+packages = { "pulserver" = "python/pulserver", "pulserver/app/sequence" = "examples/sequence", "pulserver/app/recon" = "examples/recon" }
 # Source kept in the repository to port physics from, not importable and of no
 # use to an installed package.
 exclude = ["pulserver/design/_disabled/**"]
@@ -160,7 +160,7 @@ convention = "numpy"
 "bridge/tests/**" = ["ARG001", "ARG002", "PTH123"]
 # A plugin's protocol is a declaration, and most of them do not need the
 # system limits to write one down; the contract passes them regardless.
-"examples/seqzoo/**" = ["ARG002"]
+"examples/sequence/**" = ["ARG002"]
 "python/pulserver/design/_disabled/_readout/_surgery.py" = ["ARG001"]
 "python/pulserver/design/_disabled/_readout/fse.py" = ["ARG002"]
 "python/pulserver/io.py" = ["S324"]

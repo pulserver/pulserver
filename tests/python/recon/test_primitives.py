@@ -217,14 +217,3 @@ def test_sms_inputs_require_caipi_and_a_reconstruction_reference():
         imaging=object(), caipi_encoding=object(), coil_maps=object()
     ).validate(multiband_factor=2)
 
-
-def test_recon_examples_are_importable_from_pulserver():
-    from pulserver.reczoo.sms_epi import prepare_sms_epi
-
-    inputs = prepare_sms_epi(
-        imaging=object(),
-        multiband_factor=2,
-        caipi_encoding=object(),
-        coil_maps=object(),
-    )
-    assert isinstance(inputs, SmsEpiInputs)

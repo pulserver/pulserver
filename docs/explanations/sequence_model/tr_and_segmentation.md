@@ -126,9 +126,9 @@ Two honest limits, both visible in the zoo:
 ## Seeing it
 
 ```python
-from pulserver.seqzoo import gre_2d
+from pulserver.app import gre2D_sequence
 
-seq = gre_2d.main(n_x=64, n_y=64, n_slices=3)
+seq = gre2D_sequence.main(n_x=64, n_y=64, n_slices=3)
 
 seq.declare_tr()              # 6 -- blocks in one repetition, also written
                               # into [DEFINITIONS] TRSize by write()

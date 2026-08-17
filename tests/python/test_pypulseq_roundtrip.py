@@ -437,15 +437,15 @@ def test_text_and_binary_describe_the_same_sequence(name, system, tmp_path):
 
 
 def _zoo_gre_2d():
-    from pulserver.seqzoo import gre_2d
+    from pulserver.app import gre2D_sequence
 
-    return gre_2d.main(n_x=32, n_y=32, te=5e-3, tr=30e-3)
+    return gre2D_sequence.main(n_x=32, n_y=32, te=5e-3, tr=30e-3)
 
 
 def _zoo_fse_3d():
-    from pulserver.seqzoo import fse_3d
+    from pulserver.app import fse3D_sequence
 
-    return fse_3d.main(
+    return fse3D_sequence.main(
         n_x=32,
         n_y=8,
         n_z=4,
@@ -462,15 +462,15 @@ def _zoo_fse_3d():
 
 
 def _zoo_zte_3d():
-    from pulserver.seqzoo import zte_3d
+    from pulserver.app import zte3D_sequence
 
-    return zte_3d.main(n_x=32, n_views=16, n_shots=4, readout_bandwidth_hz=125e3)
+    return zte3D_sequence.main(n_x=32, n_views=16, n_shots=4, readout_bandwidth_hz=125e3)
 
 
 def _zoo_explicit_arms():
-    from pulserver.seqzoo import mprage_stack_of_spirals_3d
+    from pulserver.app import mprage_stack_of_spirals3D_sequence
 
-    return mprage_stack_of_spirals_3d.main(
+    return mprage_stack_of_spirals3D_sequence.main(
         n_x=32,
         n_z=4,
         slab_thickness=64e-3,
@@ -500,10 +500,10 @@ def test_a_zoo_slot_survives_the_file(name, mode, tmp_path):
 def test_the_epi_collection_chain_is_a_parser_writer_fixed_point(tmp_path):
     """Each file of the NextSequence chain re-emits byte-identically once
     parsed: reading loses nothing the writer knows how to say."""
-    from pulserver.seqzoo import epi_2d
+    from pulserver.app import epi2D_sequence
 
     lead = tmp_path / "scan.seq"
-    epi_2d.main(n_x=32, n_y=16, write_seq=True, seq_filename=str(lead))
+    epi2D_sequence.main(n_x=32, n_y=16, write_seq=True, seq_filename=str(lead))
 
     chain = []
     cursor = lead
