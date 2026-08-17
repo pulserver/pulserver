@@ -7,14 +7,15 @@ what the scanner sends back and turns it into images. Each carries two entry
 points over one implementation:
 
 ``main(...)``
-    Explicit keyword controls. This is the whole plugin, written in the style
-    of a PyPulseq example script, and it is what to read, copy and edit. The
+    A sequence module's whole design, under explicit keyword controls, written
+    in the style of a PyPulseq example script: what to read, copy and edit. The
     module itself is callable, so ``gre2D_sequence(...)`` is ``main(...)``.
 ``PLUGIN``
-    A :class:`pulserver.SequencePlugin` or :class:`pulserver.ReconPlugin`
-    wrapping that same ``main`` in the scanner protocol contract, so the bridge
-    can offer it in the UI. Running the module as a script does the same job
-    offline.
+    The same thing behind the scanner protocol contract, so the bridge can
+    offer it in the UI, and running the module as a script does the job
+    offline. A reconstruction is stateful across the acquisitions it is fed,
+    so a ``_recon`` module carries only this -- a
+    :class:`pulserver.ReconPlugin` -- and is not itself callable.
 
 Everything lives in one namespace, named for what it does::
 

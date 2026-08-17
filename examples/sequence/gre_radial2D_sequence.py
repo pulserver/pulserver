@@ -46,6 +46,14 @@ from scipy.spatial.transform import Rotation
 #: The spoke-angle schemes on offer.
 ANGLE_SCHEMES = ("golden", "uniform")
 
+#: SLR design of the selective pulses, held here rather than left at the design
+#: module's default so a script can retune the excitation without touching the
+#: loop. The selection amplitude follows as
+#: ``time_bw_product / (duration * thickness)``, which is also what a slice
+#: offset is converted against.
+PULSE_DURATION = 3e-3
+TIME_BW_PRODUCT = 4.0
+
 #: Per-plugin ceilings on the gradient and slew limits, in mT/m and T/m/s. The
 #: sequence is held below the smaller of these and what the scanner reports, so
 #: lowering them here -- on the scanner console, even -- reruns the whole script
@@ -54,58 +62,6 @@ ANGLE_SCHEMES = ("golden", "uniform")
 #: cap nothing until you lower them.
 MAX_GRAD = 80.0
 MAX_SLEW = 200.0
-
-
-def play(seq, blocks, rotation, *, acquire: bool, first_extra=()) -> None:
-    """Replay one spoke's blocks with the shot's orientation injected.
-
-    Every block that drives an in-plane gradient gains the rotation, when there
-    is one to give -- an explicit spoke is already turned. A dummy drops the
-    ADC and the counters that go with it. The blocks are replayed as the module
-    laid them out, delays included, so the TE budget the module solved survives
-    the loop untouched.
-    """
-    extra_first = list(first_extra)
-    for block in blocks:
-        events = [
-            event
-            for event in block
-            if acquire or getattr(event, "type", "") not in ("adc", "labelset")
-        ]
-        additions = list(extra_first)
-        extra_first = []
-        if rotation is not None and any(
-            getattr(event, "channel", "") in ("x", "y") for event in events
-        ):
-            additions.append(rotation)
-        seq.add_block(*events, *additions)
-
-
-def spoke_angles(n_spokes: int, scheme: str) -> np.ndarray:
-    """The in-plane angle of every spoke, in radians.
-
-    ``golden`` increments by the golden angle, so any prefix of the scan is
-    close to uniformly distributed -- what an interrupted or dynamic scan
-    wants. ``uniform`` spaces the spokes evenly over half a turn, which a
-    full spoke covers.
-
-    Parameters
-    ----------
-    n_spokes : int
-        How many spokes the scan plays.
-    scheme : str
-        One of :data:`ANGLE_SCHEMES`.
-
-    Returns
-    -------
-    numpy.ndarray
-        One angle per spoke.
-    """
-    if scheme not in ANGLE_SCHEMES:
-        raise ValueError(f"scheme must be one of {ANGLE_SCHEMES}, got {scheme!r}")
-    if scheme == "golden":
-        return np.asarray(pp.calc_golden_angles(n_spokes))
-    return np.asarray(pp.calc_uniform_angles(n_spokes, span=np.pi))
 
 
 def main(
@@ -254,7 +210,7 @@ def main(
             readout.adc.phase_offset = rf_phase
             lin_label.value = int(i_spoke)
             slc_label.value = int(i_slice)
-            play(
+            ShotKernel(
                 seq,
                 readout.arm(i_spoke),
                 rotations[i_spoke],
@@ -316,6 +272,66 @@ def main(
     return seq
 
 
+# ======================================================================
+# Subroutines of main()
+# ======================================================================
+
+# ======================================================================
+# Subroutines of main()
+# ======================================================================
+
+def ShotKernel(seq, blocks, rotation, *, acquire: bool, first_extra=()) -> None:
+    """Replay one spoke's blocks with the shot's orientation injected.
+
+    Every block that drives an in-plane gradient gains the rotation, when there
+    is one to give -- an explicit spoke is already turned. A dummy drops the
+    ADC and the counters that go with it. The blocks are replayed as the module
+    laid them out, delays included, so the TE budget the module solved survives
+    the loop untouched.
+    """
+    extra_first = list(first_extra)
+    for block in blocks:
+        events = [
+            event
+            for event in block
+            if acquire or getattr(event, "type", "") not in ("adc", "labelset")
+        ]
+        additions = list(extra_first)
+        extra_first = []
+        if rotation is not None and any(
+            getattr(event, "channel", "") in ("x", "y") for event in events
+        ):
+            additions.append(rotation)
+        seq.add_block(*events, *additions)
+
+
+def spoke_angles(n_spokes: int, scheme: str) -> np.ndarray:
+    """The in-plane angle of every spoke, in radians.
+
+    ``golden`` increments by the golden angle, so any prefix of the scan is
+    close to uniformly distributed -- what an interrupted or dynamic scan
+    wants. ``uniform`` spaces the spokes evenly over half a turn, which a
+    full spoke covers.
+
+    Parameters
+    ----------
+    n_spokes : int
+        How many spokes the scan plays.
+    scheme : str
+        One of :data:`ANGLE_SCHEMES`.
+
+    Returns
+    -------
+    numpy.ndarray
+        One angle per spoke.
+    """
+    if scheme not in ANGLE_SCHEMES:
+        raise ValueError(f"scheme must be one of {ANGLE_SCHEMES}, got {scheme!r}")
+    if scheme == "golden":
+        return np.asarray(pp.calc_golden_angles(n_spokes))
+    return np.asarray(pp.calc_uniform_angles(n_spokes, span=np.pi))
+
+
 def RadialKernel(
     system: pp.Opts,
     *,
@@ -353,7 +369,11 @@ spoiling_cycles, use_rotation_ext
         and ``duration``.
     """
     excitation = design.SpatialSelectiveExcitation(
-        system, flip_angle_deg, slice_thickness
+        system,
+        flip_angle_deg,
+        slice_thickness,
+        duration_s=PULSE_DURATION,
+        time_bw_product=TIME_BW_PRODUCT,
     )
 
     count = -(-int(np.pi / 2 * n_x)) if n_spokes is None else int(n_spokes)
@@ -410,6 +430,14 @@ spoiling_cycles, use_rotation_ext
         duration=duration,
     )
 
+
+# ======================================================================
+# The scanner protocol contract
+# ======================================================================
+
+# ======================================================================
+# The scanner protocol contract
+# ======================================================================
 
 class GreRadial2D(SequencePlugin):
     """The 2D radial gradient echo behind the scanner protocol contract."""
@@ -496,11 +524,11 @@ class GreRadial2D(SequencePlugin):
     def validate_protocol(self, system: pp.Opts, protocol: dict[str, dict]) -> dict:
         """Report whether the protocol is feasible, and how long it will take."""
         system = pp.cap_system(system, max_grad=MAX_GRAD, max_slew=MAX_SLEW)
-        kwargs = _main_kwargs(system, protocol)
+        kwargs = protocol_kwargs(system, protocol)
         try:
             kernel = RadialKernel(
                 system,
-                **{name: value for name, value in kwargs.items() if name in _KERNEL_ARGUMENTS},
+                **{name: value for name, value in kwargs.items() if name in KERNEL_ARGUMENTS},
             )
         except ValueError as error:
             return {"valid": False, "duration": None, "info": str(error)}
@@ -523,11 +551,11 @@ class GreRadial2D(SequencePlugin):
         offline: bool = False,
     ) -> None:
         """Build the sequence and write it to ``output_path``."""
-        seq = main(**_main_kwargs(system, protocol))
+        seq = main(**protocol_kwargs(system, protocol))
         write_sequence(seq, output_path, offline=offline)
 
 
-_KERNEL_ARGUMENTS = frozenset(
+KERNEL_ARGUMENTS = frozenset(
     (
         "fov",
         "n_x",
@@ -546,7 +574,7 @@ _KERNEL_ARGUMENTS = frozenset(
 )
 
 
-def _main_kwargs(system: pp.Opts, protocol: dict[str, dict]) -> dict:
+def protocol_kwargs(system: pp.Opts, protocol: dict[str, dict]) -> dict:
     """The prescribed quantities, plus this sequence's own user slots."""
     prot = dict_to_protocol(protocol)
     requested = round(params.user_float(prot, 0, 0.0))
@@ -579,7 +607,7 @@ def make_sequence(system, protocol, output_path):
     return PLUGIN.make_sequence(system, protocol, output_path)
 
 
-_ARG_MAP = [
+ARG_MAP = [
     ("--te-ms", UIParam.TE, float, "Echo time [ms], or a negative TEPreset"),
     ("--tr-ms", UIParam.TR, float, "Repetition time [ms], or a negative TRPreset"),
     ("--flip-deg", UIParam.FLIP, float, "Flip angle [deg]"),
@@ -602,7 +630,7 @@ if __name__ == "__main__":
         run_cli(
             PLUGIN,
             sys.argv[1:],
-            arg_map=_ARG_MAP,
+            arg_map=ARG_MAP,
             description="Generate a 2D radial gradient-echo .seq offline.",
             default_output="gre_radial_2d.seq",
         )

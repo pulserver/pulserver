@@ -18,7 +18,11 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
+#include <cstring>
 #include <stdexcept>
+#include <string>
+#include <unordered_map>
 
 namespace pulseq
 {
@@ -61,6 +65,37 @@ namespace pulseq
                 scale = std::max(scale, std::fabs(p.v[i]));
             const double tol = 1e-9 * std::max(scale, 1.0);
             return (hi - lo) <= tol;
+        }
+
+        /*
+         * Constant across [t0, t1] to the bit?
+         *
+         * Sampled where @ref is_flat samples, and exact where it tolerates:
+         * this answers whether the accumulated phase is a straight line, and
+         * a waveform that merely nearly holds still bends it by a little.
+         * How much bending is worth carrying is a threshold the caller
+         * already applies to the residual itself; the point of asking here is
+         * that a gradient which does not move at all has no residual to
+         * compute, so the sample loop can be skipped rather than run and
+         * found to be zero.
+         */
+        bool is_exactly_constant(const Piecewise& p, double t0, double t1)
+        {
+            if (p.empty())
+                return true;
+
+            const double held = p.value_at(t0);
+            if (p.value_at(t1) != held)
+                return false;
+
+            for (size_t i = 0; i < p.t.size(); ++i)
+            {
+                if (p.t[i] <= t0 || p.t[i] >= t1)
+                    continue;
+                if (p.v[i] != held)
+                    return false;
+            }
+            return true;
         }
 
     }  // namespace
@@ -247,6 +282,74 @@ namespace pulseq
             return hz;
         }
 
+        /**
+         * Is the shift's phase a straight line across [t0, t1]?
+         *
+         * Only the axes the shift actually has a component along are asked:
+         * an axis contributing no phase cannot bend it, however it moves.
+         */
+        bool shift_is_linear(const BlockGradients& g, const std::array<double, 3>& shift,
+                             double t0, double t1)
+        {
+            for (int a = 0; a < 3; ++a)
+            {
+                if (shift[static_cast<size_t>(a)] == 0.0)
+                    continue;
+                if (!is_exactly_constant(g.wave[a], t0, t1))
+                    return false;
+            }
+            return true;
+        }
+
+        /**
+         * What a block's base trajectory is a function of, as bytes.
+         *
+         * The gradient rows as they stand, and the ADC's sample count, dwell
+         * and delay -- the whole of what `base_trajectory` reads.  Deliberately
+         * the rows rather than the ids that name them: the library is not
+         * deduplicated until the sequence is written, so a scan that plays one
+         * arm ten thousand times holds ten thousand identical rows, and an id
+         * would find nothing shared where there is nothing but sharing.  The
+         * ADC's frequency and phase are left out because the samples do not
+         * depend on them and RF spoiling moves them every shot; the rotation
+         * is left out because composing it is the consumer's job, which is
+         * what lets one stored arm serve every shot that turns it.
+         */
+        std::string played_key(const Sequence& seq, const Block& block, const double* adc)
+        {
+            std::string key;
+            key.reserve(128);
+            const auto push = [&key](const void* bytes, size_t count) {
+                key.append(static_cast<const char*>(bytes), count);
+            };
+
+            const int32_t grads[3] = {block.gx, block.gy, block.gz};
+            for (int a = 0; a < 3; ++a)
+            {
+                const GradKind kind =
+                    (grads[a] > 0) ? seq.grad_kind(static_cast<int>(grads[a])) : GradKind::None;
+                const int tag = static_cast<int>(kind);
+                push(&tag, sizeof(tag));
+
+                const int row = (kind == GradKind::None) ? 0
+                                                         : seq.grad_row(static_cast<int>(grads[a]));
+                switch (kind)
+                {
+                case GradKind::Trap:
+                    push(seq.trap_library().row(row), TRAP_WIDTH * sizeof(double));
+                    break;
+                case GradKind::Arbitrary:
+                    push(seq.arb_library().row(row), ARB_WIDTH * sizeof(double));
+                    break;
+                case GradKind::None:
+                    break;
+                }
+            }
+
+            push(adc, 3 * sizeof(double));  // num_samples, dwell, delay
+            return key;
+        }
+
         constexpr double kTwoPi = 6.283185307179586476925286766559;
 
         /*
@@ -259,25 +362,41 @@ namespace pulseq
          * varies across the ADC window cannot be expressed as a frequency at
          * all.  Everything else -- Cartesian, unrotated -- is two scalars,
          * and deferring it would store a trajectory nobody needs.
+         *
+         * The question is about the readout, not about any one shift: the
+         * consumer that has to finish a rotated or swept readout needs its
+         * base trajectory for the k-space it reports either way, which is why
+         * `attach_base_trajectory` -- where no shift exists at all -- asks
+         * exactly this.
          */
-        bool adc_defers_to_consumer(const Sequence& seq, const Block& block)
+        /** Does @p block carry a ROTATIONS extension? */
+        bool block_is_rotated(const Sequence& seq, const Block& block)
         {
-            if (block.adc <= 0 || block.adc > seq.adc_library().size())
+            const int rotations = seq.find_extension_type_id("ROTATIONS");
+            if (rotations <= 0)
                 return false;
 
-            const int rotations = seq.find_extension_type_id("ROTATIONS");
-            if (rotations > 0)
+            int32_t node = block.ext;
+            while (node > 0 && node <= seq.extensions_library().size())
             {
-                int32_t node = block.ext;
-                while (node > 0 && node <= seq.extensions_library().size())
-                {
-                    const int32_t* link = seq.extensions_library().row(static_cast<int>(node));
-                    if (link[0] == rotations)
-                        return true;
-                    node = link[2];
-                }
+                const int32_t* link = seq.extensions_library().row(static_cast<int>(node));
+                if (link[0] == rotations)
+                    return true;
+                node = link[2];
             }
+            return false;
+        }
 
+        /**
+         * Does a gradient move across the ADC window?
+         *
+         * The half of @ref adc_defers_to_consumer that depends only on which
+         * events the block plays, and so answers the same for every block
+         * playing them -- unlike the rotation, which is the block's own.
+         */
+        bool adc_gradients_vary(const Sequence& seq, const Block& block,
+                                const BlockGradients& g)
+        {
             const double* adc = seq.adc_library().row(static_cast<int>(block.adc));
             const int num_samples = static_cast<int>(adc[0]);
             const double dwell = adc[1];
@@ -289,13 +408,20 @@ namespace pulseq
             const double t_last =
                 delay + (static_cast<double>(num_samples) - 0.5) * dwell;
 
-            const BlockGradients g = block_gradients(seq, block);
             for (int a = 0; a < 3; ++a)
             {
                 if (!is_flat(g.wave[a], t_first, t_last))
                     return true;
             }
             return false;
+        }
+
+        bool adc_defers_to_consumer(const Sequence& seq, const Block& block,
+                                    const BlockGradients& g)
+        {
+            if (block.adc <= 0 || block.adc > seq.adc_library().size())
+                return false;
+            return block_is_rotated(seq, block) || adc_gradients_vary(seq, block, g);
         }
 
     }  // namespace
@@ -345,29 +471,33 @@ namespace pulseq
                 else if (mag_id > 0 && mag_id <= shapes.size())
                     n = shapes.num_uncompressed(mag_id);
 
-                std::vector<double> times;
-                times.reserve(static_cast<size_t>(n));
+                /* The pulse's own span, and the sample times only if they are
+                 * needed: a gradient that holds still across the span writes
+                 * two scalars, and reading every sample to discover that
+                 * costs more than the rest of the block put together. */
                 const double raster = seq.rf_raster_time();
+                std::vector<double> ticks;
+                bool sampled = n > 0;
+                double t_first = delay + 0.5 * raster;
+                double t_last = delay + (static_cast<double>(n) - 0.5) * raster;
                 if (time_id > 0 && time_id <= shapes.size())
                 {
                     const int nt = shapes.num_uncompressed(time_id);
-                    std::vector<double> ticks;
-                    if (shapes.is_compressed(time_id))
-                        ticks = decompress_shape(shapes.samples(time_id),
-                                                 shapes.num_compressed(time_id), nt);
-                    else
-                        ticks.assign(shapes.samples(time_id),
-                                     shapes.samples(time_id) + nt);
-                    for (int i = 0; i < n && i < nt; ++i)
-                        times.push_back(delay + ticks[static_cast<size_t>(i)] * raster);
-                }
-                else
-                {
-                    for (int i = 0; i < n; ++i)
-                        times.push_back(delay + (static_cast<double>(i) + 0.5) * raster);
+                    sampled = sampled && nt >= n;
+                    if (sampled)
+                    {
+                        if (shapes.is_compressed(time_id))
+                            ticks = decompress_shape(shapes.samples(time_id),
+                                                     shapes.num_compressed(time_id), nt);
+                        else
+                            ticks.assign(shapes.samples(time_id),
+                                         shapes.samples(time_id) + nt);
+                        t_first = delay + ticks.front() * raster;
+                        t_last = delay + ticks[static_cast<size_t>(n) - 1] * raster;
+                    }
                 }
 
-                if (n > 0 && static_cast<int>(times.size()) == n)
+                if (sampled)
                 {
                     const double t_center = delay + center;
                     const double at_center = shift_cycles(g, shift_m, origin, t_center);
@@ -375,15 +505,28 @@ namespace pulseq
 
                     /* How far the added phase departs from a straight line at
                      * the centre's slope, in radians -- the same guard the ADC
-                     * branch puts on its residual. */
+                     * branch puts on its residual.  Zero by construction when
+                     * the gradient does not move, so it is only measured when
+                     * it does. */
+                    std::vector<double> times;
                     double worst = 0.0;
-                    for (int i = 0; i < n; ++i)
+                    if (!shift_is_linear(g, shift_m, std::min(t_first, t_center),
+                                         std::max(t_last, t_center)))
                     {
-                        const double t = times[static_cast<size_t>(i)];
-                        const double linear = freq_hz * (t - t_center);
-                        const double cycles =
-                            shift_cycles(g, shift_m, origin, t) - at_center;
-                        worst = std::max(worst, std::fabs(kTwoPi * (cycles - linear)));
+                        times.reserve(static_cast<size_t>(n));
+                        for (int i = 0; i < n; ++i)
+                            times.push_back(ticks.empty()
+                                                ? delay + (static_cast<double>(i) + 0.5) * raster
+                                                : delay + ticks[static_cast<size_t>(i)] * raster);
+
+                        for (int i = 0; i < n; ++i)
+                        {
+                            const double t = times[static_cast<size_t>(i)];
+                            const double linear = freq_hz * (t - t_center);
+                            const double cycles =
+                                shift_cycles(g, shift_m, origin, t) - at_center;
+                            worst = std::max(worst, std::fabs(kTwoPi * (cycles - linear)));
+                        }
                     }
 
                     if (worst <= 1e-12)
@@ -442,7 +585,7 @@ namespace pulseq
             /* -- ADC: frequency, phase, and whatever is left over -------- */
             const bool bake_adc =
                 scope == FovShiftScope::RfAndAdc ||
-                (scope == FovShiftScope::Server && !adc_defers_to_consumer(seq, block));
+                (scope == FovShiftScope::Server && !adc_defers_to_consumer(seq, block, g));
             if (bake_adc && block.adc > 0 && block.adc <= seq.adc_library().size())
             {
                 double row[ADC_WIDTH];
@@ -463,26 +606,34 @@ namespace pulseq
                     const double phase_rad =
                         kTwoPi * (cycles_center - freq_hz * (t_center - delay));
 
-                    /* Whatever the frequency and phase offsets cannot express.
-                     * Identically zero under a constant gradient, which is why
-                     * a Cartesian readout stays two scalars. */
-                    std::vector<double> residual(static_cast<size_t>(num_samples), 0.0);
-                    double worst = 0.0;
-                    for (int i = 0; i < num_samples; ++i)
-                    {
-                        const double t = delay + (static_cast<double>(i) + 0.5) * dwell;
-                        const double phi = kTwoPi * shift_cycles(g, shift_m, origin, t);
-                        residual[static_cast<size_t>(i)] =
-                            phi - kTwoPi * freq_hz * (t - delay) - phase_rad;
-                        worst = std::max(worst,
-                                         std::fabs(residual[static_cast<size_t>(i)]));
-                    }
-
                     row[5] += freq_hz;    // freq_offset
                     row[6] += phase_rad;  // phase_offset
-                    if (worst > 1e-12)
-                        row[7] = static_cast<double>(
-                            seq.register_raw_shape(residual.data(), num_samples));
+
+                    /* Whatever the frequency and phase offsets cannot express.
+                     * Identically zero under a constant gradient, which is why
+                     * a Cartesian readout stays two scalars -- and why one is
+                     * not built sample by sample only to come out flat. */
+                    const double t_first = delay + 0.5 * dwell;
+                    const double t_last =
+                        delay + (static_cast<double>(num_samples) - 0.5) * dwell;
+                    if (!shift_is_linear(g, shift_m, t_first, t_last))
+                    {
+                        std::vector<double> residual(static_cast<size_t>(num_samples), 0.0);
+                        double worst = 0.0;
+                        for (int i = 0; i < num_samples; ++i)
+                        {
+                            const double t = delay + (static_cast<double>(i) + 0.5) * dwell;
+                            const double phi = kTwoPi * shift_cycles(g, shift_m, origin, t);
+                            residual[static_cast<size_t>(i)] =
+                                phi - kTwoPi * freq_hz * (t - delay) - phase_rad;
+                            worst = std::max(worst,
+                                             std::fabs(residual[static_cast<size_t>(i)]));
+                        }
+
+                        if (worst > 1e-12)
+                            row[7] = static_cast<double>(
+                                seq.register_raw_shape(residual.data(), num_samples));
+                    }
 
                     block.adc = seq.register_adc(row);
                     seq.set_block(b, block);
@@ -573,27 +724,59 @@ namespace pulseq
         std::vector<int32_t> wanted(static_cast<size_t>(blocks) + 1, 0);
         std::vector<int32_t> adc_of(static_cast<size_t>(blocks) + 1, 0);
 
+        std::unordered_map<std::string, int32_t> stored;
+        std::unordered_map<std::string, bool> varies;
+
         for (int b = 1; b <= blocks; ++b)
         {
             const Block block = seq.get_block(b);
-            if (block.adc <= 0)
+            if (block.adc <= 0 || block.adc > seq.adc_library().size())
                 continue;
             adc_of[static_cast<size_t>(b)] = block.adc;
+
+            const std::string played =
+                played_key(seq, block, seq.adc_library().row(static_cast<int>(block.adc)));
 
             /* A Cartesian, unrotated readout takes its shift as two scalars
              * and its k from the encoding counters -- storing a trajectory
              * for it would be pure weight.  Only the readouts the consumer
-             * actually has to finish get one. */
-            if (!adc_defers_to_consumer(seq, block))
+             * actually has to finish get one.  The rotation is asked of the
+             * block and the sweep of the events, because only the second is
+             * shared by everything that plays them. */
+            bool defers = block_is_rotated(seq, block);
+            if (!defers)
+            {
+                auto known = varies.find(played);
+                if (known == varies.end())
+                    known = varies
+                                .emplace(played, adc_gradients_vary(
+                                                     seq, block, block_gradients(seq, block)))
+                                .first;
+                defers = known->second;
+            }
+            if (!defers)
                 continue;
+
+            const auto seen = stored.find(played);
+            if (seen != stored.end())
+            {
+                wanted[static_cast<size_t>(b)] = seen->second;
+                continue;
+            }
 
             const BaseTrajectory t = base_trajectory(seq, b);
             if (!t.has_adc)
+            {
+                stored.emplace(played, 0);
                 continue;
+            }
 
             const double window = static_cast<double>(t.num_samples) * t.dwell;
             if (!(window > 0.0))
+            {
+                stored.emplace(played, 0);
                 continue;
+            }
 
             std::vector<double> packed(static_cast<size_t>(3 * t.num_samples), 0.0);
             for (int a = 0; a < 3; ++a)
@@ -606,8 +789,10 @@ namespace pulseq
                     dst[i] = ax.base[static_cast<size_t>(i)] / window;
             }
 
-            wanted[static_cast<size_t>(b)] = static_cast<int32_t>(
+            const int32_t shape = static_cast<int32_t>(
                 seq.register_raw_shape(packed.data(), static_cast<int>(packed.size())));
+            stored.emplace(played, shape);
+            wanted[static_cast<size_t>(b)] = shape;
         }
 
         /* The marker says "phase_modulation holds a base trajectory"; a

@@ -47,7 +47,7 @@ def _sampling_mask(acceleration, acceleration_z, caipi_shift):
 
 def _calibration_mask():
     """The ``(kz, ky, kx)`` mask the separate low-res GRE calibration samples."""
-    seq = epi3D_sequence.calibration(
+    seq = epi3D_sequence.CalibrationKernel(
         n_x=N,
         n_y=N,
         n_z=N_Z,

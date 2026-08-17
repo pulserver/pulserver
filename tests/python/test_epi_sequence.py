@@ -74,7 +74,7 @@ def test_the_multiband_epi_splits_calibration_from_imaging(monkeypatch):
         readout_bandwidth_hz=250e3,
     )
     main_seq = epi2D_sequence.main(**common)
-    calibration = epi2D_sequence._sms_calibration(
+    calibration = epi2D_sequence.SmsCalibrationKernel(
         pp.Opts(),
         fov=220e-3,
         slice_gap=0.0,
@@ -155,7 +155,7 @@ def test_the_calibration_is_a_full_low_res_rectangle_marked_reference():
     (coil calibration, never imaging) at the ``calc_calibration_lines`` window
     the reconstruction reads."""
     n_y, n_z, n_acs, n_acs_z = 24, 8, 8, 4
-    seq = epi3D_sequence.calibration(
+    seq = epi3D_sequence.CalibrationKernel(
         n_x=48,
         n_y=n_y,
         n_z=n_z,
@@ -199,7 +199,7 @@ def test_the_2d_calibration_is_a_per_slice_low_res_gradient_echo():
     calibration, never imaging) and carrying its ``SLC`` counter, at the
     ``calc_calibration_lines`` window the reconstruction reads."""
     n_slices, n_y, n_acs = 3, 24, 8
-    seq = epi2D_sequence.calibration(
+    seq = epi2D_sequence.CalibrationKernel(
         n_x=32,
         n_y=n_y,
         n_slices=n_slices,
@@ -315,7 +315,7 @@ def test_the_pair_is_written_linked_navigator_first(tmp_path, module, build):
 
 
 def test_the_navigator_lines_are_blip_nulled():
-    nav = epi2D_sequence.navigator(n_x=32, n_y=16, readout_bandwidth_hz=BANDWIDTH)
+    nav = epi2D_sequence.NavigatorKernel(n_x=32, n_y=16, readout_bandwidth_hz=BANDWIDTH)
     labels = nav.evaluate_labels(evolution="adc")
     k_adc, *_ = nav.calculate_kspace(dense=False)
     n_samples = k_adc.shape[1] // len(labels["NAV"])
@@ -326,7 +326,7 @@ def test_the_navigator_lines_are_blip_nulled():
 
 
 def test_the_opposite_reference_walks_k_space_backwards():
-    nav = epi2D_sequence.navigator(n_x=32, n_y=16, readout_bandwidth_hz=BANDWIDTH)
+    nav = epi2D_sequence.NavigatorKernel(n_x=32, n_y=16, readout_bandwidth_hz=BANDWIDTH)
     labels = nav.evaluate_labels(evolution="adc")
     k_adc, *_ = nav.calculate_kspace(dense=False)
     n_samples = k_adc.shape[1] // len(labels["SET"])

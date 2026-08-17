@@ -48,7 +48,15 @@ from pulserver import (
 )
 
 #: Blip-nulled lines in the navigator: odd, even, odd.
-_NAV_LINES = 3
+NAVIGATOR_LINES = 3
+
+#: SLR design of the selective pulses, held here rather than left at the design
+#: module's default so a script can retune the excitation without touching the
+#: loop. The selection amplitude follows as
+#: ``time_bw_product / (duration * thickness)``, which is also what a slice
+#: offset is converted against.
+PULSE_DURATION = 3e-3
+TIME_BW_PRODUCT = 4.0
 
 #: Per-plugin ceilings on the gradient and slew limits, in mT/m and T/m/s. The
 #: sequence is held below the smaller of these and what the scanner reports, so
@@ -75,682 +83,6 @@ SMS_EXCITATION = False
 #: frame count is forced to one and the multiphase control is dropped from the
 #: protocol, so the console never shows it.
 ENABLE_MULTIPHASE = False
-
-
-def _sms_geometry(n_slices: int, n_bands: int, slice_step: float):
-    """Group count, band spacing and slice FOV for a multiband acquisition.
-
-    The ``n_slices`` slices split into ``n_slices // n_bands`` groups; the bands
-    of one group are a whole group-count apart, so the excited comb interleaves
-    the slices across the slab. ``slice_step`` is the slice-to-slice distance
-    (thickness plus gap).
-    """
-    n_groups = n_slices // n_bands
-    band_spacing = n_groups * slice_step
-    return n_groups, band_spacing, n_bands * band_spacing
-
-
-def _sms_kernel(
-    system: pp.Opts,
-    *,
-    fov,
-    n_x: int,
-    n_y: int,
-    slice_thickness: float,
-    slice_step: float,
-    n_slices: int,
-    n_bands: int,
-    flip_angle_deg: float,
-    te: float | None = None,
-    tr: float | None = None,
-    segments: int = 1,
-    acceleration: int = 1,
-    readout_bandwidth_hz: float = 500e3,
-    spoiling_cycles: float = 4.0,
-) -> SimpleNamespace:
-    """The multiband excitation, its blipped-CAIPI train, and the reference.
-
-    The imaging train is a :class:`design.EpiReadout3D` whose ``n_z`` is the
-    multiband factor: its partition axis is not a spatial encode but the CAIPI
-    slice phase, so the ``'caipi'`` sawtooth's gz blips give band ``j`` the
-    ``exp(i 2*pi*ky*j / n_bands)`` modulation a model-based separation inverts.
-    Coil sensitivities come from the separate low-resolution gradient-echo
-    calibration (:func:`_add_gre_calibration`), the same block the plain
-    accelerated scan uses, so the maps carry no EPI distortion.
-    """
-    fov_x, fov_y = (fov, fov) if isinstance(fov, (int, float)) else fov
-    n_groups, band_spacing, sms_fov_z = _sms_geometry(n_slices, n_bands, slice_step)
-
-    sms = design.SmsExcitation(
-        system,
-        flip_angle_deg,
-        thickness_m=slice_thickness,
-        slice_gap_m=band_spacing,
-        n_bands=n_bands,
-    )
-    # Fold the rephaser onto the selection gradient, is_slab style, so the SMS
-    # train's z prewinder block never holds a second z lobe.
-    gz = pp.concatenate_gradients(sms.gz, sms.gz_reph, system=system)
-    epi = design.EpiReadout3D(
-        system,
-        sms.rf,
-        gz,
-        fov=(fov_x, fov_y, sms_fov_z),
-        matrix=(n_x, n_y, n_bands),
-        scheme="caipi",
-        segments=segments,
-        acceleration=acceleration,
-        partition_acceleration=n_bands,
-        caipi_shift=1,
-        te=te,
-        tr=tr,
-        readout_bandwidth_hz=readout_bandwidth_hz,
-        spoiling_cycles=spoiling_cycles,
-        labels=("LIN", "PAR"),
-    )
-
-    return SimpleNamespace(
-        sms=sms,
-        epi=epi,
-        n_groups=n_groups,
-        band_spacing=band_spacing,
-        fov=(fov_x, fov_y),
-    )
-
-
-def _sms_group_center(group: int, n_slices: int, n_bands: int, slice_step: float) -> float:
-    """Where the multiband comb sits to excite one group's slices (m).
-
-    Group ``g`` holds slices ``g, g + n_groups, ...``; their midpoint is where
-    the band comb -- symmetric about its own centre -- has to be placed.
-    """
-    n_groups = n_slices // n_bands
-    first = (group - (n_slices - 1) / 2) * slice_step
-    return first + (n_bands - 1) / 2 * n_groups * slice_step
-
-
-def _play_sms_shot(
-    seq,
-    epi,
-    *,
-    n_y: int,
-    center_m: float,
-    gz_amplitude: float,
-    origin_line: int,
-    rev_label,
-    extra_line_labels=(),
-    blip_nulled: bool = False,
-    n_lines: int | None = None,
-) -> None:
-    """One multiband excitation and its blipped-CAIPI train.
-
-    The comb is placed on the group's slices by the excitation frequency
-    offset. The partition prewinder is skipped: the shot starts at ``kz = 0``
-    and the gz blips walk the CAIPI sawtooth from there, so the partition label
-    is the pure slice-phase index a reconstruction reads the modulation from.
-    ``blip_nulled`` drops both blips for the phase-correction navigator, and
-    ``n_lines`` truncates the train to the leading few those lines need.
-    """
-    count = epi.etl if n_lines is None else n_lines
-    epi.rf.freq_offset = gz_amplitude * center_m
-    epi.rf.phase_offset = -2 * np.pi * epi.rf.freq_offset * epi.rf.center
-
-    seq.add_block(epi.rf, epi.gz)
-    if getattr(epi, "wait_te", None) is not None:
-        seq.add_block(epi.wait_te)
-
-    if blip_nulled:
-        seq.add_block(epi.gx_pre)
-    else:
-        ky_scale = (origin_line - n_y / 2) / (n_y / 2)
-        epi.shot_labels[0].value = int(origin_line)
-        epi.shot_labels[1].value = 0
-        seq.add_block(epi.gx_pre, pp.scale_grad(epi.gy_pre, ky_scale), *epi.shot_labels)
-    for line in range(count):
-        rev_label.value = int(line % 2)
-        events = [epi.gx[line], epi.adc, rev_label]
-        if not blip_nulled:
-            for blip in (epi.gy_blips[line], epi.gz_blips[line]):
-                if blip is not None:
-                    events.append(blip)
-            events.extend(epi.line_labels[line])
-        events.extend(extra_line_labels)
-        seq.add_block(*events)
-    if blip_nulled:
-        seq.add_block(epi.gx_spoil)
-    else:
-        ky_scale = (origin_line - n_y / 2) / (n_y / 2)
-        seq.add_block(epi.gx_spoil, pp.scale_grad(epi.gy_rew, ky_scale))
-    if getattr(epi, "wait_tr", None) is not None:
-        seq.add_block(epi.wait_tr)
-
-
-def _sms_calibration(
-    system: pp.Opts,
-    *,
-    fov,
-    n_x: int,
-    n_y: int,
-    slice_thickness: float,
-    slice_gap: float,
-    n_slices: int,
-    n_bands: int,
-    flip_angle_deg: float,
-    n_acs: int = 24,
-    te: float | None = None,
-    tr: float | None = None,
-    segments: int = 1,
-    acceleration: int = 1,
-    readout_bandwidth_hz: float = 500e3,
-    slice_order: str = "interleaved",
-    spoiling_cycles: float = 4.0,
-) -> pp.Sequence:
-    """The multiband calibration file: phase navigator, then the GRE calibration.
-
-    Three blip-nulled navigator lines (``NAV``) carry the odd/even phase, then
-    the same low-resolution slice-selective gradient echo the plain accelerated
-    scan calibrates from (:func:`_add_gre_calibration`) is played, a central
-    ``n_acs`` block per slice marked ``REF`` (``ACQ_IS_PARALLEL_CALIBRATION``) so
-    a reconstruction estimates each slice's coil sensitivities free of EPI
-    distortion. Its own sequence in the linked collection, kept out of the
-    imaging repeating unit, and played once for the whole time series.
-    """
-    slice_step = slice_thickness + slice_gap
-    kernel = _sms_kernel(
-        system,
-        fov=fov,
-        n_x=n_x,
-        n_y=n_y,
-        slice_thickness=slice_thickness,
-        slice_step=slice_step,
-        n_slices=n_slices,
-        n_bands=n_bands,
-        flip_angle_deg=flip_angle_deg,
-        te=te,
-        tr=tr,
-        segments=segments,
-        acceleration=acceleration,
-        readout_bandwidth_hz=readout_bandwidth_hz,
-        spoiling_cycles=spoiling_cycles,
-    )
-    epi = kernel.epi
-    gz_amplitude = float(kernel.sms.gz.amplitude)
-    fov_x, fov_y = kernel.fov
-    n_groups = kernel.n_groups
-
-    seq = pp.Sequence(system)
-    rev_label = pp.make_label("REV", "SET", 0)
-    sms_off = pp.make_label("SMS", "SET", 0)
-    ref_off = pp.make_label("REF", "SET", 0)
-    nav_on = pp.make_label("NAV", "SET", 1)
-    nav_off = pp.make_label("NAV", "SET", 0)
-
-    # Phase-correction navigator: the multiband readout, blips nulled, at the
-    # centre group -- its odd/even fit is the readout's, blips or not.
-    _play_sms_shot(
-        seq,
-        epi,
-        n_y=n_y,
-        center_m=_sms_group_center(n_groups // 2, n_slices, n_bands, slice_step),
-        gz_amplitude=gz_amplitude,
-        origin_line=0,
-        rev_label=rev_label,
-        extra_line_labels=(nav_on, ref_off, sms_off),
-        blip_nulled=True,
-        n_lines=_NAV_LINES,
-    )
-
-    # Coil calibration: the shared low-res GRE, one slice at a time, marked REF.
-    # ``nav_off``/``sms_off`` reset the labels the navigator set on the file.
-    _add_gre_calibration(
-        seq,
-        system,
-        fov_x=fov_x,
-        fov_y=fov_y,
-        n_x=n_x,
-        n_y=n_y,
-        n_slices=n_slices,
-        slice_thickness=slice_thickness,
-        slice_gap=slice_gap,
-        flip_angle_deg=flip_angle_deg,
-        n_acs=n_acs,
-        readout_bandwidth_hz=readout_bandwidth_hz,
-        slice_order=slice_order,
-        spoiling_cycles=spoiling_cycles,
-        extra_labels=(nav_off, sms_off),
-    )
-
-    seq.set_definition(key="FOV", value=[fov_x, fov_y, slice_thickness * n_slices])
-    seq.set_definition(key="Matrix", value=[n_x, n_y, n_slices])
-    seq.set_definition(key="Name", value="sms_epi_2d_calibration")
-    seq.set_definition(key="EchoSpacing", value=epi.esp)
-    return seq
-
-
-def _sms_main(
-    system: pp.Opts,
-    *,
-    fov,
-    fov_offset: tuple[float, float, float] = (0.0, 0.0, 0.0),
-    n_x: int,
-    n_y: int,
-    slice_thickness: float,
-    slice_gap: float,
-    n_slices: int,
-    n_bands: int,
-    flip_angle_deg: float,
-    n_acs: int = 24,
-    te: float | None = None,
-    tr: float | None = None,
-    n_repetitions: int = 1,
-    segments: int = 1,
-    acceleration: int = 1,
-    readout_bandwidth_hz: float = 500e3,
-    slice_order: str = "interleaved",
-    spoiling_cycles: float = 4.0,
-) -> pp.Sequence:
-    """The multiband imaging file: blipped-CAIPI shots, one per (segment, group).
-
-    Imaging only -- the shots are multiband (``SMS``), the group in ``SLC``,
-    and the blipped-CAIPI gz encoding is what a model-based separation inverts
-    against the calibration. The phase navigator and the coil calibration are
-    their own sequence in the linked collection (:func:`_sms_calibration`), so
-    this file is one clean repeating unit; ``MultibandFactor`` records it.
-    ``n_acs`` is accepted for a uniform call from :func:`main` but unused here,
-    the imaging carrying no calibration lines.
-    """
-    del n_acs
-    slice_step = slice_thickness + slice_gap
-    kernel = _sms_kernel(
-        system,
-        fov=fov,
-        n_x=n_x,
-        n_y=n_y,
-        slice_thickness=slice_thickness,
-        slice_step=slice_step,
-        n_slices=n_slices,
-        n_bands=n_bands,
-        flip_angle_deg=flip_angle_deg,
-        te=te,
-        tr=tr,
-        segments=segments,
-        acceleration=acceleration,
-        readout_bandwidth_hz=readout_bandwidth_hz,
-        spoiling_cycles=spoiling_cycles,
-    )
-    epi = kernel.epi
-    gz_amplitude = float(kernel.sms.gz.amplitude)
-    fov_x, fov_y = kernel.fov
-    n_groups = kernel.n_groups
-
-    seq = pp.Sequence(system)
-    rev_label = pp.make_label("REV", "SET", 0)
-    slc_label = pp.make_label("SLC", "SET", 0)
-    rep_label = pp.make_label("REP", "SET", 0)
-    sms_on = pp.make_label("SMS", "SET", 1)
-    ref_off = pp.make_label("REF", "SET", 0)
-    nav_off = pp.make_label("NAV", "SET", 0)
-
-    # Multiband imaging: one shot per (segment, group), the group in SLC.
-    groups = [int(g) for g in pp.calc_traversal_order(n_groups, slice_order)]
-    for repetition in range(n_repetitions):
-        rep_label.value = int(repetition)
-        for segment in range(segments):
-            for group in groups:
-                slc_label.value = int(group)
-                _play_sms_shot(
-                    seq,
-                    epi,
-                    n_y=n_y,
-                    center_m=_sms_group_center(
-                        group, n_slices, n_bands, slice_step
-                    ),
-                    gz_amplitude=gz_amplitude,
-                    origin_line=segment,
-                    rev_label=rev_label,
-                    extra_line_labels=(slc_label, rep_label, sms_on, ref_off, nav_off),
-                )
-
-    pp.TransformFOV(
-        translation=tuple(offset * 1e3 for offset in fov_offset), system=system
-    ).apply_to_sequence(seq, in_place=True)
-
-    slab_thickness = n_slices * slice_step - slice_gap
-    seq.set_definition(key="FOV", value=[fov_x, fov_y, slab_thickness])
-    seq.set_definition(key="Matrix", value=[n_x, n_y, n_slices])
-    seq.set_definition(key="Name", value="sms_epi_2d")
-    seq.set_definition(key="TE", value=epi.echo_times[len(epi.order) // 2])
-    seq.set_definition(key="EchoSpacing", value=epi.esp)
-    seq.set_definition(key="EPIFactor", value=epi.etl)
-    seq.set_definition(key="MultibandFactor", value=n_bands)
-    return seq
-
-
-def _shared_kernel(
-    system: pp.Opts,
-    *,
-    fov,
-    n_x: int,
-    n_y: int,
-    slice_thickness: float,
-    flip_angle_deg: float,
-    te: float | None = None,
-    tr: float | None = None,
-    segments: int = 1,
-    acceleration: int = 1,
-    readout_bandwidth_hz: float = 500e3,
-    spoiling_cycles: float = 4.0,
-) -> SimpleNamespace:
-    """The excitation and train both sequences are built from."""
-    fov_x, fov_y = (fov, fov) if isinstance(fov, (int, float)) else fov
-    excitation = design.SpatialSelectiveExcitation(
-        system, flip_angle_deg, slice_thickness
-    )
-    epi = design.EpiReadout2D(
-        system,
-        excitation.rf,
-        excitation.gz,
-        excitation.gz_reph,
-        fov=(fov_x, fov_y),
-        matrix=(n_x, n_y),
-        segments=segments,
-        acceleration=acceleration,
-        te=te,
-        tr=tr,
-        readout_bandwidth_hz=readout_bandwidth_hz,
-        spoiling_cycles=spoiling_cycles,
-        labels=("LIN",),
-    )
-    return SimpleNamespace(
-        excitation=excitation, epi=epi, fov=(fov_x, fov_y)
-    )
-
-
-def _play_shot(
-    seq,
-    epi,
-    *,
-    origin_line: int | None,
-    n_y: int,
-    rev_label,
-    extra_line_labels=(),
-    invert_phase: bool = False,
-    blip_nulled: bool = False,
-    n_lines: int | None = None,
-) -> None:
-    """One excitation and its train, per the module's loop contract.
-
-    ``origin_line`` is the absolute first line; ``None`` nulls the prewinder
-    (the navigator's centre line). ``invert_phase`` negates every
-    phase-encode event -- the opposite-PE reference. ``blip_nulled`` drops
-    the blips, and ``n_lines`` truncates the train.
-    """
-    sign = -1.0 if invert_phase else 1.0
-    count = epi.etl if n_lines is None else n_lines
-
-    # The slice rephaser runs straight off the selection lobe: with the TE
-    # wait when there is one, in the prewinder block otherwise -- the block
-    # the module itself puts it in. Without it the slice never refocuses.
-    rephaser = [epi.gz_reph] if getattr(epi, "gz_reph", None) is not None else []
-
-    seq.add_block(epi.rf, epi.gz)
-    if getattr(epi, "wait_te", None) is not None:
-        seq.add_block(epi.wait_te, *rephaser)
-        rephaser = []
-
-    scale = 0.0 if origin_line is None else sign * (origin_line - n_y / 2) / (n_y / 2)
-    if origin_line is not None:
-        epi.shot_labels[0].value = int(origin_line)
-    seq.add_block(
-        epi.gx_pre,
-        pp.scale_grad(epi.gy_pre, scale),
-        *rephaser,
-        *(epi.shot_labels if origin_line is not None else ()),
-    )
-    for line in range(count):
-        rev_label.value = int(line % 2)
-        events = [epi.gx[line], epi.adc, rev_label]
-        blip = epi.gy_blips[line]
-        if blip is not None and not blip_nulled:
-            events.append(blip if not invert_phase else pp.scale_grad(blip, -1.0))
-        events.extend(epi.line_labels[line] if origin_line is not None else ())
-        events.extend(extra_line_labels)
-        seq.add_block(*events)
-    seq.add_block(epi.gx_spoil, pp.scale_grad(epi.gy_rew, scale))
-    if getattr(epi, "wait_tr", None) is not None:
-        seq.add_block(epi.wait_tr)
-
-
-def navigator(
-    *,
-    system: pp.Opts | None = None,
-    fov: float | tuple[float, float] = 220e-3,
-    n_x: int = 128,
-    n_y: int = 128,
-    n_slices: int = 1,
-    slice_thickness: float = 5e-3,
-    slice_gap: float = 0.0,
-    flip_angle_deg: float = 70.0,
-    te: float | None = None,
-    tr: float | None = None,
-    segments: int = 1,
-    acceleration: int = 1,
-    readout_bandwidth_hz: float = 500e3,
-    opposite_reference: bool = True,
-    slice_order: str = "interleaved",
-    spoiling_cycles: float = 4.0,
-) -> pp.Sequence:
-    """Build the navigator sequence: blip-nulled lines, and the reference.
-
-    Three centre lines with the blips dropped, labelled ``NAV`` and ``REF``
-    with ``REV`` marking the reversed ones -- what an odd/even phase fit
-    reads -- then, optionally, one full shot with every phase-encode event
-    negated, labelled ``SET = 1``: the opposite-polarity acquisition a
-    distortion correction pairs with the main scan.
-
-    Parameters mirror :func:`main` where they overlap.
-
-    Returns
-    -------
-    seq : pulserver.pypulseq.Sequence
-        The navigator sequence.
-    """
-    system = pp.Opts() if system is None else system
-    system = pp.cap_system(system, max_grad=MAX_GRAD, max_slew=MAX_SLEW)
-    kernel = _shared_kernel(
-        system,
-        fov=fov,
-        n_x=n_x,
-        n_y=n_y,
-        slice_thickness=slice_thickness,
-        flip_angle_deg=flip_angle_deg,
-        te=te,
-        tr=tr,
-        segments=segments,
-        acceleration=acceleration,
-        readout_bandwidth_hz=readout_bandwidth_hz,
-        spoiling_cycles=spoiling_cycles,
-    )
-    epi = kernel.epi
-    excitation = kernel.excitation
-    slice_positions = (np.arange(n_slices) - (n_slices - 1) / 2) * (
-        slice_thickness + slice_gap
-    )
-
-    seq = pp.Sequence(system)
-    rev_label = pp.make_label("REV", "SET", 0)
-    nav_label = pp.make_label("NAV", "SET", 1)
-    ref_label = pp.make_label("REF", "SET", 1)
-    nav_clear = pp.make_label("NAV", "SET", 0)
-    ref_clear = pp.make_label("REF", "SET", 0)
-    set_label = pp.make_label("SET", "SET", 1)
-    slc_label = pp.make_label("SLC", "SET", 0)
-
-    # Match the main scan's slice order so the navigator's phase estimate is
-    # acquired under the same slice-to-slice timing.
-    for i_slice in (int(i) for i in pp.calc_traversal_order(n_slices, slice_order)):
-        epi.rf.freq_offset = excitation.gz.amplitude * slice_positions[i_slice]
-        epi.rf.phase_offset = -2 * np.pi * epi.rf.freq_offset * epi.rf.center
-        slc_label.value = int(i_slice)
-
-        _play_shot(
-            seq,
-            epi,
-            origin_line=None,
-            n_y=n_y,
-            rev_label=rev_label,
-            extra_line_labels=(nav_label, ref_label, slc_label),
-            blip_nulled=True,
-            n_lines=_NAV_LINES,
-        )
-        if opposite_reference:
-            _play_shot(
-                seq,
-                epi,
-                origin_line=0,
-                n_y=n_y,
-                rev_label=rev_label,
-                extra_line_labels=(nav_clear, ref_clear, set_label, slc_label),
-                invert_phase=True,
-            )
-
-    fov_x, fov_y = kernel.fov
-    seq.set_definition(key="FOV", value=[fov_x, fov_y, slice_thickness * n_slices])
-    seq.set_definition(key="Matrix", value=[n_x, n_y, n_slices])
-    seq.set_definition(key="Name", value="epi_2d_navigator")
-    seq.set_definition(key="EchoSpacing", value=epi.esp)
-    return seq
-
-
-def _add_gre_calibration(
-    seq: pp.Sequence,
-    system: pp.Opts,
-    *,
-    fov_x: float,
-    fov_y: float,
-    n_x: int,
-    n_y: int,
-    n_slices: int,
-    slice_thickness: float,
-    slice_gap: float,
-    flip_angle_deg: float,
-    n_acs: int,
-    readout_bandwidth_hz: float,
-    slice_order: str,
-    spoiling_cycles: float,
-    extra_labels: tuple = (),
-) -> list[int]:
-    """Add a per-slice low-resolution slice-selective gradient echo to ``seq``.
-
-    A fully sampled central ``n_acs`` block per slice, one line per repetition,
-    marked ``REF`` (``ACQ_IS_PARALLEL_CALIBRATION``, coil calibration only) and
-    ``SLC``/``LIN``. A plain gradient echo rather than an EPI train keeps EPI
-    distortion out of the coil maps. ``extra_labels`` are appended to every ADC
-    block, so a caller sharing the file with other data (the multiband
-    calibration's phase navigator) can reset the labels those lines set.
-
-    Returns the acquired calibration lines (empty when none are asked for), so
-    the caller can decide whether the block was laid down at all.
-    """
-    acs_lines = pp.calc_calibration_lines(n_y, n_acs)
-    if not acs_lines:
-        return []
-
-    excitation = design.SpatialSelectiveExcitation(system, flip_angle_deg, slice_thickness)
-    readout = design.LineReadout2D(
-        system,
-        excitation.rf,
-        excitation.gz,
-        excitation.gz_reph,
-        fov=(fov_x, fov_y),
-        matrix=(n_x, n_y),
-        readout_bandwidth_hz=readout_bandwidth_hz,
-        spoiling_cycles=spoiling_cycles,
-    )
-    slice_positions = (np.arange(n_slices) - (n_slices - 1) / 2) * (
-        slice_thickness + slice_gap
-    )
-
-    ref_label = pp.make_label("REF", "SET", 1)
-    slc_label = pp.make_label("SLC", "SET", 0)
-    lin_label = pp.make_label("LIN", "SET", 0)
-    for i_slice in (int(i) for i in pp.calc_traversal_order(n_slices, slice_order)):
-        readout.rf.freq_offset = excitation.gz.amplitude * slice_positions[i_slice]
-        readout.rf.phase_offset = -2 * np.pi * readout.rf.freq_offset * readout.rf.center
-        slc_label.value = int(i_slice)
-        for line in acs_lines:
-            ky = (line - n_y / 2) / (n_y / 2)
-            lin_label.value = int(line)
-            seq.add_block(readout.rf, readout.gz)
-            seq.add_block(
-                readout.gx_pre, pp.scale_grad(readout.gy_pre, ky), readout.gz_reph
-            )
-            seq.add_block(
-                readout.gx, readout.adc, ref_label, slc_label, lin_label, *extra_labels
-            )
-            seq.add_block(readout.gx_spoil, pp.scale_grad(readout.gy_rew, ky))
-    return acs_lines
-
-
-def calibration(
-    *,
-    system: pp.Opts | None = None,
-    fov: float | tuple[float, float] = 220e-3,
-    n_x: int = 128,
-    n_y: int = 128,
-    n_slices: int = 1,
-    slice_thickness: float = 5e-3,
-    slice_gap: float = 0.0,
-    flip_angle_deg: float = 70.0,
-    n_acs: int = 24,
-    readout_bandwidth_hz: float = 500e3,
-    slice_order: str = "interleaved",
-    spoiling_cycles: float = 4.0,
-) -> pp.Sequence:
-    """A low-resolution slice-selective gradient echo, one slice at a time.
-
-    The autocalibration for the parallel-imaging reconstruction: a fully sampled
-    central ``n_acs`` block per slice, every line ``REF``
-    (``ACQ_IS_PARALLEL_CALIBRATION``, coil calibration only). A plain gradient
-    echo rather than an EPI train keeps EPI distortion out of the coil maps, and
-    its own sequence in the linked collection so the imaging stays one clean
-    repeating unit. Both the accelerated plain scan and the multiband
-    (:func:`_sms_calibration`) path calibrate from this block. Parameters mirror
-    :func:`main`.
-
-    Returns
-    -------
-    seq : pulserver.pypulseq.Sequence
-        The calibration sequence, or ``None`` when no calibration is asked for.
-    """
-    system = pp.Opts() if system is None else system
-    system = pp.cap_system(system, max_grad=MAX_GRAD, max_slew=MAX_SLEW)
-    fov_x, fov_y = (fov, fov) if isinstance(fov, (int, float)) else fov
-
-    seq = pp.Sequence(system)
-    acs_lines = _add_gre_calibration(
-        seq,
-        system,
-        fov_x=fov_x,
-        fov_y=fov_y,
-        n_x=n_x,
-        n_y=n_y,
-        n_slices=n_slices,
-        slice_thickness=slice_thickness,
-        slice_gap=slice_gap,
-        flip_angle_deg=flip_angle_deg,
-        n_acs=n_acs,
-        readout_bandwidth_hz=readout_bandwidth_hz,
-        slice_order=slice_order,
-        spoiling_cycles=spoiling_cycles,
-    )
-    if not acs_lines:
-        return None
-
-    seq.set_definition(key="FOV", value=[fov_x, fov_y, slice_thickness * n_slices])
-    seq.set_definition(key="Matrix", value=[n_x, n_y, n_slices])
-    seq.set_definition(key="Name", value="epi_2d_calibration")
-    return seq
 
 
 def main(
@@ -881,7 +213,7 @@ def main(
             "slice_order": slice_order,
             "spoiling_cycles": spoiling_cycles,
         }
-        seq = _sms_main(
+        seq = SmsSequenceKernel(
             system,
             fov_offset=fov_offset,
             n_repetitions=n_repetitions,
@@ -899,7 +231,7 @@ def main(
             _write_sms_collection(seq, seq_filename, system, sms_kwargs)
         return seq
 
-    kernel = _shared_kernel(
+    kernel = SharedKernel(
         system,
         fov=fov,
         n_x=n_x,
@@ -940,7 +272,7 @@ def main(
                     -2 * np.pi * epi.rf.freq_offset * epi.rf.center
                 )
                 slc_label.value = int(i_slice)
-                _play_shot(
+                ShotKernel(
                     seq,
                     epi,
                     origin_line=segment,
@@ -997,7 +329,691 @@ def main(
     return seq
 
 
-def _needs_calibration(kwargs: dict) -> bool:
+# ======================================================================
+# Subroutines of main()
+# ======================================================================
+
+def sms_geometry(n_slices: int, n_bands: int, slice_step: float):
+    """Group count, band spacing and slice FOV for a multiband acquisition.
+
+    The ``n_slices`` slices split into ``n_slices // n_bands`` groups; the bands
+    of one group are a whole group-count apart, so the excited comb interleaves
+    the slices across the slab. ``slice_step`` is the slice-to-slice distance
+    (thickness plus gap).
+    """
+    n_groups = n_slices // n_bands
+    band_spacing = n_groups * slice_step
+    return n_groups, band_spacing, n_bands * band_spacing
+
+
+def SmsKernel(
+    system: pp.Opts,
+    *,
+    fov,
+    n_x: int,
+    n_y: int,
+    slice_thickness: float,
+    slice_step: float,
+    n_slices: int,
+    n_bands: int,
+    flip_angle_deg: float,
+    te: float | None = None,
+    tr: float | None = None,
+    segments: int = 1,
+    acceleration: int = 1,
+    readout_bandwidth_hz: float = 500e3,
+    spoiling_cycles: float = 4.0,
+) -> SimpleNamespace:
+    """The multiband excitation, its blipped-CAIPI train, and the reference.
+
+    The imaging train is a :class:`design.EpiReadout3D` whose ``n_z`` is the
+    multiband factor: its partition axis is not a spatial encode but the CAIPI
+    slice phase, so the ``'caipi'`` sawtooth's gz blips give band ``j`` the
+    ``exp(i 2*pi*ky*j / n_bands)`` modulation a model-based separation inverts.
+    Coil sensitivities come from the separate low-resolution gradient-echo
+    calibration (:func:`GreCalibrationKernel`), the same block the plain
+    accelerated scan uses, so the maps carry no EPI distortion.
+    """
+    fov_x, fov_y = (fov, fov) if isinstance(fov, (int, float)) else fov
+    n_groups, band_spacing, sms_fov_z = sms_geometry(n_slices, n_bands, slice_step)
+
+    sms = design.SmsExcitation(
+        system,
+        flip_angle_deg,
+        thickness_m=slice_thickness,
+        slice_gap_m=band_spacing,
+        n_bands=n_bands,
+    )
+    # Fold the rephaser onto the selection gradient, is_slab style, so the SMS
+    # train's z prewinder block never holds a second z lobe.
+    gz = pp.concatenate_gradients(sms.gz, sms.gz_reph, system=system)
+    epi = design.EpiReadout3D(
+        system,
+        sms.rf,
+        gz,
+        fov=(fov_x, fov_y, sms_fov_z),
+        matrix=(n_x, n_y, n_bands),
+        scheme="caipi",
+        segments=segments,
+        acceleration=acceleration,
+        partition_acceleration=n_bands,
+        caipi_shift=1,
+        te=te,
+        tr=tr,
+        readout_bandwidth_hz=readout_bandwidth_hz,
+        spoiling_cycles=spoiling_cycles,
+        labels=("LIN", "PAR"),
+    )
+
+    return SimpleNamespace(
+        sms=sms,
+        epi=epi,
+        n_groups=n_groups,
+        band_spacing=band_spacing,
+        fov=(fov_x, fov_y),
+    )
+
+
+def sms_group_center(group: int, n_slices: int, n_bands: int, slice_step: float) -> float:
+    """Where the multiband comb sits to excite one group's slices (m).
+
+    Group ``g`` holds slices ``g, g + n_groups, ...``; their midpoint is where
+    the band comb -- symmetric about its own centre -- has to be placed.
+    """
+    n_groups = n_slices // n_bands
+    first = (group - (n_slices - 1) / 2) * slice_step
+    return first + (n_bands - 1) / 2 * n_groups * slice_step
+
+
+def SmsShotKernel(
+    seq,
+    epi,
+    *,
+    n_y: int,
+    center_m: float,
+    gz_amplitude: float,
+    origin_line: int,
+    rev_label,
+    extra_line_labels=(),
+    blip_nulled: bool = False,
+    n_lines: int | None = None,
+) -> None:
+    """One multiband excitation and its blipped-CAIPI train.
+
+    The comb is placed on the group's slices by the excitation frequency
+    offset. The partition prewinder is skipped: the shot starts at ``kz = 0``
+    and the gz blips walk the CAIPI sawtooth from there, so the partition label
+    is the pure slice-phase index a reconstruction reads the modulation from.
+    ``blip_nulled`` drops both blips for the phase-correction navigator, and
+    ``n_lines`` truncates the train to the leading few those lines need.
+    """
+    count = epi.etl if n_lines is None else n_lines
+    epi.rf.freq_offset = gz_amplitude * center_m
+    epi.rf.phase_offset = -2 * np.pi * epi.rf.freq_offset * epi.rf.center
+
+    seq.add_block(epi.rf, epi.gz)
+    if getattr(epi, "wait_te", None) is not None:
+        seq.add_block(epi.wait_te)
+
+    if blip_nulled:
+        seq.add_block(epi.gx_pre)
+    else:
+        ky_scale = (origin_line - n_y / 2) / (n_y / 2)
+        epi.shot_labels[0].value = int(origin_line)
+        epi.shot_labels[1].value = 0
+        seq.add_block(epi.gx_pre, pp.scale_grad(epi.gy_pre, ky_scale), *epi.shot_labels)
+    for line in range(count):
+        rev_label.value = int(line % 2)
+        events = [epi.gx[line], epi.adc, rev_label]
+        if not blip_nulled:
+            for blip in (epi.gy_blips[line], epi.gz_blips[line]):
+                if blip is not None:
+                    events.append(blip)
+            events.extend(epi.line_labels[line])
+        events.extend(extra_line_labels)
+        seq.add_block(*events)
+    if blip_nulled:
+        seq.add_block(epi.gx_spoil)
+    else:
+        ky_scale = (origin_line - n_y / 2) / (n_y / 2)
+        seq.add_block(epi.gx_spoil, pp.scale_grad(epi.gy_rew, ky_scale))
+    if getattr(epi, "wait_tr", None) is not None:
+        seq.add_block(epi.wait_tr)
+
+
+def SmsCalibrationKernel(
+    system: pp.Opts,
+    *,
+    fov,
+    n_x: int,
+    n_y: int,
+    slice_thickness: float,
+    slice_gap: float,
+    n_slices: int,
+    n_bands: int,
+    flip_angle_deg: float,
+    n_acs: int = 24,
+    te: float | None = None,
+    tr: float | None = None,
+    segments: int = 1,
+    acceleration: int = 1,
+    readout_bandwidth_hz: float = 500e3,
+    slice_order: str = "interleaved",
+    spoiling_cycles: float = 4.0,
+) -> pp.Sequence:
+    """The multiband calibration file: phase navigator, then the GRE calibration.
+
+    Three blip-nulled navigator lines (``NAV``) carry the odd/even phase, then
+    the same low-resolution slice-selective gradient echo the plain accelerated
+    scan calibrates from (:func:`GreCalibrationKernel`) is played, a central
+    ``n_acs`` block per slice marked ``REF`` (``ACQ_IS_PARALLEL_CALIBRATION``) so
+    a reconstruction estimates each slice's coil sensitivities free of EPI
+    distortion. Its own sequence in the linked collection, kept out of the
+    imaging repeating unit, and played once for the whole time series.
+    """
+    slice_step = slice_thickness + slice_gap
+    kernel = SmsKernel(
+        system,
+        fov=fov,
+        n_x=n_x,
+        n_y=n_y,
+        slice_thickness=slice_thickness,
+        slice_step=slice_step,
+        n_slices=n_slices,
+        n_bands=n_bands,
+        flip_angle_deg=flip_angle_deg,
+        te=te,
+        tr=tr,
+        segments=segments,
+        acceleration=acceleration,
+        readout_bandwidth_hz=readout_bandwidth_hz,
+        spoiling_cycles=spoiling_cycles,
+    )
+    epi = kernel.epi
+    gz_amplitude = float(kernel.sms.gz.amplitude)
+    fov_x, fov_y = kernel.fov
+    n_groups = kernel.n_groups
+
+    seq = pp.Sequence(system)
+    rev_label = pp.make_label("REV", "SET", 0)
+    sms_off = pp.make_label("SMS", "SET", 0)
+    ref_off = pp.make_label("REF", "SET", 0)
+    nav_on = pp.make_label("NAV", "SET", 1)
+    nav_off = pp.make_label("NAV", "SET", 0)
+
+    # Phase-correction navigator: the multiband readout, blips nulled, at the
+    # centre group -- its odd/even fit is the readout's, blips or not.
+    SmsShotKernel(
+        seq,
+        epi,
+        n_y=n_y,
+        center_m=sms_group_center(n_groups // 2, n_slices, n_bands, slice_step),
+        gz_amplitude=gz_amplitude,
+        origin_line=0,
+        rev_label=rev_label,
+        extra_line_labels=(nav_on, ref_off, sms_off),
+        blip_nulled=True,
+        n_lines=NAVIGATOR_LINES,
+    )
+
+    # Coil calibration: the shared low-res GRE, one slice at a time, marked REF.
+    # ``nav_off``/``sms_off`` reset the labels the navigator set on the file.
+    GreCalibrationKernel(
+        seq,
+        system,
+        fov_x=fov_x,
+        fov_y=fov_y,
+        n_x=n_x,
+        n_y=n_y,
+        n_slices=n_slices,
+        slice_thickness=slice_thickness,
+        slice_gap=slice_gap,
+        flip_angle_deg=flip_angle_deg,
+        n_acs=n_acs,
+        readout_bandwidth_hz=readout_bandwidth_hz,
+        slice_order=slice_order,
+        spoiling_cycles=spoiling_cycles,
+        extra_labels=(nav_off, sms_off),
+    )
+
+    seq.set_definition(key="FOV", value=[fov_x, fov_y, slice_thickness * n_slices])
+    seq.set_definition(key="Matrix", value=[n_x, n_y, n_slices])
+    seq.set_definition(key="Name", value="sms_epi_2d_calibration")
+    seq.set_definition(key="EchoSpacing", value=epi.esp)
+    return seq
+
+
+def SmsSequenceKernel(
+    system: pp.Opts,
+    *,
+    fov,
+    fov_offset: tuple[float, float, float] = (0.0, 0.0, 0.0),
+    n_x: int,
+    n_y: int,
+    slice_thickness: float,
+    slice_gap: float,
+    n_slices: int,
+    n_bands: int,
+    flip_angle_deg: float,
+    n_acs: int = 24,
+    te: float | None = None,
+    tr: float | None = None,
+    n_repetitions: int = 1,
+    segments: int = 1,
+    acceleration: int = 1,
+    readout_bandwidth_hz: float = 500e3,
+    slice_order: str = "interleaved",
+    spoiling_cycles: float = 4.0,
+) -> pp.Sequence:
+    """The multiband imaging file: blipped-CAIPI shots, one per (segment, group).
+
+    Imaging only -- the shots are multiband (``SMS``), the group in ``SLC``,
+    and the blipped-CAIPI gz encoding is what a model-based separation inverts
+    against the calibration. The phase navigator and the coil calibration are
+    their own sequence in the linked collection (:func:`SmsCalibrationKernel`), so
+    this file is one clean repeating unit; ``MultibandFactor`` records it.
+    ``n_acs`` is accepted for a uniform call from :func:`main` but unused here,
+    the imaging carrying no calibration lines.
+    """
+    del n_acs
+    slice_step = slice_thickness + slice_gap
+    kernel = SmsKernel(
+        system,
+        fov=fov,
+        n_x=n_x,
+        n_y=n_y,
+        slice_thickness=slice_thickness,
+        slice_step=slice_step,
+        n_slices=n_slices,
+        n_bands=n_bands,
+        flip_angle_deg=flip_angle_deg,
+        te=te,
+        tr=tr,
+        segments=segments,
+        acceleration=acceleration,
+        readout_bandwidth_hz=readout_bandwidth_hz,
+        spoiling_cycles=spoiling_cycles,
+    )
+    epi = kernel.epi
+    gz_amplitude = float(kernel.sms.gz.amplitude)
+    fov_x, fov_y = kernel.fov
+    n_groups = kernel.n_groups
+
+    seq = pp.Sequence(system)
+    rev_label = pp.make_label("REV", "SET", 0)
+    slc_label = pp.make_label("SLC", "SET", 0)
+    rep_label = pp.make_label("REP", "SET", 0)
+    sms_on = pp.make_label("SMS", "SET", 1)
+    ref_off = pp.make_label("REF", "SET", 0)
+    nav_off = pp.make_label("NAV", "SET", 0)
+
+    # Multiband imaging: one shot per (segment, group), the group in SLC.
+    groups = [int(g) for g in pp.calc_traversal_order(n_groups, slice_order)]
+    for repetition in range(n_repetitions):
+        rep_label.value = int(repetition)
+        for segment in range(segments):
+            for group in groups:
+                slc_label.value = int(group)
+                SmsShotKernel(
+                    seq,
+                    epi,
+                    n_y=n_y,
+                    center_m=sms_group_center(
+                        group, n_slices, n_bands, slice_step
+                    ),
+                    gz_amplitude=gz_amplitude,
+                    origin_line=segment,
+                    rev_label=rev_label,
+                    extra_line_labels=(slc_label, rep_label, sms_on, ref_off, nav_off),
+                )
+
+    pp.TransformFOV(
+        translation=tuple(offset * 1e3 for offset in fov_offset), system=system
+    ).apply_to_sequence(seq, in_place=True)
+
+    slab_thickness = n_slices * slice_step - slice_gap
+    seq.set_definition(key="FOV", value=[fov_x, fov_y, slab_thickness])
+    seq.set_definition(key="Matrix", value=[n_x, n_y, n_slices])
+    seq.set_definition(key="Name", value="sms_epi_2d")
+    seq.set_definition(key="TE", value=epi.echo_times[len(epi.order) // 2])
+    seq.set_definition(key="EchoSpacing", value=epi.esp)
+    seq.set_definition(key="EPIFactor", value=epi.etl)
+    seq.set_definition(key="MultibandFactor", value=n_bands)
+    return seq
+
+
+def SharedKernel(
+    system: pp.Opts,
+    *,
+    fov,
+    n_x: int,
+    n_y: int,
+    slice_thickness: float,
+    flip_angle_deg: float,
+    te: float | None = None,
+    tr: float | None = None,
+    segments: int = 1,
+    acceleration: int = 1,
+    readout_bandwidth_hz: float = 500e3,
+    spoiling_cycles: float = 4.0,
+) -> SimpleNamespace:
+    """The excitation and train both sequences are built from."""
+    fov_x, fov_y = (fov, fov) if isinstance(fov, (int, float)) else fov
+    excitation = design.SpatialSelectiveExcitation(
+        system,
+        flip_angle_deg,
+        slice_thickness,
+        duration_s=PULSE_DURATION,
+        time_bw_product=TIME_BW_PRODUCT,
+    )
+    epi = design.EpiReadout2D(
+        system,
+        excitation.rf,
+        excitation.gz,
+        excitation.gz_reph,
+        fov=(fov_x, fov_y),
+        matrix=(n_x, n_y),
+        segments=segments,
+        acceleration=acceleration,
+        te=te,
+        tr=tr,
+        readout_bandwidth_hz=readout_bandwidth_hz,
+        spoiling_cycles=spoiling_cycles,
+        labels=("LIN",),
+    )
+    return SimpleNamespace(
+        excitation=excitation, epi=epi, fov=(fov_x, fov_y)
+    )
+
+
+def ShotKernel(
+    seq,
+    epi,
+    *,
+    origin_line: int | None,
+    n_y: int,
+    rev_label,
+    extra_line_labels=(),
+    invert_phase: bool = False,
+    blip_nulled: bool = False,
+    n_lines: int | None = None,
+) -> None:
+    """One excitation and its train, per the module's loop contract.
+
+    ``origin_line`` is the absolute first line; ``None`` nulls the prewinder
+    (the navigator's centre line). ``invert_phase`` negates every
+    phase-encode event -- the opposite-PE reference. ``blip_nulled`` drops
+    the blips, and ``n_lines`` truncates the train.
+    """
+    sign = -1.0 if invert_phase else 1.0
+    count = epi.etl if n_lines is None else n_lines
+
+    # The slice rephaser runs straight off the selection lobe: with the TE
+    # wait when there is one, in the prewinder block otherwise -- the block
+    # the module itself puts it in. Without it the slice never refocuses.
+    rephaser = [epi.gz_reph] if getattr(epi, "gz_reph", None) is not None else []
+
+    seq.add_block(epi.rf, epi.gz)
+    if getattr(epi, "wait_te", None) is not None:
+        seq.add_block(epi.wait_te, *rephaser)
+        rephaser = []
+
+    scale = 0.0 if origin_line is None else sign * (origin_line - n_y / 2) / (n_y / 2)
+    if origin_line is not None:
+        epi.shot_labels[0].value = int(origin_line)
+    seq.add_block(
+        epi.gx_pre,
+        pp.scale_grad(epi.gy_pre, scale),
+        *rephaser,
+        *(epi.shot_labels if origin_line is not None else ()),
+    )
+    for line in range(count):
+        rev_label.value = int(line % 2)
+        events = [epi.gx[line], epi.adc, rev_label]
+        blip = epi.gy_blips[line]
+        if blip is not None and not blip_nulled:
+            events.append(blip if not invert_phase else pp.scale_grad(blip, -1.0))
+        events.extend(epi.line_labels[line] if origin_line is not None else ())
+        events.extend(extra_line_labels)
+        seq.add_block(*events)
+    seq.add_block(epi.gx_spoil, pp.scale_grad(epi.gy_rew, scale))
+    if getattr(epi, "wait_tr", None) is not None:
+        seq.add_block(epi.wait_tr)
+
+
+def NavigatorKernel(
+    *,
+    system: pp.Opts | None = None,
+    fov: float | tuple[float, float] = 220e-3,
+    n_x: int = 128,
+    n_y: int = 128,
+    n_slices: int = 1,
+    slice_thickness: float = 5e-3,
+    slice_gap: float = 0.0,
+    flip_angle_deg: float = 70.0,
+    te: float | None = None,
+    tr: float | None = None,
+    segments: int = 1,
+    acceleration: int = 1,
+    readout_bandwidth_hz: float = 500e3,
+    opposite_reference: bool = True,
+    slice_order: str = "interleaved",
+    spoiling_cycles: float = 4.0,
+) -> pp.Sequence:
+    """Build the navigator sequence: blip-nulled lines, and the reference.
+
+    Three centre lines with the blips dropped, labelled ``NAV`` and ``REF``
+    with ``REV`` marking the reversed ones -- what an odd/even phase fit
+    reads -- then, optionally, one full shot with every phase-encode event
+    negated, labelled ``SET = 1``: the opposite-polarity acquisition a
+    distortion correction pairs with the main scan.
+
+    Parameters mirror :func:`main` where they overlap.
+
+    Returns
+    -------
+    seq : pulserver.pypulseq.Sequence
+        The navigator sequence.
+    """
+    system = pp.Opts() if system is None else system
+    system = pp.cap_system(system, max_grad=MAX_GRAD, max_slew=MAX_SLEW)
+    kernel = SharedKernel(
+        system,
+        fov=fov,
+        n_x=n_x,
+        n_y=n_y,
+        slice_thickness=slice_thickness,
+        flip_angle_deg=flip_angle_deg,
+        te=te,
+        tr=tr,
+        segments=segments,
+        acceleration=acceleration,
+        readout_bandwidth_hz=readout_bandwidth_hz,
+        spoiling_cycles=spoiling_cycles,
+    )
+    epi = kernel.epi
+    excitation = kernel.excitation
+    slice_positions = (np.arange(n_slices) - (n_slices - 1) / 2) * (
+        slice_thickness + slice_gap
+    )
+
+    seq = pp.Sequence(system)
+    rev_label = pp.make_label("REV", "SET", 0)
+    nav_label = pp.make_label("NAV", "SET", 1)
+    ref_label = pp.make_label("REF", "SET", 1)
+    nav_clear = pp.make_label("NAV", "SET", 0)
+    ref_clear = pp.make_label("REF", "SET", 0)
+    set_label = pp.make_label("SET", "SET", 1)
+    slc_label = pp.make_label("SLC", "SET", 0)
+
+    # Match the main scan's slice order so the navigator's phase estimate is
+    # acquired under the same slice-to-slice timing.
+    for i_slice in (int(i) for i in pp.calc_traversal_order(n_slices, slice_order)):
+        epi.rf.freq_offset = excitation.gz.amplitude * slice_positions[i_slice]
+        epi.rf.phase_offset = -2 * np.pi * epi.rf.freq_offset * epi.rf.center
+        slc_label.value = int(i_slice)
+
+        ShotKernel(
+            seq,
+            epi,
+            origin_line=None,
+            n_y=n_y,
+            rev_label=rev_label,
+            extra_line_labels=(nav_label, ref_label, slc_label),
+            blip_nulled=True,
+            n_lines=NAVIGATOR_LINES,
+        )
+        if opposite_reference:
+            ShotKernel(
+                seq,
+                epi,
+                origin_line=0,
+                n_y=n_y,
+                rev_label=rev_label,
+                extra_line_labels=(nav_clear, ref_clear, set_label, slc_label),
+                invert_phase=True,
+            )
+
+    fov_x, fov_y = kernel.fov
+    seq.set_definition(key="FOV", value=[fov_x, fov_y, slice_thickness * n_slices])
+    seq.set_definition(key="Matrix", value=[n_x, n_y, n_slices])
+    seq.set_definition(key="Name", value="epi_2d_navigator")
+    seq.set_definition(key="EchoSpacing", value=epi.esp)
+    return seq
+
+
+def GreCalibrationKernel(
+    seq: pp.Sequence,
+    system: pp.Opts,
+    *,
+    fov_x: float,
+    fov_y: float,
+    n_x: int,
+    n_y: int,
+    n_slices: int,
+    slice_thickness: float,
+    slice_gap: float,
+    flip_angle_deg: float,
+    n_acs: int,
+    readout_bandwidth_hz: float,
+    slice_order: str,
+    spoiling_cycles: float,
+    extra_labels: tuple = (),
+) -> list[int]:
+    """Add a per-slice low-resolution slice-selective gradient echo to ``seq``.
+
+    A fully sampled central ``n_acs`` block per slice, one line per repetition,
+    marked ``REF`` (``ACQ_IS_PARALLEL_CALIBRATION``, coil calibration only) and
+    ``SLC``/``LIN``. A plain gradient echo rather than an EPI train keeps EPI
+    distortion out of the coil maps. ``extra_labels`` are appended to every ADC
+    block, so a caller sharing the file with other data (the multiband
+    calibration's phase navigator) can reset the labels those lines set.
+
+    Returns the acquired calibration lines (empty when none are asked for), so
+    the caller can decide whether the block was laid down at all.
+    """
+    acs_lines = pp.calc_calibration_lines(n_y, n_acs)
+    if not acs_lines:
+        return []
+
+    excitation = design.SpatialSelectiveExcitation(system, flip_angle_deg, slice_thickness)
+    readout = design.LineReadout2D(
+        system,
+        excitation.rf,
+        excitation.gz,
+        excitation.gz_reph,
+        fov=(fov_x, fov_y),
+        matrix=(n_x, n_y),
+        readout_bandwidth_hz=readout_bandwidth_hz,
+        spoiling_cycles=spoiling_cycles,
+    )
+    slice_positions = (np.arange(n_slices) - (n_slices - 1) / 2) * (
+        slice_thickness + slice_gap
+    )
+
+    ref_label = pp.make_label("REF", "SET", 1)
+    slc_label = pp.make_label("SLC", "SET", 0)
+    lin_label = pp.make_label("LIN", "SET", 0)
+    for i_slice in (int(i) for i in pp.calc_traversal_order(n_slices, slice_order)):
+        readout.rf.freq_offset = excitation.gz.amplitude * slice_positions[i_slice]
+        readout.rf.phase_offset = -2 * np.pi * readout.rf.freq_offset * readout.rf.center
+        slc_label.value = int(i_slice)
+        for line in acs_lines:
+            ky = (line - n_y / 2) / (n_y / 2)
+            lin_label.value = int(line)
+            seq.add_block(readout.rf, readout.gz)
+            seq.add_block(
+                readout.gx_pre, pp.scale_grad(readout.gy_pre, ky), readout.gz_reph
+            )
+            seq.add_block(
+                readout.gx, readout.adc, ref_label, slc_label, lin_label, *extra_labels
+            )
+            seq.add_block(readout.gx_spoil, pp.scale_grad(readout.gy_rew, ky))
+    return acs_lines
+
+
+def CalibrationKernel(
+    *,
+    system: pp.Opts | None = None,
+    fov: float | tuple[float, float] = 220e-3,
+    n_x: int = 128,
+    n_y: int = 128,
+    n_slices: int = 1,
+    slice_thickness: float = 5e-3,
+    slice_gap: float = 0.0,
+    flip_angle_deg: float = 70.0,
+    n_acs: int = 24,
+    readout_bandwidth_hz: float = 500e3,
+    slice_order: str = "interleaved",
+    spoiling_cycles: float = 4.0,
+) -> pp.Sequence:
+    """A low-resolution slice-selective gradient echo, one slice at a time.
+
+    The autocalibration for the parallel-imaging reconstruction: a fully sampled
+    central ``n_acs`` block per slice, every line ``REF``
+    (``ACQ_IS_PARALLEL_CALIBRATION``, coil calibration only). A plain gradient
+    echo rather than an EPI train keeps EPI distortion out of the coil maps, and
+    its own sequence in the linked collection so the imaging stays one clean
+    repeating unit. Both the accelerated plain scan and the multiband
+    (:func:`SmsCalibrationKernel`) path calibrate from this block. Parameters mirror
+    :func:`main`.
+
+    Returns
+    -------
+    seq : pulserver.pypulseq.Sequence
+        The calibration sequence, or ``None`` when no calibration is asked for.
+    """
+    system = pp.Opts() if system is None else system
+    system = pp.cap_system(system, max_grad=MAX_GRAD, max_slew=MAX_SLEW)
+    fov_x, fov_y = (fov, fov) if isinstance(fov, (int, float)) else fov
+
+    seq = pp.Sequence(system)
+    acs_lines = GreCalibrationKernel(
+        seq,
+        system,
+        fov_x=fov_x,
+        fov_y=fov_y,
+        n_x=n_x,
+        n_y=n_y,
+        n_slices=n_slices,
+        slice_thickness=slice_thickness,
+        slice_gap=slice_gap,
+        flip_angle_deg=flip_angle_deg,
+        n_acs=n_acs,
+        readout_bandwidth_hz=readout_bandwidth_hz,
+        slice_order=slice_order,
+        spoiling_cycles=spoiling_cycles,
+    )
+    if not acs_lines:
+        return None
+
+    seq.set_definition(key="FOV", value=[fov_x, fov_y, slice_thickness * n_slices])
+    seq.set_definition(key="Matrix", value=[n_x, n_y, n_slices])
+    seq.set_definition(key="Name", value="epi_2d_calibration")
+    return seq
+
+
+def needs_calibration(kwargs: dict) -> bool:
     """Whether the scan is undersampled enough to want a coil calibration."""
     return kwargs.get("acceleration", 1) > 1
 
@@ -1036,16 +1052,16 @@ def write_pair(main_seq: pp.Sequence, seq_filename: str, **kwargs) -> tuple[str,
     # fully sampled scan reconstructs from itself and needs no coil maps.
     system = kwargs.get("system")
     calib = (
-        calibration(
+        CalibrationKernel(
             system=system,
-            **{name: value for name, value in kwargs.items() if name in _CALIBRATION_ARGUMENTS},
+            **{name: value for name, value in kwargs.items() if name in CALIBRATION_ARGUMENTS},
         )
-        if _needs_calibration(kwargs)
+        if needs_calibration(kwargs)
         else None
     )
-    nav = navigator(
+    nav = NavigatorKernel(
         system=system,
-        **{name: value for name, value in kwargs.items() if name in _NAVIGATOR_ARGUMENTS},
+        **{name: value for name, value in kwargs.items() if name in NAVIGATOR_ARGUMENTS},
     )
 
     # calibration -> navigator -> main; the calibration drops out when absent,
@@ -1065,8 +1081,34 @@ def write_pair(main_seq: pp.Sequence, seq_filename: str, **kwargs) -> tuple[str,
     return tuple(str(seq_path) for _, seq_path in chain)
 
 
-#: What :func:`_sms_calibration` takes of :func:`main`'s keywords.
-_SMS_CALIBRATION_ARGUMENTS = frozenset(
+def _write_sms_collection(
+    main_seq: pp.Sequence, seq_filename: str, system: pp.Opts, kwargs: dict
+) -> tuple[str, str]:
+    """Write the multiband collection: calibration first, then imaging.
+
+    The calibration -- phase navigator plus single-band reference -- leads the
+    chain at ``seq_filename`` and points ``NextSequence`` at the imaging file
+    beside it, so the interpreter plays them in order while each stays its own
+    repeating unit.
+    """
+    path = Path(seq_filename)
+    main_path = path.with_name(path.stem + "_main.seq")
+    calib = SmsCalibrationKernel(
+        system,
+        **{name: value for name, value in kwargs.items() if name in SMS_CALIBRATION_ARGUMENTS},
+    )
+    calib.set_definition(key="NextSequence", value=main_path.name)
+    write_sequence(calib, str(path), offline=True)
+    write_sequence(main_seq, str(main_path), offline=True)
+    return str(path), str(main_path)
+
+
+# ======================================================================
+# The scanner protocol contract
+# ======================================================================
+
+#: What :func:`SmsCalibrationKernel` takes of :func:`main`'s keywords.
+SMS_CALIBRATION_ARGUMENTS = frozenset(
     (
         "fov",
         "n_x",
@@ -1086,28 +1128,6 @@ _SMS_CALIBRATION_ARGUMENTS = frozenset(
         "spoiling_cycles",
     )
 )
-
-
-def _write_sms_collection(
-    main_seq: pp.Sequence, seq_filename: str, system: pp.Opts, kwargs: dict
-) -> tuple[str, str]:
-    """Write the multiband collection: calibration first, then imaging.
-
-    The calibration -- phase navigator plus single-band reference -- leads the
-    chain at ``seq_filename`` and points ``NextSequence`` at the imaging file
-    beside it, so the interpreter plays them in order while each stays its own
-    repeating unit.
-    """
-    path = Path(seq_filename)
-    main_path = path.with_name(path.stem + "_main.seq")
-    calib = _sms_calibration(
-        system,
-        **{name: value for name, value in kwargs.items() if name in _SMS_CALIBRATION_ARGUMENTS},
-    )
-    calib.set_definition(key="NextSequence", value=main_path.name)
-    write_sequence(calib, str(path), offline=True)
-    write_sequence(main_seq, str(main_path), offline=True)
-    return str(path), str(main_path)
 
 
 class Epi2D(SequencePlugin):
@@ -1217,7 +1237,7 @@ class Epi2D(SequencePlugin):
     def validate_protocol(self, system: pp.Opts, protocol: dict[str, dict]) -> dict:
         """Report whether the protocol is feasible, and how long it will take."""
         system = pp.cap_system(system, max_grad=MAX_GRAD, max_slew=MAX_SLEW)
-        kwargs = _main_kwargs(system, protocol)
+        kwargs = protocol_kwargs(system, protocol)
         n_bands = kwargs.get("n_bands", 1)
         multiband = SMS_EXCITATION and n_bands > 1
         n_slices = kwargs.get("n_slices", 1)
@@ -1229,17 +1249,17 @@ class Epi2D(SequencePlugin):
             }
         try:
             if multiband:
-                kernel = _sms_kernel(
+                kernel = SmsKernel(
                     system,
                     slice_step=kwargs["slice_thickness"] + kwargs.get("slice_gap", 0.0),
                     n_slices=n_slices,
                     n_bands=n_bands,
-                    **{name: value for name, value in kwargs.items() if name in _KERNEL_ARGUMENTS},
+                    **{name: value for name, value in kwargs.items() if name in KERNEL_ARGUMENTS},
                 )
             else:
-                kernel = _shared_kernel(
+                kernel = SharedKernel(
                     system,
-                    **{name: value for name, value in kwargs.items() if name in _KERNEL_ARGUMENTS},
+                    **{name: value for name, value in kwargs.items() if name in KERNEL_ARGUMENTS},
                 )
         except ValueError as error:
             return {"valid": False, "duration": None, "info": str(error)}
@@ -1248,9 +1268,9 @@ class Epi2D(SequencePlugin):
             imaging = kwargs.get("segments", 1) * kernel.n_groups
             per_rep = imaging * kernel.epi.seq.duration()[0]
             # The coil calibration is the shared low-res GRE, played once.
-            calib = calibration(
+            calib = CalibrationKernel(
                 system=system,
-                **{name: value for name, value in kwargs.items() if name in _CALIBRATION_ARGUMENTS},
+                **{name: value for name, value in kwargs.items() if name in CALIBRATION_ARGUMENTS},
             )
             calib_duration = calib.duration()[0] if calib is not None else 0.0
             duration = calib_duration + kwargs.get("n_repetitions", 1) * per_rep
@@ -1280,7 +1300,7 @@ class Epi2D(SequencePlugin):
         """Write the acquisition as a linked collection: a navigator+main pair,
         or a calibration+main pair when the SMS path is on."""
         del offline  # the chain is followed from files, so both are written
-        kwargs = _main_kwargs(system, protocol)
+        kwargs = protocol_kwargs(system, protocol)
         seq = main(**kwargs)
         if SMS_EXCITATION and kwargs.get("n_bands", 1) > 1:
             system = pp.cap_system(system, max_grad=MAX_GRAD, max_slew=MAX_SLEW)
@@ -1291,7 +1311,7 @@ class Epi2D(SequencePlugin):
         write_pair(seq, output_path, system=system, **kwargs)
 
 
-_KERNEL_ARGUMENTS = frozenset(
+KERNEL_ARGUMENTS = frozenset(
     (
         "fov",
         "n_x",
@@ -1307,7 +1327,7 @@ _KERNEL_ARGUMENTS = frozenset(
     )
 )
 
-_CALIBRATION_ARGUMENTS = frozenset(
+CALIBRATION_ARGUMENTS = frozenset(
     (
         "fov",
         "n_x",
@@ -1323,7 +1343,7 @@ _CALIBRATION_ARGUMENTS = frozenset(
     )
 )
 
-_NAVIGATOR_ARGUMENTS = frozenset(
+NAVIGATOR_ARGUMENTS = frozenset(
     (
         "fov",
         "n_x",
@@ -1344,7 +1364,7 @@ _NAVIGATOR_ARGUMENTS = frozenset(
 )
 
 
-def _main_kwargs(system: pp.Opts, protocol: dict[str, dict]) -> dict:
+def protocol_kwargs(system: pp.Opts, protocol: dict[str, dict]) -> dict:
     """The prescribed quantities, plus this sequence's own user slots."""
     prot = dict_to_protocol(protocol)
     return main_kwargs(
@@ -1379,7 +1399,7 @@ def make_sequence(system, protocol, output_path):
     return PLUGIN.make_sequence(system, protocol, output_path)
 
 
-_ARG_MAP = [
+ARG_MAP = [
     ("--te-ms", UIParam.TE, float, "Echo time [ms], or a negative TEPreset"),
     ("--tr-ms", UIParam.TR, float, "Repetition time [ms], or a negative TRPreset"),
     ("--flip-deg", UIParam.FLIP, float, "Flip angle [deg]"),
@@ -1412,7 +1432,7 @@ if __name__ == "__main__":
         run_cli(
             PLUGIN,
             sys.argv[1:],
-            arg_map=_ARG_MAP,
+            arg_map=ARG_MAP,
             description="Generate a linked 2D EPI navigator + main .seq pair offline.",
             default_output="epi_2d.seq",
         )

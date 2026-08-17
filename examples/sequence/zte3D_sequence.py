@@ -178,6 +178,10 @@ def main(
     return seq
 
 
+# ======================================================================
+# Subroutines of main()
+# ======================================================================
+
 def ZteKernel(
     system: pp.Opts,
     *,
@@ -236,6 +240,10 @@ readout_bandwidth_hz
     )
 
 
+# ======================================================================
+# The scanner protocol contract
+# ======================================================================
+
 class Zte3D(SequencePlugin):
     """The 3D ZTE behind the scanner protocol contract."""
 
@@ -282,11 +290,11 @@ class Zte3D(SequencePlugin):
     def validate_protocol(self, system: pp.Opts, protocol: dict[str, dict]) -> dict:
         """Report whether the protocol is feasible, and how long it will take."""
         system = pp.cap_system(system, max_grad=MAX_GRAD, max_slew=MAX_SLEW)
-        kwargs = _main_kwargs(system, protocol)
+        kwargs = protocol_kwargs(system, protocol)
         try:
             kernel = ZteKernel(
                 system,
-                **{name: value for name, value in kwargs.items() if name in _KERNEL_ARGUMENTS},
+                **{name: value for name, value in kwargs.items() if name in KERNEL_ARGUMENTS},
             )
         except ValueError as error:
             return {"valid": False, "duration": None, "info": str(error)}
@@ -312,11 +320,11 @@ class Zte3D(SequencePlugin):
         offline: bool = False,
     ) -> None:
         """Build the sequence and write it to ``output_path``."""
-        seq = main(**_main_kwargs(system, protocol))
+        seq = main(**protocol_kwargs(system, protocol))
         write_sequence(seq, output_path, offline=offline)
 
 
-_KERNEL_ARGUMENTS = frozenset(
+KERNEL_ARGUMENTS = frozenset(
     (
         "fov",
         "n_x",
@@ -329,7 +337,7 @@ _KERNEL_ARGUMENTS = frozenset(
 )
 
 
-def _main_kwargs(system: pp.Opts, protocol: dict[str, dict]) -> dict:
+def protocol_kwargs(system: pp.Opts, protocol: dict[str, dict]) -> dict:
     """The prescribed quantities, plus this sequence's own user slots."""
     prot = dict_to_protocol(protocol)
     views = round(params.user_float(prot, 0, 0.0))
@@ -362,7 +370,7 @@ def make_sequence(system, protocol, output_path):
     return PLUGIN.make_sequence(system, protocol, output_path)
 
 
-_ARG_MAP = [
+ARG_MAP = [
     ("--flip-deg", UIParam.FLIP, float, "Hard-pulse flip angle [deg]"),
     ("--fov-mm", UIParam.FOV, float, "Isotropic FOV [mm]"),
     ("--nx", UIParam.NX, int, "Isotropic matrix size"),
@@ -379,7 +387,7 @@ if __name__ == "__main__":
         run_cli(
             PLUGIN,
             sys.argv[1:],
-            arg_map=_ARG_MAP,
+            arg_map=ARG_MAP,
             description="Generate a 3D zero-echo-time .seq offline.",
             default_output="zte_3d.seq",
         )

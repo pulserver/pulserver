@@ -61,8 +61,8 @@ from pulserver import (
     write_sequence,
 )
 
-_PULSE_DURATION = 3e-3
-_TIME_BW_PRODUCT = 4.0
+PULSE_DURATION = 3e-3
+TIME_BW_PRODUCT = 4.0
 
 #: Per-plugin ceilings on the gradient and slew limits, in mT/m and T/m/s. The
 #: sequence is held below the smaller of these and what the scanner reports, so
@@ -76,120 +76,6 @@ MAX_SLEW = 200.0
 #: The selectable view orderings; see the module docstring. Each dispatches to
 #: the matching :mod:`pulserver.pypulseq` echo-train ordering builtin.
 ORDERINGS = ("linear", "centric", "radial", "radial_adaptive", "shuffling")
-
-
-def traps_flip_schedule(
-    etl: int,
-    n_center: int,
-    *,
-    alpha_min_deg: float = 60.0,
-    alpha_center_deg: float = 100.0,
-    alpha_max_deg: float = 160.0,
-    n_down: int = 6,
-) -> np.ndarray:
-    """A TRAPS-style refocusing flip train, in degrees.
-
-    Piecewise-linear in flip space between the four control points Busse's
-    method exposes: ``alpha_max`` at the first echo, ``alpha_min`` from echo
-    ``n_down``, ``alpha_center`` at the effective-TE echo, and ``alpha_max``
-    again at the train's end. Loose by design: the reference derives the
-    ramps from a prescribed signal envelope through EPG, and this keeps its
-    control points and its shape without the inversion.
-
-    Parameters
-    ----------
-    etl : int
-        Echo train length.
-    n_center : int
-        Zero-based echo index of the k-space centre.
-    alpha_min_deg : float, optional
-        Floor of the ramp-down, reached at echo ``n_down``. Default is 60.
-    alpha_center_deg : float, optional
-        Flip at the centre-of-k-space echo. Default is 100.
-    alpha_max_deg : float, optional
-        Flip at the first and last echoes. Default is 160.
-    n_down : int, optional
-        Echo (zero-based) where the initial ramp-down bottoms out. Default
-        is 6.
-
-    Returns
-    -------
-    numpy.ndarray
-        One flip per echo, degrees.
-    """
-    if etl < 1:
-        raise ValueError("etl must be >= 1")
-    control_echoes = [0]
-    control_flips = [alpha_max_deg]
-    bottom = min(max(1, n_down), max(1, etl - 1))
-    if bottom > 0 and bottom < etl:
-        control_echoes.append(bottom)
-        control_flips.append(alpha_min_deg)
-    if n_center > bottom:
-        control_echoes.append(n_center)
-        control_flips.append(alpha_center_deg)
-    if etl - 1 > max(control_echoes):
-        control_echoes.append(etl - 1)
-        control_flips.append(alpha_max_deg)
-    return np.interp(np.arange(etl), control_echoes, control_flips)
-
-
-def order_views(
-    views: list[tuple[int, int]],
-    etl: int,
-    n_center: int,
-    ordering: str,
-    grid: tuple[int, int],
-    *,
-    seed: int = 0,
-) -> list[list[tuple[int, int] | None]]:
-    """Deal ``(line, partition)`` views into trains, one view per echo.
-
-    Parameters
-    ----------
-    views : list of tuple
-        The views the sampling plan asks for.
-    etl : int
-        Echo train length.
-    n_center : int
-        Zero-based echo index the k-space centre should be acquired at.
-    ordering : str
-        One of :data:`ORDERINGS`.
-    grid : tuple of int
-        ``(n_y, n_z)``, locating the centre of k-space.
-    seed : int, optional
-        Seed of the shuffling permutation, so a scan is reproducible.
-
-    Returns
-    -------
-    list of list
-        One list per train, indexed by echo; ``None`` pads echoes with
-        nothing left to encode.
-    """
-    if ordering not in ORDERINGS:
-        raise ValueError(f"ordering must be one of {ORDERINGS}, got {ordering!r}")
-    n_y, n_z = grid
-    # The ordering builtins rank on the coordinates they are given, so pass the
-    # views centred on the k-space middle and normalised by the matrix -- what
-    # makes the radius isotropic in fractional k-space -- and index the shots of
-    # positions they return back into the original ``(line, partition)`` views.
-    coords = [((line - n_y / 2) / n_y, (partition - n_z / 2) / n_z) for line, partition in views]
-    if ordering == "shuffling":
-        shots = pp.make_shuffling_order(coords, etl, seed=seed, pad=True)
-    elif ordering == "linear":
-        shots = pp.make_linear_order(coords, etl, center=(0.0, 0.0), center_echo=n_center, pad=True)
-    elif ordering == "centric":
-        shots = pp.make_centric_order(coords, etl, center=(0.0, 0.0), center_echo=n_center, pad=True)
-    elif ordering == "radial":
-        shots = pp.make_radial_order(coords, etl, center=(0.0, 0.0), pad=True)
-    else:  # radial_adaptive
-        shots = pp.make_radial_adaptive_order(
-            coords, etl, center=(0.0, 0.0), center_echo=n_center, pad=True
-        )
-    return [
-        [views[index] if index is not None else None for index in shot]
-        for shot in shots
-    ]
 
 
 def main(
@@ -438,6 +324,124 @@ def main(
     return seq
 
 
+# ======================================================================
+# Subroutines of main()
+# ======================================================================
+
+def traps_flip_schedule(
+    etl: int,
+    n_center: int,
+    *,
+    alpha_min_deg: float = 60.0,
+    alpha_center_deg: float = 100.0,
+    alpha_max_deg: float = 160.0,
+    n_down: int = 6,
+) -> np.ndarray:
+    """A TRAPS-style refocusing flip train, in degrees.
+
+    Piecewise-linear in flip space between the four control points Busse's
+    method exposes: ``alpha_max`` at the first echo, ``alpha_min`` from echo
+    ``n_down``, ``alpha_center`` at the effective-TE echo, and ``alpha_max``
+    again at the train's end. Loose by design: the reference derives the
+    ramps from a prescribed signal envelope through EPG, and this keeps its
+    control points and its shape without the inversion.
+
+    Parameters
+    ----------
+    etl : int
+        Echo train length.
+    n_center : int
+        Zero-based echo index of the k-space centre.
+    alpha_min_deg : float, optional
+        Floor of the ramp-down, reached at echo ``n_down``. Default is 60.
+    alpha_center_deg : float, optional
+        Flip at the centre-of-k-space echo. Default is 100.
+    alpha_max_deg : float, optional
+        Flip at the first and last echoes. Default is 160.
+    n_down : int, optional
+        Echo (zero-based) where the initial ramp-down bottoms out. Default
+        is 6.
+
+    Returns
+    -------
+    numpy.ndarray
+        One flip per echo, degrees.
+    """
+    if etl < 1:
+        raise ValueError("etl must be >= 1")
+    control_echoes = [0]
+    control_flips = [alpha_max_deg]
+    bottom = min(max(1, n_down), max(1, etl - 1))
+    if bottom > 0 and bottom < etl:
+        control_echoes.append(bottom)
+        control_flips.append(alpha_min_deg)
+    if n_center > bottom:
+        control_echoes.append(n_center)
+        control_flips.append(alpha_center_deg)
+    if etl - 1 > max(control_echoes):
+        control_echoes.append(etl - 1)
+        control_flips.append(alpha_max_deg)
+    return np.interp(np.arange(etl), control_echoes, control_flips)
+
+
+def order_views(
+    views: list[tuple[int, int]],
+    etl: int,
+    n_center: int,
+    ordering: str,
+    grid: tuple[int, int],
+    *,
+    seed: int = 0,
+) -> list[list[tuple[int, int] | None]]:
+    """Deal ``(line, partition)`` views into trains, one view per echo.
+
+    Parameters
+    ----------
+    views : list of tuple
+        The views the sampling plan asks for.
+    etl : int
+        Echo train length.
+    n_center : int
+        Zero-based echo index the k-space centre should be acquired at.
+    ordering : str
+        One of :data:`ORDERINGS`.
+    grid : tuple of int
+        ``(n_y, n_z)``, locating the centre of k-space.
+    seed : int, optional
+        Seed of the shuffling permutation, so a scan is reproducible.
+
+    Returns
+    -------
+    list of list
+        One list per train, indexed by echo; ``None`` pads echoes with
+        nothing left to encode.
+    """
+    if ordering not in ORDERINGS:
+        raise ValueError(f"ordering must be one of {ORDERINGS}, got {ordering!r}")
+    n_y, n_z = grid
+    # The ordering builtins rank on the coordinates they are given, so pass the
+    # views centred on the k-space middle and normalised by the matrix -- what
+    # makes the radius isotropic in fractional k-space -- and index the shots of
+    # positions they return back into the original ``(line, partition)`` views.
+    coords = [((line - n_y / 2) / n_y, (partition - n_z / 2) / n_z) for line, partition in views]
+    if ordering == "shuffling":
+        shots = pp.make_shuffling_order(coords, etl, seed=seed, pad=True)
+    elif ordering == "linear":
+        shots = pp.make_linear_order(coords, etl, center=(0.0, 0.0), center_echo=n_center, pad=True)
+    elif ordering == "centric":
+        shots = pp.make_centric_order(coords, etl, center=(0.0, 0.0), center_echo=n_center, pad=True)
+    elif ordering == "radial":
+        shots = pp.make_radial_order(coords, etl, center=(0.0, 0.0), pad=True)
+    else:  # radial_adaptive
+        shots = pp.make_radial_adaptive_order(
+            coords, etl, center=(0.0, 0.0), center_echo=n_center, pad=True
+        )
+    return [
+        [views[index] if index is not None else None for index in shot]
+        for shot in shots
+    ]
+
+
 def FSE3DKernel(
     system: pp.Opts,
     *,
@@ -493,15 +497,15 @@ n_dummy, shuffle_seed, crusher_cycles, readout_crusher_cycles
         system,
         90.0,
         slab_thickness,
-        duration_s=_PULSE_DURATION,
-        time_bw_product=_TIME_BW_PRODUCT,
+        duration_s=PULSE_DURATION,
+        time_bw_product=TIME_BW_PRODUCT,
         is_slab=True,
     )
     refocusing = design.SpatialSelectiveRefocusing(
         system,
         slab_thickness,
-        duration_s=_PULSE_DURATION,
-        time_bw_product=_TIME_BW_PRODUCT,
+        duration_s=PULSE_DURATION,
+        time_bw_product=TIME_BW_PRODUCT,
         spoiling_cycles=crusher_cycles,
     )
 
@@ -600,6 +604,10 @@ n_dummy, shuffle_seed, crusher_cycles, readout_crusher_cycles
         duration=duration,
     )
 
+
+# ======================================================================
+# The scanner protocol contract
+# ======================================================================
 
 class Fse3D(SequencePlugin):
     """The 3D fast spin echo behind the scanner protocol contract."""
@@ -735,11 +743,11 @@ class Fse3D(SequencePlugin):
     def validate_protocol(self, system: pp.Opts, protocol: dict[str, dict]) -> dict:
         """Report whether the protocol is feasible, and how long it will take."""
         system = pp.cap_system(system, max_grad=MAX_GRAD, max_slew=MAX_SLEW)
-        kwargs = _main_kwargs(system, protocol)
+        kwargs = protocol_kwargs(system, protocol)
         try:
             kernel = FSE3DKernel(
                 system,
-                **{name: value for name, value in kwargs.items() if name in _KERNEL_ARGUMENTS},
+                **{name: value for name, value in kwargs.items() if name in KERNEL_ARGUMENTS},
             )
         except ValueError as error:
             return {"valid": False, "duration": None, "info": str(error)}
@@ -763,11 +771,11 @@ class Fse3D(SequencePlugin):
         offline: bool = False,
     ) -> None:
         """Build the sequence and write it to ``output_path``."""
-        seq = main(**_main_kwargs(system, protocol))
+        seq = main(**protocol_kwargs(system, protocol))
         write_sequence(seq, output_path, offline=offline)
 
 
-_KERNEL_ARGUMENTS = frozenset(
+KERNEL_ARGUMENTS = frozenset(
     (
         "fov",
         "n_x",
@@ -797,7 +805,7 @@ _KERNEL_ARGUMENTS = frozenset(
 )
 
 
-def _main_kwargs(system: pp.Opts, protocol: dict[str, dict]) -> dict:
+def protocol_kwargs(system: pp.Opts, protocol: dict[str, dict]) -> dict:
     """The prescribed quantities, plus this sequence's own user slots."""
     prot = dict_to_protocol(protocol)
     n_z = params.param_int(prot, UIParam.NSLICES)
@@ -840,7 +848,7 @@ def make_sequence(system, protocol, output_path):
     return PLUGIN.make_sequence(system, protocol, output_path)
 
 
-_ARG_MAP = [
+ARG_MAP = [
     ("--te-ms", UIParam.TE, float, "Effective echo time [ms], or a negative TEPreset"),
     ("--tr-ms", UIParam.TR, float, "Repetition time [ms], or a negative TRPreset"),
     ("--fov-mm", UIParam.FOV, float, "Readout FOV [mm]"),
@@ -887,7 +895,7 @@ if __name__ == "__main__":
         run_cli(
             PLUGIN,
             sys.argv[1:],
-            arg_map=_ARG_MAP,
+            arg_map=ARG_MAP,
             description="Generate a 3D Cartesian fast spin-echo .seq offline.",
             default_output="fse_3d.seq",
         )

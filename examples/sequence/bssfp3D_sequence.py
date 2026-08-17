@@ -39,6 +39,14 @@ from pulserver import (
     write_sequence,
 )
 
+#: SLR design of the selective pulses, held here rather than left at the design
+#: module's default so a script can retune the excitation without touching the
+#: loop. The selection amplitude follows as
+#: ``time_bw_product / (duration * thickness)``, which is also what a slice
+#: offset is converted against.
+PULSE_DURATION = 0.6e-3
+TIME_BW_PRODUCT = 4.0
+
 #: Per-plugin ceilings on the gradient and slew limits, in mT/m and T/m/s. The
 #: sequence is held below the smaller of these and what the scanner reports, so
 #: lowering them here -- on the scanner console, even -- reruns the whole script
@@ -273,6 +281,10 @@ def main(
     return seq
 
 
+# ======================================================================
+# Subroutines of main()
+# ======================================================================
+
 def Bssfp3DKernel(
     system: pp.Opts,
     *,
@@ -319,7 +331,12 @@ acceleration_z, caipi_shift, elliptical, n_acs, n_acs_z, n_dummy
     fov_x, fov_y = (fov, fov) if isinstance(fov, (int, float)) else fov
 
     excitation = design.SpatialSelectiveExcitation(
-        system, flip_angle_deg, slab_thickness, 0.6e-3, rephase=False
+        system,
+        flip_angle_deg,
+        slab_thickness,
+        duration_s=PULSE_DURATION,
+        rephase=False,
+        time_bw_product=TIME_BW_PRODUCT,
     )
     readout = design.BssfpReadout3D(
         system,
@@ -356,6 +373,10 @@ acceleration_z, caipi_shift, elliptical, n_acs, n_acs_z, n_dummy
         duration=duration,
     )
 
+
+# ======================================================================
+# The scanner protocol contract
+# ======================================================================
 
 class Bssfp3D(SequencePlugin):
     """The 3D balanced SSFP behind the scanner protocol contract."""
@@ -505,11 +526,11 @@ class Bssfp3D(SequencePlugin):
     def validate_protocol(self, system: pp.Opts, protocol: dict[str, dict]) -> dict:
         """Report whether the protocol is feasible, and how long it will take."""
         system = pp.cap_system(system, max_grad=MAX_GRAD, max_slew=MAX_SLEW)
-        kwargs = _main_kwargs(system, protocol)
+        kwargs = protocol_kwargs(system, protocol)
         try:
             kernel = Bssfp3DKernel(
                 system,
-                **{name: value for name, value in kwargs.items() if name in _KERNEL_ARGUMENTS},
+                **{name: value for name, value in kwargs.items() if name in KERNEL_ARGUMENTS},
             )
         except ValueError as error:
             return {"valid": False, "duration": None, "info": str(error)}
@@ -533,11 +554,11 @@ class Bssfp3D(SequencePlugin):
         offline: bool = False,
     ) -> None:
         """Build the sequence and write it to ``output_path``."""
-        seq = main(**_main_kwargs(system, protocol))
+        seq = main(**protocol_kwargs(system, protocol))
         write_sequence(seq, output_path, offline=offline)
 
 
-_KERNEL_ARGUMENTS = frozenset(
+KERNEL_ARGUMENTS = frozenset(
     (
         "fov",
         "n_x",
@@ -560,7 +581,7 @@ _KERNEL_ARGUMENTS = frozenset(
 )
 
 
-def _main_kwargs(system: pp.Opts, protocol: dict[str, dict]) -> dict:
+def protocol_kwargs(system: pp.Opts, protocol: dict[str, dict]) -> dict:
     """The prescribed quantities, plus this sequence's own user slots."""
     prot = dict_to_protocol(protocol)
     n_z = params.param_int(prot, UIParam.NSLICES)
@@ -599,7 +620,7 @@ def make_sequence(system, protocol, output_path):
     return PLUGIN.make_sequence(system, protocol, output_path)
 
 
-_ARG_MAP = [
+ARG_MAP = [
     ("--tr-ms", UIParam.TR, float, "Repetition time [ms], or a negative TRPreset"),
     ("--flip-deg", UIParam.FLIP, float, "Flip angle [deg]"),
     ("--fov-mm", UIParam.FOV, float, "Readout FOV [mm]"),
@@ -648,7 +669,7 @@ if __name__ == "__main__":
         run_cli(
             PLUGIN,
             sys.argv[1:],
-            arg_map=_ARG_MAP,
+            arg_map=ARG_MAP,
             description="Generate a 3D balanced SSFP .seq offline.",
             default_output="bssfp_3d.seq",
         )

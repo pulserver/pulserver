@@ -43,6 +43,14 @@ from scipy.spatial.transform import Rotation
 
 from pulserver.app.sequence.gre_radial2D_sequence import spoke_angles
 
+#: SLR design of the selective pulses, held here rather than left at the design
+#: module's default so a script can retune the excitation without touching the
+#: loop. The selection amplitude follows as
+#: ``time_bw_product / (duration * thickness)``, which is also what a slice
+#: offset is converted against.
+PULSE_DURATION = 3e-3
+TIME_BW_PRODUCT = 4.0
+
 #: Per-plugin ceilings on the gradient and slew limits, in mT/m and T/m/s. The
 #: sequence is held below the smaller of these and what the scanner reports, so
 #: lowering them here -- on the scanner console, even -- reruns the whole script
@@ -65,99 +73,6 @@ SPSP_EXCITATION = False
 #: excitation converts it against ``system.B0`` when the pulse is built, so the
 #: same script targets fat at 1.5 T and 3 T alike.
 FAT_SHIFT_PPM = -3.4
-
-
-def _build_slab_excitation(
-    system: pp.Opts, flip_angle_deg: float, thickness_m: float
-):
-    """The slab excitation, spectral-spatial when ``SPSP_EXCITATION`` is set.
-
-    Returns ``(excitation, rf, gz)``. The selection gradient carries its own
-    rephaser folded onto the end -- as a slab excitation does -- so the stack's
-    partition prewinder block, which already encodes z, never holds a second
-    z gradient.
-    """
-    if SPSP_EXCITATION:
-        fat_offset_hz = FAT_SHIFT_PPM * 1e-6 * system.gamma * system.B0
-        excitation = design.SpspExcitation(
-            system,
-            flip_angle_deg,
-            thickness_m=thickness_m,
-            spectral_bandwidth_hz=abs(fat_offset_hz),
-            freq_offset_hz=0.0,
-        )
-        # Concatenate the rephaser onto the alternating selection gradient, the
-        # way is_slab does, and hand the readout one merged z lobe.
-        gz = pp.concatenate_gradients(
-            excitation.gz, excitation.gz_reph, system=system
-        )
-        return excitation, excitation.rf, gz
-    excitation = design.SpatialSelectiveExcitation(
-        system, flip_angle_deg, thickness_m, is_slab=True
-    )
-    return excitation, excitation.rf, excitation.gz
-
-
-def stack_angles(angles, n_z: int, partition_offset_deg: float):
-    """The in-plane angle of every shot of a stack, and where to find it.
-
-    With no partition offset an arm is played at the same angle in every
-    partition, so the stack holds one angle per arm. An offset turns the arm a
-    little further with each partition, staggering the sampling along kz the
-    way a CAIPIRINHA shift does, and every ``(arm, partition)`` pair is then a
-    shot of its own.
-
-    Parameters
-    ----------
-    angles : array-like
-        One in-plane angle per arm, in radians.
-    n_z : int
-        Partitions in the stack.
-    partition_offset_deg : float
-        Angle added per partition step, in degrees.
-
-    Returns
-    -------
-    shot_angles : numpy.ndarray
-        One angle per shot.
-    shot_index : callable
-        ``(i_arm, partition) -> int``, where that shot sits in ``shot_angles``.
-    """
-    angles = np.asarray(angles, dtype=float)
-    step = np.deg2rad(float(partition_offset_deg))
-    if not step:
-        return angles, lambda i_arm, partition: int(i_arm)
-    shots = np.asarray(
-        [angle + partition * step for angle in angles for partition in range(n_z)]
-    )
-    return shots, lambda i_arm, partition: int(i_arm) * n_z + int(partition)
-
-
-def play_stack(seq, readout, blocks, rotation, kz: float, *, acquire: bool, first_extra=()) -> None:
-    """Replay one arm's blocks with the shot's orientation and partition.
-
-    The rotation rides every block that drives an in-plane gradient, when there
-    is one to give -- an explicit arm is already turned. The partition scales
-    the encode pair. A dummy drops the ADC and the counters that go with it.
-    """
-    extra_first = list(first_extra)
-    for block in blocks:
-        events = []
-        for event in block:
-            if not acquire and getattr(event, "type", "") in ("adc", "labelset"):
-                continue
-            if event is readout.gz_pre:
-                event = pp.scale_grad(readout.gz_pre, kz)
-            elif event is readout.gz_rew:
-                event = pp.scale_grad(readout.gz_rew, kz)
-            events.append(event)
-        additions = list(extra_first)
-        extra_first = []
-        if rotation is not None and any(
-            getattr(event, "channel", "") in ("x", "y") for event in events
-        ):
-            additions.append(rotation)
-        seq.add_block(*events, *additions)
 
 
 def main(
@@ -302,7 +217,7 @@ def main(
         readout.adc.phase_offset = rf_phase
         lin_label.value = int(i_arm)
         par_label.value = int(partition)
-        play_stack(
+        StackShotKernel(
             seq,
             readout,
             readout.arm(shot),
@@ -362,6 +277,108 @@ def main(
     return seq
 
 
+# ======================================================================
+# Subroutines of main()
+# ======================================================================
+
+def SlabExcitationKernel(
+    system: pp.Opts, flip_angle_deg: float, thickness_m: float
+):
+    """The slab excitation, spectral-spatial when ``SPSP_EXCITATION`` is set.
+
+    Returns ``(excitation, rf, gz)``. The selection gradient carries its own
+    rephaser folded onto the end -- as a slab excitation does -- so the stack's
+    partition prewinder block, which already encodes z, never holds a second
+    z gradient.
+    """
+    if SPSP_EXCITATION:
+        fat_offset_hz = FAT_SHIFT_PPM * 1e-6 * system.gamma * system.B0
+        excitation = design.SpspExcitation(
+            system,
+            flip_angle_deg,
+            thickness_m=thickness_m,
+            spectral_bandwidth_hz=abs(fat_offset_hz),
+            freq_offset_hz=0.0,
+        )
+        # Concatenate the rephaser onto the alternating selection gradient, the
+        # way is_slab does, and hand the readout one merged z lobe.
+        gz = pp.concatenate_gradients(
+            excitation.gz, excitation.gz_reph, system=system
+        )
+        return excitation, excitation.rf, gz
+    excitation = design.SpatialSelectiveExcitation(
+        system,
+        flip_angle_deg,
+        thickness_m,
+        duration_s=PULSE_DURATION,
+        is_slab=True,
+        time_bw_product=TIME_BW_PRODUCT,
+    )
+    return excitation, excitation.rf, excitation.gz
+
+
+def stack_angles(angles, n_z: int, partition_offset_deg: float):
+    """The in-plane angle of every shot of a stack, and where to find it.
+
+    With no partition offset an arm is played at the same angle in every
+    partition, so the stack holds one angle per arm. An offset turns the arm a
+    little further with each partition, staggering the sampling along kz the
+    way a CAIPIRINHA shift does, and every ``(arm, partition)`` pair is then a
+    shot of its own.
+
+    Parameters
+    ----------
+    angles : array-like
+        One in-plane angle per arm, in radians.
+    n_z : int
+        Partitions in the stack.
+    partition_offset_deg : float
+        Angle added per partition step, in degrees.
+
+    Returns
+    -------
+    shot_angles : numpy.ndarray
+        One angle per shot.
+    shot_index : callable
+        ``(i_arm, partition) -> int``, where that shot sits in ``shot_angles``.
+    """
+    angles = np.asarray(angles, dtype=float)
+    step = np.deg2rad(float(partition_offset_deg))
+    if not step:
+        return angles, lambda i_arm, partition: int(i_arm)
+    shots = np.asarray(
+        [angle + partition * step for angle in angles for partition in range(n_z)]
+    )
+    return shots, lambda i_arm, partition: int(i_arm) * n_z + int(partition)
+
+
+def StackShotKernel(seq, readout, blocks, rotation, kz: float, *, acquire: bool, first_extra=()) -> None:
+    """Replay one arm's blocks with the shot's orientation and partition.
+
+    The rotation rides every block that drives an in-plane gradient, when there
+    is one to give -- an explicit arm is already turned. The partition scales
+    the encode pair. A dummy drops the ADC and the counters that go with it.
+    """
+    extra_first = list(first_extra)
+    for block in blocks:
+        events = []
+        for event in block:
+            if not acquire and getattr(event, "type", "") in ("adc", "labelset"):
+                continue
+            if event is readout.gz_pre:
+                event = pp.scale_grad(readout.gz_pre, kz)
+            elif event is readout.gz_rew:
+                event = pp.scale_grad(readout.gz_rew, kz)
+            events.append(event)
+        additions = list(extra_first)
+        extra_first = []
+        if rotation is not None and any(
+            getattr(event, "channel", "") in ("x", "y") for event in events
+        ):
+            additions.append(rotation)
+        seq.add_block(*events, *additions)
+
+
 def StackOfStarsKernel(
     system: pp.Opts,
     *,
@@ -398,7 +415,7 @@ partition_angle_offset_deg, use_rotation_ext
         ``shot_index``, ``echo_time``, ``repetition_time``, ``bandwidth_hz``
         and ``duration``.
     """
-    excitation, exc_rf, exc_gz = _build_slab_excitation(
+    excitation, exc_rf, exc_gz = SlabExcitationKernel(
         system, flip_angle_deg, slab_thickness
     )
     count = -(-int(np.pi / 2 * n_x)) if n_spokes is None else int(n_spokes)
@@ -439,6 +456,10 @@ partition_angle_offset_deg, use_rotation_ext
         duration=duration,
     )
 
+
+# ======================================================================
+# The scanner protocol contract
+# ======================================================================
 
 class GreStackOfStars3D(SequencePlugin):
     """The 3D stack-of-stars gradient echo behind the scanner protocol contract."""
@@ -517,11 +538,11 @@ class GreStackOfStars3D(SequencePlugin):
     def validate_protocol(self, system: pp.Opts, protocol: dict[str, dict]) -> dict:
         """Report whether the protocol is feasible, and how long it will take."""
         system = pp.cap_system(system, max_grad=MAX_GRAD, max_slew=MAX_SLEW)
-        kwargs = _main_kwargs(system, protocol)
+        kwargs = protocol_kwargs(system, protocol)
         try:
             kernel = StackOfStarsKernel(
                 system,
-                **{name: value for name, value in kwargs.items() if name in _KERNEL_ARGUMENTS},
+                **{name: value for name, value in kwargs.items() if name in KERNEL_ARGUMENTS},
             )
         except ValueError as error:
             return {"valid": False, "duration": None, "info": str(error)}
@@ -544,11 +565,11 @@ class GreStackOfStars3D(SequencePlugin):
         offline: bool = False,
     ) -> None:
         """Build the sequence and write it to ``output_path``."""
-        seq = main(**_main_kwargs(system, protocol))
+        seq = main(**protocol_kwargs(system, protocol))
         write_sequence(seq, output_path, offline=offline)
 
 
-_KERNEL_ARGUMENTS = frozenset(
+KERNEL_ARGUMENTS = frozenset(
     (
         "fov",
         "n_x",
@@ -566,7 +587,7 @@ _KERNEL_ARGUMENTS = frozenset(
 )
 
 
-def _main_kwargs(system: pp.Opts, protocol: dict[str, dict]) -> dict:
+def protocol_kwargs(system: pp.Opts, protocol: dict[str, dict]) -> dict:
     """The prescribed quantities, plus this sequence's own user slots."""
     prot = dict_to_protocol(protocol)
     n_z = params.param_int(prot, UIParam.NSLICES)
@@ -603,7 +624,7 @@ def make_sequence(system, protocol, output_path):
     return PLUGIN.make_sequence(system, protocol, output_path)
 
 
-_ARG_MAP = [
+ARG_MAP = [
     ("--te-ms", UIParam.TE, float, "Echo time [ms], or a negative TEPreset"),
     ("--tr-ms", UIParam.TR, float, "Repetition time [ms], or a negative TRPreset"),
     ("--flip-deg", UIParam.FLIP, float, "Flip angle [deg]"),
@@ -630,7 +651,7 @@ if __name__ == "__main__":
         run_cli(
             PLUGIN,
             sys.argv[1:],
-            arg_map=_ARG_MAP,
+            arg_map=ARG_MAP,
             description="Generate a 3D stack-of-stars gradient-echo .seq offline.",
             default_output="gre_stack_of_stars_3d.seq",
         )

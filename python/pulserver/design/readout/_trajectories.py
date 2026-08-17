@@ -268,16 +268,17 @@ def _moment_bridges(system, area, grad_start, grad_end, axes):
 
     Each bridge is solved on its own, because each has its own moment to
     deliver -- but they are *played together*, and the limits are on the
-    vector. Two axes each solved against the full slew can combine to root-two
+    vector. Two axes each solved against the full ceiling combine to root-two
     times it, which no per-axis check sees and which the scanner does. Under a
     rotation it is not even hidden: the extension mixes the axes, so the
-    combined slew turns up on a single one.
+    combined amplitude turns up on a single one.
 
-    So the slew is derated by the square root of the number of axes being
-    bridged at once, which is the bound that makes any combination of them
-    legal. The amplitude is *not*: a bridge's endpoints are the readout's own,
-    fixed by a waveform already solved against the vector limit, and a derated
-    ceiling would simply refuse them.
+    So both the amplitude and the slew are derated by the square root of the
+    number of axes bridged at once, which is the bound that makes any
+    combination of them legal and leaves the bridge as rotation invariant as
+    the waveform it brackets. The endpoints are not excursions: they come from
+    a readout already solved against the vector limit, and enter as boundary
+    conditions the solver ramps around rather than as amplitudes it caps.
     """
     active = [
         index
@@ -287,13 +288,19 @@ def _moment_bridges(system, area, grad_start, grad_end, axes):
     if not active:
         return ()
 
-    limits = system
-    if len(active) > 1:
-        limits = copy.copy(system)
-        limits.max_slew = system.max_slew / math.sqrt(len(active))
+    derate = math.sqrt(len(active)) if len(active) > 1 else 1.0
 
     events = []
     for index in active:
+        limits = system
+        if derate > 1.0:
+            # The endpoint is the readout's own, so it sets the floor: a
+            # ceiling below it would refuse a boundary condition the vector
+            # limit already admits.
+            floor = max(abs(float(grad_start[index])), abs(float(grad_end[index])))
+            limits = copy.copy(system)
+            limits.max_slew = system.max_slew / derate
+            limits.max_grad = max(system.max_grad / derate, floor)
         grad, _, _ = pp.make_extended_trapezoid_area(
             area=float(area[index]),
             channel=axes[index],
