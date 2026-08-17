@@ -1,5 +1,14 @@
 # Safety
 
+```{toctree}
+:hidden:
+:maxdepth: 1
+
+gradient_slew
+pns
+mechanical_resonance
+```
+
 A Pulseq file cannot be checked against a scanner, because it does not
 describe one. Whether a sequence is playable is a statement about *this*
 system: its gradient amplifier, its coil geometry, its acoustic response, the

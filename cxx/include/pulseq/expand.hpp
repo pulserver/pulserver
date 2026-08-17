@@ -33,10 +33,12 @@
  * A `.seq` written this way plays identically under any interpreter, including
  * one that has never heard of `ONCE`, and the repetition index is a label a
  * reconstruction can sort by rather than something the interpreter has to
- * synthesise on the way past.  @ref ExpandOptions::set_ignore_averages writes
- * the `IgnoreAverages` definition that tells a Pulserver interpreter the
- * expansion has already happened, so a console-side repeat count cannot
- * multiply it a second time.
+ * synthesise on the way past.
+ *
+ * Whether a sequence carries its repetitions is the design's decision and is
+ * stated by whether this ran at all: a subsequence that should be acquired
+ * once -- an EPI calibration, say -- simply is not expanded.  Nothing is
+ * written into the file to say so, because the file already shows it.
  *
  * ### On removing the flags
  *
@@ -77,15 +79,6 @@ namespace pulseq
 
         /** Drop the `ONCE` flags once resolved.  See the file comment. */
         bool strip_once = true;
-
-        /**
-         * Write `IgnoreAverages 1` into `[DEFINITIONS]`, so a Pulserver
-         * interpreter does not repeat what is already written out.
-         *
-         * Set whenever this runs, repeat count included: calling it at all is
-         * the statement that the file carries its own repetitions.
-         */
-        bool set_ignore_averages = true;
     };
 
     /** What the expansion found and what it wrote. */
@@ -109,9 +102,8 @@ namespace pulseq
      * delimiters, so a sequence whose preparation is not one contiguous run at
      * the front expands the same way an interpreter would play it.
      *
-     * `repeats == 1` is not a no-op: it resolves the flags, strips them if
-     * asked, and writes `IgnoreAverages`, leaving a file that says a single
-     * pass is all there is.
+     * `repeats == 1` is not a no-op: it resolves the flags and strips them if
+     * asked, leaving a file whose block table is the whole of what plays.
      *
      * @throws std::invalid_argument if @p repeats is below 1.
      * @throws std::runtime_error if a block carries an `ONCE` value outside

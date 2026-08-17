@@ -47,13 +47,27 @@ def test_te_is_exactly_half_of_tr(design):
 
 @pytest.mark.parametrize("design", [design_2d, design_3d], ids=["2d", "3d"])
 def test_every_echo_is_centred(design):
+    """k = 0 falls at the middle of every readout.
+
+    An even-sampled readout that straddles the origin has no sample *at* k = 0:
+    the two central ones sit at -dk/2 and +dk/2, equidistant. So what is
+    asserted is that they straddle it symmetrically -- which is the claim --
+    and not which of the two ``argmin`` returns, since that is decided by the
+    last bits of an amplitude and not by the sequence.
+    """
     seq = design()
     k_traj_adc, *_ = seq.calculate_kspace()
     labels = seq.evaluate_labels(evolution="adc")
     n_samples = k_traj_adc.shape[1] // len(labels["LIN"])
     kx = k_traj_adc[0].reshape(-1, n_samples)
-    crossings = {int(np.argmin(np.abs(kx[i]))) for i in range(kx.shape[0])}
-    assert crossings == {n_samples // 2 - 1}
+
+    left = kx[:, n_samples // 2 - 1]
+    right = kx[:, n_samples // 2]
+    step = np.abs(right - left)
+
+    assert np.all(left < 0.0) and np.all(right > 0.0)
+    assert np.allclose(np.abs(left), np.abs(right), rtol=1e-12, atol=0.0)
+    assert np.all(np.abs(left) < step)
 
 
 @pytest.mark.parametrize("design", [design_2d, design_3d], ids=["2d", "3d"])

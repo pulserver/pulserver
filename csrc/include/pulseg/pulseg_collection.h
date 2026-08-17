@@ -228,14 +228,6 @@ extern "C"
     float pulseg_get_rf_isocenter_us(const pulseg_collection *coll, int seg_idx, int blk_idx);
 
     /**
-     * @brief Return the ADC k-zero time (us) relative to segment start.
-     *
-     * Looks up the segment timing ADC anchor matching @p blk_idx.
-     * Returns -1.0f if the block has no ADC anchor.
-     */
-    float pulseg_get_adc_kzero_us(const pulseg_collection *coll, int seg_idx, int blk_idx);
-
-    /**
      * @brief Compute scan-time info from a fully loaded collection.
      *
      * Accounts for every block duration in each pass and the

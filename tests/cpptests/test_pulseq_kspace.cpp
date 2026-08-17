@@ -1,15 +1,12 @@
 /**
  * Tests for pulseq::calculate_kspace -- the Sequence-level surface over the
- * C89 trajectory core.
+ * trajectory core.
  *
- * The core's own arithmetic is covered in tests/ctests/test_pulseq_ktraj.c
- * against the sequences' own numbers.  What is left for here is everything
- * the bridge and the layer above it add, and every one of these covers
- * something that was wrong at some point while it was being written:
+ * The core's own arithmetic is covered in test_pulseq_ktraj.cpp against the
+ * sequences' own numbers.  What is left for here is everything the layer above
+ * it adds, and every one of these covers something that was wrong at some
+ * point while it was being written:
  *
- *  - the binary round trip is exact (it was not: the format narrows shape
- *    samples to float32, and a run-length-encoded derivative accumulates that
- *    into ~1e-5 of k);
  *  - the echo of a symmetric Cartesian readout is N/2 (it was decided by a
  *    0.005%-of-a-step rounding asymmetry before the tie rule);
  *  - the dense trajectory agrees with the ADC samples where they meet;
@@ -251,23 +248,6 @@ TEST(PulseqKSpace, BlockRangeBoundsTheResult)
 }
 
 /*
- * The repeat memo fires here too.
- *
- * The bridge canonicalises nothing of its own, so this is really asserting
- * that the round trip preserves whatever made readouts group -- library ids
- * included.  A binary writer that renumbered rows would pass every other test
- * in this file and fail this one.
- */
-TEST(PulseqKSpace, TheRepeatMemoSurvivesTheBridge)
-{
-    pulseq::Sequence seq = load_corpus("gre_2d_3sl");
-    const pulseq::KSpace ks = pulseq::calculate_kspace(seq);
-
-    ASSERT_GT(ks.readouts.size(), 4u);
-    EXPECT_LT(ks.key_groups, static_cast<int>(ks.readouts.size()));
-}
-
-/*
  * A radial spoke has a constant gradient and still needs a trajectory.
  *
  * The trap this warns about: a gradient that is flat across the ADC window
@@ -356,19 +336,9 @@ TEST(PulseqKSpace, ARadialSpokeIsConstantGradientButNotCartesian)
 /*
  * `block_k_origins()` is the core's answer in Pulseq's 1-based layout.
  *
- * It used to be a second implementation -- a `Piecewise` per block, written
- * before the C89 core existed -- and this test was the evidence that let it
- * go: over every fixture in the repository the two agreed to 4e-16 relative,
- * which is arithmetic noise rather than agreement by construction. Getting
- * there needed a real fix, not just a comparison, because the old one reset k
- * only on an explicit 'e': a pulse that declared no use was read as neither an
- * excitation nor a refocusing and k accumulated over the whole scan. Both
- * refuse an undeclared use now, and there is only one of them.
- *
- * What is left to check is the re-indexing, which `TransformFOV` depends on:
- * `[b]` belongs to block `b`, `[0]` is unused, and the frame is logical. A
- * silent off-by-one here would move every FOV shift by one block's gradient
- * moment.
+ * What it checks is the re-indexing, which `TransformFOV` depends on: `[b]`
+ * belongs to block `b`, `[0]` is unused, and the frame is logical. A silent
+ * off-by-one here would move every FOV shift by one block's gradient moment.
  */
 TEST(PulseqKSpace, BlockKOriginsIsTheCoreReindexedFromOne)
 {
@@ -379,7 +349,7 @@ TEST(PulseqKSpace, BlockKOriginsIsTheCoreReindexedFromOne)
                                     kCorpus + "gre_stack_of_stars_3d",
                                     kCorpus + "mprage_stack_of_spirals_3d"})
     {
-        pulseq::Sequence seq = pulseq::read_file(stem + ".seq");
+        const pulseq::Sequence seq = pulseq::read_file(stem + ".seq");
         const std::vector<std::array<double, 3>> theirs = pulseq::block_k_origins(seq);
 
         pulseq::KSpaceOptions options;
@@ -389,8 +359,7 @@ TEST(PulseqKSpace, BlockKOriginsIsTheCoreReindexedFromOne)
         options.block_origins = true;
         options.derive_center_sample = false;
         options.materialize_samples = false;
-        pulseq::Sequence again = pulseq::read_file(stem + ".seq");
-        const pulseq::KSpace ks = pulseq::calculate_kspace(again, options);
+        const pulseq::KSpace ks = pulseq::calculate_kspace(seq, options);
 
         ASSERT_EQ(static_cast<int>(theirs.size()), seq.num_blocks() + 1) << stem;
         ASSERT_EQ(static_cast<int>(ks.block_origins.size()), seq.num_blocks()) << stem;
@@ -415,22 +384,20 @@ TEST(PulseqKSpace, BlockKOriginsIsTheCoreReindexedFromOne)
 /* Window averaging leaves a flat readout alone and moves a curved one. */
 TEST(PulseqKSpace, WindowAveragingIsOptInAndOnlyMovesCurvedReadouts)
 {
-    pulseq::Sequence flat = load_corpus("fse_2d");
+    const pulseq::Sequence flat = load_corpus("fse_2d");
     const pulseq::KSpace midpoint = pulseq::calculate_kspace(flat);
 
     pulseq::KSpaceOptions options;
     options.sample_window_average = true;
-    pulseq::Sequence flat_again = load_corpus("fse_2d");
-    const pulseq::KSpace averaged = pulseq::calculate_kspace(flat_again, options);
+    const pulseq::KSpace averaged = pulseq::calculate_kspace(flat, options);
 
     ASSERT_EQ(midpoint.k_adc.size(), averaged.k_adc.size());
     for (size_t i = 0; i < midpoint.k_adc.size(); ++i)
         EXPECT_NEAR(midpoint.k_adc[i], averaged.k_adc[i], 1e-9);
 
-    pulseq::Sequence curved = load_corpus("gre_spiral_2d");
+    const pulseq::Sequence curved = load_corpus("gre_spiral_2d");
     const pulseq::KSpace curved_mid = pulseq::calculate_kspace(curved);
-    pulseq::Sequence curved_again = load_corpus("gre_spiral_2d");
-    const pulseq::KSpace curved_avg = pulseq::calculate_kspace(curved_again, options);
+    const pulseq::KSpace curved_avg = pulseq::calculate_kspace(curved, options);
 
     double biggest = 0.0;
     for (size_t i = 0; i < curved_mid.k_adc.size(); ++i)

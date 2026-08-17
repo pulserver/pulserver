@@ -23,6 +23,7 @@
 #include <fstream>
 #include <string>
 #include <vector>
+#include <utility>
 
 using pulseq::Block;
 using pulseq::BaseTrajectory;
@@ -1368,4 +1369,107 @@ TEST(PulseqBaseTrajectoryCarrier, BlocksWithoutAdcAreLeftAlone)
     EXPECT_EQ(seq.get_block(blk).adc, 0);
     EXPECT_EQ(seq.shape_library().size(), 0);
     EXPECT_FALSE(pulseq::read_base_trajectory(seq, blk).has_adc);
+}
+
+/* ================================================================== */
+/*  The labels that exempt a block                                     */
+/* ================================================================== */
+
+namespace
+{
+    /** A block carrying `label = value` as a LABELSET extension. */
+    int add_flagged(Sequence& seq, const std::string& label, int32_t value)
+    {
+        const int blk = add_readout(seq, 50000.0, 640e-6, 10e-6, 64);
+        Block b = seq.get_block(blk);
+        b.ext = seq.chain_extension(seq.extension_type_id("LABELSET"),
+                                    seq.register_label_set(value, seq.label_id(label)), 0);
+        seq.set_block(blk, b);
+        return blk;
+    }
+
+    using Runs = std::vector<std::pair<int, int>>;
+}  // namespace
+
+/*
+ * The exemption is sticky, and it starts at the block that sets it.
+ *
+ * Both are MATLAB's behaviour, and both are what the runs have to express:
+ * a flag set in block 2 exempts 2 onwards, so the surviving run is 1..1.
+ */
+TEST(PulseqLabelGates, AFlagExemptsTheBlockThatSetsItAndEveryBlockAfter)
+{
+    Sequence seq;
+    add_readout(seq, 50000.0, 640e-6, 10e-6, 64);
+    add_flagged(seq, "NOPOS", 1);
+    add_readout(seq, 50000.0, 640e-6, 10e-6, 64);
+
+    const auto runs = pulseq::label_gate_runs(seq, {"NOPOS"});
+    ASSERT_EQ(runs.size(), 1u);
+    EXPECT_EQ(runs[0], Runs({{1, 1}}));
+}
+
+/* Clearing it lets the transformation resume, which is a second run. */
+TEST(PulseqLabelGates, ClearingAFlagOpensASecondRun)
+{
+    Sequence seq;
+    add_flagged(seq, "NOPOS", 1);
+    add_readout(seq, 50000.0, 640e-6, 10e-6, 64);
+    add_flagged(seq, "NOPOS", 0);
+    add_readout(seq, 50000.0, 640e-6, 10e-6, 64);
+
+    const auto runs = pulseq::label_gate_runs(seq, {"NOPOS"});
+    ASSERT_EQ(runs.size(), 1u);
+    EXPECT_EQ(runs[0], Runs({{3, 4}}));
+}
+
+/*
+ * Each label is read independently, in one pass.
+ *
+ * The reason the call takes a list at all: the three exemptions gate three
+ * different transforms and a scan is walked once for all of them.
+ */
+TEST(PulseqLabelGates, LabelsAreIndependentAndAnUnknownOneExemptsNothing)
+{
+    Sequence seq;
+    add_readout(seq, 50000.0, 640e-6, 10e-6, 64);
+    add_flagged(seq, "NOSCL", 1);
+
+    const auto runs = pulseq::label_gate_runs(seq, {"NOSCL", "NOPOS", "NOROT"});
+    ASSERT_EQ(runs.size(), 3u);
+    EXPECT_EQ(runs[0], Runs({{1, 1}}));
+    /* Never set, so never exempt -- the whole range is one run. */
+    EXPECT_EQ(runs[1], Runs({{1, 2}}));
+    EXPECT_EQ(runs[2], Runs({{1, 2}}));
+}
+
+/*
+ * State starts clear at `first`, not at block 1.
+ *
+ * A windowed transform resets, which is what `applyToSeq` does: the flag set
+ * in block 1 does not reach a range that starts at block 2.
+ */
+TEST(PulseqLabelGates, StateStartsClearAtTheRangeRatherThanAtBlockOne)
+{
+    Sequence seq;
+    add_flagged(seq, "NOPOS", 1);
+    add_readout(seq, 50000.0, 640e-6, 10e-6, 64);
+    add_readout(seq, 50000.0, 640e-6, 10e-6, 64);
+
+    const auto whole = pulseq::label_gate_runs(seq, {"NOPOS"});
+    EXPECT_TRUE(whole[0].empty()) << "the flag is set in block 1 and never cleared";
+
+    const auto windowed = pulseq::label_gate_runs(seq, {"NOPOS"}, 2, 3);
+    EXPECT_EQ(windowed[0], Runs({{2, 3}}));
+}
+
+/* A sequence that flags nothing is one run, which is the ordinary case. */
+TEST(PulseqLabelGates, NoFlagsAtAllIsOneRun)
+{
+    Sequence seq;
+    for (int i = 0; i < 5; ++i)
+        add_readout(seq, 50000.0, 640e-6, 10e-6, 64);
+
+    const auto runs = pulseq::label_gate_runs(seq, {"NOPOS"});
+    EXPECT_EQ(runs[0], Runs({{1, 5}}));
 }

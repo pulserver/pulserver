@@ -99,6 +99,7 @@ def main(
     tr_outer: float = 2000e-3,
     te: float | None = None,
     readout_bandwidth_hz: float = 250e3,
+    n_dummy: int = 1,
     n_gain_calibration_readouts: int = 1,
     rf_spoiling_increment_deg: float = 117.0,
     spoiling_cycles: float = 4.0,
@@ -217,7 +218,7 @@ def main(
     shot_index = kernel.shot_index
 
     rf_phases = pp.make_rf_spoiling_schedule(
-        n_arms * n_z,
+        n_arms * n_z + n_dummy * etl,
         increment=np.deg2rad(rf_spoiling_increment_deg),
     )
     rotations = (
@@ -233,7 +234,7 @@ def main(
     spoiling_phase = iter(rf_phases)
     lin_label, par_label, seg_label = readout.adc_labels
 
-    def repetition(arm: int, partition: int) -> None:
+    def repetition(arm: int, partition: int, *, acquire: bool = True) -> None:
         """One inner repetition, at this arm's orientation and partition."""
         shot = shot_index(arm, partition)
         rf_phase = next(spoiling_phase)
@@ -247,20 +248,44 @@ def main(
             readout.arm(shot),
             rotations[shot],
             (partition - n_z / 2) / (n_z / 2),
-            acquire=True,
+            acquire=acquire,
         )
 
+    def inversion_train(arms, partition, *, acquire: bool, mark=None) -> None:
+        """One outer TR: the inversion, the wait, the arms, the recovery."""
+        seq.add_block(inversion.rf_prep, *([mark] if mark is not None else []))
+        seq.add_block(inversion.gz_spoil)
+        seq.add_block(kernel.wait_ti)
+        for arm in arms:
+            repetition(arm, partition, acquire=acquire)
+        seq.add_block(kernel.wait_recovery)
+
+    # Steady state first: whole inversion trains without acquiring, so the
+    # magnetisation the first acquired train measures is the one every later
+    # train measures. The outer TR is the unit because that is what the
+    # longitudinal magnetisation recovers over.
+    #
+    # `ONCE` is what keeps them out of the averages: 1 plays on the first pass
+    # only, and the first acquired train clears it back to 0 so the body
+    # repeats.
+    for i_dummy in range(n_dummy):
+        inversion_train(
+            range(etl),
+            0,
+            acquire=False,
+            mark=pp.make_label("ONCE", "SET", 1) if i_dummy == 0 else None,
+        )
+
+    clear_once = pp.make_label("ONCE", "SET", 0) if n_dummy else None
     train = 0
     for partition in range(n_z):
         for start in range(0, n_arms, etl):
             seg_label.value = train
             train += 1
-            seq.add_block(inversion.rf_prep)
-            seq.add_block(inversion.gz_spoil)
-            seq.add_block(kernel.wait_ti)
-            for arm in range(start, start + etl):
-                repetition(arm, partition)
-            seq.add_block(kernel.wait_recovery)
+            inversion_train(
+                range(start, start + etl), partition, acquire=True, mark=clear_once
+            )
+            clear_once = None
 
     pp.TransformFOV(
         translation=tuple(offset * 1e3 for offset in fov_offset),

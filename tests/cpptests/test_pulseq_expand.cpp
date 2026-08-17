@@ -229,16 +229,23 @@ TEST(PulseqExpand, OtherExtensionsOnAStrippedBlockSurvive)
     EXPECT_EQ(replay(seq)[0].count("ONCE"), 0u);
 }
 
-TEST(PulseqExpand, TheInterpreterIsToldNotToRepeatItAgain)
+/*
+ * Expanding says nothing about itself in `[DEFINITIONS]`.
+ *
+ * Whether a sequence carries its own repetitions is the design's decision and
+ * the block table already shows it: a subsequence meant to be acquired once
+ * is simply not expanded. A definition claiming it would be a second place
+ * for the same fact to be wrong.
+ */
+TEST(PulseqExpand, ExpandingWritesNoDefinition)
 {
     pulseq::Sequence seq = prep_body_cooldown();
+    const size_t before = seq.definitions().size();
+
     pulseq::expand_repeats(seq, 3);
 
-    const pulseq::Definition* definition = seq.definition("IgnoreAverages");
-    ASSERT_NE(definition, nullptr);
-    EXPECT_EQ(definition->kind(), pulseq::Definition::Kind::Int);
-    ASSERT_EQ(definition->numbers().size(), 1u);
-    EXPECT_EQ(definition->numbers()[0], 1.0);
+    EXPECT_EQ(seq.definitions().size(), before);
+    EXPECT_EQ(seq.definition("IgnoreAverages"), nullptr);
 }
 
 TEST(PulseqExpand, ACounterTheSequenceAlreadyWritesIsRefused)

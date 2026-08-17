@@ -294,7 +294,7 @@ def main(
     seq.set_definition(key="kSpaceCenterPartition", value=n_z // 2)
     seq.set_definition(key="kSpaceCenterSample", value=kernel.readout.center_sample)
     seq.set_definition(key="SliceThickness", value=kernel.excitation.slice_thickness)
-    seq.expand_repeats(n_averages)
+    seq = pp.tile(seq, n_averages, in_place=True)
 
     if write_seq:
         write_sequence(seq, seq_filename, offline=True)

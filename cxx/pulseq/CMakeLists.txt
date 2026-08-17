@@ -15,7 +15,7 @@ add_library(pulseqpp STATIC
     raw64.cpp
     trajectory.cpp
     kspace.cpp
-    kspace_sequence.cpp
+    ktraj.cpp
     moments.cpp
     autolabel.cpp
     expand.cpp

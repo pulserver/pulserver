@@ -378,7 +378,6 @@ static py::dict _get_tr_waveforms(
         d["duration_us"] = b.duration_us;
         d["segment_idx"] = b.segment_idx;
         d["rf_isocenter_us"] = b.rf_isocenter_us;
-        d["adc_kzero_us"] = b.adc_kzero_us;
         blocks.append(d);
     }
 

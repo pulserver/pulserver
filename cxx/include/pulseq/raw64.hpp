@@ -37,7 +37,7 @@
 #define PULSEQ_CXX_RAW64_HPP
 
 #if defined(PULSEQ_CONFIG_H) || defined(PULSEQ_TYPES_H) || defined(PULSEQ_H) || \
-    defined(PULSEQ_KTRAJ_H) || defined(PULSEQ_RF_H)
+    defined(PULSEQ_RF_H)
 #error "raw64.hpp must be included before (and never alongside) the float-precision pulseq headers"
 #endif
 
@@ -61,7 +61,6 @@ namespace pulseq
 #include "pulseq.h"
 #include "pulseq_config.h"
 #include "pulseq_types.h"
-#include "pulseq_ktraj.h"
     }  // namespace raw64
 }  // namespace pulseq
 

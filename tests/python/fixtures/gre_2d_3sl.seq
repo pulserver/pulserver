@@ -11,7 +11,6 @@ AdcRasterTime 2e-06
 BlockDurationRaster 2e-05 
 FOV 0.22 0.22 0.015 
 GradientRasterTime 2e-05 
-IgnoreAverages 1 
 Matrix 64 8 3 
 Name gre_2d 
 NumGainCalibrationReadouts 3 
@@ -1972,4 +1971,4 @@ num_samples 4
 # It can be reproduced/verified with md5sum if the file trimmed to the position right above [SIGNATURE]
 # The new line character preceding [SIGNATURE] BELONGS to the signature (and needs to be stripped away for recalculating/verification)
 Type md5
-Hash a13592f74f76cf2a553fb6cb4e2c2ca9
+Hash a3f01f84f8f745d508d95b6fee4fb32c

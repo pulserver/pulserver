@@ -45,21 +45,42 @@ def test_the_refocusing_pulse_sits_at_half_the_echo_time():
 
 
 def test_the_echo_lands_on_the_centre_of_the_readout():
-    """The k-flip in action: kx crosses zero at the centre sample."""
+    """The k-flip in action: kx crosses zero at the middle of the readout.
+
+    Between the two central samples, not at one of them: an even-sampled
+    readout straddling the origin has none at k = 0, and which of the pair is
+    marginally nearer is decided by the last bits of an amplitude the file
+    holds to six figures.
+    """
     seq = design()
     k_traj_adc, *_ = seq.calculate_kspace()
     labels = seq.evaluate_labels(evolution="adc")
     n_samples = k_traj_adc.shape[1] // len(labels["LIN"])
     kx = k_traj_adc[0][:n_samples]
-    assert int(np.argmin(np.abs(kx))) == n_samples // 2 - 1
+    left, right = kx[n_samples // 2 - 1], kx[n_samples // 2]
+    step = abs(right - left)
+    assert left * right < 0.0
+    # The midpoint on the origin to a thousandth of a sample: what survives
+    # holding the gradients at the precision the file writes, which costs
+    # about 3e-5 of a step.
+    assert abs(left + right) / 2.0 < 1e-3 * step
 
 
 def test_the_slice_axis_is_rephased_through_the_refocusing_pulse():
     """The rephaser plays before the 180 and the crushers cancel around it,
-    so the acquisition sees kz = 0 without a rephaser of its own after."""
+    so the acquisition sees kz = 0 without a rephaser of its own after.
+
+    Measured against the readout's own sample spacing, because that is the
+    scale on which a residual would matter: holding the gradients at the
+    precision the file writes leaves the cancellation good to about 5e-5 of
+    a sample rather than to the bit.
+    """
     seq = design()
     k_traj_adc, *_ = seq.calculate_kspace()
-    assert float(np.abs(k_traj_adc[2]).max()) == pytest.approx(0.0, abs=1e-6)
+    labels = seq.evaluate_labels(evolution="adc")
+    n_samples = k_traj_adc.shape[1] // len(labels["LIN"])
+    step = abs(float(np.diff(k_traj_adc[0][:n_samples]).mean()))
+    assert float(np.abs(k_traj_adc[2]).max()) < 1e-3 * step
 
 
 def test_the_acquired_lines_are_the_ones_the_sampling_plan_asked_for():
@@ -101,7 +122,9 @@ def test_the_refocusing_pulse_keeps_its_cpmg_quarter_turn():
         if (block := seq.get_block(index)).rf is not None
         and seq.get_block(index).rf.use == "r"
     )
-    assert float(refocusing.phase_offset) == pytest.approx(np.pi / 2)
+    # Six significant figures: what the file holds, and so what the
+    # designed sequence holds.
+    assert float(refocusing.phase_offset) == pytest.approx(np.pi / 2, rel=1e-5)
 
 
 def test_a_te_shorter_than_either_half_is_refused_by_name():

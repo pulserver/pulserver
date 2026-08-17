@@ -33,7 +33,7 @@
 /* The full (major, minor, revision) triple must match exactly on read: a
  * cache at any other revision is rejected outright and the .seq is
  * re-parsed, never partially or heuristically read. */
-#define PULSEG_CACHE_VERSION_REVISION 10
+#define PULSEG_CACHE_VERSION_REVISION 11
 
 /* Per-consumer sections. Each carries its own distinct payload.
  * COMMON establishes the collection + descriptor framing; the others
@@ -416,12 +416,11 @@ static int write_common(FILE *f, const pulseg_sequence_descriptor *d)
         if (!pulseg__write4(f, &seg->is_nav, 1))
             return 0;
 
-        /* Segment timing anchors (k-space refs: RF isocenter, ADC kzero, plus
-         * the gap edges). calc_segment_timing builds these during parse, so they
-         * are live here. They MUST be serialized: the geninstructions/scanloop
-         * cache load paths do not rebuild them (no trajectory available), and
-         * freq-mod requires the exact isocenter/kzero. All fields are 4-byte, so
-         * the structs serialize as packed word arrays. */
+        /* Segment timing anchors: the RF isocenter and the ADC window edges.
+         * calc_segment_timing builds these during parse, so they are live
+         * here. They MUST be serialized: the geninstructions/scanloop cache
+         * load paths do not rebuild them. All fields are 4-byte, so the
+         * structs serialize as packed word arrays. */
         if (!pulseg__write4(f, &seg->timing.num_rf_anchors, 1))
             return 0;
         if (seg->timing.num_rf_anchors > 0)

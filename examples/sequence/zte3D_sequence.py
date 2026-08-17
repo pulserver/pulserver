@@ -65,6 +65,7 @@ def main(
     flip_angle_deg: float = 3.0,
     pulse_duration: float = 10e-6,
     readout_bandwidth_hz: float = 250e3,
+    n_dummy: int = 32,
     n_gain_calibration_readouts: int = 1,
 ) -> pp.Sequence:
     """Create a 3D zero-echo-time sequence.
@@ -101,6 +102,12 @@ def main(
         Hard-pulse duration in seconds. Default is 10e-6.
     readout_bandwidth_hz : float, optional
         Requested receiver bandwidth in Hz. Default is 250e3.
+    n_dummy : int, optional
+        Views played without acquiring before the first acquired one, at the
+        first view's orientation and with the gradient held, so the first
+        spoke sees the magnetisation every later spoke sees. The gradient
+        does not move through them: ZTE never turns it off, and what has to
+        settle is the magnetisation, not the direction. Default is 32.
     n_gain_calibration_readouts : int, optional
         Written as the ``NumGainCalibrationReadouts`` definition. Default
         is 1.
@@ -128,6 +135,13 @@ def main(
     seq = pp.Sequence(system)
     lin_label, seg_label = zte.adc_labels
 
+    # Steady state is reached once, at the head of the first shell: the pulse
+    # train never stops, so later shells inherit it.
+    #
+    # `ONCE` is what keeps the dummies out of the averages: 1 plays on the
+    # first pass only, and the first acquired view clears it back to 0 so the
+    # body repeats.
+    clear_once = None
     for shot_index, shot in enumerate(zte.shot_rotations):
         seg_label.value = int(shot_index)
         turns = [
@@ -135,10 +149,17 @@ def main(
             for turn in zte.view_rotations
         ]
         seq.add_block(*zte.g_ramp, turns[0])
+        if shot_index == 0:
+            for i_dummy in range(n_dummy):
+                mark = pp.make_label("ONCE", "SET", 1) if i_dummy == 0 else None
+                seq.add_block(zte.rf, *zte.g_hold, turns[0], *([mark] if mark else ()))
+                seq.add_block(*zte.g_read, turns[0])
+            clear_once = pp.make_label("ONCE", "SET", 0) if n_dummy else None
         for view, turn in enumerate(turns):
             last = view == len(turns) - 1
             lin_label.value = int(view)
-            seq.add_block(zte.rf, *zte.g_hold, turn)
+            seq.add_block(zte.rf, *zte.g_hold, turn, *([clear_once] if clear_once else ()))
+            clear_once = None
             seq.add_block(
                 zte.adc,
                 *(zte.g_end if last else zte.g_read),

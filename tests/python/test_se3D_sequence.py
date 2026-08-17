@@ -61,12 +61,19 @@ def test_the_refocusing_pulse_sits_at_half_the_echo_time():
 
 
 def test_the_echo_lands_on_the_centre_of_the_readout():
+    """Between the two central samples, not at one of them: an even-sampled
+    readout straddling the origin has none at k = 0."""
     seq = design()
     k_traj_adc, *_ = seq.calculate_kspace()
     labels = seq.evaluate_labels(evolution="adc")
     n_samples = k_traj_adc.shape[1] // len(labels["LIN"])
     kx = k_traj_adc[0][:n_samples]
-    assert int(np.argmin(np.abs(kx))) == n_samples // 2 - 1
+    left, right = kx[n_samples // 2 - 1], kx[n_samples // 2]
+    step = abs(right - left)
+    assert left * right < 0.0
+    # The midpoint on the origin to a thousandth of a sample: what survives
+    # holding the gradients at the precision the file writes.
+    assert abs(left + right) / 2.0 < 1e-3 * step
 
 
 def test_the_acquired_pairs_are_the_ones_the_plan_asked_for():

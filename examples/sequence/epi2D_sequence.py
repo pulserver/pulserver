@@ -110,6 +110,7 @@ def main(
     readout_bandwidth_hz: float = 500e3,
     opposite_reference: bool = True,
     slice_order: str = "interleaved",
+    n_dummy: int = 2,
     n_gain_calibration_readouts: int | None = None,
     spoiling_cycles: float = 4.0,
 ) -> pp.Sequence:
@@ -176,6 +177,11 @@ def main(
         Order the slices are acquired in, one of ``pp.calc_traversal_order``'s
         schemes. ``'interleaved'`` (the default) maximises the time between
         neighbouring slices.
+    n_dummy : int, optional
+        Shots played without acquiring, before the first acquired one and for
+        every slice, so the first acquired shot sees the magnetisation every
+        later one sees. A whole shot is the unit: one excitation and its
+        train is what the steady state is reached by. Default is 2.
     n_gain_calibration_readouts : int or None, optional
         Written as the ``NumGainCalibrationReadouts`` definition. None is
         one per slice. Default is None.
@@ -261,16 +267,39 @@ def main(
     # time as the ordering allows; the frequency offset stays tied to the
     # physical slice, so only the acquisition order changes.
     slices = [int(i) for i in pp.calc_traversal_order(n_slices, slice_order)]
+
+    def excite(i_slice: int) -> None:
+        """Point the pulse at a slice; the offset is the slice's, not the order's."""
+        epi.rf.freq_offset = excitation.gz.amplitude * slice_positions[i_slice]
+        epi.rf.phase_offset = -2 * np.pi * epi.rf.freq_offset * epi.rf.center
+
+    # Steady state first: whole shots without acquiring, one per slice so
+    # every slice reaches it, before the first acquired shot.
+    #
+    # `ONCE` is what keeps them out of the averages: 1 plays on the first pass
+    # only, and the first acquired shot clears it back to 0 so the body
+    # repeats.
+    mark = pp.make_label("ONCE", "SET", 1)
+    for _ in range(n_dummy):
+        for i_slice in slices:
+            excite(i_slice)
+            ShotKernel(
+                seq,
+                epi,
+                origin_line=0,
+                n_y=n_y,
+                rev_label=rev_label,
+                acquire=False,
+                first_extra=(mark,) if mark is not None else (),
+            )
+            mark = None
+
+    clear_once = pp.make_label("ONCE", "SET", 0) if n_dummy else None
     for repetition in range(n_repetitions):
         rep_label.value = int(repetition)
         for segment in range(segments):
             for i_slice in slices:
-                epi.rf.freq_offset = (
-                    excitation.gz.amplitude * slice_positions[i_slice]
-                )
-                epi.rf.phase_offset = (
-                    -2 * np.pi * epi.rf.freq_offset * epi.rf.center
-                )
+                excite(i_slice)
                 slc_label.value = int(i_slice)
                 ShotKernel(
                     seq,
@@ -279,7 +308,9 @@ def main(
                     n_y=n_y,
                     rev_label=rev_label,
                     extra_line_labels=(slc_label, rep_label),
+                    first_extra=(clear_once,) if clear_once is not None else (),
                 )
+                clear_once = None
 
     pp.TransformFOV(
         translation=tuple(offset * 1e3 for offset in fov_offset), system=system
@@ -737,13 +768,17 @@ def ShotKernel(
     invert_phase: bool = False,
     blip_nulled: bool = False,
     n_lines: int | None = None,
+    acquire: bool = True,
+    first_extra=(),
 ) -> None:
     """One excitation and its train, per the module's loop contract.
 
     ``origin_line`` is the absolute first line; ``None`` nulls the prewinder
     (the navigator's centre line). ``invert_phase`` negates every
     phase-encode event -- the opposite-PE reference. ``blip_nulled`` drops
-    the blips, and ``n_lines`` truncates the train.
+    the blips, and ``n_lines`` truncates the train. ``acquire`` false drops
+    the ADC and every counter that goes with it, which is what makes a shot
+    a dummy; ``first_extra`` rides the excitation block.
     """
     sign = -1.0 if invert_phase else 1.0
     count = epi.etl if n_lines is None else n_lines
@@ -753,7 +788,7 @@ def ShotKernel(
     # the module itself puts it in. Without it the slice never refocuses.
     rephaser = [epi.gz_reph] if getattr(epi, "gz_reph", None) is not None else []
 
-    seq.add_block(epi.rf, epi.gz)
+    seq.add_block(epi.rf, epi.gz, *first_extra)
     if getattr(epi, "wait_te", None) is not None:
         seq.add_block(epi.wait_te, *rephaser)
         rephaser = []
@@ -765,16 +800,19 @@ def ShotKernel(
         epi.gx_pre,
         pp.scale_grad(epi.gy_pre, scale),
         *rephaser,
-        *(epi.shot_labels if origin_line is not None else ()),
+        *(epi.shot_labels if acquire and origin_line is not None else ()),
     )
     for line in range(count):
         rev_label.value = int(line % 2)
-        events = [epi.gx[line], epi.adc, rev_label]
+        events = [epi.gx[line]]
+        if acquire:
+            events.extend((epi.adc, rev_label))
         blip = epi.gy_blips[line]
         if blip is not None and not blip_nulled:
             events.append(blip if not invert_phase else pp.scale_grad(blip, -1.0))
-        events.extend(epi.line_labels[line] if origin_line is not None else ())
-        events.extend(extra_line_labels)
+        if acquire:
+            events.extend(epi.line_labels[line] if origin_line is not None else ())
+            events.extend(extra_line_labels)
         seq.add_block(*events)
     seq.add_block(epi.gx_spoil, pp.scale_grad(epi.gy_rew, scale))
     if getattr(epi, "wait_tr", None) is not None:

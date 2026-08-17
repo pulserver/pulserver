@@ -1224,7 +1224,7 @@ static int get_segment_adc_adc_gap_us(const pulseg_collection *coll, int seg_idx
 }
 
 /* ================================================================== */
-/*  Per-block RF isocenter and ADC k-zero from segment timing anchors */
+/*  Per-block RF isocenter from the segment timing anchors            */
 /* ================================================================== */
 
 float pulseg_get_rf_isocenter_us(const pulseg_collection *coll, int seg_idx, int blk_idx)
@@ -1248,43 +1248,6 @@ float pulseg_get_rf_isocenter_us(const pulseg_collection *coll, int seg_idx, int
 
     rdef = &desc->rf_definitions[bdef->rf_id];
     return start_us + (float)rdef->delay + (float)rdef->stats.isodelay_us;
-}
-
-float pulseg_get_adc_kzero_us(const pulseg_collection *coll, int seg_idx, int blk_idx)
-{
-    const pulseg_sequence_descriptor *desc;
-    const pulseg_virtual_segment *seg;
-    const pulseg_base_block *bdef;
-    const pulseg_adc_definition *adef;
-    int local_blk, k;
-    float start_us = 0.0f;
-
-    if (!resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
-        return -1.0f;
-
-    for (k = 0; k < local_blk; ++k)
-        start_us += (float)desc->base_blocks[seg->unique_block_indices[k]].duration_us;
-
-    bdef = &desc->base_blocks[seg->unique_block_indices[local_blk]];
-    if (bdef->adc_id < 0 || bdef->adc_id >= desc->num_unique_adcs)
-        return -1.0f;
-
-    /* If calc_segment_timing has already computed a k=0 anchor for this block
-     * (which handles both Cartesian N/2 and non-Cartesian kRSS-minimum),
-     * return its segment-relative kzero_us directly. */
-    if (seg->timing.adc_anchors && seg->timing.num_adc_anchors > 0)
-    {
-        for (k = 0; k < seg->timing.num_adc_anchors; ++k)
-        {
-            if (seg->timing.adc_anchors[k].block_offset == local_blk)
-                return seg->timing.adc_anchors[k].kzero_us;
-        }
-    }
-
-    /* Fallback: midpoint (Cartesian convention). */
-    adef = &desc->adc_definitions[bdef->adc_id];
-    return start_us + (float)adef->delay +
-        (float)(adef->num_samples / 2) * (float)adef->dwell_time * 1e-3f;
 }
 
 /* ================================================================== */

@@ -33,12 +33,19 @@ def readout(system):
 
 @pytest.fixture
 def seq(system, readout):
-    """Three identical readouts, so a block range has something to leave alone."""
+    """Three identical readouts, so a block range has something to leave alone.
+
+    Deduplicated, which is to say held at the precision the file writes: the
+    transform works there, because the phase it bakes has to agree with the
+    gradients a consumer will read back rather than with the ones that were
+    briefly in memory. A readout built at 581.8/3.2e-3 is 181812.49999999997
+    in memory and 181812 in the file.
+    """
     gx, adc = readout
     built = pp.Sequence(system=system)
     for _ in range(3):
         built.add_block(gx, adc)
-    return built
+    return built.remove_duplicates(in_place=True)
 
 
 def _flag(label, value=1):
@@ -243,6 +250,7 @@ def test_scaling_an_arbitrary_gradient_keeps_its_waveform(system):
     wave = np.sin(np.linspace(0, np.pi, 200)) * 1e5
     built = pp.Sequence(system=system)
     built.add_block(pp.make_arbitrary_grad(channel="y", waveform=wave, system=system))
+    built.remove_duplicates(in_place=True)
 
     before = built.get_block(1).gy.waveform
     pp.TransformFOV(scale=(1.0, 2.0, 1.0)).apply_to_sequence(built, in_place=True)
@@ -277,13 +285,18 @@ def test_a_rotation_composes_with_one_the_block_already_carried(system, readout)
     gx, adc = readout
     built = pp.Sequence(system=system)
     built.add_block(gx, adc, pp.make_rotation(Rotation.from_euler("z", 30.0, degrees=True)))
+    built.remove_duplicates(in_place=True)
 
-    pp.TransformFOV(
-        rotation=Rotation.from_euler("z", 20.0, degrees=True).as_matrix()
-    ).apply_to_sequence(built, in_place=True)
+    # What the block carries, at the precision the file holds it -- composing
+    # against the exact 30 degrees would be asserting the rounding rather than
+    # the composition.
+    carried = Rotation.from_quat(built.get_block(1).rotation, scalar_first=True)
+    turn = Rotation.from_euler("z", 20.0, degrees=True)
+
+    pp.TransformFOV(rotation=turn.as_matrix()).apply_to_sequence(built, in_place=True)
 
     stored = Rotation.from_quat(built.get_block(1).rotation, scalar_first=True)
-    assert stored.approx_equal(Rotation.from_euler("z", 50.0, degrees=True), atol=1e-12)
+    assert stored.approx_equal(turn * carried, atol=1e-12)
 
 
 def test_composing_leaves_the_blocks_other_extensions_in_place(system, readout):
@@ -326,6 +339,7 @@ def test_a_flag_exempts_the_block_that_sets_it_and_every_block_after(
     built.add_block(gx, adc)
     built.add_block(gx, adc, _flag(label))
     built.add_block(gx, adc)
+    built.remove_duplicates(in_place=True)
 
     before = read(built)
     pp.TransformFOV(**kwargs).apply_to_sequence(built, in_place=True)
@@ -472,11 +486,12 @@ def test_a_unit_scale_leaves_every_block_exactly_as_it_was(seq):
 
 
 def test_a_zero_shift_beside_a_real_scale_still_scales(seq):
+    before = _amplitudes(seq)[0]
     pp.TransformFOV(translation=(0.0, 0.0, 0.0), scale=(2.0, 1.0, 1.0)).apply_to_sequence(
         seq, in_place=True
     )
 
-    assert _amplitudes(seq)[0] == pytest.approx(2.0 * 581.8 / 3.2e-3)
+    assert _amplitudes(seq)[0] == pytest.approx(2.0 * before)
 
 
 def test_an_identity_rotation_is_still_attached(seq):

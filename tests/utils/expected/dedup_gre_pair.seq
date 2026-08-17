@@ -11,7 +11,6 @@ AdcRasterTime 2e-06
 BlockDurationRaster 2e-05 
 FOV 0.22 0.22 0.005 
 GradientRasterTime 2e-05 
-IgnoreAverages 1 
 Matrix 32 8 1 
 Name gre_2d 
 NextSequence dedup_gre_pair_b.seq 
@@ -1740,4 +1739,4 @@ num_samples 4
 # It can be reproduced/verified with md5sum if the file trimmed to the position right above [SIGNATURE]
 # The new line character preceding [SIGNATURE] BELONGS to the signature (and needs to be stripped away for recalculating/verification)
 Type md5
-Hash d346c44eb725a3f03f3dd816c01d8450
+Hash ce3937b860ccc91d3c2813f17c09848d

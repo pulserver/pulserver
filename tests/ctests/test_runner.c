@@ -21,7 +21,6 @@ int test_trid_labels_main(void);
 int test_block_instance_main(void);
 int test_pulsegen_cache_main(void);
 int test_pulseq_binary_main(void);
-int test_pulseq_ktraj_main(void);
 int test_pulseq_rf_main(void);
 int test_czt_main(void);
 int test_chunk_main(void);
@@ -42,7 +41,6 @@ static const test_suite suites[] = {
     {"test_block_instance", test_block_instance_main},
     {"test_pulsegen_cache", test_pulsegen_cache_main},
     {"test_pulseq_binary", test_pulseq_binary_main},
-    {"test_pulseq_ktraj", test_pulseq_ktraj_main},
     {"test_pulseq_rf", test_pulseq_rf_main},
     {"test_czt", test_czt_main},
     {"test_chunk", test_chunk_main},

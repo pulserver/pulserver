@@ -51,11 +51,11 @@ namespace pulseq
          * (w, x, y, z) to a row-major matrix.
          *
          * The same construction as `pulseg__quaternion_to_matrix()` and as
-         * `build_rotations()` in pulseq_ktraj.c -- normalised first,
+         * `KTrajPlan::build_rotations()` in ktraj.cpp -- normalised first,
          * degenerate rows falling back to the identity.  Kept literally in
          * step with them: two rotation conventions in one repository is a
          * silent wrong-direction bug, and `tests/cpptests/test_moments.cpp`
-         * pins this against the k the C core produces for the same block.
+         * pins this against the k the core produces for the same block.
          */
         Matrix3 quaternion_to_matrix(const double* q)
         {
@@ -440,7 +440,7 @@ namespace pulseq
         return out;
     }
 
-    Moments calc_moments(Sequence& seq, const MomentsOptions& options)
+    Moments calc_moments(const Sequence& seq, const MomentsOptions& options)
     {
         Moments out;
 

@@ -240,11 +240,26 @@ class TransformFOV:
         if count == 0 or (scale is None and translation is None and rotation is None):
             return target
 
-        exempt = _label_gates(target, first, last)
+        # Deduplicate first, and not only to save the writer a pass: a scan
+        # arrives here holding one gradient row per use, and everything below
+        # -- the trajectory the shift integrates, the memo that keys its work
+        # -- costs the size of the libraries. Collapsing them first is what
+        # makes those costs the size of the sequence's vocabulary instead of
+        # the length of the scan. It is a no-op on a sequence already
+        # deduplicated, so a caller that does it itself pays nothing twice.
+        target._native.remove_duplicates()
+
+        # The runs each label leaves alone, in one native pass. Runs rather
+        # than a flag per block: the transforms below take a range, so a scan
+        # with no exemptions is one call each, and nothing here is ever a
+        # Python loop over the blocks of the scan.
+        noscl_runs, nopos_runs, norot_runs = target._native.label_gate_runs(
+            [_NOSCL, _NOPOS, _NOROT], first, last
+        )
 
         # Scale first: it changes the amplitudes the translation integrates.
         if scale is not None:
-            for run_first, run_last in _runs(exempt[_NOSCL], first, last):
+            for run_first, run_last in noscl_runs:
                 target._native.apply_fov_scale(*scale, first=run_first, last=run_last)
 
         # Rotation before translation: the server-mode shift reads each
@@ -254,13 +269,13 @@ class TransformFOV:
         # looks. Native mode reads no extensions and is order-blind.
         if rotation is not None:
             turn = Rotation.from_matrix(rotation)
-            for block in range(first, last + 1):
-                if not exempt[_NOROT][block - first]:
+            for run_first, run_last in norot_runs:
+                for block in range(run_first, run_last + 1):
                     _compose_rotation(target._native, block, turn)
 
         if translation is not None:
             shift_m = tuple(value * 1e-3 for value in translation)
-            for run_first, run_last in _runs(exempt[_NOPOS], first, last):
+            for run_first, run_last in nopos_runs:
                 target._native.apply_fov_shift(
                     *shift_m,
                     scope="server" if self.server_mode else "native",
@@ -279,55 +294,6 @@ class TransformFOV:
 
 
 # %% local subroutines
-
-
-def _label_gates(seq: Sequence, first: int, last: int) -> dict[str, list[bool]]:
-    """Which of ``first..last`` each of the three labels exempts.
-
-    One pass over the blocks' extension chains. The labels are sticky: a value
-    set in one block holds until another block sets it, and the block that
-    carries the setting is itself exempt -- both are MATLAB's behaviour. State
-    starts clear for every call, matching ``applyToSeq``'s reset.
-    """
-    state = {_NOSCL: False, _NOPOS: False, _NOROT: False}
-    gates: dict[str, list[bool]] = {name: [] for name in state}
-
-    native = seq._native
-    for block in range(first, last + 1):
-        node = native.get_block(block)[5]
-        while node:
-            type_id, reference, node = native.extension_row(node)
-            if native.extension_type_name(type_id) != "LABELSET":
-                continue
-            value, label_id = native.label_set_row(reference)
-            name = native.label_name(label_id)
-            if name in state:
-                state[name] = bool(value)
-        for name, flagged in state.items():
-            gates[name].append(flagged)
-    return gates
-
-
-def _runs(exempt: list[bool], first: int, last: int) -> list[tuple[int, int]]:
-    """The maximal runs of blocks in ``first..last`` that are not exempt.
-
-    Contiguous runs rather than single blocks because the C++ side takes a
-    range: a scan with no exemptions at all is then one call, not one per
-    block.
-    """
-    runs: list[tuple[int, int]] = []
-    start: int | None = None
-    for offset, flagged in enumerate(exempt):
-        block = first + offset
-        if flagged:
-            if start is not None:
-                runs.append((start, block - 1))
-                start = None
-        elif start is None:
-            start = block
-    if start is not None:
-        runs.append((start, last))
-    return runs
 
 
 def _compose_rotation(native, block: int, turn: Rotation) -> None:

@@ -253,9 +253,6 @@ namespace pulseq
         result.blocks_after = static_cast<int>(durations.size());
         seq.set_blocks(events.data(), durations.data(), result.blocks_after);
 
-        if (options.set_ignore_averages)
-            seq.set_definition("IgnoreAverages", Definition::integers({1.0}));
-
         return result;
     }
 

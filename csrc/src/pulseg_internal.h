@@ -54,8 +54,6 @@ typedef struct pulseg_segment_adc_anchor
     int block_offset; /* block index within segment         */
     float start_us;   /* ADC start time within segment (us) */
     float end_us;     /* ADC end time within segment (us)   */
-    int kzero_index;  /* k=0 sample index within readout    */
-    float kzero_us;   /* k=0 time within segment (us)       */
 } pulseg_segment_adc_anchor;
 
 /* pulseq_shape is defined in pulseg_types.h (public, leaf type).

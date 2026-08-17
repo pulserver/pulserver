@@ -152,7 +152,7 @@ namespace pulseq
         return data_.append(samples, count);
     }
 
-    void ShapeLibrary::compress()
+    bool ShapeLibrary::compress()
     {
         bool any = false;
         for (uint8_t flag : is_compressed_)
@@ -164,7 +164,7 @@ namespace pulseq
             }
         }
         if (!any)
-            return;
+            return false;
 
         // Rebuilt rather than edited in place: a compressed row is shorter
         // than the raw one it replaces, so every row after it moves.
@@ -182,6 +182,7 @@ namespace pulseq
             is_compressed_[static_cast<size_t>(id) - 1] = 1;
         }
         data_ = std::move(rebuilt);
+        return true;
     }
 
 }  // namespace pulseq

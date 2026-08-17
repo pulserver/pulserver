@@ -16,11 +16,14 @@ from pulserver.app import zte3D_sequence
 
 N_VIEWS = 16
 N_SHOTS = 4
+#: Steady-state views at the head of the first shell, played without acquiring.
+N_DUMMY = 4
 
 
 def design(**kwargs):
     kwargs.setdefault("n_views", N_VIEWS)
     kwargs.setdefault("n_shots", N_SHOTS)
+    kwargs.setdefault("n_dummy", N_DUMMY)
     kwargs.setdefault("readout_bandwidth_hz", 125e3)
     return zte3D_sequence.main(n_x=32, **kwargs)
 
@@ -31,16 +34,26 @@ def test_the_sequence_is_valid_pulseq():
 
 
 def test_a_view_is_two_blocks_under_one_rotation():
+    """Pulse then read, both turned the same way.
+
+    True of a dummy view as well as an acquired one -- the steady-state views
+    at the head of the first shell are the same pair without the ADC, since
+    what has to settle is the magnetisation and the gradient never stops.
+    """
     seq = design()
     rf_blocks = [
         index
         for index in range(1, seq.num_blocks + 1)
         if seq.get_block(index).rf is not None
     ]
+    acquired = 0
     for index in rf_blocks:
-        pulse, acquire = seq.get_block(index), seq.get_block(index + 1)
-        assert pulse.adc is None and acquire.adc is not None
-        assert pulse.rotation is not None and acquire.rotation is not None
+        pulse, read = seq.get_block(index), seq.get_block(index + 1)
+        assert pulse.adc is None
+        assert pulse.rotation is not None and read.rotation is not None
+        acquired += read.adc is not None
+    assert acquired == len(rf_blocks) - N_DUMMY
+    assert acquired > 0
 
 
 def test_the_spokes_run_centre_out_and_cover_the_poles():

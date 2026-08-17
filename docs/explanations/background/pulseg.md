@@ -9,9 +9,9 @@ reusable units, or what the repeating pattern is.
 
 Those four distinctions are what an interpreter needs, and they are what the
 **PulSeg intermediate representation** (spec v2.1-alpha, J-F Nielsen and
-M. Cencini) adds. Pulserver's scanner-side representation is a PulSeg
-reading; this page is the model, and {doc}`../sequence_model/pulseg_ir` is
-what Pulserver does with it.
+M. Cencini) adds. This page is the published model;
+{doc}`../sequence_model/pulseg_representation` is what Pulserver does with
+it.
 
 ## Static and dynamic, separated
 
@@ -87,27 +87,17 @@ A Pulseq file is recovered from this by hydrating the definitions and
 applying the instance parameters; the representation is lossless with respect
 to what plays.
 
-## Where Pulserver diverges, deliberately
+## The one thing the designer must still supply
 
-Pulserver conforms **semantically**: it carries every quantity the four
-structures carry, in an id-indexed layout that is a lossless compression of
-them, and the Pulseq → PulSeg conversion is fused into one pass with no
-intermediate file. Three differences are declared rather than hidden:
+The specification recovers all four structures from a Pulseq file, but not
+automatically: segment boundaries are **declared**, by the sequence designer,
+through a `TRID` label — an annotation placed on the first block of each
+repeating unit. The segmentation is manual. A file written without the
+labels, or with labels that no longer match blocks that were later edited,
+cannot be segmented as specified, and every existing Pulseq sequence has to
+be annotated before it can benefit.
 
-- **Segmentation is derived from content, not from `TRID` annotation.** The
-  partition satisfies the same constraints §4.2 exists to guarantee; it is
-  arrived at by detection rather than declaration, for the reasons in
-  {doc}`../sequence_model/tr_and_segmentation`.
-- **The flattened execution loop is not adopted.** The specification's
-  reference implementation materializes one wide row per played block, with
-  the 3×3 rotation inline; Pulserver keeps rotations in a deduplicated
-  library and stores runs, which is what makes a million-block scan fit.
-  Gradient *energy* likewise belongs with the segment definition — it is
-  consumed once, to determine the initial state for pulse generation — rather
-  than on every instance row.
-- **Times are integer microseconds**, the 32-bit scanner target, where the
-  specification speaks seconds.
-
-The full field-by-field mapping, and the proposed `user_int[]`/`user_float[]`
-spec amendment that would let an implementation carry its extras without new
-classes, is in the conformance note shipped with the source.
+How Pulserver maps onto these four structures — and how it removes the
+annotation requirement by detecting the segmentation from the block content —
+is the subject of {doc}`../sequence_model/pulseg_representation` and
+{doc}`../sequence_model/tr_and_segmentation`.

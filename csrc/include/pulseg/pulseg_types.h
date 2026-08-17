@@ -416,7 +416,6 @@ typedef struct pulseg_tr_block_descriptor
     float duration_us;     /**< block duration (us)               */
     int segment_idx;       /**< segment index, or -1 (prep/cooldown) */
     float rf_isocenter_us; /**< RF isocenter time within TR (us), or -1.0 */
-    float adc_kzero_us;    /**< ADC k=0 time within TR (us), or -1.0 */
 } pulseg_tr_block_descriptor;
 
 /**

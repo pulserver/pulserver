@@ -159,7 +159,9 @@ def test_the_first_view_of_a_train_echoes_at_the_inversion_time():
         t += block.block_duration
     inversions = np.asarray(inversions)
 
-    assert echo - inversions[0] == pytest.approx(TI, abs=2e-5)
+    # The inversion this echo belongs to, not the first of the scan: the
+    # steady-state trains invert too.
+    assert echo - inversions[inversions < echo].max() == pytest.approx(TI, abs=2e-5)
     assert np.diff(inversions) == pytest.approx(
         np.full(len(inversions) - 1, TR_OUTER), abs=1e-5
     )

@@ -19,30 +19,68 @@ NumGainCalibrationReadouts 1
 RadiofrequencyRasterTime 2e-06 
 TE 0.00542 
 TRSize 19 
-TotalDuration 0.0106 
+TotalDuration 0.0318 
 
 # Format of blocks:
 # NUM DUR RF  GX  GY  GZ  ADC  EXT
 [BLOCKS]
- 1 154   1   0   0   1  0  0
- 2  24   0   2   3   4  0  1
- 3  20   0   5   6   0  1  4
- 4  20   0   7   8   0  1  6
- 5  20   0   5   8   0  1  7
- 6  20   0   7   8   0  1  6
- 7  20   0   5   8   0  1  7
- 8  20   0   7   8   0  1  6
- 9  20   0   5   8   0  1  7
-10  20   0   7   8   0  1  6
-11  20   0   5   8   0  1  7
-12  20   0   7   8   0  1  6
-13  20   0   5   8   0  1  7
-14  20   0   7   8   0  1  6
-15  20   0   5   8   0  1  7
-16  20   0   7   8   0  1  6
-17  20   0   5   8   0  1  7
-18  20   0   7   9   0  1  6
+ 1 154   1   0   0   1  0  1
+ 2  24   0   2   3   4  0  0
+ 3  20   0   5   6   0  0  0
+ 4  20   0   7   8   0  0  0
+ 5  20   0   5   8   0  0  0
+ 6  20   0   7   8   0  0  0
+ 7  20   0   5   8   0  0  0
+ 8  20   0   7   8   0  0  0
+ 9  20   0   5   8   0  0  0
+10  20   0   7   8   0  0  0
+11  20   0   5   8   0  0  0
+12  20   0   7   8   0  0  0
+13  20   0   5   8   0  0  0
+14  20   0   7   8   0  0  0
+15  20   0   5   8   0  0  0
+16  20   0   7   8   0  0  0
+17  20   0   5   8   0  0  0
+18  20   0   7   9   0  0  0
 19  32   0  10  11   0  0  0
+20 154   1   0   0   1  0  0
+21  24   0   2   3   4  0  0
+22  20   0   5   6   0  0  0
+23  20   0   7   8   0  0  0
+24  20   0   5   8   0  0  0
+25  20   0   7   8   0  0  0
+26  20   0   5   8   0  0  0
+27  20   0   7   8   0  0  0
+28  20   0   5   8   0  0  0
+29  20   0   7   8   0  0  0
+30  20   0   5   8   0  0  0
+31  20   0   7   8   0  0  0
+32  20   0   5   8   0  0  0
+33  20   0   7   8   0  0  0
+34  20   0   5   8   0  0  0
+35  20   0   7   8   0  0  0
+36  20   0   5   8   0  0  0
+37  20   0   7   9   0  0  0
+38  32   0  10  11   0  0  0
+39 154   1   0   0   1  0  2
+40  24   0   2   3   4  0  3
+41  20   0   5   6   0  1  6
+42  20   0   7   8   0  1  8
+43  20   0   5   8   0  1  9
+44  20   0   7   8   0  1  8
+45  20   0   5   8   0  1  9
+46  20   0   7   8   0  1  8
+47  20   0   5   8   0  1  9
+48  20   0   7   8   0  1  8
+49  20   0   5   8   0  1  9
+50  20   0   7   8   0  1  8
+51  20   0   5   8   0  1  9
+52  20   0   7   8   0  1  8
+53  20   0   5   8   0  1  9
+54  20   0   7   8   0  1  8
+55  20   0   5   8   0  1  9
+56  20   0   7   9   0  1  8
+57  32   0  10  11   0  0  0
 
 # Format of RF events:
 # id ampl. mag_id phase_id time_shape_id center delay freqPPm phasePPM freq phase use
@@ -85,21 +123,25 @@ TotalDuration 0.0106
 # Extension list is followed by extension specifications
 [EXTENSIONS]
 1 1 1 0
-2 1 4 0
-3 1 3 2
-4 1 2 3
-5 2 1 3
-6 1 5 5
-7 1 2 5
+2 1 2 0
+3 1 3 0
+4 1 6 0
+5 1 5 4
+6 1 4 5
+7 2 1 5
+8 1 7 7
+9 1 4 7
 
 # Extension specification for setting labels:
 # id set labelstring
 extension LABELSET 1
-1 0 LIN
-2 0 REV
-3 0 SLC
-4 0 REP
-5 1 REV
+1 1 ONCE
+2 0 ONCE
+3 0 LIN
+4 0 REV
+5 0 SLC
+6 0 REP
+7 1 REV
 
 # Extension specification for setting labels:
 # id set labelstring
@@ -1662,4 +1704,4 @@ num_samples 2
 # It can be reproduced/verified with md5sum if the file trimmed to the position right above [SIGNATURE]
 # The new line character preceding [SIGNATURE] BELONGS to the signature (and needs to be stripped away for recalculating/verification)
 Type md5
-Hash e7a39543325a38f06d78fdacee09d2c5
+Hash ed6fb876f4a90eb0bc06a5d00efbb756

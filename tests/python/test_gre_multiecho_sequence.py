@@ -37,13 +37,29 @@ def design_3d(**kwargs):
     )
 
 
-def crossings(seq, count=N_ECHOES):
-    """Sample index of the echo in each of the first ``count`` acquisitions."""
+def straddles_centre(seq, count=N_ECHOES):
+    """Whether each of the first ``count`` acquisitions crosses k = 0 between
+    its two central samples, and symmetrically.
+
+    An even-sampled readout has no sample *at* k = 0: the two central ones sit
+    at -dk/2 and +dk/2, equidistant. Which of them ``argmin`` returns is
+    decided by the last bits of a gradient amplitude -- and a designed sequence
+    is held at the precision the file writes -- so the index is not the claim.
+    Straddling the centre is.
+    """
     k_traj_adc, *_ = seq.calculate_kspace()
     labels = seq.evaluate_labels(evolution="adc")
     n_samples = k_traj_adc.shape[1] // len(labels["ECO"])
     kx = k_traj_adc[0].reshape(-1, n_samples)
-    return [int(np.argmin(np.abs(kx[echo]))) for echo in range(count)]
+    out = []
+    for echo in range(count):
+        left, right = kx[echo, n_samples // 2 - 1], kx[echo, n_samples // 2]
+        step = abs(right - left)
+        # Straddling, and the midpoint on the origin to a thousandth of a
+        # sample -- what survives holding the gradients at file precision,
+        # which costs about 3e-5 of a step.
+        out.append(left * right < 0.0 and abs(left + right) / 2.0 < 1e-3 * step)
+    return out
 
 
 @pytest.mark.parametrize("design", [design_2d, design_3d], ids=["2d", "3d"])
@@ -58,8 +74,7 @@ def test_every_echo_is_centred_on_its_readout(design, monopolar):
     """The train's whole contract: each echo crosses k = 0 at the centre
     sample, whichever way its lobe is played."""
     seq = design(monopolar=monopolar)
-    centre = N_X // 2 - 1
-    assert crossings(seq) == [centre] * N_ECHOES
+    assert straddles_centre(seq) == [True] * N_ECHOES
 
 
 @pytest.mark.parametrize("design", [design_2d, design_3d], ids=["2d", "3d"])

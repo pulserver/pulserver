@@ -114,6 +114,7 @@ from ._results import (
 from ._simulate import bloch as _bloch
 from ._simulate import calc_rf_bandwidth as _calc_rf_bandwidth
 from ._simulate import sim_rf as _sim_rf
+from ._tile import tile as _tile
 from ._transform_fov import TransformFOV as _TransformFOV
 
 #: Upstream names Pulserver deliberately does not re-export: the three shape
@@ -179,6 +180,7 @@ scale_grad = _fast_scale_grad(globals()["scale_grad"])
 
 Sequence = _Sequence
 TransformFOV = _TransformFOV
+tile = _tile
 block_to_events = _block_to_events
 AdcTimes = _AdcTimes
 BTensor = _BTensor
@@ -379,6 +381,7 @@ OVERRIDES = frozenset(
         "Sequence",
         "TransformFOV",
         "block_to_events",
+        "tile",
         "canonical_label",
         "get_supported_labels",
         "make_label",

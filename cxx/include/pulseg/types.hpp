@@ -452,7 +452,6 @@ namespace pulseg
         float duration_us = 0.0f;
         int segment_idx = -1;
         float rf_isocenter_us = -1.0f;
-        float adc_kzero_us = -1.0f;
     };
 
     struct TrWaveforms

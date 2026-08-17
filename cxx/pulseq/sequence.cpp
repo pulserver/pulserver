@@ -182,12 +182,14 @@ namespace pulseq
 
     int Sequence::register_rf(const double* row, char use)
     {
+        deduplicated_ = false;
         rf_use_.push_back(use);
         return rf_.append(row);
     }
 
     int Sequence::register_trap(const double* row)
     {
+        deduplicated_ = false;
         const int slot = trap_.append(row);
         grad_slot_.push_back(static_cast<int32_t>(slot));
         return static_cast<int>(grad_slot_.size());
@@ -195,52 +197,84 @@ namespace pulseq
 
     int Sequence::register_arbitrary(const double* row)
     {
+        deduplicated_ = false;
         const int slot = arb_.append(row);
         grad_slot_.push_back(-static_cast<int32_t>(slot));
         return static_cast<int>(grad_slot_.size());
     }
 
-    int Sequence::register_adc(const double* row) { return adc_.append(row); }
-    int Sequence::register_trigger(const double* row) { return trigger_.append(row); }
-    int Sequence::register_rotation(const double* row) { return rotation_.append(row); }
+    int Sequence::register_adc(const double* row)
+    {
+        deduplicated_ = false;
+        return adc_.append(row);
+    }
+
+    int Sequence::register_trigger(const double* row)
+    {
+        deduplicated_ = false;
+        return trigger_.append(row);
+    }
+
+    int Sequence::register_rotation(const double* row)
+    {
+        deduplicated_ = false;
+        return rotation_.append(row);
+    }
 
     int Sequence::register_label_set(int32_t value, int32_t label_id)
     {
+        deduplicated_ = false;
         const int32_t row[LABEL_WIDTH] = {value, label_id};
         return label_set_.append(row);
     }
 
     int Sequence::register_label_inc(int32_t value, int32_t label_id)
     {
+        deduplicated_ = false;
         const int32_t row[LABEL_WIDTH] = {value, label_id};
         return label_inc_.append(row);
     }
 
     int Sequence::register_rf_shim(const double* values, int count)
     {
+        deduplicated_ = false;
         return rf_shim_.append(values, count);
     }
 
     int Sequence::register_soft_delay(const SoftDelay& row)
     {
+        deduplicated_ = false;
         soft_delays_.push_back(row);
         return static_cast<int>(soft_delays_.size());
     }
 
     int Sequence::register_shape(int num_uncompressed, const double* samples, int count)
     {
+        deduplicated_ = false;
         return shapes_.append(num_uncompressed, samples, count);
     }
 
     int Sequence::register_raw_shape(const double* samples, int count)
     {
+        deduplicated_ = false;
         return shapes_.append_raw(samples, count);
     }
 
-    void Sequence::compress_shapes() { shapes_.compress(); }
+    void Sequence::compress_shapes()
+    {
+        /* Compressing can make two shapes that differed only below the codec's
+         * quantum into one row, so what was distinct may not be any more --
+         * but only if it actually compressed something.  A library already
+         * encoded is left exactly as it was, and saying so is what lets a
+         * sequence read from a file keep its deduplicated claim through a
+         * writer that calls this on the way past. */
+        if (shapes_.compress())
+            deduplicated_ = false;
+    }
 
     int Sequence::chain_extension(int32_t type_id, int32_t ref, int32_t next)
     {
+        deduplicated_ = false;
         const std::array<int32_t, EXTENSION_WIDTH> key{type_id, ref, next};
         auto it = chain_index_.find(key);
         if (it != chain_index_.end())
@@ -253,6 +287,7 @@ namespace pulseq
 
     int Sequence::append_extension(int32_t type_id, int32_t ref, int32_t next)
     {
+        deduplicated_ = false;
         const std::array<int32_t, EXTENSION_WIDTH> row{type_id, ref, next};
         return extensions_.append(row.data());
     }
@@ -282,6 +317,7 @@ namespace pulseq
 
     int Sequence::add_block(const Block& block)
     {
+        deduplicated_ = false;
         blocks_.insert(blocks_.end(), {block.rf, block.gx, block.gy, block.gz, block.adc, block.ext});
         durations_.push_back(block.duration);
         return static_cast<int>(durations_.size());
@@ -289,6 +325,7 @@ namespace pulseq
 
     void Sequence::set_block(int index, const Block& block)
     {
+        deduplicated_ = false;
         require_block(index, num_blocks());
         int32_t* row = blocks_.data() + static_cast<size_t>(index - 1) * BLOCK_WIDTH;
         row[0] = block.rf;
@@ -317,23 +354,27 @@ namespace pulseq
 
     void Sequence::set_blocks(const int32_t* events, const double* durations, int count)
     {
+        deduplicated_ = false;
         blocks_.assign(events, events + static_cast<size_t>(count) * BLOCK_WIDTH);
         durations_.assign(durations, durations + count);
     }
 
     void Sequence::set_grad_slots(const int32_t* slots, int count)
     {
+        deduplicated_ = false;
         grad_slot_.assign(slots, slots + count);
     }
 
     void Sequence::set_shapes(const int32_t* num_uncompressed, int count, const int32_t* starts,
                               const double* samples)
     {
+        deduplicated_ = false;
         shapes_.assign(num_uncompressed, count, starts, samples);
     }
 
     void Sequence::set_rf_shims(const int32_t* starts, int count, const double* values)
     {
+        deduplicated_ = false;
         rf_shim_.assign(starts, count, values);
     }
 

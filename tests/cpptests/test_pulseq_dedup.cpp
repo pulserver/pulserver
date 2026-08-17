@@ -871,3 +871,114 @@ namespace
         });
 
 }  // namespace
+
+/* ================================================================== */
+/*  The deduplicated claim                                             */
+/* ================================================================== */
+
+namespace
+{
+    /** A sequence with two identical readouts, so there is something to collapse. */
+    pulseq::Sequence twin_readouts()
+    {
+        pulseq::Sequence seq;
+        seq.set_rasters(1e-6, 10e-6, 100e-9, 10e-6);
+
+        const double trap[pulseq::TRAP_WIDTH] = {1.0e5, 100e-6, 1000e-6, 100e-6, 0.0};
+        const double adc[pulseq::ADC_WIDTH] = {64.0, 10e-6, 100e-6, 0.0, 0.0, 0.0, 0.0, 0.0};
+
+        for (int i = 0; i < 2; ++i)
+        {
+            pulseq::Block block;
+            block.gx = seq.register_trap(trap);
+            block.adc = seq.register_adc(adc);
+            block.duration = 1200e-6;
+            seq.add_block(block);
+        }
+        return seq;
+    }
+}  // namespace
+
+TEST(PulseqDedupClaim, IsFalseUntilTheSequenceHasBeenCollapsed)
+{
+    pulseq::Sequence seq = twin_readouts();
+    EXPECT_FALSE(seq.deduplicated());
+    EXPECT_EQ(seq.trap_library().size(), 2);
+
+    seq.remove_duplicates();
+    EXPECT_TRUE(seq.deduplicated());
+    EXPECT_EQ(seq.trap_library().size(), 1);
+}
+
+/* A second pass has nothing to find, which is what makes the claim worth
+ * keeping: the ordinary path deduplicates once and then writes. */
+TEST(PulseqDedupClaim, SurvivesASecondPassAndTheSecondPassChangesNothing)
+{
+    pulseq::Sequence seq = twin_readouts();
+    seq.remove_duplicates();
+    const std::string once = pulseq::write_text(seq, false);
+
+    seq.remove_duplicates();
+    EXPECT_TRUE(seq.deduplicated());
+    EXPECT_EQ(pulseq::write_text(seq, false), once);
+}
+
+/* Registering anything gives up the claim -- the new row may be a duplicate. */
+TEST(PulseqDedupClaim, RegisteringGivesItUp)
+{
+    pulseq::Sequence seq = twin_readouts();
+    seq.remove_duplicates();
+    ASSERT_TRUE(seq.deduplicated());
+
+    const double trap[pulseq::TRAP_WIDTH] = {1.0e5, 100e-6, 1000e-6, 100e-6, 0.0};
+    seq.register_trap(trap);
+    EXPECT_FALSE(seq.deduplicated());
+}
+
+/*
+ * A writer only reads, so it must not cost a caller the claim.
+ *
+ * It does stamp `TotalDuration` and publish the rasters, and it compresses any
+ * shape still held raw -- and that last one *can* make two shapes into one, so
+ * it is the one thing here that legitimately gives the claim up.  A sequence
+ * whose shapes are already encoded keeps it.
+ */
+TEST(PulseqDedupClaim, WritingASequenceWithEncodedShapesKeepsIt)
+{
+    pulseq::Sequence seq = twin_readouts();
+    seq.remove_duplicates();
+    seq.compress_shapes();
+    ASSERT_TRUE(seq.deduplicated()) << "no shape was held raw, so nothing changed";
+
+    pulseq::write_text(seq, false);
+    EXPECT_TRUE(seq.deduplicated());
+
+    pulseq::write_binary(seq);
+    EXPECT_TRUE(seq.deduplicated());
+}
+
+/* Compressing a raw shape can collapse two rows into one, so it gives it up. */
+TEST(PulseqDedupClaim, CompressingARawShapeGivesItUp)
+{
+    pulseq::Sequence seq = twin_readouts();
+    const std::vector<double> wave(64, 0.5);
+    seq.register_raw_shape(wave.data(), static_cast<int>(wave.size()));
+    seq.remove_duplicates();
+    ASSERT_TRUE(seq.deduplicated());
+
+    seq.compress_shapes();
+    EXPECT_FALSE(seq.deduplicated());
+}
+
+/* A copy carries the claim: it is a property of the contents, not the object. */
+TEST(PulseqDedupClaim, ACopyCarriesIt)
+{
+    pulseq::Sequence seq = twin_readouts();
+    seq.remove_duplicates();
+
+    const pulseq::Sequence copy = seq;
+    EXPECT_TRUE(copy.deduplicated());
+
+    pulseq::Sequence fresh = twin_readouts();
+    EXPECT_FALSE(fresh.deduplicated());
+}

@@ -1,9 +1,9 @@
 # Pulseq in one page
 
 [Pulseq](https://pulseq.github.io) is an open file format for MR sequences.
-A `.seq` file says what to play, on which axis, for how long — and nothing
-about the scanner that will play it. Everything Pulserver does sits on that
-description, so this is what it contains.
+A `.seq` file says what to play, on which axis, for how long — the complete
+prescription of an experiment, portable across sites and vendors. Everything
+Pulserver does sits on that description, so this is what it contains.
 
 ## Blocks and events
 
@@ -79,18 +79,41 @@ evaluates each subsequence independently.
 `[SIGNATURE]` closes the file with an MD5 of everything above it, so a
 scanner can refuse a file that changed after it was checked.
 
-## What the format does not say
+## Three things the format leaves open
 
-Deliberately, and this is the point of it: nothing about hardware. No
-gradient or slew limit, no coil, no SAR model, no acoustic response. A `.seq`
-that plays on one system may be unplayable on another, and the file cannot
-tell you which.
+Pulseq describes the playout completely. Between that description and a
+sequence that stands in for a product one on a clinical scanner, three gaps
+remain — none of them a flaw in the format, all of them the motivation for
+the rest of this documentation.
 
-It also says nothing about *structure*: which blocks form the repeating unit,
-which runs are reusable segments, where the echo is. That information exists
-— it is implicit in the content — but no field carries it.
+**Structure.** The file carries every event, but not how the events are
+organised. Within one event, the fixed skeleton — a gradient's delay, its
+rise, flat and fall times, its time shape — is not separated from what varies
+playout to playout, the amplitude or the waveform shape it points at. Above
+the event, nothing groups the events that play together into a parent block
+that recurs *as a unit*, nothing groups reused ordered runs of blocks into
+segments, and nothing identifies the periodic pattern of segments — the TR —
+that the scan is a repetition of. All of that information exists, implicit in
+the content, but no field carries it. A platform whose sequencer prepares a
+segment once and replays it (GE's, for one) has to reconstruct that grouping
+before it can play the file at all, and every safety quantity that is defined
+over a repetition — SAR, gradient heating, the acoustic drive — has to
+rediscover the repetition before it can be computed, which makes the checks
+expensive.
 
-Those two gaps are the whole of Pulserver's job: {doc}`../safety/index` fills
-the first against a system's actual limits,
-{doc}`../sequence_model/tr_and_segmentation` fills the second by deriving the
-structure from the blocks.
+**Prescription-time adjustment.** A product sequence is edited at the
+console: the operator changes TE, TR, FOV, matrix, orientation minutes before
+the exam. Pulseq offers some of this — the `SOFT_DELAY` extension, FOV
+scaling and repositioning of a written file — but the adjustable surface is
+small compared to what an operator expects, and most parameter changes mean
+rewriting the file.
+
+**Design throughput.** The reference writers are MATLAB and Python. At
+demonstration sizes that is comfortable; at clinical matrix sizes a scan is
+hundreds of thousands to millions of blocks, and an interpreted loop over
+them takes minutes where a console expects seconds.
+
+Taken together, these three are what stands between a `.seq` file and a
+replacement for a product sequence. The {doc}`sequence model
+<../sequence_model/index>` pages describe how Pulserver closes each of them,
+and {doc}`../safety/index` covers the checks that structure makes affordable.

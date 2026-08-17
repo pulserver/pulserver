@@ -86,9 +86,9 @@ k_traj, t_excitation, t_refocusing, t_adc)`, and is a drop-in for upstream's:
 all five elements match it to 1e-9 or better, and the extra parameters are
 keyword-only after upstream's own.
 
-`k_traj_adc` — the one a reconstruction needs — comes from the C library,
-`csrc/src/pulseq/pulseq_ktraj.c`, the same code the interpreter links, rather
-than from a second implementation in Python. It integrates each distinct
+`k_traj_adc` — the one a reconstruction needs — comes from the compiled
+library, `cxx/pulseq/ktraj.cpp`, rather than from a second implementation in
+Python. It integrates each distinct
 gradient *shape* once instead of each block, so the cost follows the number of
 distinct gradients rather than the length of the scan, and it memoizes per
 readout on the block's event-id tuple, so a scan that plays one readout a
@@ -98,7 +98,7 @@ GRE and 2e-12 on an EPI.
 `k_traj`, the dense trajectory, is **computed by upstream**. It is a picture of
 the sequence rather than an input to a reconstruction, and being able to hand
 it to code written against upstream matters more than computing it quickly.
-The C core's own answer is on the gradient breakpoint grid — the same curve in
+The core's own answer is on the gradient breakpoint grid — the same curve in
 five to ten times fewer points — and is available through `_kspace()` together
 with its time base, which upstream's tuple has nowhere to put. Pass
 `dense=False` to skip it. Sequences upstream cannot read, meaning anything
@@ -243,11 +243,12 @@ the `opnex` knob — and uses the `ONCE` flag to work out what belongs to a
 single pass: `1` plays on the first repetition only, `2` on the last only, `0`
 on all of them.
 
-`Sequence.expand_repeats(n)` does that arithmetic here instead and writes the
-answer down. Afterwards the block table *is* the scan: every repetition is
-present in the order it plays, and nothing downstream has to be told how many
-times to read it. Call it like `remove_duplicates` — once, on a finished
-sequence, before writing.
+`tile(seq, n)` does that arithmetic here instead and writes the answer down.
+Afterwards the block table *is* the scan: every repetition is present in the
+order it plays, and nothing downstream has to be told how many times to read
+it. Call it like `remove_duplicates` — once, on a finished sequence, before
+writing; it deduplicates first, because reading `ONCE` means walking every
+block's extension chain and that is far cheaper on a collapsed library.
 
 Only the block table grows. A repetition plays the *same* events, so every
 library is untouched and deduplication has nothing left to find: a
@@ -258,9 +259,12 @@ What it buys is that the file stops depending on a number that is not in it. A
 sequence written this way plays identically under any interpreter, including
 one that has never heard of `ONCE`, and the average index becomes a label a
 reconstruction can sort by rather than something the interpreter synthesises
-on the way past. `IgnoreAverages 1` goes into `[DEFINITIONS]` to say the
-expansion has already happened, so a console-side count cannot multiply it a
-second time.
+on the way past.
+
+Nothing is written into the file to say the expansion happened. Whether a
+subsequence carries its own repetitions is the design's decision, and the
+block table already shows it: one that should be acquired once — an EPI
+calibration, say — is simply not tiled.
 
 The repetition index is stamped as `AVG`, because the repetition an
 interpreter adds is a signal average — the same acquisition, sampled again.

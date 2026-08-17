@@ -31,10 +31,5 @@ namespace pulseq
 #include "pulseq_binary.c"
 #include "pulseq_names.c"
 #include "pulseq_parse.c"
-
-/* The trajectory core comes along for the same reason the parser does: it is
- * the one implementation, and the host wants it at the precision the file was
- * written at rather than the precision the scanner stores. */
-#include "pulseq_ktraj.c"
     }  // namespace raw64
 }  // namespace pulseq

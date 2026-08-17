@@ -20,9 +20,10 @@ machinery, and each lane tests a *different* body of code:
 | design / sampling / app.sequence / app.recon / recon stacks | Python | remaining `python/` |
 | Nim bridge (host binary + bundle) | Nim via pytest | `python/native/test_nimtests.py` |
 
-So "k-space appears three times" is three implementations: `test_pulseq_ktraj.c`
-covers the scanner-side C core, `test_pulseq_trajectory.cpp`/`test_pulseq_kspace.cpp`
-the C++ library, `test_pypulseq_kspace.py` the Python binding surface.
+So "k-space appears three times" is three layers of one implementation:
+`test_pulseq_ktraj.cpp` covers the trajectory core against the sequences' own
+numbers, `test_pulseq_trajectory.cpp`/`test_pulseq_kspace.cpp` the C++ surface
+over it, `test_pypulseq_kspace.py` the Python binding surface.
 
 ## Where the references come from
 

@@ -109,6 +109,7 @@ def main(
     readout_bandwidth_hz: float = 500e3,
     opposite_reference: bool = True,
     partition_order: str = "center_out",
+    n_dummy: int = 2,
     n_gain_calibration_readouts: int = 1,
     spoiling_cycles: float = 4.0,
 ) -> pp.Sequence:
@@ -189,6 +190,11 @@ def main(
     opposite_reference : bool, optional
         Include the opposite-phase-encode reference when writing the pair.
         Default is True.
+    n_dummy : int, optional
+        Shots played without acquiring, before the first acquired one, so the
+        first acquired shot sees the magnetisation every later one sees. A
+        whole shot is the unit: one excitation and its train is what the
+        steady state is reached by. Default is 2.
     n_gain_calibration_readouts : int, optional
         Written as the ``NumGainCalibrationReadouts`` definition. Default
         is 1.
@@ -238,6 +244,26 @@ def main(
     # length, so it needs only its origin ``first_y`` here.
     kept = list(range(kernel.first_shell, kernel.n_shells))
     shells = [kept[i] for i in pp.calc_traversal_order(len(kept), partition_order)]
+    # Steady state first: whole shots without acquiring, before the first
+    # acquired one.
+    #
+    # `ONCE` is what keeps them out of the averages: 1 plays on the first pass
+    # only, and the first acquired shot clears it back to 0 so the body
+    # repeats.
+    mark = pp.make_label("ONCE", "SET", 1)
+    for _ in range(n_dummy):
+        ShotKernel(
+            seq,
+            epi,
+            origin=(kernel.first_y, shells[0] * acceleration_z),
+            grid=(n_y, n_z),
+            rev_label=rev_label,
+            acquire=False,
+            first_extra=(mark,) if mark is not None else (),
+        )
+        mark = None
+
+    clear_once = pp.make_label("ONCE", "SET", 0) if n_dummy else None
     for repetition in range(n_repetitions):
         rep_label.value = int(repetition)
         # Imaging only: coil maps come from the separate calibration sequence,
@@ -251,7 +277,9 @@ def main(
                     grid=(n_y, n_z),
                     rev_label=rev_label,
                     extra_line_labels=(rep_label,),
+                    first_extra=(clear_once,) if clear_once is not None else (),
                 )
+                clear_once = None
 
     pp.TransformFOV(
         translation=tuple(offset * 1e3 for offset in fov_offset), system=system
@@ -442,13 +470,15 @@ def ShotKernel(
     invert_phase: bool = False,
     blip_nulled: bool = False,
     n_lines: int | None = None,
+    acquire: bool = True,
+    first_extra=(),
 ) -> None:
     """One excitation and its train, per the module's loop contract."""
     n_y, n_z = grid
     sign = -1.0 if invert_phase else 1.0
     count = epi.etl if n_lines is None else n_lines
 
-    seq.add_block(epi.rf, epi.gz)
+    seq.add_block(epi.rf, epi.gz, *first_extra)
     if getattr(epi, "wait_te", None) is not None:
         seq.add_block(epi.wait_te)
 
@@ -464,16 +494,19 @@ def ShotKernel(
         epi.gx_pre,
         pp.scale_grad(epi.gy_pre, ky_scale),
         pp.scale_grad(epi.gz_pre, kz_scale),
-        *(epi.shot_labels if origin is not None else ()),
+        *(epi.shot_labels if acquire and origin is not None else ()),
     )
     for line in range(count):
         rev_label.value = int(line % 2)
-        events = [epi.gx[line], epi.adc, rev_label]
+        events = [epi.gx[line]]
+        if acquire:
+            events.extend((epi.adc, rev_label))
         for blip in (epi.gy_blips[line], epi.gz_blips[line]):
             if blip is not None and not blip_nulled:
                 events.append(blip if not invert_phase else pp.scale_grad(blip, -1.0))
-        events.extend(epi.line_labels[line] if origin is not None else ())
-        events.extend(extra_line_labels)
+        if acquire:
+            events.extend(epi.line_labels[line] if origin is not None else ())
+            events.extend(extra_line_labels)
         seq.add_block(*events)
     seq.add_block(
         epi.gx_spoil,

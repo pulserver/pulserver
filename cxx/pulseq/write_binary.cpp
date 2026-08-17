@@ -191,15 +191,22 @@ namespace pulseq
         seq.set_definition("TotalDuration", Definition(seq.duration()));
         seq.publish_rasters();
 
+        /* Every read below goes through a const reference, so the writer does
+         * not look like a mutation to the sequence.  Taking `Table&` from a
+         * non-const Sequence is what gives up its deduplicated claim, and a
+         * writer that only reads must not cost a caller that pass. */
+        const Sequence& reading = seq;
+
+
         std::string out;
         out.reserve(static_cast<size_t>(n_blocks) * 32 + 8192);
 
         out.append(FILE_HEADER, 8);
-        put_i64(out, seq.version_major());
-        put_i64(out, seq.version_minor());
+        put_i64(out, reading.version_major());
+        put_i64(out, reading.version_minor());
         put_i64(out, required_revision(seq));
 
-        if (!seq.definitions().empty())
+        if (!reading.definitions().empty())
         {
             put_section(out, SEC_DEFINITIONS);
             write_definitions(out, seq);
@@ -215,8 +222,8 @@ namespace pulseq
             // written.  It is also most of a large file, which is why it is
             // laid into one allocation through a cursor rather than appended a
             // field at a time.
-            const int32_t* events = seq.block_events();
-            const double* durations = seq.block_durations();
+            const int32_t* events = reading.block_events();
+            const double* durations = reading.block_durations();
             constexpr size_t STRIDE = 8 + 4 * BLOCK_WIDTH;
 
             const size_t base = out.size();
@@ -250,13 +257,13 @@ namespace pulseq
 
         /* -- RF ---------------------------------------------------------- */
 
-        if (!seq.rf_library().empty())
+        if (!reading.rf_library().empty())
         {
             put_section(out, SEC_RF);
-            put_i64(out, seq.rf_library().size());
-            for (int id = 1; id <= seq.rf_library().size(); ++id)
+            put_i64(out, reading.rf_library().size());
+            for (int id = 1; id <= reading.rf_library().size(); ++id)
             {
-                const double* d = seq.rf_library().row(id);
+                const double* d = reading.rf_library().row(id);
                 put_i32(out, id);
                 put_f64(out, d[0]);
                 put_i32(out, static_cast<int32_t>(d[1]));
@@ -266,7 +273,7 @@ namespace pulseq
                 put_i64(out, picoseconds(d[5]));
                 for (int i = 6; i < 10; ++i)
                     put_f64(out, d[i]);
-                const char use = seq.rf_uses()[static_cast<size_t>(id) - 1];
+                const char use = reading.rf_uses()[static_cast<size_t>(id) - 1];
                 out.push_back(use ? use : 'u');
             }
         }
@@ -274,9 +281,9 @@ namespace pulseq
         /* -- gradients --------------------------------------------------- */
 
         std::vector<int> arbitrary, trapezoids;
-        for (int id = 1; id <= seq.num_gradients(); ++id)
+        for (int id = 1; id <= reading.num_gradients(); ++id)
         {
-            if (seq.grad_kind(id) == GradKind::Arbitrary)
+            if (reading.grad_kind(id) == GradKind::Arbitrary)
                 arbitrary.push_back(id);
             else
                 trapezoids.push_back(id);
@@ -288,7 +295,7 @@ namespace pulseq
             put_i64(out, static_cast<int64_t>(arbitrary.size()));
             for (int id : arbitrary)
             {
-                const double* d = seq.arb_library().row(seq.grad_row(id));
+                const double* d = reading.arb_library().row(reading.grad_row(id));
                 put_i32(out, id);
                 put_f64(out, d[0]);
                 put_f64(out, d[1]);
@@ -305,7 +312,7 @@ namespace pulseq
             put_i64(out, static_cast<int64_t>(trapezoids.size()));
             for (int id : trapezoids)
             {
-                const double* d = seq.trap_library().row(seq.grad_row(id));
+                const double* d = reading.trap_library().row(reading.grad_row(id));
                 put_i32(out, id);
                 put_f64(out, d[0]);
                 for (int i = 1; i < TRAP_WIDTH; ++i)
@@ -315,13 +322,13 @@ namespace pulseq
 
         /* -- ADC --------------------------------------------------------- */
 
-        if (!seq.adc_library().empty())
+        if (!reading.adc_library().empty())
         {
             put_section(out, SEC_ADC);
-            put_i64(out, seq.adc_library().size());
-            for (int id = 1; id <= seq.adc_library().size(); ++id)
+            put_i64(out, reading.adc_library().size());
+            for (int id = 1; id <= reading.adc_library().size(); ++id)
             {
-                const double* d = seq.adc_library().row(id);
+                const double* d = reading.adc_library().row(id);
                 put_i32(out, id);
                 put_i64(out, static_cast<int64_t>(std::nearbyint(d[0])));
                 put_i64(out, picoseconds(d[1]));
@@ -334,16 +341,16 @@ namespace pulseq
 
         /* -- shapes ------------------------------------------------------ */
 
-        if (!seq.shape_library().empty())
+        if (!reading.shape_library().empty())
         {
             put_section(out, SEC_SHAPES);
-            put_i64(out, seq.shape_library().size());
-            for (int id = 1; id <= seq.shape_library().size(); ++id)
+            put_i64(out, reading.shape_library().size());
+            for (int id = 1; id <= reading.shape_library().size(); ++id)
             {
-                const int count = seq.shape_library().num_compressed(id);
-                const double* samples = seq.shape_library().samples(id);
+                const int count = reading.shape_library().num_compressed(id);
+                const double* samples = reading.shape_library().samples(id);
                 put_i32(out, id);
-                put_i64(out, seq.shape_library().num_uncompressed(id));
+                put_i64(out, reading.shape_library().num_uncompressed(id));
                 put_i64(out, count);
                 // The samples are the compressed (run-length) form exactly as
                 // the text format carries them; only the container changes.
@@ -354,11 +361,11 @@ namespace pulseq
 
         /* -- extension chains -------------------------------------------- */
 
-        if (!seq.extensions_library().empty())
+        if (!reading.extensions_library().empty())
         {
             // The other section that grows with the scan: a fixed sixteen bytes
             // per chain, so it goes in the same way the blocks did.
-            const int count = seq.extensions_library().size();
+            const int count = reading.extensions_library().size();
             put_section(out, SEC_EXTENSIONS);
             put_i64(out, count);
 
@@ -368,7 +375,7 @@ namespace pulseq
 
             for (int id = 1; id <= count; ++id)
             {
-                const int32_t* row = seq.extensions_library().row(id);
+                const int32_t* row = reading.extensions_library().row(id);
                 const int32_t fields[4] = {id, row[0], row[1], row[2]};
                 for (int field = 0; field < 4; ++field)
                 {
@@ -381,14 +388,14 @@ namespace pulseq
 
         /* -- extension specifications ------------------------------------ */
 
-        if (!seq.trigger_library().empty())
+        if (!reading.trigger_library().empty())
         {
             put_section(out, SEC_TRIGGERS);
             put_i32(out, seq.extension_type_id("TRIGGERS"));
-            put_i64(out, seq.trigger_library().size());
-            for (int id = 1; id <= seq.trigger_library().size(); ++id)
+            put_i64(out, reading.trigger_library().size());
+            for (int id = 1; id <= reading.trigger_library().size(); ++id)
             {
-                const double* d = seq.trigger_library().row(id);
+                const double* d = reading.trigger_library().row(id);
                 put_i32(out, id);
                 put_i32(out, static_cast<int32_t>(d[0]));
                 put_i32(out, static_cast<int32_t>(d[1]));
@@ -399,8 +406,8 @@ namespace pulseq
 
         {
             const std::pair<uint64_t, const IntTable*> label_sections[2] = {
-                {SEC_LABELSET, &seq.label_set_library()},
-                {SEC_LABELINC, &seq.label_inc_library()},
+                {SEC_LABELSET, &reading.label_set_library()},
+                {SEC_LABELINC, &reading.label_inc_library()},
             };
             const char* names[2] = {"LABELSET", "LABELINC"};
 
@@ -415,7 +422,7 @@ namespace pulseq
                 for (int id = 1; id <= label_sections[s].second->size(); ++id)
                 {
                     const int32_t* row = label_sections[s].second->row(id);
-                    const std::string& label = seq.label_name(row[1]);
+                    const std::string& label = reading.label_name(row[1]);
                     const int file_id = raw::pulseq_label_register_name(label.c_str());
                     if (file_id <= 0)
                         throw std::runtime_error(
@@ -445,7 +452,7 @@ namespace pulseq
                 for (int id = 1; id <= label_sections[s].second->size(); ++id)
                 {
                     const int32_t* row = label_sections[s].second->row(id);
-                    const std::string& label = seq.label_name(row[1]);
+                    const std::string& label = reading.label_name(row[1]);
                     put_i32(out, id);
                     put_i32(out, row[0]);
                     put_i32(out, raw::pulseq_label_register_name(label.c_str()));
@@ -453,13 +460,13 @@ namespace pulseq
             }
         }
 
-        if (!seq.soft_delay_library().empty())
+        if (!reading.soft_delay_library().empty())
         {
             put_section(out, SEC_SOFTDELAYS);
             put_i32(out, seq.extension_type_id("DELAYS"));
-            put_i64(out, static_cast<int64_t>(seq.soft_delay_library().size()));
+            put_i64(out, static_cast<int64_t>(reading.soft_delay_library().size()));
             int id = 1;
-            for (const SoftDelay& row : seq.soft_delay_library())
+            for (const SoftDelay& row : reading.soft_delay_library())
             {
                 put_i32(out, id++);
                 put_i32(out, row.num);
@@ -470,15 +477,15 @@ namespace pulseq
             }
         }
 
-        if (!seq.rf_shim_library().empty())
+        if (!reading.rf_shim_library().empty())
         {
             put_section(out, SEC_RFSHIMS);
             put_i32(out, seq.extension_type_id("RF_SHIMS"));
-            put_i64(out, seq.rf_shim_library().size());
-            for (int id = 1; id <= seq.rf_shim_library().size(); ++id)
+            put_i64(out, reading.rf_shim_library().size());
+            for (int id = 1; id <= reading.rf_shim_library().size(); ++id)
             {
-                const int length = seq.rf_shim_library().length(id);
-                const double* values = seq.rf_shim_library().row(id);
+                const int length = reading.rf_shim_library().length(id);
+                const double* values = reading.rf_shim_library().row(id);
                 put_i32(out, id);
                 put_i32(out, length / 2);
                 for (int i = 0; i < length; ++i)
@@ -486,14 +493,14 @@ namespace pulseq
             }
         }
 
-        if (!seq.rotation_library().empty())
+        if (!reading.rotation_library().empty())
         {
             put_section(out, SEC_ROTATIONS);
             put_i32(out, seq.extension_type_id("ROTATIONS"));
-            put_i64(out, seq.rotation_library().size());
-            for (int id = 1; id <= seq.rotation_library().size(); ++id)
+            put_i64(out, reading.rotation_library().size());
+            for (int id = 1; id <= reading.rotation_library().size(); ++id)
             {
-                const double* d = seq.rotation_library().row(id);
+                const double* d = reading.rotation_library().row(id);
                 put_i32(out, id);
                 for (int i = 0; i < ROTATION_WIDTH; ++i)
                     put_f64(out, d[i]);

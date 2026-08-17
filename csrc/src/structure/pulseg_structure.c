@@ -3169,104 +3169,13 @@ scan_seg_fail:
 }
 
 /* ================================================================== */
-/*  Segment timing anchors + k-space helpers                          */
-/*  (relocated from pulseg_safety.c: these are parse-time timing    */
-/*   derivations, a prerequisite for trajectory, not safety checks.)   */
-/* ================================================================== */
-/* ================================================================== */
-/*  K-space trajectory from uniform gradient waveforms                */
-/* ================================================================== */
-
-/*
- * Computes k-space trajectory by cumulative trapezoidal integration of
- * gradient waveforms (already on uniform raster).
- *
- * Output arrays (kx, ky, kz, krss) must be caller-allocated with at
- * least waveforms->gx.num_samples elements.  dt_us is returned for
- * convenience.
- */
-static int compute_kspace_trajectory(
-    const pulseg__uniform_grad_waveforms *waveforms,
-    float *kx,
-    float *ky,
-    float *kz,
-    float *krss,
-    float *dt_us,
-    const int *refocus_samples,
-    int num_refocus,
-    const int *excite_samples,
-    int num_excite)
-{
-    int i, n, r, e;
-    float dt_s;
-    float cum_x, cum_y, cum_z;
-    float v;
-
-    if (!waveforms || !waveforms->gx || waveforms->num_samples < 2)
-        return PULSEG_ERR_INVALID_ARGUMENT;
-
-    n = waveforms->num_samples;
-    *dt_us = waveforms->raster_us;
-    dt_s = (*dt_us) * 1e-6f;
-
-    /* cumulative trapezoidal integration */
-    cum_x = 0.0f;
-    cum_y = 0.0f;
-    cum_z = 0.0f;
-    kx[0] = 0.0f;
-    ky[0] = 0.0f;
-    kz[0] = 0.0f;
-
-    r = 0; /* index into refocus_samples */
-    e = 0; /* index into excite_samples  */
-
-    for (i = 1; i < n; ++i)
-    {
-        cum_x += 0.5f * (waveforms->gx[i - 1] + waveforms->gx[i]) * dt_s;
-        cum_y += 0.5f * (waveforms->gy[i - 1] + waveforms->gy[i]) * dt_s;
-        cum_z += 0.5f * (waveforms->gz[i - 1] + waveforms->gz[i]) * dt_s;
-
-        /* reset k=0 at excitation RF isocenter (90 deg pulse) */
-        if (excite_samples && e < num_excite && i == excite_samples[e])
-        {
-            cum_x = 0.0f;
-            cum_y = 0.0f;
-            cum_z = 0.0f;
-            e++;
-        }
-
-        /* negate k at refocusing RF isocenter (180 deg pulse) */
-        if (refocus_samples && r < num_refocus && i == refocus_samples[r])
-        {
-            cum_x = -cum_x;
-            cum_y = -cum_y;
-            cum_z = -cum_z;
-            r++;
-        }
-
-        kx[i] = cum_x;
-        ky[i] = cum_y;
-        kz[i] = cum_z;
-    }
-
-    /* RSS magnitude */
-    for (i = 0; i < n; ++i)
-    {
-        v = kx[i] * kx[i] + ky[i] * ky[i] + kz[i] * kz[i];
-        krss[i] = (v > 0.0f) ? (float)sqrt((double)v) : 0.0f;
-    }
-
-    return PULSEG_SUCCESS;
-}
-
-/* ================================================================== */
 /*  Compute segment timing anchors                                    */
 /* ================================================================== */
 
 int pulseg__calc_segment_timing(pulseg_sequence_descriptor *desc, pulseg_diagnostic *diag)
 {
     pulseg_diagnostic local_diag;
-    int seg_idx, blk, block_idx, result;
+    int seg_idx, blk, block_idx;
     const pulseg_virtual_segment *seg;
     const pulseg_block_table_element *bte;
     const pulseg_base_block *bdef;
@@ -3281,275 +3190,14 @@ int pulseg__calc_segment_timing(pulseg_sequence_descriptor *desc, pulseg_diagnos
     int rf_def_id, adc_def_id;
     float adc_dur_us;
 
-    /* k-space trajectory variables */
-    pulseg__uniform_grad_waveforms min_waveforms;
-    float *kx, *ky, *kz, *krss;
-    int n_samples;
-    float dt_us;
-
-    /* refocusing RF detection variables */
-    int *refocus_samples;
-    int num_refocus;
-
-    /* excitation RF detection variables */
-    int *excite_samples;
-    int num_excite;
-
-    /* ADC-to-kzero mapping variables */
-    int a, s, kz_sample;
-    float seg_time_offset;
-    float kzero_in_adc;
-    int pos_in_tr, num_prep;
-    int tr_size;
-    int adc_raster_start, adc_raster_end, min_raster_idx;
-    float min_krss_val;
-
-    int has_kspace;
-
     if (!diag)
     {
         pulseg_diagnostic_init(&local_diag);
         diag = &local_diag;
     }
 
-    memset(&min_waveforms, 0, sizeof(min_waveforms));
-    kx = NULL;
-    ky = NULL;
-    kz = NULL;
-    krss = NULL;
-    refocus_samples = NULL;
-    num_refocus = 0;
-    excite_samples = NULL;
-    num_excite = 0;
-    n_samples = 0;
-    dt_us = 0.0f;
-    has_kspace = 0;
-
     if (!desc || desc->num_unique_segments <= 0)
         return PULSEG_SUCCESS;
-
-    tr_size = desc->tr_descriptor.tr_size;
-
-    /* ---- Step A: build min-amplitude k-space trajectory ---- */
-    if (tr_size > 0)
-    {
-        result = pulseg__get_gradient_waveforms_range(
-            desc,
-            &min_waveforms,
-            diag,
-            0,
-            tr_size,
-            PULSEG_AMP_ZERO_VAR,
-            NULL,
-            0,
-            NULL);
-
-        if (!PULSEG_FAILED(result) && min_waveforms.num_samples >= 2)
-        {
-            n_samples = min_waveforms.num_samples;
-
-            /* ---- Step A.1: find refocusing RF isocenters in TR ---- */
-            /*
-             * Walk all blocks in the main TR range and identify
-             * refocusing pulses.  If rf_use is tagged in the file,
-             * use it directly; otherwise auto-detect from flip
-             * angle (|flip| within 10% of 180 deg).
-             */
-            {
-                float rf_t_accum = 0.0f;
-                int rf_cap = 0, rb;
-
-                /* first pass: count */
-                for (rb = 0; rb < tr_size; ++rb)
-                {
-                    int bi = num_prep + rb;
-                    if (bi < 0 || bi >= desc->num_blocks)
-                        continue;
-                    bte = &desc->block_table[bi];
-                    rf_raw = bte->rf_id;
-                    if (rf_raw >= 0 && rf_raw < desc->rf_table_size)
-                    {
-                        rte = &desc->rf_table[rf_raw];
-                        rf_def_id = rte->id;
-                        if (rf_def_id >= 0 && rf_def_id < desc->num_unique_rfs)
-                        {
-                            int use = rte->rf_use;
-                            if (use == PULSEG_RF_USE_UNKNOWN)
-                            {
-                                /* auto-detect: actual_flip = base_flip *
-                                 * |amplitude| / base_amplitude */
-                                rdef = &desc->rf_definitions[rf_def_id];
-                                if (rdef->stats.base_amplitude_hz > 0.0f)
-                                {
-                                    float ratio = (float)fabs((double)rte->amplitude) /
-                                        rdef->stats.base_amplitude_hz;
-                                    float actual_flip =
-                                        rdef->stats.flip_angle_rad * ratio * (180.0f / (float)M_PI);
-                                    if (actual_flip > 162.0f && actual_flip < 198.0f)
-                                        use = PULSEG_RF_USE_REFOCUSING;
-                                }
-                            }
-                            if (use == PULSEG_RF_USE_REFOCUSING)
-                                rf_cap++;
-                        }
-                    }
-                }
-
-                /* second pass: collect isocenter sample indices */
-                if (rf_cap > 0)
-                {
-                    refocus_samples = (int *)PULSEG_ALLOC((size_t)rf_cap * sizeof(int));
-                }
-                if (refocus_samples)
-                {
-                    rf_t_accum = 0.0f;
-                    num_refocus = 0;
-                    for (rb = 0; rb < tr_size; ++rb)
-                    {
-                        int bi = num_prep + rb;
-                        if (bi < 0 || bi >= desc->num_blocks)
-                            continue;
-                        bte = &desc->block_table[bi];
-                        bdef = &desc->base_blocks[bte->id];
-                        block_dur_us = (bte->duration_us >= 0) ? (float)bte->duration_us
-                                                               : (float)bdef->duration_us;
-
-                        rf_raw = bte->rf_id;
-                        if (rf_raw >= 0 && rf_raw < desc->rf_table_size)
-                        {
-                            rte = &desc->rf_table[rf_raw];
-                            rf_def_id = rte->id;
-                            if (rf_def_id >= 0 && rf_def_id < desc->num_unique_rfs)
-                            {
-                                int use = rte->rf_use;
-                                if (use == PULSEG_RF_USE_UNKNOWN)
-                                {
-                                    rdef = &desc->rf_definitions[rf_def_id];
-                                    if (rdef->stats.base_amplitude_hz > 0.0f)
-                                    {
-                                        float ratio = (float)fabs((double)rte->amplitude) /
-                                            rdef->stats.base_amplitude_hz;
-                                        float actual_flip = rdef->stats.flip_angle_rad * ratio *
-                                            (180.0f / (float)M_PI);
-                                        if (actual_flip > 162.0f && actual_flip < 198.0f)
-                                            use = PULSEG_RF_USE_REFOCUSING;
-                                    }
-                                }
-                                if (use == PULSEG_RF_USE_REFOCUSING)
-                                {
-                                    float iso_us;
-                                    int iso_sample;
-                                    rdef = &desc->rf_definitions[rf_def_id];
-                                    iso_us = rf_t_accum + (float)rdef->delay +
-                                        (float)rdef->stats.duration_us -
-                                        (float)rdef->stats.isodelay_us;
-                                    iso_sample = (int)(iso_us / min_waveforms.raster_us);
-                                    if (iso_sample < 0)
-                                        iso_sample = 0;
-                                    if (iso_sample >= n_samples)
-                                        iso_sample = n_samples - 1;
-                                    refocus_samples[num_refocus++] = iso_sample;
-                                }
-                            }
-                        }
-                        rf_t_accum += block_dur_us;
-                    }
-                }
-            }
-
-            /* ---- Step A.1b: find excitation RF isocenters in TR ---- */
-            {
-                float rf_t_accum = 0.0f;
-                int ex_cap = 0, rb;
-
-                /* first pass: count excitation pulses */
-                for (rb = 0; rb < tr_size; ++rb)
-                {
-                    int bi = num_prep + rb;
-                    if (bi < 0 || bi >= desc->num_blocks)
-                        continue;
-                    bte = &desc->block_table[bi];
-                    rf_raw = bte->rf_id;
-                    if (rf_raw >= 0 && rf_raw < desc->rf_table_size)
-                    {
-                        rte = &desc->rf_table[rf_raw];
-                        rf_def_id = rte->id;
-                        if (rf_def_id >= 0 && rf_def_id < desc->num_unique_rfs)
-                        {
-                            if (rte->rf_use == PULSEG_RF_USE_EXCITATION)
-                                ex_cap++;
-                        }
-                    }
-                }
-
-                /* second pass: collect isocenter sample indices */
-                if (ex_cap > 0)
-                {
-                    excite_samples = (int *)PULSEG_ALLOC((size_t)ex_cap * sizeof(int));
-                }
-                if (excite_samples)
-                {
-                    rf_t_accum = 0.0f;
-                    num_excite = 0;
-                    for (rb = 0; rb < tr_size; ++rb)
-                    {
-                        int bi = num_prep + rb;
-                        if (bi < 0 || bi >= desc->num_blocks)
-                            continue;
-                        bte = &desc->block_table[bi];
-                        bdef = &desc->base_blocks[bte->id];
-                        block_dur_us = (bte->duration_us >= 0) ? (float)bte->duration_us
-                                                               : (float)bdef->duration_us;
-
-                        rf_raw = bte->rf_id;
-                        if (rf_raw >= 0 && rf_raw < desc->rf_table_size)
-                        {
-                            rte = &desc->rf_table[rf_raw];
-                            rf_def_id = rte->id;
-                            if (rf_def_id >= 0 && rf_def_id < desc->num_unique_rfs &&
-                                rte->rf_use == PULSEG_RF_USE_EXCITATION)
-                            {
-                                float iso_us;
-                                int iso_sample;
-                                rdef = &desc->rf_definitions[rf_def_id];
-                                iso_us = rf_t_accum + (float)rdef->delay +
-                                    (float)rdef->stats.duration_us - (float)rdef->stats.isodelay_us;
-                                iso_sample = (int)(iso_us / min_waveforms.raster_us);
-                                if (iso_sample < 0)
-                                    iso_sample = 0;
-                                if (iso_sample >= n_samples)
-                                    iso_sample = n_samples - 1;
-                                excite_samples[num_excite++] = iso_sample;
-                            }
-                        }
-                        rf_t_accum += block_dur_us;
-                    }
-                }
-            }
-
-            /* ---- Step A.2: compute k-space trajectory ---- */
-            kx = (float *)PULSEG_ALLOC((size_t)n_samples * sizeof(float));
-            ky = (float *)PULSEG_ALLOC((size_t)n_samples * sizeof(float));
-            kz = (float *)PULSEG_ALLOC((size_t)n_samples * sizeof(float));
-            krss = (float *)PULSEG_ALLOC((size_t)n_samples * sizeof(float));
-            if (kx && ky && kz && krss)
-            {
-                result = compute_kspace_trajectory(
-                    &min_waveforms,
-                    kx,
-                    ky,
-                    kz,
-                    krss,
-                    &dt_us,
-                    refocus_samples,
-                    num_refocus,
-                    excite_samples,
-                    num_excite);
-                if (!PULSEG_FAILED(result))
-                    has_kspace = 1;
-            }
-        }
-    }
 
     /* ---- Step B: for each segment, collect RF and ADC anchors ---- */
     for (seg_idx = 0; seg_idx < desc->num_unique_segments; ++seg_idx)
@@ -3600,30 +3248,6 @@ int pulseg__calc_segment_timing(pulseg_sequence_descriptor *desc, pulseg_diagnos
                 goto timing_fail;
             }
         }
-
-        /* compute segment start time within TR (for kzero mapping) */
-        seg_time_offset = 0.0f;
-        if (has_kspace && seg->start_block >= num_prep && seg->start_block < num_prep + tr_size)
-        {
-            pos_in_tr = seg->start_block - num_prep;
-            for (s = 0; s < pos_in_tr; ++s)
-            {
-                bte = &desc->block_table[num_prep + s];
-                bdef = &desc->base_blocks[bte->id];
-                seg_time_offset +=
-                    (bte->duration_us >= 0) ? (float)bte->duration_us : (float)bdef->duration_us;
-            }
-        }
-
-        /* Kzero estimation uses the full-TR canonical k-space trajectory
-         * (PULSEG_AMP_ZERO_VAR, computed above in min_waveforms/krss).
-         * Variable-amplitude gradients (phase encodes, spiral readouts) are
-         * zeroed; constant gradients (readout prephaser, slice select) are
-         * kept — so the k-space trajectory correctly identifies the canonical
-         * k-space zero crossing (N/2 for Cartesian, sample 0 for spiral).
-         * seg_time_offset maps the segment's ADC window into the full-TR
-         * raster.  No per-segment PULSEG_AMP_ACTUAL extraction is used;
-         * that would give instance-specific k and not the canonical result.  */
 
         /* fill anchors */
         rf_count = 0;
@@ -3692,52 +3316,6 @@ int pulseg__calc_segment_timing(pulseg_sequence_descriptor *desc, pulseg_diagnos
                 adc_arr[adc_count].start_us = t_accum + (float)adef->delay;
                 adc_arr[adc_count].end_us = t_accum + (float)adef->delay + adc_dur_us;
 
-                /* default: N/2 */
-                adc_arr[adc_count].kzero_index = adef->num_samples / 2;
-                adc_arr[adc_count].kzero_us = adc_arr[adc_count].start_us +
-                    (float)(adef->num_samples / 2) * (float)adef->dwell_time * 1e-3f;
-
-                /* full-TR canonical kRSS (ZERO_VAR): find min within ADC.
-                 * Do not gate on seg->start_block being inside the first
-                 * main TR: merged/full-pass segments (e.g. average-
-                 * expanded multipass scans) still need kzero anchors for
-                 * their ADC blocks. */
-                if (has_kspace && krss && n_samples > 0)
-                {
-                    adc_raster_start =
-                        (int)((seg_time_offset + adc_arr[adc_count].start_us) / dt_us);
-                    adc_raster_end = (int)((seg_time_offset + adc_arr[adc_count].end_us) / dt_us);
-                    if (adc_raster_start < 0)
-                        adc_raster_start = 0;
-                    if (adc_raster_end >= n_samples)
-                        adc_raster_end = n_samples - 1;
-
-                    if (adc_raster_start <= adc_raster_end)
-                    {
-                        min_raster_idx = adc_raster_start;
-                        min_krss_val = krss[adc_raster_start];
-                        for (a = adc_raster_start + 1; a <= adc_raster_end; ++a)
-                        {
-                            if (krss[a] < min_krss_val)
-                            {
-                                min_krss_val = krss[a];
-                                min_raster_idx = a;
-                            }
-                        }
-
-                        kzero_in_adc = (float)min_raster_idx * dt_us -
-                            (seg_time_offset + adc_arr[adc_count].start_us);
-                        kz_sample = (int)(kzero_in_adc / ((float)adef->dwell_time * 1e-3f));
-                        if (kz_sample < 0)
-                            kz_sample = 0;
-                        if (kz_sample >= adef->num_samples)
-                            kz_sample = adef->num_samples - 1;
-                        adc_arr[adc_count].kzero_index = kz_sample;
-                        adc_arr[adc_count].kzero_us =
-                            (float)min_raster_idx * dt_us - seg_time_offset;
-                    }
-                }
-
                 adc_count++;
             }
 
@@ -3751,36 +3329,8 @@ int pulseg__calc_segment_timing(pulseg_sequence_descriptor *desc, pulseg_diagnos
         ((pulseg_virtual_segment *)seg)->timing.adc_anchors = adc_arr;
     }
 
-    /* cleanup */
-    if (kx)
-        PULSEG_FREE(kx);
-    if (ky)
-        PULSEG_FREE(ky);
-    if (kz)
-        PULSEG_FREE(kz);
-    if (krss)
-        PULSEG_FREE(krss);
-    if (refocus_samples)
-        PULSEG_FREE(refocus_samples);
-    if (excite_samples)
-        PULSEG_FREE(excite_samples);
-    pulseg__uniform_grad_waveforms_free(&min_waveforms);
-
     return PULSEG_SUCCESS;
 
 timing_fail:
-    if (kx)
-        PULSEG_FREE(kx);
-    if (ky)
-        PULSEG_FREE(ky);
-    if (kz)
-        PULSEG_FREE(kz);
-    if (krss)
-        PULSEG_FREE(krss);
-    if (refocus_samples)
-        PULSEG_FREE(refocus_samples);
-    if (excite_samples)
-        PULSEG_FREE(excite_samples);
-    pulseg__uniform_grad_waveforms_free(&min_waveforms);
     return PULSEG_ERR_ALLOC_FAILED;
 }

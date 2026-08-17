@@ -2,30 +2,11 @@
  * @file kspace.hpp
  * @brief Where every ADC sample of a `pulseq::Sequence` sits in k-space.
  *
- * ### One calculator, not two
- *
- * The arithmetic lives in `csrc/src/pulseq/pulseq_ktraj.c`, in C89, because
- * the interpreter links it directly.  Rather than reimplement it here, this
- * runs the same code: `raw64.cpp` compiles that file a second time in double
- * precision, and a `Sequence` reaches it by being written to Pulseq's binary
- * format in memory and parsed back.  The round trip costs one serialise and
- * one parse -- tens of milliseconds on a large scan.
- *
- * It carries amplitudes as float64 and times as integer picoseconds, so those
- * survive exactly.  **Shape samples do not**: the binary format writes them as
- * float32 (write_binary.cpp), and since a shape is stored run-length encoded
- * as a *derivative*, decompressing it sums those errors -- measured at 3e-8
- * per sample, reaching about 1e-5 in k across a five-hundred-sample readout.
- * Small, but not nothing, and not something to leave to chance in a number
- * whose whole purpose is to be more accurate than the alternatives.  So the
- * shapes are handed across separately, in double, and written back over the
- * parsed ones; see `restore_shapes` in kspace.cpp.  With that, the bridge is
- * exact.
- *
- * The alternative was an in-memory `Sequence` to `raw64::pulseq_file`
- * converter, which is a few hundred lines that would have to stay in lockstep
- * with read.cpp's unit conversions forever, for a saving that does not matter
- * to an offline call.
+ * The arithmetic is a native pass over the `Sequence`, in `cxx/pulseq/
+ * ktraj.cpp`: it integrates each distinct gradient once and walks the blocks
+ * once, so its cost scales with the size of the event libraries rather than
+ * with the length of the scan.  Everything is accumulated in `double`, which
+ * is what k -- a running integral over an entire scan -- needs.
  *
  * ### What this adds on top of the core
  *
@@ -71,7 +52,7 @@ namespace pulseq
          * Give each sample the k averaged over its dwell rather than k at the
          * midpoint.  Off by default -- PyPulseq, MRpro and mri-nufft all use
          * the midpoint, and matching them is what makes the answer
-         * comparable.  See `pulseq_ktraj_opts::sample_window_average`.
+         * comparable.  See `detail::KTrajOptions::sample_window_average`.
          */
         bool sample_window_average = false;
 
@@ -278,11 +259,11 @@ namespace pulseq
     /**
      * The k-space trajectory of @p seq.
      *
-     * Takes the sequence by non-const reference because the binary writer
-     * records `TotalDuration` in `[DEFINITIONS]` before serialising, exactly
-     * as `write_binary` does.
+     * @throws std::runtime_error on an empty or inverted block range, or on
+     * an RF pulse that declares no `use` -- what such a pulse does to k cannot
+     * be guessed, and guessing wrong means k never restarts.
      */
-    KSpace calculate_kspace(Sequence& seq, const KSpaceOptions& options = {});
+    KSpace calculate_kspace(const Sequence& seq, const KSpaceOptions& options = {});
 
     /* ================================================================== */
     /*  MRD                                                               */

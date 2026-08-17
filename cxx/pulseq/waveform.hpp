@@ -30,6 +30,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 #include <vector>
 
 namespace pulseq
@@ -99,6 +100,135 @@ namespace pulseq
             }
         };
 
+        /* ============================================================== */
+        /*  Hashing, and collapsing a library onto its distinct rows       */
+        /* ============================================================== */
+
+        constexpr size_t HASH_SEED = 2166136261u;
+        constexpr uint64_t HASH_PRIME = 1099511628211ull;
+
+        /** One 64-bit word mixed in: splitmix64's finalizer, then FNV. */
+        inline void hash_word(size_t& h, uint64_t x)
+        {
+            x ^= x >> 33;
+            x *= 0xff51afd7ed558ccdull;
+            x ^= x >> 33;
+            h = static_cast<size_t>((static_cast<uint64_t>(h) ^ x) * HASH_PRIME);
+        }
+
+        /**
+         * A double mixed in, with -0.0 folded onto +0.0.
+         *
+         * Hashed as one word rather than byte by byte: these hashes run over
+         * every row of a library, which on an undeduplicated protocol-scale
+         * scan is millions of rows, and eight dependent steps per double is
+         * the difference between the pass being noticeable and not.
+         */
+        inline void hash_double(size_t& h, double v)
+        {
+            if (v == 0.0)
+                v = 0.0;
+            uint64_t bits = 0;
+            std::memcpy(&bits, &v, sizeof(bits));
+            hash_word(h, bits);
+        }
+
+        inline void hash_int(size_t& h, long long v)
+        {
+            hash_word(h, static_cast<uint64_t>(v));
+        }
+
+        /**
+         * Map each of @p count 1-based ids onto the first id that means the
+         * same thing, as @p hash and @p equal define it.  Entry 0 is unused.
+         *
+         * The libraries are not deduplicated until a sequence is written, so a
+         * scan that plays one readout a million times holds a million
+         * identical rows under a million ids.  Everything that wants to do
+         * work once per *distinct* event -- integrating a gradient, planning a
+         * shift, keying a memo -- needs this first, and keying on the id alone
+         * would find nothing shared where there is nothing but sharing.
+         *
+         * Open addressing over one flat array, sized to twice the count and
+         * rounded up to a power of two so the table never exceeds half load
+         * and probes stay short.  Node-based hashing costs an allocation per
+         * row, which at these sizes is more than the work being saved.
+         */
+        template <typename Hash, typename Equal>
+        inline std::vector<int> canonical_ids(int count, Hash hash, Equal equal)
+        {
+            std::vector<int> canon(static_cast<size_t>(count) + 1, 0);
+            if (count <= 0)
+                return canon;
+
+            int capacity = 16;
+            while (capacity < count * 2)
+            {
+                if (capacity > (1 << 29))
+                    break;
+                capacity <<= 1;
+            }
+            const size_t mask = static_cast<size_t>(capacity) - 1;
+            std::vector<int> table(static_cast<size_t>(capacity), -1);
+
+            for (int id = 1; id <= count; ++id)
+            {
+                size_t slot = hash(id) & mask;
+                canon[static_cast<size_t>(id)] = id;
+                for (;;)
+                {
+                    const int occupant = table[slot];
+                    if (occupant < 0)
+                    {
+                        table[slot] = id;
+                        break;
+                    }
+                    if (equal(id, occupant))
+                    {
+                        canon[static_cast<size_t>(id)] =
+                            canon[static_cast<size_t>(occupant)];
+                        break;
+                    }
+                    slot = (slot + 1) & mask;
+                }
+            }
+            return canon;
+        }
+
+        /**
+         * Flat across [t0, t1]?
+         *
+         * Checked at the window edges and at every breakpoint strictly inside
+         * it, which is exact for a piecewise-linear waveform: a segment can
+         * only depart from a constant at its own ends.  The tolerance is
+         * relative to the waveform's own scale, so a normalised ramp of 1e-12
+         * does not read as structure.
+         */
+        inline bool is_flat(const Piecewise& p, double t0, double t1)
+        {
+            if (p.empty())
+                return true;
+
+            double lo = p.value_at(t0);
+            double hi = lo;
+            const double edge = p.value_at(t1);
+            lo = std::min(lo, edge);
+            hi = std::max(hi, edge);
+
+            double scale = 0.0;
+            for (size_t i = 0; i < p.t.size(); ++i)
+            {
+                if (p.t[i] > t0 && p.t[i] < t1)
+                {
+                    lo = std::min(lo, p.v[i]);
+                    hi = std::max(hi, p.v[i]);
+                }
+                scale = std::max(scale, std::fabs(p.v[i]));
+            }
+
+            return (hi - lo) <= 1e-9 * std::max(scale, 1.0);
+        }
+
         /* A trapezoid at unit amplitude: flat at 1 between its ramps. */
         inline Piecewise unit_trapezoid(const double* row)
         {
@@ -108,6 +238,8 @@ namespace pulseq
             const double delay = row[4];
 
             Piecewise p;
+            p.t.reserve(4);
+            p.v.reserve(4);
             double at = delay;
             p.t.push_back(at);
             p.v.push_back(0.0);
@@ -217,6 +349,8 @@ namespace pulseq
             if (!s.valid)
                 return p;
 
+            p.t.reserve(s.tt.size() + 2);
+            p.v.reserve(s.tt.size() + 2);
             p.t.push_back(s.delay);
             p.v.push_back(s.first);
             for (size_t i = 0; i < s.tt.size(); ++i)

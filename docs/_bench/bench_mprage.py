@@ -142,7 +142,7 @@ def run(name: str, n_z: int, views: int) -> None:
     print(
         f"{name:<16s} {n_z}x{views:<6d} blocks {blocks:>9d}"
         f"  design {design:7.2f}s ({design / blocks * 1e6:5.2f} us/block)"
-        f"  TransformFOV {transform[0]:6.2f}s"
+        f"  TransformFOV {transform[0]:6.2f}s ({transform[0] / blocks * 1e6:5.2f} us/block)"
         f"  shapes {seq._native.num_shapes():>6d}"
         f"  peak RSS {peak_rss_mb():7.0f} MB"
     )

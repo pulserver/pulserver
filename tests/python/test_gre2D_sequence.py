@@ -336,8 +336,15 @@ def test_no_offset_leaves_the_sequence_exactly_as_it_was():
 
 def test_an_offset_moves_the_pulse_that_excites_and_the_window_that_reads():
     """Under constant gradients the shift is scalar offsets on both -- the
-    waveforms themselves are shared with the unshifted scan."""
-    plain = design(n_slices=1, tr=30e-3, n_dummy=0)
+    waveforms themselves are shared with the unshifted scan.
+
+    Both sides are compared at the precision the file writes, because a
+    prescribed offset sends the scan through ``TransformFOV``, which works
+    there: the phase it bakes has to agree with the waveforms a consumer reads
+    back. Comparing a rounded scan against an unrounded one would be measuring
+    that, not the sharing.
+    """
+    plain = design(n_slices=1, tr=30e-3, n_dummy=0).remove_duplicates(in_place=True)
     slab = design(n_slices=1, tr=30e-3, n_dummy=0, fov_offset=(0.0, 0.0, 20e-3))
     assert slab.get_block(1).rf.freq_offset != plain.get_block(1).rf.freq_offset
     assert np.array_equal(slab.get_block(1).rf.signal, plain.get_block(1).rf.signal)
@@ -358,7 +365,10 @@ def test_the_averages_are_written_out_rather_than_left_to_the_interpreter():
     labels = twice.evaluate_labels(evolution="adc")
     assert len(labels["LIN"]) == 2 * len(once.evaluate_labels(evolution="adc")["LIN"])
     assert sorted(set(labels["AVG"].tolist())) == [0, 1]
-    assert twice.get_definition("IgnoreAverages") == 1
+    # Nothing in the file says the averages are already there; the block table
+    # is the statement, and a subsequence meant to be acquired once is simply
+    # not tiled.
+    assert twice.get_definition("IgnoreAverages") is None
 
 
 def test_the_dummies_play_on_the_first_average_only():

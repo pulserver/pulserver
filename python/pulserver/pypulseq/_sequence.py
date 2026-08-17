@@ -633,15 +633,18 @@ class Sequence(AnalysisMixin, SafetyViewsMixin, SoftDelayMixin):
         once = self._native.find_label_id("ONCE")
         return once >= 0 and self._native.label_set_writes(once)
 
-    def expand_repeats(
+    def _expand_repeats(
         self,
         repeats: int,
         *,
         label: str = "AVG",
         strip_once: bool = True,
-        ignore_averages: bool = True,
     ) -> dict[str, int]:
         """Play the sequence ``repeats`` times, written into the block table.
+
+        Private: :func:`pulserver.pypulseq.tile` is the way in, because the
+        pass wants a deduplicated sequence and reads much better on one --
+        see there. Upstream PyPulseq has no equivalent of either.
 
         A ``.seq`` describes one pass; playing it several times is normally
         left to the interpreter, which takes the count from outside the file
@@ -666,15 +669,13 @@ class Sequence(AnalysisMixin, SafetyViewsMixin, SoftDelayMixin):
         — a 100 000-block scan repeated three times is 300 000 rows of six
         integers and a duration, and not one extra gradient.
 
-        Call it like :meth:`remove_duplicates`: once, on a finished sequence,
-        before writing.
 
         Parameters
         ----------
         repeats : int
             How many times the body plays, at least 1. ``1`` is not a no-op:
-            it resolves the flags and writes ``IgnoreAverages``, leaving a
-            file that says a single pass is all there is.
+            it resolves the flags, leaving a file whose block table is the
+            whole of what plays.
         label : str, default "AVG"
             Counter stamped with the repetition index, or ``""`` for none.
             ``AVG`` because the repetition an interpreter adds is a signal
@@ -686,9 +687,6 @@ class Sequence(AnalysisMixin, SafetyViewsMixin, SoftDelayMixin):
             table they no longer fit. Pulserver's own interpreter gives
             ``ONCE`` no structural meaning, so nothing is lost by dropping
             them.
-        ignore_averages : bool, default True
-            Write ``IgnoreAverages 1`` into ``[DEFINITIONS]``, so a Pulserver
-            interpreter does not repeat what is already written out.
 
         Returns
         -------
@@ -714,7 +712,7 @@ class Sequence(AnalysisMixin, SafetyViewsMixin, SoftDelayMixin):
         1
         >>> seq.add_block(pp.make_delay(2e-3), pp.make_label("ONCE", "SET", 0))
         2
-        >>> report = seq.expand_repeats(3)
+        >>> report = seq._expand_repeats(3)
         >>> report["blocks_before"], report["blocks_after"]
         (2, 4)
         >>> report["prep_blocks"], report["body_blocks"]
@@ -726,14 +724,13 @@ class Sequence(AnalysisMixin, SafetyViewsMixin, SoftDelayMixin):
         auto_label : the encoding counters, derived rather than materialised.
         """
         if repeats < 1:
-            raise ValueError(f"expand_repeats(): repeats must be at least 1, got {repeats}")
+            raise ValueError(f"tile(): reps must be at least 1, got {repeats}")
         self._touch()
         if repeats == 1 and not self._writes_once():
             # One repetition of a sequence that flags nothing plays exactly the
             # blocks it already holds: there is no order to resolve and no flag
-            # to strip, so the table is left alone and only the definition is
-            # written. On a million-block scan that is the difference between
-            # a rebuild and nothing.
+            # to strip, so the table is left alone. On a million-block scan
+            # that is the difference between a rebuild and nothing.
             blocks = self._native.num_blocks()
             report = {
                 "repeats": 1,
@@ -744,14 +741,7 @@ class Sequence(AnalysisMixin, SafetyViewsMixin, SoftDelayMixin):
                 "cooldown_blocks": 0,
             }
         else:
-            report = self._native.expand_repeats(
-                int(repeats), label, strip_once, ignore_averages
-            )
-        if ignore_averages:
-            # Mirrored, not duplicated work: the C++ side writes it so a
-            # non-Python caller gets it too, and this is what makes it show up
-            # in `definitions` rather than only in the written file.
-            self._definitions["IgnoreAverages"] = 1
+            report = self._native.expand_repeats(int(repeats), label, strip_once)
         return report
 
     # -- FOV positioning --------------------------------------------------
@@ -835,7 +825,14 @@ class Sequence(AnalysisMixin, SafetyViewsMixin, SoftDelayMixin):
                 warnings.warn(f"write(): {message}", stacklevel=2)
         self.declare_tr()
 
-        target = self.remove_duplicates() if remove_duplicates else self
+        # A sequence that has not been touched since its last deduplication
+        # has nothing here to find, and saying so skips a copy of the whole
+        # thing as well as the pass -- which on a protocol-scale scan is the
+        # larger half.
+        if remove_duplicates and not self._native.deduplicated():
+            target = self.remove_duplicates()
+        else:
+            target = self
         payload = target._to_text(create_signature=create_signature)
         Path(name).write_bytes(payload)
         return _signature_of(payload) if create_signature else None

@@ -78,6 +78,7 @@ def main(
     tr: float | None = 2000e-3,
     readout_bandwidth_hz: float = 250e3,
     crusher_cycles: float = 4.0,
+    n_dummy: int = 0,
     n_gain_calibration_readouts: int | None = None,
 ) -> pp.Sequence:
     """Create a 2D PROPELLER spin-echo sequence.
@@ -169,8 +170,12 @@ def main(
     slc_label = pp.make_label("SLC", "SET", 0)
     seg_label = pp.make_label("SEG", "SET", 0)
 
-    def shot(blade, timing, slices, rotation, blade_index: int) -> None:
+    def shot(
+        blade, timing, slices, rotation, blade_index: int, *, acquire: bool = True,
+        mark=None,
+    ) -> None:
         """One blade of every slice of a pass."""
+        first = mark
         for i_slice in slices:
             position = slice_positions[i_slice]
             exc_hz = excitation.gz.amplitude * position
@@ -182,7 +187,8 @@ def main(
             slc_label.value = int(i_slice)
             seg_label.value = int(blade_index)
 
-            seq.add_block(excitation.rf, excitation.gz)
+            seq.add_block(excitation.rf, excitation.gz, *([first] if first else ()))
+            first = None
             seq.add_block(excitation.gz_reph)
             if timing.wait_half_te is not None:
                 seq.add_block(timing.wait_half_te)
@@ -199,14 +205,16 @@ def main(
             )
             for line in range(blade.etl):
                 blip = blade.gy_blips[line]
+                acquired = (
+                    (blade.adc, slc_label, seg_label, *blade.line_labels[line])
+                    if acquire
+                    else ()
+                )
                 seq.add_block(
                     blade.gx[line],
-                    blade.adc,
+                    *acquired,
                     *([blip] if blip is not None else []),
                     rotation,
-                    slc_label,
-                    seg_label,
-                    *blade.line_labels[line],
                 )
             seq.add_block(blade.gx_spoil, rotation)
             if timing.wait_tr is not None:
@@ -218,8 +226,29 @@ def main(
             pp.make_rotation(Rotation.from_euler("z", float(angle)))
             for angle in blade.blade_angles
         ]
+
+        # Steady state first: whole blades played without acquiring, at the
+        # first blade's angle, so the first acquired blade sees the
+        # magnetisation every later one sees. The blade is the unit because
+        # it is what one excitation drives.
+        #
+        # `ONCE` is what keeps them out of the averages: 1 plays on the first
+        # pass only, and the first acquired blade clears it back to 0.
+        for i_dummy in range(n_dummy):
+            shot(
+                blade,
+                timing,
+                slices,
+                rotations[0],
+                0,
+                acquire=False,
+                mark=pp.make_label("ONCE", "SET", 1) if i_dummy == 0 else None,
+            )
+
+        clear_once = pp.make_label("ONCE", "SET", 0) if n_dummy else None
         for blade_index, rotation in enumerate(rotations):
-            shot(blade, timing, slices, rotation, blade_index)
+            shot(blade, timing, slices, rotation, blade_index, mark=clear_once)
+            clear_once = None
 
     pp.TransformFOV(
         translation=tuple(offset * 1e3 for offset in fov_offset),

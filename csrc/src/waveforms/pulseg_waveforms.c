@@ -1390,14 +1390,11 @@ int pulseg_get_tr_waveforms(
     int pass_base;
     int pass_scan_start; /* scan-table offset for output slot 0 of this pass */
     int eff_num_averages;
-    /* occurrence-position map: 0-based position within each segment occurrence */
-    int *scan_blk_in_occ;
 
     pos_max_gx = NULL;
     pos_max_gy = NULL;
     pos_max_gz = NULL;
     block_order = NULL;
-    scan_blk_in_occ = NULL;
     pass_base = 0;
     pass_scan_start = -1;
 
@@ -1655,31 +1652,6 @@ int pulseg_get_tr_waveforms(
         (total_adc > 0 && !out->adc_events))
         goto alloc_fail;
 
-    /* ---- scan_blk_in_occ: 0-based position within current segment occurrence ----
-     * exec_stream_seg_id is populated for ALL block positions (including 2nd, 3rd, …
-     * occurrences of the same unique segment), unlike segment_definitions[s].start_block
-     * which only records the first occurrence.  We iterate the scan table once to
-     * compute the intra-occurrence offset for every scan-table position, resetting
-     * the counter whenever the segment changes OR we've filled num_blocks slots. */
-    if (desc->seg_run_id && desc->exec_stream_len > 0)
-    {
-        int occ_pos = 0, prev_seg = -1, si;
-        scan_blk_in_occ = (int *)PULSEG_ALLOC((size_t)desc->exec_stream_len * sizeof(int));
-        if (!scan_blk_in_occ)
-            goto alloc_fail;
-        for (si = 0; si < desc->exec_stream_len; ++si)
-        {
-            int curr_seg = pulseg__exec_seg_id(desc, si);
-            int seg_nblk = (curr_seg >= 0 && curr_seg < desc->segment_table.num_unique_segments)
-                ? desc->segment_definitions[curr_seg].num_blocks
-                : 1;
-            if (curr_seg != prev_seg || occ_pos >= seg_nblk)
-                occ_pos = 0;
-            scan_blk_in_occ[si] = occ_pos++;
-            prev_seg = curr_seg;
-        }
-    }
-
     /* ---- PASS 2: fill ---- */
     t0 = 0.0f;
     idx_gx = 0;
@@ -1740,91 +1712,6 @@ int pulseg_get_tr_waveforms(
             const pulseg_rf_definition *rdef = &desc->rf_definitions[bdef->rf_id];
             out->blocks[n].rf_isocenter_us =
                 t0 + (float)rdef->delay + (float)rdef->stats.isodelay_us;
-        }
-
-        /* ---- ADC k=0 anchor ---- */
-        out->blocks[n].adc_kzero_us = -1.0f;
-        {
-            int has_adc_here = 0;
-            const pulseg_adc_definition *adef_anchor = NULL;
-            if (amplitude_mode == PULSEG_AMP_ACTUAL)
-            {
-                if (bte->adc_id >= 0 && bte->adc_id < desc->adc_table_size)
-                {
-                    int adc_def_id = desc->adc_table[bte->adc_id].id;
-                    if (adc_def_id >= 0 && adc_def_id < desc->num_unique_adcs)
-                    {
-                        adef_anchor = &desc->adc_definitions[adc_def_id];
-                        has_adc_here = 1;
-                    }
-                }
-            }
-            else
-            {
-                if (bdef->adc_id >= 0 && bdef->adc_id < desc->num_unique_adcs)
-                {
-                    adef_anchor = &desc->adc_definitions[bdef->adc_id];
-                    has_adc_here = 1;
-                }
-            }
-            if (has_adc_here && adef_anchor)
-            {
-                int seg_i = out->blocks[n].segment_idx;
-                int found_anchor = 0;
-                /* Try precomputed segment adc_anchors first. */
-                if (seg_i >= 0 && seg_i < desc->segment_table.num_unique_segments)
-                {
-                    const pulseg_virtual_segment *seg = &desc->segment_definitions[seg_i];
-                    if (seg->timing.adc_anchors && seg->timing.num_adc_anchors > 0)
-                    {
-                        /* blk_in_seg: position of this block within the current
-                         * segment occurrence.  Use scan_blk_in_occ indexed at
-                         * the same NEX-aware scan position used for segment
-                         * assignment above.  For degenerate paths scan_pos ==
-                         * block_idx; for average-expanded non-degenerate passes
-                         * scan_pos = pass_scan_start + n correctly tracks the
-                         * position within the expanded occurrence. */
-                        int scan_pos2 = (pass_scan_start >= 0) ? (pass_scan_start + n) : block_idx;
-                        int blk_in_seg =
-                            (scan_blk_in_occ && scan_pos2 >= 0 && scan_pos2 < desc->exec_stream_len)
-                            ? scan_blk_in_occ[scan_pos2]
-                            : (n - seg->start_block);
-                        int ai;
-                        /* Compute segment start in TR-relative time. */
-                        float seg_start_tr = t0;
-                        {
-                            int bi;
-                            for (bi = 0; bi < blk_in_seg; ++bi)
-                            {
-                                seg_start_tr -=
-                                    (float)desc->base_blocks[seg->unique_block_indices[bi]]
-                                        .duration_us;
-                            }
-                        }
-                        for (ai = 0; ai < seg->timing.num_adc_anchors; ++ai)
-                        {
-                            if (seg->timing.adc_anchors[ai].block_offset == blk_in_seg)
-                            {
-                                out->blocks[n].adc_kzero_us =
-                                    seg_start_tr + seg->timing.adc_anchors[ai].kzero_us;
-                                found_anchor = 1;
-                                break;
-                            }
-                        }
-                    }
-                }
-                /* No fallback: segment anchors must be correct. */
-                if (!found_anchor)
-                {
-                    out->blocks[n].adc_kzero_us = -1.0f;
-                    if (diag)
-                    {
-                        diag->code = PULSEG_ERR_INVALID_ARGUMENT;
-                        sprintf(diag->message, "ADC anchor not found for block %d", n);
-                    }
-                    return PULSEG_ERR_INVALID_ARGUMENT;
-                }
-            }
         }
 
         /* ---- gradients ---- */
@@ -2070,16 +1957,12 @@ int pulseg_get_tr_waveforms(
 
     if (block_order)
         PULSEG_FREE(block_order);
-    if (scan_blk_in_occ)
-        PULSEG_FREE(scan_blk_in_occ);
     diag->code = PULSEG_SUCCESS;
     return PULSEG_SUCCESS;
 
 alloc_fail:
     if (block_order)
         PULSEG_FREE(block_order);
-    if (scan_blk_in_occ)
-        PULSEG_FREE(scan_blk_in_occ);
     if (pos_max_gx)
         PULSEG_FREE(pos_max_gx);
     if (pos_max_gy)

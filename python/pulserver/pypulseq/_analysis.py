@@ -124,9 +124,8 @@ class AnalysisMixin:
         t_refocusing, t_adc)``, with ``k_traj_adc`` and ``k_traj`` shaped
         ``(3, n)`` in 1/m and the times in seconds.
 
-        The arithmetic is ``csrc/src/pulseq/pulseq_ktraj.c``, the same code the
-        interpreter links. Cost follows the number of distinct gradients, not
-        the length of the scan.
+        The arithmetic is ``cxx/pulseq/ktraj.cpp``. Cost follows the number of
+        distinct gradients, not the length of the scan.
 
         Parameters
         ----------

@@ -16,6 +16,9 @@ add_executable(run_tests ${TEST_SOURCES})
 # Define the test root folder at compile time (repo root = two levels up from tests/ctests)
 target_compile_definitions(run_tests PRIVATE
     TEST_ROOT_DIR="${CMAKE_SOURCE_DIR}/../.."
+    # Somewhere a test may stage a file it made; the build tree is not the
+    # source tree, so nothing it writes can dirty the fixtures.
+    TEST_TMP_DIR="${CMAKE_BINARY_DIR}/"
 )
 
 # Specify the output directory for the compiled test executable

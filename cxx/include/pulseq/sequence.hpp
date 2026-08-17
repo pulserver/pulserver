@@ -205,8 +205,9 @@ namespace pulseq
          */
         int append_raw(const double* samples, int count);
 
-        /** Compress every shape still held raw.  Idempotent. */
-        void compress();
+        /** Compress every shape still held raw.  @return whether any was.
+         *  Idempotent. */
+        bool compress();
 
         void clear()
         {
@@ -356,9 +357,7 @@ namespace pulseq
          * Block durations are serialised as raster ticks, so a reader that
          * cannot see the raster cannot recover the seconds: it falls back to
          * a default, and every time in the file comes out scaled. The writers
-         * call this, which is also what makes the trajectory core -- reached
-         * by serialising and reparsing -- see the rasters the sequence was
-         * actually built on.
+         * call this.
          */
         void publish_rasters();
 
@@ -503,6 +502,23 @@ namespace pulseq
         void remove_duplicates();
 
         /**
+         * Whether every library is already down to its distinct rows.
+         *
+         * Set by @ref remove_duplicates and cleared by anything that could
+         * undo it -- registering a row, editing the block table, or taking a
+         * mutable reference to a library.  It is deliberately pessimistic: a
+         * caller that asks for write access and then writes nothing loses the
+         * claim, because the alternative is a claim that can be wrong, and a
+         * wrong one is a file full of rows the writer was told it need not
+         * collapse.
+         *
+         * Worth stating rather than re-deriving because deduplication is a
+         * pass over every row of every library, and the ordinary path
+         * deduplicates once and then writes.
+         */
+        bool deduplicated() const { return deduplicated_; }
+
+        /**
          * Hand over a whole block table at once.
          *
          * A composed scan arrives as columns already -- that is what it was
@@ -514,9 +530,9 @@ namespace pulseq
 
         /** Raw block table, row-major, BLOCK_WIDTH per block. */
         const int32_t* block_events() const { return blocks_.data(); }
-        int32_t* block_events() { return blocks_.data(); }
+        int32_t* block_events() { deduplicated_ = false; return blocks_.data(); }
         const double* block_durations() const { return durations_.data(); }
-        double* block_durations() { return durations_.data(); }
+        double* block_durations() { deduplicated_ = false; return durations_.data(); }
 
         /* -- gradients --------------------------------------------------- */
 
@@ -547,34 +563,34 @@ namespace pulseq
         /* -- libraries --------------------------------------------------- */
 
         const Table& rf_library() const { return rf_; }
-        Table& rf_library() { return rf_; }
+        Table& rf_library() { deduplicated_ = false; return rf_; }
         const std::vector<char>& rf_uses() const { return rf_use_; }
-        std::vector<char>& rf_uses() { return rf_use_; }
+        std::vector<char>& rf_uses() { deduplicated_ = false; return rf_use_; }
 
         const Table& trap_library() const { return trap_; }
-        Table& trap_library() { return trap_; }
+        Table& trap_library() { deduplicated_ = false; return trap_; }
         const Table& arb_library() const { return arb_; }
-        Table& arb_library() { return arb_; }
+        Table& arb_library() { deduplicated_ = false; return arb_; }
         const Table& adc_library() const { return adc_; }
-        Table& adc_library() { return adc_; }
+        Table& adc_library() { deduplicated_ = false; return adc_; }
         const Table& trigger_library() const { return trigger_; }
-        Table& trigger_library() { return trigger_; }
+        Table& trigger_library() { deduplicated_ = false; return trigger_; }
         const Table& rotation_library() const { return rotation_; }
-        Table& rotation_library() { return rotation_; }
+        Table& rotation_library() { deduplicated_ = false; return rotation_; }
 
         const IntTable& extensions_library() const { return extensions_; }
-        IntTable& extensions_library() { return extensions_; }
+        IntTable& extensions_library() { deduplicated_ = false; return extensions_; }
         const IntTable& label_set_library() const { return label_set_; }
-        IntTable& label_set_library() { return label_set_; }
+        IntTable& label_set_library() { deduplicated_ = false; return label_set_; }
         const IntTable& label_inc_library() const { return label_inc_; }
-        IntTable& label_inc_library() { return label_inc_; }
+        IntTable& label_inc_library() { deduplicated_ = false; return label_inc_; }
 
         const RaggedTable& rf_shim_library() const { return rf_shim_; }
-        RaggedTable& rf_shim_library() { return rf_shim_; }
+        RaggedTable& rf_shim_library() { deduplicated_ = false; return rf_shim_; }
         const ShapeLibrary& shape_library() const { return shapes_; }
-        ShapeLibrary& shape_library() { return shapes_; }
+        ShapeLibrary& shape_library() { deduplicated_ = false; return shapes_; }
         const std::vector<SoftDelay>& soft_delay_library() const { return soft_delays_; }
-        std::vector<SoftDelay>& soft_delay_library() { return soft_delays_; }
+        std::vector<SoftDelay>& soft_delay_library() { deduplicated_ = false; return soft_delays_; }
 
     private:
         int version_major_ = 1;
@@ -617,6 +633,9 @@ namespace pulseq
 
         std::vector<int32_t> blocks_;
         std::vector<double> durations_;
+
+        /** See deduplicated(); false until remove_duplicates() says otherwise. */
+        bool deduplicated_ = false;
     };
 
 }  // namespace pulseq

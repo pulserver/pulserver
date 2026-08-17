@@ -43,6 +43,8 @@
 #define PULSEQ_CXX_TRAJECTORY_HPP
 
 #include <array>
+#include <string>
+#include <utility>
 #include <vector>
 
 #include "pulseq/sequence.hpp"
@@ -85,9 +87,9 @@ namespace pulseq
          * physically a line at an arbitrary angle, and with no encoding
          * counter that locates it.  A consumer taking the trivial-shot route
          * must carry the block's rotation with the amplitude and apply it.
-         * `pulseq_ktraj_readout::constant_axes` answers the same question in
-         * the frame its k is reported in, and says physically-not-constant
-         * for the same spoke.
+         * `pulseq::Readout::constant_axes` answers the same question in the
+         * frame its k is reported in, and says physically-not-constant for
+         * the same spoke.
          */
         bool constant = true;
     };
@@ -168,18 +170,11 @@ namespace pulseq
      *
      * ### Where the arithmetic happens
      *
-     * In `csrc/src/pulseq/pulseq_ktraj.c`, which is the only place it happens.
-     * This used to be a second implementation -- a `Piecewise` per block,
-     * written before the C89 core existed -- and the two agreed over every
-     * fixture in the repository to 4e-16 relative, which is what made it safe
-     * to delete one of them.  What survives is this name, because
-     * `TransformFOV` is built on it and "k at the start of each block" is the
-     * right thing for it to ask for.
-     *
-     * @note Non-const because reaching the core means serialising the
-     * sequence, and `write_binary` stamps `TotalDuration` on the way past.
+     * In `cxx/pulseq/ktraj.cpp`, which is the only place it happens.  This
+     * name survives because `TransformFOV` is built on it and "k at the start
+     * of each block" is the right thing for it to ask for.
      */
-    std::vector<std::array<double, 3>> block_k_origins(Sequence& seq);
+    std::vector<std::array<double, 3>> block_k_origins(const Sequence& seq);
 
     /**
      * A readout's absolute k, per axis, in 1/m -- origin plus amplitude times
@@ -280,6 +275,30 @@ namespace pulseq
      */
     void apply_fov_shift(Sequence& seq, const std::array<double, 3>& shift_m,
                          FovShiftScope scope, int first = 1, int last = 0);
+
+    /**
+     * The maximal runs of blocks in @p first..@p last (1-based, inclusive;
+     * `0` for @p last means "to the end") that each of @p labels does **not**
+     * exempt, one run list per label.
+     *
+     * The exemption labels a prescription honours -- `NOSCL`, `NOPOS`,
+     * `NOROT` -- are sticky: a value a block sets holds until another block
+     * sets it, and the block carrying the setting is itself exempt.  State
+     * starts clear at @p first rather than at block 1, which is what
+     * `applyToSeq` does.
+     *
+     * Runs rather than a flag per block, because the transforms above take a
+     * range: a scan with no exemptions at all is then one call rather than one
+     * per block, and the answer is a handful of integers rather than one per
+     * block of the scan.  That second point is the reason this is here at all
+     * -- asking per block across a language boundary costs more on a
+     * million-block scan than every transform it gates put together.
+     *
+     * A label this sequence has never registered exempts nothing.
+     */
+    std::vector<std::vector<std::pair<int, int>>> label_gate_runs(
+        const Sequence& seq, const std::vector<std::string>& labels, int first = 1,
+        int last = 0);
 
     /* ================================================================== */
     /*  FOV scale                                                         */

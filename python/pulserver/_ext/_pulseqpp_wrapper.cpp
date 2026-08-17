@@ -682,12 +682,10 @@ PYBIND11_MODULE(_pulseqpp_wrapper, m)
         // Repetitions resolved into the block table.  Scan-length like the
         // pass above it, and touching Python no more than that one does.
         .def("expand_repeats",
-             [](Sequence& self, int repeats, const std::string& label, bool strip_once,
-                bool set_ignore_averages) {
+             [](Sequence& self, int repeats, const std::string& label, bool strip_once) {
                  pulseq::ExpandOptions options;
                  options.label = label;
                  options.strip_once = strip_once;
-                 options.set_ignore_averages = set_ignore_averages;
 
                  pulseq::ExpandResult r;
                  {
@@ -759,6 +757,23 @@ PYBIND11_MODULE(_pulseqpp_wrapper, m)
             },
             py::arg("sx"), py::arg("sy"), py::arg("sz"), py::arg("first") = 1,
             py::arg("last") = 0, py::call_guard<py::gil_scoped_release>())
+
+        // Which block ranges each sticky exemption label leaves alone, one run
+        // list per label.  Runs rather than a flag per block because the
+        // transforms above take a range, and because asking per block across
+        // this boundary costs more on a million-block scan than every
+        // transform it gates put together.
+        // Whether every library is already down to its distinct rows, so a
+        // writer or a transform can skip a pass it would find nothing in.
+        // Pessimistic: any write access to a library clears it.
+        .def("deduplicated", [](const Sequence& s) { return s.deduplicated(); })
+
+        .def(
+            "label_gate_runs",
+            [](const Sequence& self, const std::vector<std::string>& labels, int first,
+               int last) { return pulseq::label_gate_runs(self, labels, first, last); },
+            py::arg("labels"), py::arg("first") = 1, py::arg("last") = 0,
+            py::call_guard<py::gil_scoped_release>())
 
         // Server mode: store each readout's base trajectory in its ADC's
         // phase_modulation, for a consumer of ours to rescale and rotate.

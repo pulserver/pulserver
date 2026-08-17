@@ -304,7 +304,7 @@ def main(
         value=slice_thickness + slice_gap - kernel.excitation.slice_thickness,
     )
 
-    seq.expand_repeats(n_averages)
+    seq = pp.tile(seq, n_averages, in_place=True)
 
     if write_seq:
         write_sequence(seq, seq_filename, offline=True)

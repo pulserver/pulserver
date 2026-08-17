@@ -109,11 +109,11 @@ namespace pulseq
         /**
          * An already-computed trajectory to take the echoes from.
          *
-         * Optional.  When null this calls @ref calculate_kspace itself, which
-         * costs one serialise and one parse; a caller that already holds a
-         * `KSpace` over the same block range should hand it over instead of
-         * paying for a second one.  It must have been computed with
-         * `derive_center_sample` on, or there are no echoes in it.
+         * Optional.  When null this calls @ref calculate_kspace itself; a
+         * caller that already holds a `KSpace` over the same block range
+         * should hand it over instead of paying for a second one.  It must
+         * have been computed with `derive_center_sample` on, or there are no
+         * echoes in it.
          */
         const KSpace* kspace = nullptr;
     };
@@ -170,14 +170,8 @@ namespace pulseq
         int num_shots() const { return static_cast<int>(t_excitation.size()); }
     };
 
-    /**
-     * The b-tensor and gradient moments of every excitation in @p seq.
-     *
-     * Takes the sequence by non-const reference for the same reason
-     * @ref calculate_kspace does: the binary writer records `TotalDuration`
-     * before serialising.
-     */
-    Moments calc_moments(Sequence& seq, const MomentsOptions& options = {});
+    /** The b-tensor and gradient moments of every excitation in @p seq. */
+    Moments calc_moments(const Sequence& seq, const MomentsOptions& options = {});
 
     /** `B_fixed + C Rᵀ + R Cᵀ + R B_rot Rᵀ`, s/m². */
     Matrix3 compose_btensor(const BTensorParts& parts, const Matrix3& rotation);

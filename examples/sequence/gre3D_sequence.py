@@ -333,7 +333,7 @@ def main(
     # out rather than left to the interpreter's repeat count, so every
     # acquisition in the file carries the `AVG` it belongs to and the dummies
     # -- marked `ONCE` -- appear in the first average only.
-    seq.expand_repeats(n_averages)
+    seq = pp.tile(seq, n_averages, in_place=True)
 
     if write_seq:
         write_sequence(seq, seq_filename, offline=True)

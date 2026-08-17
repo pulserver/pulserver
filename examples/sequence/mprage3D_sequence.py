@@ -87,6 +87,7 @@ def main(
     n_acs: int = 24,
     n_acs_z: int = 16,
     shuffle_seed: int = 0,
+    n_dummy: int = 1,
     n_gain_calibration_readouts: int = 1,
     rf_spoiling_increment_deg: float = 117.0,
     spoiling_cycles: float = 4.0,
@@ -158,6 +159,12 @@ def main(
         Autocalibration extent along z, in partitions. Default is 16.
     shuffle_seed : int, optional
         Seed of the shuffling permutation. Default is 0.
+    n_dummy : int, optional
+        Inversion trains played without acquiring, before the first acquired
+        one, so the longitudinal magnetisation the scan measures is the one
+        it settles into rather than the one it starts from. A whole outer TR
+        is the unit here -- inversion, recovery and the view train -- because
+        that is what the magnetisation recovers over. Default is 1.
     n_gain_calibration_readouts : int, optional
         Written as the ``NumGainCalibrationReadouts`` definition. Default
         is 1.
@@ -209,7 +216,7 @@ def main(
     )
 
     rf_phases = pp.make_rf_spoiling_schedule(
-        len(kernel.segments) * views_per_segment,
+        (len(kernel.segments) + n_dummy) * views_per_segment,
         increment=np.deg2rad(rf_spoiling_increment_deg),
     )
 
@@ -260,13 +267,35 @@ def main(
         if wait_tr is not None:
             seq.add_block(wait_tr)
 
-    for views in kernel.segments:
-        seq.add_block(inversion.rf_prep)
+    def inversion_train(views, *, acquire: bool, mark=None) -> None:
+        """One outer TR: the inversion, the wait, the view train, the recovery."""
+        seq.add_block(inversion.rf_prep, *([mark] if mark is not None else []))
         seq.add_block(inversion.gz_spoil)
         seq.add_block(kernel.wait_ti)
         for index, view in enumerate(views):
-            repetition(view, index)
+            repetition(view if acquire else None, index)
         seq.add_block(kernel.wait_recovery)
+
+    # Steady state first: whole inversion trains without acquiring, so the
+    # magnetisation the first acquired train measures is the one every later
+    # train measures. The unit is the outer TR because that is what the
+    # longitudinal magnetisation recovers over -- a partial train would leave
+    # it somewhere in the middle of the recovery.
+    #
+    # `ONCE` is what keeps them out of the averages: 1 plays on the first pass
+    # only, and the first acquired train clears it back to 0 so the body
+    # repeats.
+    for i_dummy in range(n_dummy):
+        inversion_train(
+            kernel.segments[0],
+            acquire=False,
+            mark=pp.make_label("ONCE", "SET", 1) if i_dummy == 0 else None,
+        )
+
+    clear_once = pp.make_label("ONCE", "SET", 0) if n_dummy else None
+    for views in kernel.segments:
+        inversion_train(views, acquire=True, mark=clear_once)
+        clear_once = None
 
     pp.TransformFOV(
         translation=tuple(offset * 1e3 for offset in fov_offset), system=system

@@ -412,6 +412,14 @@ namespace pulseq
 
     void Sequence::remove_duplicates()
     {
+        /* Idempotent by construction -- rounding a row already at the file's
+         * precision leaves it alone -- so a sequence that has not been touched
+         * since the last pass has nothing here to find.  Saying so is worth a
+         * flag because the pass is over every row of every library, and the
+         * ordinary path deduplicates once and then writes. */
+        if (deduplicated_)
+            return;
+
         /* -- shapes ---------------------------------------------------- */
         //
         // Compressed samples are written `%.9g`, so nine significant digits is
@@ -665,6 +673,8 @@ namespace pulseq
             row[4] = follow(adc_map, row[4], "ADC event", b);
             row[5] = follow(new_head, row[5], "extension chain", b);
         }
+
+        deduplicated_ = true;
     }
 
 }  // namespace pulseq

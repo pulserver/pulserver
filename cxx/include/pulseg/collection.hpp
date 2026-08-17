@@ -423,7 +423,6 @@ namespace pulseg
                 b.duration_us = cw.blocks[i].duration_us;
                 b.segment_idx = cw.blocks[i].segment_idx;
                 b.rf_isocenter_us = cw.blocks[i].rf_isocenter_us;
-                b.adc_kzero_us = cw.blocks[i].adc_kzero_us;
             }
 
             w.total_duration_us = cw.total_duration_us;

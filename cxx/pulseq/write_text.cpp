@@ -288,6 +288,13 @@ namespace pulseq
         seq.set_definition("TotalDuration", Definition(seq.duration()));
         seq.publish_rasters();
 
+        /* Every read below goes through a const reference, so the writer does
+         * not look like a mutation to the sequence.  Taking `Table&` from a
+         * non-const Sequence is what gives up its deduplicated claim, and a
+         * writer that only reads must not cost a caller that pass. */
+        const Sequence& reading = seq;
+
+
         std::string out;
         // Blocks dominate a large file; ~35 characters each is close enough
         // that the buffer grows a couple of times rather than a couple of
@@ -297,15 +304,15 @@ namespace pulseq
         out.append("# Pulseq sequence file\n# Created by PyPulseq\n\n");
 
         out.append("[VERSION]\n");
-        appendf(out, "major %d\n", seq.version_major());
-        appendf(out, "minor %d\n", seq.version_minor());
+        appendf(out, "major %d\n", reading.version_major());
+        appendf(out, "minor %d\n", reading.version_minor());
         appendf(out, "revision %d\n", required_revision(seq));
         out.push_back('\n');
 
-        if (!seq.definitions().empty())
+        if (!reading.definitions().empty())
         {
             out.append("[DEFINITIONS]\n");
-            for (const auto& entry : seq.definitions())
+            for (const auto& entry : reading.definitions())
             {
                 out.append(entry.first);
                 out.push_back(' ');
@@ -324,7 +331,7 @@ namespace pulseq
         {
             const int number_width = decimal_width(n_blocks);
             const int widths[8] = {number_width, 3, 3, 3, 3, 3, 2, 2};
-            const int32_t* events = seq.block_events();
+            const int32_t* events = reading.block_events();
             const long* tick = ticks.data();
 
             // The worst a row can be: every field at its widest, a separator
@@ -353,7 +360,7 @@ namespace pulseq
 
         /* -- RF -------------------------------------------------------- */
 
-        if (!seq.rf_library().empty())
+        if (!reading.rf_library().empty())
         {
             out.append("# Format of RF events:\n");
             out.append("# id ampl. mag_id phase_id time_shape_id center delay freqPPm phasePPM freq phase use\n");
@@ -361,13 +368,13 @@ namespace pulseq
             out.append("# Field \"use\" is the initial of: excitation refocusing inversion saturation preparation other undefined\n");
             out.append("[RF]\n");
 
-            const double raster = seq.rf_raster_time();
-            for (int id = 1; id <= seq.rf_library().size(); ++id)
+            const double raster = reading.rf_raster_time();
+            for (int id = 1; id <= reading.rf_library().size(); ++id)
             {
-                const double* d = seq.rf_library().row(id);
+                const double* d = reading.rf_library().row(id);
                 const double center = d[4] * 1e6;
                 const double delay = std::rint(d[5] / raster) * raster * 1e6;
-                const char use = seq.rf_uses()[static_cast<size_t>(id) - 1];
+                const char use = reading.rf_uses()[static_cast<size_t>(id) - 1];
                 appendf(out, "%.0f %12g %.0f %.0f %.0f %g %g %g %g %g %g %c\n",
                         static_cast<double>(id), d[0], d[1], d[2], d[3], center, delay,
                         d[6], d[7], d[8], d[9], use ? use : 'u');
@@ -383,9 +390,9 @@ namespace pulseq
         // sequence handed out.
 
         std::vector<int> arbitrary, trapezoids;
-        for (int id = 1; id <= seq.num_gradients(); ++id)
+        for (int id = 1; id <= reading.num_gradients(); ++id)
         {
-            if (seq.grad_kind(id) == GradKind::Arbitrary)
+            if (reading.grad_kind(id) == GradKind::Arbitrary)
                 arbitrary.push_back(id);
             else
                 trapezoids.push_back(id);
@@ -400,7 +407,7 @@ namespace pulseq
             out.append("[GRADIENTS]\n");
             for (int id : arbitrary)
             {
-                const double* d = seq.arb_library().row(seq.grad_row(id));
+                const double* d = reading.arb_library().row(reading.grad_row(id));
                 appendf(out, "%.0f %12g %12g %12g %.0f %.0f %.0f\n",
                         static_cast<double>(id), d[0], d[1], d[2], d[3], d[4],
                         std::rint(d[5] * 1e6));
@@ -416,7 +423,7 @@ namespace pulseq
             out.append("[TRAP]\n");
             for (int id : trapezoids)
             {
-                const double* d = seq.trap_library().row(seq.grad_row(id));
+                const double* d = reading.trap_library().row(reading.grad_row(id));
                 appendf(out, "%2.0f %12g %3.0f %4.0f %3.0f %3.0f\n",
                         static_cast<double>(id), d[0], 1e6 * d[1], 1e6 * d[2], 1e6 * d[3],
                         1e6 * d[4]);
@@ -426,15 +433,15 @@ namespace pulseq
 
         /* -- ADC ------------------------------------------------------- */
 
-        if (!seq.adc_library().empty())
+        if (!reading.adc_library().empty())
         {
             out.append("# Format of ADC events:\n");
             out.append("# id num dwell delay freqPPM phasePPM freq phase phase_id\n");
             out.append("# ..  ..    ns    us     ppm  rad/MHz   Hz   rad       ..\n");
             out.append("[ADC]\n");
-            for (int id = 1; id <= seq.adc_library().size(); ++id)
+            for (int id = 1; id <= reading.adc_library().size(); ++id)
             {
-                const double* d = seq.adc_library().row(id);
+                const double* d = reading.adc_library().row(id);
                 appendf(out, "%.0f %.0f %.0f %.0f %g %g %g %g %.0f\n",
                         static_cast<double>(id), d[0], 1e9 * d[1], 1e6 * d[2], d[3], d[4],
                         d[5], d[6], d[7]);
@@ -444,15 +451,15 @@ namespace pulseq
 
         /* -- extension chains ------------------------------------------ */
 
-        if (!seq.extensions_library().empty())
+        if (!reading.extensions_library().empty())
         {
             out.append("# Format of extension lists:\n");
             out.append("# id type ref next_id\n");
             out.append("# next_id of 0 terminates the list\n");
             out.append("# Extension list is followed by extension specifications\n");
             out.append("[EXTENSIONS]\n");
-            const int count = seq.extensions_library().size();
-            const IntTable& chains = seq.extensions_library();
+            const int count = reading.extensions_library().size();
+            const IntTable& chains = reading.extensions_library();
             render_rows(
                 out, static_cast<size_t>(count), 4 * 13 + 1,
                 [&](char* cursor, size_t i) {
@@ -471,14 +478,14 @@ namespace pulseq
 
         /* -- extension specifications ---------------------------------- */
 
-        if (!seq.trigger_library().empty())
+        if (!reading.trigger_library().empty())
         {
             out.append("# Extension specification for digital output and input triggers:\n");
             out.append("# id type channel delay (us) duration (us)\n");
             appendf(out, "extension TRIGGERS %d\n", seq.extension_type_id("TRIGGERS"));
-            for (int id = 1; id <= seq.trigger_library().size(); ++id)
+            for (int id = 1; id <= reading.trigger_library().size(); ++id)
             {
-                const double* d = seq.trigger_library().row(id);
+                const double* d = reading.trigger_library().row(id);
                 appendf(out, "%.0f %.0f %.0f %.0f %.0f\n", static_cast<double>(id), d[0], d[1],
                         1e6 * d[2], 1e6 * d[3]);
             }
@@ -487,8 +494,8 @@ namespace pulseq
 
         {
             const std::pair<const char*, const IntTable*> label_sections[2] = {
-                {"LABELSET", &seq.label_set_library()},
-                {"LABELINC", &seq.label_inc_library()},
+                {"LABELSET", &reading.label_set_library()},
+                {"LABELINC", &reading.label_inc_library()},
             };
             for (const auto& section : label_sections)
             {
@@ -503,7 +510,7 @@ namespace pulseq
                     const int32_t* row = section.second->row(id);
                     // The name is what the file carries; the number was only
                     // ever how this sequence indexed it.
-                    const std::string& name = seq.label_name(row[1]);
+                    const std::string& name = reading.label_name(row[1]);
                     appendf(out, "%.0f %.0f %s\n", static_cast<double>(id),
                             static_cast<double>(row[0]),
                             name.empty() ? "UNKNOWN" : name.c_str());
@@ -512,15 +519,15 @@ namespace pulseq
             }
         }
 
-        if (!seq.rf_shim_library().empty())
+        if (!reading.rf_shim_library().empty())
         {
             out.append("# Extension specification for RF shimming:\n");
             out.append("# id num_chan factor magn_c1 phase_c1 magn_c2 phase_c2 ...\n");
             appendf(out, "extension RF_SHIMS %d\n", seq.extension_type_id("RF_SHIMS"));
-            for (int id = 1; id <= seq.rf_shim_library().size(); ++id)
+            for (int id = 1; id <= reading.rf_shim_library().size(); ++id)
             {
-                const int length = seq.rf_shim_library().length(id);
-                const double* values = seq.rf_shim_library().row(id);
+                const int length = reading.rf_shim_library().length(id);
+                const double* values = reading.rf_shim_library().row(id);
                 appendf(out, "%d %d", id, length / 2);
                 for (int i = 0; i < length; ++i)
                     appendf(out, " %g", values[i]);
@@ -529,28 +536,28 @@ namespace pulseq
             out.push_back('\n');
         }
 
-        if (!seq.rotation_library().empty())
+        if (!reading.rotation_library().empty())
         {
             out.append("# Extension specification for rotation events:\n");
             out.append("# id RotQuat0 RotQuatX RotQuatY RotQuatZ\n");
             appendf(out, "extension ROTATIONS %d\n", seq.extension_type_id("ROTATIONS"));
-            for (int id = 1; id <= seq.rotation_library().size(); ++id)
+            for (int id = 1; id <= reading.rotation_library().size(); ++id)
             {
-                const double* d = seq.rotation_library().row(id);
+                const double* d = reading.rotation_library().row(id);
                 appendf(out, "%.0f %12g %12g %12g %12g\n", static_cast<double>(id), d[0], d[1],
                         d[2], d[3]);
             }
             out.push_back('\n');
         }
 
-        if (!seq.soft_delay_library().empty())
+        if (!reading.soft_delay_library().empty())
         {
             out.append("# Extension specification for soft delays:\n");
             out.append("# id num offset factor hint\n");
             out.append("# ..  ..     us     ..   ..\n");
             appendf(out, "extension DELAYS %d\n", seq.extension_type_id("DELAYS"));
             int id = 1;
-            for (const SoftDelay& row : seq.soft_delay_library())
+            for (const SoftDelay& row : reading.soft_delay_library())
             {
                 appendf(out, "%.0f %.0f %.0f %.0f %s\n", static_cast<double>(id),
                         static_cast<double>(row.num), std::rint(row.offset * 1e6), row.factor,
@@ -562,17 +569,17 @@ namespace pulseq
 
         /* -- shapes ---------------------------------------------------- */
 
-        if (!seq.shape_library().empty())
+        if (!reading.shape_library().empty())
         {
             out.append("# Sequence Shapes\n");
             out.append("[SHAPES]\n\n");
-            for (int id = 1; id <= seq.shape_library().size(); ++id)
+            for (int id = 1; id <= reading.shape_library().size(); ++id)
             {
                 appendf(out, "shape_id %.0f\n", static_cast<double>(id));
                 appendf(out, "num_samples %.0f\n",
-                        static_cast<double>(seq.shape_library().num_uncompressed(id)));
-                const int count = seq.shape_library().num_compressed(id);
-                const double* samples = seq.shape_library().samples(id);
+                        static_cast<double>(reading.shape_library().num_uncompressed(id)));
+                const int count = reading.shape_library().num_compressed(id);
+                const double* samples = reading.shape_library().samples(id);
                 for (int i = 0; i < count; ++i)
                     appendf(out, "%.9g\n", samples[i]);
                 out.push_back('\n');
