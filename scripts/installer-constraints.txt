@@ -1,0 +1,22 @@
+# Python pins for the bundle scripts/make_installer.sh builds.
+#
+# The installer creates a fresh venv and pip-installs into it, so without pins
+# every bundle carries whatever the index served that day -- two installers
+# built a week apart are two different environments, and the Nim bridge lane
+# that runs against the bundle goes flaky for reasons nothing in the repo
+# changed.
+#
+# These are the versions the bridge suite passes against. Applied as pip
+# constraints, so they also hold for anything pulled in transitively by the
+# pulserver install below them.
+#
+# The Nim side of the same bundle is pinned in bridge/nimble.lock.
+#
+# numpy and scipy are held at the last releases that still declare
+# `requires-python >= 3.11` while shipping wheels through CPython 3.14, so one
+# pin set covers the whole band the wheels are built for. Raising either past
+# these lifts the floor to 3.12 and drops the bundle's oldest interpreter.
+
+numpy==2.4.6
+scipy==1.17.1
+pypulseq==1.5.0.post1

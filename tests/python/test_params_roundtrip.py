@@ -37,8 +37,12 @@ def test_protocol_roundtrip(sample_protocol):
     decoded = dict_to_protocol(encoded)
 
     assert set(decoded.keys()) == {UIParam.TE.value, UIParam.TR.value}
-    assert decoded[UIParam.TE.value].value == pytest.approx(sample_protocol[UIParam.TE].value)
-    assert decoded[UIParam.TR.value].value == pytest.approx(sample_protocol[UIParam.TR].value)
+    assert decoded[UIParam.TE.value].value == pytest.approx(
+        sample_protocol[UIParam.TE].value
+    )
+    assert decoded[UIParam.TR.value].value == pytest.approx(
+        sample_protocol[UIParam.TR].value
+    )
 
 
 def test_roundtrip_preserves_units(sample_protocol):
@@ -85,7 +89,9 @@ def test_dict_to_protocol_keeps_keys_as_is():
 
 def test_protocol_to_dict_emits_keys_as_given():
     protocol = {
-        UIParam.FLIP: TypeinFloatParam(value=10.0, min=0.0, max=180.0, incr=1.0, unit="deg"),
+        UIParam.FLIP: TypeinFloatParam(
+            value=10.0, min=0.0, max=180.0, incr=1.0, unit="deg"
+        ),
         UIParam.user_value(1): TypeinFloatParam(value=2.0, min=0.0, max=5.0, incr=0.1),
     }
 
@@ -168,7 +174,9 @@ def test_bool_and_stringlist_support_validate_field():
     encoded = protocol_to_dict(
         {
             "flag": BoolParam(value=True, validate=Validate.NONE),
-            "choice": StringListParam(options=["A", "B"], value="B", validate=Validate.SEARCH),
+            "choice": StringListParam(
+                options=["A", "B"], value="B", validate=Validate.SEARCH
+            ),
         }
     )
     decoded = dict_to_protocol(encoded)

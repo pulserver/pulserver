@@ -7,7 +7,7 @@ else -- the slab excitation, the autocalibration rectangle leading the
 traversal, the CAIPIRINHA lattice with its selectable kz shift per ky block
 under regular undersampling, partial Fourier, spoiling -- is
 :mod:`pulserver.app.sequence.gre3D_sequence`.
-:mod:`pulserver.app.recon.gre_multiecho3D_recon` reconstructs one volume per echo.
+:mod:`pulserver.app.recon.cartesian3D_recon` reconstructs one volume per echo.
 
 ``main`` returns the :class:`pulserver.pypulseq.Sequence`; ``PLUGIN`` is the
 same sequence behind the scanner protocol contract, and running this module
@@ -306,6 +306,7 @@ def main(
 # Subroutines of main()
 # ======================================================================
 
+
 def Multiecho3DKernel(
     system: pp.Opts,
     *,
@@ -418,6 +419,7 @@ n_averages, n_dummy, spoiling_cycles
 # The scanner protocol contract
 # ======================================================================
 
+
 class GreMultiecho3D(SequencePlugin):
     """The multi-echo 3D gradient echo behind the scanner protocol contract."""
 
@@ -523,9 +525,15 @@ class GreMultiecho3D(SequencePlugin):
                     unit="",
                     options=[1.0, 2.0, 4.0, 8.0, 16.0],
                 ),
-                UIParam.FOV_OFFSET_X: OffFloatParam(value=0.0, min=-500.0, max=500.0, unit="mm"),
-                UIParam.FOV_OFFSET_Y: OffFloatParam(value=0.0, min=-500.0, max=500.0, unit="mm"),
-                UIParam.FOV_OFFSET_Z: OffFloatParam(value=0.0, min=-500.0, max=500.0, unit="mm"),
+                UIParam.FOV_OFFSET_X: OffFloatParam(
+                    value=0.0, min=-500.0, max=500.0, unit="mm"
+                ),
+                UIParam.FOV_OFFSET_Y: OffFloatParam(
+                    value=0.0, min=-500.0, max=500.0, unit="mm"
+                ),
+                UIParam.FOV_OFFSET_Z: OffFloatParam(
+                    value=0.0, min=-500.0, max=500.0, unit="mm"
+                ),
                 UIParam.user_name(0): Description(text="ACS lines (y)"),
                 UIParam.user_value(0): TypeinFloatParam(
                     value=24.0,
@@ -591,7 +599,9 @@ class GreMultiecho3D(SequencePlugin):
                     unit="",
                 ),
                 UIParam.user_name(8): Description(text="Elliptical sampling"),
-                UIParam.user_value(8): TypeinFloatParam(value=1.0, min=0.0, max=1.0, incr=1.0, unit=""),
+                UIParam.user_value(8): TypeinFloatParam(
+                    value=1.0, min=0.0, max=1.0, incr=1.0, unit=""
+                ),
             }
         )
 
@@ -602,7 +612,11 @@ class GreMultiecho3D(SequencePlugin):
         try:
             kernel = Multiecho3DKernel(
                 system,
-                **{name: value for name, value in kwargs.items() if name in KERNEL_ARGUMENTS},
+                **{
+                    name: value
+                    for name, value in kwargs.items()
+                    if name in KERNEL_ARGUMENTS
+                },
             )
         except ValueError as error:
             return {"valid": False, "duration": None, "info": str(error)}
@@ -674,7 +688,9 @@ def protocol_kwargs(system: pp.Opts, protocol: dict[str, dict]) -> dict:
         monopolar=bool(round(params.user_float(prot, 4, 1.0))),
         partial_fourier=params.user_float(prot, 3, 1.0),
         partial_fourier_z=params.user_float(prot, 5, 1.0),
-        n_acs=params.acs_lines_from_protocol(prot, params.param_int(prot, UIParam.NY), 0),
+        n_acs=params.acs_lines_from_protocol(
+            prot, params.param_int(prot, UIParam.NY), 0
+        ),
         n_dummy=max(0, round(params.user_float(prot, 2, 64.0))),
         n_acs_z=max(0, round(params.user_float(prot, 6, 16.0))),
         caipi_shift=max(0, round(params.user_float(prot, 7, 0.0))),
@@ -720,7 +736,12 @@ ARG_MAP = [
     ("--rz", UIParam.RZ, float, "Partition-encode undersampling factor along z"),
     ("--nex", UIParam.NEX, float, "Number of signal averages"),
     ("--offset-x-mm", UIParam.FOV_OFFSET_X, float, "Volume offset along readout [mm]"),
-    ("--offset-y-mm", UIParam.FOV_OFFSET_Y, float, "Volume offset along phase encode [mm]"),
+    (
+        "--offset-y-mm",
+        UIParam.FOV_OFFSET_Y,
+        float,
+        "Volume offset along phase encode [mm]",
+    ),
     ("--offset-z-mm", UIParam.FOV_OFFSET_Z, float, "Volume offset along slab [mm]"),
     ("--acs-lines", UIParam.user_value(0), float, "Number of ACS lines along y"),
     ("--echoes", UIParam.user_value(1), float, "Echoes per repetition"),
@@ -742,7 +763,12 @@ ARG_MAP = [
         float,
         "Acquired partition-encode fraction along z in (0.5, 1]",
     ),
-    ("--acs-partitions", UIParam.user_value(6), float, "Number of ACS partitions along z"),
+    (
+        "--acs-partitions",
+        UIParam.user_value(6),
+        float,
+        "Number of ACS partitions along z",
+    ),
     ("--caipi-shift", UIParam.user_value(7), float, "CAIPIRINHA kz shift per ky block"),
     (
         "--no-elliptical",

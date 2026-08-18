@@ -1,10 +1,18 @@
+# The formatting and linting rules live in scripts/format_and_lint.sh, which
+# is also what the Style workflow runs (there with --check). Keeping one entry
+# point means a commit cannot pass locally and fail in CI on style.
 repos:
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.6
+  - repo: local
     hooks:
-      - id: ruff-check
-        args: [--fix]
-      - id: ruff-format
+      - id: format-and-lint
+        name: format and lint (Python, C, C++)
+        entry: bash scripts/format_and_lint.sh --skip-c89
+        language: system
+        pass_filenames: false
+        types_or: [python, c, c++]
+        # Rewrites in place: pre-commit then reports the modified files and
+        # asks for them to be staged. --skip-c89 keeps the hook fast; the full
+        # C89 compile runs in CI and in the unflagged script.
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
@@ -12,3 +20,16 @@ repos:
       - id: check-merge-conflict
       - id: end-of-file-fixer
       - id: trailing-whitespace
+      # The metadata this repository's automation reads. A malformed workflow
+      # or issue template is otherwise found only after it is pushed.
+      - id: check-yaml
+      - id: check-toml
+      - id: check-added-large-files
+        args: [--maxkb=2048]
+        # Fixtures are the one thing here that is legitimately large, and they
+        # are regenerated rather than hand-edited.
+        exclude: ^tests/(python/fixtures|utils/expected)/
+      - id: check-symlinks
+      - id: destroyed-symlinks
+      - id: mixed-line-ending
+        args: [--fix=lf]

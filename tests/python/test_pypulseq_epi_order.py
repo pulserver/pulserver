@@ -101,7 +101,9 @@ def test_a_caipi_train_tiles_its_lattice_exactly(ny, nz, ry, rz, shift, segments
     ("rz", "shift", "segments"),
     [(4, 1, 1), (4, 1, 2), (6, 2, 1), (5, 2, 3), (3, 1, 2)],
 )
-def test_the_partition_blips_take_the_two_values_the_pattern_allows(rz, shift, segments):
+def test_the_partition_blips_take_the_two_values_the_pattern_allows(
+    rz, shift, segments
+):
     """``b1 = (S dz) mod Rz`` up, ``b2 = (Rz - b1) mod Rz`` down, and nothing else."""
     order = pp.calc_epi_order(
         16,

@@ -1,0 +1,72 @@
+name: Bug report
+description: Something behaves differently from what the documentation says.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this. If the problem is a
+        sequence a scanner refused, the refusal message and the `.seq` that
+        produced it are usually enough to reproduce it.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what you got instead.
+      placeholder: |
+        Building a 3D FSE with etl=32 and calling seq.check_hardware_limits()
+        reports a slew violation at blocks 88 -> 89. The same design at
+        etl=16 passes, and the gradients look continuous when plotted.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: How to reproduce it
+      description: >
+        The shortest script, command or plugin invocation that shows the
+        problem. Attach the `.seq` if the sequence itself is the subject.
+      render: python
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which part
+      options:
+        - Sequence design (pulserver.design, pulserver.pypulseq)
+        - Safety checks (gradient, PNS, mechanical resonance)
+        - The C interpreter library (src/c)
+        - The C++ library (cxx, pulseqpp)
+        - Reconstruction (pulserver.recon)
+        - The Nim bridge / scanner protocol
+        - Documentation
+        - Not sure
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Pulserver version
+      description: "`python -m pip show pulserver | head -2`, or the commit you built from."
+    validations:
+      required: true
+
+  - type: input
+    id: environment
+    attributes:
+      label: Python and OS
+      placeholder: "Python 3.11 on Ubuntu 24.04"
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Traceback or scanner message
+      description: Paste it in full. It is rendered as a code block already.
+      render: text

@@ -2,8 +2,8 @@
 cmake_minimum_required(VERSION 3.10)
 project(pulserverlibTests C)
 
-# Add the csrc library folder as a subdirectory
-add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../../csrc ${CMAKE_BINARY_DIR}/csrc_build)
+# Add the C library folder as a subdirectory
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../../src/c ${CMAKE_BINARY_DIR}/c_build)
 
 
 
@@ -28,12 +28,12 @@ set_target_properties(run_tests PROPERTIES
 # Link the test executable with the libraries under test
 target_link_libraries(run_tests PRIVATE pulseg pulseq m)
 
-# Public API headers live in csrc/include; csrc/src is added because the C
+# Public API headers live in src/c/include; the tree root is added because the C
 # tests deliberately exercise internals declared in pulseg_internal.h.
 target_include_directories(run_tests PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../csrc/include
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../csrc/include/pulseg
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../csrc/src)
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../src/c/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../src/c/include/pulseg
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../src/c)
 
 # Expose POSIX timers for minunit.h (clockid_t, clock_gettime, etc.)
 target_compile_definitions(run_tests PRIVATE _POSIX_C_SOURCE=200112L)

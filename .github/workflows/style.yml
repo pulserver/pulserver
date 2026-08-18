@@ -1,10 +1,13 @@
 name: Style
 
+# Runs the same script pre-commit runs, in --check mode: nothing is rewritten
+# and any file that would change fails the job. Keeping the rules in
+# scripts/format_and_lint.sh means this workflow cannot drift from what
+# contributors run locally.
+
 on:
   push:
   pull_request:
-
-
   workflow_dispatch:
 
 concurrency:
@@ -12,27 +15,30 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  PYTHON_VERSION: "3.10"
+  PYTHON_VERSION: "3.11"
 
 jobs:
-  linter-check:
+  format-and-lint:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
+
       - name: Set up Python ${{ env.PYTHON_VERSION }}
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
 
-      - name: Install Python deps
-        shell: bash
+      # `.[dev]` carries ruff at the version this repository is linted with,
+      # so CI and a contributor's pre-commit apply the same rules.
+      - name: Install tools
         run: |
           python -m pip install --upgrade pip
-          python -m pip install ruff
-          python -m pip install -e .
+          python -m pip install .[dev]
+          sudo apt-get update && sudo apt-get install -y clang-format cmake build-essential
 
-      - name: Ruff Check
-        shell: bash
-        run: ruff check .
+      # PYTHON_BIN is left unset: the script falls back to the python3 that
+      # setup-python put on PATH.
+      - name: Format and lint (check only)
+        run: bash scripts/format_and_lint.sh --check

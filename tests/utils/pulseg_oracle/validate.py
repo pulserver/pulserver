@@ -71,11 +71,12 @@ def tile_partition(seq, segments) -> list[tuple[int, int, int]]:
             count = len(signatures)
             if position + count > len(stream):
                 continue
-            if stream[position : position + count] == signatures:
-                # Prefer the longest match; a shorter segment that happens
-                # to prefix a longer one must not shadow it.
-                if matched is None or count > len(matched[1]):
-                    matched = (segment_id, signatures)
+            # The longest match wins: a shorter segment that happens to
+            # prefix a longer one must not shadow it.
+            if stream[position : position + count] == signatures and (
+                matched is None or count > len(matched[1])
+            ):
+                matched = (segment_id, signatures)
         if matched is None:
             raise PartitionError(
                 f"no segment definition matches the stream at block {position + 1}"

@@ -31,5 +31,5 @@ resolved content is computed at test time by the spec-first oracle in
 `pulseg_oracle/` (identity normalization, partition validation, instance
 table, label walk, composed TR waveforms) and compared against the C
 interpreter in process by `../python/test_pulseg_vs_oracle.py` through the
-`_pulseg_wrapper` projections. The C test lane (`../ctests/`) keeps
+`pulserver._ext.pulseg` projections. The C test lane (`../ctests/`) keeps
 self-contained expectations only.

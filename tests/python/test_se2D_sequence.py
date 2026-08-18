@@ -85,9 +85,7 @@ def test_the_slice_axis_is_rephased_through_the_refocusing_pulse():
 
 def test_the_acquired_lines_are_the_ones_the_sampling_plan_asked_for():
     seq = design(acceleration=2)
-    expected = np.asarray(
-        pp.calc_sampled_lines(N_Y, 2, 6, order="calibration_first")
-    )
+    expected = np.asarray(pp.calc_sampled_lines(N_Y, 2, 6, order="calibration_first"))
     assert np.array_equal(acquired_lines(seq), expected)
     assert np.array_equal(
         seq.evaluate_labels(evolution="adc")["LIN"], acquired_lines(seq)
@@ -163,6 +161,6 @@ def test_a_slice_offset_is_a_frequency_on_both_pulses():
         for index in range(1, shifted.num_blocks + 1)
         if (block := shifted.get_block(index)).rf is not None
     ]
-    for before, after in zip(plain_pulses, shifted_pulses):
+    for before, after in zip(plain_pulses, shifted_pulses, strict=False):
         assert float(after.freq_offset) != pytest.approx(float(before.freq_offset))
     assert shifted._native.num_shapes() == plain._native.num_shapes()

@@ -1,0 +1,116 @@
+name: Wheels
+
+# Builds the binary wheels an end user installs: the pure-Python package plus
+# the compiled C and C++ extensions, so `pip install pulserver` needs no
+# CMake, no compiler and no SDK on the target machine.
+#
+# Reusable, so the release workflow builds its artifacts with exactly this
+# job rather than a second copy of the configuration.
+
+on:
+  workflow_call:
+    inputs:
+      cibw-build:
+        description: Which CPython builds to produce (CIBW_BUILD).
+        type: string
+        default: "cp311-* cp312-* cp313-* cp314-*"
+  workflow_dispatch:
+    inputs:
+      cibw-build:
+        description: Which CPython builds to produce (CIBW_BUILD).
+        type: string
+        default: "cp311-* cp312-* cp313-* cp314-*"
+  # A pull request that touches the build gets one wheel as a smoke test:
+  # the full matrix belongs to a release, but a broken CMakeLists should not
+  # be discovered at tag time.
+  pull_request:
+    paths:
+      - "CMakeLists.txt"
+      - "pyproject.toml"
+      - "src/c/**"
+      - "src/cpp/**"
+      - "src/python/bindings/**"
+      - ".github/workflows/wheels.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  wheels:
+    name: ${{ matrix.os }} ${{ matrix.arch }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            arch: x86_64
+          - os: ubuntu-24.04-arm
+            arch: aarch64
+          - os: macos-13
+            arch: x86_64
+          - os: macos-14
+            arch: arm64
+          - os: windows-latest
+            arch: AMD64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build wheels
+        uses: pypa/cibuildwheel@v4.2.0
+        env:
+          CIBW_ARCHS: ${{ matrix.arch }}
+          # A pull request builds one interpreter; a release builds the range.
+          CIBW_BUILD: >-
+            ${{ inputs.cibw-build
+                || (github.event_name == 'pull_request' && 'cp311-*')
+                || 'cp311-* cp312-* cp313-* cp314-*' }}
+          # musl images lack the toolchain this build expects, and PyPy is not
+          # a target: the extensions are built against CPython's C API. The
+          # free-threaded builds are a separate ABI that would otherwise be
+          # selected by `cp31?-*` from 3.14 on.
+          CIBW_SKIP: "*-musllinux_* pp* *t-*"
+          CIBW_BUILD_FRONTEND: build
+          # Import the freshly built wheel on the target interpreter. Every
+          # accelerator is checked, not a sample: `require` is the loader the
+          # package itself uses, so a wheel that shipped without one fails
+          # here rather than degrading to a slow path for a user. Loading them
+          # pulls in no third-party package, so the test venv stays empty and
+          # installing Torch per wheel does not dominate the build.
+          CIBW_TEST_COMMAND: >-
+            python -c "import pulserver; from pulserver._accelerators import require; [require(name) for name in ('pulseg', 'pulseqpp', 'arbgrad', 'sampling', 'recon_cpu')]; print(pulserver.__file__)"
+          MACOSX_DEPLOYMENT_TARGET: "13.0"
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ matrix.os }}-${{ matrix.arch }}
+          path: ./wheelhouse/*.whl
+          if-no-files-found: error
+
+  sdist:
+    name: sdist
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Build sdist
+        run: |
+          python -m pip install --upgrade pip build
+          python -m build --sdist
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdist
+          path: dist/*.tar.gz
+          if-no-files-found: error

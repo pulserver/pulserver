@@ -46,7 +46,7 @@ def acquired_pairs(seq):
     fov = seq.get_definition("FOV")
     lines = np.rint(ky * fov[1]).astype(int) + N_Y // 2
     partitions = np.rint(kz_end * fov[2]).astype(int) + N_Z // 2
-    return list(zip(lines.tolist(), partitions.tolist()))
+    return list(zip(lines.tolist(), partitions.tolist(), strict=False))
 
 
 def test_the_sequence_is_valid_pulseq():
@@ -81,9 +81,7 @@ def test_the_acquired_pairs_are_the_ones_the_plan_asked_for():
     assert acquired_pairs(seq) == kernel(acceleration=2).pairs
     labels = seq.evaluate_labels(evolution="adc")
     assert labels["LIN"].tolist() == [line for line, _ in acquired_pairs(seq)]
-    assert labels["PAR"].tolist() == [
-        partition for _, partition in acquired_pairs(seq)
-    ]
+    assert labels["PAR"].tolist() == [partition for _, partition in acquired_pairs(seq)]
 
 
 def test_the_calibration_rectangle_is_acquired_before_anything_else():

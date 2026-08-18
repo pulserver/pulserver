@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import Any
 
-from pulserver.recon.simulation import (
+from pulserver.recon import (
     TissueProperties,
     decode_sequence_description,
     simulate_subspace,

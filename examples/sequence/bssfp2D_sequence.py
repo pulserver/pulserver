@@ -8,7 +8,7 @@ a TR ahead of the first excitation and opposite in phase, and every
 subsequent excitation alternates phase; ``ONCE`` marks the catalyst (1), the
 steady state (0) and the closing rewind (2). Slices are played as complete
 trains one after another, because a steady state does not survive
-interleaving. :mod:`pulserver.app.recon.bssfp2D_recon` reads the result back.
+interleaving. :mod:`pulserver.app.recon.cartesian2D_recon` reads the result back.
 
 ``main`` returns the :class:`pulserver.pypulseq.Sequence`; ``PLUGIN`` is the
 same sequence behind the scanner protocol contract, and running this module
@@ -260,7 +260,9 @@ def main(
     seq.set_definition(key="TR", value=bssfp.tr)
     seq.set_definition(
         key="NumGainCalibrationReadouts",
-        value=n_slices if n_gain_calibration_readouts is None else n_gain_calibration_readouts,
+        value=n_slices
+        if n_gain_calibration_readouts is None
+        else n_gain_calibration_readouts,
     )
 
     seq.set_definition(key="kSpaceCenterLine", value=n_y // 2)
@@ -281,6 +283,7 @@ def main(
 # ======================================================================
 # Subroutines of main()
 # ======================================================================
+
 
 def Bssfp2DKernel(
     system: pp.Opts,
@@ -373,6 +376,7 @@ readout_bandwidth_hz, partial_fourier, acceleration, n_acs, n_dummy
 # The scanner protocol contract
 # ======================================================================
 
+
 class Bssfp2D(SequencePlugin):
     """The 2D balanced SSFP behind the scanner protocol contract."""
 
@@ -463,9 +467,15 @@ class Bssfp2D(SequencePlugin):
                     incr=1.0,
                     unit="",
                 ),
-                UIParam.FOV_OFFSET_X: OffFloatParam(value=0.0, min=-500.0, max=500.0, unit="mm"),
-                UIParam.FOV_OFFSET_Y: OffFloatParam(value=0.0, min=-500.0, max=500.0, unit="mm"),
-                UIParam.FOV_OFFSET_Z: OffFloatParam(value=0.0, min=-500.0, max=500.0, unit="mm"),
+                UIParam.FOV_OFFSET_X: OffFloatParam(
+                    value=0.0, min=-500.0, max=500.0, unit="mm"
+                ),
+                UIParam.FOV_OFFSET_Y: OffFloatParam(
+                    value=0.0, min=-500.0, max=500.0, unit="mm"
+                ),
+                UIParam.FOV_OFFSET_Z: OffFloatParam(
+                    value=0.0, min=-500.0, max=500.0, unit="mm"
+                ),
                 UIParam.user_name(0): Description(text="ACS lines"),
                 UIParam.user_value(0): TypeinFloatParam(
                     value=24.0,
@@ -500,7 +510,11 @@ class Bssfp2D(SequencePlugin):
         try:
             kernel = Bssfp2DKernel(
                 system,
-                **{name: value for name, value in kwargs.items() if name in KERNEL_ARGUMENTS},
+                **{
+                    name: value
+                    for name, value in kwargs.items()
+                    if name in KERNEL_ARGUMENTS
+                },
             )
         except ValueError as error:
             return {"valid": False, "duration": None, "info": str(error)}
@@ -554,7 +568,9 @@ def protocol_kwargs(system: pp.Opts, protocol: dict[str, dict]) -> dict:
         system,
         protocol,
         partial_fourier=params.user_float(prot, 3, 1.0),
-        n_acs=params.acs_lines_from_protocol(prot, params.param_int(prot, UIParam.NY), 0),
+        n_acs=params.acs_lines_from_protocol(
+            prot, params.param_int(prot, UIParam.NY), 0
+        ),
         n_dummy=max(0, round(params.user_float(prot, 2, 10.0))),
     )
 
@@ -590,11 +606,26 @@ ARG_MAP = [
     ("--bandwidth-hz", UIParam.BANDWIDTH, float, "Requested receiver bandwidth [Hz]"),
     ("--ry", UIParam.RY, float, "Phase-encode undersampling factor"),
     ("--offset-x-mm", UIParam.FOV_OFFSET_X, float, "Volume offset along readout [mm]"),
-    ("--offset-y-mm", UIParam.FOV_OFFSET_Y, float, "Volume offset along phase encode [mm]"),
+    (
+        "--offset-y-mm",
+        UIParam.FOV_OFFSET_Y,
+        float,
+        "Volume offset along phase encode [mm]",
+    ),
     ("--offset-z-mm", UIParam.FOV_OFFSET_Z, float, "Volume offset along slice [mm]"),
     ("--acs-lines", UIParam.user_value(0), float, "Number of ACS lines"),
-    ("--dummies", UIParam.user_value(2), float, "Unacquired repetitions after the catalyst"),
-    ("--partial-fourier", UIParam.user_value(3), float, "Acquired phase-encode fraction in (0.5, 1]"),
+    (
+        "--dummies",
+        UIParam.user_value(2),
+        float,
+        "Unacquired repetitions after the catalyst",
+    ),
+    (
+        "--partial-fourier",
+        UIParam.user_value(3),
+        float,
+        "Acquired phase-encode fraction in (0.5, 1]",
+    ),
 ]
 
 if __name__ == "__main__":

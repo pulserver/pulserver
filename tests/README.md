@@ -12,11 +12,10 @@ machinery, and each lane tests a *different* body of code:
 
 | Code under test | Lane | Files |
 |---|---|---|
-| `csrc` C89 scanner-side parser + pulseg IR + safety engine | C (minunit) | `ctests/` (13 suites) |
-| `cxx/pulseq` design/recon C++ library (pulseqpp) | C++ (GoogleTest) | `cpptests/test_pulseq_*.cpp` |
-| `cxx/recon` seqfile reader | C++ | `cpptests/test_sequence_*.cpp` |
+| `src/c` C89 scanner-side parser + pulseg IR + safety engine | C (minunit) | `ctests/` (13 suites) |
+| `src/cpp/pulseq` design/recon C++ library (pulseqpp) | C++ (GoogleTest) | `cpptests/test_pulseq_*.cpp` |
+| `src/cpp/recon` seqfile reader | C++ | `cpptests/test_sequence_*.cpp` |
 | Python surface over pulseqpp (`pulserver.pypulseq`) | Python | `python/test_pypulseq_*.py` |
-| fastseq compiled kernels (vs their kept `_py` twins) | Python differential | `python/test_fastseq_*.py` |
 | design / sampling / app.sequence / app.recon / recon stacks | Python | remaining `python/` |
 | Nim bridge (host binary + bundle) | Nim via pytest | `python/native/test_nimtests.py` |
 
@@ -39,9 +38,8 @@ There are **no stored truth files**. Reference values are one of:
    full Cartesian scan is visited exactly once; slice thickness re-measured
    from the RF spectrum lands on the prescription; `f = 1/(2·ESP)` maps echo
    spacing to acoustic frequency.
-3. **Differential twins**: compiled kernels against the Python they replace
-   (fastseq), the binary reader against the text reader, memoized PNS against
-   exact evaluation, write→read round trips.
+3. **Differential twins**: the binary reader against the text reader,
+   memoized PNS against exact evaluation, write→read round trips.
 4. **Protocol-derived numbers** measured from the corpus fixtures themselves
    (e.g. the EPI acoustic line at ~1236 Hz = 1/(2·ESP) of that protocol; the
    calibration lead's ky=0 line at index 7 of its +8Δk→−7Δk sweep). When a

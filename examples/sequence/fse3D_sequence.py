@@ -328,6 +328,7 @@ def main(
 # Subroutines of main()
 # ======================================================================
 
+
 def traps_flip_schedule(
     etl: int,
     n_center: int,
@@ -423,13 +424,20 @@ def order_views(
     # views centred on the k-space middle and normalised by the matrix -- what
     # makes the radius isotropic in fractional k-space -- and index the shots of
     # positions they return back into the original ``(line, partition)`` views.
-    coords = [((line - n_y / 2) / n_y, (partition - n_z / 2) / n_z) for line, partition in views]
+    coords = [
+        ((line - n_y / 2) / n_y, (partition - n_z / 2) / n_z)
+        for line, partition in views
+    ]
     if ordering == "shuffling":
         shots = pp.make_shuffling_order(coords, etl, seed=seed, pad=True)
     elif ordering == "linear":
-        shots = pp.make_linear_order(coords, etl, center=(0.0, 0.0), center_echo=n_center, pad=True)
+        shots = pp.make_linear_order(
+            coords, etl, center=(0.0, 0.0), center_echo=n_center, pad=True
+        )
     elif ordering == "centric":
-        shots = pp.make_centric_order(coords, etl, center=(0.0, 0.0), center_echo=n_center, pad=True)
+        shots = pp.make_centric_order(
+            coords, etl, center=(0.0, 0.0), center_echo=n_center, pad=True
+        )
     elif ordering == "radial":
         shots = pp.make_radial_order(coords, etl, center=(0.0, 0.0), pad=True)
     else:  # radial_adaptive
@@ -570,9 +578,13 @@ n_dummy, shuffle_seed, crusher_cycles, readout_crusher_cycles
                 calib=(n_acs, n_acs_z),
                 seed=shuffle_seed,
             )
-            views = [(int(line), int(partition)) for line, partition in np.argwhere(mask)]
+            views = [
+                (int(line), int(partition)) for line, partition in np.argwhere(mask)
+            ]
         else:
-            views = [(line, partition) for partition in range(n_z) for line in range(n_y)]
+            views = [
+                (line, partition) for partition in range(n_z) for line in range(n_y)
+            ]
     else:
         views, _ = pp.calc_sampled_pairs(
             (n_y, n_z),
@@ -582,9 +594,7 @@ n_dummy, shuffle_seed, crusher_cycles, readout_crusher_cycles
             elliptical=elliptical,
             order="ascending",
         )
-    trains = order_views(
-        views, etl, n_center, ordering, (n_y, n_z), seed=shuffle_seed
-    )
+    trains = order_views(views, etl, n_center, ordering, (n_y, n_z), seed=shuffle_seed)
 
     duration = (n_dummy + len(trains)) * timing.length
 
@@ -608,6 +618,7 @@ n_dummy, shuffle_seed, crusher_cycles, readout_crusher_cycles
 # ======================================================================
 # The scanner protocol contract
 # ======================================================================
+
 
 class Fse3D(SequencePlugin):
     """The 3D fast spin echo behind the scanner protocol contract."""
@@ -698,9 +709,15 @@ class Fse3D(SequencePlugin):
                     incr=1.0,
                     unit="",
                 ),
-                UIParam.FOV_OFFSET_X: OffFloatParam(value=0.0, min=-500.0, max=500.0, unit="mm"),
-                UIParam.FOV_OFFSET_Y: OffFloatParam(value=0.0, min=-500.0, max=500.0, unit="mm"),
-                UIParam.FOV_OFFSET_Z: OffFloatParam(value=0.0, min=-500.0, max=500.0, unit="mm"),
+                UIParam.FOV_OFFSET_X: OffFloatParam(
+                    value=0.0, min=-500.0, max=500.0, unit="mm"
+                ),
+                UIParam.FOV_OFFSET_Y: OffFloatParam(
+                    value=0.0, min=-500.0, max=500.0, unit="mm"
+                ),
+                UIParam.FOV_OFFSET_Z: OffFloatParam(
+                    value=0.0, min=-500.0, max=500.0, unit="mm"
+                ),
                 UIParam.user_name(0): Description(text="ACS lines (y)"),
                 UIParam.user_value(0): TypeinFloatParam(
                     value=24.0, min=0.0, max=512.0, incr=1.0, unit="lines"
@@ -736,7 +753,9 @@ class Fse3D(SequencePlugin):
                     value=100.0, min=10.0, max=180.0, incr=1.0, unit="deg"
                 ),
                 UIParam.user_name(8): Description(text="Elliptical sampling"),
-                UIParam.user_value(8): TypeinFloatParam(value=1.0, min=0.0, max=1.0, incr=1.0, unit=""),
+                UIParam.user_value(8): TypeinFloatParam(
+                    value=1.0, min=0.0, max=1.0, incr=1.0, unit=""
+                ),
             }
         )
 
@@ -747,7 +766,11 @@ class Fse3D(SequencePlugin):
         try:
             kernel = FSE3DKernel(
                 system,
-                **{name: value for name, value in kwargs.items() if name in KERNEL_ARGUMENTS},
+                **{
+                    name: value
+                    for name, value in kwargs.items()
+                    if name in KERNEL_ARGUMENTS
+                },
             )
         except ValueError as error:
             return {"valid": False, "duration": None, "info": str(error)}
@@ -822,7 +845,9 @@ def protocol_kwargs(system: pp.Opts, protocol: dict[str, dict]) -> dict:
         ],
         variable_flip=bool(round(params.user_float(prot, 3, 1.0))),
         caipi_shift=max(0, round(params.user_float(prot, 4, 0.0))),
-        n_acs=params.acs_lines_from_protocol(prot, params.param_int(prot, UIParam.NY), 0),
+        n_acs=params.acs_lines_from_protocol(
+            prot, params.param_int(prot, UIParam.NY), 0
+        ),
         n_acs_z=max(0, round(params.user_float(prot, 5, 16.0))),
         alpha_min_deg=params.user_float(prot, 6, 60.0),
         alpha_center_deg=params.user_float(prot, 7, 100.0),
@@ -866,7 +891,12 @@ ARG_MAP = [
     ("--ry", UIParam.RY, float, "Phase-encode undersampling factor along y"),
     ("--rz", UIParam.RZ, float, "Partition-encode undersampling factor along z"),
     ("--offset-x-mm", UIParam.FOV_OFFSET_X, float, "Volume offset along readout [mm]"),
-    ("--offset-y-mm", UIParam.FOV_OFFSET_Y, float, "Volume offset along phase encode [mm]"),
+    (
+        "--offset-y-mm",
+        UIParam.FOV_OFFSET_Y,
+        float,
+        "Volume offset along phase encode [mm]",
+    ),
     ("--offset-z-mm", UIParam.FOV_OFFSET_Z, float, "Volume offset along slab [mm]"),
     ("--acs-lines", UIParam.user_value(0), float, "Number of ACS lines along y"),
     ("--etl", UIParam.user_value(1), float, "Echo train length"),
@@ -876,12 +906,31 @@ ARG_MAP = [
         float,
         "View ordering: 0 linear, 1 centric, 2 radial, 3 radial-adaptive, 4 shuffling",
     ),
-    ("--constant-flip", UIParam.user_value(3), lambda value: 0.0 if float(value) else 1.0,
-     "Pass 1 for constant 180s (0, the default value, keeps the variable train)"),
+    (
+        "--constant-flip",
+        UIParam.user_value(3),
+        lambda value: 0.0 if float(value) else 1.0,
+        "Pass 1 for constant 180s (0, the default value, keeps the variable train)",
+    ),
     ("--caipi-shift", UIParam.user_value(4), float, "CAIPIRINHA kz shift per ky block"),
-    ("--acs-partitions", UIParam.user_value(5), float, "Number of ACS partitions along z"),
-    ("--alpha-min-deg", UIParam.user_value(6), float, "Variable train's floor flip [deg]"),
-    ("--alpha-centre-deg", UIParam.user_value(7), float, "Variable train's centre flip [deg]"),
+    (
+        "--acs-partitions",
+        UIParam.user_value(5),
+        float,
+        "Number of ACS partitions along z",
+    ),
+    (
+        "--alpha-min-deg",
+        UIParam.user_value(6),
+        float,
+        "Variable train's floor flip [deg]",
+    ),
+    (
+        "--alpha-centre-deg",
+        UIParam.user_value(7),
+        float,
+        "Variable train's centre flip [deg]",
+    ),
     (
         "--no-elliptical",
         UIParam.user_value(8),

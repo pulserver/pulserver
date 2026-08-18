@@ -45,7 +45,7 @@ def acquired_pairs(seq):
     fov = seq.get_definition("FOV")
     lines = np.rint(ky * fov[1]).astype(int) + N_Y // 2
     partitions = np.rint(kz * fov[2]).astype(int) + N_Z // 2
-    return list(zip(lines.tolist(), partitions.tolist()))
+    return list(zip(lines.tolist(), partitions.tolist(), strict=False))
 
 
 def _rectangle(n_acs=6, n_acs_z=4):
@@ -137,7 +137,9 @@ def test_the_calibration_rectangle_is_flagged_and_nothing_else_is():
     seq = design(acceleration=2, acceleration_z=2)
     labels = seq.evaluate_labels(evolution="adc")
     pairs = acquired_pairs(seq)
-    flagged = {pair for pair, ima in zip(pairs, labels["IMA"]) if ima == 1}
+    flagged = {
+        pair for pair, ima in zip(pairs, labels["IMA"], strict=False) if ima == 1
+    }
     assert flagged == _rectangle()
 
 

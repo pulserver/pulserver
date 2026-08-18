@@ -11,7 +11,7 @@ import numpy as np
 import pytest
 
 import pulserver.pypulseq as pp
-from pulserver._ext import _pulseqpp_wrapper as cxx
+from pulserver._ext import pulseqpp as cxx
 
 
 @pytest.fixture
@@ -56,7 +56,9 @@ def test_a_blip_of_r_cells_is_an_acceleration_of_r(system):
     three = pp.make_phase_blip("y", 0.24, steps=3, system=system)
     assert one.area == pytest.approx(1 / 0.24)
     assert three.area == pytest.approx(3 * one.area)
-    assert pp.make_phase_blip("y", 0.24, steps=-1, system=system).area == pytest.approx(-one.area)
+    assert pp.make_phase_blip("y", 0.24, steps=-1, system=system).area == pytest.approx(
+        -one.area
+    )
 
 
 def test_a_blip_refuses_to_stand_still(system):
@@ -68,7 +70,9 @@ def test_a_blip_refuses_to_stand_still(system):
 
 
 @pytest.mark.parametrize("num_samples", [64, 96, 128, 200, 256])
-@pytest.mark.parametrize(("grad_raster", "adc_raster"), [(10e-6, 100e-9), (20e-6, 2e-6), (4e-6, 2e-6)])
+@pytest.mark.parametrize(
+    ("grad_raster", "adc_raster"), [(10e-6, 100e-9), (20e-6, 2e-6), (4e-6, 2e-6)]
+)
 def test_the_adc_lands_on_both_rasters_at_once(num_samples, grad_raster, adc_raster):
     """The whole point: the readout can then sit exactly over the flat top."""
     dwell, duration = pp.calc_adc_timing(
@@ -81,7 +85,11 @@ def test_the_adc_lands_on_both_rasters_at_once(num_samples, grad_raster, adc_ras
 
 def test_a_minimum_duration_is_respected():
     _, duration = pp.calc_adc_timing(
-        64, 1e-6, grad_raster_time=10e-6, adc_raster_time=100e-9, min_readout_duration=1e-3
+        64,
+        1e-6,
+        grad_raster_time=10e-6,
+        adc_raster_time=100e-9,
+        min_readout_duration=1e-3,
     )
     assert duration >= 1e-3
 
@@ -108,9 +116,14 @@ def test_an_slr_pulse_needs_a_slice_to_select_before_it_will_select_one(system):
 def test_an_slr_pulse_has_the_bandwidth_it_was_designed_for(system):
     for time_bw_product, duration in [(4, 4e-3), (6, 3e-3)]:
         rf = pp.make_slr_pulse(
-            np.deg2rad(20), duration=duration, time_bw_product=time_bw_product, system=system
+            np.deg2rad(20),
+            duration=duration,
+            time_bw_product=time_bw_product,
+            system=system,
         )
-        assert pp.calc_rf_bandwidth(rf) == pytest.approx(time_bw_product / duration, rel=0.15)
+        assert pp.calc_rf_bandwidth(rf) == pytest.approx(
+            time_bw_product / duration, rel=0.15
+        )
 
 
 def test_a_spsp_pulse_rides_an_alternating_gradient_that_ends_balanced():
@@ -120,7 +133,9 @@ def test_a_spsp_pulse_rides_an_alternating_gradient_that_ends_balanced():
     )
     assert rf.type == "rf"
     # Alternating lobes over an even count cancel to zero net area.
-    assert float(np.trapezoid(gz.waveform, gz.tt)) == pytest.approx(0.0, abs=1e-6 * abs(gz.waveform).max())
+    assert float(np.trapezoid(gz.waveform, gz.tt)) == pytest.approx(
+        0.0, abs=1e-6 * abs(gz.waveform).max()
+    )
     assert gz_reph.channel == "z"
 
 
@@ -133,7 +148,11 @@ def test_a_spsp_pulse_refuses_what_the_hardware_cannot_do(system):
 
 def test_sms_bands_are_symmetric_and_include_zero(system):
     base = pp.make_sinc_pulse(flip_angle=np.deg2rad(30), duration=2e-3, system=system)
-    for count, expected in ((3, [-1000.0, 0.0, 1000.0]), (2, [0.0, 1000.0]), (1, [0.0])):
+    for count, expected in (
+        (3, [-1000.0, 0.0, 1000.0]),
+        (2, [0.0, 1000.0]),
+        (1, [0.0]),
+    ):
         _, offsets, _ = pp.make_sms_pulse(base, count, 1000.0)
         assert offsets.tolist() == expected
 
@@ -180,14 +199,21 @@ def test_resampling_the_same_path_does_not_change_the_gradient(system):
 
     assert abs(coarse.shape[1] - fine.shape[1]) <= 2
     shared = min(coarse.shape[1], fine.shape[1])
-    np.testing.assert_allclose(coarse[:, :shared], fine[:, :shared], rtol=0.02, atol=1e-3 * np.abs(coarse).max())
+    np.testing.assert_allclose(
+        coarse[:, :shared],
+        fine[:, :shared],
+        rtol=0.02,
+        atol=1e-3 * np.abs(coarse).max(),
+    )
 
 
 def test_differentiating_reproduces_upstream_exactly(system):
     import pypulseq as upstream
 
     k = _spiral(points=200)
-    ours = pp.traj_to_grad(k, system.grad_raster_time, time_optimal=False, system=system)
+    ours = pp.traj_to_grad(
+        k, system.grad_raster_time, time_optimal=False, system=system
+    )
     theirs = upstream.traj_to_grad(k, system.grad_raster_time)
 
     np.testing.assert_array_equal(ours[0], theirs[0])
@@ -229,7 +255,14 @@ def test_the_uniform_mask_is_the_only_mode_a_single_axis_accepts():
 
 
 def test_every_traversal_order_visits_each_view_once():
-    for order in ("sequential", "reverse", "interleaved", "center_out", "outside_in", "random"):
+    for order in (
+        "sequential",
+        "reverse",
+        "interleaved",
+        "center_out",
+        "outside_in",
+        "random",
+    ):
         visited = pp.calc_traversal_order(16, order)
         assert sorted(visited.tolist()) == list(range(16)), order
 
@@ -243,6 +276,7 @@ def test_golden_angles_never_repeat_and_tiny_ones_step_less_far():
     tiny = pp.calc_tiny_golden_angles(64, index=4)
 
     assert len(np.unique(np.round(golden, 9))) == 64
+
     def first_step(angles):
         return abs(np.diff(angles)[0]) % (2 * np.pi)
 
@@ -264,7 +298,9 @@ def test_uniform_angles_span_the_half_circle():
 
 
 def test_an_ordering_covers_the_coordinates_it_was_given_exactly_once():
-    coords = np.stack(np.meshgrid(np.arange(8), np.arange(4), indexing="ij"), -1).reshape(-1, 2)
+    coords = np.stack(
+        np.meshgrid(np.arange(8), np.arange(4), indexing="ij"), -1
+    ).reshape(-1, 2)
     for order in (
         pp.make_linear_order,
         pp.make_centric_order,
@@ -299,7 +335,10 @@ def test_an_extended_trapezoid_lasts_until_its_last_vertex(grad_raster):
     system = pp.Opts(grad_raster_time=grad_raster)
     times = np.array([0.0, 2e-4, 1e-3, 1.2e-3])
     gradient = pp.make_extended_trapezoid(
-        channel="x", amplitudes=np.array([0.0, 1e5, 1e5, 0.0]), times=times, system=system
+        channel="x",
+        amplitudes=np.array([0.0, 1e5, 1e5, 0.0]),
+        times=times,
+        system=system,
     )
     assert pp.calc_duration(gradient) == pytest.approx(times[-1])
 
@@ -308,7 +347,11 @@ def test_an_extended_trapezoid_lasts_until_its_last_vertex(grad_raster):
 def test_a_solved_bridge_lands_on_the_gradient_raster(grad_raster):
     """The case the two conventions are told apart for: a bridged spoiler."""
     system = pp.Opts(
-        max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s", grad_raster_time=grad_raster
+        max_grad=40,
+        grad_unit="mT/m",
+        max_slew=150,
+        slew_unit="T/m/s",
+        grad_raster_time=grad_raster,
     )
     gradient, _, _ = pp.make_extended_trapezoid_area(
         area=-5000.0, channel="x", grad_start=0.0, grad_end=4.5e5, system=system

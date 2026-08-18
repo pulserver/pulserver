@@ -1,7 +1,7 @@
 """The C interpreter's resolved IR against the spec-first oracle, in process.
 
 No stored truth: for every corpus fixture the file is loaded twice -- once
-through the C interpreter (via the ``_pulseg_wrapper`` projections) and once
+through the C interpreter (via the ``pulseg`` projections) and once
 through the Python oracle, which computes the PulSeg SegmentInstance /
 BaseBlock content directly from the parsed events. The two readings must
 agree wherever the spec fixes the answer.
@@ -29,7 +29,7 @@ import pulserver.pypulseq as pp
 from fixture_corpus import CORPUS, FIXTURES_DIR
 from pulseg_oracle import adc_label_table, instance_table, tile_partition
 from pulseg_oracle.content import block_boundaries, tr_window_waveforms
-from pulserver._ext import _pulseg_wrapper as wrapper
+from pulserver._ext import pulseg as wrapper
 from pulserver.pypulseq import _safety
 
 GAMMA = 42577478.0
@@ -49,8 +49,17 @@ LABEL_COLUMN_MAP = [8, 0, 6]
 def collection_for(files: list[str]):
     buffers = [(FIXTURES_DIR / name).read_bytes() for name in files]
     return wrapper._PulseqCollection(
-        buffers, GAMMA, B0, GAMMA * 1.0, GAMMA * 10000.0,
-        1e-6, 10e-6, 0.1e-6, 10e-6, True, 1,
+        buffers,
+        GAMMA,
+        B0,
+        GAMMA * 1.0,
+        GAMMA * 10000.0,
+        1e-6,
+        10e-6,
+        0.1e-6,
+        10e-6,
+        True,
+        1,
         label_column_map=LABEL_COLUMN_MAP,
     )
 
@@ -156,9 +165,7 @@ def test_the_segment_definitions_hydrate_to_the_file_events(case):
                     peak = signal.max() or 1.0
                     mag = np.asarray(blk["rf_magnitude"])
                     assert mag.shape[1] == signal.size
-                    np.testing.assert_allclose(
-                        mag[0], signal / peak, atol=2e-3
-                    )
+                    np.testing.assert_allclose(mag[0], signal / peak, atol=2e-3)
                 for axis_idx, axis in enumerate(("gx", "gy", "gz")):
                     grad = getattr(ref, axis)
                     g = blk["grads"][axis_idx]
@@ -169,9 +176,12 @@ def test_the_segment_definitions_hydrate_to_the_file_events(case):
                     assert g["delay_us"] == round(float(grad.delay) * 1e6)
                     if grad.type == "trap":
                         assert g["is_trapezoid"] == 1
-                        file_t = np.cumsum(
-                            [0.0, grad.rise_time, grad.flat_time, grad.fall_time]
-                        ) * 1e6
+                        file_t = (
+                            np.cumsum(
+                                [0.0, grad.rise_time, grad.flat_time, grad.fall_time]
+                            )
+                            * 1e6
+                        )
                         file_v = np.array([0.0, grad.amplitude, grad.amplitude, 0.0])
                     else:
                         file_t = np.asarray(grad.tt, dtype=float) * 1e6

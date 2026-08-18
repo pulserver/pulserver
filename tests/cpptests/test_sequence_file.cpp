@@ -28,57 +28,59 @@ namespace fs = std::filesystem;
 namespace
 {
 
-    std::string corpus(const std::string& name)
-    {
-        return (fs::path(PULSEQ_CORPUS_DIR) / name).string();
-    }
+std::string corpus(const std::string &name)
+{
+    return (fs::path(PULSEQ_CORPUS_DIR) / name).string();
+}
 
-    std::vector<std::string> corpus_files(const std::string& extension)
+std::vector<std::string> corpus_files(const std::string &extension)
+{
+    std::vector<std::string> files;
+    for (const auto &entry : fs::directory_iterator(PULSEQ_CORPUS_DIR))
     {
-        std::vector<std::string> files;
-        for (const auto& entry : fs::directory_iterator(PULSEQ_CORPUS_DIR))
+        if (entry.path().extension() == extension)
+            files.push_back(entry.path().string());
+    }
+    std::sort(files.begin(), files.end());
+    return files;
+}
+
+void expect_same_definitions(pulseq::SequenceFile &file)
+{
+    pulseq::Sequence full = pulseq::read_file(file.path());
+    const auto &lazy = file.definitions();
+
+    for (const auto &entry : full.definitions())
+    {
+        // The full parse re-derives TotalDuration; the lazy read only
+        // reports what the section says. Compare what both have.
+        const auto it = lazy.find(entry.first);
+        ASSERT_NE(it, lazy.end()) << entry.first << " missing from lazy read";
+
+        const pulseq::Definition &theirs = entry.second;
+        const pulseq::Definition &ours = it->second;
+        if (theirs.kind() == pulseq::Definition::Kind::Text)
         {
-            if (entry.path().extension() == extension)
-                files.push_back(entry.path().string());
+            EXPECT_EQ(ours.kind(), pulseq::Definition::Kind::Text) << entry.first;
+            EXPECT_EQ(ours.text(), theirs.text()) << entry.first;
+            continue;
         }
-        std::sort(files.begin(), files.end());
-        return files;
-    }
-
-    void expect_same_definitions(pulseq::SequenceFile& file)
-    {
-        pulseq::Sequence full = pulseq::read_file(file.path());
-        const auto& lazy = file.definitions();
-
-        for (const auto& entry : full.definitions())
+        ASSERT_EQ(ours.numbers().size(), theirs.numbers().size()) << entry.first;
+        for (size_t i = 0; i < theirs.numbers().size(); ++i)
         {
-            // The full parse re-derives TotalDuration; the lazy read only
-            // reports what the section says. Compare what both have.
-            const auto it = lazy.find(entry.first);
-            ASSERT_NE(it, lazy.end()) << entry.first << " missing from lazy read";
-
-            const pulseq::Definition& theirs = entry.second;
-            const pulseq::Definition& ours = it->second;
-            if (theirs.kind() == pulseq::Definition::Kind::Text)
-            {
-                EXPECT_EQ(ours.kind(), pulseq::Definition::Kind::Text) << entry.first;
-                EXPECT_EQ(ours.text(), theirs.text()) << entry.first;
-                continue;
-            }
-            ASSERT_EQ(ours.numbers().size(), theirs.numbers().size()) << entry.first;
-            for (size_t i = 0; i < theirs.numbers().size(); ++i)
-            {
-                /* The full parse round-trips definition values through
+            /* The full parse round-trips definition values through
                  * 9-significant-digit strings; the lazy read takes the
                  * stored float64 as written. Compare at string precision. */
-                EXPECT_NEAR(ours.numbers()[i], theirs.numbers()[i],
-                            1e-8 * std::max(1.0, std::fabs(theirs.numbers()[i])))
-                    << entry.first << "[" << i << "]";
-            }
+            EXPECT_NEAR(
+                ours.numbers()[i],
+                theirs.numbers()[i],
+                1e-8 * std::max(1.0, std::fabs(theirs.numbers()[i])))
+                << entry.first << "[" << i << "]";
         }
     }
+}
 
-}  // namespace
+} // namespace
 
 class SequenceFileText : public ::testing::TestWithParam<std::string>
 {
@@ -99,16 +101,18 @@ TEST_P(SequenceFileText, TheIndexSeesTheStructuralSections)
     EXPECT_TRUE(file.has_section("DEFINITIONS"));
 }
 
-INSTANTIATE_TEST_SUITE_P(AllTextFixtures, SequenceFileText,
-                         ::testing::ValuesIn(corpus_files(".seq")),
-                         [](const ::testing::TestParamInfo<std::string>& info)
-                         {
-                             std::string name = fs::path(info.param).stem().string();
-                             for (char& c : name)
-                                 if (!std::isalnum(static_cast<unsigned char>(c)))
-                                     c = '_';
-                             return name;
-                         });
+INSTANTIATE_TEST_SUITE_P(
+    AllTextFixtures,
+    SequenceFileText,
+    ::testing::ValuesIn(corpus_files(".seq")),
+    [](const ::testing::TestParamInfo<std::string> &info)
+    {
+        std::string name = fs::path(info.param).stem().string();
+        for (char &c : name)
+            if (!std::isalnum(static_cast<unsigned char>(c)))
+                c = '_';
+        return name;
+    });
 
 class SequenceFileBinary : public ::testing::TestWithParam<std::string>
 {
@@ -124,22 +128,24 @@ TEST_P(SequenceFileBinary, DefinitionsMatchTheFullParse)
 TEST_P(SequenceFileBinary, TheSectionWalkCoversTheWholeFile)
 {
     pulseq::SequenceFile file(GetParam());
-    const auto& names = file.section_names();
+    const auto &names = file.section_names();
     ASSERT_FALSE(names.empty());
     EXPECT_TRUE(file.has_section("BLOCKS"));
     EXPECT_TRUE(file.has_section("SHAPES"));
 }
 
-INSTANTIATE_TEST_SUITE_P(AllBinaryFixtures, SequenceFileBinary,
-                         ::testing::ValuesIn(corpus_files(".bin")),
-                         [](const ::testing::TestParamInfo<std::string>& info)
-                         {
-                             std::string name = fs::path(info.param).stem().string();
-                             for (char& c : name)
-                                 if (!std::isalnum(static_cast<unsigned char>(c)))
-                                     c = '_';
-                             return name;
-                         });
+INSTANTIATE_TEST_SUITE_P(
+    AllBinaryFixtures,
+    SequenceFileBinary,
+    ::testing::ValuesIn(corpus_files(".bin")),
+    [](const ::testing::TestParamInfo<std::string> &info)
+    {
+        std::string name = fs::path(info.param).stem().string();
+        for (char &c : name)
+            if (!std::isalnum(static_cast<unsigned char>(c)))
+                c = '_';
+        return name;
+    });
 
 TEST(SequenceFileChain, TheEpiLeadNamesItsSuccessorAndTheTailNamesNone)
 {

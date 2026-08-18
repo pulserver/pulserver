@@ -180,7 +180,7 @@ def build(name: str, kwargs: dict):
 
 def convert_with_c(seq) -> dict:
     """Serialise, then time the C-side parse + conversion of the result."""
-    from pulserver._ext._pulseg_wrapper import _PulseqCollection
+    from pulserver._ext.pulseg import _PulseqCollection
     from pulserver.pypulseq import Opts
 
     system = Opts()

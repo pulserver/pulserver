@@ -118,19 +118,18 @@ def test_the_arms_step_by_the_golden_angle():
         for index, partition in enumerate(labels["PAR"].tolist())
         if partition == N_Z // 2
     ]
+
     def arm(row):
         return k_adc[:2, row * n_samples : (row + 1) * n_samples]
 
     angle = float(np.pi * (3.0 - np.sqrt(5.0)))
-    turn = np.array(
-        [[np.cos(angle), -np.sin(angle)], [np.sin(angle), np.cos(angle)]]
-    )
+    turn = np.array([[np.cos(angle), -np.sin(angle)], [np.sin(angle), np.cos(angle)]])
     assert np.allclose(arm(rows[1]), turn @ arm(rows[0]), atol=1e-4)
 
 
 def test_every_partition_of_every_arm_is_acquired():
     labels = design(n_arms=3).evaluate_labels(evolution="adc")
-    pairs = set(zip(labels["LIN"].tolist(), labels["PAR"].tolist()))
+    pairs = set(zip(labels["LIN"].tolist(), labels["PAR"].tolist(), strict=False))
     assert pairs == {(arm, partition) for arm in range(3) for partition in range(N_Z)}
 
 

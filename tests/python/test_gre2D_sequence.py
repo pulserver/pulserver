@@ -74,9 +74,7 @@ def test_the_repetition_time_is_per_slice_not_per_slice_group():
 
 def test_the_acquired_lines_are_the_ones_the_sampling_plan_asked_for():
     seq = design(acceleration=2, n_acs=8)
-    expected = np.asarray(
-        pp.calc_sampled_lines(N_Y, 2, 8, order="calibration_first")
-    )
+    expected = np.asarray(pp.calc_sampled_lines(N_Y, 2, 8, order="calibration_first"))
     assert np.array_equal(acquired_lines(seq), expected)
 
 
@@ -228,7 +226,9 @@ def test_more_slices_than_the_tr_holds_are_split_rather_than_refused():
     sizes = [len(group) for group in kernel.passes]
     assert sum(sizes) == 10
     assert max(sizes) - min(sizes) <= 1
-    assert sorted(index for group in kernel.passes for index in group) == list(range(10))
+    assert sorted(index for group in kernel.passes for index in group) == list(
+        range(10)
+    )
 
 
 def test_every_slice_sees_the_requested_repetition_time():
@@ -251,8 +251,7 @@ def test_the_slices_of_a_pass_are_not_neighbours():
         assert min(abs(a - b) for a in group for b in group if a != b) > 1
 
 
-def test_the_reported_duration_is_the_one_the_scan_takes(
-):
+def test_the_reported_duration_is_the_one_the_scan_takes():
     for prescription in ({"n_slices": 10, "tr": 25e-3}, {"n_slices": 4, "tr": 60e-3}):
         kernel = _kernel(n_acs=8, n_dummy=2, **prescription)
         seq = design(n_acs=8, n_dummy=2, **prescription)
@@ -329,9 +328,7 @@ def test_no_offset_leaves_the_sequence_exactly_as_it_was():
     """The default has to cost nothing: it is what every unshifted scan pays."""
     plain = design(n_slices=2, tr=30e-3, n_dummy=0)
     zeroed = design(n_slices=2, tr=30e-3, n_dummy=0, fov_offset=(0.0, 0.0, 0.0))
-    assert np.array_equal(
-        plain.get_block(1).rf.signal, zeroed.get_block(1).rf.signal
-    )
+    assert np.array_equal(plain.get_block(1).rf.signal, zeroed.get_block(1).rf.signal)
 
 
 def test_an_offset_moves_the_pulse_that_excites_and_the_window_that_reads():
@@ -395,12 +392,15 @@ def test_the_reported_duration_accounts_for_the_averages(n_averages):
 
 
 def test_the_receive_gain_calibration_is_declared():
-    assert design(n_slices=6, tr=60e-3).get_definition(
-        "NumGainCalibrationReadouts"
-    ) == 6
-    assert design(n_gain_calibration_readouts=2).get_definition(
-        "NumGainCalibrationReadouts"
-    ) == 2
+    assert (
+        design(n_slices=6, tr=60e-3).get_definition("NumGainCalibrationReadouts") == 6
+    )
+    assert (
+        design(n_gain_calibration_readouts=2).get_definition(
+            "NumGainCalibrationReadouts"
+        )
+        == 2
+    )
 
 
 def test_the_prescribed_grid_is_declared():
@@ -447,7 +447,9 @@ def test_the_scanner_gets_the_binary_form_and_a_reader_gets_the_text_one(tmp_pat
     params.set_protocol_value(protocol, UIParam.TE, 5.0)
 
     for name, kwargs in (("server.seq", {}), ("offline.seq", {"offline": True})):
-        gre2D_sequence.PLUGIN.make_sequence(system, protocol, str(tmp_path / name), **kwargs)
+        gre2D_sequence.PLUGIN.make_sequence(
+            system, protocol, str(tmp_path / name), **kwargs
+        )
 
     assert (tmp_path / "server.seq").read_bytes().startswith(b"\x01pulseq")
     text = (tmp_path / "offline.seq").read_text()

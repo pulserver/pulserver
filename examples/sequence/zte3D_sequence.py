@@ -8,7 +8,7 @@ one designed transition serves the lot. The interpreter has almost no dead
 time to hide its SSP packets in, which is exactly what this slot exercises.
 The centre of k-space is not acquired -- ``n_missing`` samples fall in the
 dead-time gap and are declared in the definitions for the reconstruction to
-handle. :mod:`pulserver.app.recon.zte3D_recon` reconstructs the sphere by 3D NUFFT
+handle. :mod:`pulserver.app.recon.noncartesian3D_recon` reconstructs the sphere by 3D NUFFT
 against the trajectory the acquisitions carry.
 
 ``main`` returns the :class:`pulserver.pypulseq.Sequence`; ``PLUGIN`` is the
@@ -158,7 +158,9 @@ def main(
         for view, turn in enumerate(turns):
             last = view == len(turns) - 1
             lin_label.value = int(view)
-            seq.add_block(zte.rf, *zte.g_hold, turn, *([clear_once] if clear_once else ()))
+            seq.add_block(
+                zte.rf, *zte.g_hold, turn, *([clear_once] if clear_once else ())
+            )
             clear_once = None
             seq.add_block(
                 zte.adc,
@@ -202,6 +204,7 @@ def main(
 # ======================================================================
 # Subroutines of main()
 # ======================================================================
+
 
 def ZteKernel(
     system: pp.Opts,
@@ -265,6 +268,7 @@ readout_bandwidth_hz
 # The scanner protocol contract
 # ======================================================================
 
+
 class Zte3D(SequencePlugin):
     """The 3D ZTE behind the scanner protocol contract."""
 
@@ -294,9 +298,15 @@ class Zte3D(SequencePlugin):
                 UIParam.BANDWIDTH: TypeinFloatParam(
                     value=250e3, min=25e3, max=1000e3, incr=1000.0, unit="Hz"
                 ),
-                UIParam.FOV_OFFSET_X: OffFloatParam(value=0.0, min=-500.0, max=500.0, unit="mm"),
-                UIParam.FOV_OFFSET_Y: OffFloatParam(value=0.0, min=-500.0, max=500.0, unit="mm"),
-                UIParam.FOV_OFFSET_Z: OffFloatParam(value=0.0, min=-500.0, max=500.0, unit="mm"),
+                UIParam.FOV_OFFSET_X: OffFloatParam(
+                    value=0.0, min=-500.0, max=500.0, unit="mm"
+                ),
+                UIParam.FOV_OFFSET_Y: OffFloatParam(
+                    value=0.0, min=-500.0, max=500.0, unit="mm"
+                ),
+                UIParam.FOV_OFFSET_Z: OffFloatParam(
+                    value=0.0, min=-500.0, max=500.0, unit="mm"
+                ),
                 UIParam.user_name(0): Description(text="Views per shell (0 = Nyquist)"),
                 UIParam.user_value(0): TypeinFloatParam(
                     value=0.0, min=0.0, max=65536.0, incr=1.0, unit=""
@@ -315,7 +325,11 @@ class Zte3D(SequencePlugin):
         try:
             kernel = ZteKernel(
                 system,
-                **{name: value for name, value in kwargs.items() if name in KERNEL_ARGUMENTS},
+                **{
+                    name: value
+                    for name, value in kwargs.items()
+                    if name in KERNEL_ARGUMENTS
+                },
             )
         except ValueError as error:
             return {"valid": False, "duration": None, "info": str(error)}

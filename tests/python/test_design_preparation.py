@@ -20,7 +20,9 @@ RASTER = 1e-6
 
 @pytest.fixture
 def system():
-    return pp.Opts(B0=3.0, max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+    return pp.Opts(
+        B0=3.0, max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s"
+    )
 
 
 def rf_timeline(module, b1_scale=1.0):
@@ -69,9 +71,7 @@ def final_magnetization(module, *, b1_scale=1.0, off_resonance_hz=0.0):
 def spectral_profile(module, span_hz=6000.0, count=121):
     """Longitudinal magnetization against off-resonance, over ``span_hz``."""
     frequencies = np.linspace(-0.5 * span_hz, 0.5 * span_hz, count)
-    magnetization = pp.bloch(
-        rf_timeline(module), frequencies.reshape(-1, 1), RASTER
-    )
+    magnetization = pp.bloch(rf_timeline(module), frequencies.reshape(-1, 1), RASTER)
     return frequencies, magnetization[:, 2]
 
 
@@ -123,7 +123,9 @@ def test_the_echo_time_is_measured_between_the_outer_pulse_centres(system):
 @pytest.mark.parametrize("echo_time", [30e-3, 60e-3, 120e-3])
 def test_the_echo_time_asked_for_is_the_echo_time_delivered(system, echo_time):
     prep = design.T2Preparation(system, echo_time)
-    assert prep.echo_time == pytest.approx(echo_time, abs=2 * system.block_duration_raster)
+    assert prep.echo_time == pytest.approx(
+        echo_time, abs=2 * system.block_duration_raster
+    )
     assert prep.check_timing()[0]
 
 
@@ -304,7 +306,9 @@ def played_b_value(module, system):
             if event is module.g_diff:
                 first = round((start + float(event.delay)) / raster)
                 count = round(pp.calc_duration(event) / raster)
-                knots = np.cumsum([0.0, event.rise_time, event.flat_time, event.fall_time])
+                knots = np.cumsum(
+                    [0.0, event.rise_time, event.flat_time, event.fall_time]
+                )
                 times = (np.arange(count) + 0.5) * raster
                 gradient[first : first + count] += sign * np.interp(
                     times, knots, [0.0, event.amplitude, event.amplitude, 0.0]
@@ -402,7 +406,9 @@ def test_every_preparation_is_valid_pulseq(system, factory):
     [
         lambda system, labels: design.T2Preparation(system, 50e-3, labels=labels),
         lambda system, labels: design.MtPreparation(system, labels=labels),
-        lambda system, labels: design.DiffusionPreparation(system, 500.0, labels=labels),
+        lambda system, labels: design.DiffusionPreparation(
+            system, 500.0, labels=labels
+        ),
     ],
 )
 def test_a_preparation_opens_a_slot_for_the_counter_it_was_given(system, factory):

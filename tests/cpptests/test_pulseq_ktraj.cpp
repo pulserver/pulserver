@@ -33,40 +33,40 @@
 
 namespace
 {
-    const std::string kData = std::string(PULSEQ_FIXTURES_DIR) + "/";
-    const std::string kCorpus = std::string(PULSEQ_CORPUS_DIR) + "/";
+const std::string kData = std::string(PULSEQ_FIXTURES_DIR) + "/";
+const std::string kCorpus = std::string(PULSEQ_CORPUS_DIR) + "/";
 
-    pulseq::Sequence load(const std::string& stem)
-    {
-        return pulseq::read_file(kData + stem + ".seq");
-    }
+pulseq::Sequence load(const std::string &stem)
+{
+    return pulseq::read_file(kData + stem + ".seq");
+}
 
-    pulseq::Sequence load_corpus(const std::string& stem)
-    {
-        return pulseq::read_file(kCorpus + stem + ".seq");
-    }
+pulseq::Sequence load_corpus(const std::string &stem)
+{
+    return pulseq::read_file(kCorpus + stem + ".seq");
+}
 
-    /**
+/**
      * What two k samples can differ by from rounding alone.
      *
      * k is a running integral over a whole scan reaching a few hundred 1/m, so
      * a handful of double epsilons is what the accumulation itself costs.  The
      * floor keeps the bound meaningful where k passes through zero.
      */
-    double tol(double magnitude)
-    {
-        return std::max(4.0 * 2.3e-16 * magnitude, 1e-12);
-    }
+double tol(double magnitude)
+{
+    return std::max(4.0 * 2.3e-16 * magnitude, 1e-12);
+}
 
-    /** Axis @p a, sample @p j of readout @p r. */
-    double sample(const pulseq::KSpace& ks, const pulseq::Readout& r, int a, int j)
-    {
-        return ks.k_adc[static_cast<size_t>(r.sample_offset) * 3 +
-                        static_cast<size_t>(a) * static_cast<size_t>(r.num_samples) +
-                        static_cast<size_t>(j)];
-    }
+/** Axis @p a, sample @p j of readout @p r. */
+double sample(const pulseq::KSpace &ks, const pulseq::Readout &r, int a, int j)
+{
+    return ks.k_adc
+        [static_cast<size_t>(r.sample_offset) * 3 +
+         static_cast<size_t>(a) * static_cast<size_t>(r.num_samples) + static_cast<size_t>(j)];
+}
 
-}  // namespace
+} // namespace
 
 /*
  * A gradient the file declares constant integrates to a straight line.
@@ -86,7 +86,7 @@ TEST(PulseqKTraj, FlatArbitraryGradientIsExact)
     const pulseq::KSpace ks = pulseq::calculate_kspace(seq);
     ASSERT_FALSE(ks.readouts.empty());
 
-    const pulseq::Readout& r = ks.readouts[0];
+    const pulseq::Readout &r = ks.readouts[0];
     ASSERT_EQ(r.num_samples, 32);
 
     const double expected_step = 227273.0 * r.dwell;
@@ -114,17 +114,16 @@ TEST(PulseqKTraj, RefocusingNegatesK)
     const pulseq::KSpace ks = pulseq::calculate_kspace(seq);
     ASSERT_FALSE(ks.refocusings.empty()) << "fixture has no refocusing pulses";
 
-    for (const pulseq::Readout& r : ks.readouts)
+    for (const pulseq::Readout &r : ks.readouts)
     {
         EXPECT_LT(sample(ks, r, 0, 0), 0.0) << "readout at block " << r.block_index;
-        EXPECT_GT(sample(ks, r, 0, r.num_samples - 1), 0.0)
-            << "readout at block " << r.block_index;
+        EXPECT_GT(sample(ks, r, 0, r.num_samples - 1), 0.0) << "readout at block " << r.block_index;
     }
 }
 
 namespace
 {
-    /*
+/*
      * k_center is the scan's closest approach to the origin, and every
      * center_sample is its readout's closest sample to it -- checked against
      * the slow, obvious, unmemoized search.
@@ -136,87 +135,87 @@ namespace
      * rounding.  Where it bites, measured: epi_2d_main, whose two readout
      * polarities approach the origin equally closely.
      */
-    void check_centers_are_minimal(const pulseq::Sequence& seq, const std::string& name)
+void check_centers_are_minimal(const pulseq::Sequence &seq, const std::string &name)
+{
+    const pulseq::KSpace ks = pulseq::calculate_kspace(seq);
+    ASSERT_FALSE(ks.readouts.empty()) << name;
+
+    /* The tie tolerance the core works to: 1% of a sampling step. */
+    double tie = 0.0;
+    for (const pulseq::Readout &r : ks.readouts)
     {
-        const pulseq::KSpace ks = pulseq::calculate_kspace(seq);
-        ASSERT_FALSE(ks.readouts.empty()) << name;
-
-        /* The tie tolerance the core works to: 1% of a sampling step. */
-        double tie = 0.0;
-        for (const pulseq::Readout& r : ks.readouts)
-        {
-            if (r.num_samples < 2)
-                continue;
-            double total = 0.0;
-            for (int j = 1; j < r.num_samples; ++j)
-            {
-                double d = 0.0;
-                for (int a = 0; a < 3; ++a)
-                {
-                    const double v = sample(ks, r, a, j) - sample(ks, r, a, j - 1);
-                    d += v * v;
-                }
-                total += std::sqrt(d);
-            }
-            tie = std::max(tie, 1.0e-2 * total / static_cast<double>(r.num_samples - 1));
-        }
-
-        double global_best = 0.0;
-        bool have_global = false;
-        for (const pulseq::Readout& r : ks.readouts)
-        {
-            for (int j = 0; j < r.num_samples; ++j)
-            {
-                double d = 0.0;
-                for (int a = 0; a < 3; ++a)
-                    d += sample(ks, r, a, j) * sample(ks, r, a, j);
-                if (!have_global || d < global_best)
-                {
-                    global_best = d;
-                    have_global = true;
-                }
-            }
-        }
-
+        if (r.num_samples < 2)
+            continue;
+        double total = 0.0;
+        for (int j = 1; j < r.num_samples; ++j)
         {
             double d = 0.0;
             for (int a = 0; a < 3; ++a)
-                d += ks.k_center[static_cast<size_t>(a)] * ks.k_center[static_cast<size_t>(a)];
-            /* Compared as distances, not squared ones: the tolerance bounds a
-             * stored k, and squaring it would not mean anything. */
-            EXPECT_LE(std::sqrt(d), std::sqrt(global_best) + tie + tol(std::sqrt(global_best) + 1.0))
-                << name << ": k_center is not the scan's closest approach to the origin";
-        }
-
-        for (const pulseq::Readout& r : ks.readouts)
-        {
-            ASSERT_GE(r.center_sample, 0) << name << " block " << r.block_index;
-            ASSERT_LT(r.center_sample, r.num_samples) << name << " block " << r.block_index;
-
-            double best = 0.0;
-            double chosen = 0.0;
-            for (int j = 0; j < r.num_samples; ++j)
             {
-                double d = 0.0;
-                for (int a = 0; a < 3; ++a)
-                {
-                    const double v = sample(ks, r, a, j) - ks.k_center[static_cast<size_t>(a)];
-                    d += v * v;
-                }
-                if (j == 0 || d < best)
-                    best = d;
-                if (j == r.center_sample)
-                    chosen = d;
+                const double v = sample(ks, r, a, j) - sample(ks, r, a, j - 1);
+                d += v * v;
             }
-            /* Compared as distances, not as indices: two samples equidistant
-             * from the centre are both right answers, and which one wins is
-             * not a property worth freezing. */
-            EXPECT_LE(std::sqrt(chosen), std::sqrt(best) + tie + tol(std::sqrt(best) + 1.0))
-                << name << ": center_sample is not the closest sample to the k centre, block "
-                << r.block_index;
+            total += std::sqrt(d);
+        }
+        tie = std::max(tie, 1.0e-2 * total / static_cast<double>(r.num_samples - 1));
+    }
+
+    double global_best = 0.0;
+    bool have_global = false;
+    for (const pulseq::Readout &r : ks.readouts)
+    {
+        for (int j = 0; j < r.num_samples; ++j)
+        {
+            double d = 0.0;
+            for (int a = 0; a < 3; ++a)
+                d += sample(ks, r, a, j) * sample(ks, r, a, j);
+            if (!have_global || d < global_best)
+            {
+                global_best = d;
+                have_global = true;
+            }
         }
     }
-}  // namespace
+
+    {
+        double d = 0.0;
+        for (int a = 0; a < 3; ++a)
+            d += ks.k_center[static_cast<size_t>(a)] * ks.k_center[static_cast<size_t>(a)];
+        /* Compared as distances, not squared ones: the tolerance bounds a
+             * stored k, and squaring it would not mean anything. */
+        EXPECT_LE(std::sqrt(d), std::sqrt(global_best) + tie + tol(std::sqrt(global_best) + 1.0))
+            << name << ": k_center is not the scan's closest approach to the origin";
+    }
+
+    for (const pulseq::Readout &r : ks.readouts)
+    {
+        ASSERT_GE(r.center_sample, 0) << name << " block " << r.block_index;
+        ASSERT_LT(r.center_sample, r.num_samples) << name << " block " << r.block_index;
+
+        double best = 0.0;
+        double chosen = 0.0;
+        for (int j = 0; j < r.num_samples; ++j)
+        {
+            double d = 0.0;
+            for (int a = 0; a < 3; ++a)
+            {
+                const double v = sample(ks, r, a, j) - ks.k_center[static_cast<size_t>(a)];
+                d += v * v;
+            }
+            if (j == 0 || d < best)
+                best = d;
+            if (j == r.center_sample)
+                chosen = d;
+        }
+        /* Compared as distances, not as indices: two samples equidistant
+             * from the centre are both right answers, and which one wins is
+             * not a property worth freezing. */
+        EXPECT_LE(std::sqrt(chosen), std::sqrt(best) + tie + tol(std::sqrt(best) + 1.0))
+            << name << ": center_sample is not the closest sample to the k centre, block "
+            << r.block_index;
+    }
+}
+} // namespace
 
 /*
  * The echo is derived, and the shortcut that derives it is exact.
@@ -256,7 +255,7 @@ TEST(PulseqKTraj, CenterSampleCanBeDeclined)
     ASSERT_EQ(with.total_samples, without.total_samples);
     for (size_t i = 0; i < with.k_adc.size(); ++i)
         ASSERT_EQ(with.k_adc[i], without.k_adc[i]) << "declining centers changed k at " << i;
-    for (const pulseq::Readout& r : without.readouts)
+    for (const pulseq::Readout &r : without.readouts)
         EXPECT_EQ(r.center_sample, -1);
 }
 
@@ -284,15 +283,14 @@ TEST(PulseqKTraj, RotationExtensionComposes)
     bool differs = false;
     for (size_t i = 0; i < physical.readouts.size() && !differs; ++i)
     {
-        const pulseq::Readout& r = physical.readouts[i];
+        const pulseq::Readout &r = physical.readouts[i];
         for (int j = 0; j < r.num_samples; ++j)
         {
             const double lx = sample(logical, logical.readouts[i], 0, j);
             const double ly = sample(logical, logical.readouts[i], 1, j);
             const double lz = sample(logical, logical.readouts[i], 2, j);
             const double px = sample(physical, r, 0, j);
-            if (std::fabs(px - lx) >
-                1e-6 * (std::fabs(lx) + std::fabs(ly) + std::fabs(lz) + 1.0))
+            if (std::fabs(px - lx) > 1e-6 * (std::fabs(lx) + std::fabs(ly) + std::fabs(lz) + 1.0))
             {
                 differs = true;
                 break;
@@ -304,21 +302,21 @@ TEST(PulseqKTraj, RotationExtensionComposes)
 
 namespace
 {
-    /*
+/*
      * The floors below are floors, not measurements to keep in step with. They
      * sit well under what the fixtures currently reach (gre 87%, epi 98%, fse
      * 87%, the blipped one 96%) so ordinary changes do not trip them, while a
      * key that stops grouping does.
      */
-    void check_memo_fires(const pulseq::Sequence& seq, int max_groups, const std::string& name)
-    {
-        const pulseq::KSpace ks = pulseq::calculate_kspace(seq);
-        ASSERT_GT(static_cast<int>(ks.readouts.size()), max_groups)
-            << name << " is too small to say anything about grouping";
-        EXPECT_LE(ks.key_groups, max_groups)
-            << name << ": the repeat memo grouped fewer readouts than it should have";
-    }
-}  // namespace
+void check_memo_fires(const pulseq::Sequence &seq, int max_groups, const std::string &name)
+{
+    const pulseq::KSpace ks = pulseq::calculate_kspace(seq);
+    ASSERT_GT(static_cast<int>(ks.readouts.size()), max_groups)
+        << name << " is too small to say anything about grouping";
+    EXPECT_LE(ks.key_groups, max_groups)
+        << name << ": the repeat memo grouped fewer readouts than it should have";
+}
+} // namespace
 
 /*
  * The repeat memo actually fires.
@@ -374,9 +372,10 @@ TEST(PulseqKTraj, GradientOffsetMovesK)
     const pulseq::KSpace offset = pulseq::calculate_kspace(seq, options);
 
     ASSERT_FALSE(plain.readouts.empty());
-    EXPECT_GT(std::fabs(sample(offset, offset.readouts[0], 1, 0) -
-                        sample(plain, plain.readouts[0], 1, 0)),
-              1e-6)
+    EXPECT_GT(
+        std::fabs(
+            sample(offset, offset.readouts[0], 1, 0) - sample(plain, plain.readouts[0], 1, 0)),
+        1e-6)
         << "gradient offset did not move ky";
 }
 
@@ -387,8 +386,7 @@ TEST(PulseqKTraj, UndeclaredRfUseIsRefused)
     seq.set_rasters(1e-6, 10e-6, 100e-9, 10e-6);
 
     /* amplitude, mag, phase, time, center, delay, freq_ppm, phase_ppm, freq, phase */
-    const double rf[pulseq::RF_WIDTH] = {100.0, 0.0, 0.0, 0.0, 500e-6,
-                                         0.0,   0.0, 0.0, 0.0, 0.0};
+    const double rf[pulseq::RF_WIDTH] = {100.0, 0.0, 0.0, 0.0, 500e-6, 0.0, 0.0, 0.0, 0.0, 0.0};
 
     pulseq::Block block;
     block.rf = seq.register_rf(rf, 'u');
@@ -441,7 +439,7 @@ TEST(PulseqKTraj, WindowAverageIsANoOpOnAFlatGradient)
     const pulseq::KSpace averaged = pulseq::calculate_kspace(seq, options);
 
     ASSERT_EQ(midpoint.readouts.size(), averaged.readouts.size());
-    const pulseq::Readout& r = midpoint.readouts[0];
+    const pulseq::Readout &r = midpoint.readouts[0];
     for (int j = 0; j < r.num_samples; ++j)
     {
         const double a = sample(midpoint, r, 0, j);
@@ -499,7 +497,7 @@ TEST(PulseqKTraj, WindowAverageMatchesAnIndependentQuadrature)
     bool moved = false;
     for (size_t i = 0; i < windowed.readouts.size(); ++i)
     {
-        const pulseq::Readout& r = windowed.readouts[i];
+        const pulseq::Readout &r = windowed.readouts[i];
         for (int a = 0; a < 3; ++a)
         {
             for (int j = 0; j < r.num_samples; ++j)
@@ -507,16 +505,18 @@ TEST(PulseqKTraj, WindowAverageMatchesAnIndependentQuadrature)
                 double acc = 0.0;
                 for (int m = 0; m <= kSubsamples; ++m)
                 {
-                    const double w =
-                        (m == 0 || m == kSubsamples) ? 1.0 : ((m % 2) ? 4.0 : 2.0);
-                    acc += w * sample(sub[static_cast<size_t>(m)],
-                                      sub[static_cast<size_t>(m)].readouts[i], a, j);
+                    const double w = (m == 0 || m == kSubsamples) ? 1.0 : ((m % 2) ? 4.0 : 2.0);
+                    acc += w *
+                        sample(sub[static_cast<size_t>(m)],
+                               sub[static_cast<size_t>(m)].readouts[i],
+                               a,
+                               j);
                 }
                 const double reference = acc / (3.0 * static_cast<double>(kSubsamples));
                 const double got = sample(windowed, r, a, j);
 
-                const double midpoint = sample(sub[kSubsamples / 2],
-                                               sub[kSubsamples / 2].readouts[i], a, j);
+                const double midpoint =
+                    sample(sub[kSubsamples / 2], sub[kSubsamples / 2].readouts[i], a, j);
                 if (std::fabs(got - midpoint) > 1e-3)
                     moved = true;
                 ASSERT_NEAR(got, reference, 1e-6 * (std::fabs(reference) + 1.0))
@@ -541,7 +541,7 @@ TEST(PulseqKTraj, ACentreOutReadoutPutsItsEchoAtTheFirstSample)
     const pulseq::KSpace ks = pulseq::calculate_kspace(seq);
     ASSERT_FALSE(ks.readouts.empty());
 
-    for (const pulseq::Readout& r : ks.readouts)
+    for (const pulseq::Readout &r : ks.readouts)
     {
         EXPECT_EQ(r.center_sample, 0) << "block " << r.block_index;
 
@@ -599,7 +599,7 @@ TEST(PulseqKTraj, ABipolarTrainPutsEveryEchoAtOnePlaceOnceMirrored)
     bool seen_forward = false;
     bool seen_reverse = false;
 
-    for (const pulseq::Readout& r : ks.readouts)
+    for (const pulseq::Readout &r : ks.readouts)
     {
         if (r.num_samples < 2 || r.center_sample < 0)
             continue;

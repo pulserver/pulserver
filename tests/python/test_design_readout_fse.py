@@ -73,9 +73,7 @@ def readout3d(system, slab, hard, **kwargs):
     kwargs.setdefault("matrix", MATRIX)
     kwargs.setdefault("etl", ETL)
     kwargs.setdefault("spoiling_cycles", 2.0)
-    return design.FseReadout3D(
-        system, slab.rf, slab.gz, rf_ref=hard.rf_ref, **kwargs
-    )
+    return design.FseReadout3D(system, slab.rf, slab.gz, rf_ref=hard.rf_ref, **kwargs)
 
 
 def _lines(module):
@@ -120,7 +118,8 @@ def test_the_3d_train_is_valid_pulseq(system, slab, hard):
 def test_every_echo_replays_the_same_events(system, slice_, selective):
     fse = readout2d(system, slice_, selective)
     units = [
-        fse.blocks[-4 * (echo + 1) : len(fse.blocks) - 4 * echo] for echo in range(ETL - 1)
+        fse.blocks[-4 * (echo + 1) : len(fse.blocks) - 4 * echo]
+        for echo in range(ETL - 1)
     ]
     assert all(unit == units[0] for unit in units)
 
@@ -161,9 +160,9 @@ def test_a_trigger_rides_the_prephaser_block(system, slice_, selective):
 
 def test_every_phase_encode_is_a_trapezoid(system, slab, hard):
     fse = readout3d(system, slab, hard)
-    assert [event.type for event in (fse.gy_pre, fse.gy_rew, fse.gz_pre, fse.gz_rew)] == [
-        "trap"
-    ] * 4
+    assert [
+        event.type for event in (fse.gy_pre, fse.gy_rew, fse.gz_pre, fse.gz_rew)
+    ] == ["trap"] * 4
 
 
 def test_scaling_a_partition_encode_keeps_one_shape(system, slab, hard):
@@ -219,7 +218,9 @@ def test_the_line_spans_the_matrix(system, slice_, selective):
     )
 
 
-def test_a_partial_echo_still_starts_every_line_at_the_same_place(system, slice_, selective):
+def test_a_partial_echo_still_starts_every_line_at_the_same_place(
+    system, slice_, selective
+):
     fse = readout2d(system, slice_, selective, partial_echo=0.7)
     k, _, _ = _lines(fse)
     assert fse.n_samples < MATRIX[0]
@@ -263,7 +264,9 @@ def test_the_3d_train_is_cpmg_too(system, slab, hard):
 def test_the_echoes_are_evenly_spaced_after_the_first(system, slice_, selective):
     fse = readout2d(system, slice_, selective)
     assert np.diff(fse.echo_times) == pytest.approx(fse.esp)
-    assert fse.echo_times[0] == pytest.approx(fse.esp_first, abs=system.block_duration_raster)
+    assert fse.echo_times[0] == pytest.approx(
+        fse.esp_first, abs=system.block_duration_raster
+    )
 
 
 def test_the_train_lasts_one_spacing_per_echo(system, slice_, selective):

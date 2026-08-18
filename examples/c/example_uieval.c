@@ -7,7 +7,7 @@
  * header — no full parse, no caching, no signature verification.
  *
  * Compile:
- *   cc -I../../csrc example_uieval.c ../../csrc/pulseqlib_*.c -lm -o uieval
+ *   cc -I../../src/c example_uieval.c ../../src/c/pulseqlib_*.c -lm -o uieval
  */
 
 #include "example_vendorlib.h"

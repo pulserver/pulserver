@@ -5,8 +5,8 @@
 
 import std/unittest
 import std/strutils
-import ../../bridge/bridge_common
-import ../../bridge/pypulseq_host
+import ../../src/nim/bridge_common
+import ../../src/nim/pypulseq_host
 import nimpulseqgui/io  # makeProtocolPreamble for round-trip test
 
 # ── Test helpers ───────────────────────────────────────────────────────────

@@ -39,8 +39,13 @@ def _centre_echo(trains):
     raise AssertionError("centre view was never encoded")
 
 
-ALL_ORDERINGS = [make_linear_order, make_centric_order, make_radial_order,
-                 make_radial_adaptive_order, make_shuffling_order]
+ALL_ORDERINGS = [
+    make_linear_order,
+    make_centric_order,
+    make_radial_order,
+    make_radial_adaptive_order,
+    make_shuffling_order,
+]
 
 
 @pytest.mark.parametrize("order", ALL_ORDERINGS)

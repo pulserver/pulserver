@@ -13,6 +13,7 @@ import pytest
 
 import pulserver.pypulseq as pp
 from pulserver.app import fse2D_sequence, fse3D_sequence
+import itertools
 
 BANDWIDTH = 50e3
 
@@ -115,19 +116,27 @@ def _centre_echo(seq):
     return next(
         int(echo)
         for line, partition, echo in zip(
-            labels["LIN"].tolist(), labels["PAR"].tolist(), labels["ECO"].tolist()
+            labels["LIN"].tolist(),
+            labels["PAR"].tolist(),
+            labels["ECO"].tolist(),
+            strict=False,
         )
         if (line, partition) == (4, 2)
     )
 
 
-@pytest.mark.parametrize("ordering", ["linear", "radial", "radial_adaptive", "shuffling"])
+@pytest.mark.parametrize(
+    "ordering", ["linear", "radial", "radial_adaptive", "shuffling"]
+)
 def test_every_ordering_covers_the_grid(ordering):
     seq = design_3d(ordering=ordering)
     is_ok, error_report = seq.check_timing()
     assert is_ok, error_report
     labels = seq.evaluate_labels(evolution="adc")
-    assert len(set(zip(labels["LIN"].tolist(), labels["PAR"].tolist()))) == 32
+    assert (
+        len(set(zip(labels["LIN"].tolist(), labels["PAR"].tolist(), strict=False)))
+        == 32
+    )
 
 
 def test_the_coherent_orderings_put_the_centre_at_the_target_echo():
@@ -144,7 +153,12 @@ def test_shuffling_is_reproducible_and_scattered():
     def mapping(seq):
         labels = seq.evaluate_labels(evolution="adc")
         return list(
-            zip(labels["LIN"].tolist(), labels["PAR"].tolist(), labels["ECO"].tolist())
+            zip(
+                labels["LIN"].tolist(),
+                labels["PAR"].tolist(),
+                labels["ECO"].tolist(),
+                strict=False,
+            )
         )
 
     first = mapping(design_3d(ordering="shuffling", shuffle_seed=7))
@@ -162,14 +176,17 @@ def test_radial_adaptive_grows_radius_away_from_the_centre_echo():
     target = _centre_echo(seq)
     radii: dict[int, list[float]] = {}
     for line, partition, echo in zip(
-        labels["LIN"].tolist(), labels["PAR"].tolist(), labels["ECO"].tolist()
+        labels["LIN"].tolist(),
+        labels["PAR"].tolist(),
+        labels["ECO"].tolist(),
+        strict=False,
     ):
         radius = ((line - 4) / 8) ** 2 + ((partition - 2) / 4) ** 2
         radii.setdefault(int(echo), []).append(radius)
     means = {echo: np.mean(values) for echo, values in radii.items()}
     distances = sorted(means, key=lambda echo: abs(echo - target))
     ordered_means = [means[echo] for echo in distances]
-    assert all(a <= b + 1e-9 for a, b in zip(ordered_means, ordered_means[1:]))
+    assert all(a <= b + 1e-9 for a, b in itertools.pairwise(ordered_means))
 
 
 # ----------------------------------------------------------------------
@@ -188,9 +205,7 @@ def test_the_variable_train_modulates_the_played_amplitudes():
     ]
     first_train = refocusings[:8]
     expected = np.asarray(flips) / flips[0]
-    assert np.asarray(first_train) / first_train[0] == pytest.approx(
-        expected, rel=1e-6
-    )
+    assert np.asarray(first_train) / first_train[0] == pytest.approx(expected, rel=1e-6)
 
 
 def test_a_constant_train_plays_180s():

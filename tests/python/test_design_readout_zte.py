@@ -56,9 +56,7 @@ def build_shell(system, zte, shot=None):
     """One shell, written the way the docstring says to."""
     seq = pp.Sequence(system)
     turns = [
-        pp.make_rotation(
-            Rotation.from_matrix(turn if shot is None else shot @ turn)
-        )
+        pp.make_rotation(Rotation.from_matrix(turn if shot is None else shot @ turn))
         for turn in zte.view_rotations
     ]
     seq.add_block(*zte.g_ramp, turns[0])
@@ -118,7 +116,9 @@ def test_the_pulse_plays_on_a_gradient_already_at_full_amplitude(system, hard):
         assert np.ptp(np.asarray(hold.waveform)) == pytest.approx(0.0)
 
 
-def test_a_view_hands_the_gradient_to_the_next_without_passing_through_zero(system, hard):
+def test_a_view_hands_the_gradient_to_the_next_without_passing_through_zero(
+    system, hard
+):
     zte = readout(system, hard)
     plateau = np.array([float(np.asarray(g.waveform)[0]) for g in zte.g_read])
     handover = np.array([float(np.asarray(g.waveform)[-1]) for g in zte.g_read])
@@ -161,7 +161,9 @@ def test_the_reported_gap_is_the_time_to_the_first_sample(system, hard):
         zte = readout(system, hard, dead_time_s=dead_time_s)
         first = np.linalg.norm(spokes(zte)[0, 0])
         assert first == pytest.approx(zte.gap * zte.gradient_amplitude, rel=1e-9)
-        assert zte.gap >= float(zte.rf.ringdown_time) + (dead_time_s or system.adc_dead_time)
+        assert zte.gap >= float(zte.rf.ringdown_time) + (
+            dead_time_s or system.adc_dead_time
+        )
 
 
 def test_a_spoke_is_a_straight_line_out_of_the_centre(system, hard):
@@ -169,7 +171,9 @@ def test_a_spoke_is_a_straight_line_out_of_the_centre(system, hard):
     first = spokes(zte)[0]
     direction = first[-1] / np.linalg.norm(first[-1])
     along = first @ direction
-    assert np.linalg.norm(first - np.outer(along, direction)) == pytest.approx(0.0, abs=1e-6)
+    assert np.linalg.norm(first - np.outer(along, direction)) == pytest.approx(
+        0.0, abs=1e-6
+    )
     assert np.all(np.diff(along) > 0.0)
 
 

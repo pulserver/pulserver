@@ -25,7 +25,9 @@ GRAD_LIMIT_HZ_PIX = GRAD_LIMIT_MT * GAMMA_HZ_PER_T * FOV_M / N_PIX
 
 
 def _assert_within_limits(waveform: arbgrad.BaseWaveform, tol: float = 1e-2) -> None:
-    grad_si = arbgrad.to_gradient_tesla_per_meter(waveform, FOV_M, N_PIX, GAMMA_HZ_PER_T)
+    grad_si = arbgrad.to_gradient_tesla_per_meter(
+        waveform, FOV_M, N_PIX, GAMMA_HZ_PER_T
+    )
     grad_mag = np.linalg.norm(grad_si, axis=1)
     assert np.max(grad_mag) <= GRAD_LIMIT_MT * (1.0 + tol)
 
@@ -38,7 +40,13 @@ def test_spiral_constant_pitch_special_case_shape_and_limits():
     """Equal k_rho_phi0/k_rho_phi1 is the constant-pitch (Archimedean) case."""
     k_rho_phi = 0.5 / (4.0 * math.pi)
     wf = arbgrad.spiral(
-        FOV_M, N_PIX, SLEW_LIMIT_HZ_PIX_S, GRAD_LIMIT_HZ_PIX, DT_S, k_rho_phi0=k_rho_phi, k_rho_phi1=k_rho_phi
+        FOV_M,
+        N_PIX,
+        SLEW_LIMIT_HZ_PIX_S,
+        GRAD_LIMIT_HZ_PIX,
+        DT_S,
+        k_rho_phi0=k_rho_phi,
+        k_rho_phi1=k_rho_phi,
     )
 
     assert wf.k0.shape == (3,)
@@ -115,7 +123,9 @@ def test_shot_angles_rejects_unknown_mode():
         arbgrad.shot_angles(4, mode="not-a-mode")
 
 
-@pytest.mark.skipif(Rotation is None, reason="scipy is required to build rotation quaternions")
+@pytest.mark.skipif(
+    Rotation is None, reason="scipy is required to build rotation quaternions"
+)
 def test_base_waveform_consumable_by_fast_sequence_with_rotation():
     """Round-trip smoke test: rotate the base waveform per shot_angles and feed
     it through pulserver.pypulseq.Sequence (the fast builder every zoo sequence
@@ -128,8 +138,12 @@ def test_base_waveform_consumable_by_fast_sequence_with_rotation():
 
     seq = Sequence(opts)
     for angle in angles[:3]:
-        gx = pp.make_arbitrary_grad(channel="x", waveform=np.ascontiguousarray(grad_si[:, 0]), system=opts)
-        gy = pp.make_arbitrary_grad(channel="y", waveform=np.ascontiguousarray(grad_si[:, 1]), system=opts)
+        gx = pp.make_arbitrary_grad(
+            channel="x", waveform=np.ascontiguousarray(grad_si[:, 0]), system=opts
+        )
+        gy = pp.make_arbitrary_grad(
+            channel="y", waveform=np.ascontiguousarray(grad_si[:, 1]), system=opts
+        )
         rotation = make_rotation(Rotation.from_euler("z", angle))
         seq.add_block(gx, gy, rotation)
 

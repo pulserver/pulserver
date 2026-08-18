@@ -34,7 +34,10 @@ def _moment(event, start, stop):
         )
         amplitudes = np.array([0.0, event.amplitude, event.amplitude, 0.0])
     else:
-        times, amplitudes = np.asarray(event.tt, dtype=float), np.asarray(event.waveform)
+        times, amplitudes = (
+            np.asarray(event.tt, dtype=float),
+            np.asarray(event.waveform),
+        )
     times = times + float(event.delay)
 
     grid = np.unique(np.concatenate([times, [start, stop]]))

@@ -8,7 +8,7 @@ requested TE runs excitation centre to the blade's central echo, with the
 180 at its midpoint, so the half the readout owns is solved as
 ``TE/2 - (blade_width/2) * esp`` on its first line. Every blade samples the
 centre, which is what PROPELLER trades speed for.
-:mod:`pulserver.app.recon.se_propeller2D_recon` reconstructs the blades as one
+:mod:`pulserver.app.recon.noncartesian2D_recon` reconstructs the blades as one
 non-Cartesian set against the trajectory the acquisitions carry.
 
 ``main`` returns the :class:`pulserver.pypulseq.Sequence`; ``PLUGIN`` is the
@@ -161,7 +161,6 @@ def main(
         crusher_cycles=crusher_cycles,
     )
     excitation = kernel.excitation
-    refocusing = kernel.refocusing
     slice_positions = (np.arange(n_slices) - (n_slices - 1) / 2) * (
         slice_thickness + slice_gap
     )
@@ -171,7 +170,13 @@ def main(
     seg_label = pp.make_label("SEG", "SET", 0)
 
     def shot(
-        blade, timing, slices, rotation, blade_index: int, *, acquire: bool = True,
+        blade,
+        timing,
+        slices,
+        rotation,
+        blade_index: int,
+        *,
+        acquire: bool = True,
         mark=None,
     ) -> None:
         """One blade of every slice of a pass."""
@@ -273,7 +278,9 @@ def main(
     seq.set_definition(key="NumBlades", value=kernel.n_blades)
     seq.set_definition(
         key="NumGainCalibrationReadouts",
-        value=n_slices if n_gain_calibration_readouts is None else n_gain_calibration_readouts,
+        value=n_slices
+        if n_gain_calibration_readouts is None
+        else n_gain_calibration_readouts,
     )
 
     if write_seq:
@@ -285,6 +292,7 @@ def main(
 # ======================================================================
 # Subroutines of main()
 # ======================================================================
+
 
 def PropellerKernel(
     system: pp.Opts,
@@ -343,9 +351,7 @@ slice_thickness, slice_order, te, tr, readout_bandwidth_hz, crusher_cycles
     refocusing_amplitude = TIME_BW_PRODUCT / (PULSE_DURATION * slice_thickness)
 
     exc_center = excitation.rf.delay + excitation.rf.center
-    half_te_floor = (
-        excitation.seq.duration()[0] - exc_center
-    ) + refocusing.center
+    half_te_floor = (excitation.seq.duration()[0] - exc_center) + refocusing.center
 
     def build(first_line_te: float | None):
         return design.PropellerReadout2D(
@@ -365,9 +371,7 @@ slice_thickness, slice_order, te, tr, readout_bandwidth_hz, crusher_cycles
         )
 
     probe = build(None)
-    centre_delta = float(
-        probe.echo_times[blade_width // 2] - probe.echo_times[0]
-    )
+    centre_delta = float(probe.echo_times[blade_width // 2] - probe.echo_times[0])
 
     if te is None:
         half_te = max(probe.echo_time + centre_delta, half_te_floor)
@@ -409,15 +413,11 @@ slice_thickness, slice_order, te, tr, readout_bandwidth_hz, crusher_cycles
                     f"TR {module_tr * 1e3:.1f} ms is shorter than one blade "
                     f"takes ({length * 1e3:.1f} ms)"
                 )
-            pad = pp.round_to_raster(
-                module_tr - length, system.block_duration_raster
-            )
+            pad = pp.round_to_raster(module_tr - length, system.block_duration_raster)
             if pad > 0:
                 wait_tr = pp.make_delay(pad)
                 total += pad
-        return SimpleNamespace(
-            wait_half_te=wait_half_te, wait_tr=wait_tr, length=total
-        )
+        return SimpleNamespace(wait_half_te=wait_half_te, wait_tr=wait_tr, length=total)
 
     shortest_timing = with_tr(None)
     per_pass = n_slices if tr is None else max(1, int(tr / shortest_timing.length))
@@ -435,9 +435,7 @@ slice_thickness, slice_order, te, tr, readout_bandwidth_hz, crusher_cycles
         for size in {len(group) for group in passes}
     }
 
-    pass_time = sum(
-        len(group) * repetitions[len(group)][1].length for group in passes
-    )
+    pass_time = sum(len(group) * repetitions[len(group)][1].length for group in passes)
     duration = blade.n_blades * pass_time
 
     return SimpleNamespace(
@@ -459,6 +457,7 @@ slice_thickness, slice_order, te, tr, readout_bandwidth_hz, crusher_cycles
 # ======================================================================
 # The scanner protocol contract
 # ======================================================================
+
 
 class SePropeller2D(SequencePlugin):
     """The 2D PROPELLER spin echo behind the scanner protocol contract."""
@@ -516,9 +515,15 @@ class SePropeller2D(SequencePlugin):
                 UIParam.BANDWIDTH: TypeinFloatParam(
                     value=250e3, min=5e3, max=500e3, incr=100.0, unit="Hz"
                 ),
-                UIParam.FOV_OFFSET_X: OffFloatParam(value=0.0, min=-500.0, max=500.0, unit="mm"),
-                UIParam.FOV_OFFSET_Y: OffFloatParam(value=0.0, min=-500.0, max=500.0, unit="mm"),
-                UIParam.FOV_OFFSET_Z: OffFloatParam(value=0.0, min=-500.0, max=500.0, unit="mm"),
+                UIParam.FOV_OFFSET_X: OffFloatParam(
+                    value=0.0, min=-500.0, max=500.0, unit="mm"
+                ),
+                UIParam.FOV_OFFSET_Y: OffFloatParam(
+                    value=0.0, min=-500.0, max=500.0, unit="mm"
+                ),
+                UIParam.FOV_OFFSET_Z: OffFloatParam(
+                    value=0.0, min=-500.0, max=500.0, unit="mm"
+                ),
                 UIParam.user_name(0): Description(text="Blade width [lines]"),
                 UIParam.user_value(0): TypeinFloatParam(
                     value=16.0, min=4.0, max=128.0, incr=1.0, unit="lines"
@@ -541,7 +546,11 @@ class SePropeller2D(SequencePlugin):
         try:
             kernel = PropellerKernel(
                 system,
-                **{name: value for name, value in kwargs.items() if name in KERNEL_ARGUMENTS},
+                **{
+                    name: value
+                    for name, value in kwargs.items()
+                    if name in KERNEL_ARGUMENTS
+                },
             )
         except ValueError as error:
             return {"valid": False, "duration": None, "info": str(error)}
@@ -629,7 +638,12 @@ ARG_MAP = [
     ("--nslices", UIParam.NSLICES, int, "Number of slices"),
     ("--bandwidth-hz", UIParam.BANDWIDTH, float, "Requested receiver bandwidth [Hz]"),
     ("--offset-x-mm", UIParam.FOV_OFFSET_X, float, "Volume offset along readout [mm]"),
-    ("--offset-y-mm", UIParam.FOV_OFFSET_Y, float, "Volume offset along phase encode [mm]"),
+    (
+        "--offset-y-mm",
+        UIParam.FOV_OFFSET_Y,
+        float,
+        "Volume offset along phase encode [mm]",
+    ),
     ("--offset-z-mm", UIParam.FOV_OFFSET_Z, float, "Volume offset along slice [mm]"),
     ("--blade-width", UIParam.user_value(0), float, "Phase-encode lines per blade"),
     ("--blades", UIParam.user_value(1), float, "Blades in the set (0 = Nyquist)"),

@@ -27,25 +27,25 @@ FetchContent_MakeAvailable(googletest)
 # Build the pulseg C library (the scanner-side model several tests
 # exercise, and the cache writer the parity staging uses).
 # ------------------------------------------------------------------
-add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../../csrc ${CMAKE_CURRENT_BINARY_DIR}/csrc_build)
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../../src/c ${CMAKE_CURRENT_BINARY_DIR}/c_build)
 
-set(MRDSERVER_CSRC ${CMAKE_CURRENT_SOURCE_DIR}/../../cxx/recon)
+set(MRDSERVER_CSRC ${CMAKE_CURRENT_SOURCE_DIR}/../../src/cpp/recon)
 
 # ------------------------------------------------------------------
-# pulseq::File / pulseq::FileSet C++ wrapper (cxx/include/pulseq).
-# pulseq (csrc) is already built unconditionally above (pulseg depends on it).
+# pulseq::File / pulseq::FileSet C++ wrapper (src/cpp/include/pulseq).
+# pulseq (src/c) is already built unconditionally above (pulseg depends on it).
 # ------------------------------------------------------------------
 add_executable(test_pulseq_file test_pulseq_file.cpp)
 target_include_directories(test_pulseq_file PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../cxx/include/pulseq)
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../src/cpp/include/pulseq)
 target_compile_definitions(test_pulseq_file PRIVATE
     PULSEQ_FILE_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../python/fixtures")
 target_link_libraries(test_pulseq_file PRIVATE pulseq GTest::gtest_main)
 
 # ------------------------------------------------------------------
-# pulseqpp -- the standalone C++ Pulseq sequence library (cxx/pulseq).
+# pulseqpp -- the standalone C++ Pulseq sequence library (src/cpp/pulseq).
 # ------------------------------------------------------------------
-add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../../cxx/pulseq
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../../src/cpp/pulseq
                  ${CMAKE_CURRENT_BINARY_DIR}/pulseqpp_build)
 
 # The recon-side reader: SequenceCache from the .seq chain plus its
@@ -58,7 +58,7 @@ target_include_directories(sequence_reader_obj PUBLIC
     ${ISMRMRD_INCLUDE_DIRS}
     ${Boost_INCLUDE_DIRS}
     PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../csrc/include/pulseq)
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../src/c/include/pulseq)
 target_link_libraries(sequence_reader_obj PUBLIC
     pulseqpp ISMRMRD::ISMRMRD)
 

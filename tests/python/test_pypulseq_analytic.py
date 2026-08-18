@@ -90,7 +90,8 @@ def test_the_hexagon_is_sometimes_strictly_shorter(system):
         (start, end)
         for start, end in ENDPOINTS
         for area in (1000.0, 200.0)
-        if _durations(system, start, end, area)[0] < _durations(system, start, end, area)[1] - 1e-12
+        if _durations(system, start, end, area)[0]
+        < _durations(system, start, end, area)[1] - 1e-12
     ]
     assert wins
 
@@ -118,7 +119,9 @@ def test_energy_scales_as_the_square_of_the_flip_angle(system):
 
 
 def test_the_rms_is_the_energy_spread_over_the_pulse(system):
-    rf = pp.make_sinc_pulse(flip_angle=np.pi / 2, duration=3e-3, time_bw_product=4, system=system)
+    rf = pp.make_sinc_pulse(
+        flip_angle=np.pi / 2, duration=3e-3, time_bw_product=4, system=system
+    )
     energy, peak, rms = pp.calc_rf_power(rf)
 
     assert rms == pytest.approx(np.sqrt(energy / rf.shape_dur))
@@ -137,7 +140,9 @@ def test_a_block_pulse_is_integrated_from_two_samples(system):
 
 
 def test_power_ignores_frequency_and_phase_modulation(system):
-    rf = pp.make_sinc_pulse(flip_angle=np.pi / 2, duration=3e-3, time_bw_product=4, system=system)
+    rf = pp.make_sinc_pulse(
+        flip_angle=np.pi / 2, duration=3e-3, time_bw_product=4, system=system
+    )
     before = pp.calc_rf_power(rf)
     rf.freq_offset = 2000.0
     rf.phase_offset = 1.1
@@ -171,7 +176,9 @@ def test_bandwidth_is_the_time_bandwidth_product_over_the_duration(system):
             time_bw_product=time_bw_product,
             system=system,
         )
-        assert pp.calc_rf_bandwidth(rf) == pytest.approx(time_bw_product / duration, rel=0.06)
+        assert pp.calc_rf_bandwidth(rf) == pytest.approx(
+            time_bw_product / duration, rel=0.06
+        )
 
 
 def test_retuning_a_pulse_moves_its_band_without_widening_it(system):
@@ -183,12 +190,16 @@ def test_retuning_a_pulse_moves_its_band_without_widening_it(system):
     """
     offset = 1500.0
     rf = _sinc(system)
-    centred, spectrum, axis = pp.calc_rf_bandwidth(rf, return_spectrum=True, return_axis=True)
+    centred, spectrum, axis = pp.calc_rf_bandwidth(
+        rf, return_spectrum=True, return_axis=True
+    )
     band = axis[spectrum >= 0.5 * spectrum.max()]
     centre_before = 0.5 * (band[0] + band[-1])
 
     rf.freq_offset = offset
-    shifted, spectrum, axis = pp.calc_rf_bandwidth(rf, return_spectrum=True, return_axis=True)
+    shifted, spectrum, axis = pp.calc_rf_bandwidth(
+        rf, return_spectrum=True, return_axis=True
+    )
     band = axis[spectrum >= 0.5 * spectrum.max()]
     centre_after = 0.5 * (band[0] + band[-1])
 
@@ -237,7 +248,9 @@ def test_an_edited_file_fails_verification(system, tmp_path):
     path = tmp_path / "signed.seq"
     seq.write(str(path), check_timing=False)
 
-    payload = path.read_bytes().replace(b"# Pulseq sequence file", b"# Pulseq sequence FILE")
+    payload = path.read_bytes().replace(
+        b"# Pulseq sequence file", b"# Pulseq sequence FILE"
+    )
     path.write_bytes(payload)
 
     ok, stored, computed = pp.verify_file_signature(path)
@@ -282,15 +295,17 @@ def test_every_rf_use_tag_is_offered():
 
 
 def test_the_adiabatic_factory_is_reachable_and_builds_a_slotted_pulse(system):
-    from pulserver._ext import _pulseqpp_wrapper as cxx
+    from pulserver._ext import pulseqpp as cxx
 
     for pulse_type in ("hypsec", "wurst"):
-        rf = pp.make_adiabatic_pulse(pulse_type=pulse_type, system=system, duration=10e-3)
+        rf = pp.make_adiabatic_pulse(
+            pulse_type=pulse_type, system=system, duration=10e-3
+        )
         assert isinstance(rf, cxx.Event)
 
 
 def test_rotate3d_turns_a_gradient_onto_another_axis_and_returns_slotted_events(system):
-    from pulserver._ext import _pulseqpp_wrapper as cxx
+    from pulserver._ext import pulseqpp as cxx
 
     gx = pp.make_trapezoid(channel="x", area=1000, system=system)
     about_z = np.array([[0.0, -1.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]])

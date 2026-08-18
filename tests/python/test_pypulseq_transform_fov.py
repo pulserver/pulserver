@@ -26,7 +26,9 @@ def system():
 def readout(system):
     """A flat readout: constant gradient, so a shift is two scalars and no shape."""
     return (
-        pp.make_trapezoid(channel="x", flat_area=581.8, flat_time=3.2e-3, system=system),
+        pp.make_trapezoid(
+            channel="x", flat_area=581.8, flat_time=3.2e-3, system=system
+        ),
         pp.make_adc(num_samples=128, dwell=2.4e-5, delay=1e-4, system=system),
     )
 
@@ -100,7 +102,9 @@ def test_a_misshapen_transform_is_rejected(kwargs, match):
 
 def test_a_backwards_time_range_is_rejected(seq):
     with pytest.raises(ValueError, match="after begin time"):
-        pp.TransformFOV(translation=(1.0, 0.0, 0.0)).apply_to_sequence(seq, time_range=[0.02, 0.0])
+        pp.TransformFOV(translation=(1.0, 0.0, 0.0)).apply_to_sequence(
+            seq, time_range=[0.02, 0.0]
+        )
 
 
 def test_a_time_range_past_the_end_clamps_to_the_last_block(seq):
@@ -122,9 +126,13 @@ def test_a_shift_along_the_readout_becomes_a_frequency_and_a_phase(seq):
     amplitude = seq.get_block(1).gx.amplitude  # Hz/m
 
     shapes_before = seq._native.num_shapes()
-    pp.TransformFOV(translation=(shift_mm, 0.0, 0.0)).apply_to_sequence(seq, in_place=True)
+    pp.TransformFOV(translation=(shift_mm, 0.0, 0.0)).apply_to_sequence(
+        seq, in_place=True
+    )
 
-    assert seq.get_block(1).adc.freq_offset == pytest.approx(amplitude * shift_mm * 1e-3)
+    assert seq.get_block(1).adc.freq_offset == pytest.approx(
+        amplitude * shift_mm * 1e-3
+    )
     assert seq._native.num_shapes() == shapes_before  # no residual was needed
 
 
@@ -150,17 +158,25 @@ def test_a_ranged_shift_gives_the_same_phase_as_shifting_everything(seq):
     part = pp.TransformFOV(translation=(10.0, 0.0, 0.0)).apply_to_sequence(
         seq, time_range=_over(seq, 3, 3)
     )
-    assert part.get_block(3).adc.phase_offset == pytest.approx(whole.get_block(3).adc.phase_offset)
+    assert part.get_block(3).adc.phase_offset == pytest.approx(
+        whole.get_block(3).adc.phase_offset
+    )
 
 
 def test_server_mode_on_a_cartesian_sequence_equals_native_mode(seq):
     """Unrotated constant-gradient readouts are exact as two scalars, so
     server mode bakes them like native and has nothing to defer."""
-    server = pp.TransformFOV(translation=(10.0, 0.0, 0.0), server_mode=True).apply_to_sequence(seq)
+    server = pp.TransformFOV(
+        translation=(10.0, 0.0, 0.0), server_mode=True
+    ).apply_to_sequence(seq)
     native = pp.TransformFOV(translation=(10.0, 0.0, 0.0)).apply_to_sequence(seq)
 
     assert _phases(server) == pytest.approx(_phases(native))
-    assert server.get_block(1).adc.freq_offset == native.get_block(1).adc.freq_offset != 0.0
+    assert (
+        server.get_block(1).adc.freq_offset
+        == native.get_block(1).adc.freq_offset
+        != 0.0
+    )
     assert not server._native.has_base_trajectory()
 
 
@@ -171,9 +187,9 @@ def test_server_mode_defers_a_rotated_readout_and_attaches_its_trajectory(seq):
     rotated = pp.TransformFOV(rotation=turn.as_matrix()).apply_to_sequence(seq)
     before = _phases(rotated)
 
-    shifted = pp.TransformFOV(translation=(10.0, 0.0, 0.0), server_mode=True).apply_to_sequence(
-        rotated
-    )
+    shifted = pp.TransformFOV(
+        translation=(10.0, 0.0, 0.0), server_mode=True
+    ).apply_to_sequence(rotated)
 
     assert _phases(shifted) == before
     assert shifted.get_block(1).adc.freq_offset == 0.0
@@ -218,7 +234,9 @@ def test_a_shift_through_a_slice_select_becomes_an_rf_frequency(system):
 
     shift_mm = 10.0
     shapes_before = built._native.num_shapes()
-    pp.TransformFOV(translation=(0.0, 0.0, shift_mm)).apply_to_sequence(built, in_place=True)
+    pp.TransformFOV(translation=(0.0, 0.0, shift_mm)).apply_to_sequence(
+        built, in_place=True
+    )
 
     expected_hz = gz.amplitude * shift_mm * 1e-3
     assert built.get_block(1).rf.freq_offset == pytest.approx(expected_hz)
@@ -261,9 +279,9 @@ def test_scaling_an_arbitrary_gradient_keeps_its_waveform(system):
 def test_scale_is_applied_before_the_translation(seq):
     """Halving the gradient halves the phase a given shift produces."""
     plain = pp.TransformFOV(translation=(10.0, 0.0, 0.0)).apply_to_sequence(seq)
-    scaled = pp.TransformFOV(translation=(10.0, 0.0, 0.0), scale=(0.5, 1.0, 1.0)).apply_to_sequence(
-        seq
-    )
+    scaled = pp.TransformFOV(
+        translation=(10.0, 0.0, 0.0), scale=(0.5, 1.0, 1.0)
+    ).apply_to_sequence(seq)
     assert scaled.get_block(1).adc.freq_offset == pytest.approx(
         0.5 * plain.get_block(1).adc.freq_offset
     )
@@ -284,7 +302,9 @@ def test_a_rotation_is_attached_as_an_extension(seq):
 def test_a_rotation_composes_with_one_the_block_already_carried(system, readout):
     gx, adc = readout
     built = pp.Sequence(system=system)
-    built.add_block(gx, adc, pp.make_rotation(Rotation.from_euler("z", 30.0, degrees=True)))
+    built.add_block(
+        gx, adc, pp.make_rotation(Rotation.from_euler("z", 30.0, degrees=True))
+    )
     built.remove_duplicates(in_place=True)
 
     # What the block carries, at the precision the file holds it -- composing
@@ -302,7 +322,9 @@ def test_a_rotation_composes_with_one_the_block_already_carried(system, readout)
 def test_composing_leaves_the_blocks_other_extensions_in_place(system, readout):
     gx, adc = readout
     built = pp.Sequence(system=system)
-    built.add_block(gx, adc, _flag("LIN", 7), pp.make_trigger(channel="physio1", duration=1e-3))
+    built.add_block(
+        gx, adc, _flag("LIN", 7), pp.make_trigger(channel="physio1", duration=1e-3)
+    )
 
     pp.TransformFOV(rotation=np.eye(3)).apply_to_sequence(built, in_place=True)
 
@@ -372,7 +394,9 @@ def test_clearing_a_flag_lets_the_transformation_resume(system, readout):
     built.add_block(gx, adc, _flag("NOPOS", 0))
 
     before = _phases(built)
-    pp.TransformFOV(translation=(10.0, 0.0, 0.0)).apply_to_sequence(built, in_place=True)
+    pp.TransformFOV(translation=(10.0, 0.0, 0.0)).apply_to_sequence(
+        built, in_place=True
+    )
     after = _phases(built)
 
     assert (after[0], after[1]) == (before[0], before[1])
@@ -406,13 +430,18 @@ def test_the_source_is_untouched_unless_asked_for_in_place(seq):
 
 
 def test_in_place_hands_back_the_same_object(seq):
-    assert pp.TransformFOV(translation=(10.0, 0.0, 0.0)).apply_to_sequence(seq, in_place=True) is seq
+    assert (
+        pp.TransformFOV(translation=(10.0, 0.0, 0.0)).apply_to_sequence(
+            seq, in_place=True
+        )
+        is seq
+    )
 
 
 def test_a_transformed_copy_still_writes(seq, tmp_path):
-    moved = pp.TransformFOV(translation=(10.0, 0.0, 0.0), scale=(0.5, 1.0, 1.0)).apply_to_sequence(
-        seq
-    )
+    moved = pp.TransformFOV(
+        translation=(10.0, 0.0, 0.0), scale=(0.5, 1.0, 1.0)
+    ).apply_to_sequence(seq)
     moved.remove_duplicates(in_place=True)
     path = tmp_path / "moved.seq"
     moved.write(path)
@@ -435,7 +464,9 @@ def test_a_homogeneous_transform_is_its_rotation_and_translation():
 
     combined = pp.TransformFOV(transform=matrix)
     # The homogeneous form states its offset in the rotated frame.
-    np.testing.assert_allclose(combined.translation, turn.as_matrix().T @ offset_world, atol=1e-12)
+    np.testing.assert_allclose(
+        combined.translation, turn.as_matrix().T @ offset_world, atol=1e-12
+    )
     np.testing.assert_allclose(combined.rotation, turn.as_matrix(), atol=1e-12)
 
 
@@ -445,9 +476,9 @@ def test_applying_in_place_matches_the_copy_it_would_have_returned(seq, server_m
         translation=(0.0, 0.0, 10.0), server_mode=server_mode
     ).apply_to_sequence(seq)
 
-    pp.TransformFOV(translation=(0.0, 0.0, 10.0), server_mode=server_mode).apply_to_sequence(
-        seq, in_place=True
-    )
+    pp.TransformFOV(
+        translation=(0.0, 0.0, 10.0), server_mode=server_mode
+    ).apply_to_sequence(seq, in_place=True)
 
     assert _phases(seq) == pytest.approx(_phases(expected))
     assert seq._native.has_base_trajectory() == expected._native.has_base_trajectory()
@@ -487,9 +518,9 @@ def test_a_unit_scale_leaves_every_block_exactly_as_it_was(seq):
 
 def test_a_zero_shift_beside_a_real_scale_still_scales(seq):
     before = _amplitudes(seq)[0]
-    pp.TransformFOV(translation=(0.0, 0.0, 0.0), scale=(2.0, 1.0, 1.0)).apply_to_sequence(
-        seq, in_place=True
-    )
+    pp.TransformFOV(
+        translation=(0.0, 0.0, 0.0), scale=(2.0, 1.0, 1.0)
+    ).apply_to_sequence(seq, in_place=True)
 
     assert _amplitudes(seq)[0] == pytest.approx(2.0 * before)
 

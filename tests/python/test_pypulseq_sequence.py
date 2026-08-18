@@ -46,9 +46,13 @@ def events(system):
         "rf": rf,
         "gz": gz,
         "gzr": gzr,
-        "gx": pp.make_trapezoid(channel="x", flat_area=581.8, flat_time=3.2e-3, system=system),
+        "gx": pp.make_trapezoid(
+            channel="x", flat_area=581.8, flat_time=3.2e-3, system=system
+        ),
         "gy": pp.make_arbitrary_grad(
-            channel="y", waveform=np.sin(np.linspace(0, np.pi, 200)) * 1e5, system=system
+            channel="y",
+            waveform=np.sin(np.linspace(0, np.pi, 200)) * 1e5,
+            system=system,
         ),
         "adc": pp.make_adc(num_samples=128, dwell=2.4e-5, delay=1e-4, system=system),
         "trigger": pp.make_trigger(channel="physio1", duration=1e-3, system=system),
@@ -97,7 +101,9 @@ def test_deduplication_leaves_the_columns_at_the_precision_the_file_writes(seq, 
     seq.remove_duplicates(in_place=True)
     # Six significant digits on a gradient amplitude is what `%12g` records, so
     # that -- not double precision -- is what survives a round trip.
-    np.testing.assert_allclose(seq.get_block(3).gy.waveform, events["gy"].waveform, rtol=2e-6)
+    np.testing.assert_allclose(
+        seq.get_block(3).gy.waveform, events["gy"].waveform, rtol=2e-6
+    )
     seq.remove_duplicates(in_place=True)
     assert seq.num_blocks == 16
 
@@ -200,7 +206,9 @@ def test_writing_deduplicates_a_copy_and_leaves_the_sequence_alone(seq, tmp_path
         ("read", {"detect_rf_use": True}, "detect_rf_use"),
     ],
 )
-def test_the_arguments_we_deliberately_do_not_implement_say_so(seq, tmp_path, method, kwargs, match):
+def test_the_arguments_we_deliberately_do_not_implement_say_so(
+    seq, tmp_path, method, kwargs, match
+):
     """Upstream's keyword is accepted, then refused with a reason.
 
     Silently ignoring it would be the bad outcome: the caller would think
@@ -300,7 +308,9 @@ def test_a_slotted_and_a_namespace_event_describe_the_same_block(system):
     plain = pp.Sequence(system=system)
     slotted.add_block(pp.make_trapezoid(channel="x", area=1000, system=system))
     plain.add_block(upstream.make_trapezoid(channel="x", area=1000, system=system))
-    assert slotted._to_text(create_signature=False) == plain._to_text(create_signature=False)
+    assert slotted._to_text(create_signature=False) == plain._to_text(
+        create_signature=False
+    )
 
 
 def test_scaling_an_rf_amplitude_costs_no_extra_shape(system):
@@ -382,9 +392,13 @@ def test_gradient_continuity_is_judged_after_the_rotation_is_applied(system):
     identical to the untured case's, so a check that compared logical
     endpoints would call both continuous.
     """
-    assert _continuity_case(system, rotate_middle=False).check_gradient_continuity() == (True, "")
+    assert _continuity_case(
+        system, rotate_middle=False
+    ).check_gradient_continuity() == (True, "")
 
-    is_ok, message = _continuity_case(system, rotate_middle=True).check_gradient_continuity()
+    is_ok, message = _continuity_case(
+        system, rotate_middle=True
+    ).check_gradient_continuity()
     assert not is_ok
     assert "mT/m" in message
 
@@ -400,8 +414,16 @@ def test_a_sequence_that_never_ramps_down_is_refused_before_the_check_runs(syste
     """
     amplitude = 0.8 * float(system.max_grad)
     seq = pp.Sequence(system=system)
-    seq.add_block(pp.make_arbitrary_grad(channel="x", waveform=np.linspace(0.0, amplitude, 40), system=system))
-    seq.add_block(pp.make_arbitrary_grad(channel="x", waveform=np.full(40, amplitude), system=system))
+    seq.add_block(
+        pp.make_arbitrary_grad(
+            channel="x", waveform=np.linspace(0.0, amplitude, 40), system=system
+        )
+    )
+    seq.add_block(
+        pp.make_arbitrary_grad(
+            channel="x", waveform=np.full(40, amplitude), system=system
+        )
+    )
 
     with pytest.raises(RuntimeError, match="does not end with zero gradient"):
         seq.check_gradient_continuity()
@@ -415,7 +437,9 @@ def test_writing_warns_about_a_discontinuity_and_can_be_told_not_to(system, tmp_
 
     with warnings.catch_warnings():
         warnings.simplefilter("error")
-        seq.write(tmp_path / "quiet.seq", check_timing=False, check_gradient_continuity=False)
+        seq.write(
+            tmp_path / "quiet.seq", check_timing=False, check_gradient_continuity=False
+        )
 
 
 def test_check_timing_is_upstreams_answer_over_the_window(seq):
@@ -552,7 +576,9 @@ def test_the_methods_take_upstreams_arguments_the_way_upstream_takes_them(name):
     way it was written: positionally or by keyword.
     """
     ours = list(inspect.signature(getattr(pp.Sequence, name)).parameters.values())
-    theirs = list(inspect.signature(getattr(upstream.Sequence, name)).parameters.values())
+    theirs = list(
+        inspect.signature(getattr(upstream.Sequence, name)).parameters.values()
+    )
 
     assert [(p.name, p.default) for p in ours[: len(theirs)]] == [
         (p.name, p.default) for p in theirs
@@ -630,7 +656,9 @@ def test_pre_registering_does_not_change_the_sequence(system, events):
     for index in range(1, plain.num_blocks + 1):
         one, other = plain.get_block(index), pre.get_block(index)
         assert one.block_duration == other.block_duration
-        np.testing.assert_allclose(one.gy.waveform if one.gy else 0, other.gy.waveform if other.gy else 0)
+        np.testing.assert_allclose(
+            one.gy.waveform if one.gy else 0, other.gy.waveform if other.gy else 0
+        )
         assert (one.rf is None) == (other.rf is None)
         if one.rf is not None:
             np.testing.assert_allclose(one.rf.signal, other.rf.signal, rtol=1e-12)
@@ -639,7 +667,9 @@ def test_pre_registering_does_not_change_the_sequence(system, events):
 def test_a_trapezoid_and_a_label_have_no_shape_to_register(system, events):
     built = pp.Sequence(system=system)
     assert built.register_grad_event(events["gx"]) == 0  # trapezoid: bare id
-    assert built.register_label_event(pp.make_label(type="SET", label="LIN", value=0)) == 0
+    assert (
+        built.register_label_event(pp.make_label(type="SET", label="LIN", value=0)) == 0
+    )
     assert built._native.num_shapes() == 0
 
 
@@ -684,7 +714,9 @@ def test_registering_a_rotation_or_shim_twice_returns_the_same_id(system):
     assert seq._native.num_rf_shims() == 1
 
 
-def test_pre_registering_an_extension_changes_nothing_in_the_written_file(system, events):
+def test_pre_registering_an_extension_changes_nothing_in_the_written_file(
+    system, events
+):
     """The registration idiom has to be free of consequence, or it is a trap."""
     turn = pp.make_rotation(Rotation.from_euler("z", 30, degrees=True))
     shim = pp.make_rf_shim(np.array([1 + 0j, 0.5 * np.exp(1j * 0.7)]))
@@ -722,7 +754,7 @@ def test_mod_grad_axis_scales_only_that_axis(seq, axis):
     seq.mod_grad_axis(axis, 0.5)
     after = [seq.get_block(n) for n in range(1, seq.num_blocks + 1)]
 
-    for old, new in zip(before, after):
+    for old, new in zip(before, after, strict=False):
         for name in ("gx", "gy", "gz"):
             was, now = getattr(old, name), getattr(new, name)
             if was is None:
@@ -732,7 +764,9 @@ def test_mod_grad_axis_scales_only_that_axis(seq, axis):
             if was.type == "trap":
                 assert now.amplitude == pytest.approx(was.amplitude * factor)
             else:
-                np.testing.assert_allclose(now.waveform, was.waveform * factor, rtol=1e-9)
+                np.testing.assert_allclose(
+                    now.waveform, was.waveform * factor, rtol=1e-9
+                )
 
 
 def test_flip_grad_axis_is_a_negative_scale(seq):
@@ -802,8 +836,12 @@ def _rich_sequence(system):
 
     seq = pp.Sequence(system)
     rf, gz, _ = pp.make_slr_pulse(
-        0.5, duration=2e-3, slice_thickness=5e-3, return_gz=True,
-        use="excitation", system=system,
+        0.5,
+        duration=2e-3,
+        slice_thickness=5e-3,
+        return_gz=True,
+        use="excitation",
+        system=system,
     )
     seq.add_block(rf, gz)
     seq.add_block(
@@ -839,7 +877,8 @@ def test_a_sequence_survives_being_rebuilt_block_by_block(system):
         else:
             assert np.allclose(after.rotation, before.rotation)
     assert np.allclose(
-        np.asarray(rebuilt.get_block(1).rf.signal), np.asarray(original.get_block(1).rf.signal)
+        np.asarray(rebuilt.get_block(1).rf.signal),
+        np.asarray(original.get_block(1).rf.signal),
     )
 
 
@@ -860,7 +899,9 @@ def test_a_rebuilt_block_can_be_given_an_event_it_did_not_have(system):
 def test_a_block_held_open_by_nothing_keeps_its_length(system):
     """A block longer than its events gets the delay that says so."""
     seq = pp.Sequence(system)
-    seq.add_block(pp.make_trapezoid(channel="x", area=500.0, system=system), pp.make_delay(5e-3))
+    seq.add_block(
+        pp.make_trapezoid(channel="x", area=500.0, system=system), pp.make_delay(5e-3)
+    )
 
     events = pp.block_to_events(seq.get_block(1))
     assert "delay" in {event.type for event in events}

@@ -50,7 +50,7 @@ def test_the_blades_centre_line_meets_the_spin_echo():
     row = next(
         index
         for index, (blade, line) in enumerate(
-            zip(labels["SEG"].tolist(), labels["LIN"].tolist())
+            zip(labels["SEG"].tolist(), labels["LIN"].tolist(), strict=False)
         )
         if blade == 0 and line == WIDTH // 2
     )

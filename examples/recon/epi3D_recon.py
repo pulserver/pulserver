@@ -6,7 +6,6 @@ over ``(partition, line, readout)`` before a coil-wise 3D Fourier
 reconstruction. The opposite-polarity reference reconstructs alongside as
 its own series, the pair PyHySCO corrects.
 
-Needs the numerical stack: ``pip install "pulserver[recon-cpu]"``.
 """
 
 from __future__ import annotations
@@ -18,15 +17,19 @@ from typing import Any
 import numpy as np
 
 from pulserver import AcquisitionBucket, ReconContext, ReconPlugin, ReconResult
-from pulserver.recon import has_acquisition_flag
-from pulserver.recon._mrd.epi import partition_epi_acquisitions
-from pulserver.recon.postprocessing import center_crop, coil_combine
-from pulserver.recon.preprocessing import CartesianGridder, receiver_channels
-from pulserver.app.recon.epi2D_recon import correct_lines, odd_even_fit
-from pulserver.app.recon.gre3D_recon import (
-    coil_volumes,
+from pulserver.recon import (
+    AcquisitionFlag,
+    CartesianGridder,
+    center_crop,
+    coil_combine,
+    coil_images,
+    correct_lines,
     encoded_volume,
     fill_partial_echo,
+    has_acquisition_flag,
+    odd_even_fit,
+    partition_epi_acquisitions,
+    receiver_channels,
     recon_volume,
     sense,
     sensitivities,
@@ -57,8 +60,8 @@ class Epi3DRecon(ReconPlugin):
         device: Any = None,
     ) -> None:
         super().__init__(
-            split_on=("ACQ_LAST_IN_MEASUREMENT",),
-            reject_flags=("ACQ_IS_NOISE_MEASUREMENT",),
+            split_on=AcquisitionFlag.LAST_IN_MEASUREMENT,
+            reject_flags=AcquisitionFlag.IS_NOISE_MEASUREMENT,
         )
         self.regularization = float(regularization)
         self.iterations = int(iterations)
@@ -73,7 +76,15 @@ class Epi3DRecon(ReconPlugin):
         self.acquisitions: list[Any] = []
 
     def receive(self, acquisition: Any, context: ReconContext) -> None:
-        """Keep the stream; the partitioning wants it whole."""
+        """Keep the stream rather than placing it.
+
+        Two things have to happen to an EPI line before it belongs anywhere:
+        the stream is partitioned by flag into navigator, reverse-polarity
+        reference and imaging, and every reversed line is flipped and phase
+        corrected against a fit that only exists once its slice's navigator
+        triplet has arrived. So this one plugin sorts for itself, which is what
+        overriding the hook is for.
+        """
         del context
         self.acquisitions.append(acquisition)
 
@@ -82,19 +93,23 @@ class Epi3DRecon(ReconPlugin):
     ) -> list[ReconResult] | None:
         """Partition, phase-correct, and reconstruct at the end of the scan."""
         del context
-        last = bucket.acquisitions[-1]
-        if not has_acquisition_flag(last, "ACQ_LAST_IN_MEASUREMENT"):
+        if AcquisitionFlag.LAST_IN_MEASUREMENT not in bucket.trigger:
             return None
 
         groups = partition_epi_acquisitions(self.acquisitions)
 
         navigator = [
             np.asarray(item.data)[
-                ..., :: (-1 if has_acquisition_flag(item, "ACQ_IS_REVERSE") else 1)
+                ...,
+                :: (
+                    -1 if has_acquisition_flag(item, AcquisitionFlag.IS_REVERSE) else 1
+                ),
             ]
             for item in groups.phase_correction[:3]
         ]
-        slope, intercept = odd_even_fit(navigator) if len(navigator) == 3 else (0.0, 0.0)
+        slope, intercept = (
+            odd_even_fit(navigator) if len(navigator) == 3 else (0.0, 0.0)
+        )
 
         # Coil sensitivities come from the separate low-resolution calibration
         # (ACQ_IS_PARALLEL_CALIBRATION), estimated once and reused for every
@@ -114,9 +129,7 @@ class Epi3DRecon(ReconPlugin):
             )
 
         results = []
-        for series, group in enumerate(
-            (groups.imaging, groups.reverse_polarity)
-        ):
+        for series, group in enumerate((groups.imaging, groups.reverse_polarity)):
             if not group:
                 continue
             repetitions = sorted({int(item.idx.repetition) for item in group})
@@ -129,7 +142,7 @@ class Epi3DRecon(ReconPlugin):
                         [
                             (
                                 np.asarray(item.data),
-                                has_acquisition_flag(item, "ACQ_IS_REVERSE"),
+                                has_acquisition_flag(item, AcquisitionFlag.IS_REVERSE),
                             )
                         ],
                         slope,
@@ -150,10 +163,14 @@ class Epi3DRecon(ReconPlugin):
 
                 if encodes.all():
                     coils = (
-                        coil_volumes(kspace, mask, device=self.device)
+                        coil_images(kspace, mask, device=self.device)
                         if readout.all()
                         else fill_partial_echo(
-                            kspace, readout, self.pocs_iterations, device=self.device
+                            kspace,
+                            readout,
+                            self.pocs_iterations,
+                            dimension=3,
+                            device=self.device,
                         )
                     )
                     image = coil_combine(coils, coil_axis=0)
@@ -175,9 +192,7 @@ class Epi3DRecon(ReconPlugin):
                     )
                 results.append(
                     ReconResult(
-                        center_crop(
-                            np.abs(image), self.image_shape
-                        ).transpose(0, 2, 1),
+                        center_crop(np.abs(image), self.image_shape).transpose(0, 2, 1),
                         reference=-1,
                         series_index=series * 1000 + repetition,
                         image_type="magnitude",

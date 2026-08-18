@@ -36,7 +36,9 @@ def phantom():
     slices = []
     for s in range(N_SLICES):
         radius = 0.85 - 0.05 * s
-        plane = 0.2 + np.where((x - 0.12 * s) ** 2 + (y + 0.1 * s) ** 2 < radius**2, 0.8, 0.0)
+        plane = 0.2 + np.where(
+            (x - 0.12 * s) ** 2 + (y + 0.1 * s) ** 2 < radius**2, 0.8, 0.0
+        )
         plane[8 + 3 * s : 16 + 3 * s, 6:18] += 0.4
         slices.append(plane)
     return np.stack(slices).astype(np.complex64)
@@ -53,12 +55,20 @@ def coil_maps():
         offset = s * 2 * np.pi / (COILS * N_SLICES)
         element = np.stack(
             [
-                np.exp(-((x - 1.6 * np.cos(a + offset)) ** 2 + (y - 1.6 * np.sin(a + offset)) ** 2) / 1.6)
+                np.exp(
+                    -(
+                        (x - 1.6 * np.cos(a + offset)) ** 2
+                        + (y - 1.6 * np.sin(a + offset)) ** 2
+                    )
+                    / 1.6
+                )
                 * np.exp(1j * (1.3 * (np.cos(a) * x + np.sin(a) * y) + 0.6 * s))
                 for a in angles
             ]
         )
-        maps.append(element / np.sqrt(np.sum(np.abs(element) ** 2, axis=0, keepdims=True)))
+        maps.append(
+            element / np.sqrt(np.sum(np.abs(element) ** 2, axis=0, keepdims=True))
+        )
     return np.stack(maps).astype(np.complex64)
 
 
@@ -82,7 +92,9 @@ def header():
             SimpleNamespace(
                 encodedSpace=SimpleNamespace(matrixSize=SimpleNamespace(x=N, y=N, z=1)),
                 reconSpace=SimpleNamespace(matrixSize=SimpleNamespace(x=N, y=N, z=1)),
-                encodingLimits=SimpleNamespace(slice=SimpleNamespace(maximum=N_SLICES - 1)),
+                encodingLimits=SimpleNamespace(
+                    slice=SimpleNamespace(maximum=N_SLICES - 1)
+                ),
             )
         ],
         acquisitionSystemInformation=SimpleNamespace(receiverChannels=COILS),
@@ -177,7 +189,7 @@ def test_the_calibration_maps_unalias_the_accelerated_slices(kspace, phantom, co
 def test_the_calibration_is_not_mistaken_for_multiband(kspace):
     """The calibration visits every imaged slice, so the imaging does not
     collapse bands: the plain per-slice branch runs, not the SMS separation."""
-    from pulserver.recon._mrd.epi import partition_epi_acquisitions
+    from pulserver.recon import partition_epi_acquisitions
 
     plugin = epi2D_recon.Epi2DRecon()
     groups = partition_epi_acquisitions(stream(kspace))

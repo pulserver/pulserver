@@ -39,9 +39,13 @@ def system():
 def gre(system):
     """Eight repetitions of excite / readout, with a line label on each."""
     built = pp.Sequence(system=system)
-    rf = pp.make_sinc_pulse(flip_angle=np.pi / 9, duration=2e-3, system=system, use="excitation")
+    rf = pp.make_sinc_pulse(
+        flip_angle=np.pi / 9, duration=2e-3, system=system, use="excitation"
+    )
     gx = pp.make_trapezoid(channel="x", flat_area=1000, flat_time=3.2e-3, system=system)
-    adc = pp.make_adc(num_samples=64, duration=3.2e-3, delay=gx.rise_time, system=system)
+    adc = pp.make_adc(
+        num_samples=64, duration=3.2e-3, delay=gx.rise_time, system=system
+    )
     for line in range(8):
         built.add_block(rf)
         built.add_block(gx, adc, pp.make_label(type="SET", label="LIN", value=line))
@@ -81,6 +85,7 @@ def _diffusion(
     refocus = pp.make_block_pulse(
         flip_angle=np.pi, duration=1e-3, system=system, use="refocusing"
     )
+
     def lobes(x_scale, y_scale):
         events = [
             pp.make_trapezoid(
@@ -118,7 +123,9 @@ def _diffusion(
             seq.add_block(*diffusion)
         seq.add_block(pp.make_delay(2e-3))
         seq.add_block(
-            pp.make_trapezoid(channel="z", flat_area=100, flat_time=2e-3, system=system),
+            pp.make_trapezoid(
+                channel="z", flat_area=100, flat_time=2e-3, system=system
+            ),
             pp.make_adc(num_samples=64, duration=2e-3, system=system),
         )
     return seq
@@ -149,7 +156,10 @@ def test_no_public_method_takes_a_block_range():
         if "block_range" in parameters:
             offenders.append(name)
     assert offenders == []
-    assert "block_range" not in inspect.signature(pp.TransformFOV.apply_to_sequence).parameters
+    assert (
+        "block_range"
+        not in inspect.signature(pp.TransformFOV.apply_to_sequence).parameters
+    )
 
 
 # %% the scan structure the C core recovers
@@ -227,7 +237,9 @@ def test_the_defaults_invert_what_applying_them_writes(system):
     assert float(defaults["TR"]) == pytest.approx(8e-3)
 
     seq.apply_soft_delay(**{name: float(value) for name, value in defaults.items()})
-    np.testing.assert_allclose(np.asarray(seq.block_durations), [5e-3, 2e-3, 8e-3], rtol=1e-12)
+    np.testing.assert_allclose(
+        np.asarray(seq.block_durations), [5e-3, 2e-3, 8e-3], rtol=1e-12
+    )
 
 
 def test_a_soft_delay_carries_the_range_it_may_be_set_over(system):
@@ -242,10 +254,12 @@ def test_an_inconsistent_hint_is_reported_rather_than_raised(system):
     """`get_default_soft_delay_values` is the diagnostic, so it collects."""
     seq = pp.Sequence(system=system)
     seq.add_block(
-        pp.make_delay(5e-3), pp.make_soft_delay(numID=0, hint="TE", offset=0.0, factor=1.0)
+        pp.make_delay(5e-3),
+        pp.make_soft_delay(numID=0, hint="TE", offset=0.0, factor=1.0),
     )
     seq.add_block(
-        pp.make_delay(5e-3), pp.make_soft_delay(numID=1, hint="TE", offset=0.0, factor=1.0)
+        pp.make_delay(5e-3),
+        pp.make_soft_delay(numID=1, hint="TE", offset=0.0, factor=1.0),
     )
     _, report = seq.get_default_soft_delay_values()
     assert any("numeric ID" in line for line in report)
@@ -268,7 +282,9 @@ def test_label_evaluation_agrees_with_upstream(gre, tmp_path):
         want = theirs.evaluate_labels(evolution=evolution)
         assert set(ours) == set(want)
         for name in ours:
-            np.testing.assert_array_equal(ours[name], want[name], err_msg=f"{evolution}/{name}")
+            np.testing.assert_array_equal(
+                ours[name], want[name], err_msg=f"{evolution}/{name}"
+            )
 
 
 def test_a_label_window_evaluates_only_the_blocks_it_covers(gre):
@@ -301,10 +317,15 @@ def _brute_rf_power(seq):
         rf = seq.get_block(index).rf
         if rf is None:
             continue
-        count = int(round(rf.shape_dur / raster))
+        count = round(rf.shape_dur / raster)
         centres = (np.arange(count) + 0.5) * raster
         squared = (
-            np.abs(np.interp(centres, np.asarray(rf.t, float), rf.signal, left=0.0, right=0.0)) ** 2
+            np.abs(
+                np.interp(
+                    centres, np.asarray(rf.t, float), rf.signal, left=0.0, right=0.0
+                )
+            )
+            ** 2
         )
         total += float(squared.sum()) * raster
         peak = max(peak, float(squared.max()))
@@ -317,7 +338,9 @@ def test_rf_power_agrees_with_the_walk_it_replaces(gre):
 
     assert total_energy == pytest.approx(total, rel=1e-12)
     assert peak_power == pytest.approx(peak, rel=1e-12)
-    assert mean_power == pytest.approx(total / float(np.sum(gre.block_durations)), rel=1e-12)
+    assert mean_power == pytest.approx(
+        total / float(np.sum(gre.block_durations)), rel=1e-12
+    )
     # MATLAB keeps a second accumulator for this and it is the same number.
     assert rf_rms == pytest.approx(np.sqrt(mean_power), rel=1e-12)
 
@@ -351,7 +374,9 @@ def test_a_window_reports_the_worst_stretch_not_the_average(gre):
 def test_a_window_longer_than_the_sequence_dilutes_by_the_window(gre):
     """MATLAB divides by the nominal window, not by what was walked."""
     total = gre.calc_rf_power()[3]
-    assert gre.calc_rf_power(window_duration=10.0)[0] == pytest.approx(total / 10.0, rel=1e-12)
+    assert gre.calc_rf_power(window_duration=10.0)[0] == pytest.approx(
+        total / 10.0, rel=1e-12
+    )
 
 
 def test_a_non_positive_window_is_refused(gre):
@@ -373,7 +398,7 @@ def test_the_result_object_says_which_window_it_is_for(gre):
 
 # The numpy closed form that `calc_moments_btensor` used to be, kept here as
 # the reference implementation now that the method delegates to
-# `pulseq::calc_moments` in cxx/pulseq.  It is an independent transcription of
+# `pulseq::calc_moments` in src/cpp/pulseq.  It is an independent transcription of
 # the same algebra -- a union grid, a refocusing sign per piece, and a quartic
 # integrated term by term -- so the two agreeing is worth more than either
 # agreeing with a quadrature.
@@ -401,9 +426,11 @@ class _Pieces:
     says so in its own ``TODO``.
     """
 
-    __slots__ = ("offsets", "widths", "start", "slope")
+    __slots__ = ("offsets", "slope", "start", "widths")
 
-    def __init__(self, times: np.ndarray, gradients: np.ndarray, flips: np.ndarray) -> None:
+    def __init__(
+        self, times: np.ndarray, gradients: np.ndarray, flips: np.ndarray
+    ) -> None:
         widths = np.diff(times)
         keep = widths > 0
         self.widths = widths[keep]
@@ -414,7 +441,10 @@ class _Pieces:
         last = gradients[1:][keep] * signs
         self.start = first
         self.slope = np.divide(
-            last - first, self.widths[:, None], out=np.zeros_like(first), where=self.widths[:, None] > 0
+            last - first,
+            self.widths[:, None],
+            out=np.zeros_like(first),
+            where=self.widths[:, None] > 0,
         )
 
     def __len__(self) -> int:
@@ -441,7 +471,9 @@ def _gradient_pieces(
     gradients = np.zeros((times.size, 3))
     for axis, channel in enumerate(channels[:3]):
         if channel.shape[1]:
-            gradients[:, axis] = np.interp(times, channel[0], channel[1], left=0.0, right=0.0)
+            gradients[:, axis] = np.interp(
+                times, channel[0], channel[1], left=0.0, right=0.0
+            )
     return _Pieces(times, gradients, inside)
 
 
@@ -458,8 +490,10 @@ def _b_tensor_over(pieces: _Pieces) -> np.ndarray:
 
     widths = pieces.widths
     # q(tau) = q0 + 2*pi*(a*tau + b*tau**2/2), as coefficients in tau.
-    increments = 2 * np.pi * (
-        pieces.start * widths[:, None] + 0.5 * pieces.slope * widths[:, None] ** 2
+    increments = (
+        2
+        * np.pi
+        * (pieces.start * widths[:, None] + 0.5 * pieces.slope * widths[:, None] ** 2)
     )
     origins = np.zeros_like(increments)
     origins[1:] = np.cumsum(increments, axis=0)[:-1]
@@ -494,12 +528,12 @@ def _moment_over(pieces: _Pieces, order: int) -> np.ndarray:
     return 2 * np.pi * total
 
 
-
-
 def _dense_reference(seq, order=1, points=2_000_001):
     """The same integrals by brute numerical quadrature."""
     channels = seq.waveforms()
-    excitation = float(np.sort(seq.rf_times(compat=False).of("excitation", "undefined").t)[0])
+    excitation = float(
+        np.sort(seq.rf_times(compat=False).of("excitation", "undefined").t)[0]
+    )
     refocusings = np.sort(seq.rf_times(compat=False).of("refocusing").t)
     echo = float(seq.calc_moments_btensor(compat=False).echo_times[0])
 
@@ -515,11 +549,27 @@ def _dense_reference(seq, order=1, points=2_000_001):
     )
     gradients *= ((-1.0) ** np.searchsorted(refocusings, times, side="right"))[:, None]
 
-    q = 2 * np.pi * np.concatenate(
-        ([np.zeros(3)], np.cumsum(0.5 * (gradients[1:] + gradients[:-1]) * np.diff(times)[:, None], axis=0))
+    q = (
+        2
+        * np.pi
+        * np.concatenate(
+            (
+                [np.zeros(3)],
+                np.cumsum(
+                    0.5 * (gradients[1:] + gradients[:-1]) * np.diff(times)[:, None],
+                    axis=0,
+                ),
+            )
+        )
     )
     b = np.trapezoid(q[:, :, None] * q[:, None, :], times, axis=0)
-    moment = 2 * np.pi * np.trapezoid(gradients * (times - excitation)[:, None] ** order, times, axis=0)
+    moment = (
+        2
+        * np.pi
+        * np.trapezoid(
+            gradients * (times - excitation)[:, None] ** order, times, axis=0
+        )
+    )
     return b, moment
 
 
@@ -607,7 +657,9 @@ def test_the_b_vector_is_unit_length_and_points_along_the_encoding(system):
     seq = _diffusion(system, gy_scale=0.35)
     result = seq.calc_moments_btensor(compat=False)
 
-    np.testing.assert_allclose(np.linalg.norm(result.b_vectors, axis=-1), 1.0, rtol=1e-12)
+    np.testing.assert_allclose(
+        np.linalg.norm(result.b_vectors, axis=-1), 1.0, rtol=1e-12
+    )
     expected = np.array([1.0, 0.35, 0.0])
     expected /= np.linalg.norm(expected)
     np.testing.assert_allclose(np.abs(result.b_vectors[0]), np.abs(expected), atol=1e-9)
@@ -670,7 +722,7 @@ def _reference_moments(seq, *, orders=(1, 2, 3)):
 
     B = np.zeros((excitations.size, 3, 3))
     moments = {order: np.zeros((excitations.size, 3)) for order in orders}
-    for shot, (start, echo) in enumerate(zip(excitations, echoes)):
+    for shot, (start, echo) in enumerate(zip(excitations, echoes, strict=False)):
         if not np.isfinite(echo) or echo <= start:
             continue
         pieces = _gradient_pieces(channels, start, echo, refocusings)
@@ -700,7 +752,9 @@ def test_the_core_reproduces_the_numpy_reference(system, kwargs):
         # and carries only the association noise of whichever order the terms
         # were summed in. Judged against the largest component rather than
         # against itself, which would be judging a zero.
-        np.testing.assert_allclose(got[order], moments[order], rtol=0, atol=1e-9 * scale)
+        np.testing.assert_allclose(
+            got[order], moments[order], rtol=0, atol=1e-9 * scale
+        )
 
 
 def test_the_prescription_split_sums_to_the_tensor(system):
@@ -756,7 +810,9 @@ def test_a_prescription_rotation_turns_only_the_rotatable_half(system):
 
 def test_the_table_deduplicates_shots_that_share_an_encoding(system):
     """A scan repeats each direction; the table is what a header carries."""
-    result = _diffusion(system, gy_scale=0.35, shots=4).calc_moments_btensor(compat=False)
+    result = _diffusion(system, gy_scale=0.35, shots=4).calc_moments_btensor(
+        compat=False
+    )
 
     assert result.B.shape[0] == 4
     assert result.b_tensor_table.shape[0] == 1
@@ -851,7 +907,9 @@ def test_a_counter_that_does_not_move_with_the_encoding_is_refused(system):
     seq = _diffusion(
         system, directions=[(1.0, 0.35), (0.5, 0.175)], label="SET", label_values=[0, 0]
     )
-    with pytest.raises(ValueError, match="not the axis the diffusion encoding varies along"):
+    with pytest.raises(
+        ValueError, match="not the axis the diffusion encoding varies along"
+    ):
         seq.diffusion_definitions(axis="SET")
 
 

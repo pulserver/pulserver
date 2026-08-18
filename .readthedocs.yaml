@@ -1,0 +1,44 @@
+# Read the Docs build. The rendered documentation is never committed -- this
+# is what produces it, from the sources under docs/.
+#
+# Versioning: every tag matching v*.*.* is built and kept, `latest` follows
+# the default branch, and the version selector on the rendered page is how a
+# reader moves between them. Activate new tags under Versions in the project
+# admin, or leave the automation rule below to do it.
+version: 2
+
+build:
+  os: ubuntu-24.04
+  tools:
+    python: "3.11"
+  apt_packages:
+    # scikit-build-core compiles the C and C++ extensions during the install
+    # below; the API pages import the package to document it.
+    - cmake
+    - build-essential
+  jobs:
+    post_checkout:
+      # Full history, so the version the documentation reports matches the tag
+      # being built rather than a shallow clone's guess.
+      - git fetch --unshallow || true
+      - git fetch --tags || true
+
+sphinx:
+  configuration: docs/conf.py
+  # The build is warning-free, so a warning is a regression: a broken
+  # cross-reference, a page missing from a toctree, or an API object that no
+  # longer imports. `bash scripts/build_docs.sh --strict` is the same check.
+  fail_on_warning: true
+
+formats:
+  - pdf
+  - htmlzip
+
+python:
+  install:
+    # One environment, as everywhere else: the package plus its documentation
+    # and test tooling.
+    - method: pip
+      path: .
+      extra_requirements:
+        - dev

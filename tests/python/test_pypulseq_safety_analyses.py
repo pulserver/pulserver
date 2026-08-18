@@ -115,14 +115,20 @@ def test_pns_over_the_timeline_is_upstreams_answer_exactly(seq, mirror):
     ],
     ids=["defaults", "time_range", "rss_derivative", "uncombined", "window"],
 )
-def test_gradient_spectrum_over_the_timeline_is_upstreams_answer_exactly(seq, mirror, options):
+def test_gradient_spectrum_over_the_timeline_is_upstreams_answer_exactly(
+    seq, mirror, options
+):
     ours = seq.calculate_gradient_spectrum(plot=False, max_frequency=3000.0, **options)
-    theirs = mirror.calculate_gradient_spectrum(plot=False, max_frequency=3000.0, **options)
+    theirs = mirror.calculate_gradient_spectrum(
+        plot=False, max_frequency=3000.0, **options
+    )
 
     assert len(ours) == len(theirs) == 4
     ours_spectrograms, theirs_spectrograms = ours[0], theirs[0]
     assert len(ours_spectrograms) == len(theirs_spectrograms)
-    for ours_axis, theirs_axis in zip(ours_spectrograms, theirs_spectrograms, strict=True):
+    for ours_axis, theirs_axis in zip(
+        ours_spectrograms, theirs_spectrograms, strict=True
+    ):
         assert np.array_equal(ours_axis, theirs_axis)
     for ours_array, theirs_array in zip(ours[1:], theirs[1:], strict=True):
         assert np.array_equal(np.asarray(ours_array), np.asarray(theirs_array))
@@ -133,7 +139,9 @@ def test_the_timeline_answer_never_grows_a_fifth_element(seq):
     assert len(seq.calculate_gradient_spectrum(plot=False)) == 4
     assert len(seq.calculate_gradient_spectrum(plot=False, tr="worst_case")) == 4
     assert len(seq.calculate_pns(safe_example_hw(), do_plots=False)) == 4
-    assert len(seq.calculate_pns(safe_example_hw(), do_plots=False, tr="worst_case")) == 4
+    assert (
+        len(seq.calculate_pns(safe_example_hw(), do_plots=False, tr="worst_case")) == 4
+    )
 
 
 # %% tr= is the safety core
@@ -148,7 +156,9 @@ def test_the_worst_case_tr_bounds_every_instance_it_stands_for(seq, num_trs):
     be unsound -- so this is the assertion protecting the gate, not a
     regression baseline.
     """
-    envelope = seq.calculate_pns(safe_example_hw(), do_plots=False, tr="worst_case")[1].max()
+    envelope = seq.calculate_pns(safe_example_hw(), do_plots=False, tr="worst_case")[
+        1
+    ].max()
     instances = [
         seq.calculate_pns(safe_example_hw(), do_plots=False, tr=index)[1].max()
         for index in range(num_trs)
@@ -173,9 +183,9 @@ def test_the_instance_index_selects_a_real_and_different_tr(seq, num_trs):
 
     assert peaks[8] == pytest.approx(0.0, abs=1e-9)
     assert max(peaks) > 0.0
-    assert np.abs(structure.waveform("worst_case").waveforms()[1][1]).max() == pytest.approx(
-        max(peaks), rel=1e-6
-    )
+    assert np.abs(
+        structure.waveform("worst_case").waveforms()[1][1]
+    ).max() == pytest.approx(max(peaks), rel=1e-6)
 
 
 def test_a_repetition_time_is_transformed_whole_into_one_spectrum(seq):
@@ -229,7 +239,11 @@ def test_the_reported_lines_are_harmonics_of_the_repetition_time(seq):
 def test_a_band_over_a_strong_line_is_flagged_and_one_over_nothing_is_not(seq):
     """The verdict follows the bands, and ``ok`` follows the verdict."""
     *_, quiet = seq.calculate_gradient_spectrum(
-        plot=False, max_frequency=3000.0, tr="worst_case", resonance_lines=True, bands=[]
+        plot=False,
+        max_frequency=3000.0,
+        tr="worst_case",
+        resonance_lines=True,
+        bands=[],
     )
     assert quiet.candidate_freqs.size == 0
     assert quiet.ok
@@ -247,9 +261,7 @@ def test_a_band_over_a_strong_line_is_flagged_and_one_over_nothing_is_not(seq):
     assert bool(flagged.violations.any())
 
 
-@pytest.mark.parametrize(
-    "name", ["epi_2d_main", "bssfp_2d", "fse_2d"]
-)
+@pytest.mark.parametrize("name", ["epi_2d_main", "bssfp_2d", "fse_2d"])
 def test_the_drawn_lines_and_the_predownload_gate_reach_the_same_verdict(name):
     """The whole point of ``resonance_lines``, on recorded sequences.
 
@@ -262,7 +274,7 @@ def test_the_drawn_lines_and_the_predownload_gate_reach_the_same_verdict(name):
     so agreement is between two independent paths into the C engine rather
     than between a value and a copy of itself.
     """
-    from pulserver._ext._pulseg_wrapper import _check_safety
+    from pulserver._ext.pulseg import _check_safety
 
     system = pp.Opts(max_grad=50.0, grad_unit="mT/m", max_slew=350.0, slew_unit="T/m/s")
     recorded = pp.Sequence(system=system)
@@ -270,7 +282,11 @@ def test_the_drawn_lines_and_the_predownload_gate_reach_the_same_verdict(name):
 
     def lines_for(bands):
         return recorded.calculate_gradient_spectrum(
-            plot=False, max_frequency=3000.0, tr="worst_case", resonance_lines=True, bands=bands
+            plot=False,
+            max_frequency=3000.0,
+            tr="worst_case",
+            resonance_lines=True,
+            bands=bands,
         )[4]
 
     unbanded = lines_for([])
@@ -278,7 +294,11 @@ def test_the_drawn_lines_and_the_predownload_gate_reach_the_same_verdict(name):
     ranked = np.argsort(unbanded.line_a_eq.max(axis=-1))
 
     for expected_ok, index in ((False, ranked[-1]), (True, ranked[0])):
-        band = (float(unbanded.line_freqs[index]) - 5.0, float(unbanded.line_freqs[index]) + 5.0, 0.0)
+        band = (
+            float(unbanded.line_freqs[index]) - 5.0,
+            float(unbanded.line_freqs[index]) + 5.0,
+            0.0,
+        )
         overlay = lines_for([band])
 
         gate_ok = True
@@ -286,7 +306,12 @@ def test_the_drawn_lines_and_the_predownload_gate_reach_the_same_verdict(name):
             # PNS skipped: this is the acoustic verdict, and a slew or
             # amplitude violation would short-circuit before reaching it.
             _check_safety(
-                recorded._structure_for("test").collection, [band], 0.0, 0.0, 100.0, True
+                recorded._structure_for("test").collection,
+                [band],
+                0.0,
+                0.0,
+                100.0,
+                True,
             )
         except Exception:  # the engine's own error type is not public
             gate_ok = False
@@ -300,9 +325,13 @@ def test_the_line_spectrum_is_not_returned_unless_it_was_asked_for(seq):
         seq.calculate_gradient_spectrum(plot=False, resonance_lines=True)
 
 
-@pytest.mark.parametrize("hardware", [safe_example_hw(), IRNICH], ids=["safe", "irnich"])
+@pytest.mark.parametrize(
+    "hardware", [safe_example_hw(), IRNICH], ids=["safe", "irnich"]
+)
 def test_both_nerve_models_are_reachable_and_disagree(seq, hardware):
-    ok, norm, components, times = seq.calculate_pns(hardware, do_plots=False, tr="worst_case")
+    ok, norm, components, times = seq.calculate_pns(
+        hardware, do_plots=False, tr="worst_case"
+    )
 
     assert isinstance(ok, bool)
     assert components.shape == (norm.size, 3)
@@ -312,7 +341,9 @@ def test_both_nerve_models_are_reachable_and_disagree(seq, hardware):
 
 
 def test_the_two_models_are_not_the_same_calculation(seq):
-    safe = seq.calculate_pns(safe_example_hw(), do_plots=False, tr="worst_case")[1].max()
+    safe = seq.calculate_pns(safe_example_hw(), do_plots=False, tr="worst_case")[
+        1
+    ].max()
     irnich = seq.calculate_pns(IRNICH, do_plots=False, tr="worst_case")[1].max()
     assert safe != pytest.approx(irnich, rel=1e-3)
 
@@ -323,14 +354,14 @@ def test_the_two_models_are_not_the_same_calculation(seq):
 def test_the_c_safe_model_matches_upstreams_python_one(seq, system):
     """Cross-check across the language boundary, on identical input.
 
-    ``SafeParams`` in ``cxx/include/pulseg/types.hpp`` is a second
+    ``SafeParams`` in ``src/cpp/include/pulseg/types.hpp`` is a second
     implementation of ``safe_pns_prediction.safe_pns_model``, and a second
     implementation that is allowed to drift is worse than none: a plot would
     stop meaning what the gate means. So the C response is rebuilt here from
     the same extracted waveform, fed through upstream's Python model, and the
     two are required to agree to float precision.
     """
-    from pulserver._ext._pulseg_wrapper import _calc_pns_safe, _get_tr_waveforms
+    from pulserver._ext.pulseg import _calc_pns_safe, _get_tr_waveforms
 
     hardware = safe_example_hw()
     structure = seq._structure_for("test")
@@ -343,13 +374,19 @@ def test_the_c_safe_model_matches_upstreams_python_one(seq, system):
     padding = int(theirs["num_samples"]) - num_uniform + 1
     grid = np.arange(num_uniform) * raster
 
-    assert padding > 0, "the model asked for no warm-up history; nothing would be tested"
+    assert padding > 0, (
+        "the model asked for no warm-up history; nothing would be tested"
+    )
 
-    for axis, coefficient_axis in zip("xyz", (hardware.x, hardware.y, hardware.z), strict=True):
+    for axis, coefficient_axis in zip(
+        "xyz", (hardware.x, hardware.y, hardware.z), strict=True
+    ):
         channel = waveform[f"g{axis}"]
         times = np.asarray(channel["time_us"], dtype=float) * 1e-6
         values = np.asarray(channel["amplitude"], dtype=float)
-        uniform = np.interp(grid, times, values) if times.size else np.zeros(num_uniform)
+        uniform = (
+            np.interp(grid, times, values) if times.size else np.zeros(num_uniform)
+        )
         # The core wraps the waveform round rather than zero-padding: a TR
         # that repeats has no silence in front of it.
         padded = np.concatenate([uniform, uniform[np.arange(padding) % num_uniform]])
@@ -402,12 +439,18 @@ def test_the_structure_is_derived_once_and_reused(seq, num_trs):
 def test_the_structure_does_not_outlive_the_sequence_it_describes(seq, system):
     """A cache that survived a mutation would answer about blocks that are gone."""
     first = seq._structure_for("test")
-    before = seq.calculate_pns(safe_example_hw(), do_plots=False, tr="worst_case")[1].max()
+    before = seq.calculate_pns(safe_example_hw(), do_plots=False, tr="worst_case")[
+        1
+    ].max()
 
-    seq.add_block(pp.make_trapezoid(channel="z", area=1500, duration=2e-3, system=system))
+    seq.add_block(
+        pp.make_trapezoid(channel="z", area=1500, duration=2e-3, system=system)
+    )
 
     assert seq._structure_for("test") is not first
-    after = seq.calculate_pns(safe_example_hw(), do_plots=False, tr="worst_case")[1].max()
+    after = seq.calculate_pns(safe_example_hw(), do_plots=False, tr="worst_case")[
+        1
+    ].max()
     assert after != pytest.approx(before, rel=1e-9)
 
 
@@ -424,7 +467,9 @@ def test_the_structure_does_not_outlive_the_sequence_it_describes(seq, system):
 )
 def test_every_mutator_bumps_the_revision(seq, system, mutate, arguments):
     if arguments is None:
-        arguments = (pp.make_trapezoid(channel="x", area=100, duration=1e-3, system=system),)
+        arguments = (
+            pp.make_trapezoid(channel="x", area=100, duration=1e-3, system=system),
+        )
         if mutate == "register_adc_event":
             arguments = (pp.make_adc(num_samples=8, duration=1e-3, system=system),)
 
@@ -529,7 +574,9 @@ def test_asking_for_the_pns_plots_draws_upstreams_pair(seq):
     ],
     ids=["upstream_safe", "c_safe", "irnich"],
 )
-def test_the_pns_panel_is_marked_at_the_threshold_and_the_margin(seq, hardware, options):
+def test_the_pns_panel_is_marked_at_the_threshold_and_the_margin(
+    seq, hardware, options
+):
     """Both models, both routes. Upstream marks only the peak it happened to reach.
 
     A peak alone says how high the sequence got, not how close that is to
@@ -565,7 +612,9 @@ def test_a_pns_plot_that_overshoots_is_not_cropped_at_upstreams_ceiling(seq):
     import matplotlib.pyplot as plt
 
     plt.close("all")
-    _, passing, *_ = seq.calculate_pns(safe_example_hw(), do_plots=True, tr="worst_case")
+    _, passing, *_ = seq.calculate_pns(
+        safe_example_hw(), do_plots=True, tr="worst_case"
+    )
     assert passing.max() * 100 < 120.0
     assert plt.gcf().axes[0].get_ylim()[1] == pytest.approx(120.0)
 

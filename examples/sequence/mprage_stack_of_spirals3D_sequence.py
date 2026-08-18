@@ -12,7 +12,7 @@ extension. ``use_rotation_ext=False`` writes every shot out as its own
 gradient waveform instead, with the shape library growing with the shot count
 -- the untemplatable-waveform case, which is exactly the path an interpreter's
 waveform streaming has to survive.
-:mod:`pulserver.app.recon.mprage_stack_of_spirals3D_recon` reconstructs the stack
+:mod:`pulserver.app.recon.noncartesian_stack_recon` reconstructs the stack
 against the trajectory the acquisitions carry.
 
 ``main`` returns the :class:`pulserver.pypulseq.Sequence`; ``PLUGIN`` is the
@@ -44,7 +44,10 @@ from pulserver import (
     run_cli,
     write_sequence,
 )
-from pulserver.app.sequence.gre_stack_of_stars3D_sequence import StackShotKernel, stack_angles
+from pulserver.app.sequence.gre_stack_of_stars3D_sequence import (
+    StackShotKernel,
+    stack_angles,
+)
 from scipy.spatial.transform import Rotation
 
 
@@ -312,7 +315,9 @@ def main(
         key="AngleScheme",
         value="golden" if angular_increment_deg is None else "uniform",
     )
-    seq.set_definition(key="AngularIncrement", value=np.rad2deg(kernel.angular_increment))
+    seq.set_definition(
+        key="AngularIncrement", value=np.rad2deg(kernel.angular_increment)
+    )
     seq.set_definition(key="PartitionAngleOffset", value=partition_angle_offset_deg)
     seq.set_definition(key="EchoTrainLength", value=etl)
     seq.set_definition(key="ExplicitArms", value=0 if use_rotation_ext else 1)
@@ -333,9 +338,8 @@ def main(
 # Subroutines of main()
 # ======================================================================
 
-def SlabExcitationKernel(
-    system: pp.Opts, flip_angle_deg: float, thickness_m: float
-):
+
+def SlabExcitationKernel(system: pp.Opts, flip_angle_deg: float, thickness_m: float):
     """The slab excitation, spectral-spatial when ``SPSP_EXCITATION`` is set.
 
     Returns ``(excitation, rf, gz)``. The selection gradient carries its own
@@ -354,9 +358,7 @@ def SlabExcitationKernel(
         )
         # Concatenate the rephaser onto the alternating selection gradient, the
         # way is_slab does, and hand the readout one merged z lobe.
-        gz = pp.concatenate_gradients(
-            excitation.gz, excitation.gz_reph, system=system
-        )
+        gz = pp.concatenate_gradients(excitation.gz, excitation.gz_reph, system=system)
         return excitation, excitation.rf, gz
     excitation = design.SpatialSelectiveExcitation(
         system,
@@ -429,7 +431,9 @@ etl, angular_increment_deg, partition_angle_offset_deg, use_rotation_ext
 
     if angular_increment_deg is None:
         angles = np.asarray(pp.calc_golden_angles(n_arms, full_circle=True))
-        angular_increment = float(np.diff(pp.calc_golden_angles(2, full_circle=True))[0])
+        angular_increment = float(
+            np.diff(pp.calc_golden_angles(2, full_circle=True))[0]
+        )
     else:
         angular_increment = np.deg2rad(float(angular_increment_deg))
         angles = np.mod(np.arange(n_arms) * angular_increment, 2 * np.pi)
@@ -514,6 +518,7 @@ etl, angular_increment_deg, partition_angle_offset_deg, use_rotation_ext
 # The scanner protocol contract
 # ======================================================================
 
+
 class MprageStackOfSpirals3D(SequencePlugin):
     """The stack-of-spirals MPRAGE behind the scanner protocol contract."""
 
@@ -565,9 +570,15 @@ class MprageStackOfSpirals3D(SequencePlugin):
                 UIParam.BANDWIDTH: TypeinFloatParam(
                     value=250e3, min=5e3, max=500e3, incr=100.0, unit="Hz"
                 ),
-                UIParam.FOV_OFFSET_X: OffFloatParam(value=0.0, min=-500.0, max=500.0, unit="mm"),
-                UIParam.FOV_OFFSET_Y: OffFloatParam(value=0.0, min=-500.0, max=500.0, unit="mm"),
-                UIParam.FOV_OFFSET_Z: OffFloatParam(value=0.0, min=-500.0, max=500.0, unit="mm"),
+                UIParam.FOV_OFFSET_X: OffFloatParam(
+                    value=0.0, min=-500.0, max=500.0, unit="mm"
+                ),
+                UIParam.FOV_OFFSET_Y: OffFloatParam(
+                    value=0.0, min=-500.0, max=500.0, unit="mm"
+                ),
+                UIParam.FOV_OFFSET_Z: OffFloatParam(
+                    value=0.0, min=-500.0, max=500.0, unit="mm"
+                ),
                 UIParam.user_name(0): Description(text="Arms (one per inversion)"),
                 UIParam.user_value(0): TypeinFloatParam(
                     value=16.0, min=1.0, max=512.0, incr=1.0, unit=""
@@ -582,7 +593,11 @@ class MprageStackOfSpirals3D(SequencePlugin):
         try:
             kernel = MprageStackOfSpiralsKernel(
                 system,
-                **{name: value for name, value in kwargs.items() if name in KERNEL_ARGUMENTS},
+                **{
+                    name: value
+                    for name, value in kwargs.items()
+                    if name in KERNEL_ARGUMENTS
+                },
             )
         except ValueError as error:
             return {"valid": False, "duration": None, "info": str(error)}
@@ -678,7 +693,12 @@ ARG_MAP = [
     ("--nz", UIParam.NSLICES, int, "Partition count"),
     ("--bandwidth-hz", UIParam.BANDWIDTH, float, "Requested receiver bandwidth [Hz]"),
     ("--offset-x-mm", UIParam.FOV_OFFSET_X, float, "Volume offset along readout [mm]"),
-    ("--offset-y-mm", UIParam.FOV_OFFSET_Y, float, "Volume offset along phase encode [mm]"),
+    (
+        "--offset-y-mm",
+        UIParam.FOV_OFFSET_Y,
+        float,
+        "Volume offset along phase encode [mm]",
+    ),
     ("--offset-z-mm", UIParam.FOV_OFFSET_Z, float, "Volume offset along slab [mm]"),
     ("--arms", UIParam.user_value(0), float, "Golden-angle arms, one per inversion"),
 ]

@@ -11,8 +11,10 @@ modules it composes, the encoding plan it builds from
     seq = gre2D_sequence(n_x=128, n_y=128, n_slices=5)
     seq.write("gre2D.seq")
 
-:mod:`pulserver.app.recon` holds the reconstruction that matches each sequence,
-under the same name.
+:mod:`pulserver.app.recon` holds the reconstructions. There is one per
+sampling rather than one per sequence, because what a reconstruction needs to
+know is how k-space was covered: every 2D Cartesian scan here comes back
+through ``cartesian2D_recon``.
 """
 
 from __future__ import annotations

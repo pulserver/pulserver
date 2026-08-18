@@ -6,7 +6,7 @@ frequency-encoded line read out at the echo -- :class:`design.LineReadout2D`
 opened by the refocusing pulse, exactly as its docstring prescribes. Phase
 encoding may be undersampled with a fully sampled autocalibration block and
 truncated by partial Fourier; the readout may be a partial echo.
-:mod:`pulserver.app.recon.se2D_recon` reads all three back.
+:mod:`pulserver.app.recon.cartesian2D_recon` reads all three back.
 
 TE spans excitation centre to echo, with the 180 at its midpoint: the readout
 solves the second half (``te = TE/2`` from the refocusing pulse), and the
@@ -202,7 +202,9 @@ def main(
 
     seq = pp.Sequence(system)
 
-    def repetition(readout, timing, slices, ky: float, acquire: bool, mark=None) -> None:
+    def repetition(
+        readout, timing, slices, ky: float, acquire: bool, mark=None
+    ) -> None:
         """Play one TR of every slice of a pass, acquiring or not."""
         wait_te = getattr(readout, "wait_te", None)
         for i_slice in slices:
@@ -224,7 +226,9 @@ def main(
                 np.pi / 2 - 2 * np.pi * ref_hz * refocusing.rf_ref.center
             )
 
-            seq.add_block(excitation.rf, excitation.gz, *([mark] if mark is not None else []))
+            seq.add_block(
+                excitation.rf, excitation.gz, *([mark] if mark is not None else [])
+            )
             mark = None
             seq.add_block(excitation.gz_reph)
             if timing.wait_half_te is not None:
@@ -283,11 +287,16 @@ def main(
     seq.set_definition(key="TR", value=kernel.repetition_time)
     seq.set_definition(
         key="NumGainCalibrationReadouts",
-        value=n_slices if n_gain_calibration_readouts is None else n_gain_calibration_readouts,
+        value=n_slices
+        if n_gain_calibration_readouts is None
+        else n_gain_calibration_readouts,
     )
 
     seq.set_definition(key="kSpaceCenterLine", value=n_y // 2)
-    seq.set_definition(key="kSpaceCenterSample", value=kernel.repetitions[len(kernel.passes[0])][0].center_sample)
+    seq.set_definition(
+        key="kSpaceCenterSample",
+        value=kernel.repetitions[len(kernel.passes[0])][0].center_sample,
+    )
     seq.set_definition(key="SlicePositions", value=slice_positions.tolist())
     seq.set_definition(key="SliceThickness", value=kernel.excitation.slice_thickness)
     seq.set_definition(
@@ -306,6 +315,7 @@ def main(
 # ======================================================================
 # Subroutines of main()
 # ======================================================================
+
 
 def SE2DKernel(
     system: pp.Opts,
@@ -377,9 +387,7 @@ n_averages, n_dummy, crusher_cycles, spoiling_cycles
     # rest of its blocks, to the 180's centre. What it can never be shorter
     # than is that path with no delay inserted.
     exc_center = excitation.rf.delay + excitation.rf.center
-    pre_refocusing = (
-        excitation.seq.duration()[0] - exc_center
-    ) + refocusing.center
+    pre_refocusing = (excitation.seq.duration()[0] - exc_center) + refocusing.center
     half_te_floor = pre_refocusing
 
     def repetition(half_te: float | None, module_tr: float | None):
@@ -428,9 +436,7 @@ n_averages, n_dummy, crusher_cycles, spoiling_cycles
                     f"TR {module_tr * 1e3:.1f} ms is shorter than one "
                     f"repetition takes ({length * 1e3:.1f} ms)"
                 )
-            pad = pp.round_to_raster(
-                module_tr - length, system.block_duration_raster
-            )
+            pad = pp.round_to_raster(module_tr - length, system.block_duration_raster)
             if pad > 0:
                 wait_tr = pp.make_delay(pad)
                 length = length + pad
@@ -476,9 +482,7 @@ n_averages, n_dummy, crusher_cycles, spoiling_cycles
         pp.calc_calibration_lines(n_y, n_acs, partial_fourier=partial_fourier)
     )
 
-    pass_time = sum(
-        len(group) * repetitions[len(group)][1].length for group in passes
-    )
+    pass_time = sum(len(group) * repetitions[len(group)][1].length for group in passes)
     duration = n_dummy * pass_time + n_averages * len(sampled_lines) * pass_time
 
     return SimpleNamespace(
@@ -503,6 +507,7 @@ n_averages, n_dummy, crusher_cycles, spoiling_cycles
 # ======================================================================
 # The scanner protocol contract
 # ======================================================================
+
 
 class Se2D(SequencePlugin):
     """The 2D spin echo behind the scanner protocol contract."""
@@ -602,9 +607,15 @@ class Se2D(SequencePlugin):
                     unit="",
                     options=[1.0, 2.0, 4.0, 8.0, 16.0],
                 ),
-                UIParam.FOV_OFFSET_X: OffFloatParam(value=0.0, min=-500.0, max=500.0, unit="mm"),
-                UIParam.FOV_OFFSET_Y: OffFloatParam(value=0.0, min=-500.0, max=500.0, unit="mm"),
-                UIParam.FOV_OFFSET_Z: OffFloatParam(value=0.0, min=-500.0, max=500.0, unit="mm"),
+                UIParam.FOV_OFFSET_X: OffFloatParam(
+                    value=0.0, min=-500.0, max=500.0, unit="mm"
+                ),
+                UIParam.FOV_OFFSET_Y: OffFloatParam(
+                    value=0.0, min=-500.0, max=500.0, unit="mm"
+                ),
+                UIParam.FOV_OFFSET_Z: OffFloatParam(
+                    value=0.0, min=-500.0, max=500.0, unit="mm"
+                ),
                 UIParam.user_name(0): Description(text="ACS lines"),
                 UIParam.user_value(0): TypeinFloatParam(
                     value=24.0,
@@ -647,7 +658,11 @@ class Se2D(SequencePlugin):
         try:
             kernel = SE2DKernel(
                 system,
-                **{name: value for name, value in kwargs.items() if name in KERNEL_ARGUMENTS},
+                **{
+                    name: value
+                    for name, value in kwargs.items()
+                    if name in KERNEL_ARGUMENTS
+                },
             )
         except ValueError as error:
             return {"valid": False, "duration": None, "info": str(error)}
@@ -706,7 +721,9 @@ def protocol_kwargs(system: pp.Opts, protocol: dict[str, dict]) -> dict:
         protocol,
         partial_echo=params.user_float(prot, 1, 1.0),
         partial_fourier=params.user_float(prot, 3, 1.0),
-        n_acs=params.acs_lines_from_protocol(prot, params.param_int(prot, UIParam.NY), 0),
+        n_acs=params.acs_lines_from_protocol(
+            prot, params.param_int(prot, UIParam.NY), 0
+        ),
         n_dummy=max(0, round(params.user_float(prot, 2, 0.0))),
     )
 
@@ -743,11 +760,26 @@ ARG_MAP = [
     ("--ry", UIParam.RY, float, "Phase-encode undersampling factor"),
     ("--nex", UIParam.NEX, float, "Number of signal averages"),
     ("--offset-x-mm", UIParam.FOV_OFFSET_X, float, "Volume offset along readout [mm]"),
-    ("--offset-y-mm", UIParam.FOV_OFFSET_Y, float, "Volume offset along phase encode [mm]"),
+    (
+        "--offset-y-mm",
+        UIParam.FOV_OFFSET_Y,
+        float,
+        "Volume offset along phase encode [mm]",
+    ),
     ("--offset-z-mm", UIParam.FOV_OFFSET_Z, float, "Volume offset along slice [mm]"),
     ("--acs-lines", UIParam.user_value(0), float, "Number of ACS lines"),
-    ("--partial-echo", UIParam.user_value(1), float, "Acquired echo fraction in (0.5, 1]"),
-    ("--partial-fourier", UIParam.user_value(3), float, "Acquired phase-encode fraction in (0.5, 1]"),
+    (
+        "--partial-echo",
+        UIParam.user_value(1),
+        float,
+        "Acquired echo fraction in (0.5, 1]",
+    ),
+    (
+        "--partial-fourier",
+        UIParam.user_value(3),
+        float,
+        "Acquired phase-encode fraction in (0.5, 1]",
+    ),
 ]
 
 if __name__ == "__main__":

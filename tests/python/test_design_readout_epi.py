@@ -93,7 +93,9 @@ def play(system, epi, origins, ndim=2):
 # ----------------------------------------------------------------------
 
 
-def test_the_module_lays_out_a_pulse_a_prewinder_a_train_and_a_close(system, excitation):
+def test_the_module_lays_out_a_pulse_a_prewinder_a_train_and_a_close(
+    system, excitation
+):
     epi = readout(system, excitation, etl=8, acceleration=4)
     assert len(epi.blocks) == 3 + epi.etl
     assert epi.blocks[0] == (epi.rf, epi.gz)
@@ -143,7 +145,12 @@ def test_each_line_lands_on_the_step_the_ordering_asked_for(system, excitation):
 
 def test_the_partition_follows_its_own_column(system, slab):
     epi = readout3d(
-        system, slab, scheme="caipi", acceleration=2, segments=2, partition_acceleration=3
+        system,
+        slab,
+        scheme="caipi",
+        acceleration=2,
+        segments=2,
+        partition_acceleration=3,
     )
     measured = lines(epi)[0, :, 0, 2]
     steps = np.round((measured - measured[0]) * FOV_Z).astype(int)
@@ -152,7 +159,9 @@ def test_the_partition_follows_its_own_column(system, slab):
 
 def test_no_line_drifts_while_it_is_being_acquired(system, slab):
     """The blips ride the ramps, so they are wholly outside the sampling window."""
-    epi = readout3d(system, slab, scheme="caipi", acceleration=2, partition_acceleration=3)
+    epi = readout3d(
+        system, slab, scheme="caipi", acceleration=2, partition_acceleration=3
+    )
     traced = lines(epi)[0]
     assert traced[:, -1, 1] == pytest.approx(traced[:, 0, 1], abs=1e-9)
     assert traced[:, -1, 2] == pytest.approx(traced[:, 0, 2], abs=1e-9)
@@ -181,7 +190,9 @@ def test_moving_the_shot_origin_moves_the_whole_train(system, excitation):
 
 
 def test_the_origin_moves_the_partition_too(system, slab):
-    epi = readout3d(system, slab, scheme="caipi", acceleration=2, partition_acceleration=3)
+    epi = readout3d(
+        system, slab, scheme="caipi", acceleration=2, partition_acceleration=3
+    )
     seq = play(system, epi, [(-16, -6), (0, 3)], ndim=3)
     traced = lines(epi, seq)[:, :, 0, 2] * FOV_Z
     for shot, origin in enumerate((-6, 3)):
@@ -250,7 +261,9 @@ def test_the_echoes_are_one_spacing_apart_from_the_first(system, excitation):
 
 def test_a_longer_echo_time_is_waited_out(system, excitation):
     tight = readout(system, excitation, etl=8, acceleration=4)
-    delayed = readout(system, excitation, etl=8, acceleration=4, te=tight.echo_time + 2e-3)
+    delayed = readout(
+        system, excitation, etl=8, acceleration=4, te=tight.echo_time + 2e-3
+    )
     assert delayed.echo_time == pytest.approx(tight.echo_time + 2e-3)
     assert delayed.duration > tight.duration
 
@@ -269,7 +282,9 @@ def test_a_repetition_time_shorter_than_the_train_is_refused(system, excitation)
 
 def test_the_repetition_is_padded_to_the_time_asked_for(system, excitation):
     tight = readout(system, excitation, etl=8, acceleration=4)
-    padded = readout(system, excitation, etl=8, acceleration=4, tr=tight.duration + 5e-3)
+    padded = readout(
+        system, excitation, etl=8, acceleration=4, tr=tight.duration + 5e-3
+    )
     assert padded.duration == pytest.approx(tight.duration + 5e-3)
 
 
@@ -281,7 +296,12 @@ def test_the_repetition_is_padded_to_the_time_asked_for(system, excitation):
 def test_every_step_takes_the_same_time_however_far_it_moves(system, slab):
     """One template scaled, so the echo spacing cannot depend on the ordering."""
     epi = readout3d(
-        system, slab, scheme="caipi", acceleration=2, partition_acceleration=3, caipi_shift=1
+        system,
+        slab,
+        scheme="caipi",
+        acceleration=2,
+        partition_acceleration=3,
+        caipi_shift=1,
     )
     interior = [pp.calc_duration(event) for event in epi.gy_blips[1:-1]]
     assert interior == pytest.approx([epi.esp] * len(interior))
@@ -326,15 +346,20 @@ def test_a_flyback_step_is_played_whole_in_the_rewind(system, excitation):
 
 def test_a_flyback_train_still_walks_its_ordering(system, slab):
     epi = readout3d(
-        system, slab, scheme="caipi", acceleration=2, partition_acceleration=3, flyback=True
+        system,
+        slab,
+        scheme="caipi",
+        acceleration=2,
+        partition_acceleration=3,
+        flyback=True,
     )
     traced = lines(epi)[0]
-    assert np.round((traced[:, 0, 1] - traced[0, 0, 1]) * FOV).astype(int).tolist() == list(
-        epi.order[:, 0]
-    )
-    assert np.round((traced[:, 0, 2] - traced[0, 0, 2]) * FOV_Z).astype(int).tolist() == list(
-        epi.order[:, 1]
-    )
+    assert np.round((traced[:, 0, 1] - traced[0, 0, 1]) * FOV).astype(
+        int
+    ).tolist() == list(epi.order[:, 0])
+    assert np.round((traced[:, 0, 2] - traced[0, 0, 2]) * FOV_Z).astype(
+        int
+    ).tolist() == list(epi.order[:, 1])
     assert traced[:, -1, 1] == pytest.approx(traced[:, 0, 1], abs=1e-9)
 
 
@@ -357,7 +382,12 @@ def test_the_rewind_costs_what_a_blipped_train_saves(system, excitation):
         {"etl": 8, "acceleration": 4},
         {"etl": 8, "acceleration": 4, "flyback": True},
         {"etl": 4, "acceleration": 8, "readout_bandwidth_hz": 20e3},
-        {"etl": 4, "acceleration": 8, "readout_bandwidth_hz": 20e3, "ramp_sampling": False},
+        {
+            "etl": 4,
+            "acceleration": 8,
+            "readout_bandwidth_hz": 20e3,
+            "ramp_sampling": False,
+        },
     ],
 )
 def test_the_window_clears_the_receiver_dead_time_and_stays_centred(
@@ -465,4 +495,6 @@ def test_the_read_axis_is_rewound_when_nothing_is_spoiled(system, excitation):
 
 def test_spoiling_leaves_the_read_axis_where_it_was_asked_to(system, excitation):
     epi = readout(system, excitation, etl=8, acceleration=4, spoiling_cycles=4.0)
-    assert abs(read_residual(system, epi)) == pytest.approx(4.0 / (FOV / MATRIX), rel=1e-6)
+    assert abs(read_residual(system, epi)) == pytest.approx(
+        4.0 / (FOV / MATRIX), rel=1e-6
+    )

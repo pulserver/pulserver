@@ -177,9 +177,7 @@ static void check_fixture_in(const char *dir, const char *filename)
     mu_assert_int_eq(0, cached->descriptors[0].num_blocks);
     mu_assert(cached->descriptors[0].block_table == NULL, "INSTANCES leaked into pulsegen load");
     mu_assert_int_eq(0, cached->descriptors[0].exec_stream_len);
-    mu_assert(
-        cached->descriptors[0].exec_runs == NULL,
-        "SCANLOOP leaked into pulsegen load");
+    mu_assert(cached->descriptors[0].exec_runs == NULL, "SCANLOOP leaked into pulsegen load");
 
     assert_pulsegen_view_equal(full, cached);
 

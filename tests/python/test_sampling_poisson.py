@@ -46,7 +46,9 @@ def test_a_request_is_either_met_or_refused_for_a_reason_it_states(
     """
     tolerance = 0.1
     try:
-        mask = make_poisson_disc_mask(shape, acceleration, calib=calib, seed=seed, tol=tolerance)
+        mask = make_poisson_disc_mask(
+            shape, acceleration, calib=calib, seed=seed, tol=tolerance
+        )
     except ValueError as refusal:
         reason = str(refusal)
         if "unreachable" in reason:
@@ -62,7 +64,9 @@ def test_a_request_is_either_met_or_refused_for_a_reason_it_states(
 
 def test_an_impossible_calibration_block_is_named_before_any_searching():
     """The 12x12 block is 144 of 400 points, so 3x cannot happen at any seed."""
-    with pytest.raises(ValueError, match=r"unreachable.*calibration block.*caps acceleration"):
+    with pytest.raises(
+        ValueError, match=r"unreachable.*calibration block.*caps acceleration"
+    ):
         make_poisson_disc_mask((20, 20), 3.0, calib=(12, 12), seed=0)
 
 
@@ -72,7 +76,9 @@ def test_a_tolerance_finer_than_the_grid_can_express_says_so():
     No mask on this grid takes a value within 0.005 of 9, so the refusal has to
     name the quantisation rather than read as an unlucky search.
     """
-    with pytest.raises(ValueError, match=r"one sample moves the acceleration by about 0\.31"):
+    with pytest.raises(
+        ValueError, match=r"one sample moves the acceleration by about 0\.31"
+    ):
         make_poisson_disc_mask((16, 16), 9.0, calib=(0, 0), seed=0, tol=0.005)
 
 
@@ -80,7 +86,9 @@ def test_tightening_the_tolerance_never_returns_a_worse_mask():
     """A looser tolerance stops the search sooner; it must not search better."""
     errors = []
     for tolerance in (2.0, 1.0, 0.5, 0.3, 0.2, 0.1):
-        mask = make_poisson_disc_mask((20, 20), 4.0, calib=(0, 0), seed=3, tol=tolerance)
+        mask = make_poisson_disc_mask(
+            (20, 20), 4.0, calib=(0, 0), seed=3, tol=tolerance
+        )
         errors.append(abs(mask.size / mask.sum() - 4.0))
 
     assert errors == sorted(errors, reverse=True)

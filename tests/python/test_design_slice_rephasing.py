@@ -35,7 +35,10 @@ FAMILIES = {
     "line": (design.LineReadout2D, {}),
     "radial": (design.RadialReadout2D, {}),
     "spiral_out": (design.SpiralReadout2D, {"design_interleaves": 16}),
-    "spiral_in": (design.SpiralReadout2D, {"design_interleaves": 16, "direction": "inward"}),
+    "spiral_in": (
+        design.SpiralReadout2D,
+        {"design_interleaves": 16, "direction": "inward"},
+    ),
 }
 
 
@@ -116,9 +119,7 @@ def test_a_te_wait_takes_it_over_and_it_still_starts_the_block(
 
 
 @pytest.mark.parametrize("family", ["line", "spiral_in"])
-def test_a_wait_too_short_to_hold_it_leaves_it_where_it_was(
-    system, excitation, family
-):
+def test_a_wait_too_short_to_hold_it_leaves_it_where_it_was(system, excitation, family):
     """The requested TE wins: a rephaser that cannot fit the wait does not move.
 
     Moving it into a wait shorter than itself would stretch that block, and the
@@ -167,12 +168,21 @@ def test_it_costs_nothing_at_all_where_a_prephaser_already_runs(system, excitati
 def test_an_outward_spiral_opens_a_block_for_it(system, excitation):
     """Nothing prephases an arm that starts at k = 0, so the rephaser is the block."""
     without = design.SpiralReadout2D(
-        system, excitation.rf, excitation.gz, fov=FOV, matrix=MATRIX,
+        system,
+        excitation.rf,
+        excitation.gz,
+        fov=FOV,
+        matrix=MATRIX,
         design_interleaves=16,
     )
     with_reph = design.SpiralReadout2D(
-        system, excitation.rf, excitation.gz, excitation.gz_reph, fov=FOV,
-        matrix=MATRIX, design_interleaves=16,
+        system,
+        excitation.rf,
+        excitation.gz,
+        excitation.gz_reph,
+        fov=FOV,
+        matrix=MATRIX,
+        design_interleaves=16,
     )
     assert len(with_reph.blocks) == len(without.blocks) + 1
     assert with_reph.echo_time > without.echo_time
@@ -180,8 +190,13 @@ def test_an_outward_spiral_opens_a_block_for_it(system, excitation):
 
 def test_only_the_first_echo_of_a_train_is_rephased(system, excitation):
     module = design.RadialReadout2D(
-        system, excitation.rf, excitation.gz, excitation.gz_reph,
-        fov=FOV, matrix=MATRIX, n_echoes=3,
+        system,
+        excitation.rf,
+        excitation.gz,
+        excitation.gz_reph,
+        fov=FOV,
+        matrix=MATRIX,
+        n_echoes=3,
     )
     carried = [block for block in module.blocks if module.gz_reph in block]
     assert len(carried) == 1
@@ -196,16 +211,26 @@ def test_only_the_first_echo_of_a_train_is_rephased(system, excitation):
 def test_a_partition_encode_already_owns_the_slice_axis(system, excitation):
     with pytest.raises(ValueError, match="already plays a gradient on z"):
         design.LineReadout3D(
-            system, excitation.rf, excitation.gz, excitation.gz_reph,
-            fov=(FOV, FOV, 0.12), matrix=(MATRIX, MATRIX, 64),
+            system,
+            excitation.rf,
+            excitation.gz,
+            excitation.gz_reph,
+            fov=(FOV, FOV, 0.12),
+            matrix=(MATRIX, MATRIX, 64),
         )
 
 
 def test_a_stack_already_owns_the_slice_axis(system, excitation):
     with pytest.raises(ValueError, match="already plays a gradient on z"):
         design.RadialStackReadout(
-            system, excitation.rf, excitation.gz, excitation.gz_reph,
-            fov=FOV, matrix=MATRIX, fov_z=0.12, matrix_z=32,
+            system,
+            excitation.rf,
+            excitation.gz,
+            excitation.gz_reph,
+            fov=FOV,
+            matrix=MATRIX,
+            fov_z=0.12,
+            matrix_z=32,
         )
 
 
@@ -216,11 +241,18 @@ def test_a_stack_already_owns_the_slice_axis(system, excitation):
 def test_a_projection_rotates_every_axis_so_none_can_hold_it(
     system, excitation, factory
 ):
-    kwargs = {"design_interleaves": 16} if factory is design.SpiralProjectionReadout else {}
+    kwargs = (
+        {"design_interleaves": 16} if factory is design.SpiralProjectionReadout else {}
+    )
     with pytest.raises(ValueError, match="would be turned with the interleave"):
         factory(
-            system, excitation.rf, excitation.gz, excitation.gz_reph,
-            fov=FOV, matrix=MATRIX, **kwargs,
+            system,
+            excitation.rf,
+            excitation.gz,
+            excitation.gz_reph,
+            fov=FOV,
+            matrix=MATRIX,
+            **kwargs,
         )
 
 
@@ -229,8 +261,12 @@ def test_an_in_plane_rotation_refuses_a_rephaser_it_would_turn(system, axis):
     excitation = design.SpatialSelectiveExcitation(system, 15.0, 5e-3, axis=axis)
     with pytest.raises(ValueError, match=f"rephaser on {axis} would be turned"):
         design.RadialReadout2D(
-            system, excitation.rf, excitation.gz, excitation.gz_reph,
-            fov=FOV, matrix=MATRIX,
+            system,
+            excitation.rf,
+            excitation.gz,
+            excitation.gz_reph,
+            fov=FOV,
+            matrix=MATRIX,
         )
 
 

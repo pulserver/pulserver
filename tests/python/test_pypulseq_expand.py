@@ -43,16 +43,16 @@ def build(sections: list[tuple[float, int | None]]) -> Sequence:
 
 def labels_at_blocks(seq: Sequence) -> list[dict[str, int]]:
     """Every label in force at each block, replayed the way a reader replays."""
-    labelset = seq._native.find_extension_type_id("LABELSET")  # noqa: SLF001
+    labelset = seq._native.find_extension_type_id("LABELSET")
     state: dict[str, int] = {}
     out: list[dict[str, int]] = []
-    for index in range(1, seq._native.num_blocks() + 1):  # noqa: SLF001
-        link = seq._native.block_events()[index - 1][5]  # noqa: SLF001
+    for index in range(1, seq._native.num_blocks() + 1):
+        link = seq._native.block_events()[index - 1][5]
         while link != 0:
-            type_id, ref, link = seq._native.extension_row(int(link))  # noqa: SLF001
+            type_id, ref, link = seq._native.extension_row(int(link))
             if labelset and type_id == labelset and ref:
-                value, label_id = seq._native.label_set_row(int(ref))  # noqa: SLF001
-                state[seq._native.label_name(int(label_id))] = int(value)  # noqa: SLF001
+                value, label_id = seq._native.label_set_row(int(ref))
+                state[seq._native.label_name(int(label_id))] = int(value)
         out.append(dict(state))
     return out
 
@@ -117,10 +117,10 @@ def test_the_average_counter_lands_once_per_repetition():
 
     # One row per value written -- two, not eight: the first repetition is the
     # sticky default and writes nothing at all.
-    avg_id = seq._native.find_label_id("AVG")  # noqa: SLF001
+    avg_id = seq._native.find_label_id("AVG")
     rows = [
-        seq._native.label_set_row(row)  # noqa: SLF001
-        for row in range(1, seq._native.num_label_set() + 1)  # noqa: SLF001
+        seq._native.label_set_row(row)
+        for row in range(1, seq._native.num_label_set() + 1)
     ]
     assert sum(1 for _, label_id in rows if label_id == avg_id) == 2
 
@@ -139,7 +139,7 @@ def test_an_empty_label_leaves_the_designs_own_counters_alone():
     seq.add_block(pp.make_delay(1e-3), pp.make_label("AVG", "SET", 4))
     pp.tile(seq, 3, label="", in_place=True)
 
-    assert seq._native.num_blocks() == 3  # noqa: SLF001
+    assert seq._native.num_blocks() == 3
     assert [labels["AVG"] for labels in labels_at_blocks(seq)] == [4, 4, 4]
 
 
@@ -183,34 +183,43 @@ def test_the_expansion_survives_a_write_and_a_read(tmp_path):
 
     assert np.allclose(back.block_durations, expected)
     assert "IgnoreAverages" not in back.definitions
-    assert [labels.get("AVG", 0) for labels in labels_at_blocks(back)] == [0, 0, 1, 2, 2]
+    assert [labels.get("AVG", 0) for labels in labels_at_blocks(back)] == [
+        0,
+        0,
+        1,
+        2,
+        2,
+    ]
 
 
 def test_a_real_scan_grows_only_its_block_table():
     """The reason this belongs on the design side: repeats are free but for
     the block rows, so a materialised average costs no events at all."""
     seq = load("bssfp_2d")
-    blocks = seq._native.num_blocks()  # noqa: SLF001
+    blocks = seq._native.num_blocks()
     before = (
-        seq._native.num_gradients(),  # noqa: SLF001
-        seq._native.num_rf(),  # noqa: SLF001
-        seq._native.num_adc(),  # noqa: SLF001
-        seq._native.num_shapes(),  # noqa: SLF001
+        seq._native.num_gradients(),
+        seq._native.num_rf(),
+        seq._native.num_adc(),
+        seq._native.num_shapes(),
     )
 
     report = seq._expand_repeats(2)
 
     # The fixture opens with a ONCE=1 catalyst and closes with a ONCE=2
     # rewind, so the table is not simply doubled -- only the body is.
-    assert report["prep_blocks"] + report["body_blocks"] + report["cooldown_blocks"] == blocks
+    assert (
+        report["prep_blocks"] + report["body_blocks"] + report["cooldown_blocks"]
+        == blocks
+    )
     assert report["blocks_after"] == (
         report["prep_blocks"] + 2 * report["body_blocks"] + report["cooldown_blocks"]
     )
     assert (
-        seq._native.num_gradients(),  # noqa: SLF001
-        seq._native.num_rf(),  # noqa: SLF001
-        seq._native.num_adc(),  # noqa: SLF001
-        seq._native.num_shapes(),  # noqa: SLF001
+        seq._native.num_gradients(),
+        seq._native.num_rf(),
+        seq._native.num_adc(),
+        seq._native.num_shapes(),
     ) == before
 
 
@@ -257,7 +266,9 @@ def test_tile_deduplicates_first():
 
     assert out._native.deduplicated() or out.num_blocks > 0  # dedup ran, then expansion
     # The claim itself is what matters: doing it again finds nothing.
-    already = build([(1e-3, 1), (2e-3, 0), (3e-3, None), (4e-3, 2)]).remove_duplicates(in_place=True)
+    already = build([(1e-3, 1), (2e-3, 0), (3e-3, None), (4e-3, 2)]).remove_duplicates(
+        in_place=True
+    )
     assert already._native.deduplicated()
     assert pp.tile(already, 2).num_blocks == out.num_blocks
 

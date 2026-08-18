@@ -7,7 +7,7 @@ flips. The phase-encode lines are dealt across shots so that the centre of
 k-space is acquired at the echo whose time is the requested effective TE --
 the rolled-linear ordering, delegated to :func:`pulserver.pypulseq.make_linear_order`,
 whose wrap every product FSE accepts for the same reason. Slices are dealt into passes exactly as the gradient echo deals
-them. :mod:`pulserver.app.recon.fse2D_recon` reads the result back.
+them. :mod:`pulserver.app.recon.cartesian2D_recon` reads the result back.
 
 ``main`` returns the :class:`pulserver.pypulseq.Sequence`; ``PLUGIN`` is the
 same sequence behind the scanner protocol contract, and running this module
@@ -205,9 +205,7 @@ def main(
             fse.rf.freq_offset = exc_hz
             fse.rf.phase_offset = -2 * np.pi * exc_hz * fse.rf.center
             fse.rf_ref.freq_offset = ref_hz
-            fse.rf_ref.phase_offset = (
-                np.pi / 2 - 2 * np.pi * ref_hz * fse.rf_ref.center
-            )
+            fse.rf_ref.phase_offset = np.pi / 2 - 2 * np.pi * ref_hz * fse.rf_ref.center
 
             seq.add_block(fse.rf, fse.gz, *([mark] if mark is not None else []))
             mark = None
@@ -265,7 +263,9 @@ def main(
     seq.set_definition(key="EchoSpacing", value=kernel.echo_spacing)
     seq.set_definition(
         key="NumGainCalibrationReadouts",
-        value=n_slices if n_gain_calibration_readouts is None else n_gain_calibration_readouts,
+        value=n_slices
+        if n_gain_calibration_readouts is None
+        else n_gain_calibration_readouts,
     )
 
     seq.set_definition(key="kSpaceCenterLine", value=n_y // 2)
@@ -291,6 +291,7 @@ def main(
 # ======================================================================
 # Subroutines of main()
 # ======================================================================
+
 
 def FSE2DKernel(
     system: pp.Opts,
@@ -380,9 +381,7 @@ n_dummy, crusher_cycles, readout_crusher_cycles
                     f"TR {module_tr * 1e3:.1f} ms is shorter than one train "
                     f"takes ({length * 1e3:.1f} ms)"
                 )
-            pad = pp.round_to_raster(
-                module_tr - length, system.block_duration_raster
-            )
+            pad = pp.round_to_raster(module_tr - length, system.block_duration_raster)
             if pad > 0:
                 wait_tr = pp.make_delay(pad)
                 length += pad
@@ -392,10 +391,7 @@ n_dummy, crusher_cycles, readout_crusher_cycles
     esp = shortest.esp
 
     # The requested effective TE, rounded onto the echo grid the train has.
-    if te is None:
-        n_center = 0
-    else:
-        n_center = int(np.clip(round(te / esp) - 1, 0, etl - 1))
+    n_center = 0 if te is None else int(np.clip(round(te / esp) - 1, 0, etl - 1))
     echo_time = float(shortest.echo_times[n_center])
 
     per_pass = n_slices if tr is None else max(1, int(tr / shortest_timing.length))
@@ -410,9 +406,7 @@ n_dummy, crusher_cycles, readout_crusher_cycles
     ]
 
     repetitions = {
-        size: (
-            (shortest, shortest_timing) if tr is None else build(tr / size)
-        )
+        size: ((shortest, shortest_timing) if tr is None else build(tr / size))
         for size in {len(group) for group in passes}
     }
 
@@ -429,9 +423,7 @@ n_dummy, crusher_cycles, readout_crusher_cycles
         [sampled_lines[i] if i is not None else None for i in shot] for shot in shots
     ]
 
-    pass_time = sum(
-        len(group) * repetitions[len(group)][1].length for group in passes
-    )
+    pass_time = sum(len(group) * repetitions[len(group)][1].length for group in passes)
     duration = (n_dummy + n_averages * len(shots)) * pass_time
 
     return SimpleNamespace(
@@ -457,6 +449,7 @@ n_dummy, crusher_cycles, readout_crusher_cycles
 # ======================================================================
 # The scanner protocol contract
 # ======================================================================
+
 
 class Fse2D(SequencePlugin):
     """The 2D fast spin echo behind the scanner protocol contract."""
@@ -556,9 +549,15 @@ class Fse2D(SequencePlugin):
                     unit="",
                     options=[1.0, 2.0, 4.0, 8.0, 16.0],
                 ),
-                UIParam.FOV_OFFSET_X: OffFloatParam(value=0.0, min=-500.0, max=500.0, unit="mm"),
-                UIParam.FOV_OFFSET_Y: OffFloatParam(value=0.0, min=-500.0, max=500.0, unit="mm"),
-                UIParam.FOV_OFFSET_Z: OffFloatParam(value=0.0, min=-500.0, max=500.0, unit="mm"),
+                UIParam.FOV_OFFSET_X: OffFloatParam(
+                    value=0.0, min=-500.0, max=500.0, unit="mm"
+                ),
+                UIParam.FOV_OFFSET_Y: OffFloatParam(
+                    value=0.0, min=-500.0, max=500.0, unit="mm"
+                ),
+                UIParam.FOV_OFFSET_Z: OffFloatParam(
+                    value=0.0, min=-500.0, max=500.0, unit="mm"
+                ),
                 UIParam.user_name(0): Description(text="ACS lines"),
                 UIParam.user_value(0): TypeinFloatParam(
                     value=24.0,
@@ -593,7 +592,11 @@ class Fse2D(SequencePlugin):
         try:
             kernel = FSE2DKernel(
                 system,
-                **{name: value for name, value in kwargs.items() if name in KERNEL_ARGUMENTS},
+                **{
+                    name: value
+                    for name, value in kwargs.items()
+                    if name in KERNEL_ARGUMENTS
+                },
             )
         except ValueError as error:
             return {"valid": False, "duration": None, "info": str(error)}
@@ -654,7 +657,9 @@ def protocol_kwargs(system: pp.Opts, protocol: dict[str, dict]) -> dict:
         protocol,
         etl=max(1, round(params.user_float(prot, 1, 8.0))),
         partial_fourier=params.user_float(prot, 3, 1.0),
-        n_acs=params.acs_lines_from_protocol(prot, params.param_int(prot, UIParam.NY), 0),
+        n_acs=params.acs_lines_from_protocol(
+            prot, params.param_int(prot, UIParam.NY), 0
+        ),
     )
 
 
@@ -690,11 +695,21 @@ ARG_MAP = [
     ("--ry", UIParam.RY, float, "Phase-encode undersampling factor"),
     ("--nex", UIParam.NEX, float, "Number of signal averages"),
     ("--offset-x-mm", UIParam.FOV_OFFSET_X, float, "Volume offset along readout [mm]"),
-    ("--offset-y-mm", UIParam.FOV_OFFSET_Y, float, "Volume offset along phase encode [mm]"),
+    (
+        "--offset-y-mm",
+        UIParam.FOV_OFFSET_Y,
+        float,
+        "Volume offset along phase encode [mm]",
+    ),
     ("--offset-z-mm", UIParam.FOV_OFFSET_Z, float, "Volume offset along slice [mm]"),
     ("--acs-lines", UIParam.user_value(0), float, "Number of ACS lines"),
     ("--etl", UIParam.user_value(1), float, "Echo train length"),
-    ("--partial-fourier", UIParam.user_value(3), float, "Acquired phase-encode fraction in (0.5, 1]"),
+    (
+        "--partial-fourier",
+        UIParam.user_value(3),
+        float,
+        "Acquired phase-encode fraction in (0.5, 1]",
+    ),
 ]
 
 if __name__ == "__main__":

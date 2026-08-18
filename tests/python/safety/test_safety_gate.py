@@ -6,7 +6,7 @@ compiled engine. There is no Python re-implementation to drift from.
 
 import numpy as np
 import pytest
-from pulserver._ext._pulseg_wrapper import (
+from pulserver._ext.pulseg import (
     _calc_mech_resonances,
     _check_consistency,
     _check_safety,
@@ -48,7 +48,9 @@ def _id(name: str) -> str:
     return name.replace(".seq", "")
 
 
-def _opts(*, max_grad: float = 50.0, max_slew: float = 350.0, raster: float = 20e-6) -> Opts:
+def _opts(
+    *, max_grad: float = 50.0, max_slew: float = 350.0, raster: float = 20e-6
+) -> Opts:
     return Opts(
         max_grad=max_grad,
         grad_unit="mT/m",
@@ -118,7 +120,11 @@ def test_mech_resonance_peak_defaults_match_the_documented_values(generated_seq_
     bands = [(500.0, 600.0, 2000.0)]
 
     implicit = _calc_mech_resonances(
-        collection, subsequence_idx=0, target_resolution_hz=5.0, max_freq_hz=1200.0, forbidden_bands=bands
+        collection,
+        subsequence_idx=0,
+        target_resolution_hz=5.0,
+        max_freq_hz=1200.0,
+        forbidden_bands=bands,
     )
     explicit = _calc_mech_resonances(
         collection,
@@ -138,7 +144,9 @@ def test_mech_resonance_peak_defaults_match_the_documented_values(generated_seq_
         )
 
 
-def test_mech_resonance_candidates_pair_a_frequency_with_an_amplitude(generated_seq_path):
+def test_mech_resonance_candidates_pair_a_frequency_with_an_amplitude(
+    generated_seq_path,
+):
     collection = build_collection(generated_seq_path, _opts())
     result = _calc_mech_resonances(
         collection,
@@ -171,7 +179,9 @@ def test_public_bands_convert_to_backend_units():
 
 
 def test_multi_sequence_collections_load_from_payloads():
-    payloads = [(CORPUS / name).read_bytes() for name in ("gre_2d.seq", "epi_2d_main.seq")]
+    payloads = [
+        (CORPUS / name).read_bytes() for name in ("gre_2d.seq", "epi_2d_main.seq")
+    ]
     system = _opts()
     collection = _PulseqCollection(
         payloads,

@@ -130,8 +130,11 @@ MU_TEST(test_smoke_zte_3d)
  * that exercises the interpreter's clamp has to be made here rather than
  * found among the fixtures.  Writes to @p out_path; returns 1 on success.
  */
-static int copy_with_definition(const char *filename, const char *line,
-                                char *out_path, size_t out_size)
+static int copy_with_definition(
+    const char *filename,
+    const char *line,
+    char *out_path,
+    size_t out_size)
 {
     char in_path[512];
     char buffer[1024];
@@ -178,9 +181,9 @@ MU_TEST(test_ignore_averages_is_honored)
     char path[512];
     int rc;
 
-    mu_assert(copy_with_definition("gre_2d.seq", "IgnoreAverages 1 \n", path,
-                                   sizeof(path)),
-              "could not stage a file carrying IgnoreAverages");
+    mu_assert(
+        copy_with_definition("gre_2d.seq", "IgnoreAverages 1 \n", path, sizeof(path)),
+        "could not stage a file carrying IgnoreAverages");
 
     gre_opts_init(&opts);
     rc = pulseg_read(&coll, &diag, path, &opts, 0, 0, 0, 3);
@@ -422,10 +425,8 @@ MU_TEST(test_seqdesc_echo_uses_actual_instances_not_zero_var)
     {
         pulseg_block_table_element *bte = &desc->block_table[i];
         int tr_pos = i % desc->tr_descriptor.tr_size;
-        if (desc->variable_grad_flags &&
-            desc->variable_grad_flags[tr_pos * 3 + 1] &&
-            bte->gy_id >= 0 &&
-            bte->gy_id < desc->grad_table_size &&
+        if (desc->variable_grad_flags && desc->variable_grad_flags[tr_pos * 3 + 1] &&
+            bte->gy_id >= 0 && bte->gy_id < desc->grad_table_size &&
             fabsf(desc->grad_table[bte->gy_id].amplitude) < 0.1f)
         {
             desc->grad_table[bte->gy_id].amplitude = 4638.22f;
@@ -448,9 +449,7 @@ MU_TEST(test_seqdesc_echo_uses_actual_instances_not_zero_var)
 
     /* The existing canonical prescan metadata is unchanged. Only the new
      * real-instance echo analyzer observes that no acquired PE is zero. */
-    mu_assert_int_eq(
-        (int)before.rows[before_adc].params[0],
-        (int)after.rows[after_adc].params[0]);
+    mu_assert_int_eq((int)before.rows[before_adc].params[0], (int)after.rows[after_adc].params[0]);
     mu_assert_float_near(
         "ZERO_VAR canonical ADC anchor",
         before.rows[before_adc].timestamp_us,
@@ -463,9 +462,7 @@ MU_TEST(test_seqdesc_echo_uses_actual_instances_not_zero_var)
     pulseg_collection_free(coll);
 }
 
-static void assert_seqdesc_echo_pattern(
-    const char *seq_file,
-    int expect_all_adc_positions)
+static void assert_seqdesc_echo_pattern(const char *seq_file, int expect_all_adc_positions)
 {
     pulseg_opts opts;
     pulseg_collection *coll = NULL;

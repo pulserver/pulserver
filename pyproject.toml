@@ -6,68 +6,67 @@ build-backend = "scikit_build_core.build"
 name = "pulserver"
 version = "0.1.0"
 description = "Pulseq MRI sequence runtime — contracts, C library, and reconstruction server"
-readme = "README.rst"
+readme = "README.md"
 license = { file = "LICENSE.txt" }
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 authors = [{ name = "pulserver" }]
-dependencies = []
 
-[project.optional-dependencies]
-sequence = ["pypulseq>=1.5.0", "scipy", "numpy>=2.0", "matplotlib", "mri-nufft"]
-recon = [
+# One installation covers both sides of the scanner. Sequence design and
+# reconstruction used to be separate extras, and a scanner that runs both --
+# every scanner Pulserver targets -- then carried two Python environments and
+# two copies of Torch. Design is moving onto Torch as well, so the split cost
+# memory to express a difference that no longer exists.
+dependencies = [
   "numpy>=2.0",
-  "ismrmrd>=1.14.1",
-  "pydicom",
-  "h5py",
-  "psutil",
-  "SimpleITK>=2.3",
-]
-# The reconstruction primitives use mri-nufft rather than maintaining a
-# second NUFFT implementation.  ``recon-cpu`` is the portable default;
-# ``recon-cuda`` selects the CUFINUFFT backend on Linux/CUDA hosts.
-recon-cpu = [
-  "pulserver[recon]",
-  "torch>=2.12",
+  "scipy",
+  "matplotlib",
+  "pypulseq>=1.5.0",
+  # The NUFFT comes from MRI-NUFFT rather than a second implementation here;
+  # FINUFFT is the portable CPU backend. See the `cuda` extra for GPU.
   "mri-nufft[finufft]",
-  "finufft",
-  "mrpro",
+  "torch>=2.12",
+  "torchsim",
+  "torchio>=0.20",
   "deepinv>=0.4",
   "ptwt",
   "PyWavelets",
+  "ismrmrd>=1.14.1",
+  "h5py",
+  "pydicom",
+  "psutil",
+  "SimpleITK>=2.3",
 ]
-recon-cuda = [
-  "pulserver[recon-cpu]",
-  # CUFINUFFT accepts Torch tensors directly. Avoid MRI-NUFFT's CuPy extra:
-  # Pulserver registers its private Torch-native adapter at runtime.
-  "cufinufft>=2.4; platform_system == 'Linux'",
-]
-recon-torchio = ["pulserver[recon-cpu]", "torchio>=0.20"]
-recon-sim = ["pulserver[recon]", "torchsim"]
-# PyHySCO is GPL-3.0-only.  It remains an opt-in external executable and is
-# neither imported nor bundled by the MIT-licensed Pulserver package.
-recon-distortion = ["PyHySCO"]
-host = ["pulserver[sequence]"]
-vre = ["pulserver[recon]"]
-test = ["pytest>=8.2", "pytest-cov>=5.0"]
-dev = ["pulserver[host,vre,test]", "ruff>=0.6", "pre-commit>=3.8"]
-doc = [
-  "pulserver[sequence]",
+
+[project.optional-dependencies]
+# GPU reconstruction. CUFINUFFT accepts Torch tensors directly, so MRI-NUFFT's
+# CuPy extra is deliberately not used: Pulserver registers its own
+# Torch-native adapter at runtime. Everything CUDA-only is gated at import,
+# and the tests that need a device skip without one.
+cuda = ["cufinufft>=2.4; platform_system == 'Linux'"]
+# PyHySCO is GPL-3.0-only. It stays opt-in, and is neither imported nor
+# bundled by the MIT-licensed Pulserver package -- it is driven as an external
+# executable -- so installing it is the user's licensing decision.
+distortion = ["PyHySCO"]
+dev = [
+  "pytest>=8.2",
+  "pytest-cov>=5.0",
+  "coverage>=7.6",
+  "ruff>=0.6",
+  "pre-commit>=3.8",
   "sphinx>=7.4",
   "myst-parser>=3.0",
   "sphinx-book-theme>=1.1",
-  "matplotlib",
+  "build>=1.2",
 ]
 
 [tool.scikit-build]
 cmake.source-dir = "."
 sdist.include = [
-  "csrc/**",
-  "cxx/**",
+  "src/**",
   "examples/sequence/**",
   "examples/recon/**",
-  "python/**",
   "tests/**",
-  "README.rst",
+  "README.md",
   "LICENSE.txt",
 ]
 
@@ -76,7 +75,7 @@ sdist.include = [
 # installs the self-contained example plugins directly as
 # ``pulserver.app.sequence.<name>`` and ``pulserver.app.recon.<name>``, which
 # ``pulserver.app`` re-exports flat, without copying or moving their source.
-packages = { "pulserver" = "python/pulserver", "pulserver/app/sequence" = "examples/sequence", "pulserver/app/recon" = "examples/recon" }
+packages = { "pulserver" = "src/python/pulserver", "pulserver/app/sequence" = "examples/sequence", "pulserver/app/recon" = "examples/recon" }
 # Source kept in the repository to port physics from, not importable and of no
 # use to an installed package.
 exclude = ["pulserver/design/_disabled/**"]
@@ -92,7 +91,7 @@ extend-exclude = [
   "external/**",
   # Not imported, and written against a module protocol that no longer exists.
   # Linting it would rewrite code whose only job is to be read while porting.
-  "python/pulserver/design/_disabled/**",
+  "src/python/pulserver/design/_disabled/**",
 ]
 exclude = ["docs/**", "_docs/**"]
 
@@ -157,26 +156,40 @@ convention = "numpy"
 [tool.ruff.lint.per-file-ignores]
 # Reference plugins: they satisfy the contract without needing every
 # argument it hands them.
-"bridge/tests/**" = ["ARG001", "ARG002", "PTH123"]
+"src/nim/tests/**" = ["ARG001", "ARG002", "PTH123"]
 # A plugin's protocol is a declaration, and most of them do not need the
 # system limits to write one down; the contract passes them regardless.
 "examples/sequence/**" = ["ARG002"]
-"python/pulserver/design/_disabled/_readout/_surgery.py" = ["ARG001"]
-"python/pulserver/design/_disabled/_readout/fse.py" = ["ARG002"]
-"python/pulserver/io.py" = ["S324"]
-"python/pulserver/recon/_mrd/connection.py" = ["A003", "PTH", "S108", "S110"]
-"python/pulserver/recon/_mrd/constants.py" = ["A001"]
-"python/pulserver/recon/_mrd/dicom2mrd.py" = ["S110"]
-"python/pulserver/recon/_distortion.py" = ["S603"]
-"python/pulserver/recon/_mrd/handlers/savedataonly.py" = ["ARG001"]
-"python/pulserver/recon/_mrd/main.py" = ["PTH", "S104", "S108"]
-"python/pulserver/recon/_mrd/mrdhelper.py" = ["A002"]
-"python/pulserver/recon/_mrd/readers.py" = ["A002", "ARG001", "PTH123"]
-"python/pulserver/recon/_mrd/replay.py" = ["PTH", "S110"]
-"python/pulserver/recon/_mrd/rtp_connection.py" = ["S104"]
-"python/pulserver/recon/_mrd/server.py" = ["ARG001", "ARG004", "PTH", "S104", "S110"]
-"python/pulserver/recon/_mrd/writers.py" = ["A002"]
+"src/python/pulserver/design/_disabled/_readout/_surgery.py" = ["ARG001"]
+"src/python/pulserver/design/_disabled/_readout/fse.py" = ["ARG002"]
+"src/python/pulserver/io.py" = ["S324"]
+"src/python/pulserver/recon/_mrd/connection.py" = ["A003", "PTH", "S108", "S110"]
+"src/python/pulserver/recon/_mrd/constants.py" = ["A001"]
+"src/python/pulserver/recon/_mrd/dicom2mrd.py" = ["S110"]
+"src/python/pulserver/recon/_distortion.py" = ["S603"]
+"src/python/pulserver/recon/_mrd/handlers/savedataonly.py" = ["ARG001"]
+"src/python/pulserver/recon/_mrd/main.py" = ["PTH", "S104", "S108"]
+"src/python/pulserver/recon/_mrd/mrdhelper.py" = ["A002"]
+"src/python/pulserver/recon/_mrd/readers.py" = ["A002", "ARG001", "PTH123"]
+"src/python/pulserver/recon/_mrd/replay.py" = ["PTH", "S110"]
+"src/python/pulserver/recon/_mrd/rtp_connection.py" = ["S104"]
+"src/python/pulserver/recon/_mrd/server.py" = ["ARG001", "ARG004", "PTH", "S104", "S110"]
+"src/python/pulserver/recon/_mrd/writers.py" = ["A002"]
+# The native lanes run the suites they just built: the executables are the
+# build scripts' own output, and the toolchain names they resolve on PATH are
+# the point of the lane.
+"tests/python/native/**" = ["S603", "S607"]
+# Monkeypatch stubs stand in for a real signature, and a fixture is often
+# requested for what constructing it sets up rather than for its value.
+"tests/python/**" = ["ARG001", "ARG005"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests/python"]
 addopts = "-ra --import-mode=importlib"
+markers = [
+  # A test that needs a real CUDA device, the `cuda` extra, or both. These
+  # skip themselves when either is missing, so the default run is complete on
+  # a machine without a GPU; the marker exists so a GPU runner can select
+  # them with `-m cuda`.
+  "cuda: requires a CUDA device and the pulserver[cuda] extra",
+]

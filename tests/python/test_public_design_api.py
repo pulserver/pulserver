@@ -30,7 +30,12 @@ def test_everything_exported_is_a_sequence_module():
 
 def test_the_categories_partition_the_public_surface():
     """Every export is filed under exactly one heading, and nothing else is."""
-    categorised = [*design.EXCITATION, *design.PREPARATION, *design.READOUT, *design.BASES]
+    categorised = [
+        *design.EXCITATION,
+        *design.PREPARATION,
+        *design.READOUT,
+        *design.BASES,
+    ]
     assert sorted(categorised) == sorted(design.__all__)
     assert len(set(categorised)) == len(categorised)
 
@@ -55,7 +60,9 @@ def _listed_on_the_page() -> set[str]:
     page = API_PAGE.read_text()
     return {
         name.rpartition(".")[2]
-        for name in re.findall(r"^\s+((?:pulserver\.design\.)?[A-Z]\w+)\s*$", page, re.M)
+        for name in re.findall(
+            r"^\s+((?:pulserver\.design\.)?[A-Z]\w+)\s*$", page, re.M
+        )
     }
 
 
@@ -76,7 +83,12 @@ def test_design_holds_modules_and_pypulseq_holds_events():
 
 @pytest.mark.parametrize(
     "name",
-    ["apply_system_derates", "ceil_to_raster", "round_to_raster", "make_rf_spoiling_schedule"],
+    [
+        "apply_system_derates",
+        "ceil_to_raster",
+        "round_to_raster",
+        "make_rf_spoiling_schedule",
+    ],
 )
 def test_the_helpers_a_plugin_needs_are_in_the_event_layer(name):
     """Raster arithmetic and phase schedules answer from an Opts, not a module."""

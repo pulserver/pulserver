@@ -35,7 +35,9 @@ def _moment(event) -> float:
 
 
 def test_hard_pulse_is_one_block_centred_on_its_middle(system):
-    excitation = design.NonSelectiveExcitation(system, flip_angle_deg=10.0, duration_s=1e-3)
+    excitation = design.NonSelectiveExcitation(
+        system, flip_angle_deg=10.0, duration_s=1e-3
+    )
     assert len(excitation.blocks) == 1
     assert excitation.blocks[0] == (excitation.rf,)
     assert excitation.center == pytest.approx(0.5e-3)
@@ -43,7 +45,9 @@ def test_hard_pulse_is_one_block_centred_on_its_middle(system):
 
 
 def test_hard_pulse_flip_angle_is_the_envelope_integral(system):
-    excitation = design.NonSelectiveExcitation(system, flip_angle_deg=90.0, duration_s=1e-3)
+    excitation = design.NonSelectiveExcitation(
+        system, flip_angle_deg=90.0, duration_s=1e-3
+    )
     signal = np.asarray(excitation.rf.signal)
     times = np.asarray(excitation.rf.t)
     flip_deg = np.rad2deg(2 * np.pi * np.abs(np.trapezoid(signal, times)))
@@ -92,7 +96,9 @@ def test_the_rephaser_undoes_the_selection_moment_after_isocentre(system):
     """
     excitation = design.SpatialSelectiveExcitation(system, 15.0, 5e-3)
     scale = abs(excitation.gz.area)
-    assert _moment_after(excitation, excitation.center) == pytest.approx(0.0, abs=1e-3 * scale)
+    assert _moment_after(excitation, excitation.center) == pytest.approx(
+        0.0, abs=1e-3 * scale
+    )
 
 
 def test_without_rephasing_the_slice_is_left_dephased(system):
@@ -121,7 +127,9 @@ def test_merging_moves_the_rephaser_without_changing_the_net_moment(system):
 def test_a_slab_without_rephasing_is_the_selection_lobe_alone(system):
     """Nothing to concatenate, so the trapezoid is handed over as it stands."""
     rephased = design.SpatialSelectiveExcitation(system, 8.0, 0.12, is_slab=True)
-    slab = design.SpatialSelectiveExcitation(system, 8.0, 0.12, is_slab=True, rephase=False)
+    slab = design.SpatialSelectiveExcitation(
+        system, 8.0, 0.12, is_slab=True, rephase=False
+    )
 
     assert len(slab.blocks) == 1
     assert slab.gz.type == "trap"
@@ -138,7 +146,9 @@ def test_center_is_the_isodelay_not_the_start_of_the_envelope(system):
     """The pulse sits on the gradient's flat top, so its delay counts."""
     excitation = design.SpatialSelectiveExcitation(system, 15.0, 5e-3, duration_s=3e-3)
     assert excitation.rf.delay > 0
-    assert excitation.center == pytest.approx(excitation.rf.delay + excitation.rf.center)
+    assert excitation.center == pytest.approx(
+        excitation.rf.delay + excitation.rf.center
+    )
 
 
 @pytest.mark.parametrize("axis", ["x", "y", "z"])

@@ -9,7 +9,6 @@ scan has no un-rotated readout to bake it into.
 from __future__ import annotations
 
 import numpy as np
-import pytest
 
 import pulserver.pypulseq as pp
 from pulserver.app import zte3D_sequence

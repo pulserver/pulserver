@@ -1,0 +1,30 @@
+title: "[Q&A] "
+labels: ["question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For anything that is not yet a bug report: how to express a sequence,
+        what a safety verdict means, or how to integrate an interpreter.
+
+  - type: textarea
+    id: question
+    attributes:
+      label: What you are trying to do
+      description: >
+        Including the acquisition, if the question is about a sequence -- the
+        answer usually depends on the physics rather than on the API.
+    validations:
+      required: true
+
+  - type: textarea
+    id: attempted
+    attributes:
+      label: What you have tried
+      description: Code, and what it produced.
+      render: python
+
+  - type: input
+    id: version
+    attributes:
+      label: Pulserver version

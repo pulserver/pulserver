@@ -118,9 +118,7 @@ static void check_pair(const char *stem)
         b.reserved_definitions_library.total_duration,
         0.0f);
     mu_assert(
-        strcmp(
-            t.reserved_definitions_library.name,
-            b.reserved_definitions_library.name) == 0,
+        strcmp(t.reserved_definitions_library.name, b.reserved_definitions_library.name) == 0,
         "Name definition differs");
     mu_assert(
         strcmp(
@@ -135,59 +133,76 @@ static void check_pair(const char *stem)
         mu_assert(
             strcmp(t.definitions_library[i].name, b.definitions_library[i].name) == 0,
             "definition name differs");
-        mu_assert_int_eq(
-            t.definitions_library[i].value_size,
-            b.definitions_library[i].value_size);
+        mu_assert_int_eq(t.definitions_library[i].value_size, b.definitions_library[i].value_size);
         for (j = 0; j < t.definitions_library[i].value_size; ++j)
         {
             mu_assert(
-                strcmp(
-                    t.definitions_library[i].value[j],
-                    b.definitions_library[i].value[j]) == 0,
+                strcmp(t.definitions_library[i].value[j], b.definitions_library[i].value[j]) == 0,
                 "definition value differs");
         }
     }
 
     mu_assert(
-        rows_equal((const float *)t.block_library, (const float *)b.block_library,
-                   t.num_blocks, 7),
+        rows_equal((const float *)t.block_library, (const float *)b.block_library, t.num_blocks, 7),
         "block library differs");
     mu_assert(
-        rows_equal((const float *)t.rf_library, (const float *)b.rf_library,
-                   t.rf_library_size, 10),
+        rows_equal((const float *)t.rf_library, (const float *)b.rf_library, t.rf_library_size, 10),
         "rf library differs");
     mu_assert(
-        rows_equal((const float *)t.grad_library, (const float *)b.grad_library,
-                   t.grad_library_size, 7),
+        rows_equal(
+            (const float *)t.grad_library,
+            (const float *)b.grad_library,
+            t.grad_library_size,
+            7),
         "grad library differs");
     mu_assert(
-        rows_equal((const float *)t.adc_library, (const float *)b.adc_library,
-                   t.adc_library_size, 8),
+        rows_equal(
+            (const float *)t.adc_library,
+            (const float *)b.adc_library,
+            t.adc_library_size,
+            8),
         "adc library differs");
     mu_assert(
-        rows_equal((const float *)t.extensions_library, (const float *)b.extensions_library,
-                   t.extensions_library_size, 3),
+        rows_equal(
+            (const float *)t.extensions_library,
+            (const float *)b.extensions_library,
+            t.extensions_library_size,
+            3),
         "extension chain differs");
     mu_assert(
-        rows_equal((const float *)t.trigger_library, (const float *)b.trigger_library,
-                   t.trigger_library_size, 4),
+        rows_equal(
+            (const float *)t.trigger_library,
+            (const float *)b.trigger_library,
+            t.trigger_library_size,
+            4),
         "trigger library differs");
     mu_assert(
-        rows_equal((const float *)t.rotation_quaternion_library,
-                   (const float *)b.rotation_quaternion_library,
-                   t.rotation_library_size, 4),
+        rows_equal(
+            (const float *)t.rotation_quaternion_library,
+            (const float *)b.rotation_quaternion_library,
+            t.rotation_library_size,
+            4),
         "rotation library differs");
     mu_assert(
-        rows_equal((const float *)t.labelset_library, (const float *)b.labelset_library,
-                   t.labelset_library_size, 2),
+        rows_equal(
+            (const float *)t.labelset_library,
+            (const float *)b.labelset_library,
+            t.labelset_library_size,
+            2),
         "labelset library differs");
     mu_assert(
-        rows_equal((const float *)t.labelinc_library, (const float *)b.labelinc_library,
-                   t.labelinc_library_size, 2),
+        rows_equal(
+            (const float *)t.labelinc_library,
+            (const float *)b.labelinc_library,
+            t.labelinc_library_size,
+            2),
         "labelinc library differs");
     mu_assert(
-        rows_equal((const float *)t.soft_delay_library, (const float *)b.soft_delay_library,
-                   t.soft_delay_library_size, 4),
+        rows_equal(
+            (const float *)t.soft_delay_library,
+            (const float *)b.soft_delay_library,
+            t.soft_delay_library_size,
+            4),
         "soft delay library differs");
 
     for (i = 0; i < t.rf_library_size; ++i)
@@ -203,16 +218,17 @@ static void check_pair(const char *stem)
             b.shapes_library[i].num_uncompressed_samples);
         mu_assert_int_eq(t.shapes_library[i].num_samples, b.shapes_library[i].num_samples);
         mu_assert(
-            rows_equal(t.shapes_library[i].samples, b.shapes_library[i].samples,
-                       t.shapes_library[i].num_samples, 1),
+            rows_equal(
+                t.shapes_library[i].samples,
+                b.shapes_library[i].samples,
+                t.shapes_library[i].num_samples,
+                1),
             "shape samples differ");
     }
 
     for (i = 0; i < t.rf_shim_library_size; ++i)
     {
-        mu_assert_int_eq(
-            t.rf_shim_library[i].num_channels,
-            b.rf_shim_library[i].num_channels);
+        mu_assert_int_eq(t.rf_shim_library[i].num_channels, b.rf_shim_library[i].num_channels);
         for (j = 0; j < 2 * t.rf_shim_library[i].num_channels; ++j)
         {
             mu_assert(

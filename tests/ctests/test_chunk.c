@@ -215,7 +215,8 @@ MU_TEST(test_chunk_rejects_zero_budget)
     chunk_load(&coll);
     budget.max_wave_samples = 0;
     mu_assert_int_eq(
-        PULSEG_ERR_INVALID_ARGUMENT, pulseg_plan_chunks(coll, 0, &budget, &plan, &diag));
+        PULSEG_ERR_INVALID_ARGUMENT,
+        pulseg_plan_chunks(coll, 0, &budget, &plan, &diag));
 
     pulseg_free_chunk_plan(&plan);
     pulseg_collection_free(coll);
@@ -244,8 +245,7 @@ MU_TEST(test_chunk_rotation_preserves_summed_power)
     chunk_load(&coll);
     budget.max_wave_samples = 1000000000L;
     budget.build_us_per_sample = 0.0f;
-    mu_assert(
-        PULSEG_SUCCEEDED(pulseg_plan_chunks(coll, 0, &budget, &plan, &diag)), "plan failed");
+    mu_assert(PULSEG_SUCCEEDED(pulseg_plan_chunks(coll, 0, &budget, &plan, &diag)), "plan failed");
 
     checked = 0;
     for (w = 0; w < plan.num_waves; ++w)
@@ -262,13 +262,13 @@ MU_TEST(test_chunk_rotation_preserves_summed_power)
 
         for (axis = 0; axis < 3; ++axis)
         {
-            if (PULSEG_FAILED(pulseg_materialize_wave(
-                    coll, 0, &rotated, axis, tbuf, buf, 8192, &ns, &peak)))
+            if (PULSEG_FAILED(
+                    pulseg_materialize_wave(coll, 0, &rotated, axis, tbuf, buf, 8192, &ns, &peak)))
                 continue;
             power_rot += trapz_square(tbuf, buf, ns, peak);
 
-            if (PULSEG_FAILED(pulseg_materialize_wave(
-                    coll, 0, &plain, axis, tbuf, buf, 8192, &ns, &peak)))
+            if (PULSEG_FAILED(
+                    pulseg_materialize_wave(coll, 0, &plain, axis, tbuf, buf, 8192, &ns, &peak)))
                 continue;
             power_plain += trapz_square(tbuf, buf, ns, peak);
         }
@@ -302,8 +302,7 @@ MU_TEST(test_chunk_materialise_reports_required_size)
     chunk_load(&coll);
     budget.max_wave_samples = 1000000000L;
     budget.build_us_per_sample = 0.0f;
-    mu_assert(
-        PULSEG_SUCCEEDED(pulseg_plan_chunks(coll, 0, &budget, &plan, &diag)), "plan failed");
+    mu_assert(PULSEG_SUCCEEDED(pulseg_plan_chunks(coll, 0, &budget, &plan, &diag)), "plan failed");
 
     found = 0;
     for (w = 0; w < plan.num_waves; ++w)
@@ -311,7 +310,15 @@ MU_TEST(test_chunk_materialise_reports_required_size)
         if (plan.waves[w].num_points <= 2)
             continue;
         rc = pulseg_materialize_wave(
-            coll, 0, &plan.waves[w], PULSEG_GRAD_AXIS_X, ttiny, tiny, 1, &ns, NULL);
+            coll,
+            0,
+            &plan.waves[w],
+            PULSEG_GRAD_AXIS_X,
+            ttiny,
+            tiny,
+            1,
+            &ns,
+            NULL);
         mu_assert_int_eq(PULSEG_ERR_INDEX, rc);
         mu_assert(ns > 1, "a multi-point wave reported one point");
         found = 1;
@@ -347,8 +354,7 @@ MU_TEST(test_chunk_corner_times_strictly_increase)
     chunk_load(&coll);
     budget.max_wave_samples = 1000000000L;
     budget.build_us_per_sample = 0.0f;
-    mu_assert(
-        PULSEG_SUCCEEDED(pulseg_plan_chunks(coll, 0, &budget, &plan, &diag)), "plan failed");
+    mu_assert(PULSEG_SUCCEEDED(pulseg_plan_chunks(coll, 0, &budget, &plan, &diag)), "plan failed");
 
     checked = 0;
     for (w = 0; w < plan.num_waves; ++w)
@@ -356,7 +362,15 @@ MU_TEST(test_chunk_corner_times_strictly_increase)
         for (axis = 0; axis < 3; ++axis)
         {
             if (PULSEG_FAILED(pulseg_materialize_wave(
-                    coll, 0, &plan.waves[w], axis, tbuf, abuf, 8192, &ns, NULL)))
+                    coll,
+                    0,
+                    &plan.waves[w],
+                    axis,
+                    tbuf,
+                    abuf,
+                    8192,
+                    &ns,
+                    NULL)))
                 continue;
             for (j = 1; j < ns; ++j)
                 mu_assert(tbuf[j] > tbuf[j - 1], "corner times are not strictly increasing");
@@ -392,21 +406,22 @@ MU_TEST(test_chunk_position_waves_stay_inside_their_chunk)
     budget.max_wave_samples = 1000000000L;
     budget.build_us_per_sample = 0.0f;
     mu_assert(
-        PULSEG_SUCCEEDED(pulseg_plan_chunks(coll, 0, &budget, &probe, &diag)), "probe failed");
+        PULSEG_SUCCEEDED(pulseg_plan_chunks(coll, 0, &budget, &probe, &diag)),
+        "probe failed");
     budget.max_wave_samples = probe.peak_wave_samples / 4;
     if (budget.max_wave_samples < 1)
         budget.max_wave_samples = 1;
     pulseg_free_chunk_plan(&probe);
 
-    mu_assert(
-        PULSEG_SUCCEEDED(pulseg_plan_chunks(coll, 0, &budget, &plan, &diag)), "plan failed");
+    mu_assert(PULSEG_SUCCEEDED(pulseg_plan_chunks(coll, 0, &budget, &plan, &diag)), "plan failed");
     mu_assert(plan.max_wave_points > 0, "no wave has any points");
 
     checked = 0;
     for (k = 0; k < plan.num_chunks; ++k)
     {
         for (p = plan.chunks[k].first_position;
-             p < plan.chunks[k].first_position + plan.chunks[k].num_positions; ++p)
+             p < plan.chunks[k].first_position + plan.chunks[k].num_positions;
+             ++p)
         {
             int j, listed = 0;
             w = plan.position_wave[p];
@@ -415,7 +430,8 @@ MU_TEST(test_chunk_position_waves_stay_inside_their_chunk)
             mu_assert(w < plan.num_waves, "wave index runs past the global list");
             /* and the chunk this position sits in must actually name it */
             for (j = plan.chunks[k].first_wave;
-                 j < plan.chunks[k].first_wave + plan.chunks[k].num_waves; ++j)
+                 j < plan.chunks[k].first_wave + plan.chunks[k].num_waves;
+                 ++j)
                 if (plan.chunk_waves[j] == w)
                 {
                     listed = 1;

@@ -200,7 +200,9 @@ def _smooth_calibration_case(matrix=64, coils=6):
     angles = torch.linspace(0.0, 2 * torch.pi, coils + 1)[:-1]
     maps = torch.stack(
         [
-            torch.exp(-((x - 1.5 * torch.cos(a)) ** 2 + (y - 1.5 * torch.sin(a)) ** 2) / 3.0)
+            torch.exp(
+                -((x - 1.5 * torch.cos(a)) ** 2 + (y - 1.5 * torch.sin(a)) ** 2) / 3.0
+            )
             * torch.exp(1j * 1.5 * (torch.cos(a) * x + torch.sin(a) * y))
             for a in angles
         ]
@@ -209,7 +211,9 @@ def _smooth_calibration_case(matrix=64, coils=6):
     coil_images = maps * image.to(torch.complex64)
     axes = (-2, -1)
     kspace = torch.fft.fftshift(
-        torch.fft.fftn(torch.fft.ifftshift(coil_images, dim=axes), dim=axes, norm="ortho"),
+        torch.fft.fftn(
+            torch.fft.ifftshift(coil_images, dim=axes), dim=axes, norm="ortho"
+        ),
         dim=axes,
     )
     return kspace[None].to(torch.complex64), maps

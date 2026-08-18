@@ -8,7 +8,7 @@ which is the mechanism this slot exists to stress. ``use_rotation_ext=False``
 writes every spoke out as its own waveform instead, for a reader that will not
 compose a rotation. The FOV offset goes through ``TransformFOV`` in server
 mode, where a rotated readout defers its ADC shift to the consumer of the base
-trajectory. :mod:`pulserver.app.recon.gre_radial2D_recon` reconstructs by NUFFT against
+trajectory. :mod:`pulserver.app.recon.noncartesian2D_recon` reconstructs by NUFFT against
 the trajectory the file itself carries.
 
 ``main`` returns the :class:`pulserver.pypulseq.Sequence`; ``PLUGIN`` is the
@@ -258,12 +258,15 @@ def main(
     seq.set_definition(key="NumSpokes", value=len(angles))
     seq.set_definition(key="AngleScheme", value=angle_scheme)
     seq.set_definition(
-        key="kSpaceCenterSample", value=kernel.readouts[len(kernel.passes[0])].center_sample
+        key="kSpaceCenterSample",
+        value=kernel.readouts[len(kernel.passes[0])].center_sample,
     )
     seq.set_definition(key="SliceThickness", value=excitation.slice_thickness)
     seq.set_definition(
         key="NumGainCalibrationReadouts",
-        value=n_slices if n_gain_calibration_readouts is None else n_gain_calibration_readouts,
+        value=n_slices
+        if n_gain_calibration_readouts is None
+        else n_gain_calibration_readouts,
     )
 
     if write_seq:
@@ -279,6 +282,7 @@ def main(
 # ======================================================================
 # Subroutines of main()
 # ======================================================================
+
 
 def ShotKernel(seq, blocks, rotation, *, acquire: bool, first_extra=()) -> None:
     """Replay one spoke's blocks with the shot's orientation injected.
@@ -376,7 +380,7 @@ spoiling_cycles, use_rotation_ext
         time_bw_product=TIME_BW_PRODUCT,
     )
 
-    count = -(-int(np.pi / 2 * n_x)) if n_spokes is None else int(n_spokes)
+    count = int(np.pi / 2 * n_x) if n_spokes is None else int(n_spokes)
     angles = spoke_angles(count, angle_scheme)
 
     def readout(module_tr: float | None):
@@ -438,6 +442,7 @@ spoiling_cycles, use_rotation_ext
 # ======================================================================
 # The scanner protocol contract
 # ======================================================================
+
 
 class GreRadial2D(SequencePlugin):
     """The 2D radial gradient echo behind the scanner protocol contract."""
@@ -503,9 +508,15 @@ class GreRadial2D(SequencePlugin):
                 UIParam.BANDWIDTH: TypeinFloatParam(
                     value=250e3, min=5e3, max=500e3, incr=100.0, unit="Hz"
                 ),
-                UIParam.FOV_OFFSET_X: OffFloatParam(value=0.0, min=-500.0, max=500.0, unit="mm"),
-                UIParam.FOV_OFFSET_Y: OffFloatParam(value=0.0, min=-500.0, max=500.0, unit="mm"),
-                UIParam.FOV_OFFSET_Z: OffFloatParam(value=0.0, min=-500.0, max=500.0, unit="mm"),
+                UIParam.FOV_OFFSET_X: OffFloatParam(
+                    value=0.0, min=-500.0, max=500.0, unit="mm"
+                ),
+                UIParam.FOV_OFFSET_Y: OffFloatParam(
+                    value=0.0, min=-500.0, max=500.0, unit="mm"
+                ),
+                UIParam.FOV_OFFSET_Z: OffFloatParam(
+                    value=0.0, min=-500.0, max=500.0, unit="mm"
+                ),
                 UIParam.user_name(0): Description(text="Spokes (0 = Nyquist)"),
                 UIParam.user_value(0): TypeinFloatParam(
                     value=0.0, min=0.0, max=4096.0, incr=1.0, unit=""
@@ -528,7 +539,11 @@ class GreRadial2D(SequencePlugin):
         try:
             kernel = RadialKernel(
                 system,
-                **{name: value for name, value in kwargs.items() if name in KERNEL_ARGUMENTS},
+                **{
+                    name: value
+                    for name, value in kwargs.items()
+                    if name in KERNEL_ARGUMENTS
+                },
             )
         except ValueError as error:
             return {"valid": False, "duration": None, "info": str(error)}
@@ -584,7 +599,9 @@ def protocol_kwargs(system: pp.Opts, protocol: dict[str, dict]) -> dict:
         protocol,
         fov=params.param_float(prot, UIParam.FOV) * 1e-3,
         n_spokes=None if requested <= 0 else requested,
-        angle_scheme=ANGLE_SCHEMES[int(np.clip(round(params.user_float(prot, 1, 0.0)), 0, 1))],
+        angle_scheme=ANGLE_SCHEMES[
+            int(np.clip(round(params.user_float(prot, 1, 0.0)), 0, 1))
+        ],
         n_dummy=max(0, round(params.user_float(prot, 2, 16.0))),
     )
 
@@ -618,7 +635,12 @@ ARG_MAP = [
     ("--nslices", UIParam.NSLICES, int, "Number of slices"),
     ("--bandwidth-hz", UIParam.BANDWIDTH, float, "Requested receiver bandwidth [Hz]"),
     ("--offset-x-mm", UIParam.FOV_OFFSET_X, float, "Volume offset along readout [mm]"),
-    ("--offset-y-mm", UIParam.FOV_OFFSET_Y, float, "Volume offset along phase encode [mm]"),
+    (
+        "--offset-y-mm",
+        UIParam.FOV_OFFSET_Y,
+        float,
+        "Volume offset along phase encode [mm]",
+    ),
     ("--offset-z-mm", UIParam.FOV_OFFSET_Z, float, "Volume offset along slice [mm]"),
     ("--spokes", UIParam.user_value(0), float, "Spokes to play (0 = Nyquist count)"),
     ("--angles", UIParam.user_value(1), float, "Angle scheme: 0 golden, 1 uniform"),

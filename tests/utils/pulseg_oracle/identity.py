@@ -97,8 +97,13 @@ def structural_signature(block) -> tuple:
       ``block_duration``, so a TI/TR fill that varies is one position.
     """
     full = block_signature(block)
-    if block.rf is None and block.gx is None and block.gy is None and \
-            block.gz is None and block.adc is None:
+    if (
+        block.rf is None
+        and block.gx is None
+        and block.gy is None
+        and block.gz is None
+        and block.adc is None
+    ):
         return ("delay",)
     return full[:5]
 

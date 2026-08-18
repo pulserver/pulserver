@@ -20,7 +20,7 @@
  * point it at the .seq file and ask "is it safe?".
  *
  * Build (linking against the static pulseqlib library):
- *   cc -I../../csrc safety_with_external_sequence.c \
+ *   cc -I../../src/c safety_with_external_sequence.c \
  *      -L<build-dir> -lpulseqlib -lm \
  *      -o safety_with_external_sequence <path-to-some.seq>
  */

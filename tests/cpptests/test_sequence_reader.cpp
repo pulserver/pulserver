@@ -26,34 +26,34 @@ using mrdserver::SequenceCache;
 namespace
 {
 
-    std::string corpus(const std::string& name)
-    {
-        return (fs::path(PULSEQ_CORPUS_DIR) / name).string();
-    }
+std::string corpus(const std::string &name)
+{
+    return (fs::path(PULSEQ_CORPUS_DIR) / name).string();
+}
 
-    constexpr uint64_t kNavFlag = 1ULL << 22;
-    constexpr uint64_t kLastFlag = 1ULL << 24;
-    constexpr uint64_t kFirstInLine = 1ULL << 0;
-    constexpr uint64_t kLastInLine = 1ULL << 1;
-    constexpr uint64_t kLastInPartition = 1ULL << 3;
-    constexpr uint64_t kFirstInAverage = 1ULL << 4;
-    constexpr uint64_t kLastInAverage = 1ULL << 5;
-    constexpr uint64_t kFirstInSlice = 1ULL << 6;
-    constexpr uint64_t kLastInSlice = 1ULL << 7;
+constexpr uint64_t kNavFlag = 1ULL << 22;
+constexpr uint64_t kLastFlag = 1ULL << 24;
+constexpr uint64_t kFirstInLine = 1ULL << 0;
+constexpr uint64_t kLastInLine = 1ULL << 1;
+constexpr uint64_t kLastInPartition = 1ULL << 3;
+constexpr uint64_t kFirstInAverage = 1ULL << 4;
+constexpr uint64_t kLastInAverage = 1ULL << 5;
+constexpr uint64_t kFirstInSlice = 1ULL << 6;
+constexpr uint64_t kLastInSlice = 1ULL << 7;
 
-    /** The positions carrying `flag`. */
-    std::set<size_t> flagged(const SequenceCache& cache, uint64_t flag)
-    {
-        std::set<size_t> out;
-        for (size_t i = 0; i < cache.table.size(); ++i)
-            if (cache.table[i].flags & flag)
-                out.insert(i);
-        return out;
-    }
+/** The positions carrying `flag`. */
+std::set<size_t> flagged(const SequenceCache &cache, uint64_t flag)
+{
+    std::set<size_t> out;
+    for (size_t i = 0; i < cache.table.size(); ++i)
+        if (cache.table[i].flags & flag)
+            out.insert(i);
+    return out;
+}
 
-}  // namespace
+} // namespace
 
-class SequenceReader : public ::testing::TestWithParam<const char*>
+class SequenceReader : public ::testing::TestWithParam<const char *>
 {
 };
 
@@ -84,12 +84,11 @@ TEST_P(SequenceReader, TheCacheIsInternallyConsistent)
 
     // Exactly one final acquisition carries LAST_IN_MEASUREMENT.
     int last_count = 0;
-    for (const auto& entry : cache.table)
+    for (const auto &entry : cache.table)
     {
         last_count += (entry.flags & kLastFlag) ? 1 : 0;
         ASSERT_GE(entry.encoding_space_ref, 0);
-        ASSERT_LT(entry.encoding_space_ref,
-                  static_cast<int>(cache.encoding_spaces.size()));
+        ASSERT_LT(entry.encoding_space_ref, static_cast<int>(cache.encoding_spaces.size()));
         // Every shot id resolves, and NAV routes to the navigator space.
         for (const int shot : {entry.kx_shot_id, entry.ky_shot_id, entry.kz_shot_id})
             ASSERT_LT(shot, static_cast<int>(cache.kshots.size()));
@@ -100,10 +99,9 @@ TEST_P(SequenceReader, TheCacheIsInternallyConsistent)
     EXPECT_TRUE((cache.table.back().flags & kLastFlag) != 0);
 
     // Label limits bound what the table holds.
-    for (const auto& entry : cache.table)
+    for (const auto &entry : cache.table)
     {
-        const auto& limits =
-            cache.encoding_spaces[entry.encoding_space_ref].label_limits;
+        const auto &limits = cache.encoding_spaces[entry.encoding_space_ref].label_limits;
         EXPECT_GE(entry.lin, limits.lin.min);
         EXPECT_LE(entry.lin, limits.lin.max);
         EXPECT_GE(entry.slc, limits.slc.min);
@@ -113,19 +111,19 @@ TEST_P(SequenceReader, TheCacheIsInternallyConsistent)
     // The corpus files declare TRSize, so the description is derived: one
     // row per structural-TR block, roles either one unique centre or a tie.
     ASSERT_TRUE(cache.has_seq_desc);
-    for (const auto& sd : cache.seq_descs)
+    for (const auto &sd : cache.seq_descs)
     {
         ASSERT_FALSE(sd.events.empty());
         EXPECT_GT(sd.tr_duration_us, 0.0f);
         int echo_centers = 0;
-        for (const auto& row : sd.events)
+        for (const auto &row : sd.events)
         {
             if (row.type == mrdserver::SEQ_EVENT_ADC &&
                 row.adc_role() == mrdserver::ADC_ROLE_ECHO_CENTER)
                 ++echo_centers;
         }
         EXPECT_LE(echo_centers, 1);
-        for (const auto& def : sd.rf_defs)
+        for (const auto &def : sd.rf_defs)
         {
             EXPECT_GE(def.num_bands, 1);
             EXPECT_GT(def.total_b1sq_power, 0.0f);
@@ -146,8 +144,8 @@ TEST_P(SequenceReader, ResidentAndMaterializedReadoutsAgree)
 
     for (size_t es = 0; es < resident.size(); ++es)
     {
-        const auto& a = resident[es];
-        const auto& b = deferred[es];
+        const auto &a = resident[es];
+        const auto &b = deferred[es];
         ASSERT_EQ(b.ndim, a.ndim) << "es " << es;
         if (a.ndim == 0)
             continue;
@@ -158,22 +156,31 @@ TEST_P(SequenceReader, ResidentAndMaterializedReadoutsAgree)
         std::vector<float> row_b(row_a.size());
         for (int r = 0; r < a.num_readouts; ++r)
         {
-            ASSERT_TRUE(mrdserver::materialize_readout(
-                cache, a, static_cast<int>(es), r, row_a.data()));
-            ASSERT_TRUE(mrdserver::materialize_readout(
-                cache, b, static_cast<int>(es), r, row_b.data()));
+            ASSERT_TRUE(
+                mrdserver::materialize_readout(cache, a, static_cast<int>(es), r, row_a.data()));
+            ASSERT_TRUE(
+                mrdserver::materialize_readout(cache, b, static_cast<int>(es), r, row_b.data()));
             for (size_t s = 0; s < row_a.size(); ++s)
-                ASSERT_EQ(row_b[s], row_a[s])
-                    << "es " << es << " readout " << r << " sample " << s;
+                ASSERT_EQ(row_b[s], row_a[s]) << "es " << es << " readout " << r << " sample " << s;
         }
     }
 }
 
-INSTANTIATE_TEST_SUITE_P(Corpus, SequenceReader,
-                         ::testing::Values("gre_2d", "gre_2d_3sl", "se_2d", "fse_2d",
-                                           "bssfp_2d", "gre_radial_2d", "gre_spiral_2d",
-                                           "gre_stack_of_stars_3d", "se_propeller_2d",
-                                           "mprage_stack_of_spirals_3d", "zte_3d"));
+INSTANTIATE_TEST_SUITE_P(
+    Corpus,
+    SequenceReader,
+    ::testing::Values(
+        "gre_2d",
+        "gre_2d_3sl",
+        "se_2d",
+        "fse_2d",
+        "bssfp_2d",
+        "gre_radial_2d",
+        "gre_spiral_2d",
+        "gre_stack_of_stars_3d",
+        "se_propeller_2d",
+        "mprage_stack_of_spirals_3d",
+        "zte_3d"));
 
 TEST(SequenceReaderBoundaries, EachSliceOpensAndClosesAtItsOwnAcquisitions)
 {
@@ -188,9 +195,9 @@ TEST(SequenceReaderBoundaries, EachSliceOpensAndClosesAtItsOwnAcquisitions)
     ASSERT_EQ(first_of.size(), 3u);
 
     std::set<size_t> expect_first, expect_last;
-    for (const auto& entry : first_of)
+    for (const auto &entry : first_of)
         expect_first.insert(entry.second);
-    for (const auto& entry : last_of)
+    for (const auto &entry : last_of)
         expect_last.insert(entry.second);
 
     EXPECT_EQ(flagged(cache, kFirstInSlice), expect_first);
@@ -205,7 +212,7 @@ TEST(SequenceReaderBoundaries, AnEncodingCounterIsBoundedInsideEachFrame)
     const SequenceCache cache = mrdserver::read_sequence_files(corpus("gre_2d_3sl.seq"));
 
     std::set<std::pair<int, int>> pairs;
-    for (const auto& entry : cache.table)
+    for (const auto &entry : cache.table)
         pairs.insert({entry.slc, entry.lin});
     ASSERT_EQ(pairs.size(), cache.table.size());
 
@@ -218,7 +225,7 @@ TEST(SequenceReaderBoundaries, ACounterTheScanNeverWritesIsNeverBounded)
     // A 2D scan has no partition axis, so nothing closes one.
     const SequenceCache cache = mrdserver::read_sequence_files(corpus("gre_2d.seq"));
 
-    for (const auto& entry : cache.table)
+    for (const auto &entry : cache.table)
         ASSERT_EQ(entry.par, 0);
     EXPECT_TRUE(flagged(cache, kLastInPartition).empty());
     EXPECT_FALSE(flagged(cache, kLastInLine).empty());
@@ -248,9 +255,9 @@ TEST(SequenceReaderBoundaries, AnAverageIsAFrameCounterLikeTheOthers)
     ASSERT_EQ(last_of.size(), 9u);
 
     std::set<size_t> expect_first, expect_last;
-    for (const auto& entry : first_of)
+    for (const auto &entry : first_of)
         expect_first.insert(entry.second);
-    for (const auto& entry : last_of)
+    for (const auto &entry : last_of)
         expect_last.insert(entry.second);
 
     EXPECT_EQ(flagged(thrice, kFirstInAverage), expect_first);
@@ -263,13 +270,13 @@ TEST(SequenceReaderChain, TheEpiChainBecomesOneCacheOfSubsequences)
 
     ASSERT_GE(cache.definitions_by_subseq.size(), 2u);
     std::set<int> subseqs;
-    for (const auto& es : cache.encoding_spaces)
+    for (const auto &es : cache.encoding_spaces)
         subseqs.insert(es.subseq_idx);
     EXPECT_EQ(subseqs.size(), cache.definitions_by_subseq.size());
 
     // The navigator labels split an encoding space off somewhere.
     bool has_nav_space = false;
-    for (const auto& es : cache.encoding_spaces)
+    for (const auto &es : cache.encoding_spaces)
         has_nav_space = has_nav_space || es.geometry_tag == 1;
     EXPECT_TRUE(has_nav_space);
 }
@@ -283,7 +290,7 @@ TEST(SequenceReaderAverages, TheAvgCounterCarriesTheReplayIndex)
     ASSERT_EQ(thrice.table.size(), once.table.size() * 3);
     for (size_t i = 0; i < thrice.table.size(); ++i)
     {
-        const auto& entry = thrice.table[i];
+        const auto &entry = thrice.table[i];
         EXPECT_EQ(entry.avg, static_cast<int>(i / once.table.size()));
         // REP passes through from the file's labels, untouched by NEX.
         EXPECT_EQ(entry.rep, once.table[i % once.table.size()].rep);

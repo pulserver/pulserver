@@ -7,7 +7,7 @@
 #   - once a call or declaration does not fit, put every argument on its own
 #     line rather than packing as many as fit per line.
 #
-# csrc/ is ANSI C (C89): declarations go at the start of a block.  Prefer
+# src/c/ is ANSI C (C89): declarations go at the start of a block.  Prefer
 # nested `{ ... }` scopes that group variables with the phase of code using
 # them over one large declaration section at the top of a function.
 
@@ -33,7 +33,7 @@ BreakBeforeTernaryOperators: true
 AllowAllParametersOfDeclarationOnNextLine: false
 AllowAllArgumentsOnNextLine: false
 
-# Braces on their own line, the convention already used throughout csrc/.
+# Braces on their own line, the convention already used throughout src/c/.
 BreakBeforeBraces: Allman
 
 # Keep short constructs readable rather than compact.

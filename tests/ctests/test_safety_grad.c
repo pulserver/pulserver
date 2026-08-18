@@ -10,29 +10,37 @@
 /*  Shared data-driven helpers                                        */
 /* ================================================================== */
 
-static pulseg_opts   s_opts;
+static pulseg_opts s_opts;
 static pulseg_diagnostic s_diag;
 
 /**
  * Load a sequence, run check_safety with the current s_opts,
  * compare return code to expected_code.
  */
-static void run_safety_check(const char* filename, int expected_code)
+static void run_safety_check(const char *filename, int expected_code)
 {
-    pulseg_collection* coll = NULL;
+    pulseg_collection *coll = NULL;
     int rc;
 
     rc = load_seq(&coll, filename, &s_opts);
     mu_assert(PULSEG_SUCCEEDED(rc), "load_seq failed");
 
     pulseg_diagnostic_init(&s_diag);
-    rc = pulseg_check_safety(coll, &s_diag, &s_opts,
-                                0, NULL,   /* no forbidden bands */
-                                NULL, 0.0f /* no PNS */);
+    rc = pulseg_check_safety(
+        coll,
+        &s_diag,
+        &s_opts,
+        0,
+        NULL, /* no forbidden bands */
+        NULL,
+        0.0f /* no PNS */);
 
-    if (expected_code > 0) {
+    if (expected_code > 0)
+    {
         mu_assert(PULSEG_SUCCEEDED(rc), "expected success but got failure");
-    } else {
+    }
+    else
+    {
         mu_assert_int_eq(expected_code, rc);
     }
 
@@ -50,9 +58,8 @@ static void run_safety_check(const char* filename, int expected_code)
  */
 static int is_grad_continuity_error(int rc)
 {
-    return rc == PULSEG_ERR_SEG_NONZERO_START_GRAD ||
-           rc == PULSEG_ERR_SEG_NONZERO_END_GRAD   ||
-           rc == PULSEG_ERR_GRAD_DISCONTINUITY;
+    return rc == PULSEG_ERR_SEG_NONZERO_START_GRAD || rc == PULSEG_ERR_SEG_NONZERO_END_GRAD ||
+        rc == PULSEG_ERR_GRAD_DISCONTINUITY;
 }
 
 /**
@@ -73,18 +80,19 @@ static int is_grad_continuity_error(int rc)
  * @param should_pass 1 = sequence is gradient-continuous (no grad-class
  *                    error expected); 0 = a grad-class error is expected.
  */
-static void run_continuity_check(const char* filename, int should_pass)
+static void run_continuity_check(const char *filename, int should_pass)
 {
-    pulseg_collection* coll = NULL;
+    pulseg_collection *coll = NULL;
     int rc;
 
     rc = load_seq(&coll, filename, &s_opts);
 
-    if (PULSEG_FAILED(rc)) {
-        if (is_grad_continuity_error(rc)) {
+    if (PULSEG_FAILED(rc))
+    {
+        if (is_grad_continuity_error(rc))
+        {
             /* Segmentation caught a gradient boundary issue */
-            mu_assert(!should_pass,
-                      "continuous sequence rejected by grad boundary check");
+            mu_assert(!should_pass, "continuous sequence rejected by grad boundary check");
             return;
         }
         /* Non-gradient load failure — unexpected for continuity tests */
@@ -94,17 +102,19 @@ static void run_continuity_check(const char* filename, int should_pass)
 
     /* Load succeeded — run full safety check */
     pulseg_diagnostic_init(&s_diag);
-    rc = pulseg_check_safety(coll, &s_diag, &s_opts,
-                                0, NULL, NULL, 0.0f);
+    rc = pulseg_check_safety(coll, &s_diag, &s_opts, 0, NULL, NULL, 0.0f);
 
-    if (should_pass) {
+    if (should_pass)
+    {
         /* Sequence is continuous; safety may fail for non-continuity
          * reasons (e.g. slew rate) but must not be GRAD_DISCONTINUITY. */
-        mu_assert(rc != PULSEG_ERR_GRAD_DISCONTINUITY,
-                  "expected no discontinuity but got GRAD_DISCONTINUITY");
-    } else {
-        mu_assert(rc == PULSEG_ERR_GRAD_DISCONTINUITY,
-                  "expected GRAD_DISCONTINUITY");
+        mu_assert(
+            rc != PULSEG_ERR_GRAD_DISCONTINUITY,
+            "expected no discontinuity but got GRAD_DISCONTINUITY");
+    }
+    else
+    {
+        mu_assert(rc == PULSEG_ERR_GRAD_DISCONTINUITY, "expected GRAD_DISCONTINUITY");
     }
 
     pulseg_collection_free(coll);
@@ -122,38 +132,31 @@ static void run_continuity_check(const char* filename, int should_pass)
 
 static void grad_limit_opts(float max_grad, float max_slew)
 {
-    pulseg_opts_init(&s_opts,
-        GAMMA_HZ_PER_T, 3.0f,
-        max_grad, max_slew,
-        1.0f, 10.0f, 0.1f, 10.0f);
+    pulseg_opts_init(&s_opts, GAMMA_HZ_PER_T, 3.0f, max_grad, max_slew, 1.0f, 10.0f, 0.1f, 10.0f);
 }
 
 MU_TEST(test_grad_amplitude_violation)
 {
     grad_limit_opts(10.0f, 1e10f);
-    run_safety_check("01_grad_amplitude_violation.seq",
-                     PULSEG_ERR_MAX_GRAD_EXCEEDED);
+    run_safety_check("01_grad_amplitude_violation.seq", PULSEG_ERR_MAX_GRAD_EXCEEDED);
 }
 
 MU_TEST(test_slew_violation)
 {
     grad_limit_opts(1e10f, 100.0f);
-    run_safety_check("02_slew_violation.seq",
-                     PULSEG_ERR_MAX_SLEW_EXCEEDED);
+    run_safety_check("02_slew_violation.seq", PULSEG_ERR_MAX_SLEW_EXCEEDED);
 }
 
 MU_TEST(test_grad_rss_violation)
 {
     grad_limit_opts(10.0f, 1e10f);
-    run_safety_check("03_grad_rss_violation.seq",
-                     PULSEG_ERR_MAX_GRAD_EXCEEDED);
+    run_safety_check("03_grad_rss_violation.seq", PULSEG_ERR_MAX_GRAD_EXCEEDED);
 }
 
 MU_TEST(test_slew_rss_violation)
 {
     grad_limit_opts(1e10f, 100.0f);
-    run_safety_check("04_slew_rss_violation.seq",
-                     PULSEG_ERR_MAX_SLEW_EXCEEDED);
+    run_safety_check("04_slew_rss_violation.seq", PULSEG_ERR_MAX_SLEW_EXCEEDED);
 }
 
 MU_TEST_SUITE(suite_grad_limits)
@@ -285,13 +288,13 @@ MU_TEST_SUITE(suite_grad_continuity)
 /* ================================================================== */
 
 static void assert_canonical_sequence_matches_expected(
-    const pulseg_collection* coll,
+    const pulseg_collection *coll,
     int subseq_idx)
 {
-    const pulseg_sequence_descriptor* desc;
+    const pulseg_sequence_descriptor *desc;
     int n_main;
     int ncanon, i;
-    int* canon_ids = NULL;
+    int *canon_ids = NULL;
 
     desc = &coll->descriptors[subseq_idx];
     n_main = desc->segment_table.num_main_segments;
@@ -299,8 +302,9 @@ static void assert_canonical_sequence_matches_expected(
     ncanon = pulseg_get_canonical_segment_sequence(coll, NULL, subseq_idx);
     mu_assert_int_eq(n_main, ncanon);
 
-    if (ncanon > 0) {
-        canon_ids = (int*)malloc((size_t)ncanon * sizeof(int));
+    if (ncanon > 0)
+    {
+        canon_ids = (int *)malloc((size_t)ncanon * sizeof(int));
         mu_assert(canon_ids != NULL, "malloc failed for canonical segment ids");
     }
 
@@ -315,7 +319,7 @@ static void assert_canonical_sequence_matches_expected(
 
 MU_TEST(test_canonical_segment_sequence_degenerate_main_only)
 {
-    pulseg_collection* coll = NULL;
+    pulseg_collection *coll = NULL;
     int rc;
 
     default_opts_init(&s_opts);
@@ -351,14 +355,18 @@ MU_TEST_SUITE(suite_grad_canonical_sequence)
  * acoustic analysis is ever reached). Use generous grad/slew limits so this
  * suite exercises only the mech-resonance path.
  */
-static TEST_MAYBE_UNUSED void mech_resonances_opts_init(pulseg_opts* opts)
+static TEST_MAYBE_UNUSED void mech_resonances_opts_init(pulseg_opts *opts)
 {
-    pulseg_opts_init(opts,
+    pulseg_opts_init(
+        opts,
         GAMMA_HZ_PER_T,
         3.0f,
-        GAMMA_HZ_PER_T * 0.080f,   /* 80 mT/m -> Hz/m */
-        GAMMA_HZ_PER_T * 400.0f,  /* 400 T/m/s -> Hz/m/s */
-        2.0f, 20.0f, 2.0f, 20.0f);
+        GAMMA_HZ_PER_T * 0.080f, /* 80 mT/m -> Hz/m */
+        GAMMA_HZ_PER_T * 400.0f, /* 400 T/m/s -> Hz/m/s */
+        2.0f,
+        20.0f,
+        2.0f,
+        20.0f);
 }
 
 /**
@@ -368,24 +376,27 @@ static TEST_MAYBE_UNUSED void mech_resonances_opts_init(pulseg_opts* opts)
  * expected_code > 0 means a passing (success) result is expected.
  * expected_code <= 0 means that specific error code is expected.
  */
-static void run_mech_resonances_check(const char* filename, int num_bands,
-                                const pulseg_forbidden_band* bands,
-                                int expected_code)
+static void run_mech_resonances_check(
+    const char *filename,
+    int num_bands,
+    const pulseg_forbidden_band *bands,
+    int expected_code)
 {
-    pulseg_collection* coll = NULL;
+    pulseg_collection *coll = NULL;
     int rc;
 
     rc = load_corpus_seq(&coll, filename, &s_opts);
     mu_assert(PULSEG_SUCCEEDED(rc), "load_seq failed for acoustic test");
 
     pulseg_diagnostic_init(&s_diag);
-    rc = pulseg_check_safety(coll, &s_diag, &s_opts,
-                                num_bands, bands,
-                                NULL, 0.0f /* no PNS */);
+    rc = pulseg_check_safety(coll, &s_diag, &s_opts, num_bands, bands, NULL, 0.0f /* no PNS */);
 
-    if (expected_code > 0) {
+    if (expected_code > 0)
+    {
         mu_assert(PULSEG_SUCCEEDED(rc), "expected acoustic safety pass");
-    } else {
+    }
+    else
+    {
         mu_assert_int_eq(expected_code, rc);
     }
 
@@ -403,17 +414,16 @@ MU_TEST(test_epi_forbidden_readout_peak)
     pulseg_forbidden_band bands[2];
 
     /* Band 1: 800–2500 Hz — covers 1/ESP fundamental */
-    bands[0].freq_min_hz           = 800.0f;
-    bands[0].freq_max_hz           = 2500.0f;
+    bands[0].freq_min_hz = 800.0f;
+    bands[0].freq_max_hz = 2500.0f;
     bands[0].max_amplitude_hz_per_m = 0.0f;
 
     /* Band 2: 2500–4500 Hz — covers 2nd harmonic */
-    bands[1].freq_min_hz           = 2500.0f;
-    bands[1].freq_max_hz           = 4500.0f;
+    bands[1].freq_min_hz = 2500.0f;
+    bands[1].freq_max_hz = 4500.0f;
     bands[1].max_amplitude_hz_per_m = 0.0f;
 
-    run_mech_resonances_check("epi_2d_main.seq", 2, bands,
-                       PULSEG_ERR_MECH_RESONANCES_VIOLATION);
+    run_mech_resonances_check("epi_2d_main.seq", 2, bands, PULSEG_ERR_MECH_RESONANCES_VIOLATION);
 }
 
 /*
@@ -426,12 +436,12 @@ MU_TEST(test_epi_forbidden_band_amplitude_above_train_passes)
 {
     pulseg_forbidden_band bands[2];
 
-    bands[0].freq_min_hz           = 800.0f;
-    bands[0].freq_max_hz           = 2500.0f;
+    bands[0].freq_min_hz = 800.0f;
+    bands[0].freq_max_hz = 2500.0f;
     bands[0].max_amplitude_hz_per_m = 1.0e9f;
 
-    bands[1].freq_min_hz           = 2500.0f;
-    bands[1].freq_max_hz           = 4500.0f;
+    bands[1].freq_min_hz = 2500.0f;
+    bands[1].freq_max_hz = 4500.0f;
     bands[1].max_amplitude_hz_per_m = 1.0e9f;
 
     run_mech_resonances_check("epi_2d_main.seq", 2, bands, 1 /* pass */);
@@ -465,8 +475,8 @@ MU_TEST(test_epi_tr_fundamental_below_readout_floor_passes)
 {
     pulseg_forbidden_band band;
 
-    band.freq_min_hz            = 90.0f;
-    band.freq_max_hz            = 103.0f;
+    band.freq_min_hz = 90.0f;
+    band.freq_max_hz = 103.0f;
     band.max_amplitude_hz_per_m = 0.0f;
 
     run_mech_resonances_check("epi_2d_main.seq", 1, &band, 1 /* pass */);
@@ -491,16 +501,15 @@ MU_TEST(test_epi_guard_catches_edge_line_weak_harmonic_passes)
 {
     pulseg_forbidden_band band_lo, band_hi;
 
-    band_lo.freq_min_hz            = 1500.0f;
-    band_lo.freq_max_hz            = 2350.0f;
+    band_lo.freq_min_hz = 1500.0f;
+    band_lo.freq_max_hz = 2350.0f;
     band_lo.max_amplitude_hz_per_m = 0.0f;
 
-    band_hi.freq_min_hz            = 2600.0f;
-    band_hi.freq_max_hz            = 3450.0f;
+    band_hi.freq_min_hz = 2600.0f;
+    band_hi.freq_max_hz = 3450.0f;
     band_hi.max_amplitude_hz_per_m = 0.0f;
 
-    run_mech_resonances_check("epi_2d_main.seq", 1, &band_lo,
-                       PULSEG_ERR_MECH_RESONANCES_VIOLATION);
+    run_mech_resonances_check("epi_2d_main.seq", 1, &band_lo, PULSEG_ERR_MECH_RESONANCES_VIOLATION);
     run_mech_resonances_check("epi_2d_main.seq", 1, &band_hi, 1 /* pass */);
 }
 
@@ -518,7 +527,6 @@ MU_TEST_SUITE(suite_mech_resonances_safety)
     MU_RUN_TEST(test_epi_tr_fundamental_below_readout_floor_passes);
     MU_RUN_TEST(test_epi_guard_catches_edge_line_weak_harmonic_passes);
 }
-
 
 /* ================================================================== */
 /*  Suite E - Memoized PNS equivalence                                */
@@ -548,7 +556,7 @@ typedef struct
     float alpha;
 } pns_test_ctx;
 
-static int pns_test_build_kernel(const pns_test_ctx* c, float dt_us, float** out, int* len)
+static int pns_test_build_kernel(const pns_test_ctx *c, float dt_us, float **out, int *len)
 {
     float c_s, dt_s, s_min, *k;
     int i, n;
@@ -559,10 +567,11 @@ static int pns_test_build_kernel(const pns_test_ctx* c, float dt_us, float** out
     dt_s = dt_us * 1e-6f;
     s_min = c->rheobase / c->alpha;
     n = (int)(20.0f * c_s / dt_s) + 1;
-    k = (float*)PULSEG_ALLOC((size_t)n * sizeof(float));
+    k = (float *)PULSEG_ALLOC((size_t)n * sizeof(float));
     if (!k)
         return PULSEG_ERR_ALLOC_FAILED;
-    for (i = 0; i < n; ++i) {
+    for (i = 0; i < n; ++i)
+    {
         float tau = (float)i * dt_s;
         float den = (c_s + tau) * (c_s + tau);
         k[i] = (dt_s / s_min) * (c_s / den);
@@ -572,26 +581,32 @@ static int pns_test_build_kernel(const pns_test_ctx* c, float dt_us, float** out
     return PULSEG_SUCCESS;
 }
 
-static int pns_test_required_padding(void* ctx, float dt_us)
+static int pns_test_required_padding(void *ctx, float dt_us)
 {
-    float* k = NULL;
+    float *k = NULL;
     int n = 0;
-    int rc = pns_test_build_kernel((const pns_test_ctx*)ctx, dt_us, &k, &n);
+    int rc = pns_test_build_kernel((const pns_test_ctx *)ctx, dt_us, &k, &n);
     if (PULSEG_FAILED(rc))
         return rc;
     PULSEG_FREE(k);
     return n;
 }
 
-static int pns_test_evaluate(void* ctx,
-                             const float* dx, const float* dy, const float* dz,
-                             int n, float dt_us,
-                             float* ox, float* oy, float* oz)
+static int pns_test_evaluate(
+    void *ctx,
+    const float *dx,
+    const float *dy,
+    const float *dz,
+    int n,
+    float dt_us,
+    float *ox,
+    float *oy,
+    float *oz)
 {
-    float* k = NULL;
+    float *k = NULL;
     int kl = 0, i, rc;
 
-    rc = pns_test_build_kernel((const pns_test_ctx*)ctx, dt_us, &k, &kl);
+    rc = pns_test_build_kernel((const pns_test_ctx *)ctx, dt_us, &k, &kl);
     if (PULSEG_FAILED(rc))
         return rc;
     rc = pulseg__calc_convolution_fft(ox, dx, n, k, kl);
@@ -600,7 +615,8 @@ static int pns_test_evaluate(void* ctx,
     if (!PULSEG_FAILED(rc))
         rc = pulseg__calc_convolution_fft(oz, dz, n, k, kl);
     if (!PULSEG_FAILED(rc))
-        for (i = 0; i < n; ++i) {
+        for (i = 0; i < n; ++i)
+        {
             ox[i] *= 100.0f;
             oy[i] *= 100.0f;
             oz[i] *= 100.0f;
@@ -609,9 +625,9 @@ static int pns_test_evaluate(void* ctx,
     return rc;
 }
 
-static int pns_test_kernel(void* ctx, float dt_us, float** k, int* len, float* scale)
+static int pns_test_kernel(void *ctx, float dt_us, float **k, int *len, float *scale)
 {
-    int rc = pns_test_build_kernel((const pns_test_ctx*)ctx, dt_us, k, len);
+    int rc = pns_test_build_kernel((const pns_test_ctx *)ctx, dt_us, k, len);
     if (PULSEG_FAILED(rc))
         return rc;
     *scale = 100.0f;
@@ -619,15 +635,17 @@ static int pns_test_kernel(void* ctx, float dt_us, float** k, int* len, float* s
 }
 
 /* Peak combined PNS over a result, i.e. what the gate thresholds. */
-static double pns_peak(const pulseg_pns_result* r)
+static double pns_peak(const pulseg_pns_result *r)
 {
     double best = 0.0, v;
     int i;
 
-    for (i = 0; i < r->num_samples; ++i) {
-        v = sqrt((double)r->slew_x_hz_per_m_per_s[i] * r->slew_x_hz_per_m_per_s[i] +
-                 (double)r->slew_y_hz_per_m_per_s[i] * r->slew_y_hz_per_m_per_s[i] +
-                 (double)r->slew_z_hz_per_m_per_s[i] * r->slew_z_hz_per_m_per_s[i]);
+    for (i = 0; i < r->num_samples; ++i)
+    {
+        v = sqrt(
+            (double)r->slew_x_hz_per_m_per_s[i] * r->slew_x_hz_per_m_per_s[i] +
+            (double)r->slew_y_hz_per_m_per_s[i] * r->slew_y_hz_per_m_per_s[i] +
+            (double)r->slew_z_hz_per_m_per_s[i] * r->slew_z_hz_per_m_per_s[i]);
         if (v > best)
             best = v;
     }
@@ -635,13 +653,13 @@ static double pns_peak(const pulseg_pns_result* r)
 }
 
 /* Run both routes over one fixture and compare. */
-static void run_pns_memo_equivalence(const char* filename)
+static void run_pns_memo_equivalence(const char *filename)
 {
     pns_test_ctx ctx = {360.0f, 4.25e8f, 0.333f};
     pulseg_pns_model exact_model = {&ctx, pns_test_required_padding, pns_test_evaluate, NULL};
-    pulseg_pns_model memo_model = {&ctx, pns_test_required_padding, pns_test_evaluate,
-                                   pns_test_kernel};
-    pulseg_collection* coll = NULL;
+    pulseg_pns_model memo_model =
+        {&ctx, pns_test_required_padding, pns_test_evaluate, pns_test_kernel};
+    pulseg_collection *coll = NULL;
     pulseg_pns_result exact, memo;
     double peak_exact, peak_memo;
     int rc;
@@ -666,8 +684,9 @@ static void run_pns_memo_equivalence(const char* filename)
     peak_exact = pns_peak(&exact);
     peak_memo = pns_peak(&memo);
     mu_assert(peak_exact > 0.0, "exact PNS peak is zero: fixture exercises nothing");
-    mu_assert(fabs(peak_exact - peak_memo) <= PNS_MEMO_TEST_RTOL * peak_exact,
-              "memoized PNS peak disagrees with the exact peak");
+    mu_assert(
+        fabs(peak_exact - peak_memo) <= PNS_MEMO_TEST_RTOL * peak_exact,
+        "memoized PNS peak disagrees with the exact peak");
 
     pulseg_pns_result_free(&exact);
     pulseg_pns_result_free(&memo);
@@ -714,7 +733,7 @@ MU_TEST(test_pns_no_kernel_is_deterministic_exact_path)
 {
     pns_test_ctx ctx = {360.0f, 4.25e8f, 0.333f};
     pulseg_pns_model model = {&ctx, pns_test_required_padding, pns_test_evaluate, NULL};
-    pulseg_collection* coll = NULL;
+    pulseg_collection *coll = NULL;
     pulseg_pns_result a, b;
     int rc, i, differing = 0;
 

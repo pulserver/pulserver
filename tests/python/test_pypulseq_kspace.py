@@ -71,9 +71,7 @@ def _cartesian_scan(lines, n_y: int = 16, fov: float = 0.22) -> Sequence:
     seq = pp.Sequence(system=system)
     seq.set_definition(key="FOV", value=[fov, fov, 5e-3])
     for line in lines:
-        gy = pp.make_trapezoid(
-            channel="y", area=(line - n_y // 2) / fov, system=system
-        )
+        gy = pp.make_trapezoid(channel="y", area=(line - n_y // 2) / fov, system=system)
         seq.add_block(rf, gz)
         seq.add_block(gz_reph)
         seq.add_block(gx_pre, gy)
@@ -96,7 +94,9 @@ UPSTREAM_CASES = [
 ]
 
 
-@pytest.mark.parametrize(("stem", "tolerance"), UPSTREAM_CASES, ids=[s for s, _ in UPSTREAM_CASES])
+@pytest.mark.parametrize(
+    ("stem", "tolerance"), UPSTREAM_CASES, ids=[s for s, _ in UPSTREAM_CASES]
+)
 def test_the_trajectory_agrees_with_upstream_pypulseq(stem, tolerance):
     pp = pytest.importorskip("pypulseq")
 
@@ -109,8 +109,6 @@ def test_the_trajectory_agrees_with_upstream_pypulseq(stem, tolerance):
     assert ours.shape == theirs.shape
     scale = max(float(np.abs(theirs).max()), 1e-12)
     assert float(np.abs(ours - theirs).max()) / scale < tolerance
-
-
 
 
 def test_it_returns_upstreams_five_tuple(gre):
@@ -187,6 +185,7 @@ def test_the_whole_tuple_matches_upstream():
         ("k_traj_adc", "k_traj", "t_excitation", "t_refocusing", "t_adc"),
         scan.calculate_kspace(),
         theirs_seq.calculate_kspace(),
+        strict=False,
     ):
         ours = np.atleast_1d(np.asarray(ours, dtype=float))
         theirs = np.atleast_1d(np.asarray(theirs, dtype=float))
@@ -242,15 +241,21 @@ def test_the_times_do_not_depend_on_which_raster_the_sequence_was_built_on(raste
     """
     import pulserver.pypulseq as pp
 
-    system = pp.Opts(grad_raster_time=raster, block_duration_raster=raster, rf_dead_time=100e-6)
+    system = pp.Opts(
+        grad_raster_time=raster, block_duration_raster=raster, rf_dead_time=100e-6
+    )
     seq = pp.Sequence(system=system)
-    excite = pp.make_block_pulse(flip_angle=np.pi / 2, duration=1e-3, system=system, use="excitation")
+    excite = pp.make_block_pulse(
+        flip_angle=np.pi / 2, duration=1e-3, system=system, use="excitation"
+    )
     spacing = 40 * raster
     for _ in range(3):
         seq.add_block(excite)
         seq.add_block(pp.make_delay(spacing))
         seq.add_block(
-            pp.make_trapezoid(channel="x", flat_area=100, flat_time=2e-3, system=system),
+            pp.make_trapezoid(
+                channel="x", flat_area=100, flat_time=2e-3, system=system
+            ),
             pp.make_adc(num_samples=32, duration=2e-3, system=system),
         )
 
@@ -444,7 +449,9 @@ def test_the_epi_echo_index_is_quoted_after_mirroring():
     rev = np.asarray(labels["REV"], dtype=bool)
 
     assert set(echo.tolist()) == {15, 16}, "the fixture is not bipolar"
-    assert np.array_equal(np.where(rev, samples - 1 - echo, echo), np.full(echo.shape, 16))
+    assert np.array_equal(
+        np.where(rev, samples - 1 - echo, echo), np.full(echo.shape, 16)
+    )
 
 
 def test_a_single_named_dimension_takes_the_repeat_count():
@@ -495,7 +502,14 @@ def _stamp_label(seq, name, value_of):
             continue
         row = native.register_label_set(int(value_of(count)), label)
         native.set_block(
-            block, rf, gx, gy, gz, adc, native.chain_extension(labelset, row, ext), duration
+            block,
+            rf,
+            gx,
+            gy,
+            gz,
+            adc,
+            native.chain_extension(labelset, row, ext),
+            duration,
         )
         count += 1
     seq._touch()
@@ -579,7 +593,7 @@ def test_applying_writes_the_labels_and_the_definitions(tmp_path):
     scan = _cartesian_scan(range(16))
     labels_before = scan._native.num_label_set()
 
-    labels, aux = scan.auto_label()
+    _labels, aux = scan.auto_label()
 
     assert scan._native.num_label_set() > labels_before
     assert scan.definitions["kSpaceCenterLine"] == aux["kSpaceCenterLine"]
@@ -644,7 +658,11 @@ def test_every_autolabel_parameter_is_accepted():
     # MATLAB's come first, in MATLAB's order; ours are appended.
     names = [n for n in ours if n != "self"]
     assert names[: len(AUTOLABEL_PARAMETERS)] == list(AUTOLABEL_PARAMETERS.values())
-    assert all(p.kind is inspect.Parameter.KEYWORD_ONLY for p in ours.values() if p.name != "self")
+    assert all(
+        p.kind is inspect.Parameter.KEYWORD_ONLY
+        for p in ours.values()
+        if p.name != "self"
+    )
 
 
 def test_the_two_defaults_that_differ_from_matlab():
@@ -676,10 +694,14 @@ def test_slice_positions_index_by_slc_under_every_sorting(mode):
 
 def test_descending_is_the_reverse_of_ascending():
     up, aux_up = load("gre_2d_3sl").auto_label(skip_apply=True, sort_slices="ascending")
-    down, aux_down = load("gre_2d_3sl").auto_label(skip_apply=True, sort_slices="descending")
+    down, aux_down = load("gre_2d_3sl").auto_label(
+        skip_apply=True, sort_slices="descending"
+    )
 
-    assert np.allclose(np.asarray(aux_down["SlicePositions"]),
-                       np.asarray(aux_up["SlicePositions"])[::-1])
+    assert np.allclose(
+        np.asarray(aux_down["SlicePositions"]),
+        np.asarray(aux_up["SlicePositions"])[::-1],
+    )
     assert np.array_equal(down["SLC"], 2 - np.asarray(up["SLC"]))
     # The gap is geometry: it cannot depend on which end the counting starts.
     assert aux_up["SliceGap"] == aux_down["SliceGap"]
@@ -695,7 +717,9 @@ def test_mirror_fourier_turns_the_encoding_over_and_leaves_the_slices():
     mirrored, _ = load("gre_2d_3sl").auto_label(skip_apply=True, mirror_fourier=True)
 
     # Line order reverses ...
-    assert np.array_equal(mirrored["LIN"], plain["LIN"].max() - np.asarray(plain["LIN"]))
+    assert np.array_equal(
+        mirrored["LIN"], plain["LIN"].max() - np.asarray(plain["LIN"])
+    )
     # ... and the slice stack does not, which is what separates this from
     # reflect=[0, 1, 2].
     assert np.array_equal(mirrored["SLC"], plain["SLC"])

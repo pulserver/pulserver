@@ -1,0 +1,61 @@
+version: 2
+updates:
+  # The Actions in .github/workflows. These pin third-party code that runs
+  # with repository credentials, so they are the updates worth having weekly.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    labels: ["dependencies", "ci"]
+    commit-message:
+      prefix: "ci"
+    groups:
+      actions:
+        patterns: ["*"]
+
+  # Python dependencies declared in pyproject.toml. Grouped so the numerical
+  # stack arrives as one pull request that can be tested together rather than
+  # as a dozen that each need a full suite run.
+  - package-ecosystem: pip
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels: ["dependencies", "python"]
+    commit-message:
+      prefix: "deps"
+    groups:
+      numerical:
+        patterns:
+          - "numpy"
+          - "scipy"
+          - "torch*"
+          - "mri-nufft"
+          - "finufft"
+          - "cufinufft"
+          - "deepinv"
+          - "ptwt"
+          - "PyWavelets"
+      mr-stack:
+        patterns:
+          - "pypulseq"
+          - "ismrmrd"
+          - "pydicom"
+          - "SimpleITK"
+          - "h5py"
+      dev-tooling:
+        patterns:
+          - "pytest*"
+          - "coverage"
+          - "ruff"
+          - "pre-commit"
+          - "sphinx*"
+          - "myst-parser"
+          - "build"
+    ignore:
+      # Torch is pinned by what the scanner's CUDA runtime supports, so major
+      # bumps are a deliberate decision rather than a routine update.
+      - dependency-name: "torch"
+        update-types: ["version-update:semver-major"]

@@ -5,7 +5,7 @@ slab-selective SLR excitation — :class:`design.LineReadout3D` with both encode
 axes scaled per shot. Phase encoding may be undersampled on either axis, its
 regular lattice a CAIPIRINHA one with a selectable kz shift per ky block, with
 a fully sampled autocalibration rectangle and partial Fourier along y and z;
-the readout may be a partial echo. :mod:`pulserver.app.recon.gre3D_recon` reads all of
+the readout may be a partial echo. :mod:`pulserver.app.recon.cartesian3D_recon` reads all of
 it back.
 
 The autocalibration rectangle — the ``(ky, kz)`` pairs inside both ACS bands —
@@ -345,6 +345,7 @@ def main(
 # Subroutines of main()
 # ======================================================================
 
+
 def GRE3DKernel(
     system: pp.Opts,
     *,
@@ -463,6 +464,7 @@ n_dummy, spoiling_cycles
 # The scanner protocol contract
 # ======================================================================
 
+
 class Gre3D(SequencePlugin):
     """The 3D gradient echo behind the scanner protocol contract."""
 
@@ -570,9 +572,15 @@ class Gre3D(SequencePlugin):
                 ),
                 # Where the operator put the slab. Not a widget: the scanner
                 # fills these in from the prescription.
-                UIParam.FOV_OFFSET_X: OffFloatParam(value=0.0, min=-500.0, max=500.0, unit="mm"),
-                UIParam.FOV_OFFSET_Y: OffFloatParam(value=0.0, min=-500.0, max=500.0, unit="mm"),
-                UIParam.FOV_OFFSET_Z: OffFloatParam(value=0.0, min=-500.0, max=500.0, unit="mm"),
+                UIParam.FOV_OFFSET_X: OffFloatParam(
+                    value=0.0, min=-500.0, max=500.0, unit="mm"
+                ),
+                UIParam.FOV_OFFSET_Y: OffFloatParam(
+                    value=0.0, min=-500.0, max=500.0, unit="mm"
+                ),
+                UIParam.FOV_OFFSET_Z: OffFloatParam(
+                    value=0.0, min=-500.0, max=500.0, unit="mm"
+                ),
                 UIParam.user_name(0): Description(text="ACS lines (y)"),
                 UIParam.user_value(0): TypeinFloatParam(
                     value=24.0,
@@ -653,7 +661,11 @@ class Gre3D(SequencePlugin):
         try:
             kernel = GRE3DKernel(
                 system,
-                **{name: value for name, value in kwargs.items() if name in KERNEL_ARGUMENTS},
+                **{
+                    name: value
+                    for name, value in kwargs.items()
+                    if name in KERNEL_ARGUMENTS
+                },
             )
         except ValueError as error:
             return {"valid": False, "duration": None, "info": str(error)}
@@ -728,7 +740,9 @@ def protocol_kwargs(system: pp.Opts, protocol: dict[str, dict]) -> dict:
         partial_echo=params.user_float(prot, 1, 1.0),
         partial_fourier=params.user_float(prot, 3, 1.0),
         partial_fourier_z=params.user_float(prot, 4, 1.0),
-        n_acs=params.acs_lines_from_protocol(prot, params.param_int(prot, UIParam.NY), 0),
+        n_acs=params.acs_lines_from_protocol(
+            prot, params.param_int(prot, UIParam.NY), 0
+        ),
         n_dummy=max(0, round(params.user_float(prot, 2, 64.0))),
         n_acs_z=max(0, round(params.user_float(prot, 5, 16.0))),
         caipi_shift=max(0, round(params.user_float(prot, 6, 0.0))),
@@ -774,7 +788,12 @@ ARG_MAP = [
     ("--rz", UIParam.RZ, float, "Partition-encode undersampling factor along z"),
     ("--nex", UIParam.NEX, float, "Number of signal averages"),
     ("--offset-x-mm", UIParam.FOV_OFFSET_X, float, "Volume offset along readout [mm]"),
-    ("--offset-y-mm", UIParam.FOV_OFFSET_Y, float, "Volume offset along phase encode [mm]"),
+    (
+        "--offset-y-mm",
+        UIParam.FOV_OFFSET_Y,
+        float,
+        "Volume offset along phase encode [mm]",
+    ),
     ("--offset-z-mm", UIParam.FOV_OFFSET_Z, float, "Volume offset along slab [mm]"),
     ("--acs-lines", UIParam.user_value(0), float, "Number of ACS lines along y"),
     (
@@ -795,7 +814,12 @@ ARG_MAP = [
         float,
         "Acquired partition-encode fraction along z in (0.5, 1]",
     ),
-    ("--acs-partitions", UIParam.user_value(5), float, "Number of ACS partitions along z"),
+    (
+        "--acs-partitions",
+        UIParam.user_value(5),
+        float,
+        "Number of ACS partitions along z",
+    ),
     ("--caipi-shift", UIParam.user_value(6), float, "CAIPIRINHA kz shift per ky block"),
     (
         "--no-elliptical",

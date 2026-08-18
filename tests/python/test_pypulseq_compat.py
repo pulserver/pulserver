@@ -23,7 +23,13 @@ import pytest
 
 import pulserver.pypulseq as pp
 from pypulseq.utils.safe_pns_prediction import safe_example_hw
-from pulserver.pypulseq._results import RF_USES, AdcTimes, RfTimes, Waveforms, WaveformsAndTimes
+from pulserver.pypulseq._results import (
+    RF_USES,
+    AdcTimes,
+    RfTimes,
+    Waveforms,
+    WaveformsAndTimes,
+)
 
 #: Upstream's own example SAFE hardware, so no scanner .asc file is needed.
 #: The Irnich dict form only reaches the C path; upstream's ``calc_pns``
@@ -69,7 +75,9 @@ def _build(sequence_class, make, system, *, uses=("excitation",)):
         adc = make.make_adc(
             num_samples=128, duration=gx.flat_time, delay=gx.rise_time, system=system
         )
-        pre = make.make_trapezoid(channel="x", area=-gx.area / 2, duration=1e-3, system=system)
+        pre = make.make_trapezoid(
+            channel="x", area=-gx.area / 2, duration=1e-3, system=system
+        )
 
         for use in uses:
             rf, gz, gzr = make.make_sinc_pulse(
@@ -142,7 +150,8 @@ def test_every_method_takes_upstreams_arguments_before_any_of_ours(name):
         return [
             p.name
             for p in inspect.signature(fn).parameters.values()
-            if p.kind not in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD)
+            if p.kind
+            not in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD)
         ]
 
     theirs = names(getattr(upstream.Sequence, name))
@@ -170,7 +179,9 @@ def test_the_result_object_cannot_be_unpacked(pair, name):
 
 def _same(ours, theirs) -> bool:
     if isinstance(ours, (list, tuple)):
-        return len(ours) == len(theirs) and all(_same(a, b) for a, b in zip(ours, theirs))
+        return len(ours) == len(theirs) and all(
+            _same(a, b) for a, b in zip(ours, theirs, strict=False)
+        )
     ours, theirs = np.asarray(ours), np.asarray(theirs)
     return ours.shape == theirs.shape and np.allclose(ours, theirs, equal_nan=True)
 
@@ -180,12 +191,17 @@ def test_waveforms_matches_upstream_on_trapezoids(pair, append_RF):
     """Every gradient here is a real trapezoid, so the raster-edge restoration
     never fires and the answer has to be upstream's to the bit."""
     ours, theirs = pair
-    assert _same(ours.waveforms(append_RF=append_RF), theirs.waveforms(append_RF=append_RF))
+    assert _same(
+        ours.waveforms(append_RF=append_RF), theirs.waveforms(append_RF=append_RF)
+    )
 
 
 def test_waveforms_and_times_matches_upstream(pair):
     ours, theirs = pair
-    assert _same(ours.waveforms_and_times(append_RF=True), theirs.waveforms_and_times(append_RF=True))
+    assert _same(
+        ours.waveforms_and_times(append_RF=True),
+        theirs.waveforms_and_times(append_RF=True),
+    )
 
 
 def test_rf_and_adc_times_match_upstream(pair):
@@ -205,7 +221,10 @@ def test_a_time_range_matches_upstream(pair):
 
 def test_gradient_spectrum_still_appends_its_fifth_element_under_compat(system):
     """The deviation compat=False retires stays reachable while compat is on."""
-    assert "resonance_lines" in inspect.signature(pp.Sequence.calculate_gradient_spectrum).parameters
+    assert (
+        "resonance_lines"
+        in inspect.signature(pp.Sequence.calculate_gradient_spectrum).parameters
+    )
 
 
 # %% compat=False carries what upstream's shape cannot
@@ -214,7 +233,14 @@ def test_gradient_spectrum_still_appends_its_fifth_element_under_compat(system):
 def test_every_rf_use_survives_not_just_two(system):
     """Upstream drops inversion, saturation, preparation and other on the
     floor. An inversion pulse is not a footnote -- it defines the contrast."""
-    uses = ("excitation", "refocusing", "inversion", "saturation", "preparation", "other")
+    uses = (
+        "excitation",
+        "refocusing",
+        "inversion",
+        "saturation",
+        "preparation",
+        "other",
+    )
     ours = _build(pp.Sequence, pp, system, uses=uses)
 
     pulses = ours.rf_times(compat=False)
@@ -265,7 +291,7 @@ def test_echo_centres_are_the_c_cores_and_are_not_computed_until_read(pair):
     # Each centre falls inside its own readout, which is the only claim the
     # number makes that can be checked without redoing the trajectory.
     starts = np.concatenate(([0], np.cumsum(adc.num_samples)[:-1]))
-    for index, (start, count) in enumerate(zip(starts, adc.num_samples)):
+    for index, (start, count) in enumerate(zip(starts, adc.num_samples, strict=False)):
         window = adc.t[start : start + count]
         assert window[0] <= centres[index] <= window[-1]
 
@@ -275,7 +301,9 @@ def test_adc_phase_modulation_is_returned_where_upstream_drops_it(system):
     seq = pp.Sequence(system=system)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        gx = pp.make_trapezoid(channel="x", flat_area=1000, flat_time=2.56e-3, system=system)
+        gx = pp.make_trapezoid(
+            channel="x", flat_area=1000, flat_time=2.56e-3, system=system
+        )
         modulation = np.linspace(0.0, 1.0, 128)
         adc = pp.make_adc(
             num_samples=128,

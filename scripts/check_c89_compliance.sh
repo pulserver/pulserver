@@ -16,7 +16,7 @@ mkdir -p "$BUILD_DIR"
 echo "Checking C89 compliance of pulseg..."
 
 # Configure with strict C89 flags injected via CMAKE_C_FLAGS
-cmake -S "$REPO_ROOT/csrc" -B "$BUILD_DIR" \
+cmake -S "$REPO_ROOT/src/c" -B "$BUILD_DIR" \
     -DCMAKE_C_COMPILER=gcc \
     -DCMAKE_C_FLAGS="-std=c89 -pedantic -Werror -Wall -Wextra" \
     -DCMAKE_BUILD_TYPE=Release \

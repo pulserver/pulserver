@@ -1,0 +1,74 @@
+# Readability-first C++ style for the C++ layer (src/cpp/).
+#
+# This tree is idiomatic C++17, not C89 like src/c/, so it does not take the
+# repo-root .clang-format, which is tuned for C89's declaration style. Two
+# rules carry most of the weight:
+#   - never align continuation lines against an opening bracket (long names
+#     would otherwise push arguments far to the right), and
+#   - once a call or declaration does not fit, put every argument on its own
+#     line rather than packing as many as fit per line.
+
+BasedOnStyle: LLVM
+Language: Cpp
+Standard: c++17
+
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+ColumnLimit: 100
+
+# Match the Orchestra convention of indenting the body of a namespace.
+NamespaceIndentation: All
+
+# Align access specifiers with the class keyword, as the Orchestra headers do.
+AccessModifierOffset: -4
+
+# AlwaysBreak, not DontAlign: both refuse to align continuation lines against
+# the bracket, but only AlwaysBreak also puts the FIRST argument on its own
+# line, which is the shape we want for a wrapped argument list:
+#     int process(
+#         int first_argument,
+#         int second_argument);
+AlignAfterOpenBracket: AlwaysBreak
+BinPackParameters: false
+BinPackArguments: false
+BreakBeforeTernaryOperators: true
+AllowAllParametersOfDeclarationOnNextLine: false
+AllowAllArgumentsOnNextLine: false
+
+# Braces on their own line, the Orchestra (Allman) convention.
+BreakBeforeBraces: Allman
+
+# Keep short constructs readable rather than compact.
+AllowShortFunctionsOnASingleLine: None
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+AllowShortCaseLabelsOnASingleLine: false
+AllowShortBlocksOnASingleLine: Never
+
+# Do not let alignment padding drift as neighbouring lines change.
+AlignConsecutiveAssignments: false
+AlignConsecutiveDeclarations: false
+AlignOperands: DontAlign
+AlignTrailingComments: true
+AlignEscapedNewlines: DontAlign
+
+PointerAlignment: Left
+DerivePointerAlignment: false
+SpaceAfterCStyleCast: false
+SortIncludes: false
+ReflowComments: false
+
+# Long boolean expressions read better broken after the operator.
+BreakBeforeBinaryOperators: None
+
+# Never split the return type onto its own line -- LLVM's default penalty is
+# low enough that it does, which reads as a stray declaration.
+AlwaysBreakAfterReturnType: None
+PenaltyReturnTypeOnItsOwnLine: 100000
+
+IndentCaseLabels: false
+ContinuationIndentWidth: 4
+Cpp11BracedListStyle: true
+KeepEmptyLinesAtTheStartOfBlocks: false
+MaxEmptyLinesToKeep: 1

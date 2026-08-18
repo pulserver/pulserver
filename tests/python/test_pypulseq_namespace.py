@@ -18,7 +18,7 @@ import pypulseq as upstream
 import pytest
 
 import pulserver.pypulseq as pp
-from pulserver._ext import _pulseqpp_wrapper as cxx
+from pulserver._ext import pulseqpp as cxx
 
 
 @pytest.fixture
@@ -42,10 +42,18 @@ def pair(system):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             return {
-                "gx": make.make_trapezoid(channel="x", area=1000, duration=2e-3, system=system),
-                "gx2": make.make_trapezoid(channel="x", area=200, duration=1e-3, system=system),
-                "gy": make.make_trapezoid(channel="y", area=500, duration=1e-3, system=system),
-                "rf": make.make_sinc_pulse(flip_angle=0.5, duration=2e-3, system=system),
+                "gx": make.make_trapezoid(
+                    channel="x", area=1000, duration=2e-3, system=system
+                ),
+                "gx2": make.make_trapezoid(
+                    channel="x", area=200, duration=1e-3, system=system
+                ),
+                "gy": make.make_trapezoid(
+                    channel="y", area=500, duration=1e-3, system=system
+                ),
+                "rf": make.make_sinc_pulse(
+                    flip_angle=0.5, duration=2e-3, system=system
+                ),
                 "adc": make.make_adc(num_samples=64, duration=1.6e-3, system=system),
                 "trig": make.make_trigger("physio1", duration=1e-3),
             }
@@ -74,14 +82,25 @@ def test_calc_duration_accepts_slotted_events(pair, system):
     ("name", "call"),
     [
         ("scale_grad", lambda m, e, s: m.scale_grad(e["gx"], 0.5)),
-        ("add_gradients", lambda m, e, s: m.add_gradients([e["gx"], e["gx2"]], system=s)),
+        (
+            "add_gradients",
+            lambda m, e, s: m.add_gradients([e["gx"], e["gx2"]], system=s),
+        ),
         ("split_gradient", lambda m, e, s: m.split_gradient(e["gx"], system=s)),
-        ("split_gradient_at", lambda m, e, s: m.split_gradient_at(e["gx"], 1e-3, system=s)),
-        ("rotate", lambda m, e, s: m.rotate(e["gx"], e["gy"], angle=0.3, axis="z", system=s)),
+        (
+            "split_gradient_at",
+            lambda m, e, s: m.split_gradient_at(e["gx"], 1e-3, system=s),
+        ),
+        (
+            "rotate",
+            lambda m, e, s: m.rotate(e["gx"], e["gy"], angle=0.3, axis="z", system=s),
+        ),
         ("align", lambda m, e, s: m.align(right=[e["gx"]], left=[e["gy"]])),
     ],
 )
-def test_the_helpers_agree_with_upstream_and_hand_back_slotted_events(pair, system, name, call):
+def test_the_helpers_agree_with_upstream_and_hand_back_slotted_events(
+    pair, system, name, call
+):
     ours, theirs = pair
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
@@ -94,12 +113,22 @@ def test_the_helpers_agree_with_upstream_and_hand_back_slotted_events(pair, syst
         f"{name} handed back namespaces, not slotted events"
     )
 
-    for got, want in zip(produced, _events_in(yours)):
+    for got, want in zip(produced, _events_in(yours), strict=False):
         assert got.type == want.type
-        for field in ("amplitude", "delay", "rise_time", "flat_time", "fall_time", "area"):
+        for field in (
+            "amplitude",
+            "delay",
+            "rise_time",
+            "flat_time",
+            "fall_time",
+            "area",
+        ):
             if hasattr(want, field) and hasattr(got, field):
                 np.testing.assert_allclose(
-                    getattr(got, field), getattr(want, field), rtol=1e-12, err_msg=f"{name}.{field}"
+                    getattr(got, field),
+                    getattr(want, field),
+                    rtol=1e-12,
+                    err_msg=f"{name}.{field}",
                 )
         if hasattr(want, "waveform") and hasattr(got, "waveform"):
             np.testing.assert_allclose(got.waveform, want.waveform, rtol=1e-10)
@@ -184,10 +213,14 @@ def _factory_calls(system):
         ),
         "make_crusher": lambda: pp.make_crusher(4.0, 5e-3, "z", system=system),
         "make_delay": lambda: pp.make_delay(1e-3),
-        "make_digital_output_pulse": lambda: pp.make_digital_output_pulse("osc0", duration=1e-3),
+        "make_digital_output_pulse": lambda: pp.make_digital_output_pulse(
+            "osc0", duration=1e-3
+        ),
         "make_extended_trapezoid": lambda: pp.make_extended_trapezoid(
-            "x", amplitudes=np.array([0.0, 1000.0, 0.0]),
-            times=np.array([0.0, 200e-6, 400e-6]), system=system,
+            "x",
+            amplitudes=np.array([0.0, 1000.0, 0.0]),
+            times=np.array([0.0, 200e-6, 400e-6]),
+            system=system,
         ),
         "make_extended_trapezoid_area": lambda: pp.make_extended_trapezoid_area(
             area=1000, channel="x", grad_start=0.0, grad_end=0.0, system=system
@@ -199,8 +232,12 @@ def _factory_calls(system):
             area=1000, channel="x", grad_start=0.0, grad_end=0.0, system=system
         ),
         "make_label": lambda: pp.make_label("LIN", "SET", 3),
-        "make_phase_blip": lambda: pp.make_phase_blip("y", 0.24, steps=2, system=system),
-        "make_phase_encoding": lambda: pp.make_phase_encoding("y", 0.22 / 64, system=system),
+        "make_phase_blip": lambda: pp.make_phase_blip(
+            "y", 0.24, steps=2, system=system
+        ),
+        "make_phase_encoding": lambda: pp.make_phase_encoding(
+            "y", 0.22 / 64, system=system
+        ),
         "make_rf_shim": lambda: pp.make_rf_shim([1 + 0j, 0.5 + 0.5j]),
         "make_rotation": lambda: pp.make_rotation(Rotation.from_euler("z", 0.3)),
         "make_sigpy_pulse": lambda: pp.make_sigpy_pulse(0.5, system=system),
@@ -213,7 +250,9 @@ def _factory_calls(system):
             matrix=16,
             selective_size=0.04,
             n_interleaves=2,
-            system=pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=180, slew_unit="T/m/s"),
+            system=pp.Opts(
+                max_grad=40, grad_unit="mT/m", max_slew=180, slew_unit="T/m/s"
+            ),
         ),
         "make_slr_pulse": lambda: pp.make_slr_pulse(0.5, system=system),
         "make_sms_pulse": lambda: pp.make_sms_pulse(
@@ -224,10 +263,14 @@ def _factory_calls(system):
             10e-3,
             300.0,
             n_subpulses=12,
-            system=pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=180, slew_unit="T/m/s"),
+            system=pp.Opts(
+                max_grad=40, grad_unit="mT/m", max_slew=180, slew_unit="T/m/s"
+            ),
         ),
         "make_soft_delay": lambda: pp.make_soft_delay(numID=1, hint="TE"),
-        "make_trapezoid": lambda: pp.make_trapezoid(channel="x", area=1000, system=system),
+        "make_trapezoid": lambda: pp.make_trapezoid(
+            channel="x", area=1000, system=system
+        ),
         "make_trigger": lambda: pp.make_trigger("physio1", duration=1e-3),
     }
 
@@ -255,7 +298,9 @@ def test_every_factory_hands_back_an_event_with_its_fields_in_slots(system):
     assert set(calls) == {
         name
         for name in pp.__all__
-        if name.startswith("make_") and name not in pp.SAMPLING and name not in pp.SYSTEM
+        if name.startswith("make_")
+        and name not in pp.SAMPLING
+        and name not in pp.SYSTEM
     }
 
     for name, call in calls.items():
@@ -265,6 +310,8 @@ def test_every_factory_hands_back_an_event_with_its_fields_in_slots(system):
         events = _events_in(made) or [made]
         slotted = [isinstance(event, cxx.Event) for event in events]
         if name in _UNSLOTTED:
-            assert not any(slotted), f"{name} is now slotted: {_UNSLOTTED[name]} no longer holds"
+            assert not any(slotted), (
+                f"{name} is now slotted: {_UNSLOTTED[name]} no longer holds"
+            )
         else:
             assert all(slotted), f"{name} returned {[type(e).__name__ for e in events]}"

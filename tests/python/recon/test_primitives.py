@@ -9,7 +9,7 @@ import pytest
 
 import pulserver.recon.optim as algorithms
 import pulserver.recon.calibration as calibration
-import pulserver.recon._mrd.epi as epi
+import pulserver.recon.preprocessing as epi
 from pulserver.recon._mrd.grouping import (
     filter_acquisitions,
     group_by_labels,
@@ -57,6 +57,11 @@ def test_nlinv_public_api_is_class_based():
         "WavePSFCalibration",
         "WavePSFResult",
         "calibration_extent",
+        # The two estimators a reconstruction actually calls: one reads the
+        # calibration block off a sampling mask and solves NLINV on it, the
+        # other low-passes coil images a non-Cartesian adjoint produced.
+        "sensitivities",
+        "smooth_sensitivities",
     ]
     assert not hasattr(calibration, "nlinv_sensitivities")
     assert not hasattr(calibration, "estimate_sensitivities")
@@ -146,9 +151,7 @@ def test_the_diffusion_table_comes_back_out_of_the_header():
     np.testing.assert_allclose(np.abs(table.b_vectors), np.eye(3)[:2], atol=1e-12)
     # Linear encoding: one non-zero eigenvalue, so b_delta is 1.
     np.testing.assert_allclose(table.b_delta, [1.0, 1.0], rtol=1e-12)
-    np.testing.assert_allclose(
-        table.mrtrix_table()[:, 3], table.b_values, rtol=1e-12
-    )
+    np.testing.assert_allclose(table.mrtrix_table()[:, 3], table.b_values, rtol=1e-12)
 
 
 def test_a_scan_without_a_diffusion_table_reads_as_none():
@@ -216,4 +219,3 @@ def test_sms_inputs_require_caipi_and_a_reconstruction_reference():
     SmsEpiInputs(
         imaging=object(), caipi_encoding=object(), coil_maps=object()
     ).validate(multiband_factor=2)
-

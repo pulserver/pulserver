@@ -99,7 +99,7 @@ def instance_table(seq, gamma_hz_per_t: float, b0_t: float) -> dict[str, np.ndar
         "nopos_flag": np.zeros(n, dtype=int),
     }
 
-    sticky = {name: 0 for name in _STICKY}
+    sticky = dict.fromkeys(_STICKY, 0)
     for i in range(n):
         block = seq.get_block(i + 1)
         for kind, name, value in block.labels:
@@ -132,14 +132,16 @@ def instance_table(seq, gamma_hz_per_t: float, b0_t: float) -> dict[str, np.ndar
     return out
 
 
-def adc_label_table(seq, columns: tuple[str, ...] = ("LIN", "SLC", "ECO")) -> np.ndarray:
+def adc_label_table(
+    seq, columns: tuple[str, ...] = ("LIN", "SLC", "ECO")
+) -> np.ndarray:
     """The per-acquisition counter table, one row per ADC in stream order.
 
     Only labels the file WRITES count (SET assigns, INC accumulates): the
     instance table carries execution parameters as stated, never counters
     somebody could derive from the trajectory.
     """
-    state = {name: 0 for name in columns}
+    state = dict.fromkeys(columns, 0)
     rows: list[list[int]] = []
     for i in range(1, seq.num_blocks + 1):
         block = seq.get_block(i)
@@ -163,9 +165,17 @@ def gradient_vertices(block, axis: str, t0_us: float) -> tuple[np.ndarray, np.nd
         return np.empty(0), np.empty(0)
     delay_us = float(grad.delay) * 1e6
     if grad.type == "trap":
-        t = t0_us + delay_us + np.cumsum(
-            [0.0, float(grad.rise_time) * 1e6, float(grad.flat_time) * 1e6,
-             float(grad.fall_time) * 1e6]
+        t = (
+            t0_us
+            + delay_us
+            + np.cumsum(
+                [
+                    0.0,
+                    float(grad.rise_time) * 1e6,
+                    float(grad.flat_time) * 1e6,
+                    float(grad.fall_time) * 1e6,
+                ]
+            )
         )
         v = np.array([0.0, grad.amplitude, grad.amplitude, 0.0])
         return t, v

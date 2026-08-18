@@ -14,7 +14,7 @@
  *   6. Set up echo filters and data storage dimensions.
  *
  * Compile:
- *   cc -I../../csrc example_check.c ../../csrc/pulseqlib_*.c -lm -o check
+ *   cc -I../../src/c example_check.c ../../src/c/pulseqlib_*.c -lm -o check
  */
 
 #include "example_vendorlib.h"

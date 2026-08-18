@@ -25,42 +25,42 @@
 #include <vector>
 #include <utility>
 
-using pulseq::Block;
 using pulseq::BaseTrajectory;
+using pulseq::Block;
 using pulseq::Sequence;
 
 namespace
 {
-    /* A trapezoid: 100 us up, `flat` flat, 100 us down, no delay. */
-    std::array<double, pulseq::TRAP_WIDTH> trap(double amplitude, double flat)
-    {
-        return {amplitude, 100e-6, flat, 100e-6, 0.0};
-    }
+/* A trapezoid: 100 us up, `flat` flat, 100 us down, no delay. */
+std::array<double, pulseq::TRAP_WIDTH> trap(double amplitude, double flat)
+{
+    return {amplitude, 100e-6, flat, 100e-6, 0.0};
+}
 
-    std::array<double, pulseq::ADC_WIDTH> adc(double num_samples, double dwell, double delay)
-    {
-        return {num_samples, dwell, delay, 0, 0, 0, 0, 0};
-    }
+std::array<double, pulseq::ADC_WIDTH> adc(double num_samples, double dwell, double delay)
+{
+    return {num_samples, dwell, delay, 0, 0, 0, 0, 0};
+}
 
-    /* A block whose gx is a trapezoid and whose ADC sits on its flat top. */
-    int add_readout(Sequence& seq, double amplitude, double flat, double dwell, int samples)
-    {
-        const auto g = trap(amplitude, flat);
-        const auto a = adc(samples, dwell, 100e-6);
+/* A block whose gx is a trapezoid and whose ADC sits on its flat top. */
+int add_readout(Sequence &seq, double amplitude, double flat, double dwell, int samples)
+{
+    const auto g = trap(amplitude, flat);
+    const auto a = adc(samples, dwell, 100e-6);
 
-        Block b;
-        b.gx = seq.register_trap(g.data());
-        b.adc = seq.register_adc(a.data());
-        b.duration = 100e-6 + flat + 100e-6;
-        return seq.add_block(b);
-    }
+    Block b;
+    b.gx = seq.register_trap(g.data());
+    b.adc = seq.register_adc(a.data());
+    b.duration = 100e-6 + flat + 100e-6;
+    return seq.add_block(b);
+}
 
-    /* The trapezoid row block 1's gx points at. */
-    int seq_first_trap(const Sequence& seq)
-    {
-        return seq.grad_row(seq.get_block(1).gx);
-    }
-}  // namespace
+/* The trapezoid row block 1's gx points at. */
+int seq_first_trap(const Sequence &seq)
+{
+    return seq.grad_row(seq.get_block(1).gx);
+}
+} // namespace
 
 /* ================================================================== */
 /*  Instance independence -- the point of the whole thing              */
@@ -128,7 +128,7 @@ TEST(PulseqTrajectory, RampInsideTheWindowIsNotConstant)
 {
     Sequence seq;
     const auto g = trap(50000.0, 640e-6);
-    const auto a = adc(64, 10e-6, 0.0);  /* starts at t=0, over the ramp */
+    const auto a = adc(64, 10e-6, 0.0); /* starts at t=0, over the ramp */
 
     Block b;
     b.gx = seq.register_trap(g.data());
@@ -193,17 +193,18 @@ TEST(PulseqTrajectory, ArbitraryBaseIntegratesTheNormalisedShape)
 
     /* A flat normalised waveform of 1.0: its integral is just elapsed time. */
     const std::vector<double> samples(8, 1.0);
-    const int shape =
-        seq.register_shape(static_cast<int>(samples.size()), samples.data(),
-                           static_cast<int>(samples.size()));
+    const int shape = seq.register_shape(
+        static_cast<int>(samples.size()),
+        samples.data(),
+        static_cast<int>(samples.size()));
 
     std::array<double, pulseq::ARB_WIDTH> g{};
-    g[0] = 20000.0;                        /* amplitude */
-    g[1] = 20000.0;                        /* first     */
-    g[2] = 20000.0;                        /* last      */
-    g[3] = static_cast<double>(shape);     /* amp shape */
-    g[4] = 0.0;                            /* time shape: default raster */
-    g[5] = 0.0;                            /* delay     */
+    g[0] = 20000.0;                    /* amplitude */
+    g[1] = 20000.0;                    /* first     */
+    g[2] = 20000.0;                    /* last      */
+    g[3] = static_cast<double>(shape); /* amp shape */
+    g[4] = 0.0;                        /* time shape: default raster */
+    g[5] = 0.0;                        /* delay     */
 
     const auto a = adc(4, 10e-6, 0.0);
     Block b;
@@ -233,9 +234,10 @@ TEST(PulseqTrajectory, ArbitraryBaseIsAmplitudeIndependent)
     std::vector<double> samples(16);
     for (size_t i = 0; i < samples.size(); ++i)
         samples[i] = static_cast<double>(i) / static_cast<double>(samples.size() - 1);
-    const int shape =
-        seq.register_shape(static_cast<int>(samples.size()), samples.data(),
-                           static_cast<int>(samples.size()));
+    const int shape = seq.register_shape(
+        static_cast<int>(samples.size()),
+        samples.data(),
+        static_cast<int>(samples.size()));
 
     auto make = [&](double amplitude)
     {
@@ -272,7 +274,7 @@ TEST(PulseqTrajectory, CompressedShapesGiveTheSameBaseAsRawOnes)
      * encoded path has to agree with the raw one it will be compared against. */
     Sequence raw;
     Sequence packed;
-    for (Sequence* seq : {&raw, &packed})
+    for (Sequence *seq : {&raw, &packed})
         seq->set_rasters(1e-6, 10e-6, 100e-9, 10e-6);
 
     /* A flat-topped waveform, which is what compress_shape is built for and
@@ -287,7 +289,7 @@ TEST(PulseqTrajectory, CompressedShapesGiveTheSameBaseAsRawOnes)
         samples.push_back(1.0 - static_cast<double>(i) * 0.03125);
     ASSERT_EQ(samples.size(), 256u);
 
-    auto build = [&](Sequence& seq)
+    auto build = [&](Sequence &seq)
     {
         const int shape = seq.register_raw_shape(samples.data(), static_cast<int>(samples.size()));
         std::array<double, pulseq::ARB_WIDTH> g{};
@@ -361,50 +363,53 @@ TEST(PulseqTrajectory, OutOfRangeBlockThrows)
 
 namespace
 {
-    /* An RF row: amplitude, mag shape, phase shape, time shape, center, delay. */
-    std::array<double, pulseq::RF_WIDTH> rf_row(int mag_shape, int phase_shape, double center,
-                                                double delay)
-    {
-        std::array<double, pulseq::RF_WIDTH> r{};
-        r[0] = 1000.0;
-        r[1] = static_cast<double>(mag_shape);
-        r[2] = static_cast<double>(phase_shape);
-        r[3] = 0.0;
-        r[4] = center;
-        r[5] = delay;
-        return r;
-    }
+/* An RF row: amplitude, mag shape, phase shape, time shape, center, delay. */
+std::array<double, pulseq::RF_WIDTH> rf_row(
+    int mag_shape,
+    int phase_shape,
+    double center,
+    double delay)
+{
+    std::array<double, pulseq::RF_WIDTH> r{};
+    r[0] = 1000.0;
+    r[1] = static_cast<double>(mag_shape);
+    r[2] = static_cast<double>(phase_shape);
+    r[3] = 0.0;
+    r[4] = center;
+    r[5] = delay;
+    return r;
+}
 
-    /* Add a hard pulse of `use`, returning the block index. */
-    int add_pulse(Sequence& seq, char use, double duration)
-    {
-        const std::vector<double> mag(8, 1.0);
-        const std::vector<double> phase(8, 0.0);
-        const int m = seq.register_raw_shape(mag.data(), 8);
-        const int p = seq.register_raw_shape(phase.data(), 8);
+/* Add a hard pulse of `use`, returning the block index. */
+int add_pulse(Sequence &seq, char use, double duration)
+{
+    const std::vector<double> mag(8, 1.0);
+    const std::vector<double> phase(8, 0.0);
+    const int m = seq.register_raw_shape(mag.data(), 8);
+    const int p = seq.register_raw_shape(phase.data(), 8);
 
-        const auto r = rf_row(m, p, 0.5 * duration, 0.0);
-        Block b;
-        b.rf = seq.register_rf(r.data(), use);
-        b.duration = duration;
-        return seq.add_block(b);
-    }
+    const auto r = rf_row(m, p, 0.5 * duration, 0.0);
+    Block b;
+    b.rf = seq.register_rf(r.data(), use);
+    b.duration = duration;
+    return seq.add_block(b);
+}
 
-    /* A gradient-only block, returning its index. */
-    int add_gradient(Sequence& seq, double amplitude, double flat)
-    {
-        const auto g = trap(amplitude, flat);
-        Block b;
-        b.gx = seq.register_trap(g.data());
-        b.duration = 100e-6 + flat + 100e-6;
-        return seq.add_block(b);
-    }
-}  // namespace
+/* A gradient-only block, returning its index. */
+int add_gradient(Sequence &seq, double amplitude, double flat)
+{
+    const auto g = trap(amplitude, flat);
+    Block b;
+    b.gx = seq.register_trap(g.data());
+    b.duration = 100e-6 + flat + 100e-6;
+    return seq.add_block(b);
+}
+} // namespace
 
 TEST(PulseqKOrigins, GradientsAccumulate)
 {
     Sequence seq;
-    add_gradient(seq, 30000.0, 500e-6);  // moment 600e-6 * 30000 = 18 /m
+    add_gradient(seq, 30000.0, 500e-6); // moment 600e-6 * 30000 = 18 /m
     add_gradient(seq, 30000.0, 500e-6);
 
     const auto origins = pulseq::block_k_origins(seq);
@@ -428,9 +433,9 @@ TEST(PulseqKOrigins, ExcitationResetsK)
 TEST(PulseqKOrigins, RefocusingNegatesK)
 {
     Sequence seq;
-    add_gradient(seq, 30000.0, 500e-6);   // k = +18
-    add_pulse(seq, 'r', 200e-6);          // k = -18
-    add_gradient(seq, 30000.0, 500e-6);   // k = 0 -- the echo
+    add_gradient(seq, 30000.0, 500e-6); // k = +18
+    add_pulse(seq, 'r', 200e-6);        // k = -18
+    add_gradient(seq, 30000.0, 500e-6); // k = 0 -- the echo
 
     const auto origins = pulseq::block_k_origins(seq);
     EXPECT_NEAR(origins[2][0], 18.0, 1e-9);
@@ -493,8 +498,8 @@ TEST(PulseqKOrigins, CrushersSplitAroundTheRefocusingCentre)
     const int p = seq.register_raw_shape(phase.data(), 8);
 
     /* Gradient spans the block; the pulse sits at its centre. */
-    const auto g = trap(20000.0, 800e-6);       // total moment 900e-6 * 20000 = 18
-    const auto r = rf_row(m, p, 500e-6, 0.0);   // centre at 500 us, mid flat-top
+    const auto g = trap(20000.0, 800e-6);     // total moment 900e-6 * 20000 = 18
+    const auto r = rf_row(m, p, 500e-6, 0.0); // centre at 500 us, mid flat-top
 
     Block b;
     b.gx = seq.register_trap(g.data());
@@ -516,7 +521,7 @@ TEST(PulseqKOrigins, CrushersSplitAroundTheRefocusingCentre)
 TEST(PulseqAbsoluteTrajectory, IsOriginPlusAmplitudeTimesBase)
 {
     Sequence seq;
-    add_gradient(seq, 30000.0, 500e-6);  // prewinder: k = 18
+    add_gradient(seq, 30000.0, 500e-6); // prewinder: k = 18
     const int readout = add_readout(seq, 50000.0, 640e-6, 10e-6, 64);
 
     const auto origins = pulseq::block_k_origins(seq);
@@ -526,8 +531,10 @@ TEST(PulseqAbsoluteTrajectory, IsOriginPlusAmplitudeTimesBase)
     ASSERT_EQ(k[0].size(), static_cast<size_t>(base.num_samples));
     for (int i = 0; i < base.num_samples; ++i)
     {
-        EXPECT_NEAR(k[0][static_cast<size_t>(i)],
-                    18.0 + 50000.0 * base.axis[0].base[static_cast<size_t>(i)], 1e-9)
+        EXPECT_NEAR(
+            k[0][static_cast<size_t>(i)],
+            18.0 + 50000.0 * base.axis[0].base[static_cast<size_t>(i)],
+            1e-9)
             << "sample " << i;
     }
     EXPECT_TRUE(k[1].empty());
@@ -548,7 +555,7 @@ TEST(PulseqFovShift, ConstantGradientCostsTwoScalarsAndNoShape)
     const int shapes_before = seq.shape_library().size();
     pulseq::apply_fov_shift(seq, {0.01, 0.0, 0.0}, pulseq::FovShiftScope::RfAndAdc);
 
-    const double* row = seq.adc_library().row(seq.get_block(blk).adc);
+    const double *row = seq.adc_library().row(seq.get_block(blk).adc);
     EXPECT_NE(row[5], 0.0) << "a frequency offset";
     EXPECT_EQ(row[7], 0.0) << "and no residual shape";
     EXPECT_EQ(seq.shape_library().size(), shapes_before);
@@ -561,7 +568,7 @@ TEST(PulseqFovShift, VaryingGradientNeedsAResidual)
 {
     Sequence seq;
     const auto g = trap(50000.0, 640e-6);
-    const auto a = adc(64, 10e-6, 0.0);  // starts on the ramp
+    const auto a = adc(64, 10e-6, 0.0); // starts on the ramp
 
     Block b;
     b.gx = seq.register_trap(g.data());
@@ -595,7 +602,7 @@ TEST(PulseqFovShift, ReconstructedPhaseMatchesTheShiftTimesK)
     constexpr double shift = 0.013;
     pulseq::apply_fov_shift(seq, {shift, 0.0, 0.0}, pulseq::FovShiftScope::RfAndAdc);
 
-    const double* row = seq.adc_library().row(seq.get_block(blk).adc);
+    const double *row = seq.adc_library().row(seq.get_block(blk).adc);
     const int n = static_cast<int>(row[0]);
     const double dwell = row[1];
     const double delay = row[2];
@@ -604,9 +611,10 @@ TEST(PulseqFovShift, ReconstructedPhaseMatchesTheShiftTimesK)
     const int shape_id = static_cast<int>(row[7]);
     ASSERT_GT(shape_id, 0);
 
-    const auto& shapes = seq.shape_library();
-    std::vector<double> residual(shapes.samples(shape_id),
-                                 shapes.samples(shape_id) + shapes.num_uncompressed(shape_id));
+    const auto &shapes = seq.shape_library();
+    std::vector<double> residual(
+        shapes.samples(shape_id),
+        shapes.samples(shape_id) + shapes.num_uncompressed(shape_id));
 
     constexpr double two_pi = 6.283185307179586476925286766559;
     for (int i = 0; i < n; ++i)
@@ -614,50 +622,49 @@ TEST(PulseqFovShift, ReconstructedPhaseMatchesTheShiftTimesK)
         const double t = delay + (static_cast<double>(i) + 0.5) * dwell;
         const double rebuilt =
             two_pi * freq * (t - delay) + phase + residual[static_cast<size_t>(i)];
-        EXPECT_NEAR(rebuilt, two_pi * shift * k[0][static_cast<size_t>(i)], 1e-9)
-            << "sample " << i;
+        EXPECT_NEAR(rebuilt, two_pi * shift * k[0][static_cast<size_t>(i)], 1e-9) << "sample " << i;
     }
 }
 
 namespace
 {
-    /* An 8-sample hard pulse under a slice-select trapezoid.  `delay` places
+/* An 8-sample hard pulse under a slice-select trapezoid.  `delay` places
      * it: 200 us puts every sample on the flat top, 0 puts it on the ramp. */
-    int add_selective_pulse(Sequence& seq, double delay, int phase_shape_or_zero)
+int add_selective_pulse(Sequence &seq, double delay, int phase_shape_or_zero)
+{
+    seq.set_rasters(1e-6, 10e-6, 100e-9, 10e-6);
+
+    const std::vector<double> mag(8, 1.0);
+    const int m = seq.register_raw_shape(mag.data(), 8);
+    int p = phase_shape_or_zero;
+    if (p < 0)
     {
-        seq.set_rasters(1e-6, 10e-6, 100e-9, 10e-6);
-
-        const std::vector<double> mag(8, 1.0);
-        const int m = seq.register_raw_shape(mag.data(), 8);
-        int p = phase_shape_or_zero;
-        if (p < 0)
-        {
-            const std::vector<double> phase(8, 0.0);
-            p = seq.register_raw_shape(phase.data(), 8);
-        }
-
-        const auto g = trap(20000.0, 800e-6);
-        const auto r = rf_row(m, p, 4e-6, delay);
-
-        Block b;
-        b.gx = seq.register_trap(g.data());
-        b.rf = seq.register_rf(r.data(), 'e');
-        b.duration = 1000e-6;
-        return seq.add_block(b);
+        const std::vector<double> phase(8, 0.0);
+        p = seq.register_raw_shape(phase.data(), 8);
     }
-}  // namespace
+
+    const auto g = trap(20000.0, 800e-6);
+    const auto r = rf_row(m, p, 4e-6, delay);
+
+    Block b;
+    b.gx = seq.register_trap(g.data());
+    b.rf = seq.register_rf(r.data(), 'e');
+    b.duration = 1000e-6;
+    return seq.add_block(b);
+}
+} // namespace
 
 TEST(PulseqFovShift, RfUnderAConstantGradientCostsTwoScalarsAndNoShape)
 {
     Sequence seq;
     const int blk = add_selective_pulse(seq, 200e-6, -1);
-    const double* before = seq.rf_library().row(seq.get_block(blk).rf);
+    const double *before = seq.rf_library().row(seq.get_block(blk).rf);
     const int phase_id = static_cast<int>(before[2]);
     const int shapes_before = seq.shape_library().size();
 
     pulseq::apply_fov_shift(seq, {0.01, 0.0, 0.0}, pulseq::FovShiftScope::RfOnly);
 
-    const double* row = seq.rf_library().row(seq.get_block(blk).rf);
+    const double *row = seq.rf_library().row(seq.get_block(blk).rf);
     EXPECT_EQ(static_cast<int>(row[2]), phase_id) << "the phase shape is untouched";
     EXPECT_EQ(seq.shape_library().size(), shapes_before);
 
@@ -678,18 +685,16 @@ TEST(PulseqFovShift, RfScalarsReproduceTheBakedPhaseExactly)
 
     pulseq::apply_fov_shift(seq, {0.01, 0.0, 0.0}, pulseq::FovShiftScope::RfOnly);
 
-    const double* row = seq.rf_library().row(seq.get_block(blk).rf);
+    const double *row = seq.rf_library().row(seq.get_block(blk).rf);
     constexpr double two_pi = 6.283185307179586476925286766559;
     constexpr double shift = 0.01;
 
     /* k under trap(20000, 800e-6) at a time on the flat top, from block
      * start: full ramp area plus the flat run so far. */
-    const auto k_at = [](double t) {
-        return 20000.0 * (0.5 * 100e-6 + (t - 100e-6));
-    };
+    const auto k_at = [](double t) { return 20000.0 * (0.5 * 100e-6 + (t - 100e-6)); };
     for (int i = 0; i < 8; ++i)
     {
-        const double tau = (static_cast<double>(i) + 0.5) * 1e-6;  // from shape start
+        const double tau = (static_cast<double>(i) + 0.5) * 1e-6; // from shape start
         const double from_scalars = row[9] + two_pi * row[8] * tau;
         const double baked = two_pi * shift * (k_at(200e-6 + tau) - k_at(200e-6 + 4e-6));
         EXPECT_NEAR(from_scalars, baked, 1e-9) << "sample " << i;
@@ -700,19 +705,19 @@ TEST(PulseqFovShift, RfOverlappingTheRampStillBakesAShape)
 {
     Sequence seq;
     const int blk = add_selective_pulse(seq, 0.0, -1);
-    const double* before = seq.rf_library().row(seq.get_block(blk).rf);
+    const double *before = seq.rf_library().row(seq.get_block(blk).rf);
     const int phase_id = static_cast<int>(before[2]);
 
     pulseq::apply_fov_shift(seq, {0.01, 0.0, 0.0}, pulseq::FovShiftScope::RfOnly);
 
-    const double* row = seq.rf_library().row(seq.get_block(blk).rf);
+    const double *row = seq.rf_library().row(seq.get_block(blk).rf);
     EXPECT_NE(static_cast<int>(row[2]), phase_id) << "a varying gradient needs the shape";
     EXPECT_EQ(row[8], 0.0);
 
     /* The pulse centre is at 4 us, inside the first sample, and the phase is
      * referenced there -- so the shape passes through ~0 near the start and
      * varies away from it. */
-    const double* samples = seq.shape_library().samples(static_cast<int>(row[2]));
+    const double *samples = seq.shape_library().samples(static_cast<int>(row[2]));
     EXPECT_NEAR(samples[0], 0.0, 2e-3);
     EXPECT_NE(samples[7], samples[0]);
 }
@@ -734,7 +739,7 @@ TEST(PulseqFovShift, RepeatedRfContextsDedupOntoOneRow)
 
     Block b;
     b.gx = seq.register_trap(g.data());
-    b.rf = seq.register_rf(r.data(), 'i');  // leaves k alone, so origins differ
+    b.rf = seq.register_rf(r.data(), 'i'); // leaves k alone, so origins differ
     b.duration = 1000e-6;
     const int first = seq.add_block(b);
     const int second = seq.add_block(b);
@@ -758,7 +763,7 @@ TEST(PulseqFovShift, AnRfWithoutAPhaseShapeStillGetsTheScalars)
 
     pulseq::apply_fov_shift(seq, {0.01, 0.0, 0.0}, pulseq::FovShiftScope::RfOnly);
 
-    const double* row = seq.rf_library().row(seq.get_block(blk).rf);
+    const double *row = seq.rf_library().row(seq.get_block(blk).rf);
     EXPECT_EQ(static_cast<int>(row[2]), 0) << "still no phase shape";
     EXPECT_NEAR(row[8], 200.0, 1e-9);
 }
@@ -785,8 +790,8 @@ TEST(PulseqFovShift, ServerScopeBakesACartesianReadoutLikeNative)
     pulseq::apply_fov_shift(server, {0.01, 0.0, 0.0}, pulseq::FovShiftScope::Server);
     pulseq::apply_fov_shift(native, {0.01, 0.0, 0.0}, pulseq::FovShiftScope::RfAndAdc);
 
-    const double* s = server.adc_library().row(server.get_block(blk).adc);
-    const double* n = native.adc_library().row(native.get_block(blk).adc);
+    const double *s = server.adc_library().row(server.get_block(blk).adc);
+    const double *n = native.adc_library().row(native.get_block(blk).adc);
     for (int c = 0; c < pulseq::ADC_WIDTH; ++c)
         EXPECT_DOUBLE_EQ(s[c], n[c]) << "column " << c;
     EXPECT_NEAR(s[5], 500.0, 1e-9);
@@ -818,7 +823,7 @@ TEST(PulseqFovShift, ServerScopeDefersARampSampledReadout)
 {
     Sequence seq;
     const auto g = trap(50000.0, 640e-6);
-    const auto a = adc(64, 10e-6, 0.0);  // starts on the ramp
+    const auto a = adc(64, 10e-6, 0.0); // starts on the ramp
 
     Block b;
     b.gx = seq.register_trap(g.data());
@@ -850,11 +855,11 @@ TEST(PulseqFovShift, ZeroShiftIsANoOp)
 TEST(PulseqFovShift, ShiftAlongAnAxisWithNoGradientDoesNothing)
 {
     Sequence seq;
-    const int blk = add_readout(seq, 50000.0, 640e-6, 10e-6, 64);  // gx only
+    const int blk = add_readout(seq, 50000.0, 640e-6, 10e-6, 64); // gx only
 
     pulseq::apply_fov_shift(seq, {0.0, 0.02, 0.0}, pulseq::FovShiftScope::RfAndAdc);
 
-    const double* row = seq.adc_library().row(seq.get_block(blk).adc);
+    const double *row = seq.adc_library().row(seq.get_block(blk).adc);
     EXPECT_DOUBLE_EQ(row[5], 0.0);
     EXPECT_DOUBLE_EQ(row[6], 0.0);
 }
@@ -871,8 +876,7 @@ TEST(PulseqFovShift, ABlockRangeLeavesTheBlocksOutsideItAlone)
     const int third = add_readout(seq, 50000.0, 640e-6, 10e-6, 64);
     const int32_t before = seq.get_block(third).adc;
 
-    pulseq::apply_fov_shift(seq, {0.01, 0.0, 0.0}, pulseq::FovShiftScope::RfAndAdc, second,
-                            second);
+    pulseq::apply_fov_shift(seq, {0.01, 0.0, 0.0}, pulseq::FovShiftScope::RfAndAdc, second, second);
 
     /* The one asked for moved; neither of its neighbours did, and they still
      * point at the row they always did. */
@@ -886,12 +890,17 @@ TEST(PulseqFovShift, ARangedShiftGivesTheSamePhaseAsShiftingEverything)
 {
     /* The point of accumulating k from block 1 regardless of the range: a
      * readout's phase must not depend on where the caller drew the boundary. */
-    const auto phase_of = [](int first, int last) {
+    const auto phase_of = [](int first, int last)
+    {
         Sequence seq;
         add_readout(seq, 50000.0, 640e-6, 10e-6, 64);
         const int probe = add_readout(seq, 50000.0, 640e-6, 10e-6, 64);
-        pulseq::apply_fov_shift(seq, {0.01, 0.0, 0.0}, pulseq::FovShiftScope::RfAndAdc, first,
-                                last);
+        pulseq::apply_fov_shift(
+            seq,
+            {0.01, 0.0, 0.0},
+            pulseq::FovShiftScope::RfAndAdc,
+            first,
+            last);
         return seq.adc_library().row(seq.get_block(probe).adc)[6];
     };
 
@@ -921,7 +930,7 @@ TEST(PulseqFovScale, ScalesTheAmplitudeAndRegistersNoShape)
 
     pulseq::apply_fov_scale(seq, {0.5, 1.0, 1.0});
 
-    const double* row = seq.trap_library().row(seq.grad_row(seq.get_block(blk).gx));
+    const double *row = seq.trap_library().row(seq.grad_row(seq.get_block(blk).gx));
     EXPECT_DOUBLE_EQ(row[0], 25000.0);
     /* The timings are untouched -- a scaled gradient is the same shape. */
     EXPECT_DOUBLE_EQ(row[1], 100e-6);
@@ -934,11 +943,13 @@ TEST(PulseqFovScale, ScalesAnArbitraryGradientWithoutTouchingItsWaveform)
 {
     Sequence seq;
     const std::vector<double> wave{0.0, 0.5, 1.0, 0.5, 0.0};
-    const int shape = seq.register_shape(static_cast<int>(wave.size()), wave.data(),
-                                         static_cast<int>(wave.size()));
+    const int shape = seq.register_shape(
+        static_cast<int>(wave.size()),
+        wave.data(),
+        static_cast<int>(wave.size()));
     /* amplitude, first, last, amp_shape, time_shape, delay */
-    const std::array<double, pulseq::ARB_WIDTH> arb{10000.0, 100.0, 200.0,
-                                                    static_cast<double>(shape), 0.0, 0.0};
+    const std::array<double, pulseq::ARB_WIDTH>
+        arb{10000.0, 100.0, 200.0, static_cast<double>(shape), 0.0, 0.0};
     Block b;
     b.gx = seq.register_arbitrary(arb.data());
     b.duration = 50e-6;
@@ -946,7 +957,7 @@ TEST(PulseqFovScale, ScalesAnArbitraryGradientWithoutTouchingItsWaveform)
 
     pulseq::apply_fov_scale(seq, {2.0, 1.0, 1.0});
 
-    const double* row = seq.arb_library().row(seq.grad_row(seq.get_block(blk).gx));
+    const double *row = seq.arb_library().row(seq.grad_row(seq.get_block(blk).gx));
     EXPECT_DOUBLE_EQ(row[0], 20000.0);
     /* `first` and `last` are absolute, so they scale with the amplitude. */
     EXPECT_DOUBLE_EQ(row[1], 200.0);
@@ -1027,18 +1038,18 @@ TEST(PulseqSequenceCopy, TheCopyAndTheOriginalDivergeIndependently)
 
 namespace
 {
-    /* Attach a ROTATIONS extension, making the block one whose readout the
+/* Attach a ROTATIONS extension, making the block one whose readout the
      * consumer has to finish -- the kind that stores a base trajectory. */
-    void rotate_block(Sequence& seq, int blk)
-    {
-        const int rotations = seq.extension_type_id("ROTATIONS");
-        const double q[4] = {1.0, 0.0, 0.0, 0.0};
-        const int rot = seq.register_rotation(q);
-        Block b = seq.get_block(blk);
-        b.ext = seq.chain_extension(rotations, rot, b.ext);
-        seq.set_block(blk, b);
-    }
-}  // namespace
+void rotate_block(Sequence &seq, int blk)
+{
+    const int rotations = seq.extension_type_id("ROTATIONS");
+    const double q[4] = {1.0, 0.0, 0.0, 0.0};
+    const int rot = seq.register_rotation(q);
+    Block b = seq.get_block(blk);
+    b.ext = seq.chain_extension(rotations, rot, b.ext);
+    seq.set_block(blk, b);
+}
+} // namespace
 
 TEST(PulseqBaseTrajectoryCarrier, MarkerSaysTheFileCarriesThem)
 {
@@ -1116,8 +1127,7 @@ TEST(PulseqBaseTrajectoryCarrier, RoundTripsThroughTheAdcRow)
         EXPECT_EQ(after.axis[axis].present, before.axis[axis].present) << "axis " << axis;
         EXPECT_DOUBLE_EQ(after.axis[axis].amplitude, before.axis[axis].amplitude)
             << "axis " << axis;
-        ASSERT_EQ(after.axis[axis].base.size(), before.axis[axis].base.size())
-            << "axis " << axis;
+        ASSERT_EQ(after.axis[axis].base.size(), before.axis[axis].base.size()) << "axis " << axis;
         for (size_t i = 0; i < before.axis[axis].base.size(); ++i)
             EXPECT_NEAR(after.axis[axis].base[i], before.axis[axis].base[i], 1e-15)
                 << "axis " << axis << " sample " << i;
@@ -1136,15 +1146,15 @@ TEST(PulseqBaseTrajectoryCarrier, StoredSamplesRescaleToRealKSpace)
     /* The consumer's formula, spelled out from the ADC row alone:
      *     k = amplitude * num_samples * dwell * stored                */
     const Block block = seq.get_block(blk);
-    const double* row = seq.adc_library().row(block.adc);
+    const double *row = seq.adc_library().row(block.adc);
     const int num_samples = static_cast<int>(row[0]);
     const double dwell = row[1];
     const int shape_id = static_cast<int>(row[7]);
     ASSERT_GT(shape_id, 0);
 
-    const auto& shapes = seq.shape_library();
+    const auto &shapes = seq.shape_library();
     ASSERT_EQ(shapes.num_uncompressed(shape_id), 3 * num_samples);
-    const double* stored = shapes.samples(shape_id);
+    const double *stored = shapes.samples(shape_id);
 
     const double amplitude = truth.axis[0].amplitude;
     for (int i = 0; i < num_samples; ++i)
@@ -1164,7 +1174,7 @@ TEST(PulseqBaseTrajectoryCarrier, AxesAreAxisMajorAndAbsentOnesAreFlatZero)
 
     const Block block = seq.get_block(blk);
     const int shape_id = static_cast<int>(seq.adc_library().row(block.adc)[7]);
-    const double* stored = seq.shape_library().samples(shape_id);
+    const double *stored = seq.shape_library().samples(shape_id);
 
     /* x runs first and varies; y and z follow, flat at zero. */
     EXPECT_NE(stored[0], stored[63]);
@@ -1294,10 +1304,14 @@ TEST(PulseqBaseTrajectoryCarrier, SharedAdcRowIsSplitWhenItsUsersDisagree)
     ASSERT_TRUE(back_two.has_adc);
     for (int i = 0; i < truth_one.num_samples; ++i)
     {
-        EXPECT_NEAR(back_one.axis[0].base[static_cast<size_t>(i)],
-                    truth_one.axis[0].base[static_cast<size_t>(i)], 1e-15);
-        EXPECT_NEAR(back_two.axis[0].base[static_cast<size_t>(i)],
-                    truth_two.axis[0].base[static_cast<size_t>(i)], 1e-15);
+        EXPECT_NEAR(
+            back_one.axis[0].base[static_cast<size_t>(i)],
+            truth_one.axis[0].base[static_cast<size_t>(i)],
+            1e-15);
+        EXPECT_NEAR(
+            back_two.axis[0].base[static_cast<size_t>(i)],
+            truth_two.axis[0].base[static_cast<size_t>(i)],
+            1e-15);
     }
     EXPECT_NE(back_one.axis[0].base.front(), back_two.axis[0].base.front());
 }
@@ -1343,8 +1357,7 @@ TEST(PulseqBaseTrajectoryCarrier, SurvivesAWriteAndReadOfTheFile)
 
     for (int axis = 0; axis < 2; ++axis)
     {
-        ASSERT_EQ(back.axis[axis].base.size(), truth.axis[axis].base.size())
-            << "axis " << axis;
+        ASSERT_EQ(back.axis[axis].base.size(), truth.axis[axis].base.size()) << "axis " << axis;
         for (size_t i = 0; i < truth.axis[axis].base.size(); ++i)
         {
             /* The text writer prints shapes at finite precision, so agreement
@@ -1377,19 +1390,21 @@ TEST(PulseqBaseTrajectoryCarrier, BlocksWithoutAdcAreLeftAlone)
 
 namespace
 {
-    /** A block carrying `label = value` as a LABELSET extension. */
-    int add_flagged(Sequence& seq, const std::string& label, int32_t value)
-    {
-        const int blk = add_readout(seq, 50000.0, 640e-6, 10e-6, 64);
-        Block b = seq.get_block(blk);
-        b.ext = seq.chain_extension(seq.extension_type_id("LABELSET"),
-                                    seq.register_label_set(value, seq.label_id(label)), 0);
-        seq.set_block(blk, b);
-        return blk;
-    }
+/** A block carrying `label = value` as a LABELSET extension. */
+int add_flagged(Sequence &seq, const std::string &label, int32_t value)
+{
+    const int blk = add_readout(seq, 50000.0, 640e-6, 10e-6, 64);
+    Block b = seq.get_block(blk);
+    b.ext = seq.chain_extension(
+        seq.extension_type_id("LABELSET"),
+        seq.register_label_set(value, seq.label_id(label)),
+        0);
+    seq.set_block(blk, b);
+    return blk;
+}
 
-    using Runs = std::vector<std::pair<int, int>>;
-}  // namespace
+using Runs = std::vector<std::pair<int, int>>;
+} // namespace
 
 /*
  * The exemption is sticky, and it starts at the block that sets it.

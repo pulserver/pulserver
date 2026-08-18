@@ -1,11 +1,18 @@
-"""The reconstruction half of :mod:`pulserver.app`: one recon per sequence.
+"""The reconstruction half of :mod:`pulserver.app`: one recon per sampling.
 
 ``pyproject.toml`` packages this directory as :mod:`pulserver.app.recon`, and
-every module here is reachable from :mod:`pulserver.app` directly. Each takes
-what the scanner sends back for one :mod:`pulserver.app.sequence` module and
-turns it into images, built out of the :mod:`pulserver.recon` toolbox::
+every module here is reachable from :mod:`pulserver.app` directly. Each is
+callable, and calling it reconstructs an MRD file::
 
-    from pulserver.app import gre2D_recon
+    from pulserver.app import cartesian2D_recon
+
+    images = cartesian2D_recon("scan.h5")
+
+There is deliberately no module per sequence. What a reconstruction needs to
+know is how k-space was sampled, not what contrast the sequence was after: a
+spin echo, a gradient echo and a balanced SSFP all leave one Cartesian grid
+per slice, so one plugin serves all three. The modules are named for the
+sampling they undo, and are built out of the :mod:`pulserver.recon` toolbox.
 
 Not to be confused with :mod:`pulserver.recon`, which is that toolbox rather
 than the plugins written against it.
@@ -16,27 +23,14 @@ from __future__ import annotations
 import importlib
 
 __all__ = [
-    "bssfp2D_recon",
-    "bssfp3D_recon",
+    "cartesian2D_recon",
+    "cartesian3D_recon",
     "epi2D_recon",
     "epi3D_recon",
-    "fse2D_recon",
-    "fse3D_recon",
-    "gre2D_recon",
-    "gre3D_recon",
-    "gre_multiecho2D_recon",
-    "gre_multiecho3D_recon",
-    "gre_radial2D_recon",
-    "gre_spiral2D_recon",
-    "gre_stack_of_spirals3D_recon",
-    "gre_stack_of_stars3D_recon",
-    "mprage3D_recon",
-    "mprage_stack_of_spirals3D_recon",
-    "se2D_recon",
-    "se3D_recon",
-    "se_propeller2D_recon",
+    "noncartesian2D_recon",
+    "noncartesian3D_recon",
+    "noncartesian_stack_recon",
     "subspace_basis_recon",
-    "zte3D_recon",
 ]
 
 

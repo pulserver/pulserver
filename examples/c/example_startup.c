@@ -8,7 +8,7 @@
  * reads them as globals.
  *
  * Compile:
- *   cc -I../../csrc example_startup.c ../../csrc/pulseqlib_*.c -lm -o startup
+ *   cc -I../../src/c example_startup.c ../../src/c/pulseqlib_*.c -lm -o startup
  */
 
 #include "example_vendorlib.h"

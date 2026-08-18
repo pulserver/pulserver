@@ -47,8 +47,13 @@ static double build_rect(PULSEQ_REAL *re, PULSEQ_REAL *im, PULSEQ_REAL *t, int n
 
 /* A Hamming-windowed sinc with @p lobes zero crossings each side, so its
  * time-bandwidth product is 2 * lobes. */
-static double build_sinc(PULSEQ_REAL *re, PULSEQ_REAL *im, PULSEQ_REAL *t, int n, double lobes,
-                         double freq_offset_hz)
+static double build_sinc(
+    PULSEQ_REAL *re,
+    PULSEQ_REAL *im,
+    PULSEQ_REAL *t,
+    int n,
+    double lobes,
+    double freq_offset_hz)
 {
     int i;
     for (i = 0; i < n; ++i)
@@ -78,8 +83,10 @@ MU_TEST(test_a_rect_pulse_has_the_bandwidth_of_a_sinc)
     double centre, expected;
     int rc;
 
-    rc = pulseq_rf_spectrum_create(&plan, (PULSEQ_REAL)RF_RASTER_US,
-                                   (PULSEQ_REAL)PULSEQ_RF_DEFAULT_RESOLUTION_HZ);
+    rc = pulseq_rf_spectrum_create(
+        &plan,
+        (PULSEQ_REAL)RF_RASTER_US,
+        (PULSEQ_REAL)PULSEQ_RF_DEFAULT_RESOLUTION_HZ);
     mu_assert(PULSEQ_SUCCEEDED(rc), "spectrum_create failed");
 
     centre = build_rect(re, im, t, RF_SAMPLES);
@@ -91,10 +98,12 @@ MU_TEST(test_a_rect_pulse_has_the_bandwidth_of_a_sinc)
     /* T is the sample span, (n-1) rasters, not n. */
     expected = 1.2067 / ((double)(RF_SAMPLES - 1) * RF_RASTER_US * 1.0e-6);
     /* One grid step of slack: a flank can only land on a grid point. */
-    mu_assert(fabs((double)bw - expected) <= 2.0 * PULSEQ_RF_DEFAULT_RESOLUTION_HZ,
-              "rect bandwidth is not 1.2067 / T");
-    mu_assert(fabs((double)fc) <= PULSEQ_RF_DEFAULT_RESOLUTION_HZ,
-              "a real symmetric pulse is not centred on zero");
+    mu_assert(
+        fabs((double)bw - expected) <= 2.0 * PULSEQ_RF_DEFAULT_RESOLUTION_HZ,
+        "rect bandwidth is not 1.2067 / T");
+    mu_assert(
+        fabs((double)fc) <= PULSEQ_RF_DEFAULT_RESOLUTION_HZ,
+        "a real symmetric pulse is not centred on zero");
 
     pulseq_rf_spectrum_free(plan);
 }
@@ -118,8 +127,10 @@ MU_TEST(test_a_sinc_pulse_reports_its_time_bandwidth_product)
     lobes[1] = 4.0;
     lobes[2] = 6.0;
 
-    rc = pulseq_rf_spectrum_create(&plan, (PULSEQ_REAL)RF_RASTER_US,
-                                   (PULSEQ_REAL)PULSEQ_RF_DEFAULT_RESOLUTION_HZ);
+    rc = pulseq_rf_spectrum_create(
+        &plan,
+        (PULSEQ_REAL)RF_RASTER_US,
+        (PULSEQ_REAL)PULSEQ_RF_DEFAULT_RESOLUTION_HZ);
     mu_assert(PULSEQ_SUCCEEDED(rc), "spectrum_create failed");
 
     duration_s = (double)(RF_SAMPLES - 1) * RF_RASTER_US * 1.0e-6;
@@ -132,8 +143,9 @@ MU_TEST(test_a_sinc_pulse_reports_its_time_bandwidth_product)
         bw = pulseq_rf_bandwidth(plan, (PULSEQ_REAL)PULSEQ_RF_DEFAULT_CUTOFF, NULL);
         expected = 2.0 * lobes[i] / duration_s;
         /* 3% covers the windowing, which broadens the passband slightly. */
-        mu_assert(fabs((double)bw - expected) <= 0.03 * expected,
-                  "sinc bandwidth is not TBW / duration");
+        mu_assert(
+            fabs((double)bw - expected) <= 0.03 * expected,
+            "sinc bandwidth is not TBW / duration");
     }
 
     pulseq_rf_spectrum_free(plan);
@@ -154,8 +166,10 @@ MU_TEST(test_a_frequency_offset_moves_the_band_and_not_its_width)
     double centre;
     int rc;
 
-    rc = pulseq_rf_spectrum_create(&plan, (PULSEQ_REAL)RF_RASTER_US,
-                                   (PULSEQ_REAL)PULSEQ_RF_DEFAULT_RESOLUTION_HZ);
+    rc = pulseq_rf_spectrum_create(
+        &plan,
+        (PULSEQ_REAL)RF_RASTER_US,
+        (PULSEQ_REAL)PULSEQ_RF_DEFAULT_RESOLUTION_HZ);
     mu_assert(PULSEQ_SUCCEEDED(rc), "spectrum_create failed");
 
     centre = build_sinc(re, im, t, RF_SAMPLES, 4.0, 0.0);
@@ -166,11 +180,12 @@ MU_TEST(test_a_frequency_offset_moves_the_band_and_not_its_width)
     pulseq_rf_spectrum_run(plan, re, im, t, RF_SAMPLES, (PULSEQ_REAL)centre);
     bw_shifted = pulseq_rf_bandwidth(plan, (PULSEQ_REAL)0.5, &fc);
 
-    mu_assert(fabs((double)bw_shifted - (double)bw_at_zero) <=
-                  2.0 * PULSEQ_RF_DEFAULT_RESOLUTION_HZ,
-              "a frequency offset changed the bandwidth");
-    mu_assert(fabs((double)fc - 1500.0) <= 2.0 * PULSEQ_RF_DEFAULT_RESOLUTION_HZ,
-              "the centre frequency does not follow the offset");
+    mu_assert(
+        fabs((double)bw_shifted - (double)bw_at_zero) <= 2.0 * PULSEQ_RF_DEFAULT_RESOLUTION_HZ,
+        "a frequency offset changed the bandwidth");
+    mu_assert(
+        fabs((double)fc - 1500.0) <= 2.0 * PULSEQ_RF_DEFAULT_RESOLUTION_HZ,
+        "the centre frequency does not follow the offset");
 
     pulseq_rf_spectrum_free(plan);
 }
@@ -190,8 +205,10 @@ MU_TEST(test_the_pulse_is_zero_padded_not_held)
     int rc, n;
     double window_us;
 
-    rc = pulseq_rf_spectrum_create(&plan, (PULSEQ_REAL)RF_RASTER_US,
-                                   (PULSEQ_REAL)PULSEQ_RF_DEFAULT_RESOLUTION_HZ);
+    rc = pulseq_rf_spectrum_create(
+        &plan,
+        (PULSEQ_REAL)RF_RASTER_US,
+        (PULSEQ_REAL)PULSEQ_RF_DEFAULT_RESOLUTION_HZ);
     mu_assert(PULSEQ_SUCCEEDED(rc), "spectrum_create failed");
 
     n = pulseq_rf_spectrum_size(plan);
@@ -199,8 +216,7 @@ MU_TEST(test_the_pulse_is_zero_padded_not_held)
 
     /* A rect, but centred far beyond the end of the grid. */
     build_rect(re, im, t, RF_SAMPLES);
-    rc = pulseq_rf_spectrum_run(plan, re, im, t, RF_SAMPLES,
-                                (PULSEQ_REAL)(-10.0 * window_us));
+    rc = pulseq_rf_spectrum_run(plan, re, im, t, RF_SAMPLES, (PULSEQ_REAL)(-10.0 * window_us));
     mu_assert(PULSEQ_SUCCEEDED(rc), "spectrum_run failed");
 
     bw = pulseq_rf_bandwidth(plan, (PULSEQ_REAL)0.5, NULL);
@@ -216,30 +232,35 @@ MU_TEST(test_rf_bad_arguments_are_refused)
     PULSEQ_REAL re[4], im[4], t[4];
     int i;
 
-    mu_assert(PULSEQ_FAILED(pulseq_rf_spectrum_create(NULL, (PULSEQ_REAL)1.0, (PULSEQ_REAL)10.0)),
-              "a NULL out pointer was accepted");
-    mu_assert(PULSEQ_FAILED(pulseq_rf_spectrum_create(&plan, (PULSEQ_REAL)0.0, (PULSEQ_REAL)10.0)),
-              "a zero raster was accepted");
+    mu_assert(
+        PULSEQ_FAILED(pulseq_rf_spectrum_create(NULL, (PULSEQ_REAL)1.0, (PULSEQ_REAL)10.0)),
+        "a NULL out pointer was accepted");
+    mu_assert(
+        PULSEQ_FAILED(pulseq_rf_spectrum_create(&plan, (PULSEQ_REAL)0.0, (PULSEQ_REAL)10.0)),
+        "a zero raster was accepted");
 
-    mu_assert(PULSEQ_SUCCEEDED(pulseq_rf_spectrum_create(&plan, (PULSEQ_REAL)1.0,
-                                                         (PULSEQ_REAL)10.0)),
-              "spectrum_create failed");
+    mu_assert(
+        PULSEQ_SUCCEEDED(pulseq_rf_spectrum_create(&plan, (PULSEQ_REAL)1.0, (PULSEQ_REAL)10.0)),
+        "spectrum_create failed");
     for (i = 0; i < 4; ++i)
     {
         re[i] = (PULSEQ_REAL)1.0;
         im[i] = (PULSEQ_REAL)0.0;
         t[i] = (PULSEQ_REAL)i;
     }
-    mu_assert(PULSEQ_FAILED(pulseq_rf_spectrum_run(plan, NULL, im, t, 4, (PULSEQ_REAL)0.0)),
-              "a NULL waveform was accepted");
-    mu_assert(PULSEQ_FAILED(pulseq_rf_spectrum_run(plan, re, im, t, 0, (PULSEQ_REAL)0.0)),
-              "an empty pulse was accepted");
+    mu_assert(
+        PULSEQ_FAILED(pulseq_rf_spectrum_run(plan, NULL, im, t, 4, (PULSEQ_REAL)0.0)),
+        "a NULL waveform was accepted");
+    mu_assert(
+        PULSEQ_FAILED(pulseq_rf_spectrum_run(plan, re, im, t, 0, (PULSEQ_REAL)0.0)),
+        "an empty pulse was accepted");
 
     /* And the accessors tolerate a NULL plan rather than dereferencing it. */
     mu_assert_int_eq(0, pulseq_rf_spectrum_size(NULL));
     mu_assert(pulseq_rf_spectrum_freq(NULL) == NULL, "freq(NULL) is not NULL");
-    mu_assert((double)pulseq_rf_bandwidth(NULL, (PULSEQ_REAL)0.5, NULL) == 0.0,
-              "bandwidth(NULL) is not zero");
+    mu_assert(
+        (double)pulseq_rf_bandwidth(NULL, (PULSEQ_REAL)0.5, NULL) == 0.0,
+        "bandwidth(NULL) is not zero");
 
     pulseq_rf_spectrum_free(plan);
     pulseq_rf_spectrum_free(NULL);

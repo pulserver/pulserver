@@ -1,5 +1,5 @@
 ## Regression checks for bundled Python resolution in bridge host code.
-import ../../bridge/pypulseq_host
+import ../../src/nim/pypulseq_host
 import std/os
 import std/times
 

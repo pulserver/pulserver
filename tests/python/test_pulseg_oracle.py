@@ -11,21 +11,32 @@ label for interleaved-subsequence hyperTRs, not a segmentation input.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 import pulserver.pypulseq as pp
 from fixture_corpus import FIXTURES_DIR
 from pulseg_oracle import PartitionError, validate_partition
-from pulserver._ext import _pulseg_wrapper as wrapper
+from pulserver._ext import pulseg as wrapper
 
 GAMMA = 42577478.0
 
 
 def collection_for(paths: list[str]) -> object:
-    buffers = [open(path, "rb").read() for path in paths]
+    buffers = [Path(path).read_bytes() for path in paths]
     return wrapper._PulseqCollection(
-        buffers, GAMMA, 3.0, GAMMA * 1.0, GAMMA * 10000.0,
-        1e-6, 10e-6, 0.1e-6, 10e-6, True, 1,
+        buffers,
+        GAMMA,
+        3.0,
+        GAMMA * 1.0,
+        GAMMA * 10000.0,
+        1e-6,
+        10e-6,
+        0.1e-6,
+        10e-6,
+        True,
+        1,
     )
 
 
@@ -37,8 +48,18 @@ def read(path) -> pp.Sequence:
 
 @pytest.mark.parametrize(
     "stem",
-    ["gre_2d", "gre_2d_3sl", "se_2d", "fse_2d", "bssfp_2d", "gre_radial_2d",
-     "gre_spiral_2d", "se_propeller_2d", "mprage_stack_of_spirals_3d", "zte_3d"],
+    [
+        "gre_2d",
+        "gre_2d_3sl",
+        "se_2d",
+        "fse_2d",
+        "bssfp_2d",
+        "gre_radial_2d",
+        "gre_spiral_2d",
+        "se_propeller_2d",
+        "mprage_stack_of_spirals_3d",
+        "zte_3d",
+    ],
 )
 def test_the_interpreter_partition_is_a_valid_pulseg_reading(stem):
     path = str(FIXTURES_DIR / f"{stem}.seq")

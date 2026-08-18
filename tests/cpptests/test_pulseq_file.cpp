@@ -1,7 +1,7 @@
 /**
  * @file test_pulseq_file.cpp
  * @brief Smoke test for the pulseq::File / pulseq::FileSet C++ wrapper
- * (cxx/include/pulseq/file.hpp) against a real .seq fixture.
+ * (src/cpp/include/pulseq/file.hpp) against a real .seq fixture.
  */
 
 #include <gtest/gtest.h>

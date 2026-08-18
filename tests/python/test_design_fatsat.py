@@ -20,7 +20,9 @@ FAT_SHIFT_PPM = -3.45
 
 @pytest.fixture
 def system():
-    return pp.Opts(B0=3.0, max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+    return pp.Opts(
+        B0=3.0, max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s"
+    )
 
 
 def rf_phase_ramp(reference, moved):
@@ -59,7 +61,9 @@ def test_the_offset_is_carried_in_ppm_so_it_follows_the_field(system):
 def test_it_overshoots_the_transverse_plane(system):
     """110 degrees, so a transmit shortfall still leaves fat near null."""
     response = design.FatSaturation(system).sim_rf(compat=False)
-    assert float(np.min(response.mz_z)) == pytest.approx(np.cos(np.deg2rad(110.0)), abs=0.02)
+    assert float(np.min(response.mz_z)) == pytest.approx(
+        np.cos(np.deg2rad(110.0)), abs=0.02
+    )
 
 
 def test_it_leaves_water_alone(system):
@@ -86,7 +90,9 @@ def test_the_pulse_duration_follows_the_bandwidth_asked_for(system):
 def test_it_is_a_pulse_and_a_three_axis_spoiler(system):
     fatsat = design.FatSaturation(system)
     assert len(fatsat.blocks) == 2
-    assert {event.channel for event in fatsat.blocks[1] if hasattr(event, "channel")} == {
+    assert {
+        event.channel for event in fatsat.blocks[1] if hasattr(event, "channel")
+    } == {
         "x",
         "y",
         "z",
@@ -128,9 +134,9 @@ def test_an_offset_band_carries_the_frequency_that_moves_it(system):
     a frequency of gamma * G * dz, with the waveform itself untouched."""
     here = design.FatSaturation(system, thickness_m=0.08)
     moved = design.FatSaturation(system, thickness_m=0.08, position_mm=(0.0, 0.0, 25.0))
-    assert float(moved.rf_prep.freq_offset) - float(here.rf_prep.freq_offset) == pytest.approx(
-        float(here.gz.amplitude) * 0.025
-    )
+    assert float(moved.rf_prep.freq_offset) - float(
+        here.rf_prep.freq_offset
+    ) == pytest.approx(float(here.gz.amplitude) * 0.025)
     np.testing.assert_allclose(
         np.asarray(moved.rf_prep.signal), np.asarray(here.rf_prep.signal), atol=1e-12
     )
@@ -150,7 +156,9 @@ def test_a_tilted_band_carries_a_rotation_extension(system):
 def test_an_orientation_may_be_given_as_a_matrix(system):
     turn = Rotation.from_euler("y", 30, degrees=True)
     as_object = design.FatSaturation(system, thickness_m=0.08, orientation=turn)
-    as_matrix = design.FatSaturation(system, thickness_m=0.08, orientation=turn.as_matrix())
+    as_matrix = design.FatSaturation(
+        system, thickness_m=0.08, orientation=turn.as_matrix()
+    )
     assert np.allclose(
         as_object.seq.get_block(1).rotation, as_matrix.seq.get_block(1).rotation
     )
@@ -189,11 +197,15 @@ def test_a_later_transform_moves_the_imaging_pulse_and_not_the_band(system):
     saturation_before, saturation_after = scan.get_block(1).rf, moved.get_block(1).rf
     imaging_before, imaging_after = scan.get_block(3).rf, moved.get_block(3).rf
 
-    assert rf_phase_ramp(saturation_before, saturation_after) == pytest.approx(0.0, abs=1e-9)
+    assert rf_phase_ramp(saturation_before, saturation_after) == pytest.approx(
+        0.0, abs=1e-9
+    )
     assert float(saturation_after.freq_offset) == pytest.approx(
         float(saturation_before.freq_offset)
     )
-    assert float(imaging_after.freq_offset) != pytest.approx(float(imaging_before.freq_offset))
+    assert float(imaging_after.freq_offset) != pytest.approx(
+        float(imaging_before.freq_offset)
+    )
 
 
 def test_a_later_rotation_turns_the_imaging_pulse_and_not_the_band(system):

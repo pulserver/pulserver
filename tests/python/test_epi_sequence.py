@@ -64,15 +64,15 @@ def test_the_multiband_epi_splits_calibration_from_imaging(monkeypatch):
     repeating unit is malformed."""
     monkeypatch.setattr(epi2D_sequence, "SMS_EXCITATION", True)
     n_slices, n_bands, n_y, n_acs = 9, 3, 15, 8
-    common = dict(
-        n_x=32,
-        n_y=n_y,
-        n_slices=n_slices,
-        slice_thickness=3e-3,
-        n_bands=n_bands,
-        n_acs=n_acs,
-        readout_bandwidth_hz=250e3,
-    )
+    common = {
+        "n_x": 32,
+        "n_y": n_y,
+        "n_slices": n_slices,
+        "slice_thickness": 3e-3,
+        "n_bands": n_bands,
+        "n_acs": n_acs,
+        "readout_bandwidth_hz": 250e3,
+    }
     main_seq = epi2D_sequence.main(**common)
     calibration = epi2D_sequence.SmsCalibrationKernel(
         pp.Opts(),
@@ -93,7 +93,9 @@ def test_the_multiband_epi_splits_calibration_from_imaging(monkeypatch):
     assert int(sms.sum()) == (n_slices // n_bands) * n_y
     assert int(np.asarray(main_labels.get("REF", np.zeros(1))).sum()) == 0
     # the CAIPI slice-phase index on the multiband lines is the sawtooth.
-    assert par[sms == 1][: 2 * n_bands].tolist() == [k % n_bands for k in range(2 * n_bands)]
+    assert par[sms == 1][: 2 * n_bands].tolist() == [
+        k % n_bands for k in range(2 * n_bands)
+    ]
 
     # Calibration file: the navigator, then the GRE calibration block per slice.
     cal_labels = calibration.evaluate_labels(evolution="adc")
@@ -223,7 +225,9 @@ def test_the_accelerated_2d_epi_leads_with_a_calibration(tmp_path):
     calibration, then navigator, then main -- each linked to the next; the
     imaging file itself carries no ``REF`` lines."""
     path = tmp_path / "scan.seq"
-    design_2d(n_slices=2, acceleration=2, n_acs=8, write_seq=True, seq_filename=str(path))
+    design_2d(
+        n_slices=2, acceleration=2, n_acs=8, write_seq=True, seq_filename=str(path)
+    )
 
     calib_path = path
     nav_path = tmp_path / "scan_navigator.seq"
@@ -291,7 +295,11 @@ def test_a_time_series_carries_its_repetition_counter():
     assert sorted(set(labels["REP"].tolist())) == [0, 1, 2]
 
 
-@pytest.mark.parametrize("module,build", [(epi2D_sequence, design_2d), (epi3D_sequence, design_3d)], ids=["2d", "3d"])
+@pytest.mark.parametrize(
+    "module,build",
+    [(epi2D_sequence, design_2d), (epi3D_sequence, design_3d)],
+    ids=["2d", "3d"],
+)
 def test_the_pair_is_written_linked_navigator_first(tmp_path, module, build):
     """The Sequence Collection contract: the navigator carries NextSequence,
     the main file sits beside it under that name."""

@@ -13,7 +13,7 @@ written first, carrying ``NextSequence`` in its definitions; the main
 acquisition is the file it points to, written beside it. The interpreter
 follows the chain and treats each file as one subsequence.
 :mod:`pulserver.app.recon.epi2D_recon` reads the navigator groups back through
-:func:`pulserver.recon._mrd.epi.partition_epi_acquisitions`.
+:func:`pulserver.recon.partition_epi_acquisitions`.
 
 ``main`` returns the main :class:`pulserver.pypulseq.Sequence` and
 ``navigator`` its partner; ``PLUGIN`` writes the linked pair. Running this
@@ -231,7 +231,9 @@ def main(
             seq.plot()
         seq.set_definition(
             key="NumGainCalibrationReadouts",
-            value=n_slices if n_gain_calibration_readouts is None else n_gain_calibration_readouts,
+            value=n_slices
+            if n_gain_calibration_readouts is None
+            else n_gain_calibration_readouts,
         )
         if write_seq:
             _write_sms_collection(seq, seq_filename, system, sms_kwargs)
@@ -331,7 +333,9 @@ def main(
     seq.set_definition(key="EPIFactor", value=epi.etl)
     seq.set_definition(
         key="NumGainCalibrationReadouts",
-        value=n_slices if n_gain_calibration_readouts is None else n_gain_calibration_readouts,
+        value=n_slices
+        if n_gain_calibration_readouts is None
+        else n_gain_calibration_readouts,
     )
 
     if write_seq:
@@ -363,6 +367,7 @@ def main(
 # ======================================================================
 # Subroutines of main()
 # ======================================================================
+
 
 def sms_geometry(n_slices: int, n_bands: int, slice_step: float):
     """Group count, band spacing and slice FOV for a multiband acquisition.
@@ -445,7 +450,9 @@ def SmsKernel(
     )
 
 
-def sms_group_center(group: int, n_slices: int, n_bands: int, slice_step: float) -> float:
+def sms_group_center(
+    group: int, n_slices: int, n_bands: int, slice_step: float
+) -> float:
     """Where the multiband comb sits to excite one group's slices (m).
 
     Group ``g`` holds slices ``g, g + n_groups, ...``; their midpoint is where
@@ -689,9 +696,7 @@ def SmsSequenceKernel(
                     seq,
                     epi,
                     n_y=n_y,
-                    center_m=sms_group_center(
-                        group, n_slices, n_bands, slice_step
-                    ),
+                    center_m=sms_group_center(group, n_slices, n_bands, slice_step),
                     gz_amplitude=gz_amplitude,
                     origin_line=segment,
                     rev_label=rev_label,
@@ -752,9 +757,7 @@ def SharedKernel(
         spoiling_cycles=spoiling_cycles,
         labels=("LIN",),
     )
-    return SimpleNamespace(
-        excitation=excitation, epi=epi, fov=(fov_x, fov_y)
-    )
+    return SimpleNamespace(excitation=excitation, epi=epi, fov=(fov_x, fov_y))
 
 
 def ShotKernel(
@@ -954,7 +957,9 @@ def GreCalibrationKernel(
     if not acs_lines:
         return []
 
-    excitation = design.SpatialSelectiveExcitation(system, flip_angle_deg, slice_thickness)
+    excitation = design.SpatialSelectiveExcitation(
+        system, flip_angle_deg, slice_thickness
+    )
     readout = design.LineReadout2D(
         system,
         excitation.rf,
@@ -974,7 +979,9 @@ def GreCalibrationKernel(
     lin_label = pp.make_label("LIN", "SET", 0)
     for i_slice in (int(i) for i in pp.calc_traversal_order(n_slices, slice_order)):
         readout.rf.freq_offset = excitation.gz.amplitude * slice_positions[i_slice]
-        readout.rf.phase_offset = -2 * np.pi * readout.rf.freq_offset * readout.rf.center
+        readout.rf.phase_offset = (
+            -2 * np.pi * readout.rf.freq_offset * readout.rf.center
+        )
         slc_label.value = int(i_slice)
         for line in acs_lines:
             ky = (line - n_y / 2) / (n_y / 2)
@@ -1092,14 +1099,20 @@ def write_pair(main_seq: pp.Sequence, seq_filename: str, **kwargs) -> tuple[str,
     calib = (
         CalibrationKernel(
             system=system,
-            **{name: value for name, value in kwargs.items() if name in CALIBRATION_ARGUMENTS},
+            **{
+                name: value
+                for name, value in kwargs.items()
+                if name in CALIBRATION_ARGUMENTS
+            },
         )
         if needs_calibration(kwargs)
         else None
     )
     nav = NavigatorKernel(
         system=system,
-        **{name: value for name, value in kwargs.items() if name in NAVIGATOR_ARGUMENTS},
+        **{
+            name: value for name, value in kwargs.items() if name in NAVIGATOR_ARGUMENTS
+        },
     )
 
     # calibration -> navigator -> main; the calibration drops out when absent,
@@ -1133,7 +1146,11 @@ def _write_sms_collection(
     main_path = path.with_name(path.stem + "_main.seq")
     calib = SmsCalibrationKernel(
         system,
-        **{name: value for name, value in kwargs.items() if name in SMS_CALIBRATION_ARGUMENTS},
+        **{
+            name: value
+            for name, value in kwargs.items()
+            if name in SMS_CALIBRATION_ARGUMENTS
+        },
     )
     calib.set_definition(key="NextSequence", value=main_path.name)
     write_sequence(calib, str(path), offline=True)
@@ -1174,98 +1191,104 @@ class Epi2D(SequencePlugin):
     def get_default_protocol(self, system: pp.Opts) -> dict[str, dict]:
         """Return the protocol the scanner UI is built from."""
         controls = {
-                UIParam.TE: DropdownFloatParam(
-                    value=-1.0,
-                    min=-1.0,
-                    max=150.0,
-                    incr=0.1,
-                    unit="ms",
-                    options=[TEPreset.MINIMUM, 25.0, 30.0, 40.0, 60.0],
-                ),
-                UIParam.TR: DropdownFloatParam(
-                    value=-1.0,
-                    min=-1.0,
-                    max=10000.0,
-                    incr=1.0,
-                    unit="ms",
-                    options=[TRPreset.MINIMUM, 50.0, 100.0, 200.0, 500.0],
-                ),
-                UIParam.FLIP: DropdownFloatParam(
-                    value=70.0,
-                    min=10.0,
-                    max=90.0,
-                    incr=1.0,
-                    unit="deg",
-                    options=[45.0, 60.0, 70.0, 80.0, 90.0],
-                ),
-                UIParam.FOV: DropdownFloatParam(
-                    value=220.0,
-                    min=80.0,
-                    max=500.0,
-                    incr=1.0,
-                    unit="mm",
-                    options=[180.0, 220.0, 280.0, 340.0, 500.0],
-                ),
-                UIParam.PHASE_FOV: DropdownFloatParam(
-                    value=220.0,
-                    min=80.0,
-                    max=500.0,
-                    incr=1.0,
-                    unit="mm",
-                    options=[180.0, 220.0, 280.0, 340.0, 500.0],
-                ),
-                UIParam.SLICE_THICKNESS: DropdownFloatParam(
-                    value=5.0,
-                    min=1.0,
-                    max=20.0,
-                    incr=0.5,
-                    unit="mm",
-                    options=[2.0, 3.0, 4.0, 5.0, 8.0],
-                ),
-                UIParam.SLICE_SPACING: DropdownFloatParam(
-                    value=5.0,
-                    min=1.0,
-                    max=20.0,
-                    incr=0.5,
-                    unit="mm",
-                    options=[2.0, 3.0, 4.0, 5.0, 8.0],
-                ),
-                UIParam.NX: DropdownIntParam(
-                    value=128, min=16, max=256, incr=1, options=[64, 96, 128, 192]
-                ),
-                UIParam.NY: DropdownIntParam(
-                    value=128, min=16, max=256, incr=1, options=[64, 96, 128, 192]
-                ),
-                UIParam.NSLICES: DropdownIntParam(
-                    value=1, min=1, max=128, incr=1, options=[1, 10, 20, 30, 40]
-                ),
-                UIParam.BANDWIDTH: TypeinFloatParam(
-                    value=500e3, min=100e3, max=1000e3, incr=1000.0, unit="Hz"
-                ),
-                UIParam.RY: TypeinFloatParam(
-                    value=1.0, min=1.0, max=8.0, incr=1.0, unit=""
-                ),
-                UIParam.MULTIBAND: TypeinFloatParam(
-                    value=1.0, min=1.0, max=8.0, incr=1.0, unit=""
-                ),
-                UIParam.NUM_FRAMES: DropdownIntParam(
-                    value=1, min=1, max=1024, incr=1, options=[1, 10, 100, 300, 600]
-                ),
-                UIParam.FOV_OFFSET_X: OffFloatParam(value=0.0, min=-500.0, max=500.0, unit="mm"),
-                UIParam.FOV_OFFSET_Y: OffFloatParam(value=0.0, min=-500.0, max=500.0, unit="mm"),
-                UIParam.FOV_OFFSET_Z: OffFloatParam(value=0.0, min=-500.0, max=500.0, unit="mm"),
-                UIParam.user_name(0): Description(text="Segments"),
-                UIParam.user_value(0): TypeinFloatParam(
-                    value=1.0, min=1.0, max=32.0, incr=1.0, unit=""
-                ),
-                UIParam.user_name(1): Description(text="Opposite-PE reference"),
-                UIParam.user_value(1): TypeinFloatParam(
-                    value=1.0, min=0.0, max=1.0, incr=1.0, unit=""
-                ),
-                UIParam.user_name(2): Description(text="ACS lines (y)"),
-                UIParam.user_value(2): TypeinFloatParam(
-                    value=24.0, min=0.0, max=256.0, incr=1.0, unit="lines"
-                ),
+            UIParam.TE: DropdownFloatParam(
+                value=-1.0,
+                min=-1.0,
+                max=150.0,
+                incr=0.1,
+                unit="ms",
+                options=[TEPreset.MINIMUM, 25.0, 30.0, 40.0, 60.0],
+            ),
+            UIParam.TR: DropdownFloatParam(
+                value=-1.0,
+                min=-1.0,
+                max=10000.0,
+                incr=1.0,
+                unit="ms",
+                options=[TRPreset.MINIMUM, 50.0, 100.0, 200.0, 500.0],
+            ),
+            UIParam.FLIP: DropdownFloatParam(
+                value=70.0,
+                min=10.0,
+                max=90.0,
+                incr=1.0,
+                unit="deg",
+                options=[45.0, 60.0, 70.0, 80.0, 90.0],
+            ),
+            UIParam.FOV: DropdownFloatParam(
+                value=220.0,
+                min=80.0,
+                max=500.0,
+                incr=1.0,
+                unit="mm",
+                options=[180.0, 220.0, 280.0, 340.0, 500.0],
+            ),
+            UIParam.PHASE_FOV: DropdownFloatParam(
+                value=220.0,
+                min=80.0,
+                max=500.0,
+                incr=1.0,
+                unit="mm",
+                options=[180.0, 220.0, 280.0, 340.0, 500.0],
+            ),
+            UIParam.SLICE_THICKNESS: DropdownFloatParam(
+                value=5.0,
+                min=1.0,
+                max=20.0,
+                incr=0.5,
+                unit="mm",
+                options=[2.0, 3.0, 4.0, 5.0, 8.0],
+            ),
+            UIParam.SLICE_SPACING: DropdownFloatParam(
+                value=5.0,
+                min=1.0,
+                max=20.0,
+                incr=0.5,
+                unit="mm",
+                options=[2.0, 3.0, 4.0, 5.0, 8.0],
+            ),
+            UIParam.NX: DropdownIntParam(
+                value=128, min=16, max=256, incr=1, options=[64, 96, 128, 192]
+            ),
+            UIParam.NY: DropdownIntParam(
+                value=128, min=16, max=256, incr=1, options=[64, 96, 128, 192]
+            ),
+            UIParam.NSLICES: DropdownIntParam(
+                value=1, min=1, max=128, incr=1, options=[1, 10, 20, 30, 40]
+            ),
+            UIParam.BANDWIDTH: TypeinFloatParam(
+                value=500e3, min=100e3, max=1000e3, incr=1000.0, unit="Hz"
+            ),
+            UIParam.RY: TypeinFloatParam(
+                value=1.0, min=1.0, max=8.0, incr=1.0, unit=""
+            ),
+            UIParam.MULTIBAND: TypeinFloatParam(
+                value=1.0, min=1.0, max=8.0, incr=1.0, unit=""
+            ),
+            UIParam.NUM_FRAMES: DropdownIntParam(
+                value=1, min=1, max=1024, incr=1, options=[1, 10, 100, 300, 600]
+            ),
+            UIParam.FOV_OFFSET_X: OffFloatParam(
+                value=0.0, min=-500.0, max=500.0, unit="mm"
+            ),
+            UIParam.FOV_OFFSET_Y: OffFloatParam(
+                value=0.0, min=-500.0, max=500.0, unit="mm"
+            ),
+            UIParam.FOV_OFFSET_Z: OffFloatParam(
+                value=0.0, min=-500.0, max=500.0, unit="mm"
+            ),
+            UIParam.user_name(0): Description(text="Segments"),
+            UIParam.user_value(0): TypeinFloatParam(
+                value=1.0, min=1.0, max=32.0, incr=1.0, unit=""
+            ),
+            UIParam.user_name(1): Description(text="Opposite-PE reference"),
+            UIParam.user_value(1): TypeinFloatParam(
+                value=1.0, min=0.0, max=1.0, incr=1.0, unit=""
+            ),
+            UIParam.user_name(2): Description(text="ACS lines (y)"),
+            UIParam.user_value(2): TypeinFloatParam(
+                value=24.0, min=0.0, max=256.0, incr=1.0, unit="lines"
+            ),
         }
         # The multiphase control is shown only when the fMRI time series is on.
         if not ENABLE_MULTIPHASE:
@@ -1292,12 +1315,20 @@ class Epi2D(SequencePlugin):
                     slice_step=kwargs["slice_thickness"] + kwargs.get("slice_gap", 0.0),
                     n_slices=n_slices,
                     n_bands=n_bands,
-                    **{name: value for name, value in kwargs.items() if name in KERNEL_ARGUMENTS},
+                    **{
+                        name: value
+                        for name, value in kwargs.items()
+                        if name in KERNEL_ARGUMENTS
+                    },
                 )
             else:
                 kernel = SharedKernel(
                     system,
-                    **{name: value for name, value in kwargs.items() if name in KERNEL_ARGUMENTS},
+                    **{
+                        name: value
+                        for name, value in kwargs.items()
+                        if name in KERNEL_ARGUMENTS
+                    },
                 )
         except ValueError as error:
             return {"valid": False, "duration": None, "info": str(error)}
@@ -1308,7 +1339,11 @@ class Epi2D(SequencePlugin):
             # The coil calibration is the shared low-res GRE, played once.
             calib = CalibrationKernel(
                 system=system,
-                **{name: value for name, value in kwargs.items() if name in CALIBRATION_ARGUMENTS},
+                **{
+                    name: value
+                    for name, value in kwargs.items()
+                    if name in CALIBRATION_ARGUMENTS
+                },
             )
             calib_duration = calib.duration()[0] if calib is not None else 0.0
             duration = calib_duration + kwargs.get("n_repetitions", 1) * per_rep
@@ -1412,7 +1447,9 @@ def protocol_kwargs(system: pp.Opts, protocol: dict[str, dict]) -> dict:
         segments=max(1, round(params.user_float(prot, 0, 1.0))),
         opposite_reference=bool(round(params.user_float(prot, 1, 1.0))),
         n_acs=max(0, round(params.user_float(prot, 2, 24.0))),
-        n_bands=max(1, round(params.param_float_optional(prot, UIParam.MULTIBAND, 1.0))),
+        n_bands=max(
+            1, round(params.param_float_optional(prot, UIParam.MULTIBAND, 1.0))
+        ),
         n_repetitions=(
             params.param_int(prot, UIParam.NUM_FRAMES) if ENABLE_MULTIPHASE else 1
         ),
@@ -1450,10 +1487,20 @@ ARG_MAP = [
     ("--nslices", UIParam.NSLICES, int, "Number of slices"),
     ("--bandwidth-hz", UIParam.BANDWIDTH, float, "Requested receiver bandwidth [Hz]"),
     ("--ry", UIParam.RY, float, "Phase-encode undersampling factor"),
-    ("--multiband", UIParam.MULTIBAND, float, "Simultaneous-multislice band count (SMS)"),
+    (
+        "--multiband",
+        UIParam.MULTIBAND,
+        float,
+        "Simultaneous-multislice band count (SMS)",
+    ),
     ("--frames", UIParam.NUM_FRAMES, int, "Volumes in the time series"),
     ("--offset-x-mm", UIParam.FOV_OFFSET_X, float, "Volume offset along readout [mm]"),
-    ("--offset-y-mm", UIParam.FOV_OFFSET_Y, float, "Volume offset along phase encode [mm]"),
+    (
+        "--offset-y-mm",
+        UIParam.FOV_OFFSET_Y,
+        float,
+        "Volume offset along phase encode [mm]",
+    ),
     ("--offset-z-mm", UIParam.FOV_OFFSET_Z, float, "Volume offset along slice [mm]"),
     ("--segments", UIParam.user_value(0), float, "Interleaved shots per plane"),
     (

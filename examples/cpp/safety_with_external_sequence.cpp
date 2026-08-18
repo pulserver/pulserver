@@ -11,7 +11,7 @@
  * before returning.
  *
  * Build (linking against the static pulseqlib library):
- *   c++ -std=c++17 -I../../csrc safety_with_external_sequence.cpp \
+ *   c++ -std=c++17 -I../../src/c safety_with_external_sequence.cpp \
  *       -L<build-dir> -lpulseqlib -lm \
  *       -o safety_with_external_sequence_cpp
  *

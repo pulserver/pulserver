@@ -1,58 +1,40 @@
-name: Publish Python 🐍 distribution 📦 to PyPI and GitHub Releases
+name: Release
+
+# Publishes a tagged version: the wheels and sdist from the reusable Wheels
+# workflow, the Nim bridge bundle, then PyPI and a GitHub release.
 
 on:
   push:
     tags:
-      - 'v[0-9]+.[0-9]+.[0-9]+'
+      - "v[0-9]+.[0-9]+.[0-9]+"
 
 jobs:
-  sdist:
+  # The same job pull requests run, so what is published was built by the
+  # configuration that has been exercised all along.
+  build:
+    uses: ./.github/workflows/wheels.yml
+    with:
+      cibw-build: "cp310-* cp311-* cp312-* cp313-*"
+
+  publish-to-pypi:
+    needs: [build]
     runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/pulserver
     permissions:
-      contents: read
+      id-token: write # trusted publishing (OIDC)
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/download-artifact@v4
         with:
-          python-version: "3.x"
-      - name: Build sdist
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install build
-          python -m build --sdist
-      - uses: actions/upload-artifact@v4
-        with:
-          name: dist-sdist
-          path: dist/*.tar.gz
+          pattern: "{wheels-*,sdist}"
+          path: dist
+          merge-multiple: true
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
 
-  wheels:
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.x"
-      - name: Build wheels with cibuildwheel
-        env:
-          # Supports Python >= 3.10 per pyproject
-          CIBW_SKIP: "cp36-* cp37-* cp38-* cp39-* pp*"
-          CIBW_ARCHS_MACOS: universal2
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install cibuildwheel
-          python -m cibuildwheel --output-dir wheelhouse
-      - uses: actions/upload-artifact@v4
-        with:
-          name: dist-wheels-${{ matrix.os }}
-          path: wheelhouse/*.whl
-
-  # Build the bridge bundle using the PyPI release of pulserver.
-  # Runs after publish-to-pypi so the tag is already available on PyPI.
+  # The bridge bundle installs the published release, so it runs once PyPI has
+  # the tag.
   build-bridge-bundle:
     needs: [publish-to-pypi]
     runs-on: ubuntu-latest
@@ -64,13 +46,11 @@ jobs:
         run: |
           curl https://nim-lang.org/choosenim/init.sh -sSf | sh -s -- -y
           echo "$HOME/.nimble/bin" >> $GITHUB_PATH
-      - name: Build bridge bundle (from PyPI release)
+      - name: Build the bridge bundle
         env:
-          # Use the just-published PyPI version, pinned to the release tag.
           PULSERVER_PIP_SPEC: "pulserver==${{ github.ref_name }}"
         run: |
           bash scripts/make_installer.sh pulserver_bridge_installer.sh
-          # Repack as tar.gz: named pulserver_bridge_<tag>.tar.gz
           INSTALL_DIR="$(mktemp -d)"
           bash pulserver_bridge_installer.sh "$INSTALL_DIR"
           tar -czf "pulserver_bridge_${{ github.ref_name }}.tar.gz" -C "$INSTALL_DIR" .
@@ -78,59 +58,43 @@ jobs:
         with:
           name: pulserver-bridge-bundle
           path: pulserver_bridge_${{ github.ref_name }}.tar.gz
-
-  publish-to-pypi:
-    if: startsWith(github.ref, 'refs/tags/')
-    needs: [sdist, wheels]
-    runs-on: ubuntu-latest
-    environment:
-      name: pypi
-      url: https://pypi.org/p/pulserver
-    permissions:
-      id-token: write  # required for trusted publishing (OIDC)
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: dist-*
-          path: dist
-          merge-multiple: true
-      - name: Publish distribution 📦 to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
+          if-no-files-found: error
 
   github-release:
     needs: [publish-to-pypi, build-bridge-bundle]
     runs-on: ubuntu-latest
     permissions:
-      contents: write  # to create releases
-      id-token: write  # for sigstore
+      contents: write # create the release
+      id-token: write # sigstore
     steps:
       - uses: actions/download-artifact@v4
         with:
-          pattern: dist-*
+          pattern: "{wheels-*,sdist}"
           path: dist
           merge-multiple: true
       - uses: actions/download-artifact@v4
         with:
           name: pulserver-bridge-bundle
           path: bundle
-      - name: Sign the dists with Sigstore
-        uses: sigstore/gh-action-sigstore-python@v2.1.1
+      - name: Sign the distributions with Sigstore
+        uses: sigstore/gh-action-sigstore-python@v3.0.0
         with:
           inputs: |
             ./dist/*.tar.gz
             ./dist/*.whl
-      - name: Create GitHub Release
+      - name: Create the GitHub release
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
-          gh release create '${{ github.ref_name }}' --repo '${{ github.repository }}' --notes ""
-      - name: Upload artifact signatures to GitHub Release
+          gh release create '${{ github.ref_name }}' \
+            --repo '${{ github.repository }}' \
+            --title '${{ github.ref_name }}' \
+            --generate-notes
+      - name: Upload the distributions
         env:
           GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          gh release upload '${{ github.ref_name }}' dist/** --repo '${{ github.repository }}'
-      - name: Upload bridge bundle to GitHub Release
+        run: gh release upload '${{ github.ref_name }}' dist/** --repo '${{ github.repository }}'
+      - name: Upload the bridge bundle
         env:
           GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          gh release upload '${{ github.ref_name }}' bundle/*.tar.gz --repo '${{ github.repository }}'
+        run: gh release upload '${{ github.ref_name }}' bundle/*.tar.gz --repo '${{ github.repository }}'

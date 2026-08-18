@@ -2,12 +2,12 @@
 
 The preprocessing EPI cannot skip, then the Cartesian pipeline: the stream
 is partitioned by
-:func:`pulserver.recon._mrd.epi.partition_epi_acquisitions` into the
+:func:`pulserver.recon.partition_epi_acquisitions` into the
 blip-nulled navigator, the opposite-polarity reference and the imaging
 lines; the navigator's odd/even lines yield a linear phase fit that is
 applied to every reversed line -- after the sample-order flip its ``REV``
 polarity demands -- and the volume then reconstructs exactly as
-:mod:`pulserver.app.recon.gre2D_recon` reconstructs. The opposite-polarity
+:mod:`pulserver.app.recon.cartesian2D_recon` reconstructs. The opposite-polarity
 reference is reconstructed alongside as its own series, so the pair a
 distortion correction needs -- PyHySCO, through
 :func:`pulserver.recon.postprocessing.run_pyhysco` on the two exported
@@ -26,8 +26,7 @@ slice its coil sensitivities, and a model-based solve
 (:class:`pulserver.recon.physics.SMS`) unfolds every group back into its bands
 against the CAIPI phase the gz blips played.
 
-Needs the numerical stack: ``pip install "pulserver[recon-cpu]"``; the
-distortion step additionally needs the external ``recon-distortion`` extra.
+The distortion step needs the external ``pulserver[distortion]`` extra.
 """
 
 from __future__ import annotations
@@ -36,8 +35,6 @@ __all__ = [
     "PLUGIN",
     "Epi2DRecon",
     "coil_maps_from_reference",
-    "correct_lines",
-    "odd_even_fit",
     "separate_slices",
 ]
 
@@ -46,20 +43,21 @@ from typing import Any
 import numpy as np
 
 from pulserver import AcquisitionBucket, ReconContext, ReconPlugin, ReconResult
-from pulserver.recon import has_acquisition_flag
-from pulserver.recon._mrd.epi import partition_epi_acquisitions
-from pulserver.recon.postprocessing import center_crop, coil_combine
-from pulserver.recon.preprocessing import (
+from pulserver.recon import (
+    AcquisitionFlag,
     CartesianGridder,
+    center_crop,
+    coil_combine,
+    coil_images,
+    correct_lines,
     encoded_shape,
-    fftc,
+    fill_partial_echo,
+    has_acquisition_flag,
     ifftc,
+    odd_even_fit,
+    partition_epi_acquisitions,
     receiver_channels,
     recon_shape,
-)
-from pulserver.app.recon.gre2D_recon import (
-    coil_images,
-    fill_partial_echo,
     sense,
     sensitivities,
 )
@@ -142,72 +140,6 @@ def separate_slices(
     return image.cpu().numpy() if hasattr(image, "cpu") else np.asarray(image)
 
 
-def _hybrid(rows: Any) -> np.ndarray:
-    """Rows into hybrid space: inverse FFT along the readout."""
-    return ifftc(np.asarray(rows), axes=-1)
-
-
-def odd_even_fit(navigator_lines: list[np.ndarray]) -> tuple[float, float]:
-    """Fit the odd/even linear phase from blip-nulled navigator lines.
-
-    The middle line was read backwards; against the mean of its two
-    like-polarity neighbours, its hybrid-space phase difference is the
-    gradient-delay ramp plus a constant -- the two numbers every reversed
-    line is corrected by.
-
-    Parameters
-    ----------
-    navigator_lines : list of numpy.ndarray
-        Three ``(coils, samples)`` lines, polarity ``+ - +``, reversed lines
-        already flipped back into readout order.
-
-    Returns
-    -------
-    tuple of float
-        Phase slope (radians per sample) and intercept (radians).
-    """
-    forward = 0.5 * (_hybrid(navigator_lines[0]) + _hybrid(navigator_lines[2]))
-    backward = _hybrid(navigator_lines[1])
-    cross = np.sum(forward * np.conj(backward), axis=0)
-
-    weights = np.abs(cross)
-    phase = np.unwrap(np.angle(cross))
-    samples = np.arange(phase.size)
-    keep = weights > 0.1 * weights.max()
-    slope, intercept = np.polyfit(samples[keep], phase[keep], 1, w=weights[keep])
-    return float(slope), float(intercept)
-
-
-def correct_lines(
-    lines: list[tuple[np.ndarray, bool]], slope: float, intercept: float
-) -> list[np.ndarray]:
-    """Flip and phase-correct a train's lines into a consistent readout.
-
-    Parameters
-    ----------
-    lines : list of tuple
-        ``(data, reversed)`` per line, data ``(coils, samples)``.
-    slope, intercept
-        The odd/even fit of :func:`odd_even_fit`.
-
-    Returns
-    -------
-    list of numpy.ndarray
-        The corrected lines, all in forward readout order.
-    """
-    corrected = []
-    for data, backwards in lines:
-        row = np.asarray(data)
-        if backwards:
-            row = row[..., ::-1]
-            hybrid = _hybrid(row)
-            ramp = slope * np.arange(hybrid.shape[-1]) + intercept
-            hybrid = hybrid * np.exp(1j * ramp)
-            row = fftc(hybrid, axes=-1)
-        corrected.append(row.astype(np.complex64))
-    return corrected
-
-
 class Epi2DRecon(ReconPlugin):
     """Reconstruct a 2D EPI time series, one image per slice and repetition.
 
@@ -232,8 +164,8 @@ class Epi2DRecon(ReconPlugin):
         device: Any = None,
     ) -> None:
         super().__init__(
-            split_on=("ACQ_LAST_IN_MEASUREMENT",),
-            reject_flags=("ACQ_IS_NOISE_MEASUREMENT",),
+            split_on=AcquisitionFlag.LAST_IN_MEASUREMENT,
+            reject_flags=AcquisitionFlag.IS_NOISE_MEASUREMENT,
         )
         self.regularization = float(regularization)
         self.iterations = int(iterations)
@@ -249,7 +181,15 @@ class Epi2DRecon(ReconPlugin):
         self.acquisitions: list[Any] = []
 
     def receive(self, acquisition: Any, context: ReconContext) -> None:
-        """Keep the stream; the partitioning wants it whole."""
+        """Keep the stream rather than placing it.
+
+        Two things have to happen to an EPI line before it belongs anywhere:
+        the stream is partitioned by flag into navigator, reverse-polarity
+        reference and imaging, and every reversed line is flipped and phase
+        corrected against a fit that only exists once its slice's navigator
+        triplet has arrived. So this one plugin sorts for itself, which is what
+        overriding the hook is for.
+        """
         del context
         self.acquisitions.append(acquisition)
 
@@ -258,8 +198,7 @@ class Epi2DRecon(ReconPlugin):
     ) -> list[ReconResult] | None:
         """Partition, phase-correct, and reconstruct at the end of the scan."""
         del context
-        last = bucket.acquisitions[-1]
-        if not has_acquisition_flag(last, "ACQ_LAST_IN_MEASUREMENT"):
+        if AcquisitionFlag.LAST_IN_MEASUREMENT not in bucket.trigger:
             return None
 
         groups = partition_epi_acquisitions(self.acquisitions)
@@ -290,14 +229,10 @@ class Epi2DRecon(ReconPlugin):
         calibration_maps = self._calibration_maps(groups.single_band_reference)
 
         results = []
-        for series, group in enumerate(
-            (groups.imaging, groups.reverse_polarity)
-        ):
+        for series, group in enumerate((groups.imaging, groups.reverse_polarity)):
             if not group:
                 continue
-            repetitions = sorted(
-                {int(item.idx.repetition) for item in group}
-            )
+            repetitions = sorted({int(item.idx.repetition) for item in group})
             for repetition in repetitions:
                 buffer = CartesianGridder(self.grid, coils=self.coils)
                 for item in group:
@@ -310,9 +245,7 @@ class Epi2DRecon(ReconPlugin):
                         slope,
                         intercept,
                     )
-                    buffer.add(
-                        row, index, int(item.idx.kspace_encode_step_1)
-                    )
+                    buffer.add(row, index, int(item.idx.kspace_encode_step_1))
                 for index in range(self.grid[0]):
                     kspace, mask = buffer[index]
 
@@ -350,9 +283,7 @@ class Epi2DRecon(ReconPlugin):
                         )
                     results.append(
                         ReconResult(
-                            center_crop(
-                                np.abs(image), self.image_shape
-                            ).transpose(),
+                            center_crop(np.abs(image), self.image_shape).transpose(),
                             reference=-1,
                             series_index=series * 1000 + repetition,
                             image_index=index,
@@ -492,7 +423,7 @@ class Epi2DRecon(ReconPlugin):
 
 def _reversed(acquisition: Any) -> bool:
     """Whether the line was read backwards, by its MRD flag."""
-    return has_acquisition_flag(acquisition, "ACQ_IS_REVERSE")
+    return has_acquisition_flag(acquisition, AcquisitionFlag.IS_REVERSE)
 
 
 PLUGIN = Epi2DRecon()

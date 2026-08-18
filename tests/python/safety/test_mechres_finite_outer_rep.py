@@ -22,7 +22,7 @@ from pathlib import Path
 
 import pypulseq as pp
 import pytest
-from pulserver._ext._pulseg_wrapper import _calc_mech_resonances
+from pulserver._ext.pulseg import _calc_mech_resonances
 from pulserver.pypulseq import Opts
 
 from .conftest import build_collection
@@ -49,10 +49,18 @@ def _build_two_block_seq(tmp_path: Path) -> Path:
     )
     seq = pp.Sequence(system=sys_)
     g1 = pp.make_trapezoid(
-        channel="x", amplitude=0.5 * sys_.max_grad, flat_time=400e-6, rise_time=RASTER * 20, system=sys_
+        channel="x",
+        amplitude=0.5 * sys_.max_grad,
+        flat_time=400e-6,
+        rise_time=RASTER * 20,
+        system=sys_,
     )
     g2 = pp.make_trapezoid(
-        channel="y", amplitude=0.3 * sys_.max_grad, flat_time=300e-6, rise_time=RASTER * 20, system=sys_
+        channel="y",
+        amplitude=0.3 * sys_.max_grad,
+        flat_time=300e-6,
+        rise_time=RASTER * 20,
+        system=sys_,
     )
     seq.add_block(g1)
     seq.add_block(g2)

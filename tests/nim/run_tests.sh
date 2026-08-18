@@ -71,10 +71,27 @@ fi
 echo "Using VIRTUAL_ENV: $VIRTUAL_ENV"
 
 (
-  cd "$ROOT_DIR/bridge"
+  cd "$ROOT_DIR/src/nim"
   rm -rf "$HOME/.cache/nim/test_bridge_common_d" "$HOME/.cache/nim/test_isPyNone_d"
-  echo "Installing nimpulseqgui from GitHub"
-  nimble install -y https://github.com/nimpulseq/nimpulseqgui
+  # Same pin as scripts/make_installer.sh: a bare URL install takes whatever
+  # HEAD is on the day and bypasses the constraint in bridge.nimble.
+  NIMPULSEQGUI_REV="${NIMPULSEQGUI_REV:-eaf112c2ecc61162ba998e5a5020b921ffa2d38e}"
+  echo "Installing nimpulseqgui from GitHub at ${NIMPULSEQGUI_REV}"
+  nimble install -y "https://github.com/nimpulseq/nimpulseqgui@#${NIMPULSEQGUI_REV}"
+  # nimble.lock pins the tree; `setup` materialises it as nimble.paths, which
+  # both the in-package builds below and the test task's out-of-package entry
+  # point resolve their imports through. It rewrites config.nims as a side
+  # effect, which is why that file is generated rather than hand-maintained.
+  nimble setup -y
+  # `setup` writes nimble.paths (gitignored) and rewrites the tracked
+  # config.nims with a leading --noNimblePath. That line only *removes* the
+  # global store from the search path, and the bare `nim c` further down builds
+  # an in-package file that predates lock mode -- so drop it and leave the file
+  # byte-identical to what is committed.
+  # ... and a leading blank line. Strip both so a test run leaves the tree
+  # clean rather than showing a tracked file as modified every time.
+  sed -i '/^--noNimblePath$/d' config.nims
+  sed -i '1{/^$/d}' config.nims
   echo "Running tests with pythonVenvPath=$ENV_PULSERVER"
   nimble test
 
@@ -82,10 +99,10 @@ echo "Using VIRTUAL_ENV: $VIRTUAL_ENV"
   # it can import and execute a user plugin backed by a PulseqSequence class.
   mkdir -p "$BUNDLE_DIR/bin"
   TEST_HOST_BIN="$BUNDLE_DIR/bin/pypulseq_host_test"
-  TEST_PLUGIN="$ROOT_DIR/bridge/tests/test_pulserver_sequence_plugin.py"
+  TEST_PLUGIN="$ROOT_DIR/src/nim/tests/test_pulserver_sequence_plugin.py"
   TEST_SEQ_OUT="$BUNDLE_DIR/pulserver_sequence_plugin.seq"
 
-  if ! nim c -d:release -d:pythonVenvPath="$ENV_PULSERVER" -o:"$TEST_HOST_BIN" "$ROOT_DIR/bridge/pypulseq_host.nim"; then
+  if ! nim c -d:release -d:pythonVenvPath="$ENV_PULSERVER" -o:"$TEST_HOST_BIN" "$ROOT_DIR/src/nim/pypulseq_host.nim"; then
     echo "Failed to compile test host binary: $TEST_HOST_BIN" >&2
     exit 1
   fi

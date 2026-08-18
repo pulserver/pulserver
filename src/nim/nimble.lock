@@ -1,0 +1,72 @@
+{
+  "version": 2,
+  "packages": {
+    "nimpy": {
+      "version": "0.2.1",
+      "vcsRevision": "d559f7bcb8fb877b4eae4bd116b8fbc9e16560ef",
+      "url": "https://github.com/yglukhov/nimpy",
+      "downloadMethod": "git",
+      "dependencies": [],
+      "checksums": {
+        "sha1": "0e88588fb093806b3e2d9f2a4b7e507abf863958"
+      }
+    },
+    "checksums": {
+      "version": "0.2.1",
+      "vcsRevision": "f8f6bd34bfa3fe12c64b919059ad856a96efcba0",
+      "url": "https://github.com/nim-lang/checksums",
+      "downloadMethod": "git",
+      "dependencies": [],
+      "checksums": {
+        "sha1": "d3c7a1d0c0dee8fa089bd7f4d474e005877b608a"
+      }
+    },
+    "nimpulseq": {
+      "version": "0.1.0",
+      "vcsRevision": "30d1ebce41387a37e0697a56bba397d2f17bc977",
+      "url": "https://github.com/nimpulseq/nimpulseq",
+      "downloadMethod": "git",
+      "dependencies": [
+        "checksums"
+      ],
+      "checksums": {
+        "sha1": "c6c037883fc8f5e425d9a20d141878ab507b2120"
+      }
+    },
+    "pulseqsystems": {
+      "version": "0.1.0",
+      "vcsRevision": "d85ba90c473b6d7eca49806e10545df427965e41",
+      "url": "https://github.com/nimpulseq/PulseqSystems",
+      "downloadMethod": "git",
+      "dependencies": [],
+      "checksums": {
+        "sha1": "de72161e203762540bcb94bbb167feaaed45586a"
+      }
+    },
+    "nigui": {
+      "version": "0.2.8",
+      "vcsRevision": "3cb5598aa7f5c80e5efbdb8bc281af3d310073d0",
+      "url": "https://github.com/trustable-code/NiGui",
+      "downloadMethod": "git",
+      "dependencies": [],
+      "checksums": {
+        "sha1": "62a648324e3a145b34aa3384e9484cd07f88ce54"
+      }
+    },
+    "nimpulseqgui": {
+      "version": "0.1.0",
+      "vcsRevision": "eaf112c2ecc61162ba998e5a5020b921ffa2d38e",
+      "url": "https://github.com/nimpulseq/nimpulseqgui",
+      "downloadMethod": "git",
+      "dependencies": [
+        "nigui",
+        "nimpulseq",
+        "pulseqsystems"
+      ],
+      "checksums": {
+        "sha1": "9381827254d286ed5b39f00a84f059452f5ddc66"
+      }
+    }
+  },
+  "tasks": {}
+}

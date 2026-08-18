@@ -4,7 +4,7 @@ The echo-train readout: every repetition reads its line at each of
 ``n_echoes`` echo times, monopolar (a flyback rewinder between echoes, every
 echo read the same way) or bipolar (alternating sign, faster, even echoes
 read backwards). Each acquisition carries its echo index as ``ECO``, which is
-the counter :mod:`pulserver.app.recon.gre_multiecho2D_recon` reconstructs per-echo
+the counter :mod:`pulserver.app.recon.cartesian2D_recon` reconstructs per-echo
 images from. Everything else -- slices and passes, autocalibration block,
 partial Fourier, spoiling -- is :mod:`pulserver.app.sequence.gre2D_sequence`.
 
@@ -208,7 +208,7 @@ def main(
         """Play one TR of every slice of a pass, acquiring or not."""
         wait_te = getattr(readout, "wait_te", None)
         wait_tr = getattr(readout, "wait_tr", None)
-        lin_label, slc_label, ima_label, seg_label, eco_label = readout.adc_labels
+        _lin_label, slc_label, _ima_label, _seg_label, eco_label = readout.adc_labels
         for i_slice in slices:
             # `slice_positions` is in ascending order, so the loop index is the
             # geometric index a reconstruction stacks by.
@@ -234,11 +234,7 @@ def main(
             for i_echo in range(n_echoes):
                 if monopolar and i_echo:
                     seq.add_block(readout.gx_flyback)
-                lobe = (
-                    readout.gx
-                    if monopolar or i_echo % 2 == 0
-                    else readout.gx_rev
-                )
+                lobe = readout.gx if monopolar or i_echo % 2 == 0 else readout.gx_rev
                 if acquire:
                     eco_label.value = i_echo
                     seq.add_block(lobe, readout.adc, *readout.adc_labels)
@@ -289,7 +285,9 @@ def main(
     seq.set_definition(key="TR", value=kernel.repetition_time)
     seq.set_definition(
         key="NumGainCalibrationReadouts",
-        value=n_slices if n_gain_calibration_readouts is None else n_gain_calibration_readouts,
+        value=n_slices
+        if n_gain_calibration_readouts is None
+        else n_gain_calibration_readouts,
     )
 
     seq.set_definition(key="kSpaceCenterLine", value=n_y // 2)
@@ -315,6 +313,7 @@ def main(
 # ======================================================================
 # Subroutines of main()
 # ======================================================================
+
 
 def MultiechoKernel(
     system: pp.Opts,
@@ -450,6 +449,7 @@ acceleration, n_acs, n_averages, n_dummy, spoiling_cycles
 # The scanner protocol contract
 # ======================================================================
 
+
 class GreMultiecho2D(SequencePlugin):
     """The multi-echo 2D gradient echo behind the scanner protocol contract."""
 
@@ -556,9 +556,15 @@ class GreMultiecho2D(SequencePlugin):
                     unit="",
                     options=[1.0, 2.0, 4.0, 8.0, 16.0],
                 ),
-                UIParam.FOV_OFFSET_X: OffFloatParam(value=0.0, min=-500.0, max=500.0, unit="mm"),
-                UIParam.FOV_OFFSET_Y: OffFloatParam(value=0.0, min=-500.0, max=500.0, unit="mm"),
-                UIParam.FOV_OFFSET_Z: OffFloatParam(value=0.0, min=-500.0, max=500.0, unit="mm"),
+                UIParam.FOV_OFFSET_X: OffFloatParam(
+                    value=0.0, min=-500.0, max=500.0, unit="mm"
+                ),
+                UIParam.FOV_OFFSET_Y: OffFloatParam(
+                    value=0.0, min=-500.0, max=500.0, unit="mm"
+                ),
+                UIParam.FOV_OFFSET_Z: OffFloatParam(
+                    value=0.0, min=-500.0, max=500.0, unit="mm"
+                ),
                 UIParam.user_name(0): Description(text="ACS lines"),
                 UIParam.user_value(0): TypeinFloatParam(
                     value=24.0,
@@ -609,7 +615,11 @@ class GreMultiecho2D(SequencePlugin):
         try:
             kernel = MultiechoKernel(
                 system,
-                **{name: value for name, value in kwargs.items() if name in KERNEL_ARGUMENTS},
+                **{
+                    name: value
+                    for name, value in kwargs.items()
+                    if name in KERNEL_ARGUMENTS
+                },
             )
         except ValueError as error:
             return {"valid": False, "duration": None, "info": str(error)}
@@ -672,7 +682,9 @@ def protocol_kwargs(system: pp.Opts, protocol: dict[str, dict]) -> dict:
         n_echoes=max(1, round(params.user_float(prot, 1, 4.0))),
         monopolar=bool(round(params.user_float(prot, 4, 1.0))),
         partial_fourier=params.user_float(prot, 3, 1.0),
-        n_acs=params.acs_lines_from_protocol(prot, params.param_int(prot, UIParam.NY), 0),
+        n_acs=params.acs_lines_from_protocol(
+            prot, params.param_int(prot, UIParam.NY), 0
+        ),
         n_dummy=max(0, round(params.user_float(prot, 2, 16.0))),
     )
 
@@ -710,11 +722,21 @@ ARG_MAP = [
     ("--ry", UIParam.RY, float, "Phase-encode undersampling factor"),
     ("--nex", UIParam.NEX, float, "Number of signal averages"),
     ("--offset-x-mm", UIParam.FOV_OFFSET_X, float, "Volume offset along readout [mm]"),
-    ("--offset-y-mm", UIParam.FOV_OFFSET_Y, float, "Volume offset along phase encode [mm]"),
+    (
+        "--offset-y-mm",
+        UIParam.FOV_OFFSET_Y,
+        float,
+        "Volume offset along phase encode [mm]",
+    ),
     ("--offset-z-mm", UIParam.FOV_OFFSET_Z, float, "Volume offset along slice [mm]"),
     ("--acs-lines", UIParam.user_value(0), float, "Number of ACS lines"),
     ("--echoes", UIParam.user_value(1), float, "Echoes per repetition"),
-    ("--partial-fourier", UIParam.user_value(3), float, "Acquired phase-encode fraction in (0.5, 1]"),
+    (
+        "--partial-fourier",
+        UIParam.user_value(3),
+        float,
+        "Acquired phase-encode fraction in (0.5, 1]",
+    ),
     (
         "--bipolar",
         UIParam.user_value(4),

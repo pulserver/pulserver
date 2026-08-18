@@ -32,30 +32,30 @@ using pulseq::SoftDelay;
 
 namespace
 {
-    std::array<double, pulseq::TRAP_WIDTH> trap(double amplitude, double delay = 0.0)
-    {
-        return {amplitude, 100e-6, 500e-6, 100e-6, delay};
-    }
+std::array<double, pulseq::TRAP_WIDTH> trap(double amplitude, double delay = 0.0)
+{
+    return {amplitude, 100e-6, 500e-6, 100e-6, delay};
+}
 
-    std::array<double, pulseq::ARB_WIDTH> arb(double amplitude, double shape_id)
-    {
-        return {amplitude, 0.0, 0.0, shape_id, 0.0, 0.0};
-    }
+std::array<double, pulseq::ARB_WIDTH> arb(double amplitude, double shape_id)
+{
+    return {amplitude, 0.0, 0.0, shape_id, 0.0, 0.0};
+}
 
-    std::array<double, pulseq::ADC_WIDTH> adc(double samples, double phase_shape = 0.0)
-    {
-        return {samples, 1e-5, 0.0, 0.0, 0.0, 0.0, 0.0, phase_shape};
-    }
+std::array<double, pulseq::ADC_WIDTH> adc(double samples, double phase_shape = 0.0)
+{
+    return {samples, 1e-5, 0.0, 0.0, 0.0, 0.0, 0.0, phase_shape};
+}
 
-    /** A block that plays gx and nothing else. */
-    Block on_x(int32_t grad, double duration = 1e-3)
-    {
-        Block block;
-        block.gx = grad;
-        block.duration = duration;
-        return block;
-    }
-}  // namespace
+/** A block that plays gx and nothing else. */
+Block on_x(int32_t grad, double duration = 1e-3)
+{
+    Block block;
+    block.gx = grad;
+    block.duration = duration;
+    return block;
+}
+} // namespace
 
 /* ================================================================== */
 /*  What counts as the same event                                     */
@@ -262,7 +262,8 @@ TEST(PulseqDedup, ShapesThatDecompressToDifferentLengthsStayApart)
     // so the sample count is part of what makes a shape a shape.
     Sequence seq;
     const std::vector<double> samples{1.0, 0.0, 10.0};
-    const auto shorter = arb(1000.0, static_cast<double>(seq.register_shape(12, samples.data(), 3)));
+    const auto shorter =
+        arb(1000.0, static_cast<double>(seq.register_shape(12, samples.data(), 3)));
     const auto longer = arb(1000.0, static_cast<double>(seq.register_shape(20, samples.data(), 3)));
     seq.add_block(on_x(seq.register_arbitrary(shorter.data())));
     seq.add_block(on_x(seq.register_arbitrary(longer.data())));
@@ -420,11 +421,11 @@ TEST(PulseqDedup, ATwoLinkChainKeepsItsOrderAndItsReferences)
 
     ASSERT_EQ(seq.extensions_library().size(), 2);
     const int32_t first = seq.get_block(1).ext;
-    const int32_t* head_row = seq.extensions_library().row(first);
+    const int32_t *head_row = seq.extensions_library().row(first);
     EXPECT_EQ(head_row[0], trigger_type);
     EXPECT_EQ(head_row[1], 1);
     ASSERT_NE(head_row[2], 0);
-    const int32_t* tail_row = seq.extensions_library().row(head_row[2]);
+    const int32_t *tail_row = seq.extensions_library().row(head_row[2]);
     EXPECT_EQ(tail_row[0], labelset);
     EXPECT_EQ(tail_row[1], 1);
     EXPECT_EQ(tail_row[2], 0);
@@ -438,7 +439,7 @@ TEST(PulseqDedup, AppendedChainsCollapseJustLikeSearchedOnes)
     // writing a different file from the careful one.
     Sequence appended;
     Sequence searched;
-    for (Sequence* seq : {&appended, &searched})
+    for (Sequence *seq : {&appended, &searched})
     {
         const int labelset = seq->extension_type_id("LABELSET");
         const int lin = seq->label_id("LIN");
@@ -458,8 +459,8 @@ TEST(PulseqDedup, AppendedChainsCollapseJustLikeSearchedOnes)
     EXPECT_EQ(appended.label_set_library().size(), searched.label_set_library().size());
     for (int id = 1; id <= appended.extensions_library().size(); ++id)
     {
-        const int32_t* a = appended.extensions_library().row(id);
-        const int32_t* b = searched.extensions_library().row(id);
+        const int32_t *a = appended.extensions_library().row(id);
+        const int32_t *b = searched.extensions_library().row(id);
         for (int c = 0; c < pulseq::EXTENSION_WIDTH; ++c)
             EXPECT_EQ(a[c], b[c]) << "chain " << id << " column " << c;
     }
@@ -600,21 +601,21 @@ TEST(PulseqDedup, AnEmptySequenceSurvivesIt)
 
 namespace
 {
-    namespace fs = std::filesystem;
+namespace fs = std::filesystem;
 
-    std::vector<std::string> fixtures()
+std::vector<std::string> fixtures()
+{
+    std::vector<std::string> paths;
+    for (const auto &entry : fs::directory_iterator(PULSEQ_FIXTURES_DIR))
     {
-        std::vector<std::string> paths;
-        for (const auto& entry : fs::directory_iterator(PULSEQ_FIXTURES_DIR))
-        {
-            if (entry.path().extension() == ".seq")
-                paths.push_back(entry.path().string());
-        }
-        std::sort(paths.begin(), paths.end());
-        return paths;
+        if (entry.path().extension() == ".seq")
+            paths.push_back(entry.path().string());
     }
+    std::sort(paths.begin(), paths.end());
+    return paths;
+}
 
-    /**
+/**
      * Everything a block plays, resolved through the libraries.
      *
      * Ids mean nothing across a renumbering, so nothing here is an id: a
@@ -623,254 +624,255 @@ namespace
      * these compare equal exactly when the two blocks play the same thing,
      * which is what deduplication is not allowed to change.
      */
-    struct Played
-    {
-        std::vector<double> values;
-        std::vector<std::string> names;
-    };
+struct Played
+{
+    std::vector<double> values;
+    std::vector<std::string> names;
+};
 
-    void push_shape(const Sequence& seq, double id, Played& out)
+void push_shape(const Sequence &seq, double id, Played &out)
+{
+    const int shape = static_cast<int>(std::lround(id));
+    if (shape < 1)
     {
-        const int shape = static_cast<int>(std::lround(id));
-        if (shape < 1)
+        // 0 is "no shape" and -1 is the half-raster flag; neither is an id.
+        out.values.push_back(id);
+        return;
+    }
+    out.values.push_back(-2.0); // a marker, so a shape is never read as a number
+    out.values.push_back(seq.shape_library().num_uncompressed(shape));
+    const int count = seq.shape_library().num_compressed(shape);
+    out.values.push_back(count);
+    const double *samples = seq.shape_library().samples(shape);
+    out.values.insert(out.values.end(), samples, samples + count);
+}
+
+void push_row(const double *row, int width, Played &out)
+{
+    out.values.insert(out.values.end(), row, row + width);
+}
+
+Played played(const Sequence &seq, int index)
+{
+    const Block block = seq.get_block(index);
+    Played out;
+    out.values.push_back(block.duration);
+
+    if (block.rf)
+    {
+        const double *row = seq.rf_library().row(block.rf);
+        out.values.push_back(row[0]);
+        for (int c = 1; c <= 3; ++c)
+            push_shape(seq, row[c], out);
+        for (int c = 4; c < pulseq::RF_WIDTH; ++c)
+            out.values.push_back(row[c]);
+        out.names.push_back(std::string(1, seq.rf_uses()[static_cast<size_t>(block.rf) - 1]));
+    }
+
+    const int32_t axes[3] = {block.gx, block.gy, block.gz};
+    for (int32_t grad : axes)
+    {
+        if (!grad)
         {
-            // 0 is "no shape" and -1 is the half-raster flag; neither is an id.
-            out.values.push_back(id);
-            return;
+            out.values.push_back(0.0);
+            continue;
         }
-        out.values.push_back(-2.0);  // a marker, so a shape is never read as a number
-        out.values.push_back(seq.shape_library().num_uncompressed(shape));
-        const int count = seq.shape_library().num_compressed(shape);
-        out.values.push_back(count);
-        const double* samples = seq.shape_library().samples(shape);
-        out.values.insert(out.values.end(), samples, samples + count);
-    }
-
-    void push_row(const double* row, int width, Played& out)
-    {
-        out.values.insert(out.values.end(), row, row + width);
-    }
-
-    Played played(const Sequence& seq, int index)
-    {
-        const Block block = seq.get_block(index);
-        Played out;
-        out.values.push_back(block.duration);
-
-        if (block.rf)
+        if (seq.grad_kind(grad) == GradKind::Trap)
         {
-            const double* row = seq.rf_library().row(block.rf);
+            out.values.push_back(1.0);
+            push_row(seq.trap_library().row(seq.grad_row(grad)), pulseq::TRAP_WIDTH, out);
+        }
+        else
+        {
+            out.values.push_back(2.0);
+            const double *row = seq.arb_library().row(seq.grad_row(grad));
             out.values.push_back(row[0]);
-            for (int c = 1; c <= 3; ++c)
-                push_shape(seq, row[c], out);
-            for (int c = 4; c < pulseq::RF_WIDTH; ++c)
-                out.values.push_back(row[c]);
-            out.names.push_back(std::string(1, seq.rf_uses()[static_cast<size_t>(block.rf) - 1]));
+            out.values.push_back(row[1]);
+            out.values.push_back(row[2]);
+            push_shape(seq, row[3], out);
+            push_shape(seq, row[4], out);
+            out.values.push_back(row[5]);
         }
-
-        const int32_t axes[3] = {block.gx, block.gy, block.gz};
-        for (int32_t grad : axes)
-        {
-            if (!grad)
-            {
-                out.values.push_back(0.0);
-                continue;
-            }
-            if (seq.grad_kind(grad) == GradKind::Trap)
-            {
-                out.values.push_back(1.0);
-                push_row(seq.trap_library().row(seq.grad_row(grad)), pulseq::TRAP_WIDTH, out);
-            }
-            else
-            {
-                out.values.push_back(2.0);
-                const double* row = seq.arb_library().row(seq.grad_row(grad));
-                out.values.push_back(row[0]);
-                out.values.push_back(row[1]);
-                out.values.push_back(row[2]);
-                push_shape(seq, row[3], out);
-                push_shape(seq, row[4], out);
-                out.values.push_back(row[5]);
-            }
-        }
-
-        if (block.adc)
-        {
-            const double* row = seq.adc_library().row(block.adc);
-            for (int c = 0; c < 7; ++c)
-                out.values.push_back(row[c]);
-            push_shape(seq, row[7], out);
-        }
-
-        // The chain, head first, as the file stores it.
-        for (int32_t node = block.ext; node;)
-        {
-            const int32_t* link = seq.extensions_library().row(node);
-            const std::string& type = seq.extension_type_name(link[0]);
-            out.names.push_back(type);
-            const int ref = link[1];
-            if (type == "TRIGGERS")
-                push_row(seq.trigger_library().row(ref), pulseq::TRIGGER_WIDTH, out);
-            else if (type == "ROTATIONS")
-                push_row(seq.rotation_library().row(ref), pulseq::ROTATION_WIDTH, out);
-            else if (type == "LABELSET" || type == "LABELINC")
-            {
-                const pulseq::IntTable& table =
-                    type == "LABELSET" ? seq.label_set_library() : seq.label_inc_library();
-                const int32_t* label = table.row(ref);
-                out.values.push_back(label[0]);
-                out.names.push_back(seq.label_name(label[1]));
-            }
-            else if (type == "RF_SHIMS")
-            {
-                const int count = seq.rf_shim_library().length(ref);
-                out.values.push_back(count);
-                push_row(seq.rf_shim_library().row(ref), count, out);
-            }
-            else if (type == "DELAYS")
-            {
-                const SoftDelay& delay = seq.soft_delay_library()[static_cast<size_t>(ref) - 1];
-                out.values.push_back(delay.num);
-                out.values.push_back(delay.offset);
-                out.values.push_back(delay.factor);
-                out.names.push_back(delay.hint);
-            }
-            node = link[2];
-        }
-        return out;
     }
 
-    class PulseqDedupFixture : public testing::TestWithParam<std::string>
+    if (block.adc)
     {
-    };
+        const double *row = seq.adc_library().row(block.adc);
+        for (int c = 0; c < 7; ++c)
+            out.values.push_back(row[c]);
+        push_shape(seq, row[7], out);
+    }
 
-    TEST_P(PulseqDedupFixture, EveryBlockStillPlaysTheSameEvents)
+    // The chain, head first, as the file stores it.
+    for (int32_t node = block.ext; node;)
     {
-        // The property the whole pass exists to preserve, and the one that a
-        // renumbering bug breaks while still writing a perfectly valid file:
-        // collapse the vocabulary as far as you like, but every block has to
-        // come out playing what it played.
-        //
-        // Compared to a tolerance rather than exactly, because deduplication
-        // deliberately rounds to what the file records -- but to a tolerance
-        // far tighter than any confusion of one event for another could hide
-        // in.
-        if (GetParam().find("corrupted") != std::string::npos)
-            GTEST_SKIP() << "deliberately broken fixture; rejection is tested below";
+        const int32_t *link = seq.extensions_library().row(node);
+        const std::string &type = seq.extension_type_name(link[0]);
+        out.names.push_back(type);
+        const int ref = link[1];
+        if (type == "TRIGGERS")
+            push_row(seq.trigger_library().row(ref), pulseq::TRIGGER_WIDTH, out);
+        else if (type == "ROTATIONS")
+            push_row(seq.rotation_library().row(ref), pulseq::ROTATION_WIDTH, out);
+        else if (type == "LABELSET" || type == "LABELINC")
+        {
+            const pulseq::IntTable &table =
+                type == "LABELSET" ? seq.label_set_library() : seq.label_inc_library();
+            const int32_t *label = table.row(ref);
+            out.values.push_back(label[0]);
+            out.names.push_back(seq.label_name(label[1]));
+        }
+        else if (type == "RF_SHIMS")
+        {
+            const int count = seq.rf_shim_library().length(ref);
+            out.values.push_back(count);
+            push_row(seq.rf_shim_library().row(ref), count, out);
+        }
+        else if (type == "DELAYS")
+        {
+            const SoftDelay &delay = seq.soft_delay_library()[static_cast<size_t>(ref) - 1];
+            out.values.push_back(delay.num);
+            out.values.push_back(delay.offset);
+            out.values.push_back(delay.factor);
+            out.names.push_back(delay.hint);
+        }
+        node = link[2];
+    }
+    return out;
+}
 
-        Sequence seq = pulseq::read_file(GetParam());
-        const int blocks = seq.num_blocks();
-        std::vector<Played> before;
-        before.reserve(static_cast<size_t>(blocks));
-        for (int b = 1; b <= blocks; ++b)
-            before.push_back(played(seq, b));
+class PulseqDedupFixture : public testing::TestWithParam<std::string>
+{
+};
 
+TEST_P(PulseqDedupFixture, EveryBlockStillPlaysTheSameEvents)
+{
+    // The property the whole pass exists to preserve, and the one that a
+    // renumbering bug breaks while still writing a perfectly valid file:
+    // collapse the vocabulary as far as you like, but every block has to
+    // come out playing what it played.
+    //
+    // Compared to a tolerance rather than exactly, because deduplication
+    // deliberately rounds to what the file records -- but to a tolerance
+    // far tighter than any confusion of one event for another could hide
+    // in.
+    if (GetParam().find("corrupted") != std::string::npos)
+        GTEST_SKIP() << "deliberately broken fixture; rejection is tested below";
+
+    Sequence seq = pulseq::read_file(GetParam());
+    const int blocks = seq.num_blocks();
+    std::vector<Played> before;
+    before.reserve(static_cast<size_t>(blocks));
+    for (int b = 1; b <= blocks; ++b)
+        before.push_back(played(seq, b));
+
+    seq.remove_duplicates();
+
+    ASSERT_EQ(seq.num_blocks(), blocks);
+    for (int b = 1; b <= blocks; ++b)
+    {
+        const Played after = played(seq, b);
+        const Played &was = before[static_cast<size_t>(b) - 1];
+        ASSERT_EQ(after.values.size(), was.values.size()) << "block " << b << " shape changed";
+        ASSERT_EQ(after.names, was.names) << "block " << b << " names changed";
+        for (size_t i = 0; i < was.values.size(); ++i)
+            ASSERT_NEAR(
+                after.values[i],
+                was.values[i],
+                1e-5 * std::max(1.0, std::fabs(was.values[i])))
+                << "block " << b << " value " << i;
+    }
+}
+
+TEST_P(PulseqDedupFixture, DeduplicationIsAFixedPoint)
+{
+    // Not "changes nothing" -- several fixtures were written without
+    // deduplicating -- but "settles": once collapsed, running it again has
+    // to find nothing.  Rounding a row already at the file's precision has
+    // to leave it alone, or the pass would keep moving, and every
+    // cross-reference has to survive being rewritten twice.
+    if (GetParam().find("corrupted") != std::string::npos)
+        GTEST_SKIP() << "deliberately broken fixture; rejection is tested below";
+
+    Sequence seq = pulseq::read_file(GetParam());
+    seq.remove_duplicates();
+    const std::string once = pulseq::write_text(seq, false);
+
+    seq.remove_duplicates();
+    const std::string twice = pulseq::write_text(seq, false);
+
+    EXPECT_EQ(once.size(), twice.size());
+    EXPECT_TRUE(once == twice) << "a second deduplication moved something";
+}
+
+TEST_P(PulseqDedupFixture, TheScanItselfIsUntouched)
+{
+    if (GetParam().find("corrupted") != std::string::npos)
+        GTEST_SKIP() << "deliberately broken fixture; rejection is tested below";
+
+    Sequence seq = pulseq::read_file(GetParam());
+    const int blocks = seq.num_blocks();
+    const double duration = seq.duration();
+    const std::vector<double> durations(seq.block_durations(), seq.block_durations() + blocks);
+
+    seq.remove_duplicates();
+
+    ASSERT_EQ(seq.num_blocks(), blocks);
+    EXPECT_DOUBLE_EQ(seq.duration(), duration);
+    for (int i = 0; i < blocks; ++i)
+        EXPECT_DOUBLE_EQ(seq.block_durations()[i], durations[static_cast<size_t>(i)])
+            << "block " << (i + 1);
+
+    // Nothing may point past the end of what it points into.
+    const int32_t *events = seq.block_events();
+    for (int i = 0; i < blocks; ++i)
+    {
+        const int32_t *row = events + static_cast<size_t>(i) * pulseq::BLOCK_WIDTH;
+        EXPECT_LE(row[0], seq.rf_library().size()) << "block " << (i + 1) << " rf";
+        for (int axis = 1; axis <= 3; ++axis)
+            EXPECT_LE(row[axis], seq.num_gradients()) << "block " << (i + 1) << " gradient";
+        EXPECT_LE(row[4], seq.adc_library().size()) << "block " << (i + 1) << " adc";
+        EXPECT_LE(row[5], seq.extensions_library().size()) << "block " << (i + 1) << " ext";
+    }
+}
+
+TEST(PulseqDedupCorpus, ABlockPointingAtAChainThatIsNotThereIsRejected)
+{
+    // The corrupted fixture is a copy of the corpus gre_2d whose first
+    // block names a dangling extension chain id.  Reading and writing
+    // both carry it through -- neither resolves the reference -- so
+    // deduplication, which does, is where it has to be noticed.
+    const std::string path = std::string(PULSEQ_FIXTURES_DIR) + "/gre_2d_corrupted.seq";
+    Sequence seq = pulseq::read_file(path);
+    try
+    {
         seq.remove_duplicates();
-
-        ASSERT_EQ(seq.num_blocks(), blocks);
-        for (int b = 1; b <= blocks; ++b)
-        {
-            const Played after = played(seq, b);
-            const Played& was = before[static_cast<size_t>(b) - 1];
-            ASSERT_EQ(after.values.size(), was.values.size()) << "block " << b << " shape changed";
-            ASSERT_EQ(after.names, was.names) << "block " << b << " names changed";
-            for (size_t i = 0; i < was.values.size(); ++i)
-                ASSERT_NEAR(after.values[i], was.values[i],
-                            1e-5 * std::max(1.0, std::fabs(was.values[i])))
-                    << "block " << b << " value " << i;
-        }
+        FAIL() << "a dangling extension reference went unnoticed";
     }
-
-    TEST_P(PulseqDedupFixture, DeduplicationIsAFixedPoint)
+    catch (const std::out_of_range &error)
     {
-        // Not "changes nothing" -- several fixtures were written without
-        // deduplicating -- but "settles": once collapsed, running it again has
-        // to find nothing.  Rounding a row already at the file's precision has
-        // to leave it alone, or the pass would keep moving, and every
-        // cross-reference has to survive being rewritten twice.
-        if (GetParam().find("corrupted") != std::string::npos)
-            GTEST_SKIP() << "deliberately broken fixture; rejection is tested below";
-
-        Sequence seq = pulseq::read_file(GetParam());
-        seq.remove_duplicates();
-        const std::string once = pulseq::write_text(seq, false);
-
-        seq.remove_duplicates();
-        const std::string twice = pulseq::write_text(seq, false);
-
-        EXPECT_EQ(once.size(), twice.size());
-        EXPECT_TRUE(once == twice) << "a second deduplication moved something";
+        const std::string message = error.what();
+        EXPECT_NE(message.find("block 1"), std::string::npos) << message;
+        EXPECT_NE(message.find("extension chain"), std::string::npos) << message;
     }
+}
 
-    TEST_P(PulseqDedupFixture, TheScanItselfIsUntouched)
+INSTANTIATE_TEST_SUITE_P(
+    AllFixtures,
+    PulseqDedupFixture,
+    testing::ValuesIn(fixtures()),
+    [](const testing::TestParamInfo<std::string> &info)
     {
-        if (GetParam().find("corrupted") != std::string::npos)
-            GTEST_SKIP() << "deliberately broken fixture; rejection is tested below";
-
-        Sequence seq = pulseq::read_file(GetParam());
-        const int blocks = seq.num_blocks();
-        const double duration = seq.duration();
-        const std::vector<double> durations(seq.block_durations(),
-                                            seq.block_durations() + blocks);
-
-        seq.remove_duplicates();
-
-        ASSERT_EQ(seq.num_blocks(), blocks);
-        EXPECT_DOUBLE_EQ(seq.duration(), duration);
-        for (int i = 0; i < blocks; ++i)
-            EXPECT_DOUBLE_EQ(seq.block_durations()[i], durations[static_cast<size_t>(i)])
-                << "block " << (i + 1);
-
-        // Nothing may point past the end of what it points into.
-        const int32_t* events = seq.block_events();
-        for (int i = 0; i < blocks; ++i)
+        std::string name = fs::path(info.param).stem().string();
+        for (char &c : name)
         {
-            const int32_t* row = events + static_cast<size_t>(i) * pulseq::BLOCK_WIDTH;
-            EXPECT_LE(row[0], seq.rf_library().size()) << "block " << (i + 1) << " rf";
-            for (int axis = 1; axis <= 3; ++axis)
-                EXPECT_LE(row[axis], seq.num_gradients()) << "block " << (i + 1) << " gradient";
-            EXPECT_LE(row[4], seq.adc_library().size()) << "block " << (i + 1) << " adc";
-            EXPECT_LE(row[5], seq.extensions_library().size()) << "block " << (i + 1) << " ext";
+            if (!std::isalnum(static_cast<unsigned char>(c)))
+                c = '_';
         }
-    }
+        return name;
+    });
 
-    TEST(PulseqDedupCorpus, ABlockPointingAtAChainThatIsNotThereIsRejected)
-    {
-        // The corrupted fixture is a copy of the corpus gre_2d whose first
-        // block names a dangling extension chain id.  Reading and writing
-        // both carry it through -- neither resolves the reference -- so
-        // deduplication, which does, is where it has to be noticed.
-        const std::string path =
-            std::string(PULSEQ_FIXTURES_DIR) + "/gre_2d_corrupted.seq";
-        Sequence seq = pulseq::read_file(path);
-        try
-        {
-            seq.remove_duplicates();
-            FAIL() << "a dangling extension reference went unnoticed";
-        }
-        catch (const std::out_of_range& error)
-        {
-            const std::string message = error.what();
-            EXPECT_NE(message.find("block 1"), std::string::npos) << message;
-            EXPECT_NE(message.find("extension chain"), std::string::npos) << message;
-        }
-    }
-
-    INSTANTIATE_TEST_SUITE_P(
-        AllFixtures,
-        PulseqDedupFixture,
-        testing::ValuesIn(fixtures()),
-        [](const testing::TestParamInfo<std::string>& info) {
-            std::string name = fs::path(info.param).stem().string();
-            for (char& c : name)
-            {
-                if (!std::isalnum(static_cast<unsigned char>(c)))
-                    c = '_';
-            }
-            return name;
-        });
-
-}  // namespace
+} // namespace
 
 /* ================================================================== */
 /*  The deduplicated claim                                             */
@@ -878,26 +880,26 @@ namespace
 
 namespace
 {
-    /** A sequence with two identical readouts, so there is something to collapse. */
-    pulseq::Sequence twin_readouts()
+/** A sequence with two identical readouts, so there is something to collapse. */
+pulseq::Sequence twin_readouts()
+{
+    pulseq::Sequence seq;
+    seq.set_rasters(1e-6, 10e-6, 100e-9, 10e-6);
+
+    const double trap[pulseq::TRAP_WIDTH] = {1.0e5, 100e-6, 1000e-6, 100e-6, 0.0};
+    const double adc[pulseq::ADC_WIDTH] = {64.0, 10e-6, 100e-6, 0.0, 0.0, 0.0, 0.0, 0.0};
+
+    for (int i = 0; i < 2; ++i)
     {
-        pulseq::Sequence seq;
-        seq.set_rasters(1e-6, 10e-6, 100e-9, 10e-6);
-
-        const double trap[pulseq::TRAP_WIDTH] = {1.0e5, 100e-6, 1000e-6, 100e-6, 0.0};
-        const double adc[pulseq::ADC_WIDTH] = {64.0, 10e-6, 100e-6, 0.0, 0.0, 0.0, 0.0, 0.0};
-
-        for (int i = 0; i < 2; ++i)
-        {
-            pulseq::Block block;
-            block.gx = seq.register_trap(trap);
-            block.adc = seq.register_adc(adc);
-            block.duration = 1200e-6;
-            seq.add_block(block);
-        }
-        return seq;
+        pulseq::Block block;
+        block.gx = seq.register_trap(trap);
+        block.adc = seq.register_adc(adc);
+        block.duration = 1200e-6;
+        seq.add_block(block);
     }
-}  // namespace
+    return seq;
+}
+} // namespace
 
 TEST(PulseqDedupClaim, IsFalseUntilTheSequenceHasBeenCollapsed)
 {

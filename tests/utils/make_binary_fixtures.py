@@ -30,12 +30,18 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 #: Sources are the synthetic corpus (tests/utils/expected) and, for the
 #: label-heavy pairs, the zoo corpus (tests/python/fixtures).
 SOURCES = [
-    ("basic", "tests/utils/expected/00_basic_rfstat.seq"),        # rf, shapes
-    ("arbgrad", "tests/utils/expected/05_ok_extended_with_delay.seq"),  # arbitrary gradients
-    ("rotations", "tests/utils/expected/09_fail_rot_identity.seq"),     # rotation quaternions
-    ("rfshims", "tests/utils/expected/07_rfstat_cp_8ch_180.seq"),       # pTx shim vectors
-    ("labelset", "tests/python/fixtures/gre_2d.seq"),             # LABELSET + custom names
-    ("labelinc", "tests/python/fixtures/epi_2d_main.seq"),        # LABELINC + triggers
+    ("basic", "tests/utils/expected/00_basic_rfstat.seq"),  # rf, shapes
+    (
+        "arbgrad",
+        "tests/utils/expected/05_ok_extended_with_delay.seq",
+    ),  # arbitrary gradients
+    (
+        "rotations",
+        "tests/utils/expected/09_fail_rot_identity.seq",
+    ),  # rotation quaternions
+    ("rfshims", "tests/utils/expected/07_rfstat_cp_8ch_180.seq"),  # pTx shim vectors
+    ("labelset", "tests/python/fixtures/gre_2d.seq"),  # LABELSET + custom names
+    ("labelinc", "tests/python/fixtures/epi_2d_main.seq"),  # LABELINC + triggers
 ]
 
 OUT_DIR = ROOT / "tests" / "utils" / "expected" / "binary"

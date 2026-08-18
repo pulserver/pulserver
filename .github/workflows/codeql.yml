@@ -1,0 +1,66 @@
+name: CodeQL
+
+# Static analysis for both languages in the repository. The C/C++ analysis is
+# the one that earns its keep: `src/c/` parses files that arrive from
+# elsewhere, in C89, without a memory-safe runtime underneath it.
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+  schedule:
+    # Monday morning, so a newly published rule is found by a scheduled run
+    # rather than by the next unrelated pull request.
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      security-events: write
+      packages: read
+      actions: read
+      contents: read
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: python
+            build-mode: none
+          - language: c-cpp
+            build-mode: manual
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+          queries: security-and-quality
+
+      # CodeQL observes an actual compilation for C/C++. Building the library
+      # and the test suites covers src/c/ and src/cpp/ together.
+      - name: Build the C and C++ libraries
+        if: matrix.language == 'c-cpp'
+        run: |
+          sudo apt-get update && sudo apt-get install -y cmake build-essential
+          cmake -S src/c -B build/codeql -DCMAKE_BUILD_TYPE=Debug
+          cmake --build build/codeql --parallel
+          bash scripts/build_cpp_tests.sh
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"

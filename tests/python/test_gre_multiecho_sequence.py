@@ -96,6 +96,7 @@ def test_the_declared_echo_times_are_where_the_echoes_actually_fall(design):
     n_samples = k_traj_adc.shape[1] // len(labels["ECO"])
     kx = k_traj_adc[0].reshape(-1, n_samples)
     times = t_adc.reshape(-1, n_samples)
+
     # Relative to the excitation the echoes belong to -- the dummies excite
     # too, so the first excitation of the scan is not it.
     def measured_te(echo):

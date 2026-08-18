@@ -1,6 +1,6 @@
 """``to_mrd`` is the inverse of ``from_mrd``, word for word.
 
-The authority for the wire format is ``cxx/recon/sequence_cache.cpp``
+The authority for the wire format is ``src/cpp/recon/sequence_cache.cpp``
 -- what the scanner actually emits. These tests pin the Python encoder to the
 Python decoder, which is what catches a drift on either side; they cannot catch
 the two drifting together away from the C++, so the field order in
@@ -58,11 +58,15 @@ def _collection(system, *, use="excitation", flip=30.0):
             return_gz=True,
             use=use,
         )
-        gx = pp.make_trapezoid(channel="x", flat_area=128 / 0.256, flat_time=2.56e-3, system=system)
+        gx = pp.make_trapezoid(
+            channel="x", flat_area=128 / 0.256, flat_time=2.56e-3, system=system
+        )
         adc = pp.make_adc(
             num_samples=128, duration=gx.flat_time, delay=gx.rise_time, system=system
         )
-        pre = pp.make_trapezoid(channel="x", area=-gx.area / 2, duration=1e-3, system=system)
+        pre = pp.make_trapezoid(
+            channel="x", area=-gx.area / 2, duration=1e-3, system=system
+        )
         for _ in range(6):
             seq.add_block(rf, gz)
             seq.add_block(pre, gzr)

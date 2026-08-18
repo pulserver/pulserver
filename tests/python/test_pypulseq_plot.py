@@ -59,9 +59,13 @@ def _events(make, system):
         "rf": rf,
         "gz": gz,
         "gzr": gzr,
-        "gx": make.make_trapezoid(channel="x", flat_area=581.8, flat_time=3.2e-3, system=system),
+        "gx": make.make_trapezoid(
+            channel="x", flat_area=581.8, flat_time=3.2e-3, system=system
+        ),
         "gy": make.make_arbitrary_grad(
-            channel="y", waveform=np.sin(np.linspace(0, np.pi, 200)) * 1e5, system=system
+            channel="y",
+            waveform=np.sin(np.linspace(0, np.pi, 200)) * 1e5,
+            system=system,
         ),
         "adc": make.make_adc(num_samples=128, dwell=2.4e-5, delay=1e-4, system=system),
         "trigger": make.make_trigger(channel="physio1", duration=1e-3, system=system),
@@ -122,7 +126,9 @@ def turned(system, events):
             built,
             events,
             line,
-            extra=(pp.make_rotation(Rotation.from_euler("z", 30.0 * line, degrees=True)),),
+            extra=(
+                pp.make_rotation(Rotation.from_euler("z", 30.0 * line, degrees=True)),
+            ),
         )
     built.add_block(events["rf"], pp.make_rf_shim([1.0, 0.5j, -0.25]))
     return built
@@ -167,7 +173,9 @@ def test_a_window_decodes_exactly_as_upstream_would(plain, mirror):
         ours, theirs = window.get_block(index), mirror.get_block(index)
         assert np.isclose(ours.block_duration, theirs.block_duration)
         for name in ("rf", "gx", "gy", "gz", "adc"):
-            _same_event(getattr(ours, name), getattr(theirs, name), f"block {index} {name}")
+            _same_event(
+                getattr(ours, name), getattr(theirs, name), f"block {index} {name}"
+            )
         assert _labels(ours) == _labels(theirs), f"block {index} labels"
         assert _triggers(ours) == _triggers(theirs), f"block {index} triggers"
         _same_event(ours.soft_delay, theirs.soft_delay, f"block {index} soft delay")
@@ -217,7 +225,11 @@ def test_a_rotation_arrives_resolved_into_the_gradients(turned, system):
     )
     found = window.get_block(readout)
     for gradient in wanted:
-        _same_event(getattr(found, f"g{gradient.channel}"), gradient, f"rotated g{gradient.channel}")
+        _same_event(
+            getattr(found, f"g{gradient.channel}"),
+            gradient,
+            f"rotated g{gradient.channel}",
+        )
 
 
 def test_an_rf_shim_arrives_spread_across_the_channels(turned):
@@ -227,7 +239,9 @@ def test_an_rf_shim_arrives_spread_across_the_channels(turned):
     shimmed = window.get_block(len(turned)).rf
 
     weights = np.array([1.0, 0.5j, -0.25])
-    assert np.allclose(shimmed.signal, (weights[:, None] * base.signal[None, :]).ravel())
+    assert np.allclose(
+        shimmed.signal, (weights[:, None] * base.signal[None, :]).ravel()
+    )
     assert np.allclose(shimmed.t, np.tile(base.t, weights.size))
 
 
@@ -235,7 +249,12 @@ def test_the_extensions_upstream_cannot_read_are_gone_from_the_window(turned):
     """`get_block` raises on an unknown extension id; these would be two."""
     window = turned._upstream_window(1, len(turned))
 
-    assert set(window.extension_string_idx) <= {"TRIGGERS", "LABELSET", "LABELINC", "DELAYS"}
+    assert set(window.extension_string_idx) <= {
+        "TRIGGERS",
+        "LABELSET",
+        "LABELINC",
+        "DELAYS",
+    }
     for index in window.block_events:
         window.get_block(index)  # would raise if a ROTATIONS node had survived
 
@@ -266,7 +285,9 @@ def test_unstacked_is_one_window_of_three_rows_by_two_columns(plain):
         "Gy (kHz/m)",
         "Gz (kHz/m)",
     ]
-    assert {axis.get_subplotspec().get_gridspec().get_geometry() for axis in plot.fig1.axes} == {(3, 2)}
+    assert {
+        axis.get_subplotspec().get_gridspec().get_geometry() for axis in plot.fig1.axes
+    } == {(3, 2)}
 
 
 def test_the_two_columns_share_their_time_axis(plain):
@@ -363,7 +384,9 @@ def _drawn(axis) -> np.ndarray:
 def _panels(plot) -> dict:
     """The six panels of a merged plot, by the channel each one carries."""
     return dict(
-        zip(("adc", "rf_mag", "rf_phase", "gx", "gy", "gz"), plot.fig1.axes, strict=True)
+        zip(
+            ("adc", "rf_mag", "rf_phase", "gx", "gy", "gz"), plot.fig1.axes, strict=True
+        )
     )
 
 
@@ -382,7 +405,9 @@ def test_a_canonical_tr_is_drawn_whole_rather_than_gradients_only(encoded, tr):
     assert len(_drawn(panels["gx"])), "no readout gradient was drawn"
 
 
-@pytest.mark.parametrize("tr", ["worst_case", "zero_variable", 0, NUM_INSTANCES - 1], ids=str)
+@pytest.mark.parametrize(
+    "tr", ["worst_case", "zero_variable", 0, NUM_INSTANCES - 1], ids=str
+)
 def test_what_is_drawn_is_the_waveform_the_safety_core_handed_over(encoded, tr):
     """The viewer and the analyses read the same array, to the sample.
 
@@ -419,7 +444,9 @@ def test_the_worst_case_tr_drawn_bounds_every_instance_drawn(encoded):
     for index in range(NUM_INSTANCES):
         played = structure.waveform(index).waveforms()
         for axis, bound, channel in zip("xyz", envelope, played, strict=True):
-            assert np.all(np.abs(channel[1]) <= np.abs(bound) + 1e-3), f"tr={index} g{axis}"
+            assert np.all(np.abs(channel[1]) <= np.abs(bound) + 1e-3), (
+                f"tr={index} g{axis}"
+            )
 
 
 def test_zeroing_the_variable_gradients_keeps_the_constant_ones(encoded):
@@ -441,7 +468,9 @@ def test_an_instance_is_drawn_as_it_really_plays(encoded):
     all and the ones either side of it are drawn with opposite signs.
     """
     structure = encoded._structure_for("test")
-    encodes = [structure.waveform(index).waveforms()[1][1] for index in range(NUM_INSTANCES)]
+    encodes = [
+        structure.waveform(index).waveforms()[1][1] for index in range(NUM_INSTANCES)
+    ]
     extremes = [channel[np.argmax(np.abs(channel))] for channel in encodes]
 
     assert min(extremes) < 0 < max(extremes)
@@ -540,7 +569,9 @@ def _two_channel_tr(system, num_channels=3):
         ],
         rf=(
             np.tile(times, num_channels),
-            np.concatenate([np.full(samples, 10.0 * (c + 1)) for c in range(num_channels)]),
+            np.concatenate(
+                [np.full(samples, 10.0 * (c + 1)) for c in range(num_channels)]
+            ),
             np.concatenate([np.full(samples, 0.5 * c) for c in range(num_channels)]),
         ),
         num_rf_channels=num_channels,
@@ -583,8 +614,14 @@ def test_the_remaining_transmit_channels_are_added_to_the_panels(system):
     _safety.overlay_rf_channels(tr, magnitude, phase, time_factor=1.0)
 
     assert len(magnitude.get_lines()) == len(phase.get_lines()) == 2
-    assert sorted(float(line.get_ydata()[0]) for line in magnitude.get_lines()) == [20.0, 30.0]
-    assert [text.get_text() for text in magnitude.get_legend().get_texts()] == ["Tx1", "Tx2"]
+    assert sorted(float(line.get_ydata()[0]) for line in magnitude.get_lines()) == [
+        20.0,
+        30.0,
+    ]
+    assert [text.get_text() for text in magnitude.get_legend().get_texts()] == [
+        "Tx1",
+        "Tx2",
+    ]
 
 
 def test_a_single_transmit_tr_is_left_exactly_as_upstream_drew_it(system):

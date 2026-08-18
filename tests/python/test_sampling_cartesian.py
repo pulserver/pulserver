@@ -49,7 +49,7 @@ def test_calibration_lines_respect_partial_fourier():
 
 @pytest.mark.parametrize("acs_y", [0, 8, 24])
 def test_no_calibration_means_empty_rectangle(acs_y):
-    pairs, n_cal = calc_sampled_pairs((64, 32), (2, 2), (acs_y, 0))
+    _pairs, n_cal = calc_sampled_pairs((64, 32), (2, 2), (acs_y, 0))
     assert n_cal == 0  # the rectangle is empty when either axis has no ACS
 
 
@@ -71,17 +71,13 @@ def test_calibration_first_leads_with_the_rectangle():
     # Every leading pair calibrates on both axes...
     assert all(line in lines and part in partitions for line, part in rectangle)
     # ...and none of the pairs after it does.
-    assert not any(
-        line in lines and part in partitions for line, part in pairs[n_cal:]
-    )
+    assert not any(line in lines and part in partitions for line, part in pairs[n_cal:])
 
 
 def test_partial_fourier_on_z_drops_leading_partitions():
     shape, accel, calib = (64, 64), (1, 1), (0, 0)
     full, _ = calc_sampled_pairs(shape, accel, calib)
-    truncated, _ = calc_sampled_pairs(
-        shape, accel, calib, partial_fourier=(1.0, 0.75)
-    )
+    truncated, _ = calc_sampled_pairs(shape, accel, calib, partial_fourier=(1.0, 0.75))
     partitions_full = {part for _, part in full}
     partitions_trunc = {part for _, part in truncated}
     assert partitions_trunc < partitions_full  # z extent genuinely shrank

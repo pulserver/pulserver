@@ -57,7 +57,7 @@ def _packed_kernel(transfer, image_shape, *, chunk_size=7):
 @pytest.mark.parametrize("complex_transfer", [False, True])
 def test_precompiled_cpu_kernel_matches_torch_reference(complex_transfer):
     extension = pytest.importorskip(
-        "pulserver._ext._recon_cpu_wrapper",
+        "pulserver._ext.recon_cpu",
         exc_type=ImportError,
     )
     generator = torch.Generator().manual_seed(2)
@@ -108,7 +108,7 @@ def test_precompiled_cpu_kernel_matches_torch_reference(complex_transfer):
 
 def test_precompiled_cpu_kernel_parallelizes_independent_batches():
     extension = pytest.importorskip(
-        "pulserver._ext._recon_cpu_wrapper",
+        "pulserver._ext.recon_cpu",
         exc_type=ImportError,
     )
     generator = torch.Generator().manual_seed(7)

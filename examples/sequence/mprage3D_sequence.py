@@ -8,7 +8,7 @@ are dealt into segments by the same orderings the 3D fast spin echo uses --
 ``linear``, ``centric``, ``radial``, ``radial_adaptive`` (coherent,
 TI-targeted) or ``shuffling`` (incoherent, for a subspace reconstruction) --
 with each acquisition carrying its within-segment index as ``ECO``.
-:mod:`pulserver.app.recon.mprage3D_recon` reads the result back.
+:mod:`pulserver.app.recon.cartesian3D_recon` reads the result back.
 
 ``main`` returns the :class:`pulserver.pypulseq.Sequence`; ``PLUGIN`` is the
 same sequence behind the scanner protocol contract, and running this module
@@ -337,6 +337,7 @@ def main(
 # Subroutines of main()
 # ======================================================================
 
+
 def Mprage3DKernel(
     system: pp.Opts,
     *,
@@ -429,9 +430,13 @@ acceleration_z, caipi_shift, elliptical, n_acs, n_acs_z, shuffle_seed, spoiling_
                 calib=(n_acs, n_acs_z),
                 seed=shuffle_seed,
             )
-            views = [(int(line), int(partition)) for line, partition in np.argwhere(mask)]
+            views = [
+                (int(line), int(partition)) for line, partition in np.argwhere(mask)
+            ]
         else:
-            views = [(line, partition) for partition in range(n_z) for line in range(n_y)]
+            views = [
+                (line, partition) for partition in range(n_z) for line in range(n_y)
+            ]
     else:
         views, _ = pp.calc_sampled_pairs(
             (n_y, n_z),
@@ -472,9 +477,7 @@ acceleration_z, caipi_shift, elliptical, n_acs, n_acs_z, shuffle_seed, spoiling_
     )
 
     segment_body = (
-        inversion.seq.duration()[0]
-        + wait_ti.delay
-        + views_per_segment * inner_tr
+        inversion.seq.duration()[0] + wait_ti.delay + views_per_segment * inner_tr
     )
     recovery = tr_outer - segment_body
     if recovery < 0:
@@ -510,6 +513,7 @@ acceleration_z, caipi_shift, elliptical, n_acs, n_acs_z, shuffle_seed, spoiling_
 # ======================================================================
 # The scanner protocol contract
 # ======================================================================
+
 
 class Mprage3D(SequencePlugin):
     """The 3D MPRAGE behind the scanner protocol contract."""
@@ -583,9 +587,15 @@ class Mprage3D(SequencePlugin):
                 UIParam.RZ: TypeinFloatParam(
                     value=1.0, min=1.0, max=8.0, incr=1.0, unit=""
                 ),
-                UIParam.FOV_OFFSET_X: OffFloatParam(value=0.0, min=-500.0, max=500.0, unit="mm"),
-                UIParam.FOV_OFFSET_Y: OffFloatParam(value=0.0, min=-500.0, max=500.0, unit="mm"),
-                UIParam.FOV_OFFSET_Z: OffFloatParam(value=0.0, min=-500.0, max=500.0, unit="mm"),
+                UIParam.FOV_OFFSET_X: OffFloatParam(
+                    value=0.0, min=-500.0, max=500.0, unit="mm"
+                ),
+                UIParam.FOV_OFFSET_Y: OffFloatParam(
+                    value=0.0, min=-500.0, max=500.0, unit="mm"
+                ),
+                UIParam.FOV_OFFSET_Z: OffFloatParam(
+                    value=0.0, min=-500.0, max=500.0, unit="mm"
+                ),
                 UIParam.user_name(0): Description(text="ACS lines (y)"),
                 UIParam.user_value(0): TypeinFloatParam(
                     value=24.0, min=0.0, max=512.0, incr=1.0, unit="lines"
@@ -609,7 +619,9 @@ class Mprage3D(SequencePlugin):
                     value=16.0, min=0.0, max=256.0, incr=1.0, unit="lines"
                 ),
                 UIParam.user_name(6): Description(text="Elliptical sampling"),
-                UIParam.user_value(6): TypeinFloatParam(value=1.0, min=0.0, max=1.0, incr=1.0, unit=""),
+                UIParam.user_value(6): TypeinFloatParam(
+                    value=1.0, min=0.0, max=1.0, incr=1.0, unit=""
+                ),
             }
         )
 
@@ -620,7 +632,11 @@ class Mprage3D(SequencePlugin):
         try:
             kernel = Mprage3DKernel(
                 system,
-                **{name: value for name, value in kwargs.items() if name in KERNEL_ARGUMENTS},
+                **{
+                    name: value
+                    for name, value in kwargs.items()
+                    if name in KERNEL_ARGUMENTS
+                },
             )
         except ValueError as error:
             return {"valid": False, "duration": None, "info": str(error)}
@@ -696,7 +712,9 @@ def protocol_kwargs(system: pp.Opts, protocol: dict[str, dict]) -> dict:
             int(np.clip(round(params.user_float(prot, 2, 0.0)), 0, len(ORDERINGS) - 1))
         ],
         caipi_shift=max(0, round(params.user_float(prot, 3, 0.0))),
-        n_acs=params.acs_lines_from_protocol(prot, params.param_int(prot, UIParam.NY), 0),
+        n_acs=params.acs_lines_from_protocol(
+            prot, params.param_int(prot, UIParam.NY), 0
+        ),
         n_acs_z=max(0, round(params.user_float(prot, 5, 16.0))),
         elliptical=bool(round(params.user_float(prot, 6, 1.0))),
     )
@@ -721,7 +739,12 @@ def make_sequence(system, protocol, output_path):
 
 
 ARG_MAP = [
-    ("--ti-ms", UIParam.PREP_TIME, float, "Inversion time [ms], centre of inversion to centre view"),
+    (
+        "--ti-ms",
+        UIParam.PREP_TIME,
+        float,
+        "Inversion time [ms], centre of inversion to centre view",
+    ),
     ("--tr-ms", UIParam.TR, float, "Inversion-to-inversion interval [ms]"),
     ("--flip-deg", UIParam.FLIP, float, "Readout flip angle [deg]"),
     ("--fov-mm", UIParam.FOV, float, "Readout FOV [mm]"),
@@ -739,10 +762,20 @@ ARG_MAP = [
     ("--ry", UIParam.RY, float, "Phase-encode undersampling factor along y"),
     ("--rz", UIParam.RZ, float, "Partition-encode undersampling factor along z"),
     ("--offset-x-mm", UIParam.FOV_OFFSET_X, float, "Volume offset along readout [mm]"),
-    ("--offset-y-mm", UIParam.FOV_OFFSET_Y, float, "Volume offset along phase encode [mm]"),
+    (
+        "--offset-y-mm",
+        UIParam.FOV_OFFSET_Y,
+        float,
+        "Volume offset along phase encode [mm]",
+    ),
     ("--offset-z-mm", UIParam.FOV_OFFSET_Z, float, "Volume offset along slab [mm]"),
     ("--acs-lines", UIParam.user_value(0), float, "Number of ACS lines along y"),
-    ("--views-per-segment", UIParam.user_value(1), float, "Views acquired per inversion"),
+    (
+        "--views-per-segment",
+        UIParam.user_value(1),
+        float,
+        "Views acquired per inversion",
+    ),
     (
         "--ordering",
         UIParam.user_value(2),
@@ -750,7 +783,12 @@ ARG_MAP = [
         "View ordering: 0 linear, 1 centric, 2 radial, 3 radial-adaptive, 4 shuffling",
     ),
     ("--caipi-shift", UIParam.user_value(3), float, "CAIPIRINHA kz shift per ky block"),
-    ("--acs-partitions", UIParam.user_value(5), float, "Number of ACS partitions along z"),
+    (
+        "--acs-partitions",
+        UIParam.user_value(5),
+        float,
+        "Number of ACS partitions along z",
+    ),
     (
         "--no-elliptical",
         UIParam.user_value(6),

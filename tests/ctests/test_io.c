@@ -68,8 +68,7 @@ MU_TEST(test_signature_mismatch_gre)
     int rc;
 
     gre_opts_init(&opts);
-    rc = load_seq_with_signature_check(
-        &coll, "gre_2d_corrupted.seq", &opts);
+    rc = load_seq_with_signature_check(&coll, "gre_2d_corrupted.seq", &opts);
 
     mu_assert_int_eq(PULSEG_ERR_SIGNATURE_MISMATCH, rc);
     mu_assert(coll == NULL, "collection must remain NULL on signature mismatch");
@@ -94,11 +93,15 @@ MU_TEST(test_cache_stage_loaders_and_clear)
     mu_assert_int_eq(PULSEG_SUCCESS, rc);
     mu_assert(!cache_file_exists(cache_path), "cache file should be absent after clear");
 
-    rc = pulseg_read(&coll, &diag, seq_path, &opts,
-                        1, /* cache_binary */
-                        1, /* verify_signature */
-                        0, /* parse_labels */
-                        1);
+    rc = pulseg_read(
+        &coll,
+        &diag,
+        seq_path,
+        &opts,
+        1, /* cache_binary */
+        1, /* verify_signature */
+        0, /* parse_labels */
+        1);
     mu_assert(PULSEG_SUCCEEDED(rc), "pulseg_read failed with cache enabled");
     mu_assert(cache_file_exists(cache_path), "cache file should be created by pulseg_read");
 
@@ -109,7 +112,9 @@ MU_TEST(test_cache_stage_loaders_and_clear)
     mu_assert_int_eq(PULSEG_SUCCESS, rc);
     rc = pulseg_get_collection_info(stage_coll, &info);
     mu_assert(PULSEG_SUCCEEDED(rc), "get_collection_info failed after geninstructions cache load");
-    mu_assert(info.num_subsequences > 0, "geninstructions cache must contain at least one subsequence");
+    mu_assert(
+        info.num_subsequences > 0,
+        "geninstructions cache must contain at least one subsequence");
     pulseg_collection_free(stage_coll);
     stage_coll = NULL;
 
@@ -123,7 +128,9 @@ MU_TEST(test_cache_stage_loaders_and_clear)
     mu_assert(!cache_file_exists(cache_path), "cache file should be removed by clear_cache");
 
     rc = pulseg_load_geninstructions_cache(&stage_coll, seq_path);
-    mu_assert(PULSEG_FAILED(rc), "load_geninstructions_cache should fail when cache file is missing");
+    mu_assert(
+        PULSEG_FAILED(rc),
+        "load_geninstructions_cache should fail when cache file is missing");
     mu_assert(stage_coll == NULL, "stage collection should stay NULL on cache load failure");
 }
 

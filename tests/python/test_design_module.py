@@ -193,7 +193,7 @@ class WrongSequence(SequenceModule):
 
 def test_an_upstream_sequence_is_refused(system):
     """Upstream's Sequence cannot record, and its events are not the fast ones."""
-    with pytest.raises(TypeError, match="pulserver.pypulseq.Sequence"):
+    with pytest.raises(TypeError, match=r"pulserver\.pypulseq\.Sequence"):
         WrongSequence(system)
 
 
@@ -202,9 +202,13 @@ class Readable(SequenceModule):
 
     def init_module(self, system):
         rf = _rf(system)
-        gread = pp.make_trapezoid("x", flat_area=2000.0, flat_time=2.56e-3, system=system)
+        gread = pp.make_trapezoid(
+            "x", flat_area=2000.0, flat_time=2.56e-3, system=system
+        )
         gpre = pp.make_trapezoid("x", area=-0.5 * gread.area, system=system)
-        adc = pp.make_adc(num_samples=64, dwell=4e-5, delay=gread.rise_time, system=system)
+        adc = pp.make_adc(
+            num_samples=64, dwell=4e-5, delay=gread.rise_time, system=system
+        )
         self.seq = pp.Sequence(system)
         self.seq.add_block(rf)
         self.seq.add_block(gpre)
@@ -224,13 +228,15 @@ def test_analyses_are_answered_by_the_inner_sequence(system):
 def test_dir_offers_events_and_analyses(system):
     module = Arms(system)
     listing = dir(module)
-    assert {"rf", "adc", "gread", "plot_kspace", "calculate_pns", "duration"} <= set(listing)
+    assert {"rf", "adc", "gread", "plot_kspace", "calculate_pns", "duration"} <= set(
+        listing
+    )
 
 
 def test_an_unknown_name_names_the_module(system):
     module = Arms(system)
     with pytest.raises(AttributeError, match="no attribute or event 'gphase'"):
-        module.gphase
+        module.gphase  # noqa: B018 -- the attribute access is what must raise
 
 
 class Base(SequenceModule):

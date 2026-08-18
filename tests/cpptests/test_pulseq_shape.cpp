@@ -21,27 +21,29 @@
 
 namespace
 {
-    /* Encode then decode, and say how far the round trip moved each sample. */
-    double round_trip_error(const std::vector<double>& samples, bool* out_compressed = nullptr)
-    {
-        const std::vector<double> packed =
-            pulseq::compress_shape(samples.data(), static_cast<int>(samples.size()));
-        if (out_compressed)
-            *out_compressed = packed.size() < samples.size();
+/* Encode then decode, and say how far the round trip moved each sample. */
+double round_trip_error(const std::vector<double> &samples, bool *out_compressed = nullptr)
+{
+    const std::vector<double> packed =
+        pulseq::compress_shape(samples.data(), static_cast<int>(samples.size()));
+    if (out_compressed)
+        *out_compressed = packed.size() < samples.size();
 
-        const std::vector<double> back = pulseq::decompress_shape(
-            packed.data(), static_cast<int>(packed.size()), static_cast<int>(samples.size()));
+    const std::vector<double> back = pulseq::decompress_shape(
+        packed.data(),
+        static_cast<int>(packed.size()),
+        static_cast<int>(samples.size()));
 
-        EXPECT_EQ(back.size(), samples.size());
-        if (back.size() != samples.size())
-            return std::numeric_limits<double>::infinity();
+    EXPECT_EQ(back.size(), samples.size());
+    if (back.size() != samples.size())
+        return std::numeric_limits<double>::infinity();
 
-        double worst = 0.0;
-        for (size_t i = 0; i < samples.size(); ++i)
-            worst = std::max(worst, std::fabs(back[i] - samples[i]));
-        return worst;
-    }
-}  // namespace
+    double worst = 0.0;
+    for (size_t i = 0; i < samples.size(); ++i)
+        worst = std::max(worst, std::fabs(back[i] - samples[i]));
+    return worst;
+}
+} // namespace
 
 /* The codec quantises the derivative onto a 1e-7 grid, so that is the scale
  * the round trip is allowed to move a sample by. */
@@ -107,7 +109,8 @@ TEST(PulseqShapeCodec, IrregularWaveformIsPassedThroughUnchanged)
      * "keep the original if it is no longer" rule keeps the original. */
     std::vector<double> samples(64);
     for (size_t i = 0; i < samples.size(); ++i)
-        samples[i] = std::sin(static_cast<double>(i) * 1.7) * std::cos(static_cast<double>(i) * 0.3);
+        samples[i] =
+            std::sin(static_cast<double>(i) * 1.7) * std::cos(static_cast<double>(i) * 0.3);
 
     bool compressed = true;
     EXPECT_EQ(round_trip_error(samples, &compressed), 0.0)

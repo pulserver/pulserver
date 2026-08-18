@@ -23,16 +23,16 @@ using pulseq::SoftDelay;
 
 namespace
 {
-    std::array<double, pulseq::TRAP_WIDTH> trap(double amplitude)
-    {
-        return {amplitude, 100e-6, 500e-6, 100e-6, 0.0};
-    }
+std::array<double, pulseq::TRAP_WIDTH> trap(double amplitude)
+{
+    return {amplitude, 100e-6, 500e-6, 100e-6, 0.0};
+}
 
-    std::array<double, pulseq::ARB_WIDTH> arb(double amplitude, double shape_id)
-    {
-        return {amplitude, 0.0, 0.0, shape_id, 0.0, 0.0};
-    }
-}  // namespace
+std::array<double, pulseq::ARB_WIDTH> arb(double amplitude, double shape_id)
+{
+    return {amplitude, 0.0, 0.0, shape_id, 0.0, 0.0};
+}
+} // namespace
 
 /* ================================================================== */
 /*  Tables and ids                                                    */
@@ -90,8 +90,8 @@ TEST(PulseqSequence, GradientIdsInterleaveAcrossTrapAndArbitrary)
     EXPECT_EQ(seq.grad_kind(3), GradKind::Trap);
 
     EXPECT_EQ(seq.grad_row(1), 1);
-    EXPECT_EQ(seq.grad_row(2), 1);  // first row of the *arbitrary* table
-    EXPECT_EQ(seq.grad_row(3), 2);  // second row of the trapezoid table
+    EXPECT_EQ(seq.grad_row(2), 1); // first row of the *arbitrary* table
+    EXPECT_EQ(seq.grad_row(3), 2); // second row of the trapezoid table
 
     EXPECT_DOUBLE_EQ(seq.trap_library().row(seq.grad_row(3))[0], 3000.0);
     EXPECT_DOUBLE_EQ(seq.arb_library().row(seq.grad_row(2))[0], 2000.0);
@@ -270,7 +270,7 @@ TEST(PulseqSequence, ReadingAFileCanForceTheNumbering)
     // A file declares its own mapping, and it need not match the order the
     // sections appear in -- so setting an id has to win over first use.
     Sequence seq;
-    seq.extension_type_id("LABELSET");  // would be 1
+    seq.extension_type_id("LABELSET"); // would be 1
     seq.set_extension_type_id("LABELSET", 4);
 
     EXPECT_EQ(seq.find_extension_type_id("LABELSET"), 4);
@@ -354,7 +354,7 @@ TEST(PulseqSequence, DefinitionsIterateInSortedOrder)
     seq.set_definition("Middle", Definition(3.0));
 
     std::vector<std::string> keys;
-    for (const auto& entry : seq.definitions())
+    for (const auto &entry : seq.definitions())
         keys.push_back(entry.first);
     EXPECT_EQ(keys, (std::vector<std::string>{"Alpha", "Middle", "Zed"}));
 }

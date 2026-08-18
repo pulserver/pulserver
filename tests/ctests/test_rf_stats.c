@@ -334,9 +334,7 @@ MU_TEST_SUITE(suite_rf_consistency)
  * case, applied across TR instances. */
 MU_TEST(test_rf_multipass_variable_structure)
 {
-    run_consistency_check(
-        "06_rfamp_two_tier_trs.seq",
-        PULSEG_SUCCESS);
+    run_consistency_check("06_rfamp_two_tier_trs.seq", PULSEG_SUCCESS);
 }
 
 MU_TEST(test_rf_multipass_variable_flag_off)
@@ -368,8 +366,16 @@ MU_TEST(test_rf_multipass_variable_array_uses_worst_pass)
 
     for (i = 0; i < npulses; ++i)
     {
-        mu_assert_float_near("act_amplitude_hz (225 Hz tier winner)", 225.0f, pulses[i].act_amplitude_hz, 1.0f);
-        mu_assert_float_near("peak_amplitude_hz (uniform-per-TR envelope)", 225.0f, pulses[i].peak_amplitude_hz, 1.0f);
+        mu_assert_float_near(
+            "act_amplitude_hz (225 Hz tier winner)",
+            225.0f,
+            pulses[i].act_amplitude_hz,
+            1.0f);
+        mu_assert_float_near(
+            "peak_amplitude_hz (uniform-per-TR envelope)",
+            225.0f,
+            pulses[i].peak_amplitude_hz,
+            1.0f);
     }
 
     free(pulses);
@@ -444,7 +450,9 @@ MU_TEST_SUITE(suite_rf_cp_8ch)
  *   peak_amplitude_hz (positional max across A, B)   = {10, 10}
  * -- act_amplitude_hz[1] != peak_amplitude_hz[1] is the point of the test.
  */
-static int build_divergent_variable_rf_collection(pulseg_collection *coll, pulseg_sequence_descriptor *desc)
+static int build_divergent_variable_rf_collection(
+    pulseg_collection *coll,
+    pulseg_sequence_descriptor *desc)
 {
     static pulseg_rf_definition rf_defs[2];
     static pulseg_rf_table_element rf_table[4];
@@ -537,14 +545,30 @@ MU_TEST(test_rf_array_worst_b1rms_diverges_from_peak_envelope)
 
     /* act_amplitude_hz: real amplitudes of the winning (worst-B1rms)
      * instance A -- never a synthetic per-position amalgam. */
-    mu_assert_float_near("act_amplitude_hz[0] (instance A)", 10.0f, pulses[0].act_amplitude_hz, 1e-4f);
-    mu_assert_float_near("act_amplitude_hz[1] (instance A)", 1.0f, pulses[1].act_amplitude_hz, 1e-4f);
+    mu_assert_float_near(
+        "act_amplitude_hz[0] (instance A)",
+        10.0f,
+        pulses[0].act_amplitude_hz,
+        1e-4f);
+    mu_assert_float_near(
+        "act_amplitude_hz[1] (instance A)",
+        1.0f,
+        pulses[1].act_amplitude_hz,
+        1e-4f);
 
     /* peak_amplitude_hz: positional max across A and B -- dominates both
      * instances at every position, including position 1 where B (not the
      * B1rms winner) holds the larger amplitude. */
-    mu_assert_float_near("peak_amplitude_hz[0] (max(A,B))", 10.0f, pulses[0].peak_amplitude_hz, 1e-4f);
-    mu_assert_float_near("peak_amplitude_hz[1] (max(A,B))", 10.0f, pulses[1].peak_amplitude_hz, 1e-4f);
+    mu_assert_float_near(
+        "peak_amplitude_hz[0] (max(A,B))",
+        10.0f,
+        pulses[0].peak_amplitude_hz,
+        1e-4f);
+    mu_assert_float_near(
+        "peak_amplitude_hz[1] (max(A,B))",
+        10.0f,
+        pulses[1].peak_amplitude_hz,
+        1e-4f);
 
     free(pulses);
 }
@@ -567,10 +591,26 @@ MU_TEST(test_rf_array_periodic_path_unaffected)
     npulses = pulseg_get_rf_array(&coll, &pulses, 0);
     mu_assert_int_eq(2, npulses);
 
-    mu_assert_float_near("act_amplitude_hz[0] (canonical)", 10.0f, pulses[0].act_amplitude_hz, 1e-4f);
-    mu_assert_float_near("act_amplitude_hz[1] (canonical)", 1.0f, pulses[1].act_amplitude_hz, 1e-4f);
-    mu_assert_float_near("peak_amplitude_hz[0] == act", pulses[0].act_amplitude_hz, pulses[0].peak_amplitude_hz, 1e-6f);
-    mu_assert_float_near("peak_amplitude_hz[1] == act", pulses[1].act_amplitude_hz, pulses[1].peak_amplitude_hz, 1e-6f);
+    mu_assert_float_near(
+        "act_amplitude_hz[0] (canonical)",
+        10.0f,
+        pulses[0].act_amplitude_hz,
+        1e-4f);
+    mu_assert_float_near(
+        "act_amplitude_hz[1] (canonical)",
+        1.0f,
+        pulses[1].act_amplitude_hz,
+        1e-4f);
+    mu_assert_float_near(
+        "peak_amplitude_hz[0] == act",
+        pulses[0].act_amplitude_hz,
+        pulses[0].peak_amplitude_hz,
+        1e-6f);
+    mu_assert_float_near(
+        "peak_amplitude_hz[1] == act",
+        pulses[1].act_amplitude_hz,
+        pulses[1].peak_amplitude_hz,
+        1e-6f);
 
     free(pulses);
 }

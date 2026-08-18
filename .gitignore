@@ -1,46 +1,112 @@
-*.npy
-*.so
-build/
-build-bench/
-dist/
-3p/
-*.egg-info/
-**/.ipynb_checkpoints/
-examples/*.ipynb
-*.xml
-.coverage*
-.vscode
+# What belongs in the repository: sources, the test fixtures the suites read
+# (`.seq`, `.bin` and friends under tests/ -- small, and regenerating them is
+# how a fixture change is reviewed), and documentation sources.
+#
+# What does not: anything a toolchain produces. Compiled extensions, object
+# files, wheels, caches and rendered documentation are all reproducible from
+# the sources above, and tracking them makes the history heavy and the diffs
+# unreadable.
 
-
-.idea
-*.log
-tmp/
-
-*_cache/
+# ---------------------------------------------------------------- Python ----
+__pycache__/
 *.py[cod]
 *.egg
+*.egg-info/
+.eggs/
 *.nbi
 *.nbc
+.Python
+# Virtual environments, however they are named.
+.venv/
+venv/
+env/
+ENV/
+.python-version
 
+# --------------------------------------------------- Compiled extensions ----
+# The C/C++ libraries and the pybind11 modules built from them.
+*.so
+*.pyd
+*.dll
+*.dylib
+*.o
+*.obj
+*.a
+*.lib
+
+# ------------------------------------------------ Build and distribution ----
+build/
+build*/
+!scripts/build*.sh
+_skbuild/
+wheelhouse/
+dist/
+sdist/
+*.whl
+*.tar.gz
+# CMake leavings, wherever a build was configured.
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+compile_commands.json
+
+# --------------------------------------------------------------- Caches ----
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.tox/
+.nox/
+
+# -------------------------------------------------------- Documentation ----
+# Rendered output only. Everything under docs/ that is a source is tracked.
+docs/_build/
 docs/generated/
+docs/api/generated/
 docs_build/
 jupyter_execute/
-
-src/pulserver/_version.py_codeql_detected_source_root
-build*
-build_test/
-.nim-test-bundle/
-.nim-test-bundle-installer.sh
-bridge/pypulseq_host
-bridge/matlab_host
-docs/api/generated/
-
-# Documentation-only benchmark tooling: built binary and generated sequences.
+# Documentation-only benchmark tooling: the binary it builds and the
+# sequences and result files it generates.
 docs/_bench/bench_pipeline
 docs/_bench/bench_pipeline_timing
 docs/_bench/work/
 docs/_bench/results.json
+docs/_bench/results_c.json
 docs/_bench/safety.json
-fastseq/*.pge
-fastseq/*.pseg
-docs/_build/
+docs/_bench/scale_results.json
+docs/_bench/zoo_report.json
+
+# ------------------------------------------------------------- Notebooks ----
+.ipynb_checkpoints/
+**/.ipynb_checkpoints/
+examples/*.ipynb
+
+# ------------------------------------------------------------------- Nim ----
+.nim-test-bundle/
+.nim-test-bundle-installer.sh
+nimcache/
+src/nim/pypulseq_host
+src/nim/matlab_host
+
+# ------------------------------------------------------- Editors and OS ----
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+
+# The superseded documentation tree. Kept on disk for reference while docs/
+# settles; nothing in it is tracked.
+_docs/
+
+# ------------------------------------------------------------------ Misc ----
+*.log
+tmp/
+3p/
+# Generated at build time from the version control tag.
+src/pulserver/_version.py

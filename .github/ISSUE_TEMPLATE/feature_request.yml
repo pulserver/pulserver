@@ -1,0 +1,45 @@
+name: Feature request
+description: Something Pulserver should be able to do and cannot.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What you are trying to do
+      description: >
+        The acquisition or workflow you have in mind, rather than the API you
+        imagine for it. Most requests here are a sequence family, a safety
+        model or a scanner integration, and the physics decides the shape of
+        the answer.
+    validations:
+      required: true
+
+  - type: textarea
+    id: today
+    attributes:
+      label: What you do today
+      description: The workaround, if there is one, and where it falls short.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which part
+      options:
+        - A sequence family for the zoo
+        - Sequence design primitives
+        - A safety model or hardware limit
+        - Interpreter / scanner integration
+        - Reconstruction
+        - Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: references
+    attributes:
+      label: References
+      description: >
+        Papers, vendor documentation or an existing implementation, if the
+        feature has a published definition. For a sequence, the reference the
+        implementation should be checked against.

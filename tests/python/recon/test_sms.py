@@ -144,7 +144,9 @@ def _noncartesian_base(matrix=12, coils=3, samples=64):
     maps = torch.randn(coils, matrix, matrix, dtype=torch.complex64)
     maps = maps / maps.abs().square().sum(0, keepdim=True).sqrt()
     trajectory = (torch.rand(samples, 2) - 0.5).float()
-    physics = NonCartesian2D(trajectory, (matrix, matrix), coil_maps=maps, n_coils=coils)
+    physics = NonCartesian2D(
+        trajectory, (matrix, matrix), coil_maps=maps, n_coils=coils
+    )
     return physics, matrix, coils
 
 

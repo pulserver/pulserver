@@ -250,7 +250,9 @@ def _mprage_stack_of_spirals_3d():
 def _zte_3d():
     from pulserver.app import zte3D_sequence
 
-    return zte3D_sequence.main(n_x=32, n_views=16, n_shots=4, readout_bandwidth_hz=125e3)
+    return zte3D_sequence.main(
+        n_x=32, n_views=16, n_shots=4, readout_bandwidth_hz=125e3
+    )
 
 
 #: name -> builder for the single-file fixtures.
@@ -318,7 +320,6 @@ def write_epi_collections(directory: Path) -> list[Path]:
 
 def build_parser_edges():
     """Minimal single-feature files for the parser's edge branches."""
-    import numpy as np
 
     import pulserver.pypulseq as pp
 
@@ -333,14 +334,16 @@ def build_parser_edges():
     trap_only.add_block(pp.make_trapezoid(channel="x", area=100.0, system=system))
 
     ext_only = pp.Sequence(system=system)
-    ext_only.add_block(
-        pp.make_delay(1e-3), pp.make_label("LIN", "SET", 1)
-    )
+    ext_only.add_block(pp.make_delay(1e-3), pp.make_label("LIN", "SET", 1))
     ext_only.add_block(
         pp.make_delay(1e-3),
         pp.make_soft_delay(numID=0, hint="TE", offset=0.0, factor=1.0),
     )
 
-    for seq, name in ((adc_only, "adc_only"), (trap_only, "trap_only"), (ext_only, "ext_only")):
+    for seq, name in (
+        (adc_only, "adc_only"),
+        (trap_only, "trap_only"),
+        (ext_only, "ext_only"),
+    ):
         seq.set_definition("Name", name)
     return {"adc_only": adc_only, "trap_only": trap_only, "ext_only": ext_only}

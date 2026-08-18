@@ -39,13 +39,13 @@ def _ensure_built(binary: Path, script: str) -> str | None:
         )
     if shutil.which("cmake") is None:
         return "cmake not available to build the native tests"
-    build = subprocess.run(
-        ["bash", script], cwd=ROOT, capture_output=True, text=True
-    )
+    build = subprocess.run(["bash", script], cwd=ROOT, capture_output=True, text=True)
     if build.returncode != 0:
         return f"`bash {script}` failed:\n{build.stdout[-2000:]}{build.stderr[-2000:]}"
     if not binary.exists():
-        return f"`bash {script}` succeeded but {binary.relative_to(ROOT)} is still missing"
+        return (
+            f"`bash {script}` succeeded but {binary.relative_to(ROOT)} is still missing"
+        )
     return None
 
 

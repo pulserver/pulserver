@@ -15,7 +15,7 @@
  * the pattern used by vendor toolchains (e.g. EPIC_CHECK).
  *
  * Compile:
- *   cc -I../../csrc example_errorhandling.c ../../csrc/pulseqlib_*.c -lm -o errorhandling
+ *   cc -I../../src/c example_errorhandling.c ../../src/c/pulseqlib_*.c -lm -o errorhandling
  */
 
 #include "example_vendorlib.h"

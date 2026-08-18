@@ -38,10 +38,10 @@ def excited_profile(module, extent=0.08, n=161):
     dwell = float(np.diff(np.asarray(module.gradients[0].tt))[0])
     kspace = -np.cumsum(gradient[::-1], axis=0)[::-1] * dwell
     axis = np.linspace(-extent, extent, n)
-    grid = np.stack(
-        [m.ravel() for m in np.meshgrid(axis, axis, indexing="ij")], axis=1
+    grid = np.stack([m.ravel() for m in np.meshgrid(axis, axis, indexing="ij")], axis=1)
+    profile = np.abs(
+        np.exp(2j * np.pi * (grid @ kspace.T)) @ np.asarray(module.rf.signal)
     )
-    profile = np.abs(np.exp(2j * np.pi * (grid @ kspace.T)) @ np.asarray(module.rf.signal))
     return axis, profile.reshape(n, n) / profile.max()
 
 
@@ -210,12 +210,22 @@ def test_the_sideband_power_is_solved_for_the_requested_b1rms(system, n_bands):
 def test_one_sideband_carries_what_two_carry_between_them(system):
     """Power-matched, not amplitude-matched: that is what makes ihMT ihMT."""
     single = design.MultibandExcitation(
-        system, 7.0, duration_s=2e-3, band_offset_hz=7000.0, n_bands=2,
-        b1rms_ut=2.0, tr=30e-3,
+        system,
+        7.0,
+        duration_s=2e-3,
+        band_offset_hz=7000.0,
+        n_bands=2,
+        b1rms_ut=2.0,
+        tr=30e-3,
     )
     dual = design.MultibandExcitation(
-        system, 7.0, duration_s=2e-3, band_offset_hz=7000.0, n_bands=3,
-        b1rms_ut=2.0, tr=30e-3,
+        system,
+        7.0,
+        duration_s=2e-3,
+        band_offset_hz=7000.0,
+        n_bands=3,
+        b1rms_ut=2.0,
+        tr=30e-3,
     )
     assert single.sideband_power == pytest.approx(2 * dual.sideband_power)
     centre = list(dual.band_offsets_hz).index(0.0)
@@ -227,12 +237,22 @@ def test_one_sideband_carries_what_two_carry_between_them(system):
 
 def test_the_bands_add_in_phase_so_two_of_them_cost_peak(system):
     single = design.MultibandExcitation(
-        system, 7.0, duration_s=2e-3, band_offset_hz=7000.0, n_bands=2,
-        b1rms_ut=2.0, tr=30e-3,
+        system,
+        7.0,
+        duration_s=2e-3,
+        band_offset_hz=7000.0,
+        n_bands=2,
+        b1rms_ut=2.0,
+        tr=30e-3,
     )
     dual = design.MultibandExcitation(
-        system, 7.0, duration_s=2e-3, band_offset_hz=7000.0, n_bands=3,
-        b1rms_ut=2.0, tr=30e-3,
+        system,
+        7.0,
+        duration_s=2e-3,
+        band_offset_hz=7000.0,
+        n_bands=3,
+        b1rms_ut=2.0,
+        tr=30e-3,
     )
     assert dual.peak_ut > single.peak_ut
 

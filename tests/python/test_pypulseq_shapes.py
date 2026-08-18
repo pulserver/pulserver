@@ -30,7 +30,7 @@ def _centres(count: int) -> np.ndarray:
 
 
 def _trapezoid(rise: float, flat: float, fall: float, amplitude: float):
-    count = int(round((rise + flat + fall) / RASTER))
+    count = round((rise + flat + fall) / RASTER)
     times = _centres(count)
     waveform = np.interp(
         times, [0, rise, rise + flat, rise + flat + fall], [0, amplitude, amplitude, 0]
@@ -49,12 +49,18 @@ def _cases() -> list[tuple[str, np.ndarray, np.ndarray, float, float]]:
     ramp = np.linspace(100.0, 900.0, count)
     half_step = (ramp[1] - ramp[0]) / 2.0
     cases.append(
-        ("linear ramp", _centres(count), ramp, ramp[0] - half_step, ramp[-1] + half_step)
+        (
+            "linear ramp",
+            _centres(count),
+            ramp,
+            ramp[0] - half_step,
+            ramp[-1] + half_step,
+        )
     )
 
     knot_times = np.array([0, 100e-6, 260e-6, 300e-6, 520e-6])
     knot_amplitudes = np.array([0.0, 800.0, 800.0, -400.0, 0.0])
-    times = _centres(int(round(knot_times[-1] / RASTER)))
+    times = _centres(round(knot_times[-1] / RASTER))
     cases.append(
         (
             "extended trapezoid",
@@ -68,7 +74,13 @@ def _cases() -> list[tuple[str, np.ndarray, np.ndarray, float, float]]:
     count = 200
     angle = np.linspace(0, 8 * np.pi, count)
     cases.append(
-        ("spiral arm", _centres(count), 1000.0 * angle / (8 * np.pi) * np.cos(angle), 0.0, 0.0)
+        (
+            "spiral arm",
+            _centres(count),
+            1000.0 * angle / (8 * np.pi) * np.cos(angle),
+            0.0,
+            0.0,
+        )
     )
 
     cases.append(("one sample", _centres(1), np.array([500.0]), 0.0, 1000.0))
@@ -138,14 +150,14 @@ def test_a_restored_extended_trapezoid_recovers_its_knots():
     """Interior knots off the raster grid come back at their exact times."""
     knot_times = np.array([0, 100e-6, 260e-6, 300e-6, 520e-6])
     knot_amplitudes = np.array([0.0, 800.0, 800.0, -400.0, 0.0])
-    times = _centres(int(round(knot_times[-1] / RASTER)))
+    times = _centres(round(knot_times[-1] / RASTER))
     waveform = np.interp(times, knot_times, knot_amplitudes)
 
     got_times, got_waveform = restore_additional_shape_samples(
         times, waveform, 0.0, 0.0, RASTER
     )
 
-    for t, a in zip(knot_times, knot_amplitudes):
+    for t, a in zip(knot_times, knot_amplitudes, strict=False):
         assert float(np.interp(t, got_times, got_waveform)) == pytest.approx(
             a, abs=1e-6
         )
@@ -162,7 +174,10 @@ def test_the_restored_form_is_lossless_where_it_decimates():
         # Every original centre sample still lies on the returned polyline.
         resampled = np.interp(times, got_times, got_waveform)
         np.testing.assert_allclose(
-            resampled, waveform, rtol=0, atol=1e-6 * max(np.max(np.abs(waveform)), 1.0),
+            resampled,
+            waveform,
+            rtol=0,
+            atol=1e-6 * max(np.max(np.abs(waveform)), 1.0),
             err_msg=f"{name}: decimation moved the waveform",
         )
 

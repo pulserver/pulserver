@@ -191,7 +191,9 @@ def test_post_spoiling_keeps_the_acquisition_centred(system, slab):
     """The dephasing follows the readout, so the line itself does not move."""
     balanced = readout3d(system, slab)
     spoiled = readout3d(system, slab, spoiling_cycles=4.0)
-    assert np.allclose(_first_line(spoiled)[0][0], _first_line(balanced)[0][0], atol=1e-9)
+    assert np.allclose(
+        _first_line(spoiled)[0][0], _first_line(balanced)[0][0], atol=1e-9
+    )
 
 
 def test_pre_spoiling_offsets_the_fid_pathway(system, slab):
@@ -203,7 +205,11 @@ def test_pre_spoiling_offsets_the_fid_pathway(system, slab):
     """
     cycles, voxel = 4.0, 1e-3
     readout = readout3d(
-        system, slab, spoiling_cycles=cycles, voxel_size_m=voxel, spoiling_position="pre"
+        system,
+        slab,
+        spoiling_cycles=cycles,
+        voxel_size_m=voxel,
+        spoiling_position="pre",
     )
     kx, _, _ = _first_line(readout)
     assert kx[0].max() < 0
@@ -221,7 +227,9 @@ def test_the_spoiler_rides_the_readout_lobe_rather_than_waiting_for_it(system, s
 
 
 def test_the_default_voxel_is_the_readout_resolution(system, slab):
-    explicit = readout3d(system, slab, spoiling_cycles=2.0, voxel_size_m=FOV[0] / MATRIX[0])
+    explicit = readout3d(
+        system, slab, spoiling_cycles=2.0, voxel_size_m=FOV[0] / MATRIX[0]
+    )
     implied = readout3d(system, slab, spoiling_cycles=2.0)
     assert implied.duration == pytest.approx(explicit.duration)
 
@@ -234,7 +242,11 @@ def test_the_default_voxel_is_the_readout_resolution(system, slab):
 def test_a_monopolar_train_reads_every_echo_the_same_way(system, slab):
     readout = readout3d(system, slab, n_echoes=3)
     assert readout.gx_flyback.area == pytest.approx(-readout.gx.area)
-    lobes = [block[0] for block in readout.blocks if any(getattr(e, "type", "") == "adc" for e in block)]
+    lobes = [
+        block[0]
+        for block in readout.blocks
+        if any(getattr(e, "type", "") == "adc" for e in block)
+    ]
     assert len(lobes) == 3
     assert all(lobe is readout.gx for lobe in lobes)
 
@@ -252,7 +264,9 @@ def test_every_echo_of_a_monopolar_train_traces_the_same_line(system, slab):
     readout = readout3d(system, slab, n_echoes=2)
     k_traj_adc = readout.calculate_kspace()[0]
     count = int(readout.adc.num_samples)
-    assert np.allclose(k_traj_adc[0, :count], k_traj_adc[0, count : 2 * count], atol=1e-6)
+    assert np.allclose(
+        k_traj_adc[0, :count], k_traj_adc[0, count : 2 * count], atol=1e-6
+    )
 
 
 # ----------------------------------------------------------------------
@@ -268,7 +282,9 @@ def test_a_longer_te_or_tr_is_padded_with_a_wait(system, slab):
     assert len(stretched.blocks) == len(short.blocks) + 2
 
 
-@pytest.mark.parametrize(("kwargs", "name"), [({"te": 1e-4}, "TE"), ({"tr": 1e-4}, "TR")])
+@pytest.mark.parametrize(
+    ("kwargs", "name"), [({"te": 1e-4}, "TE"), ({"tr": 1e-4}, "TR")]
+)
 def test_an_impossible_time_is_refused_by_name(system, slab, kwargs, name):
     with pytest.raises(ValueError, match=f"requested {name}"):
         readout3d(system, slab, **kwargs)
@@ -309,9 +325,7 @@ def test_an_impossible_readout_is_refused(system, slab, kwargs, message):
 
 def test_a_mismatched_fov_says_how_many_it_wanted(system, slab):
     with pytest.raises(ValueError, match="fov must be a scalar or 3 values"):
-        design.LineReadout3D(
-            system, slab.rf, slab.gz, fov=(0.22, 0.22), matrix=MATRIX
-        )
+        design.LineReadout3D(system, slab.rf, slab.gz, fov=(0.22, 0.22), matrix=MATRIX)
 
 
 # ----------------------------------------------------------------------
@@ -322,8 +336,15 @@ def test_a_mismatched_fov_says_how_many_it_wanted(system, slab):
 def test_a_whole_3d_scan_is_a_plain_pypulseq_loop(system, slab, tmp_path):
     """Design once, index per shot, write. No module writes a scan loop."""
     readout = design.LineReadout3D(
-        system, slab.rf, slab.gz, fov=FOV, matrix=MATRIX,
-        te=4e-3, tr=10e-3, spoiling_cycles=4.0, labels=("LIN", "PAR"),
+        system,
+        slab.rf,
+        slab.gz,
+        fov=FOV,
+        matrix=MATRIX,
+        te=4e-3,
+        tr=10e-3,
+        spoiling_cycles=4.0,
+        labels=("LIN", "PAR"),
     )
     lines, partitions = 8, 4
     phases = pp.make_rf_spoiling_schedule(lines * partitions)

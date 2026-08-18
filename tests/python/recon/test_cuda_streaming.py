@@ -510,9 +510,7 @@ def test_streamed_cartesian_physics_chunks_multislice_batch():
         dtype=torch.complex64,
     )
     maps /= torch.linalg.vector_norm(maps, dim=1, keepdim=True)
-    image = torch.randn(
-        batch, *shape, generator=generator, dtype=torch.complex64
-    )
+    image = torch.randn(batch, *shape, generator=generator, dtype=torch.complex64)
     physics = Cartesian2D(mask, maps)
 
     forward_reference = physics.A(image)

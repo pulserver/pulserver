@@ -26,69 +26,71 @@
 namespace
 {
 
-    /** A block carrying nothing but a duration and, optionally, one label. */
-    int add_labelled(pulseq::Sequence& seq, double duration, const std::string& label, int value)
+/** A block carrying nothing but a duration and, optionally, one label. */
+int add_labelled(pulseq::Sequence &seq, double duration, const std::string &label, int value)
+{
+    pulseq::Block block;
+    block.duration = duration;
+    if (!label.empty())
     {
-        pulseq::Block block;
-        block.duration = duration;
-        if (!label.empty())
-        {
-            const int row = seq.register_label_set(static_cast<int32_t>(value),
-                                                   static_cast<int32_t>(seq.label_id(label)));
-            block.ext = static_cast<int32_t>(seq.chain_extension(
-                static_cast<int32_t>(seq.extension_type_id("LABELSET")),
-                static_cast<int32_t>(row), 0));
-        }
-        return seq.add_block(block);
+        const int row = seq.register_label_set(
+            static_cast<int32_t>(value),
+            static_cast<int32_t>(seq.label_id(label)));
+        block.ext = static_cast<int32_t>(seq.chain_extension(
+            static_cast<int32_t>(seq.extension_type_id("LABELSET")),
+            static_cast<int32_t>(row),
+            0));
     }
+    return seq.add_block(block);
+}
 
-    /** The durations in play order -- the sequence as a scanner would meet it. */
-    std::vector<double> order(const pulseq::Sequence& seq)
-    {
-        std::vector<double> out;
-        for (int b = 1; b <= seq.num_blocks(); ++b)
-            out.push_back(seq.get_block(b).duration);
-        return out;
-    }
+/** The durations in play order -- the sequence as a scanner would meet it. */
+std::vector<double> order(const pulseq::Sequence &seq)
+{
+    std::vector<double> out;
+    for (int b = 1; b <= seq.num_blocks(); ++b)
+        out.push_back(seq.get_block(b).duration);
+    return out;
+}
 
-    /** Every label in force at each block, replayed as a reader replays them. */
-    std::vector<std::map<std::string, int>> replay(const pulseq::Sequence& seq)
+/** Every label in force at each block, replayed as a reader replays them. */
+std::vector<std::map<std::string, int>> replay(const pulseq::Sequence &seq)
+{
+    const int labelset = seq.find_extension_type_id("LABELSET");
+    std::vector<std::map<std::string, int>> out;
+    std::map<std::string, int> state;
+    for (int b = 1; b <= seq.num_blocks(); ++b)
     {
-        const int labelset = seq.find_extension_type_id("LABELSET");
-        std::vector<std::map<std::string, int>> out;
-        std::map<std::string, int> state;
-        for (int b = 1; b <= seq.num_blocks(); ++b)
+        for (int32_t link = seq.get_block(b).ext; link != 0;)
         {
-            for (int32_t link = seq.get_block(b).ext; link != 0;)
+            const int32_t *row = seq.extensions_library().row(link);
+            if (labelset != 0 && row[0] == labelset && row[1] != 0)
             {
-                const int32_t* row = seq.extensions_library().row(link);
-                if (labelset != 0 && row[0] == labelset && row[1] != 0)
-                {
-                    const int32_t* label = seq.label_set_library().row(row[1]);
-                    state[seq.label_name(label[1])] = label[0];
-                }
-                link = row[2];
+                const int32_t *label = seq.label_set_library().row(row[1]);
+                state[seq.label_name(label[1])] = label[0];
             }
-            out.push_back(state);
+            link = row[2];
         }
-        return out;
+        out.push_back(state);
     }
+    return out;
+}
 
-    /**
+/**
      * Preparation, two body blocks, cooldown.  Durations 1, 2, 3, 4 ms, so
      * "which block" and "which duration" are the same question.
      */
-    pulseq::Sequence prep_body_cooldown()
-    {
-        pulseq::Sequence seq;
-        add_labelled(seq, 1e-3, "ONCE", 1);
-        add_labelled(seq, 2e-3, "ONCE", 0);
-        add_labelled(seq, 3e-3, "", 0);
-        add_labelled(seq, 4e-3, "ONCE", 2);
-        return seq;
-    }
+pulseq::Sequence prep_body_cooldown()
+{
+    pulseq::Sequence seq;
+    add_labelled(seq, 1e-3, "ONCE", 1);
+    add_labelled(seq, 2e-3, "ONCE", 0);
+    add_labelled(seq, 3e-3, "", 0);
+    add_labelled(seq, 4e-3, "ONCE", 2);
+    return seq;
+}
 
-}  // namespace
+} // namespace
 
 TEST(PulseqExpand, ThePreparationLeadsAndTheCooldownTrails)
 {
@@ -200,7 +202,8 @@ TEST(PulseqExpand, OtherExtensionsOnAStrippedBlockSurvive)
     block.duration = 1e-3;
     int32_t head = static_cast<int32_t>(seq.chain_extension(
         static_cast<int32_t>(seq.extension_type_id("ROTATIONS")),
-        static_cast<int32_t>(rotation_id), 0));
+        static_cast<int32_t>(rotation_id),
+        0));
     head = static_cast<int32_t>(seq.chain_extension(
         static_cast<int32_t>(seq.extension_type_id("LABELSET")),
         static_cast<int32_t>(seq.register_label_set(7, static_cast<int32_t>(seq.label_id("ECO")))),
@@ -219,7 +222,7 @@ TEST(PulseqExpand, OtherExtensionsOnAStrippedBlockSurvive)
     int found_rotations = 0;
     for (int32_t link = seq.get_block(1).ext; link != 0;)
     {
-        const int32_t* row = seq.extensions_library().row(link);
+        const int32_t *row = seq.extensions_library().row(link);
         if (row[0] == rotations)
             ++found_rotations;
         link = row[2];

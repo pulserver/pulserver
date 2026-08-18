@@ -1,0 +1,29 @@
+title: "[Idea] "
+labels: ["idea"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For a direction rather than a defect: a sequence family worth adding,
+        a safety model worth supporting, a scanner worth targeting.
+
+  - type: textarea
+    id: idea
+    attributes:
+      label: The idea
+    validations:
+      required: true
+
+  - type: textarea
+    id: motivation
+    attributes:
+      label: What it would make possible
+      description: The study, protocol or integration that is out of reach today.
+    validations:
+      required: true
+
+  - type: textarea
+    id: references
+    attributes:
+      label: References
+      description: Papers or implementations that define what "correct" means here.

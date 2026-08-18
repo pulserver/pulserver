@@ -18,7 +18,7 @@
  *      pulseqlib_cursor_rewind().
  *
  * Compile:
- *   cc -I../../csrc example_scanloop.c ../../csrc/pulseqlib_*.c -lm -o scanloop
+ *   cc -I../../src/c example_scanloop.c ../../src/c/pulseqlib_*.c -lm -o scanloop
  *
  * Run:
  *   ./scanloop path/to/sequence.seq

@@ -27,20 +27,20 @@
 
 namespace
 {
-    const std::string kData = std::string(PULSEQ_FIXTURES_DIR) + "/";
-    const std::string kCorpus = std::string(PULSEQ_CORPUS_DIR) + "/";
+const std::string kData = std::string(PULSEQ_FIXTURES_DIR) + "/";
+const std::string kCorpus = std::string(PULSEQ_CORPUS_DIR) + "/";
 
-    pulseq::Sequence load(const std::string& stem)
-    {
-        return pulseq::read_file(kData + stem + ".seq");
-    }
+pulseq::Sequence load(const std::string &stem)
+{
+    return pulseq::read_file(kData + stem + ".seq");
+}
 
-    pulseq::Sequence load_corpus(const std::string& stem)
-    {
-        return pulseq::read_file(kCorpus + stem + ".seq");
-    }
+pulseq::Sequence load_corpus(const std::string &stem)
+{
+    return pulseq::read_file(kCorpus + stem + ".seq");
+}
 
-}  // namespace
+} // namespace
 
 /*
  * A fully sampled symmetric Cartesian readout puts its echo at N/2.
@@ -58,15 +58,18 @@ namespace
  */
 TEST(PulseqKSpace, SymmetricCartesianEchoIsAtHalfN)
 {
-    for (const std::string& stem : {kCorpus + "gre_2d", kCorpus + "gre_2d_3sl",
-                                    kCorpus + "fse_2d", kData + "gre_32x32_pe_blip",
-                                    kCorpus + "bssfp_2d"})
+    for (const std::string &stem :
+         {kCorpus + "gre_2d",
+          kCorpus + "gre_2d_3sl",
+          kCorpus + "fse_2d",
+          kData + "gre_32x32_pe_blip",
+          kCorpus + "bssfp_2d"})
     {
         pulseq::Sequence seq = pulseq::read_file(stem + ".seq");
         const pulseq::KSpace ks = pulseq::calculate_kspace(seq);
         ASSERT_FALSE(ks.readouts.empty()) << stem;
 
-        for (const pulseq::Readout& r : ks.readouts)
+        for (const pulseq::Readout &r : ks.readouts)
         {
             if (r.num_samples <= 0)
                 continue;
@@ -92,11 +95,11 @@ TEST(PulseqKSpace, EpiPolaritiesHaveMirroredEchoes)
 
     int seen_forward = 0;
     int seen_reverse = 0;
-    for (const pulseq::Readout& r : ks.readouts)
+    for (const pulseq::Readout &r : ks.readouts)
     {
         if (r.num_samples <= 0 || r.center_sample < 0)
             continue;
-        const double* kx = ks.k_adc.data() + static_cast<size_t>(r.sample_offset) * 3;
+        const double *kx = ks.k_adc.data() + static_cast<size_t>(r.sample_offset) * 3;
         const bool forward = kx[r.num_samples - 1] > kx[0];
         if (forward)
         {
@@ -135,7 +138,7 @@ TEST(PulseqKSpace, DenseTrajectoryAgreesWithTheAdcSamples)
 
     const int dense_n = static_cast<int>(ks.t_ktraj.size());
     double worst = 0.0;
-    for (const pulseq::Readout& r : ks.readouts)
+    for (const pulseq::Readout &r : ks.readouts)
     {
         for (int j = 0; j < r.num_samples; ++j)
         {
@@ -157,22 +160,22 @@ TEST(PulseqKSpace, DenseTrajectoryAgreesWithTheAdcSamples)
                 ks.t_ktraj[static_cast<size_t>(hi)] - ks.t_ktraj[static_cast<size_t>(lo)];
             if (span <= 0.0)
                 continue;
-            const double frac =
-                (t - ks.t_ktraj[static_cast<size_t>(lo)]) / span;
+            const double frac = (t - ks.t_ktraj[static_cast<size_t>(lo)]) / span;
 
             for (int a = 0; a < 3; ++a)
             {
-                const double k_lo = ks.k_ktraj[static_cast<size_t>(a) *
-                                                   static_cast<size_t>(dense_n) +
-                                               static_cast<size_t>(lo)];
-                const double k_hi = ks.k_ktraj[static_cast<size_t>(a) *
-                                                   static_cast<size_t>(dense_n) +
-                                               static_cast<size_t>(hi)];
+                const double k_lo = ks.k_ktraj
+                                        [static_cast<size_t>(a) * static_cast<size_t>(dense_n) +
+                                         static_cast<size_t>(lo)];
+                const double k_hi = ks.k_ktraj
+                                        [static_cast<size_t>(a) * static_cast<size_t>(dense_n) +
+                                         static_cast<size_t>(hi)];
                 const double interpolated = k_lo + (k_hi - k_lo) * frac;
                 const double exact =
-                    ks.k_adc[static_cast<size_t>(r.sample_offset) * 3 +
-                             static_cast<size_t>(a) * static_cast<size_t>(r.num_samples) +
-                             static_cast<size_t>(j)];
+                    ks.k_adc
+                        [static_cast<size_t>(r.sample_offset) * 3 +
+                         static_cast<size_t>(a) * static_cast<size_t>(r.num_samples) +
+                         static_cast<size_t>(j)];
                 worst = std::max(worst, std::fabs(interpolated - exact));
             }
         }
@@ -204,13 +207,12 @@ TEST(PulseqKSpace, MrdLayoutIsInterleavedAndPrunedConsistently)
 
     for (size_t i = 0; i < ks.readouts.size(); ++i)
     {
-        const pulseq::Readout& r = ks.readouts[i];
+        const pulseq::Readout &r = ks.readouts[i];
         if (r.num_samples <= 0)
             continue;
 
         std::vector<float> out(static_cast<size_t>(ndim * r.num_samples), 0.0f);
-        const int written =
-            pulseq::interleave_readout(ks, axes, static_cast<int>(i), out.data());
+        const int written = pulseq::interleave_readout(ks, axes, static_cast<int>(i), out.data());
         ASSERT_EQ(written, ndim * r.num_samples);
 
         /* Interleaved: sample j's axes are adjacent, not a stride apart. */
@@ -222,11 +224,13 @@ TEST(PulseqKSpace, MrdLayoutIsInterleavedAndPrunedConsistently)
             for (int j = 0; j < r.num_samples; ++j)
             {
                 const double expected =
-                    ks.k_adc[static_cast<size_t>(r.sample_offset) * 3 +
-                             static_cast<size_t>(a) * static_cast<size_t>(r.num_samples) +
-                             static_cast<size_t>(j)];
-                EXPECT_FLOAT_EQ(out[static_cast<size_t>(j * ndim + slot)],
-                                static_cast<float>(expected));
+                    ks.k_adc
+                        [static_cast<size_t>(r.sample_offset) * 3 +
+                         static_cast<size_t>(a) * static_cast<size_t>(r.num_samples) +
+                         static_cast<size_t>(j)];
+                EXPECT_FLOAT_EQ(
+                    out[static_cast<size_t>(j * ndim + slot)],
+                    static_cast<float>(expected));
             }
             ++slot;
         }
@@ -283,8 +287,8 @@ TEST(PulseqKSpace, ARadialSpokeIsConstantGradientButNotCartesian)
         const double angle = M_PI * static_cast<double>(s) / kSpokes;
         angles.push_back(angle);
         /* Quaternions are stored **scalar first**: (w, x, y, z). */
-        const double q[pulseq::ROTATION_WIDTH] = {std::cos(0.5 * angle), 0.0, 0.0,
-                                                  std::sin(0.5 * angle)};
+        const double q[pulseq::ROTATION_WIDTH] =
+            {std::cos(0.5 * angle), 0.0, 0.0, std::sin(0.5 * angle)};
         const int rotation = seq.register_rotation(q);
 
         pulseq::Block block;
@@ -298,12 +302,11 @@ TEST(PulseqKSpace, ARadialSpokeIsConstantGradientButNotCartesian)
     const pulseq::KSpace ks = pulseq::calculate_kspace(seq);
     ASSERT_EQ(ks.readouts.size(), static_cast<size_t>(kSpokes));
 
-    EXPECT_TRUE(ks.rotations_vary)
-        << "the spokes differ only by rotation; nothing else says so";
+    EXPECT_TRUE(ks.rotations_vary) << "the spokes differ only by rotation; nothing else says so";
 
     for (int s = 0; s < kSpokes; ++s)
     {
-        const pulseq::Readout& r = ks.readouts[static_cast<size_t>(s)];
+        const pulseq::Readout &r = ks.readouts[static_cast<size_t>(s)];
         EXPECT_GE(r.rotation_id, 0) << "spoke " << s << " lost its rotation";
 
         /* The gradient is flat on every axis -- which is exactly why this
@@ -313,7 +316,7 @@ TEST(PulseqKSpace, ARadialSpokeIsConstantGradientButNotCartesian)
 
         /* And yet the spoke points somewhere new.  Its direction is the
          * rotation applied to the readout axis. */
-        const double* k = ks.k_adc.data() + static_cast<size_t>(r.sample_offset) * 3;
+        const double *k = ks.k_adc.data() + static_cast<size_t>(r.sample_offset) * 3;
         const double dx = k[r.num_samples - 1] - k[0];
         const double dy = k[2 * r.num_samples - 1] - k[r.num_samples];
         ASSERT_GT(std::hypot(dx, dy), 1.0) << "spoke " << s << " does not move through k";
@@ -329,7 +332,7 @@ TEST(PulseqKSpace, ARadialSpokeIsConstantGradientButNotCartesian)
      * `num_samples / 2` that pulseg falls back to when its k-space analysis
      * did not run is not merely imprecise but wrong by half a readout.
      */
-    for (const pulseq::Readout& r : ks.readouts)
+    for (const pulseq::Readout &r : ks.readouts)
         EXPECT_EQ(r.center_sample, 0);
 }
 
@@ -342,12 +345,16 @@ TEST(PulseqKSpace, ARadialSpokeIsConstantGradientButNotCartesian)
  */
 TEST(PulseqKSpace, BlockKOriginsIsTheCoreReindexedFromOne)
 {
-    for (const std::string& stem : {kCorpus + "gre_2d", kCorpus + "gre_2d_3sl",
-                                    kCorpus + "epi_2d_main", kCorpus + "fse_2d",
-                                    kData + "gre_32x32_pe_blip", kCorpus + "bssfp_2d",
-                                    kCorpus + "mprage_3d",
-                                    kCorpus + "gre_stack_of_stars_3d",
-                                    kCorpus + "mprage_stack_of_spirals_3d"})
+    for (const std::string &stem :
+         {kCorpus + "gre_2d",
+          kCorpus + "gre_2d_3sl",
+          kCorpus + "epi_2d_main",
+          kCorpus + "fse_2d",
+          kData + "gre_32x32_pe_blip",
+          kCorpus + "bssfp_2d",
+          kCorpus + "mprage_3d",
+          kCorpus + "gre_stack_of_stars_3d",
+          kCorpus + "mprage_stack_of_spirals_3d"})
     {
         const pulseq::Sequence seq = pulseq::read_file(stem + ".seq");
         const std::vector<std::array<double, 3>> theirs = pulseq::block_k_origins(seq);
@@ -373,8 +380,9 @@ TEST(PulseqKSpace, BlockKOriginsIsTheCoreReindexedFromOne)
         {
             for (int a = 0; a < 3; ++a)
             {
-                ASSERT_EQ(theirs[static_cast<size_t>(b)][static_cast<size_t>(a)],
-                          ks.block_origins[static_cast<size_t>(b - 1)][static_cast<size_t>(a)])
+                ASSERT_EQ(
+                    theirs[static_cast<size_t>(b)][static_cast<size_t>(a)],
+                    ks.block_origins[static_cast<size_t>(b - 1)][static_cast<size_t>(a)])
                     << stem << " block " << b << " axis " << a;
             }
         }

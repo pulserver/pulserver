@@ -1,0 +1,58 @@
+# Line endings are normalised to LF in the repository. The C library is built
+# on Linux, macOS and Windows from the same checkout, and a CRLF that reaches
+# a `.seq` fixture changes the bytes the parser is asserted against.
+* text=auto eol=lf
+
+# Windows-only tooling keeps its native endings.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# ------------------------------------------------------------ Diff hints ----
+*.py    text diff=python
+*.c     text diff=cpp
+*.h     text diff=cpp
+*.cpp   text diff=cpp
+*.hpp   text diff=cpp
+*.md    text diff=markdown
+*.nim   text
+*.seq   text
+CMakeLists.txt text
+
+# ---------------------------------------------------------------- Binary ----
+# Never diffed, never line-ending converted.
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.pdf   binary
+*.ico   binary
+*.so    binary
+*.dylib binary
+*.dll   binary
+*.pyd   binary
+*.a     binary
+*.lib   binary
+*.npy   binary
+*.mat   binary
+# The binary Pulseq encoding, and the binary halves of the fixture corpus.
+*.bin   binary
+*.pge   binary
+*.pseg  binary
+
+# ------------------------------------------------------------- Languages ----
+# Keep the language statistics about the code someone writes here: generated
+# API stubs, vendored reference sources and rendered documentation are not it.
+docs/api/generated/**   linguist-generated=true
+_docs/**                linguist-documentation=true
+docs/**                 linguist-documentation=true
+tests/**/expected/**    linguist-generated=true
+tests/python/fixtures/** linguist-generated=true
+
+# --------------------------------------------------------- Archive export ----
+# `git archive` (and the GitHub source tarball) ships the package, not the
+# development scaffolding.
+.github/        export-ignore
+.gitattributes  export-ignore
+.gitignore      export-ignore
+.pre-commit-config.yaml export-ignore
+_docs/          export-ignore

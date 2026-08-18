@@ -334,9 +334,8 @@ def main(
 # Subroutines of main()
 # ======================================================================
 
-def SlabExcitationKernel(
-    system: pp.Opts, flip_angle_deg: float, thickness_m: float
-):
+
+def SlabExcitationKernel(system: pp.Opts, flip_angle_deg: float, thickness_m: float):
     """The slab excitation, spectral-spatial when ``SPSP_EXCITATION`` is set.
 
     Returns ``(excitation, rf, gz)``. The selection gradient carries its own
@@ -359,9 +358,7 @@ def SlabExcitationKernel(
         )
         # Concatenate the rephaser onto the alternating selection gradient, the
         # way is_slab does, and hand the readout one merged z lobe.
-        gz = pp.concatenate_gradients(
-            excitation.gz, excitation.gz_reph, system=system
-        )
+        gz = pp.concatenate_gradients(excitation.gz, excitation.gz_reph, system=system)
         return excitation, excitation.rf, gz
     excitation = design.SpatialSelectiveExcitation(
         system,
@@ -642,9 +639,7 @@ def CalibrationKernel(
     if not acs_lines or not acs_partitions:
         return None
 
-    _, exc_rf, exc_gz = SlabExcitationKernel(
-        system, flip_angle_deg, slab_thickness
-    )
+    _, exc_rf, exc_gz = SlabExcitationKernel(system, flip_angle_deg, slab_thickness)
     readout = design.LineReadout3D(
         system,
         exc_rf,
@@ -737,14 +732,20 @@ def write_pair(main_seq: pp.Sequence, seq_filename: str, **kwargs) -> tuple[str,
     calib = (
         CalibrationKernel(
             system=system,
-            **{name: value for name, value in kwargs.items() if name in CALIBRATION_ARGUMENTS},
+            **{
+                name: value
+                for name, value in kwargs.items()
+                if name in CALIBRATION_ARGUMENTS
+            },
         )
         if needs_calibration(kwargs)
         else None
     )
     nav = NavigatorKernel(
         system=system,
-        **{name: value for name, value in kwargs.items() if name in NAVIGATOR_ARGUMENTS},
+        **{
+            name: value for name, value in kwargs.items() if name in NAVIGATOR_ARGUMENTS
+        },
     )
 
     # calibration -> navigator -> main; the calibration drops out when absent,
@@ -768,112 +769,119 @@ def write_pair(main_seq: pp.Sequence, seq_filename: str, **kwargs) -> tuple[str,
 # The scanner protocol contract
 # ======================================================================
 
+
 class Epi3D(SequencePlugin):
     """The 3D EPI behind the scanner protocol contract."""
 
     def get_default_protocol(self, system: pp.Opts) -> dict[str, dict]:
         """Return the protocol the scanner UI is built from."""
         controls = {
-                UIParam.TE: DropdownFloatParam(
-                    value=-1.0,
-                    min=-1.0,
-                    max=150.0,
-                    incr=0.1,
-                    unit="ms",
-                    options=[TEPreset.MINIMUM, 20.0, 25.0, 30.0, 40.0],
-                ),
-                UIParam.TR: DropdownFloatParam(
-                    value=-1.0,
-                    min=-1.0,
-                    max=10000.0,
-                    incr=1.0,
-                    unit="ms",
-                    options=[TRPreset.MINIMUM, 50.0, 60.0, 80.0, 100.0],
-                ),
-                UIParam.FLIP: DropdownFloatParam(
-                    value=20.0,
-                    min=5.0,
-                    max=90.0,
-                    incr=1.0,
-                    unit="deg",
-                    options=[12.0, 15.0, 20.0, 25.0, 30.0],
-                ),
-                UIParam.FOV: DropdownFloatParam(
-                    value=220.0,
-                    min=80.0,
-                    max=500.0,
-                    incr=1.0,
-                    unit="mm",
-                    options=[180.0, 220.0, 280.0, 340.0, 500.0],
-                ),
-                UIParam.PHASE_FOV: DropdownFloatParam(
-                    value=220.0,
-                    min=80.0,
-                    max=500.0,
-                    incr=1.0,
-                    unit="mm",
-                    options=[180.0, 220.0, 280.0, 340.0, 500.0],
-                ),
-                UIParam.SLICE_THICKNESS: DropdownFloatParam(
-                    value=3.0,
-                    min=0.5,
-                    max=10.0,
-                    incr=0.1,
-                    unit="mm",
-                    options=[1.5, 2.0, 3.0, 4.0, 5.0],
-                ),
-                UIParam.NX: DropdownIntParam(
-                    value=128, min=16, max=256, incr=1, options=[64, 96, 128, 192]
-                ),
-                UIParam.NY: DropdownIntParam(
-                    value=128, min=16, max=256, incr=1, options=[64, 96, 128, 192]
-                ),
-                UIParam.NSLICES: DropdownIntParam(
-                    value=32, min=4, max=128, incr=1, options=[16, 24, 32, 48, 64]
-                ),
-                UIParam.BANDWIDTH: TypeinFloatParam(
-                    value=500e3, min=100e3, max=1000e3, incr=1000.0, unit="Hz"
-                ),
-                UIParam.RY: TypeinFloatParam(
-                    value=1.0, min=1.0, max=8.0, incr=1.0, unit=""
-                ),
-                UIParam.RZ: TypeinFloatParam(
-                    value=1.0, min=1.0, max=8.0, incr=1.0, unit=""
-                ),
-                UIParam.NUM_FRAMES: DropdownIntParam(
-                    value=1, min=1, max=1024, incr=1, options=[1, 10, 100, 300, 600]
-                ),
-                UIParam.FOV_OFFSET_X: OffFloatParam(value=0.0, min=-500.0, max=500.0, unit="mm"),
-                UIParam.FOV_OFFSET_Y: OffFloatParam(value=0.0, min=-500.0, max=500.0, unit="mm"),
-                UIParam.FOV_OFFSET_Z: OffFloatParam(value=0.0, min=-500.0, max=500.0, unit="mm"),
-                UIParam.user_name(0): Description(text="Segments"),
-                UIParam.user_value(0): TypeinFloatParam(
-                    value=1.0, min=1.0, max=32.0, incr=1.0, unit=""
-                ),
-                UIParam.user_name(1): Description(text="Opposite-PE reference"),
-                UIParam.user_value(1): TypeinFloatParam(
-                    value=1.0, min=0.0, max=1.0, incr=1.0, unit=""
-                ),
-                UIParam.user_name(2): Description(text="CAIPI shift (kz per ky)"),
-                UIParam.user_value(2): TypeinFloatParam(
-                    value=1.0, min=0.0, max=8.0, incr=1.0, unit=""
-                ),
-                UIParam.user_name(3): Description(text="ACS lines (y)"),
-                UIParam.user_value(3): TypeinFloatParam(
-                    value=24.0, min=0.0, max=256.0, incr=1.0, unit="lines"
-                ),
-                UIParam.user_name(4): Description(text="ACS partitions (z)"),
-                UIParam.user_value(4): TypeinFloatParam(
-                    value=16.0, min=0.0, max=128.0, incr=1.0, unit="lines"
-                ),
-                UIParam.user_name(5): Description(text="Partial Fourier (y)"),
-                UIParam.user_value(5): TypeinFloatParam(
-                    value=1.0, min=0.75, max=1.0, incr=0.05, unit=""
-                ),
-                UIParam.user_name(6): Description(text="Partial Fourier (z)"),
-                UIParam.user_value(6): TypeinFloatParam(
-                    value=1.0, min=0.75, max=1.0, incr=0.05, unit=""
-                ),
+            UIParam.TE: DropdownFloatParam(
+                value=-1.0,
+                min=-1.0,
+                max=150.0,
+                incr=0.1,
+                unit="ms",
+                options=[TEPreset.MINIMUM, 20.0, 25.0, 30.0, 40.0],
+            ),
+            UIParam.TR: DropdownFloatParam(
+                value=-1.0,
+                min=-1.0,
+                max=10000.0,
+                incr=1.0,
+                unit="ms",
+                options=[TRPreset.MINIMUM, 50.0, 60.0, 80.0, 100.0],
+            ),
+            UIParam.FLIP: DropdownFloatParam(
+                value=20.0,
+                min=5.0,
+                max=90.0,
+                incr=1.0,
+                unit="deg",
+                options=[12.0, 15.0, 20.0, 25.0, 30.0],
+            ),
+            UIParam.FOV: DropdownFloatParam(
+                value=220.0,
+                min=80.0,
+                max=500.0,
+                incr=1.0,
+                unit="mm",
+                options=[180.0, 220.0, 280.0, 340.0, 500.0],
+            ),
+            UIParam.PHASE_FOV: DropdownFloatParam(
+                value=220.0,
+                min=80.0,
+                max=500.0,
+                incr=1.0,
+                unit="mm",
+                options=[180.0, 220.0, 280.0, 340.0, 500.0],
+            ),
+            UIParam.SLICE_THICKNESS: DropdownFloatParam(
+                value=3.0,
+                min=0.5,
+                max=10.0,
+                incr=0.1,
+                unit="mm",
+                options=[1.5, 2.0, 3.0, 4.0, 5.0],
+            ),
+            UIParam.NX: DropdownIntParam(
+                value=128, min=16, max=256, incr=1, options=[64, 96, 128, 192]
+            ),
+            UIParam.NY: DropdownIntParam(
+                value=128, min=16, max=256, incr=1, options=[64, 96, 128, 192]
+            ),
+            UIParam.NSLICES: DropdownIntParam(
+                value=32, min=4, max=128, incr=1, options=[16, 24, 32, 48, 64]
+            ),
+            UIParam.BANDWIDTH: TypeinFloatParam(
+                value=500e3, min=100e3, max=1000e3, incr=1000.0, unit="Hz"
+            ),
+            UIParam.RY: TypeinFloatParam(
+                value=1.0, min=1.0, max=8.0, incr=1.0, unit=""
+            ),
+            UIParam.RZ: TypeinFloatParam(
+                value=1.0, min=1.0, max=8.0, incr=1.0, unit=""
+            ),
+            UIParam.NUM_FRAMES: DropdownIntParam(
+                value=1, min=1, max=1024, incr=1, options=[1, 10, 100, 300, 600]
+            ),
+            UIParam.FOV_OFFSET_X: OffFloatParam(
+                value=0.0, min=-500.0, max=500.0, unit="mm"
+            ),
+            UIParam.FOV_OFFSET_Y: OffFloatParam(
+                value=0.0, min=-500.0, max=500.0, unit="mm"
+            ),
+            UIParam.FOV_OFFSET_Z: OffFloatParam(
+                value=0.0, min=-500.0, max=500.0, unit="mm"
+            ),
+            UIParam.user_name(0): Description(text="Segments"),
+            UIParam.user_value(0): TypeinFloatParam(
+                value=1.0, min=1.0, max=32.0, incr=1.0, unit=""
+            ),
+            UIParam.user_name(1): Description(text="Opposite-PE reference"),
+            UIParam.user_value(1): TypeinFloatParam(
+                value=1.0, min=0.0, max=1.0, incr=1.0, unit=""
+            ),
+            UIParam.user_name(2): Description(text="CAIPI shift (kz per ky)"),
+            UIParam.user_value(2): TypeinFloatParam(
+                value=1.0, min=0.0, max=8.0, incr=1.0, unit=""
+            ),
+            UIParam.user_name(3): Description(text="ACS lines (y)"),
+            UIParam.user_value(3): TypeinFloatParam(
+                value=24.0, min=0.0, max=256.0, incr=1.0, unit="lines"
+            ),
+            UIParam.user_name(4): Description(text="ACS partitions (z)"),
+            UIParam.user_value(4): TypeinFloatParam(
+                value=16.0, min=0.0, max=128.0, incr=1.0, unit="lines"
+            ),
+            UIParam.user_name(5): Description(text="Partial Fourier (y)"),
+            UIParam.user_value(5): TypeinFloatParam(
+                value=1.0, min=0.75, max=1.0, incr=0.05, unit=""
+            ),
+            UIParam.user_name(6): Description(text="Partial Fourier (z)"),
+            UIParam.user_value(6): TypeinFloatParam(
+                value=1.0, min=0.75, max=1.0, incr=0.05, unit=""
+            ),
         }
         # The multiphase control is shown only when the fMRI time series is on.
         if not ENABLE_MULTIPHASE:
@@ -887,7 +895,11 @@ class Epi3D(SequencePlugin):
         try:
             kernel = SharedKernel(
                 system,
-                **{name: value for name, value in kwargs.items() if name in KERNEL_ARGUMENTS},
+                **{
+                    name: value
+                    for name, value in kwargs.items()
+                    if name in KERNEL_ARGUMENTS
+                },
             )
         except ValueError as error:
             return {"valid": False, "duration": None, "info": str(error)}
@@ -899,7 +911,11 @@ class Epi3D(SequencePlugin):
         if needs_calibration(kwargs):
             calib = CalibrationKernel(
                 system=system,
-                **{name: value for name, value in kwargs.items() if name in CALIBRATION_ARGUMENTS},
+                **{
+                    name: value
+                    for name, value in kwargs.items()
+                    if name in CALIBRATION_ARGUMENTS
+                },
             )
             if calib is not None:
                 duration += calib.duration()[0]
@@ -1048,7 +1064,12 @@ ARG_MAP = [
     ("--rz", UIParam.RZ, float, "Partition-encode undersampling factor along z"),
     ("--frames", UIParam.NUM_FRAMES, int, "Volumes in the time series"),
     ("--offset-x-mm", UIParam.FOV_OFFSET_X, float, "Volume offset along readout [mm]"),
-    ("--offset-y-mm", UIParam.FOV_OFFSET_Y, float, "Volume offset along phase encode [mm]"),
+    (
+        "--offset-y-mm",
+        UIParam.FOV_OFFSET_Y,
+        float,
+        "Volume offset along phase encode [mm]",
+    ),
     ("--offset-z-mm", UIParam.FOV_OFFSET_Z, float, "Volume offset along slab [mm]"),
     ("--segments", UIParam.user_value(0), float, "Interleaved shots per partition"),
     (
@@ -1059,9 +1080,24 @@ ARG_MAP = [
     ),
     ("--caipi-shift", UIParam.user_value(2), float, "CAIPIRINHA kz shift per ky block"),
     ("--acs-lines", UIParam.user_value(3), float, "Autocalibration lines along y"),
-    ("--acs-partitions", UIParam.user_value(4), float, "Autocalibration partitions along z"),
-    ("--partial-fourier", UIParam.user_value(5), float, "Acquired y fraction in (0.5, 1]"),
-    ("--partial-fourier-z", UIParam.user_value(6), float, "Acquired z fraction in (0.5, 1]"),
+    (
+        "--acs-partitions",
+        UIParam.user_value(4),
+        float,
+        "Autocalibration partitions along z",
+    ),
+    (
+        "--partial-fourier",
+        UIParam.user_value(5),
+        float,
+        "Acquired y fraction in (0.5, 1]",
+    ),
+    (
+        "--partial-fourier-z",
+        UIParam.user_value(6),
+        float,
+        "Acquired z fraction in (0.5, 1]",
+    ),
 ]
 
 if __name__ == "__main__":

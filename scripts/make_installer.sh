@@ -9,8 +9,9 @@
 #   - pypulseq
 #   - pulserver
 #
-# The system Python (python3) is used to create the venv, so it must be
-# >= 3.14 on the build host.
+# The system Python (python3) is used to create the venv, and the bundle runs
+# on whatever interpreter it was built with, so build with the oldest one the
+# targets have: >= 3.11 on the build host.
 #
 # Usage:
 #   ./scripts/make_installer.sh [output.sh]
@@ -19,6 +20,8 @@
 #   PULSERVER_PIP_SPEC  — pip spec to install for pulserver (default: "pulserver"
 #                         from PyPI; set to a local checkout path for testing)
 #   PYTHON              — path to the python3 binary to use (default: python3)
+#   PIP_CONSTRAINTS     — pip constraints file pinning the bundled Python
+#                         packages (default: scripts/installer-constraints.txt)
 #
 # Prerequisites:
 #   - nim & nimble on PATH
@@ -28,20 +31,26 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-BRIDGE_DIR="$ROOT_DIR/bridge"
+BRIDGE_DIR="$ROOT_DIR/src/nim"
 BUILD_DIR="$(mktemp -d)"
 OUTPUT="${1:-$ROOT_DIR/pulserver_bridge_installer.sh}"
 
 PYTHON="${PYTHON:-python3}"
 PULSERVER_PIP_SPEC="${PULSERVER_PIP_SPEC:-pulserver}"
+PIP_CONSTRAINTS="${PIP_CONSTRAINTS:-$SCRIPT_DIR/installer-constraints.txt}"
 
 cleanup() { rm -rf "$BUILD_DIR"; }
 trap cleanup EXIT
 
 echo "=== Building bridge binary (pypulseq_host) ==="
 cd "$BRIDGE_DIR"
-echo "Installing nimpulseqgui from GitHub"
-nimble install -y https://github.com/nimpulseq/nimpulseqgui
+# Pinned to the commit the bridge was built and tested against, not to the
+# branch: `nimble install <url>` without a revision takes whatever HEAD is on
+# the day, and the URL form bypasses the version constraint in bridge.nimble.
+# src/nim/nimble.lock pins the rest of the tree; keep the two in step.
+NIMPULSEQGUI_REV="${NIMPULSEQGUI_REV:-eaf112c2ecc61162ba998e5a5020b921ffa2d38e}"
+echo "Installing nimpulseqgui from GitHub at ${NIMPULSEQGUI_REV}"
+nimble install -y "https://github.com/nimpulseq/nimpulseqgui@#${NIMPULSEQGUI_REV}"
 nimble c -y -d:release pypulseq_host.nim
 
 echo "=== Creating Python venv ==="
@@ -50,18 +59,32 @@ PYTHON_DIR="$BUILD_DIR/python"
 
 echo "=== Installing Python packages ==="
 "$PYTHON_DIR/bin/pip" install --quiet --upgrade pip
-"$PYTHON_DIR/bin/pip" install --quiet numpy scipy pypulseq
+"$PYTHON_DIR/bin/pip" install --quiet -c "$PIP_CONSTRAINTS" numpy scipy pypulseq
 
-if ! env -u CC -u CXX "$PYTHON_DIR/bin/pip" install --quiet "$PULSERVER_PIP_SPEC"; then
+# Same constraints for pulserver, so resolving its dependencies cannot pull a
+# different numpy in underneath the ones just installed.
+if ! env -u CC -u CXX "$PYTHON_DIR/bin/pip" install --quiet -c "$PIP_CONSTRAINTS" "$PULSERVER_PIP_SPEC"; then
   echo "Warning: pip install for pulserver failed; falling back to source package copy"
   SITE_PACKAGES="$("$PYTHON_DIR/bin/python3" -c 'import site; print(site.getsitepackages()[0])')"
-  if [[ -d "$ROOT_DIR/python/pulserver" ]]; then
-    cp -a "$ROOT_DIR/python/pulserver" "$SITE_PACKAGES/"
+  if [[ -d "$ROOT_DIR/src/python/pulserver" ]]; then
+    cp -a "$ROOT_DIR/src/python/pulserver" "$SITE_PACKAGES/"
   else
-    echo "Error: fallback source package path not found: $ROOT_DIR/python/pulserver" >&2
+    echo "Error: fallback source package path not found: $ROOT_DIR/src/python/pulserver" >&2
     exit 1
   fi
 fi
+
+# A bundle without the compiled kernels fails at runtime rather than running
+# slower, so prove they load before the payload is assembled -- neither pip
+# nor the source copy above guarantees a build for this interpreter.
+echo "=== Verifying bundled accelerators ==="
+"$PYTHON_DIR/bin/python3" - <<'VERIFY'
+from pulserver._accelerators import require
+
+for name in ("pulseg", "pulseqpp", "arbgrad", "sampling", "recon_cpu"):
+    require(name)
+print("all five accelerators load")
+VERIFY
 
 echo "=== Assembling payload ==="
 PAYLOAD_DIR="$BUILD_DIR/payload"
@@ -75,8 +98,8 @@ cp "$BRIDGE_DIR/pypulseq_host" "$PAYLOAD_DIR/bin/" 2>/dev/null || \
 cp -a "$PYTHON_DIR" "$PAYLOAD_DIR/python"
 
 # Copy example plugin(s)
-if [ -d "$ROOT_DIR/python/pulserver/sequences" ]; then
-  cp "$ROOT_DIR/python/pulserver/sequences/"*.py "$PAYLOAD_DIR/plugins/" 2>/dev/null || true
+if [ -d "$ROOT_DIR/src/python/pulserver/sequences" ]; then
+  cp "$ROOT_DIR/src/python/pulserver/sequences/"*.py "$PAYLOAD_DIR/plugins/" 2>/dev/null || true
 fi
 
 echo "=== Creating self-extracting archive ==="

@@ -29,7 +29,9 @@ def design(**kwargs):
     # The ordering tests want the full rectangle; the elliptical crop is a
     # separate sampling toggle exercised on its own.
     kwargs.setdefault("elliptical", False)
-    return mprage3D_sequence.main(n_x=32, n_y=N_Y, n_z=N_Z, slab_thickness=64e-3, **kwargs)
+    return mprage3D_sequence.main(
+        n_x=32, n_y=N_Y, n_z=N_Z, slab_thickness=64e-3, **kwargs
+    )
 
 
 def pulse_centres(seq):
@@ -52,14 +54,17 @@ def test_the_sequence_is_valid_pulseq():
 
 def test_every_view_is_acquired_once():
     labels = design().evaluate_labels(evolution="adc")
-    assert len(set(zip(labels["LIN"].tolist(), labels["PAR"].tolist()))) == N_Y * N_Z
+    assert (
+        len(set(zip(labels["LIN"].tolist(), labels["PAR"].tolist(), strict=False)))
+        == N_Y * N_Z
+    )
 
 
 def test_the_centre_view_is_excited_at_the_inversion_time():
     seq = design()
     inversions, excitations = pulse_centres(seq)
     labels = seq.evaluate_labels(evolution="adc")
-    pairs = list(zip(labels["LIN"].tolist(), labels["PAR"].tolist()))
+    pairs = list(zip(labels["LIN"].tolist(), labels["PAR"].tolist(), strict=False))
     n_center = int(labels["ECO"][pairs.index((N_Y // 2, N_Z // 2))])
 
     first_segment = excitations[
@@ -89,7 +94,7 @@ def test_a_too_short_outer_tr_is_refused_by_name():
 def test_the_orderings_place_the_centre_where_they_promise():
     def centre_echo(seq):
         labels = seq.evaluate_labels(evolution="adc")
-        pairs = list(zip(labels["LIN"].tolist(), labels["PAR"].tolist()))
+        pairs = list(zip(labels["LIN"].tolist(), labels["PAR"].tolist(), strict=False))
         return int(labels["ECO"][pairs.index((N_Y // 2, N_Z // 2))])
 
     assert centre_echo(design(ordering="linear")) == 4

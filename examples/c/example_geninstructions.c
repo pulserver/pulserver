@@ -44,8 +44,8 @@
  *   via block_instance.gx_amp_hz_per_m / rf_amp_hz.
  *
  * Compile:
- *   cc -I../../csrc example_geninstructions.c \
- *      ../../csrc/pulseqlib_*.c -lm -o geninstructions
+ *   cc -I../../src/c example_geninstructions.c \
+ *      ../../src/c/pulseqlib_*.c -lm -o geninstructions
  */
 
 #include "example_vendorlib.h"

@@ -30,41 +30,41 @@
 
 namespace
 {
-    const std::string kData = std::string(PULSEQ_FIXTURES_DIR) + "/";
-    const std::string kCorpus = std::string(PULSEQ_CORPUS_DIR) + "/";
+const std::string kData = std::string(PULSEQ_FIXTURES_DIR) + "/";
+const std::string kCorpus = std::string(PULSEQ_CORPUS_DIR) + "/";
 
-    pulseq::Sequence load(const std::string& stem)
-    {
-        return pulseq::read_file(kData + stem + ".seq");
-    }
+pulseq::Sequence load(const std::string &stem)
+{
+    return pulseq::read_file(kData + stem + ".seq");
+}
 
-    pulseq::Sequence load_corpus(const std::string& stem)
-    {
-        return pulseq::read_file(kCorpus + stem + ".seq");
-    }
+pulseq::Sequence load_corpus(const std::string &stem)
+{
+    return pulseq::read_file(kCorpus + stem + ".seq");
+}
 
-    pulseq::Matrix3 total(const pulseq::BTensorParts& parts)
-    {
-        return pulseq::compose_btensor(parts, pulseq::identity3());
-    }
+pulseq::Matrix3 total(const pulseq::BTensorParts &parts)
+{
+    return pulseq::compose_btensor(parts, pulseq::identity3());
+}
 
-    double peak(const pulseq::Matrix3& m)
-    {
-        double out = 0.0;
-        for (int i = 0; i < 9; ++i)
-            out = std::max(out, std::fabs(m[static_cast<size_t>(i)]));
-        return out;
-    }
+double peak(const pulseq::Matrix3 &m)
+{
+    double out = 0.0;
+    for (int i = 0; i < 9; ++i)
+        out = std::max(out, std::fabs(m[static_cast<size_t>(i)]));
+    return out;
+}
 
-    /** A rotation of `angle` about z, row-major. */
-    pulseq::Matrix3 about_z(double angle)
-    {
-        const double c = std::cos(angle);
-        const double s = std::sin(angle);
-        return pulseq::Matrix3{{c, -s, 0.0, s, c, 0.0, 0.0, 0.0, 1.0}};
-    }
+/** A rotation of `angle` about z, row-major. */
+pulseq::Matrix3 about_z(double angle)
+{
+    const double c = std::cos(angle);
+    const double s = std::sin(angle);
+    return pulseq::Matrix3{{c, -s, 0.0, s, c, 0.0, 0.0, 0.0, 1.0}};
+}
 
-    /**
+/**
      * A rotation of `angle` about y, row-major.
      *
      * The one that actually moves a Cartesian shot: its gradients live on the
@@ -72,14 +72,14 @@ namespace
      * where it was and would make a sensitivity check pass for the wrong
      * reason.
      */
-    pulseq::Matrix3 about_y(double angle)
-    {
-        const double c = std::cos(angle);
-        const double s = std::sin(angle);
-        return pulseq::Matrix3{{c, 0.0, s, 0.0, 1.0, 0.0, -s, 0.0, c}};
-    }
+pulseq::Matrix3 about_y(double angle)
+{
+    const double c = std::cos(angle);
+    const double s = std::sin(angle);
+    return pulseq::Matrix3{{c, 0.0, s, 0.0, 1.0, 0.0, -s, 0.0, c}};
+}
 
-}  // namespace
+} // namespace
 
 /*
  * Every fixture with an excitation reports one shot per excitation, and each
@@ -91,8 +91,8 @@ namespace
  */
 TEST(PulseqMoments, TheSplitSumsToTheTensor)
 {
-    for (const std::string& stem : {kCorpus + "gre_2d", kCorpus + "fse_2d",
-                                    kCorpus + "epi_2d_main"})
+    for (const std::string &stem :
+         {kCorpus + "gre_2d", kCorpus + "fse_2d", kCorpus + "epi_2d_main"})
     {
         pulseq::Sequence seq = pulseq::read_file(stem + ".seq");
         const pulseq::Moments moments = pulseq::calc_moments(seq);
@@ -101,16 +101,15 @@ TEST(PulseqMoments, TheSplitSumsToTheTensor)
         bool any = false;
         for (int shot = 0; shot < moments.num_shots(); ++shot)
         {
-            const pulseq::BTensorParts& parts = moments.b[static_cast<size_t>(shot)];
+            const pulseq::BTensorParts &parts = moments.b[static_cast<size_t>(shot)];
             const pulseq::Matrix3 sum = total(parts);
             any |= peak(sum) > 0.0;
             const double scale = std::max(peak(sum), 1.0);
             for (int i = 0; i < 9; ++i)
             {
                 const double expected = parts.fixed[static_cast<size_t>(i)] +
-                                        parts.rotatable[static_cast<size_t>(i)] +
-                                        parts.cross[static_cast<size_t>(i)] +
-                                        parts.cross[static_cast<size_t>((i % 3) * 3 + i / 3)];
+                    parts.rotatable[static_cast<size_t>(i)] + parts.cross[static_cast<size_t>(i)] +
+                    parts.cross[static_cast<size_t>((i % 3) * 3 + i / 3)];
                 EXPECT_NEAR(sum[static_cast<size_t>(i)], expected, 1e-12 * scale)
                     << stem << " shot " << shot << " element " << i;
             }
@@ -132,8 +131,8 @@ TEST(PulseqMoments, ComposingAPrescriptionTurnsTheTensor)
 
     /* A shot with something in it: a GRE opens with excitations that have no
      * readout after them, and those integrate to nothing. */
-    const pulseq::BTensorParts* found = nullptr;
-    for (const pulseq::BTensorParts& candidate : moments.b)
+    const pulseq::BTensorParts *found = nullptr;
+    for (const pulseq::BTensorParts &candidate : moments.b)
     {
         if (peak(total(candidate)) > 0.0)
         {
@@ -142,7 +141,7 @@ TEST(PulseqMoments, ComposingAPrescriptionTurnsTheTensor)
         }
     }
     ASSERT_NE(found, nullptr) << "no shot of this fixture has an echo";
-    const pulseq::BTensorParts& parts = *found;
+    const pulseq::BTensorParts &parts = *found;
     ASSERT_EQ(peak(parts.fixed), 0.0) << "no block of this fixture carries NOROT";
 
     const pulseq::Matrix3 R = about_y(0.7);
@@ -156,16 +155,15 @@ TEST(PulseqMoments, ComposingAPrescriptionTurnsTheTensor)
             for (int k = 0; k < 3; ++k)
                 for (int l = 0; l < 3; ++l)
                     turned[i * 3 + j] += R[static_cast<size_t>(i * 3 + k)] *
-                                         direct[static_cast<size_t>(k * 3 + l)] *
-                                         R[static_cast<size_t>(j * 3 + l)];
+                        direct[static_cast<size_t>(k * 3 + l)] * R[static_cast<size_t>(j * 3 + l)];
 
     const double scale = std::max(peak(direct), 1.0);
     bool differs = false;
     for (int i = 0; i < 9; ++i)
     {
         EXPECT_NEAR(composed[static_cast<size_t>(i)], turned[i], 1e-9 * scale);
-        differs |= std::fabs(composed[static_cast<size_t>(i)] -
-                             direct[static_cast<size_t>(i)]) > 1e-6 * scale;
+        differs |= std::fabs(composed[static_cast<size_t>(i)] - direct[static_cast<size_t>(i)]) >
+            1e-6 * scale;
     }
     EXPECT_TRUE(differs) << "a 0.7 rad rotation has to move this tensor";
 }
@@ -180,7 +178,7 @@ TEST(PulseqMoments, TheBValueDoesNotDependOnThePrescription)
     const pulseq::Moments moments = pulseq::calc_moments(seq);
     ASSERT_GT(moments.num_shots(), 0);
 
-    for (const pulseq::BTensorParts& parts : moments.b)
+    for (const pulseq::BTensorParts &parts : moments.b)
     {
         const pulseq::Matrix3 plain = total(parts);
         const pulseq::Matrix3 turned = pulseq::compose_btensor(parts, about_z(1.1));
@@ -215,8 +213,10 @@ TEST(PulseqMoments, TheTableHasOneRowPerDistinctEncoding)
         const pulseq::Matrix3 from_shot = total(moments.b[static_cast<size_t>(shot)]);
         const double scale = std::max(peak(from_shot), 1.0);
         for (int i = 0; i < 9; ++i)
-            EXPECT_NEAR(from_table[static_cast<size_t>(i)], from_shot[static_cast<size_t>(i)],
-                        1e-9 * scale);
+            EXPECT_NEAR(
+                from_table[static_cast<size_t>(i)],
+                from_shot[static_cast<size_t>(i)],
+                1e-9 * scale);
     }
 }
 
@@ -239,8 +239,9 @@ TEST(PulseqMoments, SkippingDummiesLeavesTheRestAlone)
     ASSERT_EQ(rest.num_shots(), all.num_shots() - 2);
     for (int shot = 0; shot < rest.num_shots(); ++shot)
     {
-        EXPECT_DOUBLE_EQ(rest.t_excitation[static_cast<size_t>(shot)],
-                         all.t_excitation[static_cast<size_t>(shot + 2)]);
+        EXPECT_DOUBLE_EQ(
+            rest.t_excitation[static_cast<size_t>(shot)],
+            all.t_excitation[static_cast<size_t>(shot + 2)]);
         const pulseq::Matrix3 a = total(rest.b[static_cast<size_t>(shot)]);
         const pulseq::Matrix3 b = total(all.b[static_cast<size_t>(shot + 2)]);
         for (int i = 0; i < 9; ++i)

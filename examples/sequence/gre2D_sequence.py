@@ -3,7 +3,7 @@
 One frequency-encoded line per repetition, from a slice-selective SLR
 excitation. Phase encoding may be undersampled with a fully sampled
 autocalibration block and truncated by partial Fourier; the readout may be a
-partial echo. :mod:`pulserver.app.recon.gre2D_recon` reads all three back.
+partial echo. :mod:`pulserver.app.recon.cartesian2D_recon` reads all three back.
 
 The autocalibration block leads the traversal and closes a segment of its own,
 so the reconstruction can calibrate while the rest of the scan is still
@@ -313,14 +313,19 @@ def main(
     seq.set_definition(key="TR", value=kernel.repetition_time)
     seq.set_definition(
         key="NumGainCalibrationReadouts",
-        value=n_slices if n_gain_calibration_readouts is None else n_gain_calibration_readouts,
+        value=n_slices
+        if n_gain_calibration_readouts is None
+        else n_gain_calibration_readouts,
     )
 
     # Where the centre of k-space is, and the slice geometry the excitation
     # actually produces: the gap is the prescribed spacing less one measured
     # thickness.
     seq.set_definition(key="kSpaceCenterLine", value=n_y // 2)
-    seq.set_definition(key="kSpaceCenterSample", value=kernel.readouts[len(kernel.passes[0])].center_sample)
+    seq.set_definition(
+        key="kSpaceCenterSample",
+        value=kernel.readouts[len(kernel.passes[0])].center_sample,
+    )
     seq.set_definition(key="SlicePositions", value=slice_positions.tolist())
     seq.set_definition(key="SliceThickness", value=kernel.excitation.slice_thickness)
     seq.set_definition(
@@ -343,6 +348,7 @@ def main(
 # ======================================================================
 # Subroutines of main()
 # ======================================================================
+
 
 def GREKernel(
     system: pp.Opts,
@@ -496,6 +502,7 @@ n_averages, n_dummy, spoiling_cycles
 # The scanner protocol contract
 # ======================================================================
 
+
 class Gre2D(SequencePlugin):
     """The 2D gradient echo behind the scanner protocol contract."""
 
@@ -604,9 +611,15 @@ class Gre2D(SequencePlugin):
                 ),
                 # Where the operator put the slab. Not a widget: the scanner
                 # fills these in from the prescription.
-                UIParam.FOV_OFFSET_X: OffFloatParam(value=0.0, min=-500.0, max=500.0, unit="mm"),
-                UIParam.FOV_OFFSET_Y: OffFloatParam(value=0.0, min=-500.0, max=500.0, unit="mm"),
-                UIParam.FOV_OFFSET_Z: OffFloatParam(value=0.0, min=-500.0, max=500.0, unit="mm"),
+                UIParam.FOV_OFFSET_X: OffFloatParam(
+                    value=0.0, min=-500.0, max=500.0, unit="mm"
+                ),
+                UIParam.FOV_OFFSET_Y: OffFloatParam(
+                    value=0.0, min=-500.0, max=500.0, unit="mm"
+                ),
+                UIParam.FOV_OFFSET_Z: OffFloatParam(
+                    value=0.0, min=-500.0, max=500.0, unit="mm"
+                ),
                 UIParam.user_name(0): Description(text="ACS lines"),
                 UIParam.user_value(0): TypeinFloatParam(
                     value=24.0,
@@ -655,7 +668,11 @@ class Gre2D(SequencePlugin):
         try:
             kernel = GREKernel(
                 system,
-                **{name: value for name, value in kwargs.items() if name in KERNEL_ARGUMENTS},
+                **{
+                    name: value
+                    for name, value in kwargs.items()
+                    if name in KERNEL_ARGUMENTS
+                },
             )
         except ValueError as error:
             return {"valid": False, "duration": None, "info": str(error)}
@@ -716,7 +733,9 @@ def protocol_kwargs(system: pp.Opts, protocol: dict[str, dict]) -> dict:
         protocol,
         partial_echo=params.user_float(prot, 1, 1.0),
         partial_fourier=params.user_float(prot, 3, 1.0),
-        n_acs=params.acs_lines_from_protocol(prot, params.param_int(prot, UIParam.NY), 0),
+        n_acs=params.acs_lines_from_protocol(
+            prot, params.param_int(prot, UIParam.NY), 0
+        ),
         n_dummy=max(0, round(params.user_float(prot, 2, 16.0))),
     )
 
@@ -754,7 +773,12 @@ ARG_MAP = [
     ("--ry", UIParam.RY, float, "Phase-encode undersampling factor"),
     ("--nex", UIParam.NEX, float, "Number of signal averages"),
     ("--offset-x-mm", UIParam.FOV_OFFSET_X, float, "Volume offset along readout [mm]"),
-    ("--offset-y-mm", UIParam.FOV_OFFSET_Y, float, "Volume offset along phase encode [mm]"),
+    (
+        "--offset-y-mm",
+        UIParam.FOV_OFFSET_Y,
+        float,
+        "Volume offset along phase encode [mm]",
+    ),
     ("--offset-z-mm", UIParam.FOV_OFFSET_Z, float, "Volume offset along slice [mm]"),
     ("--acs-lines", UIParam.user_value(0), float, "Number of ACS lines"),
     (

@@ -118,7 +118,8 @@ _GRAD_CASES["01_ok_trap_extended_trap"] = _seq(
 [TRAP]
  1  1.20482e+06 170  660 170   0
 
-""" + _TRIANGLE_SHAPES,
+"""
+    + _TRIANGLE_SHAPES,
 )
 
 _GRAD_CASES["02_slew_violation"] = _seq(
@@ -145,7 +146,8 @@ _GRAD_CASES["02_fail_trap_then_startshigh"] = _seq(
 [TRAP]
  1  1.20482e+06 170  660 170   0
 
-""" + _shapes3("1 1 0", "0 10 20"),
+"""
+    + _shapes3("1 1 0", "0 10 20"),
 )
 
 _GRAD_CASES["03_grad_rss_violation"] = _seq(
@@ -168,7 +170,8 @@ _GRAD_CASES["03_fail_startshigh_first"] = _seq(
 [GRADIENTS]
 1       100000       100000            0 1 2 0
 
-""" + _shapes3("1 1 0", "0 10 20"),
+"""
+    + _shapes3("1 1 0", "0 10 20"),
 )
 
 _GRAD_CASES["04_slew_rss_violation"] = _seq(
@@ -192,7 +195,8 @@ _GRAD_CASES["04_fail_delay_then_allhigh"] = _seq(
 [GRADIENTS]
 1       100000       100000       100000 1 2 0
 
-""" + _shapes3("1 1 1", "0 10 20"),
+"""
+    + _shapes3("1 1 1", "0 10 20"),
 )
 
 _GRAD_CASES["05_ok_extended_with_delay"] = _seq(
@@ -204,7 +208,8 @@ _GRAD_CASES["05_ok_extended_with_delay"] = _seq(
 [GRADIENTS]
 1       100000            0            0 1 2 100
 
-""" + _TRIANGLE_SHAPES,
+"""
+    + _TRIANGLE_SHAPES,
 )
 
 _GRAD_CASES["06_fail_delay_then_startshigh"] = _seq(
@@ -217,7 +222,8 @@ _GRAD_CASES["06_fail_delay_then_startshigh"] = _seq(
 [GRADIENTS]
 1       100000       100000            0 1 2 0
 
-""" + _shapes3("1 1 0", "0 10 20"),
+"""
+    + _shapes3("1 1 0", "0 10 20"),
 )
 
 _GRAD_CASES["07_fail_nonconnecting"] = _seq(
@@ -231,7 +237,8 @@ _GRAD_CASES["07_fail_nonconnecting"] = _seq(
 1       100000            0       100000 1 2 0
 2       200000       200000            0 3 2 0
 
-""" + _shapes3("0 1 1", "0 10 20", "1 0.5 0"),
+"""
+    + _shapes3("0 1 1", "0 10 20", "1 0.5 0"),
 )
 
 
@@ -263,7 +270,8 @@ _GRAD_CASES["08_ok_rot_identity"] = _rot_case(
 extension ROTATIONS 1
 1  1 0 0 0
 
-""" + _TRIANGLE_SHAPES,
+"""
+    + _TRIANGLE_SHAPES,
 )
 
 _GRAD_CASES["09_fail_rot_identity"] = _rot_case(
@@ -285,7 +293,8 @@ _GRAD_CASES["09_fail_rot_identity"] = _rot_case(
 extension ROTATIONS 1
 1  1 0 0 0
 
-""" + _shapes3("1 1 0", "0 10 20"),
+"""
+    + _shapes3("1 1 0", "0 10 20"),
 )
 
 _GRAD_CASES["10_fail_rot_first_block"] = _rot_case(
@@ -303,7 +312,8 @@ _GRAD_CASES["10_fail_rot_first_block"] = _rot_case(
 extension ROTATIONS 1
 1  1 0 0 0
 
-""" + _shapes3("1 1 0", "0 10 20"),
+"""
+    + _shapes3("1 1 0", "0 10 20"),
 )
 
 _GRAD_CASES["11_fail_rot_allhigh"] = _rot_case(
@@ -322,7 +332,8 @@ _GRAD_CASES["11_fail_rot_allhigh"] = _rot_case(
 extension ROTATIONS 1
 1  1 0 0 0
 
-""" + _shapes3("1 1 1", "0 10 20"),
+"""
+    + _shapes3("1 1 1", "0 10 20"),
 )
 
 _GRAD_CASES["12_ok_rot_extended_delay"] = _rot_case(
@@ -340,7 +351,8 @@ _GRAD_CASES["12_ok_rot_extended_delay"] = _rot_case(
 extension ROTATIONS 1
 1  1 0 0 0
 
-""" + _TRIANGLE_SHAPES,
+"""
+    + _TRIANGLE_SHAPES,
 )
 
 _GRAD_CASES["13_fail_rot_delay_then_startshigh"] = _rot_case(
@@ -359,7 +371,8 @@ _GRAD_CASES["13_fail_rot_delay_then_startshigh"] = _rot_case(
 extension ROTATIONS 1
 1  1 0 0 0
 
-""" + _shapes3("1 1 0", "0 10 20"),
+"""
+    + _shapes3("1 1 0", "0 10 20"),
 )
 
 _GRAD_CASES["14_fail_rot_nonconnecting"] = _rot_case(
@@ -379,7 +392,8 @@ _GRAD_CASES["14_fail_rot_nonconnecting"] = _rot_case(
 extension ROTATIONS 1
 1  1 0 0 0
 
-""" + _shapes3("0 1 1", "0 10 20", "1 0.5 0"),
+"""
+    + _shapes3("0 1 1", "0 10 20", "1 0.5 0"),
 )
 
 _GRAD_CASES["15_ok_rot_same_rotation"] = _rot_case(
@@ -399,7 +413,8 @@ _GRAD_CASES["15_ok_rot_same_rotation"] = _rot_case(
 extension ROTATIONS 1
 1  0.707107 0 0 0.707107
 
-""" + _shapes3("0 1 1", "0 10 20", "1 1 0"),
+"""
+    + _shapes3("0 1 1", "0 10 20", "1 1 0"),
 )
 
 _GRAD_CASES["16_fail_rot_diff_rotation_1"] = _rot_case(
@@ -421,7 +436,8 @@ extension ROTATIONS 1
 1  1 0 0 0
 2  0.707107 0 0 0.707107
 
-""" + _shapes3("0 1 1", "0 10 20", "1 1 0"),
+"""
+    + _shapes3("0 1 1", "0 10 20", "1 1 0"),
 )
 
 _GRAD_CASES["17_fail_rot_diff_rotation_2"] = _rot_case(
@@ -443,7 +459,8 @@ extension ROTATIONS 1
 1  0.707107 0 0 0.707107
 2  1 0 0 0
 
-""" + _shapes3("0 1 1", "0 10 20", "1 1 0"),
+"""
+    + _shapes3("0 1 1", "0 10 20", "1 1 0"),
 )
 
 
@@ -460,7 +477,8 @@ _RF_CASES["00_basic_rfstat"] = _seq(
 [RF]
 1          500 1 2 3 500 0 0 0 0 0 e
 
-""" + _RF_SHAPES,
+"""
+    + _RF_SHAPES,
 )
 
 
@@ -507,7 +525,8 @@ def _vfa_body() -> str:
     # A single 80-block train ramping 25..250 Hz in tiers of four pulses:
     # the amplitude pattern never repeats, so no TR periodicity exists.
     rf_rows = [
-        f"{i + 1:>2d}          {25 * (i + 1):>3d} 1 2 3 500 0 0 0 0 0 e" for i in range(10)
+        f"{i + 1:>2d}          {25 * (i + 1):>3d} 1 2 3 500 0 0 0 0 0 e"
+        for i in range(10)
     ]
     ids: list[int] = []
     for tier in range(10):
@@ -638,7 +657,8 @@ _RF_CASES["05_rf_ladder_no_adc"] = _seq(
 [TRAP]
  1  1.20482e+06 170  660 170   0
 
-""" + _RF_SHAPES,
+"""
+    + _RF_SHAPES,
 )
 
 _RF_CASES["06_rfamp_two_tier_trs"] = _seq(
@@ -667,7 +687,8 @@ _RF_CASES["06_rfamp_two_tier_trs"] = _seq(
 [TRAP]
  1  1.20482e+06 170  660 170   0
 
-""" + _RF_SHAPES,
+"""
+    + _RF_SHAPES,
 )
 
 _RF_CASES["07_rfstat_cp_8ch_180"] = _seq(
@@ -686,7 +707,8 @@ _RF_CASES["07_rfstat_cp_8ch_180"] = _seq(
 extension RF_SHIMS 1
 1 8 0.353553 -0 0.353553 -0.785398 0.353553 -1.5708 0.353553 -2.35619 0.353553 -3.14159 0.353553 2.35619 0.353553 1.5708 0.353553 0.785398
 
-""" + _RF_SHAPES,
+"""
+    + _RF_SHAPES,
 )
 
 
@@ -861,7 +883,10 @@ def build_nav_gre():
         )
         seq.add_block(
             pp.make_trapezoid(
-                channel="y", area=(line - n_pe / 2) / fov, duration=400e-6, system=system
+                channel="y",
+                area=(line - n_pe / 2) / fov,
+                duration=400e-6,
+                system=system,
             )
         )
         gx = pp.make_trapezoid(

@@ -5,7 +5,7 @@ Spiral interleaves in-plane, Cartesian partitions along z --
 interleave serves every ``(arm, partition)``: the arm is a ``ROTATIONS``
 extension and the partition an amplitude on the encode pair. The FOV offset
 goes through ``TransformFOV`` in server mode.
-:mod:`pulserver.app.recon.gre_stack_of_spirals3D_recon` reconstructs by NUFFT
+:mod:`pulserver.app.recon.noncartesian_stack_recon` reconstructs by NUFFT
 in-plane and FFT along the stack.
 
 ``main`` returns the :class:`pulserver.pypulseq.Sequence`; ``PLUGIN`` is the
@@ -41,7 +41,10 @@ from pulserver import (
 from scipy.spatial.transform import Rotation
 
 from pulserver.app.sequence.gre_spiral2D_sequence import arm_angles
-from pulserver.app.sequence.gre_stack_of_stars3D_sequence import StackShotKernel, stack_angles
+from pulserver.app.sequence.gre_stack_of_stars3D_sequence import (
+    StackShotKernel,
+    stack_angles,
+)
 
 #: SLR design of the selective pulses, held here rather than left at the design
 #: module's default so a script can retune the excitation without touching the
@@ -209,7 +212,9 @@ def main(
     spoiling_phase = iter(rf_phases)
     lin_label, par_label = readout.adc_labels
 
-    def repetition(i_arm: int, partition: int, kz: float, acquire: bool, mark=None) -> None:
+    def repetition(
+        i_arm: int, partition: int, kz: float, acquire: bool, mark=None
+    ) -> None:
         shot = shot_index(i_arm, partition)
         rf_phase = next(spoiling_phase)
         readout.rf.phase_offset = rf_phase
@@ -280,9 +285,8 @@ def main(
 # Subroutines of main()
 # ======================================================================
 
-def SlabExcitationKernel(
-    system: pp.Opts, flip_angle_deg: float, thickness_m: float
-):
+
+def SlabExcitationKernel(system: pp.Opts, flip_angle_deg: float, thickness_m: float):
     """The slab excitation, spectral-spatial when ``SPSP_EXCITATION`` is set.
 
     Returns ``(excitation, rf, gz)``. The selection gradient carries its own
@@ -301,9 +305,7 @@ def SlabExcitationKernel(
         )
         # Concatenate the rephaser onto the alternating selection gradient, the
         # way is_slab does, and hand the readout one merged z lobe.
-        gz = pp.concatenate_gradients(
-            excitation.gz, excitation.gz_reph, system=system
-        )
+        gz = pp.concatenate_gradients(excitation.gz, excitation.gz_reph, system=system)
         return excitation, excitation.rf, gz
     excitation = design.SpatialSelectiveExcitation(
         system,
@@ -398,6 +400,7 @@ partition_angle_offset_deg, use_rotation_ext
 # The scanner protocol contract
 # ======================================================================
 
+
 class GreStackOfSpirals3D(SequencePlugin):
     """The 3D stack-of-spirals gradient echo behind the scanner protocol contract."""
 
@@ -454,9 +457,15 @@ class GreStackOfSpirals3D(SequencePlugin):
                 UIParam.BANDWIDTH: TypeinFloatParam(
                     value=250e3, min=5e3, max=500e3, incr=100.0, unit="Hz"
                 ),
-                UIParam.FOV_OFFSET_X: OffFloatParam(value=0.0, min=-500.0, max=500.0, unit="mm"),
-                UIParam.FOV_OFFSET_Y: OffFloatParam(value=0.0, min=-500.0, max=500.0, unit="mm"),
-                UIParam.FOV_OFFSET_Z: OffFloatParam(value=0.0, min=-500.0, max=500.0, unit="mm"),
+                UIParam.FOV_OFFSET_X: OffFloatParam(
+                    value=0.0, min=-500.0, max=500.0, unit="mm"
+                ),
+                UIParam.FOV_OFFSET_Y: OffFloatParam(
+                    value=0.0, min=-500.0, max=500.0, unit="mm"
+                ),
+                UIParam.FOV_OFFSET_Z: OffFloatParam(
+                    value=0.0, min=-500.0, max=500.0, unit="mm"
+                ),
                 UIParam.user_name(0): Description(text="Arms"),
                 UIParam.user_value(0): TypeinFloatParam(
                     value=16.0, min=1.0, max=512.0, incr=1.0, unit=""
@@ -479,7 +488,11 @@ class GreStackOfSpirals3D(SequencePlugin):
         try:
             kernel = StackOfSpiralsKernel(
                 system,
-                **{name: value for name, value in kwargs.items() if name in KERNEL_ARGUMENTS},
+                **{
+                    name: value
+                    for name, value in kwargs.items()
+                    if name in KERNEL_ARGUMENTS
+                },
             )
         except ValueError as error:
             return {"valid": False, "duration": None, "info": str(error)}
@@ -575,7 +588,12 @@ ARG_MAP = [
     ("--nz", UIParam.NSLICES, int, "Partition count"),
     ("--bandwidth-hz", UIParam.BANDWIDTH, float, "Requested receiver bandwidth [Hz]"),
     ("--offset-x-mm", UIParam.FOV_OFFSET_X, float, "Volume offset along readout [mm]"),
-    ("--offset-y-mm", UIParam.FOV_OFFSET_Y, float, "Volume offset along phase encode [mm]"),
+    (
+        "--offset-y-mm",
+        UIParam.FOV_OFFSET_Y,
+        float,
+        "Volume offset along phase encode [mm]",
+    ),
     ("--offset-z-mm", UIParam.FOV_OFFSET_Z, float, "Volume offset along slab [mm]"),
     ("--arms", UIParam.user_value(0), float, "Interleaves per partition"),
     ("--angles", UIParam.user_value(1), float, "Angle scheme: 0 uniform, 1 golden"),

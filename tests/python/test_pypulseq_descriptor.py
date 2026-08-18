@@ -57,11 +57,15 @@ def _gre(system, *, repetitions=8, use="excitation", flip=FLIP_DEGREES):
             return_gz=True,
             use=use,
         )
-        gx = pp.make_trapezoid(channel="x", flat_area=128 / 0.256, flat_time=2.56e-3, system=system)
+        gx = pp.make_trapezoid(
+            channel="x", flat_area=128 / 0.256, flat_time=2.56e-3, system=system
+        )
         adc = pp.make_adc(
             num_samples=128, duration=gx.flat_time, delay=gx.rise_time, system=system
         )
-        pre = pp.make_trapezoid(channel="x", area=-gx.area / 2, duration=1e-3, system=system)
+        pre = pp.make_trapezoid(
+            channel="x", area=-gx.area / 2, duration=1e-3, system=system
+        )
         for _ in range(repetitions):
             seq.add_block(rf, gz)
             seq.add_block(pre, gzr)
@@ -87,7 +91,9 @@ def test_one_event_per_block_of_the_repetition_time(system):
         EventType.ADC,
     ]
     # The TR is the three blocks it is made of, not the whole scan.
-    assert description.tr_duration_us == pytest.approx(seq.duration()[0] / 8 * 1e6, rel=1e-6)
+    assert description.tr_duration_us == pytest.approx(
+        seq.duration()[0] / 8 * 1e6, rel=1e-6
+    )
 
 
 def test_the_rf_row_carries_its_use_and_recovers_the_designed_flip_angle(system):
@@ -160,7 +166,9 @@ def test_the_echo_time_agrees_with_the_trajectorys_own_answer(system):
     # offset of the first readout's centre within its own repetition.
     tr_seconds = description.tr_duration_us * 1e-6
     within_tr = centres[0] % tr_seconds
-    assert within_tr == pytest.approx(adc_event.timestamp_us * 1e-6, abs=2 * system.grad_raster_time)
+    assert within_tr == pytest.approx(
+        adc_event.timestamp_us * 1e-6, abs=2 * system.grad_raster_time
+    )
 
 
 def test_it_does_not_decompress_gradient_waveforms(system, monkeypatch):
@@ -194,7 +202,9 @@ def test_it_is_cached_against_the_revision_and_rebuilt_after_a_change(system):
         seq.add_block(pp.make_delay(5e-3))
 
     seq.sequence_descriptor()
-    assert seq._structure is not cached, "a mutated sequence answered from the old structure"
+    assert seq._structure is not cached, (
+        "a mutated sequence answered from the old structure"
+    )
 
 
 def test_the_scan_parameters_come_across(system):

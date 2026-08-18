@@ -3,8 +3,8 @@
 The blipped-CAIPI train of :mod:`pulserver.app.sequence.epi3D_sequence` lays down an
 undersampled ``make_caipirinha_mask`` lattice plus a fully sampled
 autocalibration rectangle. The reconstruction of :mod:`pulserver.app.recon.epi3D_recon`
-reuses the CG-SENSE and NLINV routines of :mod:`pulserver.app.recon.gre3D_recon`, whose
-image math is exercised in :mod:`test_gre3D_recon`. What this file pins is the
+reuses the CG-SENSE and NLINV routines of :mod:`pulserver.app.recon.cartesian3D_recon`, whose
+image math is exercised in :mod:`test_cartesian3D_recon`. What this file pins is the
 join between them: the coil-sensitivity calibration must succeed on the mask the
 sequence actually produces -- i.e. the rectangle the sequence acquires is the
 block NLINV reads off the mask.
@@ -15,7 +15,7 @@ from __future__ import annotations
 import numpy as np
 
 import pulserver.pypulseq as pp
-from pulserver.app import gre3D_recon
+from pulserver.app import cartesian3D_recon
 from pulserver.app import epi3D_sequence
 
 N = 32
@@ -67,7 +67,10 @@ def _smooth_kspace():
     axis = np.linspace(-1.0, 1.0, N)
     y, x = np.meshgrid(axis, axis, indexing="ij")
     phantom = np.stack(
-        [0.3 + np.where((x / 0.9) ** 2 + (y / 0.9) ** 2 < 1.0, 0.7, 0.0) for _ in range(N_Z)]
+        [
+            0.3 + np.where((x / 0.9) ** 2 + (y / 0.9) ** 2 < 1.0, 0.7, 0.0)
+            for _ in range(N_Z)
+        ]
     ).astype(np.complex64)
     angles = np.linspace(0.0, 2 * np.pi, COILS, endpoint=False)
     maps = np.stack(
@@ -95,7 +98,7 @@ def test_calibration_succeeds_on_the_calibration_mask():
     assert not mask.all()  # a central block only
 
     kspace = _smooth_kspace() * mask[None]
-    maps = gre3D_recon.sensitivities(kspace, mask)
+    maps = cartesian3D_recon.sensitivities(kspace, mask)
     maps = np.asarray(maps.cpu() if hasattr(maps, "cpu") else maps)
 
     assert maps.shape == (1, COILS, N_Z, N, N)

@@ -33,8 +33,7 @@ MU_TEST(test_param_lookup)
     /* Unknown key */
     mu_assert_int_eq(-1, pulseg_param_find("Bogus"));
     mu_assert(pulseg_param_wire_name(-1) == NULL, "wire_name(-1)");
-    mu_assert(pulseg_param_wire_name(PULSEG_PARAM_COUNT) == NULL,
-              "wire_name(COUNT)");
+    mu_assert(pulseg_param_wire_name(PULSEG_PARAM_COUNT) == NULL, "wire_name(COUNT)");
 }
 
 /* ================================================================== */
@@ -52,14 +51,13 @@ MU_TEST(test_user_slots)
 /*  Test: parse a preamble                                            */
 /* ================================================================== */
 
-static const char *PREAMBLE =
-    "[NimPulseqGUI Protocol]\n"
-    "TE: 5.0\n"
-    "TR: 500.0\n"
-    "nslices: 10\n"
-    "FatSat: true\n"
-    "user0_value: 42.5\n"
-    "[NimPulseqGUI Protocol End]\n";
+static const char *PREAMBLE = "[NimPulseqGUI Protocol]\n"
+                              "TE: 5.0\n"
+                              "TR: 500.0\n"
+                              "nslices: 10\n"
+                              "FatSat: true\n"
+                              "user0_value: 42.5\n"
+                              "[NimPulseqGUI Protocol End]\n";
 
 MU_TEST(test_parse)
 {
@@ -91,10 +89,9 @@ MU_TEST(test_parse)
 /*  Test: parse with comment-prefix lines                             */
 /* ================================================================== */
 
-static const char *PREAMBLE_COMMENTED =
-    "# [NimPulseqGUI Protocol]\n"
-    "# TE: 3.0\n"
-    "# [NimPulseqGUI Protocol End]\n";
+static const char *PREAMBLE_COMMENTED = "# [NimPulseqGUI Protocol]\n"
+                                        "# TE: 3.0\n"
+                                        "# [NimPulseqGUI Protocol End]\n";
 
 MU_TEST(test_parse_commented)
 {
@@ -121,12 +118,9 @@ MU_TEST(test_setters)
 
     memset(&proto, 0, sizeof(proto));
 
-    mu_assert_int_eq(0, pulseg_protocol_set_float(&proto,
-                                                     PULSEG_PARAM_FOV, 240.0f));
-    mu_assert_int_eq(0, pulseg_protocol_set_int(&proto,
-                                                   PULSEG_PARAM_MATRIX, 256));
-    mu_assert_int_eq(0, pulseg_protocol_set_bool(&proto,
-                                                    PULSEG_PARAM_SPOILER, 1));
+    mu_assert_int_eq(0, pulseg_protocol_set_float(&proto, PULSEG_PARAM_FOV, 240.0f));
+    mu_assert_int_eq(0, pulseg_protocol_set_int(&proto, PULSEG_PARAM_MATRIX, 256));
+    mu_assert_int_eq(0, pulseg_protocol_set_bool(&proto, PULSEG_PARAM_SPOILER, 1));
 
     mu_assert_int_eq(0, pulseg_protocol_get_float(&proto, &fval, PULSEG_PARAM_FOV));
     mu_assert(fabsf(fval - 240.0f) < 1e-6f, "fov");
@@ -175,14 +169,13 @@ MU_TEST(test_roundtrip)
 /*  Test: rich schema format "type|value|min|max|incr|unit"           */
 /* ================================================================== */
 
-static const char *PREAMBLE_RICH =
-    "[NimPulseqGUI Protocol]\n"
-    "TE: float|5.0|0.5|100.0|0.1|ms\n"
-    "TR: float|500.0|10.0|10000.0|1.0|ms\n"
-    "nslices: int|10|1|256|1|slices\n"
-    "FatSat: bool|1\n"
-    "user0_value: float|42.5|-100.0|100.0|0.5|\n"
-    "[NimPulseqGUI Protocol End]\n";
+static const char *PREAMBLE_RICH = "[NimPulseqGUI Protocol]\n"
+                                   "TE: float|5.0|0.5|100.0|0.1|ms\n"
+                                   "TR: float|500.0|10.0|10000.0|1.0|ms\n"
+                                   "nslices: int|10|1|256|1|slices\n"
+                                   "FatSat: bool|1\n"
+                                   "user0_value: float|42.5|-100.0|100.0|0.5|\n"
+                                   "[NimPulseqGUI Protocol End]\n";
 
 MU_TEST(test_parse_rich)
 {
@@ -246,13 +239,12 @@ MU_TEST(test_parse_rich)
 /*  Test: rich + simple mixed (backward compat)                       */
 /* ================================================================== */
 
-static const char *PREAMBLE_MIXED =
-    "[NimPulseqGUI Protocol]\n"
-    "TE: float|5.0|0.5|100.0|0.1|ms\n"
-    "TR: 500.0\n"
-    "nslices: int|10|1|256|1|\n"
-    "FatSat: true\n"
-    "[NimPulseqGUI Protocol End]\n";
+static const char *PREAMBLE_MIXED = "[NimPulseqGUI Protocol]\n"
+                                    "TE: float|5.0|0.5|100.0|0.1|ms\n"
+                                    "TR: 500.0\n"
+                                    "nslices: int|10|1|256|1|\n"
+                                    "FatSat: true\n"
+                                    "[NimPulseqGUI Protocol End]\n";
 
 MU_TEST(test_parse_mixed)
 {

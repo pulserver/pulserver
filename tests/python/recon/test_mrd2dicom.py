@@ -9,6 +9,7 @@ import pytest
 from pulserver.recon._mrd.mrd2dicom import (
     DicomWithName,
     MrdDicomBuilder,
+    _quantize,
     convert_string_vrs,
     to_dicom_date,
     to_dicom_time,
@@ -17,6 +18,16 @@ from pulserver.recon._mrd.mrd2dicom import (
 # ---------------------------------------------------------------------------
 # Fixtures: minimal ISMRMRD headers for testing
 # ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def parsed_mrd_header(minimal_mrd_header) -> ismrmrd.xsd.ismrmrdHeader:
+    """The same header as the runtime sees it: read back from its XML.
+
+    A parsed header carries every optional element the schema declares, where
+    one built by hand leaves them ``None``.
+    """
+    return ismrmrd.xsd.CreateFromDocument(minimal_mrd_header.toXML())
 
 
 @pytest.fixture
@@ -81,9 +92,7 @@ def _bare_header(**sections) -> ismrmrd.xsd.ismrmrdHeader:
             H1resonanceFrequency_Hz=63_750_000
         )
     )
-    header.acquisitionSystemInformation = (
-        ismrmrd.xsd.acquisitionSystemInformationType()
-    )
+    header.acquisitionSystemInformation = ismrmrd.xsd.acquisitionSystemInformationType()
     header.sequenceParameters = ismrmrd.xsd.sequenceParametersType()
     for name, value in sections.items():
         setattr(header, name, value)
@@ -260,3 +269,64 @@ def test_the_builder_maps_subject_study_and_system_together():
     assert builder.dicomDset.PatientID == "12345"
     assert builder.dicomDset.StudyID == "STUDY001"
     assert builder.dicomDset.Manufacturer == "Siemens"
+
+
+# %% storing an image's real values in integer pixels
+
+
+def test_an_integer_image_is_stored_as_it_is():
+    """Already storable: nothing to map, so no rescale is asked for."""
+    image = np.arange(16, dtype=np.int16).reshape(4, 4)
+    stored, rescale = _quantize(image)
+    assert rescale is None
+    assert stored is image
+
+
+def test_a_real_image_is_quantized_with_the_mapping_back_to_it():
+    """DICOM pixels are integers, so a reconstruction's real values are stored
+    through ``RescaleSlope``/``RescaleIntercept`` rather than having their
+    bytes reinterpreted."""
+    image = np.linspace(-3.5, 12.25, 256, dtype=np.float32).reshape(16, 16)
+    stored, (intercept, slope) = _quantize(image)
+
+    assert stored.dtype == np.uint16
+    assert stored.min() == 0
+    assert stored.max() == np.iinfo(np.uint16).max
+    recovered = stored.astype(float) * slope + intercept
+    assert np.abs(recovered - image).max() < (image.max() - image.min()) / 65534
+
+
+def test_a_constant_image_survives_having_no_range():
+    """Nothing to spread over the integers, and the one value it does have
+    still has to come back."""
+    stored, (intercept, slope) = _quantize(np.full((4, 4), 0.7, dtype=np.float32))
+    assert stored.dtype == np.uint16
+    assert not stored.any()
+    assert stored.astype(float) * slope + intercept == pytest.approx(0.7)
+
+
+def test_a_reconstructed_image_round_trips_through_the_builder(parsed_mrd_header):
+    """End to end: what a plugin computed is what a reader recovers."""
+    values = np.linspace(0.3, 1.0, 64, dtype=np.float32).reshape(8, 8)
+    mrd_image = ismrmrd.Image.from_array(values, transpose=False)
+
+    dicom = MrdDicomBuilder(parsed_mrd_header)(mrd_image).dset
+
+    assert dicom.BitsAllocated == 16
+    assert dicom.PixelRepresentation == 0
+    recovered = dicom.pixel_array.astype(float) * float(dicom.RescaleSlope) + float(
+        dicom.RescaleIntercept
+    )
+    np.testing.assert_allclose(recovered, values, atol=1e-4)
+
+
+def test_the_default_window_is_centred_on_the_data_not_on_half_its_width(
+    parsed_mrd_header,
+):
+    """A window is a centre and a width in real units; half the width is only
+    the centre when the data starts at zero."""
+    values = np.linspace(10.0, 20.0, 64, dtype=np.float32).reshape(8, 8)
+    dicom = MrdDicomBuilder(parsed_mrd_header)(
+        ismrmrd.Image.from_array(values, transpose=False)
+    ).dset
+    assert float(dicom.WindowCenter) == pytest.approx(15.0, abs=0.5)

@@ -74,7 +74,10 @@ def build_loop(system, bssfp, plan, partitions=None):
                 system=system,
             ),
             pp.add_gradients(
-                [bssfp.gz_rew, pp.scale_grad(bssfp.gz_partition_rew, partitions[index])],
+                [
+                    bssfp.gz_rew,
+                    pp.scale_grad(bssfp.gz_partition_rew, partitions[index]),
+                ],
                 system=system,
             ),
         )
@@ -83,7 +86,9 @@ def build_loop(system, bssfp, plan, partitions=None):
         bssfp.rf.phase_offset = bssfp.adc.phase_offset = np.pi * ((shot + 1) % 2)
         if shot:
             seq.add_block(
-                bssfp.gx_rew, pp.scale_grad(bssfp.gy_rew, plan[shot - 1]), z_lobes(shot - 1)[1]
+                bssfp.gx_rew,
+                pp.scale_grad(bssfp.gy_rew, plan[shot - 1]),
+                z_lobes(shot - 1)[1],
             )
         else:
             seq.add_block(bssfp.wait_rewind, bssfp.gz_rew)
@@ -96,7 +101,9 @@ def build_loop(system, bssfp, plan, partitions=None):
             *getattr(bssfp.events, "adc_labels", ()),
         )
     seq.add_block(
-        bssfp.gx_rew, pp.scale_grad(bssfp.gy_rew, plan[-1]), z_lobes(len(plan) - 1)[1],
+        bssfp.gx_rew,
+        pp.scale_grad(bssfp.gy_rew, plan[-1]),
+        z_lobes(len(plan) - 1)[1],
         *bssfp.end_labels,
     )
     return seq
@@ -170,7 +177,9 @@ def test_a_2d_readout_has_no_partition_encode(system, slice_):
 def test_the_read_axis_never_leaves_the_plateau(system, slice_):
     """The lobe that closes a repetition starts where the acquisition ended."""
     bssfp = readout2d(system, slice_)
-    assert float(bssfp.gx.waveform[-1]) == pytest.approx(float(bssfp.gx_rew.waveform[0]))
+    assert float(bssfp.gx.waveform[-1]) == pytest.approx(
+        float(bssfp.gx_rew.waveform[0])
+    )
     assert float(bssfp.gx.waveform[0]) == pytest.approx(0.0)
     assert float(bssfp.gx_rew.waveform[-1]) == pytest.approx(0.0)
 
@@ -252,7 +261,9 @@ def test_summing_them_stays_a_trapezoid_at_every_partition(system, slab):
         for kz in np.linspace(-1.0, 1.0, 17)
     ]
     assert {lobe.type for lobe in lobes} == {"trap"}
-    assert len({(lobe.rise_time, lobe.flat_time, lobe.fall_time) for lobe in lobes}) == 1
+    assert (
+        len({(lobe.rise_time, lobe.flat_time, lobe.fall_time) for lobe in lobes}) == 1
+    )
 
 
 def test_the_summed_lobe_stays_inside_the_gradient_limit(system, slab):
@@ -326,7 +337,9 @@ def test_a_repetition_time_shorter_than_the_layout_is_refused(system, slice_):
 
 def test_a_pulse_too_long_for_the_acquisition_is_refused(system):
     """Half a repetition has to hold the pulse tail, the rewind and the lead."""
-    long_pulse = design.SpatialSelectiveExcitation(system, 40.0, 5e-3, 5e-3, rephase=False)
+    long_pulse = design.SpatialSelectiveExcitation(
+        system, 40.0, 5e-3, 5e-3, rephase=False
+    )
     with pytest.raises(ValueError, match="half-flip"):
         design.BssfpReadout2D(
             system, long_pulse.rf, long_pulse.gz, fov=FOV[:2], matrix=MATRIX[:2]
@@ -334,7 +347,9 @@ def test_a_pulse_too_long_for_the_acquisition_is_refused(system):
 
 
 def test_the_same_pulse_builds_without_the_half_flip_preparation(system):
-    long_pulse = design.SpatialSelectiveExcitation(system, 40.0, 5e-3, 5e-3, rephase=False)
+    long_pulse = design.SpatialSelectiveExcitation(
+        system, 40.0, 5e-3, 5e-3, rephase=False
+    )
     bssfp = design.BssfpReadout2D(
         system,
         long_pulse.rf,
@@ -371,7 +386,9 @@ def test_the_half_flip_pulse_must_oppose_the_first_excitation():
         signal = np.asarray(signal)
         # How far each echo departs from the mean of its neighbours: the
         # echo-to-echo oscillation, with the smooth approach divided out.
-        return np.max(np.abs(signal[1:-1] - 0.5 * (signal[:-2] + signal[2:]))) / signal[-1]
+        return (
+            np.max(np.abs(signal[1:-1] - 0.5 * (signal[:-2] + signal[2:]))) / signal[-1]
+        )
 
     opposed = alternation(0.0, np.pi)
     aligned = alternation(0.0, 0.0)
@@ -421,9 +438,7 @@ def test_an_impossible_request_is_refused(system, slice_, kwargs, message):
 
 def test_a_hard_pulse_needs_no_rephasers(system):
     excitation = design.NonSelectiveExcitation(system, 40.0, duration_s=0.3e-3)
-    bssfp = design.BssfpReadout3D(
-        system, excitation.rf, fov=FOV, matrix=MATRIX
-    )
+    bssfp = design.BssfpReadout3D(system, excitation.rf, fov=FOV, matrix=MATRIX)
     assert not hasattr(bssfp.events, "gz_pre")
     assert bssfp.gz_partition.type == "trap"
     assert bssfp.check_timing()[0]

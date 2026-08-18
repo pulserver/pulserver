@@ -13,9 +13,9 @@
 MU_TEST(test_event_array_alignment)
 {
     pulseg_opts opts;
-    pulseg_collection* coll = NULL;
-    pulseg_rf_stats* stats = NULL;
-    pulseg_rf_event* events = NULL;
+    pulseg_collection *coll = NULL;
+    pulseg_rf_stats *stats = NULL;
+    pulseg_rf_event *events = NULL;
     pulseg_subseq_info info = PULSEG_SUBSEQ_INFO_INIT;
     int rc, nstats, nevents, i;
 
@@ -34,9 +34,13 @@ MU_TEST(test_event_array_alignment)
 
     for (i = 0; i < nstats; ++i)
     {
-        mu_assert_float_near("events[i].amplitude_hz == stats[i].act_amplitude_hz",
-            stats[i].act_amplitude_hz, events[i].amplitude_hz, 1e-6f);
-        mu_assert(events[i].rf_def_id >= 0 && events[i].rf_def_id < info.num_unique_rf,
+        mu_assert_float_near(
+            "events[i].amplitude_hz == stats[i].act_amplitude_hz",
+            stats[i].act_amplitude_hz,
+            events[i].amplitude_hz,
+            1e-6f);
+        mu_assert(
+            events[i].rf_def_id >= 0 && events[i].rf_def_id < info.num_unique_rf,
             "events[i].rf_def_id out of range");
     }
 
@@ -48,10 +52,10 @@ MU_TEST(test_event_array_alignment)
 MU_TEST(test_def_waveform_getters)
 {
     pulseg_opts opts;
-    pulseg_collection* coll = NULL;
-    pulseg_rf_stats* stats = NULL;
-    pulseg_rf_event* events = NULL;
-    float** mag = NULL;
+    pulseg_collection *coll = NULL;
+    pulseg_rf_stats *stats = NULL;
+    pulseg_rf_event *events = NULL;
+    float **mag = NULL;
     int rc, nstats, nevents, nch, npts, s;
 
     default_opts_init(&opts);
@@ -70,8 +74,7 @@ MU_TEST(test_def_waveform_getters)
 
     for (s = 0; s < npts; ++s)
     {
-        mu_assert(mag[0][s] >= -1.0f && mag[0][s] <= 1.0f,
-            "magnitude sample out of [-1,1]");
+        mu_assert(mag[0][s] >= -1.0f && mag[0][s] <= 1.0f, "magnitude sample out of [-1,1]");
     }
 
     PULSEG_FREE(mag[0]);

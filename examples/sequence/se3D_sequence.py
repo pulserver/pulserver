@@ -6,7 +6,7 @@ phase-encoded along y and z at the echo -- :class:`design.LineReadout3D`
 opened by the refocusing pulse. The autocalibration rectangle leads the
 ``(ky, kz)`` traversal exactly as :mod:`pulserver.app.sequence.gre3D_sequence` orders it,
 regular undersampling laying a CAIPIRINHA lattice with a selectable kz shift
-per ky block, and :mod:`pulserver.app.recon.se3D_recon` reads it back.
+per ky block, and :mod:`pulserver.app.recon.cartesian3D_recon` reads it back.
 
 TE spans excitation centre to echo, with the 180 at its midpoint: the readout
 solves the second half (``te = TE/2`` from the refocusing pulse), and a delay
@@ -289,6 +289,7 @@ def main(
 # Subroutines of main()
 # ======================================================================
 
+
 def SE3DKernel(
     system: pp.Opts,
     *,
@@ -359,9 +360,7 @@ caipi_shift, elliptical, n_acs, n_acs_z, n_averages, n_dummy, crusher_cycles, sp
     )
 
     exc_center = excitation.rf.delay + excitation.rf.center
-    half_te_floor = (
-        excitation.seq.duration()[0] - exc_center
-    ) + refocusing.center
+    half_te_floor = (excitation.seq.duration()[0] - exc_center) + refocusing.center
 
     def build(half_te: float | None):
         readout = design.LineReadout3D(
@@ -444,6 +443,7 @@ caipi_shift, elliptical, n_acs, n_acs_z, n_averages, n_dummy, crusher_cycles, sp
 # ======================================================================
 # The scanner protocol contract
 # ======================================================================
+
 
 class Se3D(SequencePlugin):
     """The 3D spin echo behind the scanner protocol contract."""
@@ -542,9 +542,15 @@ class Se3D(SequencePlugin):
                     unit="",
                     options=[1.0, 2.0, 4.0, 8.0, 16.0],
                 ),
-                UIParam.FOV_OFFSET_X: OffFloatParam(value=0.0, min=-500.0, max=500.0, unit="mm"),
-                UIParam.FOV_OFFSET_Y: OffFloatParam(value=0.0, min=-500.0, max=500.0, unit="mm"),
-                UIParam.FOV_OFFSET_Z: OffFloatParam(value=0.0, min=-500.0, max=500.0, unit="mm"),
+                UIParam.FOV_OFFSET_X: OffFloatParam(
+                    value=0.0, min=-500.0, max=500.0, unit="mm"
+                ),
+                UIParam.FOV_OFFSET_Y: OffFloatParam(
+                    value=0.0, min=-500.0, max=500.0, unit="mm"
+                ),
+                UIParam.FOV_OFFSET_Z: OffFloatParam(
+                    value=0.0, min=-500.0, max=500.0, unit="mm"
+                ),
                 UIParam.user_name(0): Description(text="ACS lines (y)"),
                 UIParam.user_value(0): TypeinFloatParam(
                     value=24.0,
@@ -602,7 +608,9 @@ class Se3D(SequencePlugin):
                     unit="",
                 ),
                 UIParam.user_name(7): Description(text="Elliptical sampling"),
-                UIParam.user_value(7): TypeinFloatParam(value=1.0, min=0.0, max=1.0, incr=1.0, unit=""),
+                UIParam.user_value(7): TypeinFloatParam(
+                    value=1.0, min=0.0, max=1.0, incr=1.0, unit=""
+                ),
             }
         )
 
@@ -613,7 +621,11 @@ class Se3D(SequencePlugin):
         try:
             kernel = SE3DKernel(
                 system,
-                **{name: value for name, value in kwargs.items() if name in KERNEL_ARGUMENTS},
+                **{
+                    name: value
+                    for name, value in kwargs.items()
+                    if name in KERNEL_ARGUMENTS
+                },
             )
         except ValueError as error:
             return {"valid": False, "duration": None, "info": str(error)}
@@ -682,7 +694,9 @@ def protocol_kwargs(system: pp.Opts, protocol: dict[str, dict]) -> dict:
         partial_echo=params.user_float(prot, 1, 1.0),
         partial_fourier=params.user_float(prot, 3, 1.0),
         partial_fourier_z=params.user_float(prot, 4, 1.0),
-        n_acs=params.acs_lines_from_protocol(prot, params.param_int(prot, UIParam.NY), 0),
+        n_acs=params.acs_lines_from_protocol(
+            prot, params.param_int(prot, UIParam.NY), 0
+        ),
         n_dummy=max(0, round(params.user_float(prot, 2, 0.0))),
         n_acs_z=max(0, round(params.user_float(prot, 5, 16.0))),
         caipi_shift=max(0, round(params.user_float(prot, 6, 0.0))),
@@ -727,10 +741,20 @@ ARG_MAP = [
     ("--rz", UIParam.RZ, float, "Partition-encode undersampling factor along z"),
     ("--nex", UIParam.NEX, float, "Number of signal averages"),
     ("--offset-x-mm", UIParam.FOV_OFFSET_X, float, "Volume offset along readout [mm]"),
-    ("--offset-y-mm", UIParam.FOV_OFFSET_Y, float, "Volume offset along phase encode [mm]"),
+    (
+        "--offset-y-mm",
+        UIParam.FOV_OFFSET_Y,
+        float,
+        "Volume offset along phase encode [mm]",
+    ),
     ("--offset-z-mm", UIParam.FOV_OFFSET_Z, float, "Volume offset along slab [mm]"),
     ("--acs-lines", UIParam.user_value(0), float, "Number of ACS lines along y"),
-    ("--partial-echo", UIParam.user_value(1), float, "Acquired echo fraction in (0.5, 1]"),
+    (
+        "--partial-echo",
+        UIParam.user_value(1),
+        float,
+        "Acquired echo fraction in (0.5, 1]",
+    ),
     (
         "--partial-fourier",
         UIParam.user_value(3),
@@ -743,7 +767,12 @@ ARG_MAP = [
         float,
         "Acquired partition-encode fraction along z in (0.5, 1]",
     ),
-    ("--acs-partitions", UIParam.user_value(5), float, "Number of ACS partitions along z"),
+    (
+        "--acs-partitions",
+        UIParam.user_value(5),
+        float,
+        "Number of ACS partitions along z",
+    ),
     ("--caipi-shift", UIParam.user_value(6), float, "CAIPIRINHA kz shift per ky block"),
     (
         "--no-elliptical",

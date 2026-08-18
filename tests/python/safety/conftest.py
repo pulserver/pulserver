@@ -8,7 +8,7 @@ verdict a scanner reaches at predownload is the verdict asserted here.
 from pathlib import Path
 
 import pytest
-from pulserver._ext._pulseg_wrapper import _PulseqCollection
+from pulserver._ext.pulseg import _PulseqCollection
 
 EXPECTED = Path(__file__).resolve().parents[2] / "utils" / "expected"
 CORPUS = Path(__file__).resolve().parents[1] / "fixtures"

@@ -56,8 +56,12 @@ def test_refocusing_efficiency_separates_a_180_from_a_90(system):
     refocusing = pp.sim_rf(_pulse(system, 180, "refocusing"), compat=False)
     excitation = pp.sim_rf(_pulse(system, 90, "excitation"), compat=False)
 
-    assert abs(refocusing.ref_eff[_on_resonance(refocusing)]) == pytest.approx(1.0, abs=1e-3)
-    assert abs(excitation.ref_eff[_on_resonance(excitation)]) == pytest.approx(0.5, abs=1e-3)
+    assert abs(refocusing.ref_eff[_on_resonance(refocusing)]) == pytest.approx(
+        1.0, abs=1e-3
+    )
+    assert abs(excitation.ref_eff[_on_resonance(excitation)]) == pytest.approx(
+        0.5, abs=1e-3
+    )
 
 
 @pytest.mark.parametrize(
@@ -73,8 +77,12 @@ def test_the_simulated_profile_is_as_wide_as_the_pulse_was_designed_to_be(
     self-consistent: the answer has to land on a number chosen before the
     simulator ran.
     """
-    response = pp.sim_rf(_pulse(system, 90, "excitation", time_bw_product=time_bw_product,
-                                duration=duration), compat=False)
+    response = pp.sim_rf(
+        _pulse(
+            system, 90, "excitation", time_bw_product=time_bw_product, duration=duration
+        ),
+        compat=False,
+    )
     magnitude = np.abs(response.mz_xy)
     above = np.flatnonzero(magnitude >= 0.5 * magnitude.max())
     measured = response.frequency[above[-1]] - response.frequency[above[0]]

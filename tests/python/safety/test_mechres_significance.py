@@ -14,7 +14,7 @@ itself (no Python wrapper in between):
 """
 
 import pytest
-from pulserver._ext._pulseg_wrapper import _check_consistency, _check_safety
+from pulserver._ext.pulseg import _check_consistency, _check_safety
 from pulserver.pypulseq import Opts
 
 from .conftest import CORPUS, EXPECTED, build_collection

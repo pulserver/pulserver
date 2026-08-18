@@ -117,7 +117,9 @@ def test_the_vocabulary_is_what_get_supported_labels_reports():
 def test_a_new_name_survives_a_file_round_trip(tmp_path):
     """It reaches a reconstruction through the file, so the file must keep it."""
     seq = pp.Sequence()
-    seq.add_block(pp.make_delay(1e-3), pp.make_label("acq_last_in_measurement", "SET", 1))
+    seq.add_block(
+        pp.make_delay(1e-3), pp.make_label("acq_last_in_measurement", "SET", 1)
+    )
     seq.add_block(pp.make_delay(1e-3), pp.make_label("user_2", "SET", 7))
 
     path = tmp_path / "vocabulary.seq"
@@ -201,9 +203,9 @@ def test_a_boundary_lands_on_the_last_acquisition_of_its_unit(prescription):
         last_of = {}
         for index, key in enumerate(zip(*keys, strict=True)):
             last_of[key] = index
-        assert np.array_equal(
-            np.flatnonzero(labels[flag]), sorted(last_of.values())
-        ), flag
+        assert np.array_equal(np.flatnonzero(labels[flag]), sorted(last_of.values())), (
+            flag
+        )
 
     assert labels["LASTSEG"].sum() == 2 * n_slices
     if n_slices > 1:
@@ -212,7 +214,9 @@ def test_a_boundary_lands_on_the_last_acquisition_of_its_unit(prescription):
 
 def test_auto_label_leaves_a_counter_the_sequence_wrote_alone():
     """Detection fills the gaps around what is there; it does not correct it."""
-    seq = gre2D_sequence.main(n_x=32, n_y=32, n_slices=2, acceleration=2, n_acs=8, n_dummy=0)
+    seq = gre2D_sequence.main(
+        n_x=32, n_y=32, n_slices=2, acceleration=2, n_acs=8, n_dummy=0
+    )
     detected = seq.evaluate_labels(evolution="adc")["LIN"]
 
     # Something the trajectory plainly disagrees with, written as a counter.
@@ -227,7 +231,9 @@ def test_auto_label_leaves_a_counter_the_sequence_wrote_alone():
 
 
 def test_running_it_twice_changes_nothing_the_first_run_decided():
-    seq = gre2D_sequence.main(n_x=32, n_y=32, n_slices=3, acceleration=2, n_acs=8, n_dummy=0)
+    seq = gre2D_sequence.main(
+        n_x=32, n_y=32, n_slices=3, acceleration=2, n_acs=8, n_dummy=0
+    )
     seq.auto_label()
     once = seq.evaluate_labels(evolution="adc")
 
@@ -240,14 +246,18 @@ def test_running_it_twice_changes_nothing_the_first_run_decided():
 
 
 def test_the_scan_ends_once():
-    seq = gre2D_sequence.main(n_x=32, n_y=32, n_slices=4, acceleration=2, n_acs=8, n_dummy=0)
+    seq = gre2D_sequence.main(
+        n_x=32, n_y=32, n_slices=4, acceleration=2, n_acs=8, n_dummy=0
+    )
     seq.auto_label()
     last_scan = seq.evaluate_labels(evolution="adc")["LASTSCAN"]
     assert np.array_equal(np.flatnonzero(last_scan), [len(last_scan) - 1])
 
 
 def test_boundary_flags_can_be_restricted_or_refused():
-    seq = gre2D_sequence.main(n_x=32, n_y=32, n_slices=2, acceleration=1, n_acs=8, n_dummy=0)
+    seq = gre2D_sequence.main(
+        n_x=32, n_y=32, n_slices=2, acceleration=1, n_acs=8, n_dummy=0
+    )
 
     none, _ = seq.auto_label(skip_apply=True, boundary_flags=False)
     assert not set(none) & set(MRD_FLAGS)

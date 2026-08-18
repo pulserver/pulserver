@@ -28,61 +28,60 @@
 
 namespace
 {
-    const std::string kData = std::string(PULSEQ_FIXTURES_DIR) + "/";
-    const std::string kCorpus = std::string(PULSEQ_CORPUS_DIR) + "/";
+const std::string kData = std::string(PULSEQ_FIXTURES_DIR) + "/";
+const std::string kCorpus = std::string(PULSEQ_CORPUS_DIR) + "/";
 
-    pulseq::Sequence load(const std::string& stem)
-    {
-        return pulseq::read_file(kData + stem + ".seq");
-    }
+pulseq::Sequence load(const std::string &stem)
+{
+    return pulseq::read_file(kData + stem + ".seq");
+}
 
-    pulseq::Sequence load_corpus(const std::string& stem)
-    {
-        return pulseq::read_file(kCorpus + stem + ".seq");
-    }
+pulseq::Sequence load_corpus(const std::string &stem)
+{
+    return pulseq::read_file(kCorpus + stem + ".seq");
+}
 
-    /**
+/**
      * Replay the sequence's own LABELSET extensions, the way a reader does.
      *
      * Values persist from the block that sets them until something sets them
      * again -- that is what makes writing only the changes lossless -- so this
      * carries a running state across every block and samples it at each ADC.
      */
-    std::map<std::string, std::vector<int>> replay_labels(const pulseq::Sequence& seq)
-    {
-        const int labelset = seq.find_extension_type_id("LABELSET");
-        std::map<std::string, std::vector<int>> out;
-        std::map<std::string, int> state;
+std::map<std::string, std::vector<int>> replay_labels(const pulseq::Sequence &seq)
+{
+    const int labelset = seq.find_extension_type_id("LABELSET");
+    std::map<std::string, std::vector<int>> out;
+    std::map<std::string, int> state;
 
-        /* Every counter the file mentions starts at zero, including one whose
+    /* Every counter the file mentions starts at zero, including one whose
          * first SET is partway through -- a scan whose LIN begins at 0 writes
          * nothing on its first readout, and the value there is still 0. */
-        for (int id = 1; id <= seq.label_set_library().size(); ++id)
-            state[seq.label_name(seq.label_set_library().row(id)[1])] = 0;
+    for (int id = 1; id <= seq.label_set_library().size(); ++id)
+        state[seq.label_name(seq.label_set_library().row(id)[1])] = 0;
 
-        for (int b = 1; b <= seq.num_blocks(); ++b)
+    for (int b = 1; b <= seq.num_blocks(); ++b)
+    {
+        const pulseq::Block block = seq.get_block(b);
+        for (int32_t link = block.ext; link != 0;)
         {
-            const pulseq::Block block = seq.get_block(b);
-            for (int32_t link = block.ext; link != 0;)
+            const int32_t *row = seq.extensions_library().row(link);
+            if (labelset != 0 && row[0] == labelset && row[1] != 0)
             {
-                const int32_t* row = seq.extensions_library().row(link);
-                if (labelset != 0 && row[0] == labelset && row[1] != 0)
-                {
-                    const int32_t* label = seq.label_set_library().row(row[1]);
-                    state[seq.label_name(label[1])] = label[0];
-                }
-                link = row[2];
+                const int32_t *label = seq.label_set_library().row(row[1]);
+                state[seq.label_name(label[1])] = label[0];
             }
-            if (block.adc == 0)
-                continue;
-            for (std::map<std::string, int>::const_iterator it = state.begin();
-                 it != state.end(); ++it)
-                out[it->first].push_back(it->second);
+            link = row[2];
         }
-        return out;
+        if (block.adc == 0)
+            continue;
+        for (std::map<std::string, int>::const_iterator it = state.begin(); it != state.end(); ++it)
+            out[it->first].push_back(it->second);
     }
+    return out;
+}
 
-}  // namespace
+} // namespace
 
 /*
  * A fully sampled Cartesian scan visits each line once, and the centre is N/2.
@@ -182,7 +181,7 @@ TEST(PulseqAutoLabel, SliceCountersRankByPositionNotByArrival)
     const int kOrder[5] = {0, 2, 4, 1, 3};
     const int kSlices = 5;
     const int kSamples = 16;
-    const double kReadout = 1e5;    /* Hz/m */
+    const double kReadout = 1e5;     /* Hz/m */
     const double kSliceSelect = 2e5; /* Hz/m */
 
     pulseq::Sequence seq;
@@ -198,8 +197,8 @@ TEST(PulseqAutoLabel, SliceCountersRankByPositionNotByArrival)
     const int gx_read = seq.register_trap(read);
     const int gx_prewind = seq.register_trap(prewind);
 
-    const double adc[pulseq::ADC_WIDTH] = {static_cast<double>(kSamples), 10e-6, 100e-6,
-                                           0.0, 0.0, 0.0, 0.0, 0.0};
+    const double adc[pulseq::ADC_WIDTH] =
+        {static_cast<double>(kSamples), 10e-6, 100e-6, 0.0, 0.0, 0.0, 0.0, 0.0};
     const int adc_id = seq.register_adc(adc);
 
     for (int visit = 0; visit < kSlices; ++visit)
@@ -207,10 +206,9 @@ TEST(PulseqAutoLabel, SliceCountersRankByPositionNotByArrival)
         const double position = kPositions[kOrder[visit]];
 
         /* What selects a slice: the frequency the gradient puts it at. */
-        double rf[pulseq::RF_WIDTH] = {1000.0, static_cast<double>(mag_shape), 0.0, 0.0,
-                                       50e-6,  50e-6,                         0.0, 0.0,
-                                       0.0,    0.0};
-        rf[8] = kSliceSelect * position;  /* freq */
+        double rf[pulseq::RF_WIDTH] =
+            {1000.0, static_cast<double>(mag_shape), 0.0, 0.0, 50e-6, 50e-6, 0.0, 0.0, 0.0, 0.0};
+        rf[8] = kSliceSelect * position; /* freq */
 
         pulseq::Block excite;
         excite.rf = seq.register_rf(rf, 'e');
@@ -242,8 +240,8 @@ TEST(PulseqAutoLabel, SliceCountersRankByPositionNotByArrival)
     for (int visit = 0; visit < kSlices; ++visit)
     {
         EXPECT_EQ(r.labels.slc[static_cast<size_t>(visit)], kOrder[visit])
-            << "acquisition " << visit << " is the slice at "
-            << kPositions[kOrder[visit]] * 1e3 << " mm";
+            << "acquisition " << visit << " is the slice at " << kPositions[kOrder[visit]] * 1e3
+            << " mm";
     }
 
     /* And SlicePositions[SLC] really is where that acquisition was: the two
@@ -251,66 +249,66 @@ TEST(PulseqAutoLabel, SliceCountersRankByPositionNotByArrival)
     for (int visit = 0; visit < kSlices; ++visit)
         EXPECT_NEAR(
             r.aux.slice_positions[static_cast<size_t>(r.labels.slc[static_cast<size_t>(visit)])],
-            kPositions[kOrder[visit]], 1e-9);
+            kPositions[kOrder[visit]],
+            1e-9);
 }
 
 namespace
 {
-    /** Positions and visiting order shared by the slice-sorting tests. */
-    const double kSortPositions[5] = {-10e-3, -3e-3, 0.0, +5e-3, +12e-3};
-    const int kSortOrder[5] = {0, 2, 4, 1, 3};
+/** Positions and visiting order shared by the slice-sorting tests. */
+const double kSortPositions[5] = {-10e-3, -3e-3, 0.0, +5e-3, +12e-3};
+const int kSortOrder[5] = {0, 2, 4, 1, 3};
 
-    /** The same five interleaved slices as the test above, one readout each. */
-    pulseq::Sequence interleaved_slices()
+/** The same five interleaved slices as the test above, one readout each. */
+pulseq::Sequence interleaved_slices()
+{
+    const int kSamples = 16;
+    const double kReadout = 1e5;
+    const double kSliceSelect = 2e5;
+
+    pulseq::Sequence seq;
+    seq.set_rasters(1e-6, 10e-6, 100e-9, 10e-6);
+
+    std::vector<double> magnitude(100, 1.0);
+    const int mag_shape = seq.register_raw_shape(magnitude.data(), 100);
+
+    const double slice_grad[pulseq::TRAP_WIDTH] = {kSliceSelect, 100e-6, 100e-6, 100e-6, 0.0};
+    const double read[pulseq::TRAP_WIDTH] = {kReadout, 100e-6, 200e-6, 100e-6, 0.0};
+    const double prewind[pulseq::TRAP_WIDTH] = {-1.1 * kReadout, 100e-6, 100e-6, 100e-6, 0.0};
+    const int gz_slice = seq.register_trap(slice_grad);
+    const int gx_read = seq.register_trap(read);
+    const int gx_prewind = seq.register_trap(prewind);
+
+    const double adc[pulseq::ADC_WIDTH] =
+        {static_cast<double>(kSamples), 10e-6, 100e-6, 0.0, 0.0, 0.0, 0.0, 0.0};
+    const int adc_id = seq.register_adc(adc);
+
+    for (int visit = 0; visit < 5; ++visit)
     {
-        const int kSamples = 16;
-        const double kReadout = 1e5;
-        const double kSliceSelect = 2e5;
+        double rf[pulseq::RF_WIDTH] =
+            {1000.0, static_cast<double>(mag_shape), 0.0, 0.0, 50e-6, 50e-6, 0.0, 0.0, 0.0, 0.0};
+        rf[8] = kSliceSelect * kSortPositions[kSortOrder[visit]];
 
-        pulseq::Sequence seq;
-        seq.set_rasters(1e-6, 10e-6, 100e-9, 10e-6);
+        pulseq::Block excite;
+        excite.rf = seq.register_rf(rf, 'e');
+        excite.gz = gz_slice;
+        excite.duration = 300e-6;
+        seq.add_block(excite);
 
-        std::vector<double> magnitude(100, 1.0);
-        const int mag_shape = seq.register_raw_shape(magnitude.data(), 100);
+        pulseq::Block encode;
+        encode.gx = gx_prewind;
+        encode.duration = 300e-6;
+        seq.add_block(encode);
 
-        const double slice_grad[pulseq::TRAP_WIDTH] = {kSliceSelect, 100e-6, 100e-6, 100e-6, 0.0};
-        const double read[pulseq::TRAP_WIDTH] = {kReadout, 100e-6, 200e-6, 100e-6, 0.0};
-        const double prewind[pulseq::TRAP_WIDTH] = {-1.1 * kReadout, 100e-6, 100e-6, 100e-6, 0.0};
-        const int gz_slice = seq.register_trap(slice_grad);
-        const int gx_read = seq.register_trap(read);
-        const int gx_prewind = seq.register_trap(prewind);
-
-        const double adc[pulseq::ADC_WIDTH] = {static_cast<double>(kSamples), 10e-6, 100e-6,
-                                               0.0, 0.0, 0.0, 0.0, 0.0};
-        const int adc_id = seq.register_adc(adc);
-
-        for (int visit = 0; visit < 5; ++visit)
-        {
-            double rf[pulseq::RF_WIDTH] = {1000.0, static_cast<double>(mag_shape), 0.0, 0.0,
-                                           50e-6,  50e-6,                         0.0, 0.0,
-                                           0.0,    0.0};
-            rf[8] = kSliceSelect * kSortPositions[kSortOrder[visit]];
-
-            pulseq::Block excite;
-            excite.rf = seq.register_rf(rf, 'e');
-            excite.gz = gz_slice;
-            excite.duration = 300e-6;
-            seq.add_block(excite);
-
-            pulseq::Block encode;
-            encode.gx = gx_prewind;
-            encode.duration = 300e-6;
-            seq.add_block(encode);
-
-            pulseq::Block readout;
-            readout.gx = gx_read;
-            readout.adc = adc_id;
-            readout.duration = 400e-6;
-            seq.add_block(readout);
-        }
-        return seq;
+        pulseq::Block readout;
+        readout.gx = gx_read;
+        readout.adc = adc_id;
+        readout.duration = 400e-6;
+        seq.add_block(readout);
     }
-}  // namespace
+    return seq;
+}
+} // namespace
 
 /*
  * `sortSlices` decides which slice gets which index -- and under every one of
@@ -335,8 +333,10 @@ TEST(PulseqAutoLabel, AcquisitionSortingNumbersSlicesByArrival)
 
     ASSERT_EQ(r.aux.slice_positions.size(), 5u);
     for (int visit = 0; visit < 5; ++visit)
-        EXPECT_NEAR(r.aux.slice_positions[static_cast<size_t>(visit)],
-                    kSortPositions[kSortOrder[visit]], 1e-9);
+        EXPECT_NEAR(
+            r.aux.slice_positions[static_cast<size_t>(visit)],
+            kSortPositions[kSortOrder[visit]],
+            1e-9);
 }
 
 TEST(PulseqAutoLabel, DescendingSortingReversesBothHalvesTogether)
@@ -355,9 +355,10 @@ TEST(PulseqAutoLabel, DescendingSortingReversesBothHalvesTogether)
     for (int visit = 0; visit < 5; ++visit)
     {
         EXPECT_EQ(r.labels.slc[static_cast<size_t>(visit)], 4 - kSortOrder[visit]);
-        EXPECT_NEAR(r.aux.slice_positions[static_cast<size_t>(
-                        r.labels.slc[static_cast<size_t>(visit)])],
-                    kSortPositions[kSortOrder[visit]], 1e-9)
+        EXPECT_NEAR(
+            r.aux.slice_positions[static_cast<size_t>(r.labels.slc[static_cast<size_t>(visit)])],
+            kSortPositions[kSortOrder[visit]],
+            1e-9)
             << "the two halves disagree at visit " << visit;
     }
 }
@@ -366,9 +367,10 @@ TEST(PulseqAutoLabel, TheSliceGapIsGeometryAndDoesNotFollowTheNumbering)
 {
     /* Closest spacing is -3 to 0 mm, whichever end the counting starts from. */
     double gap[3] = {0.0, 0.0, 0.0};
-    const pulseq::SliceSorting modes[3] = {pulseq::SliceSorting::Ascending,
-                                           pulseq::SliceSorting::Descending,
-                                           pulseq::SliceSorting::Acquisition};
+    const pulseq::SliceSorting modes[3] = {
+        pulseq::SliceSorting::Ascending,
+        pulseq::SliceSorting::Descending,
+        pulseq::SliceSorting::Acquisition};
     for (int m = 0; m < 3; ++m)
     {
         pulseq::Sequence seq = interleaved_slices();
@@ -475,7 +477,7 @@ TEST(PulseqAutoLabel, TheEpiEchoIndexIsQuotedAfterMirroring)
     bool seen_reverse = false;
     for (size_t i = 0; i < ks.readouts.size(); ++i)
     {
-        const pulseq::Readout& ro = ks.readouts[i];
+        const pulseq::Readout &ro = ks.readouts[i];
         ASSERT_GT(ro.num_samples, 0);
         const bool reversed = r.labels.rev[i] != 0;
         (reversed ? seen_reverse : seen_forward) = true;
@@ -566,15 +568,13 @@ TEST(PulseqAutoLabel, RepeatDimensionSizesAreReadFromTheAcquisitionOrder)
 
     std::vector<double> magnitude(100, 1.0);
     const int mag_shape = seq.register_raw_shape(magnitude.data(), 100);
-    const double rf[pulseq::RF_WIDTH] = {1000.0, static_cast<double>(mag_shape), 0.0, 0.0,
-                                         50e-6,  50e-6,                          0.0, 0.0,
-                                         0.0,    0.0};
+    const double rf[pulseq::RF_WIDTH] =
+        {1000.0, static_cast<double>(mag_shape), 0.0, 0.0, 50e-6, 50e-6, 0.0, 0.0, 0.0, 0.0};
     const int excitation = seq.register_rf(rf, 'e');
 
     const double slice_grad[pulseq::TRAP_WIDTH] = {kSliceSelect, 100e-6, 100e-6, 100e-6, 0.0};
     const double read[pulseq::TRAP_WIDTH] = {kReadout, 100e-6, 200e-6, 100e-6, 0.0};
-    const double prewind[pulseq::TRAP_WIDTH] = {kPrewindArea / kArea, 100e-6, 100e-6, 100e-6,
-                                                0.0};
+    const double prewind[pulseq::TRAP_WIDTH] = {kPrewindArea / kArea, 100e-6, 100e-6, 100e-6, 0.0};
     /* Between echoes: take the readout back, so both echoes of a TR sit on
      * the same k-space position and are indistinguishable by trajectory. */
     const double rewind[pulseq::TRAP_WIDTH] = {kRewindArea / kArea, 100e-6, 100e-6, 100e-6, 0.0};
@@ -583,8 +583,8 @@ TEST(PulseqAutoLabel, RepeatDimensionSizesAreReadFromTheAcquisitionOrder)
     const int gx_prewind = seq.register_trap(prewind);
     const int gx_rewind = seq.register_trap(rewind);
 
-    const double adc[pulseq::ADC_WIDTH] = {static_cast<double>(kSamples), 10e-6, 100e-6,
-                                           0.0, 0.0, 0.0, 0.0, 0.0};
+    const double adc[pulseq::ADC_WIDTH] =
+        {static_cast<double>(kSamples), 10e-6, 100e-6, 0.0, 0.0, 0.0, 0.0, 0.0};
     const int adc_id = seq.register_adc(adc);
 
     for (int frame = 0; frame < kFrames; ++frame)
@@ -597,8 +597,8 @@ TEST(PulseqAutoLabel, RepeatDimensionSizesAreReadFromTheAcquisitionOrder)
             excite.duration = 300e-6;
             seq.add_block(excite);
 
-            const double gy[pulseq::TRAP_WIDTH] = {(line - kLines / 2) / kArea, 100e-6, 100e-6,
-                                                   100e-6, 0.0};
+            const double gy[pulseq::TRAP_WIDTH] =
+                {(line - kLines / 2) / kArea, 100e-6, 100e-6, 100e-6, 0.0};
             pulseq::Block encode;
             encode.gx = gx_prewind;
             encode.gy = seq.register_trap(gy);
@@ -627,8 +627,9 @@ TEST(PulseqAutoLabel, RepeatDimensionSizesAreReadFromTheAcquisitionOrder)
     const pulseq::AutoLabelResult plain = pulseq::auto_label(seq, {}, false);
     ASSERT_EQ(plain.labels.rep.size(), static_cast<size_t>(kFrames * kLines * kEchoes));
     for (int i = 0; i < kFrames * kLines * kEchoes; ++i)
-        EXPECT_EQ(plain.labels.rep[static_cast<size_t>(i)],
-                  (i / (kLines * kEchoes)) * kEchoes + (i % kEchoes))
+        EXPECT_EQ(
+            plain.labels.rep[static_cast<size_t>(i)],
+            (i / (kLines * kEchoes)) * kEchoes + (i % kEchoes))
             << "acquisition " << i;
 
     /* Named, outermost first, with no sizes given at all. */
@@ -861,15 +862,18 @@ TEST(PulseqAutoLabel, NonCartesianSequencesAreRefused)
  */
 TEST(PulseqAutoLabel, WritingThenReadingReproducesTheEvolution)
 {
-    for (const std::string& stem : {kCorpus + "gre_2d", kCorpus + "gre_2d_3sl",
-                                    kCorpus + "epi_2d_main", kCorpus + "fse_2d",
-                                    kData + "gre_32x32_pe_blip"})
+    for (const std::string &stem :
+         {kCorpus + "gre_2d",
+          kCorpus + "gre_2d_3sl",
+          kCorpus + "epi_2d_main",
+          kCorpus + "fse_2d",
+          kData + "gre_32x32_pe_blip"})
     {
         pulseq::Sequence seq = pulseq::read_file(stem + ".seq");
         const pulseq::AutoLabelResult r = pulseq::auto_label(seq, {}, true);
 
         const std::map<std::string, std::vector<int>> replayed = replay_labels(seq);
-        const std::vector<std::pair<std::string, const std::vector<int>*>> expected =
+        const std::vector<std::pair<std::string, const std::vector<int> *>> expected =
             r.labels.present();
         ASSERT_FALSE(expected.empty()) << stem;
 
@@ -942,7 +946,7 @@ TEST(PulseqAutoLabel, ExistingExtensionsOnAReadoutBlockSurvive)
     const pulseq::Block block = seq.get_block(target);
     for (int32_t link = block.ext; link != 0;)
     {
-        const int32_t* row = seq.extensions_library().row(link);
+        const int32_t *row = seq.extensions_library().row(link);
         if (row[0] == rotations && row[1] == rotation)
             found = true;
         link = row[2];
@@ -959,8 +963,8 @@ TEST(PulseqAutoLabel, ExistingExtensionsOnAReadoutBlockSurvive)
  */
 TEST(PulseqAutoLabel, TheAnswerDoesNotDependOnMaterialisedSamples)
 {
-    for (const std::string& stem : {kCorpus + "gre_2d_3sl", kCorpus + "epi_2d_main",
-                                    kCorpus + "fse_2d"})
+    for (const std::string &stem :
+         {kCorpus + "gre_2d_3sl", kCorpus + "epi_2d_main", kCorpus + "fse_2d"})
     {
         pulseq::Sequence dense = pulseq::read_file(stem + ".seq");
         pulseq::KSpaceOptions with;
@@ -1006,7 +1010,7 @@ TEST(PulseqAutoLabel, SliceThicknessComesFromTheRfSpectrum)
 
     /* Three contiguous 5 mm slices: the z FOV divided by the slice count
      * is the prescription the spectral measurement must land near. */
-    const pulseq::Definition* fov = seq.definition("FOV");
+    const pulseq::Definition *fov = seq.definition("FOV");
     ASSERT_NE(fov, nullptr);
     ASSERT_EQ(fov->numbers().size(), 3u);
     const double prescribed = fov->numbers()[2] / 3.0;
@@ -1021,7 +1025,7 @@ TEST(PulseqAutoLabel, SliceThicknessComesFromTheRfSpectrum)
     ASSERT_TRUE(r.aux.has_slice_gap);
     EXPECT_NEAR(r.aux.slice_gap, 0.0, 0.05 * prescribed);
 
-    const pulseq::Definition* thickness = seq.definition("SliceThickness");
+    const pulseq::Definition *thickness = seq.definition("SliceThickness");
     ASSERT_NE(thickness, nullptr);
     EXPECT_EQ(thickness->kind(), pulseq::Definition::Kind::Real);
     ASSERT_EQ(thickness->numbers().size(), 1u);
@@ -1068,8 +1072,8 @@ TEST(PulseqAutoLabel, AThreeDimensionalSlabGivesLinAndParAndASlabThickness)
     const int mag_shape = seq.register_raw_shape(magnitude.data(), 200);
 
     /* amplitude, mag_shape, phase_shape, time_shape, center, delay, ... */
-    const double rf[pulseq::RF_WIDTH] = {1000.0, static_cast<double>(mag_shape), 0.0, 0.0,
-                                         100e-6, 100e-6, 0.0, 0.0, 0.0, 0.0};
+    const double rf[pulseq::RF_WIDTH] =
+        {1000.0, static_cast<double>(mag_shape), 0.0, 0.0, 100e-6, 100e-6, 0.0, 0.0, 0.0, 0.0};
     const int excitation = seq.register_rf(rf, 'e');
 
     const double slab[pulseq::TRAP_WIDTH] = {kSlabSelect, 100e-6, 200e-6, 100e-6, 0.0};
@@ -1081,8 +1085,8 @@ TEST(PulseqAutoLabel, AThreeDimensionalSlabGivesLinAndParAndASlabThickness)
     const int gx_read = seq.register_trap(read);
     const int gx_prewind = seq.register_trap(prewind);
 
-    const double adc[pulseq::ADC_WIDTH] = {static_cast<double>(kSamples), kDwell, 100e-6,
-                                           0.0, 0.0, 0.0, 0.0, 0.0};
+    const double adc[pulseq::ADC_WIDTH] =
+        {static_cast<double>(kSamples), kDwell, 100e-6, 0.0, 0.0, 0.0, 0.0, 0.0};
     const int adc_id = seq.register_adc(adc);
 
     /* The slab gradient still runs after the pulse centre; that moment has to
@@ -1100,10 +1104,10 @@ TEST(PulseqAutoLabel, AThreeDimensionalSlabGivesLinAndParAndASlabThickness)
             seq.add_block(excite);
 
             /* One 1/m per step on both encoded axes. */
-            const double gy[pulseq::TRAP_WIDTH] = {(iy - kLines / 2) / kArea, 100e-6, 100e-6,
-                                                   100e-6, 0.0};
-            const double gz[pulseq::TRAP_WIDTH] = {
-                (iz - kPartitions / 2) / kArea + rephase, 100e-6, 100e-6, 100e-6, 0.0};
+            const double gy[pulseq::TRAP_WIDTH] =
+                {(iy - kLines / 2) / kArea, 100e-6, 100e-6, 100e-6, 0.0};
+            const double gz[pulseq::TRAP_WIDTH] =
+                {(iz - kPartitions / 2) / kArea + rephase, 100e-6, 100e-6, 100e-6, 0.0};
             pulseq::Block encode;
             encode.gx = gx_prewind;
             encode.gy = seq.register_trap(gy);
@@ -1173,17 +1177,17 @@ TEST(PulseqAutoLabel, AuxBecomesIntegerDefinitions)
     pulseq::Sequence seq = load_corpus("gre_2d_3sl");
     pulseq::auto_label(seq, {}, true);
 
-    const pulseq::Definition* line = seq.definition("kSpaceCenterLine");
+    const pulseq::Definition *line = seq.definition("kSpaceCenterLine");
     ASSERT_NE(line, nullptr);
     EXPECT_EQ(line->kind(), pulseq::Definition::Kind::Int);
     ASSERT_EQ(line->numbers().size(), 1u);
     EXPECT_DOUBLE_EQ(line->numbers()[0], 4.0);
 
-    const pulseq::Definition* sample = seq.definition("kSpaceCenterSample");
+    const pulseq::Definition *sample = seq.definition("kSpaceCenterSample");
     ASSERT_NE(sample, nullptr);
     EXPECT_EQ(sample->kind(), pulseq::Definition::Kind::Int);
 
-    const pulseq::Definition* slices = seq.definition("SlicePositions");
+    const pulseq::Definition *slices = seq.definition("SlicePositions");
     ASSERT_NE(slices, nullptr);
     EXPECT_EQ(slices->kind(), pulseq::Definition::Kind::Real);
     EXPECT_EQ(slices->numbers().size(), 3u);

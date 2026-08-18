@@ -100,9 +100,9 @@ Pulserver's C++ headers are header-only over the C library, so linking is one
 static library and one include path:
 
 ```cmake
-add_subdirectory(pulserver/csrc)
+add_subdirectory(pulserver/src/c)
 target_link_libraries(my_interpreter PRIVATE pulseg)
-target_include_directories(my_interpreter PRIVATE pulserver/cxx/include)
+target_include_directories(my_interpreter PRIVATE pulserver/src/cpp/include)
 ```
 
 There are no third-party dependencies — the parser, the structure detection

@@ -10,7 +10,6 @@ rotations, explicit arms, collections).
 
 from __future__ import annotations
 
-import math
 
 import numpy as np
 import pytest
@@ -50,7 +49,9 @@ def build_trapezoids(system):
         pp.make_trapezoid(channel="y", area=-150.0, system=system),
         pp.make_trapezoid(channel="z", area=90.0, delay=40e-6, system=system),
     )
-    seq.add_block(pp.make_trapezoid(channel="x", amplitude=1e6, duration=1e-3, system=system))
+    seq.add_block(
+        pp.make_trapezoid(channel="x", amplitude=1e6, duration=1e-3, system=system)
+    )
     return seq
 
 
@@ -217,9 +218,7 @@ def build_rf_shim(system):
     shim = np.array(
         [0.9, 0.0, 0.7, np.pi / 3, 0.5, -np.pi / 4, 0.3, np.pi], dtype=float
     )
-    rf = pp.make_block_pulse(
-        np.pi / 6, duration=1e-3, system=system, use="excitation"
-    )
+    rf = pp.make_block_pulse(np.pi / 6, duration=1e-3, system=system, use="excitation")
     seq.add_block(rf, pp.make_rf_shim(shim))
     return seq
 
@@ -228,7 +227,9 @@ def build_triggers(system):
     seq = pp.Sequence(system=system)
     seq.add_block(
         pp.make_delay(1e-3),
-        pp.make_trigger(channel="physio1", delay=100e-6, duration=200e-6, system=system),
+        pp.make_trigger(
+            channel="physio1", delay=100e-6, duration=200e-6, system=system
+        ),
     )
     seq.add_block(
         pp.make_delay(1e-3),
@@ -326,8 +327,14 @@ def _assert_rotation_match(built, read):
     if built is None:
         assert read is None
         return
-    q1 = np.asarray(built if not hasattr(built, "rot_quaternion") else built.rot_quaternion, dtype=float)
-    q2 = np.asarray(read if not hasattr(read, "rot_quaternion") else read.rot_quaternion, dtype=float)
+    q1 = np.asarray(
+        built if not hasattr(built, "rot_quaternion") else built.rot_quaternion,
+        dtype=float,
+    )
+    q2 = np.asarray(
+        read if not hasattr(read, "rot_quaternion") else read.rot_quaternion,
+        dtype=float,
+    )
     # q and -q are the same rotation; the file may store either sign.
     assert abs(float(np.dot(q1, q2))) == pytest.approx(1.0, abs=1e-6)
 
@@ -368,7 +375,7 @@ def assert_same_events(built, read):
         mine_trigs = ours.triggers or []
         other_trigs = theirs.triggers or []
         assert len(other_trigs) == len(mine_trigs), index
-        for a, b in zip(mine_trigs, other_trigs):
+        for a, b in zip(mine_trigs, other_trigs, strict=False):
             assert b.channel == a.channel
             _close(b.delay, a.delay)
             _close(b.duration, a.duration)
@@ -464,7 +471,9 @@ def _zoo_fse_3d():
 def _zoo_zte_3d():
     from pulserver.app import zte3D_sequence
 
-    return zte3D_sequence.main(n_x=32, n_views=16, n_shots=4, readout_bandwidth_hz=125e3)
+    return zte3D_sequence.main(
+        n_x=32, n_views=16, n_shots=4, readout_bandwidth_hz=125e3
+    )
 
 
 def _zoo_explicit_arms():

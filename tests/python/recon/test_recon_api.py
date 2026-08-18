@@ -29,42 +29,64 @@ from pulserver.recon.preprocessing import (
 )
 
 
-def test_public_namespace_is_small_and_module_oriented():
-    assert recon.__all__ == [
-        "AcquisitionBucket",
-        "AcquisitionBucketStats",
-        "ExamCache",
-        "ReconContext",
-        "ReconPlugin",
-        "ReconResult",
-        "calibration",
-        "datasets",
-        "denoisers",
-        # A function, like `pics`: reading the diffusion gradient table out of
-        # an MRD header is the first thing a diffusion pipeline does, and the
-        # reader itself stays private under _mrd with the rest of the
-        # transport.
-        "diffusion_table",
-        "execution",
-        "has_acquisition_flag",
-        "learned",
-        "models",
-        "motion",
-        "optim",
-        "physics",
-        "pics",
-        "plugin",
-        "postprocessing",
-        "preprocessing",
-        "simulation",
-        "weights",
-    ]
+#: Where the public names actually live. Reaching them is not supposed to
+#: require knowing this -- that is what the test below is about.
+RECON_MODULES = (
+    "calibration",
+    "datasets",
+    "denoisers",
+    "execution",
+    "learned",
+    "models",
+    "motion",
+    "optim",
+    "physics",
+    "plugin",
+    "postprocessing",
+    "preprocessing",
+    "reconstruction",
+    "simulation",
+    "weights",
+)
+
+
+def test_the_public_namespace_is_flat():
+    """One access point. A reconstruction reaches everything as
+    ``pulserver.recon.<name>`` and never has to know which file it is in, so no
+    submodule is part of the public namespace."""
+    assert not set(recon.__all__) & set(RECON_MODULES)
+    assert not any("." in name or name.startswith("_") for name in recon.__all__)
+
+
+def test_every_name_a_submodule_publishes_is_reachable_flat():
+    """The map cannot rot: a name added to any submodule and not surfaced here
+    would be a name only reachable the long way round."""
+    import importlib
+
+    flat = set(recon.__all__)
+    for module in RECON_MODULES:
+        published = set(
+            getattr(importlib.import_module(f"pulserver.recon.{module}"), "__all__", ())
+        )
+        assert published <= flat, f"{module}: {sorted(published - flat)}"
+
+
+def test_every_public_name_resolves():
+    for name in recon.__all__:
+        assert getattr(recon, name) is not None
+
+
+def test_the_flat_name_is_the_same_object_as_the_module_one():
     assert recon.pics is algorithms.pics
     assert recon.diffusion_table is metadata.diffusion_table
+    assert recon.ReconPlugin is recon.plugin.ReconPlugin
+    assert recon.sensitivities is recon.calibration.sensitivities
+
+
+def test_the_transport_stays_private():
     assert "Connection" not in dir(recon)
     assert "Server" not in dir(recon)
     assert "MrdMetadata" not in dir(recon)
-    assert recon.ReconPlugin is recon.plugin.ReconPlugin
 
 
 def test_importing_public_root_does_not_load_private_mrd_stack():
@@ -736,3 +758,52 @@ def test_symmetric_epi_eddy_correction_removes_known_phase():
     np.testing.assert_allclose(corrected_positive, signal, atol=1e-6)
     np.testing.assert_allclose(corrected_negative, signal, atol=1e-6)
     np.testing.assert_allclose(returned_phase, phase)
+
+
+def test_the_api_page_documents_every_public_name():
+    """The namespace is flat, so the only place the library is grouped by what
+    it is for is the API page -- which makes an undocumented name invisible."""
+    import re
+    from pathlib import Path
+
+    page = Path(__file__).resolve().parents[3] / "docs/api/python/recon.md"
+    listed: set[str] = set()
+    for block in re.findall(
+        r"autosummary::\n(?:\s+:\w+:.*\n)*\n((?:   \S+\n)+)", page.read_text()
+    ):
+        listed |= {line.strip() for line in block.splitlines() if line.strip()}
+
+    assert set(recon.__all__) - listed == set(), "undocumented"
+    assert listed - set(recon.__all__) == set(), "documented but not public"
+
+
+def test_the_acquisition_flags_are_the_ismrmrd_ones():
+    """They are defined here so this module imports without ``ismrmrd``, which
+    makes agreeing with it something to check rather than something given."""
+    import ismrmrd
+
+    from pulserver.recon import AcquisitionFlag
+
+    for member in AcquisitionFlag:
+        assert getattr(ismrmrd, member.flag) == member.position, member.name
+
+    declared = {name for name in dir(ismrmrd) if name.startswith("ACQ_")}
+    assert declared == {member.flag for member in AcquisitionFlag}
+
+
+def test_the_app_page_documents_every_reconstruction():
+    """The zoo is named for the samplings it undoes, and the page is where a
+    reader finds which one fits their scan."""
+    import re
+    from pathlib import Path
+
+    import pulserver.app.recon as family
+
+    page = Path(__file__).resolve().parents[3] / "docs/api/python/app_recon.md"
+    listed: set[str] = set()
+    for block in re.findall(
+        r"autosummary::\n(?:\s+:\w+:.*\n)*\n((?:   \S+\n)+)", page.read_text()
+    ):
+        listed |= {line.strip() for line in block.splitlines() if line.strip()}
+
+    assert listed == set(family.__all__)

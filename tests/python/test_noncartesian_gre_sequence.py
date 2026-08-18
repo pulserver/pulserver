@@ -41,14 +41,18 @@ def stars(**kwargs):
     kwargs.setdefault("n_spokes", 4)
     kwargs.setdefault("n_dummy", 2)
     kwargs.setdefault("readout_bandwidth_hz", BANDWIDTH)
-    return gre_stack_of_stars3D_sequence.main(n_x=32, n_z=4, slab_thickness=64e-3, **kwargs)
+    return gre_stack_of_stars3D_sequence.main(
+        n_x=32, n_z=4, slab_thickness=64e-3, **kwargs
+    )
 
 
 def spirals(**kwargs):
     kwargs.setdefault("n_arms", 4)
     kwargs.setdefault("n_dummy", 2)
     kwargs.setdefault("readout_bandwidth_hz", BANDWIDTH)
-    return gre_stack_of_spirals3D_sequence.main(n_x=32, n_z=4, slab_thickness=64e-3, **kwargs)
+    return gre_stack_of_spirals3D_sequence.main(
+        n_x=32, n_z=4, slab_thickness=64e-3, **kwargs
+    )
 
 
 DESIGNS = {"radial": radial, "spiral": spiral, "stars": stars, "spirals": spirals}
@@ -85,9 +89,7 @@ def test_the_spokes_turn_by_the_golden_angle():
     n_samples = k_adc.shape[1] // n_adc
     first = k_adc[:2, :n_samples]
     angle = float(gre_radial2D_sequence.spoke_angles(8, "golden")[1])
-    turn = np.array(
-        [[np.cos(angle), -np.sin(angle)], [np.sin(angle), np.cos(angle)]]
-    )
+    turn = np.array([[np.cos(angle), -np.sin(angle)], [np.sin(angle), np.cos(angle)]])
     assert np.allclose(k_adc[:2, n_samples : 2 * n_samples], turn @ first, atol=1e-6)
 
 
@@ -125,7 +127,12 @@ def test_an_offset_defers_the_rotated_adc_and_attaches_the_trajectory(name):
 
 @pytest.mark.parametrize(
     "module",
-    [gre_radial2D_sequence, gre_spiral2D_sequence, gre_stack_of_stars3D_sequence, gre_stack_of_spirals3D_sequence],
+    [
+        gre_radial2D_sequence,
+        gre_spiral2D_sequence,
+        gre_stack_of_stars3D_sequence,
+        gre_stack_of_spirals3D_sequence,
+    ],
 )
 def test_the_default_protocol_is_feasible(module):
     system = pp.Opts()
