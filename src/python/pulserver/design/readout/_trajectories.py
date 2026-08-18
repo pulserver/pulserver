@@ -594,7 +594,7 @@ class Arbitrary(NonCartesianGradient):
                 "axes must contain one distinct gradient channel per trajectory dimension"
             )
         if derate:
-            pp.apply_system_derates(system)
+            system = pp.apply_system_derates(system)
 
         k_start = path[0]
         has_pre = not np.allclose(k_start, 0.0, atol=1e-12)
@@ -651,7 +651,7 @@ class Radial(NonCartesianGradient):
     ):
         fov_m, n = _validate_common(fov, matrix, oversamp, bandwidth_hz_px)
         if derate:
-            pp.apply_system_derates(system)
+            system = pp.apply_system_derates(system)
         raster = system.grad_raster_time
         kmax = n / (2.0 * fov_m)
         n_adc = max(2, round(n * oversamp))
@@ -749,7 +749,7 @@ class Spiral(NonCartesianGradient):
         ):
             raise ValueError("axes must contain two distinct gradient channels")
         if derate:
-            pp.apply_system_derates(system)
+            system = pp.apply_system_derates(system)
 
         factor = 2 if direction == "in_out" else 1
         path_out = spiral_trajectory(
@@ -944,7 +944,7 @@ class Rosette(NonCartesianGradient):
         ):
             raise ValueError("axes must contain two distinct gradient channels")
         if derate:
-            pp.apply_system_derates(system)
+            system = pp.apply_system_derates(system)
         path = rosette_trajectory(
             fov_m,
             n,

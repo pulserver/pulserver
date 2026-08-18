@@ -4,8 +4,9 @@
 builders in ``fixture_corpus.py`` (see its docstring for the trust
 argument). What is asserted here: every promised file exists, every file
 parses, each checked-in file is exactly what today's writer emits for its
-builder, the binary twins describe the same sequence as their text
-counterparts, and the EPI chains resolve.
+builder, every builder's gradients stay inside the limits it declares, the
+binary twins describe the same sequence as their text counterparts, and the
+EPI chains resolve.
 """
 
 from __future__ import annotations
@@ -31,6 +32,20 @@ def test_the_fixture_exists_and_parses(name):
         f"{name}.seq missing -- run scripts/regenerate_fixtures.sh"
     )
     assert load(f"{name}.seq").num_blocks > 0
+
+
+@pytest.mark.parametrize("name", CORPUS)
+def test_a_builder_stays_inside_the_limits_it_declares(name):
+    """No family designs a gradient its own ``system`` would refuse.
+
+    A plugin hands one system object to every module it builds and then to
+    the ``Sequence``, so anything that lowers those limits partway through
+    leaves the events built before it over the ceiling the file goes on to
+    declare. The peak is judged in the stored frame, which is the frame the
+    declared limits are stated in.
+    """
+    is_ok, message = CORPUS[name]().check_hardware_limits()
+    assert is_ok, f"{name}: {message}"
 
 
 @pytest.mark.parametrize("name", CORPUS)

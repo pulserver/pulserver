@@ -27,9 +27,12 @@ how the in-plane shot is held:
     The same arms written out as their own waveforms, which is the path a
     reader that will not compose a rotation has to take.
 
-The safety cases are smaller on purpose: a blipped EPI train is where the two
-expensive analyses are hardest, and the point being measured there is a ratio
-between routes rather than a protocol-scale wall clock.
+The safety sweep is smaller on purpose: a blipped EPI train is where the two
+expensive analyses are hardest, and what is being measured there is how each
+check responds to scan length rather than a protocol-scale wall clock.
+
+The MPRAGE cases are scale cases sized to measure what the path costs per block
+at protocol size, not clinically prescribed protocols.
 
 Run it as::
 
@@ -218,8 +221,14 @@ def creation(name: str, n_z: int, views: int) -> tuple[dict, object, bytes, byte
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
+        # ``write()`` runs both of these before deduplicating, so the
+        # amplitude/slew pass sees the library as the design left it. The
+        # continuity check is then the first caller to need the C collection
+        # and pays for building it, which is the "cold" figure; "warm" is the
+        # pass on its own.
         t_limits, (limits_ok, _) = timed(seq.check_hardware_limits)
-        t_continuity, (continuity_ok, _) = timed(seq.check_gradient_continuity)
+        t_continuity_cold, (continuity_ok, _) = timed(seq.check_gradient_continuity)
+        t_continuity, _ = timed(seq.check_gradient_continuity)
         checked, t_timing, timing_ok = _timing_over_a_window(seq)
 
     t_dedup, deduped = timed(seq.remove_duplicates)
@@ -232,6 +241,7 @@ def creation(name: str, n_z: int, views: int) -> tuple[dict, object, bytes, byte
         "transform_fov_s": transform[0],
         "check_hardware_limits_s": t_limits,
         "check_gradient_continuity_s": t_continuity,
+        "check_gradient_continuity_cold_s": t_continuity_cold,
         "check_timing_s": t_timing,
         "check_timing_blocks": checked,
         "checks_ok": bool(limits_ok and continuity_ok and timing_ok),
@@ -392,6 +402,7 @@ def report_creation(name: str, entry: dict) -> None:
     print(
         f"  {name:<16s} checks: limits {entry['check_hardware_limits_s'] * 1e3:8.1f} ms"
         f"  continuity {entry['check_gradient_continuity_s'] * 1e3:8.1f} ms"
+        f" (cold {entry['check_gradient_continuity_cold_s'] * 1e3:8.1f} ms)"
         f"  timing {entry['check_timing_s'] * 1e3:8.1f} ms"
         f" over {entry['check_timing_blocks']} blocks"
         f" ({entry['check_timing_s'] / entry['check_timing_blocks'] * 1e6:5.1f} us/block)",
