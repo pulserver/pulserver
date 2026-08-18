@@ -825,17 +825,40 @@ class Sequence(AnalysisMixin, SafetyViewsMixin, SoftDelayMixin):
                 "superseded revision and nothing here reads it back. Write 1.5 and convert "
                 "with MATLAB's write_v141 if a 1.4.1 file is really needed."
             )
+        target = self._prepared_for_write(
+            check_timing=check_timing,
+            check_gradient_continuity=check_gradient_continuity,
+            remove_duplicates=remove_duplicates,
+        )
+        payload = target._to_text(create_signature=create_signature)
+        Path(name).write_bytes(payload)
+        return _signature_of(payload) if create_signature else None
+
+    def _prepared_for_write(
+        self,
+        *,
+        check_timing: bool = True,
+        check_gradient_continuity: bool = True,
+        remove_duplicates: bool = True,
+    ) -> Sequence:
+        """The sequence a writer should serialise, warnings already raised.
+
+        Returns
+        -------
+        Sequence
+            ``self``, or a deduplicated copy of it.
+        """
         if check_timing:
             is_ok, error_report = self.check_timing()
             if not is_ok:
                 warnings.warn(
                     f"write(): {len(error_report)} timing errors found in the sequence",
-                    stacklevel=2,
+                    stacklevel=3,
                 )
         if check_gradient_continuity:
             is_ok, message = self.check_gradient_continuity()
             if not is_ok:
-                warnings.warn(f"write(): {message}", stacklevel=2)
+                warnings.warn(f"write(): {message}", stacklevel=3)
         self.declare_tr()
 
         # A sequence that has not been touched since its last deduplication
@@ -843,12 +866,8 @@ class Sequence(AnalysisMixin, SafetyViewsMixin, SoftDelayMixin):
         # thing as well as the pass -- which on a protocol-scale scan is the
         # larger half.
         if remove_duplicates and not self._native.deduplicated():
-            target = self.remove_duplicates()
-        else:
-            target = self
-        payload = target._to_text(create_signature=create_signature)
-        Path(name).write_bytes(payload)
-        return _signature_of(payload) if create_signature else None
+            return self.remove_duplicates()
+        return self
 
     def write_binary(self, target: str | Path | object) -> None:
         """Write the sequence in the binary Pulseq format.

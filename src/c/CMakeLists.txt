@@ -46,6 +46,8 @@ set(PULSEG_SOURCES
     waveforms/pulseg_chunk.c
     safety/pulseg_safety.c
     safety/pulseg_pns_memo.c
+    safety/pulseg_pns_irnich.c
+    safety/pulseg_pns_safe.c
     cache/pulseg_cache.c
 )
 

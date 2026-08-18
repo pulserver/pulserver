@@ -67,10 +67,15 @@ Two further checks are opt-in, because they need site data the file cannot
 carry:
 
 ```cpp
-// Peripheral nerve stimulation, against a coil's own response model.
-pulseg::PnsParams pns{ /* chronaxie_us */ 360.0f,
-                       /* saturation   */ 4.25e8f,
-                       /* effective_len*/ 0.333f };
+// Peripheral nerve stimulation, against a nerve model and its coefficients.
+// The two published models ship with the C library (<pulseg/pulseg_pns_models.h>);
+// a vendor with its own fills the same `pulseg_pns_model` interface instead.
+pulseg_pns_irnich nerve;
+pulseg_pns_model pns;
+pulseg_pns_irnich_init(&pns, &nerve,
+                       /* chronaxie_us */ 360.0f,
+                       /* rheobase     */ 4.25e8f,
+                       /* alpha        */ 0.333f);
 scan.check_safety({}, &pns, /* threshold_percent */ 80.0f);
 
 // Mechanical resonance, against the system's forbidden bands.

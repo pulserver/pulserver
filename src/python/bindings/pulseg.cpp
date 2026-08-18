@@ -19,6 +19,7 @@
 #include "bindings.hpp"
 
 #include "pulseg.hpp"
+#include "pulseg_pns_models.h"
 #include "pulseg.h"
 #include "pulseg_types.h"
 
@@ -266,12 +267,11 @@ static py::dict _calc_pns(
     float rheobase,
     float alpha)
 {
-    pulseg::PnsParams params;
-    params.chronaxie_us = chronaxie_us;
-    params.rheobase_hz_per_m_per_s = rheobase;
-    params.alpha = alpha;
+    pulseg_pns_irnich ctx;
+    pulseg_pns_model model;
+    pulseg_pns_irnich_init(&model, &ctx, chronaxie_us, rheobase, alpha);
 
-    auto r = pc.coll().calc_pns(subsequence_idx, canonical_tr_idx, params);
+    auto r = pc.coll().calc_pns(subsequence_idx, canonical_tr_idx, model);
 
     py::dict out;
     out["num_samples"] = r.num_samples;
@@ -283,14 +283,14 @@ static py::dict _calc_pns(
 
 /** One axis of a SAFE hardware table, as (a1, a2, a3, tau1, tau2, tau3,
  *  stim_limit, g_scale) -- the order pypulseq's asc_to_hw reports them. */
-static pulseg::SafeParams::Axis _safe_axis(const py::sequence& coeffs, const char* name)
+static pulseg_pns_safe_axis _safe_axis(const py::sequence& coeffs, const char* name)
 {
     if (py::len(coeffs) != 8)
         throw std::invalid_argument(
             std::string("SAFE axis '") + name +
             "' needs 8 coefficients (a1, a2, a3, tau1_ms, tau2_ms, tau3_ms, stim_limit, g_scale)");
 
-    pulseg::SafeParams::Axis axis;
+    pulseg_pns_safe_axis axis;
     axis.a1 = coeffs[0].cast<float>();
     axis.a2 = coeffs[1].cast<float>();
     axis.a3 = coeffs[2].cast<float>();
@@ -310,12 +310,14 @@ static py::dict _calc_pns_safe(
     const py::sequence& gy,
     const py::sequence& gz)
 {
-    pulseg::SafeParams params;
-    params.x = _safe_axis(gx, "x");
-    params.y = _safe_axis(gy, "y");
-    params.z = _safe_axis(gz, "z");
+    pulseg_pns_safe ctx;
+    pulseg_pns_model model;
+    ctx.x = _safe_axis(gx, "x");
+    ctx.y = _safe_axis(gy, "y");
+    ctx.z = _safe_axis(gz, "z");
+    pulseg_pns_safe_init(&model, &ctx);
 
-    auto r = pc.coll().calc_pns(subsequence_idx, canonical_tr_idx, params);
+    auto r = pc.coll().calc_pns(subsequence_idx, canonical_tr_idx, model);
 
     py::dict out;
     out["num_samples"] = r.num_samples;
@@ -506,14 +508,14 @@ static void _check_safety(
         bands.push_back(b);
     }
 
-    const pulseg::PnsParams* pns_ptr = nullptr;
-    pulseg::PnsParams pns;
+    const pulseg_pns_model* pns_ptr = nullptr;
+    pulseg_pns_irnich ctx;
+    pulseg_pns_model model;
     if (!skip_pns)
     {
-        pns.chronaxie_us = decay_constant_us;
-        pns.rheobase_hz_per_m_per_s = stim_threshold; // rheobase/alpha combined
-        pns.alpha = 1.0f;                             // folded into stim_threshold
-        pns_ptr = &pns;
+        /* alpha folded into stim_threshold, which is rheobase/alpha. */
+        pulseg_pns_irnich_init(&model, &ctx, decay_constant_us, stim_threshold, 1.0f);
+        pns_ptr = &model;
     }
 
     pc.coll().check_safety(bands, pns_ptr, pns_threshold_percent);
