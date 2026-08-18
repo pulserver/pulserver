@@ -30,11 +30,11 @@ dependencies = [
   "deepinv>=0.4",
   "ptwt",
   "PyWavelets",
-  "ismrmrd>=1.14.1",
+  "ismrmrd>=1.15.0",
   "h5py",
   "pydicom",
   "psutil",
-  "SimpleITK>=2.3",
+  "SimpleITK>=2.5.6",
 ]
 
 [project.optional-dependencies]
