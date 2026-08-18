@@ -50,7 +50,7 @@ def write(
 
     target = seq._prepared_for_write(
         check_timing=check_timing,
-        check_gradient_continuity=False,
+        check_gradients=False,
         remove_duplicates=remove_duplicates,
     )
     payload = target._to_text(create_signature=create_signature)

@@ -96,10 +96,14 @@ segments, and nothing identifies the periodic pattern of segments — the TR —
 that the scan is a repetition of. All of that information exists, implicit in
 the content, but no field carries it. A platform whose sequencer prepares a
 segment once and replays it (GE's, for one) has to reconstruct that grouping
-before it can play the file at all, and every safety quantity that is defined
-over a repetition — SAR, gradient heating, the acoustic drive — has to
-rediscover the repetition before it can be computed, which makes the checks
-expensive.
+before it can play the file at all. The safety quantities — SAR, gradient
+heating, the acoustic drive — are not defined over a repetition either: each
+is a window sliding along the whole scan, and evaluating one without knowing
+the structure means sweeping every block. Where a repetition does exist the
+sweep collapses onto a single period, which is how the check becomes cheap
+enough for some vendors to do it that way; and since a sequence is almost
+always periodic at some level — a hyper-TR if nothing smaller — recovering
+that pattern is where most of the saving comes from.
 
 **Prescription-time adjustment.** A product sequence is edited at the
 console: the operator changes TE, TR, FOV, matrix, orientation minutes before

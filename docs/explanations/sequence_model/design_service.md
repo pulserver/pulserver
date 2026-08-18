@@ -9,7 +9,7 @@ console, minutes before the exam.
 
 The alternative is to treat the sequence as a **service**: the program that
 builds it stays available, the console asks it for a protocol, and it
-answers. {doc}`nimpulseq <../background/nimpulseqgui>` reached the same
+answers. {doc}`Nimpulseq <../background/nimpulseqgui>` reached the same
 conclusion and pays for it by writing every sequence in a compiled language.
 Pulserver keeps the sequence in Python — where the MR community's design,
 optimization and simulation tools live — and recovers the speed underneath

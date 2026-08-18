@@ -15,18 +15,26 @@ why the alternative — annotating the file — was rejected.
 
 Take the first block, and ask whether the stream is periodic with period
 $P$: whether block $n$ and block $n + P$ have the same normalized structure —
-same duration, same events, same waveform *shapes* — for every $n$. The
-smallest $P$ that holds over the whole table is the **structural TR**, and
-`tr_size` blocks is its length.
+the same duration, playing on the same channels — for every $n$. The smallest
+$P$ that holds over the whole table is the **structural TR**, and `tr_size`
+blocks is its length.
 
 Two properties make this well-posed:
 
-- **Amplitudes are excluded.** A phase encode steps from line to line; a
-  spoiler phase advances every shot; an RF pulse alternates sign. Those are
-  per-instance parameters of one structure, not different structures. The
-  comparison is on the normalized identity — shape by value, trapezoid by
-  its four times, ADC by count, dwell and delay — which is exactly the
-  identity Pulseq's own event libraries deduplicate on.
+- **Everything a playout can vary is excluded.** A phase encode steps from
+  line to line; a spoiler's phase advances every shot; an RF pulse alternates
+  sign; a radial view rotates; a navigator acquires on some repetitions and
+  not on others. Those are per-instance parameters of one structure, not
+  different structures, and the comparison ignores all of them: amplitudes,
+  which waveform variant a gradient plays on this shot, the frequency and
+  phase offsets of RF and ADC — in hertz or in ppm — whether the block's ADC
+  acquires this time round, the rotation, whether a trigger fires. What is
+  compared is the timing each event occupies inside the block: an RF pulse by
+  its delay and its magnitude, phase and time shapes — a pulse is never
+  swapped for another under the same structure; a trapezoid by its delay,
+  rise, flat and fall; an arbitrary gradient by its delay and its time shape,
+  or its sample count where the samples sit on the raster; an ADC by its
+  delay, dwell and number of samples. A segment is a timing pattern.
 - **Pure delays match any pure delay.** A TI fill or a TR pad whose duration
   varies is one position whose duration is a runtime parameter, not a
   different sequence. This is the same relaxation the Pulseq specification
@@ -76,10 +84,8 @@ train, and the frame-counter block, because those three do not repeat with
 the same period as each other.
 
 The partition satisfies the constraints the PulSeg IR specification places on
-a virtual segment — every instance has the same block count and the same
-normalized structure — and it is checked to: `tests/python/test_pulseg_oracle.py`
-validates the interpreter's partition against an independent implementation
-of the specification's rules, over the whole zoo.
+a virtual segment: every instance has the same block count and the same
+normalized structure.
 
 ### The declared divergence: content, not annotation
 
@@ -106,22 +112,24 @@ Concatenated subsequences need no label at all: they are separate `.seq`
 files linked by `NextSequence`, loaded as a collection and evaluated
 independently.
 
-## What detection cannot do
+## Two properties of the answer
 
-Two honest limits, both visible in the zoo:
+**The period is anchored at the first block.** Periodicity is tested from the
+start of the stream, so a scan whose opening differs from everything after it
+— a catalyst ramp before a bSSFP train — comes back as one long TR. That is
+what the file repeats: nothing shorter recurs from the first block onward, and
+the catalyst is part of the unit. A single-slice train longer than 15 s
+(`SINGLE_TR_MAX_DURATION_US`) is refused outright rather than segmented on a
+period that was never verified.
 
-- **The period is anchored at the first block.** A scan whose first
-  repetition differs from the rest — a catalyst before a bSSFP train — is
-  read as one long TR rather than a prologue plus a period, and a
-  single-slice train longer than 15 s (`SINGLE_TR_MAX_DURATION_US`) is
-  refused rather than mis-segmented. Materializing the prologue with
-  `Sequence.expand_repeats()` gives detection a uniform stream.
-- **Granularity is a choice, not a fact.** Reading a scan as one segment
-  played once breaks no rule; so does the finest partition. Pulserver picks
-  the finest partition that satisfies the constraints, because that is the
-  one that reuses the most on the scanner, but a different interpreter
-  choosing differently is still conformant. The oracle checks conformance,
-  not agreement.
+**Granularity is bounded by the hardware, not chosen by taste.** Reading a
+scan as one segment played once breaks no rule, and neither does the finest
+partition the constraints allow. Pulserver takes the finest one, and it is
+the finest one that can actually be played: a boundary is where the sequencer
+stops one prepared unit and starts the next, and no gradient can be broken off
+mid-ramp without violating the slew limit, so the cuts fall only where the
+waveforms already permit playout to pause. The result is the most reuse the
+scanner can get out of the file with every unit still physically executable.
 
 ## Seeing it
 
@@ -130,12 +138,24 @@ from pulserver.app import gre2D_sequence
 
 seq = gre2D_sequence.main(n_x=64, n_y=64, n_slices=3)
 
-seq.declare_tr()              # 6 -- blocks in one repetition, also written
-                              # into [DEFINITIONS] TRSize by write()
+seq.tr_size                   # 6 -- blocks in one repetition
 seq.plot(tr="worst_case")     # the repetition the safety checks used
-seq.sequence_descriptor()     # what a reconstruction reads off one TR
+
+seq.num_segments              # 2 -- the readout run, and the TR pad
+seq.plot(segment_idx=0)       # the units the interpreter prepares and replays
+
+seq.sequence_descriptor       # what a reconstruction reads off one TR
 ```
 
-Plotting the TR is usually the fastest way to see whether detection found
-what you meant: `tr="worst_case"` draws the positional-maximum envelope the
-gradient checks run on, and an integer index draws that actual repetition.
+Nothing here has to be asked for in order: detection and segmentation run in
+the C core the first time any of them is wanted, and the result is held until
+the blocks change. Writing the file records the block count as
+`[DEFINITIONS] TRSize` so the next reader need not derive it again.
+
+Plotting is usually the fastest way to see whether detection found what you
+meant. `tr="worst_case"` draws the positional-maximum envelope the gradient
+checks run on, and an integer index draws that actual repetition.
+`segment_idx` draws one segment as real blocks on the sequence's own clock —
+the instance of it carrying the most gradient energy, which is the one the
+safety checks were run against — so stepping `0 .. num_segments - 1` shows
+the whole decomposition, unit by unit.

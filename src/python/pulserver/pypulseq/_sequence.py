@@ -769,7 +769,7 @@ class Sequence(AnalysisMixin, SafetyViewsMixin, SoftDelayMixin):
         check_timing: bool = True,
         v141_compat: bool = False,
         *,
-        check_gradient_continuity: bool = True,
+        check_gradients: bool = True,
     ) -> str | None:
         """Write the sequence as a ``.seq`` file.
 
@@ -788,11 +788,12 @@ class Sequence(AnalysisMixin, SafetyViewsMixin, SoftDelayMixin):
             Warn if the sequence has timing errors.
         v141_compat : bool, default False
             Not implemented -- see Raises.
-        check_gradient_continuity : bool, default True
-            Warn if a gradient jumps across a block boundary. Building the
-            sequence does not check this, so writing is the natural place;
-            pass False in a server-mode plugin, where the scanner checks it
-            at predownload anyway.
+        check_gradients : bool, default True
+            Warn if a gradient exceeds the system's amplitude or slew limit,
+            or jumps across a block boundary. Building the sequence checks
+            none of these, so writing is the natural place; pass False in a
+            server-mode plugin, where the scanner checks them at predownload
+            against its own rasters and limits.
 
         Returns
         -------
@@ -827,7 +828,7 @@ class Sequence(AnalysisMixin, SafetyViewsMixin, SoftDelayMixin):
             )
         target = self._prepared_for_write(
             check_timing=check_timing,
-            check_gradient_continuity=check_gradient_continuity,
+            check_gradients=check_gradients,
             remove_duplicates=remove_duplicates,
         )
         payload = target._to_text(create_signature=create_signature)
@@ -838,7 +839,7 @@ class Sequence(AnalysisMixin, SafetyViewsMixin, SoftDelayMixin):
         self,
         *,
         check_timing: bool = True,
-        check_gradient_continuity: bool = True,
+        check_gradients: bool = True,
         remove_duplicates: bool = True,
     ) -> Sequence:
         """The sequence a writer should serialise, warnings already raised.
@@ -855,10 +856,13 @@ class Sequence(AnalysisMixin, SafetyViewsMixin, SoftDelayMixin):
                     f"write(): {len(error_report)} timing errors found in the sequence",
                     stacklevel=3,
                 )
-        if check_gradient_continuity:
-            is_ok, message = self.check_gradient_continuity()
-            if not is_ok:
-                warnings.warn(f"write(): {message}", stacklevel=3)
+        if check_gradients:
+            for is_ok, message in (
+                self.check_hardware_limits(),
+                self.check_gradient_continuity(),
+            ):
+                if not is_ok:
+                    warnings.warn(f"write(): {message}", stacklevel=3)
         self.declare_tr()
 
         # A sequence that has not been touched since its last deduplication
@@ -1334,7 +1338,8 @@ class Sequence(AnalysisMixin, SafetyViewsMixin, SoftDelayMixin):
 
         See Also
         --------
-        check_gradient_continuity : the check add_block skips for speed.
+        check_hardware_limits, check_gradient_continuity : the gradient checks
+            :meth:`write` runs.
         """
         first, last = self._window_for(time_range)
         is_ok, error_report = self._upstream_window(first, last).check_timing()
@@ -1392,7 +1397,7 @@ class Sequence(AnalysisMixin, SafetyViewsMixin, SoftDelayMixin):
 
         See Also
         --------
-        check_gradient_continuity : the other check :meth:`write` runs.
+        check_gradient_continuity : the other gradient check :meth:`write` runs.
         """
         from ._block import _grad_event
 
@@ -2006,7 +2011,8 @@ class Sequence(AnalysisMixin, SafetyViewsMixin, SoftDelayMixin):
             ext=int(row[5]),
         )
 
-    def sequence_descriptor(self, *, subsequence: int = 0):
+    @property
+    def sequence_descriptor(self):
         """The state-machine description of one repetition time.
 
         Returns a :class:`~pulserver.recon.simulation.SequenceDescription`: one
@@ -2032,8 +2038,8 @@ class Sequence(AnalysisMixin, SafetyViewsMixin, SoftDelayMixin):
         the waveform decompression it would immediately discard is the one
         performance mistake this method could make.
 
-        The description is cached against the sequence's revision, so asking
-        repeatedly costs one build.
+        The scan structure it is built from is cached against the sequence's
+        revision, so asking repeatedly costs one detection.
         """
         from ..recon._seqdesc import (
             EventType,
@@ -2048,7 +2054,7 @@ class Sequence(AnalysisMixin, SafetyViewsMixin, SoftDelayMixin):
         )
 
         structure = self._structure_for("sequence_descriptor")
-        raw = _get_sequence_description(structure.collection, int(subsequence))
+        raw = _get_sequence_description(structure.collection, 0)
 
         events = tuple(
             SequenceEvent(
@@ -2062,7 +2068,7 @@ class Sequence(AnalysisMixin, SafetyViewsMixin, SoftDelayMixin):
         )
 
         definitions = {}
-        for entry in _get_rf_definitions(structure.collection, int(subsequence)):
+        for entry in _get_rf_definitions(structure.collection, 0):
             channels = max(int(entry["num_channels"]), 1)
             magnitude = np.asarray(entry["magnitude"], dtype=np.float32)
             # Channel-major; a simulation reads the first transmit channel,

@@ -1,9 +1,9 @@
-"""``Sequence.sequence_descriptor()``: the recon's own description, design-side.
+"""``Sequence.sequence_descriptor``: the recon's own description, design-side.
 
 The point of these tests is that there is **one** descriptor type and one
 derivation of it. ``pulserver.recon.simulation.decode_sequence_description``
 builds a :class:`~pulserver.recon.simulation.SequenceDescription` from the
-description a reconstruction consumes; ``Sequence.sequence_descriptor()`` builds
+description a reconstruction consumes; ``Sequence.sequence_descriptor`` builds
 one from a sequence that has not been written yet. Both come out of
 ``pulseg_get_sequence_description`` in the C core. If they could drift, a
 simulation driven from a design script and a simulation driven from a scan
@@ -75,14 +75,14 @@ def _gre(system, *, repetitions=8, use="excitation", flip=FLIP_DEGREES):
 
 def test_it_returns_the_recons_own_type(system):
     """Not a parallel dataclass -- the one `recon.simulation` already consumes."""
-    description = _gre(system).sequence_descriptor()
+    description = _gre(system).sequence_descriptor
     assert isinstance(description, SequenceDescription)
     assert description.__class__.__module__ == "pulserver.recon._seqdesc"
 
 
 def test_one_event_per_block_of_the_repetition_time(system):
     seq = _gre(system)
-    description = seq.sequence_descriptor()
+    description = seq.sequence_descriptor
 
     assert len(description.events) == 3
     assert [event.type for event in description.events] == [
@@ -100,7 +100,7 @@ def test_the_rf_row_carries_its_use_and_recovers_the_designed_flip_angle(system)
     """The flip is not stored; it is the pulse envelope times the amplitude.
     Recovering the number the sequence was designed with is what says the
     envelope, the amplitude and the time base all crossed intact."""
-    description = _gre(system).sequence_descriptor()
+    description = _gre(system).sequence_descriptor
     (rf_event,) = [event for event in description.events if event.type is EventType.RF]
 
     assert rf_event.rf_use is RfUse.EXCITATION
@@ -114,7 +114,7 @@ def test_the_rf_row_carries_its_use_and_recovers_the_designed_flip_angle(system)
 def test_a_wrong_envelope_would_fail_that_check(system):
     """Mutation check on the test above -- perturbing the amplitude by a
     percent has to move the recovered flip angle out of tolerance."""
-    description = _gre(system).sequence_descriptor()
+    description = _gre(system).sequence_descriptor
     (rf_event,) = [event for event in description.events if event.type is EventType.RF]
     definition = description.rf_definitions[rf_event.rf_definition_id]
 
@@ -138,13 +138,13 @@ def test_a_wrong_envelope_would_fail_that_check(system):
 def test_every_pulseq_rf_use_survives_into_the_descriptor(system, use, expected):
     """PREPARATION and OTHER used to raise ValueError at decode: the enum
     stopped at SATURATION while the parser produced all seven."""
-    description = _gre(system, use=use).sequence_descriptor()
+    description = _gre(system, use=use).sequence_descriptor
     (rf_event,) = [event for event in description.events if event.type is EventType.RF]
     assert rf_event.rf_use is expected
 
 
 def test_the_adc_row_is_the_echo_and_says_where_k_is_zero(system):
-    description = _gre(system).sequence_descriptor()
+    description = _gre(system).sequence_descriptor
     (adc_event,) = description.adc_events
 
     assert adc_event.adc_role is AdcRole.SINGLE
@@ -158,7 +158,7 @@ def test_the_echo_time_agrees_with_the_trajectorys_own_answer(system):
     """Two independent derivations of the same instant: the descriptor's
     k-zero timestamp, and the ADC sample the k-space walk calls the centre."""
     seq = _gre(system)
-    description = seq.sequence_descriptor()
+    description = seq.sequence_descriptor
     (adc_event,) = description.adc_events
 
     centres = seq.adc_times(compat=False).echo_center_time
@@ -175,7 +175,7 @@ def test_it_does_not_decompress_gradient_waveforms(system, monkeypatch):
     """A simulation wants flip angles and timings; making it pay for the
     waveform decompression it would discard is the one mistake available."""
     seq = _gre(system)
-    seq.sequence_descriptor()  # warm the structure cache
+    _ = seq.sequence_descriptor  # warm the structure cache
 
     called = []
     monkeypatch.setattr(
@@ -184,7 +184,7 @@ def test_it_does_not_decompress_gradient_waveforms(system, monkeypatch):
     monkeypatch.setattr(
         type(seq), "get_gradients", lambda self, *a, **k: called.append(1) or []
     )
-    seq.sequence_descriptor()
+    _ = seq.sequence_descriptor
     assert called == []
 
 
@@ -192,16 +192,16 @@ def test_it_is_cached_against_the_revision_and_rebuilt_after_a_change(system):
     """Cached so repeated asking is cheap, invalidated so it cannot go stale."""
     seq = _gre(system, repetitions=4)
 
-    seq.sequence_descriptor()
+    _ = seq.sequence_descriptor
     cached = seq._structure
-    seq.sequence_descriptor()
+    _ = seq.sequence_descriptor
     assert seq._structure is cached, "a second call rebuilt the structure"
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         seq.add_block(pp.make_delay(5e-3))
 
-    seq.sequence_descriptor()
+    _ = seq.sequence_descriptor
     assert seq._structure is not cached, (
         "a mutated sequence answered from the old structure"
     )
