@@ -890,9 +890,10 @@ int pulseg__get_tr_in_sequence(pulseg_sequence_descriptor *desc, pulseg_diagnost
                  * the whole table IS the single TR. */
                 span_dur_us = 0.0;
                 for (n = 0; n < desc->num_blocks; ++n)
-                    span_dur_us += (double)((desc->block_table[n].duration_us >= 0)
-                                                ? desc->block_table[n].duration_us
-                                                : desc->base_blocks[desc->block_table[n].id].duration_us);
+                    span_dur_us +=
+                        (double)((desc->block_table[n].duration_us >= 0)
+                                     ? desc->block_table[n].duration_us
+                                     : desc->base_blocks[desc->block_table[n].id].duration_us);
 
                 if (span_dur_us <= (double)SINGLE_TR_MAX_DURATION_US)
                 {

@@ -1197,7 +1197,8 @@ static int compute_rf_stats(
             {
                 double mag_d = sqrt(dre * dre + dim * dim);
                 rd->stats.flip_angle_rad =
-                    (float)(2.0 * 3.14159265358979323846 * (double)rd->stats.base_amplitude_hz * mag_d); /* radians */
+                    (float)(2.0 * 3.14159265358979323846 * (double)rd->stats.base_amplitude_hz *
+                            mag_d); /* radians */
             }
         }
         /* b1sq power (neutral) still needs the uniform-grid envelope. */
