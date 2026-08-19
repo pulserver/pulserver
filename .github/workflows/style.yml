@@ -24,11 +24,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # No pip cache: the one this repository fills is the whole test and
+      # documentation environment, and restoring it costs more than the single
+      # wheel this job installs.
       - name: Set up Python ${{ env.PYTHON_VERSION }}
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-          cache: pip
 
       # The linters only, taken from the same `dev` extra a contributor's
       # pre-commit installs, so both apply one ruff. Installing that extra
@@ -45,7 +47,9 @@ jobs:
           print("\n".join(line for line in dev if line.startswith("ruff")))
           PY
           python -m pip install -r "$RUNNER_TEMP/lint-requirements.txt"
-          sudo apt-get update && sudo apt-get install -y clang-format cmake build-essential
+          # cmake and a C compiler are already on the runner; clang-format is
+          # not, and the C89 gate and the format pass need both.
+          sudo apt-get update && sudo apt-get install -y clang-format
 
       # PYTHON_BIN is left unset: the script falls back to the python3 that
       # setup-python put on PATH.
