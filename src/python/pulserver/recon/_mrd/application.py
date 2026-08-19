@@ -59,34 +59,39 @@ def run_application(
             else:
                 connection.send(item)
 
-    def reconstruct_bucket() -> None:
+    def deliver(output: Any) -> None:
+        """Emit what one branch produced, against the unit that closed."""
         nonlocal acquisitions
-        if not acquisitions:
+        if output is None:
             return
-        # Waveforms describe the measurement, not the bucket: a scanner sends
-        # them once, ahead of the acquisitions, so every bucket of the scan
+        # Waveforms describe the measurement, not the unit: a scanner sends
+        # them once, ahead of the acquisitions, so every image of the scan
         # sees the same set rather than only the first one.
         bucket = _make_bucket(acquisitions, waveforms)
         acquisitions = []
-        emit(app.recon(bucket, context), bucket)
+        emit(output, bucket)
 
     app.startup(context)
+    last: Any = None
     for item in connection:
         if isinstance(item, ismrmrd.Acquisition):
-            finish = any(has_acquisition_flag(item, flag) for flag in app.split_on)
             if _accept(item, app):
-                # Hand each accepted acquisition to the plugin as it arrives, so
-                # any per-acquisition work overlaps the wait for the next one.
-                app.receive(item, context)
+                # Hand each accepted acquisition to the plugin as it arrives:
+                # placing it, and reconstructing whatever it completed, both
+                # overlap the wait for the next one.
                 acquisitions.append(item)
-            if finish:
-                reconstruct_bucket()
+                last = item
+                deliver(app.receive(item, context))
         elif isinstance(item, ismrmrd.Waveform):
             waveforms.append(item)
         else:
             connection.send(item)
 
-    reconstruct_bucket()
+    # A stream that ended without an acquisition closing anything still ended.
+    if acquisitions and not any(
+        has_acquisition_flag(last, flag) for flag in app.split_on
+    ):
+        deliver(app.recon("imaging", context))
 
 
 # %% private module subroutines

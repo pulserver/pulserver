@@ -45,8 +45,12 @@ scanner played, parsed in C++ (`read_sequence_files()` walks the
   (`center_sample`) and dwell time. The first/last boundary flags are derived
   here, from the counters and arrival order.
 - **The k-space trajectory**, computed from the gradient waveforms and
-  attached per readout for non-Cartesian encoding — the reconstruction never
-  re-derives it from vendor parameters.
+  attached per readout wherever k does not advance at a constant rate across
+  the ADC window — the test is per axis, so a Cartesian readout that samples
+  its ramps gets a one-dimensional trajectory along the readout while its
+  flat axes stay in the counters, and a readout played entirely on a plateau
+  gets none because there is nothing a counter cannot say. The reconstruction
+  never re-derives it from vendor parameters.
 - **The sequence description**, streamed in band as MRD waveforms: the RF
   definitions with their shapes and shim vectors, the event timeline of one
   TR, and the echo layout — enough for parameter fitting or subspace

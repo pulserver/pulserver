@@ -34,6 +34,12 @@ What the runtime drives, and what it hands a plugin. A reconstruction plugin
 is one `ReconPlugin` subclass and a module-level `PLUGIN` instance; see
 {doc}`app_recon` for the zoo built on it.
 
+Three hooks, and the division between them is the same in every plugin:
+`startup` lays out the buffers the header's encoding spaces describe, `receive`
+places each acquisition and — reading its flags — routes the boundaries it
+closes to a named branch, and `recon` holds the reconstruction of each branch
+over buffers that are already filled.
+
 ```{eval-rst}
 .. autosummary::
    :toctree: ../generated/recon
@@ -70,31 +76,35 @@ a plugin reconstructing sorted k-space overrides no hook at all.
    ReconData
    ReconBuffer
    EncodingSpace
-   CartesianGridder
 ```
 
 ## Reading the header
 
-What a scan declares about itself, for the shapes a reconstruction allocates
-and crops to.
+Almost nothing is here, and that is the point: the header's encoding spaces are
+what `ReconBuffer` is laid out from, so it answers for them — `.extents` for
+how far each axis runs, `.image_shape` for the matrix to crop to. A second
+reading of the same fields could only disagree with the buffer a plugin
+actually fills.
+
+What is left is what the encoding spaces do not describe: the free-form
+parameters a sequence attached to the scan. MRD splits those across four typed
+collections of `name`/`value` pairs, so `user_parameter` searches all four and
+answers with the value, whichever it was written as.
 
 ```{eval-rst}
 .. autosummary::
    :toctree: ../generated/recon
 
-   encoded_shape
-   encoded_volume
-   recon_shape
-   recon_volume
-   receiver_channels
-   echo_count
+   user_parameter
    diffusion_table
 ```
 
 ## Preprocessing
 
 What happens to the measurement before it is inverted: noise, oversampling,
-coil count, and the corrections a particular readout demands.
+coil count, and the corrections a particular readout demands. The first two are
+per-acquisition work, which is why a plugin does them in `receive` rather than
+waiting for a trigger.
 
 ```{eval-rst}
 .. autosummary::
@@ -103,8 +113,6 @@ coil count, and the corrections a particular readout demands.
    noise_prewhiten
    coil_compress
    remove_readout_oversampling
-   grid_cartesian
-   cartesian_3d_to_2d
    fftc
    ifftc
    pipe_menon_dcf
@@ -113,7 +121,10 @@ coil count, and the corrections a particular readout demands.
 ### Partial Fourier
 
 Recovering the k-space edge a partial acquisition never took, from the
-conjugate symmetry an image with slowly varying phase carries.
+conjugate symmetry an image with slowly varying phase carries. `POCS` iterates
+towards an image that reproduces every acquired sample and `Homodyne` reaches
+an answer in one pass; `fill_partial_echo` takes either by name, and that name
+is what a plugin exposes as its `partial_fourier` setting.
 
 ```{eval-rst}
 .. autosummary::
@@ -133,29 +144,31 @@ conjugate symmetry an image with slowly varying phase carries.
 
 ### EPI
 
-An EPI stream is several roles in one, and its reversed lines need the
-odd/even ramp fitted from a navigator before they belong anywhere.
+A reversed EPI line carries a phase its forward neighbours do not, and leaving
+it there puts a ghost at half the field of view. `estimate_epi_phase` reads that
+phase off a blip-nulled navigator triplet and `correct_lines` flips and
+demodulates by it — which is what a plugin does in `receive`, before the readout
+is placed, because a corrected line is what belongs on the grid.
+
+One estimator, with the order as its parameter: first order is the
+gradient-delay ramp every product reconstruction corrects, and raising it picks
+up what an eddy current leaves beyond a ramp.
+
+A train worth playing samples across its read ramps rather than waiting for the
+plateau, so k does not advance at a constant rate along a readout and the
+samples are not on the grid. `epi_ramp_positions` says where each one actually
+landed, from the lobe's timing, for a stream whose acquisitions carry no
+trajectory to say it directly; `epi_ramp_operator` is the change of basis onto
+the grid, which is exact while the samples outnumber the pixels they determine.
 
 ```{eval-rst}
 .. autosummary::
    :toctree: ../generated/recon
 
-   partition_epi_acquisitions
-   odd_even_fit
+   estimate_epi_phase
    correct_lines
-   epi_ramp_interpolate
-   estimate_epi_eddy_phase
-   correct_epi_eddy_currents
-```
-
-```{eval-rst}
-.. autosummary::
-   :toctree: ../generated/recon
-   :template: autosummary/class.rst
-
-   EpiAcquisitionGroups
-   EPIPhaseCorrection
-   SmsEpiInputs
+   epi_ramp_positions
+   epi_ramp_operator
 ```
 
 ## Calibration
@@ -164,11 +177,17 @@ Estimating what the reconstruction needs but the scan does not measure
 directly: coil sensitivities, and the point-spread function of a wave
 encoding.
 
+`NLINV` solves for the maps and the object together and is the better estimate
+for one image; `coil_maps_from_reference` reads them straight off a prescan and
+is the one to use when several images are solved against each other, because
+maps read off one reference share a scale a per-image solve does not guarantee.
+
 ```{eval-rst}
 .. autosummary::
    :toctree: ../generated/recon
 
    calibration_extent
+   coil_maps_from_reference
 ```
 
 ```{eval-rst}
@@ -217,11 +236,17 @@ measurement. Every solver takes one of these.
 
 ## Solvers
 
+`pics` is the solve: a measurement, a physics, and a prior. `cartesian_recon`
+is the Cartesian composition of it — the adjoint, the partial-Fourier
+constraint and the CG-SENSE solve, chosen by what the buffer's mask says the
+scan sampled, so a plugin reconstructs a filled buffer in one call.
+
 ```{eval-rst}
 .. autosummary::
    :toctree: ../generated/recon
 
    pics
+   cartesian_recon
 ```
 
 ```{eval-rst}

@@ -12,8 +12,8 @@ distortion correction -- is its own :class:`pulserver.pypulseq.Sequence`,
 written first, carrying ``NextSequence`` in its definitions; the main
 acquisition is the file it points to, written beside it. The interpreter
 follows the chain and treats each file as one subsequence.
-:mod:`pulserver.app.recon.epi2D_recon` reads the navigator groups back through
-:func:`pulserver.recon.partition_epi_acquisitions`.
+:mod:`pulserver.app.recon.epi2D_recon` reads the navigator back off the flags
+these lines carry.
 
 ``main`` returns the main :class:`pulserver.pypulseq.Sequence` and
 ``navigator`` its partner; ``PLUGIN`` writes the linked pair. Running this

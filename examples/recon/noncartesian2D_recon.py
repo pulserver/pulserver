@@ -24,15 +24,17 @@ from typing import Any
 
 import numpy as np
 
-from pulserver import AcquisitionBucket, ReconContext, ReconPlugin, ReconResult
+from pulserver import ReconContext, ReconPlugin, ReconResult
 from pulserver.recon import (
     NLINV,
     AcquisitionFlag,
     NonCartesian2D,
     as_numpy,
+    coil_compress,
+    has_acquisition_flag,
+    noise_prewhiten,
     pics,
     pipe_menon_dcf,
-    recon_shape,
 )
 
 
@@ -51,6 +53,9 @@ class NonCartesian2DRecon(ReconPlugin):
         Tikhonov weight of the CG-SENSE solve.
     iterations
         Maximum CG iterations.
+    virtual_coils
+        Channels to compress the array onto before the solve. A scan with fewer
+        physical channels keeps them all.
     calibration_width
         Width of the centred square NLINV solves the sensitivities over.
     device
@@ -63,39 +68,57 @@ class NonCartesian2DRecon(ReconPlugin):
         mode: str = "auto",
         regularization: float = 1e-3,
         iterations: int = 30,
+        virtual_coils: int = 8,
         calibration_width: int = 24,
         device: Any = None,
     ) -> None:
         super().__init__(
             split_on=AcquisitionFlag.LAST_IN_MEASUREMENT,
-            reject_flags=AcquisitionFlag.IS_NOISE_MEASUREMENT
-            | AcquisitionFlag.IS_PHASECORR_DATA,
+            reject_flags=AcquisitionFlag.IS_PHASECORR_DATA,
         )
         if mode not in ("auto", "direct", "pics"):
             raise ValueError(f"mode must be auto, direct or pics, got {mode!r}")
         self.mode = mode
         self.regularization = float(regularization)
         self.iterations = int(iterations)
+        self.virtual_coils = int(virtual_coils)
         self.calibration_width = int(calibration_width)
         self.device = device
 
     def startup(self, context: ReconContext) -> None:
-        """Lay the scan's buffers out and size the image from the header."""
+        """Lay the scan's buffers out, with no noise measured yet."""
         super().startup(context)
-        self.image_shape = recon_shape(context.header)
+        self.noise: Any = None
 
-    def recon(
-        self, bucket: AcquisitionBucket, context: ReconContext
-    ) -> list[ReconResult] | None:
-        """Reconstruct every slice once the measurement is complete."""
-        del context
-        if AcquisitionFlag.LAST_IN_MEASUREMENT not in bucket.trigger:
+    def receive(self, acquisition: Any, context: ReconContext) -> Any:
+        """Whiten the readout and place it, and reconstruct at the end of the scan.
+
+        A noise scan is not imaging data and never reaches a buffer: what it
+        leaves behind is the covariance every readout that follows is whitened
+        by.
+        """
+        line = np.asarray(acquisition.data)
+        if has_acquisition_flag(acquisition, AcquisitionFlag.IS_NOISE_MEASUREMENT):
+            self.noise = (
+                line if self.noise is None else np.concatenate([self.noise, line], -1)
+            )
             return None
+        if self.noise is not None:
+            line = noise_prewhiten(line, self.noise, coil_axis=0)
 
+        self.buffers.add(acquisition, line)
+        if has_acquisition_flag(acquisition, AcquisitionFlag.LAST_IN_MEASUREMENT):
+            return self.recon("imaging", context)
+        return None
+
+    def recon(self, branch: str, context: ReconContext) -> list[ReconResult]:
+        """Reconstruct every slice, once the measurement is complete."""
+        del branch, context
         buffer = self.buffers[0]
-        extents = dict(zip(buffer.axes, buffer.kspace.shape, strict=True))
-        n_slices, n_views = extents.get("slice", 1), extents["phase_encode"]
-        nyquist = int(np.ceil(np.pi / 2 * max(self.image_shape)))
+        image_shape = buffer.image_shape
+        n_slices = buffer.extents.get("slice", 1)
+        n_views = buffer.extents["phase_encode"]
+        nyquist = int(np.ceil(np.pi / 2 * max(image_shape)))
         direct = self.mode == "direct" or (self.mode == "auto" and n_views >= nyquist)
 
         results = []
@@ -110,7 +133,8 @@ class NonCartesian2DRecon(ReconPlugin):
                 .reshape(-1, 2)
                 .astype(np.float32)
             )
-            density = pipe_menon_dcf(trajectory, self.image_shape)
+            data, _ = coil_compress(data, self.virtual_coils)
+            density = pipe_menon_dcf(trajectory, image_shape)
             n_coils = int(data.shape[0])
 
             if direct:
@@ -118,7 +142,7 @@ class NonCartesian2DRecon(ReconPlugin):
                 # Nyquist, and a coil-wise one at that: combine by
                 # root-sum-of-squares.
                 coil_wise = NonCartesian2D(
-                    trajectory, self.image_shape, density=density, n_coils=n_coils
+                    trajectory, image_shape, density=density, n_coils=n_coils
                 )
                 coils = coil_wise.A_adjoint(data[None])[0]
                 image = np.sqrt(np.sum(np.abs(coils) ** 2, axis=0))
@@ -126,13 +150,13 @@ class NonCartesian2DRecon(ReconPlugin):
                 maps = NLINV(spatial_ndim=2, calibration_width=self.calibration_width)(
                     data,
                     trajectory=trajectory,
-                    image_shape=self.image_shape,
+                    image_shape=image_shape,
                     density=density,
                     device=self.device,
                 )
                 unaliasing = NonCartesian2D(
                     trajectory,
-                    self.image_shape,
+                    image_shape,
                     coil_maps=maps,
                     density=density,
                     n_coils=n_coils,

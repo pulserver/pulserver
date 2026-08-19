@@ -14,6 +14,14 @@ spin echo, a gradient echo and a balanced SSFP all leave one Cartesian grid
 per slice, so one plugin serves all three. The modules are named for the
 sampling they undo, and are built out of the :mod:`pulserver.recon` toolbox.
 
+Every module here is one complete plugin and nothing else: one
+:class:`pulserver.ReconPlugin` subclass, its ``PLUGIN`` instance, and the
+three hooks. No module-level helper, no private method, no module that
+demonstrates a step rather than reconstructing a scan -- a step that a plugin
+needs is a name in :mod:`pulserver.recon`, general enough to compose in a hook,
+because a local subroutine obscures which of the code is the mandatory hook and
+which is this plugin's own detour.
+
 Not to be confused with :mod:`pulserver.recon`, which is that toolbox rather
 than the plugins written against it.
 """
