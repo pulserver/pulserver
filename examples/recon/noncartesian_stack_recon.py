@@ -10,6 +10,35 @@ the samples inside the calibration radius, CG-SENSE -- against the trajectory
 its acquisitions carry, which ``pulserver`` buffered beside them. One
 magnitude volume per measurement.
 
+
+Examples
+--------
+Calling the module reconstructs an MRD file: the same three hooks an
+inline reconstruction is driven through, fed from the file in this
+process rather than over a socket.
+
+>>> from pulserver import ReconPlugin
+>>> from pulserver.app import noncartesian_stack_recon
+>>> isinstance(noncartesian_stack_recon.PLUGIN, ReconPlugin)
+True
+
+The three hooks are the whole plugin, and nothing else is overridden:
+
+>>> sorted(
+...     hook for hook in ("startup", "receive", "recon")
+...     if hook in vars(noncartesian_stack_recon.NonCartesianStackRecon)
+... )
+['receive', 'recon', 'startup']
+
+Reconstruct a stack whose partition axis is Cartesian::
+
+    images = noncartesian_stack_recon("scan.h5")
+
+Or re-instantiate the plugin with different settings, and drive it the
+same way::
+
+    plugin = noncartesian_stack_recon.NonCartesianStackRecon(coil_compression=8)
+    images = plugin.run("scan.h5")
 """
 
 from __future__ import annotations

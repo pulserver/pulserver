@@ -32,7 +32,7 @@ converting by hand.
 
 What the runtime drives, and what it hands a plugin. A reconstruction plugin
 is one `ReconPlugin` subclass and a module-level `PLUGIN` instance; see
-{doc}`app_recon` for the zoo built on it.
+{doc}`apps` for the zoo built on it.
 
 Three hooks, and the division between them is the same in every plugin:
 `startup` lays out the buffers the header's encoding spaces describe, `receive`

@@ -14,6 +14,35 @@ the trajectory the file itself carries.
 ``main`` returns the :class:`pulserver.pypulseq.Sequence`; ``PLUGIN`` is the
 same sequence behind the scanner protocol contract, and running this module
 as a script writes a ``.seq`` from the same controls.
+
+Examples
+--------
+>>> from pulserver.app import gre_radial2D_sequence
+>>> seq = gre_radial2D_sequence(n_x=32, n_spokes=13, n_slices=1, n_dummy=0)
+>>> seq.num_trs, seq.num_segments
+(13, 2)
+
+One spoke per repetition, the waveform stored once and turned by a rotation extension:
+
+.. plot::
+   :include-source:
+
+   from pulserver.app import gre_radial2D_sequence
+
+   seq = gre_radial2D_sequence(n_x=32, n_spokes=13, n_slices=1, n_dummy=0)
+   seq.plot(tr="worst_case", time_disp="ms", grad_disp="mT/m", stacked=True,
+            plot_now=False)
+
+Thirteen golden-angle spokes, each one landing in the widest gap the
+previous ones left:
+
+.. plot::
+   :include-source:
+
+   from pulserver.app import gre_radial2D_sequence
+
+   seq = gre_radial2D_sequence(n_x=32, n_spokes=13, n_slices=1, n_dummy=0)
+   seq.plot_kspace(show_trajectory=False, plot_now=False)
 """
 
 from __future__ import annotations

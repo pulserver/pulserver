@@ -395,6 +395,18 @@ def pics(
     regularize the complex image directly; Pulserver's own complex-aware
     denoisers pass through untouched. See :func:`_pics` for the algorithm and
     its parameters.
+
+    Examples
+    --------
+    >>> import torch
+    >>> import pulserver.recon as recon
+    >>> physics = recon.Cartesian2D(
+    ...     torch.ones(1, 1, 16, 16),
+    ...     torch.ones(1, 2, 16, 16, dtype=torch.complex64) / 2 ** 0.5,
+    ... )
+    >>> measurement = physics.A(torch.zeros(1, 16, 16, dtype=torch.complex64))
+    >>> recon.pics(measurement, physics, iterations=4).shape
+    torch.Size([1, 16, 16])
     """
     denoiser = _complex_denoiser(denoiser)
     # Direct imports rather than the module's ``import_module`` so the boundary

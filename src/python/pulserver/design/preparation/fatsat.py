@@ -124,6 +124,23 @@ class FatSaturation(RfModule):
             system, thickness_m=0.08, position_mm=(0.0, 0.0, 25.0),
             orientation=Rotation.from_euler("y", 30, degrees=True),
         )
+
+    What the pulse leaves along z, across the spectrum. The band sits at the
+    fat resonance and water is untouched:
+
+    .. plot::
+
+       import pulserver.design as design
+       import pulserver.pypulseq as pp
+       from _figures import rf_profile
+
+       rf_profile(
+           design.FatSaturation(pp.Opts(B0=3.0)),
+           title="fat saturation at 3 T",
+           kind="saturation",
+           whole=True,
+           extent=(-800, 400),
+       )
     """
 
     def init_module(

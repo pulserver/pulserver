@@ -11,6 +11,35 @@ The dead-time gap's missing centre samples are declared by the sequence and
 left to the density weighting here; a dedicated gap-filling refinement
 starts by overriding this plugin.
 
+
+Examples
+--------
+Calling the module reconstructs an MRD file: the same three hooks an
+inline reconstruction is driven through, fed from the file in this
+process rather than over a socket.
+
+>>> from pulserver import ReconPlugin
+>>> from pulserver.app import noncartesian3D_recon
+>>> isinstance(noncartesian3D_recon.PLUGIN, ReconPlugin)
+True
+
+The three hooks are the whole plugin, and nothing else is overridden:
+
+>>> sorted(
+...     hook for hook in ("startup", "receive", "recon")
+...     if hook in vars(noncartesian3D_recon.NonCartesian3DRecon)
+... )
+['receive', 'recon', 'startup']
+
+Reconstruct a fully 3D non-Cartesian scan::
+
+    images = noncartesian3D_recon("scan.h5")
+
+Or re-instantiate the plugin with different settings, and drive it the
+same way::
+
+    plugin = noncartesian3D_recon.NonCartesian3DRecon(coil_compression=8)
+    images = plugin.run("scan.h5")
 """
 
 from __future__ import annotations

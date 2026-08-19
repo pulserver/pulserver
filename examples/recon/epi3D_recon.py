@@ -39,6 +39,35 @@ here onto the readout's own extent, so the units it was written in do not
 matter -- which holds for a readout that sweeps the prescribed width. An
 acquisition carrying none was sampled uniformly, which is what a train that
 waits for its plateau is.
+
+Examples
+--------
+Calling the module reconstructs an MRD file: the same three hooks an
+inline reconstruction is driven through, fed from the file in this
+process rather than over a socket.
+
+>>> from pulserver import ReconPlugin
+>>> from pulserver.app import epi3D_recon
+>>> isinstance(epi3D_recon.PLUGIN, ReconPlugin)
+True
+
+The three hooks are the whole plugin, and nothing else is overridden:
+
+>>> sorted(
+...     hook for hook in ("startup", "receive", "recon")
+...     if hook in vars(epi3D_recon.Epi3DRecon)
+... )
+['receive', 'recon', 'startup']
+
+Reconstruct a 3D echo-planar scan and its calibration prescan::
+
+    images = epi3D_recon("scan.h5")
+
+Or re-instantiate the plugin with different settings, and drive it the
+same way::
+
+    plugin = epi3D_recon.Epi3DRecon(coil_compression=8)
+    images = plugin.run("scan.h5")
 """
 
 from __future__ import annotations

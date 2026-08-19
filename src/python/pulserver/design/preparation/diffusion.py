@@ -98,6 +98,20 @@ class DiffusionPreparation(RfModule):
     500
     >>> round(prep.scale_for(125.0), 3)
     0.5
+
+    The whole module, pulses and diffusion lobes together. Both lobes are the
+    same sign because the refocusing pulse between them is what makes the
+    pair sensitising rather than balanced:
+
+    .. plot::
+       :include-source:
+
+       import pulserver.design as design
+       import pulserver.pypulseq as pp
+
+       system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+       prep = design.DiffusionPreparation(system, 500.0)
+       prep.plot(time_disp="ms", grad_disp="mT/m", stacked=True, plot_now=False)
     """
 
     def init_module(

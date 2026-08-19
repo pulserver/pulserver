@@ -426,6 +426,46 @@ class LineReadout2D(_LineReadout):
 
     >>> readout.blocks[1] == (readout.gx_pre, readout.gy_pre, readout.gz_reph)
     True
+
+    One line per repetition: the loop scales ``gy_pre`` and the same events
+    walk k-space line by line.
+
+    .. plot::
+
+       import numpy as np
+       import pulserver.design as design
+       import pulserver.pypulseq as pp
+       from _figures import trajectory
+
+       system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+       excitation = design.SpatialSelectiveExcitation(system, 15.0, 5e-3)
+       readout = design.LineReadout2D(
+           system, excitation.rf, excitation.gz, excitation.gz_reph,
+           fov=0.22, matrix=64,
+       )
+       trajectory(
+           readout,
+           ky=np.linspace(-1, 1, 9),
+           per="shot",
+           label="shot",
+           title="LineReadout2D, nine repetitions",
+       )
+
+    The blocks one repetition is made of, which is what the loop replays:
+
+    .. plot::
+       :include-source:
+
+       import pulserver.design as design
+       import pulserver.pypulseq as pp
+
+       system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+       excitation = design.SpatialSelectiveExcitation(system, 15.0, 5e-3)
+       readout = design.LineReadout2D(
+           system, excitation.rf, excitation.gz, excitation.gz_reph,
+           fov=0.22, matrix=64,
+       )
+       readout.plot(time_disp="ms", grad_disp="mT/m", stacked=True, plot_now=False)
     """
 
     _ndim = 2
@@ -449,6 +489,31 @@ class LineReadout3D(_LineReadout):
     ... )
     >>> readout.gy_pre.channel, readout.gz_pre.channel
     ('y', 'z')
+
+    Two encodes to scale rather than one, so a repetition is a point in the
+    ``(ky, kz)`` plane and the readout runs perpendicular to it:
+
+    .. plot::
+
+       import numpy as np
+       import pulserver.design as design
+       import pulserver.pypulseq as pp
+       from _figures import trajectory
+
+       system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+       slab = design.SpatialSelectiveExcitation(system, 8.0, 0.12, is_slab=True)
+       readout = design.LineReadout3D(
+           system, slab.rf, slab.gz, fov=(0.22, 0.22, 0.12), matrix=(64, 64, 16),
+       )
+       trajectory(
+           readout,
+           ky=np.tile(np.linspace(-1, 1, 5), 3),
+           kz=np.repeat(np.linspace(-1, 1, 3), 5),
+           per="shot",
+           plane="yz",
+           label="shot",
+           title="LineReadout3D, a 5 x 3 corner of the encoding plane",
+       )
     """
 
     _ndim = 3

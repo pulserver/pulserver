@@ -23,6 +23,35 @@ loop run once.
 
 One magnitude volume per echo, the echo as the image series, cropped to the
 prescribed matrix.
+
+Examples
+--------
+Calling the module reconstructs an MRD file: the same three hooks an
+inline reconstruction is driven through, fed from the file in this
+process rather than over a socket.
+
+>>> from pulserver import ReconPlugin
+>>> from pulserver.app import cartesian3D_recon
+>>> isinstance(cartesian3D_recon.PLUGIN, ReconPlugin)
+True
+
+The three hooks are the whole plugin, and nothing else is overridden:
+
+>>> sorted(
+...     hook for hook in ("startup", "receive", "recon")
+...     if hook in vars(cartesian3D_recon.Cartesian3DRecon)
+... )
+['receive', 'recon', 'startup']
+
+Reconstruct any 3D Cartesian scan::
+
+    images = cartesian3D_recon("scan.h5")
+
+Or re-instantiate the plugin with different settings, and drive it the
+same way::
+
+    plugin = cartesian3D_recon.Cartesian3DRecon(coil_compression=8)
+    images = plugin.run("scan.h5")
 """
 
 from __future__ import annotations

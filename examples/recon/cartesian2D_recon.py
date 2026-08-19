@@ -29,6 +29,35 @@ single-echo scan is that loop run once.
 
 One magnitude image per ``(slice, echo)``, the echo as the image series,
 cropped to the prescribed matrix.
+
+Examples
+--------
+Calling the module reconstructs an MRD file: the same three hooks an
+inline reconstruction is driven through, fed from the file in this
+process rather than over a socket.
+
+>>> from pulserver import ReconPlugin
+>>> from pulserver.app import cartesian2D_recon
+>>> isinstance(cartesian2D_recon.PLUGIN, ReconPlugin)
+True
+
+The three hooks are the whole plugin, and nothing else is overridden:
+
+>>> sorted(
+...     hook for hook in ("startup", "receive", "recon")
+...     if hook in vars(cartesian2D_recon.Cartesian2DRecon)
+... )
+['receive', 'recon', 'startup']
+
+Reconstruct any 2D Cartesian scan::
+
+    images = cartesian2D_recon("scan.h5")
+
+Or re-instantiate the plugin with different settings, and drive it the
+same way::
+
+    plugin = cartesian2D_recon.Cartesian2DRecon(coil_compression=8)
+    images = plugin.run("scan.h5")
 """
 
 from __future__ import annotations

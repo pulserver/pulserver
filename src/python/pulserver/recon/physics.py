@@ -1921,6 +1921,17 @@ class Cartesian3D(MRIPhysics):
     coil-wise image ``(batch, coils, d, h, w)``, and a measurement
     ``(batch, coils, d, h, w)``. See :class:`Cartesian2D` for the layout
     convention.
+
+    Examples
+    --------
+    >>> import torch
+    >>> import pulserver.recon as recon
+    >>> physics = recon.Cartesian3D(
+    ...     torch.ones(1, 1, 8, 8, 8),
+    ...     torch.ones(1, 2, 8, 8, 8, dtype=torch.complex64) / 2 ** 0.5,
+    ... )
+    >>> physics.A(torch.zeros(1, 8, 8, 8, dtype=torch.complex64)).shape
+    torch.Size([1, 2, 8, 8, 8])
     """
 
     def __init__(
@@ -2421,6 +2432,24 @@ class NonCartesian2D(MRIPhysics):
     Notes
     -----
     Images are ``(batch, 2, h, w)``, measurements ``(batch, coils, k, 2)``.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> import torch
+    >>> import pulserver.recon as recon
+    >>> angles = np.linspace(0, np.pi, 8, endpoint=False)
+    >>> radius = np.linspace(-0.5, 0.5, 32)
+    >>> trajectory = np.stack(
+    ...     [np.outer(np.cos(angles), radius), np.outer(np.sin(angles), radius)], -1
+    ... ).reshape(-1, 2)
+
+    With no maps the adjoint grids each coil onto the image matrix, which is
+    what a density-compensated first estimate is made of:
+
+    >>> physics = recon.NonCartesian2D(trajectory, (16, 16))
+    >>> physics.A_adjoint(torch.ones(1, 1, 256, dtype=torch.complex64)).shape
+    torch.Size([1, 1, 16, 16])
     """
 
     def __init__(

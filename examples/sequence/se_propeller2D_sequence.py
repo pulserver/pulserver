@@ -14,6 +14,37 @@ non-Cartesian set against the trajectory the acquisitions carry.
 ``main`` returns the :class:`pulserver.pypulseq.Sequence`; ``PLUGIN`` is the
 same sequence behind the scanner protocol contract, and running this module
 as a script writes a ``.seq`` from the same controls.
+
+Examples
+--------
+>>> from pulserver.app import se_propeller2D_sequence
+>>> seq = se_propeller2D_sequence(n_x=32, n_blades=4, n_slices=1, te=20e-3, tr=None)
+>>> seq.num_trs, seq.num_segments
+(4, 3)
+
+One blade per excitation: a short Cartesian train, turned:
+
+.. plot::
+   :include-source:
+
+   from pulserver.app import se_propeller2D_sequence
+
+   seq = se_propeller2D_sequence(n_x=32, n_blades=4, n_slices=1, te=20e-3, tr=None)
+   seq.plot(tr="worst_case", time_disp="ms", grad_disp="mT/m", stacked=True,
+            plot_now=False)
+
+Every blade crosses the centre of k-space, which is what lets each one
+navigate the motion between them:
+
+.. plot::
+   :include-source:
+
+   from pulserver.app import se_propeller2D_sequence
+
+   seq = se_propeller2D_sequence(
+       n_x=32, n_blades=4, n_slices=1, te=20e-3, tr=None
+   )
+   seq.plot_kspace(show_trajectory=False, plot_now=False)
 """
 
 from __future__ import annotations

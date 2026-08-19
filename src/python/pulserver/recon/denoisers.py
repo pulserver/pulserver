@@ -486,7 +486,16 @@ class LLR(_ModuleBase):
 
 
 class TV(_ModuleBase):
-    """DeepInverse's spatially 2D/3D-agnostic total-variation denoiser."""
+    """DeepInverse's spatially 2D/3D-agnostic total-variation denoiser.
+
+    Examples
+    --------
+    >>> import torch
+    >>> import pulserver.recon as recon
+    >>> prior = recon.TV()
+    >>> prior(torch.zeros(1, 1, 8, 8), 0.1).shape
+    torch.Size([1, 1, 8, 8])
+    """
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__()

@@ -656,10 +656,11 @@ def test_the_app_page_documents_every_reconstruction():
 
     import pulserver.app.recon as family
 
-    page = Path(__file__).resolve().parents[3] / "docs/api/python/app_recon.md"
+    page = Path(__file__).resolve().parents[3] / "docs/api/python/apps.md"
     listed: set[str] = set()
     for block in re.findall(
-        r"autosummary::\n(?:\s+:\w+:.*\n)*\n((?:   \S+\n)+)", page.read_text()
+        r"autosummary::\n\s+:toctree: \.\./generated/app_recon\n\n((?:   \S+\n)+)",
+        page.read_text(),
     ):
         listed |= {line.strip() for line in block.splitlines() if line.strip()}
 
