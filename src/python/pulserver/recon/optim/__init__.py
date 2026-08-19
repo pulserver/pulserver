@@ -8,37 +8,20 @@ ImportError if the numerical stack is genuinely absent when it runs.
 
 from __future__ import annotations
 
-__all__ = [
-    "ADMM",
-    "CGInfo",
-    "ConjugateGradient",
-    "FISTA",
-    "IRGNM",
-    "OptimResult",
-    "OptimState",
-    "PDHG",
-    "PolynomialPreconditioner",
-    "StackedPrior",
-    "pics",
-]
-
 import importlib
 from typing import TYPE_CHECKING, Any
 
-#: Public name to the private module defining it.
+from .. import _MEMBERS as _RECON_MEMBERS
+
+#: Public name to the private module defining it, derived from the one map
+#: the parent package keeps of where every flat name lives.
 _MEMBERS = {
-    "ADMM": "admm",
-    "CGInfo": "cg",
-    "ConjugateGradient": "cg",
-    "FISTA": "fista",
-    "IRGNM": "irgnm",
-    "OptimResult": "state",
-    "OptimState": "state",
-    "PDHG": "pdhg",
-    "PolynomialPreconditioner": "_algorithms",
-    "StackedPrior": "prior",
-    "pics": "_algorithms",
+    name: target.removeprefix("optim.")
+    for name, target in _RECON_MEMBERS.items()
+    if target.startswith("optim.")
 }
+
+__all__ = sorted(_MEMBERS)
 
 
 def __getattr__(name: str) -> Any:

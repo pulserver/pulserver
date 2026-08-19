@@ -24,6 +24,9 @@ class FISTA(deepinv.optim.FISTA):
     simultaneous priors require PDHG or ADMM; FISTA rejects them because an
     average of proximity operators is not the proximity operator of their sum.
 
+    Satisfies :class:`pulserver.recon.StatefulReconstructor`, the one
+    step-wise contract the learned stack trains against.
+
     Parameters
     ----------
     data_fidelity, prior, lambda_reg, stepsize, a, g_param

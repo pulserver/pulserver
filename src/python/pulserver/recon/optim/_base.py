@@ -18,6 +18,12 @@ from .state import OptimResult, OptimState
 
 
 class _IterativeOptimizer(torch.nn.Module):
+    """Shared init_state/step/get_output base for Pulserver solvers.
+
+    Every subclass satisfies :class:`pulserver.recon.StatefulReconstructor`,
+    the one step-wise contract the learned stack trains against.
+    """
+
     def __init__(
         self,
         *,

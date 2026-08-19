@@ -28,18 +28,18 @@ from typing import TYPE_CHECKING, Any
 #: Public name to the module defining it. Every name is reachable flat; this
 #: is the only place the file layout is written down.
 _MEMBERS = {
-    "ADMM": "optim",
+    "ADMM": "optim.admm",
     "AcquisitionBucket": "plugin",
     "AcquisitionBucketStats": "plugin",
     "AcquisitionFlag": "plugin",
     "AdcRole": "simulation",
     "AverageDenoiser": "denoisers",
-    "CGInfo": "optim",
+    "CGInfo": "optim.cg",
     "Cartesian2D": "physics",
     "Cartesian3D": "physics",
     "CartesianGridder": "preprocessing",
     "CoefficientAccessor": "postprocessing",
-    "ConjugateGradient": "optim",
+    "ConjugateGradient": "optim.cg",
     "ContextAgnosticDenoiser": "models",
     "CudaStreaming": "execution",
     "EPIPhaseCorrection": "preprocessing",
@@ -47,12 +47,12 @@ _MEMBERS = {
     "EpiAcquisitionGroups": "preprocessing",
     "EventType": "simulation",
     "ExamCache": "plugin",
-    "FISTA": "optim",
+    "FISTA": "optim.fista",
     "GradientCoefficients": "postprocessing",
     "GradientDataConsistency": "learned",
     "Gradunwarp": "postprocessing",
     "Homodyne": "preprocessing",
-    "IRGNM": "optim",
+    "IRGNM": "optim.irgnm",
     "IXI": "datasets",
     "IXITiny": "datasets",
     "ImageGeometry": "postprocessing",
@@ -67,12 +67,12 @@ _MEMBERS = {
     "NonCartesian2D": "physics",
     "NonCartesian3D": "physics",
     "OffResonance": "physics",
-    "OptimResult": "optim",
-    "OptimState": "optim",
-    "PDHG": "optim",
+    "OptimResult": "optim.state",
+    "OptimState": "optim.state",
+    "PDHG": "optim.pdhg",
     "POCS": "preprocessing",
     "PhasePoleCorrection": "calibration",
-    "PolynomialPreconditioner": "optim",
+    "PolynomialPreconditioner": "optim._algorithms",
     "Positive": "denoisers",
     "ReconBuffer": "plugin",
     "ReconContext": "plugin",
@@ -93,7 +93,7 @@ _MEMBERS = {
     "SequenceParameters": "simulation",
     "ShimDefinition": "simulation",
     "SmsEpiInputs": "preprocessing",
-    "StackedPrior": "optim",
+    "StackedPrior": "optim.prior",
     "StatefulReconstructor": "learned",
     "Subspace": "physics",
     "TGV": "denoisers",
@@ -136,7 +136,7 @@ _MEMBERS = {
     "noise_prewhiten": "preprocessing",
     "odd_even_fit": "preprocessing",
     "partition_epi_acquisitions": "preprocessing",
-    "pics": "optim",
+    "pics": "optim._algorithms",
     "pipe_menon_dcf": "preprocessing",
     "receiver_channels": "preprocessing",
     "recon_shape": "preprocessing",
@@ -150,7 +150,9 @@ __all__ = sorted(_MEMBERS)
 
 #: Reachable as attributes for anyone who wants them, but not part of the
 #: public namespace: the flat names above are.
-_SUBMODULES = frozenset(_MEMBERS.values()) - {"_mrd.metadata"}
+_SUBMODULES = frozenset(
+    value.split(".", 1)[0] for value in _MEMBERS.values()
+) - {"_mrd"}
 
 
 def __getattr__(name: str) -> Any:
