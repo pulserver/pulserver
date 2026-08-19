@@ -22,10 +22,12 @@ rather than an EPI train keeps EPI distortion out of the coil maps.
 
 When the sequence ran multiband (``SMS_EXCITATION``), that same prescan visits
 every slice while the imaging excites combs, so the calibration carries more
-slices than the imaging does -- which is how the two are told apart here. Each
-group is then unfolded back into its bands by a model-based solve
-(:class:`pulserver.recon.physics.SMS`) against the CAIPI phase the gz blips
-played.
+slices than the imaging does -- which is how the two are told apart here. A
+group's bands land in one readout, so unfolding them is the ordinary
+:func:`pulserver.recon.pics` solve against an operator that sums the bands
+(:class:`pulserver.recon.physics.SMS`), each modulated by the CAIPI phase the
+gz blips played. Summing them coherently is why every band's maps have to come
+off the one prescan the same way.
 """
 
 from __future__ import annotations

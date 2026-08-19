@@ -44,9 +44,13 @@ def coil_maps_from_reference(kspace: Any, *, spatial_ndim: int = 2) -> Any:
     band-limits the images: exactly the smoothing a sensitivity map wants.
 
     Where :class:`NLINV` solves for maps and object together and is the better
-    estimate for one image, this is the direct one -- and the one to use when
-    several images are solved against each other, because maps read off one
-    reference this way share a scale that a per-image solve does not guarantee.
+    estimate for one image, this is the direct one -- and the one an SMS
+    separation needs. A single-image solve determines only the product of maps
+    and object, so the scale and phase split between them is a gauge each solve
+    fixes for itself and ``abs()`` then hides. Bands solved against each other
+    are summed coherently, so that gauge stops being free: maps read off one
+    reference the same way for every slice share it, and maps solved per slice
+    do not.
 
     Parameters
     ----------

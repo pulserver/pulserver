@@ -1,65 +1,14 @@
-"""Simultaneous-multislice data contracts and private encoding machinery."""
+"""Private simultaneous-multislice encoding machinery."""
 
 from __future__ import annotations
 
-__all__ = ["SmsEpiInputs"]
+__all__: list[str] = []
 
-from dataclasses import dataclass
 from typing import Any
 
 import torch
 
 import deepinv
-
-
-@dataclass(frozen=True)
-class SmsEpiInputs:
-    """Inputs a simultaneous-multislice reconstruction needs, checked together.
-
-    Parameters
-    ----------
-    imaging
-        Multiband data, encoded by whatever trajectory the sequence played.
-    coil_maps
-        Per-slice coil maps for the model-based separation. Keep this tensor
-        on the selected Torch CPU/CUDA device.
-    single_band_reference
-        Single-band prescan the coil maps can be derived from, when they were
-        not estimated another way.
-    caipi_encoding
-        The CAIPI phase/modulation model that was played. Required whenever
-        the multiband factor is greater than one, since it is what tells the
-        simultaneously excited slices apart.
-
-    Notes
-    -----
-    This class collects and checks the inputs; the separation itself is
-    :class:`pulserver.recon.physics.SMS`, which composes with any in-plane
-    physics and so does not restrict the acquisition to a Cartesian encode.
-    """
-
-    imaging: Any
-    coil_maps: Any | None = None
-    single_band_reference: Any | None = None
-    caipi_encoding: Any | None = None
-
-    def validate(self, multiband_factor: int) -> None:
-        """Raise ``ValueError`` when an SMS backend lacks essential inputs."""
-        if multiband_factor < 1:
-            raise ValueError("multiband_factor must be at least one")
-        if multiband_factor > 1 and self.caipi_encoding is None:
-            raise ValueError(
-                "SMS reconstruction requires the acquired CAIPI encoding model"
-            )
-        if (
-            multiband_factor > 1
-            and self.coil_maps is None
-            and self.single_band_reference is None
-        ):
-            raise ValueError(
-                "SMS reconstruction requires coil maps or a single-band reference"
-            )
-
 
 # %% private module subroutines
 

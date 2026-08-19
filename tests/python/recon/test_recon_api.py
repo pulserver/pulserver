@@ -18,7 +18,6 @@ import pulserver.recon.preprocessing as preprocessing
 import pulserver.recon.physics as physics
 from pulserver.recon._mrd import metadata
 from pulserver.recon.preprocessing import (
-    EPIPhaseCorrection,
     Homodyne,
     POCS,
     correct_epi_eddy_currents,
@@ -334,67 +333,6 @@ def test_pocs_keeps_acquired_partial_fourier_lines_exact():
     recovered = np.fft.fftshift(np.fft.fftn(np.fft.ifftshift(result), norm="ortho"))
 
     np.testing.assert_allclose(recovered[mask], kspace[mask], atol=1e-10)
-
-
-@pytest.mark.parametrize("library", ["numpy", "torch"])
-def test_epi_phase_correction_tracks_independent_shot_drift(library):
-    coordinate = np.linspace(-1, 1, 32)
-    true_phase = np.stack(
-        [0.1 + 0.3 * coordinate, -0.25 + 0.15 * coordinate],
-    )
-    signal = np.ones((2, 3, 32), dtype=np.complex64)
-    positive = signal * np.exp(0.5j * true_phase[:, None])
-    negative = signal * np.exp(-0.5j * true_phase[:, None])
-    if library == "torch":
-        torch = pytest.importorskip("torch")
-        positive = torch.as_tensor(positive)
-        negative = torch.as_tensor(negative)
-        expected = torch.as_tensor(true_phase, dtype=positive.real.dtype)
-    else:
-        expected = true_phase
-
-    model = EPIPhaseCorrection(shot_axis=0, readout_axis=-1)
-    phase = model.fit(positive, negative)
-    corrected_positive, corrected_negative, _ = model.correct(
-        positive,
-        negative,
-        phase,
-    )
-
-    if library == "torch":
-        torch.testing.assert_close(phase, expected, atol=2e-6, rtol=2e-6)
-        torch.testing.assert_close(
-            corrected_positive,
-            corrected_negative,
-            atol=2e-6,
-            rtol=2e-6,
-        )
-    else:
-        np.testing.assert_allclose(phase, expected, atol=2e-6, rtol=2e-6)
-        np.testing.assert_allclose(
-            corrected_positive,
-            corrected_negative,
-            atol=2e-6,
-            rtol=2e-6,
-        )
-
-
-def test_epi_phase_correction_supports_nonleading_shot_axis():
-    coordinate = np.linspace(-1, 1, 24)
-    phase = np.stack([0.2 * coordinate, 0.1 - 0.3 * coordinate])
-    positive = np.exp(0.5j * phase[:, None]).transpose(2, 1, 0)
-    negative = np.exp(-0.5j * phase[:, None]).transpose(2, 1, 0)
-    model = EPIPhaseCorrection(shot_axis=2, readout_axis=0)
-
-    fitted = model.fit(positive, negative)
-    corrected_positive, corrected_negative, broadcast_phase = model(
-        positive,
-        negative,
-        fitted,
-    )
-
-    assert broadcast_phase.shape == (24, 1, 2)
-    np.testing.assert_allclose(corrected_positive, corrected_negative, atol=1e-7)
 
 
 def test_average_denoiser_is_a_registered_torch_model(monkeypatch):

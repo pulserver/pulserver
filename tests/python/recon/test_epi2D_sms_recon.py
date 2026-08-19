@@ -6,6 +6,11 @@ calibration for each slice, then the blipped-CAIPI multiband shots whose slices
 collapse with the CAIPI phase the sequence played. The reconstruction has to
 estimate each slice's coil maps from the calibration and unfold each group back
 into its bands, placing them at the right slices.
+
+The residual bound is what holds the bands to a common calibration gauge: a
+sum over bands separates only if their maps were read the same way, so maps
+whose scale or phase is fixed per slice leak signal between bands and the
+bound catches it.
 """
 
 from __future__ import annotations

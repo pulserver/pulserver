@@ -80,18 +80,18 @@ a plugin reconstructing sorted k-space overrides no hook at all.
 
 ## Reading the header
 
-What a scan declares about itself, for the shapes a reconstruction allocates
-and crops to.
+What a scan declares about itself. The encoded grid is not here: `ReconBuffer`
+is laid out from it and answers with `.axes` and `.kspace.shape`, so a second
+reading of the same fields could only disagree with the buffer a plugin
+actually fills. What is left is what the header says and the buffer does not —
+the matrix to crop to, and how many echoes to loop over.
 
 ```{eval-rst}
 .. autosummary::
    :toctree: ../generated/recon
 
-   encoded_shape
-   encoded_volume
    recon_shape
    recon_volume
-   receiver_channels
    echo_count
    diffusion_table
 ```
@@ -136,29 +136,20 @@ conjugate symmetry an image with slowly varying phase carries.
 
 ### EPI
 
-An EPI stream is several roles in one, and its reversed lines need the
-odd/even ramp fitted from a navigator before they belong anywhere.
+A reversed EPI line needs the odd/even ramp fitted from a navigator before it
+belongs anywhere: `odd_even_fit` reads the ramp off a blip-nulled triplet and
+`correct_lines` flips and demodulates by it, which is what a plugin does in
+`receive` before placing the readout.
 
 ```{eval-rst}
 .. autosummary::
    :toctree: ../generated/recon
 
-   partition_epi_acquisitions
    odd_even_fit
    correct_lines
    epi_ramp_interpolate
    estimate_epi_eddy_phase
    correct_epi_eddy_currents
-```
-
-```{eval-rst}
-.. autosummary::
-   :toctree: ../generated/recon
-   :template: autosummary/class.rst
-
-   EpiAcquisitionGroups
-   EPIPhaseCorrection
-   SmsEpiInputs
 ```
 
 ## Calibration

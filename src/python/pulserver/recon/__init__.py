@@ -41,9 +41,7 @@ _MEMBERS = {
     "ConjugateGradient": "optim.cg",
     "ContextAgnosticDenoiser": "models",
     "CudaStreaming": "execution",
-    "EPIPhaseCorrection": "preprocessing",
     "EncodingSpace": "plugin",
-    "EpiAcquisitionGroups": "preprocessing",
     "EventType": "simulation",
     "ExamCache": "plugin",
     "FISTA": "optim.fista",
@@ -91,7 +89,6 @@ _MEMBERS = {
     "SequenceEvent": "simulation",
     "SequenceParameters": "simulation",
     "ShimDefinition": "simulation",
-    "SmsEpiInputs": "preprocessing",
     "StackedPrior": "optim.prior",
     "StatefulReconstructor": "learned",
     "Subspace": "physics",
@@ -123,8 +120,6 @@ _MEMBERS = {
     "default_model_paths": "weights",
     "diffusion_table": "_mrd.metadata",
     "echo_count": "preprocessing",
-    "encoded_shape": "preprocessing",
-    "encoded_volume": "preprocessing",
     "epi_ramp_interpolate": "preprocessing",
     "estimate_epi_eddy_phase": "preprocessing",
     "fftc": "preprocessing",
@@ -134,10 +129,8 @@ _MEMBERS = {
     "load_model": "weights",
     "noise_prewhiten": "preprocessing",
     "odd_even_fit": "preprocessing",
-    "partition_epi_acquisitions": "preprocessing",
     "pics": "optim._algorithms",
     "pipe_menon_dcf": "preprocessing",
-    "receiver_channels": "preprocessing",
     "recon_shape": "preprocessing",
     "recon_volume": "preprocessing",
     "remove_readout_oversampling": "preprocessing",
@@ -243,17 +236,12 @@ if TYPE_CHECKING:
     from .postprocessing import center_crop as center_crop
     from .postprocessing import coil_combine as coil_combine
     from .postprocessing import run_pyhysco as run_pyhysco
-    from .preprocessing import EPIPhaseCorrection as EPIPhaseCorrection
-    from .preprocessing import EpiAcquisitionGroups as EpiAcquisitionGroups
     from .preprocessing import Homodyne as Homodyne
     from .preprocessing import POCS as POCS
-    from .preprocessing import SmsEpiInputs as SmsEpiInputs
     from .preprocessing import coil_compress as coil_compress
     from .preprocessing import correct_epi_eddy_currents as correct_epi_eddy_currents
     from .preprocessing import correct_lines as correct_lines
     from .preprocessing import echo_count as echo_count
-    from .preprocessing import encoded_shape as encoded_shape
-    from .preprocessing import encoded_volume as encoded_volume
     from .preprocessing import epi_ramp_interpolate as epi_ramp_interpolate
     from .preprocessing import estimate_epi_eddy_phase as estimate_epi_eddy_phase
     from .preprocessing import fftc as fftc
@@ -261,9 +249,7 @@ if TYPE_CHECKING:
     from .preprocessing import ifftc as ifftc
     from .preprocessing import noise_prewhiten as noise_prewhiten
     from .preprocessing import odd_even_fit as odd_even_fit
-    from .preprocessing import partition_epi_acquisitions as partition_epi_acquisitions
     from .preprocessing import pipe_menon_dcf as pipe_menon_dcf
-    from .preprocessing import receiver_channels as receiver_channels
     from .preprocessing import recon_shape as recon_shape
     from .preprocessing import recon_volume as recon_volume
     from .preprocessing import remove_readout_oversampling as remove_readout_oversampling
