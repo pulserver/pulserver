@@ -221,12 +221,15 @@ class ReconBuffer:
     space
         The encoding space this buffers.
     coils, readout
-        Channels and samples to allocate, widening the space's declaration.
-        Both are facts the data carries -- readout oversampling makes an
-        acquisition wider than the encoded matrix says, and a header need not
-        state its channel count at all -- so the first arrival widens the
-        buffer rather than being refused. Where the acquisitions go is another
-        matter: that the header declares, and a contradiction is an error.
+        Channels and samples to allocate. Both are facts the data carries
+        rather than the header, so the first arrival settles them. They settle
+        differently: a readout narrower than the encoded matrix is a partial
+        echo and still needs the full width to be right-aligned in, so the
+        readout only ever widens, while the channel count is simply what
+        arrived -- a plugin that compresses the array before placing a readout
+        places fewer channels than the header declares, and the buffer holds
+        what it was given. Where the acquisitions go is another matter: that
+        the header declares, and a contradiction is an error.
     dtype
         Complex dtype of :attr:`kspace`.
 
@@ -260,7 +263,7 @@ class ReconBuffer:
         dtype: Any = np.complex64,
     ) -> None:
         self.space = space
-        self.coils = max(space.coils, coils or 0)
+        self.coils = int(coils) if coils else space.coils
         self.readout = max(space.readout, readout or 0)
         shape = (self.coils, *space.shape[1:-1], self.readout)
         self.kspace = np.zeros(shape, dtype=dtype)

@@ -102,7 +102,9 @@ answers with the value, whichever it was written as.
 ## Preprocessing
 
 What happens to the measurement before it is inverted: noise, oversampling,
-coil count, and the corrections a particular readout demands.
+coil count, and the corrections a particular readout demands. The first two are
+per-acquisition work, which is why a plugin does them in `receive` rather than
+waiting for a trigger.
 
 ```{eval-rst}
 .. autosummary::
@@ -119,7 +121,10 @@ coil count, and the corrections a particular readout demands.
 ### Partial Fourier
 
 Recovering the k-space edge a partial acquisition never took, from the
-conjugate symmetry an image with slowly varying phase carries.
+conjugate symmetry an image with slowly varying phase carries. `POCS` iterates
+towards an image that reproduces every acquired sample and `Homodyne` reaches
+an answer in one pass; `fill_partial_echo` takes either by name, and that name
+is what a plugin exposes as its `partial_fourier` setting.
 
 ```{eval-rst}
 .. autosummary::

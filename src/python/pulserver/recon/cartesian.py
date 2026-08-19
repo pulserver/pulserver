@@ -27,6 +27,7 @@ def cartesian_recon(
     regularization: float = 1e-3,
     iterations: int = 40,
     pocs_iterations: int = 12,
+    partial_fourier: str = "pocs",
     device: Any = None,
 ) -> np.ndarray:
     """Reconstruct one Cartesian k-space, the mask selecting which way.
@@ -65,6 +66,9 @@ def cartesian_recon(
         Maximum CG iterations.
     pocs_iterations
         Partial-echo POCS iterations.
+    partial_fourier
+        Which partial-Fourier estimator fills a truncated readout, ``"pocs"``
+        or ``"homodyne"``; see :func:`~pulserver.recon.fill_partial_echo`.
     device
         Torch device the reconstruction runs on. ``None`` is the CPU.
 
@@ -100,7 +104,11 @@ def cartesian_recon(
             ifftc(kspace, axes=spatial)
             if readout.all()
             else fill_partial_echo(
-                kspace, readout, pocs_iterations, dimension=mask.ndim
+                kspace,
+                readout,
+                pocs_iterations,
+                dimension=mask.ndim,
+                method=partial_fourier,
             )
         )
         return coil_combine(coils, coil_axis=0)
@@ -131,7 +139,11 @@ def cartesian_recon(
     if readout.all():
         return image
     return fill_partial_echo(
-        fftc(image, axes=spatial), readout, pocs_iterations, dimension=mask.ndim
+        fftc(image, axes=spatial),
+        readout,
+        pocs_iterations,
+        dimension=mask.ndim,
+        method=partial_fourier,
     )
 
 

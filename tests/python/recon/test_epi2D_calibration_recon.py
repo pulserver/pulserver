@@ -225,3 +225,34 @@ def test_the_prescan_never_reaches_the_imaging_grid(kspace, context):
     assert imaging[0].sum() == N // ACCELERATION
     assert calibration[0].sum() == N_ACS
     assert sorted(plugin.coil_maps) == list(range(N_SLICES))
+
+
+def test_the_imaging_buffer_holds_only_the_virtual_channels(kspace, context):
+    """The prescan is a separate encoding space, so the basis exists before the
+    first imaging line: the imaging grid is allocated compressed and never holds
+    the full array."""
+    virtual = 4
+    plugin = epi2D_recon.Epi2DRecon(virtual_coils=virtual).spawn()
+    plugin.startup(context)
+    for acquisition in stream(kspace):
+        plugin.receive(acquisition, context)
+
+    assert plugin.buffers[0].kspace.shape[0] == virtual
+    assert plugin.buffers[1].kspace.shape[0] == COILS
+
+
+def test_the_basis_the_prescan_established_is_left_in_the_exam_cache(kspace, context):
+    """The prescan is its own sequence, so the imaging may arrive as a stream of
+    its own -- the exam cache is what carries the basis across."""
+    plugin = epi2D_recon.Epi2DRecon().spawn()
+    plugin.startup(context)
+    for acquisition in stream(kspace):
+        plugin.receive(acquisition, context)
+
+    basis = context.exam.get("epi2D_coil_basis")
+    assert basis is not None
+    assert basis.shape == (min(8, COILS), COILS)
+    # Orthonormal rows: the compression is a projection, not a rescaling.
+    np.testing.assert_allclose(
+        basis @ basis.conj().T, np.eye(basis.shape[0]), atol=1e-5
+    )

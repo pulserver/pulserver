@@ -141,8 +141,17 @@ def fill_partial_echo(
     iterations: int = 12,
     *,
     dimension: int,
+    method: str = "pocs",
 ) -> Any:
     """Recover the readout edge a partial echo never acquired.
+
+    Both estimators rest on the same fact -- an image whose phase varies slowly
+    is nearly conjugate symmetric in k-space, so the missing edge is implied by
+    the acquired one. :class:`POCS` iterates towards an image that reproduces
+    every acquired sample; :class:`Homodyne` reaches an answer in one pass by
+    weighting the acquired half and demodulating the low-resolution phase.
+    POCS is the more faithful of the two and Homodyne the cheaper, which is the
+    choice a scanner-side reconstruction is actually making.
 
     Parameters
     ----------
@@ -151,22 +160,33 @@ def fill_partial_echo(
     readout
         Which readout samples were acquired, over the full width.
     iterations
-        POCS iterations.
+        POCS iterations. Homodyne takes one pass and ignores this.
     dimension
         How many trailing axes of ``kspace`` are spatial: 2 for a slice, 3 for
         a slab. Required rather than inferred, because whether a leading axis
         is coils or partitions is the caller's to know, and guessing it wrong
         fills the wrong axis and says nothing.
+    method
+        ``"pocs"`` or ``"homodyne"``.
 
     Returns
     -------
     array
-        The partial-Fourier image, in the namespace of ``kspace``: the
-        reconstruction whose re-encoding reproduces every acquired sample.
+        The partial-Fourier image, in the namespace of ``kspace``: for POCS,
+        the reconstruction whose re-encoding reproduces every acquired sample.
+
+    Raises
+    ------
+    ValueError
+        If ``method`` names neither estimator.
     """
-    return POCS(dimension=dimension, partial_axis=-1, iterations=iterations)(
-        kspace, readout
-    )
+    if method == "pocs":
+        return POCS(dimension=dimension, partial_axis=-1, iterations=iterations)(
+            kspace, readout
+        )
+    if method == "homodyne":
+        return Homodyne(dimension=dimension, partial_axis=-1)(kspace, readout)
+    raise ValueError(f"method must be pocs or homodyne, got {method!r}")
 
 
 def fftc(data: Any, *, axes: int | tuple[int, ...] = (-2, -1)) -> Any:
@@ -257,20 +277,87 @@ def coil_compress(
     trajectory: Any | None = None,
     calibration_radius: float | None = None,
 ) -> tuple[Any, Any]:
-    """Apply mri-nufft SVD coil compression and return data plus matrix."""
-    try:
-        function = import_module("mrinufft.extras").coil_compression
-    except ImportError as error:
-        raise ImportError(
-            "Coil compression requires mri-nufft, which ships with "
-            "pulserver; reinstall the package to restore it."
-        ) from error
-    return function(
-        kspace,
-        n_coils,
-        traj=trajectory,
-        krad_thresh=calibration_radius,
-    )
+    """Compress the receive array onto its principal channels.
+
+    A receive array measures the same object through every element, so the
+    channels are strongly correlated and most of what they carry lives in far
+    fewer of them. The principal components of the sample covariance are those
+    channels: keeping the leading ones is the linear combination that retains
+    the most energy for a given count, and everything downstream -- the
+    sensitivities, the solve, the buffers -- then runs on the smaller array.
+
+    Parameters
+    ----------
+    kspace
+        The measurement, ``(coils, samples)``. Torch tensors keep their device.
+    n_coils
+        Virtual channels to keep, as a count, or the fraction of the energy to
+        retain when given as a float in ``(0, 1]``. A count beyond the physical
+        channels keeps them all.
+    trajectory
+        Where each sample was taken, ``(samples, dimensions)``. Only needed
+        with ``calibration_radius``.
+    calibration_radius
+        Estimate the components from the samples inside this fraction of the
+        maximum k-space radius, rather than from every sample -- the centre is
+        where the array's correlations are, and where the object is brightest.
+
+    Returns
+    -------
+    compressed : array
+        ``(n_coils, samples)`` in the virtual basis.
+    matrix : array
+        ``(n_coils, coils)``, the basis itself, for compressing anything else
+        the same way -- the acquisitions that arrive after a calibration
+        established it, or the sensitivities they are solved against.
+
+    Raises
+    ------
+    ValueError
+        If ``kspace`` is not two-dimensional, ``n_coils`` asks for nothing, or
+        ``calibration_radius`` is given without a trajectory.
+    """
+    xp, _ = _torch_or_numpy(kspace)
+    if kspace.ndim != 2:
+        raise ValueError(f"kspace must be (coils, samples), got {kspace.shape}")
+    if (calibration_radius is None) != (trajectory is None):
+        raise ValueError("calibration_radius and trajectory are given together")
+
+    region = kspace
+    if calibration_radius is not None:
+        radius = xp.sqrt(xp.sum(trajectory**2, axis=-1))
+        region = kspace[:, radius < calibration_radius * radius.max()]
+
+    # Eigenvectors of the sample covariance, largest eigenvalue first. eigh
+    # returns them as columns, and ascending, so the order is applied to the
+    # second axis and the rows of the result are the virtual channels.
+    values, vectors = xp.linalg.eigh(region @ region.conj().T)
+    order = xp.argsort(-values)
+    energies = [float(values[int(index)]) for index in order]
+
+    keep = _retained_channels(n_coils, energies)
+    matrix = vectors[:, order[:keep]].conj().T
+    return matrix @ kspace, matrix
+
+
+def _retained_channels(n_coils: int | float, energies: list[float]) -> int:
+    """How many principal channels a count or an energy fraction asks for."""
+    if isinstance(n_coils, float) and not float(n_coils).is_integer():
+        if not 0.0 < n_coils <= 1.0:
+            raise ValueError(f"an energy fraction must lie in (0, 1], got {n_coils}")
+        total = sum(energies)
+        if total <= 0.0:
+            return 1
+        running = 0.0
+        for count, energy in enumerate(energies, start=1):
+            running += energy
+            if running / total >= n_coils:
+                return count
+        return len(energies)
+    keep = int(n_coils)
+    if keep < 1:
+        raise ValueError(f"n_coils must keep at least one channel, got {n_coils}")
+    return min(keep, len(energies))
 
 
 def noise_prewhiten(

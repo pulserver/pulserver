@@ -11,6 +11,12 @@ this.
 Which reconstruction runs is read off the sampling mask by
 :func:`pulserver.recon.cartesian_recon`, not declared here.
 
+The buffer holds every physical channel: an autocalibration rectangle is
+imaging data on the imaging grid, so there is no point before the first line at
+which a coil basis could exist, and the compression happens on the way into the
+solve instead. A noise scan never reaches the buffer -- it whitens every line
+that follows.
+
 Echoes are an axis, not a variant: each is unaliased and filled against the
 same sensitivities, estimated from the first, and a single-echo scan is that
 loop run once.
@@ -33,7 +39,9 @@ from pulserver.recon import (
     AcquisitionFlag,
     cartesian_recon,
     center_crop,
+    coil_compress,
     has_acquisition_flag,
+    noise_prewhiten,
 )
 
 
@@ -48,6 +56,11 @@ class Cartesian3DRecon(ReconPlugin):
         Maximum CG iterations.
     pocs_iterations
         Partial-echo POCS iterations.
+    partial_fourier
+        Which estimator fills a truncated readout, ``"pocs"`` or ``"homodyne"``.
+    virtual_coils
+        Channels to compress the array onto before the solve. A scan with fewer
+        physical channels keeps them all.
     device
         Torch device the reconstruction runs on. ``None`` is the CPU.
     """
@@ -58,32 +71,46 @@ class Cartesian3DRecon(ReconPlugin):
         regularization: float = 1e-3,
         iterations: int = 40,
         pocs_iterations: int = 12,
+        partial_fourier: str = "pocs",
+        virtual_coils: int = 8,
         device: Any = None,
     ) -> None:
         super().__init__(
             split_on=AcquisitionFlag.LAST_IN_SEGMENT
             | AcquisitionFlag.LAST_IN_MEASUREMENT,
-            reject_flags=AcquisitionFlag.IS_NOISE_MEASUREMENT
-            | AcquisitionFlag.IS_PHASECORR_DATA,
+            reject_flags=AcquisitionFlag.IS_PHASECORR_DATA,
         )
         self.regularization = float(regularization)
         self.iterations = int(iterations)
         self.pocs_iterations = int(pocs_iterations)
+        self.partial_fourier = partial_fourier
+        self.virtual_coils = int(virtual_coils)
         self.device = device
 
     def startup(self, context: ReconContext) -> None:
         """Lay the scan's buffers out, and start with no maps."""
         super().startup(context)
         self.coil_maps: Any = None
+        self.coil_basis: Any = None
+        self.noise: Any = None
 
     def receive(self, acquisition: Any, context: ReconContext) -> Any:
-        """Place the line, then route the boundary it closed.
+        """Whiten the line, place it, then route the boundary it closed.
 
         The measurement is tested first: its last line closes the trailing
         segment as well, and only a segment that closed nothing larger is the
         autocalibration rectangle.
         """
-        self.buffers.add(acquisition)
+        line = np.asarray(acquisition.data)
+        if has_acquisition_flag(acquisition, AcquisitionFlag.IS_NOISE_MEASUREMENT):
+            self.noise = (
+                line if self.noise is None else np.concatenate([self.noise, line], -1)
+            )
+            return None
+        if self.noise is not None:
+            line = noise_prewhiten(line, self.noise, coil_axis=0)
+
+        self.buffers.add(acquisition, line)
         if has_acquisition_flag(acquisition, AcquisitionFlag.LAST_IN_MEASUREMENT):
             return self.recon("imaging", context)
         if has_acquisition_flag(acquisition, AcquisitionFlag.LAST_IN_SEGMENT):
@@ -99,14 +126,20 @@ class Cartesian3DRecon(ReconPlugin):
             # The autocalibration rectangle, from the first echo: it has the
             # most signal, and every echo is unaliased against the same maps.
             kspace, mask = buffer.select(contrast=0)
+            lines = kspace[:, mask.any(axis=-1)].reshape(kspace.shape[0], -1)
+            _, self.coil_basis = coil_compress(lines, self.virtual_coils)
             self.coil_maps = NLINV(spatial_ndim=3)(
-                kspace[None], mask=mask, device=self.device
+                np.einsum("vc,c...->v...", self.coil_basis, kspace)[None],
+                mask=mask,
+                device=self.device,
             )
             return None
 
         results = []
         for echo in range(buffer.extents.get("contrast", 1)):
             kspace, mask = buffer.select(contrast=echo)
+            if self.coil_basis is not None:
+                kspace = np.einsum("vc,c...->v...", self.coil_basis, kspace)
             image = cartesian_recon(
                 kspace,
                 mask,
@@ -114,6 +147,7 @@ class Cartesian3DRecon(ReconPlugin):
                 regularization=self.regularization,
                 iterations=self.iterations,
                 pocs_iterations=self.pocs_iterations,
+                partial_fourier=self.partial_fourier,
                 device=self.device,
             )
             results.append(

@@ -35,6 +35,22 @@ holds the reconstruction of each branch over buffers that are already filled.
 There is no local helper between them: what a step needs is a name in
 {doc}`recon`, so a plugin reads as the composition it is.
 
+## What happens on the way in
+
+A noise scan measures the receiver, not the object, so it never reaches a
+buffer: `receive` keeps it and whitens every readout that follows against it.
+
+Coil compression is the same idea one step later, and where it can happen
+depends on what the sequence acquired. A scan whose calibration is a separate
+prescan — both EPI plugins — reads the array's principal channels off it when
+that prescan closes and leaves the basis in `context.exam`, which is what
+carries an artifact from the prescan's stream to the imaging one; every imaging
+readout is then compressed as it arrives, and the imaging buffer is allocated
+at the virtual channel count. A scan whose calibration is imaging data on the
+imaging grid has no such moment — there is no basis before the first line — so
+those plugins buffer the full array and compress once, on the way into the
+solve.
+
 The module also exposes `PLUGIN`, the configured
 {class}`pulserver.ReconPlugin` the scanner drives, which is what to subclass or
 re-instantiate with different settings.

@@ -27,6 +27,9 @@ from pulserver.recon import (
     AcquisitionFlag,
     NonCartesian3D,
     as_numpy,
+    coil_compress,
+    has_acquisition_flag,
+    noise_prewhiten,
     pics,
     pipe_menon_dcf,
 )
@@ -42,6 +45,9 @@ class NonCartesian3DRecon(ReconPlugin):
         design) or ``"pics"`` for an undersampled prescription.
     regularization, iterations
         The CG solve's Tikhonov weight and iteration ceiling, ``pics`` only.
+    virtual_coils
+        Channels to compress the array onto before the solve. A scan with fewer
+        physical channels keeps them all.
     calibration_width
         Width of the centred cube NLINV solves the sensitivities over,
         ``pics`` only.
@@ -55,21 +61,48 @@ class NonCartesian3DRecon(ReconPlugin):
         mode: str = "direct",
         regularization: float = 1e-3,
         iterations: int = 20,
+        virtual_coils: int = 8,
         calibration_width: int = 16,
         device: Any = None,
     ) -> None:
         super().__init__(
             split_on=AcquisitionFlag.LAST_IN_MEASUREMENT,
-            reject_flags=AcquisitionFlag.IS_NOISE_MEASUREMENT
-            | AcquisitionFlag.IS_PHASECORR_DATA,
+            reject_flags=AcquisitionFlag.IS_PHASECORR_DATA,
         )
         if mode not in ("direct", "pics"):
             raise ValueError(f"mode must be direct or pics, got {mode!r}")
         self.mode = mode
         self.regularization = float(regularization)
         self.iterations = int(iterations)
+        self.virtual_coils = int(virtual_coils)
         self.calibration_width = int(calibration_width)
         self.device = device
+
+    def startup(self, context: ReconContext) -> None:
+        """Lay the scan's buffers out, with no noise measured yet."""
+        super().startup(context)
+        self.noise: Any = None
+
+    def receive(self, acquisition: Any, context: ReconContext) -> Any:
+        """Whiten the readout and place it, and reconstruct at the end of the scan.
+
+        A noise scan is not imaging data and never reaches a buffer: what it
+        leaves behind is the covariance every readout that follows is whitened
+        by.
+        """
+        line = np.asarray(acquisition.data)
+        if has_acquisition_flag(acquisition, AcquisitionFlag.IS_NOISE_MEASUREMENT):
+            self.noise = (
+                line if self.noise is None else np.concatenate([self.noise, line], -1)
+            )
+            return None
+        if self.noise is not None:
+            line = noise_prewhiten(line, self.noise, coil_axis=0)
+
+        self.buffers.add(acquisition, line)
+        if has_acquisition_flag(acquisition, AcquisitionFlag.LAST_IN_MEASUREMENT):
+            return self.recon("imaging", context)
+        return None
 
     def recon(self, branch: str, context: ReconContext) -> ReconResult:
         """Reconstruct the volume, once the measurement is complete."""
@@ -81,6 +114,7 @@ class NonCartesian3DRecon(ReconPlugin):
         data = buffer.kspace.reshape(buffer.kspace.shape[0], -1)
         points = buffer.points()[:3].reshape(3, -1).T.astype(np.float32)
 
+        data, _ = coil_compress(data, self.virtual_coils)
         density = pipe_menon_dcf(points, volume_shape)
         n_coils = int(data.shape[0])
 
