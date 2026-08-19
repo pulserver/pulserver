@@ -3027,8 +3027,7 @@ class Subspace(MRIPhysics):
         Base MRI physics, applied per frame.
     basis
         Temporal basis shaped ``(rank, frames)`` -- rank first. Rows are the
-        retained singular vectors, for example from
-        :func:`pulserver.recon.simulation.simulate_subspace`.
+        retained singular vectors of a signal dictionary.
     **kwargs
         Forwarded to the base physics wrapper.
 

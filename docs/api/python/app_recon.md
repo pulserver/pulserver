@@ -82,15 +82,6 @@ slice's navigator triplet.
    epi3D_recon
 ```
 
-## Utilities
-
-```{eval-rst}
-.. autosummary::
-   :toctree: ../generated/app_recon
-
-   subspace_basis_recon
-```
-
 `examples/recon/mrd_epi_preprocessing.py` sits beside these as a worked
 adapter for handing the EPI groups to an outside reconstruction backend. It is
 not part of the zoo and is not importable from `pulserver.app`.

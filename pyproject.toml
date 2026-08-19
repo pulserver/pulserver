@@ -25,7 +25,6 @@ dependencies = [
   # FINUFFT is the portable CPU backend. See the `cuda` extra for GPU.
   "mri-nufft[finufft]",
   "torch>=2.12",
-  "torchsim",
   "torchio>=0.20",
   "deepinv>=0.4",
   "ptwt",

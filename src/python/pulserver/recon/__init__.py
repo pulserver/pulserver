@@ -34,9 +34,7 @@ _MEMBERS = {
     "AcquisitionFlag": "plugin",
     "AdcRole": "simulation",
     "AverageDenoiser": "denoisers",
-    "BSSFP": "simulation",
     "CGInfo": "optim",
-    "CMRxReconSliceDataset": "datasets",
     "Cartesian2D": "physics",
     "Cartesian3D": "physics",
     "CartesianGridder": "preprocessing",
@@ -47,30 +45,21 @@ _MEMBERS = {
     "CudaStreaming": "execution",
     "EPIPhaseCorrection": "preprocessing",
     "EncodingSpace": "plugin",
-    "EpgInterpreter": "simulation",
     "EpiAcquisitionGroups": "preprocessing",
     "EventType": "simulation",
     "ExamCache": "plugin",
     "FISTA": "optim",
-    "FSE": "simulation",
-    "FastMRISliceDataset": "datasets",
     "GradientCoefficients": "postprocessing",
     "GradientDataConsistency": "learned",
     "Gradunwarp": "postprocessing",
-    "HDF5Dataset": "datasets",
     "Homodyne": "preprocessing",
     "IRGNM": "optim",
     "IXI": "datasets",
     "IXITiny": "datasets",
-    "ImageDataset": "datasets",
-    "ImageFolder": "datasets",
     "ImageGeometry": "postprocessing",
     "LLR": "denoisers",
-    "LidcIdriSliceDataset": "datasets",
     "MODEL_PATH_ENV": "weights",
     "MRIPhysics": "physics",
-    "MRISliceTransform": "datasets",
-    "MoDL": "models",
     "ModelBundle": "weights",
     "ModelStore": "weights",
     "NLINV": "calibration",
@@ -83,12 +72,9 @@ _MEMBERS = {
     "OptimState": "optim",
     "PDHG": "optim",
     "POCS": "preprocessing",
-    "PatchDataset": "datasets",
     "PhasePoleCorrection": "calibration",
     "PolynomialPreconditioner": "optim",
     "Positive": "denoisers",
-    "RAM": "models",
-    "RandomPatchSampler": "datasets",
     "ReconBuffer": "plugin",
     "ReconContext": "plugin",
     "ReconData": "plugin",
@@ -100,34 +86,24 @@ _MEMBERS = {
     "RigidMotionEKF": "motion",
     "RigidMotionEstimate": "motion",
     "RigidRegistration": "motion",
-    "SKMTEASliceDataset": "datasets",
     "SMS": "physics",
-    "SPGR": "simulation",
-    "SSFPEcho": "simulation",
-    "SSFPFID": "simulation",
     "ScaledAdjoint": "learned",
     "SequenceDescription": "simulation",
     "SequenceDescriptionCollection": "simulation",
     "SequenceEvent": "simulation",
     "SequenceParameters": "simulation",
     "ShimDefinition": "simulation",
-    "SimpleFastMRISliceDataset": "datasets",
-    "SimulationResult": "simulation",
     "SmsEpiInputs": "preprocessing",
     "StackedPrior": "optim",
     "StatefulReconstructor": "learned",
     "Subspace": "physics",
-    "SubspaceBasis": "simulation",
     "TGV": "denoisers",
     "TV": "denoisers",
-    "TensorDataset": "datasets",
-    "TissueProperties": "simulation",
     "Toeplitz": "physics",
     "TorchIODataset": "datasets",
     "UnrollResult": "learned",
     "UnrollState": "learned",
     "UnrolledReconstructor": "learned",
-    "VarNet": "models",
     "WaveEncoding": "physics",
     "WavePSF": "calibration",
     "WavePSFCalibration": "calibration",
@@ -141,7 +117,6 @@ _MEMBERS = {
     "calibration_extent": "calibration",
     "cartesian_3d_to_2d": "preprocessing",
     "center_crop": "postprocessing",
-    "check_dataset": "datasets",
     "coil_combine": "postprocessing",
     "coil_compress": "preprocessing",
     "coil_images": "reconstruction",
@@ -151,7 +126,6 @@ _MEMBERS = {
     "decompress_shape": "simulation",
     "default_model_paths": "weights",
     "diffusion_table": "_mrd.metadata",
-    "download_archive": "datasets",
     "echo_count": "preprocessing",
     "encoded_shape": "preprocessing",
     "encoded_volume": "preprocessing",
@@ -159,12 +133,10 @@ _MEMBERS = {
     "estimate_epi_eddy_phase": "preprocessing",
     "fftc": "preprocessing",
     "fill_partial_echo": "reconstruction",
-    "generate_dataset": "datasets",
     "grid_cartesian": "preprocessing",
     "has_acquisition_flag": "plugin",
     "ifftc": "preprocessing",
     "load_model": "weights",
-    "make_interpreter": "simulation",
     "measurement_to_channels": "physics",
     "measurement_to_trailing": "physics",
     "noise_prewhiten": "preprocessing",
@@ -181,7 +153,6 @@ _MEMBERS = {
     "save_bundle": "weights",
     "sense": "reconstruction",
     "sensitivities": "calibration",
-    "simulate_subspace": "simulation",
     "smooth_sensitivities": "calibration",
 }
 
@@ -219,24 +190,9 @@ if TYPE_CHECKING:
     from .calibration import calibration_extent as calibration_extent
     from .calibration import sensitivities as sensitivities
     from .calibration import smooth_sensitivities as smooth_sensitivities
-    from .datasets import CMRxReconSliceDataset as CMRxReconSliceDataset
-    from .datasets import FastMRISliceDataset as FastMRISliceDataset
-    from .datasets import HDF5Dataset as HDF5Dataset
     from .datasets import IXI as IXI
     from .datasets import IXITiny as IXITiny
-    from .datasets import ImageDataset as ImageDataset
-    from .datasets import ImageFolder as ImageFolder
-    from .datasets import LidcIdriSliceDataset as LidcIdriSliceDataset
-    from .datasets import MRISliceTransform as MRISliceTransform
-    from .datasets import PatchDataset as PatchDataset
-    from .datasets import RandomPatchSampler as RandomPatchSampler
-    from .datasets import SKMTEASliceDataset as SKMTEASliceDataset
-    from .datasets import SimpleFastMRISliceDataset as SimpleFastMRISliceDataset
-    from .datasets import TensorDataset as TensorDataset
     from .datasets import TorchIODataset as TorchIODataset
-    from .datasets import check_dataset as check_dataset
-    from .datasets import download_archive as download_archive
-    from .datasets import generate_dataset as generate_dataset
     from .denoisers import AverageDenoiser as AverageDenoiser
     from .denoisers import LLR as LLR
     from .denoisers import Positive as Positive
@@ -254,9 +210,6 @@ if TYPE_CHECKING:
     from .learned import as_complex_channels as as_complex_channels
     from .learned import as_real_channels as as_real_channels
     from .models import ContextAgnosticDenoiser as ContextAgnosticDenoiser
-    from .models import MoDL as MoDL
-    from .models import RAM as RAM
-    from .models import VarNet as VarNet
     from .motion import RigidMotionEKF as RigidMotionEKF
     from .motion import RigidMotionEstimate as RigidMotionEstimate
     from .motion import RigidRegistration as RigidRegistration
@@ -335,28 +288,17 @@ if TYPE_CHECKING:
     from .reconstruction import reconstruct_plane as reconstruct_plane
     from .reconstruction import sense as sense
     from .simulation import AdcRole as AdcRole
-    from .simulation import BSSFP as BSSFP
-    from .simulation import EpgInterpreter as EpgInterpreter
     from .simulation import EventType as EventType
-    from .simulation import FSE as FSE
     from .simulation import RfDefinition as RfDefinition
     from .simulation import RfShape as RfShape
     from .simulation import RfUse as RfUse
-    from .simulation import SPGR as SPGR
-    from .simulation import SSFPEcho as SSFPEcho
-    from .simulation import SSFPFID as SSFPFID
     from .simulation import SequenceDescription as SequenceDescription
     from .simulation import SequenceDescriptionCollection as SequenceDescriptionCollection
     from .simulation import SequenceEvent as SequenceEvent
     from .simulation import SequenceParameters as SequenceParameters
     from .simulation import ShimDefinition as ShimDefinition
-    from .simulation import SimulationResult as SimulationResult
-    from .simulation import SubspaceBasis as SubspaceBasis
-    from .simulation import TissueProperties as TissueProperties
     from .simulation import decode_sequence_description as decode_sequence_description
     from .simulation import decompress_shape as decompress_shape
-    from .simulation import make_interpreter as make_interpreter
-    from .simulation import simulate_subspace as simulate_subspace
     from .weights import MODEL_PATH_ENV as MODEL_PATH_ENV
     from .weights import ModelBundle as ModelBundle
     from .weights import ModelStore as ModelStore

@@ -279,9 +279,6 @@ data, and the stores their weights come from.
    GradientDataConsistency
    ScaledAdjoint
    ComplexAdapter
-   MoDL
-   VarNet
-   RAM
    ContextAgnosticDenoiser
 ```
 
@@ -321,51 +318,21 @@ data, and the stores their weights come from.
    :toctree: ../generated/recon
    :template: autosummary/class.rst
 
-   ImageDataset
-   ImageFolder
-   TensorDataset
-   PatchDataset
-   RandomPatchSampler
-   HDF5Dataset
    TorchIODataset
-   MRISliceTransform
-   FastMRISliceDataset
-   SimpleFastMRISliceDataset
-   CMRxReconSliceDataset
-   SKMTEASliceDataset
-   LidcIdriSliceDataset
    IXI
    IXITiny
 ```
 
-```{eval-rst}
-.. autosummary::
-   :toctree: ../generated/recon
+## Sequence description
 
-   check_dataset
-   download_archive
-   generate_dataset
-```
-
-## Simulation
-
-Bloch and EPG signal models, and the sequence description a scan carries so a
-simulation can be driven from the sequence itself.
+The description of itself a scan carries, decoded from its MRD waveforms --
+the same object the design side writes.
 
 ```{eval-rst}
 .. autosummary::
    :toctree: ../generated/recon
    :template: autosummary/class.rst
 
-   SPGR
-   BSSFP
-   SSFPFID
-   SSFPEcho
-   FSE
-   EpgInterpreter
-   TissueProperties
-   SimulationResult
-   SubspaceBasis
    SequenceDescription
    SequenceDescriptionCollection
    SequenceEvent
@@ -382,8 +349,6 @@ simulation can be driven from the sequence itself.
 .. autosummary::
    :toctree: ../generated/recon
 
-   make_interpreter
-   simulate_subspace
    decode_sequence_description
    decompress_shape
 ```

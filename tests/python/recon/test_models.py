@@ -60,11 +60,9 @@ class _FakeBatchStreaming:
         return execute
 
 
-def test_models_expose_a_small_native_selection_and_mri_adapter():
-    assert set(models.__all__) == {"RAM", "MoDL", "VarNet", "ContextAgnosticDenoiser"}
-    assert models.RAM is RAM
-    assert models.MoDL is MoDL
-    assert models.VarNet is VarNet
+def test_the_models_module_exposes_only_original_code():
+    """Native DeepInverse models are imported from deepinv, never re-exported."""
+    assert models.__all__ == ["ContextAgnosticDenoiser"]
     assert not hasattr(models, "UNet")
     assert not hasattr(models, "DnCNN")
 
