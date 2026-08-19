@@ -408,10 +408,10 @@ def pics(
     NumPy array are moved to Torch in the complex working dtype -- zero-copy
     when they already are complex64 on the host -- and the reconstruction is
     handed back as NumPy, so a pipeline never converts by hand. A DeepInverse
-    denoiser that works in two real channels is routed through the single
-    :class:`~pulserver.recon.learned.ComplexAdapter` so it can regularize the
-    complex image directly; Pulserver's own complex-aware denoisers pass
-    through untouched. See :func:`_pics` for the algorithm and its parameters.
+    denoiser that works in two real channels is adapted internally so it can
+    regularize the complex image directly; Pulserver's own complex-aware
+    denoisers pass through untouched. See :func:`_pics` for the algorithm and
+    its parameters.
     """
     denoiser = _complex_denoiser(denoiser)
     # Direct imports rather than the module's ``import_module`` so the boundary
@@ -436,18 +436,18 @@ def _complex_denoiser(denoiser: Any | None) -> Any | None:
     """Wrap a real-valued DeepInverse denoiser so it acts on complex images.
 
     A plain DeepInverse model expects two real channels, so it is wrapped in
-    the one :class:`~pulserver.recon.learned.ComplexAdapter` that packs complex
-    to real and back -- which reproduces the two-channel view these denoisers
-    always saw. A denoiser marked ``handles_complex`` is left alone, and a
-    sequence is passed through untouched so :func:`_pics` can reject it.
+    the one adapter that packs complex to real and back -- which reproduces
+    the two-channel view these denoisers always saw. A denoiser marked
+    ``handles_complex`` is left alone, and a sequence is passed through
+    untouched so :func:`_pics` can reject it.
     """
     if denoiser is None or getattr(denoiser, "handles_complex", False):
         return denoiser
     if isinstance(denoiser, Sequence):
         return denoiser
-    from ..learned import ComplexAdapter
+    from ..learned import _ComplexAdapter
 
-    return ComplexAdapter(denoiser)
+    return _ComplexAdapter(denoiser)
 
 
 # %% private module subroutines

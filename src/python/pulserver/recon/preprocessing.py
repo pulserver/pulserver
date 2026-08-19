@@ -23,6 +23,7 @@ __all__ = [
     "epi_ramp_interpolate",
     "estimate_epi_eddy_phase",
     "fftc",
+    "fill_partial_echo",
     "grid_cartesian",
     "ifftc",
     "noise_prewhiten",
@@ -279,6 +280,40 @@ class POCS:
                 break
             previous = updated
         return previous
+
+
+def fill_partial_echo(
+    kspace: Any,
+    readout: Any,
+    iterations: int = 12,
+    *,
+    dimension: int,
+) -> Any:
+    """Recover the readout edge a partial echo never acquired.
+
+    Parameters
+    ----------
+    kspace
+        K-space over the full readout width, coil-wise or combined.
+    readout
+        Which readout samples were acquired, over the full width.
+    iterations
+        POCS iterations.
+    dimension
+        How many trailing axes of ``kspace`` are spatial: 2 for a slice, 3 for
+        a slab. Required rather than inferred, because whether a leading axis
+        is coils or partitions is the caller's to know, and guessing it wrong
+        fills the wrong axis and says nothing.
+
+    Returns
+    -------
+    array
+        The partial-Fourier image, in the namespace of ``kspace``: the
+        reconstruction whose re-encoding reproduces every acquired sample.
+    """
+    return POCS(dimension=dimension, partial_axis=-1, iterations=iterations)(
+        kspace, readout
+    )
 
 
 def _torch_or_numpy(array: Any) -> tuple[Any, bool]:

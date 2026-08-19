@@ -35,6 +35,9 @@ class NonCartesian3DRecon(ReconPlugin):
         design) or ``"pics"`` for an undersampled prescription.
     regularization, iterations
         The CG solve's Tikhonov weight and iteration ceiling, ``pics`` only.
+    calibration_width
+        Width of the centred cube NLINV solves the sensitivities over,
+        ``pics`` only.
     device
         Torch device the reconstruction runs on. ``None`` is the CPU.
     """
@@ -45,6 +48,7 @@ class NonCartesian3DRecon(ReconPlugin):
         mode: str = "direct",
         regularization: float = 1e-3,
         iterations: int = 20,
+        calibration_width: int = 16,
         device: Any = None,
     ) -> None:
         super().__init__(
@@ -57,6 +61,7 @@ class NonCartesian3DRecon(ReconPlugin):
         self.mode = mode
         self.regularization = float(regularization)
         self.iterations = int(iterations)
+        self.calibration_width = int(calibration_width)
         self.device = device
 
     def startup(self, context: ReconContext) -> None:
@@ -82,21 +87,27 @@ class NonCartesian3DRecon(ReconPlugin):
 
         density = pipe_menon_dcf(points, self.volume_shape)
         n_coils = int(data.shape[0])
-        coil_wise = NonCartesian3D(
-            points, self.volume_shape, density=density, n_coils=n_coils
-        )
-        # Native complex throughout: the measurement crosses the NumPy boundary
-        # and the coil-wise adjoint answers with one complex volume per coil, so
-        # there is no real/complex view juggling to unpack the channel axis.
-        coil_images = coil_wise.A_adjoint(data[None])[0]
 
         if self.mode == "direct":
+            coil_wise = NonCartesian3D(
+                points, self.volume_shape, density=density, n_coils=n_coils
+            )
+            # Native complex throughout: the measurement crosses the NumPy
+            # boundary and the coil-wise adjoint answers with one complex
+            # volume per coil, so there is no real/complex view juggling to
+            # unpack the channel axis.
+            coil_images = coil_wise.A_adjoint(data[None])[0]
             image = np.sqrt(np.sum(np.abs(coil_images) ** 2, axis=0))
         else:
-            from pulserver.recon import pics
-            from pulserver.recon.calibration import smooth_sensitivities
+            from pulserver.recon import NLINV, pics
 
-            maps = smooth_sensitivities(coil_images)
+            maps = NLINV(spatial_ndim=3, calibration_width=self.calibration_width)(
+                data,
+                trajectory=points,
+                image_shape=self.volume_shape,
+                density=density,
+                device=self.device,
+            )
             sense = NonCartesian3D(
                 points,
                 self.volume_shape,

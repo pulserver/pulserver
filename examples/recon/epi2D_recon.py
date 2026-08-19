@@ -44,22 +44,23 @@ import numpy as np
 
 from pulserver import AcquisitionBucket, ReconContext, ReconPlugin, ReconResult
 from pulserver.recon import (
+    NLINV,
     AcquisitionFlag,
+    Cartesian2D,
     CartesianGridder,
     center_crop,
     coil_combine,
-    coil_images,
     correct_lines,
     encoded_shape,
+    fftc,
     fill_partial_echo,
     has_acquisition_flag,
     ifftc,
     odd_even_fit,
     partition_epi_acquisitions,
+    pics,
     receiver_channels,
     recon_shape,
-    sense,
-    sensitivities,
 )
 
 
@@ -256,31 +257,35 @@ class Epi2DRecon(ReconPlugin):
                     readout = mask.any(axis=0)
 
                     if lines.all():
+                        # Fully sampled k-space is zero outside the mask, so
+                        # the coil-wise adjoint is the centered inverse FFT.
                         coils = (
-                            coil_images(kspace, mask, device=self.device)
+                            ifftc(kspace, axes=(-2, -1))
                             if readout.all()
                             else fill_partial_echo(
-                                kspace,
-                                readout,
-                                self.pocs_iterations,
-                                device=self.device,
+                                kspace, readout, self.pocs_iterations, dimension=2
                             )
                         )
                         image = coil_combine(coils, coil_axis=0)
                     else:
                         maps = calibration_maps.get(index)
                         if maps is None:
-                            maps = sensitivities(kspace, mask, device=self.device)
-                        image = sense(
-                            kspace,
-                            mask,
-                            maps,
-                            readout,
+                            maps = NLINV(spatial_ndim=2)(
+                                kspace[None], mask=mask, device=self.device
+                            )
+                        image = pics(
+                            kspace[None],
+                            Cartesian2D(mask[None], maps, device=self.device),
                             regularization=self.regularization,
                             iterations=self.iterations,
-                            pocs_iterations=self.pocs_iterations,
-                            device=self.device,
-                        )
+                        )[0]
+                        if not readout.all():
+                            image = fill_partial_echo(
+                                fftc(image, axes=(-2, -1)),
+                                readout,
+                                self.pocs_iterations,
+                                dimension=2,
+                            )
                     results.append(
                         ReconResult(
                             center_crop(np.abs(image), self.image_shape).transpose(),
@@ -331,10 +336,13 @@ class Epi2DRecon(ReconPlugin):
         NLINV reads the fully sampled centre off the mask and resamples the maps
         to the full matrix. Estimated once for the whole time series.
         """
-        return {
-            index: sensitivities(*self._grid_calibration(items), device=self.device)
-            for index, items in self._by_slice(reference).items()
-        }
+        maps = {}
+        for index, items in self._by_slice(reference).items():
+            kspace, mask = self._grid_calibration(items)
+            maps[index] = NLINV(spatial_ndim=2)(
+                kspace[None], mask=mask, device=self.device
+            )
+        return maps
 
     def _grid_train(self, items: list[Any], fit: tuple[float, float]) -> Any:
         """Phase-correct a train's lines and grid them into one 2D k-space."""

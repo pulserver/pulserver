@@ -4,11 +4,11 @@ Stack of stars, stack of spirals: the in-plane shape is the trajectory's
 business, and the reconstruction is the same either way.
 
 A stack factorises: the partition axis is Cartesian, so an inverse FFT along z
-turns the volume into independent planes, and each plane then goes through
-:func:`pulserver.recon.reconstruct_plane` -- density compensation,
-adjoint-derived sensitivities, CG-SENSE -- against the in-plane trajectory its
-acquisitions carry, which ``pulserver`` buffered beside them. One magnitude
-volume per measurement.
+turns the volume into independent planes, and each plane then goes through the
+in-plane recipe -- Pipe--Menon density compensation, NLINV sensitivities from
+the samples inside the calibration radius, CG-SENSE -- against the trajectory
+its acquisitions carry, which ``pulserver`` buffered beside them. One
+magnitude volume per measurement.
 
 """
 
@@ -22,11 +22,14 @@ import numpy as np
 
 from pulserver import AcquisitionBucket, ReconContext, ReconPlugin, ReconResult
 from pulserver.recon import (
+    NLINV,
     AcquisitionFlag,
+    NonCartesian2D,
     as_numpy,
     ifftc,
+    pics,
+    pipe_menon_dcf,
     recon_volume,
-    reconstruct_plane,
 )
 
 
@@ -46,6 +49,8 @@ class NonCartesianStackRecon(ReconPlugin):
         Tikhonov weight of the per-plane CG-SENSE solve.
     iterations
         Maximum CG iterations per plane.
+    calibration_width
+        Width of the centred square NLINV solves the sensitivities over.
     device
         Torch device the reconstruction runs on. ``None`` is the CPU.
     """
@@ -56,6 +61,7 @@ class NonCartesianStackRecon(ReconPlugin):
         mode: str = "auto",
         regularization: float = 1e-3,
         iterations: int = 30,
+        calibration_width: int = 24,
         device: Any = None,
     ) -> None:
         super().__init__(
@@ -68,6 +74,7 @@ class NonCartesianStackRecon(ReconPlugin):
         self.mode = mode
         self.regularization = float(regularization)
         self.iterations = int(iterations)
+        self.calibration_width = int(calibration_width)
         self.device = device
 
     def startup(self, context: ReconContext) -> None:
@@ -94,21 +101,48 @@ class NonCartesianStackRecon(ReconPlugin):
 
         # One trajectory per view, the same for every partition of the stack,
         # and in-plane: the two transverse components of the first partition's.
-        trajectory = buffer.points(partition=0)[:2].transpose(1, 2, 0).reshape(-1, 2)
-        nyquist = int(np.ceil(np.pi / 2 * max(self.volume_shape[1:])))
+        trajectory = (
+            buffer.points(partition=0)[:2]
+            .transpose(1, 2, 0)
+            .reshape(-1, 2)
+            .astype(np.float32)
+        )
+        plane_shape = self.volume_shape[1:]
+        density = pipe_menon_dcf(trajectory, plane_shape)
+        n_coils = int(planes.shape[0])
+        nyquist = int(np.ceil(np.pi / 2 * max(plane_shape)))
         direct = self.mode == "direct" or (self.mode == "auto" and n_views >= nyquist)
+
         volume = []
         for plane in range(n_z):
-            data = planes[:, plane].reshape(planes.shape[0], -1)
-            image = reconstruct_plane(
-                data,
-                trajectory,
-                self.volume_shape[1:],
-                direct=direct,
-                regularization=self.regularization,
-                iterations=self.iterations,
-                device=self.device,
-            )
+            data = planes[:, plane].reshape(n_coils, -1)
+            if direct:
+                coil_wise = NonCartesian2D(
+                    trajectory, plane_shape, density=density, n_coils=n_coils
+                )
+                coils = coil_wise.A_adjoint(data[None])[0]
+                image = np.sqrt(np.sum(np.abs(coils) ** 2, axis=0))
+            else:
+                maps = NLINV(spatial_ndim=2, calibration_width=self.calibration_width)(
+                    data,
+                    trajectory=trajectory,
+                    image_shape=plane_shape,
+                    density=density,
+                    device=self.device,
+                )
+                unaliasing = NonCartesian2D(
+                    trajectory,
+                    plane_shape,
+                    coil_maps=maps,
+                    density=density,
+                    n_coils=n_coils,
+                )
+                image = pics(
+                    data[None],
+                    unaliasing,
+                    regularization=self.regularization,
+                    iterations=self.iterations,
+                )[0, 0]
             volume.append(np.abs(as_numpy(image)))
 
         return ReconResult(

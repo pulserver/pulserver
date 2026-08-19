@@ -21,8 +21,6 @@ __all__ = [
     "WaveEncoding",
     "WaveShuffling",
     "available_nufft_backends",
-    "measurement_to_channels",
-    "measurement_to_trailing",
 ]
 
 from collections import OrderedDict
@@ -190,7 +188,7 @@ def _mirror_array_namespace(method: Callable) -> Callable:
     return wrapper
 
 
-def measurement_to_trailing(value: Any) -> Any:
+def _measurement_to_trailing(value: Any) -> Any:
     """Move a measurement's real/imaginary axis from channel one to the end.
 
     Pulserver carries the real and imaginary parts of a *measurement* in a
@@ -211,10 +209,10 @@ def measurement_to_trailing(value: Any) -> Any:
     return value.movedim(1, -1)
 
 
-def measurement_to_channels(value: Any) -> Any:
+def _measurement_to_channels(value: Any) -> Any:
     """Move a measurement's real/imaginary axis from the end to channel one.
 
-    The inverse of :func:`measurement_to_trailing`.
+    The inverse of :func:`_measurement_to_trailing`.
     """
     return value.movedim(-1, 1)
 
@@ -241,11 +239,11 @@ class _TrailingRealView(deepinv.physics.LinearPhysics):
 
     def A(self, x: Any, **kwargs: Any) -> Any:
         """Encode an image, answering in the trailing layout."""
-        return measurement_to_trailing(self.operator.A(x, **kwargs))
+        return _measurement_to_trailing(self.operator.A(x, **kwargs))
 
     def A_adjoint(self, y: Any, **kwargs: Any) -> Any:
         """Decode a measurement given in the trailing layout."""
-        return self.operator.A_adjoint(measurement_to_channels(y), **kwargs)
+        return self.operator.A_adjoint(_measurement_to_channels(y), **kwargs)
 
     def A_adjoint_A(self, x: Any, **kwargs: Any) -> Any:
         """Apply the normal operator, which never leaves image space."""
@@ -567,10 +565,10 @@ class MRIPhysics(deepinv.physics.LinearPhysics):
             return image_as_real(image)
 
         if name == "A":
-            result = measurement_to_trailing(forward(value))
+            result = _measurement_to_trailing(forward(value))
             return result if real_view else _kspace_as_cpx(result)
         if name == "A_adjoint":
-            result = adjoint(measurement_to_channels(value))
+            result = adjoint(_measurement_to_channels(value))
             result = self.operator.crop(result, crop=kwargs.get("crop", False))
             return result if real_view else image_as_complex(result)
         if name == "A_adjoint_A":
@@ -1788,6 +1786,22 @@ def _cartesian(
     """
     toeplitz_enabled, options = _toeplitz_request(toeplitz)
     physics_module = _require_deepinv()
+    # Direct imports rather than the module's ``import_module`` so the array
+    # boundary keeps working when a test stubs the latter for operator
+    # selection.
+    import numpy
+    import torch
+
+    requested_device = kwargs.pop("device", None)
+    if isinstance(mask, numpy.ndarray):
+        mask = torch.as_tensor(mask).to(torch.float32)
+    if isinstance(coil_maps, numpy.ndarray):
+        coil_maps = torch.as_tensor(coil_maps).to(torch.complex64)
+    if requested_device is not None:
+        if hasattr(mask, "to"):
+            mask = mask.to(requested_device)
+        if coil_maps is not None and hasattr(coil_maps, "to"):
+            coil_maps = coil_maps.to(requested_device)
     device = getattr(coil_maps, "device", getattr(mask, "device", "cpu"))
     operator_class = (
         _CoilwiseCartesianMRI if coil_maps is None else physics_module.MultiCoilMRI

@@ -37,15 +37,17 @@ import numpy as np
 
 from pulserver import AcquisitionBucket, ReconContext, ReconPlugin, ReconResult
 from pulserver.recon import (
+    NLINV,
     AcquisitionFlag,
+    Cartesian2D,
     center_crop,
     coil_combine,
-    coil_images,
     echo_count,
+    fftc,
     fill_partial_echo,
+    ifftc,
+    pics,
     recon_shape,
-    sense,
-    sensitivities,
 )
 
 
@@ -101,8 +103,9 @@ class Cartesian2DRecon(ReconPlugin):
         # calibration block: estimate the sensitivities now, from the first
         # echo, and let the rest of the slice keep arriving.
         if bucket.trigger is AcquisitionFlag.LAST_IN_SEGMENT:
-            self.coil_maps[index] = sensitivities(
-                *buffer.select(slice=index, contrast=0), device=self.device
+            kspace, mask = buffer.select(slice=index, contrast=0)
+            self.coil_maps[index] = NLINV(spatial_ndim=2)(
+                kspace[None], mask=mask, device=self.device
             )
             return None
 
@@ -113,33 +116,38 @@ class Cartesian2DRecon(ReconPlugin):
             readout = echo_mask.any(axis=0)
 
             if lines.all():
+                # Fully sampled k-space is zero outside the mask, so the
+                # coil-wise adjoint is the centered inverse FFT itself.
                 coils = (
-                    coil_images(echo_kspace, echo_mask, device=self.device)
+                    ifftc(echo_kspace, axes=(-2, -1))
                     if readout.all()
                     else fill_partial_echo(
-                        echo_kspace,
-                        readout,
-                        self.pocs_iterations,
-                        dimension=2,
-                        device=self.device,
+                        echo_kspace, readout, self.pocs_iterations, dimension=2
                     )
                 )
                 image = coil_combine(coils, coil_axis=0)
             else:
                 maps = self.coil_maps.get(index)
                 if maps is None:
-                    maps = sensitivities(echo_kspace, echo_mask, device=self.device)
+                    maps = NLINV(spatial_ndim=2)(
+                        echo_kspace[None], mask=echo_mask, device=self.device
+                    )
                     self.coil_maps[index] = maps
-                image = sense(
-                    echo_kspace,
-                    echo_mask,
-                    maps,
-                    readout,
+                image = pics(
+                    echo_kspace[None],
+                    Cartesian2D(echo_mask[None], maps, device=self.device),
                     regularization=self.regularization,
                     iterations=self.iterations,
-                    pocs_iterations=self.pocs_iterations,
-                    device=self.device,
-                )
+                )[0]
+                if not readout.all():
+                    # The phase constraint POCS relies on means something only
+                    # once the aliasing is gone, so the echo fills last.
+                    image = fill_partial_echo(
+                        fftc(image, axes=(-2, -1)),
+                        readout,
+                        self.pocs_iterations,
+                        dimension=2,
+                    )
 
             image = center_crop(np.abs(image), self.image_shape)
             results.append(

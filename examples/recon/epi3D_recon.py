@@ -18,21 +18,24 @@ import numpy as np
 
 from pulserver import AcquisitionBucket, ReconContext, ReconPlugin, ReconResult
 from pulserver.recon import (
+    NLINV,
     AcquisitionFlag,
+    Cartesian2D,
+    Cartesian3D,
     CartesianGridder,
     center_crop,
     coil_combine,
-    coil_images,
     correct_lines,
     encoded_volume,
+    fftc,
     fill_partial_echo,
     has_acquisition_flag,
+    ifftc,
     odd_even_fit,
     partition_epi_acquisitions,
+    pics,
     receiver_channels,
     recon_volume,
-    sense,
-    sensitivities,
 )
 
 
@@ -124,8 +127,8 @@ class Epi3DRecon(ReconPlugin):
                     int(item.idx.kspace_encode_step_2),
                     int(item.idx.kspace_encode_step_1),
                 )
-            coil_maps = sensitivities(
-                calibration.kspace, calibration.mask, device=self.device
+            coil_maps = NLINV(spatial_ndim=3)(
+                calibration.kspace[None], mask=calibration.mask, device=self.device
             )
 
         results = []
@@ -162,15 +165,13 @@ class Epi3DRecon(ReconPlugin):
                 readout = mask.reshape(-1, mask.shape[-1]).any(axis=0)
 
                 if encodes.all():
+                    # Fully sampled k-space is zero outside the mask, so the
+                    # coil-wise adjoint is the centered inverse FFT itself.
                     coils = (
-                        coil_images(kspace, mask, device=self.device)
+                        ifftc(kspace, axes=(-3, -2, -1))
                         if readout.all()
                         else fill_partial_echo(
-                            kspace,
-                            readout,
-                            self.pocs_iterations,
-                            dimension=3,
-                            device=self.device,
+                            kspace, readout, self.pocs_iterations, dimension=3
                         )
                     )
                     image = coil_combine(coils, coil_axis=0)
@@ -178,18 +179,35 @@ class Epi3DRecon(ReconPlugin):
                     maps = (
                         coil_maps
                         if coil_maps is not None
-                        else sensitivities(kspace, mask, device=self.device)
+                        else NLINV(spatial_ndim=3)(
+                            kspace[None], mask=mask, device=self.device
+                        )
                     )
-                    image = sense(
-                        kspace,
-                        mask,
-                        maps,
-                        readout,
-                        regularization=self.regularization,
-                        iterations=self.iterations,
-                        pocs_iterations=self.pocs_iterations,
-                        device=self.device,
-                    )
+                    if readout.all():
+                        image = _sense_by_readout_plane(
+                            kspace,
+                            mask,
+                            maps,
+                            regularization=self.regularization,
+                            iterations=self.iterations,
+                            device=self.device,
+                        )
+                    else:
+                        # A partial echo couples the readout: keep the whole
+                        # 3D solve, then fill the echo once the aliasing its
+                        # phase constraint depends on is gone.
+                        image = pics(
+                            kspace[None],
+                            Cartesian3D(mask[None], maps, device=self.device),
+                            regularization=self.regularization,
+                            iterations=self.iterations,
+                        )[0]
+                        image = fill_partial_echo(
+                            fftc(image, axes=(-3, -2, -1)),
+                            readout,
+                            self.pocs_iterations,
+                            dimension=3,
+                        )
                 results.append(
                     ReconResult(
                         center_crop(np.abs(image), self.image_shape).transpose(0, 2, 1),
@@ -200,6 +218,41 @@ class Epi3DRecon(ReconPlugin):
                     )
                 )
         return results
+
+
+def _sense_by_readout_plane(
+    kspace: Any,
+    mask: Any,
+    coil_maps: Any,
+    *,
+    regularization: float,
+    iterations: int,
+    device: Any,
+) -> np.ndarray:
+    """CG-SENSE decoupled over a fully sampled readout: one 2D solve per column.
+
+    The centered inverse FFT along the readout takes the volume to
+    ``(coil, partition, line, x)`` hybrid space, where every readout position
+    ``x`` is an independent 2D ``(partition, line)`` parallel-imaging problem
+    sharing the one phase-encode lattice. Stacking the columns on the batch
+    axis solves them together against a batched
+    :class:`~pulserver.recon.physics.Cartesian2D`.
+    """
+    hybrid = ifftc(np.asarray(kspace), axes=-1)
+    _, n_z, n_y, n_x = hybrid.shape
+    data = np.moveaxis(hybrid, -1, 0)  # (x, coil, partition, line)
+
+    maps = np.moveaxis(np.asarray(coil_maps)[0], -1, 0)  # (x, coil, partition, line)
+    plane = np.asarray(mask).any(axis=-1).astype(np.float32)  # (partition, line)
+    lattice = np.broadcast_to(plane, (n_x, 1, n_z, n_y)).copy()
+
+    image = pics(
+        data,
+        Cartesian2D(lattice, np.ascontiguousarray(maps), device=device),
+        regularization=regularization,
+        iterations=iterations,
+    )
+    return np.moveaxis(image, 0, -1)
 
 
 PLUGIN = Epi3DRecon()

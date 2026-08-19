@@ -39,7 +39,6 @@ _MEMBERS = {
     "Cartesian3D": "physics",
     "CartesianGridder": "preprocessing",
     "CoefficientAccessor": "postprocessing",
-    "ComplexAdapter": "learned",
     "ConjugateGradient": "optim",
     "ContextAgnosticDenoiser": "models",
     "CudaStreaming": "execution",
@@ -110,16 +109,13 @@ _MEMBERS = {
     "WavePSFResult": "calibration",
     "WaveShuffling": "physics",
     "Wavelet": "denoisers",
-    "as_complex_channels": "learned",
     "as_numpy": "postprocessing",
-    "as_real_channels": "learned",
     "available_nufft_backends": "physics",
     "calibration_extent": "calibration",
     "cartesian_3d_to_2d": "preprocessing",
     "center_crop": "postprocessing",
     "coil_combine": "postprocessing",
     "coil_compress": "preprocessing",
-    "coil_images": "reconstruction",
     "correct_epi_eddy_currents": "preprocessing",
     "correct_lines": "preprocessing",
     "decode_sequence_description": "simulation",
@@ -132,13 +128,11 @@ _MEMBERS = {
     "epi_ramp_interpolate": "preprocessing",
     "estimate_epi_eddy_phase": "preprocessing",
     "fftc": "preprocessing",
-    "fill_partial_echo": "reconstruction",
+    "fill_partial_echo": "preprocessing",
     "grid_cartesian": "preprocessing",
     "has_acquisition_flag": "plugin",
     "ifftc": "preprocessing",
     "load_model": "weights",
-    "measurement_to_channels": "physics",
-    "measurement_to_trailing": "physics",
     "noise_prewhiten": "preprocessing",
     "odd_even_fit": "preprocessing",
     "partition_epi_acquisitions": "preprocessing",
@@ -147,13 +141,9 @@ _MEMBERS = {
     "receiver_channels": "preprocessing",
     "recon_shape": "preprocessing",
     "recon_volume": "preprocessing",
-    "reconstruct_plane": "reconstruction",
     "remove_readout_oversampling": "preprocessing",
     "run_pyhysco": "postprocessing",
     "save_bundle": "weights",
-    "sense": "reconstruction",
-    "sensitivities": "calibration",
-    "smooth_sensitivities": "calibration",
 }
 
 __all__ = sorted(_MEMBERS)
@@ -188,8 +178,6 @@ if TYPE_CHECKING:
     from .calibration import WavePSFCalibration as WavePSFCalibration
     from .calibration import WavePSFResult as WavePSFResult
     from .calibration import calibration_extent as calibration_extent
-    from .calibration import sensitivities as sensitivities
-    from .calibration import smooth_sensitivities as smooth_sensitivities
     from .datasets import IXI as IXI
     from .datasets import IXITiny as IXITiny
     from .datasets import TorchIODataset as TorchIODataset
@@ -200,15 +188,12 @@ if TYPE_CHECKING:
     from .denoisers import TV as TV
     from .denoisers import Wavelet as Wavelet
     from .execution import CudaStreaming as CudaStreaming
-    from .learned import ComplexAdapter as ComplexAdapter
     from .learned import GradientDataConsistency as GradientDataConsistency
     from .learned import ScaledAdjoint as ScaledAdjoint
     from .learned import StatefulReconstructor as StatefulReconstructor
     from .learned import UnrollResult as UnrollResult
     from .learned import UnrollState as UnrollState
     from .learned import UnrolledReconstructor as UnrolledReconstructor
-    from .learned import as_complex_channels as as_complex_channels
-    from .learned import as_real_channels as as_real_channels
     from .models import ContextAgnosticDenoiser as ContextAgnosticDenoiser
     from .motion import RigidMotionEKF as RigidMotionEKF
     from .motion import RigidMotionEstimate as RigidMotionEstimate
@@ -236,8 +221,6 @@ if TYPE_CHECKING:
     from .physics import WaveEncoding as WaveEncoding
     from .physics import WaveShuffling as WaveShuffling
     from .physics import available_nufft_backends as available_nufft_backends
-    from .physics import measurement_to_channels as measurement_to_channels
-    from .physics import measurement_to_trailing as measurement_to_trailing
     from .plugin import AcquisitionBucket as AcquisitionBucket
     from .plugin import AcquisitionBucketStats as AcquisitionBucketStats
     from .plugin import AcquisitionFlag as AcquisitionFlag
@@ -273,6 +256,7 @@ if TYPE_CHECKING:
     from .preprocessing import epi_ramp_interpolate as epi_ramp_interpolate
     from .preprocessing import estimate_epi_eddy_phase as estimate_epi_eddy_phase
     from .preprocessing import fftc as fftc
+    from .preprocessing import fill_partial_echo as fill_partial_echo
     from .preprocessing import grid_cartesian as grid_cartesian
     from .preprocessing import ifftc as ifftc
     from .preprocessing import noise_prewhiten as noise_prewhiten
@@ -283,10 +267,6 @@ if TYPE_CHECKING:
     from .preprocessing import recon_shape as recon_shape
     from .preprocessing import recon_volume as recon_volume
     from .preprocessing import remove_readout_oversampling as remove_readout_oversampling
-    from .reconstruction import coil_images as coil_images
-    from .reconstruction import fill_partial_echo as fill_partial_echo
-    from .reconstruction import reconstruct_plane as reconstruct_plane
-    from .reconstruction import sense as sense
     from .simulation import AdcRole as AdcRole
     from .simulation import EventType as EventType
     from .simulation import RfDefinition as RfDefinition
