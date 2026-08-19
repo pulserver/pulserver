@@ -1879,6 +1879,26 @@ class Cartesian2D(MRIPhysics):
     >>> coil_wise = Cartesian2D(torch.ones(1, 1, 8, 8), img_size=(8, 8))
     >>> coil_wise.A_adjoint(torch.randn(1, 4, 8, 8, dtype=torch.complex64)).shape
     torch.Size([1, 4, 8, 8])
+
+    What the operator does, on DeepInverse's phantom: measure the object
+    through each element of the array, and bring it back. Without maps the
+    adjoint keeps the coils apart, which is what a calibration wants to see:
+
+    .. plot::
+
+       import torch
+       import pulserver.recon as recon
+       from _figures import images, phantom
+
+       truth, coil_maps = phantom(64, coils=4)
+       mask = torch.ones(1, 1, 64, 64)
+       coil_wise = recon.Cartesian2D(mask, img_size=(64, 64))
+       measured = recon.Cartesian2D(mask, coil_maps).A(truth)
+       coils = coil_wise.A_adjoint(measured)
+       images(
+           [("object", truth), ("coil 0", coils[0, 0]), ("coil 2", coils[0, 2])],
+           title="Cartesian2D, fully sampled, four elements",
+       )
     """
 
     def __init__(
@@ -2450,6 +2470,38 @@ class NonCartesian2D(MRIPhysics):
     >>> physics = recon.NonCartesian2D(trajectory, (16, 16))
     >>> physics.A_adjoint(torch.ones(1, 1, 256, dtype=torch.complex64)).shape
     torch.Size([1, 1, 16, 16])
+
+    Golden-angle spokes, gridded and then solved. The adjoint needs the
+    density compensation because the samples crowd the centre; the solve does
+    not, because the operator's normal equations already account for it:
+
+    .. plot::
+
+       import numpy as np
+       import torch
+       import pulserver.recon as recon
+       from _figures import images, phantom
+
+       truth, coil_maps = phantom(64, coils=4)
+       angles = np.pi * (np.arange(48) * 0.618034 % 1.0)
+       radius = np.linspace(-0.5, 0.5, 128)
+       trajectory = np.stack(
+           [np.outer(np.cos(angles), radius), np.outer(np.sin(angles), radius)], -1
+       ).reshape(-1, 2).astype(np.float32)
+
+       physics = recon.NonCartesian2D(trajectory, (64, 64), coil_maps=coil_maps)
+       measured = physics.A(truth)
+       weights = torch.as_tensor(
+           np.asarray(recon.pipe_menon_dcf(trajectory, (64, 64))), dtype=torch.complex64
+       )
+       images(
+           [
+               ("object", truth),
+               ("density-compensated adjoint", physics.A_adjoint(measured * weights)),
+               ("CG-SENSE", recon.pics(measured, physics, iterations=15)),
+           ],
+           title="NonCartesian2D, 48 golden-angle spokes",
+       )
     """
 
     def __init__(

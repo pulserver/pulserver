@@ -44,7 +44,7 @@ navigate the motion between them:
    seq = se_propeller2D_sequence(
        n_x=32, n_blades=4, n_slices=1, te=20e-3, tr=None
    )
-   seq.plot_kspace(show_trajectory=False, plot_now=False)
+   seq.plot_kspace(plot_now=False)
 """
 
 from __future__ import annotations

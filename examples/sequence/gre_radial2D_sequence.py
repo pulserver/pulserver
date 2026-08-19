@@ -42,7 +42,7 @@ previous ones left:
    from pulserver.app import gre_radial2D_sequence
 
    seq = gre_radial2D_sequence(n_x=32, n_spokes=13, n_slices=1, n_dummy=0)
-   seq.plot_kspace(show_trajectory=False, plot_now=False)
+   seq.plot_kspace(plot_now=False)
 """
 
 from __future__ import annotations

@@ -4,7 +4,7 @@ Documentation-only. The ``.. plot::`` directives embedded in Pulserver's
 docstrings import this package; nothing in the shipped wheel does, which is
 why it lives beside ``conf.py`` rather than under ``src/``.
 
-Four kinds of picture, one function each:
+Five kinds of picture, one function each:
 
 ``excitation_kspace``
     The path a multidimensional pulse deposits its energy along.
@@ -19,12 +19,18 @@ Four kinds of picture, one function each:
 ``order_figure``
     The ``(ky, kz)`` views an ordering deals into its trains, coloured by the
     echo they are encoded at.
+``images``
+    A row of images, for the reconstruction side: what was measured beside
+    what was recovered from it, in DeepInverse's own example shape.
+    :func:`phantom` supplies the object and the array those examples measure.
 
 Every function returns the :class:`~matplotlib.figure.Figure` it drew, so a
 directive that wants to add to it can.
 """
 
 from __future__ import annotations
+
+from typing import NamedTuple
 
 import numpy as np
 from matplotlib import pyplot as plt
@@ -36,7 +42,9 @@ __all__ = [
     "ORDINAL",
     "SERIES",
     "excitation_kspace",
+    "images",
     "order_figure",
+    "phantom",
     "rf_profile",
     "trajectory",
 ]
@@ -825,3 +833,124 @@ def order_figure(
     _title(figure, title)
     figure.tight_layout(rect=(0, 0, 1, 0.93 if title else 1.0))
     return figure
+
+
+# ----------------------------------------------------------------------
+# Reconstruction: an object to measure, and a row of images
+# ----------------------------------------------------------------------
+
+
+class Phantom(NamedTuple):
+    """What a reconstruction example measures.
+
+    Attributes
+    ----------
+    image : torch.Tensor
+        The object, complex, shaped ``(1, size, size)`` -- the layout every
+        physics in :mod:`pulserver.recon` answers in.
+    coil_maps : torch.Tensor
+        Sensitivities, complex, shaped ``(1, coils, size, size)``,
+        root-sum-of-squares normalised.
+    """
+
+    image: object
+    coil_maps: object
+
+
+def phantom(size: int = 64, coils: int = 4):
+    """A Shepp-Logan and a ring of receive coils around it.
+
+    The object is DeepInverse's own phantom, so a reconstruction example here
+    starts where one of theirs does; the sensitivities are analytic, because
+    the point of the picture is the solver rather than the array.
+
+    Parameters
+    ----------
+    size : int, optional
+        Matrix size, square.
+    coils : int, optional
+        Elements in the ring.
+
+    Returns
+    -------
+    Phantom
+    """
+    import torch
+    from deepinv.utils.phantoms import generate_shepp_logan
+
+    image = generate_shepp_logan(size).to(torch.complex64)[None]
+
+    axis = torch.linspace(-1.0, 1.0, size)
+    rows, columns = torch.meshgrid(axis, axis, indexing="ij")
+    angles = 2.0 * torch.pi * torch.arange(coils) / coils
+    sensitivities = torch.stack(
+        [
+            torch.exp(
+                -((columns - 0.9 * torch.cos(angle)) ** 2)
+                / 1.2
+                - ((rows - 0.9 * torch.sin(angle)) ** 2) / 1.2
+            )
+            for angle in angles
+        ]
+    ).to(torch.complex64)
+    sensitivities = sensitivities / sensitivities.abs().pow(2).sum(0).sqrt()
+    return Phantom(image, sensitivities[None])
+
+
+def images(
+    panels,
+    *,
+    title: str | None = None,
+    figsize: tuple[float, float] | None = None,
+    log: bool = False,
+):
+    """Draw a row of images: what was measured beside what was recovered.
+
+    Parameters
+    ----------
+    panels : sequence of tuple
+        ``(label, array)`` per panel. Anything with a magnitude will do --
+        NumPy or Torch, complex or real, with any leading singleton axes.
+    title : str, optional
+        Figure title.
+    figsize : tuple of float, optional
+        Figure size, in inches.
+    log : bool, optional
+        Draw ``log(1 + |x|)``, which is what makes k-space legible beside an
+        image.
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+    """
+    panels = list(panels)
+    figure, axes = plt.subplots(
+        1,
+        len(panels),
+        figsize=figsize or (2.9 * len(panels), 3.2),
+        squeeze=False,
+    )
+    for axis, (label, array) in zip(axes[0], panels, strict=True):
+        values = np.abs(np.asarray(_detached(array), dtype=complex))
+        values = values.reshape(values.shape[-2:]) if values.ndim > 2 else values
+        if log:
+            # Three decades on a linear grey ramp, which is what makes the
+            # centre of k-space and its first tails legible in one picture.
+            ceiling = max(values.max(), 1e-12)
+            values = np.log10(np.maximum(values, ceiling * 1e-3) / ceiling)
+        axis.imshow(values, cmap="gray", interpolation="nearest")
+        axis.set_xticks([])
+        axis.set_yticks([])
+        for spine in axis.spines.values():
+            spine.set_color(FAINT)
+        axis.set_title(label, loc="left", fontsize=9, color=INK)
+
+    _title(figure, title)
+    figure.tight_layout(rect=(0, 0, 1, 0.92 if title else 1.0))
+    return figure
+
+
+def _detached(array):
+    """``array`` as something NumPy will take, Torch or not."""
+    detach = getattr(array, "detach", None)
+    return detach().cpu().numpy() if callable(detach) else array

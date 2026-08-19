@@ -39,7 +39,7 @@ The gradient is already on when the pulse plays, so a view starts at the centre 
    from pulserver.app import zte3D_sequence
 
    seq = zte3D_sequence(n_x=32, n_views=24, n_shots=2, n_dummy=0)
-   seq.plot_kspace(show_trajectory=False, plot_now=False)
+   seq.plot_kspace(plot_now=False)
 """
 
 from __future__ import annotations

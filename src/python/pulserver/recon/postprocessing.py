@@ -123,6 +123,26 @@ def coil_combine(
     >>> maps = np.full((4, 8, 8), 0.5, dtype=complex)
     >>> complex(coil_combine(coil_images, maps)[0, 0])
     (2+0j)
+
+    One image per element, and the combination that is insensitive to where
+    the elements were:
+
+    .. plot::
+
+       import numpy as np
+       import pulserver.recon as recon
+       from _figures import images, phantom
+
+       truth, coil_maps = phantom(64, coils=4)
+       coils = truth.numpy() * coil_maps[0].numpy()
+       images(
+           [
+               ("coil 0", coils[0]),
+               ("coil 1", coils[1]),
+               ("root sum of squares", recon.coil_combine(coils, coil_axis=0)),
+           ],
+           title="coil_combine, a four-element ring",
+       )
     """
     if coil_maps is None:
         squared = (coil_images * coil_images.conj()).real

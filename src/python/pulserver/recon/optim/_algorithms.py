@@ -407,6 +407,30 @@ def pics(
     >>> measurement = physics.A(torch.zeros(1, 16, 16, dtype=torch.complex64))
     >>> recon.pics(measurement, physics, iterations=4).shape
     torch.Size([1, 16, 16])
+
+    Three-fold undersampled with a calibration block: the adjoint aliases,
+    and the solve unfolds it against the sensitivities.
+
+    .. plot::
+
+       import torch
+       import pulserver.recon as recon
+       from _figures import images, phantom
+
+       truth, coil_maps = phantom(64, coils=4)
+       mask = torch.zeros(64, 64)
+       mask[:, ::3] = 1.0
+       mask[:, 24:40] = 1.0
+       physics = recon.Cartesian2D(mask[None, None], coil_maps)
+       measured = physics.A(truth)
+       images(
+           [
+               ("object", truth),
+               ("zero-filled, R = 3", physics.A_adjoint(measured)),
+               ("CG-SENSE", recon.pics(measured, physics, iterations=20)),
+           ],
+           title="pics, Cartesian, three-fold undersampled",
+       )
     """
     denoiser = _complex_denoiser(denoiser)
     # Direct imports rather than the module's ``import_module`` so the boundary

@@ -203,13 +203,50 @@ def test_the_whole_tuple_matches_upstream():
         assert float(np.abs(ours[finite] - theirs[finite]).max()) / scale < 1e-9, name
 
 
-def test_the_dense_trajectory_is_refused_where_upstream_cannot_read_the_sequence():
-    """A rotation extension would come back in the wrong frame, silently."""
+def test_the_dense_trajectory_of_a_rotated_sequence_is_the_physical_one():
+    """Upstream has no vocabulary for a rotation, so the window is replayed
+    with it resolved into the gradients -- and what comes back is then the
+    same trajectory the C core reports for the ADC samples, in the same
+    frame."""
     seq = load("gre_radial_2d")
-    with pytest.raises(NotImplementedError, match="rotation"):
-        seq.calculate_kspace()
-    # The ADC samples are still available, and they do resolve the rotation.
-    assert seq.calculate_kspace(dense=False)[0].shape[1] > 0
+    dense = np.asarray(seq.calculate_kspace()[1])
+
+    assert dense.size > 0
+    # Every spoke of a radial scan is the base spoke turned, so the resolved
+    # trajectory reaches both in-plane axes where the stored one reaches one.
+    assert np.nanmax(np.abs(dense[1])) > 0.5 * np.nanmax(np.abs(dense[0]))
+
+
+def test_the_resolved_window_and_the_core_agree_on_a_rotated_trajectory():
+    """The differential check the materialisation is worth having: upstream,
+    given the replayed window, lands the ADC samples where the C core says
+    they are."""
+    seq = load("gre_radial_2d")
+    ours = np.asarray(seq.calculate_kspace(dense=False)[0])
+    theirs = np.asarray(seq._upstream_window(1, seq.num_blocks).calculate_kspace()[0])
+
+    assert ours.shape == theirs.shape
+    scale = max(float(np.abs(ours).max()), 1e-12)
+    assert float(np.abs(ours - theirs).max()) / scale < 1e-9
+
+
+def test_the_dense_trajectory_of_a_rotated_sequence_can_be_asked_for_unrotated():
+    """``frame="logical"`` is the file's own frame, so there the rotation is
+    exactly what should be left out: every spoke is the one that was stored."""
+    seq = load("gre_radial_2d")
+    dense = np.asarray(seq.calculate_kspace(frame="logical")[1])
+
+    assert dense.size > 0
+    assert float(np.nanmax(np.abs(dense[1]))) == pytest.approx(0.0, abs=1e-9)
+
+
+def test_plotting_the_kspace_of_a_rotated_sequence_needs_no_special_argument():
+    """The path a reader reaches for first, on the scans that carry rotations."""
+    matplotlib = pytest.importorskip("matplotlib")
+    matplotlib.use("Agg")
+
+    figure = load("gre_radial_2d").plot_kspace(plot_now=False)
+    assert figure is not None
 
 
 def test_the_logical_frame_leaves_rotations_out():

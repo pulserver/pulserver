@@ -187,9 +187,12 @@ class AnalysisMixin:
         where the samples actually are, and it is the C core's, agreeing with
         upstream to 2e-13 on a GRE and 2e-12 on an EPI.
 
-        Sequences upstream cannot read -- anything carrying rotation or RF-shim
-        extensions -- have no ``k_traj``, and ask for one raises rather than
-        quietly returning the breakpoint grid in its place.
+        A rotation is a frame rather than an event, and upstream has no
+        vocabulary for one, so a window carrying rotations or RF shims is
+        replayed with them resolved into its gradients before it is handed
+        over -- the same materialisation :meth:`plot` draws. Both trajectories
+        then come back in the frame that was asked for, and a radial or
+        spiral scan needs no special argument.
 
         See Also
         --------
@@ -209,22 +212,21 @@ class AnalysisMixin:
 
         k_traj = np.zeros((3, 0))
         if dense:
-            # to_upstream does not resolve rotation or RF-shim extensions, so
-            # for a sequence carrying either it would hand back a logical-frame
-            # k_traj beside a physical-frame k_traj_adc -- two frames in one
-            # tuple, and nothing to say which is which. Refuse instead.
-            if self._native.num_rotations() > 0 or self._native.num_rf_shims() > 0:
-                raise NotImplementedError(
-                    "calculate_kspace: k_traj comes from upstream PyPulseq, which cannot "
-                    "read the rotation or RF-shim extensions this sequence carries -- it "
-                    "would come back in the logical frame beside a physical-frame "
-                    "k_traj_adc. Use dense=False for the ADC samples, or _kspace() for "
-                    "the breakpoint-grid trajectory, which does resolve them."
-                )
             first, last = blocks
-            upstream = to_upstream(
-                self, first=first, last=(None if last == 0 else last)
-            )
+            last = last or self.num_blocks
+            if frame == "logical":
+                # The logical frame is the file's own, so the rows cross as
+                # they stand -- and a rotation left unresolved is exactly what
+                # "logical" asks for.
+                upstream = to_upstream(self, first=first, last=last)
+            else:
+                # A rotation is a frame, not an event, and upstream has no
+                # vocabulary for one: the window is replayed with it resolved
+                # into the gradients first, which is the same materialisation
+                # plot() draws. Without it the dense trajectory would come
+                # back in the logical frame beside a physical-frame
+                # k_traj_adc -- two frames in one tuple.
+                upstream = self._upstream_window(first, last)
             k_traj = upstream.calculate_kspace(
                 trajectory_delay=trajectory_delay,
                 gradient_offset=gradient_offset,

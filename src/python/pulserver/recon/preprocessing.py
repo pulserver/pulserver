@@ -197,6 +197,28 @@ def fill_partial_echo(
     ... )
     >>> pocs.shape == homodyne.shape
     True
+
+    What the truncation costs, and what the conjugate symmetry buys back:
+
+    .. plot::
+
+       import numpy as np
+       import pulserver.recon as recon
+       from _figures import images, phantom
+
+       truth = phantom(64)[0][0].numpy()
+       truncated = recon.fftc(truth)
+       truncated[:, 40:] = 0.0
+       readout = np.ones(64)
+       readout[40:] = 0.0
+       images(
+           [
+               ("object", truth),
+               ("zero-filled", recon.ifftc(truncated)),
+               ("POCS", recon.fill_partial_echo(truncated[None], readout, dimension=2)),
+           ],
+           title="fill_partial_echo, 62 % of the readout acquired",
+       )
     """
     if method == "pocs":
         return POCS(dimension=dimension, partial_axis=-1, iterations=iterations)(

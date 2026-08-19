@@ -30,6 +30,12 @@ ROOTS = (
 )
 
 
+def _raise(name: str) -> None:
+    """Walking a package swallows import errors by default, which would drop
+    a module out of the parametrisation rather than fail it."""
+    raise
+
+
 def _modules() -> list[str]:
     found: list[str] = []
     for root in ROOTS:
@@ -38,7 +44,7 @@ def _modules() -> list[str]:
         found += [
             module.name
             for module in pkgutil.walk_packages(
-                getattr(package, "__path__", []), root + "."
+                getattr(package, "__path__", []), root + ".", onerror=_raise
             )
             if "_disabled" not in module.name
         ]

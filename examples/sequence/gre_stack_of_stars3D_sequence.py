@@ -37,7 +37,7 @@ Radial in the plane, Cartesian along z:
    from pulserver.app import gre_stack_of_stars3D_sequence
 
    seq = gre_stack_of_stars3D_sequence(n_x=32, n_z=4, n_spokes=13, n_dummy=0)
-   seq.plot_kspace(show_trajectory=False, plot_now=False)
+   seq.plot_kspace(plot_now=False)
 """
 
 from __future__ import annotations
