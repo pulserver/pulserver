@@ -24,6 +24,14 @@ array's principal channels are read, and the basis goes into ``context.exam``
 cache is what carries an artifact from one to the next. Every imaging readout
 is compressed onto that basis as it arrives, so the imaging buffer is allocated
 at the virtual channel count and never holds the full array.
+
+The readout is ramp-sampled -- an EPI train that waits for the plateau throws
+away the time its ramps take -- so k does not advance at a constant rate across
+a readout and the samples are not on the grid. ``receive`` resamples them onto
+it, from the lobe timing the header declares (``rampUpTime``, ``flatTopTime``,
+``rampDownTime``, ``acqDelayTime``, microseconds) and the dwell each
+acquisition carries. A header that declares none is read as a plateau-only
+readout, which is already uniform.
 """
 
 from __future__ import annotations
@@ -42,14 +50,20 @@ from pulserver.recon import (
     coil_compress,
     coil_maps_from_reference,
     correct_lines,
+    epi_ramp_interpolate,
+    epi_ramp_positions,
     estimate_epi_phase,
     has_acquisition_flag,
     noise_prewhiten,
+    user_parameter,
 )
 
 #: Where the coil basis the prescan established is left for the imaging that
 #: follows it, which may arrive as a stream of its own.
 _BASIS = "epi3D_coil_basis"
+
+#: The read lobe's timing, as the header declares it, in microseconds.
+_LOBE = ("rampUpTime", "flatTopTime", "rampDownTime", "acqDelayTime")
 
 
 class Epi3DRecon(ReconPlugin):
@@ -103,6 +117,19 @@ class Epi3DRecon(ReconPlugin):
         self.navigator: list[Any] = []
         self.noise: Any = None
         self.phase: Any = None
+        self.ramp: Any = None
+        timing = [user_parameter(context.header, key) for key in _LOBE]
+        self.lobe = (
+            None
+            if any(value is None for value in timing)
+            else dict(
+                zip(
+                    ("ramp_up", "flat_top", "ramp_down", "delay"),
+                    [float(value) * 1e-6 for value in timing],
+                    strict=True,
+                )
+            )
+        )
 
     def receive(self, acquisition: Any, context: ReconContext) -> Any:
         """Whiten, correct and compress the line, place it, and route what it closed.
@@ -119,6 +146,17 @@ class Epi3DRecon(ReconPlugin):
             return None
         if self.noise is not None:
             line = noise_prewhiten(line, self.noise, coil_axis=0)
+        if self.lobe is not None:
+            # Where k actually was when each sample was taken, then onto the
+            # grid. Every readout of the train shares one lobe, so the
+            # positions are computed once and reused.
+            if self.ramp is None or self.ramp[0].size != line.shape[-1]:
+                self.ramp = epi_ramp_positions(
+                    line.shape[-1],
+                    float(acquisition.sample_time_us) * 1e-6,
+                    **self.lobe,
+                )
+            line = epi_ramp_interpolate(line, *self.ramp)
 
         backwards = has_acquisition_flag(acquisition, AcquisitionFlag.IS_REVERSE)
         if has_acquisition_flag(acquisition, AcquisitionFlag.IS_PHASECORR_DATA):
@@ -153,7 +191,7 @@ class Epi3DRecon(ReconPlugin):
             _, basis = coil_compress(lines, self.virtual_coils)
             context.exam.set(_BASIS, basis)
             self.coil_maps = coil_maps_from_reference(
-                np.einsum("vc,c...->v...", basis, kspace)[None], spatial_ndim=3
+                np.einsum("vc,c...->v...", basis, kspace)[None], mask, spatial_ndim=3
             )
             return None
 

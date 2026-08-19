@@ -119,6 +119,7 @@ _MEMBERS = {
     "default_model_paths": "weights",
     "diffusion_table": "_mrd.metadata",
     "epi_ramp_interpolate": "preprocessing",
+    "epi_ramp_positions": "preprocessing",
     "estimate_epi_phase": "preprocessing",
     "fftc": "preprocessing",
     "fill_partial_echo": "preprocessing",
@@ -238,6 +239,7 @@ if TYPE_CHECKING:
     from .preprocessing import coil_compress as coil_compress
     from .preprocessing import correct_lines as correct_lines
     from .preprocessing import epi_ramp_interpolate as epi_ramp_interpolate
+    from .preprocessing import epi_ramp_positions as epi_ramp_positions
     from .preprocessing import estimate_epi_phase as estimate_epi_phase
     from .preprocessing import fftc as fftc
     from .preprocessing import fill_partial_echo as fill_partial_echo

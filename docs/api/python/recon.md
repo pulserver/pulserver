@@ -154,12 +154,19 @@ One estimator, with the order as its parameter: first order is the
 gradient-delay ramp every product reconstruction corrects, and raising it picks
 up what an eddy current leaves beyond a ramp.
 
+A train worth playing samples across its read ramps rather than waiting for the
+plateau, so k does not advance at a constant rate along a readout and the
+samples are not on the grid. `epi_ramp_positions` says where each one actually
+landed, from the lobe's timing, and `epi_ramp_interpolate` resamples onto the
+grid it belongs on.
+
 ```{eval-rst}
 .. autosummary::
    :toctree: ../generated/recon
 
    estimate_epi_phase
    correct_lines
+   epi_ramp_positions
    epi_ramp_interpolate
 ```
 

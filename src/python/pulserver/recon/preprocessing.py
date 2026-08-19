@@ -11,6 +11,7 @@ __all__ = [
     "coil_compress",
     "correct_lines",
     "epi_ramp_interpolate",
+    "epi_ramp_positions",
     "estimate_epi_phase",
     "fftc",
     "fill_partial_echo",
@@ -436,6 +437,94 @@ def noise_prewhiten(
     flat = moved_data.reshape(moved_data.shape[0], -1)
     whitened = xp.linalg.solve(cholesky, flat) * scale_factor**0.5
     return xp.moveaxis(whitened.reshape(moved_data.shape), 0, coil_axis)
+
+
+def epi_ramp_positions(
+    n_samples: int,
+    dwell: float,
+    *,
+    ramp_up: float,
+    flat_top: float,
+    ramp_down: float,
+    delay: float = 0.0,
+) -> tuple[Any, Any]:
+    """Where a ramp-sampled EPI readout took its samples, and where they belong.
+
+    Sampling only the plateau throws away the time the ramps take, which is why
+    a readout worth playing samples across them too. The cost is that k no
+    longer advances at a constant rate: during a ramp the gradient is still
+    rising, so the early samples are packed together in k and the plateau's are
+    evenly spread. Placing them on the grid as if they were uniform is a
+    geometric distortion along the readout, and the fix is to say where each
+    one actually landed and resample.
+
+    k is the integral of the gradient, so the position of a sample is the area
+    the trapezoid has swept by the time it is taken.
+
+    Parameters
+    ----------
+    n_samples
+        Samples the ADC took.
+    dwell
+        Seconds between them.
+    ramp_up, flat_top, ramp_down
+        The read lobe's timing, in seconds.
+    delay
+        Seconds from the start of the lobe to the first sample.
+
+    Returns
+    -------
+    sampled : numpy.ndarray
+        Where each sample was taken, in k, normalised so the whole lobe sweeps
+        ``[-0.5, 0.5]``.
+    uniform : numpy.ndarray
+        The grid they belong on: ``n_samples`` evenly spaced positions spanning
+        what was actually swept.
+
+    Raises
+    ------
+    ValueError
+        If the lobe has no duration, the dwell is not positive, or the samples
+        run past the end of the lobe.
+
+    See Also
+    --------
+    epi_ramp_interpolate : resamples a readout from one onto the other.
+    """
+    import numpy as np
+
+    if n_samples < 2:
+        raise ValueError(f"a readout is at least two samples, got {n_samples}")
+    if dwell <= 0.0:
+        raise ValueError(f"dwell must be positive, got {dwell}")
+    if min(ramp_up, flat_top, ramp_down) < 0.0 or ramp_up + flat_top + ramp_down <= 0.0:
+        raise ValueError("the read lobe must have a positive duration")
+
+    times = delay + (np.arange(n_samples) + 0.5) * dwell
+    duration = ramp_up + flat_top + ramp_down
+    if times[0] < 0.0 or times[-1] > duration:
+        raise ValueError(
+            f"the samples span {times[0]:.3e}..{times[-1]:.3e} s, outside the "
+            f"{duration:.3e} s lobe"
+        )
+
+    # Area swept by each phase of the trapezoid, at unit amplitude. Every
+    # branch is evaluated, so a phase of zero duration divides by one and is
+    # then discarded rather than overflowing on the way.
+    rising = np.square(times) / (2.0 * (ramp_up or 1.0))
+    plateau = 0.5 * ramp_up + (times - ramp_up)
+    fallen = np.clip((times - ramp_up - flat_top) / (ramp_down or 1.0), 0.0, 1.0)
+    falling = (
+        0.5 * ramp_up + flat_top + 0.5 * ramp_down * (1.0 - np.square(1.0 - fallen))
+    )
+    swept = np.where(
+        times <= ramp_up,
+        rising,
+        np.where(times <= ramp_up + flat_top, plateau, falling),
+    )
+    total = 0.5 * ramp_up + flat_top + 0.5 * ramp_down
+    sampled = swept / total - 0.5
+    return sampled, np.linspace(sampled[0], sampled[-1], n_samples)
 
 
 def epi_ramp_interpolate(
