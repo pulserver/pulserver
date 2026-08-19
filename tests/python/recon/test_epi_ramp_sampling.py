@@ -140,3 +140,27 @@ def test_the_operator_needs_two_position_sets_and_a_support():
         epi_ramp_operator(sampled[:1], uniform, SUPPORT)
     with pytest.raises(ValueError, match="support must be positive"):
         epi_ramp_operator(sampled, uniform, 0)
+
+
+def test_a_partial_echo_resamples_onto_the_pitch_a_full_one_would():
+    """A truncated readout still ends where a full one would, so what it
+    resamples onto is the tail of the whole encoded grid -- not a grid of its
+    own spanning only what it sampled. Getting that wrong puts every sample at
+    the wrong pitch, and the buffer then right-aligns them into the wrong
+    columns."""
+    image = _object()
+    sampled, uniform = _trapezoid_positions()
+    kept = slice(N // 4, None)  # the early samples, before the echo, are dropped
+
+    partial = _sampled_at(sampled[kept], image)
+    onto = epi_ramp_operator(sampled[kept], uniform[kept], SUPPORT)
+    resampled = partial @ onto.T
+
+    # What a full readout would have measured at those same grid positions.
+    np.testing.assert_allclose(
+        resampled, _sampled_at(uniform, image)[kept], rtol=1e-3, atol=1e-3
+    )
+
+    # A grid of its own instead spans too little, so the pitch is wrong.
+    own = np.linspace(sampled[kept][0], sampled[kept][-1], sampled[kept].size)
+    assert np.abs(np.diff(own)[0] - np.diff(uniform)[0]) > 0.1 * np.diff(uniform)[0]

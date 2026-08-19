@@ -141,18 +141,26 @@ class Epi3DRecon(ReconPlugin):
         trajectory = getattr(acquisition, "traj", None)
         samples = line.shape[-1]
         if trajectory is not None and np.size(trajectory) >= samples:
-            taken = np.asarray(trajectory).reshape(samples, -1)[:, 0]
-            # Onto the readout's own extent, whatever units it was written in:
-            # the resampling is against a pixel grid, so what matters is that a
-            # full sweep spans one k width.
-            taken = taken / (2.0 * np.abs(taken).max())
             # One lobe is played for every readout of the train, so the change
-            # of basis onto the grid is built once and applied to each.
-            if self.regrid is None or self.regrid.shape[1] != taken.size:
+            # of basis onto the grid is built once and applied to each. The
+            # space is read rather than the buffer, which would allocate at the
+            # header's channel count before the first compressed line reached
+            # it.
+            if self.regrid is None or self.regrid.shape[1] != samples:
+                space = self.buffers.spaces[0]
+                taken = np.asarray(trajectory).reshape(samples, -1)[:, 0]
+                # k is zero at the echo and a truncated readout still ends
+                # where a full one would, so the largest |k| it reaches is half
+                # the full sweep -- which normalises it whatever units the
+                # client wrote, without assuming this readout swept all of it.
+                taken = taken / (2.0 * np.abs(taken).max())
+                # And the grid is the whole encoded readout, not the part this
+                # one sampled: a partial echo resamples onto the same pitch as
+                # a full one and is right-aligned in it, exactly as the buffer
+                # places it.
+                grid = (np.arange(space.readout) - space.readout // 2) / space.readout
                 self.regrid = epi_ramp_operator(
-                    taken,
-                    np.linspace(taken[0], taken[-1], taken.size),
-                    self.buffers[0].image_shape[-1],
+                    taken, grid[space.readout - samples :], space.recon_matrix[-1]
                 )
             line = line @ self.regrid.T
 
