@@ -10,7 +10,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from pulserver.app.recon.epi2D_recon import correct_lines, odd_even_fit
+from pulserver.recon import correct_lines, odd_even_fit
 
 N = 64
 COILS = 3

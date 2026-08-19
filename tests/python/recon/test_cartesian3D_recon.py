@@ -226,12 +226,9 @@ def test_the_calibration_boundary_produces_maps_and_no_image(kspace, context):
     )
     plugin = PLUGIN.spawn()
     plugin.startup(context)
-    for acquisition in rectangle:
-        plugin.receive(acquisition, context)
+    emitted = [plugin.receive(item, context) for item in rectangle]
 
-    from pulserver.recon._mrd.application import _make_bucket
-
-    assert plugin.recon(_make_bucket(rectangle, []), context) is None
+    assert all(output is None for output in emitted)
     assert plugin.coil_maps is not None
 
 

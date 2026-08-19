@@ -5,18 +5,15 @@ contrast the sequence was after -- a spin echo, a balanced SSFP and a gradient
 echo all leave one Cartesian grid per slice, and all of them come back through
 this. So there is one plugin here rather than one per sequence.
 
-A streamed reconstruction in one hook. The header describes the encoding space
-and each acquisition carries its own counters, so ``pulserver`` places every
-line as it arrives; this implements ``recon`` alone, running at each boundary
-the sequence flags -- estimating coil sensitivities when a calibration segment
-closes, reconstructing when the slice does. The calibration lines are imaging
-data too, so there is one buffer and no second grid.
+A streamed reconstruction. The header describes the encoding space and each
+acquisition carries its own counters, so every line is placed as it arrives and
+``receive`` routes the two boundaries the sequence flags: a segment that closes
+without closing the slice is the calibration block, and the slice itself is an
+image. The calibration lines are imaging data too, so there is one buffer and
+no second grid.
 
-Which of three reconstructions runs is read off the sampling mask rather than
-declared: the coil-wise adjoint when everything is there, POCS when the readout
-is truncated, CG-SENSE against NLINV maps when phase encodes are missing.
-Parallel imaging comes first, because the phase constraint POCS relies on only
-means something once the image is unaliased.
+Which reconstruction runs is read off the sampling mask by
+:func:`pulserver.recon.cartesian_recon`, not declared here.
 
 Echoes are an axis, not a variant: a scan whose ``ECO`` label fills the
 ``contrast`` counter reconstructs each echo against the same sensitivities --
@@ -35,18 +32,14 @@ from typing import Any
 
 import numpy as np
 
-from pulserver import AcquisitionBucket, ReconContext, ReconPlugin, ReconResult
+from pulserver import ReconContext, ReconPlugin, ReconResult
 from pulserver.recon import (
     NLINV,
     AcquisitionFlag,
-    Cartesian2D,
+    cartesian_recon,
     center_crop,
-    coil_combine,
     echo_count,
-    fftc,
-    fill_partial_echo,
-    ifftc,
-    pics,
+    has_acquisition_flag,
     recon_shape,
 )
 
@@ -90,19 +83,32 @@ class Cartesian2DRecon(ReconPlugin):
         self.n_echoes = echo_count(context.header)
         self.image_shape = recon_shape(context.header)
         self.coil_maps: dict[int, Any] = {}
+        self.slice = 0
 
-    def recon(
-        self, bucket: AcquisitionBucket, context: ReconContext
-    ) -> list[ReconResult] | None:
-        """Calibrate or reconstruct, according to which boundary ended this bucket."""
+    def receive(self, acquisition: Any, context: ReconContext) -> Any:
+        """Place the line, then route the boundary it closed.
+
+        The slice is tested first: the last line of a slice closes its trailing
+        segment as well, and only a segment that closed nothing larger is the
+        calibration block.
+        """
+        self.buffers.add(acquisition)
+        self.slice = int(acquisition.idx.slice)
+        if has_acquisition_flag(acquisition, AcquisitionFlag.LAST_IN_SLICE):
+            return self.recon("imaging", context)
+        if has_acquisition_flag(acquisition, AcquisitionFlag.LAST_IN_SEGMENT):
+            return self.recon("calibration", context)
+        return None
+
+    def recon(self, branch: str, context: ReconContext) -> list[ReconResult] | None:
+        """Calibrate the slice, or reconstruct every echo of it."""
         del context
-        index = int(bucket.labels("slice")[-1])
         buffer = self.buffers[0]
+        index = self.slice
 
-        # A segment that ended without ending anything larger is the
-        # calibration block: estimate the sensitivities now, from the first
-        # echo, and let the rest of the slice keep arriving.
-        if bucket.trigger is AcquisitionFlag.LAST_IN_SEGMENT:
+        if branch == "calibration":
+            # The autocalibration block, from the first echo: it has the most
+            # signal, and every echo is unaliased against the same maps.
             kspace, mask = buffer.select(slice=index, contrast=0)
             self.coil_maps[index] = NLINV(spatial_ndim=2)(
                 kspace[None], mask=mask, device=self.device
@@ -111,48 +117,19 @@ class Cartesian2DRecon(ReconPlugin):
 
         results = []
         for echo in range(self.n_echoes):
-            echo_kspace, echo_mask = buffer.select(slice=index, contrast=echo)
-            lines = echo_mask.any(axis=-1)
-            readout = echo_mask.any(axis=0)
-
-            if lines.all():
-                # Fully sampled k-space is zero outside the mask, so the
-                # coil-wise adjoint is the centered inverse FFT itself.
-                coils = (
-                    ifftc(echo_kspace, axes=(-2, -1))
-                    if readout.all()
-                    else fill_partial_echo(
-                        echo_kspace, readout, self.pocs_iterations, dimension=2
-                    )
-                )
-                image = coil_combine(coils, coil_axis=0)
-            else:
-                maps = self.coil_maps.get(index)
-                if maps is None:
-                    maps = NLINV(spatial_ndim=2)(
-                        echo_kspace[None], mask=echo_mask, device=self.device
-                    )
-                    self.coil_maps[index] = maps
-                image = pics(
-                    echo_kspace[None],
-                    Cartesian2D(echo_mask[None], maps, device=self.device),
-                    regularization=self.regularization,
-                    iterations=self.iterations,
-                )[0]
-                if not readout.all():
-                    # The phase constraint POCS relies on means something only
-                    # once the aliasing is gone, so the echo fills last.
-                    image = fill_partial_echo(
-                        fftc(image, axes=(-2, -1)),
-                        readout,
-                        self.pocs_iterations,
-                        dimension=2,
-                    )
-
-            image = center_crop(np.abs(image), self.image_shape)
+            kspace, mask = buffer.select(slice=index, contrast=echo)
+            image = cartesian_recon(
+                kspace,
+                mask,
+                self.coil_maps.get(index),
+                regularization=self.regularization,
+                iterations=self.iterations,
+                pocs_iterations=self.pocs_iterations,
+                device=self.device,
+            )
             results.append(
                 ReconResult(
-                    image.transpose(),
+                    center_crop(np.abs(image), self.image_shape).transpose(),
                     reference=-1,
                     series_index=echo,
                     image_type="magnitude",

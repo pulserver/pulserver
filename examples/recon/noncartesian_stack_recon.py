@@ -20,7 +20,7 @@ from typing import Any
 
 import numpy as np
 
-from pulserver import AcquisitionBucket, ReconContext, ReconPlugin, ReconResult
+from pulserver import ReconContext, ReconPlugin, ReconResult
 from pulserver.recon import (
     NLINV,
     AcquisitionFlag,
@@ -82,14 +82,9 @@ class NonCartesianStackRecon(ReconPlugin):
         super().startup(context)
         self.volume_shape = recon_volume(context.header)
 
-    def recon(
-        self, bucket: AcquisitionBucket, context: ReconContext
-    ) -> ReconResult | None:
-        """Reconstruct once the measurement is complete."""
-        del context
-        if AcquisitionFlag.LAST_IN_MEASUREMENT not in bucket.trigger:
-            return None
-
+    def recon(self, branch: str, context: ReconContext) -> ReconResult:
+        """Reconstruct the stack, once the measurement is complete."""
+        del branch, context
         buffer = self.buffers[0]
         extents = dict(zip(buffer.axes, buffer.kspace.shape, strict=True))
         n_z, n_views = extents.get("partition", 1), extents["phase_encode"]

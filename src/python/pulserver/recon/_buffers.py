@@ -11,10 +11,10 @@ which one it belongs to through ``encoding_space_ref``. So the layout is known
 before the first line arrives, and every line can be placed the moment it does,
 rather than accumulated in a list and sorted at the trigger.
 
-Axis order is coils first, readout last, matching :class:`CartesianGridder` and
-the rest of the package rather than Gadgetron's ``[E0,E1,E2,CHA,N,S,LOC]``.
-What is borrowed is the shape of the idea, not its index order: a buffer that
-disagreed with the arrays around it would cost a transpose at every boundary.
+Axis order is coils first, readout last, matching the rest of the package
+rather than Gadgetron's ``[E0,E1,E2,CHA,N,S,LOC]``. What is borrowed is the
+shape of the idea, not its index order: a buffer that disagreed with the arrays
+around it would cost a transpose at every boundary.
 An axis exists where the header says something varies, and nowhere else: a
 two-dimensional scan has no partition axis and a single-slice one no slice
 axis, so what comes out is the array a reconstruction would have built by
@@ -301,15 +301,26 @@ class ReconBuffer:
                 where.append(index)
         return tuple(where)
 
-    def add(self, acquisition: Any) -> None:
+    def add(self, acquisition: Any, data: Any = None) -> None:
         """Place one acquisition where its counters say it belongs.
+
+        Parameters
+        ----------
+        acquisition
+            The acquisition, whose counters and flags say where it goes.
+        data
+            ``(coils, samples)`` to place instead of ``acquisition.data``, for
+            a readout a plugin corrected on arrival -- the reversed line of an
+            EPI train, flipped and phase corrected in
+            :meth:`~pulserver.ReconPlugin.receive`. ``None`` places what the
+            acquisition carries.
 
         Raises
         ------
         ValueError
             If the acquisition does not fit the space it is placed in.
         """
-        data = np.asarray(acquisition.data)
+        data = np.asarray(acquisition.data if data is None else data)
         if data.ndim != 2:
             raise ValueError(
                 f"acquisition data must be (coils, samples), got shape {data.shape}"
@@ -508,17 +519,18 @@ class ReconData(Mapping):
             )
         return self.data[encoding]
 
-    def add(self, acquisition: Any) -> None:
+    def add(self, acquisition: Any, data: Any = None) -> None:
         """Place one acquisition in the buffer its header names.
 
         Routed by ``encoding_space_ref``, which is how a scan of several
-        subsequences sorts itself with nothing declared per plugin.
+        subsequences sorts itself with nothing declared per plugin. ``data``
+        replaces what the acquisition carries; see :meth:`ReconBuffer.add`.
         """
         if not self.spaces:
             return
         encoding = int(acquisition_label(acquisition, "encoding_space_ref", 0) or 0)
-        coils, samples = np.shape(acquisition.data)[-2:]
-        self.buffer(encoding, coils=coils, readout=samples).add(acquisition)
+        coils, samples = np.shape(acquisition.data if data is None else data)[-2:]
+        self.buffer(encoding, coils=coils, readout=samples).add(acquisition, data)
 
     def __getitem__(self, encoding: int) -> ReconBuffer:
         return self.buffer(encoding)

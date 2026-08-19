@@ -11,20 +11,32 @@ The data model keeps Gadgetron's familiar acquisition-bucket vocabulary while
 adding array conveniences for users concerned only with reconstruction. MRD
 connections, framing, close handling, and output serialization remain private.
 
+The three hooks divide the work the same way in every plugin: :meth:`startup`
+lays out the buffers the header describes, :meth:`receive` places each
+acquisition and routes the boundaries it closes to a named branch, and
+:meth:`recon` holds the reconstruction of each branch over buffers that are
+already filled.
+
 Examples
 --------
 >>> import numpy as np
+>>> from types import SimpleNamespace
 >>> from pulserver import AcquisitionBucket, ReconPlugin, ReconContext, ReconResult
 >>> class RootSumOfSquares(ReconPlugin):
-...     def recon(self, bucket, context):
-...         del context
-...         kspace = bucket.kspace()
-...         image = np.sqrt(np.sum(np.abs(kspace) ** 2, axis=1))
-...         return ReconResult(image)
->>> bucket = AcquisitionBucket.from_arrays(
-...     np.ones((4, 2, 8), dtype=np.complex64)
+...     def recon(self, branch, context):
+...         del branch, context
+...         kspace = self.buffers[0].kspace
+...         return ReconResult(np.sqrt(np.sum(np.abs(kspace) ** 2, axis=0)))
+>>> matrix = SimpleNamespace(matrixSize=SimpleNamespace(x=8, y=4, z=1))
+>>> header = SimpleNamespace(
+...     encoding=[SimpleNamespace(encodedSpace=matrix, reconSpace=matrix)],
+...     acquisitionSystemInformation=SimpleNamespace(receiverChannels=2),
 ... )
->>> result = RootSumOfSquares()(bucket, ReconContext.offline())
+>>> bucket = AcquisitionBucket.from_arrays(
+...     np.ones((4, 2, 8), dtype=np.complex64),
+...     labels={"kspace_encode_step_1": np.arange(4)},
+... )
+>>> result = RootSumOfSquares()(bucket, ReconContext.offline(header))
 >>> result.data.shape
 (4, 8)
 """
@@ -556,45 +568,57 @@ class ReconPlugin(ABC):
     A plugin module creates one configured instance named ``PLUGIN``, and the
     private inline runtime discovers it -- no registration or connection
     callback is required. Like a sequence plugin, a reconstruction plugin is a
-    handful of lifecycle hooks the runtime drives over one MRD stream:
+    handful of lifecycle hooks the runtime drives over one MRD stream, and the
+    division between them is the same in every plugin:
 
     :meth:`startup`
-        Once, when the stream opens, before any acquisition. Allocate the
-        buffers the scan will fill. *Optional.*
+        Once, when the stream opens, before any acquisition. Lay out the
+        buffers the header's encoding spaces describe. *Optional.*
     :meth:`receive`
-        For every accepted acquisition, as it arrives. Do the per-acquisition
-        work -- filtering, sorting, placing -- here, so it overlaps
-        acquisition dead time instead of waiting for the trigger. *Optional.*
+        For every accepted acquisition, as it arrives. Place it in its buffer,
+        and -- reading the acquisition's own flags and counters -- decide
+        whether it closed something worth reconstructing and which branch
+        reconstructs it. The sorting and the routing both live here, so they
+        overlap acquisition dead time instead of waiting for a trigger.
+        *Optional.*
     :meth:`recon`
-        Once per bucket, at each ``split_on`` boundary, on the Gadgetron-style
-        :class:`AcquisitionBucket` the runtime has assembled. Produce the
-        images. **Required** -- it is the reconstruction.
+        Whenever :meth:`receive` routes a branch to it, over buffers that are
+        already filled. Holds the reconstruction of each branch and nothing
+        else. **Required** -- it is the reconstruction.
 
-    Only :meth:`recon` is mandatory; the default hooks do nothing, so a plugin
-    that does everything at trigger time overrides :meth:`recon` alone.
+    Only :meth:`recon` is mandatory. The default :meth:`startup` reads the
+    header, the default :meth:`receive` places each acquisition and routes
+    ``"imaging"`` at every ``split_on`` boundary, so a plugin with one branch
+    overrides :meth:`recon` alone.
 
-    Triggers
+    Branches
     --------
-    ``split_on`` may name several boundaries rather than one, and then
-    :meth:`recon` runs at each of them and reads ``bucket.trigger`` to see
-    which fired. A scan whose autocalibration block completes long before the
-    slice does is the case this exists for::
+    A branch is a name :meth:`receive` chooses and :meth:`recon` switches on --
+    ``"calibration"`` and ``"imaging"`` in the scans that have two. A scan
+    whose autocalibration block completes long before the slice does is the
+    case this exists for::
 
-        super().__init__(split_on=AcquisitionFlag.LAST_IN_SEGMENT | AcquisitionFlag.LAST_IN_SLICE)
-        ...
-        def recon(self, bucket, context):
-            if bucket.trigger is AcquisitionFlag.LAST_IN_SEGMENT:
-                self.maps = sensitivities(...)      # calibrate, no image yet
+        def receive(self, acquisition, context):
+            self.buffers.add(acquisition)
+            if has_acquisition_flag(acquisition, AcquisitionFlag.LAST_IN_SLICE):
+                return self.recon("imaging", context)
+            if has_acquisition_flag(acquisition, AcquisitionFlag.LAST_IN_SEGMENT):
+                return self.recon("calibration", context)
+            return None
+
+        def recon(self, branch, context):
+            if branch == "calibration":
+                self.maps = sensitivities(self.buffers[0])   # no image yet
                 return None
-            ...                                     # the slice is complete
+            ...                                             # the slice is complete
 
-    Testing the whole combination rather than one bit is what makes that read
-    correctly: the final acquisition of a scan closes its segment *and* its
-    slice *and* the measurement, so ``is AcquisitionFlag.LAST_IN_SEGMENT`` is
-    true only at a boundary where nothing larger ended.
+    Testing the slice before the segment is what makes that read correctly: the
+    final acquisition of a slice closes its segment *and* the slice, so the
+    calibration branch is reached only where nothing larger ended.
 
-    Nothing forces the split to mean anything in particular: a bucket that
-    produces no image simply returns ``None``, exactly as a data sink does.
+    Whatever :meth:`receive` returns is what the runtime emits, so a branch
+    that produces no image simply returns ``None``, exactly as a data sink
+    does.
 
     State
     -----
@@ -621,34 +645,35 @@ class ReconPlugin(ABC):
 
     ``self.buffers[0].kspace`` is one space's array and ``.axes`` names its
     dimensions; ``.mask`` says where data actually landed, which is how an
-    undersampled or partial-echo scan is read. Acquisitions the scanner marks
-    as calibration are usually imaging data too, and those land in both
-    ``buffers.data`` and ``buffers.ref``; a calibration genuinely excluded from
-    the imaging k-space lands only in ``ref``. Either way the split is the
-    scanner's flag, not something a plugin routes for itself.
+    undersampled or partial-echo scan is read, and ``.reference`` which of
+    those positions the scanner flagged as parallel-imaging calibration. A
+    calibration acquired on its own geometry -- the low-resolution gradient
+    echo an EPI scan calibrates from -- is a subsequence, so it is an encoding
+    space of its own and reaches ``self.buffers[1]`` without a plugin routing
+    it there.
 
     Parameters
     ----------
     split_on
-        The boundary that ends one bucket, as an :class:`AcquisitionFlag`
-        (several may be combined with ``|``) or a named MRD acquisition flag.
-        ``None`` produces one bucket at end of stream.
+        The boundary the default :meth:`receive` reconstructs at, as an
+        :class:`AcquisitionFlag` (several may be combined with ``|``) or a
+        named MRD acquisition flag. ``None`` reconstructs at end of stream.
     require_flags
-        Flags every acquisition entering the bucket must contain.
+        Flags every accepted acquisition must contain.
     reject_flags
-        Flags that exclude an acquisition. A rejected acquisition may still
-        end a bucket when it contains one of ``split_on``.
+        Flags that exclude an acquisition, which the runtime then never hands
+        to :meth:`receive`.
     buffered
         Sort the acquisitions into :attr:`buffers` as they arrive. Turn it off
         for a plugin that must digest a header too thin to describe its data --
-        a generic MRD handler taking streams from elsewhere -- which then reads
-        the bucket at the trigger and sorts for itself.
+        a generic MRD handler taking streams from elsewhere -- which then
+        collects the acquisitions in :meth:`receive` and sorts for itself.
 
     Attributes
     ----------
     split_on : tuple
         The flags as a tuple, whatever form they were given in. Empty when the
-        stream is one bucket.
+        stream reconstructs once, at its end.
     buffers : ReconData
         Every encoding space of the scan, filled as the acquisitions arrive.
         Laid out by :meth:`startup` from the header; empty until then, and
@@ -695,34 +720,61 @@ class ReconPlugin(ABC):
         if self.buffered:
             self.buffers = ReconData.from_header(context.header)
 
-    def receive(self, acquisition: Any, context: ReconContext) -> None:
-        """Place one acquisition in its buffer as it arrives.
+    def receive(self, acquisition: Any, context: ReconContext) -> Any:
+        """Place one acquisition, and reconstruct whatever it completed.
 
-        Runs for every accepted acquisition, before its bucket is complete, so
-        the sorting overlaps acquisition dead time rather than waiting for the
-        trigger. The default routes on ``encoding_space_ref`` and places by the
-        acquisition's own counters, which is what the header laid the buffers
-        out for -- so a plugin that reconstructs sorted k-space does not
-        override this at all, and reads :attr:`buffers` in :meth:`recon`.
+        Runs for every accepted acquisition, as it arrives, so both the sorting
+        and the routing overlap acquisition dead time. Placement routes on
+        ``encoding_space_ref`` and indexes by the acquisition's own counters,
+        which is what the header laid the buffers out for. The routing then
+        reads the same acquisition's flags: a boundary it closes selects the
+        branch :meth:`recon` runs, and whatever that returns is returned from
+        here for the runtime to emit.
 
-        Override for work the placement cannot do -- a running noise estimate,
-        an on-the-fly filter -- and call ``super().receive(...)`` to keep the
-        placement.
+        The default places the acquisition and routes ``"imaging"`` at every
+        ``split_on`` boundary. Override it for a scan with more than one branch,
+        or for work the placement cannot do -- an EPI line that must be phase
+        corrected before it belongs anywhere, a running noise estimate.
+
+        Parameters
+        ----------
+        acquisition
+            The acquisition, with its data, counters and flags.
+        context
+            The scan context, as :meth:`startup` saw it.
+
+        Returns
+        -------
+        object or None
+            What :meth:`recon` produced, or ``None`` when this acquisition
+            closed nothing.
         """
-        del context
         if self.buffered:
             self.buffers.add(acquisition)
+        if _closes(acquisition, self.split_on):
+            return self.recon("imaging", context)
+        return None
 
     @abstractmethod
-    def recon(
-        self,
-        bucket: AcquisitionBucket,
-        context: ReconContext,
-    ) -> Any:
-        """Reconstruct one acquisition bucket at its ``split_on`` boundary.
+    def recon(self, branch: str, context: ReconContext) -> Any:
+        """Reconstruct one branch, over buffers :meth:`receive` has filled.
 
-        Return a :class:`ReconResult`, a native MRD output, a sequence of
-        either, or ``None`` for a data sink.
+        Holds the reconstruction and nothing else: the acquisitions are already
+        sorted, and which branch runs was decided by the hook that called this.
+
+        Parameters
+        ----------
+        branch
+            The branch :meth:`receive` routed -- ``"imaging"`` from the default
+            routing, and whatever names a plugin gives its own.
+        context
+            The scan context, as :meth:`startup` saw it.
+
+        Returns
+        -------
+        object or None
+            A :class:`ReconResult`, a native MRD output, a sequence of either,
+            or ``None`` for a branch that produces no image.
         """
         ...
 
@@ -781,21 +833,40 @@ class ReconPlugin(ABC):
 
         Replays the bucket's acquisitions through the same lifecycle the
         runtime drives -- :meth:`startup`, then :meth:`receive` per
-        acquisition, then :meth:`recon` -- on a fresh :meth:`spawn`. A plugin
-        therefore reconstructs assembled data exactly as it reconstructs
-        streamed data, and this instance is left untouched.
+        acquisition, which routes the branches -- on a fresh :meth:`spawn`. A
+        plugin therefore reconstructs assembled data exactly as it
+        reconstructs streamed data, and this instance is left untouched.
 
         The bucket is one boundary, whatever number of them the stream would
-        have had, so a plugin that splits several ways sees only the last.
+        have had, so a plugin that branches several ways answers with the last.
+        A bucket whose acquisitions close nothing -- one assembled from arrays,
+        which carry no flags -- is reconstructed as ``"imaging"`` at its end.
         """
         plugin = self.spawn()
         plugin.startup(context)
+        output = None
         for acquisition in bucket.acquisitions:
-            plugin.receive(acquisition, context)
-        return plugin.recon(bucket, context)
+            received = plugin.receive(acquisition, context)
+            if received is not None:
+                output = received
+        if output is None and not _closes(_last(bucket.acquisitions), plugin.split_on):
+            output = plugin.recon("imaging", context)
+        return output
 
 
 # %% private module subroutines
+
+
+def _closes(acquisition: Any, split_on: tuple[Any, ...]) -> bool:
+    """Whether this acquisition carries one of the boundaries named."""
+    if acquisition is None:
+        return False
+    return any(has_acquisition_flag(acquisition, flag) for flag in split_on)
+
+
+def _last(acquisitions: tuple[Any, ...]) -> Any | None:
+    """The acquisition that ended a bucket, or ``None`` for an empty one."""
+    return acquisitions[-1] if acquisitions else None
 
 
 class _ArrayAcquisition:

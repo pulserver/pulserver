@@ -21,8 +21,16 @@ from typing import Any
 
 import numpy as np
 
-from pulserver import AcquisitionBucket, ReconContext, ReconPlugin, ReconResult
-from pulserver.recon import AcquisitionFlag, as_numpy, pipe_menon_dcf, recon_volume
+from pulserver import ReconContext, ReconPlugin, ReconResult
+from pulserver.recon import (
+    NLINV,
+    AcquisitionFlag,
+    NonCartesian3D,
+    as_numpy,
+    pics,
+    pipe_menon_dcf,
+    recon_volume,
+)
 
 
 class NonCartesian3DRecon(ReconPlugin):
@@ -69,16 +77,9 @@ class NonCartesian3DRecon(ReconPlugin):
         super().startup(context)
         self.volume_shape = recon_volume(context.header)
 
-    def recon(
-        self, bucket: AcquisitionBucket, context: ReconContext
-    ) -> ReconResult | None:
-        """Reconstruct once the measurement is complete."""
-        del context
-        if AcquisitionFlag.LAST_IN_MEASUREMENT not in bucket.trigger:
-            return None
-
-        from pulserver.recon.physics import NonCartesian3D
-
+    def recon(self, branch: str, context: ReconContext) -> ReconResult:
+        """Reconstruct the volume, once the measurement is complete."""
+        del branch, context
         # Spokes laid end to end, and the points they were taken at in the
         # same order: one non-Cartesian measurement of the volume.
         buffer = self.buffers[0]
@@ -99,8 +100,6 @@ class NonCartesian3DRecon(ReconPlugin):
             coil_images = coil_wise.A_adjoint(data[None])[0]
             image = np.sqrt(np.sum(np.abs(coil_images) ** 2, axis=0))
         else:
-            from pulserver.recon import NLINV, pics
-
             maps = NLINV(spatial_ndim=3, calibration_width=self.calibration_width)(
                 data,
                 trajectory=points,

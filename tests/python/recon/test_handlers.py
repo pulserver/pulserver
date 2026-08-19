@@ -126,36 +126,22 @@ def test_fftrecon_emits_one_dicom_per_slice(monkeypatch):
     assert [item[1].slice for item in connection.sent] == [0, 1, 2]
 
 
-def test_interleaved_waveform_is_attached_to_bucket():
-    from pulserver import ReconPlugin
-
-    seen = []
-
-    class Capture(ReconPlugin):
-        def recon(self, bucket, context):
-            del context
-            seen.append(bucket)
+def test_the_waveforms_of_a_measurement_reach_every_bucket():
+    """A scanner sends its waveforms once, ahead of the data."""
+    from pulserver.recon._mrd.application import _make_bucket
 
     acquisitions = _make_acquisitions(n_pe=4, n_ro=8, n_channels=1)
     waveform = ismrmrd.Waveform()
     waveform.resize(16, 1)
-    connection = FakeConnection([*acquisitions[:2], waveform, *acquisitions[2:]])
-    run_application(Capture(), connection, _context(_make_header(8, 4)))
 
-    assert len(seen) == 1
-    assert seen[0].waveforms == (waveform,)
-    assert seen[0].kspace().shape == (4, 1, 8)
+    bucket = _make_bucket(acquisitions, [waveform])
+
+    assert bucket.waveforms == (waveform,)
+    assert bucket.kspace().shape == (4, 1, 8)
 
 
 def test_bucket_matches_gadgetron_data_and_reference_classification():
-    from pulserver import ReconPlugin
-
-    seen = []
-
-    class Capture(ReconPlugin):
-        def recon(self, bucket, context):
-            del context
-            seen.append(bucket)
+    from pulserver.recon._mrd.application import _make_bucket
 
     imaging, calibration, combined, phase = _make_acquisitions(
         n_pe=4,
@@ -165,14 +151,13 @@ def test_bucket_matches_gadgetron_data_and_reference_classification():
     calibration.setFlag(ismrmrd.ACQ_IS_PARALLEL_CALIBRATION)
     combined.setFlag(ismrmrd.ACQ_IS_PARALLEL_CALIBRATION_AND_IMAGING)
     phase.setFlag(ismrmrd.ACQ_IS_PHASECORR_DATA)
-    connection = FakeConnection([imaging, calibration, combined, phase])
-    run_application(Capture(split_on=None), connection, _context(_make_header(8, 4)))
 
-    assert len(seen) == 1
-    assert seen[0].data == (imaging, combined)
-    assert seen[0].ref == (calibration, combined)
-    assert seen[0].datastats[0].kspace_encode_step_1 == frozenset({0, 2})
-    assert seen[0].refstats[0].kspace_encode_step_1 == frozenset({1, 2})
+    bucket = _make_bucket([imaging, calibration, combined, phase], [])
+
+    assert bucket.data == (imaging, combined)
+    assert bucket.ref == (calibration, combined)
+    assert bucket.datastats[0].kspace_encode_step_1 == frozenset({0, 2})
+    assert bucket.refstats[0].kspace_encode_step_1 == frozenset({1, 2})
 
 
 def test_savedataonly_consumes_without_output():
@@ -184,8 +169,8 @@ def test_savedataonly_consumes_without_output():
 
 
 def test_the_runtime_drives_the_lifecycle_hooks_in_order():
-    """startup once, receive per acquisition on arrival, recon per bucket at its
-    split boundary."""
+    """startup once, then receive per acquisition on arrival -- and receive is
+    what calls recon, at the boundary it routes."""
     from pulserver import ReconPlugin, ReconResult
 
     events = []
@@ -196,18 +181,18 @@ def test_the_runtime_drives_the_lifecycle_hooks_in_order():
             events.append("startup")
 
         def receive(self, acquisition, context):
-            del context
             events.append(("receive", int(acquisition.idx.slice)))
+            return super().receive(acquisition, context)
 
-        def recon(self, bucket, context):
+        def recon(self, branch, context):
             del context
-            events.append(("recon", len(bucket.data)))
+            events.append(("recon", branch))
             return ReconResult(np.ones((2, 2), dtype=np.float32))
 
     acquisitions = _make_acquisitions(n_pe=3, n_ro=8, n_channels=1, n_slices=2)
     connection = FakeConnection(acquisitions)
     run_application(
-        Lifecycle(split_on="ACQ_LAST_IN_SLICE"),
+        Lifecycle(split_on="ACQ_LAST_IN_SLICE", buffered=False),
         connection,
         _context(_make_header(8, 3)),
     )
@@ -217,52 +202,55 @@ def test_the_runtime_drives_the_lifecycle_hooks_in_order():
         ("receive", 0),
         ("receive", 0),
         ("receive", 0),
-        ("recon", 3),
+        ("recon", "imaging"),
         ("receive", 1),
         ("receive", 1),
         ("receive", 1),
-        ("recon", 3),
+        ("recon", "imaging"),
     ]
     assert len(connection.sent) == 2
     assert all(isinstance(item, ismrmrd.Image) for item in connection.sent)
 
 
-def test_several_flags_each_end_a_bucket():
-    """recon runs at every boundary and decides what that boundary meant."""
+def test_receive_routes_the_branch_the_acquisition_closed():
+    """The routing reads the arriving acquisition, not an assembled bucket."""
     from pulserver import ReconPlugin
+    from pulserver.recon import AcquisitionFlag, has_acquisition_flag
 
     seen = []
 
     class Splitting(ReconPlugin):
-        def recon(self, bucket, context):
+        def receive(self, acquisition, context):
+            line = int(acquisition.idx.kspace_encode_step_1)
+            if has_acquisition_flag(acquisition, AcquisitionFlag.LAST_IN_SLICE):
+                return self.recon(f"imaging:{line}", context)
+            if has_acquisition_flag(acquisition, AcquisitionFlag.LAST_IN_SEGMENT):
+                return self.recon(f"calibration:{line}", context)
+            return None
+
+        def recon(self, branch, context):
             del context
-            last = bucket.acquisitions[-1]
-            seen.append(
-                (
-                    int(last.idx.kspace_encode_step_1),
-                    last.is_flag_set(ismrmrd.ACQ_LAST_IN_SEGMENT),
-                )
-            )
+            seen.append(branch)
             return None
 
     acquisitions = _make_acquisitions(n_pe=6, n_ro=8, n_channels=1)
     acquisitions[1].setFlag(ismrmrd.ACQ_LAST_IN_SEGMENT)
     run_application(
-        Splitting(split_on=("ACQ_LAST_IN_SEGMENT", "ACQ_LAST_IN_SLICE")),
+        Splitting(buffered=False),
         FakeConnection(acquisitions),
         _context(_make_header(8, 6)),
     )
 
     # The segment closes at line 1 and the slice at line 5.
-    assert seen == [(1, True), (5, False)]
+    assert seen == ["calibration:1", "imaging:5"]
 
 
 def test_one_flag_may_be_given_without_wrapping_it():
     from pulserver import ReconPlugin
 
     class Nothing(ReconPlugin):
-        def recon(self, bucket, context):
-            del bucket, context
+        def recon(self, branch, context):
+            del branch, context
             return None
 
     assert Nothing(split_on="ACQ_LAST_IN_SLICE").split_on == ("ACQ_LAST_IN_SLICE",)
@@ -281,11 +269,11 @@ def test_each_stream_reconstructs_through_its_own_instance():
             self.lines = []
 
         def receive(self, acquisition, context):
-            del context
             self.lines.append(int(acquisition.idx.kspace_encode_step_1))
+            return super().receive(acquisition, context)
 
-        def recon(self, bucket, context):
-            del bucket, context
+        def recon(self, branch, context):
+            del branch, context
             seen.append(tuple(self.lines))
             return None
 

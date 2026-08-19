@@ -86,17 +86,25 @@ def kspace(phantom, coil_maps):
     return _fft2c(coil_maps * phantom[:, None]).astype(np.complex64)
 
 
-def header():
+def _encoding():
+    """One encoding space over the scan's slices."""
+    matrix = SimpleNamespace(matrixSize=SimpleNamespace(x=N, y=N, z=1))
     return SimpleNamespace(
-        encoding=[
-            SimpleNamespace(
-                encodedSpace=SimpleNamespace(matrixSize=SimpleNamespace(x=N, y=N, z=1)),
-                reconSpace=SimpleNamespace(matrixSize=SimpleNamespace(x=N, y=N, z=1)),
-                encodingLimits=SimpleNamespace(
-                    slice=SimpleNamespace(maximum=N_SLICES - 1)
-                ),
-            )
-        ],
+        encodedSpace=matrix,
+        reconSpace=matrix,
+        encodingLimits=SimpleNamespace(slice=SimpleNamespace(maximum=N_SLICES - 1)),
+    )
+
+
+def header():
+    """Two encoding spaces: the EPI imaging, then the prescan.
+
+    The calibration is its own subsequence, so it is its own encoding space --
+    and it visits exactly the slices the imaging visits, which is what says the
+    scan was not multiband.
+    """
+    return SimpleNamespace(
+        encoding=[_encoding(), _encoding()],
         acquisitionSystemInformation=SimpleNamespace(receiverChannels=COILS),
     )
 
@@ -106,13 +114,14 @@ def context():
     return ReconContext.offline(header())
 
 
-def _line(data, *, slice_index, line, flags=(), last=False):
+def _line(data, *, slice_index, line, encoding=0, flags=(), last=False):
     acquisition = ismrmrd.Acquisition()
     acquisition.resize(N, COILS)
     acquisition.data[:] = data.astype(np.complex64)
     acquisition.idx.kspace_encode_step_1 = int(line)
     acquisition.idx.slice = int(slice_index)
     acquisition.idx.repetition = 0
+    acquisition.encoding_space_ref = int(encoding)
     for flag in flags:
         acquisition.setFlag(getattr(ismrmrd, flag))
     if last:
@@ -131,13 +140,18 @@ def stream(kspace):
     acquisitions = []
     # Calibration: a central block per slice, marked parallel-imaging calibration.
     for slice_index in range(N_SLICES):
-        for line in _calibration_lines():
+        lines = _calibration_lines()
+        for line in lines:
+            flags = ["ACQ_IS_PARALLEL_CALIBRATION"]
+            if line == lines[-1]:
+                flags.append("ACQ_LAST_IN_SLICE")
             acquisitions.append(
                 _line(
                     kspace[slice_index, :, line, :],
                     slice_index=slice_index,
                     line=line,
-                    flags=("ACQ_IS_PARALLEL_CALIBRATION",),
+                    encoding=1,
+                    flags=tuple(flags),
                 )
             )
     # Imaging: every ``ACCELERATION``-th line per slice, no calibration flag.
@@ -186,12 +200,28 @@ def test_the_calibration_maps_unalias_the_accelerated_slices(kspace, phantom, co
         assert relative_error(by_slice[slice_index], truth) < 0.15
 
 
-def test_the_calibration_is_not_mistaken_for_multiband(kspace):
+def test_the_calibration_is_not_mistaken_for_multiband(kspace, context):
     """The calibration visits every imaged slice, so the imaging does not
-    collapse bands: the plain per-slice branch runs, not the SMS separation."""
-    from pulserver.recon import partition_epi_acquisitions
+    collapse bands: one image per imaged slice, not one per band."""
+    from pulserver.recon._mrd.application import _make_bucket
 
     plugin = epi2D_recon.Epi2DRecon()
-    groups = partition_epi_acquisitions(stream(kspace))
-    assert groups.single_band_reference  # a calibration is present
-    assert not plugin._is_multiband(groups)
+    results = plugin(_make_bucket(stream(kspace), []), context)
+
+    assert sorted(result.image_index for result in results) == list(range(N_SLICES))
+
+
+def test_the_prescan_never_reaches_the_imaging_grid(kspace, context):
+    """It is its own encoding space, so its low-resolution lines cannot be
+    mistaken for the EPI lines they calibrate."""
+    plugin = epi2D_recon.Epi2DRecon().spawn()
+    plugin.startup(context)
+    for acquisition in stream(kspace):
+        plugin.receive(acquisition, context)
+
+    imaging = plugin.buffers[0].mask.any(axis=-1)
+    calibration = plugin.buffers[1].mask.any(axis=-1)
+    # The imaging sampled every second line; the prescan a central block.
+    assert imaging[0].sum() == N // ACCELERATION
+    assert calibration[0].sum() == N_ACS
+    assert sorted(plugin.coil_maps) == list(range(N_SLICES))

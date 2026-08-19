@@ -242,18 +242,17 @@ def test_the_sampling_matches_what_the_sequence_would_have_played():
 
 
 def test_the_calibration_boundary_produces_maps_and_no_image(kspace, context):
-    """The ACS block closes a segment without closing the slice."""
+    """The ACS block closes a segment without closing the slice, so ``receive``
+    routes the calibration branch and nothing is emitted."""
     lines, calibration = _sampling()
     stream = acquisitions(kspace, lines, calibration=calibration)
     boundary = len(calibration)
 
     plugin = cartesian2D_recon.PLUGIN.spawn()
     plugin.startup(context)
-    for acquisition in stream[:boundary]:
-        plugin.receive(acquisition, context)
-    from pulserver.recon._mrd.application import _make_bucket
+    emitted = [plugin.receive(item, context) for item in stream[:boundary]]
 
-    assert plugin.recon(_make_bucket(stream[:boundary], []), context) is None
+    assert all(output is None for output in emitted)
     assert 0 in plugin.coil_maps
     assert boundary < len(stream)
 
@@ -284,16 +283,11 @@ def test_driving_the_lifecycle_by_hand_matches_calling_the_plugin(kspace, contex
     """Calling the plugin replays the bucket through the very same hooks."""
     lines, calibration = _sampling()
     stream = acquisitions(kspace, lines, calibration=calibration)
-    from pulserver.recon._mrd.application import _make_bucket
 
     plugin = cartesian2D_recon.PLUGIN.spawn()
     plugin.startup(context)
-    for acquisition in stream[: len(calibration)]:
-        plugin.receive(acquisition, context)
-    plugin.recon(_make_bucket(stream[: len(calibration)], []), context)
-    for acquisition in stream[len(calibration) :]:
-        plugin.receive(acquisition, context)
-    streamed = plugin.recon(_make_bucket(stream, []), context)[0].data
+    outputs = [plugin.receive(item, context) for item in stream]
+    streamed = [output for output in outputs if output is not None][-1][0].data
 
     called = cartesian2D_recon.PLUGIN(
         bucket(kspace, lines, calibration=calibration), context

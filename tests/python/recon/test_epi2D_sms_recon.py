@@ -87,17 +87,25 @@ def kspace(phantom, coil_maps):
     return _fft2c(coil_maps * phantom[:, None]).astype(np.complex64)
 
 
-def header():
+def _encoding(n_slices):
+    """One encoding space, over ``n_slices`` slices of the same matrix."""
+    matrix = SimpleNamespace(matrixSize=SimpleNamespace(x=N, y=N, z=1))
     return SimpleNamespace(
-        encoding=[
-            SimpleNamespace(
-                encodedSpace=SimpleNamespace(matrixSize=SimpleNamespace(x=N, y=N, z=1)),
-                reconSpace=SimpleNamespace(matrixSize=SimpleNamespace(x=N, y=N, z=1)),
-                encodingLimits=SimpleNamespace(
-                    slice=SimpleNamespace(maximum=N_SLICES - 1)
-                ),
-            )
-        ],
+        encodedSpace=matrix,
+        reconSpace=matrix,
+        encodingLimits=SimpleNamespace(slice=SimpleNamespace(maximum=n_slices - 1)),
+    )
+
+
+def header():
+    """Two encoding spaces: the multiband imaging, then the prescan.
+
+    The calibration is its own subsequence, so it is its own encoding space --
+    and it visits every slice while the imaging excites ``N_GROUPS`` combs,
+    which is what tells the reconstruction the scan was multiband.
+    """
+    return SimpleNamespace(
+        encoding=[_encoding(N_GROUPS), _encoding(N_SLICES)],
         acquisitionSystemInformation=SimpleNamespace(receiverChannels=COILS),
     )
 
@@ -107,13 +115,14 @@ def context():
     return ReconContext.offline(header())
 
 
-def _line(data, *, slice_index, line, flags=(), last=False):
+def _line(data, *, slice_index, line, encoding=0, flags=(), last=False):
     acquisition = ismrmrd.Acquisition()
     acquisition.resize(N, COILS)
     acquisition.data[:] = data.astype(np.complex64)
     acquisition.idx.kspace_encode_step_1 = int(line)
     acquisition.idx.slice = int(slice_index)
     acquisition.idx.repetition = 0
+    acquisition.encoding_space_ref = int(encoding)
     for flag in flags:
         acquisition.setFlag(getattr(ismrmrd, flag))
     if last:
@@ -140,13 +149,18 @@ def stream(kspace):
     # Low-resolution GRE calibration: a central block per slice, marked
     # calibration -- the same block the plain accelerated scan uses.
     for slice_index in range(N_SLICES):
-        for line in _calibration_lines():
+        lines = _calibration_lines()
+        for line in lines:
+            flags = ["ACQ_IS_PARALLEL_CALIBRATION"]
+            if line == lines[-1]:
+                flags.append("ACQ_LAST_IN_SLICE")
             acquisitions.append(
                 _line(
                     kspace[slice_index, :, line, :],
                     slice_index=slice_index,
                     line=line,
-                    flags=("ACQ_IS_PARALLEL_CALIBRATION",),
+                    encoding=1,
+                    flags=tuple(flags),
                 )
             )
     # Multiband imaging: one shot per group, its bands collapsed with the CAIPI

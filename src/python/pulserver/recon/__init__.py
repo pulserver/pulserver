@@ -37,7 +37,6 @@ _MEMBERS = {
     "CGInfo": "optim.cg",
     "Cartesian2D": "physics",
     "Cartesian3D": "physics",
-    "CartesianGridder": "preprocessing",
     "CoefficientAccessor": "postprocessing",
     "ConjugateGradient": "optim.cg",
     "ContextAgnosticDenoiser": "models",
@@ -112,9 +111,10 @@ _MEMBERS = {
     "as_numpy": "postprocessing",
     "available_nufft_backends": "physics",
     "calibration_extent": "calibration",
-    "cartesian_3d_to_2d": "preprocessing",
+    "cartesian_recon": "cartesian",
     "center_crop": "postprocessing",
     "coil_combine": "postprocessing",
+    "coil_maps_from_reference": "calibration",
     "coil_compress": "preprocessing",
     "correct_epi_eddy_currents": "preprocessing",
     "correct_lines": "preprocessing",
@@ -129,7 +129,6 @@ _MEMBERS = {
     "estimate_epi_eddy_phase": "preprocessing",
     "fftc": "preprocessing",
     "fill_partial_echo": "preprocessing",
-    "grid_cartesian": "preprocessing",
     "has_acquisition_flag": "plugin",
     "ifftc": "preprocessing",
     "load_model": "weights",
@@ -172,6 +171,7 @@ def __dir__() -> list[str]:
 
 if TYPE_CHECKING:
     from ._mrd.metadata import diffusion_table as diffusion_table
+    from .cartesian import cartesian_recon as cartesian_recon
     from .calibration import NLINV as NLINV
     from .calibration import NLINVPhysics as NLINVPhysics
     from .calibration import NLINVResult as NLINVResult
@@ -180,6 +180,7 @@ if TYPE_CHECKING:
     from .calibration import WavePSFCalibration as WavePSFCalibration
     from .calibration import WavePSFResult as WavePSFResult
     from .calibration import calibration_extent as calibration_extent
+    from .calibration import coil_maps_from_reference as coil_maps_from_reference
     from .datasets import IXI as IXI
     from .datasets import IXITiny as IXITiny
     from .datasets import TorchIODataset as TorchIODataset
@@ -242,13 +243,11 @@ if TYPE_CHECKING:
     from .postprocessing import center_crop as center_crop
     from .postprocessing import coil_combine as coil_combine
     from .postprocessing import run_pyhysco as run_pyhysco
-    from .preprocessing import CartesianGridder as CartesianGridder
     from .preprocessing import EPIPhaseCorrection as EPIPhaseCorrection
     from .preprocessing import EpiAcquisitionGroups as EpiAcquisitionGroups
     from .preprocessing import Homodyne as Homodyne
     from .preprocessing import POCS as POCS
     from .preprocessing import SmsEpiInputs as SmsEpiInputs
-    from .preprocessing import cartesian_3d_to_2d as cartesian_3d_to_2d
     from .preprocessing import coil_compress as coil_compress
     from .preprocessing import correct_epi_eddy_currents as correct_epi_eddy_currents
     from .preprocessing import correct_lines as correct_lines
@@ -259,7 +258,6 @@ if TYPE_CHECKING:
     from .preprocessing import estimate_epi_eddy_phase as estimate_epi_eddy_phase
     from .preprocessing import fftc as fftc
     from .preprocessing import fill_partial_echo as fill_partial_echo
-    from .preprocessing import grid_cartesian as grid_cartesian
     from .preprocessing import ifftc as ifftc
     from .preprocessing import noise_prewhiten as noise_prewhiten
     from .preprocessing import odd_even_fit as odd_even_fit

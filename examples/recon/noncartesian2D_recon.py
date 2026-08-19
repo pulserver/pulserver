@@ -24,7 +24,7 @@ from typing import Any
 
 import numpy as np
 
-from pulserver import AcquisitionBucket, ReconContext, ReconPlugin, ReconResult
+from pulserver import ReconContext, ReconPlugin, ReconResult
 from pulserver.recon import (
     NLINV,
     AcquisitionFlag,
@@ -84,14 +84,9 @@ class NonCartesian2DRecon(ReconPlugin):
         super().startup(context)
         self.image_shape = recon_shape(context.header)
 
-    def recon(
-        self, bucket: AcquisitionBucket, context: ReconContext
-    ) -> list[ReconResult] | None:
-        """Reconstruct every slice once the measurement is complete."""
-        del context
-        if AcquisitionFlag.LAST_IN_MEASUREMENT not in bucket.trigger:
-            return None
-
+    def recon(self, branch: str, context: ReconContext) -> list[ReconResult]:
+        """Reconstruct every slice, once the measurement is complete."""
+        del branch, context
         buffer = self.buffers[0]
         extents = dict(zip(buffer.axes, buffer.kspace.shape, strict=True))
         n_slices, n_views = extents.get("slice", 1), extents["phase_encode"]

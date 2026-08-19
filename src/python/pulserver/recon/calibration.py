@@ -11,6 +11,7 @@ __all__ = [
     "WavePSFCalibration",
     "WavePSFResult",
     "calibration_extent",
+    "coil_maps_from_reference",
 ]
 
 from dataclasses import dataclass
@@ -22,12 +23,64 @@ import torch
 import deepinv
 
 from ._fourier import fftc as _fftc
+from ._fourier import torch_or_numpy as _torch_or_numpy
 from ._fourier import ifftc as _ifftc
 from ._fourier import resize_centered as _resize_centered
 from .optim import IRGNM, ConjugateGradient
 from .physics import NonCartesian2D, NonCartesian3D
 from ._phase_poles import PhasePoleCorrection
 from ._wave_psf import WavePSF, WavePSFCalibration, WavePSFResult
+
+
+def coil_maps_from_reference(kspace: Any, *, spatial_ndim: int = 2) -> Any:
+    """Coil sensitivities from a low-resolution reference k-space.
+
+    The reference is a fully sampled block at the centre of k-space -- the
+    prescan an accelerated or multiband sequence acquires -- so its coil images
+    are smooth and, up to the object they share, are the sensitivities.
+    Dividing by the root sum-of-squares removes that common magnitude and
+    leaves maps of unit norm, which is the convention every model-based solve
+    in this package expects. The unsampled outer k-space reads as zero, which
+    band-limits the images: exactly the smoothing a sensitivity map wants.
+
+    Where :class:`NLINV` solves for maps and object together and is the better
+    estimate for one image, this is the direct one -- and the one to use when
+    several images are solved against each other, because maps read off one
+    reference this way share a scale that a per-image solve does not guarantee.
+
+    Parameters
+    ----------
+    kspace
+        The reference, ``(coils, *grid)`` or with a leading batch axis. Torch
+        tensors keep their device; NumPy arrays stay NumPy.
+    spatial_ndim
+        How many trailing axes are spatial: 2 for a slice, 3 for a slab.
+
+    Returns
+    -------
+    array
+        Maps shaped like ``kspace``, root sum-of-squares one over the coil axis.
+
+    Raises
+    ------
+    ValueError
+        If ``kspace`` has no coil axis before its spatial ones.
+    """
+    if spatial_ndim not in (2, 3):
+        raise ValueError("spatial_ndim must be 2 or 3")
+    if getattr(kspace, "ndim", 0) < spatial_ndim + 1:
+        raise ValueError(
+            f"kspace must be (coils, *grid) with {spatial_ndim} spatial axes, "
+            f"got shape {getattr(kspace, 'shape', ())}"
+        )
+    xp, _ = _torch_or_numpy(kspace)
+    coil_axis = -(spatial_ndim + 1)
+    images = _ifftc(kspace, tuple(range(-spatial_ndim, 0)))
+    rss = xp.sqrt(xp.sum(xp.abs(images) ** 2, axis=coil_axis, keepdims=True))
+    # A reference with no signal in it has no sensitivities to read; the floor
+    # keeps the division defined rather than answering NaN.
+    floor = float(rss.max()) * 1e-8
+    return images / xp.clip(rss, floor if floor > 0.0 else 1.0, None)
 
 
 def calibration_extent(mask: Any) -> int:

@@ -21,7 +21,6 @@ from pulserver.recon.preprocessing import (
     EPIPhaseCorrection,
     Homodyne,
     POCS,
-    cartesian_3d_to_2d,
     correct_epi_eddy_currents,
     epi_ramp_interpolate,
     noise_prewhiten,
@@ -560,60 +559,6 @@ def test_cartesian_without_coil_maps_keeps_the_coils():
     assert np.allclose(np.abs(combined), rss, atol=1e-4)
 
 
-def test_cartesian_gridder_matches_grid_cartesian():
-    """Placing acquisitions one at a time equals gridding them all at once."""
-    from pulserver.recon.preprocessing import CartesianGridder, grid_cartesian
-
-    rng = np.random.default_rng(0)
-    data = (
-        rng.standard_normal((6, 3, 12)) + 1j * rng.standard_normal((6, 3, 12))
-    ).astype(np.complex64)
-    lines = [0, 2, 4, 5, 8, 11]
-    buffer = CartesianGridder((12, 12), coils=3)
-    for line, acquisition in zip(lines, data, strict=True):
-        buffer.add(acquisition, line)
-    grid, mask = buffer.result()
-    reference, reference_mask = grid_cartesian(data, lines, 12)
-    assert np.array_equal(grid, reference)
-    assert np.array_equal(mask, reference_mask)
-
-
-def test_cartesian_gridder_right_aligns_a_partial_echo():
-    """A readout shorter than the grid ends where a full one would."""
-    from pulserver.recon.preprocessing import CartesianGridder
-
-    buffer = CartesianGridder((4, 16), coils=2)
-    buffer.add(np.ones((2, 12), dtype=np.complex64), 1)
-    assert not buffer.mask[1, :4].any()
-    assert buffer.mask[1, 4:].all()
-    assert not buffer.mask[0].any()
-
-
-def test_cartesian_gridder_indexes_one_position_of_the_volume():
-    """Indexing returns one slice's k-space and mask, without its leading axis."""
-    from pulserver.recon.preprocessing import CartesianGridder
-
-    buffer = CartesianGridder((3, 8, 16), coils=2)
-    buffer.add(np.full((2, 16), 2.0, dtype=np.complex64), 2, 5)
-    kspace, mask = buffer[2]
-    assert kspace.shape == (2, 8, 16)
-    assert mask.shape == (8, 16)
-    assert mask[5].all()
-    assert not buffer[0][1].any()
-
-
-def test_cartesian_gridder_refuses_what_does_not_fit():
-    from pulserver.recon.preprocessing import CartesianGridder
-
-    buffer = CartesianGridder((3, 8, 16), coils=2)
-    with pytest.raises(ValueError, match="coils"):
-        buffer.add(np.ones((3, 16)), 0, 0)
-    with pytest.raises(ValueError, match="index values"):
-        buffer.add(np.ones((2, 16)), 0)
-    with pytest.raises(ValueError, match="readout axis holds"):
-        buffer.add(np.ones((2, 20)), 0, 0)
-
-
 def test_center_crop_takes_the_middle_of_the_trailing_axes():
     from pulserver.recon.postprocessing import center_crop
 
@@ -723,7 +668,7 @@ def test_epi_ramp_interpolation_handles_complex_batches():
     np.testing.assert_allclose(result, [[0.5 + 1.0j, 1.5 + 3.0j]])
 
 
-def test_readout_hybrid_transform_and_oversampling_crop():
+def test_readout_oversampling_crop_keeps_the_middle_of_the_image():
     image = np.zeros((2, 8), dtype=np.complex64)
     image[:, 2:6] = 1
     kspace = np.fft.fftshift(
@@ -732,8 +677,6 @@ def test_readout_hybrid_transform_and_oversampling_crop():
     )
     cropped = remove_readout_oversampling(kspace, 4)
     assert cropped.shape == (2, 4)
-    hybrid = cartesian_3d_to_2d(kspace)
-    np.testing.assert_allclose(hybrid, image, atol=1e-6)
 
 
 def test_noise_prewhitening_decorrelates_coils():

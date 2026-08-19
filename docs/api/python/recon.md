@@ -34,6 +34,12 @@ What the runtime drives, and what it hands a plugin. A reconstruction plugin
 is one `ReconPlugin` subclass and a module-level `PLUGIN` instance; see
 {doc}`app_recon` for the zoo built on it.
 
+Three hooks, and the division between them is the same in every plugin:
+`startup` lays out the buffers the header's encoding spaces describe, `receive`
+places each acquisition and — reading its flags — routes the boundaries it
+closes to a named branch, and `recon` holds the reconstruction of each branch
+over buffers that are already filled.
+
 ```{eval-rst}
 .. autosummary::
    :toctree: ../generated/recon
@@ -70,7 +76,6 @@ a plugin reconstructing sorted k-space overrides no hook at all.
    ReconData
    ReconBuffer
    EncodingSpace
-   CartesianGridder
 ```
 
 ## Reading the header
@@ -103,8 +108,6 @@ coil count, and the corrections a particular readout demands.
    noise_prewhiten
    coil_compress
    remove_readout_oversampling
-   grid_cartesian
-   cartesian_3d_to_2d
    fftc
    ifftc
    pipe_menon_dcf
@@ -164,11 +167,17 @@ Estimating what the reconstruction needs but the scan does not measure
 directly: coil sensitivities, and the point-spread function of a wave
 encoding.
 
+`NLINV` solves for the maps and the object together and is the better estimate
+for one image; `coil_maps_from_reference` reads them straight off a prescan and
+is the one to use when several images are solved against each other, because
+maps read off one reference share a scale a per-image solve does not guarantee.
+
 ```{eval-rst}
 .. autosummary::
    :toctree: ../generated/recon
 
    calibration_extent
+   coil_maps_from_reference
 ```
 
 ```{eval-rst}
@@ -217,11 +226,17 @@ measurement. Every solver takes one of these.
 
 ## Solvers
 
+`pics` is the solve: a measurement, a physics, and a prior. `cartesian_recon`
+is the Cartesian composition of it — the adjoint, the partial-Fourier
+constraint and the CG-SENSE solve, chosen by what the buffer's mask says the
+scan sampled, so a plugin reconstructs a filled buffer in one call.
+
 ```{eval-rst}
 .. autosummary::
    :toctree: ../generated/recon
 
    pics
+   cartesian_recon
 ```
 
 ```{eval-rst}

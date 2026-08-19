@@ -8,12 +8,10 @@ from __future__ import annotations
 
 __all__ = [
     "POCS",
-    "CartesianGridder",
     "EPIPhaseCorrection",
     "EpiAcquisitionGroups",
     "Homodyne",
     "SmsEpiInputs",
-    "cartesian_3d_to_2d",
     "coil_compress",
     "correct_epi_eddy_currents",
     "correct_lines",
@@ -24,7 +22,6 @@ __all__ = [
     "estimate_epi_eddy_phase",
     "fftc",
     "fill_partial_echo",
-    "grid_cartesian",
     "ifftc",
     "noise_prewhiten",
     "odd_even_fit",
@@ -341,7 +338,6 @@ def fftc(data: Any, *, axes: int | tuple[int, ...] = (-2, -1)) -> Any:
     See Also
     --------
     ifftc : the inverse.
-    cartesian_3d_to_2d : the readout-decoupling this builds on.
     """
     axes = (axes,) if isinstance(axes, int) else tuple(axes)
     return _centered_fftn(data, axes=axes, inverse=False)
@@ -351,7 +347,7 @@ def ifftc(data: Any, *, axes: int | tuple[int, ...] = (-2, -1)) -> Any:
     """Centered orthonormal inverse FFT over one or more axes.
 
     The inverse of :func:`fftc`; see it for the convention. A single-axis call
-    along the readout is the decoupling :func:`cartesian_3d_to_2d` performs.
+    along the readout decouples a Cartesian volume into independent planes.
 
     Parameters
     ----------
@@ -367,20 +363,6 @@ def ifftc(data: Any, *, axes: int | tuple[int, ...] = (-2, -1)) -> Any:
     """
     axes = (axes,) if isinstance(axes, int) else tuple(axes)
     return _centered_fftn(data, axes=axes, inverse=True)
-
-
-def cartesian_3d_to_2d(
-    kspace: Any,
-    *,
-    readout_axis: int = -1,
-) -> Any:
-    """Convert Cartesian 3D k-space into independent 2D hybrid-space planes.
-
-    A centered inverse FFT is applied along readout. The returned readout
-    positions can be moved into the batch dimension before constructing
-    :func:`pulserver.recon.physics.Cartesian2D` physics.
-    """
-    return _centered_fftn(kspace, axes=(readout_axis,), inverse=True)
 
 
 def remove_readout_oversampling(
@@ -825,105 +807,6 @@ def pipe_menon_dcf(
     )
 
 
-def grid_cartesian(
-    acquisitions: Any,
-    encodes: Any,
-    shape: Any,
-    *,
-    partitions: Any = None,
-    echo_position: int | None = None,
-) -> tuple[Any, Any]:
-    """Scatter acquisitions onto a zero-filled Cartesian grid, with their mask.
-
-    Step one of every Cartesian reconstruction: acquisitions arrive ordered by
-    acquisition, each carrying the phase encode it belongs to, and the
-    reconstruction needs them on a grid together with a record of which
-    positions were actually sampled.
-
-    Partial echo is handled by ``echo_position``. Truncating the samples before
-    the echo leaves the acquired window right-aligned against a readout axis
-    twice as wide as the part that follows the echo, which is where this places
-    them.
-
-    Parameters
-    ----------
-    acquisitions
-        K-space shaped ``(acquisition, coil, sample)``.
-    encodes
-        Phase encode of each acquisition, as indices into the first grid axis.
-    shape
-        Phase-encode extent, or ``(n_y, n_z)`` for a 3D acquisition. The
-        readout extent comes from the samples and ``echo_position``.
-    partitions
-        Partition of each acquisition, for a 3D acquisition. Required when
-        ``shape`` has two entries and refused when it has one.
-    echo_position
-        Sample index the echo sits at, as MRD's ``center_sample`` reports it.
-        ``None`` treats the readout as a full echo centred on its midpoint.
-
-    Returns
-    -------
-    grid : numpy.ndarray
-        Zero-filled ``(coil, *shape, n_x)`` k-space.
-    mask : numpy.ndarray
-        Boolean array shaped like ``grid`` without its coil axis, true where a
-        sample was acquired.
-
-    Raises
-    ------
-    ValueError
-        If the acquisitions are ragged, the counters do not match the
-        acquisition count, or ``partitions`` disagrees with ``shape``.
-
-    Examples
-    --------
-    >>> import numpy as np
-    >>> from pulserver.recon.preprocessing import grid_cartesian
-    >>> data = np.ones((4, 2, 16), dtype=complex)
-    >>> grid, mask = grid_cartesian(data, [0, 2, 4, 6], 8)
-    >>> grid.shape, mask.shape, int(mask.sum())
-    ((2, 8, 16), (8, 16), 64)
-
-    A partial echo lands against the full readout width:
-
-    >>> data = np.ones((8, 2, 12), dtype=complex)
-    >>> grid, mask = grid_cartesian(data, range(8), 8, echo_position=4)
-    >>> grid.shape, bool(mask[0, 0]), bool(mask[0, -1])
-    ((2, 8, 16), False, True)
-    """
-    numpy = import_module("numpy")
-
-    acquisitions = numpy.asarray(acquisitions)
-    if acquisitions.ndim != 3:
-        raise ValueError(
-            "acquisitions must be (acquisition, coil, sample); ragged "
-            "acquisitions have to be padded or split first"
-        )
-    extents = (int(shape),) if numpy.isscalar(shape) else tuple(int(s) for s in shape)
-    if len(extents) not in (1, 2):
-        raise ValueError("shape must hold one or two phase-encode extents")
-    if (partitions is None) != (len(extents) == 1):
-        raise ValueError(
-            "partitions is required for a 3D shape and refused for a 2D one"
-        )
-
-    counters = [numpy.asarray(encodes, dtype=int)]
-    if partitions is not None:
-        counters.append(numpy.asarray(partitions, dtype=int))
-    for counter in counters:
-        if counter.shape != (acquisitions.shape[0],):
-            raise ValueError("every counter needs one entry per acquisition")
-
-    n_x, acquired = _cartesian_extent(acquisitions.shape[-1], echo_position)
-
-    grid = numpy.zeros((acquisitions.shape[1], *extents, n_x), dtype=numpy.complex64)
-    grid[(slice(None), *counters, acquired)] = numpy.moveaxis(acquisitions, 0, 1)
-
-    mask = numpy.zeros((*extents, n_x), dtype=bool)
-    mask[(*counters, acquired)] = True
-    return grid, mask
-
-
 @dataclass(frozen=True)
 class EpiAcquisitionGroups:
     """EPI acquisitions partitioned by the roles their MRD flags declare.
@@ -1243,141 +1126,3 @@ def _encoding_space(header: Any, index: int, name: str) -> Any:
     if space is None or getattr(space, "matrixSize", None) is None:
         raise ValueError(f"MRD encoding {index} carries no {name} matrix size")
     return space
-
-
-def _cartesian_extent(n_samples: int, echo_position: int | None) -> tuple[int, slice]:
-    """Full readout width, and where the acquired samples land in it.
-
-    Truncating the samples before the echo leaves the acquired window
-    right-aligned against a readout axis twice as wide as the part that follows
-    the echo.
-    """
-    n_samples = int(n_samples)
-    position = n_samples // 2 if echo_position is None else int(echo_position)
-    n_x = 2 * (n_samples - position)
-    return n_x, slice(n_x - n_samples, None)
-
-
-class CartesianGridder:
-    """A scan's Cartesian k-space, filled one acquisition at a time.
-
-    Allocated up front from the grid the header describes, so a reconstruction
-    can place each acquisition the moment it arrives and read a finished unit
-    out by index without a second pass. Indexing returns the ``(kspace, mask)``
-    of one position along the leading axis -- one slice of a multi-slice scan --
-    and :meth:`result` the whole buffer.
-
-    A readout shorter than the grid is right-aligned in it: truncating the
-    samples before the echo is what a partial echo does, so the acquired window
-    ends where a full one would.
-
-    Parameters
-    ----------
-    shape
-        Full grid without the coil axis, readout last: ``(n_y, n_x)`` for a
-        single plane, ``(n_slices, n_y, n_x)`` for a multi-slice scan,
-        ``(n_z, n_y, n_x)`` for a volume.
-    coils
-        Number of receive channels.
-
-    Attributes
-    ----------
-    kspace : numpy.ndarray
-        Zero-filled ``(coils, *shape)`` k-space.
-    mask : numpy.ndarray
-        Boolean array shaped ``shape``, true where a sample was acquired.
-
-    Raises
-    ------
-    ValueError
-        If ``shape`` has fewer than two axes, or an acquisition does not fit
-        the grid it is placed in.
-
-    Examples
-    --------
-    >>> import numpy as np
-    >>> from pulserver.recon.preprocessing import CartesianGridder
-    >>> buffer = CartesianGridder((2, 8, 16), coils=4)
-    >>> for line in range(0, 8, 2):
-    ...     buffer.add(np.ones((4, 16)), 1, line)
-    >>> kspace, mask = buffer[1]
-    >>> kspace.shape, mask.shape, int(mask.sum())
-    ((4, 8, 16), (8, 16), 64)
-
-    An unfilled position is empty, which is what makes the mask the record of
-    what the scan actually sampled:
-
-    >>> bool(buffer[0][1].any())
-    False
-
-    A partial echo lands against the full readout width:
-
-    >>> partial = CartesianGridder((4, 16), coils=1)
-    >>> partial.add(np.ones((1, 12)), 0)
-    >>> bool(partial.mask[0, 0]), bool(partial.mask[0, -1])
-    (False, True)
-    """
-
-    def __init__(self, shape: Any, *, coils: int) -> None:
-        numpy = import_module("numpy")
-
-        extents = tuple(int(s) for s in shape)
-        if len(extents) < 2:
-            raise ValueError("shape needs at least a phase-encode and a readout axis")
-        coils = int(coils)
-        if coils < 1:
-            raise ValueError("coils must be positive")
-        self.shape = extents
-        self.coils = coils
-        self.kspace = numpy.zeros((coils, *extents), dtype=numpy.complex64)
-        self.mask = numpy.zeros(extents, dtype=bool)
-
-    def add(self, acquisition: Any, *index: int) -> None:
-        """Place one ``(coil, sample)`` acquisition at its position in the grid.
-
-        Parameters
-        ----------
-        acquisition
-            K-space of one readout, shaped ``(coils, samples)``.
-        *index
-            Position along every axis of ``shape`` except the readout, in the
-            same order.
-
-        Raises
-        ------
-        ValueError
-            If the acquisition is not two-dimensional, the index does not name
-            a position, or either exceeds the grid.
-        """
-        numpy = import_module("numpy")
-
-        acquisition = numpy.asarray(acquisition)
-        if acquisition.ndim != 2:
-            raise ValueError("each acquisition must be (coil, sample)")
-        if acquisition.shape[0] != self.coils:
-            raise ValueError(
-                f"acquisition carries {acquisition.shape[0]} coils, grid holds "
-                f"{self.coils}"
-            )
-        if len(index) != len(self.shape) - 1:
-            raise ValueError(
-                f"grid needs {len(self.shape) - 1} index values, got {len(index)}"
-            )
-        n_x = self.shape[-1]
-        n_samples = acquisition.shape[-1]
-        if n_samples > n_x:
-            raise ValueError(
-                f"acquisition has {n_samples} samples, readout axis holds {n_x}"
-            )
-        position = tuple(int(value) for value in index)
-        acquired = slice(n_x - n_samples, None)
-        self.kspace[(slice(None), *position, acquired)] = acquisition
-        self.mask[(*position, acquired)] = True
-
-    def __getitem__(self, index: Any) -> tuple[Any, Any]:
-        """Return the ``(kspace, mask)`` at one position along the leading axis."""
-        return self.kspace[:, index], self.mask[index]
-
-    def result(self) -> tuple[Any, Any]:
-        """Return the whole ``(kspace, mask)`` buffer."""
-        return self.kspace, self.mask
