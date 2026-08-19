@@ -82,10 +82,6 @@ slice's navigator triplet.
    epi3D_recon
 ```
 
-`examples/recon/mrd_epi_preprocessing.py` sits beside these as a worked
-adapter for handing the EPI groups to an outside reconstruction backend. It is
-not part of the zoo and is not importable from `pulserver.app`.
-
 ## See also
 
 {doc}`recon` is the toolbox these are written against -- physics operators,
