@@ -156,10 +156,10 @@ up what an eddy current leaves beyond a ramp.
 
 A train worth playing samples across its read ramps rather than waiting for the
 plateau, so k does not advance at a constant rate along a readout and the
-samples are not on the grid. `epi_ramp_positions` says where each one actually
-landed, from the lobe's timing, for a stream whose acquisitions carry no
-trajectory to say it directly; `epi_ramp_operator` is the change of basis onto
-the grid, which is exact while the samples outnumber the pixels they determine.
+samples are not on the grid. Where they fell is the trajectory the acquisition
+carries — a client attaches one exactly when the gradient was still moving
+under the ADC — and `epi_ramp_operator` is the change of basis onto the grid,
+which is exact while the samples outnumber the pixels they determine.
 
 ```{eval-rst}
 .. autosummary::
@@ -167,7 +167,6 @@ the grid, which is exact while the samples outnumber the pixels they determine.
 
    estimate_epi_phase
    correct_lines
-   epi_ramp_positions
    epi_ramp_operator
 ```
 
