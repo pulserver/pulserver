@@ -64,6 +64,16 @@ class SmsEpiInputs:
 # %% private module subroutines
 
 
+def _fits_one_call(physics: Any, batch: int) -> bool:
+    """Whether ``physics`` encodes ``batch`` images in a single call.
+
+    An mri-nufft operator plans for a fixed batch size and refuses any other;
+    a physics that carries no such plan takes whatever batch it is given.
+    """
+    planned = getattr(getattr(physics, "native_operator", None), "n_batchs", None)
+    return planned is None or int(planned) == batch
+
+
 class _SMSLinearPhysics(deepinv.physics.LinearPhysics):
     """Collapse and unalias slices around one or more linear MRI operators."""
 
@@ -123,15 +133,15 @@ class _SMSLinearPhysics(deepinv.physics.LinearPhysics):
         if value.ndim < 3 or value.shape[1] != self.n_slices:
             raise ValueError("SMS input must have shape (batch, slices, ...)")
         batch = value.shape[0]
-        if self.shared:
+        if self.shared and _fits_one_call(self.physics[0], batch * self.n_slices):
             flattened = value.reshape(batch * self.n_slices, *value.shape[2:])
             encoded = self.physics[0].A(flattened, **kwargs)
             encoded = encoded.reshape(batch, self.n_slices, *encoded.shape[1:])
         else:
             encoded = torch.stack(
                 [
-                    selected.A(value[:, index], **kwargs)
-                    for index, selected in enumerate(self.physics)
+                    self._for_slice(index).A(value[:, index], **kwargs)
+                    for index in range(self.n_slices)
                 ],
                 dim=1,
             )
@@ -145,24 +155,29 @@ class _SMSLinearPhysics(deepinv.physics.LinearPhysics):
             *value.shape[1:],
         )
         demodulated = self._modulate(expanded, conjugate=True)
-        if self.shared:
+        batch = value.shape[0]
+        if self.shared and _fits_one_call(self.physics[0], batch * self.n_slices):
             flattened = demodulated.reshape(
-                value.shape[0] * self.n_slices,
+                batch * self.n_slices,
                 *value.shape[1:],
             )
             decoded = self.physics[0].A_adjoint(flattened, **kwargs)
             return decoded.reshape(
-                value.shape[0],
+                batch,
                 self.n_slices,
                 *decoded.shape[1:],
             )
         return torch.stack(
             [
-                selected.A_adjoint(demodulated[:, index], **kwargs)
-                for index, selected in enumerate(self.physics)
+                self._for_slice(index).A_adjoint(demodulated[:, index], **kwargs)
+                for index in range(self.n_slices)
             ],
             dim=1,
         )
+
+    def _for_slice(self, index: int) -> Any:
+        """The physics that encodes slice ``index``."""
+        return self.physics[0] if self.shared else self.physics[index]
 
     def A_adjoint_A(self, value: torch.Tensor, **kwargs: Any) -> torch.Tensor:
         """Apply the exact coupled slice normal operator."""

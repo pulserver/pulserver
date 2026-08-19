@@ -50,15 +50,26 @@ jobs:
           build-mode: ${{ matrix.build-mode }}
           queries: security-and-quality
 
-      # CodeQL observes an actual compilation for C/C++. Building the library
-      # and the test suites covers src/c/ and src/cpp/ together.
+      # CodeQL observes an actual compilation for C/C++, so every tree that
+      # ships is compiled here: the C library, the C++ sequence library above
+      # it, and the recon-side reader, which needs the ISMRMRD headers. The
+      # pulseqpp configure builds src/c/ underneath it as well.
       - name: Build the C and C++ libraries
         if: matrix.language == 'c-cpp'
         run: |
-          sudo apt-get update && sudo apt-get install -y cmake build-essential
-          cmake -S src/c -B build/codeql -DCMAKE_BUILD_TYPE=Debug
-          cmake --build build/codeql --parallel
-          bash scripts/build_cpp_tests.sh
+          sudo apt-get update && sudo apt-get install -y \
+            cmake build-essential libismrmrd-dev libboost-dev
+          cmake -S src/c -B build/codeql-c -DCMAKE_BUILD_TYPE=Debug
+          cmake --build build/codeql-c --parallel
+          cmake -S src/cpp/pulseq -B build/codeql-cpp -DCMAKE_BUILD_TYPE=Debug
+          cmake --build build/codeql-cpp --parallel
+          mkdir -p build/codeql-recon
+          for source in src/cpp/recon/sequence_cache.cpp \
+                        src/cpp/recon/sequence_file_reader.cpp; do
+            g++ -std=c++17 -c "$source" \
+              -Isrc/cpp/include -Isrc/cpp/recon -Isrc/c/include/pulseq \
+              -o "build/codeql-recon/$(basename "$source").o"
+          done
 
       - name: Perform CodeQL analysis
         uses: github/codeql-action/analyze@v3

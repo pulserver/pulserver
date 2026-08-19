@@ -48,8 +48,8 @@ jobs:
             arch: x86_64
           - os: ubuntu-24.04-arm
             arch: aarch64
-          - os: macos-13
-            arch: x86_64
+          # Apple silicon only: the Intel macOS runners no longer get
+          # scheduled, and an x86_64 Mac installs from the sdist.
           - os: macos-14
             arch: arm64
           - os: windows-latest

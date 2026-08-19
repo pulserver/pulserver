@@ -14,11 +14,13 @@ cd "$REPO_ROOT"
 # one with the package and its test dependencies installed -- then an active
 # virtual environment, then whatever python is on PATH.
 if [ -z "${PYTHON_BIN:-}" ]; then
-    for candidate in \
-        "$REPO_ROOT/.venv/bin/python" \
-        "$REPO_ROOT/../../../.venv/bin/python" \
-        "${VIRTUAL_ENV:-}/bin/python"
-    do
+    CANDIDATES=("$REPO_ROOT/.venv/bin/python" "$REPO_ROOT/../../../.venv/bin/python")
+    # An empty VIRTUAL_ENV would make the candidate the system /bin/python,
+    # which is not the interpreter the package was installed into.
+    if [ -n "${VIRTUAL_ENV:-}" ]; then
+        CANDIDATES+=("$VIRTUAL_ENV/bin/python")
+    fi
+    for candidate in "${CANDIDATES[@]}"; do
         if [ -x "$candidate" ]; then
             PYTHON_BIN="$candidate"
             break

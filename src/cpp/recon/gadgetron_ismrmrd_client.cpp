@@ -821,12 +821,9 @@ public:
             ostr << prefix_ << "_";
         }
 
-        ostr << "SLC" << h.slice << "_"
-             << "CON" << h.contrast << "_"
-             << "PHS" << h.phase << "_"
-             << "REP" << h.repetition << "_"
-             << "SET" << h.set << "_"
-             << "AVE" << h.average << "_" << h.image_index << "_" << h.image_series_index;
+        ostr << "SLC" << h.slice << "_" << "CON" << h.contrast << "_" << "PHS" << h.phase << "_"
+             << "REP" << h.repetition << "_" << "SET" << h.set << "_" << "AVE" << h.average << "_"
+             << h.image_index << "_" << h.image_series_index;
 
         std::string filename = ostr.str();
 

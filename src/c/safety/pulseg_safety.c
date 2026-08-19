@@ -2596,8 +2596,8 @@ static int sa_check_structural_violations(
                                     &sim,
                                     f_sub_hz,
                                     w_tables[ax].num_series ? &sub_query : NULL);
-                                aeq_sub =
-                                    (float)(2.0 / T_s * sqrt((double)(sre * sre + sim * sim)) * ratio);
+                                aeq_sub = (float)(2.0 / T_s *
+                                                  sqrt((double)(sre * sre + sim * sim)) * ratio);
                                 if (aeq_sub > max_ga)
                                     max_ga = aeq_sub;
                             }
