@@ -119,7 +119,6 @@ _MEMBERS = {
     "decompress_shape": "simulation",
     "default_model_paths": "weights",
     "diffusion_table": "_mrd.metadata",
-    "echo_count": "preprocessing",
     "epi_ramp_interpolate": "preprocessing",
     "estimate_epi_eddy_phase": "preprocessing",
     "fftc": "preprocessing",
@@ -131,11 +130,10 @@ _MEMBERS = {
     "odd_even_fit": "preprocessing",
     "pics": "optim._algorithms",
     "pipe_menon_dcf": "preprocessing",
-    "recon_shape": "preprocessing",
-    "recon_volume": "preprocessing",
     "remove_readout_oversampling": "preprocessing",
     "run_pyhysco": "postprocessing",
     "save_bundle": "weights",
+    "user_parameter": "_mrd.metadata",
 }
 
 __all__ = sorted(_MEMBERS)
@@ -164,6 +162,7 @@ def __dir__() -> list[str]:
 
 if TYPE_CHECKING:
     from ._mrd.metadata import diffusion_table as diffusion_table
+    from ._mrd.metadata import user_parameter as user_parameter
     from .cartesian import cartesian_recon as cartesian_recon
     from .calibration import NLINV as NLINV
     from .calibration import NLINVPhysics as NLINVPhysics
@@ -241,7 +240,6 @@ if TYPE_CHECKING:
     from .preprocessing import coil_compress as coil_compress
     from .preprocessing import correct_epi_eddy_currents as correct_epi_eddy_currents
     from .preprocessing import correct_lines as correct_lines
-    from .preprocessing import echo_count as echo_count
     from .preprocessing import epi_ramp_interpolate as epi_ramp_interpolate
     from .preprocessing import estimate_epi_eddy_phase as estimate_epi_eddy_phase
     from .preprocessing import fftc as fftc
@@ -250,8 +248,6 @@ if TYPE_CHECKING:
     from .preprocessing import noise_prewhiten as noise_prewhiten
     from .preprocessing import odd_even_fit as odd_even_fit
     from .preprocessing import pipe_menon_dcf as pipe_menon_dcf
-    from .preprocessing import recon_shape as recon_shape
-    from .preprocessing import recon_volume as recon_volume
     from .preprocessing import remove_readout_oversampling as remove_readout_oversampling
     from .simulation import AdcRole as AdcRole
     from .simulation import EventType as EventType

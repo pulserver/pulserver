@@ -29,7 +29,6 @@ from pulserver.recon import (
     as_numpy,
     pics,
     pipe_menon_dcf,
-    recon_volume,
 )
 
 
@@ -72,26 +71,22 @@ class NonCartesian3DRecon(ReconPlugin):
         self.calibration_width = int(calibration_width)
         self.device = device
 
-    def startup(self, context: ReconContext) -> None:
-        """Lay the scan's buffers out and size the volume from the header."""
-        super().startup(context)
-        self.volume_shape = recon_volume(context.header)
-
     def recon(self, branch: str, context: ReconContext) -> ReconResult:
         """Reconstruct the volume, once the measurement is complete."""
         del branch, context
         # Spokes laid end to end, and the points they were taken at in the
         # same order: one non-Cartesian measurement of the volume.
         buffer = self.buffers[0]
+        volume_shape = buffer.image_shape
         data = buffer.kspace.reshape(buffer.kspace.shape[0], -1)
         points = buffer.points()[:3].reshape(3, -1).T.astype(np.float32)
 
-        density = pipe_menon_dcf(points, self.volume_shape)
+        density = pipe_menon_dcf(points, volume_shape)
         n_coils = int(data.shape[0])
 
         if self.mode == "direct":
             coil_wise = NonCartesian3D(
-                points, self.volume_shape, density=density, n_coils=n_coils
+                points, volume_shape, density=density, n_coils=n_coils
             )
             # Native complex throughout: the measurement crosses the NumPy
             # boundary and the coil-wise adjoint answers with one complex
@@ -103,13 +98,13 @@ class NonCartesian3DRecon(ReconPlugin):
             maps = NLINV(spatial_ndim=3, calibration_width=self.calibration_width)(
                 data,
                 trajectory=points,
-                image_shape=self.volume_shape,
+                image_shape=volume_shape,
                 density=density,
                 device=self.device,
             )
             sense = NonCartesian3D(
                 points,
-                self.volume_shape,
+                volume_shape,
                 coil_maps=maps,
                 density=density,
                 n_coils=n_coils,

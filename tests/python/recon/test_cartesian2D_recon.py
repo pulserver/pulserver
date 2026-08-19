@@ -214,7 +214,8 @@ def test_the_matrix_comes_from_the_header_not_from_the_last_line(kspace, context
 
 
 def test_without_a_header_the_buffer_cannot_be_sized(kspace):
-    with pytest.raises(ValueError, match="no encoding 0"):
+    """Nothing said where the lines go, so there is no buffer to reconstruct."""
+    with pytest.raises(KeyError, match="no encoding space 0"):
         cartesian2D_recon.PLUGIN(bucket(kspace, list(range(N))), ReconContext.offline())
 
 

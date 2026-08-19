@@ -35,7 +35,6 @@ from pulserver.recon import (
     correct_lines,
     has_acquisition_flag,
     odd_even_fit,
-    recon_volume,
 )
 
 
@@ -72,9 +71,8 @@ class Epi3DRecon(ReconPlugin):
         self.device = device
 
     def startup(self, context: ReconContext) -> None:
-        """Lay the scan's buffers out and note the matrix to crop to."""
+        """Lay the scan's buffers out, and start with no maps and no fit."""
         super().startup(context)
-        self.image_shape = recon_volume(context.header)
         self.coil_maps: Any = None
         self.navigator: list[Any] = []
         self.fit = (0.0, 0.0)
@@ -115,9 +113,8 @@ class Epi3DRecon(ReconPlugin):
             return None
 
         buffer = self.buffers[0]
-        extents = dict(zip(buffer.axes, buffer.kspace.shape, strict=True))
-        n_repetitions = extents.get("repetition", 1)
-        n_sets = extents.get("set", 1)
+        n_repetitions = buffer.extents.get("repetition", 1)
+        n_sets = buffer.extents.get("set", 1)
 
         results = []
         for set_index in range(n_sets):
@@ -136,7 +133,9 @@ class Epi3DRecon(ReconPlugin):
                 )
                 results.append(
                     ReconResult(
-                        center_crop(np.abs(image), self.image_shape).transpose(0, 2, 1),
+                        center_crop(np.abs(image), buffer.image_shape).transpose(
+                            0, 2, 1
+                        ),
                         reference=-1,
                         series_index=set_index * 1000 + repetition,
                         image_type="magnitude",

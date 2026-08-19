@@ -26,8 +26,9 @@ slices than the imaging does -- which is how the two are told apart here. A
 group's bands land in one readout, so unfolding them is the ordinary
 :func:`pulserver.recon.pics` solve against an operator that sums the bands
 (:class:`pulserver.recon.physics.SMS`), each modulated by the CAIPI phase the
-gz blips played. Summing them coherently is why every band's maps have to come
-off the one prescan the same way.
+gz blips played. Nothing is undersampled in plane, so the sensitivities are the
+only thing telling the bands apart, and the separation is correspondingly
+sensitive to how well they were estimated.
 """
 
 from __future__ import annotations
@@ -50,7 +51,6 @@ from pulserver.recon import (
     has_acquisition_flag,
     odd_even_fit,
     pics,
-    recon_shape,
 )
 
 
@@ -87,9 +87,8 @@ class Epi2DRecon(ReconPlugin):
         self.device = device
 
     def startup(self, context: ReconContext) -> None:
-        """Lay the scan's buffers out and note the matrix to crop to."""
+        """Lay the scan's buffers out, and start with no maps and no fit."""
         super().startup(context)
-        self.image_shape = recon_shape(context.header)
         self.coil_maps: dict[int, Any] = {}
         self.navigator: list[Any] = []
         self.fit = (0.0, 0.0)
@@ -125,13 +124,7 @@ class Epi2DRecon(ReconPlugin):
         """Calibrate the prescan's slices, or reconstruct the time series."""
         del context
         calibration = self.buffers[1] if len(self.buffers.spaces) > 1 else None
-        n_calibrated = (
-            0
-            if calibration is None
-            else dict(zip(calibration.axes, calibration.kspace.shape, strict=True)).get(
-                "slice", 1
-            )
-        )
+        n_calibrated = 0 if calibration is None else calibration.extents.get("slice", 1)
 
         if branch == "calibration":
             for index in range(n_calibrated):
@@ -141,10 +134,9 @@ class Epi2DRecon(ReconPlugin):
             return None
 
         buffer = self.buffers[0]
-        extents = dict(zip(buffer.axes, buffer.kspace.shape, strict=True))
-        n_groups = extents.get("slice", 1)
-        n_repetitions = extents.get("repetition", 1)
-        n_sets = extents.get("set", 1)
+        n_groups = buffer.extents.get("slice", 1)
+        n_repetitions = buffer.extents.get("repetition", 1)
+        n_sets = buffer.extents.get("set", 1)
 
         # The multiband imaging excites combs, so it carries fewer slice labels
         # than the prescan, which visits every slice on its own. A plain
@@ -155,7 +147,7 @@ class Epi2DRecon(ReconPlugin):
         # The CAIPI slice phase the gz blips played: band j shifted j / n_bands
         # of the FOV, a linear ramp along ky. The trailing unit axis lands the
         # phase on the phase-encode axis of the (coil, ky, kx) measurement.
-        ky = np.arange(extents["phase_encode"])
+        ky = np.arange(buffer.extents["phase_encode"])
         caipi = np.exp(
             1j * 2 * np.pi * (np.arange(n_bands)[:, None] / n_bands) * ky[None, :]
         )[..., None].astype(np.complex64)
@@ -195,7 +187,7 @@ class Epi2DRecon(ReconPlugin):
                             results.append(
                                 ReconResult(
                                     center_crop(
-                                        np.abs(images[band]), self.image_shape
+                                        np.abs(images[band]), buffer.image_shape
                                     ).transpose(),
                                     reference=-1,
                                     series_index=series,
@@ -217,7 +209,7 @@ class Epi2DRecon(ReconPlugin):
                     )
                     results.append(
                         ReconResult(
-                            center_crop(np.abs(image), self.image_shape).transpose(),
+                            center_crop(np.abs(image), buffer.image_shape).transpose(),
                             reference=-1,
                             series_index=series,
                             image_index=group,

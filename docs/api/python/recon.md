@@ -80,19 +80,22 @@ a plugin reconstructing sorted k-space overrides no hook at all.
 
 ## Reading the header
 
-What a scan declares about itself. The encoded grid is not here: `ReconBuffer`
-is laid out from it and answers with `.axes` and `.kspace.shape`, so a second
+Almost nothing is here, and that is the point: the header's encoding spaces are
+what `ReconBuffer` is laid out from, so it answers for them — `.extents` for
+how far each axis runs, `.image_shape` for the matrix to crop to. A second
 reading of the same fields could only disagree with the buffer a plugin
-actually fills. What is left is what the header says and the buffer does not —
-the matrix to crop to, and how many echoes to loop over.
+actually fills.
+
+What is left is what the encoding spaces do not describe: the free-form
+parameters a sequence attached to the scan. MRD splits those across four typed
+collections of `name`/`value` pairs, so `user_parameter` searches all four and
+answers with the value, whichever it was written as.
 
 ```{eval-rst}
 .. autosummary::
    :toctree: ../generated/recon
 
-   recon_shape
-   recon_volume
-   echo_count
+   user_parameter
    diffusion_table
 ```
 

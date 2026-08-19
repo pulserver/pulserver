@@ -43,14 +43,13 @@ def coil_maps_from_reference(kspace: Any, *, spatial_ndim: int = 2) -> Any:
     in this package expects. The unsampled outer k-space reads as zero, which
     band-limits the images: exactly the smoothing a sensitivity map wants.
 
-    Where :class:`NLINV` solves for maps and object together and is the better
-    estimate for one image, this is the direct one -- and the one an SMS
-    separation needs. A single-image solve determines only the product of maps
-    and object, so the scale and phase split between them is a gauge each solve
-    fixes for itself and ``abs()`` then hides. Bands solved against each other
-    are summed coherently, so that gauge stops being free: maps read off one
-    reference the same way for every slice share it, and maps solved per slice
-    do not.
+    This is the estimator for a dedicated reference prescan; :class:`NLINV` is
+    the one for a scan that must calibrate from its own imaging data, where
+    there is no separate reference to read. Given a prescan the direct estimate
+    is the more accurate of the two: zero-filling the unsampled outer k-space
+    band-limits the coil images, and a sensitivity is smooth, so what comes back
+    is close to the truth, while a joint solve has to reach the same answer by
+    iteration and extrapolation.
 
     Parameters
     ----------

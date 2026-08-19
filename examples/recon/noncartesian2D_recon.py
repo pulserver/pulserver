@@ -32,7 +32,6 @@ from pulserver.recon import (
     as_numpy,
     pics,
     pipe_menon_dcf,
-    recon_shape,
 )
 
 
@@ -79,18 +78,14 @@ class NonCartesian2DRecon(ReconPlugin):
         self.calibration_width = int(calibration_width)
         self.device = device
 
-    def startup(self, context: ReconContext) -> None:
-        """Lay the scan's buffers out and size the image from the header."""
-        super().startup(context)
-        self.image_shape = recon_shape(context.header)
-
     def recon(self, branch: str, context: ReconContext) -> list[ReconResult]:
         """Reconstruct every slice, once the measurement is complete."""
         del branch, context
         buffer = self.buffers[0]
-        extents = dict(zip(buffer.axes, buffer.kspace.shape, strict=True))
-        n_slices, n_views = extents.get("slice", 1), extents["phase_encode"]
-        nyquist = int(np.ceil(np.pi / 2 * max(self.image_shape)))
+        image_shape = buffer.image_shape
+        n_slices = buffer.extents.get("slice", 1)
+        n_views = buffer.extents["phase_encode"]
+        nyquist = int(np.ceil(np.pi / 2 * max(image_shape)))
         direct = self.mode == "direct" or (self.mode == "auto" and n_views >= nyquist)
 
         results = []
@@ -105,7 +100,7 @@ class NonCartesian2DRecon(ReconPlugin):
                 .reshape(-1, 2)
                 .astype(np.float32)
             )
-            density = pipe_menon_dcf(trajectory, self.image_shape)
+            density = pipe_menon_dcf(trajectory, image_shape)
             n_coils = int(data.shape[0])
 
             if direct:
@@ -113,7 +108,7 @@ class NonCartesian2DRecon(ReconPlugin):
                 # Nyquist, and a coil-wise one at that: combine by
                 # root-sum-of-squares.
                 coil_wise = NonCartesian2D(
-                    trajectory, self.image_shape, density=density, n_coils=n_coils
+                    trajectory, image_shape, density=density, n_coils=n_coils
                 )
                 coils = coil_wise.A_adjoint(data[None])[0]
                 image = np.sqrt(np.sum(np.abs(coils) ** 2, axis=0))
@@ -121,13 +116,13 @@ class NonCartesian2DRecon(ReconPlugin):
                 maps = NLINV(spatial_ndim=2, calibration_width=self.calibration_width)(
                     data,
                     trajectory=trajectory,
-                    image_shape=self.image_shape,
+                    image_shape=image_shape,
                     density=density,
                     device=self.device,
                 )
                 unaliasing = NonCartesian2D(
                     trajectory,
-                    self.image_shape,
+                    image_shape,
                     coil_maps=maps,
                     density=density,
                     n_coils=n_coils,

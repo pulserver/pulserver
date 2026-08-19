@@ -7,10 +7,10 @@ collapse with the CAIPI phase the sequence played. The reconstruction has to
 estimate each slice's coil maps from the calibration and unfold each group back
 into its bands, placing them at the right slices.
 
-The residual bound is what holds the bands to a common calibration gauge: a
-sum over bands separates only if their maps were read the same way, so maps
-whose scale or phase is fixed per slice leak signal between bands and the
-bound catches it.
+Nothing is undersampled in plane here, so the sensitivities are the only thing
+telling the bands apart and the residual bound is really a bound on how well
+they were estimated: map error shows up directly as signal leaking between
+bands.
 """
 
 from __future__ import annotations

@@ -12,7 +12,6 @@ __all__ = [
     "coil_compress",
     "correct_epi_eddy_currents",
     "correct_lines",
-    "echo_count",
     "epi_ramp_interpolate",
     "estimate_epi_eddy_phase",
     "fftc",
@@ -21,8 +20,6 @@ __all__ = [
     "noise_prewhiten",
     "odd_even_fit",
     "pipe_menon_dcf",
-    "recon_shape",
-    "recon_volume",
     "remove_readout_oversampling",
 ]
 
@@ -670,106 +667,8 @@ def correct_lines(
     return corrected
 
 
-def recon_shape(header: Any, *, encoding: int = 0) -> tuple[int, int]:
-    """Return the ``(n_y, n_x)`` image matrix an MRD header asks for.
-
-    The reconstructed space, which is the encoded one with readout oversampling
-    and any phase field-of-view oversampling taken back off.
-
-    Parameters
-    ----------
-    header
-        Parsed MRD XML header.
-    encoding
-        Encoding space to read.
-
-    Returns
-    -------
-    tuple of int
-        Phase encodes, readout samples.
-
-    Raises
-    ------
-    ValueError
-        If the header carries no such reconstructed space.
-    """
-    space = _encoding_space(header, encoding, "reconSpace")
-    return int(space.matrixSize.y), int(space.matrixSize.x)
-
-
-def recon_volume(header: Any, *, encoding: int = 0) -> tuple[int, int, int]:
-    """Return the ``(n_z, n_y, n_x)`` image matrix an MRD header asks for.
-
-    Parameters
-    ----------
-    header
-        Parsed MRD XML header.
-    encoding
-        Encoding space to read.
-
-    Returns
-    -------
-    tuple of int
-        Partitions, phase encodes, readout samples.
-
-    Raises
-    ------
-    ValueError
-        If the header carries no such reconstructed space.
-    """
-    return _volume(header, encoding, "reconSpace")
-
-
-def echo_count(header: Any, *, encoding: int = 0) -> int:
-    """Return how many echoes the MRD header declares.
-
-    A sequence's ``ECO`` label arrives as the ``contrast`` counter, so its
-    encoding limit is the echo count. A header without one describes a
-    single-echo scan.
-
-    Parameters
-    ----------
-    header
-        Parsed MRD XML header.
-    encoding
-        Encoding space to read.
-
-    Returns
-    -------
-    int
-        Echoes per repetition.
-    """
-    try:
-        limits = header.encoding[encoding].encodingLimits.contrast
-    except (AttributeError, IndexError, TypeError):
-        return 1
-    return 1 if limits is None else int(limits.maximum) + 1
-
-
 def _hybrid(rows: Any) -> Any:
     """Rows into hybrid space: inverse FFT along the readout."""
     import numpy as np
 
     return ifftc(np.asarray(rows), axes=-1)
-
-
-def _encoding(header: Any, index: int) -> Any:
-    try:
-        return header.encoding[index]
-    except (AttributeError, IndexError, TypeError) as error:
-        raise ValueError(
-            f"MRD header carries no encoding {index}; an inline reconstruction "
-            "needs the header the scanner sends ahead of the data"
-        ) from error
-
-
-def _volume(header: Any, index: int, name: str) -> tuple[int, int, int]:
-    matrix = _encoding_space(header, index, name).matrixSize
-    return int(matrix.z), int(matrix.y), int(matrix.x)
-
-
-def _encoding_space(header: Any, index: int, name: str) -> Any:
-    space = getattr(_encoding(header, index), name, None)
-    if space is None or getattr(space, "matrixSize", None) is None:
-        raise ValueError(f"MRD encoding {index} carries no {name} matrix size")
-    return space

@@ -29,7 +29,6 @@ from pulserver.recon import (
     ifftc,
     pics,
     pipe_menon_dcf,
-    recon_volume,
 )
 
 
@@ -77,17 +76,12 @@ class NonCartesianStackRecon(ReconPlugin):
         self.calibration_width = int(calibration_width)
         self.device = device
 
-    def startup(self, context: ReconContext) -> None:
-        """Lay the scan's buffers out and size the volume from the header."""
-        super().startup(context)
-        self.volume_shape = recon_volume(context.header)
-
     def recon(self, branch: str, context: ReconContext) -> ReconResult:
         """Reconstruct the stack, once the measurement is complete."""
         del branch, context
         buffer = self.buffers[0]
-        extents = dict(zip(buffer.axes, buffer.kspace.shape, strict=True))
-        n_z, n_views = extents.get("partition", 1), extents["phase_encode"]
+        n_z = buffer.extents.get("partition", 1)
+        n_views = buffer.extents["phase_encode"]
 
         # A stack of 2D non-Cartesian planes decouples along the fully sampled
         # partition axis: a centered inverse FFT there turns the volume into
@@ -102,7 +96,7 @@ class NonCartesianStackRecon(ReconPlugin):
             .reshape(-1, 2)
             .astype(np.float32)
         )
-        plane_shape = self.volume_shape[1:]
+        plane_shape = buffer.image_shape[1:]
         density = pipe_menon_dcf(trajectory, plane_shape)
         n_coils = int(planes.shape[0])
         nyquist = int(np.ceil(np.pi / 2 * max(plane_shape)))

@@ -38,9 +38,7 @@ from pulserver.recon import (
     AcquisitionFlag,
     cartesian_recon,
     center_crop,
-    echo_count,
     has_acquisition_flag,
-    recon_shape,
 )
 
 
@@ -78,10 +76,8 @@ class Cartesian2DRecon(ReconPlugin):
         self.device = device
 
     def startup(self, context: ReconContext) -> None:
-        """Lay the scan's buffers out and note the matrix to crop to."""
+        """Lay the scan's buffers out, and start with no maps and no slice."""
         super().startup(context)
-        self.n_echoes = echo_count(context.header)
-        self.image_shape = recon_shape(context.header)
         self.coil_maps: dict[int, Any] = {}
         self.slice = 0
 
@@ -116,7 +112,7 @@ class Cartesian2DRecon(ReconPlugin):
             return None
 
         results = []
-        for echo in range(self.n_echoes):
+        for echo in range(buffer.extents.get("contrast", 1)):
             kspace, mask = buffer.select(slice=index, contrast=echo)
             image = cartesian_recon(
                 kspace,
@@ -129,7 +125,7 @@ class Cartesian2DRecon(ReconPlugin):
             )
             results.append(
                 ReconResult(
-                    center_crop(np.abs(image), self.image_shape).transpose(),
+                    center_crop(np.abs(image), buffer.image_shape).transpose(),
                     reference=-1,
                     series_index=echo,
                     image_type="magnitude",

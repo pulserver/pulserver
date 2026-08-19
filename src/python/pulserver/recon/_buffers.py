@@ -100,7 +100,10 @@ class EncodingSpace:
     loop_sizes
         Extent of each of those counters.
     recon_matrix
-        ``(n_y, n_x)`` the images are cropped to.
+        The image matrix the header asks for, ``(n_y, n_x)`` for a plane or
+        ``(n_z, n_y, n_x)`` for a volume -- which of the two is the header's
+        answer, not the buffer's: a stack of spokes has no partition axis and
+        still reconstructs a volume.
     """
 
     index: int
@@ -110,7 +113,7 @@ class EncodingSpace:
     partitions: int
     loops: tuple[str, ...]
     loop_sizes: tuple[int, ...]
-    recon_matrix: tuple[int, int]
+    recon_matrix: tuple[int, ...]
 
     @classmethod
     def from_header(cls, header: Any, index: int = 0) -> EncodingSpace:
@@ -137,12 +140,11 @@ class EncodingSpace:
         system = getattr(header, "acquisitionSystemInformation", None)
         coils = int(getattr(system, "receiverChannels", 1) or 1)
 
-        matrix = getattr(getattr(encoding, "reconSpace", None), "matrixSize", None)
-        recon_matrix = (
-            (int(encoded.y), int(encoded.x))
-            if matrix is None
-            else (int(matrix.y), int(matrix.x))
-        )
+        matrix = encoded if getattr(encoding, "reconSpace", None) is None else None
+        matrix = matrix or getattr(encoding.reconSpace, "matrixSize", None) or encoded
+        recon_matrix = (int(matrix.z), int(matrix.y), int(matrix.x))
+        if recon_matrix[0] == 1:
+            recon_matrix = recon_matrix[1:]
 
         views = _limit(limits, "kspace_encoding_step_1")
         partitions = _limit(limits, "kspace_encoding_step_2")
@@ -272,6 +274,25 @@ class ReconBuffer:
     def axes(self) -> tuple[str, ...]:
         """Name of every axis of :attr:`kspace`, in order."""
         return self.space.axes
+
+    @property
+    def extents(self) -> dict[str, int]:
+        """How far each axis of :attr:`kspace` runs, by the name it goes under.
+
+        What a plugin loops over: ``extents.get("slice", 1)`` answers for a scan
+        whether or not it varies the slice, so a reconstruction is written once
+        and a single-slice scan is that loop run once.
+        """
+        return dict(zip(self.axes, self.kspace.shape, strict=True))
+
+    @property
+    def image_shape(self) -> tuple[int, ...]:
+        """The matrix the header asks the images to be cropped to.
+
+        The reconstructed space, so the readout oversampling the scanner
+        digitises and any phase field-of-view oversampling are off it.
+        """
+        return self.space.recon_matrix
 
     #: The MRD counter each placement axis is read from.
     _COUNTERS: ClassVar[dict[str, str]] = {
