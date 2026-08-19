@@ -806,3 +806,21 @@ def test_the_app_page_documents_every_reconstruction():
         listed |= {line.strip() for line in block.splitlines() if line.strip()}
 
     assert listed == set(family.__all__)
+
+
+def test_the_toeplitz_wrapper_shares_the_base_operator_and_enables_its_kernel():
+    """The wrapper and the physics it accelerates alias one operator, so
+    enabling the kernel on either is visible through both."""
+    torch = pytest.importorskip("torch")
+
+    base = physics.Cartesian2D(
+        torch.ones(1, 1, 8, 8),
+        torch.ones(1, 2, 8, 8, dtype=torch.complex64) / 2**0.5,
+    )
+    wrapper = physics.Toeplitz(base, coil_batch_size=2)
+
+    assert wrapper.operator is base.operator
+    assert "toeplitz" in wrapper.modifiers
+    assert "toeplitz" in base.modifiers
+    assert wrapper.toeplitz_options["coil_batch_size"] == 2
+    assert wrapper.normal_mode == "exact-fft"

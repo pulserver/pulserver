@@ -645,6 +645,32 @@ class MRIPhysics(deepinv.physics.LinearPhysics):
         return self._rebuild(trajectory, frame_index)
 
 
+def _init_from(physics: MRIPhysics, source: MRIPhysics) -> None:
+    """Initialize a facade in place from a built one, sharing operator state.
+
+    The wrapper and the source deliberately alias the same operator, rebuild
+    hook and streaming state, so enabling a kernel or a policy on either is
+    visible through both.
+    """
+    MRIPhysics.__init__(
+        physics,
+        source.operator,
+        native_operator=source.native_operator,
+        kind=source.kind,
+        spatial_ndim=source.spatial_ndim,
+        viewed_as_real=source.viewed_as_real,
+        modifiers=source.modifiers,
+        trajectory=source.trajectory,
+        rebuild=source._rebuild,
+        toeplitz_options=source.toeplitz_options,
+    )
+    physics.streaming_policy = source.streaming_policy
+    physics._streaming_methods = source._streaming_methods
+    physics._streaming_parameters = source._streaming_parameters
+    physics._replicate = source._replicate
+    physics._streaming_replicas = source._streaming_replicas
+
+
 class _FramePhysicsProvider:
     """Small LRU of frame-specific native operators for streamed dynamics."""
 
@@ -668,7 +694,7 @@ class _FramePhysicsProvider:
         result = self.physics.rebuild(self.trajectory[index], index)
         result.enable_streaming(self.policy)
         if self.toeplitz_options is not None:
-            _toeplitz(result, **self.toeplitz_options)
+            _enable_toeplitz(result, **self.toeplitz_options)
         self.cache[index] = result
         while len(self.cache) > self.policy.frame_cache_size:
             self.cache.popitem(last=False)
@@ -1737,7 +1763,8 @@ class _CoilwiseCartesianMRI(deepinv.physics.MultiCoilMRI):
         return self.A_adjoint(self.A(x, **kwargs))
 
 
-def _cartesian(
+def _init_cartesian(
+    physics: MRIPhysics,
     mask: Any,
     coil_maps: Any,
     *,
@@ -1745,8 +1772,8 @@ def _cartesian(
     toeplitz: bool | dict[str, Any] = False,
     viewed_as_real: bool = False,
     **kwargs: Any,
-) -> MRIPhysics:
-    """Create Cartesian physics.
+) -> None:
+    """Initialize Cartesian physics in place.
 
     With ``coil_maps`` this is SENSE: the adjoint combines the coils through the
     sensitivities. With ``coil_maps=None`` it is a coil-wise operator whose
@@ -1790,7 +1817,8 @@ def _cartesian(
     boundary = _TrailingRealView(operator)
     if not viewed_as_real:
         boundary = _CartesianComplexView(boundary)
-    result = MRIPhysics(
+    MRIPhysics.__init__(
+        physics,
         boundary,
         native_operator=None,
         kind=f"cartesian{spatial_ndim}d",
@@ -1799,11 +1827,10 @@ def _cartesian(
         modifiers=("toeplitz",) if toeplitz_enabled else (),
         toeplitz_options=options if toeplitz_enabled else None,
     )
-    result._streaming_parameters = {
+    physics._streaming_parameters = {
         "mask": getattr(operator, "mask", mask),
         "coil_maps": getattr(operator, "coil_maps", coil_maps),
     }
-    return result
 
 
 class Cartesian2D(MRIPhysics):
@@ -1862,14 +1889,13 @@ class Cartesian2D(MRIPhysics):
         toeplitz: bool | dict[str, Any] = False,
         **kwargs: Any,
     ) -> None:
-        self.__dict__.update(
-            _cartesian(
-                mask,
-                coil_maps,
-                spatial_ndim=2,
-                toeplitz=toeplitz,
-                **kwargs,
-            ).__dict__
+        _init_cartesian(
+            self,
+            mask,
+            coil_maps,
+            spatial_ndim=2,
+            toeplitz=toeplitz,
+            **kwargs,
         )
 
 
@@ -1905,14 +1931,13 @@ class Cartesian3D(MRIPhysics):
         toeplitz: bool | dict[str, Any] = False,
         **kwargs: Any,
     ) -> None:
-        self.__dict__.update(
-            _cartesian(
-                mask,
-                coil_maps,
-                spatial_ndim=3,
-                toeplitz=toeplitz,
-                **kwargs,
-            ).__dict__
+        _init_cartesian(
+            self,
+            mask,
+            coil_maps,
+            spatial_ndim=3,
+            toeplitz=toeplitz,
+            **kwargs,
         )
 
 
@@ -2363,41 +2388,6 @@ def _noncartesian(
     return result
 
 
-def _noncartesian_2d(
-    trajectory: Any,
-    image_shape: tuple[int, int],
-    *,
-    coil_maps: Any | None = None,
-    density: Any | None = None,
-    backend: str = "finufft",
-    n_coils: int = 1,
-    n_batchs: int = 1,
-    toeplitz: bool | dict[str, Any] = False,
-    viewed_as_real: bool = False,
-    streaming: Any | None = None,
-    **kwargs: Any,
-) -> MRIPhysics:
-    """Create 2D non-Cartesian mri-nufft physics."""
-    result = _noncartesian(
-        trajectory,
-        image_shape,
-        spatial_ndim=2,
-        coil_maps=coil_maps,
-        density=density,
-        backend=backend,
-        n_coils=n_coils,
-        n_batchs=n_batchs,
-        stacked=False,
-        z_index=None,
-        toeplitz=toeplitz,
-        viewed_as_real=viewed_as_real,
-        streaming=streaming,
-        operator_kwargs=kwargs,
-    )
-    enabled, options = _toeplitz_request(toeplitz)
-    return Toeplitz(result, **options) if enabled else result
-
-
 class NonCartesian2D(MRIPhysics):
     """Two-dimensional non-Cartesian MRI physics, over MRI-NUFFT.
 
@@ -2448,58 +2438,26 @@ class NonCartesian2D(MRIPhysics):
         streaming: Any | None = None,
         **kwargs: Any,
     ) -> None:
-        self.__dict__.update(
-            _noncartesian_2d(
-                trajectory,
-                image_shape,
-                coil_maps=coil_maps,
-                density=density,
-                backend=backend,
-                n_coils=n_coils,
-                n_batchs=n_batchs,
-                toeplitz=toeplitz,
-                viewed_as_real=viewed_as_real,
-                streaming=streaming,
-                **kwargs,
-            ).__dict__
+        base = _noncartesian(
+            trajectory,
+            image_shape,
+            spatial_ndim=2,
+            coil_maps=coil_maps,
+            density=density,
+            backend=backend,
+            n_coils=n_coils,
+            n_batchs=n_batchs,
+            stacked=False,
+            z_index=None,
+            toeplitz=toeplitz,
+            viewed_as_real=viewed_as_real,
+            streaming=streaming,
+            operator_kwargs=kwargs,
         )
-
-
-def _noncartesian_3d(
-    trajectory: Any,
-    image_shape: tuple[int, int, int],
-    *,
-    coil_maps: Any | None = None,
-    density: Any | None = None,
-    backend: str = "finufft",
-    n_coils: int = 1,
-    n_batchs: int = 1,
-    stacked: bool = False,
-    z_index: Any = "auto",
-    toeplitz: bool | dict[str, Any] = False,
-    viewed_as_real: bool = False,
-    streaming: Any | None = None,
-    **kwargs: Any,
-) -> MRIPhysics:
-    """Create full-3D or stack-of-trajectories mri-nufft physics."""
-    result = _noncartesian(
-        trajectory,
-        image_shape,
-        spatial_ndim=3,
-        coil_maps=coil_maps,
-        density=density,
-        backend=backend,
-        n_coils=n_coils,
-        n_batchs=n_batchs,
-        stacked=stacked,
-        z_index=z_index,
-        toeplitz=toeplitz,
-        viewed_as_real=viewed_as_real,
-        streaming=streaming,
-        operator_kwargs=kwargs,
-    )
-    enabled, options = _toeplitz_request(toeplitz)
-    return Toeplitz(result, **options) if enabled else result
+        enabled, options = _toeplitz_request(toeplitz)
+        if enabled:
+            _enable_toeplitz(base, **options)
+        _init_from(self, base)
 
 
 class NonCartesian3D(MRIPhysics):
@@ -2562,23 +2520,26 @@ class NonCartesian3D(MRIPhysics):
         streaming: Any | None = None,
         **kwargs: Any,
     ) -> None:
-        self.__dict__.update(
-            _noncartesian_3d(
-                trajectory,
-                image_shape,
-                coil_maps=coil_maps,
-                density=density,
-                backend=backend,
-                n_coils=n_coils,
-                n_batchs=n_batchs,
-                stacked=stacked,
-                z_index=z_index,
-                toeplitz=toeplitz,
-                viewed_as_real=viewed_as_real,
-                streaming=streaming,
-                **kwargs,
-            ).__dict__
+        base = _noncartesian(
+            trajectory,
+            image_shape,
+            spatial_ndim=3,
+            coil_maps=coil_maps,
+            density=density,
+            backend=backend,
+            n_coils=n_coils,
+            n_batchs=n_batchs,
+            stacked=stacked,
+            z_index=z_index,
+            toeplitz=toeplitz,
+            viewed_as_real=viewed_as_real,
+            streaming=streaming,
+            operator_kwargs=kwargs,
         )
+        enabled, options = _toeplitz_request(toeplitz)
+        if enabled:
+            _enable_toeplitz(base, **options)
+        _init_from(self, base)
 
 
 def _subspace_linear_physics(
@@ -2657,7 +2618,7 @@ def _subspace_linear_physics(
                 if isinstance(item, _LazyFramePhysics):
                     item.enable_toeplitz(options)
                 else:
-                    _toeplitz(item, **options)
+                    _enable_toeplitz(item, **options)
             self.use_toeplitz = bool(self.frame_physics) and all(
                 item.normal_mode in {"toeplitz", "exact-fft"}
                 for item in self.frame_physics
@@ -3038,7 +2999,7 @@ class Subspace(MRIPhysics):
     """
 
     def __init__(self, physics: MRIPhysics, basis: Any, **kwargs: Any) -> None:
-        self.__dict__.update(_subspace(physics, basis, **kwargs).__dict__)
+        _init_from(self, _subspace(physics, basis, **kwargs))
 
 
 def _configure_off_resonance_toeplitz(
@@ -3276,8 +3237,6 @@ class OffResonance(MRIPhysics):
         If ``physics`` is Cartesian.
     """
 
-    """Off-resonance-corrected non-Cartesian MRI physics."""
-
     def __init__(
         self,
         physics: MRIPhysics,
@@ -3285,17 +3244,13 @@ class OffResonance(MRIPhysics):
         readout_time: Any,
         **kwargs: Any,
     ) -> None:
-        self.__dict__.update(
-            _off_resonance(
-                physics,
-                field_map,
-                readout_time,
-                **kwargs,
-            ).__dict__
+        _init_from(
+            self,
+            _off_resonance(physics, field_map, readout_time, **kwargs),
         )
 
 
-def _toeplitz(
+def _enable_toeplitz(
     physics: MRIPhysics,
     *,
     support: str = "full",
@@ -3305,7 +3260,7 @@ def _toeplitz(
     cuda_mode: str = "auto",
     cuda_max_device_fraction: float = 0.85,
     cuda_transfer_precision: str = "auto",
-) -> MRIPhysics:
+) -> None:
     """Enable a Toeplitz normal operator wherever the backend supports it.
 
     Subspace and off-resonance decorators use a Torch-native matrix-valued
@@ -3332,7 +3287,6 @@ def _toeplitz(
         enable(options)
     elif physics.native_operator is not None:
         physics.operator.use_toeplitz = True
-    return physics
 
 
 class Toeplitz(MRIPhysics):
@@ -3347,10 +3301,9 @@ class Toeplitz(MRIPhysics):
         ``coil_batch_size`` and the CUDA transfer settings.
     """
 
-    """MRI physics with an accelerated Toeplitz normal operator."""
-
     def __init__(self, physics: MRIPhysics, **kwargs: Any) -> None:
-        self.__dict__.update(_toeplitz(physics, **kwargs).__dict__)
+        _enable_toeplitz(physics, **kwargs)
+        _init_from(self, physics)
 
 
 class WaveShuffling(MRIPhysics):
@@ -3417,16 +3370,26 @@ class WaveEncoding(MRIPhysics):
 
     Parameters
     ----------
-    physics
-        Base Cartesian physics the wave modulation rides on.
-    psf
-        Wave point-spread function, from
+    sampling
+        Acquired ``(phase, partition, echo)`` indices, or ``(phase,
+        partition)`` for a single-echo scan.
+    coil_maps
+        Complex sensitivities over the reconstructed volume.
+    wave_psf
+        Wave point-spread function: a tensor, or a
+        :class:`pulserver.recon.calibration.WavePSFResult` from
         :class:`pulserver.recon.calibration.WavePSFCalibration`.
-    **kwargs
-        Forwarded to the wave operator.
+    line_weights
+        Optional per-line weights over the acquired samples.
+    viewed_as_real
+        Exchange images and measurements through real views.
+    coil_batch_size
+        Coils processed together by the hybrid-space normal operator.
+    cuda_transfer_precision
+        Precision of host-to-device transfers when streaming.
+    streaming
+        Optional :class:`pulserver.recon.execution.CudaStreaming` policy.
     """
-
-    """Three-dimensional Wave encoding physics with a tensor or calibrated PSF."""
 
     def __init__(
         self,
