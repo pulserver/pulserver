@@ -21,6 +21,9 @@ import torch
 
 import deepinv
 
+from ._fourier import fftc as _fftc
+from ._fourier import ifftc as _ifftc
+from ._fourier import resize_centered as _resize_centered
 from .optim import IRGNM, ConjugateGradient
 from .physics import NonCartesian2D, NonCartesian3D
 from ._phase_poles import PhasePoleCorrection
@@ -759,35 +762,6 @@ def _sobolev_weights(
     )
     radius = sum(grid.square() for grid in grids)
     return (1.0 + scale * radius).pow(-degree / 2)
-
-
-def _fftc(value: torch.Tensor, axes: tuple[int, ...]) -> torch.Tensor:
-    value = torch.fft.ifftshift(value, dim=axes)
-    value = torch.fft.fftn(value, dim=axes, norm="ortho")
-    return torch.fft.fftshift(value, dim=axes)
-
-
-def _ifftc(value: torch.Tensor, axes: tuple[int, ...]) -> torch.Tensor:
-    value = torch.fft.ifftshift(value, dim=axes)
-    value = torch.fft.ifftn(value, dim=axes, norm="ortho")
-    return torch.fft.fftshift(value, dim=axes)
-
-
-def _resize_centered(value: torch.Tensor, shape: tuple[int, ...]) -> torch.Tensor:
-    spatial_ndim = len(shape)
-    result_shape = (*value.shape[:-spatial_ndim], *shape)
-    result = torch.zeros(result_shape, dtype=value.dtype, device=value.device)
-    source_slices = [slice(None)] * value.ndim
-    target_slices = [slice(None)] * value.ndim
-    for offset, target_size in enumerate(shape, start=value.ndim - spatial_ndim):
-        source_size = value.shape[offset]
-        count = min(source_size, target_size)
-        source_start = (source_size - count) // 2
-        target_start = (target_size - count) // 2
-        source_slices[offset] = slice(source_start, source_start + count)
-        target_slices[offset] = slice(target_start, target_start + count)
-    result[tuple(target_slices)] = value[tuple(source_slices)]
-    return result
 
 
 def _resize_fourier_image(

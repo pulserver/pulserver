@@ -41,6 +41,8 @@ from dataclasses import dataclass
 from importlib import import_module
 from typing import Any
 
+from ._fourier import centered_fftn as _centered_fftn
+from ._fourier import torch_or_numpy as _torch_or_numpy
 from ._mrd.metadata import acquisition_label, has_acquisition_flag
 from ._sms import SmsEpiInputs
 
@@ -316,38 +318,6 @@ def fill_partial_echo(
     )
 
 
-def _torch_or_numpy(array: Any) -> tuple[Any, bool]:
-    try:
-        torch = import_module("torch")
-    except ImportError:
-        torch = None
-    if torch is not None and isinstance(array, torch.Tensor):
-        return torch, True
-    return import_module("numpy"), False
-
-
-def _centered_fft(
-    data: Any,
-    *,
-    axis: int,
-    inverse: bool,
-) -> Any:
-    xp, is_torch = _torch_or_numpy(data)
-    if is_torch:
-        shifted = xp.fft.ifftshift(data, dim=axis)
-        transform = xp.fft.ifft if inverse else xp.fft.fft
-        return xp.fft.fftshift(
-            transform(shifted, dim=axis, norm="ortho"),
-            dim=axis,
-        )
-    shifted = xp.fft.ifftshift(data, axes=axis)
-    transform = xp.fft.ifft if inverse else xp.fft.fft
-    return xp.fft.fftshift(
-        transform(shifted, axis=axis, norm="ortho"),
-        axes=axis,
-    )
-
-
 def fftc(data: Any, *, axes: int | tuple[int, ...] = (-2, -1)) -> Any:
     """Centered orthonormal FFT over one or more axes.
 
@@ -410,7 +380,7 @@ def cartesian_3d_to_2d(
     positions can be moved into the batch dimension before constructing
     :func:`pulserver.recon.physics.Cartesian2D` physics.
     """
-    return _centered_fft(kspace, axis=readout_axis, inverse=True)
+    return _centered_fftn(kspace, axes=(readout_axis,), inverse=True)
 
 
 def remove_readout_oversampling(
@@ -436,12 +406,12 @@ def remove_readout_oversampling(
         raise ValueError(f"target_size must be in [1, {current}], got {target_size}")
     if target_size == current:
         return data
-    image = _centered_fft(data, axis=readout_axis, inverse=True)
+    image = _centered_fftn(data, axes=(readout_axis,), inverse=True)
     start = (current - target_size) // 2
     selection = [slice(None)] * image.ndim
     selection[readout_axis] = slice(start, start + target_size)
     cropped = image[tuple(selection)]
-    return _centered_fft(cropped, axis=readout_axis, inverse=False)
+    return _centered_fftn(cropped, axes=(readout_axis,), inverse=False)
 
 
 def coil_compress(
@@ -675,28 +645,6 @@ def _spatial_axes(
     if selected not in axes:
         raise ValueError("partial_axis must be one of the spatial dimensions")
     return axes, selected
-
-
-def _centered_fftn(
-    data: Any,
-    *,
-    axes: tuple[int, ...],
-    inverse: bool,
-) -> Any:
-    xp, is_torch = _torch_or_numpy(data)
-    if is_torch:
-        shifted = xp.fft.ifftshift(data, dim=axes)
-        transform = xp.fft.ifftn if inverse else xp.fft.fftn
-        return xp.fft.fftshift(
-            transform(shifted, dim=axes, norm="ortho"),
-            dim=axes,
-        )
-    shifted = xp.fft.ifftshift(data, axes=axes)
-    transform = xp.fft.ifftn if inverse else xp.fft.fftn
-    return xp.fft.fftshift(
-        transform(shifted, axes=axes, norm="ortho"),
-        axes=axes,
-    )
 
 
 def _partial_fourier_mask(data: Any, mask: Any | None, axis: int) -> Any:

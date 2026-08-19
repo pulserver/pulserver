@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-__all__: list[str] = []
+__all__ = ["PhasePoleCorrection"]
 
 from math import ceil, cos, pi, sin
 

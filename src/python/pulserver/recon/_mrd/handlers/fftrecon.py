@@ -6,9 +6,6 @@ __all__ = ["PLUGIN", "FftRecon"]
 
 import numpy as np
 
-from ...postprocessing import coil_combine
-import numpy.fft as fft
-
 from ...plugin import (
     AcquisitionBucket,
     AcquisitionFlag,
@@ -16,7 +13,7 @@ from ...plugin import (
     ReconPlugin,
     ReconResult,
 )
-from .. import mrdhelper
+from . import _fft_combine_scaled
 
 
 class FftRecon(ReconPlugin):
@@ -42,7 +39,11 @@ class FftRecon(ReconPlugin):
         slices = bucket.labels("slice")
         for slice_index in np.unique(slices):
             indices = np.flatnonzero(slices == slice_index)
-            data = _reconstruct_slice(bucket, indices, context.header)
+            stacked = np.stack(
+                [bucket.data[int(index)].data for index in indices],
+                axis=-1,
+            )
+            data = _fft_combine_scaled(stacked, context.header)
             results.append(
                 ReconResult(
                     data.transpose(),
@@ -57,31 +58,3 @@ class FftRecon(ReconPlugin):
 
 
 PLUGIN = FftRecon()
-
-
-# %% private module subroutines
-
-
-def _reconstruct_slice(
-    bucket: AcquisitionBucket,
-    indices: np.ndarray,
-    header,
-) -> np.ndarray:
-    data = np.stack(
-        [bucket.data[int(index)].data for index in indices],
-        axis=-1,
-    )
-    data = fft.fftshift(data, axes=(1, 2))
-    data = fft.ifft2(data, axes=(1, 2))
-    data = fft.ifftshift(data, axes=(1, 2))
-    data = coil_combine(data, coil_axis=0)
-
-    maximum = float(data.max(initial=0.0))
-    if maximum > 0.0:
-        data *= _max_value(header) / maximum
-    return np.around(data).astype(np.int16)
-
-
-def _max_value(header) -> int:
-    bits = mrdhelper.get_userParameterLong_value(header, "BitsStored") or 12
-    return 2 ** int(bits) - 1

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-__all__: list[str] = []
+__all__ = ["PackedHermitianField", "packed_hermitian_matvec"]
 
 from typing import Any
 

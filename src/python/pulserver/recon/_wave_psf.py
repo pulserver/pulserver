@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
-__all__: list[str] = []
+__all__ = ["WavePSF", "WavePSFCalibration", "WavePSFResult"]
 
 from dataclasses import dataclass
 from math import ceil, pi
 from typing import Any
 
 import torch
+
+from ._fourier import fftc as _fftc
+from ._fourier import ifftc as _ifftc
 
 from .._accelerators import require
 
@@ -834,15 +837,3 @@ def _crop_readout(value: torch.Tensor, readout: int) -> torch.Tensor:
         return value
     start = (value.shape[-3] - readout) // 2
     return value[..., start : start + readout, :, :]
-
-
-def _fftc(value: torch.Tensor, dim: int) -> torch.Tensor:
-    value = torch.fft.ifftshift(value, dim=dim)
-    value = torch.fft.fft(value, dim=dim, norm="ortho")
-    return torch.fft.fftshift(value, dim=dim)
-
-
-def _ifftc(value: torch.Tensor, dim: int) -> torch.Tensor:
-    value = torch.fft.ifftshift(value, dim=dim)
-    value = torch.fft.ifft(value, dim=dim, norm="ortho")
-    return torch.fft.fftshift(value, dim=dim)

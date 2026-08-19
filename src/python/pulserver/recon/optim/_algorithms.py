@@ -125,38 +125,7 @@ def _initial_fista_iterates(
     return init, init
 
 
-def _polynomial_fista(
-    data: Any,
-    physics: Any,
-    denoiser: Any,
-    *,
-    regularization: float,
-    iterations: int,
-    stepsize: float,
-    degree: int,
-    init: Any | None,
-) -> Any:
-    rhs = physics.A_adjoint(data)
-    x, z = _initial_fista_iterates(init, data, physics, rhs)
-    preconditioner = PolynomialPreconditioner(
-        physics.A_adjoint_A,
-        degree=degree,
-        spectrum=(0.0, 1.0),
-        scale=stepsize,
-    )
-    for iteration in range(iterations):
-        gradient = physics.A_adjoint_A(z) - rhs
-        next_x = denoiser(
-            z - preconditioner(stepsize * gradient),
-            regularization,
-        )
-        momentum = (iteration + 2.0) / (iteration + 3.0)
-        z = next_x + momentum * (next_x - x)
-        x = next_x
-    return x
-
-
-def _host_fista(
+def _plain_fista(
     data: Any,
     physics: Any,
     denoiser: Any,
@@ -165,17 +134,25 @@ def _host_fista(
     iterations: int,
     stepsize: float,
     init: Any | None,
+    gradient_transform: Any | None = None,
+    host: bool = False,
 ) -> Any:
-    """FISTA with CPU-resident iterates and streamed operator/denoiser calls."""
+    """One FISTA loop for the fast paths: optionally preconditioned, optionally
+    with CPU-resident iterates so streamed operator and denoiser calls stage
+    their own device transfers."""
     rhs = physics.A_adjoint(data)
     x, z = _initial_fista_iterates(init, data, physics, rhs)
-    if hasattr(x, "device") and x.device.type != "cpu":
-        x = x.to("cpu")
-    if hasattr(z, "device") and z.device.type != "cpu":
-        z = z.to("cpu")
+    if host:
+        if hasattr(x, "device") and x.device.type != "cpu":
+            x = x.to("cpu")
+        if hasattr(z, "device") and z.device.type != "cpu":
+            z = z.to("cpu")
     for iteration in range(iterations):
         gradient = physics.A_adjoint_A(z) - rhs
-        next_x = denoiser(z - stepsize * gradient, regularization)
+        step = stepsize * gradient
+        if gradient_transform is not None:
+            step = gradient_transform(step)
+        next_x = denoiser(z - step, regularization)
         momentum = (iteration + 2.0) / (iteration + 3.0)
         z = next_x + momentum * (next_x - x)
         x = next_x
@@ -343,22 +320,27 @@ def _pics(
         raise ValueError("stepsize must be positive and finite")
 
     if polynomial_degree:
-        result = _polynomial_fista(
+        result = _plain_fista(
             data,
             linear,
             denoiser,
             regularization=regularization,
             iterations=iterations,
             stepsize=stepsize,
-            degree=polynomial_degree,
             init=init,
+            gradient_transform=PolynomialPreconditioner(
+                linear.A_adjoint_A,
+                degree=polynomial_degree,
+                spectrum=(0.0, 1.0),
+                scale=stepsize,
+            ),
         )
         if streaming is not None and streaming.result_device == "cuda":
             return result.to(streaming.torch_device, non_blocking=True)
         return result
 
     if streaming is not None:
-        result = _host_fista(
+        result = _plain_fista(
             data,
             linear,
             denoiser,
@@ -366,6 +348,7 @@ def _pics(
             iterations=iterations,
             stepsize=stepsize,
             init=init,
+            host=True,
         )
         if streaming.result_device == "cuda":
             return result.to(streaming.torch_device, non_blocking=True)

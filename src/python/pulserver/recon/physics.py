@@ -36,6 +36,10 @@ from typing import Any
 import deepinv
 
 from ._toeplitz import CompactToeplitzKernel, as_torch, support_indices
+from ._views import image_as_cpx as _image_as_cpx
+from ._views import image_as_real as _image_as_real
+from ._views import kspace_as_cpx as _kspace_as_cpx
+from ._views import kspace_as_real as _kspace_as_real
 from ._stacked import _StackedNUFFTLinearPhysics
 from ._wave import _WaveLinearPhysics
 from ._sms import _SMSLinearPhysics
@@ -93,36 +97,6 @@ def _resolve_nufft_backend(
     except ImportError:
         return "finufft"
     return "cufinufft-torch" if torch.cuda.is_available() else "finufft"
-
-
-def _image_as_real(value: Any) -> Any:
-    """Pack complex image channels as DeepInverse real channels."""
-    torch = import_module("torch")
-    batch, channels, *spatial = value.shape
-    value = torch.view_as_real(value).movedim(-1, 2)
-    return value.reshape(batch, channels * 2, *spatial)
-
-
-def _image_as_cpx(value: Any) -> Any:
-    """Unpack DeepInverse real image channels to complex channels."""
-    torch = import_module("torch")
-    batch, channels, *spatial = value.shape
-    if channels % 2:
-        raise ValueError("real-view images require pairs of complex channels")
-    value = value.reshape(batch, channels // 2, 2, *spatial).movedim(2, -1)
-    return torch.view_as_complex(value.contiguous())
-
-
-def _kspace_as_real(value: Any) -> Any:
-    """Expose complex k-space through a trailing real/imaginary dimension."""
-    torch = import_module("torch")
-    return torch.view_as_real(value)
-
-
-def _kspace_as_cpx(value: Any) -> Any:
-    """Restore complex k-space from its trailing real/imaginary dimension."""
-    torch = import_module("torch")
-    return torch.view_as_complex(value.contiguous())
 
 
 def _cartesian_image_as_real(value: Any) -> Any:

@@ -168,7 +168,6 @@ convention = "numpy"
 "src/python/pulserver/recon/_distortion.py" = ["S603"]
 "src/python/pulserver/recon/_mrd/handlers/savedataonly.py" = ["ARG001"]
 "src/python/pulserver/recon/_mrd/main.py" = ["PTH", "S104", "S108"]
-"src/python/pulserver/recon/_mrd/mrdhelper.py" = ["A002"]
 "src/python/pulserver/recon/_mrd/readers.py" = ["A002", "ARG001", "PTH123"]
 "src/python/pulserver/recon/_mrd/replay.py" = ["PTH", "S110"]
 "src/python/pulserver/recon/_mrd/rtp_connection.py" = ["S104"]

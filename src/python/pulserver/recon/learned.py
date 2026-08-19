@@ -18,6 +18,8 @@ from typing import Any, Protocol, runtime_checkable
 
 import torch
 
+from .optim.state import _detach
+
 
 def _as_real_channels(
     value: torch.Tensor,
@@ -694,16 +696,3 @@ def _checkpoint(
     function: Callable[..., torch.Tensor], *args: torch.Tensor
 ) -> torch.Tensor:
     return torch.utils.checkpoint.checkpoint(function, *args, use_reentrant=False)
-
-
-def _detach(value: Any) -> Any:
-    if isinstance(value, torch.Tensor):
-        return value.detach()
-    if isinstance(value, tuple):
-        return tuple(_detach(item) for item in value)
-    if isinstance(value, list):
-        return [_detach(item) for item in value]
-    if isinstance(value, Mapping):
-        return {key: _detach(item) for key, item in value.items()}
-    detach = getattr(value, "detach", None)
-    return detach() if callable(detach) else value
