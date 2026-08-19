@@ -1,7 +1,6 @@
 """Array-level MRI preprocessing utilities.
 
 Functions preserve Torch tensors (including their device) and NumPy arrays.
-MRPro containers are delegated to their maintained methods when applicable.
 """
 
 from __future__ import annotations
@@ -10,15 +9,13 @@ __all__ = [
     "POCS",
     "Homodyne",
     "coil_compress",
-    "correct_epi_eddy_currents",
     "correct_lines",
     "epi_ramp_interpolate",
-    "estimate_epi_eddy_phase",
+    "estimate_epi_phase",
     "fftc",
     "fill_partial_echo",
     "ifftc",
     "noise_prewhiten",
-    "odd_even_fit",
     "pipe_menon_dcf",
     "remove_readout_oversampling",
 ]
@@ -241,22 +238,37 @@ def ifftc(data: Any, *, axes: int | tuple[int, ...] = (-2, -1)) -> Any:
 
 def remove_readout_oversampling(
     data: Any,
-    target_size: int | None = None,
+    target_size: int,
     *,
     readout_axis: int = -1,
 ) -> Any:
     """Remove readout oversampling by centered image-domain cropping.
 
-    MRPro ``KData`` objects delegate to ``KData.remove_readout_os()`` and infer
-    the target from their header. Raw arrays require ``target_size``.
+    A scanner digitises more samples than the prescribed matrix so the readout
+    filter has room to roll off, and those extra samples are field of view, not
+    resolution: the crop is in the image domain, and what comes back is the
+    same k-space over the prescribed width.
+
+    Parameters
+    ----------
+    data
+        K-space with the readout along ``readout_axis``.
+    target_size
+        Samples the prescribed matrix asks for --
+        :attr:`~pulserver.recon.ReconBuffer.image_shape` last entry.
+    readout_axis
+        Which axis the readout runs along.
+
+    Returns
+    -------
+    array
+        K-space over ``target_size`` samples, in the namespace of ``data``.
+
+    Raises
+    ------
+    ValueError
+        If ``target_size`` is not within the samples there are.
     """
-    method = getattr(data, "remove_readout_os", None)
-    if callable(method):
-        if target_size is not None:
-            raise ValueError("target_size is inferred from an MRPro KData header")
-        return method()
-    if target_size is None:
-        raise ValueError("target_size is required for raw arrays")
     current = data.shape[readout_axis]
     if not 0 < target_size <= current:
         raise ValueError(f"target_size must be in [1, {current}], got {target_size}")
@@ -369,13 +381,32 @@ def noise_prewhiten(
 ) -> Any:
     """Decorrelate receiver coils using the measured noise covariance.
 
-    MRPro ``KData`` delegates to ``KData.prewhiten``. Raw Torch/NumPy arrays
-    are whitened with a Cholesky solve and preserve their input container.
-    """
-    method = getattr(kspace, "prewhiten", None)
-    if callable(method):
-        return method(noise, scale_factor)
+    A receive array's channels see correlated noise, and a solve that assumes
+    they do not weights them wrongly. The noise scan measures that covariance;
+    whitening is the Cholesky solve that turns it into the identity, so every
+    channel afterwards carries unit, independent noise.
 
+    Parameters
+    ----------
+    kspace
+        The measurement, with the channels along ``coil_axis``.
+    noise
+        The noise scan, channels along the same axis.
+    coil_axis
+        Which axis the channels run along.
+    scale_factor
+        Applied to the whitened data, for a caller keeping a known noise level.
+
+    Returns
+    -------
+    array
+        The whitened measurement, in the namespace of ``kspace``.
+
+    Raises
+    ------
+    TypeError
+        If the measurement and the noise are not in the same array library.
+    """
     xp, is_torch = _torch_or_numpy(kspace)
     _, noise_is_torch = _torch_or_numpy(noise)
     if is_torch != noise_is_torch:
@@ -454,103 +485,6 @@ def epi_ramp_interpolate(
     moved = xp.moveaxis(data, readout_axis, -1)
     result = moved[..., left] * (1 - weight) + moved[..., right] * weight
     return xp.moveaxis(result, -1, readout_axis)
-
-
-def _unwrap(phase: Any, xp: Any, is_torch: bool) -> Any:
-    if not is_torch:
-        return xp.unwrap(phase)
-    delta = phase[1:] - phase[:-1]
-    wrapped = (delta + xp.pi) % (2 * xp.pi) - xp.pi
-    wrapped = xp.where((wrapped == -xp.pi) & (delta > 0), xp.pi, wrapped)
-    correction = xp.cumsum(wrapped - delta, dim=0)
-    result = phase.clone()
-    result[1:] += correction
-    return result
-
-
-def estimate_epi_eddy_phase(
-    positive_navigator: Any,
-    negative_navigator: Any,
-    *,
-    readout_axis: int = -1,
-    polynomial_order: int = 1,
-) -> Any:
-    """Estimate a smooth odd/even EPI phase difference from navigator pairs."""
-    if positive_navigator.shape != negative_navigator.shape:
-        raise ValueError("positive and negative navigators must have equal shape")
-    if polynomial_order < 0:
-        raise ValueError("polynomial_order must be non-negative")
-    xp, is_torch = _torch_or_numpy(positive_navigator)
-    negative_xp, negative_is_torch = _torch_or_numpy(negative_navigator)
-    if xp is not negative_xp and is_torch != negative_is_torch:
-        raise TypeError("navigator arrays must use the same array library")
-
-    cross = positive_navigator * negative_navigator.conj()
-    axes = tuple(
-        index for index in range(cross.ndim) if index != readout_axis % cross.ndim
-    )
-    cross = cross.sum(dim=axes) if is_torch else cross.sum(axis=axes)
-    phase = _unwrap(xp.angle(cross), xp, is_torch)
-    n_readout = phase.shape[0]
-    if is_torch:
-        coordinate = xp.linspace(
-            -1,
-            1,
-            n_readout,
-            device=phase.device,
-            dtype=phase.dtype,
-        )
-        design = xp.stack(
-            [coordinate**degree for degree in range(polynomial_order + 1)],
-            dim=1,
-        )
-        coefficients = xp.linalg.lstsq(design, phase[:, None]).solution
-        return (design @ coefficients)[:, 0]
-    coordinate = xp.linspace(-1, 1, n_readout)
-    coefficients = xp.polynomial.polynomial.polyfit(
-        coordinate,
-        phase,
-        polynomial_order,
-    )
-    return xp.polynomial.polynomial.polyval(coordinate, coefficients)
-
-
-def correct_epi_eddy_currents(
-    positive_readouts: Any,
-    negative_readouts: Any,
-    phase: Any | None = None,
-    *,
-    readout_axis: int = -1,
-    polynomial_order: int = 1,
-) -> tuple[Any, Any, Any]:
-    """Apply symmetric odd/even phase correction to EPI readout polarities."""
-    if phase is None:
-        phase = estimate_epi_eddy_phase(
-            positive_readouts,
-            negative_readouts,
-            readout_axis=readout_axis,
-            polynomial_order=polynomial_order,
-        )
-    xp, is_torch = _torch_or_numpy(positive_readouts)
-    phase = (
-        xp.as_tensor(
-            phase,
-            device=positive_readouts.device,
-            dtype=positive_readouts.real.dtype,
-        )
-        if is_torch
-        else xp.asarray(phase)
-    )
-    shape = [1] * positive_readouts.ndim
-    shape[readout_axis] = phase.shape[0]
-    phase = phase.reshape(shape)
-    positive_factor = xp.exp(-0.5j * phase)
-    negative_factor = xp.exp(0.5j * phase)
-    return (
-        positive_readouts * positive_factor,
-        negative_readouts * negative_factor,
-        phase.reshape(-1),
-    )
 
 
 # %% private module subroutines
@@ -689,26 +623,61 @@ def pipe_menon_dcf(
     )
 
 
-def odd_even_fit(navigator_lines: list[Any]) -> tuple[float, float]:
-    """Fit the odd/even linear phase from blip-nulled navigator lines.
+def estimate_epi_phase(
+    navigator_lines: list[Any],
+    *,
+    polynomial_order: int = 1,
+) -> Any:
+    """Fit the odd/even phase an EPI readout carries, from a blip-nulled navigator.
 
-    The middle line was read backwards; against the mean of its two
-    like-polarity neighbours, its hybrid-space phase difference is the
-    gradient-delay ramp plus a constant -- the two numbers every reversed
-    line is corrected by.
+    Reversing a readout does not reverse the delays it was played through, so a
+    line read backwards carries a phase its forward neighbours do not, and
+    leaving it there is what puts a ghost at half the field of view. The
+    navigator measures it directly: three blip-nulled lines of alternating
+    polarity see the same object, so the phase difference between the middle
+    one and its neighbours is that phase and nothing else.
+
+    A first-order fit is the correction every product reconstruction applies,
+    because the term that dominates is the gradient and ADC delay and a delay
+    is linear in the readout. Raising the order picks up what eddy currents
+    leave beyond it, which an oblique or a strongly driven readout has more of.
+
+    The fit is weighted by the cross-correlation magnitude and ignores the
+    samples below a tenth of its peak: a phase difference where there is no
+    signal is noise, and letting the readout's empty edges into an unweighted
+    fit is what drags a high-order one off.
 
     Parameters
     ----------
     navigator_lines : list of numpy.ndarray
         Three ``(coils, samples)`` lines, polarity ``+ - +``, reversed lines
         already flipped back into readout order.
+    polynomial_order
+        Order of the phase polynomial. ``1`` is the gradient-delay ramp and a
+        constant.
 
     Returns
     -------
-    tuple of float
-        Phase slope (radians per sample) and intercept (radians).
+    numpy.ndarray
+        Coefficients of the phase, lowest order first, in a coordinate running
+        from ``-1`` to ``1`` across the readout -- so a fit measured on the
+        navigator applies to a readout of any length.
+
+    Raises
+    ------
+    ValueError
+        If fewer than three navigator lines are given, or the order is
+        negative.
     """
     import numpy as np
+
+    if len(navigator_lines) < 3:
+        raise ValueError(
+            f"the navigator is three lines of alternating polarity, got "
+            f"{len(navigator_lines)}"
+        )
+    if polynomial_order < 0:
+        raise ValueError("polynomial_order must be non-negative")
 
     forward = 0.5 * (_hybrid(navigator_lines[0]) + _hybrid(navigator_lines[2]))
     backward = _hybrid(navigator_lines[1])
@@ -716,23 +685,28 @@ def odd_even_fit(navigator_lines: list[Any]) -> tuple[float, float]:
 
     weights = np.abs(cross)
     phase = np.unwrap(np.angle(cross))
-    samples = np.arange(phase.size)
+    coordinate = np.linspace(-1.0, 1.0, phase.size)
     keep = weights > 0.1 * weights.max()
-    slope, intercept = np.polyfit(samples[keep], phase[keep], 1, w=weights[keep])
-    return float(slope), float(intercept)
+    return np.polynomial.polynomial.polyfit(
+        coordinate[keep], phase[keep], polynomial_order, w=weights[keep]
+    )
 
 
-def correct_lines(
-    lines: list[tuple[Any, bool]], slope: float, intercept: float
-) -> list[Any]:
+def correct_lines(lines: list[tuple[Any, bool]], phase: Any = None) -> list[Any]:
     """Flip and phase-correct a train's lines into a consistent readout.
+
+    The forward lines define the grid, so a reversed one is rotated onto them
+    rather than both being met in the middle: the correction is one-sided, and
+    the image does not move.
 
     Parameters
     ----------
     lines : list of tuple
         ``(data, reversed)`` per line, data ``(coils, samples)``.
-    slope, intercept
-        The odd/even fit of :func:`odd_even_fit`.
+    phase
+        The polynomial coefficients :func:`estimate_epi_phase` returned.
+        ``None`` -- before a navigator has arrived -- flips a reversed line
+        without demodulating it.
 
     Returns
     -------
@@ -746,10 +720,11 @@ def correct_lines(
         row = np.asarray(data)
         if backwards:
             row = row[..., ::-1]
-            hybrid = _hybrid(row)
-            ramp = slope * np.arange(hybrid.shape[-1]) + intercept
-            hybrid = hybrid * np.exp(1j * ramp)
-            row = fftc(hybrid, axes=-1)
+            if phase is not None:
+                hybrid = _hybrid(row)
+                coordinate = np.linspace(-1.0, 1.0, hybrid.shape[-1])
+                ramp = np.polynomial.polynomial.polyval(coordinate, phase)
+                row = fftc(hybrid * np.exp(1j * ramp), axes=-1)
         corrected.append(row.astype(np.complex64))
     return corrected
 

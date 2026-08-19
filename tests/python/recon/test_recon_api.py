@@ -20,7 +20,6 @@ from pulserver.recon._mrd import metadata
 from pulserver.recon.preprocessing import (
     Homodyne,
     POCS,
-    correct_epi_eddy_currents,
     epi_ramp_interpolate,
     noise_prewhiten,
     remove_readout_oversampling,
@@ -625,19 +624,6 @@ def test_noise_prewhitening_decorrelates_coils():
     whitened = noise_prewhiten(noise, noise, coil_axis=0)
     covariance = whitened @ whitened.conj().T / whitened.shape[-1]
     np.testing.assert_allclose(covariance, np.eye(2), atol=2e-2)
-
-
-def test_symmetric_epi_eddy_correction_removes_known_phase():
-    phase = np.linspace(-0.6, 0.6, 16)
-    signal = np.ones((2, 16), dtype=np.complex64)
-    positive = signal * np.exp(0.5j * phase)
-    negative = signal * np.exp(-0.5j * phase)
-    corrected_positive, corrected_negative, returned_phase = correct_epi_eddy_currents(
-        positive, negative, phase
-    )
-    np.testing.assert_allclose(corrected_positive, signal, atol=1e-6)
-    np.testing.assert_allclose(corrected_negative, signal, atol=1e-6)
-    np.testing.assert_allclose(returned_phase, phase)
 
 
 def test_the_api_page_documents_every_public_name():

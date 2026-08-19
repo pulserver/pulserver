@@ -1,7 +1,7 @@
 """Reconstruction for :mod:`pulserver.app.sequence.epi2D_sequence`.
 
 The preprocessing EPI cannot skip, then the Cartesian pipeline. A blip-nulled
-navigator triplet gives the odd/even linear phase fit, and every reversed line
+navigator triplet gives the odd/even phase fit, and every reversed line
 is flipped and corrected by it as it arrives -- before it is placed, because a
 corrected line is what belongs on the grid. The volume then reconstructs
 exactly as :mod:`pulserver.app.recon.cartesian2D_recon` reconstructs it.
@@ -57,9 +57,9 @@ from pulserver.recon import (
     coil_compress,
     coil_maps_from_reference,
     correct_lines,
+    estimate_epi_phase,
     has_acquisition_flag,
     noise_prewhiten,
-    odd_even_fit,
     pics,
 )
 
@@ -84,6 +84,10 @@ class Epi2DRecon(ReconPlugin):
     virtual_coils
         Channels to compress the array onto. A scan with fewer physical
         channels keeps them all.
+    phase_order
+        Order of the odd/even phase fitted from the navigator. One is the
+        gradient-delay ramp every product reconstruction corrects; raising it
+        picks up what eddy currents leave beyond that.
     device
         Torch device the reconstruction runs on. ``None`` is the CPU.
     """
@@ -96,6 +100,7 @@ class Epi2DRecon(ReconPlugin):
         pocs_iterations: int = 12,
         partial_fourier: str = "pocs",
         virtual_coils: int = 8,
+        phase_order: int = 1,
         device: Any = None,
     ) -> None:
         super().__init__(split_on=AcquisitionFlag.LAST_IN_MEASUREMENT)
@@ -104,6 +109,7 @@ class Epi2DRecon(ReconPlugin):
         self.pocs_iterations = int(pocs_iterations)
         self.partial_fourier = partial_fourier
         self.virtual_coils = int(virtual_coils)
+        self.phase_order = int(phase_order)
         self.device = device
 
     def startup(self, context: ReconContext) -> None:
@@ -112,7 +118,7 @@ class Epi2DRecon(ReconPlugin):
         self.coil_maps: dict[int, Any] = {}
         self.navigator: list[Any] = []
         self.noise: Any = None
-        self.fit = (0.0, 0.0)
+        self.phase: Any = None
 
     def receive(self, acquisition: Any, context: ReconContext) -> Any:
         """Whiten, correct and compress the line, place it, and route what it closed.
@@ -134,11 +140,13 @@ class Epi2DRecon(ReconPlugin):
         if has_acquisition_flag(acquisition, AcquisitionFlag.IS_PHASECORR_DATA):
             self.navigator.append(line[..., :: -1 if backwards else 1])
             if len(self.navigator) == 3:
-                self.fit = odd_even_fit(self.navigator)
+                self.phase = estimate_epi_phase(
+                    self.navigator, polynomial_order=self.phase_order
+                )
                 self.navigator = []
             return None
 
-        (line,) = correct_lines([(line, backwards)], *self.fit)
+        (line,) = correct_lines([(line, backwards)], self.phase)
         if has_acquisition_flag(acquisition, AcquisitionFlag.IS_PARALLEL_CALIBRATION):
             # The prescan fills its own space at full channel count: it is what
             # the basis is estimated from, so it cannot already be in it.

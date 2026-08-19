@@ -61,6 +61,11 @@ class Cartesian3DRecon(ReconPlugin):
     virtual_coils
         Channels to compress the array onto before the solve. A scan with fewer
         physical channels keeps them all.
+    calibration_iterations
+        Newton steps the sensitivity solve takes. More than the eight NLINV
+        defaults to: those are for a whole imaging dataset, and an
+        autocalibration block is small enough that the solve is still moving
+        at eight.
     device
         Torch device the reconstruction runs on. ``None`` is the CPU.
     """
@@ -73,6 +78,7 @@ class Cartesian3DRecon(ReconPlugin):
         pocs_iterations: int = 12,
         partial_fourier: str = "pocs",
         virtual_coils: int = 8,
+        calibration_iterations: int = 16,
         device: Any = None,
     ) -> None:
         super().__init__(
@@ -85,6 +91,7 @@ class Cartesian3DRecon(ReconPlugin):
         self.pocs_iterations = int(pocs_iterations)
         self.partial_fourier = partial_fourier
         self.virtual_coils = int(virtual_coils)
+        self.calibration_iterations = int(calibration_iterations)
         self.device = device
 
     def startup(self, context: ReconContext) -> None:
@@ -128,7 +135,9 @@ class Cartesian3DRecon(ReconPlugin):
             kspace, mask = buffer.select(contrast=0)
             lines = kspace[:, mask.any(axis=-1)].reshape(kspace.shape[0], -1)
             _, self.coil_basis = coil_compress(lines, self.virtual_coils)
-            self.coil_maps = NLINV(spatial_ndim=3)(
+            self.coil_maps = NLINV(
+                spatial_ndim=3, max_iter=self.calibration_iterations
+            )(
                 np.einsum("vc,c...->v...", self.coil_basis, kspace)[None],
                 mask=mask,
                 device=self.device,

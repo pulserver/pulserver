@@ -144,20 +144,23 @@ is what a plugin exposes as its `partial_fourier` setting.
 
 ### EPI
 
-A reversed EPI line needs the odd/even ramp fitted from a navigator before it
-belongs anywhere: `odd_even_fit` reads the ramp off a blip-nulled triplet and
-`correct_lines` flips and demodulates by it, which is what a plugin does in
-`receive` before placing the readout.
+A reversed EPI line carries a phase its forward neighbours do not, and leaving
+it there puts a ghost at half the field of view. `estimate_epi_phase` reads that
+phase off a blip-nulled navigator triplet and `correct_lines` flips and
+demodulates by it — which is what a plugin does in `receive`, before the readout
+is placed, because a corrected line is what belongs on the grid.
+
+One estimator, with the order as its parameter: first order is the
+gradient-delay ramp every product reconstruction corrects, and raising it picks
+up what an eddy current leaves beyond a ramp.
 
 ```{eval-rst}
 .. autosummary::
    :toctree: ../generated/recon
 
-   odd_even_fit
+   estimate_epi_phase
    correct_lines
    epi_ramp_interpolate
-   estimate_epi_eddy_phase
-   correct_epi_eddy_currents
 ```
 
 ## Calibration

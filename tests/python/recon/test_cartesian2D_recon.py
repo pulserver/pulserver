@@ -434,3 +434,17 @@ def test_homodyne_fills_a_truncated_echo_as_pocs_does(kspace, phantom, context):
         cartesian2D_recon.Cartesian2DRecon(partial_fourier="guess")(
             bucket(kspace, list(range(N)), n_samples=48), context
         )
+
+
+def test_the_calibration_solve_is_run_to_convergence(kspace, phantom, context):
+    """NLINV defaults to the eight Newton steps BART takes on a whole imaging
+    dataset. An autocalibration block is small enough that the solve is still
+    moving there, and an unaliasing is only as good as the maps it was given."""
+    lines, calibration = _sampling()
+    errors = {}
+    for steps in (8, 16):
+        plugin = cartesian2D_recon.Cartesian2DRecon(calibration_iterations=steps)
+        image = plugin(bucket(kspace, lines, calibration=calibration), context)[0]
+        errors[steps] = relative_error(image.data.T, phantom)
+
+    assert errors[16] < 0.7 * errors[8]

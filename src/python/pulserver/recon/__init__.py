@@ -113,21 +113,19 @@ _MEMBERS = {
     "coil_combine": "postprocessing",
     "coil_maps_from_reference": "calibration",
     "coil_compress": "preprocessing",
-    "correct_epi_eddy_currents": "preprocessing",
     "correct_lines": "preprocessing",
     "decode_sequence_description": "simulation",
     "decompress_shape": "simulation",
     "default_model_paths": "weights",
     "diffusion_table": "_mrd.metadata",
     "epi_ramp_interpolate": "preprocessing",
-    "estimate_epi_eddy_phase": "preprocessing",
+    "estimate_epi_phase": "preprocessing",
     "fftc": "preprocessing",
     "fill_partial_echo": "preprocessing",
     "has_acquisition_flag": "plugin",
     "ifftc": "preprocessing",
     "load_model": "weights",
     "noise_prewhiten": "preprocessing",
-    "odd_even_fit": "preprocessing",
     "pics": "optim._algorithms",
     "pipe_menon_dcf": "preprocessing",
     "remove_readout_oversampling": "preprocessing",
@@ -238,15 +236,13 @@ if TYPE_CHECKING:
     from .preprocessing import Homodyne as Homodyne
     from .preprocessing import POCS as POCS
     from .preprocessing import coil_compress as coil_compress
-    from .preprocessing import correct_epi_eddy_currents as correct_epi_eddy_currents
     from .preprocessing import correct_lines as correct_lines
     from .preprocessing import epi_ramp_interpolate as epi_ramp_interpolate
-    from .preprocessing import estimate_epi_eddy_phase as estimate_epi_eddy_phase
+    from .preprocessing import estimate_epi_phase as estimate_epi_phase
     from .preprocessing import fftc as fftc
     from .preprocessing import fill_partial_echo as fill_partial_echo
     from .preprocessing import ifftc as ifftc
     from .preprocessing import noise_prewhiten as noise_prewhiten
-    from .preprocessing import odd_even_fit as odd_even_fit
     from .preprocessing import pipe_menon_dcf as pipe_menon_dcf
     from .preprocessing import remove_readout_oversampling as remove_readout_oversampling
     from .simulation import AdcRole as AdcRole
