@@ -50,9 +50,9 @@ not a variant.
 
 ## Non-Cartesian
 
-Density compensation, adjoint-derived sensitivities, and a CG-SENSE solve
-against the trajectory the acquisitions carry -- which `pulserver` buffers
-beside the data.
+Density compensation, NLINV sensitivities calibrated from the samples inside
+the calibration radius, and a CG-SENSE solve against the trajectory the
+acquisitions carry -- which `pulserver` buffers beside the data.
 
 ```{eval-rst}
 .. autosummary::
