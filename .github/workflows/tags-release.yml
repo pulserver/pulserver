@@ -25,7 +25,7 @@ jobs:
     permissions:
       id-token: write # trusted publishing (OIDC)
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: "{wheels-*,sdist}"
           path: dist
@@ -41,7 +41,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install Nim
         run: |
           curl https://nim-lang.org/choosenim/init.sh -sSf | sh -s -- -y
@@ -54,7 +54,7 @@ jobs:
           INSTALL_DIR="$(mktemp -d)"
           bash pulserver_bridge_installer.sh "$INSTALL_DIR"
           tar -czf "pulserver_bridge_${{ github.ref_name }}.tar.gz" -C "$INSTALL_DIR" .
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: pulserver-bridge-bundle
           path: pulserver_bridge_${{ github.ref_name }}.tar.gz
@@ -67,17 +67,17 @@ jobs:
       contents: write # create the release
       id-token: write # sigstore
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: "{wheels-*,sdist}"
           path: dist
           merge-multiple: true
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: pulserver-bridge-bundle
           path: bundle
       - name: Sign the distributions with Sigstore
-        uses: sigstore/gh-action-sigstore-python@v3.0.0
+        uses: sigstore/gh-action-sigstore-python@v3.5.0
         with:
           inputs: |
             ./dist/*.tar.gz
