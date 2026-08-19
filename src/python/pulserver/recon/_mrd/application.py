@@ -18,6 +18,7 @@ from ..plugin import (
     ReconContext,
     ReconResult,
 )
+from ..postprocessing import as_numpy
 from .metadata import acquisition_label, has_acquisition_flag
 from .mrd2dicom import MrdDicomBuilder
 
@@ -192,7 +193,7 @@ def _make_image(
             f"{len(bucket.data)} acquisitions"
         )
     acquisition = bucket.data[result.reference]
-    data = _as_numpy(result.data)
+    data = as_numpy(result.data)
     image_index = (
         next_image_index if result.image_index is None else int(result.image_index)
     )
@@ -222,19 +223,6 @@ def _make_image(
     )
     image.attribute_string = ismrmrd.Meta(attributes).serialize()
     return image, max(next_image_index + 1, image_index + 1)
-
-
-def _as_numpy(value: Any) -> np.ndarray:
-    detach = getattr(value, "detach", None)
-    if callable(detach):
-        value = detach()
-        cpu = getattr(value, "cpu", None)
-        if callable(cpu):
-            value = cpu()
-        numpy = getattr(value, "numpy", None)
-        if callable(numpy):
-            value = numpy()
-    return np.asarray(value)
 
 
 def _image_type(name: str) -> int:

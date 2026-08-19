@@ -5,14 +5,13 @@ from __future__ import annotations
 __all__ = ["FISTA"]
 
 from collections.abc import Callable, Iterable, Sequence
-from contextlib import nullcontext
 from typing import Any
 
 import torch
 
 import deepinv
 
-from ._base import _physics_parameters, _unique_parameters
+from ._base import _physics_parameters, _run_state_aware, _unique_parameters
 from .prior import StackedPrior
 from .state import OptimResult, OptimState
 
@@ -24,6 +23,9 @@ class FISTA(deepinv.optim.FISTA):
     priors retains DeepInverse's meaning of one prior per iteration. Multiple
     simultaneous priors require PDHG or ADMM; FISTA rejects them because an
     average of proximity operators is not the proximity operator of their sum.
+
+    Satisfies :class:`pulserver.recon.StatefulReconstructor`, the one
+    step-wise contract the learned stack trains against.
 
     Parameters
     ----------
@@ -173,34 +175,17 @@ class FISTA(deepinv.optim.FISTA):
             raise ValueError(
                 "compute_metrics cannot be combined with state-aware output"
             )
-        count = self.max_iter if iterations is None else iterations
-        _validate_run(count, self.max_iter, detach_every)
-        if any(index < 0 or index > count for index in selected):
-            raise ValueError(
-                "record_iterations entries must lie between 0 and iterations"
-            )
-
-        context = nullcontext() if self.unfold else torch.no_grad()
-        with context:
-            state = self.init_state(y, physics, init)
-            history = {0: state.estimate} if 0 in selected else {}
-            for iteration in range(count):
-                previous = state.estimate
-                state = self.step(state, y, physics, iteration, **kwargs)
-                completed = iteration + 1
-                if completed in selected:
-                    history[completed] = state.estimate
-                if (
-                    self.early_stop
-                    and _relative_residual(previous, state.estimate) <= self.thres_conv
-                ):
-                    break
-                if detach_every is not None and completed % detach_every == 0:
-                    state = state.detach()
-        reconstruction = self.get_output(state)
-        if return_info:
-            return OptimResult(reconstruction, state, history)
-        return reconstruction
+        return _run_state_aware(
+            self,
+            y,
+            physics,
+            init,
+            iterations=iterations,
+            return_info=return_info,
+            record_iterations=record_iterations,
+            detach_every=detach_every,
+            **kwargs,
+        )
 
     def prior_parameters(
         self,
@@ -305,30 +290,3 @@ def _prepare_prior(
     weight = prior.weights[0]
     selected_g_param = prior.g_params[0] if g_param is None else g_param
     return prior.priors[0], lambda_reg * weight, selected_g_param
-
-
-def _validate_run(
-    iterations: int,
-    max_iter: int,
-    detach_every: int | None,
-) -> None:
-    if (
-        not isinstance(iterations, int)
-        or isinstance(iterations, bool)
-        or iterations < 1
-    ):
-        raise ValueError("iterations must be a positive integer")
-    if iterations > max_iter:
-        raise ValueError("iterations cannot exceed the configured max_iter")
-    if detach_every is not None and (
-        not isinstance(detach_every, int)
-        or isinstance(detach_every, bool)
-        or detach_every < 1
-    ):
-        raise ValueError("detach_every must be a positive integer")
-
-
-def _relative_residual(previous: torch.Tensor, current: torch.Tensor) -> float:
-    numerator = torch.linalg.vector_norm(current - previous)
-    denominator = torch.linalg.vector_norm(current).clamp_min(1e-12)
-    return float(numerator / denominator)

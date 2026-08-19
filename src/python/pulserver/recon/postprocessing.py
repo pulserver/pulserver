@@ -148,4 +148,7 @@ def as_numpy(array: Any) -> Any:
     """
     import numpy as np
 
+    detach = getattr(array, "detach", None)
+    if callable(detach):
+        array = detach()
     return array.cpu().numpy() if hasattr(array, "cpu") else np.asarray(array)

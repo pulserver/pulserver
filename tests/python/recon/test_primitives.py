@@ -57,11 +57,6 @@ def test_nlinv_public_api_is_class_based():
         "WavePSFCalibration",
         "WavePSFResult",
         "calibration_extent",
-        # The two estimators a reconstruction actually calls: one reads the
-        # calibration block off a sampling mask and solves NLINV on it, the
-        # other low-passes coil images a non-Cartesian adjoint produced.
-        "sensitivities",
-        "smooth_sensitivities",
     ]
     assert not hasattr(calibration, "nlinv_sensitivities")
     assert not hasattr(calibration, "estimate_sensitivities")

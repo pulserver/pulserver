@@ -3,15 +3,12 @@
 from __future__ import annotations
 
 __all__ = [
-    "ComplexAdapter",
     "GradientDataConsistency",
     "ScaledAdjoint",
     "StatefulReconstructor",
     "UnrollResult",
     "UnrollState",
     "UnrolledReconstructor",
-    "as_complex_channels",
-    "as_real_channels",
 ]
 
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
@@ -21,8 +18,10 @@ from typing import Any, Protocol, runtime_checkable
 
 import torch
 
+from .optim.state import _detach
 
-def as_real_channels(
+
+def _as_real_channels(
     value: torch.Tensor,
     *,
     channel_dim: int = 1,
@@ -50,7 +49,7 @@ def as_real_channels(
     return paired.reshape(shape)
 
 
-def as_complex_channels(
+def _as_complex_channels(
     value: torch.Tensor,
     *,
     channel_dim: int = 1,
@@ -81,7 +80,7 @@ def as_complex_channels(
     return torch.view_as_complex(paired.contiguous())
 
 
-class ComplexAdapter(torch.nn.Module):
+class _ComplexAdapter(torch.nn.Module):
     """Apply a paired-real model to native complex MRI tensors.
 
     Parameters
@@ -106,7 +105,7 @@ class ComplexAdapter(torch.nn.Module):
         """Apply the model while preserving a complex input representation."""
         restore_complex = value.is_complex()
         model_input = (
-            as_real_channels(value, channel_dim=self.channel_dim)
+            _as_real_channels(value, channel_dim=self.channel_dim)
             if restore_complex
             else value
         )
@@ -115,7 +114,7 @@ class ComplexAdapter(torch.nn.Module):
             raise TypeError("a complex-adapted model must return a Torch tensor")
         if not restore_complex or result.is_complex():
             return result
-        return as_complex_channels(result, channel_dim=self.channel_dim)
+        return _as_complex_channels(result, channel_dim=self.channel_dim)
 
 
 @runtime_checkable
@@ -697,16 +696,3 @@ def _checkpoint(
     function: Callable[..., torch.Tensor], *args: torch.Tensor
 ) -> torch.Tensor:
     return torch.utils.checkpoint.checkpoint(function, *args, use_reentrant=False)
-
-
-def _detach(value: Any) -> Any:
-    if isinstance(value, torch.Tensor):
-        return value.detach()
-    if isinstance(value, tuple):
-        return tuple(_detach(item) for item in value)
-    if isinstance(value, list):
-        return [_detach(item) for item in value]
-    if isinstance(value, Mapping):
-        return {key: _detach(item) for key, item in value.items()}
-    detach = getattr(value, "detach", None)
-    return detach() if callable(detach) else value

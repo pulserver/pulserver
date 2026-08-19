@@ -264,16 +264,20 @@ def test_calibrating_early_and_late_give_the_same_maps(kspace, context):
     stream = acquisitions(kspace, lines, calibration=calibration)
     boundary = len(calibration)
 
+    from pulserver.recon import NLINV
+
     plugin = cartesian2D_recon.PLUGIN.spawn()
     plugin.startup(context)
     for acquisition in stream[:boundary]:
         plugin.receive(acquisition, context)
-    early = cartesian2D_recon.sensitivities(*plugin.buffers[0].select(slice=0))
+    data, mask = plugin.buffers[0].select(slice=0)
+    early = NLINV(spatial_ndim=2)(data[None], mask=mask)
     for acquisition in stream[boundary:]:
         plugin.receive(acquisition, context)
-    late = cartesian2D_recon.sensitivities(*plugin.buffers[0].select(slice=0))
+    data, mask = plugin.buffers[0].select(slice=0)
+    late = NLINV(spatial_ndim=2)(data[None], mask=mask)
 
-    np.testing.assert_allclose(early.numpy(), late.numpy(), atol=1e-5)
+    np.testing.assert_allclose(early, late, atol=1e-5)
 
 
 def test_driving_the_lifecycle_by_hand_matches_calling_the_plugin(kspace, context):

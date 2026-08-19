@@ -13,8 +13,7 @@ centre-out radius bands, rolled onto the target echo), ``radial`` (centre-out
 by radius, effective TE at the first echo), and ``radial_adaptive`` (by
 radius, but the bands assigned outward from the target echo, so the centre is
 late without a seam). The *incoherent* ordering, ``shuffling``, scatters views
-across echoes for a subspace reconstruction -- pair it with
-:mod:`pulserver.app.recon.subspace_basis_recon`. Every acquisition carries its echo
+across echoes for a subspace reconstruction. Every acquisition carries its echo
 index as ``ECO``, which is what any of them reconstruct from.
 
 **Sampling** is undersampled through the same builtins: the regular orderings

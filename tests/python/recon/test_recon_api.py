@@ -44,7 +44,6 @@ RECON_MODULES = (
     "plugin",
     "postprocessing",
     "preprocessing",
-    "reconstruction",
     "simulation",
     "weights",
 )
@@ -80,7 +79,7 @@ def test_the_flat_name_is_the_same_object_as_the_module_one():
     assert recon.pics is algorithms.pics
     assert recon.diffusion_table is metadata.diffusion_table
     assert recon.ReconPlugin is recon.plugin.ReconPlugin
-    assert recon.sensitivities is recon.calibration.sensitivities
+    assert recon.calibration_extent is recon.calibration.calibration_extent
 
 
 def test_the_transport_stays_private():
@@ -206,16 +205,16 @@ def test_pics_selects_fista_with_a_denoiser(monkeypatch):
         )
         == "reconstructed"
     )
-    from pulserver.recon.learned import ComplexAdapter
+    from pulserver.recon.learned import _ComplexAdapter
 
     assert calls["g_param"] == 0.05
     assert calls["stepsize"] == 0.2
     assert calls["max_iter"] == 9
-    # The denoiser is routed through the one ComplexAdapter so it can act on
+    # The denoiser is routed through the one complex adapter so it can act on
     # the native-complex image; the wrapped model is the one that was passed.
     tag, wrapped = calls["prior"]
     assert tag == "pnp"
-    assert isinstance(wrapped, ComplexAdapter)
+    assert isinstance(wrapped, _ComplexAdapter)
     assert wrapped.model is model
 
 
@@ -807,3 +806,21 @@ def test_the_app_page_documents_every_reconstruction():
         listed |= {line.strip() for line in block.splitlines() if line.strip()}
 
     assert listed == set(family.__all__)
+
+
+def test_the_toeplitz_wrapper_shares_the_base_operator_and_enables_its_kernel():
+    """The wrapper and the physics it accelerates alias one operator, so
+    enabling the kernel on either is visible through both."""
+    torch = pytest.importorskip("torch")
+
+    base = physics.Cartesian2D(
+        torch.ones(1, 1, 8, 8),
+        torch.ones(1, 2, 8, 8, dtype=torch.complex64) / 2**0.5,
+    )
+    wrapper = physics.Toeplitz(base, coil_batch_size=2)
+
+    assert wrapper.operator is base.operator
+    assert "toeplitz" in wrapper.modifiers
+    assert "toeplitz" in base.modifiers
+    assert wrapper.toeplitz_options["coil_batch_size"] == 2
+    assert wrapper.normal_mode == "exact-fft"

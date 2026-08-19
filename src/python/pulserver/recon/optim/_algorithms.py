@@ -125,38 +125,7 @@ def _initial_fista_iterates(
     return init, init
 
 
-def _polynomial_fista(
-    data: Any,
-    physics: Any,
-    denoiser: Any,
-    *,
-    regularization: float,
-    iterations: int,
-    stepsize: float,
-    degree: int,
-    init: Any | None,
-) -> Any:
-    rhs = physics.A_adjoint(data)
-    x, z = _initial_fista_iterates(init, data, physics, rhs)
-    preconditioner = PolynomialPreconditioner(
-        physics.A_adjoint_A,
-        degree=degree,
-        spectrum=(0.0, 1.0),
-        scale=stepsize,
-    )
-    for iteration in range(iterations):
-        gradient = physics.A_adjoint_A(z) - rhs
-        next_x = denoiser(
-            z - preconditioner(stepsize * gradient),
-            regularization,
-        )
-        momentum = (iteration + 2.0) / (iteration + 3.0)
-        z = next_x + momentum * (next_x - x)
-        x = next_x
-    return x
-
-
-def _host_fista(
+def _plain_fista(
     data: Any,
     physics: Any,
     denoiser: Any,
@@ -165,17 +134,25 @@ def _host_fista(
     iterations: int,
     stepsize: float,
     init: Any | None,
+    gradient_transform: Any | None = None,
+    host: bool = False,
 ) -> Any:
-    """FISTA with CPU-resident iterates and streamed operator/denoiser calls."""
+    """One FISTA loop for the fast paths: optionally preconditioned, optionally
+    with CPU-resident iterates so streamed operator and denoiser calls stage
+    their own device transfers."""
     rhs = physics.A_adjoint(data)
     x, z = _initial_fista_iterates(init, data, physics, rhs)
-    if hasattr(x, "device") and x.device.type != "cpu":
-        x = x.to("cpu")
-    if hasattr(z, "device") and z.device.type != "cpu":
-        z = z.to("cpu")
+    if host:
+        if hasattr(x, "device") and x.device.type != "cpu":
+            x = x.to("cpu")
+        if hasattr(z, "device") and z.device.type != "cpu":
+            z = z.to("cpu")
     for iteration in range(iterations):
         gradient = physics.A_adjoint_A(z) - rhs
-        next_x = denoiser(z - stepsize * gradient, regularization)
+        step = stepsize * gradient
+        if gradient_transform is not None:
+            step = gradient_transform(step)
+        next_x = denoiser(z - step, regularization)
         momentum = (iteration + 2.0) / (iteration + 3.0)
         z = next_x + momentum * (next_x - x)
         x = next_x
@@ -343,22 +320,27 @@ def _pics(
         raise ValueError("stepsize must be positive and finite")
 
     if polynomial_degree:
-        result = _polynomial_fista(
+        result = _plain_fista(
             data,
             linear,
             denoiser,
             regularization=regularization,
             iterations=iterations,
             stepsize=stepsize,
-            degree=polynomial_degree,
             init=init,
+            gradient_transform=PolynomialPreconditioner(
+                linear.A_adjoint_A,
+                degree=polynomial_degree,
+                spectrum=(0.0, 1.0),
+                scale=stepsize,
+            ),
         )
         if streaming is not None and streaming.result_device == "cuda":
             return result.to(streaming.torch_device, non_blocking=True)
         return result
 
     if streaming is not None:
-        result = _host_fista(
+        result = _plain_fista(
             data,
             linear,
             denoiser,
@@ -366,6 +348,7 @@ def _pics(
             iterations=iterations,
             stepsize=stepsize,
             init=init,
+            host=True,
         )
         if streaming.result_device == "cuda":
             return result.to(streaming.torch_device, non_blocking=True)
@@ -408,10 +391,10 @@ def pics(
     NumPy array are moved to Torch in the complex working dtype -- zero-copy
     when they already are complex64 on the host -- and the reconstruction is
     handed back as NumPy, so a pipeline never converts by hand. A DeepInverse
-    denoiser that works in two real channels is routed through the single
-    :class:`~pulserver.recon.learned.ComplexAdapter` so it can regularize the
-    complex image directly; Pulserver's own complex-aware denoisers pass
-    through untouched. See :func:`_pics` for the algorithm and its parameters.
+    denoiser that works in two real channels is adapted internally so it can
+    regularize the complex image directly; Pulserver's own complex-aware
+    denoisers pass through untouched. See :func:`_pics` for the algorithm and
+    its parameters.
     """
     denoiser = _complex_denoiser(denoiser)
     # Direct imports rather than the module's ``import_module`` so the boundary
@@ -436,18 +419,18 @@ def _complex_denoiser(denoiser: Any | None) -> Any | None:
     """Wrap a real-valued DeepInverse denoiser so it acts on complex images.
 
     A plain DeepInverse model expects two real channels, so it is wrapped in
-    the one :class:`~pulserver.recon.learned.ComplexAdapter` that packs complex
-    to real and back -- which reproduces the two-channel view these denoisers
-    always saw. A denoiser marked ``handles_complex`` is left alone, and a
-    sequence is passed through untouched so :func:`_pics` can reject it.
+    the one adapter that packs complex to real and back -- which reproduces
+    the two-channel view these denoisers always saw. A denoiser marked
+    ``handles_complex`` is left alone, and a sequence is passed through
+    untouched so :func:`_pics` can reject it.
     """
     if denoiser is None or getattr(denoiser, "handles_complex", False):
         return denoiser
     if isinstance(denoiser, Sequence):
         return denoiser
-    from ..learned import ComplexAdapter
+    from ..learned import _ComplexAdapter
 
-    return ComplexAdapter(denoiser)
+    return _ComplexAdapter(denoiser)
 
 
 # %% private module subroutines

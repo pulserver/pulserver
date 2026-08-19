@@ -6,17 +6,16 @@ __all__ = ["PLUGIN", "SimpleFftRecon"]
 
 import numpy as np
 
-from ...postprocessing import coil_combine
-import numpy.fft as fft
-
 from ...plugin import (
     AcquisitionBucket,
+    AcquisitionFlag,
     ReconContext,
     ReconPlugin,
     ReconResult,
-    AcquisitionFlag,
 )
-from .. import mrdhelper
+from ...postprocessing import center_crop
+from ..metadata import max_stored_value
+from . import _fft_combine_scaled
 
 
 class SimpleFftRecon(ReconPlugin):
@@ -46,8 +45,8 @@ class SimpleFftRecon(ReconPlugin):
             data.transpose(),
             attributes={
                 "ImageProcessingHistory": ["PULSERVER", "PYTHON", "FFT"],
-                "WindowCenter": str((_max_value(context.header) + 1) // 2),
-                "WindowWidth": str(_max_value(context.header) + 1),
+                "WindowCenter": str((max_stored_value(context.header) + 1) // 2),
+                "WindowWidth": str(max_stored_value(context.header) + 1),
             },
         )
 
@@ -59,33 +58,14 @@ PLUGIN = SimpleFftRecon()
 
 
 def _reconstruct(bucket: AcquisitionBucket, header) -> np.ndarray:
-    data = np.stack([acquisition.data for acquisition in bucket.data], axis=-1)
-    data = fft.fftshift(data, axes=(1, 2))
-    data = fft.ifft2(data, axes=(1, 2))
-    data = fft.ifftshift(data, axes=(1, 2))
-    data = coil_combine(data, coil_axis=0)
-
-    maximum = float(data.max(initial=0.0))
-    if maximum > 0.0:
-        data *= _max_value(header) / maximum
-    data = np.around(data).astype(np.int16)
+    stacked = np.stack([acquisition.data for acquisition in bucket.data], axis=-1)
+    data = _fft_combine_scaled(stacked, header)
 
     encoding = header.encoding[0]
-    target_x = int(encoding.reconSpace.matrixSize.x or data.shape[0])
-    target_y = int(encoding.reconSpace.matrixSize.y or data.shape[1])
-    data = _center_crop(data, target_x, axis=0)
-    return _center_crop(data, target_y, axis=1)
-
-
-def _max_value(header) -> int:
-    bits = mrdhelper.get_userParameterLong_value(header, "BitsStored") or 12
-    return 2 ** int(bits) - 1
-
-
-def _center_crop(data: np.ndarray, size: int, *, axis: int) -> np.ndarray:
-    if size >= data.shape[axis]:
-        return data
-    start = (data.shape[axis] - size) // 2
-    selection = [slice(None)] * data.ndim
-    selection[axis] = slice(start, start + size)
-    return data[tuple(selection)]
+    target_x = min(
+        int(encoding.reconSpace.matrixSize.x or data.shape[0]), data.shape[0]
+    )
+    target_y = min(
+        int(encoding.reconSpace.matrixSize.y or data.shape[1]), data.shape[1]
+    )
+    return center_crop(data, (target_x, target_y))

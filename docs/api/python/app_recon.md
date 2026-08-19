@@ -50,9 +50,9 @@ not a variant.
 
 ## Non-Cartesian
 
-Density compensation, adjoint-derived sensitivities, and a CG-SENSE solve
-against the trajectory the acquisitions carry -- which `pulserver` buffers
-beside the data.
+Density compensation, NLINV sensitivities calibrated from the samples inside
+the calibration radius, and a CG-SENSE solve against the trajectory the
+acquisitions carry -- which `pulserver` buffers beside the data.
 
 ```{eval-rst}
 .. autosummary::
@@ -81,19 +81,6 @@ slice's navigator triplet.
    epi2D_recon
    epi3D_recon
 ```
-
-## Utilities
-
-```{eval-rst}
-.. autosummary::
-   :toctree: ../generated/app_recon
-
-   subspace_basis_recon
-```
-
-`examples/recon/mrd_epi_preprocessing.py` sits beside these as a worked
-adapter for handing the EPI groups to an outside reconstruction backend. It is
-not part of the zoo and is not importable from `pulserver.app`.
 
 ## See also
 

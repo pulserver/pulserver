@@ -4,12 +4,12 @@ Radial, spiral, PROPELLER: what a reconstruction needs is the trajectory each
 acquisition carries, not which shape the sequence drew with it, so all of them
 come back through this.
 
-Model-based reconstruction, per slice: Pipe--Menon density
-compensation, a coil-wise adjoint NUFFT for the sensitivity estimate --
-low-pass filtered and normalised to unit root-sum-of-squares, the classic
-adaptive-combine approximation -- and a CG-SENSE solve against the
-:class:`pulserver.recon.physics.NonCartesian2D` operator built from the
-same trajectory.
+Model-based reconstruction, per slice: Pipe--Menon density compensation, NLINV
+sensitivities calibrated from the samples inside the calibration radius --
+selected before any gridding -- and a CG-SENSE solve against the
+:class:`pulserver.recon.physics.NonCartesian2D` operator built from the same
+trajectory. A fully sampled slice finishes with the density-compensated
+adjoint instead, coil images root-sum-of-squares combined.
 
 The trajectory arrives per acquisition, as MRD carries it, scaled to
 MRI-NUFFT's ``[-0.5, 0.5)`` units -- what the LiveSDK's enrichment writes.
@@ -25,7 +25,15 @@ from typing import Any
 import numpy as np
 
 from pulserver import AcquisitionBucket, ReconContext, ReconPlugin, ReconResult
-from pulserver.recon import AcquisitionFlag, as_numpy, recon_shape, reconstruct_plane
+from pulserver.recon import (
+    NLINV,
+    AcquisitionFlag,
+    NonCartesian2D,
+    as_numpy,
+    pics,
+    pipe_menon_dcf,
+    recon_shape,
+)
 
 
 class NonCartesian2DRecon(ReconPlugin):
@@ -43,6 +51,8 @@ class NonCartesian2DRecon(ReconPlugin):
         Tikhonov weight of the CG-SENSE solve.
     iterations
         Maximum CG iterations.
+    calibration_width
+        Width of the centred square NLINV solves the sensitivities over.
     device
         Torch device the reconstruction runs on. ``None`` is the CPU.
     """
@@ -53,6 +63,7 @@ class NonCartesian2DRecon(ReconPlugin):
         mode: str = "auto",
         regularization: float = 1e-3,
         iterations: int = 30,
+        calibration_width: int = 24,
         device: Any = None,
     ) -> None:
         super().__init__(
@@ -65,6 +76,7 @@ class NonCartesian2DRecon(ReconPlugin):
         self.mode = mode
         self.regularization = float(regularization)
         self.iterations = int(iterations)
+        self.calibration_width = int(calibration_width)
         self.device = device
 
     def startup(self, context: ReconContext) -> None:
@@ -93,17 +105,46 @@ class NonCartesian2DRecon(ReconPlugin):
             views, _ = buffer.select(slice=index)
             data = views.reshape(views.shape[0], -1)
             trajectory = (
-                buffer.points(slice=index)[:2].transpose(1, 2, 0).reshape(-1, 2)
+                buffer.points(slice=index)[:2]
+                .transpose(1, 2, 0)
+                .reshape(-1, 2)
+                .astype(np.float32)
             )
-            image = reconstruct_plane(
-                data,
-                trajectory,
-                self.image_shape,
-                direct=direct,
-                regularization=self.regularization,
-                iterations=self.iterations,
-                device=self.device,
-            )
+            density = pipe_menon_dcf(trajectory, self.image_shape)
+            n_coils = int(data.shape[0])
+
+            if direct:
+                # The density-compensated adjoint is an inverse only at
+                # Nyquist, and a coil-wise one at that: combine by
+                # root-sum-of-squares.
+                coil_wise = NonCartesian2D(
+                    trajectory, self.image_shape, density=density, n_coils=n_coils
+                )
+                coils = coil_wise.A_adjoint(data[None])[0]
+                image = np.sqrt(np.sum(np.abs(coils) ** 2, axis=0))
+            else:
+                maps = NLINV(spatial_ndim=2, calibration_width=self.calibration_width)(
+                    data,
+                    trajectory=trajectory,
+                    image_shape=self.image_shape,
+                    density=density,
+                    device=self.device,
+                )
+                unaliasing = NonCartesian2D(
+                    trajectory,
+                    self.image_shape,
+                    coil_maps=maps,
+                    density=density,
+                    n_coils=n_coils,
+                )
+                # The SENSE solve keeps a singleton coil axis, so index past
+                # both batch and channel to reach the plane.
+                image = pics(
+                    data[None],
+                    unaliasing,
+                    regularization=self.regularization,
+                    iterations=self.iterations,
+                )[0, 0]
             results.append(
                 ReconResult(
                     np.abs(as_numpy(image)).transpose(),

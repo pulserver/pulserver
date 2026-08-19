@@ -20,6 +20,10 @@ Names resolve on first use, so importing the module needs neither an MRD
 server environment nor any optional numerical backend; only what a plugin
 touches pulls its dependencies in.
 
+The primitives are backend-polymorphic: NumPy in, NumPy out; Torch in, Torch
+out, on the device the tensors arrived on. A plugin composes them without
+converting by hand.
+
 ```{eval-rst}
 .. currentmodule:: pulserver.recon
 ```
@@ -106,6 +110,27 @@ coil count, and the corrections a particular readout demands.
    pipe_menon_dcf
 ```
 
+### Partial Fourier
+
+Recovering the k-space edge a partial acquisition never took, from the
+conjugate symmetry an image with slowly varying phase carries.
+
+```{eval-rst}
+.. autosummary::
+   :toctree: ../generated/recon
+
+   fill_partial_echo
+```
+
+```{eval-rst}
+.. autosummary::
+   :toctree: ../generated/recon
+   :template: autosummary/class.rst
+
+   POCS
+   Homodyne
+```
+
 ### EPI
 
 An EPI stream is several roles in one, and its reversed lines need the
@@ -143,8 +168,6 @@ encoding.
 .. autosummary::
    :toctree: ../generated/recon
 
-   sensitivities
-   smooth_sensitivities
    calibration_extent
 ```
 
@@ -190,33 +213,6 @@ measurement. Every solver takes one of these.
    :toctree: ../generated/recon
 
    available_nufft_backends
-   measurement_to_channels
-   measurement_to_trailing
-```
-
-## Reconstruction
-
-The recipes that compose a physics operator with a solver — the part every
-Cartesian reconstruction repeats. Two and three dimensions are the same
-recipe, read off the sampling mask.
-
-```{eval-rst}
-.. autosummary::
-   :toctree: ../generated/recon
-
-   coil_images
-   sense
-   fill_partial_echo
-   reconstruct_plane
-```
-
-```{eval-rst}
-.. autosummary::
-   :toctree: ../generated/recon
-   :template: autosummary/class.rst
-
-   POCS
-   Homodyne
 ```
 
 ## Solvers
@@ -264,8 +260,9 @@ Priors the iterative solvers minimize against.
 
 ## Learned reconstruction
 
-Unrolled networks, the adapters that let a real-valued network see complex
-data, and the stores their weights come from.
+Unrolled networks and the stores their weights come from. A real-valued
+network sees complex data through adapters applied internally; nothing has to
+be packed or unpacked by the caller.
 
 ```{eval-rst}
 .. autosummary::
@@ -278,19 +275,7 @@ data, and the stores their weights come from.
    UnrollState
    GradientDataConsistency
    ScaledAdjoint
-   ComplexAdapter
-   MoDL
-   VarNet
-   RAM
    ContextAgnosticDenoiser
-```
-
-```{eval-rst}
-.. autosummary::
-   :toctree: ../generated/recon
-
-   as_complex_channels
-   as_real_channels
 ```
 
 ### Weights
@@ -321,51 +306,21 @@ data, and the stores their weights come from.
    :toctree: ../generated/recon
    :template: autosummary/class.rst
 
-   ImageDataset
-   ImageFolder
-   TensorDataset
-   PatchDataset
-   RandomPatchSampler
-   HDF5Dataset
    TorchIODataset
-   MRISliceTransform
-   FastMRISliceDataset
-   SimpleFastMRISliceDataset
-   CMRxReconSliceDataset
-   SKMTEASliceDataset
-   LidcIdriSliceDataset
    IXI
    IXITiny
 ```
 
-```{eval-rst}
-.. autosummary::
-   :toctree: ../generated/recon
+## Sequence description
 
-   check_dataset
-   download_archive
-   generate_dataset
-```
-
-## Simulation
-
-Bloch and EPG signal models, and the sequence description a scan carries so a
-simulation can be driven from the sequence itself.
+The description of itself a scan carries, decoded from its MRD waveforms --
+the same object the design side writes.
 
 ```{eval-rst}
 .. autosummary::
    :toctree: ../generated/recon
    :template: autosummary/class.rst
 
-   SPGR
-   BSSFP
-   SSFPFID
-   SSFPEcho
-   FSE
-   EpgInterpreter
-   TissueProperties
-   SimulationResult
-   SubspaceBasis
    SequenceDescription
    SequenceDescriptionCollection
    SequenceEvent
@@ -382,8 +337,6 @@ simulation can be driven from the sequence itself.
 .. autosummary::
    :toctree: ../generated/recon
 
-   make_interpreter
-   simulate_subspace
    decode_sequence_description
    decompress_shape
 ```

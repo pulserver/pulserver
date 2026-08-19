@@ -9,9 +9,16 @@ from typing import Any
 
 import torch
 
-import deepinv
 
-from ._base import _AlgorithmSchedule, _IterativeOptimizer
+from ._base import (
+    _AlgorithmSchedule,
+    _IterativeOptimizer,
+    _data_fidelity_schedule,
+    _prior_schedule,
+    _validate_algorithm_values,
+    _validate_prior_width,
+    _validate_schedule_length,
+)
 from .cg import ConjugateGradient
 from .prior import StackedPrior
 from .state import OptimState
@@ -231,54 +238,3 @@ class ADMM(_IterativeOptimizer):
             if len(self.data_fidelity) > 1
             else self.data_fidelity[0]
         )
-
-
-# %% private module subroutines
-
-
-def _data_fidelity_schedule(data_fidelity: Any | list[Any] | None) -> list[Any]:
-    if data_fidelity is None:
-        return [deepinv.optim.L2()]
-    selected = data_fidelity if isinstance(data_fidelity, list) else [data_fidelity]
-    if not selected:
-        raise ValueError("data_fidelity schedule cannot be empty")
-    if not all(isinstance(item, torch.nn.Module) for item in selected):
-        raise TypeError("data_fidelity entries must be torch.nn.Module instances")
-    return list(selected)
-
-
-def _prior_schedule(prior: Any | list[Any] | None, g_param: Any) -> list[StackedPrior]:
-    if prior is None:
-        return [StackedPrior([])]
-    selected = prior if isinstance(prior, list) else [prior]
-    if not selected:
-        raise ValueError("prior schedule cannot be empty")
-    return [
-        item
-        if isinstance(item, StackedPrior)
-        else StackedPrior([item], g_params=[g_param])
-        for item in selected
-    ]
-
-
-def _validate_schedule_length(
-    schedule: Sequence[Any],
-    max_iter: int,
-    name: str,
-) -> None:
-    if len(schedule) not in {1, max_iter}:
-        raise ValueError(f"{name} must be singular or contain max_iter entries")
-
-
-def _validate_prior_width(schedule: Sequence[StackedPrior]) -> None:
-    widths = {len(prior) for prior in schedule}
-    if len(widths) > 1:
-        raise ValueError("iteration-wise StackedPrior entries must have equal lengths")
-
-
-def _validate_algorithm_values(values: dict[str, Any]) -> None:
-    if bool(torch.any(torch.as_tensor(values["stepsize"]) <= 0.0)):
-        raise ValueError("stepsize must be positive")
-    for name in ("lambda", "beta"):
-        if bool(torch.any(torch.as_tensor(values[name]) < 0.0)):
-            raise ValueError(f"{name} must be non-negative")

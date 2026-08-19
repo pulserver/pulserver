@@ -4,17 +4,17 @@ from __future__ import annotations
 
 import pytest
 import torch
-from deepinv.models import ArtifactRemoval, DnCNN, MoDL, RAM, UNet, VarNet
+from deepinv.models import ArtifactRemoval, DnCNN, MoDL, UNet, VarNet
 
 from pulserver.recon import models
 from pulserver.recon.learned import (
-    ComplexAdapter,
     GradientDataConsistency,
     UnrolledReconstructor,
-    as_complex_channels,
-    as_real_channels,
+    _as_complex_channels,
+    _as_real_channels,
+    _ComplexAdapter,
 )
-from pulserver.recon.physics import Cartesian2D, measurement_to_channels
+from pulserver.recon.physics import Cartesian2D, _measurement_to_channels
 
 
 class _Scale(torch.nn.Module):
@@ -60,11 +60,9 @@ class _FakeBatchStreaming:
         return execute
 
 
-def test_models_expose_a_small_native_selection_and_mri_adapter():
-    assert set(models.__all__) == {"RAM", "MoDL", "VarNet", "ContextAgnosticDenoiser"}
-    assert models.RAM is RAM
-    assert models.MoDL is MoDL
-    assert models.VarNet is VarNet
+def test_the_models_module_exposes_only_original_code():
+    """Native DeepInverse models are imported from deepinv, never re-exported."""
+    assert models.__all__ == ["ContextAgnosticDenoiser"]
     assert not hasattr(models, "UNet")
     assert not hasattr(models, "DnCNN")
 
@@ -184,8 +182,8 @@ def test_complex_channel_conversion_is_invertible_and_differentiable():
         requires_grad=True,
     )
 
-    packed = as_real_channels(value)
-    restored = as_complex_channels(packed)
+    packed = _as_real_channels(value)
+    restored = _as_complex_channels(packed)
 
     assert packed.shape == (1, 4, 1, 1)
     torch.testing.assert_close(
@@ -198,7 +196,7 @@ def test_complex_channel_conversion_is_invertible_and_differentiable():
 
 
 def test_complex_adapter_preserves_native_complex_layout():
-    model = ComplexAdapter(_Scale(2.0))
+    model = _ComplexAdapter(_Scale(2.0))
     value = torch.randn(2, 5, 4, 4, 4, dtype=torch.complex64)
 
     result = model(value)
@@ -225,7 +223,7 @@ def test_native_reconstructors_accept_pulserver_cartesian_physics(architecture):
         model = VarNet(denoiser, num_cascades=2, mode="varnet")
     shape = (8, 8)
     # DeepInverse's own reconstructors work in the two-channel real layout, so
-    # this opts the physics back into it; the package default is now complex.
+    # this opts the physics back into it from the native-complex default.
     physics = Cartesian2D(
         torch.ones(1, 1, *shape),
         torch.ones(1, 1, *shape, dtype=torch.complex64),
@@ -236,7 +234,7 @@ def test_native_reconstructors_accept_pulserver_cartesian_physics(architecture):
     if architecture == "varnet":
         # VarNet is DeepInverse's own class and refines the measurement, so it
         # reads the channel-first layout rather than Pulserver's trailing one.
-        measurement = measurement_to_channels(measurement)
+        measurement = _measurement_to_channels(measurement)
         physics = physics.operator.operator
 
     result = model(measurement, physics)

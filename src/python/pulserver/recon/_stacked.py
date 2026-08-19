@@ -10,6 +10,11 @@ from typing import Any
 import deepinv
 import torch
 
+from ._views import image_as_cpx as _image_as_cpx
+from ._views import image_as_real as _image_as_real
+from ._views import kspace_as_cpx as _kspace_as_cpx
+from ._views import kspace_as_real as _kspace_as_real
+
 
 class _StackedNUFFTLinearPhysics(deepinv.physics.LinearPhysics):
     """Compose a Cartesian stack transform with one or more 2D NUFFTs."""
@@ -246,28 +251,3 @@ class _StackedNUFFTLinearPhysics(deepinv.physics.LinearPhysics):
             ),
             dim=-1,
         ) / sqrt(2.0)
-
-
-# %% private module subroutines
-
-
-def _image_as_real(value: Any) -> Any:
-    batch, channels, *spatial = value.shape
-    value = torch.view_as_real(value).movedim(-1, 2)
-    return value.reshape(batch, channels * 2, *spatial)
-
-
-def _image_as_cpx(value: Any) -> Any:
-    batch, channels, *spatial = value.shape
-    if channels % 2:
-        raise ValueError("real-view images require pairs of complex channels")
-    value = value.reshape(batch, channels // 2, 2, *spatial).movedim(2, -1)
-    return torch.view_as_complex(value.contiguous())
-
-
-def _kspace_as_real(value: Any) -> Any:
-    return torch.view_as_real(value)
-
-
-def _kspace_as_cpx(value: Any) -> Any:
-    return torch.view_as_complex(value.contiguous())

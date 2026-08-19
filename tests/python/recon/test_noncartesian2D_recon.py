@@ -68,23 +68,6 @@ def sample(phantom, coil_maps, trajectory):
     return data.reshape(COILS, trajectory.shape[0], trajectory.shape[1])
 
 
-def stream(kspace, trajectory):
-    """The acquisitions as array-backed objects the plugin accepts."""
-    acquisitions = []
-    for view in range(trajectory.shape[0]):
-        acquisitions.append(
-            SimpleNamespace(
-                data=np.ascontiguousarray(kspace[:, view]),
-                traj=trajectory[view],
-                # LIN carries the spoke: a radial plane has no phase-encode
-                # line, so the counter a reconstruction grids by is the view.
-                idx=SimpleNamespace(slice=0, kspace_encode_step_1=view),
-                flags=0,
-            )
-        )
-    return acquisitions
-
-
 def header(n_spokes=NYQUIST):
     """What the scanner sends: spokes counted in ``kspace_encoding_step_1``,
     and the trajectory type that says the count is views and not a grid."""
@@ -114,22 +97,31 @@ def relative_error(image, reference):
 
 
 def reconstruct(kspace, trajectory, **kwargs):
-    plugin = noncartesian2D_recon.NonCartesian2DRecon(**kwargs).spawn()
-    plugin.startup(ReconContext.offline(header(trajectory.shape[0])))
-    for acquisition in stream(kspace, trajectory):
-        plugin.receive(acquisition, None)
-    nyq = int(np.ceil(np.pi / 2 * max(plugin.image_shape)))
-    direct = plugin.mode == "direct" or (
-        plugin.mode == "auto" and trajectory.shape[0] >= nyq
+    """Drive the plugin over the streamed views and return the magnitude."""
+    from pulserver.recon._mrd.application import _make_bucket
+
+    import ismrmrd
+
+    acquisitions = []
+    for view in range(trajectory.shape[0]):
+        acquisition = ismrmrd.Acquisition()
+        acquisition.resize(trajectory.shape[1], COILS, trajectory_dimensions=2)
+        acquisition.data[:] = kspace[:, view]
+        acquisition.traj[:] = trajectory[view]
+        acquisition.idx.slice = 0
+        # LIN carries the spoke: a radial plane has no phase-encode line, so
+        # the counter a reconstruction grids by is the view.
+        acquisition.idx.kspace_encode_step_1 = view
+        if view == trajectory.shape[0] - 1:
+            acquisition.setFlag(ismrmrd.ACQ_LAST_IN_MEASUREMENT)
+        acquisitions.append(acquisition)
+
+    plugin = noncartesian2D_recon.NonCartesian2DRecon(**kwargs)
+    results = plugin(
+        _make_bucket(acquisitions, []),
+        ReconContext.offline(header(trajectory.shape[0])),
     )
-    image = noncartesian2D_recon.reconstruct_plane(
-        np.concatenate([kspace[:, view] for view in range(trajectory.shape[0])], -1),
-        trajectory.reshape(-1, 2),
-        plugin.image_shape,
-        direct=direct,
-        iterations=kwargs.get("iterations", 20),
-    )
-    return np.abs(np.asarray(image.cpu() if hasattr(image, "cpu") else image))
+    return np.abs(np.asarray(results[0].data.T))
 
 
 def test_a_fully_sampled_scan_is_the_phantom_through_the_direct_branch(
@@ -148,19 +140,14 @@ def test_an_undersampled_scan_goes_through_the_solve_and_beats_the_adjoint(
 ):
     trajectory = spoke_trajectory(NYQUIST // 3)
     kspace = sample(phantom, coil_maps, trajectory)
-    flat = np.concatenate(
-        [kspace[:, view] for view in range(trajectory.shape[0])], axis=-1
-    )
-    points = trajectory.reshape(-1, 2)
 
-    solved = noncartesian2D_recon.reconstruct_plane(
-        flat, points, (N, N), direct=False, iterations=25
+    # At toy size the sixteen spokes only sample a calibration radius of
+    # sixteen densely enough for NLINV to reproduce its own data.
+    solved = reconstruct(
+        kspace, trajectory, mode="pics", iterations=25, calibration_width=16
     )
-    adjoint = noncartesian2D_recon.reconstruct_plane(flat, points, (N, N), direct=True)
-    to_mag = lambda x: np.abs(np.asarray(x.cpu() if hasattr(x, "cpu") else x))
-    assert relative_error(to_mag(solved), phantom) < relative_error(
-        to_mag(adjoint), phantom
-    )
+    adjoint = reconstruct(kspace, trajectory, mode="direct")
+    assert relative_error(solved, phantom) < relative_error(adjoint, phantom)
 
 
 def test_the_plugin_reconstructs_a_streamed_measurement(phantom, coil_maps):
