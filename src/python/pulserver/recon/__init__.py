@@ -118,7 +118,7 @@ _MEMBERS = {
     "decompress_shape": "simulation",
     "default_model_paths": "weights",
     "diffusion_table": "_mrd.metadata",
-    "epi_ramp_interpolate": "preprocessing",
+    "epi_ramp_operator": "preprocessing",
     "epi_ramp_positions": "preprocessing",
     "estimate_epi_phase": "preprocessing",
     "fftc": "preprocessing",
@@ -238,7 +238,7 @@ if TYPE_CHECKING:
     from .preprocessing import POCS as POCS
     from .preprocessing import coil_compress as coil_compress
     from .preprocessing import correct_lines as correct_lines
-    from .preprocessing import epi_ramp_interpolate as epi_ramp_interpolate
+    from .preprocessing import epi_ramp_operator as epi_ramp_operator
     from .preprocessing import epi_ramp_positions as epi_ramp_positions
     from .preprocessing import estimate_epi_phase as estimate_epi_phase
     from .preprocessing import fftc as fftc

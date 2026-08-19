@@ -157,8 +157,9 @@ up what an eddy current leaves beyond a ramp.
 A train worth playing samples across its read ramps rather than waiting for the
 plateau, so k does not advance at a constant rate along a readout and the
 samples are not on the grid. `epi_ramp_positions` says where each one actually
-landed, from the lobe's timing, and `epi_ramp_interpolate` resamples onto the
-grid it belongs on.
+landed, from the lobe's timing, for a stream whose acquisitions carry no
+trajectory to say it directly; `epi_ramp_operator` is the change of basis onto
+the grid, which is exact while the samples outnumber the pixels they determine.
 
 ```{eval-rst}
 .. autosummary::
@@ -167,7 +168,7 @@ grid it belongs on.
    estimate_epi_phase
    correct_lines
    epi_ramp_positions
-   epi_ramp_interpolate
+   epi_ramp_operator
 ```
 
 ## Calibration

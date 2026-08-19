@@ -28,10 +28,17 @@ at the virtual channel count and never holds the full array.
 The readout is ramp-sampled -- an EPI train that waits for the plateau throws
 away the time its ramps take -- so k does not advance at a constant rate across
 a readout and the samples are not on the grid. ``receive`` resamples them onto
-it, from the lobe timing the header declares (``rampUpTime``, ``flatTopTime``,
-``rampDownTime``, ``acqDelayTime``, microseconds) and the dwell each
-acquisition carries. A header that declares none is read as a plateau-only
-readout, which is already uniform.
+it, exactly: a readout is the transform of an object of known width, so where
+its samples fell is a change of basis away from where they belong.
+
+Where they fell is what the acquisition's trajectory says, which is what a
+client attaches once it notices the gradient is still moving under the ADC --
+normalised here onto the readout's own extent, so the units it was written in
+do not matter, which holds for a readout that sweeps the prescribed width.
+Failing that, the lobe timing the header declares (``rampUpTime``,
+``flatTopTime``, ``rampDownTime``, ``acqDelayTime``, microseconds) says the
+same thing. With neither, the readout is taken to be uniform already, which is
+what a train that waits for its plateau is.
 """
 
 from __future__ import annotations
@@ -50,7 +57,7 @@ from pulserver.recon import (
     coil_compress,
     coil_maps_from_reference,
     correct_lines,
-    epi_ramp_interpolate,
+    epi_ramp_operator,
     epi_ramp_positions,
     estimate_epi_phase,
     has_acquisition_flag,
@@ -117,7 +124,7 @@ class Epi3DRecon(ReconPlugin):
         self.navigator: list[Any] = []
         self.noise: Any = None
         self.phase: Any = None
-        self.ramp: Any = None
+        self.regrid: Any = None
         timing = [user_parameter(context.header, key) for key in _LOBE]
         self.lobe = (
             None
@@ -146,17 +153,34 @@ class Epi3DRecon(ReconPlugin):
             return None
         if self.noise is not None:
             line = noise_prewhiten(line, self.noise, coil_axis=0)
-        if self.lobe is not None:
-            # Where k actually was when each sample was taken, then onto the
-            # grid. Every readout of the train shares one lobe, so the
-            # positions are computed once and reused.
-            if self.ramp is None or self.ramp[0].size != line.shape[-1]:
-                self.ramp = epi_ramp_positions(
-                    line.shape[-1],
-                    float(acquisition.sample_time_us) * 1e-6,
-                    **self.lobe,
+        # Where the samples fell: the trajectory the scanner attached is the
+        # direct answer, and the read lobe's timing derives the same thing when
+        # it did not. With neither, the readout is already on the grid.
+        trajectory = getattr(acquisition, "traj", None)
+        samples = line.shape[-1]
+        if trajectory is not None and np.size(trajectory) >= samples:
+            taken = np.asarray(trajectory).reshape(samples, -1)[:, 0]
+            # Onto the readout's own extent, whatever units it was written in:
+            # the resampling is against a pixel grid, so what matters is that a
+            # full sweep spans one k width.
+            taken = taken / (2.0 * np.abs(taken).max())
+        elif self.lobe is not None:
+            taken = epi_ramp_positions(
+                samples, float(acquisition.sample_time_us) * 1e-6, **self.lobe
+            )[0]
+        else:
+            taken = None
+
+        if taken is not None:
+            # One lobe is played for every readout of the train, so the change
+            # of basis onto the grid is built once and applied to each.
+            if self.regrid is None or self.regrid.shape[1] != taken.size:
+                self.regrid = epi_ramp_operator(
+                    taken,
+                    np.linspace(taken[0], taken[-1], taken.size),
+                    self.buffers[0].image_shape[-1],
                 )
-            line = epi_ramp_interpolate(line, *self.ramp)
+            line = line @ self.regrid.T
 
         backwards = has_acquisition_flag(acquisition, AcquisitionFlag.IS_REVERSE)
         if has_acquisition_flag(acquisition, AcquisitionFlag.IS_PHASECORR_DATA):

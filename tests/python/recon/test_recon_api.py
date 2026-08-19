@@ -20,7 +20,6 @@ from pulserver.recon._mrd import metadata
 from pulserver.recon.preprocessing import (
     Homodyne,
     POCS,
-    epi_ramp_interpolate,
     noise_prewhiten,
     remove_readout_oversampling,
 )
@@ -595,14 +594,6 @@ def test_streamed_noncartesian_factory_only_builds_first_dynamic_frame(monkeypat
     np.testing.assert_array_equal(calls[0]["density"], density_weights[0])
     assert result.trajectory is trajectory
     assert result.streaming_policy is policy
-
-
-def test_epi_ramp_interpolation_handles_complex_batches():
-    source = np.array([-1.0, 0.0, 1.0])
-    target = np.array([-0.5, 0.5])
-    data = np.array([[0.0 + 0.0j, 1.0 + 2.0j, 2.0 + 4.0j]])
-    result = epi_ramp_interpolate(data, source, target)
-    np.testing.assert_allclose(result, [[0.5 + 1.0j, 1.5 + 3.0j]])
 
 
 def test_readout_oversampling_crop_keeps_the_middle_of_the_image():
