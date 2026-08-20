@@ -376,7 +376,7 @@ extern "C"
      * @brief Return decompressed RF magnitude waveform (multi-channel).
      *
      * Returns an array of num_channels pointers, each pointing to
-     * num_samples floats.  The waveform is normalised (peak \u2248 1.0).
+     * num_samples floats.  The waveform is normalised to a peak of about 1.0.
      * Use pulseg_get_rf_initial_amplitude_hz() and
      * pulseg_get_rf_max_amplitude_hz() for the physical scale.
      * Caller must free each result[ch] with PULSEG_FREE, then
@@ -465,7 +465,7 @@ extern "C"
     /**
      * @brief Return decompressed gradient amplitude waveforms (normalised).
      *
-     * Waveforms are normalised (peak \u2248 1.0).  Use
+     * Waveforms are normalised to a peak of about 1.0.  Use
      * pulseg_get_grad_initial_amplitude_hz_per_m() and
      * pulseg_get_grad_max_amplitude_hz_per_m() for the physical scale.
      * For multi-shot gradients, returns one waveform per shot.

@@ -102,7 +102,7 @@ class Sequence(AnalysisMixin, SafetyViewsMixin, SoftDelayMixin):
     >>> seq = pp.Sequence(system=system)
     >>> gx = pp.make_trapezoid(channel="x", area=1000, system=system)
     >>> index = seq.add_block(gx)
-    >>> seq.remove_duplicates(in_place=True)
+    >>> deduplicated = seq.remove_duplicates(in_place=True)
     >>> seq.write("gradient.seq")  # doctest: +SKIP
 
     Notes
@@ -1815,10 +1815,10 @@ class Sequence(AnalysisMixin, SafetyViewsMixin, SoftDelayMixin):
         first seen by an ``INC`` starts from zero, and that a label evolution
         reports ``0`` for blocks before the label was first touched.
 
-        The one place this can differ from upstream is a block that both
-        ``SET``s and ``INC``s the *same* counter: the operations are applied in
-        the order the block plays them, read off the extension chain, rather
-        than sets-then-increments.
+        The one place this can differ from upstream is a block carrying both
+        a ``SET`` and an ``INC`` of the *same* counter: the operations are
+        applied in the order the block plays them, read off the extension
+        chain, rather than sets-then-increments.
         """
         if evolution not in ("none", "blocks", "adc", "label"):
             raise ValueError(

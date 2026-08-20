@@ -214,7 +214,8 @@ def test_the_matrix_comes_from_the_header_not_from_the_last_line(kspace, context
 
 
 def test_without_a_header_the_buffer_cannot_be_sized(kspace):
-    with pytest.raises(ValueError, match="no encoding 0"):
+    """Nothing said where the lines go, so there is no buffer to reconstruct."""
+    with pytest.raises(KeyError, match="no encoding space 0"):
         cartesian2D_recon.PLUGIN(bucket(kspace, list(range(N))), ReconContext.offline())
 
 
@@ -242,18 +243,17 @@ def test_the_sampling_matches_what_the_sequence_would_have_played():
 
 
 def test_the_calibration_boundary_produces_maps_and_no_image(kspace, context):
-    """The ACS block closes a segment without closing the slice."""
+    """The ACS block closes a segment without closing the slice, so ``receive``
+    routes the calibration branch and nothing is emitted."""
     lines, calibration = _sampling()
     stream = acquisitions(kspace, lines, calibration=calibration)
     boundary = len(calibration)
 
     plugin = cartesian2D_recon.PLUGIN.spawn()
     plugin.startup(context)
-    for acquisition in stream[:boundary]:
-        plugin.receive(acquisition, context)
-    from pulserver.recon._mrd.application import _make_bucket
+    emitted = [plugin.receive(item, context) for item in stream[:boundary]]
 
-    assert plugin.recon(_make_bucket(stream[:boundary], []), context) is None
+    assert all(output is None for output in emitted)
     assert 0 in plugin.coil_maps
     assert boundary < len(stream)
 
@@ -264,32 +264,31 @@ def test_calibrating_early_and_late_give_the_same_maps(kspace, context):
     stream = acquisitions(kspace, lines, calibration=calibration)
     boundary = len(calibration)
 
+    from pulserver.recon import NLINV
+
     plugin = cartesian2D_recon.PLUGIN.spawn()
     plugin.startup(context)
     for acquisition in stream[:boundary]:
         plugin.receive(acquisition, context)
-    early = cartesian2D_recon.sensitivities(*plugin.buffers[0].select(slice=0))
+    data, mask = plugin.buffers[0].select(slice=0)
+    early = NLINV(spatial_ndim=2)(data[None], mask=mask)
     for acquisition in stream[boundary:]:
         plugin.receive(acquisition, context)
-    late = cartesian2D_recon.sensitivities(*plugin.buffers[0].select(slice=0))
+    data, mask = plugin.buffers[0].select(slice=0)
+    late = NLINV(spatial_ndim=2)(data[None], mask=mask)
 
-    np.testing.assert_allclose(early.numpy(), late.numpy(), atol=1e-5)
+    np.testing.assert_allclose(early, late, atol=1e-5)
 
 
 def test_driving_the_lifecycle_by_hand_matches_calling_the_plugin(kspace, context):
     """Calling the plugin replays the bucket through the very same hooks."""
     lines, calibration = _sampling()
     stream = acquisitions(kspace, lines, calibration=calibration)
-    from pulserver.recon._mrd.application import _make_bucket
 
     plugin = cartesian2D_recon.PLUGIN.spawn()
     plugin.startup(context)
-    for acquisition in stream[: len(calibration)]:
-        plugin.receive(acquisition, context)
-    plugin.recon(_make_bucket(stream[: len(calibration)], []), context)
-    for acquisition in stream[len(calibration) :]:
-        plugin.receive(acquisition, context)
-    streamed = plugin.recon(_make_bucket(stream, []), context)[0].data
+    outputs = [plugin.receive(item, context) for item in stream]
+    streamed = [output for output in outputs if output is not None][-1][0].data
 
     called = cartesian2D_recon.PLUGIN(
         bucket(kspace, lines, calibration=calibration), context
@@ -354,3 +353,98 @@ def _zero_filled(kspace, lines, n_samples=N):
     grid = np.zeros_like(kspace)
     grid[:, lines, N - n_samples :] = kspace[:, lines, N - n_samples :]
     return np.sqrt(np.sum(np.abs(_ifft2c(grid)) ** 2, axis=0))
+
+
+# ----------------------------------------------------------------------
+# Preprocessing the plugin does on the way in
+# ----------------------------------------------------------------------
+
+
+def noise_scan(n_samples=N, coils=COILS, seed=3):
+    """One noise readout, as a scanner sends it before the imaging."""
+    generator = np.random.default_rng(seed)
+    # Correlated channels: whitening has something to undo.
+    mixing = np.tril(generator.standard_normal((coils, coils))) + np.eye(coils)
+    samples = generator.standard_normal(
+        (coils, n_samples)
+    ) + 1j * generator.standard_normal((coils, n_samples))
+    acquisition = ismrmrd.Acquisition()
+    acquisition.resize(n_samples, coils)
+    acquisition.data[:] = (mixing @ samples).astype(np.complex64)
+    acquisition.setFlag(ismrmrd.ACQ_IS_NOISE_MEASUREMENT)
+    return acquisition
+
+
+def test_a_noise_scan_whitens_what_follows_and_never_reaches_the_buffer(
+    kspace, context
+):
+    """It measures the receiver, not the object, so it has no place on a grid."""
+    from pulserver.recon._mrd.application import _make_bucket
+
+    stream = [noise_scan(), *acquisitions(kspace, list(range(N)))]
+    plugin = cartesian2D_recon.PLUGIN.spawn()
+    plugin.startup(context)
+    for acquisition in stream:
+        plugin.receive(acquisition, context)
+
+    assert plugin.noise is not None
+    # Every phase encode was acquired, and only the phase encodes.
+    assert plugin.buffers[0].mask.any(axis=-1).all()
+    assert len(plugin.buffers[0].headers) == N
+
+    whitened = cartesian2D_recon.PLUGIN(_make_bucket(stream, []), context)[0]
+    assert whitened.data.shape == (N, N)
+
+
+def test_the_solve_runs_on_the_virtual_channels_the_basis_kept(
+    kspace, phantom, context
+):
+    """Compressing the array is a rotation onto its principal channels, so the
+    image survives it -- and degrades as fewer are kept, not before."""
+    lines, calibration = _sampling()
+    stream = acquisitions(kspace, lines, calibration=calibration)
+    errors = {}
+    for virtual in (COILS, 4):
+        # Driven by hand rather than called, so the basis the stream's own
+        # instance established can be read off it.
+        plugin = cartesian2D_recon.Cartesian2DRecon(virtual_coils=virtual).spawn()
+        plugin.startup(context)
+        emitted = [plugin.receive(item, context) for item in stream]
+        assert plugin.coil_basis.shape == (virtual, COILS)
+        (results,) = [output for output in emitted if output is not None]
+        errors[virtual] = relative_error(results[0].data.T, phantom)
+
+    assert (
+        errors[COILS] < errors[4] < relative_error(_zero_filled(kspace, lines), phantom)
+    )
+
+
+def test_homodyne_fills_a_truncated_echo_as_pocs_does(kspace, phantom, context):
+    """The two partial-Fourier estimators are alternatives, not a default and a
+    fallback: either recovers what zero-filling would blur."""
+    zero_filled = relative_error(
+        _zero_filled(kspace, list(range(N)), n_samples=48), phantom
+    )
+    for method in ("pocs", "homodyne"):
+        plugin = cartesian2D_recon.Cartesian2DRecon(partial_fourier=method)
+        image = plugin(bucket(kspace, list(range(N)), n_samples=48), context)[0]
+        assert relative_error(image.data.T, phantom) < 0.5 * zero_filled
+
+    with pytest.raises(ValueError, match="pocs or homodyne"):
+        cartesian2D_recon.Cartesian2DRecon(partial_fourier="guess")(
+            bucket(kspace, list(range(N)), n_samples=48), context
+        )
+
+
+def test_the_calibration_solve_is_run_to_convergence(kspace, phantom, context):
+    """NLINV defaults to the eight Newton steps BART takes on a whole imaging
+    dataset. An autocalibration block is small enough that the solve is still
+    moving there, and an unaliasing is only as good as the maps it was given."""
+    lines, calibration = _sampling()
+    errors = {}
+    for steps in (8, 16):
+        plugin = cartesian2D_recon.Cartesian2DRecon(calibration_iterations=steps)
+        image = plugin(bucket(kspace, lines, calibration=calibration), context)[0]
+        errors[steps] = relative_error(image.data.T, phantom)
+
+    assert errors[16] < 0.7 * errors[8]

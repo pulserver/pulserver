@@ -10,6 +10,8 @@ replaced with Torch operations.
 
 from __future__ import annotations
 
+__all__ = ["register_torch_cufinufft"]
+
 from functools import partial
 from typing import Any
 
@@ -393,6 +395,3 @@ def register_torch_cufinufft() -> bool:
 
     # Class creation performs MRI-NUFFT's normal backend registration.
     return bool(MRITorchCufiNUFFT.available)
-
-
-__all__: list[str] = []

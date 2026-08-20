@@ -19,9 +19,18 @@ from pulserver.recon._mrd.exam import ExamCacheManager, resolve_exam_id
 
 
 class SumRecon(ReconPlugin):
-    def recon(self, bucket, context):
+    def startup(self, context):
+        del context
+        self.lines: list[np.ndarray] = []
+
+    def receive(self, acquisition, context):
+        self.lines.append(np.asarray(acquisition.data))
+        return super().receive(acquisition, context)
+
+    def recon(self, branch, context):
+        del branch
         scale = context.exam.get_or_create("scale", lambda: 2.0)
-        return ReconResult(bucket.kspace().sum(axis=1) * scale)
+        return ReconResult(np.stack(self.lines).sum(axis=1) * scale)
 
 
 def _header(exam_id: str | None = None, study_uid: str | None = None):
@@ -49,7 +58,7 @@ def test_plugin_runs_unchanged_offline():
     )
     context = ReconContext.offline(exam_id="offline-test")
 
-    result = SumRecon()(bucket, context)
+    result = SumRecon(buffered=False)(bucket, context)
 
     assert isinstance(result, ReconResult)
     np.testing.assert_array_equal(result.data, np.full((4, 8), 6.0))

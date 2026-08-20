@@ -35,12 +35,11 @@ def _subject(offset: float = 0.0) -> _Subject:
     )
 
 
-def test_the_selected_deepinverse_datasets_are_reexported_by_identity():
-    """Whatever is re-exported is DeepInverse's own class, never a wrapper."""
-    for name in recon_datasets.__all__:
-        native = getattr(deepinv.datasets, name, None)
-        if native is not None:
-            assert getattr(recon_datasets, name) is native
+def test_the_datasets_module_exposes_only_original_code():
+    """DeepInverse's own datasets are imported from deepinv, never re-exported."""
+    assert recon_datasets.__all__ == ["IXI", "IXITiny", "TorchIODataset"]
+    assert not hasattr(recon_datasets, "FastMRISliceDataset")
+    assert not hasattr(recon_datasets, "check_dataset")
 
 
 def test_natural_image_benchmarks_stay_in_deepinverse():

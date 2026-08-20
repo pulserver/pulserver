@@ -17,6 +17,7 @@ __all__ = [
     "acquisition_labels",
     "diffusion_table",
     "has_acquisition_flag",
+    "max_stored_value",
     "user_parameter",
 ]
 
@@ -51,6 +52,11 @@ def user_parameter(metadata: Any, name: str, default: Any = None) -> Any:
             if getattr(parameter, "name", None) == name:
                 return getattr(parameter, "value", default)
     return default
+
+
+def max_stored_value(metadata: Any) -> int:
+    """Largest pixel value the scan's stored bit depth can hold."""
+    return 2 ** int(user_parameter(metadata, "BitsStored") or 12) - 1
 
 
 def acquisition_label(acquisition: Any, name: str, default: Any = None) -> Any:

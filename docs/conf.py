@@ -7,9 +7,12 @@ import warnings
 from pathlib import Path
 
 # ``_figures`` holds the Bloch simulator and plotting helpers the ``.. plot::``
-# directives embedded in docstrings import.  It is documentation-only and is
-# deliberately not part of the shipped package.
+# directives embedded in docstrings import, and ``_doxygen_xml`` the Doxygen
+# run the C and C++ reference is rendered from.  Both are documentation-only
+# and are deliberately not part of the shipped package.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import _doxygen_xml  # noqa: E402
 
 _REPOSITORY = Path(__file__).resolve().parents[1]
 
@@ -78,6 +81,48 @@ extensions = [
     "sphinx.ext.mathjax",
     "matplotlib.sphinxext.plot_directive",
 ]
+
+
+#: Whether the C and C++ reference is in this build. The pages read it, so a
+#: build without Doxygen says so rather than rendering empty sections.
+HAS_DOXYGEN = _doxygen_xml.run()
+
+if HAS_DOXYGEN:
+    extensions.append("breathe")
+    breathe_projects = {"pulserver": str(_doxygen_xml.XML)}
+    breathe_default_project = "pulserver"
+    breathe_default_members = ()
+    breathe_show_include = False
+    # ``{only} doxygen`` is how the C and C++ pages ask for the reference, so
+    # they carry their prose either way.
+    tags.add("doxygen")
+
+
+def _stub_breathe_directives(app) -> None:
+    """Make the reference directives parse to nothing without Doxygen.
+
+    ``only`` decides what is *rendered*, not what is read: the directives
+    inside it are parsed whether or not the tag is set, and an unregistered
+    name is a warning per line. These stubs absorb that, and ``only`` then
+    drops what they produced.
+    """
+    from docutils.parsers.rst import Directive, directives
+
+    class Nothing(Directive):
+        has_content = True
+        required_arguments = 0
+        optional_arguments = 1
+        final_argument_whitespace = True
+        option_spec = {
+            "members": directives.unchanged,
+            "sections": directives.unchanged,
+        }
+
+        def run(self):
+            return []
+
+    for kind in ("class", "enum", "file", "function", "struct"):
+        app.add_directive(f"doxygen{kind}", Nothing)
 
 # The explanation pages carry real formulae. Without ``dollarmath`` MyST does
 # not treat ``$...$`` / ``$$...$$`` as maths at all and renders the LaTeX
@@ -219,4 +264,6 @@ _patch_upstream_summaries()
 def setup(app):
     """Sphinx entry point."""
     app.connect("autodoc-process-docstring", _repair_third_party_docstrings)
+    if not HAS_DOXYGEN:
+        _stub_breathe_directives(app)
     return {"parallel_read_safe": True, "parallel_write_safe": True}

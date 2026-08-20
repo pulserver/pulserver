@@ -458,6 +458,48 @@ class FseReadout2D(_FseReadout):
 
     >>> fse.blocks[-3] == (fse.gx_bridge_pre, fse.gy_pre)
     True
+
+    Which line each echo encodes is the loop's, and it is the whole of the
+    contrast: this train is played in centric order, so the k-space centre is
+    acquired at the first echo and the effective echo time is one spacing.
+
+    .. plot::
+
+       import pulserver.design as design
+       import pulserver.pypulseq as pp
+       from _figures import trajectory
+
+       system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+       excitation = design.SpatialSelectiveExcitation(system, 90.0, 3e-3)
+       refocusing = design.SpatialSelectiveRefocusing(system, 3e-3)
+       fse = design.FseReadout2D(
+           system, excitation.rf, excitation.gz, excitation.gz_reph,
+           rf_ref=refocusing.rf_ref, gz_ref=refocusing.gz,
+           fov=0.22, matrix=128, etl=5, readout_bandwidth_hz=100e3,
+       )
+       trajectory(
+           fse,
+           ky=[0.0, 0.25, -0.25, 0.5, -0.5],
+           title="FseReadout2D, five echoes in centric order",
+       )
+
+    One excitation and the train that follows it, echo spacing and all:
+
+    .. plot::
+       :include-source:
+
+       import pulserver.design as design
+       import pulserver.pypulseq as pp
+
+       system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+       excitation = design.SpatialSelectiveExcitation(system, 90.0, 3e-3)
+       refocusing = design.SpatialSelectiveRefocusing(system, 3e-3)
+       fse = design.FseReadout2D(
+           system, excitation.rf, excitation.gz, excitation.gz_reph,
+           rf_ref=refocusing.rf_ref, gz_ref=refocusing.gz,
+           fov=0.22, matrix=128, etl=5, readout_bandwidth_hz=100e3,
+       )
+       fse.plot(time_disp="ms", grad_disp="mT/m", stacked=True, plot_now=False)
     """
 
     _ndim = 2
@@ -495,6 +537,34 @@ class FseReadout3D(_FseReadout):
 
     >>> fse.esp_first > fse.esp
     True
+
+    Two encodes per echo, so the train is a path through the ``(ky, kz)``
+    plane rather than a stack of lines. Where that path starts and how fast
+    it leaves the centre is the ordering the loop chose:
+
+    .. plot::
+
+       import pulserver.design as design
+       import pulserver.pypulseq as pp
+       from _figures import trajectory
+
+       system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+       slab = design.SpatialSelectiveExcitation(system, 90.0, 0.16, is_slab=True)
+       refocusing = design.NonSelectiveRefocusing(
+           system, duration_s=0.6e-3, spoiling_cycles=0.0
+       )
+       fse = design.FseReadout3D(
+           system, slab.rf, slab.gz, rf_ref=refocusing.rf_ref,
+           fov=(0.22, 0.22, 0.16), matrix=(128, 128, 32), etl=5,
+           spoiling_cycles=2.0, readout_bandwidth_hz=100e3,
+       )
+       trajectory(
+           fse,
+           ky=[0.0, 0.3, -0.3, 0.6, -0.6],
+           kz=[0.0, 0.2, 0.4, 0.6, 0.8],
+           plane="yz",
+           title="FseReadout3D, five echoes in the encoding plane",
+       )
     """
 
     _ndim = 3

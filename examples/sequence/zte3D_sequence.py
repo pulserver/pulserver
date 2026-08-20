@@ -14,6 +14,32 @@ against the trajectory the acquisitions carry.
 ``main`` returns the :class:`pulserver.pypulseq.Sequence`; ``PLUGIN`` is the
 same sequence behind the scanner protocol contract, and running this module
 as a script writes a ``.seq`` from the same controls.
+
+Examples
+--------
+>>> from pulserver.app import zte3D_sequence
+>>> seq = zte3D_sequence(n_x=32, n_views=24, n_shots=2, n_dummy=0)
+>>> seq.num_trs, seq.num_segments
+(2, 1)
+
+The gradient is already on when the pulse plays, so a view starts at the centre of k-space and runs outward:
+
+.. plot::
+   :include-source:
+
+   from pulserver.app import zte3D_sequence
+
+   seq = zte3D_sequence(n_x=32, n_views=24, n_shots=2, n_dummy=0)
+   seq.plot(tr="worst_case", time_disp="ms", grad_disp="mT/m", stacked=True,
+            plot_now=False)
+
+.. plot::
+   :include-source:
+
+   from pulserver.app import zte3D_sequence
+
+   seq = zte3D_sequence(n_x=32, n_views=24, n_shots=2, n_dummy=0)
+   seq.plot_kspace(plot_now=False)
 """
 
 from __future__ import annotations

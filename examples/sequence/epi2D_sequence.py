@@ -12,12 +12,30 @@ distortion correction -- is its own :class:`pulserver.pypulseq.Sequence`,
 written first, carrying ``NextSequence`` in its definitions; the main
 acquisition is the file it points to, written beside it. The interpreter
 follows the chain and treats each file as one subsequence.
-:mod:`pulserver.app.recon.epi2D_recon` reads the navigator groups back through
-:func:`pulserver.recon.partition_epi_acquisitions`.
+:mod:`pulserver.app.recon.epi2D_recon` reads the navigator back off the flags
+these lines carry.
 
 ``main`` returns the main :class:`pulserver.pypulseq.Sequence` and
 ``navigator`` its partner; ``PLUGIN`` writes the linked pair. Running this
 module as a script writes both from the same controls.
+
+Examples
+--------
+>>> from pulserver.app import epi2D_sequence
+>>> seq = epi2D_sequence(n_x=32, n_y=32, n_slices=1, n_dummy=0)
+>>> seq.num_trs, seq.num_segments
+(1, 1)
+
+The whole plane from one excitation, blip by blip:
+
+.. plot::
+   :include-source:
+
+   from pulserver.app import epi2D_sequence
+
+   seq = epi2D_sequence(n_x=32, n_y=32, n_slices=1, n_dummy=0)
+   seq.plot(tr="worst_case", time_disp="ms", grad_disp="mT/m", stacked=True,
+            plot_now=False)
 """
 
 from __future__ import annotations

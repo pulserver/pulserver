@@ -16,6 +16,24 @@ early centre of k-space out of the transient.
 ``main`` returns the :class:`pulserver.pypulseq.Sequence`; ``PLUGIN`` is the
 same sequence behind the scanner protocol contract, and running this module as
 a script writes a ``.seq`` from the same controls.
+
+Examples
+--------
+>>> from pulserver.app import gre3D_sequence
+>>> seq = gre3D_sequence(n_x=32, n_y=16, n_z=4, n_dummy=0)
+>>> seq.num_trs, seq.num_segments
+(64, 1)
+
+The same repetition with a partition encode beside the phase encode:
+
+.. plot::
+   :include-source:
+
+   from pulserver.app import gre3D_sequence
+
+   seq = gre3D_sequence(n_x=32, n_y=16, n_z=4, n_dummy=0)
+   seq.plot(tr="worst_case", time_disp="ms", grad_disp="mT/m", stacked=True,
+            plot_now=False)
 """
 
 from __future__ import annotations

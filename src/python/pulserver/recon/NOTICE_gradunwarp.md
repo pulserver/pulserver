@@ -1,4 +1,4 @@
-Gradient nonlinearity correction in `gradunwarp.py` adapts spherical-harmonic
+Gradient nonlinearity correction in `_gradunwarp.py` adapts spherical-harmonic
 coefficient parsing and conversion, displacement-field evaluation, and
 Jacobian concepts from the Human Connectome Project `gradunwarp` package and
 its predecessor:
