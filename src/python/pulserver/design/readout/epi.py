@@ -668,6 +668,46 @@ class EpiReadout2D(_EpiReadout):
     ... )
     >>> half.etl, int(half.order[1, 0])
     (32, 2)
+
+    The whole plane from one excitation: the prewinder places k at a corner
+    and every blip steps it one line, so the train is the lattice.
+
+    .. plot::
+
+       import pulserver.design as design
+       import pulserver.pypulseq as pp
+       from _figures import trajectory
+
+       system = pp.Opts(max_grad=50, grad_unit="mT/m", max_slew=180, slew_unit="T/m/s")
+       excitation = design.SpatialSelectiveExcitation(system, 60.0, 3e-3)
+       epi = design.EpiReadout2D(
+           system, excitation.rf, excitation.gz, excitation.gz_reph,
+           fov=0.22, matrix=32,
+       )
+       trajectory(
+           epi,
+           ky=[-1.0],
+           per="shot",
+           label="line",
+           title="EpiReadout2D, a 32-line train",
+       )
+
+    The blips are what separates the lines, and the alternating read lobe is
+    why every other one is reversed:
+
+    .. plot::
+       :include-source:
+
+       import pulserver.design as design
+       import pulserver.pypulseq as pp
+
+       system = pp.Opts(max_grad=50, grad_unit="mT/m", max_slew=180, slew_unit="T/m/s")
+       excitation = design.SpatialSelectiveExcitation(system, 60.0, 3e-3)
+       epi = design.EpiReadout2D(
+           system, excitation.rf, excitation.gz, excitation.gz_reph,
+           fov=0.22, matrix=32,
+       )
+       epi.plot(time_disp="ms", grad_disp="mT/m", stacked=True, plot_now=False)
     """
 
     _ndim = 2
@@ -698,6 +738,32 @@ class EpiReadout3D(_EpiReadout):
 
     >>> sorted(set(int(step) for step in epi.order[1:, 1] - epi.order[:-1, 1]))
     [-1, 2]
+
+    Under ``scheme="caipi"`` the partition blips walk a cycle alongside the
+    phase blips, so the train covers a sheared lattice rather than one plane:
+
+    .. plot::
+
+       import pulserver.design as design
+       import pulserver.pypulseq as pp
+       from _figures import trajectory
+
+       system = pp.Opts(max_grad=50, grad_unit="mT/m", max_slew=180, slew_unit="T/m/s")
+       slab = design.SpatialSelectiveExcitation(system, 15.0, 0.12, is_slab=True)
+       epi = design.EpiReadout3D(
+           system, slab.rf, slab.gz,
+           fov=(0.22, 0.22, 0.12), matrix=(32, 32, 8),
+           scheme="caipi", acceleration=2, partition_acceleration=2, caipi_shift=1,
+       )
+       trajectory(
+           epi,
+           ky=[-1.0],
+           kz=[-1.0],
+           per="shot",
+           plane="yz",
+           label="line",
+           title="EpiReadout3D, the CAIPI lattice one train covers",
+       )
     """
 
     _ndim = 3

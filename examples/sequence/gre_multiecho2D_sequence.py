@@ -11,6 +11,24 @@ partial Fourier, spoiling -- is :mod:`pulserver.app.sequence.gre2D_sequence`.
 ``main`` returns the :class:`pulserver.pypulseq.Sequence`; ``PLUGIN`` is the
 same sequence behind the scanner protocol contract, and running this module
 as a script writes a ``.seq`` from the same controls.
+
+Examples
+--------
+>>> from pulserver.app import gre_multiecho2D_sequence
+>>> seq = gre_multiecho2D_sequence(n_x=32, n_y=16, n_slices=1, n_echoes=3, tr=20e-3, n_dummy=0)
+>>> seq.num_trs, seq.num_segments
+(16, 2)
+
+Three echoes per excitation, the read lobe alternating sign between them:
+
+.. plot::
+   :include-source:
+
+   from pulserver.app import gre_multiecho2D_sequence
+
+   seq = gre_multiecho2D_sequence(n_x=32, n_y=16, n_slices=1, n_echoes=3, tr=20e-3, n_dummy=0)
+   seq.plot(tr="worst_case", time_disp="ms", grad_disp="mT/m", stacked=True,
+            plot_now=False)
 """
 
 from __future__ import annotations

@@ -82,7 +82,7 @@ def _collection(system, *, use="excitation", flip=30.0):
             max_flip_angle_deg=parameters["max_flip_angle_deg"],
             total_scan_time_us=parameters["total_scan_time_us"],
         ),
-        subsequences={0: seq.sequence_descriptor()},
+        subsequences={0: seq.sequence_descriptor},
     )
 
 

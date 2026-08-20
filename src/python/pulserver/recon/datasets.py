@@ -1,38 +1,18 @@
-"""MRI datasets, and the DeepInverse dataset machinery they are built on.
+"""TorchIO's volumetric MRI subjects through the DeepInverse dataset contract.
 
-The MRI slice datasets and the generic containers, samplers and helpers are
-re-exported from DeepInverse without wrapping or signature changes. ``IXI``
-and ``IXITiny`` add TorchIO's volumetric MRI subjects using the same sample
-contract as :class:`deepinv.datasets.ImageDataset`.
-
-DeepInverse's natural-image benchmarks -- super-resolution, denoising and
-deblurring sets such as ``DIV2K``, ``Set14HR`` and ``Urban100HR`` -- are not
-re-exported here. They are useful for training a denoiser and entirely
-unrelated to a scanner reconstruction, so import them from
-:mod:`deepinv.datasets` directly when that is what you are doing.
+Every dataset here yields the sample layout
+:class:`deepinv.datasets.ImageDataset` defines, so it drops into DeepInverse
+training and evaluation loops unchanged. DeepInverse's own datasets -- the
+MRI slice sets, the generic containers and samplers, and the natural-image
+benchmarks -- are imported directly from :mod:`deepinv.datasets`.
 """
 
 from __future__ import annotations
 
 __all__ = [
     "IXI",
-    "CMRxReconSliceDataset",
-    "FastMRISliceDataset",
-    "HDF5Dataset",
     "IXITiny",
-    "ImageDataset",
-    "ImageFolder",
-    "LidcIdriSliceDataset",
-    "MRISliceTransform",
-    "PatchDataset",
-    "RandomPatchSampler",
-    "SKMTEASliceDataset",
-    "SimpleFastMRISliceDataset",
-    "TensorDataset",
     "TorchIODataset",
-    "check_dataset",
-    "download_archive",
-    "generate_dataset",
 ]
 
 import copy
@@ -42,26 +22,12 @@ from os import PathLike
 from typing import Any
 
 import torch
-from deepinv.datasets import CMRxReconSliceDataset as CMRxReconSliceDataset
-from deepinv.datasets import FastMRISliceDataset as FastMRISliceDataset
-from deepinv.datasets import HDF5Dataset as HDF5Dataset
-from deepinv.datasets import ImageDataset as ImageDataset
-from deepinv.datasets import ImageFolder as ImageFolder
-from deepinv.datasets import LidcIdriSliceDataset as LidcIdriSliceDataset
-from deepinv.datasets import MRISliceTransform as MRISliceTransform
-from deepinv.datasets import PatchDataset as PatchDataset
-from deepinv.datasets import RandomPatchSampler as RandomPatchSampler
-from deepinv.datasets import SKMTEASliceDataset as SKMTEASliceDataset
-from deepinv.datasets import SimpleFastMRISliceDataset as SimpleFastMRISliceDataset
-from deepinv.datasets import TensorDataset as TensorDataset
-from deepinv.datasets import check_dataset as check_dataset
-from deepinv.datasets import download_archive as download_archive
-from deepinv.datasets import generate_dataset as generate_dataset
+from deepinv.datasets import ImageDataset as _ImageDataset
 
 _Selector = str | Sequence[str] | Callable[[Any], torch.Tensor]
 
 
-class TorchIODataset(ImageDataset):
+class TorchIODataset(_ImageDataset):
     """Expose TorchIO subjects through the DeepInverse dataset contract.
 
     Parameters

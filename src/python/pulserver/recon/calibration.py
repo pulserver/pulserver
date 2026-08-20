@@ -11,8 +11,7 @@ __all__ = [
     "WavePSFCalibration",
     "WavePSFResult",
     "calibration_extent",
-    "sensitivities",
-    "smooth_sensitivities",
+    "coil_maps_from_reference",
 ]
 
 from dataclasses import dataclass
@@ -23,10 +22,136 @@ import torch
 
 import deepinv
 
+from ._fourier import fftc as _fftc
+from ._fourier import torch_or_numpy as _torch_or_numpy
+from ._fourier import ifftc as _ifftc
+from ._fourier import resize_centered as _resize_centered
 from .optim import IRGNM, ConjugateGradient
 from .physics import NonCartesian2D, NonCartesian3D
 from ._phase_poles import PhasePoleCorrection
 from ._wave_psf import WavePSF, WavePSFCalibration, WavePSFResult
+
+
+def coil_maps_from_reference(
+    kspace: Any,
+    mask: Any = None,
+    *,
+    spatial_ndim: int = 2,
+    taper: float = 0.15,
+) -> Any:
+    """Coil sensitivities from a low-resolution reference k-space.
+
+    The reference is a fully sampled block at the centre of k-space -- the
+    prescan an accelerated or multiband sequence acquires -- so its coil images
+    are smooth and, up to the object they share, are the sensitivities.
+    Dividing by the root sum-of-squares removes that common magnitude and
+    leaves maps of unit norm, which is the convention every model-based solve
+    in this package expects.
+
+    Reading the unsampled outer k-space as zero truncates the coil images
+    sharply, and a sharp truncation rings: behind a hard-edged object the
+    estimate wanders seven times further between neighbouring pixels than the
+    true sensitivity does, which is not something a smooth map should do. What
+    rings is the edge of the acquired block, so the block's edge is what is
+    softened -- a cosine taper across the acquired extent, which halves that
+    wander and leaves the resolution alone. Low-passing the whole reference
+    instead would cost what the separation of an SMS scan actually runs on.
+
+    This is the estimator for a dedicated reference prescan; :class:`NLINV` is
+    the one for a scan that must calibrate from its own imaging data, where
+    there is no separate reference to read.
+
+    Parameters
+    ----------
+    kspace
+        The reference, ``(coils, *grid)`` or with a leading batch axis. Torch
+        tensors keep their device; NumPy arrays stay NumPy.
+    mask
+        Where the reference was sampled, ``kspace`` without its coil axis --
+        which is what says where the block ends and so where to taper.
+        ``None`` reads the whole grid as acquired and applies no taper.
+    spatial_ndim
+        How many trailing axes are spatial: 2 for a slice, 3 for a slab.
+    taper
+        Fraction of the acquired extent the cosine roll-off spans, per axis.
+        Zero is the sharp truncation that rings; one is a full Hann window
+        across the block, which starts costing resolution.
+
+    Returns
+    -------
+    array
+        Maps shaped like ``kspace``, root sum-of-squares one over the coil axis.
+
+    Raises
+    ------
+    ValueError
+        If ``kspace`` has no coil axis before its spatial ones, ``mask`` does
+        not describe its grid, or ``taper`` is outside ``[0, 1]``.
+    """
+    if spatial_ndim not in (2, 3):
+        raise ValueError("spatial_ndim must be 2 or 3")
+    if getattr(kspace, "ndim", 0) < spatial_ndim + 1:
+        raise ValueError(
+            f"kspace must be (coils, *grid) with {spatial_ndim} spatial axes, "
+            f"got shape {getattr(kspace, 'shape', ())}"
+        )
+    if not 0.0 <= taper <= 1.0:
+        raise ValueError(f"taper must lie in [0, 1], got {taper}")
+
+    xp, is_torch = _torch_or_numpy(kspace)
+    axes = tuple(range(-spatial_ndim, 0))
+    coil_axis = -(spatial_ndim + 1)
+
+    if mask is not None and taper > 0.0:
+        grid = tuple(int(size) for size in kspace.shape[-spatial_ndim:])
+        if tuple(int(size) for size in mask.shape[-spatial_ndim:]) != grid:
+            raise ValueError(
+                f"mask covers {tuple(mask.shape[-spatial_ndim:])}, the reference {grid}"
+            )
+        window = _acquired_taper(mask, spatial_ndim, taper)
+        kspace = kspace * (
+            xp.as_tensor(window, device=kspace.device) if is_torch else window
+        )
+
+    images = _ifftc(kspace, axes)
+    rss = xp.sqrt(xp.sum(xp.abs(images) ** 2, axis=coil_axis, keepdims=True))
+    # A reference with no signal in it has no sensitivities to read; the floor
+    # keeps the division defined rather than answering NaN.
+    floor = float(rss.max()) * 1e-8
+    return images / xp.clip(rss, floor if floor > 0.0 else 1.0, None)
+
+
+def _acquired_taper(mask: Any, spatial_ndim: int, taper: float) -> Any:
+    """A separable cosine roll-off across each axis's acquired extent."""
+    import numpy as numpy_
+
+    acquired = numpy_.asarray(
+        mask.detach().cpu() if hasattr(mask, "detach") else mask
+    ).astype(bool)
+    acquired = acquired.reshape(acquired.shape[-spatial_ndim:])
+    window = numpy_.ones(acquired.shape, numpy_.float32)
+    for axis in range(spatial_ndim):
+        others = tuple(index for index in range(spatial_ndim) if index != axis)
+        taken = numpy_.flatnonzero(acquired.any(axis=others))
+        if taken.size == 0:
+            continue
+        first, last = int(taken[0]), int(taken[-1])
+        position = numpy_.linspace(0.0, 1.0, last - first + 1)
+        line = numpy_.ones(position.size)
+        rising = position < taper / 2
+        line[rising] = 0.5 * (
+            1 + numpy_.cos(2 * numpy_.pi / taper * (position[rising] - taper / 2))
+        )
+        falling = position > 1 - taper / 2
+        line[falling] = 0.5 * (
+            1 + numpy_.cos(2 * numpy_.pi / taper * (position[falling] - 1 + taper / 2))
+        )
+        full = numpy_.zeros(acquired.shape[axis], numpy_.float32)
+        full[first : last + 1] = line
+        window *= full.reshape(
+            [-1 if index == axis else 1 for index in range(spatial_ndim)]
+        )
+    return window
 
 
 def calibration_extent(mask: Any) -> int:
@@ -323,6 +448,33 @@ class NLINV(torch.nn.Module):
     RuntimeError
         If the calibration leaves a relative residual above
         ``residual_tolerance``.
+
+    Examples
+    --------
+    The maps and the object come out of the same solve, so nothing has to be
+    acquired for the sensitivities that was not acquired for the image:
+
+    .. plot::
+
+       import numpy as np
+       import pulserver.recon as recon
+       from _figures import images, phantom
+
+       truth, coil_maps = phantom(64, coils=4)
+       mask = np.zeros((64, 64), dtype=np.float32)
+       mask[::2] = 1.0
+       mask[26:38] = 1.0
+       measured = recon.fftc((truth * coil_maps[0]).numpy()) * mask
+
+       estimated = recon.NLINV(spatial_ndim=2, max_iter=10)(measured[None], mask=mask)
+       images(
+           [
+               ("object", truth),
+               ("NLINV sensitivity, coil 0", estimated[0, 0]),
+               ("solved against it", recon.cartesian_recon(measured, mask, estimated)),
+           ],
+           title="NLINV, two-fold undersampled with a calibration block",
+       )
     """
 
     def __init__(
@@ -384,44 +536,58 @@ class NLINV(torch.nn.Module):
 
     def forward(
         self,
-        kspace: torch.Tensor,
+        kspace: Any,
         *,
-        mask: torch.Tensor | None = None,
-        trajectory: torch.Tensor | None = None,
+        mask: Any | None = None,
+        trajectory: Any | None = None,
         image_shape: tuple[int, ...] | None = None,
-        density: torch.Tensor | None = None,
+        density: Any | None = None,
         encoding: deepinv.physics.LinearPhysics | None = None,
+        device: Any = None,
         return_info: bool = False,
-    ) -> torch.Tensor | NLINVResult:
+    ) -> Any:
         """Estimate sensitivity maps from Cartesian or non-Cartesian data.
 
         Parameters
         ----------
         kspace
-            Complex data with shape ``(..., coils, *samples)``.
+            Complex data with shape ``(..., coils, *samples)``. A NumPy array
+            is accepted and answered in kind: NumPy in, NumPy out.
         mask
             Cartesian sampling mask. It is inferred from nonzero data by
             default.
         trajectory
-            Non-Cartesian coordinates ending in ``spatial_ndim``.
+            Non-Cartesian coordinates ending in ``spatial_ndim``. Only the
+            samples inside the calibration radius enter the solve, selected
+            before any gridding.
         image_shape
             Reconstructed matrix, required for non-Cartesian data.
         density
-            Optional density/preconditioning weights passed to MRI-NUFFT.
+            Optional density/preconditioning weights over the samples. When
+            omitted for non-Cartesian data, Pipe--Menon weights are computed
+            over the selected calibration samples.
         encoding
             Optional coil-preserving custom DeepInverse linear physics.
+        device
+            Torch device the calibration runs on. ``None`` keeps the data's.
         return_info
             Return image and synthesized calibration data with the maps.
 
         Returns
         -------
-        torch.Tensor or NLINVResult
-            RSS-normalized sensitivities, or all calibration outputs.
+        torch.Tensor, numpy.ndarray, or NLINVResult
+            RSS-normalized sensitivities, or all calibration outputs, in the
+            namespace ``kspace`` arrived in.
         """
-        if not isinstance(kspace, torch.Tensor) or not kspace.is_complex():
-            raise TypeError("kspace must be a complex torch.Tensor")
+        return_numpy = not isinstance(kspace, torch.Tensor)
+        if return_numpy:
+            kspace = torch.as_tensor(kspace)
+        if not kspace.is_complex():
+            raise TypeError("kspace must be complex")
         if kspace.dtype != torch.complex64:
             kspace = kspace.to(torch.complex64)
+        if device is not None:
+            kspace = kspace.to(device)
 
         prepared = self._prepare(
             kspace,
@@ -501,6 +667,10 @@ class NLINV(torch.nn.Module):
             leading_shape,
             (n_coils, *solve_shape),
         )
+        if return_numpy:
+            sensitivities = sensitivities.cpu().numpy()
+            reconstructed = reconstructed.cpu().numpy()
+            calibration = calibration.cpu().numpy()
         if not return_info:
             return sensitivities
         return NLINVResult(
@@ -613,7 +783,7 @@ class NLINV(torch.nn.Module):
         leading_shape, data = _flatten_batches(kspace, len(sample_shape) + 1)
         data = data.reshape(data.shape[0], data.shape[1], -1)
         trajectory = trajectory.reshape(-1, self.spatial_ndim)
-        selected_density = None if density is None else density.reshape(-1)
+        selected_density = _host_density(density)
         if self.calibration_width == "auto":
             raise ValueError(
                 "a non-Cartesian acquisition does not state its calibration "
@@ -633,7 +803,13 @@ class NLINV(torch.nn.Module):
             trajectory = trajectory[retained]
             data = data[..., retained]
             if selected_density is not None:
-                selected_density = selected_density[retained]
+                selected_density = selected_density[retained.cpu().numpy()]
+        if selected_density is None:
+            from .preprocessing import pipe_menon_dcf
+
+            selected_density = _host_density(
+                pipe_menon_dcf(trajectory.cpu().numpy(), solve_shape)
+            )
         physics_class = NonCartesian2D if self.spatial_ndim == 2 else NonCartesian3D
         selected_encoding = physics_class(
             trajectory,
@@ -649,6 +825,17 @@ class NLINV(torch.nn.Module):
 
 
 # %% private module subroutines
+
+
+def _host_density(density: Any) -> Any:
+    """Flatten density weights onto the host, where MRI-NUFFT reads them."""
+    if density is None:
+        return None
+    if hasattr(density, "detach"):
+        density = density.detach().cpu().numpy()
+    from numpy import asarray
+
+    return asarray(density).reshape(-1)
 
 
 class _NLINVJacobian(deepinv.physics.LinearPhysics):
@@ -728,35 +915,6 @@ def _sobolev_weights(
     return (1.0 + scale * radius).pow(-degree / 2)
 
 
-def _fftc(value: torch.Tensor, axes: tuple[int, ...]) -> torch.Tensor:
-    value = torch.fft.ifftshift(value, dim=axes)
-    value = torch.fft.fftn(value, dim=axes, norm="ortho")
-    return torch.fft.fftshift(value, dim=axes)
-
-
-def _ifftc(value: torch.Tensor, axes: tuple[int, ...]) -> torch.Tensor:
-    value = torch.fft.ifftshift(value, dim=axes)
-    value = torch.fft.ifftn(value, dim=axes, norm="ortho")
-    return torch.fft.fftshift(value, dim=axes)
-
-
-def _resize_centered(value: torch.Tensor, shape: tuple[int, ...]) -> torch.Tensor:
-    spatial_ndim = len(shape)
-    result_shape = (*value.shape[:-spatial_ndim], *shape)
-    result = torch.zeros(result_shape, dtype=value.dtype, device=value.device)
-    source_slices = [slice(None)] * value.ndim
-    target_slices = [slice(None)] * value.ndim
-    for offset, target_size in enumerate(shape, start=value.ndim - spatial_ndim):
-        source_size = value.shape[offset]
-        count = min(source_size, target_size)
-        source_start = (source_size - count) // 2
-        target_start = (target_size - count) // 2
-        source_slices[offset] = slice(source_start, source_start + count)
-        target_slices[offset] = slice(target_start, target_start + count)
-    result[tuple(target_slices)] = value[tuple(source_slices)]
-    return result
-
-
 def _resize_fourier_image(
     value: torch.Tensor,
     shape: tuple[int, ...],
@@ -787,78 +945,3 @@ def _restore_leading(
     if not leading_shape:
         return value.reshape(*single_shape)
     return value.reshape(*leading_shape, *single_shape)
-
-
-def sensitivities(kspace: Any, mask: Any, *, device: Any = None) -> torch.Tensor:
-    """Estimate coil sensitivities from the calibration block of a measurement.
-
-    The mask says which positions the scan took, so :class:`NLINV` reads the
-    calibration region off it: the fully sampled block around the centre of
-    k-space. It solves the maps at that size and resamples them to the full
-    matrix by zero-filling in Fourier space, which is the smooth interpolation
-    a sensitivity map wants. Nothing outside the block enters the estimate, so
-    it does not matter whether the rest has been filled in yet.
-
-    Two and three dimensions are the same estimate, read off the mask: two axes
-    calibrate a slice, three a slab.
-
-    Parameters
-    ----------
-    kspace
-        K-space, ``(coil, *spatial)``.
-    mask
-        Its sampling mask, ``(*spatial)``.
-    device
-        Torch device. ``None`` is the CPU.
-
-    Returns
-    -------
-    torch.Tensor
-        Sensitivities, ``(1, coil, *spatial)``.
-
-    Raises
-    ------
-    ValueError
-        If no fully sampled block surrounds the centre of k-space.
-    """
-    spatial = int(getattr(mask, "ndim", len(getattr(mask, "shape", ()))))
-    return NLINV(spatial_ndim=spatial)(
-        _as_tensor(kspace, torch.complex64, device)[None],
-        mask=_as_tensor(mask, torch.bool, device),
-    )
-
-
-def smooth_sensitivities(coil_images: Any) -> torch.Tensor:
-    """Sensitivities from coil images, by Fourier low-pass and normalisation.
-
-    What a non-Cartesian reconstruction calibrates from: the coil images its
-    own density-compensated adjoint produced, with everything but their
-    low-spatial-frequency envelope windowed away.
-
-    Parameters
-    ----------
-    coil_images
-        Complex coil images, ``(coil, h, w)``.
-
-    Returns
-    -------
-    torch.Tensor
-        Unit root-sum-of-squares maps of the same shape.
-    """
-    from .preprocessing import fftc, ifftc
-
-    images = torch.as_tensor(coil_images)
-    spectrum = fftc(images, axes=(-2, -1))
-    height, width = spectrum.shape[-2:]
-    window_h = torch.hann_window(height, dtype=spectrum.real.dtype)
-    window_w = torch.hann_window(width, dtype=spectrum.real.dtype)
-    spectrum = spectrum * (window_h[:, None] * window_w[None, :]) ** 4
-    smoothed = ifftc(spectrum, axes=(-2, -1))
-    norm = torch.sqrt(torch.sum(torch.abs(smoothed) ** 2, dim=0, keepdim=True))
-    return smoothed / torch.clamp(norm, min=1e-12 * float(norm.max()))
-
-
-def _as_tensor(array: Any, dtype: Any, device: Any) -> torch.Tensor:
-    return torch.as_tensor(
-        array, dtype=dtype, device="cpu" if device is None else device
-    )

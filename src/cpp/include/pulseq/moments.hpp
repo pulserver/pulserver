@@ -37,7 +37,7 @@
  *   B(R) = B_{fixed} + C R^T + R C^T + R\,B_{rot}\,R^T
  * @f]
  *
- * which @ref compose_btensor evaluates.  Twenty-seven numbers a shot instead
+ * which @ref pulseq::compose_btensor evaluates.  Twenty-seven numbers a shot instead
  * of nine, and both degenerate cases fall out of it: an all-`NOROT` shot has
  * `B = B_fixed` and does not move with the prescription at all, while a shot
  * with no `NOROT` has the familiar `B = R B_rot Rᵀ`.  At `R = I` the sum is
@@ -54,7 +54,7 @@
  * ### Where the echo comes from
  *
  * A shot's integral runs from its excitation to its echo, and the echo is the
- * ADC sample nearest k-space zero -- which @ref calculate_kspace already
+ * ADC sample nearest k-space zero -- which @ref pulseq::calculate_kspace already
  * derives while integrating the trajectory (`Readout::center_sample`).  It is
  * read from there rather than re-derived, so this and the reconstruction agree
  * by construction, and a twice-refocused sequence needs no special case.
@@ -109,7 +109,7 @@ namespace pulseq
         /**
          * An already-computed trajectory to take the echoes from.
          *
-         * Optional.  When null this calls @ref calculate_kspace itself; a
+         * Optional.  When null this calls @ref pulseq::calculate_kspace itself; a
          * caller that already holds a `KSpace` over the same block range
          * should hand it over instead of paying for a second one.  It must
          * have been computed with `derive_center_sample` on, or there are no

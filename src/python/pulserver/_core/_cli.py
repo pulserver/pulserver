@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import sys
-import warnings
 
 import pulserver.pypulseq as pp
 
@@ -55,15 +54,7 @@ def write_sequence(seq: pp.Sequence, output_path: str, *, offline: bool) -> str 
         seq.remove_duplicates().write_binary(output_path)
         return None
 
-    for is_ok, message in (
-        seq.check_gradient_continuity(),
-        seq.check_hardware_limits(),
-    ):
-        if not is_ok:
-            warnings.warn(f"write_sequence(): {message}", stacklevel=2)
-    # `write` deduplicates and runs the timing check itself, and the gradient
-    # continuity one this has just run.
-    return seq.write(output_path, check_gradient_continuity=False)
+    return seq.write(output_path)
 
 
 def run_cli(

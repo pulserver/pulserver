@@ -25,7 +25,6 @@ dependencies = [
   # FINUFFT is the portable CPU backend. See the `cuda` extra for GPU.
   "mri-nufft[finufft]",
   "torch>=2.12",
-  "torchsim",
   "torchio>=0.20",
   "deepinv>=0.4",
   "ptwt",
@@ -56,6 +55,10 @@ dev = [
   "sphinx>=7.4",
   "myst-parser>=3.0",
   "sphinx-book-theme>=1.1",
+  # The C and C++ reference is the headers' own comments, pulled in through
+  # Doxygen's XML. Doxygen itself is a system package, so the pages say so
+  # and the rest of the documentation builds without it.
+  "breathe>=4.35",
   "build>=1.2",
 ]
 
@@ -169,7 +172,6 @@ convention = "numpy"
 "src/python/pulserver/recon/_distortion.py" = ["S603"]
 "src/python/pulserver/recon/_mrd/handlers/savedataonly.py" = ["ARG001"]
 "src/python/pulserver/recon/_mrd/main.py" = ["PTH", "S104", "S108"]
-"src/python/pulserver/recon/_mrd/mrdhelper.py" = ["A002"]
 "src/python/pulserver/recon/_mrd/readers.py" = ["A002", "ARG001", "PTH123"]
 "src/python/pulserver/recon/_mrd/replay.py" = ["PTH", "S110"]
 "src/python/pulserver/recon/_mrd/rtp_connection.py" = ["S104"]

@@ -4,7 +4,7 @@ The scanner carries the sequence description as custom single-channel ISMRMRD
 waveforms.  This module owns that transport and nothing else -- sequence
 physics lives in :mod:`pulserver.recon.simulation`, and the description itself
 is produced either here (:meth:`SequenceDescriptionCollection.from_mrd`, from a
-stream) or by :meth:`pulserver.pypulseq.Sequence.sequence_descriptor` (from a
+stream) or by :attr:`pulserver.pypulseq.Sequence.sequence_descriptor` (from a
 sequence that has not been run yet).  Both routes end in the same objects.
 
 :meth:`~SequenceDescriptionCollection.to_mrd` is the inverse, word for word:

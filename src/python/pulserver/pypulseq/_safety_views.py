@@ -38,7 +38,7 @@ class SafetyViewsMixin:
             path or a per-axis namespace of the kind
             :func:`pypulseq.utils.safe_pns_prediction.safe_example_hw`
             returns selects **SAFE**, upstream's model. A mapping carrying
-            ``chronaxie`` (seconds) and ``rheobase`` (Hz/m/s) selects the
+            ``chronaxie`` (seconds) and ``rheobase`` (T/m/s) selects the
             **Irnich** rheobase/chronaxie model, which is what the GE gate
             applies.
         time_range : list of float, optional

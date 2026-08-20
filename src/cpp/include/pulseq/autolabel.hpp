@@ -27,8 +27,8 @@
  * samples *are* read is `KSpace::k_central`, because the sampling pattern
  * cannot be judged from a single point; that is one readout, not R.
  *
- * Consequently @ref detect_labels takes a `KSpace` built with
- * `materialize_samples` off, and @ref auto_label builds one that way.
+ * Consequently @ref pulseq::detect_labels takes a `KSpace` built with
+ * `materialize_samples` off, and @ref pulseq::auto_label builds one that way.
  *
  * ### Where this deliberately differs
  *
@@ -58,7 +58,7 @@
  *   scan is only true in one frame; the frame chosen is the one a
  *   reconstruction reads it in, once `REV` has been honoured.
  * - **Dimensions the trajectory cannot see are named by the caller**, not
- *   guessed -- see @ref AutoLabelOptions::repeat_dims.
+ *   guessed -- see @ref pulseq::AutoLabelOptions::repeat_dims.
  * - **`aux.kReadout` is not produced.**  It exists in MATLAB to draw the
  *   bipolar-alignment figure and is not among the fields that become sequence
  *   definitions.
@@ -106,7 +106,7 @@ namespace pulseq
      * A name splits that count back apart.  Only the names are needed --
      * `{"REP", "ECO"}`, **outermost loop first** -- because the *shape* of the
      * nest is written in the acquisition order and can be read back:
-     * @ref detect_labels measures how far apart a k-space position's repeat
+     * @ref pulseq::detect_labels measures how far apart a k-space position's repeat
      * visits are, and a dimension nested inside the k-space loop revisits
      * after a short stride where one outside it revisits after a whole pass.
      * Two echoes inside a TR then ten frames over the scan produces strides
@@ -275,7 +275,7 @@ namespace pulseq
 
         /**
          * The repetition counter, undivided.  Empty when
-         * @ref AutoLabelOptions::repeat_dims named the dimensions it stands
+         * @ref pulseq::AutoLabelOptions::repeat_dims named the dimensions it stands
          * for, in which case they are in @ref named instead.
          */
         std::vector<int> rep;

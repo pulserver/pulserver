@@ -11,10 +11,10 @@ which one it belongs to through ``encoding_space_ref``. So the layout is known
 before the first line arrives, and every line can be placed the moment it does,
 rather than accumulated in a list and sorted at the trigger.
 
-Axis order is coils first, readout last, matching :class:`CartesianGridder` and
-the rest of the package rather than Gadgetron's ``[E0,E1,E2,CHA,N,S,LOC]``.
-What is borrowed is the shape of the idea, not its index order: a buffer that
-disagreed with the arrays around it would cost a transpose at every boundary.
+Axis order is coils first, readout last, matching the rest of the package
+rather than Gadgetron's ``[E0,E1,E2,CHA,N,S,LOC]``. What is borrowed is the
+shape of the idea, not its index order: a buffer that disagreed with the arrays
+around it would cost a transpose at every boundary.
 An axis exists where the header says something varies, and nowhere else: a
 two-dimensional scan has no partition axis and a single-slice one no slice
 axis, so what comes out is the array a reconstruction would have built by
@@ -100,7 +100,20 @@ class EncodingSpace:
     loop_sizes
         Extent of each of those counters.
     recon_matrix
-        ``(n_y, n_x)`` the images are cropped to.
+        The image matrix the header asks for, ``(n_y, n_x)`` for a plane or
+        ``(n_z, n_y, n_x)`` for a volume -- which of the two is the header's
+        answer, not the buffer's: a stack of spokes has no partition axis and
+        still reconstructs a volume.
+
+    Examples
+    --------
+    >>> import pulserver.recon as recon
+    >>> space = recon.EncodingSpace(
+    ...     index=0, coils=4, readout=64, phase_encodes=32, partitions=1,
+    ...     loops=("slice",), loop_sizes=(2,), recon_matrix=(32, 32),
+    ... )
+    >>> space.recon_matrix
+    (32, 32)
     """
 
     index: int
@@ -110,7 +123,7 @@ class EncodingSpace:
     partitions: int
     loops: tuple[str, ...]
     loop_sizes: tuple[int, ...]
-    recon_matrix: tuple[int, int]
+    recon_matrix: tuple[int, ...]
 
     @classmethod
     def from_header(cls, header: Any, index: int = 0) -> EncodingSpace:
@@ -137,12 +150,11 @@ class EncodingSpace:
         system = getattr(header, "acquisitionSystemInformation", None)
         coils = int(getattr(system, "receiverChannels", 1) or 1)
 
-        matrix = getattr(getattr(encoding, "reconSpace", None), "matrixSize", None)
-        recon_matrix = (
-            (int(encoded.y), int(encoded.x))
-            if matrix is None
-            else (int(matrix.y), int(matrix.x))
-        )
+        matrix = encoded if getattr(encoding, "reconSpace", None) is None else None
+        matrix = matrix or getattr(encoding.reconSpace, "matrixSize", None) or encoded
+        recon_matrix = (int(matrix.z), int(matrix.y), int(matrix.x))
+        if recon_matrix[0] == 1:
+            recon_matrix = recon_matrix[1:]
 
         views = _limit(limits, "kspace_encoding_step_1")
         partitions = _limit(limits, "kspace_encoding_step_2")
@@ -219,12 +231,15 @@ class ReconBuffer:
     space
         The encoding space this buffers.
     coils, readout
-        Channels and samples to allocate, widening the space's declaration.
-        Both are facts the data carries -- readout oversampling makes an
-        acquisition wider than the encoded matrix says, and a header need not
-        state its channel count at all -- so the first arrival widens the
-        buffer rather than being refused. Where the acquisitions go is another
-        matter: that the header declares, and a contradiction is an error.
+        Channels and samples to allocate. Both are facts the data carries
+        rather than the header, so the first arrival settles them. They settle
+        differently: a readout narrower than the encoded matrix is a partial
+        echo and still needs the full width to be right-aligned in, so the
+        readout only ever widens, while the channel count is simply what
+        arrived -- a plugin that compresses the array before placing a readout
+        places fewer channels than the header declares, and the buffer holds
+        what it was given. Where the acquisitions go is another matter: that
+        the header declares, and a contradiction is an error.
     dtype
         Complex dtype of :attr:`kspace`.
 
@@ -247,6 +262,25 @@ class ReconBuffer:
     center_sample : int or None
         Index of the echo along the readout axis, from the acquisitions
         themselves, or ``None`` until the first one arrives.
+
+    Examples
+    --------
+    >>> import pulserver.recon as recon
+    >>> space = recon.EncodingSpace(
+    ...     index=0, coils=4, readout=64, phase_encodes=32, partitions=1,
+    ...     loops=("slice",), loop_sizes=(2,), recon_matrix=(32, 32),
+    ... )
+    >>> buffer = recon.ReconBuffer(space)
+
+    The layout is the encoding space's, so a plugin knows the shape before the
+    first line arrives:
+
+    >>> buffer.kspace.shape
+    (4, 2, 32, 64)
+    >>> buffer.extents
+    {'coil': 4, 'slice': 2, 'phase_encode': 32, 'readout': 64}
+    >>> buffer.image_shape
+    (32, 32)
     """
 
     def __init__(
@@ -258,7 +292,7 @@ class ReconBuffer:
         dtype: Any = np.complex64,
     ) -> None:
         self.space = space
-        self.coils = max(space.coils, coils or 0)
+        self.coils = int(coils) if coils else space.coils
         self.readout = max(space.readout, readout or 0)
         shape = (self.coils, *space.shape[1:-1], self.readout)
         self.kspace = np.zeros(shape, dtype=dtype)
@@ -272,6 +306,25 @@ class ReconBuffer:
     def axes(self) -> tuple[str, ...]:
         """Name of every axis of :attr:`kspace`, in order."""
         return self.space.axes
+
+    @property
+    def extents(self) -> dict[str, int]:
+        """How far each axis of :attr:`kspace` runs, by the name it goes under.
+
+        What a plugin loops over: ``extents.get("slice", 1)`` answers for a scan
+        whether or not it varies the slice, so a reconstruction is written once
+        and a single-slice scan is that loop run once.
+        """
+        return dict(zip(self.axes, self.kspace.shape, strict=True))
+
+    @property
+    def image_shape(self) -> tuple[int, ...]:
+        """The matrix the header asks the images to be cropped to.
+
+        The reconstructed space, so the readout oversampling the scanner
+        digitises and any phase field-of-view oversampling are off it.
+        """
+        return self.space.recon_matrix
 
     #: The MRD counter each placement axis is read from.
     _COUNTERS: ClassVar[dict[str, str]] = {
@@ -301,15 +354,26 @@ class ReconBuffer:
                 where.append(index)
         return tuple(where)
 
-    def add(self, acquisition: Any) -> None:
+    def add(self, acquisition: Any, data: Any = None) -> None:
         """Place one acquisition where its counters say it belongs.
+
+        Parameters
+        ----------
+        acquisition
+            The acquisition, whose counters and flags say where it goes.
+        data
+            ``(coils, samples)`` to place instead of ``acquisition.data``, for
+            a readout a plugin corrected on arrival -- the reversed line of an
+            EPI train, flipped and phase corrected in
+            :meth:`~pulserver.ReconPlugin.receive`. ``None`` places what the
+            acquisition carries.
 
         Raises
         ------
         ValueError
             If the acquisition does not fit the space it is placed in.
         """
-        data = np.asarray(acquisition.data)
+        data = np.asarray(acquisition.data if data is None else data)
         if data.ndim != 2:
             raise ValueError(
                 f"acquisition data must be (coils, samples), got shape {data.shape}"
@@ -466,6 +530,25 @@ class ReconData(Mapping):
         What the header described, by encoding-space index.
     data : dict
         The buffers allocated so far, by encoding-space index.
+
+    Examples
+    --------
+    >>> import pulserver.recon as recon
+    >>> space = recon.EncodingSpace(
+    ...     index=0, coils=4, readout=64, phase_encodes=32, partitions=1,
+    ...     loops=("slice",), loop_sizes=(2,), recon_matrix=(32, 32),
+    ... )
+    >>> data = recon.ReconData([space])
+
+    A buffer costs its memory only once something reaches it, so a scan whose
+    prescan never runs never allocates its grid:
+
+    >>> len(data)
+    0
+    >>> data[0].kspace.shape
+    (4, 2, 32, 64)
+    >>> len(data)
+    1
     """
 
     def __init__(self, spaces: Any = (), *, dtype: Any = np.complex64) -> None:
@@ -508,17 +591,18 @@ class ReconData(Mapping):
             )
         return self.data[encoding]
 
-    def add(self, acquisition: Any) -> None:
+    def add(self, acquisition: Any, data: Any = None) -> None:
         """Place one acquisition in the buffer its header names.
 
         Routed by ``encoding_space_ref``, which is how a scan of several
-        subsequences sorts itself with nothing declared per plugin.
+        subsequences sorts itself with nothing declared per plugin. ``data``
+        replaces what the acquisition carries; see :meth:`ReconBuffer.add`.
         """
         if not self.spaces:
             return
         encoding = int(acquisition_label(acquisition, "encoding_space_ref", 0) or 0)
-        coils, samples = np.shape(acquisition.data)[-2:]
-        self.buffer(encoding, coils=coils, readout=samples).add(acquisition)
+        coils, samples = np.shape(acquisition.data if data is None else data)[-2:]
+        self.buffer(encoding, coils=coils, readout=samples).add(acquisition, data)
 
     def __getitem__(self, encoding: int) -> ReconBuffer:
         return self.buffer(encoding)

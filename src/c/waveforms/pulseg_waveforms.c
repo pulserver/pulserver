@@ -1910,8 +1910,8 @@ int pulseg_get_tr_waveforms(
 
     /* ---- Rotation post-pass ----
      * All three grad axes now share the same uniform time base.
-     * Walk through samples, find each sample's block, and apply R^T
-     * if that block has a rotation. */
+     * Walk through samples, find each sample's block, and turn the logical
+     * vector into the physical one it plays as. */
     blk_n = 0;
     blk_end = out->blocks[0].start_us + out->blocks[0].duration_us;
     for (s = 0; s < n_uniform; ++s)
@@ -1932,7 +1932,7 @@ int pulseg_get_tr_waveforms(
         vec[0] = out->gx.amplitude[s];
         vec[1] = out->gy.amplitude[s];
         vec[2] = out->gz.amplitude[s];
-        pulseg__apply_rotation(rot_out, R, vec, 1);
+        pulseg__apply_rotation(rot_out, R, vec, 0);
         out->gx.amplitude[s] = rot_out[0];
         out->gy.amplitude[s] = rot_out[1];
         out->gz.amplitude[s] = rot_out[2];

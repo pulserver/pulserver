@@ -73,6 +73,11 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install .[dev]
 
+      # The C++ suites link the recon-side reader, so the lane needs the
+      # ISMRMRD and Boost headers; without them the whole lane skips.
+      - name: Install the C++ test dependencies
+        run: sudo apt-get update && sudo apt-get install -y libismrmrd-dev libboost-dev
+
       # The C and C++ suites are built by the lanes themselves
       # (PULSERVER_BUILD_NATIVE=1, which run_tests.sh sets).
       - name: Run the C and C++ lanes

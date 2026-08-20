@@ -94,14 +94,9 @@ class SequenceModule(ABC):
     ----------
     events : types.SimpleNamespace
         Every published event, by name.
-    seq : pulserver.pypulseq.Sequence
-        The sequence the module built itself in, holding one pass of its blocks.
     center : float
         Time from the start of the module to the point it is timed against —
         an RF pulse's isodelay, a readout's echo. The subclass sets it.
-    duration : float
-        Length of the module (s). Summed from the blocks unless the subclass
-        assigns one.
 
     See Also
     --------
@@ -138,7 +133,12 @@ class SequenceModule(ABC):
 
     @property
     def seq(self):
-        """The module's own sequence. Assign one to start building."""
+        """The sequence the module built itself in, one pass of its blocks.
+
+        Assign one to start building. Everything a sequence answers about
+        itself — k-space, PNS, timing, a plot — the module answers by
+        forwarding here.
+        """
         return self._seq
 
     @seq.setter

@@ -76,6 +76,22 @@ class InversionPreparation(RfModule):
             prep.prep_labels[0].value = shot
             for block in prep.blocks:
                 seq.add_block(*block)
+
+    The pulse and its spoiler together, which is what the TI is measured
+    from:
+
+    .. plot::
+
+       import pulserver.design as design
+       import pulserver.pypulseq as pp
+       from _figures import rf_profile
+
+       rf_profile(
+           design.InversionPreparation(pp.Opts(), 8e-3),
+           title="inversion preparation, 8 ms",
+           whole=True,
+           extent=2000,
+       )
     """
 
     def init_module(

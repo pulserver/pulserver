@@ -102,7 +102,7 @@ class Sequence(AnalysisMixin, SafetyViewsMixin, SoftDelayMixin):
     >>> seq = pp.Sequence(system=system)
     >>> gx = pp.make_trapezoid(channel="x", area=1000, system=system)
     >>> index = seq.add_block(gx)
-    >>> seq.remove_duplicates(in_place=True)
+    >>> deduplicated = seq.remove_duplicates(in_place=True)
     >>> seq.write("gradient.seq")  # doctest: +SKIP
 
     Notes
@@ -769,7 +769,7 @@ class Sequence(AnalysisMixin, SafetyViewsMixin, SoftDelayMixin):
         check_timing: bool = True,
         v141_compat: bool = False,
         *,
-        check_gradient_continuity: bool = True,
+        check_gradients: bool = True,
     ) -> str | None:
         """Write the sequence as a ``.seq`` file.
 
@@ -788,11 +788,12 @@ class Sequence(AnalysisMixin, SafetyViewsMixin, SoftDelayMixin):
             Warn if the sequence has timing errors.
         v141_compat : bool, default False
             Not implemented -- see Raises.
-        check_gradient_continuity : bool, default True
-            Warn if a gradient jumps across a block boundary. Building the
-            sequence does not check this, so writing is the natural place;
-            pass False in a server-mode plugin, where the scanner checks it
-            at predownload anyway.
+        check_gradients : bool, default True
+            Warn if a gradient exceeds the system's amplitude or slew limit,
+            or jumps across a block boundary. Building the sequence checks
+            none of these, so writing is the natural place; pass False in a
+            server-mode plugin, where the scanner checks them at predownload
+            against its own rasters and limits.
 
         Returns
         -------
@@ -825,17 +826,43 @@ class Sequence(AnalysisMixin, SafetyViewsMixin, SoftDelayMixin):
                 "superseded revision and nothing here reads it back. Write 1.5 and convert "
                 "with MATLAB's write_v141 if a 1.4.1 file is really needed."
             )
+        target = self._prepared_for_write(
+            check_timing=check_timing,
+            check_gradients=check_gradients,
+            remove_duplicates=remove_duplicates,
+        )
+        payload = target._to_text(create_signature=create_signature)
+        Path(name).write_bytes(payload)
+        return _signature_of(payload) if create_signature else None
+
+    def _prepared_for_write(
+        self,
+        *,
+        check_timing: bool = True,
+        check_gradients: bool = True,
+        remove_duplicates: bool = True,
+    ) -> Sequence:
+        """The sequence a writer should serialise, warnings already raised.
+
+        Returns
+        -------
+        Sequence
+            ``self``, or a deduplicated copy of it.
+        """
         if check_timing:
             is_ok, error_report = self.check_timing()
             if not is_ok:
                 warnings.warn(
                     f"write(): {len(error_report)} timing errors found in the sequence",
-                    stacklevel=2,
+                    stacklevel=3,
                 )
-        if check_gradient_continuity:
-            is_ok, message = self.check_gradient_continuity()
-            if not is_ok:
-                warnings.warn(f"write(): {message}", stacklevel=2)
+        if check_gradients:
+            for is_ok, message in (
+                self.check_hardware_limits(),
+                self.check_gradient_continuity(),
+            ):
+                if not is_ok:
+                    warnings.warn(f"write(): {message}", stacklevel=3)
         self.declare_tr()
 
         # A sequence that has not been touched since its last deduplication
@@ -843,12 +870,8 @@ class Sequence(AnalysisMixin, SafetyViewsMixin, SoftDelayMixin):
         # thing as well as the pass -- which on a protocol-scale scan is the
         # larger half.
         if remove_duplicates and not self._native.deduplicated():
-            target = self.remove_duplicates()
-        else:
-            target = self
-        payload = target._to_text(create_signature=create_signature)
-        Path(name).write_bytes(payload)
-        return _signature_of(payload) if create_signature else None
+            return self.remove_duplicates()
+        return self
 
     def write_binary(self, target: str | Path | object) -> None:
         """Write the sequence in the binary Pulseq format.
@@ -1315,7 +1338,8 @@ class Sequence(AnalysisMixin, SafetyViewsMixin, SoftDelayMixin):
 
         See Also
         --------
-        check_gradient_continuity : the check add_block skips for speed.
+        check_hardware_limits, check_gradient_continuity : the gradient checks
+            :meth:`write` runs.
         """
         first, last = self._window_for(time_range)
         is_ok, error_report = self._upstream_window(first, last).check_timing()
@@ -1373,7 +1397,7 @@ class Sequence(AnalysisMixin, SafetyViewsMixin, SoftDelayMixin):
 
         See Also
         --------
-        check_gradient_continuity : the other check :meth:`write` runs.
+        check_gradient_continuity : the other gradient check :meth:`write` runs.
         """
         from ._block import _grad_event
 
@@ -1791,10 +1815,10 @@ class Sequence(AnalysisMixin, SafetyViewsMixin, SoftDelayMixin):
         first seen by an ``INC`` starts from zero, and that a label evolution
         reports ``0`` for blocks before the label was first touched.
 
-        The one place this can differ from upstream is a block that both
-        ``SET``s and ``INC``s the *same* counter: the operations are applied in
-        the order the block plays them, read off the extension chain, rather
-        than sets-then-increments.
+        The one place this can differ from upstream is a block carrying both
+        a ``SET`` and an ``INC`` of the *same* counter: the operations are
+        applied in the order the block plays them, read off the extension
+        chain, rather than sets-then-increments.
         """
         if evolution not in ("none", "blocks", "adc", "label"):
             raise ValueError(
@@ -1987,7 +2011,8 @@ class Sequence(AnalysisMixin, SafetyViewsMixin, SoftDelayMixin):
             ext=int(row[5]),
         )
 
-    def sequence_descriptor(self, *, subsequence: int = 0):
+    @property
+    def sequence_descriptor(self):
         """The state-machine description of one repetition time.
 
         Returns a :class:`~pulserver.recon.simulation.SequenceDescription`: one
@@ -2013,8 +2038,8 @@ class Sequence(AnalysisMixin, SafetyViewsMixin, SoftDelayMixin):
         the waveform decompression it would immediately discard is the one
         performance mistake this method could make.
 
-        The description is cached against the sequence's revision, so asking
-        repeatedly costs one build.
+        The scan structure it is built from is cached against the sequence's
+        revision, so asking repeatedly costs one detection.
         """
         from ..recon._seqdesc import (
             EventType,
@@ -2029,7 +2054,7 @@ class Sequence(AnalysisMixin, SafetyViewsMixin, SoftDelayMixin):
         )
 
         structure = self._structure_for("sequence_descriptor")
-        raw = _get_sequence_description(structure.collection, int(subsequence))
+        raw = _get_sequence_description(structure.collection, 0)
 
         events = tuple(
             SequenceEvent(
@@ -2043,7 +2068,7 @@ class Sequence(AnalysisMixin, SafetyViewsMixin, SoftDelayMixin):
         )
 
         definitions = {}
-        for entry in _get_rf_definitions(structure.collection, int(subsequence)):
+        for entry in _get_rf_definitions(structure.collection, 0):
             channels = max(int(entry["num_channels"]), 1)
             magnitude = np.asarray(entry["magnitude"], dtype=np.float32)
             # Channel-major; a simulation reads the first transmit channel,

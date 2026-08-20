@@ -11,11 +11,19 @@ from typing import Any
 
 import torch
 
-from .prior import StackedPrior
+import deepinv
+
+from .prior import StackedPrior, _unique_parameters
 from .state import OptimResult, OptimState
 
 
 class _IterativeOptimizer(torch.nn.Module):
+    """Shared init_state/step/get_output base for Pulserver solvers.
+
+    Every subclass satisfies :class:`pulserver.recon.StatefulReconstructor`,
+    the one step-wise contract the learned stack trains against.
+    """
+
     def __init__(
         self,
         *,
@@ -74,50 +82,17 @@ class _IterativeOptimizer(torch.nn.Module):
         **kwargs: Any,
     ) -> torch.Tensor | OptimResult:
         """Reconstruct data using the standard or state-aware interface."""
-        count = self.max_iter if iterations is None else iterations
-        if not isinstance(count, int) or isinstance(count, bool) or count < 1:
-            raise ValueError("iterations must be a positive integer")
-        if count > self.max_iter:
-            raise ValueError("iterations cannot exceed the configured max_iter")
-        if detach_every is not None and (
-            not isinstance(detach_every, int)
-            or isinstance(detach_every, bool)
-            or detach_every < 1
-        ):
-            raise ValueError("detach_every must be a positive integer")
-        selected = set(record_iterations)
-        if any(index < 0 or index > count for index in selected):
-            raise ValueError(
-                "record_iterations entries must lie between 0 and iterations"
-            )
-
-        context = nullcontext() if getattr(self, "unfold", False) else torch.no_grad()
-        with context:
-            state = self.init_state(y, physics, init)
-            history = {0: state.estimate} if 0 in selected else {}
-            for iteration in range(count):
-                previous = state.estimate
-                state = self.step(
-                    state,
-                    y,
-                    physics,
-                    iteration=iteration,
-                    **kwargs,
-                )
-                completed = iteration + 1
-                if completed in selected:
-                    history[completed] = state.estimate
-                if (
-                    self.early_stop
-                    and _relative_residual(previous, state.estimate) <= self.thres_conv
-                ):
-                    break
-                if detach_every is not None and completed % detach_every == 0:
-                    state = state.detach()
-        reconstruction = self.get_output(state)
-        if return_info:
-            return OptimResult(reconstruction, state, history)
-        return reconstruction
+        return _run_state_aware(
+            self,
+            y,
+            physics,
+            init,
+            iterations=iterations,
+            return_info=return_info,
+            record_iterations=record_iterations,
+            detach_every=detach_every,
+            **kwargs,
+        )
 
     def prior_parameters(
         self,
@@ -243,6 +218,63 @@ class _AlgorithmSchedule(torch.nn.Module):
 # %% private module subroutines
 
 
+def _run_state_aware(
+    solver: Any,
+    y: torch.Tensor,
+    physics: Any,
+    init: Any | None,
+    *,
+    iterations: int | None,
+    return_info: bool,
+    record_iterations: Iterable[int],
+    detach_every: int | None,
+    **kwargs: Any,
+) -> torch.Tensor | OptimResult:
+    """Drive any init/step/get_output solver through the state-aware loop."""
+    count = solver.max_iter if iterations is None else iterations
+    if not isinstance(count, int) or isinstance(count, bool) or count < 1:
+        raise ValueError("iterations must be a positive integer")
+    if count > solver.max_iter:
+        raise ValueError("iterations cannot exceed the configured max_iter")
+    if detach_every is not None and (
+        not isinstance(detach_every, int)
+        or isinstance(detach_every, bool)
+        or detach_every < 1
+    ):
+        raise ValueError("detach_every must be a positive integer")
+    selected = set(record_iterations)
+    if any(index < 0 or index > count for index in selected):
+        raise ValueError("record_iterations entries must lie between 0 and iterations")
+
+    context = nullcontext() if getattr(solver, "unfold", False) else torch.no_grad()
+    with context:
+        state = solver.init_state(y, physics, init)
+        history = {0: state.estimate} if 0 in selected else {}
+        for iteration in range(count):
+            previous = state.estimate
+            state = solver.step(
+                state,
+                y,
+                physics,
+                iteration=iteration,
+                **kwargs,
+            )
+            completed = iteration + 1
+            if completed in selected:
+                history[completed] = state.estimate
+            if (
+                solver.early_stop
+                and _relative_residual(previous, state.estimate) <= solver.thres_conv
+            ):
+                break
+            if detach_every is not None and completed % detach_every == 0:
+                state = state.detach()
+    reconstruction = solver.get_output(state)
+    if return_info:
+        return OptimResult(reconstruction, state, history)
+    return reconstruction
+
+
 def _schedule_tensor(
     value: float | Sequence[float] | torch.Tensor,
     max_iter: int,
@@ -256,6 +288,59 @@ def _schedule_tensor(
     if not bool(torch.all(torch.isfinite(tensor))):
         raise ValueError(f"{name} must be finite")
     return tensor
+
+
+def _data_fidelity_schedule(data_fidelity: Any | list[Any] | None) -> list[Any]:
+    if data_fidelity is None:
+        return [deepinv.optim.L2()]
+    selected = data_fidelity if isinstance(data_fidelity, list) else [data_fidelity]
+    if not selected:
+        raise ValueError("data_fidelity schedule cannot be empty")
+    if not all(isinstance(item, torch.nn.Module) for item in selected):
+        raise TypeError("data_fidelity entries must be torch.nn.Module instances")
+    return list(selected)
+
+
+def _prior_schedule(prior: Any | list[Any] | None, g_param: Any) -> list[StackedPrior]:
+    if prior is None:
+        return [StackedPrior([])]
+    selected = prior if isinstance(prior, list) else [prior]
+    if not selected:
+        raise ValueError("prior schedule cannot be empty")
+    return [
+        item
+        if isinstance(item, StackedPrior)
+        else StackedPrior([item], g_params=[g_param])
+        for item in selected
+    ]
+
+
+def _validate_schedule_length(
+    schedule: Sequence[Any],
+    max_iter: int,
+    name: str,
+) -> None:
+    if len(schedule) not in {1, max_iter}:
+        raise ValueError(f"{name} must be singular or contain max_iter entries")
+
+
+def _validate_prior_width(schedule: Sequence[StackedPrior]) -> None:
+    widths = {len(prior) for prior in schedule}
+    if len(widths) > 1:
+        raise ValueError("iteration-wise StackedPrior entries must have equal lengths")
+
+
+def _validate_algorithm_values(
+    values: dict[str, Any],
+    *,
+    positive: tuple[str, ...] = ("stepsize",),
+) -> None:
+    for name in positive:
+        if bool(torch.any(torch.as_tensor(values[name]) <= 0.0)):
+            raise ValueError(f"{name} must be positive")
+    for name in ("lambda", "beta"):
+        if bool(torch.any(torch.as_tensor(values[name]) < 0.0)):
+            raise ValueError(f"{name} must be non-negative")
 
 
 def _relative_residual(previous: torch.Tensor, current: torch.Tensor) -> float:
@@ -296,15 +381,3 @@ def _physics_parameters(physics: Any) -> list[torch.nn.Parameter]:
         if buffers is not None:
             parameters.extend(buffer for buffer in buffers() if buffer.requires_grad)
     return _unique_parameters(parameters)
-
-
-def _unique_parameters(
-    parameters: Iterable[torch.nn.Parameter],
-) -> list[torch.nn.Parameter]:
-    result = []
-    identities = set()
-    for parameter in parameters:
-        if id(parameter) not in identities:
-            identities.add(id(parameter))
-            result.append(parameter)
-    return result

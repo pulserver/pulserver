@@ -28,49 +28,34 @@ from typing import TYPE_CHECKING, Any
 #: Public name to the module defining it. Every name is reachable flat; this
 #: is the only place the file layout is written down.
 _MEMBERS = {
-    "ADMM": "optim",
+    "ADMM": "optim.admm",
     "AcquisitionBucket": "plugin",
     "AcquisitionBucketStats": "plugin",
     "AcquisitionFlag": "plugin",
     "AdcRole": "simulation",
     "AverageDenoiser": "denoisers",
-    "BSSFP": "simulation",
-    "CGInfo": "optim",
-    "CMRxReconSliceDataset": "datasets",
+    "CGInfo": "optim.cg",
     "Cartesian2D": "physics",
     "Cartesian3D": "physics",
-    "CartesianGridder": "preprocessing",
     "CoefficientAccessor": "postprocessing",
-    "ComplexAdapter": "learned",
-    "ConjugateGradient": "optim",
+    "ConjugateGradient": "optim.cg",
     "ContextAgnosticDenoiser": "models",
     "CudaStreaming": "execution",
-    "EPIPhaseCorrection": "preprocessing",
     "EncodingSpace": "plugin",
-    "EpgInterpreter": "simulation",
-    "EpiAcquisitionGroups": "preprocessing",
     "EventType": "simulation",
     "ExamCache": "plugin",
-    "FISTA": "optim",
-    "FSE": "simulation",
-    "FastMRISliceDataset": "datasets",
+    "FISTA": "optim.fista",
     "GradientCoefficients": "postprocessing",
     "GradientDataConsistency": "learned",
     "Gradunwarp": "postprocessing",
-    "HDF5Dataset": "datasets",
     "Homodyne": "preprocessing",
-    "IRGNM": "optim",
+    "IRGNM": "optim.irgnm",
     "IXI": "datasets",
     "IXITiny": "datasets",
-    "ImageDataset": "datasets",
-    "ImageFolder": "datasets",
     "ImageGeometry": "postprocessing",
     "LLR": "denoisers",
-    "LidcIdriSliceDataset": "datasets",
     "MODEL_PATH_ENV": "weights",
     "MRIPhysics": "physics",
-    "MRISliceTransform": "datasets",
-    "MoDL": "models",
     "ModelBundle": "weights",
     "ModelStore": "weights",
     "NLINV": "calibration",
@@ -79,16 +64,13 @@ _MEMBERS = {
     "NonCartesian2D": "physics",
     "NonCartesian3D": "physics",
     "OffResonance": "physics",
-    "OptimResult": "optim",
-    "OptimState": "optim",
-    "PDHG": "optim",
+    "OptimResult": "optim.state",
+    "OptimState": "optim.state",
+    "PDHG": "optim.pdhg",
     "POCS": "preprocessing",
-    "PatchDataset": "datasets",
     "PhasePoleCorrection": "calibration",
-    "PolynomialPreconditioner": "optim",
+    "PolynomialPreconditioner": "optim._algorithms",
     "Positive": "denoisers",
-    "RAM": "models",
-    "RandomPatchSampler": "datasets",
     "ReconBuffer": "plugin",
     "ReconContext": "plugin",
     "ReconData": "plugin",
@@ -100,96 +82,65 @@ _MEMBERS = {
     "RigidMotionEKF": "motion",
     "RigidMotionEstimate": "motion",
     "RigidRegistration": "motion",
-    "SKMTEASliceDataset": "datasets",
     "SMS": "physics",
-    "SPGR": "simulation",
-    "SSFPEcho": "simulation",
-    "SSFPFID": "simulation",
     "ScaledAdjoint": "learned",
     "SequenceDescription": "simulation",
     "SequenceDescriptionCollection": "simulation",
     "SequenceEvent": "simulation",
     "SequenceParameters": "simulation",
     "ShimDefinition": "simulation",
-    "SimpleFastMRISliceDataset": "datasets",
-    "SimulationResult": "simulation",
-    "SmsEpiInputs": "preprocessing",
-    "StackedPrior": "optim",
+    "StackedPrior": "optim.prior",
     "StatefulReconstructor": "learned",
     "Subspace": "physics",
-    "SubspaceBasis": "simulation",
     "TGV": "denoisers",
     "TV": "denoisers",
-    "TensorDataset": "datasets",
-    "TissueProperties": "simulation",
     "Toeplitz": "physics",
     "TorchIODataset": "datasets",
     "UnrollResult": "learned",
     "UnrollState": "learned",
     "UnrolledReconstructor": "learned",
-    "VarNet": "models",
     "WaveEncoding": "physics",
     "WavePSF": "calibration",
     "WavePSFCalibration": "calibration",
     "WavePSFResult": "calibration",
     "WaveShuffling": "physics",
     "Wavelet": "denoisers",
-    "as_complex_channels": "learned",
     "as_numpy": "postprocessing",
-    "as_real_channels": "learned",
     "available_nufft_backends": "physics",
     "calibration_extent": "calibration",
-    "cartesian_3d_to_2d": "preprocessing",
+    "cartesian_recon": "cartesian",
     "center_crop": "postprocessing",
-    "check_dataset": "datasets",
     "coil_combine": "postprocessing",
+    "coil_maps_from_reference": "calibration",
     "coil_compress": "preprocessing",
-    "coil_images": "reconstruction",
-    "correct_epi_eddy_currents": "preprocessing",
     "correct_lines": "preprocessing",
     "decode_sequence_description": "simulation",
     "decompress_shape": "simulation",
     "default_model_paths": "weights",
     "diffusion_table": "_mrd.metadata",
-    "download_archive": "datasets",
-    "echo_count": "preprocessing",
-    "encoded_shape": "preprocessing",
-    "encoded_volume": "preprocessing",
-    "epi_ramp_interpolate": "preprocessing",
-    "estimate_epi_eddy_phase": "preprocessing",
+    "epi_ramp_operator": "preprocessing",
+    "estimate_epi_phase": "preprocessing",
     "fftc": "preprocessing",
-    "fill_partial_echo": "reconstruction",
-    "generate_dataset": "datasets",
-    "grid_cartesian": "preprocessing",
+    "fill_partial_echo": "preprocessing",
     "has_acquisition_flag": "plugin",
     "ifftc": "preprocessing",
     "load_model": "weights",
-    "make_interpreter": "simulation",
-    "measurement_to_channels": "physics",
-    "measurement_to_trailing": "physics",
     "noise_prewhiten": "preprocessing",
-    "odd_even_fit": "preprocessing",
-    "partition_epi_acquisitions": "preprocessing",
-    "pics": "optim",
+    "pics": "optim._algorithms",
     "pipe_menon_dcf": "preprocessing",
-    "receiver_channels": "preprocessing",
-    "recon_shape": "preprocessing",
-    "recon_volume": "preprocessing",
-    "reconstruct_plane": "reconstruction",
     "remove_readout_oversampling": "preprocessing",
     "run_pyhysco": "postprocessing",
     "save_bundle": "weights",
-    "sense": "reconstruction",
-    "sensitivities": "calibration",
-    "simulate_subspace": "simulation",
-    "smooth_sensitivities": "calibration",
+    "user_parameter": "_mrd.metadata",
 }
 
 __all__ = sorted(_MEMBERS)
 
 #: Reachable as attributes for anyone who wants them, but not part of the
 #: public namespace: the flat names above are.
-_SUBMODULES = frozenset(_MEMBERS.values()) - {"_mrd.metadata"}
+_SUBMODULES = frozenset(
+    value.split(".", 1)[0] for value in _MEMBERS.values()
+) - {"_mrd"}
 
 
 def __getattr__(name: str) -> Any:
@@ -209,6 +160,8 @@ def __dir__() -> list[str]:
 
 if TYPE_CHECKING:
     from ._mrd.metadata import diffusion_table as diffusion_table
+    from ._mrd.metadata import user_parameter as user_parameter
+    from .cartesian import cartesian_recon as cartesian_recon
     from .calibration import NLINV as NLINV
     from .calibration import NLINVPhysics as NLINVPhysics
     from .calibration import NLINVResult as NLINVResult
@@ -217,26 +170,10 @@ if TYPE_CHECKING:
     from .calibration import WavePSFCalibration as WavePSFCalibration
     from .calibration import WavePSFResult as WavePSFResult
     from .calibration import calibration_extent as calibration_extent
-    from .calibration import sensitivities as sensitivities
-    from .calibration import smooth_sensitivities as smooth_sensitivities
-    from .datasets import CMRxReconSliceDataset as CMRxReconSliceDataset
-    from .datasets import FastMRISliceDataset as FastMRISliceDataset
-    from .datasets import HDF5Dataset as HDF5Dataset
+    from .calibration import coil_maps_from_reference as coil_maps_from_reference
     from .datasets import IXI as IXI
     from .datasets import IXITiny as IXITiny
-    from .datasets import ImageDataset as ImageDataset
-    from .datasets import ImageFolder as ImageFolder
-    from .datasets import LidcIdriSliceDataset as LidcIdriSliceDataset
-    from .datasets import MRISliceTransform as MRISliceTransform
-    from .datasets import PatchDataset as PatchDataset
-    from .datasets import RandomPatchSampler as RandomPatchSampler
-    from .datasets import SKMTEASliceDataset as SKMTEASliceDataset
-    from .datasets import SimpleFastMRISliceDataset as SimpleFastMRISliceDataset
-    from .datasets import TensorDataset as TensorDataset
     from .datasets import TorchIODataset as TorchIODataset
-    from .datasets import check_dataset as check_dataset
-    from .datasets import download_archive as download_archive
-    from .datasets import generate_dataset as generate_dataset
     from .denoisers import AverageDenoiser as AverageDenoiser
     from .denoisers import LLR as LLR
     from .denoisers import Positive as Positive
@@ -244,19 +181,13 @@ if TYPE_CHECKING:
     from .denoisers import TV as TV
     from .denoisers import Wavelet as Wavelet
     from .execution import CudaStreaming as CudaStreaming
-    from .learned import ComplexAdapter as ComplexAdapter
     from .learned import GradientDataConsistency as GradientDataConsistency
     from .learned import ScaledAdjoint as ScaledAdjoint
     from .learned import StatefulReconstructor as StatefulReconstructor
     from .learned import UnrollResult as UnrollResult
     from .learned import UnrollState as UnrollState
     from .learned import UnrolledReconstructor as UnrolledReconstructor
-    from .learned import as_complex_channels as as_complex_channels
-    from .learned import as_real_channels as as_real_channels
     from .models import ContextAgnosticDenoiser as ContextAgnosticDenoiser
-    from .models import MoDL as MoDL
-    from .models import RAM as RAM
-    from .models import VarNet as VarNet
     from .motion import RigidMotionEKF as RigidMotionEKF
     from .motion import RigidMotionEstimate as RigidMotionEstimate
     from .motion import RigidRegistration as RigidRegistration
@@ -283,8 +214,6 @@ if TYPE_CHECKING:
     from .physics import WaveEncoding as WaveEncoding
     from .physics import WaveShuffling as WaveShuffling
     from .physics import available_nufft_backends as available_nufft_backends
-    from .physics import measurement_to_channels as measurement_to_channels
-    from .physics import measurement_to_trailing as measurement_to_trailing
     from .plugin import AcquisitionBucket as AcquisitionBucket
     from .plugin import AcquisitionBucketStats as AcquisitionBucketStats
     from .plugin import AcquisitionFlag as AcquisitionFlag
@@ -304,59 +233,30 @@ if TYPE_CHECKING:
     from .postprocessing import center_crop as center_crop
     from .postprocessing import coil_combine as coil_combine
     from .postprocessing import run_pyhysco as run_pyhysco
-    from .preprocessing import CartesianGridder as CartesianGridder
-    from .preprocessing import EPIPhaseCorrection as EPIPhaseCorrection
-    from .preprocessing import EpiAcquisitionGroups as EpiAcquisitionGroups
     from .preprocessing import Homodyne as Homodyne
     from .preprocessing import POCS as POCS
-    from .preprocessing import SmsEpiInputs as SmsEpiInputs
-    from .preprocessing import cartesian_3d_to_2d as cartesian_3d_to_2d
     from .preprocessing import coil_compress as coil_compress
-    from .preprocessing import correct_epi_eddy_currents as correct_epi_eddy_currents
     from .preprocessing import correct_lines as correct_lines
-    from .preprocessing import echo_count as echo_count
-    from .preprocessing import encoded_shape as encoded_shape
-    from .preprocessing import encoded_volume as encoded_volume
-    from .preprocessing import epi_ramp_interpolate as epi_ramp_interpolate
-    from .preprocessing import estimate_epi_eddy_phase as estimate_epi_eddy_phase
+    from .preprocessing import epi_ramp_operator as epi_ramp_operator
+    from .preprocessing import estimate_epi_phase as estimate_epi_phase
     from .preprocessing import fftc as fftc
-    from .preprocessing import grid_cartesian as grid_cartesian
+    from .preprocessing import fill_partial_echo as fill_partial_echo
     from .preprocessing import ifftc as ifftc
     from .preprocessing import noise_prewhiten as noise_prewhiten
-    from .preprocessing import odd_even_fit as odd_even_fit
-    from .preprocessing import partition_epi_acquisitions as partition_epi_acquisitions
     from .preprocessing import pipe_menon_dcf as pipe_menon_dcf
-    from .preprocessing import receiver_channels as receiver_channels
-    from .preprocessing import recon_shape as recon_shape
-    from .preprocessing import recon_volume as recon_volume
     from .preprocessing import remove_readout_oversampling as remove_readout_oversampling
-    from .reconstruction import coil_images as coil_images
-    from .reconstruction import fill_partial_echo as fill_partial_echo
-    from .reconstruction import reconstruct_plane as reconstruct_plane
-    from .reconstruction import sense as sense
     from .simulation import AdcRole as AdcRole
-    from .simulation import BSSFP as BSSFP
-    from .simulation import EpgInterpreter as EpgInterpreter
     from .simulation import EventType as EventType
-    from .simulation import FSE as FSE
     from .simulation import RfDefinition as RfDefinition
     from .simulation import RfShape as RfShape
     from .simulation import RfUse as RfUse
-    from .simulation import SPGR as SPGR
-    from .simulation import SSFPEcho as SSFPEcho
-    from .simulation import SSFPFID as SSFPFID
     from .simulation import SequenceDescription as SequenceDescription
     from .simulation import SequenceDescriptionCollection as SequenceDescriptionCollection
     from .simulation import SequenceEvent as SequenceEvent
     from .simulation import SequenceParameters as SequenceParameters
     from .simulation import ShimDefinition as ShimDefinition
-    from .simulation import SimulationResult as SimulationResult
-    from .simulation import SubspaceBasis as SubspaceBasis
-    from .simulation import TissueProperties as TissueProperties
     from .simulation import decode_sequence_description as decode_sequence_description
     from .simulation import decompress_shape as decompress_shape
-    from .simulation import make_interpreter as make_interpreter
-    from .simulation import simulate_subspace as simulate_subspace
     from .weights import MODEL_PATH_ENV as MODEL_PATH_ENV
     from .weights import ModelBundle as ModelBundle
     from .weights import ModelStore as ModelStore

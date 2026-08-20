@@ -40,8 +40,8 @@ from pulserver.app import gre2D_sequence
 
 seq = gre2D_sequence(n_x=256, n_y=256, n_slices=16)
 
-ok, message = seq.check_hardware_limits()   # amplitude, slew, continuity
-seq.declare_tr()                            # the repeating unit, from the content
+ok, message = seq.check_hardware_limits()  # amplitude, slew, continuity
+seq.declare_tr()  # the repeating unit, from the content
 seq.write("gre.seq")
 ```
 

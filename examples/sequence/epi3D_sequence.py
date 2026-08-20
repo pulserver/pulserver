@@ -12,6 +12,24 @@ Sequence Collection path. :mod:`pulserver.app.recon.epi3D_recon` reads both back
 
 ``main`` returns the main :class:`pulserver.pypulseq.Sequence`; ``PLUGIN``
 writes the linked pair.
+
+Examples
+--------
+>>> from pulserver.app import epi3D_sequence
+>>> seq = epi3D_sequence(n_x=32, n_y=32, n_z=4, n_dummy=0)
+>>> seq.num_trs, seq.num_segments
+(4, 1)
+
+The same train with partition blips beside the phase blips:
+
+.. plot::
+   :include-source:
+
+   from pulserver.app import epi3D_sequence
+
+   seq = epi3D_sequence(n_x=32, n_y=32, n_z=4, n_dummy=0)
+   seq.plot(tr="worst_case", time_disp="ms", grad_disp="mT/m", stacked=True,
+            plot_now=False)
 """
 
 from __future__ import annotations
