@@ -24,9 +24,9 @@ dependencies = [
   # The NUFFT comes from MRI-NUFFT rather than a second implementation here;
   # FINUFFT is the portable CPU backend. See the `cuda` extra for GPU.
   "mri-nufft[finufft]",
-  "torch>=2.12",
-  "torchio>=0.20",
-  "deepinv>=0.4",
+  "torch>=2.13.0",
+  "torchio>=1.2.1",
+  "deepinv>=0.4.1",
   "ptwt",
   "PyWavelets",
   "ismrmrd>=1.15.0",
@@ -41,7 +41,7 @@ dependencies = [
 # CuPy extra is deliberately not used: Pulserver registers its own
 # Torch-native adapter at runtime. Everything CUDA-only is gated at import,
 # and the tests that need a device skip without one.
-cuda = ["cufinufft>=2.4; platform_system == 'Linux'"]
+cuda = ["cufinufft>=2.5.1; platform_system == 'Linux'"]
 # PyHySCO is GPL-3.0-only. It stays opt-in, and is neither imported nor
 # bundled by the MIT-licensed Pulserver package -- it is driven as an external
 # executable -- so installing it is the user's licensing decision.
