@@ -4,10 +4,11 @@ from __future__ import annotations
 
 __all__ = ["PLUGIN", "SimpleFftRecon"]
 
+from typing import Any
+
 import numpy as np
 
 from ...plugin import (
-    AcquisitionBucket,
     AcquisitionFlag,
     ReconContext,
     ReconPlugin,
@@ -28,19 +29,27 @@ class SimpleFftRecon(ReconPlugin):
             | AcquisitionFlag.IS_PHASECORR_DATA,
             # A generic handler takes streams from anywhere, and a header
             # that does not describe its encoding spaces cannot lay any
-            # buffers out. This one sorts the bucket for itself.
+            # buffers out. This one collects the lines for itself.
             buffered=False,
         )
 
-    def recon(
-        self,
-        bucket: AcquisitionBucket,
-        context: ReconContext,
-    ) -> ReconResult | None:
+    def startup(self, context: ReconContext) -> None:
+        """Start the slice empty; there are no buffers to lay out."""
+        del context
+        self.lines: list[Any] = []
+
+    def receive(self, acquisition: Any, context: ReconContext) -> Any:
+        """Keep the line, and reconstruct when it closes the slice."""
+        self.lines.append(acquisition)
+        return super().receive(acquisition, context)
+
+    def recon(self, branch: str, context: ReconContext) -> ReconResult | None:
         """Apply a two-dimensional IFFT and root-sum-of-squares combine."""
-        if not bucket.data:
+        del branch
+        if not self.lines:
             return None
-        data = _reconstruct(bucket, context.header)
+        data = _reconstruct(self.lines, context.header)
+        self.lines = []
         return ReconResult(
             data.transpose(),
             attributes={
@@ -57,8 +66,8 @@ PLUGIN = SimpleFftRecon()
 # %% private module subroutines
 
 
-def _reconstruct(bucket: AcquisitionBucket, header) -> np.ndarray:
-    stacked = np.stack([acquisition.data for acquisition in bucket.data], axis=-1)
+def _reconstruct(lines: list[Any], header) -> np.ndarray:
+    stacked = np.stack([acquisition.data for acquisition in lines], axis=-1)
     data = _fft_combine_scaled(stacked, header)
 
     encoding = header.encoding[0]

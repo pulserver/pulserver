@@ -88,6 +88,24 @@ class SpatialSelective2DExcitation(RfModule):
 
     >>> pencil.self_refocused, pencil.rephasers
     (True, ())
+
+    The subpulses and the excitation k-space they deposit energy along. A
+    pulse played under moving gradients tips the transform of what is laid
+    down on this path, so the path is the design:
+
+    .. plot::
+
+       import pulserver.design as design
+       import pulserver.pypulseq as pp
+       from _figures import excitation_kspace
+
+       system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+       excitation_kspace(
+           design.SpatialSelective2DExcitation(
+               system, 30.0, fov=0.256, matrix=16, selective_size=0.04
+           ),
+           title="2D spiral pencil beam, 16 turns",
+       )
     """
 
     def init_module(

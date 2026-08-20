@@ -320,6 +320,48 @@ class UnrolledReconstructor(torch.nn.Module):
     conditioning
         ``"none"``, ``"iteration"``, ``"context"``, ``"all"``, or a
         callable producing denoiser keyword arguments.
+
+    Examples
+    --------
+    The unroll is a fixed number of steps, each a data-consistency gradient
+    and a denoiser, with the state carried explicitly between them. Training
+    is what makes the denoiser learned; the composition is the same either
+    way, so this one stands a total-variation denoiser in for it and shows
+    the estimate at three of its six steps.
+
+    ``viewed_as_real=True`` is what puts a complex image in front of a
+    real-valued network: the image arrives as two channels, and
+    ``channels_per_group=2`` is what keeps them together.
+
+    .. plot::
+
+       import torch
+       import pulserver.recon as recon
+       from _figures import images, phantom
+
+       truth, coil_maps = phantom(64, coils=4)
+       mask = torch.zeros(64, 64)
+       mask[::3] = 1.0
+       mask[26:38] = 1.0
+       physics = recon.Cartesian2D(mask[None, None], coil_maps, viewed_as_real=True)
+       measured = physics.A(torch.stack([truth.real, truth.imag], 1))
+
+       network = recon.UnrolledReconstructor(
+           recon.ContextAgnosticDenoiser(recon.TV(), channels_per_group=2),
+           iterations=6,
+           data_consistency=recon.GradientDataConsistency(6, stepsize=1.0, trainable=False),
+           denoiser_strength=0.03,
+       )
+       unrolled = network(measured, physics, return_info=True, record_iterations=(1, 3, 6))
+
+       def complex_image(paired):
+           return torch.complex(paired[:, 0], paired[:, 1])
+
+       images(
+           [("object", truth)]
+           + [(f"step {step}", complex_image(value)) for step, value in unrolled.history.items()],
+           title="an unrolled reconstruction, step by step",
+       )
     """
 
     def __init__(

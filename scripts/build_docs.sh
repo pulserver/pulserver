@@ -9,6 +9,10 @@
 # The interpreter needs sphinx, myst-parser and sphinx-book-theme, plus this
 # package importable (conf.py puts ./python on the path itself).
 #
+# The C and C++ reference additionally needs doxygen, which is a system
+# package rather than a Python one. Without it those pages render their prose
+# and say so, and the rest of the build is unaffected.
+#
 # Environment: PYTHON_BIN selects the interpreter.
 
 set -euo pipefail
@@ -23,7 +27,7 @@ for arg in "$@"; do
     case "$arg" in
         --clean) rm -rf "$DOCS/_build" ;;
         --strict) SPHINX_ARGS+=(-W --keep-going) ;;
-        -h|--help) sed -n '2,13p' "${BASH_SOURCE[0]}"; exit 0 ;;
+        -h|--help) sed -n '2,16p' "${BASH_SOURCE[0]}"; exit 0 ;;
         *) echo "unknown argument: $arg" >&2; exit 2 ;;
     esac
 done

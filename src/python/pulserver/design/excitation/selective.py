@@ -93,6 +93,23 @@ class SpatialSelectiveExcitation(RfModule):
     >>> slab = design.SpatialSelectiveExcitation(pp.Opts(), 8.0, 0.12, is_slab=True)
     >>> len(slab.blocks), slab.gz.type
     (1, 'grad')
+
+    The slice the pulse selects, and the envelope that selects it. The SLR
+    design puts the passband where it was asked for and holds the ripple to
+    what it was given:
+
+    .. plot::
+
+       import pulserver.design as design
+       import pulserver.pypulseq as pp
+       from _figures import rf_profile
+
+       system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+       rf_profile(
+           design.SpatialSelectiveExcitation(system, 90.0, 3e-3),
+           title="SLR excitation, 90 degrees over 3 mm",
+           extent=8,
+       )
     """
 
     def init_module(
@@ -238,6 +255,22 @@ class SpatialSelectiveRefocusing(RfModule):
             system, refocusing.rf_ref, refocusing.gz,
             fov=0.22, matrix=128, te=15e-3,
         )
+
+    Refocusing efficiency across the slice, which is what an ``"se"`` profile
+    is designed against and an excitation profile is not:
+
+    .. plot::
+
+       import pulserver.design as design
+       import pulserver.pypulseq as pp
+       from _figures import rf_profile
+
+       system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+       rf_profile(
+           design.SpatialSelectiveRefocusing(system, 3e-3),
+           title="SLR refocusing, 3 mm",
+           extent=8,
+       )
     """
 
     def init_module(

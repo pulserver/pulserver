@@ -191,6 +191,29 @@ class PropellerReadout2D(_PropellerReadout):
 
     >>> float(round(blade.blade_angles[1] - blade.blade_angles[0], 6))
     0.241661
+
+    Each blade is a short Cartesian train, and the blades are the same train
+    turned. Every blade crosses the centre, which is what makes the
+    self-navigation work:
+
+    .. plot::
+
+       import pulserver.design as design
+       import pulserver.pypulseq as pp
+       from _figures import trajectory
+
+       system = pp.Opts(max_grad=50, grad_unit="mT/m", max_slew=180, slew_unit="T/m/s")
+       excitation = design.SpatialSelectiveExcitation(system, 60.0, 3e-3)
+       blade = design.PropellerReadout2D(
+           system, excitation.rf, excitation.gz, excitation.gz_reph,
+           fov=0.22, matrix=64, blade_width=8,
+       )
+       trajectory(
+           blade,
+           angles=blade.blade_angles[:5],
+           label="line",
+           title="PropellerReadout2D, five blades of eight lines",
+       )
     """
 
     _ndim = 2

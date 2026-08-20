@@ -11,6 +11,7 @@ __all__ = [
     "WavePSFCalibration",
     "WavePSFResult",
     "calibration_extent",
+    "coil_maps_from_reference",
 ]
 
 from dataclasses import dataclass
@@ -22,12 +23,135 @@ import torch
 import deepinv
 
 from ._fourier import fftc as _fftc
+from ._fourier import torch_or_numpy as _torch_or_numpy
 from ._fourier import ifftc as _ifftc
 from ._fourier import resize_centered as _resize_centered
 from .optim import IRGNM, ConjugateGradient
 from .physics import NonCartesian2D, NonCartesian3D
 from ._phase_poles import PhasePoleCorrection
 from ._wave_psf import WavePSF, WavePSFCalibration, WavePSFResult
+
+
+def coil_maps_from_reference(
+    kspace: Any,
+    mask: Any = None,
+    *,
+    spatial_ndim: int = 2,
+    taper: float = 0.15,
+) -> Any:
+    """Coil sensitivities from a low-resolution reference k-space.
+
+    The reference is a fully sampled block at the centre of k-space -- the
+    prescan an accelerated or multiband sequence acquires -- so its coil images
+    are smooth and, up to the object they share, are the sensitivities.
+    Dividing by the root sum-of-squares removes that common magnitude and
+    leaves maps of unit norm, which is the convention every model-based solve
+    in this package expects.
+
+    Reading the unsampled outer k-space as zero truncates the coil images
+    sharply, and a sharp truncation rings: behind a hard-edged object the
+    estimate wanders seven times further between neighbouring pixels than the
+    true sensitivity does, which is not something a smooth map should do. What
+    rings is the edge of the acquired block, so the block's edge is what is
+    softened -- a cosine taper across the acquired extent, which halves that
+    wander and leaves the resolution alone. Low-passing the whole reference
+    instead would cost what the separation of an SMS scan actually runs on.
+
+    This is the estimator for a dedicated reference prescan; :class:`NLINV` is
+    the one for a scan that must calibrate from its own imaging data, where
+    there is no separate reference to read.
+
+    Parameters
+    ----------
+    kspace
+        The reference, ``(coils, *grid)`` or with a leading batch axis. Torch
+        tensors keep their device; NumPy arrays stay NumPy.
+    mask
+        Where the reference was sampled, ``kspace`` without its coil axis --
+        which is what says where the block ends and so where to taper.
+        ``None`` reads the whole grid as acquired and applies no taper.
+    spatial_ndim
+        How many trailing axes are spatial: 2 for a slice, 3 for a slab.
+    taper
+        Fraction of the acquired extent the cosine roll-off spans, per axis.
+        Zero is the sharp truncation that rings; one is a full Hann window
+        across the block, which starts costing resolution.
+
+    Returns
+    -------
+    array
+        Maps shaped like ``kspace``, root sum-of-squares one over the coil axis.
+
+    Raises
+    ------
+    ValueError
+        If ``kspace`` has no coil axis before its spatial ones, ``mask`` does
+        not describe its grid, or ``taper`` is outside ``[0, 1]``.
+    """
+    if spatial_ndim not in (2, 3):
+        raise ValueError("spatial_ndim must be 2 or 3")
+    if getattr(kspace, "ndim", 0) < spatial_ndim + 1:
+        raise ValueError(
+            f"kspace must be (coils, *grid) with {spatial_ndim} spatial axes, "
+            f"got shape {getattr(kspace, 'shape', ())}"
+        )
+    if not 0.0 <= taper <= 1.0:
+        raise ValueError(f"taper must lie in [0, 1], got {taper}")
+
+    xp, is_torch = _torch_or_numpy(kspace)
+    axes = tuple(range(-spatial_ndim, 0))
+    coil_axis = -(spatial_ndim + 1)
+
+    if mask is not None and taper > 0.0:
+        grid = tuple(int(size) for size in kspace.shape[-spatial_ndim:])
+        if tuple(int(size) for size in mask.shape[-spatial_ndim:]) != grid:
+            raise ValueError(
+                f"mask covers {tuple(mask.shape[-spatial_ndim:])}, the reference {grid}"
+            )
+        window = _acquired_taper(mask, spatial_ndim, taper)
+        kspace = kspace * (
+            xp.as_tensor(window, device=kspace.device) if is_torch else window
+        )
+
+    images = _ifftc(kspace, axes)
+    rss = xp.sqrt(xp.sum(xp.abs(images) ** 2, axis=coil_axis, keepdims=True))
+    # A reference with no signal in it has no sensitivities to read; the floor
+    # keeps the division defined rather than answering NaN.
+    floor = float(rss.max()) * 1e-8
+    return images / xp.clip(rss, floor if floor > 0.0 else 1.0, None)
+
+
+def _acquired_taper(mask: Any, spatial_ndim: int, taper: float) -> Any:
+    """A separable cosine roll-off across each axis's acquired extent."""
+    import numpy as numpy_
+
+    acquired = numpy_.asarray(
+        mask.detach().cpu() if hasattr(mask, "detach") else mask
+    ).astype(bool)
+    acquired = acquired.reshape(acquired.shape[-spatial_ndim:])
+    window = numpy_.ones(acquired.shape, numpy_.float32)
+    for axis in range(spatial_ndim):
+        others = tuple(index for index in range(spatial_ndim) if index != axis)
+        taken = numpy_.flatnonzero(acquired.any(axis=others))
+        if taken.size == 0:
+            continue
+        first, last = int(taken[0]), int(taken[-1])
+        position = numpy_.linspace(0.0, 1.0, last - first + 1)
+        line = numpy_.ones(position.size)
+        rising = position < taper / 2
+        line[rising] = 0.5 * (
+            1 + numpy_.cos(2 * numpy_.pi / taper * (position[rising] - taper / 2))
+        )
+        falling = position > 1 - taper / 2
+        line[falling] = 0.5 * (
+            1 + numpy_.cos(2 * numpy_.pi / taper * (position[falling] - 1 + taper / 2))
+        )
+        full = numpy_.zeros(acquired.shape[axis], numpy_.float32)
+        full[first : last + 1] = line
+        window *= full.reshape(
+            [-1 if index == axis else 1 for index in range(spatial_ndim)]
+        )
+    return window
 
 
 def calibration_extent(mask: Any) -> int:
@@ -324,6 +448,33 @@ class NLINV(torch.nn.Module):
     RuntimeError
         If the calibration leaves a relative residual above
         ``residual_tolerance``.
+
+    Examples
+    --------
+    The maps and the object come out of the same solve, so nothing has to be
+    acquired for the sensitivities that was not acquired for the image:
+
+    .. plot::
+
+       import numpy as np
+       import pulserver.recon as recon
+       from _figures import images, phantom
+
+       truth, coil_maps = phantom(64, coils=4)
+       mask = np.zeros((64, 64), dtype=np.float32)
+       mask[::2] = 1.0
+       mask[26:38] = 1.0
+       measured = recon.fftc((truth * coil_maps[0]).numpy()) * mask
+
+       estimated = recon.NLINV(spatial_ndim=2, max_iter=10)(measured[None], mask=mask)
+       images(
+           [
+               ("object", truth),
+               ("NLINV sensitivity, coil 0", estimated[0, 0]),
+               ("solved against it", recon.cartesian_recon(measured, mask, estimated)),
+           ],
+           title="NLINV, two-fold undersampled with a calibration block",
+       )
     """
 
     def __init__(

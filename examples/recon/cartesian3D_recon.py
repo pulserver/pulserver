@@ -8,15 +8,14 @@ there is no per-slice boundary to reconstruct at. An MPRAGE, a fast spin echo
 and a balanced SSFP all leave that same grid, so all of them come back through
 this.
 
-Which of three reconstructions runs is read off the sampling mask rather than
-declared: the coil-wise adjoint when everything is there, POCS when the readout
-is truncated, CG-SENSE against 3D NLINV maps when phase encodes are missing on
-either axis. Parallel imaging comes first, because the phase constraint POCS
-relies on only means something once the image is unaliased. A slab whose
-readout was fully sampled separates along it: a centered inverse FFT there
-turns the three-dimensional solve into one two-dimensional solve per readout
-position, all sharing the same phase-encode lattice, which is cheaper and
-better conditioned.
+Which reconstruction runs is read off the sampling mask by
+:func:`pulserver.recon.cartesian_recon`, not declared here.
+
+The buffer holds every physical channel: an autocalibration rectangle is
+imaging data on the imaging grid, so there is no point before the first line at
+which a coil basis could exist, and the compression happens on the way into the
+solve instead. A noise scan never reaches the buffer -- it whitens every line
+that follows.
 
 Echoes are an axis, not a variant: each is unaliased and filled against the
 same sensitivities, estimated from the first, and a single-echo scan is that
@@ -24,6 +23,35 @@ loop run once.
 
 One magnitude volume per echo, the echo as the image series, cropped to the
 prescribed matrix.
+
+Examples
+--------
+Calling the module reconstructs an MRD file: the same three hooks an
+inline reconstruction is driven through, fed from the file in this
+process rather than over a socket.
+
+>>> from pulserver import ReconPlugin
+>>> from pulserver.app import cartesian3D_recon
+>>> isinstance(cartesian3D_recon.PLUGIN, ReconPlugin)
+True
+
+The three hooks are the whole plugin, and nothing else is overridden:
+
+>>> sorted(
+...     hook for hook in ("startup", "receive", "recon")
+...     if hook in vars(cartesian3D_recon.Cartesian3DRecon)
+... )
+['receive', 'recon', 'startup']
+
+Reconstruct any 3D Cartesian scan::
+
+    images = cartesian3D_recon("scan.h5")
+
+Or re-instantiate the plugin with different settings, and drive it the
+same way::
+
+    plugin = cartesian3D_recon.Cartesian3DRecon(coil_compression=8)
+    images = plugin.run("scan.h5")
 """
 
 from __future__ import annotations
@@ -34,20 +62,15 @@ from typing import Any
 
 import numpy as np
 
-from pulserver import AcquisitionBucket, ReconContext, ReconPlugin, ReconResult
+from pulserver import ReconContext, ReconPlugin, ReconResult
 from pulserver.recon import (
     NLINV,
     AcquisitionFlag,
-    Cartesian2D,
-    Cartesian3D,
+    cartesian_recon,
     center_crop,
-    coil_combine,
-    echo_count,
-    fftc,
-    fill_partial_echo,
-    ifftc,
-    pics,
-    recon_volume,
+    coil_compress,
+    has_acquisition_flag,
+    noise_prewhiten,
 )
 
 
@@ -62,6 +85,16 @@ class Cartesian3DRecon(ReconPlugin):
         Maximum CG iterations.
     pocs_iterations
         Partial-echo POCS iterations.
+    partial_fourier
+        Which estimator fills a truncated readout, ``"pocs"`` or ``"homodyne"``.
+    virtual_coils
+        Channels to compress the array onto before the solve. A scan with fewer
+        physical channels keeps them all.
+    calibration_iterations
+        Newton steps the sensitivity solve takes. More than the eight NLINV
+        defaults to: those are for a whole imaging dataset, and an
+        autocalibration block is small enough that the solve is still moving
+        at eight.
     device
         Torch device the reconstruction runs on. ``None`` is the CPU.
     """
@@ -72,94 +105,92 @@ class Cartesian3DRecon(ReconPlugin):
         regularization: float = 1e-3,
         iterations: int = 40,
         pocs_iterations: int = 12,
+        partial_fourier: str = "pocs",
+        virtual_coils: int = 8,
+        calibration_iterations: int = 16,
         device: Any = None,
     ) -> None:
         super().__init__(
             split_on=AcquisitionFlag.LAST_IN_SEGMENT
             | AcquisitionFlag.LAST_IN_MEASUREMENT,
-            reject_flags=AcquisitionFlag.IS_NOISE_MEASUREMENT
-            | AcquisitionFlag.IS_PHASECORR_DATA,
+            reject_flags=AcquisitionFlag.IS_PHASECORR_DATA,
         )
         self.regularization = float(regularization)
         self.iterations = int(iterations)
         self.pocs_iterations = int(pocs_iterations)
+        self.partial_fourier = partial_fourier
+        self.virtual_coils = int(virtual_coils)
+        self.calibration_iterations = int(calibration_iterations)
         self.device = device
 
     def startup(self, context: ReconContext) -> None:
-        """Lay the scan's buffers out and note the matrix to crop to."""
+        """Lay the scan's buffers out, and start with no maps."""
         super().startup(context)
-        self.n_echoes = echo_count(context.header)
-        self.image_shape = recon_volume(context.header)
         self.coil_maps: Any = None
+        self.coil_basis: Any = None
+        self.noise: Any = None
 
-    def recon(
-        self, bucket: AcquisitionBucket, context: ReconContext
-    ) -> list[ReconResult] | None:
-        """Calibrate or reconstruct, according to which boundary ended this bucket."""
+    def receive(self, acquisition: Any, context: ReconContext) -> Any:
+        """Whiten the line, place it, then route the boundary it closed.
+
+        The measurement is tested first: its last line closes the trailing
+        segment as well, and only a segment that closed nothing larger is the
+        autocalibration rectangle.
+        """
+        line = np.asarray(acquisition.data)
+        if has_acquisition_flag(acquisition, AcquisitionFlag.IS_NOISE_MEASUREMENT):
+            self.noise = (
+                line if self.noise is None else np.concatenate([self.noise, line], -1)
+            )
+            return None
+        if self.noise is not None:
+            line = noise_prewhiten(line, self.noise, coil_axis=0)
+
+        self.buffers.add(acquisition, line)
+        if has_acquisition_flag(acquisition, AcquisitionFlag.LAST_IN_MEASUREMENT):
+            return self.recon("imaging", context)
+        if has_acquisition_flag(acquisition, AcquisitionFlag.LAST_IN_SEGMENT):
+            return self.recon("calibration", context)
+        return None
+
+    def recon(self, branch: str, context: ReconContext) -> list[ReconResult] | None:
+        """Calibrate the slab, or reconstruct every echo of it."""
         del context
         buffer = self.buffers[0]
 
-        if AcquisitionFlag.LAST_IN_MEASUREMENT not in bucket.trigger:
+        if branch == "calibration":
+            # The autocalibration rectangle, from the first echo: it has the
+            # most signal, and every echo is unaliased against the same maps.
             kspace, mask = buffer.select(contrast=0)
-            self.coil_maps = NLINV(spatial_ndim=3)(
-                kspace[None], mask=mask, device=self.device
+            lines = kspace[:, mask.any(axis=-1)].reshape(kspace.shape[0], -1)
+            _, self.coil_basis = coil_compress(lines, self.virtual_coils)
+            self.coil_maps = NLINV(
+                spatial_ndim=3, max_iter=self.calibration_iterations
+            )(
+                np.einsum("vc,c...->v...", self.coil_basis, kspace)[None],
+                mask=mask,
+                device=self.device,
             )
             return None
 
         results = []
-        for echo in range(self.n_echoes):
-            echo_kspace, echo_mask = buffer.select(contrast=echo)
-            encodes = echo_mask.any(axis=-1)
-            readout = echo_mask.reshape(-1, echo_mask.shape[-1]).any(axis=0)
-
-            if encodes.all():
-                # Fully sampled k-space is zero outside the mask, so the
-                # coil-wise adjoint is the centered inverse FFT itself.
-                coils = (
-                    ifftc(echo_kspace, axes=(-3, -2, -1))
-                    if readout.all()
-                    else fill_partial_echo(
-                        echo_kspace, readout, self.pocs_iterations, dimension=3
-                    )
-                )
-                image = coil_combine(coils, coil_axis=0)
-            else:
-                maps = self.coil_maps
-                if maps is None:
-                    maps = NLINV(spatial_ndim=3)(
-                        echo_kspace[None], mask=echo_mask, device=self.device
-                    )
-                    self.coil_maps = maps
-                if readout.all():
-                    image = _sense_by_readout_plane(
-                        echo_kspace,
-                        echo_mask,
-                        maps,
-                        regularization=self.regularization,
-                        iterations=self.iterations,
-                        device=self.device,
-                    )
-                else:
-                    # A partial echo couples the readout, so this case keeps
-                    # the whole 3D solve and fills the echo last, once the
-                    # aliasing its phase constraint depends on is gone.
-                    image = pics(
-                        echo_kspace[None],
-                        Cartesian3D(echo_mask[None], maps, device=self.device),
-                        regularization=self.regularization,
-                        iterations=self.iterations,
-                    )[0]
-                    image = fill_partial_echo(
-                        fftc(image, axes=(-3, -2, -1)),
-                        readout,
-                        self.pocs_iterations,
-                        dimension=3,
-                    )
-
-            image = center_crop(np.abs(image), self.image_shape)
+        for echo in range(buffer.extents.get("contrast", 1)):
+            kspace, mask = buffer.select(contrast=echo)
+            if self.coil_basis is not None:
+                kspace = np.einsum("vc,c...->v...", self.coil_basis, kspace)
+            image = cartesian_recon(
+                kspace,
+                mask,
+                self.coil_maps,
+                regularization=self.regularization,
+                iterations=self.iterations,
+                pocs_iterations=self.pocs_iterations,
+                partial_fourier=self.partial_fourier,
+                device=self.device,
+            )
             results.append(
                 ReconResult(
-                    image.transpose(0, 2, 1),
+                    center_crop(np.abs(image), buffer.image_shape).transpose(0, 2, 1),
                     reference=-1,
                     series_index=echo,
                     image_type="magnitude",
@@ -167,41 +198,6 @@ class Cartesian3DRecon(ReconPlugin):
                 )
             )
         return results
-
-
-def _sense_by_readout_plane(
-    kspace: Any,
-    mask: Any,
-    coil_maps: Any,
-    *,
-    regularization: float,
-    iterations: int,
-    device: Any,
-) -> np.ndarray:
-    """CG-SENSE decoupled over a fully sampled readout: one 2D solve per column.
-
-    The centered inverse FFT along the readout takes the volume to
-    ``(coil, partition, line, x)`` hybrid space, where every readout position
-    ``x`` is an independent 2D ``(partition, line)`` parallel-imaging problem
-    sharing the one phase-encode lattice. Stacking the columns on the batch
-    axis solves them together against a batched
-    :class:`~pulserver.recon.physics.Cartesian2D`.
-    """
-    hybrid = ifftc(np.asarray(kspace), axes=-1)
-    _, n_z, n_y, n_x = hybrid.shape
-    data = np.moveaxis(hybrid, -1, 0)  # (x, coil, partition, line)
-
-    maps = np.moveaxis(np.asarray(coil_maps)[0], -1, 0)  # (x, coil, partition, line)
-    plane = np.asarray(mask).any(axis=-1).astype(np.float32)  # (partition, line)
-    lattice = np.broadcast_to(plane, (n_x, 1, n_z, n_y)).copy()
-
-    image = pics(
-        data,
-        Cartesian2D(lattice, np.ascontiguousarray(maps), device=device),
-        regularization=regularization,
-        iterations=iterations,
-    )
-    return np.moveaxis(image, 0, -1)
 
 
 PLUGIN = Cartesian3DRecon()

@@ -10,6 +10,35 @@ the samples inside the calibration radius, CG-SENSE -- against the trajectory
 its acquisitions carry, which ``pulserver`` buffered beside them. One
 magnitude volume per measurement.
 
+
+Examples
+--------
+Calling the module reconstructs an MRD file: the same three hooks an
+inline reconstruction is driven through, fed from the file in this
+process rather than over a socket.
+
+>>> from pulserver import ReconPlugin
+>>> from pulserver.app import noncartesian_stack_recon
+>>> isinstance(noncartesian_stack_recon.PLUGIN, ReconPlugin)
+True
+
+The three hooks are the whole plugin, and nothing else is overridden:
+
+>>> sorted(
+...     hook for hook in ("startup", "receive", "recon")
+...     if hook in vars(noncartesian_stack_recon.NonCartesianStackRecon)
+... )
+['receive', 'recon', 'startup']
+
+Reconstruct a stack whose partition axis is Cartesian::
+
+    images = noncartesian_stack_recon("scan.h5")
+
+Or re-instantiate the plugin with different settings, and drive it the
+same way::
+
+    plugin = noncartesian_stack_recon.NonCartesianStackRecon(coil_compression=8)
+    images = plugin.run("scan.h5")
 """
 
 from __future__ import annotations
@@ -20,16 +49,18 @@ from typing import Any
 
 import numpy as np
 
-from pulserver import AcquisitionBucket, ReconContext, ReconPlugin, ReconResult
+from pulserver import ReconContext, ReconPlugin, ReconResult
 from pulserver.recon import (
     NLINV,
     AcquisitionFlag,
     NonCartesian2D,
     as_numpy,
+    coil_compress,
+    has_acquisition_flag,
+    noise_prewhiten,
     ifftc,
     pics,
     pipe_menon_dcf,
-    recon_volume,
 )
 
 
@@ -49,6 +80,9 @@ class NonCartesianStackRecon(ReconPlugin):
         Tikhonov weight of the per-plane CG-SENSE solve.
     iterations
         Maximum CG iterations per plane.
+    virtual_coils
+        Channels to compress the array onto before the solve. A scan with fewer
+        physical channels keeps them all.
     calibration_width
         Width of the centred square NLINV solves the sensitivities over.
     device
@@ -61,43 +95,62 @@ class NonCartesianStackRecon(ReconPlugin):
         mode: str = "auto",
         regularization: float = 1e-3,
         iterations: int = 30,
+        virtual_coils: int = 8,
         calibration_width: int = 24,
         device: Any = None,
     ) -> None:
         super().__init__(
             split_on=AcquisitionFlag.LAST_IN_MEASUREMENT,
-            reject_flags=AcquisitionFlag.IS_NOISE_MEASUREMENT
-            | AcquisitionFlag.IS_PHASECORR_DATA,
+            reject_flags=AcquisitionFlag.IS_PHASECORR_DATA,
         )
         if mode not in ("auto", "direct", "pics"):
             raise ValueError(f"mode must be auto, direct or pics, got {mode!r}")
         self.mode = mode
         self.regularization = float(regularization)
         self.iterations = int(iterations)
+        self.virtual_coils = int(virtual_coils)
         self.calibration_width = int(calibration_width)
         self.device = device
 
     def startup(self, context: ReconContext) -> None:
-        """Lay the scan's buffers out and size the volume from the header."""
+        """Lay the scan's buffers out, with no noise measured yet."""
         super().startup(context)
-        self.volume_shape = recon_volume(context.header)
+        self.noise: Any = None
 
-    def recon(
-        self, bucket: AcquisitionBucket, context: ReconContext
-    ) -> ReconResult | None:
-        """Reconstruct once the measurement is complete."""
-        del context
-        if AcquisitionFlag.LAST_IN_MEASUREMENT not in bucket.trigger:
+    def receive(self, acquisition: Any, context: ReconContext) -> Any:
+        """Whiten the readout and place it, and reconstruct at the end of the scan.
+
+        A noise scan is not imaging data and never reaches a buffer: what it
+        leaves behind is the covariance every readout that follows is whitened
+        by.
+        """
+        line = np.asarray(acquisition.data)
+        if has_acquisition_flag(acquisition, AcquisitionFlag.IS_NOISE_MEASUREMENT):
+            self.noise = (
+                line if self.noise is None else np.concatenate([self.noise, line], -1)
+            )
             return None
+        if self.noise is not None:
+            line = noise_prewhiten(line, self.noise, coil_axis=0)
 
+        self.buffers.add(acquisition, line)
+        if has_acquisition_flag(acquisition, AcquisitionFlag.LAST_IN_MEASUREMENT):
+            return self.recon("imaging", context)
+        return None
+
+    def recon(self, branch: str, context: ReconContext) -> ReconResult:
+        """Reconstruct the stack, once the measurement is complete."""
+        del branch, context
         buffer = self.buffers[0]
-        extents = dict(zip(buffer.axes, buffer.kspace.shape, strict=True))
-        n_z, n_views = extents.get("partition", 1), extents["phase_encode"]
+        n_z = buffer.extents.get("partition", 1)
+        n_views = buffer.extents["phase_encode"]
 
         # A stack of 2D non-Cartesian planes decouples along the fully sampled
         # partition axis: a centered inverse FFT there turns the volume into
         # independent planes the in-plane recon handles one at a time.
-        planes = ifftc(buffer.kspace.reshape(-1, n_z, n_views, buffer.readout), axes=1)
+        kspace = buffer.kspace.reshape(buffer.kspace.shape[0], -1)
+        kspace, _ = coil_compress(kspace, self.virtual_coils)
+        planes = ifftc(kspace.reshape(-1, n_z, n_views, buffer.readout), axes=1)
 
         # One trajectory per view, the same for every partition of the stack,
         # and in-plane: the two transverse components of the first partition's.
@@ -107,7 +160,7 @@ class NonCartesianStackRecon(ReconPlugin):
             .reshape(-1, 2)
             .astype(np.float32)
         )
-        plane_shape = self.volume_shape[1:]
+        plane_shape = buffer.image_shape[1:]
         density = pipe_menon_dcf(trajectory, plane_shape)
         n_coils = int(planes.shape[0])
         nyquist = int(np.ceil(np.pi / 2 * max(plane_shape)))

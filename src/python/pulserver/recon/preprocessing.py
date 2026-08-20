@@ -1,182 +1,30 @@
 """Array-level MRI preprocessing utilities.
 
 Functions preserve Torch tensors (including their device) and NumPy arrays.
-MRPro containers are delegated to their maintained methods when applicable.
 """
 
 from __future__ import annotations
 
 __all__ = [
     "POCS",
-    "CartesianGridder",
-    "EPIPhaseCorrection",
-    "EpiAcquisitionGroups",
     "Homodyne",
-    "SmsEpiInputs",
-    "cartesian_3d_to_2d",
     "coil_compress",
-    "correct_epi_eddy_currents",
     "correct_lines",
-    "echo_count",
-    "encoded_shape",
-    "encoded_volume",
-    "epi_ramp_interpolate",
-    "estimate_epi_eddy_phase",
+    "epi_ramp_operator",
+    "estimate_epi_phase",
     "fftc",
     "fill_partial_echo",
-    "grid_cartesian",
     "ifftc",
     "noise_prewhiten",
-    "odd_even_fit",
-    "partition_epi_acquisitions",
     "pipe_menon_dcf",
-    "receiver_channels",
-    "recon_shape",
-    "recon_volume",
     "remove_readout_oversampling",
 ]
 
-from collections.abc import Iterable
-from dataclasses import dataclass
 from importlib import import_module
 from typing import Any
 
 from ._fourier import centered_fftn as _centered_fftn
 from ._fourier import torch_or_numpy as _torch_or_numpy
-from ._mrd.metadata import acquisition_label, has_acquisition_flag
-from ._sms import SmsEpiInputs
-
-
-class EPIPhaseCorrection:
-    """Shot-resolved odd/even EPI navigator phase correction.
-
-    The estimator fits the readout phase independently for every shot after
-    combining all remaining navigator dimensions. Optional causal smoothing
-    acts on the polynomial coefficients, retaining slow drift without merging
-    genuinely distinct shot offsets.
-
-    Parameters
-    ----------
-    polynomial_order
-        Readout phase-polynomial order.
-    shot_axis
-        Navigator shot axis. ``None`` estimates one global correction.
-    readout_axis
-        Readout sample axis.
-    temporal_smoothing
-        Causal coefficient smoothing in ``[0, 1)``. Zero disables smoothing.
-    """
-
-    def __init__(
-        self,
-        *,
-        polynomial_order: int = 1,
-        shot_axis: int | None = 0,
-        readout_axis: int = -1,
-        temporal_smoothing: float = 0.0,
-    ) -> None:
-        if polynomial_order < 0:
-            raise ValueError("polynomial_order must be non-negative")
-        if not 0.0 <= temporal_smoothing < 1.0:
-            raise ValueError("temporal_smoothing must lie in [0, 1)")
-        self.polynomial_order = int(polynomial_order)
-        self.shot_axis = shot_axis
-        self.readout_axis = int(readout_axis)
-        self.temporal_smoothing = float(temporal_smoothing)
-
-    def fit(self, positive_navigator: Any, negative_navigator: Any) -> Any:
-        """Estimate one smooth odd/even phase curve per navigator shot."""
-        if positive_navigator.shape != negative_navigator.shape:
-            raise ValueError("positive and negative navigators must have equal shape")
-        if self.shot_axis is None:
-            return estimate_epi_eddy_phase(
-                positive_navigator,
-                negative_navigator,
-                readout_axis=self.readout_axis,
-                polynomial_order=self.polynomial_order,
-            )
-        xp, is_torch = _matching_libraries(
-            positive_navigator,
-            negative_navigator,
-        )
-        shot_axis = self.shot_axis % positive_navigator.ndim
-        readout_axis = self.readout_axis % positive_navigator.ndim
-        if shot_axis == readout_axis:
-            raise ValueError("shot_axis and readout_axis must be distinct")
-        cross = positive_navigator * negative_navigator.conj()
-        if is_torch:
-            cross = cross.movedim((shot_axis, readout_axis), (0, -1))
-            if cross.ndim > 2:
-                cross = cross.sum(dim=tuple(range(1, cross.ndim - 1)))
-        else:
-            cross = xp.moveaxis(cross, (shot_axis, readout_axis), (0, -1))
-            if cross.ndim > 2:
-                cross = cross.sum(axis=tuple(range(1, cross.ndim - 1)))
-        phase = _unwrap_last(xp.angle(cross), xp, is_torch)
-        return _fit_phase_curves(
-            phase,
-            self.polynomial_order,
-            self.temporal_smoothing,
-            xp,
-            is_torch,
-        )
-
-    def correct(
-        self,
-        positive_readouts: Any,
-        negative_readouts: Any,
-        phase: Any | None = None,
-    ) -> tuple[Any, Any, Any]:
-        """Apply symmetric phase correction to shot-resolved polarities."""
-        if positive_readouts.shape != negative_readouts.shape:
-            raise ValueError("positive and negative readouts must have equal shape")
-        if phase is None:
-            phase = self.fit(positive_readouts, negative_readouts)
-        xp, is_torch = _matching_libraries(positive_readouts, negative_readouts)
-        phase = (
-            xp.as_tensor(
-                phase,
-                device=positive_readouts.device,
-                dtype=positive_readouts.real.dtype,
-            )
-            if is_torch
-            else xp.asarray(phase, dtype=positive_readouts.real.dtype)
-        )
-        shape = [1] * positive_readouts.ndim
-        readout_axis = self.readout_axis % positive_readouts.ndim
-        shape[readout_axis] = positive_readouts.shape[readout_axis]
-        if self.shot_axis is not None:
-            shot_axis = self.shot_axis % positive_readouts.ndim
-            shape[shot_axis] = positive_readouts.shape[shot_axis]
-            expected = (shape[shot_axis], shape[readout_axis])
-            if phase.shape != expected:
-                raise ValueError(f"shot-resolved phase must have shape {expected}")
-            phase = phase.reshape(
-                *phase.shape,
-                *([1] * (positive_readouts.ndim - 2)),
-            )
-            phase = (
-                phase.movedim((0, 1), (shot_axis, readout_axis))
-                if is_torch
-                else xp.moveaxis(phase, (0, 1), (shot_axis, readout_axis))
-            )
-        elif phase.ndim != 1:
-            raise ValueError("global EPI phase must be one-dimensional")
-        else:
-            phase = phase.reshape(shape)
-        return (
-            positive_readouts * xp.exp(-0.5j * phase),
-            negative_readouts * xp.exp(0.5j * phase),
-            phase,
-        )
-
-    def __call__(
-        self,
-        positive_readouts: Any,
-        negative_readouts: Any,
-        phase: Any | None = None,
-    ) -> tuple[Any, Any, Any]:
-        return self.correct(positive_readouts, negative_readouts, phase)
 
 
 class Homodyne:
@@ -188,6 +36,20 @@ class Homodyne:
         Number of spatial Fourier dimensions.
     partial_axis
         Axis containing the partial-Fourier acquisition.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> import pulserver.recon as recon
+    >>> truncated = np.zeros((1, 16, 16), dtype=complex)
+    >>> truncated[..., :10] = 1.0
+    >>> readout = np.zeros(16)
+    >>> readout[:10] = 1.0
+    >>> recon.Homodyne(dimension=2, partial_axis=-1)(truncated, readout).shape
+    (1, 16, 16)
+
+    One pass rather than POCS's iteration; ``fill_partial_echo`` reaches it by
+    name, and its figure is the two side by side.
     """
 
     def __init__(self, *, dimension: int = 2, partial_axis: int = -2) -> None:
@@ -229,6 +91,20 @@ class POCS:
         Relative iterate-change tolerance. Set to zero for a fixed count.
     positive
         Also project the demodulated image onto the non-negative real cone.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> import pulserver.recon as recon
+    >>> truncated = np.zeros((1, 16, 16), dtype=complex)
+    >>> truncated[..., :10] = 1.0
+    >>> readout = np.zeros(16)
+    >>> readout[:10] = 1.0
+    >>> recon.POCS(dimension=2, partial_axis=-1, iterations=4)(truncated, readout).shape
+    (1, 16, 16)
+
+    ``fill_partial_echo`` reaches this by name, and its figure is the two
+    estimators side by side.
     """
 
     def __init__(
@@ -290,8 +166,17 @@ def fill_partial_echo(
     iterations: int = 12,
     *,
     dimension: int,
+    method: str = "pocs",
 ) -> Any:
     """Recover the readout edge a partial echo never acquired.
+
+    Both estimators rest on the same fact -- an image whose phase varies slowly
+    is nearly conjugate symmetric in k-space, so the missing edge is implied by
+    the acquired one. :class:`POCS` iterates towards an image that reproduces
+    every acquired sample; :class:`Homodyne` reaches an answer in one pass by
+    weighting the acquired half and demodulating the low-resolution phase.
+    POCS is the more faithful of the two and Homodyne the cheaper, which is the
+    choice a scanner-side reconstruction is actually making.
 
     Parameters
     ----------
@@ -300,22 +185,82 @@ def fill_partial_echo(
     readout
         Which readout samples were acquired, over the full width.
     iterations
-        POCS iterations.
+        POCS iterations. Homodyne takes one pass and ignores this.
     dimension
         How many trailing axes of ``kspace`` are spatial: 2 for a slice, 3 for
         a slab. Required rather than inferred, because whether a leading axis
         is coils or partitions is the caller's to know, and guessing it wrong
         fills the wrong axis and says nothing.
+    method
+        ``"pocs"`` or ``"homodyne"``.
 
     Returns
     -------
     array
-        The partial-Fourier image, in the namespace of ``kspace``: the
-        reconstruction whose re-encoding reproduces every acquired sample.
+        The partial-Fourier image, in the namespace of ``kspace``: for POCS,
+        the reconstruction whose re-encoding reproduces every acquired sample.
+
+    Raises
+    ------
+    ValueError
+        If ``method`` names neither estimator.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> import pulserver.recon as recon
+    >>> image = np.zeros((16, 16), dtype=complex)
+    >>> image[6:10, 6:10] = 1.0
+    >>> truncated = recon.fftc(image)
+    >>> truncated[:, 12:] = 0
+    >>> readout = np.ones(16)
+    >>> readout[12:] = 0
+
+    Both estimators answer for the same truncation, and the name is what a
+    plugin exposes as its ``partial_fourier`` setting:
+
+    >>> pocs = recon.fill_partial_echo(truncated[None], readout, dimension=2)
+    >>> homodyne = recon.fill_partial_echo(
+    ...     truncated[None], readout, dimension=2, method="homodyne"
+    ... )
+    >>> pocs.shape == homodyne.shape
+    True
+
+    What the truncation costs, and what the conjugate symmetry buys back:
+
+    .. plot::
+
+       import numpy as np
+       import pulserver.recon as recon
+       from _figures import images, phantom
+
+       truth = phantom(64)[0][0].numpy()
+       truncated = recon.fftc(truth)
+       truncated[:, 40:] = 0.0
+       readout = np.ones(64)
+       readout[40:] = 0.0
+       images(
+           [
+               ("object", truth),
+               ("zero-filled", recon.ifftc(truncated)),
+               ("POCS", recon.fill_partial_echo(truncated[None], readout, dimension=2)),
+               (
+                   "Homodyne",
+                   recon.fill_partial_echo(
+                       truncated[None], readout, dimension=2, method="homodyne"
+                   ),
+               ),
+           ],
+           title="fill_partial_echo: two estimators for the same truncation",
+       )
     """
-    return POCS(dimension=dimension, partial_axis=-1, iterations=iterations)(
-        kspace, readout
-    )
+    if method == "pocs":
+        return POCS(dimension=dimension, partial_axis=-1, iterations=iterations)(
+            kspace, readout
+        )
+    if method == "homodyne":
+        return Homodyne(dimension=dimension, partial_axis=-1)(kspace, readout)
+    raise ValueError(f"method must be pocs or homodyne, got {method!r}")
 
 
 def fftc(data: Any, *, axes: int | tuple[int, ...] = (-2, -1)) -> Any:
@@ -341,7 +286,22 @@ def fftc(data: Any, *, axes: int | tuple[int, ...] = (-2, -1)) -> Any:
     See Also
     --------
     ifftc : the inverse.
-    cartesian_3d_to_2d : the readout-decoupling this builds on.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> import pulserver.recon as recon
+    >>> image = np.zeros((8, 8), dtype=complex)
+    >>> image[4, 4] = 1.0
+    >>> kspace = recon.fftc(image)
+
+    A point at the centre of the image is flat in k-space, and the round trip
+    is exact:
+
+    >>> bool(np.allclose(np.abs(kspace), np.abs(kspace).mean()))
+    True
+    >>> bool(np.allclose(recon.ifftc(kspace), image, atol=1e-12))
+    True
     """
     axes = (axes,) if isinstance(axes, int) else tuple(axes)
     return _centered_fftn(data, axes=axes, inverse=False)
@@ -351,7 +311,7 @@ def ifftc(data: Any, *, axes: int | tuple[int, ...] = (-2, -1)) -> Any:
     """Centered orthonormal inverse FFT over one or more axes.
 
     The inverse of :func:`fftc`; see it for the convention. A single-axis call
-    along the readout is the decoupling :func:`cartesian_3d_to_2d` performs.
+    along the readout decouples a Cartesian volume into independent planes.
 
     Parameters
     ----------
@@ -364,43 +324,61 @@ def ifftc(data: Any, *, axes: int | tuple[int, ...] = (-2, -1)) -> Any:
     -------
     array
         The inverse transform, in the namespace of ``data``.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> import pulserver.recon as recon
+    >>> kspace = np.ones((8, 8), dtype=complex)
+    >>> image = recon.ifftc(kspace)
+    >>> bool(np.allclose(recon.fftc(image), kspace, atol=1e-12))
+    True
     """
     axes = (axes,) if isinstance(axes, int) else tuple(axes)
     return _centered_fftn(data, axes=axes, inverse=True)
 
 
-def cartesian_3d_to_2d(
-    kspace: Any,
-    *,
-    readout_axis: int = -1,
-) -> Any:
-    """Convert Cartesian 3D k-space into independent 2D hybrid-space planes.
-
-    A centered inverse FFT is applied along readout. The returned readout
-    positions can be moved into the batch dimension before constructing
-    :func:`pulserver.recon.physics.Cartesian2D` physics.
-    """
-    return _centered_fftn(kspace, axes=(readout_axis,), inverse=True)
-
-
 def remove_readout_oversampling(
     data: Any,
-    target_size: int | None = None,
+    target_size: int,
     *,
     readout_axis: int = -1,
 ) -> Any:
     """Remove readout oversampling by centered image-domain cropping.
 
-    MRPro ``KData`` objects delegate to ``KData.remove_readout_os()`` and infer
-    the target from their header. Raw arrays require ``target_size``.
+    A scanner digitises more samples than the prescribed matrix so the readout
+    filter has room to roll off, and those extra samples are field of view, not
+    resolution: the crop is in the image domain, and what comes back is the
+    same k-space over the prescribed width.
+
+    Parameters
+    ----------
+    data
+        K-space with the readout along ``readout_axis``.
+    target_size
+        Samples the prescribed matrix asks for --
+        :attr:`~pulserver.recon.ReconBuffer.image_shape` last entry.
+    readout_axis
+        Which axis the readout runs along.
+
+    Returns
+    -------
+    array
+        K-space over ``target_size`` samples, in the namespace of ``data``.
+
+    Raises
+    ------
+    ValueError
+        If ``target_size`` is not within the samples there are.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> import pulserver.recon as recon
+    >>> readout = recon.ifftc(np.ones((4, 128)), axes=-1)
+    >>> recon.remove_readout_oversampling(readout, 64).shape
+    (4, 64)
     """
-    method = getattr(data, "remove_readout_os", None)
-    if callable(method):
-        if target_size is not None:
-            raise ValueError("target_size is inferred from an MRPro KData header")
-        return method()
-    if target_size is None:
-        raise ValueError("target_size is required for raw arrays")
     current = data.shape[readout_axis]
     if not 0 < target_size <= current:
         raise ValueError(f"target_size must be in [1, {current}], got {target_size}")
@@ -421,20 +399,103 @@ def coil_compress(
     trajectory: Any | None = None,
     calibration_radius: float | None = None,
 ) -> tuple[Any, Any]:
-    """Apply mri-nufft SVD coil compression and return data plus matrix."""
-    try:
-        function = import_module("mrinufft.extras").coil_compression
-    except ImportError as error:
-        raise ImportError(
-            "Coil compression requires mri-nufft, which ships with "
-            "pulserver; reinstall the package to restore it."
-        ) from error
-    return function(
-        kspace,
-        n_coils,
-        traj=trajectory,
-        krad_thresh=calibration_radius,
-    )
+    """Compress the receive array onto its principal channels.
+
+    A receive array measures the same object through every element, so the
+    channels are strongly correlated and most of what they carry lives in far
+    fewer of them. The principal components of the sample covariance are those
+    channels: keeping the leading ones is the linear combination that retains
+    the most energy for a given count, and everything downstream -- the
+    sensitivities, the solve, the buffers -- then runs on the smaller array.
+
+    Parameters
+    ----------
+    kspace
+        The measurement, ``(coils, samples)``. Torch tensors keep their device.
+    n_coils
+        Virtual channels to keep, as a count, or the fraction of the energy to
+        retain when given as a float in ``(0, 1]``. A count beyond the physical
+        channels keeps them all.
+    trajectory
+        Where each sample was taken, ``(samples, dimensions)``. Only needed
+        with ``calibration_radius``.
+    calibration_radius
+        Estimate the components from the samples inside this fraction of the
+        maximum k-space radius, rather than from every sample -- the centre is
+        where the array's correlations are, and where the object is brightest.
+
+    Returns
+    -------
+    compressed : array
+        ``(n_coils, samples)`` in the virtual basis.
+    matrix : array
+        ``(n_coils, coils)``, the basis itself, for compressing anything else
+        the same way -- the acquisitions that arrive after a calibration
+        established it, or the sensitivities they are solved against.
+
+    Raises
+    ------
+    ValueError
+        If ``kspace`` is not two-dimensional, ``n_coils`` asks for nothing, or
+        ``calibration_radius`` is given without a trajectory.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> import pulserver.recon as recon
+    >>> rng = np.random.default_rng(0)
+    >>> lines = rng.normal(size=(8, 256)) + 1j * rng.normal(size=(8, 256))
+
+    Eight channels carrying four independent signals compress onto four
+    without loss, and the basis comes back to apply to everything that
+    follows:
+
+    >>> lines[4:] = lines[:4]
+    >>> compressed, basis = recon.coil_compress(lines, 4)
+    >>> compressed.shape, basis.shape
+    ((4, 256), (4, 8))
+    """
+    xp, _ = _torch_or_numpy(kspace)
+    if kspace.ndim != 2:
+        raise ValueError(f"kspace must be (coils, samples), got {kspace.shape}")
+    if (calibration_radius is None) != (trajectory is None):
+        raise ValueError("calibration_radius and trajectory are given together")
+
+    region = kspace
+    if calibration_radius is not None:
+        radius = xp.sqrt(xp.sum(trajectory**2, axis=-1))
+        region = kspace[:, radius < calibration_radius * radius.max()]
+
+    # Eigenvectors of the sample covariance, largest eigenvalue first. eigh
+    # returns them as columns, and ascending, so the order is applied to the
+    # second axis and the rows of the result are the virtual channels.
+    values, vectors = xp.linalg.eigh(region @ region.conj().T)
+    order = xp.argsort(-values)
+    energies = [float(values[int(index)]) for index in order]
+
+    keep = _retained_channels(n_coils, energies)
+    matrix = vectors[:, order[:keep]].conj().T
+    return matrix @ kspace, matrix
+
+
+def _retained_channels(n_coils: int | float, energies: list[float]) -> int:
+    """How many principal channels a count or an energy fraction asks for."""
+    if isinstance(n_coils, float) and not float(n_coils).is_integer():
+        if not 0.0 < n_coils <= 1.0:
+            raise ValueError(f"an energy fraction must lie in (0, 1], got {n_coils}")
+        total = sum(energies)
+        if total <= 0.0:
+            return 1
+        running = 0.0
+        for count, energy in enumerate(energies, start=1):
+            running += energy
+            if running / total >= n_coils:
+                return count
+        return len(energies)
+    keep = int(n_coils)
+    if keep < 1:
+        raise ValueError(f"n_coils must keep at least one channel, got {n_coils}")
+    return min(keep, len(energies))
 
 
 def noise_prewhiten(
@@ -446,13 +507,47 @@ def noise_prewhiten(
 ) -> Any:
     """Decorrelate receiver coils using the measured noise covariance.
 
-    MRPro ``KData`` delegates to ``KData.prewhiten``. Raw Torch/NumPy arrays
-    are whitened with a Cholesky solve and preserve their input container.
-    """
-    method = getattr(kspace, "prewhiten", None)
-    if callable(method):
-        return method(noise, scale_factor)
+    A receive array's channels see correlated noise, and a solve that assumes
+    they do not weights them wrongly. The noise scan measures that covariance;
+    whitening is the Cholesky solve that turns it into the identity, so every
+    channel afterwards carries unit, independent noise.
 
+    Parameters
+    ----------
+    kspace
+        The measurement, with the channels along ``coil_axis``.
+    noise
+        The noise scan, channels along the same axis.
+    coil_axis
+        Which axis the channels run along.
+    scale_factor
+        Applied to the whitened data, for a caller keeping a known noise level.
+
+    Returns
+    -------
+    array
+        The whitened measurement, in the namespace of ``kspace``.
+
+    Raises
+    ------
+    TypeError
+        If the measurement and the noise are not in the same array library.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> import pulserver.recon as recon
+    >>> rng = np.random.default_rng(0)
+    >>> noise = rng.normal(size=(4, 512)) + 1j * rng.normal(size=(4, 512))
+
+    Whitening the noise scan against itself leaves an identity covariance,
+    which is what every readout that follows is measured against:
+
+    >>> whitened = recon.noise_prewhiten(noise, noise, coil_axis=0)
+    >>> covariance = whitened @ whitened.conj().T / whitened.shape[-1]
+    >>> bool(np.allclose(covariance, np.eye(4), atol=5e-2))
+    True
+    """
     xp, is_torch = _torch_or_numpy(kspace)
     _, noise_is_torch = _torch_or_numpy(noise)
     if is_torch != noise_is_torch:
@@ -484,150 +579,79 @@ def noise_prewhiten(
     return xp.moveaxis(whitened.reshape(moved_data.shape), 0, coil_axis)
 
 
-def epi_ramp_interpolate(
-    data: Any,
+def epi_ramp_operator(
     sample_positions: Any,
     target_positions: Any,
+    support: int,
     *,
-    readout_axis: int = -1,
+    regularization: float = 1e-6,
 ) -> Any:
-    """Linearly interpolate EPI ramp samples onto a uniform readout grid."""
-    xp, is_torch = _torch_or_numpy(data)
-    if is_torch:
-        source = xp.as_tensor(
-            sample_positions,
-            device=data.device,
-            dtype=data.real.dtype,
-        )
-        target = xp.as_tensor(
-            target_positions,
-            device=data.device,
-            dtype=data.real.dtype,
-        )
-        if source.ndim != 1 or target.ndim != 1:
-            raise ValueError("sample_positions and target_positions must be 1D")
-        if source.numel() != data.shape[readout_axis]:
-            raise ValueError("sample_positions length must match the readout")
-        if not bool(xp.all(source[1:] > source[:-1])):
-            raise ValueError("sample_positions must be strictly increasing")
-        right = xp.searchsorted(source, target).clamp(1, source.numel() - 1)
-        left = right - 1
-        weight = (target - source[left]) / (source[right] - source[left])
-        moved = data.movedim(readout_axis, -1)
-        result = moved[..., left] * (1 - weight) + moved[..., right] * weight
-        return result.movedim(-1, readout_axis)
+    """Resample a readout from where it was taken onto where it belongs.
 
-    source = xp.asarray(sample_positions)
-    target = xp.asarray(target_positions)
-    if source.ndim != 1 or target.ndim != 1:
-        raise ValueError("sample_positions and target_positions must be 1D")
-    if source.size != data.shape[readout_axis]:
-        raise ValueError("sample_positions length must match the readout")
-    if not xp.all(source[1:] > source[:-1]):
-        raise ValueError("sample_positions must be strictly increasing")
-    right = xp.searchsorted(source, target).clip(1, source.size - 1)
-    left = right - 1
-    weight = (target - source[left]) / (source[right] - source[left])
-    moved = xp.moveaxis(data, readout_axis, -1)
-    result = moved[..., left] * (1 - weight) + moved[..., right] * weight
-    return xp.moveaxis(result, -1, readout_axis)
+    A readout is band-limited: it is the transform of an object that occupies
+    ``support`` pixels and nothing outside them. So samples taken anywhere
+    determine it everywhere, and moving them onto the grid is not an
+    approximation but a change of basis -- the least-squares inverse of the
+    non-uniform transform, followed by the uniform one. The operator's entries
+    are the sinc-like kernels that implies.
 
+    Linear interpolation is the cheap stand-in for this and is visibly worse:
+    over a readout whose ramps take half its duration, this resampling is exact
+    to numerical precision where a linear one leaves seven percent.
 
-def _unwrap(phase: Any, xp: Any, is_torch: bool) -> Any:
-    if not is_torch:
-        return xp.unwrap(phase)
-    delta = phase[1:] - phase[:-1]
-    wrapped = (delta + xp.pi) % (2 * xp.pi) - xp.pi
-    wrapped = xp.where((wrapped == -xp.pi) & (delta > 0), xp.pi, wrapped)
-    correction = xp.cumsum(wrapped - delta, dim=0)
-    result = phase.clone()
-    result[1:] += correction
-    return result
+    What makes it exact is that the samples outnumber the pixels they have to
+    determine, which is what readout oversampling buys. Where they do not --
+    where the fast part of the sweep steps further than ``1 / support`` -- the
+    readout has aliased and no resampling recovers it; ``regularization`` keeps
+    the solve from amplifying that, it does not undo it.
 
+    One lobe is played for every readout of a train, so the operator is built
+    once and applied to each.
 
-def estimate_epi_eddy_phase(
-    positive_navigator: Any,
-    negative_navigator: Any,
-    *,
-    readout_axis: int = -1,
-    polynomial_order: int = 1,
-) -> Any:
-    """Estimate a smooth odd/even EPI phase difference from navigator pairs."""
-    if positive_navigator.shape != negative_navigator.shape:
-        raise ValueError("positive and negative navigators must have equal shape")
-    if polynomial_order < 0:
-        raise ValueError("polynomial_order must be non-negative")
-    xp, is_torch = _torch_or_numpy(positive_navigator)
-    negative_xp, negative_is_torch = _torch_or_numpy(negative_navigator)
-    if xp is not negative_xp and is_torch != negative_is_torch:
-        raise TypeError("navigator arrays must use the same array library")
+    Parameters
+    ----------
+    sample_positions
+        Where each sample was taken, in k, normalised so the readout spans at
+        most ``[-0.5, 0.5]``. The trajectory an acquisition carries: a client
+        attaches one exactly when the gradient was still moving under the ADC,
+        which is when a readout needs this.
+    target_positions
+        Where they belong -- the uniform grid, in the same units.
+    support
+        Pixels the object occupies along the readout: the reconstructed matrix,
+        not the oversampled one the scanner digitised.
+    regularization
+        Tikhonov weight on the normal equations, relative to the sample count.
 
-    cross = positive_navigator * negative_navigator.conj()
-    axes = tuple(
-        index for index in range(cross.ndim) if index != readout_axis % cross.ndim
+    Returns
+    -------
+    numpy.ndarray
+        ``(target, source)``. Applying it to a ``(coils, samples)`` readout is
+        ``readout @ operator.T``.
+
+    Raises
+    ------
+    ValueError
+        If either position set does not describe a readout, or ``support`` is
+        not positive.
+    """
+    import numpy as np
+
+    sample_positions = np.asarray(sample_positions, dtype=float).reshape(-1)
+    target_positions = np.asarray(target_positions, dtype=float).reshape(-1)
+    support = int(support)
+    if sample_positions.size < 2 or target_positions.size < 2:
+        raise ValueError("both position sets must describe a readout")
+    if support < 1:
+        raise ValueError(f"support must be positive, got {support}")
+
+    grid = np.arange(support) - support // 2
+    taken = np.exp(-2j * np.pi * np.outer(sample_positions, grid))
+    wanted = np.exp(-2j * np.pi * np.outer(target_positions, grid))
+    normal = taken.conj().T @ taken + regularization * sample_positions.size * np.eye(
+        support
     )
-    cross = cross.sum(dim=axes) if is_torch else cross.sum(axis=axes)
-    phase = _unwrap(xp.angle(cross), xp, is_torch)
-    n_readout = phase.shape[0]
-    if is_torch:
-        coordinate = xp.linspace(
-            -1,
-            1,
-            n_readout,
-            device=phase.device,
-            dtype=phase.dtype,
-        )
-        design = xp.stack(
-            [coordinate**degree for degree in range(polynomial_order + 1)],
-            dim=1,
-        )
-        coefficients = xp.linalg.lstsq(design, phase[:, None]).solution
-        return (design @ coefficients)[:, 0]
-    coordinate = xp.linspace(-1, 1, n_readout)
-    coefficients = xp.polynomial.polynomial.polyfit(
-        coordinate,
-        phase,
-        polynomial_order,
-    )
-    return xp.polynomial.polynomial.polyval(coordinate, coefficients)
-
-
-def correct_epi_eddy_currents(
-    positive_readouts: Any,
-    negative_readouts: Any,
-    phase: Any | None = None,
-    *,
-    readout_axis: int = -1,
-    polynomial_order: int = 1,
-) -> tuple[Any, Any, Any]:
-    """Apply symmetric odd/even phase correction to EPI readout polarities."""
-    if phase is None:
-        phase = estimate_epi_eddy_phase(
-            positive_readouts,
-            negative_readouts,
-            readout_axis=readout_axis,
-            polynomial_order=polynomial_order,
-        )
-    xp, is_torch = _torch_or_numpy(positive_readouts)
-    phase = (
-        xp.as_tensor(
-            phase,
-            device=positive_readouts.device,
-            dtype=positive_readouts.real.dtype,
-        )
-        if is_torch
-        else xp.asarray(phase)
-    )
-    shape = [1] * positive_readouts.ndim
-    shape[readout_axis] = phase.shape[0]
-    phase = phase.reshape(shape)
-    positive_factor = xp.exp(-0.5j * phase)
-    negative_factor = xp.exp(0.5j * phase)
-    return (
-        positive_readouts * positive_factor,
-        negative_readouts * negative_factor,
-        phase.reshape(-1),
-    )
+    return (wanted @ np.linalg.solve(normal, taken.conj().T)).astype(np.complex64)
 
 
 # %% private module subroutines
@@ -735,65 +759,6 @@ def _relative_change(current: Any, previous: Any) -> float:
     return float(numerator / denominator)
 
 
-def _matching_libraries(first: Any, second: Any) -> tuple[Any, bool]:
-    xp, is_torch = _torch_or_numpy(first)
-    second_xp, second_is_torch = _torch_or_numpy(second)
-    if xp is not second_xp and is_torch != second_is_torch:
-        raise TypeError("arrays must use the same array library")
-    return xp, is_torch
-
-
-def _unwrap_last(phase: Any, xp: Any, is_torch: bool) -> Any:
-    if not is_torch:
-        return xp.unwrap(phase, axis=-1)
-    delta = phase[..., 1:] - phase[..., :-1]
-    wrapped = (delta + xp.pi) % (2 * xp.pi) - xp.pi
-    wrapped = xp.where((wrapped == -xp.pi) & (delta > 0), xp.pi, wrapped)
-    correction = xp.cumsum(wrapped - delta, dim=-1)
-    result = phase.clone()
-    result[..., 1:] += correction
-    return result
-
-
-def _fit_phase_curves(
-    phase: Any,
-    order: int,
-    smoothing: float,
-    xp: Any,
-    is_torch: bool,
-) -> Any:
-    coordinate = (
-        xp.linspace(
-            -1,
-            1,
-            phase.shape[-1],
-            device=phase.device,
-            dtype=phase.dtype,
-        )
-        if is_torch
-        else xp.linspace(-1, 1, phase.shape[-1], dtype=phase.dtype)
-    )
-    design = (
-        xp.stack([coordinate**degree for degree in range(order + 1)], dim=1)
-        if is_torch
-        else xp.stack([coordinate**degree for degree in range(order + 1)], axis=1)
-    )
-    coefficients = (
-        xp.linalg.lstsq(design, phase.T).solution.T
-        if is_torch
-        else xp.linalg.lstsq(design, phase.T, rcond=None)[0].T
-    )
-    if smoothing:
-        filtered = coefficients.clone() if is_torch else coefficients.copy()
-        for index in range(1, filtered.shape[0]):
-            filtered[index] = (
-                smoothing * filtered[index - 1]
-                + (1.0 - smoothing) * coefficients[index]
-            )
-        coefficients = filtered
-    return coefficients @ design.T
-
-
 def pipe_menon_dcf(
     trajectory: Any,
     image_shape: tuple[int, ...],
@@ -807,6 +772,18 @@ def pipe_menon_dcf(
     implementation, including options such as ``max_iter`` and
     normalization. The returned array remains in the array/device ecosystem
     selected by MRI-NUFFT.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> import pulserver.recon as recon
+    >>> angles = np.linspace(0, np.pi, 8, endpoint=False)
+    >>> radius = np.linspace(-0.5, 0.5, 32)
+    >>> trajectory = np.stack(
+    ...     [np.outer(np.cos(angles), radius), np.outer(np.sin(angles), radius)], -1
+    ... ).reshape(-1, 2)
+    >>> np.asarray(recon.pipe_menon_dcf(trajectory, (16, 16))).shape
+    (256,)
     """
     if len(image_shape) not in (2, 3) or any(int(item) < 1 for item in image_shape):
         raise ValueError("image_shape must contain two or three positive entries")
@@ -825,187 +802,61 @@ def pipe_menon_dcf(
     )
 
 
-def grid_cartesian(
-    acquisitions: Any,
-    encodes: Any,
-    shape: Any,
+def estimate_epi_phase(
+    navigator_lines: list[Any],
     *,
-    partitions: Any = None,
-    echo_position: int | None = None,
-) -> tuple[Any, Any]:
-    """Scatter acquisitions onto a zero-filled Cartesian grid, with their mask.
+    polynomial_order: int = 1,
+) -> Any:
+    """Fit the odd/even phase an EPI readout carries, from a blip-nulled navigator.
 
-    Step one of every Cartesian reconstruction: acquisitions arrive ordered by
-    acquisition, each carrying the phase encode it belongs to, and the
-    reconstruction needs them on a grid together with a record of which
-    positions were actually sampled.
+    Reversing a readout does not reverse the delays it was played through, so a
+    line read backwards carries a phase its forward neighbours do not, and
+    leaving it there is what puts a ghost at half the field of view. The
+    navigator measures it directly: three blip-nulled lines of alternating
+    polarity see the same object, so the phase difference between the middle
+    one and its neighbours is that phase and nothing else.
 
-    Partial echo is handled by ``echo_position``. Truncating the samples before
-    the echo leaves the acquired window right-aligned against a readout axis
-    twice as wide as the part that follows the echo, which is where this places
-    them.
+    A first-order fit is the correction every product reconstruction applies,
+    because the term that dominates is the gradient and ADC delay and a delay
+    is linear in the readout. Raising the order picks up what eddy currents
+    leave beyond it, which an oblique or a strongly driven readout has more of.
 
-    Parameters
-    ----------
-    acquisitions
-        K-space shaped ``(acquisition, coil, sample)``.
-    encodes
-        Phase encode of each acquisition, as indices into the first grid axis.
-    shape
-        Phase-encode extent, or ``(n_y, n_z)`` for a 3D acquisition. The
-        readout extent comes from the samples and ``echo_position``.
-    partitions
-        Partition of each acquisition, for a 3D acquisition. Required when
-        ``shape`` has two entries and refused when it has one.
-    echo_position
-        Sample index the echo sits at, as MRD's ``center_sample`` reports it.
-        ``None`` treats the readout as a full echo centred on its midpoint.
-
-    Returns
-    -------
-    grid : numpy.ndarray
-        Zero-filled ``(coil, *shape, n_x)`` k-space.
-    mask : numpy.ndarray
-        Boolean array shaped like ``grid`` without its coil axis, true where a
-        sample was acquired.
-
-    Raises
-    ------
-    ValueError
-        If the acquisitions are ragged, the counters do not match the
-        acquisition count, or ``partitions`` disagrees with ``shape``.
-
-    Examples
-    --------
-    >>> import numpy as np
-    >>> from pulserver.recon.preprocessing import grid_cartesian
-    >>> data = np.ones((4, 2, 16), dtype=complex)
-    >>> grid, mask = grid_cartesian(data, [0, 2, 4, 6], 8)
-    >>> grid.shape, mask.shape, int(mask.sum())
-    ((2, 8, 16), (8, 16), 64)
-
-    A partial echo lands against the full readout width:
-
-    >>> data = np.ones((8, 2, 12), dtype=complex)
-    >>> grid, mask = grid_cartesian(data, range(8), 8, echo_position=4)
-    >>> grid.shape, bool(mask[0, 0]), bool(mask[0, -1])
-    ((2, 8, 16), False, True)
-    """
-    numpy = import_module("numpy")
-
-    acquisitions = numpy.asarray(acquisitions)
-    if acquisitions.ndim != 3:
-        raise ValueError(
-            "acquisitions must be (acquisition, coil, sample); ragged "
-            "acquisitions have to be padded or split first"
-        )
-    extents = (int(shape),) if numpy.isscalar(shape) else tuple(int(s) for s in shape)
-    if len(extents) not in (1, 2):
-        raise ValueError("shape must hold one or two phase-encode extents")
-    if (partitions is None) != (len(extents) == 1):
-        raise ValueError(
-            "partitions is required for a 3D shape and refused for a 2D one"
-        )
-
-    counters = [numpy.asarray(encodes, dtype=int)]
-    if partitions is not None:
-        counters.append(numpy.asarray(partitions, dtype=int))
-    for counter in counters:
-        if counter.shape != (acquisitions.shape[0],):
-            raise ValueError("every counter needs one entry per acquisition")
-
-    n_x, acquired = _cartesian_extent(acquisitions.shape[-1], echo_position)
-
-    grid = numpy.zeros((acquisitions.shape[1], *extents, n_x), dtype=numpy.complex64)
-    grid[(slice(None), *counters, acquired)] = numpy.moveaxis(acquisitions, 0, 1)
-
-    mask = numpy.zeros((*extents, n_x), dtype=bool)
-    mask[(*counters, acquired)] = True
-    return grid, mask
-
-
-@dataclass(frozen=True)
-class EpiAcquisitionGroups:
-    """EPI acquisitions partitioned by the roles their MRD flags declare.
-
-    ``phase_correction`` holds the blip-nulled navigator (``NAV``/``REF``),
-    ``reverse_polarity`` the optional ``SET=1`` reference volume, and
-    ``single_band_reference`` the multiband ``REF`` data. Everything else is
-    ``imaging``.
-    """
-
-    phase_correction: list[Any]
-    single_band_reference: list[Any]
-    reverse_polarity: list[Any]
-    imaging: list[Any]
-
-
-def partition_epi_acquisitions(
-    acquisitions: Iterable[Any], *, reverse_polarity_set: int = 1
-) -> EpiAcquisitionGroups:
-    """Sort an EPI stream into the roles its flags and ``idx.set`` declare.
-
-    What every EPI reconstruction does before anything else: the navigator, the
-    reverse-polarity reference and the multiband reference each want different
-    treatment from the imaging lines, and the sequence has already said which
-    is which.
-
-    Parameters
-    ----------
-    acquisitions
-        The acquisitions of one EPI measurement, in arrival order.
-    reverse_polarity_set
-        ``idx.set`` value reserved for the reverse phase-encode reference.
-
-    Returns
-    -------
-    EpiAcquisitionGroups
-        The four roles, each in arrival order.
-    """
-    phase_correction: list[Any] = []
-    single_band_reference: list[Any] = []
-    reverse_polarity: list[Any] = []
-    imaging: list[Any] = []
-    for acquisition in acquisitions:
-        if _any_flag(acquisition, ("ACQ_IS_PHASECORR_DATA", "ACQ_IS_NAVIGATION_DATA")):
-            phase_correction.append(acquisition)
-        elif acquisition_label(acquisition, "set", 0) == reverse_polarity_set:
-            reverse_polarity.append(acquisition)
-        elif _any_flag(
-            acquisition,
-            (
-                "ACQ_IS_PARALLEL_CALIBRATION",
-                "ACQ_IS_PARALLEL_CALIBRATION_AND_IMAGING",
-            ),
-        ):
-            single_band_reference.append(acquisition)
-        else:
-            imaging.append(acquisition)
-    return EpiAcquisitionGroups(
-        phase_correction, single_band_reference, reverse_polarity, imaging
-    )
-
-
-def odd_even_fit(navigator_lines: list[Any]) -> tuple[float, float]:
-    """Fit the odd/even linear phase from blip-nulled navigator lines.
-
-    The middle line was read backwards; against the mean of its two
-    like-polarity neighbours, its hybrid-space phase difference is the
-    gradient-delay ramp plus a constant -- the two numbers every reversed
-    line is corrected by.
+    The fit is weighted by the cross-correlation magnitude and ignores the
+    samples below a tenth of its peak: a phase difference where there is no
+    signal is noise, and letting the readout's empty edges into an unweighted
+    fit is what drags a high-order one off.
 
     Parameters
     ----------
     navigator_lines : list of numpy.ndarray
         Three ``(coils, samples)`` lines, polarity ``+ - +``, reversed lines
         already flipped back into readout order.
+    polynomial_order
+        Order of the phase polynomial. ``1`` is the gradient-delay ramp and a
+        constant.
 
     Returns
     -------
-    tuple of float
-        Phase slope (radians per sample) and intercept (radians).
+    numpy.ndarray
+        Coefficients of the phase, lowest order first, in a coordinate running
+        from ``-1`` to ``1`` across the readout -- so a fit measured on the
+        navigator applies to a readout of any length.
+
+    Raises
+    ------
+    ValueError
+        If fewer than three navigator lines are given, or the order is
+        negative.
     """
     import numpy as np
+
+    if len(navigator_lines) < 3:
+        raise ValueError(
+            f"the navigator is three lines of alternating polarity, got "
+            f"{len(navigator_lines)}"
+        )
+    if polynomial_order < 0:
+        raise ValueError("polynomial_order must be non-negative")
 
     forward = 0.5 * (_hybrid(navigator_lines[0]) + _hybrid(navigator_lines[2]))
     backward = _hybrid(navigator_lines[1])
@@ -1013,28 +864,73 @@ def odd_even_fit(navigator_lines: list[Any]) -> tuple[float, float]:
 
     weights = np.abs(cross)
     phase = np.unwrap(np.angle(cross))
-    samples = np.arange(phase.size)
+    coordinate = np.linspace(-1.0, 1.0, phase.size)
     keep = weights > 0.1 * weights.max()
-    slope, intercept = np.polyfit(samples[keep], phase[keep], 1, w=weights[keep])
-    return float(slope), float(intercept)
+    return np.polynomial.polynomial.polyfit(
+        coordinate[keep], phase[keep], polynomial_order, w=weights[keep]
+    )
 
 
-def correct_lines(
-    lines: list[tuple[Any, bool]], slope: float, intercept: float
-) -> list[Any]:
+def correct_lines(lines: list[tuple[Any, bool]], phase: Any = None) -> list[Any]:
     """Flip and phase-correct a train's lines into a consistent readout.
+
+    The forward lines define the grid, so a reversed one is rotated onto them
+    rather than both being met in the middle: the correction is one-sided, and
+    the image does not move.
 
     Parameters
     ----------
     lines : list of tuple
         ``(data, reversed)`` per line, data ``(coils, samples)``.
-    slope, intercept
-        The odd/even fit of :func:`odd_even_fit`.
+    phase
+        The polynomial coefficients :func:`estimate_epi_phase` returned.
+        ``None`` -- before a navigator has arrived -- flips a reversed line
+        without demodulating it.
 
     Returns
     -------
     list of numpy.ndarray
         The corrected lines, all in forward readout order.
+
+    Examples
+    --------
+    A reversed line carries the delay it was played through, and leaving it
+    there is what puts a copy of the object at half the field of view.
+    ``phase=None`` is the same train flipped but not demodulated, which is
+    what the ghost is:
+
+    .. plot::
+
+       import numpy as np
+       import pulserver.recon as recon
+       from _figures import images, phantom
+
+       truth = phantom(64)[0][0].numpy()
+       kspace = recon.fftc(truth)
+       ramp = 0.9 * np.linspace(-1.0, 1.0, 64) + 0.4
+
+       def backwards(line):
+           hybrid = recon.ifftc(line, axes=-1)
+           return recon.fftc(hybrid * np.exp(-1j * ramp), axes=-1)[..., ::-1]
+
+       train = [
+           (line[None], False) if index % 2 == 0 else (backwards(line[None]), True)
+           for index, line in enumerate(kspace)
+       ]
+       middle = kspace[32][None]
+       phase = recon.estimate_epi_phase([middle, backwards(middle)[..., ::-1], middle])
+
+       def placed(fit):
+           return np.stack([recon.correct_lines([line], fit)[0][0] for line in train])
+
+       images(
+           [
+               ("object", truth),
+               ("flipped only", recon.ifftc(placed(None))),
+               ("phase corrected", recon.ifftc(placed(phase))),
+           ],
+           title="an odd/even phase, and the ghost it leaves",
+       )
     """
     import numpy as np
 
@@ -1043,177 +939,13 @@ def correct_lines(
         row = np.asarray(data)
         if backwards:
             row = row[..., ::-1]
-            hybrid = _hybrid(row)
-            ramp = slope * np.arange(hybrid.shape[-1]) + intercept
-            hybrid = hybrid * np.exp(1j * ramp)
-            row = fftc(hybrid, axes=-1)
+            if phase is not None:
+                hybrid = _hybrid(row)
+                coordinate = np.linspace(-1.0, 1.0, hybrid.shape[-1])
+                ramp = np.polynomial.polynomial.polyval(coordinate, phase)
+                row = fftc(hybrid * np.exp(1j * ramp), axes=-1)
         corrected.append(row.astype(np.complex64))
     return corrected
-
-
-def encoded_shape(header: Any, *, encoding: int = 0) -> tuple[int, int, int]:
-    """Return the ``(n_slices, n_y, n_x)`` grid an MRD header describes.
-
-    The encoded space, so the readout extent is the oversampled one the scanner
-    actually digitises and the phase-encode extent covers the whole prescribed
-    matrix rather than the lines one acceleration happens to sample. This is
-    the grid a reconstruction allocates; :func:`recon_shape` is what it crops to
-    at the end.
-
-    Parameters
-    ----------
-    header
-        Parsed MRD XML header.
-    encoding
-        Encoding space to read. Navigator data lives in its own.
-
-    Returns
-    -------
-    tuple of int
-        Slices, phase encodes, readout samples.
-
-    Raises
-    ------
-    ValueError
-        If the header carries no such encoded space.
-    """
-    space = _encoding_space(header, encoding, "encodedSpace")
-    limits = getattr(_encoding(header, encoding), "encodingLimits", None)
-    slices = getattr(limits, "slice", None)
-    n_slices = 1 if slices is None else int(slices.maximum) + 1
-    return n_slices, int(space.matrixSize.y), int(space.matrixSize.x)
-
-
-def recon_shape(header: Any, *, encoding: int = 0) -> tuple[int, int]:
-    """Return the ``(n_y, n_x)`` image matrix an MRD header asks for.
-
-    The reconstructed space, which is the encoded one with readout oversampling
-    and any phase field-of-view oversampling taken back off.
-
-    Parameters
-    ----------
-    header
-        Parsed MRD XML header.
-    encoding
-        Encoding space to read.
-
-    Returns
-    -------
-    tuple of int
-        Phase encodes, readout samples.
-
-    Raises
-    ------
-    ValueError
-        If the header carries no such reconstructed space.
-    """
-    space = _encoding_space(header, encoding, "reconSpace")
-    return int(space.matrixSize.y), int(space.matrixSize.x)
-
-
-def encoded_volume(header: Any, *, encoding: int = 0) -> tuple[int, int, int]:
-    """Return the ``(n_z, n_y, n_x)`` grid an MRD header describes for a slab.
-
-    The volume counterpart of :func:`encoded_shape`: the partition extent comes
-    from the encoded matrix rather than the slice counter, because a 3D scan
-    encodes z instead of stepping through it.
-
-    Parameters
-    ----------
-    header
-        Parsed MRD XML header.
-    encoding
-        Encoding space to read.
-
-    Returns
-    -------
-    tuple of int
-        Partitions, phase encodes, readout samples.
-
-    Raises
-    ------
-    ValueError
-        If the header carries no such encoded space.
-    """
-    return _volume(header, encoding, "encodedSpace")
-
-
-def recon_volume(header: Any, *, encoding: int = 0) -> tuple[int, int, int]:
-    """Return the ``(n_z, n_y, n_x)`` image matrix an MRD header asks for.
-
-    Parameters
-    ----------
-    header
-        Parsed MRD XML header.
-    encoding
-        Encoding space to read.
-
-    Returns
-    -------
-    tuple of int
-        Partitions, phase encodes, readout samples.
-
-    Raises
-    ------
-    ValueError
-        If the header carries no such reconstructed space.
-    """
-    return _volume(header, encoding, "reconSpace")
-
-
-def echo_count(header: Any, *, encoding: int = 0) -> int:
-    """Return how many echoes the MRD header declares.
-
-    A sequence's ``ECO`` label arrives as the ``contrast`` counter, so its
-    encoding limit is the echo count. A header without one describes a
-    single-echo scan.
-
-    Parameters
-    ----------
-    header
-        Parsed MRD XML header.
-    encoding
-        Encoding space to read.
-
-    Returns
-    -------
-    int
-        Echoes per repetition.
-    """
-    try:
-        limits = header.encoding[encoding].encodingLimits.contrast
-    except (AttributeError, IndexError, TypeError):
-        return 1
-    return 1 if limits is None else int(limits.maximum) + 1
-
-
-def receiver_channels(header: Any) -> int:
-    """Return the number of receive channels an MRD header declares.
-
-    Parameters
-    ----------
-    header
-        Parsed MRD XML header.
-
-    Returns
-    -------
-    int
-        Coils in every acquisition of the scan.
-
-    Raises
-    ------
-    ValueError
-        If the header does not declare a channel count.
-    """
-    system = getattr(header, "acquisitionSystemInformation", None)
-    channels = getattr(system, "receiverChannels", None)
-    if channels is None:
-        raise ValueError("MRD header declares no receiverChannels")
-    return int(channels)
-
-
-def _any_flag(acquisition: Any, flags: tuple[str, ...]) -> bool:
-    return any(has_acquisition_flag(acquisition, flag) for flag in flags)
 
 
 def _hybrid(rows: Any) -> Any:
@@ -1221,163 +953,3 @@ def _hybrid(rows: Any) -> Any:
     import numpy as np
 
     return ifftc(np.asarray(rows), axes=-1)
-
-
-def _encoding(header: Any, index: int) -> Any:
-    try:
-        return header.encoding[index]
-    except (AttributeError, IndexError, TypeError) as error:
-        raise ValueError(
-            f"MRD header carries no encoding {index}; an inline reconstruction "
-            "needs the header the scanner sends ahead of the data"
-        ) from error
-
-
-def _volume(header: Any, index: int, name: str) -> tuple[int, int, int]:
-    matrix = _encoding_space(header, index, name).matrixSize
-    return int(matrix.z), int(matrix.y), int(matrix.x)
-
-
-def _encoding_space(header: Any, index: int, name: str) -> Any:
-    space = getattr(_encoding(header, index), name, None)
-    if space is None or getattr(space, "matrixSize", None) is None:
-        raise ValueError(f"MRD encoding {index} carries no {name} matrix size")
-    return space
-
-
-def _cartesian_extent(n_samples: int, echo_position: int | None) -> tuple[int, slice]:
-    """Full readout width, and where the acquired samples land in it.
-
-    Truncating the samples before the echo leaves the acquired window
-    right-aligned against a readout axis twice as wide as the part that follows
-    the echo.
-    """
-    n_samples = int(n_samples)
-    position = n_samples // 2 if echo_position is None else int(echo_position)
-    n_x = 2 * (n_samples - position)
-    return n_x, slice(n_x - n_samples, None)
-
-
-class CartesianGridder:
-    """A scan's Cartesian k-space, filled one acquisition at a time.
-
-    Allocated up front from the grid the header describes, so a reconstruction
-    can place each acquisition the moment it arrives and read a finished unit
-    out by index without a second pass. Indexing returns the ``(kspace, mask)``
-    of one position along the leading axis -- one slice of a multi-slice scan --
-    and :meth:`result` the whole buffer.
-
-    A readout shorter than the grid is right-aligned in it: truncating the
-    samples before the echo is what a partial echo does, so the acquired window
-    ends where a full one would.
-
-    Parameters
-    ----------
-    shape
-        Full grid without the coil axis, readout last: ``(n_y, n_x)`` for a
-        single plane, ``(n_slices, n_y, n_x)`` for a multi-slice scan,
-        ``(n_z, n_y, n_x)`` for a volume.
-    coils
-        Number of receive channels.
-
-    Attributes
-    ----------
-    kspace : numpy.ndarray
-        Zero-filled ``(coils, *shape)`` k-space.
-    mask : numpy.ndarray
-        Boolean array shaped ``shape``, true where a sample was acquired.
-
-    Raises
-    ------
-    ValueError
-        If ``shape`` has fewer than two axes, or an acquisition does not fit
-        the grid it is placed in.
-
-    Examples
-    --------
-    >>> import numpy as np
-    >>> from pulserver.recon.preprocessing import CartesianGridder
-    >>> buffer = CartesianGridder((2, 8, 16), coils=4)
-    >>> for line in range(0, 8, 2):
-    ...     buffer.add(np.ones((4, 16)), 1, line)
-    >>> kspace, mask = buffer[1]
-    >>> kspace.shape, mask.shape, int(mask.sum())
-    ((4, 8, 16), (8, 16), 64)
-
-    An unfilled position is empty, which is what makes the mask the record of
-    what the scan actually sampled:
-
-    >>> bool(buffer[0][1].any())
-    False
-
-    A partial echo lands against the full readout width:
-
-    >>> partial = CartesianGridder((4, 16), coils=1)
-    >>> partial.add(np.ones((1, 12)), 0)
-    >>> bool(partial.mask[0, 0]), bool(partial.mask[0, -1])
-    (False, True)
-    """
-
-    def __init__(self, shape: Any, *, coils: int) -> None:
-        numpy = import_module("numpy")
-
-        extents = tuple(int(s) for s in shape)
-        if len(extents) < 2:
-            raise ValueError("shape needs at least a phase-encode and a readout axis")
-        coils = int(coils)
-        if coils < 1:
-            raise ValueError("coils must be positive")
-        self.shape = extents
-        self.coils = coils
-        self.kspace = numpy.zeros((coils, *extents), dtype=numpy.complex64)
-        self.mask = numpy.zeros(extents, dtype=bool)
-
-    def add(self, acquisition: Any, *index: int) -> None:
-        """Place one ``(coil, sample)`` acquisition at its position in the grid.
-
-        Parameters
-        ----------
-        acquisition
-            K-space of one readout, shaped ``(coils, samples)``.
-        *index
-            Position along every axis of ``shape`` except the readout, in the
-            same order.
-
-        Raises
-        ------
-        ValueError
-            If the acquisition is not two-dimensional, the index does not name
-            a position, or either exceeds the grid.
-        """
-        numpy = import_module("numpy")
-
-        acquisition = numpy.asarray(acquisition)
-        if acquisition.ndim != 2:
-            raise ValueError("each acquisition must be (coil, sample)")
-        if acquisition.shape[0] != self.coils:
-            raise ValueError(
-                f"acquisition carries {acquisition.shape[0]} coils, grid holds "
-                f"{self.coils}"
-            )
-        if len(index) != len(self.shape) - 1:
-            raise ValueError(
-                f"grid needs {len(self.shape) - 1} index values, got {len(index)}"
-            )
-        n_x = self.shape[-1]
-        n_samples = acquisition.shape[-1]
-        if n_samples > n_x:
-            raise ValueError(
-                f"acquisition has {n_samples} samples, readout axis holds {n_x}"
-            )
-        position = tuple(int(value) for value in index)
-        acquired = slice(n_x - n_samples, None)
-        self.kspace[(slice(None), *position, acquired)] = acquisition
-        self.mask[(*position, acquired)] = True
-
-    def __getitem__(self, index: Any) -> tuple[Any, Any]:
-        """Return the ``(kspace, mask)`` at one position along the leading axis."""
-        return self.kspace[:, index], self.mask[index]
-
-    def result(self) -> tuple[Any, Any]:
-        """Return the whole ``(kspace, mask)`` buffer."""
-        return self.kspace, self.mask

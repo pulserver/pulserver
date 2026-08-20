@@ -91,29 +91,13 @@ extern "C"
     /* ================================================================== */
 
     /**
-     * @brief Compute mechanical resonances spectral data for wrapper-side plotting.
+     * @brief Compute mechanical resonances spectral data for a specific canonical TR of a subsequence.
      *
      * Independently extracts TR gradient waveforms (without segment
      * labels), interpolates them to uniform raster, and computes
      * spectrograms, full-TR spectra, and sequence-level harmonics.
      * Peak candidate masks are included for forbidden-band detection
      * in the wrapper.
-     *
-     * @param[out] spectra                  Receives spectral data (caller frees
-     *                                       via pulseg_mech_resonances_spectra_free).
-     * @param[out] diag                     Diagnostic on failure.
-     * @param[in]  coll                     Loaded collection.
-     * @param[in]  subseq_idx              Subsequence index.
-     * @param[in]  opts                     Scanner limits.
-     * @param[in]  target_resolution_hz     Spectral resolution (0 = auto).
-     * @param[in]  max_freq_hz             Max frequency to report (0 = auto).
-     * @param[in]  num_forbidden_bands      Number of forbidden bands.
-     * @param[in]  forbidden_bands          Array of forbidden bands.
-     * @return PULSEG_SUCCESS on success, negative error code on failure.
-     */
-
-    /**
-     * @brief Compute mechanical resonances spectral data for a specific canonical TR of a subsequence.
      *
      * @param[out] spectra                  Receives spectral data (caller frees via pulseg_mech_resonances_spectra_free).
      * @param[out] diag                     Diagnostic on failure.
@@ -159,26 +143,13 @@ extern "C"
     /* ================================================================== */
 
     /**
-     * @brief Compute convolved slew-rate waveforms for PNS plotting.
+     * @brief Compute PNS slew-rate waveforms for a specific canonical TR of a subsequence.
      *
      * Independently extracts TR gradient waveforms (without segment
      * labels), interpolates them to uniform raster, and convolves with
      * the PNS model kernel.  Returns per-axis slew rates; the wrapper
      * can trivially compute combined PNS = sqrt(x^2 + y^2 + z^2) and
      * threshold percentage.
-     *
-     * @param[out] result       Receives slew-rate waveforms (caller frees
-     *                           via pulseg_pns_result_free).
-     * @param[out] diag         Diagnostic on failure.
-     * @param[in]  coll         Loaded collection.
-     * @param[in]  subseq_idx   Subsequence index.
-     * @param[in]  opts         Scanner limits.
-     * @param[in]  params       PNS model parameters.
-     * @return PULSEG_SUCCESS on success, negative error code on failure.
-     */
-
-    /**
-     * @brief Compute PNS slew-rate waveforms for a specific canonical TR of a subsequence.
      *
      * @param[out] result       Receives slew-rate waveforms (caller frees via pulseg_pns_result_free).
      * @param[out] diag         Diagnostic on failure.
