@@ -17,6 +17,24 @@ them, and every pulse of a repetition is offset to its slice.
 ``main`` returns the :class:`pulserver.pypulseq.Sequence`; ``PLUGIN`` is the
 same sequence behind the scanner protocol contract, and running this module
 as a script writes a ``.seq`` from the same controls.
+
+Examples
+--------
+>>> from pulserver.app import se2D_sequence
+>>> seq = se2D_sequence(n_x=32, n_y=16, n_slices=1, te=15e-3, tr=None)
+>>> seq.num_trs, seq.num_segments
+(16, 3)
+
+One echo per excitation, the crushers either side of the refocusing pulse identical so the refocused pathway passes and the FID does not:
+
+.. plot::
+   :include-source:
+
+   from pulserver.app import se2D_sequence
+
+   seq = se2D_sequence(n_x=32, n_y=16, n_slices=1, te=15e-3, tr=None)
+   seq.plot(tr="worst_case", time_disp="ms", grad_disp="mT/m", stacked=True,
+            plot_now=False)
 """
 
 from __future__ import annotations

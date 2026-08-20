@@ -55,6 +55,10 @@ dev = [
   "sphinx>=7.4",
   "myst-parser>=3.0",
   "sphinx-book-theme>=1.1",
+  # The C and C++ reference is the headers' own comments, pulled in through
+  # Doxygen's XML. Doxygen itself is a system package, so the pages say so
+  # and the rest of the documentation builds without it.
+  "breathe>=4.35",
   "build>=1.2",
 ]
 

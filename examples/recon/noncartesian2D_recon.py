@@ -14,6 +14,35 @@ adjoint instead, coil images root-sum-of-squares combined.
 The trajectory arrives per acquisition, as MRD carries it, scaled to
 MRI-NUFFT's ``[-0.5, 0.5)`` units -- what the LiveSDK's enrichment writes.
 
+
+Examples
+--------
+Calling the module reconstructs an MRD file: the same three hooks an
+inline reconstruction is driven through, fed from the file in this
+process rather than over a socket.
+
+>>> from pulserver import ReconPlugin
+>>> from pulserver.app import noncartesian2D_recon
+>>> isinstance(noncartesian2D_recon.PLUGIN, ReconPlugin)
+True
+
+The three hooks are the whole plugin, and nothing else is overridden:
+
+>>> sorted(
+...     hook for hook in ("startup", "receive", "recon")
+...     if hook in vars(noncartesian2D_recon.NonCartesian2DRecon)
+... )
+['receive', 'recon', 'startup']
+
+Reconstruct a 2D scan whose acquisitions carry a trajectory::
+
+    images = noncartesian2D_recon("scan.h5")
+
+Or re-instantiate the plugin with different settings, and drive it the
+same way::
+
+    plugin = noncartesian2D_recon.NonCartesian2DRecon(coil_compression=8)
+    images = plugin.run("scan.h5")
 """
 
 from __future__ import annotations

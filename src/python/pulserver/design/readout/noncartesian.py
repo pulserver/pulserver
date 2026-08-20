@@ -381,11 +381,61 @@ class RadialReadout2D(_RadialReadout):
 
     >>> any(event is readout.gz_reph for event in readout.blocks[1])
     True
+
+    One waveform, one rotation per spoke. Golden angles put every new spoke
+    in the widest gap the previous ones left, so any prefix of the scan
+    covers the plane:
+
+    .. plot::
+
+       import pulserver.design as design
+       import pulserver.pypulseq as pp
+       from _figures import trajectory
+
+       system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+       excitation = design.SpatialSelectiveExcitation(system, 15.0, 5e-3)
+       readout = design.RadialReadout2D(
+           system, excitation.rf, excitation.gz, excitation.gz_reph,
+           fov=0.22, matrix=64,
+       )
+       trajectory(
+           readout,
+           angles=pp.calc_golden_angles(13),
+           label="spoke",
+           title="RadialReadout2D, thirteen golden-angle spokes",
+       )
     """
 
 
 class RadialStackReadout(_RadialReadout):
-    """Radial spokes in-plane, Cartesian partitions along z: stack of stars."""
+    """Radial spokes in-plane, Cartesian partitions along z: stack of stars.
+
+    Examples
+    --------
+    Spokes in the plane and Cartesian steps along z: the same spoke on every
+    partition, which is what lets an inverse FFT along z reduce the volume to
+    independent planes.
+
+    .. plot::
+
+       import numpy as np
+       import pulserver.design as design
+       import pulserver.pypulseq as pp
+       from _figures import trajectory
+
+       system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+       slab = design.SpatialSelectiveExcitation(system, 15.0, 0.12, is_slab=True)
+       readout = design.RadialStackReadout(
+           system, slab.rf, slab.gz, fov=0.22, matrix=64, fov_z=0.12, matrix_z=16,
+       )
+       trajectory(
+           readout,
+           angles=np.repeat(pp.calc_uniform_angles(8), 3),
+           kz=np.tile([-0.8, 0.0, 0.8], 8),
+           label="spoke",
+           title="RadialStackReadout, eight spokes on three partitions",
+       )
+    """
 
     _phase_axis = "z"
 
@@ -398,6 +448,29 @@ class RadialProjectionReadout(_RadialReadout):
     exists so the intent is stated where the readout is built, and so that a
     partition encode -- which such an acquisition has no place for -- is
     refused rather than quietly accepted.
+
+    Examples
+    --------
+    The same spoke turned over a sphere. Nothing about the blocks changes;
+    the rotations are the acquisition:
+
+    .. plot::
+
+       import pulserver.design as design
+       import pulserver.pypulseq as pp
+       from _figures import trajectory
+
+       system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+       slab = design.SpatialSelectiveExcitation(system, 15.0, 0.12, is_slab=True)
+       readout = design.RadialProjectionReadout(
+           system, slab.rf, slab.gz, fov=0.22, matrix=64,
+       )
+       trajectory(
+           readout,
+           angles=pp.calc_projection_shell(48)[0],
+           label="spoke",
+           title="RadialProjectionReadout, 48 directions on a sphere",
+       )
     """
 
     _rotated_axes = AXES
@@ -457,6 +530,46 @@ class NonCartesianReadout(_ArmedReadout):
     ----------
     Shared with :class:`_RadialReadout`, except that the interleave arrives as
     ``trajectory`` rather than being built from ``fov`` and ``matrix``.
+
+    Examples
+    --------
+    A family is a trajectory and nothing else: design one, hand it over, and
+    the bracket alignment, the TE and TR budget, the spoiler and the
+    explicit-rotation path are inherited.
+
+    >>> import numpy as np
+    >>> import pulserver.design as design
+    >>> import pulserver.pypulseq as pp
+    >>> system = pp.Opts()
+    >>> excitation = design.SpatialSelectiveExcitation(system, 15.0, 5e-3)
+    >>> readout = design.SpiralReadout2D(
+    ...     system, excitation.rf, excitation.gz, excitation.gz_reph,
+    ...     fov=0.22, matrix=64, design_interleaves=8,
+    ... )
+    >>> isinstance(readout, design.NonCartesianReadout)
+    True
+
+    Whatever the trajectory, the arm is what the loop plays and rotates:
+
+    .. plot::
+
+       import numpy as np
+       import pulserver.design as design
+       import pulserver.pypulseq as pp
+       from _figures import trajectory
+
+       system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+       excitation = design.SpatialSelectiveExcitation(system, 15.0, 5e-3)
+       readout = design.SpiralReadout2D(
+           system, excitation.rf, excitation.gz, excitation.gz_reph,
+           fov=0.22, matrix=64, design_interleaves=6, direction="in_out",
+       )
+       trajectory(
+           readout,
+           angles=np.arange(6) * 2 * np.pi / 6,
+           label="interleave",
+           title="an in-out spiral family, six interleaves",
+       )
     """
 
     _phase_axis: str | None = None
@@ -688,17 +801,91 @@ class SpiralReadout2D(_SpiralReadout):
     ... )
     >>> readout.trajectory.direction
     'in_out'
+
+    One designed interleave, rotated into the rest. Eight of them fill the
+    plane the density asked for:
+
+    .. plot::
+
+       import numpy as np
+       import pulserver.design as design
+       import pulserver.pypulseq as pp
+       from _figures import trajectory
+
+       system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+       excitation = design.SpatialSelectiveExcitation(system, 15.0, 5e-3)
+       readout = design.SpiralReadout2D(
+           system, excitation.rf, excitation.gz, excitation.gz_reph,
+           fov=0.22, matrix=64, design_interleaves=8,
+       )
+       trajectory(
+           readout,
+           angles=np.arange(8) * 2 * np.pi / 8,
+           label="interleave",
+           title="SpiralReadout2D, eight interleaves",
+       )
     """
 
 
 class SpiralStackReadout(_SpiralReadout):
-    """Spiral arms in-plane, Cartesian partitions along z."""
+    """Spiral arms in-plane, Cartesian partitions along z.
+
+    Examples
+    --------
+    The in-plane interleave is the 2D one; z is encoded by a trapezoid, so
+    the volume is a stack of identical planes:
+
+    .. plot::
+
+       import numpy as np
+       import pulserver.design as design
+       import pulserver.pypulseq as pp
+       from _figures import trajectory
+
+       system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+       slab = design.SpatialSelectiveExcitation(system, 15.0, 0.12, is_slab=True)
+       readout = design.SpiralStackReadout(
+           system, slab.rf, slab.gz, fov=0.22, matrix=64, design_interleaves=8,
+           fov_z=0.12, matrix_z=16,
+       )
+       trajectory(
+           readout,
+           angles=np.repeat(np.arange(4) * 2 * np.pi / 4, 3),
+           kz=np.tile([-0.8, 0.0, 0.8], 4),
+           label="interleave",
+           title="SpiralStackReadout, four interleaves on three partitions",
+       )
+    """
 
     _phase_axis = "z"
 
 
 class SpiralProjectionReadout(_SpiralReadout):
-    """Spiral arms turned over a sphere."""
+    """Spiral arms turned over a sphere.
+
+    Examples
+    --------
+    The same interleave turned over a sphere, so each one is a spiral on its
+    own plane through the origin:
+
+    .. plot::
+
+       import pulserver.design as design
+       import pulserver.pypulseq as pp
+       from _figures import trajectory
+
+       system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+       slab = design.SpatialSelectiveExcitation(system, 15.0, 0.12, is_slab=True)
+       readout = design.SpiralProjectionReadout(
+           system, slab.rf, slab.gz, fov=0.22, matrix=64, design_interleaves=8,
+       )
+       trajectory(
+           readout,
+           angles=pp.calc_projection_shell(16)[0],
+           label="interleave",
+           title="SpiralProjectionReadout, sixteen orientations",
+       )
+    """
 
     _rotated_axes = AXES
 
@@ -738,17 +925,94 @@ class _RosetteReadout(NonCartesianReadout):
 
 
 class RosetteReadout2D(_RosetteReadout):
-    """One multi-petal rosette interleave in a plane."""
+    """One multi-petal rosette interleave in a plane.
+
+    Examples
+    --------
+    Every petal passes through the centre, so a rosette samples k = 0 once
+    per petal and the low frequencies are revisited throughout the readout:
+
+    .. plot::
+
+       import numpy as np
+       import pulserver.design as design
+       import pulserver.pypulseq as pp
+       from _figures import trajectory
+
+       system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+       excitation = design.SpatialSelectiveExcitation(system, 15.0, 5e-3)
+       readout = design.RosetteReadout2D(
+           system, excitation.rf, excitation.gz, excitation.gz_reph,
+           fov=0.22, matrix=48, petals=5,
+       )
+       trajectory(
+           readout,
+           angles=np.arange(4) * 2 * np.pi / 4,
+           label="arm",
+           title="RosetteReadout2D, four rotations of a five-petal arm",
+       )
+    """
 
 
 class RosetteStackReadout(_RosetteReadout):
-    """Rosette petals in-plane, Cartesian partitions along z."""
+    """Rosette petals in-plane, Cartesian partitions along z.
+
+    Examples
+    --------
+    The in-plane arm is the 2D one; z is a trapezoid, so the volume is a
+    stack of identical rosettes:
+
+    .. plot::
+
+       import numpy as np
+       import pulserver.design as design
+       import pulserver.pypulseq as pp
+       from _figures import trajectory
+
+       system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+       slab = design.SpatialSelectiveExcitation(system, 15.0, 0.12, is_slab=True)
+       readout = design.RosetteStackReadout(
+           system, slab.rf, slab.gz, fov=0.22, matrix=48, petals=5,
+           fov_z=0.12, matrix_z=16,
+       )
+       trajectory(
+           readout,
+           angles=np.repeat(np.arange(3) * 2 * np.pi / 3, 3),
+           kz=np.tile([-0.8, 0.0, 0.8], 3),
+           label="arm",
+           title="RosetteStackReadout, three arms on three partitions",
+       )
+    """
 
     _phase_axis = "z"
 
 
 class RosetteProjectionReadout(_RosetteReadout):
-    """Rosette petals turned over a sphere."""
+    """Rosette petals turned over a sphere.
+
+    Examples
+    --------
+    The same arm turned over a sphere, so every petal lies on its own plane
+    through the origin and k = 0 is revisited from every direction:
+
+    .. plot::
+
+       import pulserver.design as design
+       import pulserver.pypulseq as pp
+       from _figures import trajectory
+
+       system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+       slab = design.SpatialSelectiveExcitation(system, 15.0, 0.12, is_slab=True)
+       readout = design.RosetteProjectionReadout(
+           system, slab.rf, slab.gz, fov=0.22, matrix=48, petals=5,
+       )
+       trajectory(
+           readout,
+           angles=pp.calc_projection_shell(12)[0],
+           label="arm",
+           title="RosetteProjectionReadout, twelve orientations",
+       )
+    """
 
     _rotated_axes = AXES
 

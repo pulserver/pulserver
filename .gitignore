@@ -65,6 +65,7 @@ htmlcov/
 # -------------------------------------------------------- Documentation ----
 # Rendered output only. Everything under docs/ that is a source is tracked.
 docs/_build/
+docs/_doxygen/
 docs/generated/
 docs/api/generated/
 docs_build/

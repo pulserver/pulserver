@@ -448,6 +448,33 @@ class NLINV(torch.nn.Module):
     RuntimeError
         If the calibration leaves a relative residual above
         ``residual_tolerance``.
+
+    Examples
+    --------
+    The maps and the object come out of the same solve, so nothing has to be
+    acquired for the sensitivities that was not acquired for the image:
+
+    .. plot::
+
+       import numpy as np
+       import pulserver.recon as recon
+       from _figures import images, phantom
+
+       truth, coil_maps = phantom(64, coils=4)
+       mask = np.zeros((64, 64), dtype=np.float32)
+       mask[::2] = 1.0
+       mask[26:38] = 1.0
+       measured = recon.fftc((truth * coil_maps[0]).numpy()) * mask
+
+       estimated = recon.NLINV(spatial_ndim=2, max_iter=10)(measured[None], mask=mask)
+       images(
+           [
+               ("object", truth),
+               ("NLINV sensitivity, coil 0", estimated[0, 0]),
+               ("solved against it", recon.cartesian_recon(measured, mask, estimated)),
+           ],
+           title="NLINV, two-fold undersampled with a calibration block",
+       )
     """
 
     def __init__(

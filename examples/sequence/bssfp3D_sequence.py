@@ -12,6 +12,24 @@ CAIPIRINHA lattice with a selectable kz shift per ky block.
 ``main`` returns the :class:`pulserver.pypulseq.Sequence`; ``PLUGIN`` is the
 same sequence behind the scanner protocol contract, and running this module
 as a script writes a ``.seq`` from the same controls.
+
+Examples
+--------
+>>> from pulserver.app import bssfp3D_sequence
+>>> seq = bssfp3D_sequence(n_x=64, n_y=16, n_z=4, readout_bandwidth_hz=100e3, n_dummy=0)
+>>> seq.num_trs, seq.num_segments
+(1, 2)
+
+The balanced repetition over a slab, partition encode rewound with the rest:
+
+.. plot::
+   :include-source:
+
+   from pulserver.app import bssfp3D_sequence
+
+   seq = bssfp3D_sequence(n_x=64, n_y=16, n_z=4, readout_bandwidth_hz=100e3, n_dummy=0)
+   seq.plot(tr="worst_case", time_disp="ms", grad_disp="mT/m", stacked=True,
+            plot_now=False)
 """
 
 from __future__ import annotations

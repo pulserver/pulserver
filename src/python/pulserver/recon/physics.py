@@ -1763,6 +1763,37 @@ class _CoilwiseCartesianMRI(deepinv.physics.MultiCoilMRI):
         return self.A_adjoint(self.A(x, **kwargs))
 
 
+def _single_precision(value: Any) -> Any:
+    """``value`` in the precision every operator here works in.
+
+    A trajectory is what a NUFFT plans on and sensitivities are what it
+    applies, so a double-precision one plans a double-precision transform
+    and then meets single-precision data -- which the backend reports as a
+    dtype mismatch, from inside a plan, far from the call that caused it.
+    Whatever arrives, NumPy or Torch, a sequence of either, leaves single.
+    """
+    import numpy
+    import torch
+
+    if value is None:
+        return None
+    if isinstance(value, (list, tuple)):
+        return type(value)(_single_precision(item) for item in value)
+    if isinstance(value, torch.Tensor):
+        if value.dtype == torch.complex128:
+            return value.to(torch.complex64)
+        if value.dtype == torch.float64:
+            return value.to(torch.float32)
+        return value
+    if isinstance(value, numpy.ndarray):
+        if value.dtype == numpy.complex128:
+            return value.astype(numpy.complex64, copy=False)
+        if value.dtype == numpy.float64:
+            return value.astype(numpy.float32, copy=False)
+        return value
+    return value
+
+
 def _init_cartesian(
     physics: MRIPhysics,
     mask: Any,
@@ -1798,6 +1829,7 @@ def _init_cartesian(
         mask = torch.as_tensor(mask).to(torch.float32)
     if isinstance(coil_maps, numpy.ndarray):
         coil_maps = torch.as_tensor(coil_maps).to(torch.complex64)
+    mask, coil_maps = _single_precision(mask), _single_precision(coil_maps)
     if requested_device is not None:
         if hasattr(mask, "to"):
             mask = mask.to(requested_device)
@@ -1879,6 +1911,26 @@ class Cartesian2D(MRIPhysics):
     >>> coil_wise = Cartesian2D(torch.ones(1, 1, 8, 8), img_size=(8, 8))
     >>> coil_wise.A_adjoint(torch.randn(1, 4, 8, 8, dtype=torch.complex64)).shape
     torch.Size([1, 4, 8, 8])
+
+    What the operator does, on DeepInverse's phantom: measure the object
+    through each element of the array, and bring it back. Without maps the
+    adjoint keeps the coils apart, which is what a calibration wants to see:
+
+    .. plot::
+
+       import torch
+       import pulserver.recon as recon
+       from _figures import images, phantom
+
+       truth, coil_maps = phantom(64, coils=4)
+       mask = torch.ones(1, 1, 64, 64)
+       coil_wise = recon.Cartesian2D(mask, img_size=(64, 64))
+       measured = recon.Cartesian2D(mask, coil_maps).A(truth)
+       coils = coil_wise.A_adjoint(measured)
+       images(
+           [("object", truth), ("coil 0", coils[0, 0]), ("coil 2", coils[0, 2])],
+           title="Cartesian2D, fully sampled, four elements",
+       )
     """
 
     def __init__(
@@ -1921,6 +1973,17 @@ class Cartesian3D(MRIPhysics):
     coil-wise image ``(batch, coils, d, h, w)``, and a measurement
     ``(batch, coils, d, h, w)``. See :class:`Cartesian2D` for the layout
     convention.
+
+    Examples
+    --------
+    >>> import torch
+    >>> import pulserver.recon as recon
+    >>> physics = recon.Cartesian3D(
+    ...     torch.ones(1, 1, 8, 8, 8),
+    ...     torch.ones(1, 2, 8, 8, 8, dtype=torch.complex64) / 2 ** 0.5,
+    ... )
+    >>> physics.A(torch.zeros(1, 8, 8, 8, dtype=torch.complex64)).shape
+    torch.Size([1, 2, 8, 8, 8])
     """
 
     def __init__(
@@ -2216,6 +2279,9 @@ def _noncartesian(
         raise ValueError(
             f"image_shape must have {spatial_ndim} entries, got {image_shape!r}"
         )
+    trajectory = _single_precision(trajectory)
+    density = _single_precision(density)
+    coil_maps = _single_precision(coil_maps)
     trajectory_shape = getattr(trajectory, "shape", ())
     if not trajectory_shape and isinstance(trajectory, (list, tuple)) and trajectory:
         trajectory_shape = getattr(trajectory[0], "shape", ())
@@ -2421,6 +2487,56 @@ class NonCartesian2D(MRIPhysics):
     Notes
     -----
     Images are ``(batch, 2, h, w)``, measurements ``(batch, coils, k, 2)``.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> import torch
+    >>> import pulserver.recon as recon
+    >>> angles = np.linspace(0, np.pi, 8, endpoint=False)
+    >>> radius = np.linspace(-0.5, 0.5, 32)
+    >>> trajectory = np.stack(
+    ...     [np.outer(np.cos(angles), radius), np.outer(np.sin(angles), radius)], -1
+    ... ).reshape(-1, 2)
+
+    With no maps the adjoint grids each coil onto the image matrix, which is
+    what a density-compensated first estimate is made of:
+
+    >>> physics = recon.NonCartesian2D(trajectory, (16, 16))
+    >>> physics.A_adjoint(torch.ones(1, 1, 256, dtype=torch.complex64)).shape
+    torch.Size([1, 1, 16, 16])
+
+    Golden-angle spokes, gridded and then solved. The adjoint needs the
+    density compensation because the samples crowd the centre; the solve does
+    not, because the operator's normal equations already account for it:
+
+    .. plot::
+
+       import numpy as np
+       import torch
+       import pulserver.recon as recon
+       from _figures import images, phantom
+
+       truth, coil_maps = phantom(64, coils=4)
+       angles = np.pi * (np.arange(48) * 0.618034 % 1.0)
+       radius = np.linspace(-0.5, 0.5, 128)
+       trajectory = np.stack(
+           [np.outer(np.cos(angles), radius), np.outer(np.sin(angles), radius)], -1
+       ).reshape(-1, 2)
+
+       physics = recon.NonCartesian2D(trajectory, (64, 64), coil_maps=coil_maps)
+       measured = physics.A(truth)
+       weights = torch.as_tensor(
+           np.asarray(recon.pipe_menon_dcf(trajectory, (64, 64))), dtype=torch.complex64
+       )
+       images(
+           [
+               ("object", truth),
+               ("density-compensated adjoint", physics.A_adjoint(measured * weights)),
+               ("CG-SENSE", recon.pics(measured, physics, iterations=15)),
+           ],
+           title="NonCartesian2D, 48 golden-angle spokes",
+       )
     """
 
     def __init__(

@@ -16,6 +16,9 @@ build:
     # below; the API pages import the package to document it.
     - cmake
     - build-essential
+    # The C and C++ reference is the headers' own comments, read through
+    # Doxygen's XML. Without it those pages carry their prose alone.
+    - doxygen
   jobs:
     post_checkout:
       # Full history, so the version the documentation reports matches the tag

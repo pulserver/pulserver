@@ -104,6 +104,16 @@ class EncodingSpace:
         ``(n_z, n_y, n_x)`` for a volume -- which of the two is the header's
         answer, not the buffer's: a stack of spokes has no partition axis and
         still reconstructs a volume.
+
+    Examples
+    --------
+    >>> import pulserver.recon as recon
+    >>> space = recon.EncodingSpace(
+    ...     index=0, coils=4, readout=64, phase_encodes=32, partitions=1,
+    ...     loops=("slice",), loop_sizes=(2,), recon_matrix=(32, 32),
+    ... )
+    >>> space.recon_matrix
+    (32, 32)
     """
 
     index: int
@@ -252,6 +262,25 @@ class ReconBuffer:
     center_sample : int or None
         Index of the echo along the readout axis, from the acquisitions
         themselves, or ``None`` until the first one arrives.
+
+    Examples
+    --------
+    >>> import pulserver.recon as recon
+    >>> space = recon.EncodingSpace(
+    ...     index=0, coils=4, readout=64, phase_encodes=32, partitions=1,
+    ...     loops=("slice",), loop_sizes=(2,), recon_matrix=(32, 32),
+    ... )
+    >>> buffer = recon.ReconBuffer(space)
+
+    The layout is the encoding space's, so a plugin knows the shape before the
+    first line arrives:
+
+    >>> buffer.kspace.shape
+    (4, 2, 32, 64)
+    >>> buffer.extents
+    {'coil': 4, 'slice': 2, 'phase_encode': 32, 'readout': 64}
+    >>> buffer.image_shape
+    (32, 32)
     """
 
     def __init__(
@@ -501,6 +530,25 @@ class ReconData(Mapping):
         What the header described, by encoding-space index.
     data : dict
         The buffers allocated so far, by encoding-space index.
+
+    Examples
+    --------
+    >>> import pulserver.recon as recon
+    >>> space = recon.EncodingSpace(
+    ...     index=0, coils=4, readout=64, phase_encodes=32, partitions=1,
+    ...     loops=("slice",), loop_sizes=(2,), recon_matrix=(32, 32),
+    ... )
+    >>> data = recon.ReconData([space])
+
+    A buffer costs its memory only once something reaches it, so a scan whose
+    prescan never runs never allocates its grid:
+
+    >>> len(data)
+    0
+    >>> data[0].kspace.shape
+    (4, 2, 32, 64)
+    >>> len(data)
+    1
     """
 
     def __init__(self, spaces: Any = (), *, dtype: Any = np.complex64) -> None:

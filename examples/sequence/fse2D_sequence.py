@@ -12,6 +12,24 @@ them. :mod:`pulserver.app.recon.cartesian2D_recon` reads the result back.
 ``main`` returns the :class:`pulserver.pypulseq.Sequence`; ``PLUGIN`` is the
 same sequence behind the scanner protocol contract, and running this module
 as a script writes a ``.seq`` from the same controls.
+
+Examples
+--------
+>>> from pulserver.app import fse2D_sequence
+>>> seq = fse2D_sequence(n_x=64, n_y=16, n_slices=1, etl=4, te=20e-3, tr=None)
+>>> seq.num_trs, seq.num_segments
+(4, 3)
+
+One excitation and a train of four refocused echoes, each encoding a different line:
+
+.. plot::
+   :include-source:
+
+   from pulserver.app import fse2D_sequence
+
+   seq = fse2D_sequence(n_x=64, n_y=16, n_slices=1, etl=4, te=20e-3, tr=None)
+   seq.plot(tr="worst_case", time_disp="ms", grad_disp="mT/m", stacked=True,
+            plot_now=False)
 """
 
 from __future__ import annotations

@@ -94,6 +94,21 @@ class AcquisitionFlag(Flag):
     :attr:`flag` gives the constant's name for anything that wants it spelled
     out. Defining them here rather than reading them from ``ismrmrd`` keeps
     this module importable without it; that they agree is a test.
+
+    Examples
+    --------
+    >>> import pulserver.recon as recon
+    >>> recon.AcquisitionFlag.LAST_IN_SLICE.position
+    8
+    >>> recon.AcquisitionFlag.IS_NOISE_MEASUREMENT.flag
+    'ACQ_IS_NOISE_MEASUREMENT'
+
+    Flags combine, which is how a plugin says which boundaries it wants
+    ``receive`` woken on::
+
+        super().__init__(
+            split_on=AcquisitionFlag.LAST_IN_SEGMENT | AcquisitionFlag.LAST_IN_SLICE
+        )
     """
 
     FIRST_IN_ENCODE_STEP1 = 1 << 0

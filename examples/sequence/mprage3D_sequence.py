@@ -13,6 +13,44 @@ with each acquisition carrying its within-segment index as ``ECO``.
 ``main`` returns the :class:`pulserver.pypulseq.Sequence`; ``PLUGIN`` is the
 same sequence behind the scanner protocol contract, and running this module
 as a script writes a ``.seq`` from the same controls.
+
+Examples
+--------
+>>> from pulserver.app import mprage3D_sequence
+>>> seq = mprage3D_sequence(n_x=32, n_y=16, n_z=8, views_per_segment=16, ti=100e-3, tr_outer=300e-3)
+>>> seq.num_trs, seq.num_segments
+(9, 2)
+
+One inversion, the wait that places the TI, and a segment of spoiled low-flip repetitions:
+
+.. plot::
+   :include-source:
+
+   from pulserver.app import mprage3D_sequence
+
+   seq = mprage3D_sequence(n_x=32, n_y=16, n_z=8, views_per_segment=16, ti=100e-3, tr_outer=300e-3)
+   seq.plot(tr="worst_case", time_disp="ms", grad_disp="mT/m", stacked=True,
+            plot_now=False)
+
+The TI is the time to the segment's *centre-of-k-space* view, so which
+view that is -- and therefore what the inversion weights -- is the
+ordering's:
+
+.. plot::
+
+   from pulserver.app.sequence.fse3D_sequence import order_views
+   from _figures import order_figure
+
+   grid = (32, 32)
+   views = [(y, z) for y in range(grid[0]) for z in range(grid[1])]
+   order_figure(
+       [
+           (name, order_views(views, 64, 0, name, grid))
+           for name in ("linear", "centric", "radial_adaptive")
+       ],
+       views,
+       title="MPRAGE segments, three orderings",
+   )
 """
 
 from __future__ import annotations

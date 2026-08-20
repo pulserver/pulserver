@@ -13,6 +13,24 @@ interleaving. :mod:`pulserver.app.recon.cartesian2D_recon` reads the result back
 ``main`` returns the :class:`pulserver.pypulseq.Sequence`; ``PLUGIN`` is the
 same sequence behind the scanner protocol contract, and running this module
 as a script writes a ``.seq`` from the same controls.
+
+Examples
+--------
+>>> from pulserver.app import bssfp2D_sequence
+>>> seq = bssfp2D_sequence(n_x=64, n_y=16, n_slices=1, readout_bandwidth_hz=50e3, n_dummy=0)
+>>> seq.num_trs, seq.num_segments
+(1, 2)
+
+Every gradient axis returns to zero before the next excitation, which is what balanced means:
+
+.. plot::
+   :include-source:
+
+   from pulserver.app import bssfp2D_sequence
+
+   seq = bssfp2D_sequence(n_x=64, n_y=16, n_slices=1, readout_bandwidth_hz=50e3, n_dummy=0)
+   seq.plot(tr="worst_case", time_disp="ms", grad_disp="mT/m", stacked=True,
+            plot_now=False)
 """
 
 from __future__ import annotations

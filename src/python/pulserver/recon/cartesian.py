@@ -81,6 +81,21 @@ def cartesian_recon(
     ------
     ValueError
         If ``mask`` is neither a plane nor a volume.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> import pulserver.recon as recon
+    >>> image = np.zeros((16, 16), dtype=complex)
+    >>> image[6:10, 6:10] = 1.0
+    >>> mask = np.ones((16, 16))
+    >>> kspace = recon.fftc(image)[None] * mask
+
+    A fully sampled buffer takes the coil-wise adjoint, and which of the three
+    reconstructions runs is read off the mask rather than declared:
+
+    >>> recon.cartesian_recon(kspace, mask).shape
+    (16, 16)
     """
     from .calibration import NLINV
     from .optim import pics
