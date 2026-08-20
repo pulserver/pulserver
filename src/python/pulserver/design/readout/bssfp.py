@@ -371,6 +371,33 @@ class BssfpReadout2D(_BssfpReadout):
     ... )
     >>> bssfp.te == bssfp.tr / 2
     True
+
+    Every axis is rewound before the next excitation, so the trajectory is
+    the same line at whatever ``ky`` the loop scales to and nothing is left
+    over at the end of a repetition:
+
+    .. plot::
+
+       import numpy as np
+       import pulserver.design as design
+       import pulserver.pypulseq as pp
+       from _figures import trajectory
+
+       system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+       excitation = design.SpatialSelectiveExcitation(
+           system, 40.0, 5e-3, 1e-3, rephase=False
+       )
+       readout = design.BssfpReadout2D(
+           system, excitation.rf, excitation.gz, fov=0.28, matrix=64,
+           readout_bandwidth_hz=60e3, half_flip_prep=False,
+       )
+       trajectory(
+           readout,
+           ky=np.linspace(-1, 1, 9),
+           per="shot",
+           label="shot",
+           title="BssfpReadout2D, nine repetitions",
+       )
     """
 
     _ndim = 2
@@ -402,6 +429,32 @@ class BssfpReadout3D(_BssfpReadout):
     ...     [bssfp.gz_pre, pp.scale_grad(bssfp.gz_partition, 1.0)], system=system
     ... ).type
     'trap'
+
+    The partition encode rides the slab rephaser, so a repetition is one
+    point of the ``(ky, kz)`` plane and the pair is rewound together:
+
+    .. plot::
+
+       import numpy as np
+       import pulserver.design as design
+       import pulserver.pypulseq as pp
+       from _figures import trajectory
+
+       system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+       slab = design.SpatialSelectiveExcitation(system, 40.0, 0.12, 1e-3, rephase=False)
+       readout = design.BssfpReadout3D(
+           system, slab.rf, slab.gz, fov=(0.28, 0.28, 0.12), matrix=(64, 64, 16),
+           readout_bandwidth_hz=60e3, half_flip_prep=False,
+       )
+       trajectory(
+           readout,
+           ky=np.tile(np.linspace(-1, 1, 5), 3),
+           kz=np.repeat(np.linspace(-1, 1, 3), 5),
+           per="shot",
+           plane="yz",
+           label="shot",
+           title="BssfpReadout3D, a 5 x 3 corner of the encoding plane",
+       )
     """
 
     _ndim = 3

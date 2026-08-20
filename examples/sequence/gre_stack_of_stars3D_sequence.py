@@ -12,6 +12,32 @@ and FFT along the stack.
 ``main`` returns the :class:`pulserver.pypulseq.Sequence`; ``PLUGIN`` is the
 same sequence behind the scanner protocol contract, and running this module
 as a script writes a ``.seq`` from the same controls.
+
+Examples
+--------
+>>> from pulserver.app import gre_stack_of_stars3D_sequence
+>>> seq = gre_stack_of_stars3D_sequence(n_x=32, n_z=4, n_spokes=13, n_dummy=0)
+>>> seq.num_trs, seq.num_segments
+(52, 1)
+
+Radial in the plane, Cartesian along z:
+
+.. plot::
+   :include-source:
+
+   from pulserver.app import gre_stack_of_stars3D_sequence
+
+   seq = gre_stack_of_stars3D_sequence(n_x=32, n_z=4, n_spokes=13, n_dummy=0)
+   seq.plot(tr="worst_case", time_disp="ms", grad_disp="mT/m", stacked=True,
+            plot_now=False)
+
+.. plot::
+   :include-source:
+
+   from pulserver.app import gre_stack_of_stars3D_sequence
+
+   seq = gre_stack_of_stars3D_sequence(n_x=32, n_z=4, n_spokes=13, n_dummy=0)
+   seq.plot_kspace(plot_now=False)
 """
 
 from __future__ import annotations

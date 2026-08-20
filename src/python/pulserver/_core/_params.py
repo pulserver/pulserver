@@ -989,7 +989,7 @@ def validate_protocol_entry(key: ProtocolKey, value: ProtocolValue) -> None:
     >>> validate_protocol_entry(UIParam.TR, TypeinIntParam(value=500))
     Traceback (most recent call last):
         ...
-    TypeError: Key 'tr' expects float parameter type (FloatParam), got TypeinIntParam.
+    TypeError: Key 'TR' expects float parameter type (FloatParam), got TypeinIntParam.
 
     See Also
     --------

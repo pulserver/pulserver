@@ -112,7 +112,11 @@ def test_each_echo_reconstructs_to_its_own_series(kspace, phantom):
 
 
 def test_the_echo_count_comes_from_the_header():
-    assert cartesian2D_recon.echo_count(header()) == N_ECHOES
+    """The ``ECO`` label arrives as the contrast counter, so its encoding limit
+    is what gives the buffer a contrast axis to loop over."""
+    from pulserver.recon import ReconData
+
+    assert ReconData.from_header(header()).buffer(0).extents["contrast"] == N_ECHOES
     bare = header()
     bare.encoding[0].encodingLimits.contrast = None
-    assert cartesian2D_recon.echo_count(bare) == 1
+    assert "contrast" not in ReconData.from_header(bare).buffer(0).extents

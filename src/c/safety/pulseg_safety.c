@@ -2596,8 +2596,8 @@ static int sa_check_structural_violations(
                                     &sim,
                                     f_sub_hz,
                                     w_tables[ax].num_series ? &sub_query : NULL);
-                                aeq_sub =
-                                    (float)(2.0 / T_s * sqrt((double)(sre * sre + sim * sim)) * ratio);
+                                aeq_sub = (float)(2.0 / T_s *
+                                                  sqrt((double)(sre * sre + sim * sim)) * ratio);
                                 if (aeq_sub > max_ga)
                                     max_ga = aeq_sub;
                             }
@@ -3832,8 +3832,8 @@ int pulseg_check_grad_continuity(
         rot_id = bte->rotation_id;
         if (rot_id >= 0 && rot_id < desc->num_rotations)
         {
-            pulseg__apply_rotation(first_phys, desc->rotation_matrices[rot_id], first_val, 1);
-            pulseg__apply_rotation(last_phys, desc->rotation_matrices[rot_id], last_val, 1);
+            pulseg__apply_rotation(first_phys, desc->rotation_matrices[rot_id], first_val, 0);
+            pulseg__apply_rotation(last_phys, desc->rotation_matrices[rot_id], last_val, 0);
         }
         else
         {

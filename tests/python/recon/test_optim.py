@@ -396,3 +396,33 @@ def test_training_controls_address_prior_transform_and_algorithm_roles():
     assert not transform.gain.requires_grad
     model.set_trainable("prior", enabled=True)
     assert prior.weight.requires_grad
+
+
+def test_the_optim_namespace_is_derived_from_the_recon_map():
+    """The facade keeps no second copy of the layout: its members are exactly
+    the recon map's optim entries."""
+    import pulserver.recon.optim as optim
+
+    derived = {
+        name for name, target in recon._MEMBERS.items() if target.startswith("optim.")
+    }
+    assert set(optim.__all__) == derived
+
+
+def test_every_stepwise_solver_satisfies_the_stateful_reconstructor_protocol():
+    """One step-wise contract: iterations, init_state, step, get_output."""
+    from pulserver.recon.learned import StatefulReconstructor, UnrolledReconstructor
+
+    class _Identity(torch.nn.Module):
+        def forward(self, value, *_args, **_kwargs):
+            return value
+
+    solvers = [
+        FISTA(max_iter=2),
+        ADMM(max_iter=2),
+        PDHG(max_iter=2),
+        IRGNM(ConjugateGradient(max_iter=2), max_iter=2),
+        UnrolledReconstructor(_Identity(), iterations=1),
+    ]
+    for solver in solvers:
+        assert isinstance(solver, StatefulReconstructor), type(solver).__name__

@@ -110,6 +110,33 @@ class RigidRegistration:
         Coarse-to-fine SimpleITK pyramid configuration.
     learning_rate, min_step
         Regular-step gradient-descent controls.
+
+    Examples
+    --------
+    Eight degrees and a few millimetres, measured and undone. The estimate is
+    a transform in SimpleITK's physical ``(x, y)`` order, so resampling with
+    an array-indexed tool means swapping its axes:
+
+    .. plot::
+
+       import numpy as np
+       from scipy.ndimage import affine_transform, rotate, shift
+       import pulserver.recon as recon
+       from _figures import images, phantom
+
+       truth = phantom(64)[0][0].numpy().real.astype(np.float32)
+       moved = shift(rotate(truth, 8.0, reshape=False, order=1), (3.0, -4.0), order=1)
+
+       estimate = recon.RigidRegistration(iterations=100)(truth, moved)
+       swap = np.array([[0.0, 1.0], [1.0, 0.0]])
+       matrix = np.asarray(estimate.matrix)
+       registered = affine_transform(
+           moved, swap @ matrix[:2, :2] @ swap, offset=swap @ matrix[:2, 2], order=1
+       )
+       images(
+           [("object", truth), ("moved", moved), ("registered", registered)],
+           title=f"rigid registration: {np.rad2deg(estimate.angles)[0]:.1f} degrees recovered",
+       )
     """
 
     def __init__(

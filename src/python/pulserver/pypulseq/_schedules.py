@@ -60,6 +60,7 @@ def make_rf_spoiling_schedule(
         for shot, phase in enumerate(phases):
             readout.rf.phase_offset = readout.adc.phase_offset = phase
             ...
+
     .. plot::
        :include-source: false
 

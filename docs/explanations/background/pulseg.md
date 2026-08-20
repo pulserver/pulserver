@@ -4,14 +4,12 @@ Pulseq describes a sequence as a flat list of blocks whose events carry
 hardware-facing quantities — amplitudes in Hz and Hz/m, times on declared
 rasters. What it does not describe is *structure*: nothing in the file says
 which properties of an event are fixed and which vary shot to shot, which
-blocks are the same block played differently, which runs of blocks are
-reusable units, or what the repeating pattern is.
+blocks are the same block played differently, or which runs of blocks are
+reusable units.
 
-Those four distinctions are what an interpreter needs, and they are what the
+Those distinctions are what an interpreter needs, and they are what the
 **PulSeg intermediate representation** (spec v2.1-alpha, J-F Nielsen and
-M. Cencini) adds. This page is the published model;
-{doc}`../sequence_model/pulseg_representation` is what Pulserver does with
-it.
+M. Cencini) adds. This page is the published model.
 
 ## Static and dynamic, separated
 
@@ -63,16 +61,7 @@ every instance of a segment must have the same block count and the same
 normalized structure, so the hardware program is valid for all of them. What
 varies between instances is what the instance table carries.
 
-## The TR: the periodic pattern
-
-The **TR** is the repeating pattern of segments — the unit whose repetition
-the scan is made of. Pulseq has no field for it; it can be inferred, and
-PulSeg makes it an explicit part of the representation because too much
-depends on it: SAR is defined per unit time over a repetition, gradient
-heating over a duty cycle, acoustic response over a periodic drive, and the
-reconstruction's description over one instance of the pattern.
-
-## The four structures
+## The top-level structures
 
 The specification's top level is small:
 
@@ -81,7 +70,7 @@ The specification's top level is small:
 | `BaseBlock` | one block's definitions and duration |
 | `VirtualSegment` | an ordered list of base block ids |
 | `SegmentInstance` | the per-playout parameters: amplitudes, offsets, shot index, rotation, labels |
-| the execution stream | which segment instance plays when |
+| `ExecutionStream` | which segment instance plays when |
 
 A Pulseq file is recovered from this by hydrating the definitions and
 applying the instance parameters; the representation is lossless with respect
@@ -89,15 +78,10 @@ to what plays.
 
 ## The one thing the designer must still supply
 
-The specification recovers all four structures from a Pulseq file, but not
+The specification recovers these structures from a Pulseq file, but not
 automatically: segment boundaries are **declared**, by the sequence designer,
 through a `TRID` label — an annotation placed on the first block of each
 repeating unit. The segmentation is manual. A file written without the
 labels, or with labels that no longer match blocks that were later edited,
 cannot be segmented as specified, and every existing Pulseq sequence has to
 be annotated before it can benefit.
-
-How Pulserver maps onto these four structures — and how it removes the
-annotation requirement by detecting the segmentation from the block content —
-is the subject of {doc}`../sequence_model/pulseg_representation` and
-{doc}`../sequence_model/tr_and_segmentation`.

@@ -1,20 +1,15 @@
-"""Selected DeepInverse MRI models and MRI-specific model adapters.
+"""MRI-specific adapters over native DeepInverse denoisers.
 
-``RAM`` and ``MoDL`` are their native DeepInverse classes: RAM is a pretrained
-single-pass option, MoDL a general physics-aware unroll. Both reach the data
-only through the physics adjoint, so they accept a Pulserver measurement
-unchanged.
-
-``VarNet`` refines the measurement itself rather than only pulling it through
-the adjoint, and it is DeepInverse's own class, so it reads measurements in
-DeepInverse's channel-first layout. Convert a Pulserver measurement with
-:func:`pulserver.recon.physics.measurement_to_channels` before handing it over.
-Import other backbones and research models directly from :mod:`deepinv.models`.
+Backbones and research models -- RAM, MoDL, VarNet, and the rest -- are
+imported directly from :mod:`deepinv.models`; they reach the data only
+through the physics, so they accept a Pulserver measurement unchanged. What
+lives here is the adaptation a DeepInverse model needs to run inside an MRI
+reconstruction.
 """
 
 from __future__ import annotations
 
-__all__ = ["RAM", "ContextAgnosticDenoiser", "MoDL", "VarNet"]
+__all__ = ["ContextAgnosticDenoiser"]
 
 from math import prod
 from typing import Any
@@ -23,9 +18,6 @@ import torch
 
 try:
     from deepinv.models import Denoiser as _Denoiser
-    from deepinv.models import MoDL as MoDL
-    from deepinv.models import RAM as RAM
-    from deepinv.models import VarNet as VarNet
 except ImportError as error:
     raise ImportError(
         "Learned reconstruction models require DeepInverse, which ships "

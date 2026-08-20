@@ -189,7 +189,7 @@ extern "C"
         int *position_wave;
     } pulseg_chunk_plan;
 
-/* clang-format off */
+    /* clang-format off */
 #define PULSEG_CHUNK_PLAN_INIT \
     {PULSEG_WAVE_RESIDENT, 0, NULL, 0, NULL, NULL, 0, 0, 0, 0, 0, NULL}
     /* clang-format on */

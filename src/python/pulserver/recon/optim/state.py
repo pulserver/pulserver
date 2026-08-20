@@ -5,6 +5,7 @@ from __future__ import annotations
 __all__ = ["OptimResult", "OptimState"]
 
 from dataclasses import dataclass, replace
+from collections.abc import Mapping
 from typing import Any
 
 import torch
@@ -64,7 +65,7 @@ def _detach(value: Any) -> Any:
         return tuple(_detach(item) for item in value)
     if isinstance(value, list):
         return [_detach(item) for item in value]
-    if isinstance(value, dict):
+    if isinstance(value, Mapping):
         return {key: _detach(item) for key, item in value.items()}
     detach = getattr(value, "detach", None)
-    return detach() if detach is not None else value
+    return detach() if callable(detach) else value

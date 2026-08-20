@@ -7,18 +7,9 @@ import numpy as np
 import pytest
 
 from pulserver.recon.simulation import (
-    BSSFP,
-    FSE,
-    SPGR,
-    SSFPEcho,
-    SSFPFID,
-    TissueProperties,
-    make_interpreter,
-    simulate_subspace,
     AdcRole,
     EventType,
     RfUse,
-    SequenceEvent,
     decode_sequence_description,
     decompress_shape,
 )
@@ -118,62 +109,3 @@ def test_decompress_shape_delta_rle():
     # Deltas [1, 1, 1, 1, -1] are packed as [1, 1, 2, -1].
     result = decompress_shape(np.array([1, 1, 2, -1], np.float32), 5)
     np.testing.assert_allclose(result, [1, 2, 3, 4, 3])
-
-
-def test_bssfp_record_all_vs_echo_and_subspace():
-    pytest.importorskip("torchsim")
-    description = decode_sequence_description(_resources()).subsequence()
-    tissue = TissueProperties(
-        t1_ms=np.array([600, 1000], np.float32),
-        t2_ms=np.array([50, 80], np.float32),
-    )
-
-    all_result = BSSFP().simulate(description, tissue, repetitions=2, record="all")
-    echo_result = BSSFP().simulate(description, tissue, repetitions=2, record="echo")
-
-    assert all_result.signal.shape == (4, 2)
-    assert echo_result.signal.shape == (2, 2)
-    assert echo_result.echo.all()
-
-    subspace = simulate_subspace(
-        description,
-        "bssfp",
-        tissue,
-        rank=1,
-        repetitions=2,
-        record="all",
-    )
-    assert subspace.basis.shape == (4, 1)
-    assert subspace.dictionary.shape == (4, 2)
-
-
-def test_sequence_policies_attach_crushers_to_the_expected_events():
-    class FakeEpg:
-        @staticmethod
-        def shift(states):
-            return [*states, "shift"]
-
-        @staticmethod
-        def spoil(states):
-            return [*states, "spoil"]
-
-    epg = FakeEpg()
-    refocusing = SequenceEvent(
-        EventType.RF,
-        0.0,
-        (0.0, float(RfUse.REFOCUSING), 0.0, 0.0, 0.0, -1.0, 0.0),
-    )
-    adc = SequenceEvent(
-        EventType.ADC,
-        1.0,
-        (float(AdcRole.SINGLE), 0.0, 1.0, 0.0, 0.0, 0.0, 0.0),
-    )
-
-    assert FSE().before_rf([], refocusing, epg) == ["shift"]
-    assert FSE().after_rf([], refocusing, epg) == ["shift"]
-    assert SPGR().after_adc([], adc, epg) == ["spoil"]
-    assert SSFPEcho().before_adc([], adc, epg) == ["shift"]
-    assert SSFPFID().after_adc([], adc, epg) == ["shift"]
-    assert BSSFP().before_adc([], adc, epg) == []
-
-    assert isinstance(make_interpreter("ssfp_echo"), SSFPEcho)

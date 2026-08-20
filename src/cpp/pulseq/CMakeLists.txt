@@ -37,6 +37,12 @@ target_include_directories(pulseqpp PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/../../c/vendor
 )
 
+# MSVC keeps M_PI and the rest of the maths constants behind this macro; the
+# compilers on the other targets define them without being asked.
+if(MSVC)
+    target_compile_definitions(pulseqpp PUBLIC _USE_MATH_DEFINES)
+endif()
+
 set_target_properties(pulseqpp PROPERTIES
     CXX_STANDARD 17
     CXX_STANDARD_REQUIRED ON

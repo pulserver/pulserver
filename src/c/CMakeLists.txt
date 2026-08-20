@@ -46,6 +46,8 @@ set(PULSEG_SOURCES
     waveforms/pulseg_chunk.c
     safety/pulseg_safety.c
     safety/pulseg_pns_memo.c
+    safety/pulseg_pns_irnich.c
+    safety/pulseg_pns_safe.c
     cache/pulseg_cache.c
 )
 
@@ -64,6 +66,11 @@ target_include_directories(pulseg PRIVATE
 
 # ---------------------------------------------------------------------------
 #  pulseg_bridge -- out-of-process sequence-generation bridge (server infra).
+#  It drives a child process over pipes with fork/exec and select, so it is
+#  built where those exist: the console hosts it serves are POSIX, and the
+#  Python extension links pulseg directly rather than through it.
 # ---------------------------------------------------------------------------
-add_library(pulseg_bridge STATIC bridge/pulseg_bridge.c)
-target_link_libraries(pulseg_bridge PUBLIC pulseg)
+if(NOT WIN32)
+    add_library(pulseg_bridge STATIC bridge/pulseg_bridge.c)
+    target_link_libraries(pulseg_bridge PUBLIC pulseg)
+endif()

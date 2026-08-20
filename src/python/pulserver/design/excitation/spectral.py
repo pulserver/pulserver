@@ -73,6 +73,19 @@ class FrequencySelectiveExcitation(RfModule):
     >>> narrow = design.FrequencySelectiveExcitation(pp.Opts(), 90.0, bandwidth_hz=100.0)
     >>> narrow.duration_s == 2 * water.duration_s
     True
+
+    The band it tips, and the rest of the spectrum it leaves where it was:
+
+    .. plot::
+
+       import pulserver.design as design
+       import pulserver.pypulseq as pp
+       from _figures import rf_profile
+
+       rf_profile(
+           design.FrequencySelectiveExcitation(pp.Opts(), 90.0, bandwidth_hz=200.0),
+           title="water excitation, 200 Hz passband",
+       )
     """
 
     def init_module(
@@ -187,6 +200,30 @@ class SpspExcitation(RfModule):
 
     >>> water.gz.type
     'grad'
+
+    The subpulse train and its spectral response. The passband repeats at the
+    subpulse rate, and where the repeats fall is what the subpulse count
+    buys:
+
+    .. plot::
+
+       import pulserver.design as design
+       import pulserver.pypulseq as pp
+       from _figures import rf_profile
+
+       system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=180, slew_unit="T/m/s")
+       rf_profile(
+           design.SpspExcitation(
+               system,
+               30.0,
+               thickness_m=10e-3,
+               spectral_bandwidth_hz=300.0,
+               n_subpulses=12,
+           ),
+           title="spectral-spatial, 10 mm and 300 Hz",
+           spatial=False,
+           extent=2500,
+       )
     """
 
     def init_module(

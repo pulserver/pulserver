@@ -2,12 +2,12 @@
 
 {doc}`PulSeg <../background/pulseg>` describes what a scanner-side sequence
 representation must carry: definitions separated from per-playout parameters,
-blocks grouped into reusable segments, and the repeating pattern — the TR —
-made explicit. Pulserver's scanner-side representation is a reading of that
-specification. This page says how the four structures map, and where
+blocks grouped into base blocks and reusable segments, and an ordered stream
+of instances. Pulserver's scanner-side representation is a reading of that
+specification, plus one structure the specification does not have. This page
+says how the four structures map, what the addition is for, and where
 Pulserver deliberately takes a different route; the companion page,
-{doc}`tr_and_segmentation`, covers the TR itself and how the segmentation is
-found without anyone annotating it.
+{doc}`tr_and_segmentation`, covers the added structure in full.
 
 ## The mapping
 
@@ -20,11 +20,40 @@ specification's four structures carry is carried here:
 | `BaseBlock` — one block's definitions and duration | a row of indices into definition libraries: waveform shapes, trapezoid timings, ADC descriptions, RF envelopes — each stored once, however often it plays |
 | `VirtualSegment` — an ordered list of base blocks | a segment found by {doc}`detection <tr_and_segmentation>`: a maximal run of blocks that repeats identically across TR instances |
 | `SegmentInstance` — the per-playout parameters | instance tables: amplitudes, phase and frequency offsets, shot index, labels, and a reference into a shared rotation library |
-| the execution stream — which instance plays when | runs (“positions *i*..*j* play instances *i*..*j* in order”) plus one period of the segment order |
+| `ExecutionStream` — which instance plays when | runs (“positions *i*..*j* play instances *i*..*j* in order”) plus one period of the segment order |
 
 The representation is lossless with respect to what plays: hydrating the
 definitions and applying the instance parameters recovers the playout the
 `.seq` describes, sample for sample.
+
+## The extension: the structural TR
+
+The specification's top level stops at the segment. It says which runs of
+blocks are reusable units; it does not say what the scan is a repetition
+*of*. Pulserver adds that one structure above the segment: the **structural
+TR**, the smallest block period over which the normalized structure repeats —
+six blocks for a gradient echo, the whole echo train for an FSE, two blocks
+for a ZTE. It is derived from the block content, and written back into the
+`.seq` as `[DEFINITIONS] TRSize` so a consumer need not re-derive it.
+
+It earns its place by paying for two things the four structures alone leave
+expensive.
+
+**Safety checks collapse onto one period.** SAR, gradient heating and the
+acoustic drive are not properties of a block: each is a window sliding along
+the whole scan, and evaluating one without knowing the period means sweeping
+every block of a 30-minute protocol. Given the period, the sweep runs over a
+single repetition and over the instance parameters that vary across its
+occurrences — the worst B1rms rather than the first or the average, a
+spectrum over a drive that is genuinely periodic. The {doc}`safety pages
+<../safety/index>` are built on that reduction.
+
+**Segmentation needs no annotation.** Segments are the TR partitioned by
+structure: within one period, the maximal runs of blocks that repeat
+identically across instances. Because the period follows from the content,
+the boundaries the specification asks the designer to mark with `TRID` are
+computed instead — the sequence labels its own repeating units, whether or
+not its author labelled anything.
 
 ## Where Pulserver diverges, deliberately
 
@@ -33,11 +62,11 @@ sees exactly the objects the specification defines — but three choices are
 declared rather than hidden:
 
 - **Segmentation is derived from the content, not from `TRID`
-  annotation.** The specification asks the designer to label where segments
-  begin; Pulserver finds the partition by comparing what the blocks actually
-  play, so the same guarantees hold by construction rather than by trust, and
-  unannotated files — every existing Pulseq sequence — work as they are. The
-  full argument is in {doc}`tr_and_segmentation`.
+  annotation.** The guarantees the specification asks the label to secure —
+  every instance of a segment with the same block count and the same
+  normalized structure — hold by construction when the partition is read off
+  what the blocks play, rather than by trusting a label that a later edit can
+  contradict. The full argument is in {doc}`tr_and_segmentation`.
 - **The execution loop is stored compactly.** The specification's reference
   implementation writes one wide row per played block, with the 3×3 rotation
   matrix repeated inline. Pulserver keeps rotations in a shared library that
@@ -48,20 +77,6 @@ declared rather than hidden:
   instance row.
 - **Times are integer microseconds** — the scanner's own clock — where the
   specification speaks seconds.
-
-The full field-by-field mapping, and the proposed `user_int[]`/`user_float[]`
-amendment that would let an implementation carry its extras within the
-specification, is in the conformance note shipped with the source.
-
-## Conformance is tested, not asserted
-
-The partition Pulserver derives must satisfy the same constraints the
-specification places on a declared one — every instance of a segment with the
-same block count and the same normalized structure. That is checked
-mechanically: `tests/python/test_pulseg_oracle.py` validates the
-interpreter's partition against an independent implementation of the
-specification's rules, over the whole {doc}`sequence zoo
-<../validation/sequence_zoo>`.
 
 ## Why a scanner wants this shape
 

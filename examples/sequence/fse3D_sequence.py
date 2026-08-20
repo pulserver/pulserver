@@ -13,8 +13,7 @@ centre-out radius bands, rolled onto the target echo), ``radial`` (centre-out
 by radius, effective TE at the first echo), and ``radial_adaptive`` (by
 radius, but the bands assigned outward from the target echo, so the centre is
 late without a seam). The *incoherent* ordering, ``shuffling``, scatters views
-across echoes for a subspace reconstruction -- pair it with
-:mod:`pulserver.app.recon.subspace_basis_recon`. Every acquisition carries its echo
+across echoes for a subspace reconstruction. Every acquisition carries its echo
 index as ``ECO``, which is what any of them reconstruct from.
 
 **Sampling** is undersampled through the same builtins: the regular orderings
@@ -33,6 +32,45 @@ without the EPG inversion. The played angles are written into the
 ``main`` returns the :class:`pulserver.pypulseq.Sequence`; ``PLUGIN`` is the
 same sequence behind the scanner protocol contract, and running this module
 as a script writes a ``.seq`` from the same controls.
+
+Examples
+--------
+>>> from pulserver.app import fse3D_sequence
+>>> seq = fse3D_sequence(n_x=64, n_y=16, n_z=4, etl=4, te=20e-3, tr=None)
+>>> seq.num_trs, seq.num_segments
+(16, 3)
+
+A non-selective refocusing train over a slab, which is what makes single-slab 3D FSE efficient:
+
+.. plot::
+   :include-source:
+
+   from pulserver.app import fse3D_sequence
+
+   seq = fse3D_sequence(n_x=64, n_y=16, n_z=4, etl=4, te=20e-3, tr=None)
+   seq.plot(tr="worst_case", time_disp="ms", grad_disp="mT/m", stacked=True,
+            plot_now=False)
+
+Which view each echo encodes is what the effective echo time is, and the
+ordering is where that is decided. All five are dealt from the same
+``(ky, kz)`` grid; only the rank they sort on differs:
+
+.. plot::
+
+   import numpy as np
+   from pulserver.app.sequence.fse3D_sequence import ORDERINGS, order_views
+   from _figures import order_figure
+
+   grid = (32, 32)
+   views = [(y, z) for y in range(grid[0]) for z in range(grid[1])]
+   order_figure(
+       [
+           (name, order_views(views, 32, 0, name, grid))
+           for name in ("linear", "centric", "radial", "shuffling")
+       ],
+       views,
+       title="the same views, four orderings",
+   )
 """
 
 from __future__ import annotations

@@ -12,6 +12,24 @@ under regular undersampling, partial Fourier, spoiling -- is
 ``main`` returns the :class:`pulserver.pypulseq.Sequence`; ``PLUGIN`` is the
 same sequence behind the scanner protocol contract, and running this module
 as a script writes a ``.seq`` from the same controls.
+
+Examples
+--------
+>>> from pulserver.app import gre_multiecho3D_sequence
+>>> seq = gre_multiecho3D_sequence(n_x=32, n_y=16, n_z=4, n_echoes=3, n_dummy=0)
+>>> seq.num_trs, seq.num_segments
+(64, 1)
+
+Three echoes per excitation, over a slab:
+
+.. plot::
+   :include-source:
+
+   from pulserver.app import gre_multiecho3D_sequence
+
+   seq = gre_multiecho3D_sequence(n_x=32, n_y=16, n_z=4, n_echoes=3, n_dummy=0)
+   seq.plot(tr="worst_case", time_disp="ms", grad_disp="mT/m", stacked=True,
+            plot_now=False)
 """
 
 from __future__ import annotations

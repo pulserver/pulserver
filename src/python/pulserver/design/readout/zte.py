@@ -161,6 +161,27 @@ class ZteReadout(SequenceModule):
 
     >>> zte.n_samples + zte.n_missing == zte.n_nominal
     True
+
+    The gradient is already on when the pulse is played, so every view starts
+    at the centre and runs outward, and the views cover a sphere:
+
+    .. plot::
+
+       import pulserver.design as design
+       import pulserver.pypulseq as pp
+       from _figures import trajectory
+
+       system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+       hard = design.NonSelectiveExcitation(system, 4.0, duration_s=10e-6)
+       zte = design.ZteReadout(
+           system, hard.rf, fov=0.24, matrix=48, n_views=24, n_shots=1
+       )
+       trajectory(
+           zte,
+           angles=zte.view_rotations,
+           label="acquisition",
+           title="ZteReadout, 24 views of one shot",
+       )
     """
 
     def init_module(

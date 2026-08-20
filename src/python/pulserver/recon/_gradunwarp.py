@@ -643,6 +643,41 @@ class Gradunwarp:
     jacobian
         Apply the full 3D Jacobian intensity multiplier, including when
         sampling a single 2D plane.
+
+    Examples
+    --------
+    What a real gradient does to the edge of a large field of view, and what
+    undoing it moves. The shift grows with distance from isocentre, which is
+    why a head-sized acquisition sees almost none of it:
+
+    .. plot::
+
+       import numpy as np
+       import pulserver.recon as recon
+       from _figures import images, phantom
+
+       alpha = np.zeros((3, 4, 4))
+       beta = np.zeros_like(alpha)
+       alpha[0, 3, 1] = 8e-5
+       beta[1, 3, 1] = 8e-5
+       geometry = recon.ImageGeometry(
+           (64, 64),
+           (400.0, 400.0),
+           np.asarray(((1.0, 0.0), (0.0, 1.0), (0.0, 0.0))),
+           np.zeros(3),
+       )
+       correct = recon.Gradunwarp(
+           recon.GradientCoefficients("unnormalized", alpha, beta), geometry
+       )
+
+       acquired = phantom(64)[0][0].numpy().real.astype(np.float32)
+       grid = np.stack(np.meshgrid(np.arange(64), np.arange(64), indexing="ij"), -1)
+       shift = np.linalg.norm(correct.sampling_grid() - grid, axis=-1)
+       images(
+           [("as acquired", acquired), ("unwarped", correct(acquired)),
+            ("shift [px]", shift)],
+           title="gradient nonlinearity over a 400 mm field of view",
+       )
     """
 
     def __init__(

@@ -5,10 +5,6 @@ the C safety core (``pulseg_check_safety``, run by the interpreter at
 predownload) and the vendor's own predownload checks, and these exist so the
 same quantities can be *looked at* while a sequence is being written.
 
-* :func:`chronaxie_pns` — the Irnich rheobase/chronaxie nerve model, the form
-  GE uses, as opposed to the SAFE model upstream PyPulseq implements. It is a
-  line-for-line Python counterpart of ``pulserver_ge_pns.c`` so a plot here and
-  a predownload verdict on the scanner cannot silently disagree.
 * :func:`read_esp_bands` / :func:`read_asc_bands` / :func:`bands_to_resonances`
   — reading mechanical resonance bands out of a vendor lockout table, in either
   vendor's spelling, and handing them to upstream's spectrogram plotter.
@@ -43,7 +39,6 @@ from __future__ import annotations
 __all__ = [
     "bands_to_hz_per_m",
     "bands_to_resonances",
-    "chronaxie_pns",
     "read_asc_bands",
     "read_esp_bands",
 ]
@@ -55,93 +50,12 @@ from types import SimpleNamespace
 import numpy as np
 import pypulseq as pp
 
-#: How many chronaxie constants of kernel to keep before truncating the
-#: ``1/tau**2`` tail. Matches ``PULSERVER_GE_PNS_KERNEL_DURATION_FACTOR``.
-_KERNEL_DURATION_FACTOR = 20.0
-
 #: Axis order of an ESP lockout table.
 _ESP_AXES = ("gx", "gy", "gz")
 
 #: Largest band count a single ESP axis may declare, matching
 #: ``PULSERVER_MAX_ESP_PER_AXIS``.
 _MAX_ESP_PER_AXIS = 10
-
-
-def chronaxie_kernel(
-    dt: float, chronaxie_us: float, rheobase: float, alpha: float = 1.0
-) -> np.ndarray:
-    """Irnich rheobase/chronaxie PNS kernel.
-
-    Parameters
-    ----------
-    dt : float
-        Sampling interval in seconds (the gradient raster).
-    chronaxie_us : float
-        Chronaxie time constant in microseconds.
-    rheobase : float
-        Rheobase in Hz/m/s.
-    alpha : float, default 1.0
-        Coil attenuation factor. The stimulation threshold is
-        ``rheobase / alpha``.
-
-    Returns
-    -------
-    numpy.ndarray
-        Kernel ``k[i] = (dt / s_min) * c / (c + i*dt)**2``, normalised so
-        that convolving a slew waveform in Hz/m/s yields a fraction of the
-        threshold.
-    """
-    if chronaxie_us <= 0.0:
-        raise ValueError("chronaxie_us must be > 0")
-    if rheobase <= 0.0:
-        raise ValueError("rheobase must be > 0")
-    if alpha <= 0.0:
-        raise ValueError("alpha must be > 0")
-
-    c = chronaxie_us * 1e-6
-    s_min = rheobase / alpha
-    n = int(_KERNEL_DURATION_FACTOR * c / dt) + 1
-    tau = np.arange(n, dtype=float) * dt
-    return (dt / s_min) * c / (c + tau) ** 2
-
-
-def chronaxie_pns(
-    gradients: np.ndarray,
-    dt: float,
-    *,
-    chronaxie_us: float,
-    rheobase: float,
-    alpha: float = 1.0,
-) -> np.ndarray:
-    """PNS response of a gradient waveform under the Irnich model.
-
-    Parameters
-    ----------
-    gradients : numpy.ndarray
-        Gradient waveform, shape ``(N, 3)``, in Hz/m.
-    dt : float
-        Sampling interval in seconds.
-    chronaxie_us, rheobase, alpha
-        Model parameters, see :func:`chronaxie_kernel`.
-
-    Returns
-    -------
-    numpy.ndarray
-        PNS per axis, shape ``(N, 3)``, as a **percentage** of the
-        stimulation threshold. Take the root-sum-square across axes for the
-        combined level.
-    """
-    gradients = np.atleast_2d(np.asarray(gradients, dtype=float))
-    if gradients.shape[-1] != 3:
-        raise ValueError("gradients must have shape (N, 3)")
-
-    slew = np.diff(gradients, axis=0, prepend=gradients[:1]) / dt
-    kernel = chronaxie_kernel(dt, chronaxie_us, rheobase, alpha)
-
-    out = np.empty_like(slew)
-    for axis in range(3):
-        out[:, axis] = np.convolve(slew[:, axis], kernel)[: slew.shape[0]]
-    return 100.0 * out
 
 
 def _esp_rows(lines: list[str]) -> list[str]:
@@ -829,7 +743,7 @@ def irnich_coefficients(hardware) -> tuple[float, float, float]:
     ----------
     hardware : dict or types.SimpleNamespace
         Carrying ``chronaxie`` (seconds) or ``chronaxie_us``, ``rheobase``
-        in Hz/m/s, and optionally ``alpha`` (default 1).
+        in T/m/s, and optionally ``alpha`` (default 1).
     """
     read = (
         hardware.get
@@ -846,7 +760,7 @@ def irnich_coefficients(hardware) -> tuple[float, float, float]:
 
     rheobase = read("rheobase")
     if rheobase is None:
-        raise ValueError("Irnich PNS model needs 'rheobase' in Hz/m/s")
+        raise ValueError("Irnich PNS model needs 'rheobase' in T/m/s")
 
     return float(chronaxie_us), float(rheobase), float(read("alpha", 1.0) or 1.0)
 
