@@ -94,14 +94,16 @@ precision the text form rounds away.
 ## What the checks cost
 
 `write()` runs three checks before it serialises — amplitude and slew,
-continuity, and timing — and they have three different cost models:
+continuity, and timing — and what each costs is set by what it is a property
+of: a waveform, a pair of neighbours, or an event. On the same
+2 103 300-block protocols:
 
 | | Cartesian | Spirals, rotated | Spirals, written out |
 |---|---:|---:|---:|
 | `check_hardware_limits` — amplitude and slew | 9 ms | 2 ms | 105 ms |
-| `check_gradient_continuity` | 69 ms | 80 ms | 77 ms |
-| …including the structure build it pays for | 1.15 s | 1.65 s | 1.20 s |
-| `check_timing`, per block | 77 µs | 637 µs | 84 µs |
+| `check_gradient_continuity`, first call | 1.15 s | 1.65 s | 1.20 s |
+| `check_gradient_continuity`, called again | 69 ms | 80 ms | 77 ms |
+| `check_timing` | 49 ms | 38 ms | 53 ms |
 
 **Amplitude and slew** are a pass over the gradient library, so they cost one
 evaluation per distinct waveform — milliseconds on a two-million-block scan,
@@ -111,20 +113,43 @@ it; {doc}`gradient_checks` measures both sides of that.
 
 **Continuity** is a pass over block instances, because whether a waveform ends
 where its neighbour begins is a property of the pair. Linear in the scan, but
-in the C safety core: about 70–80 ms for two million blocks. The first caller to
-need the C representation also builds it — a serialise and a parse of the whole
-scan — and on the writing path that bill falls here, which is the second row.
+in the C safety core: about 70–80 ms for two million blocks. That core works on
+its own copy of the scan, built by serialising and parsing the whole thing —
+the first caller to need it builds it, and on the writing path that caller is
+this check, which is the difference between the two rows. Everything asked
+afterwards, here and on the safety pages, finds the copy ready.
 
-**Timing** is the one check whose cost is genuinely per block in Python: it is
-upstream's own checker, and running it means materialising an upstream
-PyPulseq sequence over the window it is given. At tens to hundreds of
-microseconds per block, that is minutes on a protocol — and gigabytes, which
-is why the table reports a rate measured on a 20 000-block window rather than
-a whole-scan time. The rotated case is the expensive one because upstream has
-no vocabulary for a `ROTATIONS` extension, so every block must be replayed with
-the rotation resolved into its events.
+**Timing** asks, of every block: does each delay, duration, dwell and ramp land
+on its raster; does the duration stored for the block agree with what its
+events actually take; does the RF start after the coil's dead time and finish a
+ringdown before the block ends; does the ADC leave its dead time at both ends;
+do soft delays sharing an ID agree. The rasters and dead times it judges
+against are the system's, not the ones the file records — the question is
+whether the machine that will play the sequence can address those times.
 
-So the two forms of writing are not arbitrary:
+Most of that list is a property of the event, not of the block that plays it.
+A delay, a dwell, a trapezoid's three ramps: all live in a library row, so
+whether they land on a raster is decided once per *distinct* event and then
+attributed to each block that uses it — the same shape of cost as the
+amplitude and slew pass. What is genuinely per block is arithmetic over
+precomputed extents, no waveform decoded: does anything end after its block
+does, and do the dead times fit. Two million blocks come to tens of
+milliseconds.
+
+The report is upstream PyPulseq's, entry for entry, and a differential test
+holds it there: the same findings in the same order carrying the same fields,
+on deliberately broken files as well as clean ones. Which is the only thing
+that makes a faster answer worth having — a check that disagrees with the one
+it replaces is a different check, not a quicker one.
+
+Rotation does not enter into it. Resolving a `ROTATIONS` extension changes
+gradient *values*, and no time in the list above, so a rotated scan is judged
+directly rather than replayed — which is why the rotated column here is the
+cheapest of the three rather than the most expensive.
+
+All three are switchable on `write()`: `check_timing`, on by default exactly
+as it is upstream, and `check_gradients`, covering both gradient passes. So
+the two forms of writing are not arbitrary:
 
 ```python
 write_sequence(seq, path, offline=False)  # to the scanner: binary, unchecked
@@ -135,13 +160,3 @@ Going to the scanner, the interpreter checks timing and gradients at
 predownload against its *real* rasters and limits, so checking again here buys
 nothing. Going anywhere else — a bench, a foreign toolbox, a colleague —
 nothing downstream will check, so everything is checked here.
-
-## Counters are written, not recovered
-
-The design loop knows which line, partition, slice and echo every acquisition
-is — they are what it iterates over — so it writes them into the file as labels
-while it builds, for free.
-{meth}`~pulserver.pypulseq.Sequence.auto_label` can recover them from the
-gradients instead, at the cost of a full k-space evaluation of the scan. The
-zoo runs it as an independent check that the gradients encode what the loop
-believed, which is where a whole-scan cost belongs.

@@ -41,11 +41,12 @@ Two properties make this well-posed:
   makes for its reserved implicit-delay blocks.
 
 For a gradient echo the answer is the obvious one: excitation, prewinder,
-readout, rewinder, spoiler, pad — six blocks, repeated once per line. For an
-FSE it is the whole echo train, because that is the unit that repeats. For a
-ZTE it is one view: two blocks, the pulse and the acquisition, because a ZTE
-really does repeat every 360 µs. Detection reports what the sequence is, not
-what its author called it.
+readout, a combined rewinder and spoiler, pad — five blocks, repeated once per
+line. For an FSE it is the whole echo train, because that is the unit that
+repeats. For a ZTE it is the whole shell -- the ramp onto the first spoke,
+then a pulse and an acquisition per view -- because the shell opens and closes
+differently from the way it runs, and it is the shell a shot repeats.
+Detection reports what the sequence is, not what its author called it.
 
 ```{note}
 `Sequence.declare_tr()` writes the detected block count into
@@ -86,6 +87,41 @@ the same period as each other.
 The partition satisfies the constraints the PulSeg IR specification places on
 a virtual segment: every instance has the same block count and the same
 normalized structure.
+
+### Two decompositions
+
+A spoiled gradient echo has nothing to reuse inside its own TR. Five blocks:
+the four carrying waveforms are one segment, and the pad is the other, split
+off because a pure delay is one position whose duration the playout sets. Two
+segments, one instance each.
+
+![One GRE TR, with the two segments shaded behind the waveforms](../assets/segments/gre_2d_tr_segments.png)
+
+MPRAGE repeats at the shot, not at the line, so its TR is the whole
+inversion-recovery experiment — the inversion pulse and its crusher, the TI
+fill, a train of spoiled gradient echoes, and the recovery delay that pads out
+to the outer TR. Here that is 36 blocks over 135 ms, and three segments cover
+them, played eleven times between them.
+
+![One MPRAGE TR: the inversion, the TI fill, eight instances of the readout segment, and the recovery delay](../assets/segments/mprage_3d_tr_segments.png)
+
+Segment 1 is played twice, as the 24 ms TI fill and as the 15 ms recovery pad.
+Two different durations and one segment, because a pure delay matches any pure
+delay: what the interpreter prepares is the position, and how long it waits
+there is a runtime parameter.
+
+The eight readouts above are the eight instances of that segment. One of them,
+on its own, is four blocks — excite, prewind, read, rewind and spoil:
+
+![One instance of the MPRAGE readout segment: excitation, prewinder, readout, and the combined rewinder and spoiler](../assets/segments/mprage_3d_train_segments.png)
+
+Every instance occupies that same timing, and almost nothing else about them
+matches — look along the train above: the phase encode steps, so each
+instance's encoding lobe is a different height; the RF phase advances by the
+spoiling increment; the rewinder undoes whatever the encode did. That
+difference is exactly what the comparison above excludes, which is why these
+are one segment and not eight — and it is the form the scanner wants anyway,
+one prepared unit and a table of per-instance amplitudes.
 
 ### The declared divergence: content, not annotation
 
@@ -136,9 +172,9 @@ scanner can get out of the file with every unit still physically executable.
 ```python
 from pulserver.app import gre2D_sequence
 
-seq = gre2D_sequence.main(n_x=64, n_y=64, n_slices=3)
+seq = gre2D_sequence.main(n_x=256, n_y=64, n_slices=1, te=None, tr=12e-3)
 
-seq.tr_size                   # 6 -- blocks in one repetition
+seq.tr_size                   # 5 -- blocks in one repetition
 seq.plot(tr="worst_case")     # the repetition the safety checks used
 
 seq.num_segments              # 2 -- the readout run, and the TR pad

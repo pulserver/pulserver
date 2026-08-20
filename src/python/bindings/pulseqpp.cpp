@@ -32,6 +32,7 @@
 #include "pulseq/moments.hpp"
 #include "pulseq/read.hpp"
 #include "pulseq/sequence.hpp"
+#include "pulseq/timing.hpp"
 #include "pulseq/trajectory.hpp"
 #include "pulseq/write.hpp"
 
@@ -892,8 +893,9 @@ void pulserver_bind_pulseqpp(py::module_& m)
             // alone, so this registers no shapes.
             .def(
                 "apply_fov_scale",
-                [](Sequence& self, double sx, double sy, double sz, int first, int last)
-                { pulseq::apply_fov_scale(self, {sx, sy, sz}, first, last); },
+                [](Sequence& self, double sx, double sy, double sz, int first, int last) {
+                    pulseq::apply_fov_scale(self, {sx, sy, sz}, first, last);
+                },
                 py::arg("sx"),
                 py::arg("sy"),
                 py::arg("sz"),
@@ -1094,6 +1096,73 @@ void pulserver_bind_pulseqpp(py::module_& m)
                     out["total_duration"] = ks.total_duration;
                     return out;
                 })
+
+            // Every timing problem, one dict per finding, in block order.  The
+            // fields are the union of what the kinds carry; the caller keeps
+            // only the ones its own report shape names.  Dead times and
+            // ringdown come in as arguments because a sequence does not carry
+            // them -- they belong to the system it is played on.
+            .def(
+                "check_timing",
+                [](Sequence& self,
+                   double rf_raster_time,
+                   double grad_raster_time,
+                   double adc_raster_time,
+                   double block_duration_raster,
+                   double rf_dead_time,
+                   double rf_ringdown_time,
+                   double adc_dead_time,
+                   int first_block,
+                   int last_block)
+                {
+                    pulseq::TimingLimits limits;
+                    limits.rf_raster_time = rf_raster_time;
+                    limits.grad_raster_time = grad_raster_time;
+                    limits.adc_raster_time = adc_raster_time;
+                    limits.block_duration_raster = block_duration_raster;
+                    limits.rf_dead_time = rf_dead_time;
+                    limits.rf_ringdown_time = rf_ringdown_time;
+                    limits.adc_dead_time = adc_dead_time;
+                    limits.first_block = first_block;
+                    limits.last_block = last_block;
+
+                    std::vector<pulseq::TimingFinding> found;
+                    {
+                        py::gil_scoped_release unlocked;
+                        found = pulseq::check_timing(self, limits);
+                    }
+
+                    py::list out;
+                    for (size_t i = 0; i < found.size(); ++i)
+                    {
+                        const pulseq::TimingFinding& f = found[i];
+                        py::dict d;
+                        d["block"] = f.block;
+                        d["event"] = f.event;
+                        d["field"] = f.field;
+                        d["error_type"] = f.error_type;
+                        d["raster"] = f.raster;
+                        d["hint"] = f.hint;
+                        d["numID"] = f.num_id;
+                        d["value"] = f.value;
+                        d["value_rounded"] = f.value_rounded;
+                        d["error"] = f.error;
+                        d["duration"] = f.duration;
+                        d["dead_time"] = f.dead_time;
+                        d["ringdown_time"] = f.ringdown_time;
+                        out.append(d);
+                    }
+                    return out;
+                },
+                py::arg("rf_raster_time") = 1e-6,
+                py::arg("grad_raster_time") = 10e-6,
+                py::arg("adc_raster_time") = 100e-9,
+                py::arg("block_duration_raster") = 10e-6,
+                py::arg("rf_dead_time") = 0.0,
+                py::arg("rf_ringdown_time") = 0.0,
+                py::arg("adc_dead_time") = 0.0,
+                py::arg("first_block") = 1,
+                py::arg("last_block") = 0)
 
             // The b-tensor and gradient moments, one entry per excitation.  A
             // dict again, and for the same reason -- and here the shape is not

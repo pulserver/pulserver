@@ -13,6 +13,7 @@
 
 /* Only register and call the suites, do not define test logic here. */
 int test_safety_grad_main(void);
+int test_raster_main(void);
 int test_rf_stats_main(void);
 int test_sequences_main(void);
 int test_protocol_main(void);
@@ -33,6 +34,7 @@ typedef struct
 
 static const test_suite suites[] = {
     {"test_safety_grad", test_safety_grad_main},
+    {"test_raster", test_raster_main},
     {"test_rf_stats", test_rf_stats_main},
     {"test_sequences", test_sequences_main},
     {"test_protocol", test_protocol_main},

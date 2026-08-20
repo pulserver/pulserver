@@ -1452,6 +1452,13 @@ float pulseg__grad_shape_last(const pulseg_sequence_descriptor *desc, int shape_
     return desc->grad_shape_last[shape_id - 1];
 }
 
+float pulseg__grad_shape_slew(const pulseg_sequence_descriptor *desc, int shape_id)
+{
+    if (!desc || !desc->grad_shape_slew || shape_id <= 0 || shape_id > desc->num_grad_shape_stats)
+        return 0.0f;
+    return desc->grad_shape_slew[shape_id - 1];
+}
+
 float pulseg__grad_boundary_first(const pulseg_sequence_descriptor *desc, int raw_id)
 {
     return grad_boundary_value(desc, raw_id, 0);
@@ -1881,7 +1888,7 @@ static int find_segments_on_exec_stream(
         }
 
         has_rf = (desc->base_blocks[desc->block_table[bt_idx].id].rf_id >= 0);
-        has_adc = (desc->block_table[bt_idx].adc_id >= 0);
+        has_adc = (desc->base_blocks[desc->block_table[bt_idx].id].adc_id >= 0);
 
         if (state == SEGSTATE_SEEKING_FIRST_ADC)
         {

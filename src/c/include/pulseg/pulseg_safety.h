@@ -86,6 +86,46 @@ extern "C"
         pulseg_diagnostic *diag,
         const pulseg_opts *opts);
 
+    /**
+     * @brief Check that every event time lands on the raster it is played on.
+     *
+     * Also run as part of pulseg_check_safety(); exposed separately so a
+     * design tool can ask it offline against design limits rather than a
+     * scanner's.  @p opts supplies the four rasters the times are judged
+     * against -- online those are the scanner's own.
+     *
+     * The rasters a file declares are checked against @p opts elsewhere, when
+     * the collection is built.  That comparison accepts either direction, so a
+     * sequence laid out on a raster finer than the scanner's passes it while
+     * still holding times the hardware cannot address; this is the check that
+     * catches those.  RF and ADC start times go against the RF raster, ADC
+     * dwell against the ADC raster, gradient delays and trapezoid ramps
+     * against the gradient raster, block durations against the block duration
+     * raster.  An arbitrary event's own time shape is checked sample by
+     * sample.
+     *
+     * Also reports an event that ends after its block does
+     * (PULSEG_ERR_BLOCK_DURATION_OVERRUN).  A block longer than its events is
+     * legal and silent.
+     *
+     * RF dead time and ringdown, and ADC dead time, are deliberately not
+     * checked: they bound what a transmit chain can do rather than what the
+     * sequencer can address, and are the design side's to enforce.
+     *
+     * Every time field lives in a deduplicated definition, so the cost is the
+     * number of distinct events in the scan, not the number of blocks.
+     *
+     * @param[in]  coll  Collection to check.
+     * @param[out] diag  Diagnostic naming the event and value on violation.
+     * @param[in]  opts  The rasters to judge against.
+     * @return PULSEG_SUCCESS, PULSEG_ERR_RASTER_ALIGNMENT or
+     *         PULSEG_ERR_BLOCK_DURATION_OVERRUN.
+     */
+    int pulseg_check_raster_alignment(
+        const pulseg_collection *coll,
+        pulseg_diagnostic *diag,
+        const pulseg_opts *opts);
+
     /* ================================================================== */
     /*  Acoustic spectra (for wrapper-side plotting)                      */
     /* ================================================================== */
@@ -103,7 +143,12 @@ extern "C"
      * @param[out] diag                     Diagnostic on failure.
      * @param[in]  coll                     Loaded collection.
      * @param[in]  subseq_idx               Subsequence index.
-     * @param[in]  canonical_tr_idx         Canonical TR index (0-based, within subsequence).
+     * @param[in]  canonical_tr_idx         TR instance index (0-based, within subsequence);
+     *                                       read only under PULSEG_AMP_ACTUAL.
+     * @param[in]  amplitude_mode           PULSEG_AMP_MAX_POS for the bound over every
+     *                                       instance of the canonical TR, which is what
+     *                                       pulseg_check_safety judges; PULSEG_AMP_ACTUAL
+     *                                       for one instance exactly as it plays.
      * @param[in]  opts                     Scanner limits.
      * @param[in]  target_resolution_hz     Spectral resolution (0 = auto).
      * @param[in]  max_freq_hz              Max frequency to report (0 = auto).
@@ -128,6 +173,7 @@ extern "C"
         pulseg_diagnostic *diag,
         int subseq_idx,
         int canonical_tr_idx,
+        int amplitude_mode,
         const pulseg_opts *opts,
         float target_resolution_hz,
         float max_freq_hz,

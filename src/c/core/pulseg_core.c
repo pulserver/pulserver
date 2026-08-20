@@ -116,6 +116,11 @@ void pulseg_sequence_descriptor_free(pulseg_sequence_descriptor *d)
         PULSEG_FREE(d->grad_shape_last);
         d->grad_shape_last = NULL;
     }
+    if (d->grad_shape_slew)
+    {
+        PULSEG_FREE(d->grad_shape_slew);
+        d->grad_shape_slew = NULL;
+    }
     d->num_grad_shape_stats = 0;
 
     if (d->shapes)

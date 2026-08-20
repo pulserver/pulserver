@@ -50,10 +50,16 @@ the `hardware` argument: a mapping carrying `chronaxie` and `rheobase`
 selects Irnich, a Siemens `.asc` path or a per-axis description selects SAFE.
 
 ```python
-irnich = {"chronaxie_us": 360.0, "rheobase": 4.25e8, "alpha": 0.333}
+irnich = {"chronaxie_us": 360.0, "rheobase": 20.0, "alpha": 0.333}
 ok, norm, components, t = seq.calculate_pns(irnich, tr="worst_case")         # Irnich
 ok, norm, components, t = seq.calculate_pns("scanner.asc", tr="worst_case")  # SAFE
 ```
+
+The rheobase is in T/m/s, the unit of the slew waveform the model is handed;
+the response is normalised against `rheobase / alpha`. Whichever model runs,
+the picture is drawn the same way — upstream PyPulseq's `safe_plot`, with the
+100 % threshold and the 80 % margin marked over it — so two figures can be
+read against each other without first working out which is scaled how.
 
 The hardware description is always passed in, never read off the system
 limits: a sequence author's `Opts` describe the gradients they are designing
@@ -99,8 +105,19 @@ The corpus figures below pair each sequence's worst-case TR with its Irnich
 stimulation trace; the SAFE figure uses upstream PyPulseq's own example
 coefficients (explicitly *not* a real scanner's) on the same GRE fixture.
 
-**GRE**, one isolated readout gradient per TR — three isolated spikes, one
-per gradient event, decaying between them because nothing else is playing:
+Each trace runs past the end of its TR. That tail is the wrapped history the
+model needed — the opening events of the TR replayed with the previous
+repetition's memory behind them — and comparing it against the same events at
+$t = 0$, where the model starts cold, shows directly how much of the response
+comes from the repetition rather than from the events themselves. How far it
+runs is the model's own answer to `required_padding()`, which is why the SAFE
+figure extends further than the Irnich one over the same sequence.
+
+**GRE**, one isolated readout gradient per TR. Every gradient edge raises a
+spike of its own and each has time to decay before the next: the slice-select
+ramp at $t = 0$, its rewinder at 3.3 ms, then the prewinder pair and the
+readout ramps clustered around 6–7 ms, and nothing at all across the 22 ms of
+dead time that fills out the TR.
 
 ![GRE representative TR](../assets/representative_tr/gre_2d_tr.png)
 
@@ -108,17 +125,38 @@ per gradient event, decaying between them because nothing else is playing:
 
 ![GRE PNS, SAFE model with example coefficients](../assets/pns_safety/gre_2d_pns_safe.png)
 
+The shape is the point, not the number. The two models see the same events at
+the same instants, but they do not agree on which one is worst. Irnich reads
+122 % on the slice-select rewinder at 3.3 ms — a single large
+excursion on Z, well clear of anything else — because one chronaxie and one
+rheobase serve all three axes, so the verdict follows whichever axis slews
+hardest. SAFE carries a separate coefficient set per axis, and in this
+example table Y is twice as sensitive as X; the prewinder pair at 6.8 ms
+therefore comes out at 57 % and 56 % *together*, and their combination, not
+the Z rewinder, is what sets the 80 %. Which of the two is right for a given
+scanner is a question about that scanner's gradient coil, so read the SAFE
+figure as "this is what the model's output looks like", not as a statement
+about any real margin; that would need that scanner's own `.asc` file passed
+as `hardware`.
+
 **EPI**, a long blipped echo train, is the sharpest contrast available — a
-readout gradient reversed dozens of times a few hundred microseconds apart is
-a qualitatively different stimulation problem from GRE's well-separated
-events:
+readout gradient reversed dozens of times a few hundred microseconds apart
+asks a question GRE's well-separated events never do: whether the responses
+pile up.
 
 ![EPI representative TR](../assets/representative_tr/epi_2d_tr.png)
 
 ![EPI PNS, Irnich model](../assets/pns_safety/epi_2d_pns.png)
 
-Every blip adds its own rising edge before the previous one has decayed, so
-the per-blip peaks ride on a sustained, near-saturated plateau across the
-whole train instead of returning to baseline. The nerve's memory genuinely
-matters here — which is exactly why the check evaluates a full TR with its
-history rather than scoring events one at a time.
+The train shows up as a run of near-identical ~59 % teeth, one per reversal,
+400 µs apart. They do not stack: the echo spacing is just longer than the
+360 µs chronaxie, so each response has decayed to a couple of per cent before
+the next edge arrives, and the verdict — 124 % — is still set by the
+slice-select rewinder at 8.7 ms, exactly as in GRE. Shorten the echo spacing,
+or move to a coil with a longer chronaxie, and those teeth start landing on
+each other's tails instead, at which point the train sets the verdict and
+nothing about any single reversal predicts it. That is why the check
+evaluates a whole TR with its history rather than scoring events one at a
+time: whether a repetitive train accumulates is a property of the interval
+between its edges against the nerve's own time constant, and neither is
+visible in the events alone.

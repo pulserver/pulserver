@@ -17,6 +17,7 @@ add_library(pulseqpp STATIC
     kspace.cpp
     ktraj.cpp
     moments.cpp
+    timing.cpp
     autolabel.cpp
     expand.cpp
 )

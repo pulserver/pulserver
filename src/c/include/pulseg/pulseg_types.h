@@ -695,10 +695,11 @@ typedef struct pulseg_pns_result
     float *slew_x_hz_per_m_per_s; /**< convolved dG/dt on X (Hz/m/s) */
     float *slew_y_hz_per_m_per_s; /**< convolved dG/dt on Y (Hz/m/s) */
     float *slew_z_hz_per_m_per_s; /**< convolved dG/dt on Z (Hz/m/s) */
+    int worst_group;              /**< canonical-TR group this window is */
 } pulseg_pns_result;
 
 /* clang-format off */
-#define PULSEG_PNS_RESULT_INIT {0, NULL, NULL, NULL}
+#define PULSEG_PNS_RESULT_INIT {0, NULL, NULL, NULL, 0}
 /* clang-format on */
 
 /* ================================================================== */

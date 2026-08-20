@@ -163,6 +163,12 @@ static int compute_position_max_amplitudes_filtered(
     tr_size = tr->tr_size;
     num_trs = tr->num_trs;
     use_full_pass_layout = !(block_start == 0 && block_count == tr_size);
+    /* A group sweep renders each group at one of its own instances, so
+     * block_start is that instance's -- but the amplitudes still have to be
+     * maximised over the whole group, which is the per-TR loop below and not
+     * the single-window read above. */
+    if (tr_group_labels && block_count == tr_size)
+        use_full_pass_layout = 0;
 
     for (n = 0; n < block_count; ++n)
     {
@@ -389,8 +395,199 @@ int pulseg__compute_variable_grad_flags(pulseg_sequence_descriptor *desc)
 }
 
 /* ================================================================== */
-/*  Find unique shot-index TR variants                                */
+/*  Group TR instances by the definitions they play                   */
 /* ================================================================== */
+
+/** Ints of signature per block position: base block, duration, gx, gy, gz. */
+#define SHAPE_SIGNATURE_WIDTH 5
+
+/** One position's identity: which block, how long, and which definition per
+ *  axis. Amplitude is deliberately absent -- it is what the envelope bounds. */
+static void shape_signature_at(const pulseg_sequence_descriptor *desc, int bt_idx, int *out)
+{
+    const pulseg_block_table_element *bte;
+    const pulseg_base_block *bdef;
+    int axis, raw, ids[3];
+
+    for (axis = 0; axis < SHAPE_SIGNATURE_WIDTH; ++axis)
+        out[axis] = -1;
+    if (bt_idx < 0 || bt_idx >= desc->num_blocks)
+        return;
+
+    bte = &desc->block_table[bt_idx];
+    bdef = &desc->base_blocks[bte->id];
+    out[0] = bte->id;
+    out[1] = (bte->duration_us >= 0) ? bte->duration_us : bdef->duration_us;
+
+    ids[0] = bte->gx_id;
+    ids[1] = bte->gy_id;
+    ids[2] = bte->gz_id;
+    for (axis = 0; axis < 3; ++axis)
+    {
+        raw = ids[axis];
+        out[2 + axis] = (raw >= 0 && raw < desc->grad_table_size) ? desc->grad_table[raw].id : -1;
+    }
+}
+
+/** Classify every TR instance by its signature.
+ *
+ * Instances are addressed as block_table[tr_idx * tr_size + pos], which is how
+ * the position-max envelope and the canonical-window selection address them
+ * too -- so a label here names the same repetition they do.
+ * @p labels may be NULL, in which case only the group count is produced.
+ */
+static int classify_tr_instances(
+    const pulseg_sequence_descriptor *desc,
+    int tr_size,
+    int num_trs,
+    int max_groups,
+    int *signature,
+    int *groups,
+    int *group_first,
+    int *labels,
+    int *num_groups)
+{
+    int tr_idx, pos, g, i, width, matched;
+
+    width = tr_size * SHAPE_SIGNATURE_WIDTH;
+    *num_groups = 0;
+
+    for (tr_idx = 0; tr_idx < num_trs; ++tr_idx)
+    {
+        if ((tr_idx + 1) * tr_size > desc->num_blocks)
+            break;
+
+        for (pos = 0; pos < tr_size; ++pos)
+            shape_signature_at(
+                desc,
+                tr_idx * tr_size + pos,
+                &signature[pos * SHAPE_SIGNATURE_WIDTH]);
+
+        matched = -1;
+        for (g = 0; g < *num_groups && matched < 0; ++g)
+        {
+            matched = g;
+            for (i = 0; i < width; ++i)
+            {
+                if (groups[g * width + i] != signature[i])
+                {
+                    matched = -1;
+                    break;
+                }
+            }
+        }
+        if (matched < 0)
+        {
+            if (*num_groups >= max_groups)
+                return PULSEG_ERR_INVALID_ARGUMENT;
+            matched = *num_groups;
+            for (i = 0; i < width; ++i)
+                groups[matched * width + i] = signature[i];
+            group_first[matched] = tr_idx;
+            ++(*num_groups);
+        }
+        if (labels)
+            labels[tr_idx] = matched;
+    }
+
+    /* An instance the block table does not reach keeps the first group's
+     * label: it contributes no position the envelope has not already seen. */
+    if (labels)
+        for (; tr_idx < num_trs; ++tr_idx)
+            labels[tr_idx] = 0;
+    if (*num_groups <= 0)
+        *num_groups = 1;
+    return PULSEG_SUCCESS;
+}
+
+int pulseg__group_tr_instances_by_shape(
+    const pulseg_sequence_descriptor *desc,
+    int **out_labels,
+    int **out_first,
+    int *out_num_groups,
+    int max_groups)
+{
+    int *signature, *groups, *group_first, *labels;
+    int tr_size, num_trs, width, num_groups, rc;
+
+    if (!desc || !out_labels || !out_first || !out_num_groups || max_groups < 1)
+        return PULSEG_ERR_NULL_POINTER;
+
+    *out_labels = NULL;
+    *out_first = NULL;
+    *out_num_groups = 1;
+
+    tr_size = desc->tr_descriptor.tr_size;
+    num_trs = desc->tr_descriptor.num_trs;
+    if (tr_size <= 0 || num_trs <= 1)
+        return PULSEG_SUCCESS;
+
+    width = tr_size * SHAPE_SIGNATURE_WIDTH;
+    signature = (int *)PULSEG_ALLOC((size_t)width * sizeof(int));
+    groups = (int *)PULSEG_ALLOC((size_t)max_groups * (size_t)width * sizeof(int));
+    group_first = (int *)PULSEG_ALLOC((size_t)max_groups * sizeof(int));
+    if (!signature || !groups || !group_first)
+    {
+        PULSEG_FREE(signature);
+        PULSEG_FREE(groups);
+        PULSEG_FREE(group_first);
+        return PULSEG_ERR_ALLOC_FAILED;
+    }
+
+    /* First pass counts. Only a sequence that really needs the sweep pays for
+     * the per-instance label array, which is the one allocation here that
+     * grows with the scan. */
+    rc = classify_tr_instances(
+        desc,
+        tr_size,
+        num_trs,
+        max_groups,
+        signature,
+        groups,
+        group_first,
+        NULL,
+        &num_groups);
+    if (PULSEG_FAILED(rc) || num_groups <= 1)
+    {
+        PULSEG_FREE(signature);
+        PULSEG_FREE(groups);
+        PULSEG_FREE(group_first);
+        *out_num_groups = 1;
+        return rc;
+    }
+
+    labels = (int *)PULSEG_ALLOC((size_t)num_trs * sizeof(int));
+    if (!labels)
+    {
+        PULSEG_FREE(signature);
+        PULSEG_FREE(groups);
+        PULSEG_FREE(group_first);
+        return PULSEG_ERR_ALLOC_FAILED;
+    }
+    rc = classify_tr_instances(
+        desc,
+        tr_size,
+        num_trs,
+        max_groups,
+        signature,
+        groups,
+        group_first,
+        labels,
+        &num_groups);
+    PULSEG_FREE(signature);
+    PULSEG_FREE(groups);
+    if (PULSEG_FAILED(rc))
+    {
+        PULSEG_FREE(group_first);
+        PULSEG_FREE(labels);
+        return rc;
+    }
+
+    *out_labels = labels;
+    *out_first = group_first;
+    *out_num_groups = num_groups;
+    return PULSEG_SUCCESS;
+}
 
 /* ================================================================== */
 /*  Fill waveform for a single block                                  */
@@ -1384,12 +1581,18 @@ int pulseg_get_tr_waveforms(
     int *block_order;
     int pass_scan_start; /* scan-table offset for output slot 0 of this pass */
     int eff_num_averages;
+    int *can_group_labels;
+    int *can_group_first;
+    int num_canonical;
 
     pos_max_gx = NULL;
     pos_max_gy = NULL;
     pos_max_gz = NULL;
     block_order = NULL;
     pass_scan_start = -1;
+    can_group_labels = NULL;
+    can_group_first = NULL;
+    num_canonical = 1;
 
     if (!diag)
     {
@@ -1443,23 +1646,25 @@ int pulseg_get_tr_waveforms(
     }
     else
     {
-        int *can_unique_indices = NULL;
-        int *can_group_labels = NULL;
-        int num_canonical = 0;
         int rep_idx = 0;
 
         /*
-         * Canonical waveform extraction used by MAX_POS / ZERO_VAR:
-         * select the representative instance for the requested canonical
-         * group so geometry (RF/ADC placement, delays, etc.) matches the
-         * same canonical TR used for amplitude filtering.
+         * Canonical waveform extraction used by MAX_POS / ZERO_VAR: the
+         * repetitions are grouped by the gradient definitions they play, and
+         * `tr_index` selects a group. Geometry comes from that group's own
+         * representative so that shapes and amplitude filtering describe the
+         * same window; a sequence whose repetitions differ only in amplitude
+         * has one group, and this is then the whole-scan envelope.
          */
-        num_canonical = 0 /* one canonical TR; representatives carry the worst case */;
+        pulseg__group_tr_instances_by_shape(
+            desc,
+            &can_group_labels,
+            &can_group_first,
+            &num_canonical,
+            PULSEG__MAX_SHAPE_GROUPS);
 
-        if (num_canonical > 0 && tr_index >= 0 && tr_index < num_canonical && can_unique_indices)
-        {
-            rep_idx = can_unique_indices[tr_index];
-        }
+        if (num_canonical > 1 && can_group_first && tr_index > 0 && tr_index < num_canonical)
+            rep_idx = can_group_first[tr_index];
 
         tr_block_start = 0;
         block_start = 0;
@@ -1469,25 +1674,18 @@ int pulseg_get_tr_waveforms(
         {
             block_order = (int *)PULSEG_ALLOC((size_t)tr->tr_size * sizeof(int));
             if (!block_order)
-            {
-                if (can_group_labels)
-                    PULSEG_FREE(can_group_labels);
-                if (can_unique_indices)
-                    PULSEG_FREE(can_unique_indices);
                 goto alloc_fail;
-            }
             for (n = 0; n < tr->tr_size; ++n)
                 block_order[n] = rep_idx * tr->tr_size + n;
         }
-
-        if (can_group_labels)
-            PULSEG_FREE(can_group_labels);
-        if (can_unique_indices)
-            PULSEG_FREE(can_unique_indices);
     }
 
     if (!block_order && (block_start < 0 || block_start + block_count > desc->num_blocks))
     {
+        if (can_group_labels)
+            PULSEG_FREE(can_group_labels);
+        if (can_group_first)
+            PULSEG_FREE(can_group_first);
         diag->code = PULSEG_ERR_INVALID_ARGUMENT;
         return diag->code;
     }
@@ -1495,23 +1693,13 @@ int pulseg_get_tr_waveforms(
     /* ---- precompute position-max if needed ---- */
     if (amplitude_mode == PULSEG_AMP_MAX_POS || amplitude_mode == PULSEG_AMP_ZERO_VAR)
     {
-        int *can_group_labels = NULL;
-        int *can_unique_indices = NULL;
-        int num_canonical = 0;
-
         pos_max_gx = (float *)PULSEG_ALLOC((size_t)block_count * sizeof(float));
         pos_max_gy = (float *)PULSEG_ALLOC((size_t)block_count * sizeof(float));
         pos_max_gz = (float *)PULSEG_ALLOC((size_t)block_count * sizeof(float));
         if (!pos_max_gx || !pos_max_gy || !pos_max_gz)
             goto alloc_fail;
 
-        /* If tr_index > 0, filter max-pos to that canonical TR group. */
-        if (tr_index >= 0)
-        {
-            num_canonical = 0 /* one canonical TR; representatives carry the worst case */;
-        }
-
-        if (num_canonical > 1 && tr_index >= 0 && tr_index < num_canonical)
+        if (num_canonical > 1 && can_group_labels && tr_index >= 0 && tr_index < num_canonical)
         {
             compute_position_max_amplitudes_filtered(
                 desc,
@@ -1535,11 +1723,6 @@ int pulseg_get_tr_waveforms(
                 NULL,
                 0);
         }
-
-        if (can_group_labels)
-            PULSEG_FREE(can_group_labels);
-        if (can_unique_indices)
-            PULSEG_FREE(can_unique_indices);
 
         /* ZERO_VAR: zero out positions whose gradients vary across TRs.
          * For non-degenerate passes, iterate over ALL imaging positions
@@ -1872,6 +2055,10 @@ int pulseg_get_tr_waveforms(
             target_raster_us);
         if (PULSEG_FAILED(interp_result))
         {
+            if (can_group_labels)
+                PULSEG_FREE(can_group_labels);
+            if (can_group_first)
+                PULSEG_FREE(can_group_first);
             diag->code = interp_result;
             return interp_result;
         }
@@ -1882,6 +2069,10 @@ int pulseg_get_tr_waveforms(
             target_raster_us);
         if (PULSEG_FAILED(interp_result))
         {
+            if (can_group_labels)
+                PULSEG_FREE(can_group_labels);
+            if (can_group_first)
+                PULSEG_FREE(can_group_first);
             diag->code = interp_result;
             return interp_result;
         }
@@ -1892,6 +2083,10 @@ int pulseg_get_tr_waveforms(
             target_raster_us);
         if (PULSEG_FAILED(interp_result))
         {
+            if (can_group_labels)
+                PULSEG_FREE(can_group_labels);
+            if (can_group_first)
+                PULSEG_FREE(can_group_first);
             diag->code = interp_result;
             return interp_result;
         }
@@ -1956,12 +2151,20 @@ int pulseg_get_tr_waveforms(
 
     if (block_order)
         PULSEG_FREE(block_order);
+    if (can_group_labels)
+        PULSEG_FREE(can_group_labels);
+    if (can_group_first)
+        PULSEG_FREE(can_group_first);
     diag->code = PULSEG_SUCCESS;
     return PULSEG_SUCCESS;
 
 alloc_fail:
     if (block_order)
         PULSEG_FREE(block_order);
+    if (can_group_labels)
+        PULSEG_FREE(can_group_labels);
+    if (can_group_first)
+        PULSEG_FREE(can_group_first);
     if (pos_max_gx)
         PULSEG_FREE(pos_max_gx);
     if (pos_max_gy)

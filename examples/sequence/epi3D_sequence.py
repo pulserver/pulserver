@@ -714,7 +714,9 @@ def needs_calibration(kwargs: dict) -> bool:
     )
 
 
-def write_pair(main_seq: pp.Sequence, seq_filename: str, **kwargs) -> tuple[str, ...]:
+def write_pair(
+    main_seq: pp.Sequence, seq_filename: str, *, offline: bool = True, **kwargs
+) -> tuple[str, ...]:
     """Write the linked collection: calibration, then navigator, then main.
 
     Each sequence in the chain points ``NextSequence`` at the next, so the
@@ -731,6 +733,9 @@ def write_pair(main_seq: pp.Sequence, seq_filename: str, **kwargs) -> tuple[str,
     seq_filename : str
         Where the chain's first sequence is written; the others go beside it as
         ``<stem>_navigator.seq`` and ``<stem>_main.seq``.
+    offline : bool, optional
+        The form every file of the chain is written in, as
+        :func:`pulserver.write_sequence` reads it. Default is True.
     **kwargs
         Forwarded to :func:`calibration` and :func:`navigator`, each taking the
         subset it declares.
@@ -779,7 +784,7 @@ def write_pair(main_seq: pp.Sequence, seq_filename: str, **kwargs) -> tuple[str,
     for index, (seq, seq_path) in enumerate(chain):
         if index + 1 < len(chain):
             seq.set_definition(key="NextSequence", value=chain[index + 1][1].name)
-        write_sequence(seq, str(seq_path), offline=True)
+        write_sequence(seq, str(seq_path), offline=offline)
     return tuple(str(seq_path) for _, seq_path in chain)
 
 
@@ -955,12 +960,11 @@ class Epi3D(SequencePlugin):
         offline: bool = False,
     ) -> None:
         """Build both sequences and write the linked pair at ``output_path``."""
-        del offline
         kwargs = protocol_kwargs(system, protocol)
         seq = main(**kwargs)
         # write_pair filters to what the calibration and navigator each take;
         # pass everything so it can also read the undersampling flags.
-        write_pair(seq, output_path, system=system, **kwargs)
+        write_pair(seq, output_path, offline=offline, **kwargs)
 
 
 KERNEL_ARGUMENTS = frozenset(

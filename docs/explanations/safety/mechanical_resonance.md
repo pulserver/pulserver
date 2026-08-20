@@ -143,7 +143,7 @@ produces a broadband transient every TR — flagged by a literal test, harmless
 to the coil because nothing is *sustained*, and correctly passed here, far
 below the floor. A bSSFP readout comb puts a genuine sustained line near
 1.2 kHz at several mT/m — and is flagged, as it must be. Both verdicts are
-regression-tested over the {doc}`sequence zoo <../validation/sequence_zoo>`.
+regression-tested over every shipped plugin.
 
 One more property comes free: forbidden bands carry no axis tag, and the
 check runs every axis against every band. A rotation — a per-block rotation

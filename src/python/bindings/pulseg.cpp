@@ -160,6 +160,7 @@ static py::dict _calc_mech_resonances(
     _PulseqCollection& pc,
     int subsequence_idx,
     int canonical_tr_idx,
+    int amplitude_mode,
     float target_resolution_hz,
     float max_freq_hz,
     py::list py_bands,
@@ -197,6 +198,7 @@ static py::dict _calc_mech_resonances(
     auto sp = pc.coll().calc_mech_resonances(
         subsequence_idx,
         canonical_tr_idx,
+        amplitude_mode,
         target_resolution_hz,
         max_freq_hz,
         bands,
@@ -278,6 +280,7 @@ static py::dict _calc_pns(
     out["slew_x"] = r.slew_x;
     out["slew_y"] = r.slew_y;
     out["slew_z"] = r.slew_z;
+    out["worst_group"] = r.worst_group;
     return out;
 }
 
@@ -324,6 +327,7 @@ static py::dict _calc_pns_safe(
     out["slew_x"] = r.slew_x;
     out["slew_y"] = r.slew_y;
     out["slew_z"] = r.slew_z;
+    out["worst_group"] = r.worst_group;
     return out;
 }
 
@@ -885,6 +889,7 @@ void pulserver_bind_pulseg(py::module_& m)
         py::arg("collection"),
         py::arg("subsequence_idx") = 0,
         py::arg("canonical_tr_idx") = 0,
+        py::arg("amplitude_mode") = PULSEG_AMP_MAX_POS,
         py::arg("target_resolution_hz"),
         py::arg("max_freq_hz"),
         py::arg("forbidden_bands") = py::list(),

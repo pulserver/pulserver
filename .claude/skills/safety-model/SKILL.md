@@ -81,8 +81,7 @@ inside a guarded band — the amplitude of the pure sinusoid delivering the same
 coherent drive, in the vendor's own units. Two guards make it a verdict: a
 frequency guard of half the narrowest band's width, and an amplitude floor of
 `0.08 * G_max` where a band states literal zero. Changing either changes which
-sequences are refused, so re-run the zoo verdicts and update the table in
-`docs/explanations/validation/sequence_zoo.md`.
+sequences are refused, so re-run the verdicts over every shipped plugin.
 
 No inner periodicity is ever declared: an echo train or a slice loop is just
 more materialised events inside the one known period, and the comb emerges
@@ -96,5 +95,6 @@ bash scripts/run_tests.sh -k safety         # the Python gate tests
 bash scripts/format_and_lint.sh
 ```
 
-and, if a verdict moved, regenerating the affected zoo numbers with
-`python docs/_bench/zoo_report.py`.
+and, if the gate's cost moved, regenerating
+`docs/explanations/performance/full_benchmark` with
+`python docs/_bench/bench_full.py`.

@@ -128,7 +128,12 @@ class SafetyViewsMixin:
         times = np.arange(components.shape[0]) * raster
 
         if do_plots:
-            _plot_pns(structure.waveform(tr), components, raster)
+            # The window the core judged, not the first group's: under
+            # `worst_case` the check evaluates one window per group of
+            # instances sharing their gradient definitions, and reports which
+            # one it took.
+            drawn = structure.waveform(tr, group=result.get("worst_group"))
+            _plot_pns(drawn, components, raster)
 
         verdict = (bool(np.all(norm < 1)), norm, components, times)
         return verdict if compat else _results.Pns(*verdict)
@@ -345,21 +350,32 @@ def _plot_pns(
     plt.title("gradient wave form, in Hz/m")
 
     plt.figure()
-    safe_plot(components * 100, raster)
+    # Magnitudes, because either polarity of slew stimulates and ``safe_plot``
+    # frames its axis at 0-120 %: an Irnich response is signed, so a negative
+    # excursion -- often where the peak of the combined norm comes from --
+    # would be drawn off the bottom of the panel and read as that axis
+    # contributing nothing. The norm is a root-sum-square, so it is unchanged.
+    safe_plot(np.abs(components) * 100, raster)
     _safety.overlay_pns_thresholds()
 
 
 def _resonance_lines(
     structure: _Structure, tr, max_frequency: float, bands: list
 ) -> _safety.MechResonances:
-    """The C safety core's acoustic line spectrum for one TR."""
+    """The C safety core's acoustic line spectrum for one TR.
+
+    Under ``worst_case`` the lines are the bound over every instance of the
+    canonical TR -- the gate's own object -- and under an integer they are
+    that instance exactly as it plays.
+    """
     from .._ext.pulseg import _calc_mech_resonances
 
-    _, index = structure.resolve(tr)
+    mode, index = structure.resolve(tr)
     spectra = _calc_mech_resonances(
         structure.collection,
         0,
         index,
+        mode,
         # A resolution fine enough that the harmonic grid the core
         # tabulates reaches max_frequency; the lines themselves land at
         # k / T_TR regardless of what is asked for here.

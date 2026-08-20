@@ -1312,9 +1312,13 @@ class Sequence(AnalysisMixin, SafetyViewsMixin, SoftDelayMixin):
     ) -> tuple[bool, list]:
         """Check every block's timing against the rasters and dead times.
 
-        Upstream PyPulseq's own checker, run on the blocks asked for: raster
-        alignment, ADC and RF dead times, ringdown, block-duration
-        consistency, and soft-delay agreement.
+        Raster alignment, RF and ADC dead times, ringdown, block-duration
+        consistency, and soft-delay agreement, judged against ``system`` --
+        its four rasters and its three dead times, not the ones the file
+        happens to record. The report is upstream PyPulseq's, entry for entry;
+        the arithmetic is compiled and reads the event libraries, so what a
+        raster costs is one decision per distinct event rather than one per
+        block.
 
         The scanner runs its own version of this at predownload against its
         real rasters, which is the authoritative one; a design script can only
@@ -1326,9 +1330,7 @@ class Sequence(AnalysisMixin, SafetyViewsMixin, SoftDelayMixin):
         print_errors : bool, default False
             Also print the report.
         time_range : list of float, optional
-            Restrict to the blocks in this window, in seconds. Only the blocks
-            it touches are decoded, so checking part of a long protocol costs
-            part of the protocol.
+            Restrict to the blocks in this window, in seconds.
 
         Returns
         -------
@@ -1342,11 +1344,24 @@ class Sequence(AnalysisMixin, SafetyViewsMixin, SoftDelayMixin):
             :meth:`write` runs.
         """
         first, last = self._window_for(time_range)
-        is_ok, error_report = self._upstream_window(first, last).check_timing()
+        error_report = [
+            _timing_entry(finding)
+            for finding in self._native.check_timing(
+                float(self.system.rf_raster_time),
+                float(self.system.grad_raster_time),
+                float(self.system.adc_raster_time),
+                float(self.system.block_duration_raster),
+                float(self.system.rf_dead_time),
+                float(self.system.rf_ringdown_time),
+                float(self.system.adc_dead_time),
+                first,
+                last,
+            )
+        ]
         if print_errors:
             for entry in error_report:
                 print(entry)
-        return is_ok, error_report
+        return not error_report, error_report
 
     def check_gradient_continuity(self) -> tuple[bool, str]:
         """Check that gradients join across every block boundary.
@@ -2282,6 +2297,35 @@ def _signature_of(payload: bytes) -> str | None:
     marker = b"\nHash "
     at = payload.rfind(marker)
     return None if at < 0 else payload[at + len(marker) :].split()[0].decode("ascii")
+
+
+#: Which fields each kind of timing finding reports, beyond the four every
+#: one carries. The sets are upstream's: its message templates format exactly
+#: these names, and its printer formats `vars(entry)`.
+_TIMING_FIELDS = {
+    "RASTER": ("value", "value_rounded", "error", "raster"),
+    "NEGATIVE_DELAY": ("value",),
+    "BLOCK_DURATION_MISMATCH": ("value", "duration"),
+    "RF_DEAD_TIME": ("value", "dead_time"),
+    "RF_RINGDOWN_TIME": ("value", "duration", "ringdown_time"),
+    "ADC_DEAD_TIME": ("value", "dead_time"),
+    "POST_ADC_DEAD_TIME": ("value", "duration", "dead_time"),
+    "SOFT_DELAY_FACTOR": ("value", "hint", "numID"),
+    "SOFT_DELAY_DUR_INCONSISTENCY": ("value", "hint", "numID"),
+}
+
+
+def _timing_entry(finding: dict) -> SimpleNamespace:
+    """One compiled timing finding as the report entry upstream would write."""
+    entry = {
+        "block": finding["block"],
+        "event": finding["event"],
+        "field": finding["field"],
+        "error_type": finding["error_type"],
+    }
+    for name in _TIMING_FIELDS.get(finding["error_type"], ()):
+        entry[name] = finding[name]
+    return SimpleNamespace(**entry)
 
 
 def _playable(block: SimpleNamespace, system: pp.Opts) -> list:

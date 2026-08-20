@@ -9,8 +9,10 @@ repeating unit — a {doc}`PulSeg reading <pulseg_representation>` whose
 than annotated by the designer. On the design side, it is a
 {doc}`service the console asks <design_service>`: a Python program on a
 compiled sequence core, answering protocol edits in interactive time. On the
-reconstruction side, it is an {doc}`MRD stream <mrd_client>` that arrives
-already carrying its encoding counters, trajectory and sequence description.
+reconstruction side, it is an {doc}`MRD stream <mrd_architecture>` that
+arrives already carrying its encoding counters, trajectory and sequence
+description, and a server that reconstructs it with the exam, rather than the
+connection, as its unit of context.
 
 ```{toctree}
 :maxdepth: 1
@@ -18,5 +20,5 @@ already carrying its encoding counters, trajectory and sequence description.
 pulseg_representation
 tr_and_segmentation
 design_service
-mrd_client
+mrd_architecture
 ```

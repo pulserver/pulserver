@@ -98,7 +98,9 @@ class _Structure:
             self._segments = _get_segments(self.collection, 0)
         return self._segments
 
-    def waveform(self, tr, *, rf_channel: int = 0) -> _safety.TRSequence:
+    def waveform(
+        self, tr, *, rf_channel: int = 0, group: int | None = None
+    ) -> _safety.TRSequence:
         """The TR ``tr`` names, as a sequence upstream can read.
 
         Everything in it -- gradients, RF magnitude and phase, ADC events,
@@ -117,10 +119,18 @@ class _Structure:
             it really plays, signed amplitudes and all.
         rf_channel : int, default 0
             Which transmit channel the returned blocks report, for a pTx TR.
+        group : int, optional
+            Which group of instances the worst case is taken over. The
+            repetitions are grouped by the gradient definitions they play, and
+            a check that evaluated one group reports the one it judged, so
+            that the drawn waveform is the waveform the verdict came from.
+            Read only under ``"worst_case"`` and ``"zero_variable"``.
         """
         from .._ext.pulseg import _get_tr_waveforms
 
         mode, index = self.resolve(tr)
+        if group is not None and mode != _safety.AMPLITUDE_MODES["actual"]:
+            index = int(group)
         return _safety.TRSequence.from_c(
             _get_tr_waveforms(self.collection, 0, mode, index),
             self.system,

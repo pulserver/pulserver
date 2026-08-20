@@ -1081,7 +1081,9 @@ def needs_calibration(kwargs: dict) -> bool:
     return kwargs.get("acceleration", 1) > 1
 
 
-def write_pair(main_seq: pp.Sequence, seq_filename: str, **kwargs) -> tuple[str, ...]:
+def write_pair(
+    main_seq: pp.Sequence, seq_filename: str, *, offline: bool = True, **kwargs
+) -> tuple[str, ...]:
     """Write the linked collection: calibration, then navigator, then main.
 
     Each sequence in the chain points ``NextSequence`` at the next, so the
@@ -1098,6 +1100,9 @@ def write_pair(main_seq: pp.Sequence, seq_filename: str, **kwargs) -> tuple[str,
     seq_filename : str
         Where the chain's first sequence is written; the others go beside it as
         ``<stem>_navigator.seq`` and ``<stem>_main.seq``.
+    offline : bool, optional
+        The form every file of the chain is written in, as
+        :func:`pulserver.write_sequence` reads it. Default is True.
     **kwargs
         Forwarded to :func:`calibration` and :func:`navigator`, each taking the
         subset it declares.
@@ -1146,12 +1151,17 @@ def write_pair(main_seq: pp.Sequence, seq_filename: str, **kwargs) -> tuple[str,
     for index, (seq, seq_path) in enumerate(chain):
         if index + 1 < len(chain):
             seq.set_definition(key="NextSequence", value=chain[index + 1][1].name)
-        write_sequence(seq, str(seq_path), offline=True)
+        write_sequence(seq, str(seq_path), offline=offline)
     return tuple(str(seq_path) for _, seq_path in chain)
 
 
 def _write_sms_collection(
-    main_seq: pp.Sequence, seq_filename: str, system: pp.Opts, kwargs: dict
+    main_seq: pp.Sequence,
+    seq_filename: str,
+    system: pp.Opts,
+    kwargs: dict,
+    *,
+    offline: bool = True,
 ) -> tuple[str, str]:
     """Write the multiband collection: calibration first, then imaging.
 
@@ -1171,8 +1181,8 @@ def _write_sms_collection(
         },
     )
     calib.set_definition(key="NextSequence", value=main_path.name)
-    write_sequence(calib, str(path), offline=True)
-    write_sequence(main_seq, str(main_path), offline=True)
+    write_sequence(calib, str(path), offline=offline)
+    write_sequence(main_seq, str(main_path), offline=offline)
     return str(path), str(main_path)
 
 
@@ -1390,16 +1400,15 @@ class Epi2D(SequencePlugin):
     ) -> None:
         """Write the acquisition as a linked collection: a navigator+main pair,
         or a calibration+main pair when the SMS path is on."""
-        del offline  # the chain is followed from files, so both are written
         kwargs = protocol_kwargs(system, protocol)
         seq = main(**kwargs)
         if SMS_EXCITATION and kwargs.get("n_bands", 1) > 1:
             system = pp.cap_system(system, max_grad=MAX_GRAD, max_slew=MAX_SLEW)
-            _write_sms_collection(seq, output_path, system, kwargs)
+            _write_sms_collection(seq, output_path, system, kwargs, offline=offline)
             return
         # write_pair filters to what the calibration and navigator each take;
         # pass everything so it can also read the undersampling flag.
-        write_pair(seq, output_path, system=system, **kwargs)
+        write_pair(seq, output_path, offline=offline, **kwargs)
 
 
 KERNEL_ARGUMENTS = frozenset(

@@ -324,6 +324,9 @@ namespace pulseg
         std::vector<float> slew_x;
         std::vector<float> slew_y;
         std::vector<float> slew_z;
+        /* Which canonical-TR group this window is, for a caller that wants to
+         * draw the waveform the verdict came from. */
+        int worst_group = 0;
     };
 
     // ── Block instance (cursor output) ──────────────────────────────────

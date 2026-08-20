@@ -32,8 +32,8 @@ The specification's top level stops at the segment. It says which runs of
 blocks are reusable units; it does not say what the scan is a repetition
 *of*. Pulserver adds that one structure above the segment: the **structural
 TR**, the smallest block period over which the normalized structure repeats —
-six blocks for a gradient echo, the whole echo train for an FSE, two blocks
-for a ZTE. It is derived from the block content, and written back into the
+six blocks for a gradient echo, the whole echo train for an FSE, a whole
+shell for a ZTE. It is derived from the block content, and written back into the
 `.seq` as `[DEFINITIONS] TRSize` so a consumer need not re-derive it.
 
 It earns its place by paying for two things the four structures alone leave

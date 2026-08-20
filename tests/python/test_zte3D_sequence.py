@@ -1,8 +1,8 @@
 """The 3D zero-echo-time module of the sequence zoo.
 
 What ZTE owes: the gradient at full amplitude when the pulse fires, no
-return to zero within a shell, constant-step views under per-view
-rotations, the missing centre declared, and the offset deferred -- the
+return to zero anywhere within a shell, one rotation per shot and none
+per view, the missing centre declared, and the offset deferred -- the
 scan has no un-rotated readout to bake it into.
 """
 
@@ -53,6 +53,41 @@ def test_a_view_is_two_blocks_under_one_rotation():
         acquired += read.adc is not None
     assert acquired == len(rf_blocks) - N_DUMMY
     assert acquired > 0
+
+
+def test_a_shell_is_played_under_a_single_rotation():
+    """The shot is the only rotation; the views are waveforms."""
+    seq = design()
+    turns = [
+        np.asarray(seq.get_block(index).rotation, dtype=float).reshape(-1)
+        for index in range(1, seq.num_blocks + 1)
+        if seq.get_block(index).rotation is not None
+    ]
+    assert len(turns) == seq.num_blocks
+    assert len(np.unique(np.round(turns, 9), axis=0)) == N_SHOTS
+
+
+def test_the_gradient_never_jumps_between_blocks():
+    """Including through the dummies, which hold it rather than turning it."""
+    seq = design()
+    gradients = seq.waveforms_and_times()[0]
+    edge = np.cumsum(
+        [seq.get_block(i).block_duration for i in range(1, seq.num_blocks)]
+    )
+    played = np.stack(
+        [
+            np.interp(
+                np.repeat(edge, 2) + np.tile([-1e-9, 1e-9], len(edge)),
+                np.asarray(gradients[axis][0]),
+                np.asarray(gradients[axis][1]),
+            )
+            for axis in range(3)
+        ]
+    ).reshape(3, -1, 2)
+    # A slewing edge moves between the two probes, so what a boundary may not
+    # do is move faster than the amplifier can.
+    jump = np.linalg.norm(played[:, :, 1] - played[:, :, 0], axis=0)
+    assert (jump / 2e-9).max() <= pp.cap_system(pp.Opts(), max_slew=200.0).max_slew
 
 
 def test_the_spokes_run_centre_out_and_cover_the_poles():

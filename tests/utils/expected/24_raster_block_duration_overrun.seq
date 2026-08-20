@@ -1,0 +1,20 @@
+# Pulseq sequence file
+# A 1 ms trapezoid in a 40 us block: every time aligned, the gradient still overruns.
+# Written by tests/utils/synthetic_fixtures.py
+
+[VERSION]
+major 1
+minor 5
+revision 1
+
+[DEFINITIONS]
+AdcRasterTime 1e-07
+BlockDurationRaster 1e-05
+GradientRasterTime 1e-05
+RadiofrequencyRasterTime 1e-06
+
+[BLOCKS]
+1   4   0   1   0   0  0  0
+
+[TRAP]
+ 1          0.2  20  960  20   0

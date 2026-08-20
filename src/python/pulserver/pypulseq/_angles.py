@@ -282,14 +282,17 @@ def calc_uniform_angles(n: int, *, span: float = 2.0 * np.pi) -> np.ndarray:
 def calc_projection_shell(n_views: int, n_shots: int = 1, *, scheme: str = "spiral"):
     """Cover the sphere with one base shell of spokes and a rotation per shot.
 
-    A continuous-gradient readout cannot afford a waveform per spoke, so the
-    shell is designed once and replayed rigidly rotated. Two properties make
-    that work. Consecutive views inside the shell subtend a **constant angle**,
-    which lets one designed transition carry any view onto the next under a
-    rotation of its own. And the shell runs from ``+z`` to ``-z``, visiting
-    every polar ring once, so turning it about ``z`` by ``2 * pi / n_shots``
-    puts ``n_shots`` evenly spaced spokes on each ring: full coverage, and
-    every shot congruent with every other.
+    A continuous-gradient readout writes its shell out as one waveform and
+    cannot afford one per shot, so the sphere is covered by rotating that
+    shell. The shell runs from ``+z`` to ``-z``, visiting every polar ring
+    once, so turning it about ``z`` by ``2 * pi / n_shots`` puts ``n_shots``
+    evenly spaced spokes on each ring: full coverage, and every shot congruent
+    with every other.
+
+    Consecutive views inside the shell subtend a **constant angle**, so every
+    turn between them asks the amplifier for the same slew. The repetition
+    time has to hold the widest turn, and a constant step is what stops the
+    other turns wasting it.
 
     The two poles are the exception -- they sit on the rotation axis, so all
     shots share them.
@@ -332,8 +335,8 @@ def calc_projection_shell(n_views: int, n_shots: int = 1, *, scheme: str = "spir
     >>> bool(np.allclose(directions[[0, -1]], [[0, 0, 1], [0, 0, -1]]))
     True
 
-    Consecutive views are exactly one step apart, which is the condition a
-    rotation-encoded readout depends on:
+    Consecutive views are exactly one step apart, so every turn between them
+    is the same slew:
 
     >>> steps = np.arccos(np.clip(np.sum(directions[:-1] * directions[1:], axis=1), -1, 1))
     >>> bool(np.ptp(steps) < 1e-9)

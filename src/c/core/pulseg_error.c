@@ -68,7 +68,11 @@ const char *pulseg_get_error_message(int code)
     case PULSEG_ERR_SIGNATURE_MISSING:
         return "Sequence file has no [SIGNATURE] section or stored hash";
     case PULSEG_ERR_ADC_DEFINITION_CONFLICT:
-        return "Block definition has conflicting ADC definitions across instances";
+        return "A non-acquiring block matches more than one ADC definition";
+    case PULSEG_ERR_RASTER_ALIGNMENT:
+        return "An event time does not land on the system raster it is played against";
+    case PULSEG_ERR_BLOCK_DURATION_OVERRUN:
+        return "A block event extends past the end of its block";
     case PULSEG_ERR_INDEX:
         return "Index out of range";
     case PULSEG_ERR_TOO_MANY_GRAD_SHOTS:
@@ -161,9 +165,11 @@ const char *pulseg_get_error_hint(int code)
         return "Each segment must begin and end with gradient amplitudes that can "
                "ramp to/from zero within one gradient raster.";
     case PULSEG_ERR_ADC_DEFINITION_CONFLICT:
-        return "Two instances of the same block definition use different ADC events "
-               "(different num_samples, dwell time, or delay). Ensure all instances "
-               "of a given block use the same ADC structure, or omit the ADC entirely.";
+        return "A block position holds instances that do not acquire alongside two or "
+               "more different ADC events (different num_samples, dwell time, or "
+               "delay), so which readout the non-acquiring instances stand in for is "
+               "not written anywhere. Give those instances the ADC they belong to, or "
+               "keep one ADC structure per block.";
     case PULSEG_ERR_TOO_MANY_GRAD_SHOTS:
         return "The sequence contains a waveform with more than 16 distinct waveform shapes.";
     case PULSEG_ERR_TR_PREP_TOO_LONG:
@@ -179,6 +185,16 @@ const char *pulseg_get_error_hint(int code)
         return "The gradient amplitude step between consecutive blocks exceeds "
                "the maximum allowed by the slew rate and raster time. "
                "See diagnostic message for details.";
+    case PULSEG_ERR_RASTER_ALIGNMENT:
+        return "Every delay, duration, ramp and dwell must be an integer multiple of "
+               "the scanner raster it is played against: RF and ADC start times on the "
+               "RF raster, gradient times on the gradient raster, ADC dwell on the ADC "
+               "raster, block durations on the block duration raster. "
+               "See diagnostic message for the event and the offending value.";
+    case PULSEG_ERR_BLOCK_DURATION_OVERRUN:
+        return "An RF, gradient or ADC event runs past the end of the block that "
+               "holds it. A block longer than its events is fine; a block shorter "
+               "than them is not playable. See diagnostic message for details.";
     case PULSEG_ERR_MAX_SLEW_EXCEEDED:
         return "A gradient waveform exceeds the per-axis slew rate limit "
                "(derated by 1/sqrt(3) for rotation safety). "

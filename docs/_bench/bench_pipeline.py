@@ -192,23 +192,10 @@ def _collection_args():
     )
 
 
-#: How many blocks ``check_timing`` is measured over. It is the one check
-#: whose cost is per block -- it materialises an upstream PyPulseq sequence
-#: over the window it is given -- so at protocol scale it is reported as a
-#: rate measured on a window rather than run over the whole scan.
-TIMING_WINDOW_BLOCKS = 20_000
-
-
-def _timing_over_a_window(seq):
-    """``check_timing`` on the first ``TIMING_WINDOW_BLOCKS`` blocks."""
-    import numpy as np
-
-    blocks = min(int(seq.num_blocks), TIMING_WINDOW_BLOCKS)
-    if blocks == int(seq.num_blocks):
-        elapsed, (ok, _) = timed(seq.check_timing)
-        return blocks, elapsed, ok
-    end = float(np.cumsum(seq.block_durations)[blocks - 1])
-    elapsed, (ok, _) = timed(seq.check_timing, time_range=[0.0, end])
+def _timing(seq):
+    """``check_timing`` over the whole scan."""
+    blocks = int(seq.num_blocks)
+    elapsed, (ok, _) = timed(seq.check_timing)
     return blocks, elapsed, ok
 
 
@@ -221,15 +208,14 @@ def creation(name: str, n_z: int, views: int) -> tuple[dict, object, bytes, byte
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        # ``write()`` runs both of these before deduplicating, so the
-        # amplitude/slew pass sees the library as the design left it. The
-        # continuity check is then the first caller to need the C collection
-        # and pays for building it, which is the "cold" figure; "warm" is the
-        # pass on its own.
+        # ``write()`` runs these before deduplicating, so the amplitude/slew
+        # pass sees the library as the design left it. The continuity check is
+        # then the first caller to need the C collection and pays for building
+        # it, which is the "cold" figure; "warm" is the pass on its own.
         t_limits, (limits_ok, _) = timed(seq.check_hardware_limits)
         t_continuity_cold, (continuity_ok, _) = timed(seq.check_gradient_continuity)
         t_continuity, _ = timed(seq.check_gradient_continuity)
-        checked, t_timing, timing_ok = _timing_over_a_window(seq)
+        checked, t_timing, timing_ok = _timing(seq)
 
     t_dedup, deduped = timed(seq.remove_duplicates)
     t_text, text = timed(deduped._to_text, create_signature=False)
@@ -314,11 +300,54 @@ SAFETY_SWEEP = [
 #: baseline between blips, and the echo train is a sharp spectral comb.
 SAFETY_FAMILY = "epi2D"
 
+#: The multishot sweep: one spiral GRE at growing arm counts, each built both
+#: ways. EPI has one canonical TR to bound, so it says nothing about what the
+#: bound over instances costs; a spiral says it twice over, since a rotated
+#: arm and a written-out arm are the same scan reaching the analysis as one
+#: waveform or as many.
+MULTISHOT_FAMILY = "gre_spiral2D"
+MULTISHOT_SWEEP = [
+    {"n_x": 128, "n_arms": 4, "n_dummy": 0, "tr": 40e-3},
+    {"n_x": 128, "n_arms": 16, "n_dummy": 0, "tr": 40e-3},
+    {"n_x": 128, "n_arms": 64, "n_dummy": 0, "tr": 40e-3},
+]
+
 
 def _build(name: str, **kwargs):
     import pulserver.app as app
 
     return getattr(app, name + "_sequence")(plot=False, write_seq=False, **kwargs)
+
+
+def multishot(kwargs: dict, *, rotated: bool) -> dict:
+    """What the acoustic bound costs when the arms differ between instances."""
+    seq = _build(MULTISHOT_FAMILY, use_rotation_ext=rotated, **kwargs)
+    seq.declare_tr()
+
+    t_timeline, _ = timed(seq.calculate_gradient_spectrum, plot=False, tr=None)
+    t_gate, gate = timed(
+        seq.calculate_gradient_spectrum,
+        plot=False,
+        tr="worst_case",
+        resonance_lines=True,
+        bands=BANDS,
+    )
+    t_comb, _ = timed(
+        seq.calculate_gradient_spectrum, plot=False, tr="worst_case", resonance_lines=False
+    )
+    return {
+        "kwargs": kwargs,
+        "rotated": rotated,
+        "blocks": int(seq.num_blocks),
+        "num_trs": int(seq.num_trs),
+        "tr_size": int(seq.tr_size),
+        "shapes": int(seq._native.num_shapes()),
+        "mechres_timeline_s": t_timeline,
+        "mechres_gate_s": t_gate,
+        "mechres_comb_s": t_comb,
+        "mechres_ok": bool(gate[-1].ok),
+        "peak_rss_mb": peak_rss_mb(),
+    }
 
 
 def safety(kwargs: dict) -> dict:
@@ -455,6 +484,18 @@ def report_safety(entry: dict) -> None:
     )
 
 
+def report_multishot(entry: dict) -> None:
+    arms = entry["kwargs"]["n_arms"]
+    how = "rotated" if entry["rotated"] else "written out"
+    print(
+        f"  {arms:>3d} arms {how:<12s} shapes {entry['shapes']:>4d}"
+        f"  spectrum timeline {entry['mechres_timeline_s'] * 1e3:9.1f} ms"
+        f"  gate {entry['mechres_gate_s'] * 1e3:7.1f} ms"
+        f"  comb {entry['mechres_comb_s'] * 1e3:7.1f} ms",
+        flush=True,
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--only", choices=sorted(CASES), help="run one throughput case")
@@ -501,6 +542,15 @@ def main() -> int:
             results["safety"]["sweep"].append(entry)
             report_safety(entry)
             RESULTS.write_text(json.dumps(results, indent=2))
+
+        print(f"multishot sweep ({MULTISHOT_FAMILY}, arms varied, both encodings)", flush=True)
+        results["multishot"] = {"family": MULTISHOT_FAMILY, "sweep": []}
+        for kwargs in MULTISHOT_SWEEP:
+            for rotated in (True, False):
+                entry = multishot(kwargs, rotated=rotated)
+                results["multishot"]["sweep"].append(entry)
+                report_multishot(entry)
+                RESULTS.write_text(json.dumps(results, indent=2))
 
     print(f"results -> {RESULTS}", flush=True)
     return 0

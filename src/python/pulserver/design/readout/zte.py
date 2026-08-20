@@ -5,6 +5,7 @@ from __future__ import annotations
 __all__ = ["ZteReadout"]
 
 import math
+from itertools import pairwise
 from typing import Any
 
 import numpy as np
@@ -18,31 +19,41 @@ _READOUT_GRAD_MARGIN = 0.95
 
 
 class ZteReadout(SequenceModule):
-    """One view of a continuous-gradient ZTE shell, and the step onto the next.
+    """A whole shell of a continuous-gradient ZTE, ramp up to ramp down.
 
+    Two things define the family, and the module is laid out to give both.
     The readout gradient is already at full amplitude when the pulse fires, so
-    encoding begins at the pulse and the spoke runs from the centre of k-space
-    outward. It never returns to zero: after the acquisition it slews straight
-    to the next view's direction, so a whole shell costs one ramp up and one
-    ramp down.
+    encoding begins at the pulse and every spoke runs from the centre of
+    k-space outward -- the echo time is the dead time, not a design choice.
+    And the gradient never returns to zero between spokes: after each
+    acquisition it slews straight onto the next direction, so a shell costs one
+    ramp up and one ramp down however many views it holds. A gradient that
+    only ever *turns* is what makes a well-designed ZTE quiet.
 
-    Every view is the same two blocks -- pulse and hold, then acquire and turn
-    -- under a rotation of its own, one designed transition serving the lot,
-    which needs consecutive views to be a **constant angle** apart. Leaving
-    ``directions`` unset deals a Nyquist-matched sphere into ``n_shots``
-    congruent shells that satisfy this; supplying one has it measured, and
-    refused if its step wanders::
+    The shell is therefore one continuous waveform, written out view by view::
 
         zte = design.ZteReadout(system, hard.rf, fov=0.24, matrix=192)
 
         for shot in zte.shot_rotations:
-            turns = [pp.make_rotation(Rotation.from_matrix(shot @ turn))
-                     for turn in zte.view_rotations]
-            seq.add_block(*zte.g_ramp, turns[0])
-            for view, turn in enumerate(turns):
-                last = view == len(turns) - 1
-                seq.add_block(zte.rf, *zte.g_hold, turn)
-                seq.add_block(zte.adc, *(zte.g_end if last else zte.g_read), turn)
+            turn = pp.make_rotation(Rotation.from_matrix(shot))
+            seq.add_block(*zte.g_ramp, turn)
+            for view in range(len(zte.directions)):
+                seq.add_block(zte.rf, *zte.g_hold[view], turn)
+                seq.add_block(zte.adc, *zte.g_read[view], turn)
+
+    A view is two blocks -- pulse and hold, then acquire and turn -- because a
+    block carries at most one of an RF and an ADC. It costs nothing: gradients
+    need not reach zero at a block boundary, so the plateau runs through and
+    the whole shell is one segment.
+
+    **The only rotation is the shot.** A generated shell runs pole to pole, so
+    turning it about ``z`` by ``2 * pi / n_shots`` leaves its ends where they
+    were and slides every intermediate spoke onto the azimuthal gaps the shell
+    left behind. ``n_shots`` congruent shells then cover the sphere, one
+    ``ROTATIONS`` extension each, and the waveform memory holds one shell
+    rather than the whole sphere. It is also what keeps a shell short enough
+    to fit: raising ``n_shots`` divides a fixed sphere into more, shorter
+    segments rather than acquiring more spokes.
 
     The centre of k-space is not acquired. Transmit ringdown and receiver dead
     time run into the spoke, and the samples that fall inside them are dropped
@@ -55,36 +66,35 @@ class ZteReadout(SequenceModule):
         The pulse, delayed by the transmit dead time. Non-selective, and short:
         it plays on a gradient, so its bandwidth has to cover the whole spoke.
     g_ramp : list of GradEvent
-        Zero to the first view's direction, played once before a shell.
-    g_hold : list of GradEvent
-        The plateau the pulse runs on, held through the dead-time gap.
-    g_read : list of GradEvent
-        The plateau under the acquisition, then the slew onto the next view.
-        One event per axis, so a rotation has all three to turn.
-    g_end : list of GradEvent
-        The same, slewing to zero instead, for the last view of a shell.
+        Zero to the first view's direction, played once at the head of a shell.
+        One event per axis.
+    g_hold : list of list of GradEvent
+        Per view, the plateau the pulse runs on, held through the dead-time gap.
+    g_read : list of list of GradEvent
+        Per view, the plateau under the acquisition and then the turn onto the
+        next view. The last entry slews to zero instead, closing the shell.
+    g_dummy : list of GradEvent
+        The same span as a ``g_read``, held at the first view's direction. A
+        view played on this one drives the magnetisation without moving the
+        gradient, which is what a ZTE preparation wants: the pulse train has to
+        settle, the orbit does not.
     adc : AdcEvent
         The acquisition, delayed past the gap.
     adc_labels : LabelSetEvent or list of LabelSetEvent
         One per name in ``labels``; a bare event when there is one.
-    view_rotations : numpy.ndarray
-        ``(n_views, 3, 3)``, the rotation that carries the designed view -- a
-        spoke along x, stepping into the x-y plane -- onto each view of
-        ``directions``.
     shot_rotations : numpy.ndarray
         ``(n_shots, 3, 3)``, the turn about ``z`` that puts the shell where
         each shot samples. Published only when the module generated the shell;
         a supplied ordering brings its own.
     directions : numpy.ndarray
-        ``(n_views, 3)``, the shell the rotations were solved for.
+        ``(n_views, 3)``, the spoke directions of one shell, in play order.
     step_rad : float
-        Angle between consecutive views, and so the slew each transition asks
-        for. A generated shell fixes it at ``arccos(1 - 2 / (n_views - 1))``,
-        the polar gap at the pole; there is no separate knob for it.
+        The widest angle between consecutive views. The turn between views is
+        budgeted for it, so a shell whose steps are equal wastes none of it.
     tr : float
         Pulse centre to pulse centre (s).
     view_duration : float
-        Plateau held for one view, before the transition (s).
+        Plateau held for one view, before the turn (s).
     n_samples, n_missing, n_nominal : int
         Samples acquired, lost to the gap, and the full half-spoke.
     gap : float
@@ -107,10 +117,12 @@ class ZteReadout(SequenceModule):
     matrix : int
         Isotropic matrix size.
     directions : array_like, optional
-        ``(n_views, 3)`` unit spoke directions, consecutive views a constant
-        angle apart. Supplying one silences the four generator arguments
-        below; the default asks
-        :func:`~pulserver.pypulseq.calc_projection_shell` for a shell.
+        ``(n_views, 3)`` unit spoke directions, in the order the shell walks
+        them. Supplying one silences the four generator arguments below; the
+        default asks :func:`~pulserver.pypulseq.calc_projection_shell` for a
+        shell. An ordering whose steps vary is accepted, but every turn is
+        given the widest one's slot, so the repetition pays for the worst step
+        throughout.
     n_views : int, optional
         Spokes in one shell. Defaults to a Nyquist-matched sphere,
         ``ceil(pi * matrix ** 2)``, split evenly between the shots -- so
@@ -130,8 +142,8 @@ class ZteReadout(SequenceModule):
         rasters allowed. It sets the gradient amplitude too, the spoke being
         traversed at one sample per ``delta_k``.
     tr : float, optional
-        Pulse centre to pulse centre (s). ``None`` is as short as the slew
-        between the two widest-apart views allows.
+        Pulse centre to pulse centre (s). ``None`` is as short as the widest
+        turn allows. A longer one is spent slewing more gently, not waiting.
     dead_time_s : float, optional
         Receiver dead time after the pulse. Defaults to ``system.adc_dead_time``;
         transmit ringdown is added on top either way.
@@ -142,8 +154,8 @@ class ZteReadout(SequenceModule):
     ------
     ValueError
         If a count is out of range, the pulse is too long for the dwell, the
-        gap swallows the whole spoke, the directions do not step by a constant
-        angle, or the requested TR is shorter than the transition needs.
+        gap swallows the whole spoke, two consecutive views coincide, or the
+        requested TR is shorter than the turn needs.
 
     Examples
     --------
@@ -154,34 +166,29 @@ class ZteReadout(SequenceModule):
     >>> zte = design.ZteReadout(
     ...     system, hard.rf, fov=0.24, matrix=96, n_views=64, n_shots=256
     ... )
-    >>> zte.view_rotations.shape, zte.shot_rotations.shape
-    ((64, 3, 3), (256, 3, 3))
+    >>> len(zte.g_read), zte.shot_rotations.shape
+    (64, (256, 3, 3))
 
     The samples the dead time costs are dropped, not compressed:
 
     >>> zte.n_samples + zte.n_missing == zte.n_nominal
     True
 
-    The gradient is already on when the pulse is played, so every view starts
-    at the centre and runs outward, and the views cover a sphere:
+    The module is the shell, so what it plays is the koosh ball one shot
+    acquires -- every spoke leaving the centre, their ends walking pole to
+    pole:
 
     .. plot::
 
        import pulserver.design as design
        import pulserver.pypulseq as pp
-       from _figures import trajectory
 
        system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
        hard = design.NonSelectiveExcitation(system, 4.0, duration_s=10e-6)
        zte = design.ZteReadout(
            system, hard.rf, fov=0.24, matrix=48, n_views=24, n_shots=1
        )
-       trajectory(
-           zte,
-           angles=zte.view_rotations,
-           label="acquisition",
-           title="ZteReadout, 24 views of one shot",
-       )
+       zte.plot_kspace(plot_now=False)
     """
 
     def init_module(
@@ -225,7 +232,6 @@ class ZteReadout(SequenceModule):
                 n_views, n_shots, scheme=scheme
             )
         directions = _unit(directions)
-        view_rotations, step_rad = _view_rotations(directions)
         dead_time_s = (
             system.adc_dead_time if dead_time_s is None else float(dead_time_s)
         )
@@ -291,53 +297,75 @@ class ZteReadout(SequenceModule):
             adc_delay + n_samples * dwell, system.grad_raster_time
         )
 
-        # One transition serves every view, so it is designed for the slew they
-        # all ask for -- the step being constant -- and the ramp to zero, which
-        # is the longest of the lot, closes the shell.
-        start = amplitude * np.array([1.0, 0.0, 0.0])
-        end = amplitude * np.array([np.cos(step_rad), np.sin(step_rad), 0.0])
-        step_span = _slew_span(system, end - start)
-        ramp_span = _slew_span(system, start)
+        # Where the gradient sits under each view, and the chord it crosses to
+        # reach the next one. Every turn gets the same slot -- the repetition
+        # is what the magnetisation sees, so it has to be one number -- and the
+        # slot is the widest chord's. Closing the shell is the long one: from
+        # full amplitude down to zero.
+        vertices = amplitude * directions
+        chords = np.linalg.norm(np.diff(vertices, axis=0), axis=1)
+        if not np.all(chords > 0.0):
+            raise ValueError("consecutive views must not coincide")
+        widest_turn = _slew_span(system, float(chords.max()))
+        ramp_span = _slew_span(system, amplitude)
 
         tr_min = pp.ceil_to_raster(
-            hold_span + read_span + max(step_span, ramp_span),
-            system.block_duration_raster,
+            hold_span + read_span + widest_turn, system.block_duration_raster
         )
-        tr_delay = solve_delay(tr, tr_min, "TR", system)
-        tail = tr_min + tr_delay - hold_span - read_span
+        view_span = tr_min + solve_delay(tr, tr_min, "TR", system)
+        # Whatever the repetition leaves over is spent turning more slowly, not
+        # sitting still: a gentler slew is a quieter one, and nothing is
+        # encoded between the acquisitions.
+        turn_span = view_span - hold_span - read_span
+        close_span = max(ramp_span, turn_span)
 
-        g_ramp = _gradients(system, [0.0, ramp_span], [np.zeros(3), start])
-        g_hold = _gradients(system, [0.0, hold_span], [start, start])
-        times = [0.0, read_span, read_span + step_span]
-        amplitudes = [start, start, end]
-        if tail > step_span + 1e-12:
-            times.append(read_span + tail)
-            amplitudes.append(end)
-        g_read = _gradients(system, times, amplitudes)
-        g_end = _gradients(
-            system, [0.0, read_span, read_span + ramp_span], [start, start, np.zeros(3)]
+        g_ramp = _gradients(system, [0.0, ramp_span], [np.zeros(3), vertices[0]])
+        g_hold = [
+            _gradients(system, [0.0, hold_span], [vertex, vertex])
+            for vertex in vertices
+        ]
+        g_read = [
+            _gradients(
+                system,
+                [0.0, read_span, read_span + turn_span],
+                [start, start, end],
+            )
+            for start, end in pairwise(vertices)
+        ]
+        g_read.append(
+            _gradients(
+                system,
+                [0.0, read_span, read_span + close_span],
+                [vertices[-1], vertices[-1], np.zeros(3)],
+            )
+        )
+        g_dummy = _gradients(
+            system, [0.0, read_span + turn_span], [vertices[0], vertices[0]]
         )
 
         adc_labels = [
             pp.make_label(type="SET", label=name, value=0) for name in labels or ()
         ]
 
-        # Two views: the shortest thing that starts at rest, plays a transition
-        # and comes back to rest, so the module traces a real pair of spokes.
         self.seq = pp.Sequence(system)
         self.seq.add_block(*g_ramp)
-        self.seq.add_block(rf, *g_hold)
-        self.seq.add_block(adc, *g_read, *adc_labels)
-        self.seq.add_block(rf, *g_hold, _turn(step_rad))
-        self.seq.add_block(adc, *g_end, _turn(step_rad), *adc_labels)
+        for view in range(len(directions)):
+            self.seq.add_block(rf, *g_hold[view])
+            self.seq.add_block(adc, *g_read[view], *adc_labels)
 
-        self.register(view_rotations=view_rotations, directions=directions)
+        self.register(
+            g_hold=g_hold, g_read=g_read, g_dummy=g_dummy, directions=directions
+        )
         if shot_rotations is not None:
             self.register(shot_rotations=shot_rotations)
         self.center = ramp_span + rf_center
-        self.tr = hold_span + read_span + tail
+        self.tr = view_span
         self.view_duration = hold_span + read_span
-        self.step_rad = step_rad
+        self.step_rad = float(
+            np.arccos(
+                np.clip(np.sum(directions[:-1] * directions[1:], axis=1), -1, 1)
+            ).max()
+        )
         self.n_samples = n_samples
         self.n_missing = n_missing
         self.n_nominal = n_nominal
@@ -365,87 +393,11 @@ def _unit(directions: Any) -> np.ndarray:
     return unit
 
 
-def _view_rotations(directions: np.ndarray, tolerance: float = 1e-8):
-    """One rotation per view, carrying the designed transition onto that view's.
-
-    A view is played as view 0's waveform turned, so what is needed is a
-    rotation taking the *pair* ``(d0, d1)`` onto ``(dk, dk+1)``. One exists
-    exactly when the two pairs subtend the same angle -- when consecutive views
-    are a constant angle apart. That is far weaker than a circle: any
-    constant-step walk on the sphere qualifies. The last view has no successor
-    and only slews to zero, so any rotation placing ``d0`` on it will do.
-    """
-    from scipy.spatial.transform import Rotation
-
-    turning = np.array(directions, dtype=float)
-    cosines = np.clip(np.sum(turning[:-1] * turning[1:], axis=1), -1.0, 1.0)
-    steps = np.arccos(cosines)
-    if float(np.ptp(steps)) > tolerance:
-        raise ValueError(
-            f"consecutive views step by {np.degrees(steps.min()):.3f} to "
-            f"{np.degrees(steps.max()):.3f} degrees, so no single designed transition can "
-            f"carry one view onto the next; use calc_projection_shell, whose orderings step "
-            f"by a constant angle"
-        )
-    if np.any(np.abs(cosines) >= 1.0 - 1e-12):
-        raise ValueError("consecutive views must be neither coincident nor antipodal")
-
-    # The reference is the frame the module designs in -- a view along x and a
-    # step of the same angle in the x-y plane -- not the first pair of the
-    # shell, because it is that designed waveform the rotations have to carry.
-    step = float(steps[0])
-    designed = _pair_frame(
-        np.array([1.0, 0.0, 0.0]), np.array([np.cos(step), np.sin(step), 0.0])
-    ).T
-    rotations = [
-        _pair_frame(turning[index], turning[index + 1]) @ designed
-        for index in range(len(turning) - 1)
-    ]
-    rotations.append(_minimal_turn(np.array([1.0, 0.0, 0.0]), turning[-1]).as_matrix())
-    matrices = np.asarray(
-        [Rotation.from_matrix(turn).as_matrix() for turn in rotations]
-    )
-    matrices.setflags(write=False)
-    return matrices, step
-
-
-def _pair_frame(first: np.ndarray, second: np.ndarray) -> np.ndarray:
-    """Orthonormal frame of an ordered pair of distinct unit directions."""
-    normal = np.cross(first, second)
-    normal = normal / np.linalg.norm(normal)
-    return np.column_stack((first, np.cross(normal, first), normal))
-
-
-def _minimal_turn(start: np.ndarray, end: np.ndarray):
-    """Smallest rotation carrying unit vector ``start`` onto unit vector ``end``."""
-    from scipy.spatial.transform import Rotation
-
-    cross = np.cross(start, end)
-    sine = float(np.linalg.norm(cross))
-    cosine = float(np.dot(start, end))
-    if sine <= 1e-12:
-        if cosine > 0.0:
-            return Rotation.identity()
-        basis = np.eye(3)[int(np.argmin(np.abs(start)))]
-        axis = np.cross(start, basis)
-        return Rotation.from_rotvec(np.pi * axis / np.linalg.norm(axis))
-    return Rotation.from_rotvec(np.arctan2(sine, cosine) * cross / sine)
-
-
-def _turn(step_rad: float):
-    """The rotation event that carries the designed view onto the next one."""
-    from scipy.spatial.transform import Rotation
-
-    return pp.make_rotation(Rotation.from_euler("z", step_rad))
-
-
-def _slew_span(system: pp.Opts, delta: np.ndarray) -> float:
+def _slew_span(system: pp.Opts, delta: float) -> float:
     """Time to change the gradient vector by ``delta`` within the slew limit."""
     return max(
         system.grad_raster_time,
-        pp.ceil_to_raster(
-            float(np.linalg.norm(delta)) / system.max_slew, system.grad_raster_time
-        ),
+        pp.ceil_to_raster(delta / system.max_slew, system.grad_raster_time),
     )
 
 

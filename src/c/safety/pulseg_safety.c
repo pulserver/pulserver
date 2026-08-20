@@ -28,12 +28,11 @@
 /*  Canonical-TR window selection                                     */
 /* ================================================================== */
 
-/* Helper: select the canonical TR window for a given canonical_tr_idx */
+/* Helper: select the block window of one TR instance. */
 static void select_canonical_tr_window_idx(
     const struct pulseg_sequence_descriptor *desc,
     int *start_block,
     int *block_count,
-    int *amplitude_mode,
     int *num_instances,
     float *tr_duration_us,
     int canonical_tr_idx)
@@ -44,7 +43,6 @@ static void select_canonical_tr_window_idx(
     /* canonical_tr_idx selects a TR; averages are accounted for here. */
     *start_block = canonical_tr_idx * trd->tr_size;
     *block_count = trd->tr_size;
-    *amplitude_mode = PULSEG_AMP_MAX_POS;
     *num_instances = trd->num_trs * num_avgs;
     *tr_duration_us = trd->tr_duration_us;
 }
@@ -223,8 +221,9 @@ typedef struct
 {
     int def_id;                              /**< gradient definition id                */
     int def_index;                           /**< index into grad_definitions[]         */
+    int w_key;                               /**< base-waveform identity, for the W(f) caches */
     double start_time_us;                    /**< event start time within the TR (us)   */
-    float amplitude;                         /**< worst-case positional amplitude (Hz/m), signed */
+    float amplitude;                         /**< amplitude of this occurrence (Hz/m), signed */
     int pwl_num_vertices;                    /**< >0 -> use piecewise-linear W(f)       */
     float pwl_times_us[SA_MAX_PWL_VERTICES]; /**< vertex times (us from event start) */
     float pwl_values[SA_MAX_PWL_VERTICES];   /**< vertex amplitudes (normalised)     */
@@ -258,19 +257,24 @@ typedef struct
 /**
  * W_k(f) memoization (docs/explanations/mechanical_resonance_safety.md, "Stage 4"): caches
  * sa_eval_event_transform()'s result -- the base-waveform Fourier response,
- * a pure function of (definition shape, frequency) -- keyed by def_id, for
+ * a pure function of (base waveform, frequency) -- keyed by w_key, for
  * the duration of ONE sa_eval_axis_spectrum() call (which is itself already
- * scoped to a single fixed frequency, so def_id alone is a sufficient key;
+ * scoped to a single fixed frequency, so w_key alone is a sufficient key;
  * no separate frequency field needed). Multiple sa_event occurrences that
- * share a def_id (the common case: a handful of unique gradient shapes
+ * share a waveform (the common case: a handful of unique gradient shapes
  * reused across many materialized occurrences) hit this cache instead of
  * repeating the O(vertices) sa_eval_pwl_transform integral. NULL disables
  * caching (used at call sites outside the hot per-candidate-frequency
  * loop, where memoizing a single lookup isn't worth the bookkeeping).
+ *
+ * The key is the waveform, not the definition: a definition is deduplicated
+ * on its timing and sample count, so a materialised multishot readout plays
+ * many distinct shapes under one definition id, and keying on the definition
+ * would hand every arm the first arm's transform.
  */
 typedef struct
 {
-    int def_id;
+    int w_key;
     float re, im;
 } sa_transform_cache_entry;
 
@@ -281,21 +285,21 @@ typedef struct
     int capacity;
 } sa_transform_cache;
 
-/** Linear scan: def_id counts per axis are small (a handful of unique
+/** Linear scan: waveform counts per axis are small (a handful of unique
  *  gradient shapes even for a long/complex hyper-TR, per the design doc's
  *  own cost model), so a hash table would be overhead without benefit. */
 static int sa_transform_cache_lookup(
     const sa_transform_cache *cache,
     float *out_re,
     float *out_im,
-    int def_id)
+    int w_key)
 {
     int i;
     if (!cache)
         return 0;
     for (i = 0; i < cache->count; ++i)
     {
-        if (cache->entries[i].def_id == def_id)
+        if (cache->entries[i].w_key == w_key)
         {
             *out_re = cache->entries[i].re;
             *out_im = cache->entries[i].im;
@@ -305,45 +309,111 @@ static int sa_transform_cache_lookup(
     return 0;
 }
 
-static void sa_transform_cache_insert(sa_transform_cache *cache, int def_id, float re, float im)
+static void sa_transform_cache_insert(sa_transform_cache *cache, int w_key, float re, float im)
 {
     if (!cache || cache->count >= cache->capacity)
         return; /* cache disabled or full: caller just recomputes next time */
-    cache->entries[cache->count].def_id = def_id;
+    cache->entries[cache->count].w_key = w_key;
     cache->entries[cache->count].re = re;
     cache->entries[cache->count].im = im;
     cache->count++;
 }
 
+/**
+ * One block position whose gradients are not the same in every TR instance.
+ *
+ * The instances of a canonical TR share a block structure and a timing, but
+ * a position may play a different amplitude (a phase encode), a different
+ * definition (a materialised spiral arm) or a different rotation (an arm
+ * turned by a rotation extension) in each of them. Such a position cannot
+ * join the coherent sum, because there is no single complex contribution it
+ * makes; it is bounded instead by the largest magnitude any instance can put
+ * there, which is what makes the canonical TR's answer an upper bound for
+ * the whole scan rather than one instance's answer.
+ *
+ * @c shapes holds one event per distinct waveform the position takes on each
+ * axis, so the base transform W(f) is evaluated once per waveform however
+ * many instances reuse it. @c tuple_* then holds the (waveform, amplitude,
+ * rotation) combinations that really occur, and the bound is the largest
+ * magnitude among them -- exact for the position, whatever the rotation
+ * mixes. A position with more combinations than are worth enumerating falls
+ * back to its largest amplitude per axis, combined through @c weight; for a
+ * position playing one waveform per axis, which is what a phase encode is,
+ * the two are the same number.
+ */
+typedef struct
+{
+    sa_axis_events shapes[3]; /**< distinct definitions, unit amplitude, per axis */
+    int num_tuples;           /**< distinct instance combinations at this position */
+    int *tuple_slot;          /**< [num_tuples*3] index into shapes[axis], -1 = none */
+    float *tuple_amp;         /**< [num_tuples*3] the amplitude that instance plays  */
+    int *tuple_rot;           /**< [num_tuples] rotation matrix index, -1 = none     */
+    float weight[9];          /**< num_tuples == 0: |R| bounded over its rotations   */
+    float *w_re[3];           /**< [shapes[ax].num_events] scratch, one frequency    */
+    float *w_im[3];
+} sa_varying_position;
+
 /** Structural analysis: event lists for all three axes. */
 typedef struct
 {
-    sa_axis_events axes[3]; /**< 0=gx, 1=gy, 2=gz */
+    sa_axis_events axes[3];       /**< 0=gx, 1=gy, 2=gz; summed coherently */
+    sa_varying_position *varying; /**< [num_varying] positions summed as magnitudes */
+    int num_varying;
 } sa_structural_events;
+
+static void sa_free_axis_events(sa_axis_events *ae)
+{
+    int k;
+    if (!ae)
+        return;
+    if (ae->events)
+    {
+        for (k = 0; k < ae->num_events; ++k)
+        {
+            if (ae->events[k].arb_samples)
+                PULSEG_FREE(ae->events[k].arb_samples);
+            if (ae->events[k].arb_times_us)
+                PULSEG_FREE(ae->events[k].arb_times_us);
+            if (ae->events[k].train_amps)
+                PULSEG_FREE(ae->events[k].train_amps);
+        }
+        PULSEG_FREE(ae->events);
+    }
+    ae->events = NULL;
+    ae->num_events = 0;
+}
 
 static void sa_free_structural_events(sa_structural_events *se)
 {
-    int ax, k;
+    int ax, v;
     if (!se)
         return;
     for (ax = 0; ax < 3; ++ax)
+        sa_free_axis_events(&se->axes[ax]);
+    for (v = 0; v < se->num_varying; ++v)
     {
-        if (se->axes[ax].events)
+        sa_varying_position *vp = &se->varying[v];
+        for (ax = 0; ax < 3; ++ax)
         {
-            for (k = 0; k < se->axes[ax].num_events; ++k)
-            {
-                if (se->axes[ax].events[k].arb_samples)
-                    PULSEG_FREE(se->axes[ax].events[k].arb_samples);
-                if (se->axes[ax].events[k].arb_times_us)
-                    PULSEG_FREE(se->axes[ax].events[k].arb_times_us);
-                if (se->axes[ax].events[k].train_amps)
-                    PULSEG_FREE(se->axes[ax].events[k].train_amps);
-            }
-            PULSEG_FREE(se->axes[ax].events);
+            sa_free_axis_events(&vp->shapes[ax]);
+            if (vp->w_re[ax])
+                PULSEG_FREE(vp->w_re[ax]);
+            if (vp->w_im[ax])
+                PULSEG_FREE(vp->w_im[ax]);
+            vp->w_re[ax] = NULL;
+            vp->w_im[ax] = NULL;
         }
-        se->axes[ax].events = NULL;
-        se->axes[ax].num_events = 0;
+        if (vp->tuple_slot)
+            PULSEG_FREE(vp->tuple_slot);
+        if (vp->tuple_amp)
+            PULSEG_FREE(vp->tuple_amp);
+        if (vp->tuple_rot)
+            PULSEG_FREE(vp->tuple_rot);
     }
+    if (se->varying)
+        PULSEG_FREE(se->varying);
+    se->varying = NULL;
+    se->num_varying = 0;
 }
 
 /* ================================================================== */
@@ -351,9 +421,10 @@ static void sa_free_structural_events(sa_structural_events *se)
 /* ================================================================== */
 
 /**
- * Extract grad-def occurrences for one axis within the canonical TR.
- * Collects (def_id, def_index, start_time_us, amplitude) for each block
- * that has a gradient event on the given axis.
+ * Extract grad-def occurrences for one physical axis within the canonical TR.
+ * Collects (def_id, def_index, shape_id, start_time_us, amplitude) for each
+ * block that drives the given axis, a rotated block through every logical
+ * axis its rotation puts there.
  * @param axis  0=gx, 1=gy, 2=gz
  * Returns number of occurrences, or -1 on allocation failure.
  * Caller must free *out_events.
@@ -362,6 +433,7 @@ typedef struct
 {
     int def_id;
     int def_index;
+    int shape_id; /**< pulseq shape this occurrence plays; 0 for a trapezoid */
     double start_time_us;
     float amplitude;
 } sa_raw_occurrence;
@@ -385,6 +457,7 @@ static int sa_extract_raw_occurrences(
     sa_raw_occurrence *occ;
 
     cap = (block_count > 0) ? block_count : 16;
+
     occ = (sa_raw_occurrence *)PULSEG_ALLOC((size_t)cap * sizeof(sa_raw_occurrence));
     if (!occ)
         return -1;
@@ -395,28 +468,32 @@ static int sa_extract_raw_occurrences(
     {
         const struct pulseg_block_table_element *bte = &desc->block_table[start_block + i];
         const struct pulseg_base_block *bdef = &desc->base_blocks[bte->id];
-        int grad_table_idx;
+        const float *rotation;
+        int raw_ids[3];
+        int source;
         double blk_dur;
 
-        switch (axis)
-        {
-        case 0:
-            grad_table_idx = bte->gx_id;
-            break;
-        case 1:
-            grad_table_idx = bte->gy_id;
-            break;
-        case 2:
-            grad_table_idx = bte->gz_id;
-            break;
-        default:
-            grad_table_idx = -1;
-            break;
-        }
+        raw_ids[0] = bte->gx_id;
+        raw_ids[1] = bte->gy_id;
+        raw_ids[2] = bte->gz_id;
 
-        if (grad_table_idx >= 0)
+        /* A rotated block plays a mixture of its logical axes on this
+         * physical one, so each of them contributes an occurrence here,
+         * scaled by the matrix entry that lands it on this axis. */
+        rotation = NULL;
+        if (bte->rotation_id >= 0 && bte->rotation_id < desc->num_rotations && !bte->norot_flag)
+            rotation = desc->rotation_matrices[bte->rotation_id];
+
+        for (source = 0; source < 3; ++source)
         {
-            const struct pulseg_grad_table_element *gte = &desc->grad_table[grad_table_idx];
+            const struct pulseg_grad_table_element *gte;
+            float weight =
+                rotation ? rotation[axis * 3 + source] : ((axis == source) ? 1.0f : 0.0f);
+
+            if (weight == 0.0f || raw_ids[source] < 0 || raw_ids[source] >= desc->grad_table_size)
+                continue;
+
+            gte = &desc->grad_table[raw_ids[source]];
             if (n >= cap)
             {
                 sa_raw_occurrence *tmp;
@@ -433,8 +510,9 @@ static int sa_extract_raw_occurrences(
             }
             occ[n].def_id = gte->id;
             occ[n].def_index = gte->id;
+            occ[n].shape_id = gte->shape_id;
             occ[n].start_time_us = time_us;
-            occ[n].amplitude = gte->amplitude;
+            occ[n].amplitude = weight * gte->amplitude;
             ++n;
         }
 
@@ -456,9 +534,27 @@ static int sa_compare_int(const void *a, const void *b)
 }
 
 /**
+ * The base waveform an occurrence plays, as one integer.
+ *
+ * A trapezoid is described by its corner times, so its definition is its
+ * waveform. An arbitrary gradient's waveform is the shape the occurrence
+ * carries: definitions deduplicate on timing and sample count, so a
+ * materialised multishot readout plays as many shapes as it has shots under
+ * a single definition id.
+ */
+static int sa_waveform_key(
+    const struct pulseg_sequence_descriptor *desc,
+    const sa_raw_occurrence *occ)
+{
+    if (occ->shape_id > 0)
+        return desc->num_unique_grads + occ->shape_id;
+    return occ->def_index;
+}
+
+/**
  * Build event list for one axis from raw occurrences.
  *
- * For each unique def_id:
+ * For each unique base waveform:
  *   - Trapezoid: one event per occurrence, PWL from rise/flat/fall.
  *   - Arbitrary with few samples: one event per occurrence, PWL from vertices.
  *   - Arbitrary with many samples: one event per occurrence carrying the raw
@@ -471,7 +567,7 @@ static int sa_build_axis_events(
     int num_occ,
     const struct pulseg_sequence_descriptor *desc)
 {
-    int i, j, n_events, cap, did, idx, s_idx, nv;
+    int i, j, n_events, cap, wid, idx, s_idx, nv, occ_shape_id;
     int *unique_ids;
     int num_unique;
     float raster;
@@ -483,12 +579,12 @@ static int sa_build_axis_events(
 
     raster = desc->grad_raster_us;
 
-    /* Collect unique def_ids */
+    /* Collect unique base waveforms */
     unique_ids = (int *)PULSEG_ALLOC((size_t)num_occ * sizeof(int));
     if (!unique_ids)
         return PULSEG_ERR_ALLOC_FAILED;
     for (i = 0; i < num_occ; ++i)
-        unique_ids[i] = occ[i].def_id;
+        unique_ids[i] = sa_waveform_key(desc, &occ[i]);
     qsort(unique_ids, (size_t)num_occ, sizeof(int), sa_compare_int);
     num_unique = 1;
     for (i = 1; i < num_occ; ++i)
@@ -520,27 +616,29 @@ static int sa_build_axis_events(
         int shared_arb_n;
         int use_arb;
 
-        did = unique_ids[idx];
+        wid = unique_ids[idx];
         gdef = NULL;
+        occ_shape_id = 0;
         pwl_nv = 0;
         shared_arb_samples = NULL;
         shared_arb_times = NULL;
         shared_arb_n = 0;
         use_arb = 0;
 
-        /* Find first occurrence of this def to get gdef */
+        /* Find the first occurrence of this waveform to get its definition */
         for (j = 0; j < num_occ; ++j)
         {
-            if (occ[j].def_id == did)
+            if (sa_waveform_key(desc, &occ[j]) == wid)
             {
                 gdef = &desc->grad_definitions[occ[j].def_index];
+                occ_shape_id = occ[j].shape_id;
                 break;
             }
         }
         if (!gdef)
             continue;
 
-        /* --- Compute shared PWL parameters for this def --- */
+        /* --- Compute the shared PWL parameters for this waveform --- */
 
         if (gdef->type == 0)
         {
@@ -560,10 +658,10 @@ static int sa_build_axis_events(
         }
         else if (gdef->type == 1)
         {
-            /* Arbitrary waveform.  Of the shapes this definition plays,
-             * take the one selected for exactly this analysis: the largest
-             * second moment of S(f), i.e. the most slew energy. */
-            int shape_id = gdef->spectral.shape_id;
+            /* Arbitrary waveform: the shape these occurrences play. The
+             * definition's own representative is the fallback for an
+             * occurrence that carries no shape of its own. */
+            int shape_id = (occ_shape_id > 0) ? occ_shape_id : gdef->spectral.shape_id;
             int time_shape_id = gdef->unused_or_time_shape_id;
 
             if (shape_id > 0 && shape_id <= desc->num_shapes)
@@ -667,7 +765,7 @@ static int sa_build_axis_events(
         /* --- Emit events for each occurrence of this def --- */
         for (j = 0; j < num_occ; ++j)
         {
-            if (occ[j].def_id != did)
+            if (sa_waveform_key(desc, &occ[j]) != wid)
                 continue;
 
             {
@@ -692,8 +790,9 @@ static int sa_build_axis_events(
                     PULSEG_FREE(ae->events);
                     ae->events = tmp;
                 }
-                ae->events[n_events].def_id = did;
+                ae->events[n_events].def_id = occ[j].def_id;
                 ae->events[n_events].def_index = occ[j].def_index;
+                ae->events[n_events].w_key = wid;
                 ae->events[n_events].start_time_us = occ[j].start_time_us + (double)gdef->delay;
                 ae->events[n_events].amplitude = occ[j].amplitude;
                 ae->events[n_events].train_len = 1;
@@ -744,7 +843,7 @@ static int sa_build_axis_events(
                 n_events++;
             }
         }
-        /* Free shared raw-sample template for this def_id */
+        /* Free the shared raw-sample template for this waveform */
         if (shared_arb_samples)
         {
             PULSEG_FREE(shared_arb_samples);
@@ -769,7 +868,7 @@ static int sa_build_axis_events(
 /**
  * May occurrences @p a and @p b belong to the same compressed train?
  *
- * Same definition (hence same base waveform and same W_d(f)) and same outer
+ * Same base waveform (hence the same W_d(f)) and same outer
  * repetition tagging.  Including the (num_reps, rep_period_us) pair in the
  * key is what stops a train from straddling the prep / imaging / cooldown
  * regions that the NEX tagging distinguishes: events in different regions
@@ -777,7 +876,7 @@ static int sa_build_axis_events(
  */
 static int sa_train_compatible(const sa_event *a, const sa_event *b)
 {
-    return a->def_id == b->def_id && a->def_index == b->def_index && a->num_reps == b->num_reps &&
+    return a->w_key == b->w_key && a->def_index == b->def_index && a->num_reps == b->num_reps &&
         a->rep_period_us == b->rep_period_us && a->train_len == 1 && b->train_len == 1;
 }
 
@@ -1053,6 +1152,613 @@ static int sa_build_structural_events(
         }
     }
     return PULSEG_SUCCESS;
+}
+
+/* ================================================================== */
+/*  Structural acoustic analysis — the bound over TR instances        */
+/* ================================================================== */
+
+/** Distinct (waveform, amplitude, rotation) combinations one position may
+ *  take before it is bounded axis by axis rather than combination by
+ *  combination. A multishot readout has as many combinations as it has
+ *  shots. A phase encode has as many as it has steps, and for it the two
+ *  bounds are the same number, since one waveform's largest amplitude is
+ *  its largest contribution. */
+#define SA_MAX_POSITION_TUPLES 256
+
+/** Distinct rotations one position may take before every matrix entry is
+ *  bounded by 1, which holds for any orthonormal row. */
+#define SA_MAX_POSITION_ROTATIONS 8
+
+/** One base waveform a block position plays on one axis. */
+typedef struct
+{
+    int def_index;
+    int shape_id;
+    float amp_max;   /**< largest |amplitude| any instance plays here */
+    float amp_first; /**< the signed amplitude the first instance plays */
+    int amp_varies;
+} sa_position_waveform;
+
+/** What one block position does across every instance of the canonical TR. */
+typedef struct
+{
+    sa_position_waveform *waveforms[3];
+    int num_waveforms[3];
+    int cap_waveforms[3];
+
+    int rot_ids[SA_MAX_POSITION_ROTATIONS]; /**< -1 = no rotation applied */
+    int num_rot;
+    int rot_overflow;
+
+    int num_tuples;
+    int cap_tuples;
+    int tuple_overflow;
+    int *tuple_slot;  /**< [cap_tuples*3] index into waveforms[axis], -1 = none */
+    float *tuple_amp; /**< [cap_tuples*3] */
+    int *tuple_rot;   /**< [cap_tuples] */
+} sa_position_variants;
+
+static void sa_free_position_variants(sa_position_variants *pv, int count)
+{
+    int i, ax;
+    if (!pv)
+        return;
+    for (i = 0; i < count; ++i)
+    {
+        for (ax = 0; ax < 3; ++ax)
+            if (pv[i].waveforms[ax])
+                PULSEG_FREE(pv[i].waveforms[ax]);
+        if (pv[i].tuple_slot)
+            PULSEG_FREE(pv[i].tuple_slot);
+        if (pv[i].tuple_amp)
+            PULSEG_FREE(pv[i].tuple_amp);
+        if (pv[i].tuple_rot)
+            PULSEG_FREE(pv[i].tuple_rot);
+    }
+    PULSEG_FREE(pv);
+}
+
+/** Record one instance's waveform on one axis; returns its slot, or -1. */
+static int sa_variants_add_waveform(
+    sa_position_variants *pv,
+    int axis,
+    int def_index,
+    int shape_id,
+    float amplitude)
+{
+    int i;
+    float mag = (amplitude < 0.0f) ? -amplitude : amplitude;
+
+    for (i = 0; i < pv->num_waveforms[axis]; ++i)
+    {
+        sa_position_waveform *w = &pv->waveforms[axis][i];
+        if (w->def_index == def_index && w->shape_id == shape_id)
+        {
+            if (mag > w->amp_max)
+                w->amp_max = mag;
+            if (amplitude != w->amp_first)
+                w->amp_varies = 1;
+            return i;
+        }
+    }
+
+    if (pv->num_waveforms[axis] >= pv->cap_waveforms[axis])
+    {
+        int cap = (pv->cap_waveforms[axis] > 0) ? pv->cap_waveforms[axis] * 2 : 4;
+        sa_position_waveform *grown =
+            (sa_position_waveform *)PULSEG_ALLOC((size_t)cap * sizeof(sa_position_waveform));
+        if (!grown)
+            return -1;
+        if (pv->waveforms[axis])
+        {
+            memcpy(
+                grown,
+                pv->waveforms[axis],
+                (size_t)pv->num_waveforms[axis] * sizeof(sa_position_waveform));
+            PULSEG_FREE(pv->waveforms[axis]);
+        }
+        pv->waveforms[axis] = grown;
+        pv->cap_waveforms[axis] = cap;
+    }
+
+    i = pv->num_waveforms[axis]++;
+    pv->waveforms[axis][i].def_index = def_index;
+    pv->waveforms[axis][i].shape_id = shape_id;
+    pv->waveforms[axis][i].amp_max = mag;
+    pv->waveforms[axis][i].amp_first = amplitude;
+    pv->waveforms[axis][i].amp_varies = 0;
+    return i;
+}
+
+static void sa_variants_add_rotation(sa_position_variants *pv, int rot_id)
+{
+    int i;
+    for (i = 0; i < pv->num_rot; ++i)
+        if (pv->rot_ids[i] == rot_id)
+            return;
+    if (pv->num_rot >= SA_MAX_POSITION_ROTATIONS)
+    {
+        pv->rot_overflow = 1;
+        return;
+    }
+    pv->rot_ids[pv->num_rot++] = rot_id;
+}
+
+/** Record one instance's (waveform, amplitude, rotation) combination.
+ *  Returns 0 on allocation failure; the overflow past the cap is not one. */
+static int sa_variants_add_tuple(
+    sa_position_variants *pv,
+    const int *slot,
+    const float *amp,
+    int rot_id)
+{
+    int i, at;
+
+    if (pv->tuple_overflow)
+        return 1;
+
+    for (i = 0; i < pv->num_tuples; ++i)
+    {
+        if (pv->tuple_rot[i] != rot_id)
+            continue;
+        if (pv->tuple_slot[i * 3 + 0] == slot[0] && pv->tuple_slot[i * 3 + 1] == slot[1] &&
+            pv->tuple_slot[i * 3 + 2] == slot[2] && pv->tuple_amp[i * 3 + 0] == amp[0] &&
+            pv->tuple_amp[i * 3 + 1] == amp[1] && pv->tuple_amp[i * 3 + 2] == amp[2])
+            return 1;
+    }
+
+    if (pv->num_tuples >= SA_MAX_POSITION_TUPLES)
+    {
+        pv->tuple_overflow = 1;
+        return 1;
+    }
+
+    if (pv->num_tuples >= pv->cap_tuples)
+    {
+        int cap = (pv->cap_tuples > 0) ? pv->cap_tuples * 2 : 4;
+        int *slots = (int *)PULSEG_ALLOC((size_t)cap * 3 * sizeof(int));
+        float *amps = (float *)PULSEG_ALLOC((size_t)cap * 3 * sizeof(float));
+        int *rots = (int *)PULSEG_ALLOC((size_t)cap * sizeof(int));
+        if (!slots || !amps || !rots)
+        {
+            if (slots)
+                PULSEG_FREE(slots);
+            if (amps)
+                PULSEG_FREE(amps);
+            if (rots)
+                PULSEG_FREE(rots);
+            return 0;
+        }
+        if (pv->num_tuples > 0)
+        {
+            memcpy(slots, pv->tuple_slot, (size_t)pv->num_tuples * 3 * sizeof(int));
+            memcpy(amps, pv->tuple_amp, (size_t)pv->num_tuples * 3 * sizeof(float));
+            memcpy(rots, pv->tuple_rot, (size_t)pv->num_tuples * sizeof(int));
+        }
+        if (pv->tuple_slot)
+            PULSEG_FREE(pv->tuple_slot);
+        if (pv->tuple_amp)
+            PULSEG_FREE(pv->tuple_amp);
+        if (pv->tuple_rot)
+            PULSEG_FREE(pv->tuple_rot);
+        pv->tuple_slot = slots;
+        pv->tuple_amp = amps;
+        pv->tuple_rot = rots;
+        pv->cap_tuples = cap;
+    }
+
+    at = pv->num_tuples++;
+    for (i = 0; i < 3; ++i)
+    {
+        pv->tuple_slot[at * 3 + i] = slot[i];
+        pv->tuple_amp[at * 3 + i] = amp[i];
+    }
+    pv->tuple_rot[at] = rot_id;
+    return 1;
+}
+
+/**
+ * What every instance of the canonical TR plays at each of its positions.
+ *
+ * One pass over the scan, the same walk pulseg__compute_variable_grad_flags
+ * makes: the execution stream marks where each TR starts, so a block's
+ * position within the TR is where it falls after that mark, and the
+ * amplitudes it is compared against are the expanded scan's rather than the
+ * deduplicated block table's.
+ *
+ * Block durations are not collected per instance because TR detection has
+ * already established they cannot differ: a period is accepted only when
+ * every position matches in duration (pulseg__block_defs_structurally_equal),
+ * so one instance's timing is every instance's timing.
+ */
+static int sa_scan_position_variants(
+    sa_position_variants *pv,
+    const struct pulseg_sequence_descriptor *desc,
+    int tr_size)
+{
+    int si, tr_pos, ax;
+    int stream_len;
+
+    stream_len =
+        (desc->exec_stream_len > 0) ? desc->exec_stream_len : desc->tr_descriptor.num_trs * tr_size;
+    tr_pos = 0;
+    for (si = 0; si < stream_len; ++si)
+    {
+        const struct pulseg_block_table_element *bte;
+        int bt_idx;
+        int slot[3];
+        float amp[3];
+        int rot_id;
+        int raw_ids[3];
+
+        if (desc->exec_stream_len > 0)
+        {
+            if (pulseg__exec_tr_start(desc, si))
+                tr_pos = 0;
+            bt_idx = pulseg__exec_block_idx(desc, si);
+        }
+        else
+        {
+            if (si % tr_size == 0)
+                tr_pos = 0;
+            bt_idx = si;
+        }
+
+        if (tr_pos >= tr_size || bt_idx < 0 || bt_idx >= desc->num_blocks)
+        {
+            ++tr_pos;
+            if (tr_pos >= tr_size)
+                tr_pos = 0;
+            continue;
+        }
+
+        bte = &desc->block_table[bt_idx];
+        raw_ids[0] = bte->gx_id;
+        raw_ids[1] = bte->gy_id;
+        raw_ids[2] = bte->gz_id;
+
+        for (ax = 0; ax < 3; ++ax)
+        {
+            slot[ax] = -1;
+            amp[ax] = 0.0f;
+            if (raw_ids[ax] >= 0 && raw_ids[ax] < desc->grad_table_size)
+            {
+                const struct pulseg_grad_table_element *gte = &desc->grad_table[raw_ids[ax]];
+                slot[ax] = sa_variants_add_waveform(
+                    &pv[tr_pos],
+                    ax,
+                    gte->id,
+                    gte->shape_id,
+                    gte->amplitude);
+                if (slot[ax] < 0)
+                    return PULSEG_ERR_ALLOC_FAILED;
+                amp[ax] = gte->amplitude;
+            }
+        }
+
+        rot_id = bte->rotation_id;
+        if (rot_id < 0 || rot_id >= desc->num_rotations || bte->norot_flag)
+            rot_id = -1;
+        sa_variants_add_rotation(&pv[tr_pos], rot_id);
+
+        if (!sa_variants_add_tuple(&pv[tr_pos], slot, amp, rot_id))
+            return PULSEG_ERR_ALLOC_FAILED;
+
+        ++tr_pos;
+        if (tr_pos >= tr_size)
+            tr_pos = 0;
+    }
+    return PULSEG_SUCCESS;
+}
+
+/** |R[ax][j]| bounded over every rotation the position takes, identity
+ *  included for the instances that apply none. */
+static void sa_variant_weights(
+    float *weight,
+    const sa_position_variants *pv,
+    const struct pulseg_sequence_descriptor *desc)
+{
+    int i, ax, j;
+
+    for (i = 0; i < 9; ++i)
+        weight[i] = 0.0f;
+
+    if (pv->rot_overflow)
+    {
+        for (i = 0; i < 9; ++i)
+            weight[i] = 1.0f;
+        return;
+    }
+
+    for (i = 0; i < pv->num_rot; ++i)
+    {
+        int rot = pv->rot_ids[i];
+        if (rot < 0 || rot >= desc->num_rotations)
+        {
+            for (ax = 0; ax < 3; ++ax)
+                if (weight[ax * 3 + ax] < 1.0f)
+                    weight[ax * 3 + ax] = 1.0f;
+            continue;
+        }
+        for (ax = 0; ax < 3; ++ax)
+            for (j = 0; j < 3; ++j)
+            {
+                float w = desc->rotation_matrices[rot][ax * 3 + j];
+                if (w < 0.0f)
+                    w = -w;
+                if (w > weight[ax * 3 + j])
+                    weight[ax * 3 + j] = w;
+            }
+    }
+}
+
+/** The event index a position's waveform was built into, or -1. */
+static int sa_shape_event_index(
+    const sa_axis_events *ae,
+    const struct pulseg_sequence_descriptor *desc,
+    const sa_position_waveform *w)
+{
+    sa_raw_occurrence probe;
+    int key, k;
+
+    probe.def_id = w->def_index;
+    probe.def_index = w->def_index;
+    probe.shape_id = w->shape_id;
+    probe.start_time_us = 0.0;
+    probe.amplitude = 0.0f;
+    key = sa_waveform_key(desc, &probe);
+
+    for (k = 0; k < ae->num_events; ++k)
+        if (ae->events[k].w_key == key)
+            return k;
+    return -1;
+}
+
+/**
+ * Build the event model that bounds every instance of the canonical TR.
+ *
+ * A position every instance plays identically joins the coherent sum, with
+ * its rotation folded into the amplitudes it contributes to each physical
+ * axis, so the sum is exact wherever the TR really is one waveform. A
+ * position that differs between instances becomes a sa_varying_position,
+ * whose contribution is taken at its largest magnitude instead of its
+ * complex value: the coherence between it and the rest of the TR is what is
+ * given up, and it is given up only where there is no single value to be
+ * coherent with.
+ */
+static int sa_build_bounded_events(
+    sa_structural_events *se,
+    const struct pulseg_sequence_descriptor *desc,
+    int start_block,
+    int block_count)
+{
+    sa_position_variants *pv = NULL;
+    sa_raw_occurrence *coh[3];
+    int num_coh[3];
+    int cap_coh[3];
+    double *pos_time = NULL;
+    int p, ax, j, result;
+    double time_us;
+
+    memset(se, 0, sizeof(*se));
+    for (ax = 0; ax < 3; ++ax)
+    {
+        coh[ax] = NULL;
+        num_coh[ax] = 0;
+        cap_coh[ax] = 0;
+    }
+
+    pv = (sa_position_variants *)PULSEG_ALLOC((size_t)block_count * sizeof(sa_position_variants));
+    pos_time = (double *)PULSEG_ALLOC((size_t)block_count * sizeof(double));
+    if (!pv || !pos_time)
+    {
+        if (pv)
+            PULSEG_FREE(pv);
+        if (pos_time)
+            PULSEG_FREE(pos_time);
+        return PULSEG_ERR_ALLOC_FAILED;
+    }
+    memset(pv, 0, (size_t)block_count * sizeof(sa_position_variants));
+
+    time_us = 0.0;
+    for (p = 0; p < block_count; ++p)
+    {
+        const struct pulseg_block_table_element *bte = &desc->block_table[start_block + p];
+        const struct pulseg_base_block *bdef = &desc->base_blocks[bte->id];
+        pos_time[p] = time_us;
+        time_us += (bte->duration_us >= 0) ? (double)bte->duration_us : (double)bdef->duration_us;
+    }
+
+    result = sa_scan_position_variants(pv, desc, block_count);
+    if (PULSEG_FAILED(result))
+        goto fail;
+
+    se->varying =
+        (sa_varying_position *)PULSEG_ALLOC((size_t)block_count * sizeof(sa_varying_position));
+    if (!se->varying)
+    {
+        result = PULSEG_ERR_ALLOC_FAILED;
+        goto fail;
+    }
+    memset(se->varying, 0, (size_t)block_count * sizeof(sa_varying_position));
+
+    for (p = 0; p < block_count; ++p)
+    {
+        sa_position_variants *v = &pv[p];
+        int multi_waveform = 0;
+        int rotated = 0;
+        int constant;
+
+        for (ax = 0; ax < 3; ++ax)
+            if (v->num_waveforms[ax] > 1)
+                multi_waveform = 1;
+        if (v->rot_overflow || v->num_rot > 1 || (v->num_rot == 1 && v->rot_ids[0] >= 0))
+            rotated = 1;
+
+        constant = (!v->tuple_overflow && v->num_tuples == 1);
+
+        if (v->num_tuples == 0 && !v->tuple_overflow)
+            continue; /* no block ever landed here */
+
+        if (constant)
+        {
+            const float *R = NULL;
+            int rot = v->tuple_rot[0];
+            if (rot >= 0 && rot < desc->num_rotations)
+                R = desc->rotation_matrices[rot];
+
+            for (ax = 0; ax < 3; ++ax)
+            {
+                for (j = 0; j < 3; ++j)
+                {
+                    const sa_position_waveform *w;
+                    float weight = R ? R[ax * 3 + j] : ((ax == j) ? 1.0f : 0.0f);
+                    int slot = v->tuple_slot[j];
+                    if (slot < 0 || weight == 0.0f)
+                        continue;
+                    w = &v->waveforms[j][slot];
+
+                    if (num_coh[ax] >= cap_coh[ax])
+                    {
+                        int cap = (cap_coh[ax] > 0) ? cap_coh[ax] * 2 : 16;
+                        sa_raw_occurrence *grown = (sa_raw_occurrence *)PULSEG_ALLOC(
+                            (size_t)cap * sizeof(sa_raw_occurrence));
+                        if (!grown)
+                        {
+                            result = PULSEG_ERR_ALLOC_FAILED;
+                            goto fail;
+                        }
+                        if (coh[ax])
+                        {
+                            memcpy(grown, coh[ax], (size_t)num_coh[ax] * sizeof(sa_raw_occurrence));
+                            PULSEG_FREE(coh[ax]);
+                        }
+                        coh[ax] = grown;
+                        cap_coh[ax] = cap;
+                    }
+                    coh[ax][num_coh[ax]].def_id = w->def_index;
+                    coh[ax][num_coh[ax]].def_index = w->def_index;
+                    coh[ax][num_coh[ax]].shape_id = w->shape_id;
+                    coh[ax][num_coh[ax]].start_time_us = pos_time[p];
+                    coh[ax][num_coh[ax]].amplitude = weight * v->tuple_amp[j];
+                    num_coh[ax]++;
+                }
+            }
+            continue;
+        }
+
+        /* Varying: one unit-amplitude event per waveform, and either the
+         * combinations this position really takes or, when there are more of
+         * them than are worth enumerating, its largest amplitude per axis --
+         * which for a position playing one waveform per axis is the same
+         * bound at a fraction of the cost. */
+        {
+            sa_varying_position *vp = &se->varying[se->num_varying];
+            int by_tuple = (!v->tuple_overflow && (rotated || multi_waveform));
+
+            /* Counted before it is filled, so a failure part way through
+             * leaves it for sa_free_structural_events to release. */
+            se->num_varying++;
+
+            for (ax = 0; ax < 3; ++ax)
+            {
+                sa_raw_occurrence *shape_occ;
+                int k;
+                if (v->num_waveforms[ax] == 0)
+                    continue;
+                shape_occ = (sa_raw_occurrence *)PULSEG_ALLOC(
+                    (size_t)v->num_waveforms[ax] * sizeof(sa_raw_occurrence));
+                if (!shape_occ)
+                {
+                    result = PULSEG_ERR_ALLOC_FAILED;
+                    goto fail;
+                }
+                for (k = 0; k < v->num_waveforms[ax]; ++k)
+                {
+                    shape_occ[k].def_id = v->waveforms[ax][k].def_index;
+                    shape_occ[k].def_index = v->waveforms[ax][k].def_index;
+                    shape_occ[k].shape_id = v->waveforms[ax][k].shape_id;
+                    shape_occ[k].start_time_us = pos_time[p];
+                    shape_occ[k].amplitude = by_tuple ? 1.0f : v->waveforms[ax][k].amp_max;
+                }
+                result =
+                    sa_build_axis_events(&vp->shapes[ax], shape_occ, v->num_waveforms[ax], desc);
+                PULSEG_FREE(shape_occ);
+                if (PULSEG_FAILED(result))
+                    goto fail;
+
+                if (vp->shapes[ax].num_events > 0)
+                {
+                    vp->w_re[ax] =
+                        (float *)PULSEG_ALLOC((size_t)vp->shapes[ax].num_events * sizeof(float));
+                    vp->w_im[ax] =
+                        (float *)PULSEG_ALLOC((size_t)vp->shapes[ax].num_events * sizeof(float));
+                    if (!vp->w_re[ax] || !vp->w_im[ax])
+                    {
+                        result = PULSEG_ERR_ALLOC_FAILED;
+                        goto fail;
+                    }
+                }
+            }
+
+            if (by_tuple)
+            {
+                int t;
+                vp->tuple_slot = (int *)PULSEG_ALLOC((size_t)v->num_tuples * 3 * sizeof(int));
+                vp->tuple_amp = (float *)PULSEG_ALLOC((size_t)v->num_tuples * 3 * sizeof(float));
+                vp->tuple_rot = (int *)PULSEG_ALLOC((size_t)v->num_tuples * sizeof(int));
+                if (!vp->tuple_slot || !vp->tuple_amp || !vp->tuple_rot)
+                {
+                    result = PULSEG_ERR_ALLOC_FAILED;
+                    goto fail;
+                }
+                for (t = 0; t < v->num_tuples; ++t)
+                {
+                    vp->tuple_rot[t] = v->tuple_rot[t];
+                    for (ax = 0; ax < 3; ++ax)
+                    {
+                        int slot = v->tuple_slot[t * 3 + ax];
+                        vp->tuple_amp[t * 3 + ax] = v->tuple_amp[t * 3 + ax];
+                        vp->tuple_slot[t * 3 + ax] = (slot < 0)
+                            ? -1
+                            : sa_shape_event_index(&vp->shapes[ax], desc, &v->waveforms[ax][slot]);
+                    }
+                }
+                vp->num_tuples = v->num_tuples;
+            }
+            else
+            {
+                sa_variant_weights(vp->weight, v, desc);
+                vp->num_tuples = 0;
+            }
+        }
+    }
+
+    for (ax = 0; ax < 3; ++ax)
+    {
+        result = sa_build_axis_events(&se->axes[ax], coh[ax], num_coh[ax], desc);
+        if (PULSEG_FAILED(result))
+            goto fail;
+    }
+
+    for (ax = 0; ax < 3; ++ax)
+        if (coh[ax])
+            PULSEG_FREE(coh[ax]);
+    PULSEG_FREE(pos_time);
+    sa_free_position_variants(pv, block_count);
+    return PULSEG_SUCCESS;
+
+fail:
+    for (ax = 0; ax < 3; ++ax)
+        if (coh[ax])
+            PULSEG_FREE(coh[ax]);
+    if (pos_time)
+        PULSEG_FREE(pos_time);
+    if (pv)
+        sa_free_position_variants(pv, block_count);
+    sa_free_structural_events(se);
+    return result;
 }
 
 /* ================================================================== */
@@ -1338,10 +2044,10 @@ static void sa_eval_pwl_transform(
  *  sequence built from them ever reaches this path. */
 #define SA_CZT_MIN_VERTICES 64
 
-/** One definition's transform, tabulated over (offset, candidate). */
+/** One base waveform's transform, tabulated over (offset, candidate). */
 typedef struct
 {
-    int def_id;
+    int w_key;
     double *re; /* [num_offsets * num_points] */
     double *im;
 } sa_w_series;
@@ -1384,8 +2090,8 @@ static void sa_w_table_free(sa_w_table *table)
     table->num_series = 0;
 }
 
-/** The tabulated value, or 0 if this definition is not in the table. */
-static int sa_w_table_lookup(const sa_w_query *q, int def_id, float *out_re, float *out_im)
+/** The tabulated value, or 0 if this waveform is not in the table. */
+static int sa_w_table_lookup(const sa_w_query *q, int w_key, float *out_re, float *out_im)
 {
     const sa_w_table *table = q->table;
     int i;
@@ -1396,7 +2102,7 @@ static int sa_w_table_lookup(const sa_w_query *q, int def_id, float *out_re, flo
         return 0;
     for (i = 0; i < table->num_series; ++i)
     {
-        if (table->series[i].def_id == def_id)
+        if (table->series[i].w_key == w_key)
         {
             int at = q->offset_slot * table->num_points + q->point;
             *out_re = (float)table->series[i].re[at];
@@ -1542,11 +2248,11 @@ static void sa_build_offsets(double *offsets, int *num_offsets, int num_instance
     *num_offsets = at;
 }
 
-/** Tabulate every wide definition on one axis over one band of candidates.
+/** Tabulate every wide waveform on one axis over one band of candidates.
  *
- * Failure is not an error: the table is an accelerator, so a definition that
+ * Failure is not an error: the table is an accelerator, so a waveform that
  * cannot be tabulated (ragged raster, too few vertices, no memory) is simply
- * left out and its transform is taken the direct way, as before. */
+ * left out and its transform is taken the direct way. */
 static int sa_build_w_table(
     sa_w_table *table,
     const sa_axis_events *ae,
@@ -1584,7 +2290,7 @@ static int sa_build_w_table(
         int already = 0;
 
         for (i = 0; i < table->num_series; ++i)
-            if (table->series[i].def_id == ev->def_id)
+            if (table->series[i].w_key == ev->w_key)
                 already = 1;
         if (already)
             continue;
@@ -1647,7 +2353,7 @@ static int sa_build_w_table(
             }
         }
 
-        table->series[table->num_series].def_id = ev->def_id;
+        table->series[table->num_series].w_key = ev->w_key;
         table->num_series++;
 
         PULSEG_FREE(pr);
@@ -1683,10 +2389,10 @@ static void sa_eval_event_transform(
      * sequence whose definitions are all narrow tabulates nothing, and then
      * this must cost one predictable branch on a path taken hundreds of
      * thousands of times, not a call. */
-    if (query && sa_w_table_lookup(query, ev->def_id, out_re, out_im))
+    if (query && sa_w_table_lookup(query, ev->w_key, out_re, out_im))
         return;
 
-    if (sa_transform_cache_lookup(cache, out_re, out_im, ev->def_id))
+    if (sa_transform_cache_lookup(cache, out_re, out_im, ev->w_key))
         return;
 
     if (ev->arb_num_samples >= 2)
@@ -1711,7 +2417,7 @@ static void sa_eval_event_transform(
         *out_im = 0.0f;
     }
 
-    sa_transform_cache_insert(cache, ev->def_id, *out_re, *out_im);
+    sa_transform_cache_insert(cache, ev->w_key, *out_re, *out_im);
 }
 
 /**
@@ -1984,6 +2690,130 @@ static void sa_eval_axis_spectrum(
     *out_im = (float)sum_im;
 }
 
+/**
+ * What the positions that differ between instances can add, per axis, at one
+ * frequency.
+ *
+ * Each such position contributes the largest magnitude any instance can put
+ * there, so |S_ax(f)| <= |coherent sum| + this. The maximum is taken over
+ * the combinations the position really plays, which is exact for the
+ * position however its rotation mixes the axes; a position that fell back to
+ * per-axis amplitudes combines them through its |R| weights instead.
+ */
+static void sa_eval_varying_bound(
+    sa_structural_events *se,
+    const struct pulseg_sequence_descriptor *desc,
+    float f_hz,
+    double *out_bound)
+{
+    int v, ax, j, t, k;
+
+    out_bound[0] = 0.0;
+    out_bound[1] = 0.0;
+    out_bound[2] = 0.0;
+
+    for (v = 0; v < se->num_varying; ++v)
+    {
+        sa_varying_position *vp = &se->varying[v];
+        double best[3];
+
+        best[0] = 0.0;
+        best[1] = 0.0;
+        best[2] = 0.0;
+
+        for (j = 0; j < 3; ++j)
+        {
+            for (k = 0; k < vp->shapes[j].num_events; ++k)
+            {
+                float re, im;
+                sa_eval_event_line(&vp->shapes[j].events[k], &re, &im, f_hz, NULL, NULL);
+                vp->w_re[j][k] = re;
+                vp->w_im[j][k] = im;
+            }
+        }
+
+        if (vp->num_tuples > 0)
+        {
+            for (t = 0; t < vp->num_tuples; ++t)
+            {
+                const float *R = NULL;
+                int rot = vp->tuple_rot[t];
+                if (rot >= 0 && rot < desc->num_rotations)
+                    R = desc->rotation_matrices[rot];
+
+                for (ax = 0; ax < 3; ++ax)
+                {
+                    double sum_re = 0.0;
+                    double sum_im = 0.0;
+                    double mag;
+                    for (j = 0; j < 3; ++j)
+                    {
+                        int slot = vp->tuple_slot[t * 3 + j];
+                        double w = R ? (double)R[ax * 3 + j] : ((ax == j) ? 1.0 : 0.0);
+                        double a;
+                        if (slot < 0 || w == 0.0)
+                            continue;
+                        a = w * (double)vp->tuple_amp[t * 3 + j];
+                        sum_re += a * (double)vp->w_re[j][slot];
+                        sum_im += a * (double)vp->w_im[j][slot];
+                    }
+                    mag = sqrt(sum_re * sum_re + sum_im * sum_im);
+                    if (mag > best[ax])
+                        best[ax] = mag;
+                }
+            }
+        }
+        else
+        {
+            double m[3];
+            for (j = 0; j < 3; ++j)
+            {
+                double largest = 0.0;
+                for (k = 0; k < vp->shapes[j].num_events; ++k)
+                {
+                    double mag = sqrt(
+                        (double)vp->w_re[j][k] * (double)vp->w_re[j][k] +
+                        (double)vp->w_im[j][k] * (double)vp->w_im[j][k]);
+                    if (mag > largest)
+                        largest = mag;
+                }
+                m[j] = largest;
+            }
+            for (ax = 0; ax < 3; ++ax)
+                best[ax] = (double)vp->weight[ax * 3 + 0] * m[0] +
+                    (double)vp->weight[ax * 3 + 1] * m[1] + (double)vp->weight[ax * 3 + 2] * m[2];
+        }
+
+        for (ax = 0; ax < 3; ++ax)
+            out_bound[ax] += best[ax];
+    }
+}
+
+/** Tag one event list with the outer (NEX) repetition it takes part in. */
+static void sa_tag_repetition(
+    sa_axis_events *ae,
+    int num_avgs,
+    double prep_dur_us,
+    double img_dur_us,
+    double img_end_us)
+{
+    int k;
+    for (k = 0; k < ae->num_events; ++k)
+    {
+        sa_event *ev = &ae->events[k];
+        if (num_avgs > 1 && ev->start_time_us >= prep_dur_us && ev->start_time_us < img_end_us)
+        {
+            ev->num_reps = num_avgs;
+            ev->rep_period_us = img_dur_us;
+            continue;
+        }
+        if (num_avgs > 1 && ev->start_time_us >= img_end_us)
+            ev->start_time_us += (double)(num_avgs - 1) * img_dur_us;
+        ev->num_reps = 1;
+        ev->rep_period_us = 0.0;
+    }
+}
+
 /* ================================================================== */
 /*  Structural acoustic analysis — top-level violation check          */
 /* ================================================================== */
@@ -2072,13 +2902,15 @@ static int sa_check_structural_violations(
     float g_max_hz_per_m,
     int compute_dense_envelope,
     int compute_display_products,
-    int compress_trains)
+    int compress_trains,
+    int bound_over_instances)
 {
     sa_structural_events se;
     int result, ax, i, b, k, ci;
     double T_s, f1_hz;
     float freq_max, guard, min_bw;
     int m_max;
+    double bound[3];
 
     /* analytical display grid (TR harmonics; display-only, not the verdict) */
     int num_ana;
@@ -2152,7 +2984,17 @@ static int sa_check_structural_violations(
         cand_grad_amps_ax[ax] = NULL;
     }
 
-    result = sa_build_structural_events(&se, desc, start_block, block_count);
+    bound[0] = 0.0;
+    bound[1] = 0.0;
+    bound[2] = 0.0;
+
+    /* The bound is over the instances of one canonical TR, so it is offered
+     * only for a window that is one: any other window is a caller asking
+     * about a specific stretch of blocks, and gets exactly those. */
+    if (bound_over_instances && block_count == desc->tr_descriptor.tr_size)
+        result = sa_build_bounded_events(&se, desc, start_block, block_count);
+    else
+        result = sa_build_structural_events(&se, desc, start_block, block_count);
     if (PULSEG_FAILED(result))
         return result;
 
@@ -2195,39 +3037,25 @@ static int sa_check_structural_violations(
 
         for (ax = 0; ax < 3; ++ax)
         {
-            int k;
-            for (k = 0; k < se.axes[ax].num_events; ++k)
-            {
-                sa_event *ev = &se.axes[ax].events[k];
-                if (ev->start_time_us >= prep_dur_us && ev->start_time_us < img_end_us)
-                {
-                    ev->num_reps = num_avgs;
-                    ev->rep_period_us = img_dur_us;
-                }
-                else if (ev->start_time_us >= img_end_us)
-                {
-                    ev->start_time_us += (double)(num_avgs - 1) * img_dur_us;
-                    ev->num_reps = 1;
-                    ev->rep_period_us = 0.0;
-                }
-                else
-                {
-                    ev->num_reps = 1;
-                    ev->rep_period_us = 0.0;
-                }
-            }
+            int v;
+            sa_tag_repetition(&se.axes[ax], num_avgs, prep_dur_us, img_dur_us, img_end_us);
+            for (v = 0; v < se.num_varying; ++v)
+                sa_tag_repetition(
+                    &se.varying[v].shapes[ax],
+                    num_avgs,
+                    prep_dur_us,
+                    img_dur_us,
+                    img_end_us);
         }
     }
     else
     {
         for (ax = 0; ax < 3; ++ax)
         {
-            int k;
-            for (k = 0; k < se.axes[ax].num_events; ++k)
-            {
-                se.axes[ax].events[k].num_reps = 1;
-                se.axes[ax].events[k].rep_period_us = 0.0;
-            }
+            int v;
+            sa_tag_repetition(&se.axes[ax], 1, 0.0, 0.0, 0.0);
+            for (v = 0; v < se.num_varying; ++v)
+                sa_tag_repetition(&se.varying[v].shapes[ax], 1, 0.0, 0.0, 0.0);
         }
     }
 
@@ -2316,17 +3144,19 @@ static int sa_check_structural_violations(
                 ana_widths[i] = 1.2067091288032284f * ((float)f1_hz / (float)num_instances);
             else
                 ana_widths[i] = (float)f1_hz;
+            sa_eval_varying_bound(&se, desc, f_hz, bound);
             for (ax = 0; ax < 3; ++ax)
             {
                 float sre, sim;
-                if (se.axes[ax].num_events == 0)
+                if (se.axes[ax].num_events == 0 && bound[ax] == 0.0)
                 {
                     ana_amps[ax][i] = 0.0f;
                     ana_phases[ax][i] = 0.0f;
                     continue;
                 }
                 sa_eval_axis_spectrum(&se.axes[ax], &sre, &sim, f_hz, NULL);
-                ana_amps[ax][i] = (float)(2.0 / T_s * sqrt((double)(sre * sre + sim * sim)));
+                ana_amps[ax][i] =
+                    (float)(2.0 / T_s * (sqrt((double)(sre * sre + sim * sim)) + bound[ax]));
                 ana_phases[ax][i] = (float)atan2((double)sim, (double)sre);
             }
         }
@@ -2360,16 +3190,18 @@ static int sa_check_structural_violations(
         {
             float f_hz = spectra->freq_min_hz + (float)i * spectra->freq_spacing_hz;
             env_freqs[i] = f_hz;
+            sa_eval_varying_bound(&se, desc, f_hz, bound);
             for (ax = 0; ax < 3; ++ax)
             {
                 float sre, sim;
-                if (se.axes[ax].num_events == 0)
+                if (se.axes[ax].num_events == 0 && bound[ax] == 0.0)
                 {
                     env_amps[ax][i] = 0.0f;
                     continue;
                 }
                 sa_eval_axis_spectrum(&se.axes[ax], &sre, &sim, f_hz, NULL);
-                env_amps[ax][i] = (float)(2.0 / T_s * sqrt((double)(sre * sre + sim * sim)));
+                env_amps[ax][i] =
+                    (float)(2.0 / T_s * (sqrt((double)(sre * sre + sim * sim)) + bound[ax]));
             }
         }
     }
@@ -2479,10 +3311,11 @@ static int sa_check_structural_violations(
                 float max_ga = 0.0f;
                 cand_freqs[ci] = f_hz;
                 surviving_freqs_hz[ci] = f_hz;
+                sa_eval_varying_bound(&se, desc, f_hz, bound);
                 for (ax = 0; ax < 3; ++ax)
                 {
                     float sre, sim, aeq;
-                    if (se.axes[ax].num_events == 0)
+                    if (se.axes[ax].num_events == 0 && bound[ax] == 0.0)
                     {
                         cand_amps[ax][ci] = 0.0f;
                         cand_grad_amps_ax[ax][ci] = 0.0f;
@@ -2497,7 +3330,7 @@ static int sa_check_structural_violations(
                         &sim,
                         f_hz,
                         w_tables[ax].num_series ? &coarse_query : NULL);
-                    aeq = (float)(2.0 / T_s * sqrt((double)(sre * sre + sim * sim)));
+                    aeq = (float)(2.0 / T_s * (sqrt((double)(sre * sre + sim * sim)) + bound[ax]));
                     cand_amps[ax][ci] = aeq;
                     cand_grad_amps_ax[ax][ci] = aeq;
                     if (aeq > max_ga)
@@ -2582,10 +3415,11 @@ static int sa_check_structural_violations(
                             x_sub = (side == 0) ? ((double)kk + delta) : ((double)(kk + 1) - delta);
                             f_sub_hz = (float)(x_sub * f1_hz);
                             ratio = sa_dirichlet_ratio(x_sub, num_instances);
+                            sa_eval_varying_bound(&se, desc, f_sub_hz, bound);
                             for (ax = 0; ax < 3; ++ax)
                             {
                                 float sre, sim, aeq_sub;
-                                if (se.axes[ax].num_events == 0)
+                                if (se.axes[ax].num_events == 0 && bound[ax] == 0.0)
                                     continue;
                                 sub_query.table = &w_tables[ax];
                                 sub_query.offset_slot = 1 + side * npts_per_side + p;
@@ -2596,8 +3430,8 @@ static int sa_check_structural_violations(
                                     &sim,
                                     f_sub_hz,
                                     w_tables[ax].num_series ? &sub_query : NULL);
-                                aeq_sub = (float)(2.0 / T_s *
-                                                  sqrt((double)(sre * sre + sim * sim)) * ratio);
+                                aeq_sub =
+                                    (float)(2.0 / T_s * (sqrt((double)(sre * sre + sim * sim)) + bound[ax]) * ratio);
                                 if (aeq_sub > max_ga)
                                     max_ga = aeq_sub;
                             }
@@ -2882,7 +3716,8 @@ static int calc_mech_resonances_from_uniform(
     float g_max_hz_per_m,
     int compute_dense_envelope,
     int compute_display_products,
-    int compress_trains)
+    int compress_trains,
+    int bound_over_instances)
 {
     pulseg_diagnostic local_diag;
     int max_samples, result;
@@ -3030,7 +3865,8 @@ static int calc_mech_resonances_from_uniform(
             g_max_hz_per_m,
             compute_dense_envelope,
             compute_display_products,
-            compress_trains);
+            compress_trains,
+            bound_over_instances);
         if (PULSEG_FAILED(result))
         {
             pulseg_mech_resonances_spectra_free(spectra);
@@ -3043,15 +3879,13 @@ static int calc_mech_resonances_from_uniform(
     return PULSEG_SUCCESS;
 }
 
-/* Select canonical TR window for safety/plotting wrappers.
- * Canonical geometry is always extracted with AMP_MAX_POS.
+/* Select the canonical TR window for the safety gate.
  * Non-degenerate prep/cooldown: full-pass canonical TR (pass-expanded).
  * Degenerate prep/cooldown: imaging TR canonical window (no pass expansion). */
 static void select_canonical_tr_window(
     const pulseg_sequence_descriptor *desc,
     int *start_block,
     int *block_count,
-    int *amplitude_mode,
     int *num_instances,
     float *tr_duration_us)
 {
@@ -3061,10 +3895,9 @@ static void select_canonical_tr_window(
 
     *start_block = 0;
     *block_count = trd->tr_size;
-    *amplitude_mode = PULSEG_AMP_MAX_POS;
-    /* F8.2: align with select_canonical_tr_window_idx's degenerate
-     * branch (:55), which multiplies by num_averages; display-only
-     * (min-2 clamp + FWHM), does not change the structural/spectral verdict. */
+    /* Aligns with select_canonical_tr_window_idx's degenerate branch, which
+     * multiplies by num_averages; display-only (min-2 clamp + FWHM), does
+     * not change the structural/spectral verdict. */
     {
         int num_avgs = (desc->num_averages > 1) ? desc->num_averages : 1;
         *num_instances = trd->num_trs * num_avgs;
@@ -3082,6 +3915,7 @@ int pulseg_calc_mech_resonances(
     pulseg_diagnostic *diag,
     int subseq_idx,
     int canonical_tr_idx,
+    int amplitude_mode,
     const pulseg_opts *opts,
     float target_resolution_hz,
     float max_freq_hz,
@@ -3092,7 +3926,7 @@ int pulseg_calc_mech_resonances(
     const pulseg_sequence_descriptor *desc;
     pulseg__uniform_grad_waveforms uw;
     pulseg_diagnostic local_diag;
-    int rc, start_block, block_count, amplitude_mode, num_instances;
+    int rc, start_block, block_count, num_instances, bound_over_instances;
     int sa_start_block, sa_block_count, num_avgs;
     int *block_order;
     float tr_duration_us;
@@ -3142,15 +3976,14 @@ int pulseg_calc_mech_resonances(
         diag->code = PULSEG_ERR_INVALID_ARGUMENT;
         return diag->code;
     }
-    /* Use a new helper to select the correct window for the canonical_tr_idx */
+    bound_over_instances = (amplitude_mode != PULSEG_AMP_ACTUAL);
     select_canonical_tr_window_idx(
         desc,
         &start_block,
         &block_count,
-        &amplitude_mode,
         &num_instances,
         &tr_duration_us,
-        canonical_tr_idx);
+        bound_over_instances ? 0 : canonical_tr_idx);
 
     sa_start_block = start_block;
     sa_block_count = block_count;
@@ -3162,7 +3995,7 @@ int pulseg_calc_mech_resonances(
         diag,
         start_block,
         block_count,
-        amplitude_mode,
+        bound_over_instances ? PULSEG_AMP_MAX_POS : PULSEG_AMP_ACTUAL,
         NULL,
         0,
         block_order);
@@ -3202,7 +4035,8 @@ int pulseg_calc_mech_resonances(
         /* dense envelope: plotting API only, see
                                             * calc_mech_resonances_from_uniform doc */
         1 /* display products: this IS the plotting API */,
-        compress_trains);
+        compress_trains,
+        bound_over_instances);
     pulseg__uniform_grad_waveforms_free(&uw);
     if (block_order)
         PULSEG_FREE(block_order);
@@ -3473,6 +4307,157 @@ fail:
 }
 
 /* ================================================================== */
+/*  PNS over every shape the canonical TR takes                       */
+/* ================================================================== */
+
+/** Peak combined response over a result: the number the gate thresholds. */
+static float pns_result_peak(const pulseg_pns_result *r)
+{
+    float best, v;
+    int i;
+
+    best = 0.0f;
+    for (i = 0; i < r->num_samples; ++i)
+    {
+        v = 0.0f;
+        if (r->slew_x_hz_per_m_per_s)
+            v += r->slew_x_hz_per_m_per_s[i] * r->slew_x_hz_per_m_per_s[i];
+        if (r->slew_y_hz_per_m_per_s)
+            v += r->slew_y_hz_per_m_per_s[i] * r->slew_y_hz_per_m_per_s[i];
+        if (r->slew_z_hz_per_m_per_s)
+            v += r->slew_z_hz_per_m_per_s[i] * r->slew_z_hz_per_m_per_s[i];
+        v = (float)sqrt((double)v);
+        if (v > best)
+            best = v;
+    }
+    return best;
+}
+
+/**
+ * PNS over the canonical TR, worst over every shape the repetitions take.
+ *
+ * The per-position amplitude maximum bounds repetitions that play the same
+ * gradient *definitions* -- the same shape driven harder is a larger response
+ * everywhere -- but it does not bound a repetition that plays a *different*
+ * definition at that position, because there is no amplitude at which one
+ * spiral arm's shape covers another's. So the instances are grouped by the
+ * definitions they play and one window is evaluated per group, at that
+ * group's own shapes and its own amplitude maximum. A sequence whose
+ * repetitions differ only in amplitude has one group, and this is then the
+ * single envelope evaluation it has always been.
+ *
+ * Rotation is not part of the grouping: the extraction does not apply one, so
+ * grouping by it would render the same waveform repeatedly. A rotated arm is
+ * therefore covered only for a model that treats the axes alike, which the
+ * chronaxie model does and a per-axis model does not.
+ */
+static int calc_pns_over_shape_groups(
+    pulseg_pns_result *result,
+    pulseg_diagnostic *diag,
+    float gamma_hz_per_tesla,
+    const pulseg_pns_model *model,
+    const pulseg_sequence_descriptor *desc,
+    int start_block,
+    int block_count)
+{
+    pulseg__uniform_grad_waveforms uw;
+    pulseg_pns_result candidate;
+    int *labels;
+    int *group_first;
+    int num_groups, tr_size, g, rc, group_start, have_best;
+    float peak, best_peak;
+
+    labels = NULL;
+    group_first = NULL;
+    num_groups = 1;
+    have_best = 0;
+    best_peak = 0.0f;
+    tr_size = desc->tr_descriptor.tr_size;
+
+    rc = pulseg__group_tr_instances_by_shape(
+        desc,
+        &labels,
+        &group_first,
+        &num_groups,
+        PULSEG__MAX_SHAPE_GROUPS);
+    if (PULSEG_FAILED(rc))
+    {
+        /* More shapes than the sweep will enumerate. The envelope alone does
+         * not bound them, and saying so is the only honest answer. */
+        pulseg__diag_printf(
+            diag,
+            "PNS: the repetitions play more than %d distinct sets of gradient "
+            "waveforms, which is more windows than the check will evaluate, and "
+            "one window over all of them would not bound them. Write the "
+            "repeated waveform once and turn it with a ROTATIONS extension",
+            PULSEG__MAX_SHAPE_GROUPS);
+        diag->code = PULSEG_ERR_PNS_INVALID_PARAMS;
+        return diag->code;
+    }
+
+    memset(result, 0, sizeof(*result));
+
+    for (g = 0; g < num_groups; ++g)
+    {
+        group_start = (labels && group_first) ? group_first[g] * tr_size : start_block;
+        memset(&uw, 0, sizeof(uw));
+        rc = pulseg__get_gradient_waveforms_range(
+            desc,
+            &uw,
+            diag,
+            group_start,
+            block_count,
+            PULSEG_AMP_MAX_POS,
+            labels,
+            g,
+            NULL);
+        if (PULSEG_FAILED(rc))
+            goto done;
+
+        memset(&candidate, 0, sizeof(candidate));
+        rc = calc_pns_from_uniform(
+            &candidate,
+            diag,
+            gamma_hz_per_tesla,
+            &uw,
+            model,
+            desc,
+            group_start,
+            block_count,
+            NULL);
+        pulseg__uniform_grad_waveforms_free(&uw);
+        if (PULSEG_FAILED(rc))
+            goto done;
+
+        peak = pns_result_peak(&candidate);
+        if (!have_best || peak > best_peak)
+        {
+            pulseg_pns_result_free(result);
+            *result = candidate;
+            result->worst_group = g;
+            best_peak = peak;
+            have_best = 1;
+        }
+        else
+        {
+            pulseg_pns_result_free(&candidate);
+        }
+    }
+
+done:
+    if (PULSEG_FAILED(rc))
+    {
+        pulseg__uniform_grad_waveforms_free(&uw);
+        pulseg_pns_result_free(result);
+    }
+    if (labels)
+        PULSEG_FREE(labels);
+    if (group_first)
+        PULSEG_FREE(group_first);
+    return rc;
+}
+
+/* ================================================================== */
 /*  PNS (public wrapper)                                              */
 /* ================================================================== */
 
@@ -3525,12 +4510,25 @@ int pulseg_calc_pns(
         desc,
         &start_block,
         &block_count,
-        &amplitude_mode,
         &num_instances,
         &tr_duration_us,
         canonical_tr_idx);
+    amplitude_mode = PULSEG_AMP_MAX_POS;
     (void)num_instances;
     (void)tr_duration_us;
+
+    /* Index 0 is the request for the worst case rather than for a repetition,
+     * and the worst case is worst over every shape the repetitions take. Any
+     * other index is that window, on its own shapes. */
+    if (canonical_tr_idx == 0)
+        return calc_pns_over_shape_groups(
+            result,
+            diag,
+            opts->gamma_hz_per_t,
+            model,
+            desc,
+            start_block,
+            block_count);
 
     rc = pulseg__get_gradient_waveforms_range(
         desc,
@@ -3923,13 +4921,13 @@ static int check_max_slew(
      * sqrt(3) * derated = physical slew limit.  Compare GSOS_slew^2 against
      * 3 * (derated)^2.
      *
-     * Slew per axis at each block = slew_rate_normalised * amplitude, where
-     * slew_rate_normalised (1/s) comes from grad_definitions and amplitude from
-     * grad_table (the per-block-instance value).  This mirrors check_max_grad
-     * which also iterates block_table for per-instance amplitudes.
+     * Slew per axis at each block = slew_rate_normalised * amplitude, both
+     * read per block instance from grad_table: the amplitude directly, and
+     * the normalised slew (1/s) from the shape that instance names.  This
+     * mirrors check_max_grad, which also iterates block_table.
      */
     int s, b, n, raw_id, def_idx;
-    float slew_sq, slew_sq_max, limit_sq, amp;
+    float slew_sq, slew_sq_max, limit_sq, amp, shape_slew;
     float axis_slew[3];
     int raw_ids[3];
     int worst_subseq, worst_block;
@@ -3981,11 +4979,15 @@ static int check_max_slew(
                     continue;
 
                 gdef = &desc->grad_definitions[def_idx];
-                /* Upper bound: this instance's own amplitude times the
-                 * steepest normalised slew any of the definition's shapes
-                 * reaches.  A ceiling has to bound every instance, which the
-                 * energy-selected representative would not. */
-                axis_slew[n] = gdef->any.max_slew_rate * amp;
+                /* This instance's own amplitude times the steepest normalised
+                 * slew of the shape it actually plays.  Grad definitions are
+                 * deduplicated without the magnitude shape id, so the
+                 * definition's own ceiling would pair the steepest shape in
+                 * the family with the largest amplitude in it -- an upper
+                 * bound, but on an object no instance plays.  A trapezoid has
+                 * no shape and its one profile is the definition's. */
+                shape_slew = pulseg__grad_shape_slew(desc, desc->grad_table[raw_id].shape_id);
+                axis_slew[n] = (shape_slew > 0.0f ? shape_slew : gdef->any.max_slew_rate) * amp;
             }
 
             slew_sq = axis_slew[0] * axis_slew[0] + axis_slew[1] * axis_slew[1] +
@@ -4082,7 +5084,7 @@ int pulseg__check_safety_profiled(
     pulseg__uniform_grad_waveforms uw;
     pulseg_mech_resonances_spectra spectra;
     pulseg_pns_result pns_result;
-    int start_block, block_count, amplitude_mode, num_instances;
+    int start_block, block_count, num_instances;
     int sa_start_block, sa_block_count, num_avgs;
     int *block_order;
     float tr_duration_us;
@@ -4102,6 +5104,13 @@ int pulseg__check_safety_profiled(
     }
     if (diag)
         pulseg_diagnostic_init(diag);
+
+    /* ---- 0. raster alignment ----
+     * Ahead of the gradient-presence skip below: it judges RF, ADC and block
+     * durations too, which an RF-only sequence still has. */
+    rc = pulseg_check_raster_alignment(coll, diag, opts);
+    if (PULSEG_FAILED(rc))
+        return rc;
 
     /* No gradient event anywhere in the collection (e.g. an RF-only or
      * pure-delay sequence): every check below operates on gx/gy/gz, so
@@ -4197,10 +5206,8 @@ int pulseg__check_safety_profiled(
             desc,
             &start_block,
             &block_count,
-            &amplitude_mode,
             &num_instances,
             &tr_duration_us);
-        (void)amplitude_mode;
         sa_start_block = start_block;
         sa_block_count = block_count;
         num_avgs = 1;
@@ -4280,7 +5287,8 @@ int pulseg__check_safety_profiled(
                     opts->max_grad_hz_per_m,
                     0 /* compute_dense_envelope: never on the PSD path */,
                     0 /* compute_display_products: never on the PSD path */,
-                    1 /* compress_trains: this is the path being optimised */);
+                    1 /* compress_trains: this is the path being optimised */,
+                    1 /* bound over every instance of the canonical TR */);
 
                 /* Safety path: fail fast on first violating candidate.
                  * Pattern: for each candidate, scan union of all bands. */
@@ -4366,16 +5374,17 @@ int pulseg__check_safety_profiled(
                 if (profile_fn)
                     profile_fn(profile_ctx, PULSEG__SAFETY_PROFILE_PNS, 1);
                 memset(&pns_result, 0, sizeof(pns_result));
-                rc = calc_pns_from_uniform(
+                /* Not the `uw` above: that window carries one group's shapes
+                 * at the whole scan's amplitudes, which bounds the
+                 * repetitions that share those shapes and no others. */
+                rc = calc_pns_over_shape_groups(
                     &pns_result,
                     diag,
                     opts->gamma_hz_per_t,
-                    &uw,
                     pns_model,
                     desc,
                     start_block,
-                    block_count,
-                    block_order);
+                    block_count);
                 if (!PULSEG_FAILED(rc) && pns_result.num_samples > 0)
                 {
                     max_pns = 0.0f;

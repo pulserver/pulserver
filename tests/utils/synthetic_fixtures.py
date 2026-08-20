@@ -838,8 +838,83 @@ extension LABELSET 1
 )
 
 
+# -- raster-alignment family (test_raster.c) --------------------------------
+#
+# Every file here declares the standard rasters -- RF 1 us, gradient and block
+# 10 us -- and is played against a system whose rasters are twice as coarse.
+# That pairing passes the declared-versus-system grid check, which accepts
+# either direction, so what each case exercises is the per-event alignment
+# check and nothing before it.
+
+_RASTER_CASES: dict[str, str] = {}
+
+_RASTER_CASES["20_raster_ok_on_coarse_system"] = _seq(
+    "Every time a multiple of a system raster twice as coarse as the declared one.",
+    """\
+[BLOCKS]
+1 110   1   1   0   0  0  0
+
+[RF]
+1          500 1 2 3 500 4 0 0 0 0 e
+
+[TRAP]
+ 1          0.2  20  960  20   0
+
+"""
+    + _RF_SHAPES,
+)
+
+_RASTER_CASES["21_raster_rf_delay_misaligned"] = _seq(
+    "RF delayed 3 us: a whole number of the declared 1 us raster, not of a 2 us one.",
+    """\
+[BLOCKS]
+1 100   1   0   0   0  0  0
+
+[RF]
+1          500 1 2 3 500 3 0 0 0 0 e
+
+"""
+    + _RF_SHAPES,
+)
+
+_RASTER_CASES["22_raster_trap_ramp_misaligned"] = _seq(
+    "A 10 us trapezoid ramp: on the declared 10 us gradient raster, not on a 20 us one.",
+    """\
+[BLOCKS]
+1 100   0   1   0   0  0  0
+
+[TRAP]
+ 1          0.2  10  980  10   0
+""",
+)
+
+_RASTER_CASES["23_raster_block_duration_misaligned"] = _seq(
+    "A 30 us block: three ticks of the declared raster, one and a half of a 20 us one.",
+    """\
+[BLOCKS]
+1   3   0   0   0   0  0  0
+""",
+)
+
+_RASTER_CASES["24_raster_block_duration_overrun"] = _seq(
+    "A 1 ms trapezoid in a 40 us block: every time aligned, the gradient still overruns.",
+    """\
+[BLOCKS]
+1   4   0   1   0   0  0  0
+
+[TRAP]
+ 1          0.2  20  960  20   0
+""",
+)
+
+
 #: name -> exact file text for every hand-specified case.
-TEXT_CASES: dict[str, str] = {**_GRAD_CASES, **_RF_CASES, **_OTHER_CASES}
+TEXT_CASES: dict[str, str] = {
+    **_GRAD_CASES,
+    **_RF_CASES,
+    **_RASTER_CASES,
+    **_OTHER_CASES,
+}
 
 
 # ---------------------------------------------------------------------------

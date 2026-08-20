@@ -19,7 +19,7 @@ Examples
 >>> from pulserver.app import mprage3D_sequence
 >>> seq = mprage3D_sequence(n_x=32, n_y=16, n_z=8, views_per_segment=16, ti=100e-3, tr_outer=300e-3)
 >>> seq.num_trs, seq.num_segments
-(9, 2)
+(9, 3)
 
 One inversion, the wait that places the TI, and a segment of spoiled low-flip repetitions:
 

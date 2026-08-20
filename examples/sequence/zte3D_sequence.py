@@ -2,10 +2,12 @@
 
 The auto-SSP-placement stress case: the readout gradient is at full
 amplitude when the hard pulse fires and never returns to zero inside a
-shell -- :class:`design.ZteReadout`, whose view is two blocks, pulse-and-
-hold then acquire-and-turn, with consecutive views a constant angle apart so
-one designed transition serves the lot. The interpreter has almost no dead
-time to hide its SSP packets in, which is exactly what this slot exercises.
+shell -- :class:`design.ZteReadout`, which writes the whole shell out as one
+continuous waveform, view by view, ramping up once at the north pole and
+down once at the south. Each shot replays it turned about ``z``, so the
+sphere costs one shell's worth of waveform memory. The interpreter has almost
+no dead time to hide its SSP packets in, which is exactly what this slot
+exercises.
 The centre of k-space is not acquired -- ``n_missing`` samples fall in the
 dead-time gap and are declared in the definitions for the reconstruction to
 handle. :mod:`pulserver.app.recon.noncartesian3D_recon` reconstructs the sphere by 3D NUFFT
@@ -170,31 +172,23 @@ def main(
     clear_once = None
     for shot_index, shot in enumerate(zte.shot_rotations):
         seg_label.value = int(shot_index)
-        turns = [
-            pp.make_rotation(Rotation.from_matrix(shot @ turn))
-            for turn in zte.view_rotations
-        ]
-        seq.add_block(*zte.g_ramp, turns[0])
+        # One rotation for the whole shell. The shell itself is written out
+        # spoke by spoke, so this only says where the shot samples.
+        turn = pp.make_rotation(Rotation.from_matrix(shot))
+        seq.add_block(*zte.g_ramp, turn)
         if shot_index == 0:
             for i_dummy in range(n_dummy):
                 mark = pp.make_label("ONCE", "SET", 1) if i_dummy == 0 else None
-                seq.add_block(zte.rf, *zte.g_hold, turns[0], *([mark] if mark else ()))
-                seq.add_block(*zte.g_read, turns[0])
+                seq.add_block(zte.rf, *zte.g_hold[0], turn, *([mark] if mark else ()))
+                seq.add_block(*zte.g_dummy, turn)
             clear_once = pp.make_label("ONCE", "SET", 0) if n_dummy else None
-        for view, turn in enumerate(turns):
-            last = view == len(turns) - 1
+        for view in range(len(zte.directions)):
             lin_label.value = int(view)
             seq.add_block(
-                zte.rf, *zte.g_hold, turn, *([clear_once] if clear_once else ())
+                zte.rf, *zte.g_hold[view], turn, *([clear_once] if clear_once else ())
             )
             clear_once = None
-            seq.add_block(
-                zte.adc,
-                *(zte.g_end if last else zte.g_read),
-                turn,
-                lin_label,
-                seg_label,
-            )
+            seq.add_block(zte.adc, *zte.g_read[view], turn, lin_label, seg_label)
 
     pp.TransformFOV(
         translation=tuple(offset * 1e3 for offset in fov_offset),
@@ -215,7 +209,7 @@ def main(
     seq.set_definition(key="TR", value=zte.tr)
     seq.set_definition(key="Trajectory", value="zte")
     seq.set_definition(key="NumShots", value=len(zte.shot_rotations))
-    seq.set_definition(key="ViewsPerShot", value=len(zte.view_rotations))
+    seq.set_definition(key="ViewsPerShot", value=len(zte.directions))
     seq.set_definition(key="MissingSamples", value=zte.n_missing)
     seq.set_definition(
         key="NumGainCalibrationReadouts", value=n_gain_calibration_readouts
@@ -278,8 +272,7 @@ readout_bandwidth_hz
         labels=("LIN", "SEG"),
         **kwargs,
     )
-    n_total = len(readout.shot_rotations) * len(readout.view_rotations)
-    duration = n_total * readout.tr
+    duration = len(readout.shot_rotations) * readout.duration
 
     return SimpleNamespace(
         excitation=excitation,
@@ -367,7 +360,7 @@ class Zte3D(SequencePlugin):
             "info": (
                 f"TA = {kernel.duration:.1f} s over "
                 f"{len(zte.shot_rotations)} shells of "
-                f"{len(zte.view_rotations)} views, "
+                f"{len(zte.directions)} views, "
                 f"{zte.n_missing} centre samples missing"
             ),
         }

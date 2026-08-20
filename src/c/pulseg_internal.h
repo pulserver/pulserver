@@ -224,7 +224,7 @@ typedef struct pulseg_adc_table_element
  * added without updating the count, fails the build instead of silently
  * changing the cache layout. */
 #define PULSEG_ASSERT_PACKED(type, nwords) \
-    typedef char pulseg__packed_check_##type[(sizeof(type) == (nwords) * 4) ? 1 : -1]
+    typedef char pulseg__packed_check_##type[(sizeof(type) == (nwords)*4) ? 1 : -1]
 
 typedef struct pulseg_base_block
 {
@@ -454,23 +454,27 @@ typedef struct pulseg_sequence_descriptor
     int grad_table_size;
     pulseg_grad_table_element *grad_table;
 
-    /* Per-SHAPE endpoint values of the normalised waveform, indexed by pulseq
+    /* Per-SHAPE statistics of the normalised waveform, indexed by pulseq
      * shape id - 1; `num_grad_shape_stats` is the shape library's size.
+     * `grad_shape_slew` is the steepest normalised slew the shape reaches,
+     * in 1/s, over its own time shape where it has one.
      *
      * These live here rather than on the definition because they are
-     * properties of the shape alone -- w[0] and w[n-1] do not depend on the
-     * time shape, the amplitude, or which definition happens to reference it
-     * -- and because the question they answer is per instance, not worst
-     * case: "is the gradient at zero across this junction" has to be asked of
-     * the instance that actually plays there.  A definition's representatives
-     * cannot answer it, and the fixed per-definition array that used to is
-     * exactly what capped a definition at 16 shapes.
+     * properties of the shape alone, and because the questions they answer
+     * are per instance rather than worst case: "is the gradient at zero
+     * across this junction" and "how steep is what plays here" both have to
+     * be asked of the instance that actually plays there.  Grad definitions
+     * are deduplicated without the magnitude shape id, so one definition
+     * covers every shape of equal sample count -- its representatives pair
+     * the steepest shape with the largest amplitude, which need not be the
+     * same instance.
      *
      * A trapezoid has no shape id and no entry; its endpoints are zero by
-     * construction. */
+     * construction and its slew follows from its ramp times. */
     int num_grad_shape_stats;
     float *grad_shape_first;
     float *grad_shape_last;
+    float *grad_shape_slew;
 
     int num_unique_adcs;
     pulseg_adc_definition *adc_definitions;
@@ -565,7 +569,7 @@ typedef struct pulseg_sequence_descriptor
     { \
     0.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0, 1, 0, {0, 1, 2}, {0, 0, 0}, {0, 0, \
     0}, {0, 0, 0}, {0, 0, 0}, 0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, /* rf_amplitude_variable */ \
-    0, NULL, 0, NULL, /* grad shape stats */ 0, NULL, NULL, \
+    0, NULL, 0, NULL, /* grad shape stats */ 0, NULL, NULL, NULL, \
     0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, NULL, \
     PULSEG_TR_DESCRIPTOR_INIT, 0, NULL, PULSEG_SEGMENT_TABLE_RESULT_INIT, 0, NULL, NULL, \
     NULL, NULL, /* exec_runs */ 0, NULL, /* seg runs */ 0, 0, NULL, NULL, \
@@ -706,6 +710,11 @@ float pulseg__grad_boundary_last(const pulseg_sequence_descriptor *desc, int raw
  * amplitude for the value that instance actually plays. */
 float pulseg__grad_shape_first(const pulseg_sequence_descriptor *desc, int shape_id);
 float pulseg__grad_shape_last(const pulseg_sequence_descriptor *desc, int shape_id);
+
+/* Steepest slew of the NORMALISED waveform of pulseq shape @p shape_id, in
+ * 1/s, or 0 when there is no such shape.  Multiply by an instance's own
+ * amplitude for the slew that instance actually plays. */
+float pulseg__grad_shape_slew(const pulseg_sequence_descriptor *desc, int shape_id);
 int pulseg__block_defs_structurally_equal(
     const pulseg_sequence_descriptor *desc,
     int id_a,
@@ -861,6 +870,25 @@ void pulseg_sequence_descriptor_free(pulseg_sequence_descriptor *desc);
  * Allocates desc->variable_grad_flags (tr_size * 3 ints).
  * Must be called after pulseg__get_tr_in_sequence. */
 int pulseg__compute_variable_grad_flags(pulseg_sequence_descriptor *desc);
+
+/* Label the TR instances by the gradient *definitions* they play, so that a
+ * caller can evaluate one canonical window per group. Instances in one group
+ * differ only in amplitude, which the per-position maximum bounds; instances
+ * in different groups play different shapes, which it does not.
+ *
+ * @p out_labels is [num_trs] and @p out_first is [*out_num_groups], the first
+ * instance of each group; both are NULL (and *out_num_groups is 1) when every
+ * instance falls in one group, which is the plain whole-scan envelope. The
+ * caller frees both. Returns PULSEG_ERR_INVALID_ARGUMENT when the sequence
+ * has more groups than @p max_groups. */
+#define PULSEG__MAX_SHAPE_GROUPS 64
+
+int pulseg__group_tr_instances_by_shape(
+    const pulseg_sequence_descriptor *desc,
+    int **out_labels,
+    int **out_first,
+    int *out_num_groups,
+    int max_groups);
 
 /* Free uniform waveforms. */
 void pulseg__uniform_grad_waveforms_free(pulseg__uniform_grad_waveforms *w);

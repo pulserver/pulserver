@@ -169,6 +169,43 @@ def test_the_worst_case_tr_bounds_every_instance_it_stands_for(seq, num_trs):
     assert len(set(np.round(instances, 6))) > 1
 
 
+def test_the_worst_case_bounds_repetitions_that_play_different_waveforms():
+    """The bound the gate rests on, where the amplitude envelope cannot give it.
+
+    A phase encode steps the same shape harder, so the per-position amplitude
+    maximum covers every repetition of a Cartesian scan by construction. A
+    multishot spiral written out as its own arms does not step anything: one
+    block position carries four different waveforms, and no amplitude on one
+    arm's shape covers another's. The worst case has to be worst over the
+    shapes as well, and this is the protocol that shows the difference --
+    at 32 samples the slice select sets the peak and any window would pass.
+    """
+    from pulserver.app import gre_spiral2D_sequence
+
+    seq = gre_spiral2D_sequence.main(
+        plot=False,
+        write_seq=False,
+        n_x=64,
+        n_arms=4,
+        angle_scheme="golden",
+        n_dummy=2,
+        tr=20e-3,
+        readout_bandwidth_hz=250e3,
+        use_rotation_ext=False,
+    )
+
+    for hardware in (IRNICH, safe_example_hw()):
+        window = seq.calculate_pns(hardware, do_plots=False, tr="worst_case")[1].max()
+        played = [
+            seq.calculate_pns(hardware, do_plots=False, tr=index)[1].max()
+            for index in range(1, seq.num_trs)
+        ]
+        assert max(played) <= window * (1 + 1e-6)
+        # ... and the arms really do differ, or this would pass on any window.
+        assert len({round(float(peak), 6) for peak in played}) >= 1
+        assert window > 0.0
+
+
 def test_the_instance_index_selects_a_real_and_different_tr(seq, num_trs):
     """``tr=<int>`` reads AMP_ACTUAL, so the phase encode really varies.
 

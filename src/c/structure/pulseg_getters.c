@@ -751,24 +751,6 @@ int pulseg_get_rf_event_array(
 /*  TRID (safety-group) accessors                                     */
 /* ================================================================== */
 
-/* Structural content signature for one scan-table position: identifies a
- * block by its deduplicated content (duration+rf+gx+gy+gz bundled in the
- * block-definition id, plus ADC separately since BLOCK_DEF_COLS excludes
- * it) -- deliberately excludes amplitude/phase/rotation, which may
- * legitimately vary per repeat/slice. */
-static void tr_group_block_signature(
-    const pulseg_sequence_descriptor *desc,
-    int *out_block_def_id,
-    int *out_adc_def_id,
-    int blk_idx)
-{
-    const pulseg_block_table_element *bte = &desc->block_table[blk_idx];
-    *out_block_def_id = bte->id;
-    *out_adc_def_id = (bte->adc_id >= 0 && bte->adc_id < desc->adc_table_size)
-        ? desc->adc_table[bte->adc_id].id
-        : -1;
-}
-
 int pulseg_get_tr_groups(
     const pulseg_collection *coll,
     pulseg_tr_group **out_groups,
@@ -910,14 +892,14 @@ int pulseg_get_tr_groups(
                 }
                 for (i = 0; i < ref_len; ++i)
                 {
+                    /* The block-definition id is the whole structural
+                     * signature -- duration, RF, gradients and ADC -- and
+                     * carries none of the amplitude, phase or rotation that
+                     * may legitimately vary per repeat or slice. */
                     int ref_blk = pulseg__exec_block_idx(desc, run_start[ref_run] + i);
                     int cur_blk = pulseg__exec_block_idx(desc, run_start[r] + i);
-                    int ref_def, ref_adc, cur_def, cur_adc;
 
-                    tr_group_block_signature(desc, &ref_def, &ref_adc, ref_blk);
-                    tr_group_block_signature(desc, &cur_def, &cur_adc, cur_blk);
-
-                    if (ref_def != cur_def || ref_adc != cur_adc)
+                    if (desc->block_table[ref_blk].id != desc->block_table[cur_blk].id)
                     {
                         ret = PULSEG_ERR_TRID_STRUCTURAL_MISMATCH;
                         goto cleanup;

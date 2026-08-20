@@ -4,13 +4,12 @@ A clinical protocol is not a demonstration. A 3D acquisition is hundreds of
 thousands to millions of blocks, and it has to be built while an operator
 waits, checked against the hardware, and parsed by a scanner with a few
 seconds and a few tens of megabytes to spare. These pages are how Pulserver
-makes that affordable — and, just as important, the evidence that none of the
-speed changes an answer: every fast path is held equal to the plain
-calculation it replaces, by tests that run over the whole zoo.
+makes that affordable, without any of the speed changing an answer: every
+fast path is held equal to the plain calculation it replaces.
 
 Two sequences carry the section, chosen because each is the informative
 extreme of its question. **MPRAGE** carries the throughput story: at
-512 × 1024 × 512 it is the largest protocol in the zoo, and its Cartesian and
+512 × 1024 × 512 it is the largest of the shipped families, and its Cartesian and
 stack-of-spirals variants between them exercise every case the design path
 has — a line readout rescaled per shot, an arm rotated per shot, and arms
 written out as distinct waveforms. **EPI** carries the safety story: a blipped
@@ -26,6 +25,7 @@ conversion
 gradient_checks
 pns
 mechanical_resonance
+full_benchmark
 ```
 
 ## The five stages
@@ -40,6 +40,10 @@ has its own cost model, and each page below is one of them.
 | {doc}`gradient_checks` | amplitude, slew, gradient continuity | the number of *distinct waveforms*, not blocks |
 | {doc}`pns` | the peripheral-nerve-stimulation estimate | one window, and the shapes inside it |
 | {doc}`mechanical_resonance` | the acoustic drive spectrum | one window, and the frequencies actually asked about |
+
+{doc}`full_benchmark` then puts the stages back together: every shipped plugin
+at four prescribable sizes, on the two clocks an operator feels — the
+parameter round trip, and one press of *Save Rx*.
 
 ## Two facts do most of the work
 
@@ -92,21 +96,6 @@ evaluated *periodically*: the history a nerve model or a spectrum needs at
 the start of the window is wrapped around from its end, so the boundary
 between repetitions is handled rather than ignored, and the peak found inside
 one window is the peak of the steady-state scan.
-
-## No fast path stands unpinned
-
-Fast paths that "should" agree with the plain ones eventually don't, so
-agreement here is not a design intention — it is pinned by tests that run over
-the zoo. Each page below names the tests for its own stage; the rule they
-share is stated once:
-
-| Claim | Test |
-|---|---|
-| `tr=None` is upstream PyPulseq *to the bit* — a script that ran against PyPulseq gets PyPulseq's numbers | `test_pns_over_the_timeline_is_upstreams_answer_exactly`, `test_gradient_spectrum_over_the_timeline_is_upstreams_answer_exactly` |
-| the worst-case envelope bounds every real repetition | `test_the_worst_case_tr_bounds_every_instance_it_stands_for` |
-
-A fast estimate that disagreed with the slow one would not be an
-optimization; it would be a different check.
 
 ## Reproducing it
 

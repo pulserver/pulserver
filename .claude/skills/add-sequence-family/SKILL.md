@@ -84,6 +84,7 @@ git diff --stat        # review what moved, and why
 
 1. `bash scripts/format_and_lint.sh`
 2. `bash scripts/run_tests.sh`
-3. Adding the family to the zoo table in
-   `docs/explanations/validation/sequence_zoo.md` if it is new, regenerating
-   the numbers with `python docs/_bench/zoo_report.py --only=<family>`.
+3. Giving the family a size sweep in `docs/_bench/bench_full.py` if it is
+   new, and regenerating
+   `docs/explanations/performance/full_benchmark` with
+   `python docs/_bench/bench_full.py --only=<family>`.

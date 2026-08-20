@@ -436,6 +436,7 @@ namespace pulseg
         MechResonancesSpectra calc_mech_resonances(
             int ss,
             int canonical_tr_idx,
+            int amplitude_mode,
             float target_resolution_hz,
             float max_freq_hz,
             const std::vector<ForbiddenBand>& bands = {},
@@ -468,6 +469,7 @@ namespace pulseg
                 &diag,
                 ss,
                 canonical_tr_idx,
+                amplitude_mode,
                 &run_opts,
                 target_resolution_hz,
                 max_freq_hz,
@@ -568,6 +570,7 @@ namespace pulseg
 
             PnsResult r;
             r.num_samples = cr.num_samples;
+            r.worst_group = cr.worst_group;
             if (cr.slew_x_hz_per_m_per_s)
                 r.slew_x.assign(
                     cr.slew_x_hz_per_m_per_s,

@@ -1,10 +1,10 @@
 """The zero-echo-time readout.
 
-Two things make ZTE what it is, and both are checked against the trajectory the
-sequence reports: the gradient is already up when the pulse fires, so a spoke
-starts at the centre of k-space, and it never returns to zero between views, so
-a shell costs one ramp. The third is arithmetic on the directions -- every view
-is the designed one turned -- and that is checked against the rotations.
+Three things make ZTE what it is, and each is checked against what the module
+plays: the gradient is already up when the pulse fires, so a spoke starts at
+the centre of k-space; it never returns to zero between views, so a shell costs
+one ramp; and the shell is written out spoke by spoke, so nothing but the shot
+is a rotation.
 """
 
 from __future__ import annotations
@@ -52,18 +52,19 @@ def spokes(module, seq=None):
     return np.asarray(k_traj_adc).T.reshape(-1, count, 3)
 
 
-def build_shell(system, zte, shot=None):
-    """One shell, written the way the docstring says to."""
+def plateau(events, sample=0):
+    """The gradient vector the three axes of ``events`` hold at ``sample``."""
+    return np.array([float(np.asarray(g.waveform)[sample]) for g in events])
+
+
+def build_shot(system, zte, shot):
+    """One shell turned onto where a shot samples, written the docstring's way."""
     seq = pp.Sequence(system)
-    turns = [
-        pp.make_rotation(Rotation.from_matrix(turn if shot is None else shot @ turn))
-        for turn in zte.view_rotations
-    ]
-    seq.add_block(*zte.g_ramp, turns[0])
-    for view, turn in enumerate(turns):
-        last = view == len(turns) - 1
-        seq.add_block(zte.rf, *zte.g_hold, turn)
-        seq.add_block(zte.adc, *(zte.g_end if last else zte.g_read), turn)
+    turn = pp.make_rotation(Rotation.from_matrix(shot))
+    seq.add_block(*zte.g_ramp, turn)
+    for view in range(len(zte.directions)):
+        seq.add_block(zte.rf, *zte.g_hold[view], turn)
+        seq.add_block(zte.adc, *zte.g_read[view], turn)
     return seq
 
 
@@ -72,27 +73,26 @@ def build_shell(system, zte, shot=None):
 # ----------------------------------------------------------------------
 
 
-def test_the_module_lays_out_a_ramp_and_two_views(system, hard):
+def test_the_module_lays_out_a_whole_shell(system, hard):
     zte = readout(system, hard)
-    assert len(zte.blocks) == 5
+    views = len(zte.directions)
+    assert len(zte.blocks) == 1 + 2 * views
     assert zte.blocks[0] == tuple(zte.g_ramp)
-    assert zte.blocks[1] == (zte.rf, *zte.g_hold)
-    assert zte.blocks[2] == (zte.adc, *zte.g_read)
+    assert zte.blocks[1] == (zte.rf, *zte.g_hold[0])
+    assert zte.blocks[2] == (zte.adc, *zte.g_read[0])
+    assert zte.blocks[-1] == (zte.adc, *zte.g_read[-1])
 
 
 def test_the_readout_is_valid_pulseq(system, hard):
     assert readout(system, hard).check_timing()[0]
 
 
-def test_a_whole_shell_is_valid_pulseq(system, hard):
+def test_every_view_replays_the_same_pulse_and_acquisition(system, hard):
+    """Only the gradient differs from one view to the next."""
     zte = readout(system, hard)
-    assert build_shell(system, zte).check_timing()[0]
-
-
-def test_every_view_replays_the_same_events(system, hard):
-    zte = readout(system, hard)
-    assert zte.blocks[3][:-1] == zte.blocks[1]
-    assert zte.blocks[4][0] == zte.blocks[2][0]
+    for view in range(len(zte.directions)):
+        assert zte.blocks[1 + 2 * view][0] is zte.rf
+        assert zte.blocks[2 + 2 * view][0] is zte.adc
 
 
 def test_labels_ride_the_acquisition_block(system, hard):
@@ -102,13 +102,63 @@ def test_labels_ride_the_acquisition_block(system, hard):
 
 
 # ----------------------------------------------------------------------
+# The shell is written out, not rotated into place
+# ----------------------------------------------------------------------
+
+
+def test_the_shell_carries_no_rotation_of_its_own(system, hard):
+    """A shot is a rotation; a view is a waveform."""
+    zte = readout(system, hard)
+    for index in range(1, zte.seq.num_blocks + 1):
+        assert zte.seq.get_block(index).rotation is None
+
+
+def test_every_view_holds_its_own_direction(system, hard):
+    zte = readout(system, hard)
+    held = np.array([plateau(hold) for hold in zte.g_hold])
+    assert held == pytest.approx(zte.gradient_amplitude * zte.directions, rel=1e-9)
+
+
+def test_the_shell_plays_the_directions_it_was_given(system, hard):
+    zte = readout(system, hard, n_views=12)
+    ends = spokes(zte)[:, -1, :]
+    played = ends / np.linalg.norm(ends, axis=1, keepdims=True)
+    assert played == pytest.approx(zte.directions, abs=1e-4)
+
+
+def test_a_rotated_shell_lands_where_the_shot_rotation_says(system, hard):
+    zte = readout(system, hard, n_views=12, n_shots=5)
+    shot = zte.shot_rotations[3]
+    seq = build_shot(system, zte, shot)
+    ends = spokes(zte, seq)[:, -1, :]
+    played = ends / np.linalg.norm(ends, axis=1, keepdims=True)
+    assert played == pytest.approx(zte.directions @ shot.T, abs=1e-4)
+
+
+def test_an_ordering_whose_step_wanders_is_played_as_it_stands(system, hard):
+    """Nothing has to carry one view onto the next, so nothing constrains them."""
+    golden = np.pi * (3.0 - np.sqrt(5.0))
+    index = np.arange(24, dtype=float)
+    height = 1.0 - 2.0 * (index + 0.5) / 24
+    radius = np.sqrt(np.maximum(0.0, 1.0 - height**2))
+    azimuth = index * golden
+    phyllotaxis = np.column_stack(
+        (radius * np.cos(azimuth), radius * np.sin(azimuth), height)
+    )
+    zte = readout(system, hard, n_views=None, directions=phyllotaxis)
+    ends = spokes(zte)[:, -1, :]
+    played = ends / np.linalg.norm(ends, axis=1, keepdims=True)
+    assert played == pytest.approx(zte.directions, abs=1e-4)
+
+
+# ----------------------------------------------------------------------
 # The gradient never comes down
 # ----------------------------------------------------------------------
 
 
 def test_the_pulse_plays_on_a_gradient_already_at_full_amplitude(system, hard):
     zte = readout(system, hard)
-    for ramp, hold in zip(zte.g_ramp, zte.g_hold, strict=True):
+    for ramp, hold in zip(zte.g_ramp, zte.g_hold[0], strict=True):
         assert float(np.asarray(ramp.waveform)[0]) == pytest.approx(0.0)
         assert float(np.asarray(ramp.waveform)[-1]) == pytest.approx(
             float(np.asarray(hold.waveform)[0])
@@ -120,20 +170,50 @@ def test_a_view_hands_the_gradient_to_the_next_without_passing_through_zero(
     system, hard
 ):
     zte = readout(system, hard)
-    plateau = np.array([float(np.asarray(g.waveform)[0]) for g in zte.g_read])
-    handover = np.array([float(np.asarray(g.waveform)[-1]) for g in zte.g_read])
-    assert np.linalg.norm(plateau) == pytest.approx(zte.gradient_amplitude)
-    assert np.linalg.norm(handover) == pytest.approx(zte.gradient_amplitude)
-    # It turned by the step rather than dropping and climbing again.
-    cosine = np.dot(plateau, handover) / zte.gradient_amplitude**2
-    assert np.arccos(np.clip(cosine, -1, 1)) == pytest.approx(zte.step_rad, rel=1e-6)
+    for view in range(len(zte.directions) - 1):
+        held = plateau(zte.g_read[view])
+        handover = plateau(zte.g_read[view], -1)
+        assert np.linalg.norm(held) == pytest.approx(zte.gradient_amplitude)
+        assert np.linalg.norm(handover) == pytest.approx(zte.gradient_amplitude)
+        # It turned onto the next view rather than dropping and climbing again.
+        assert handover == pytest.approx(plateau(zte.g_hold[view + 1]), rel=1e-9)
 
 
 def test_only_the_last_view_ramps_down(system, hard):
     zte = readout(system, hard)
-    assert np.linalg.norm(
-        [float(np.asarray(g.waveform)[-1]) for g in zte.g_end]
-    ) == pytest.approx(0.0, abs=1e-9)
+    assert np.linalg.norm(plateau(zte.g_read[-1], -1)) == pytest.approx(0.0, abs=1e-9)
+    for view in range(len(zte.directions) - 1):
+        assert np.linalg.norm(plateau(zte.g_read[view], -1)) > 0.0
+
+
+def test_the_shell_stays_within_the_slew_limit(system, hard):
+    zte = readout(system, hard)
+    gradients = zte.waveforms_and_times()[0]
+    raster = system.grad_raster_time
+    grid = np.arange(0.0, zte.duration, raster)
+    played = np.stack(
+        [
+            np.interp(
+                grid, np.asarray(gradients[axis][0]), np.asarray(gradients[axis][1])
+            )
+            for axis in range(3)
+        ]
+    )
+    slew = np.linalg.norm(np.diff(played, axis=1), axis=0) / raster
+    assert slew.max() <= system.max_slew * 1.001
+
+
+def test_a_dummy_view_holds_the_gradient_still(system, hard):
+    """A preparation view drives the magnetisation without moving the orbit."""
+    zte = readout(system, hard)
+    for dummy, hold, read in zip(
+        zte.g_dummy, zte.g_hold[0], zte.g_read[0], strict=True
+    ):
+        assert np.ptp(np.asarray(dummy.waveform)) == pytest.approx(0.0)
+        assert float(np.asarray(dummy.waveform)[0]) == pytest.approx(
+            float(np.asarray(hold.waveform)[0])
+        )
+        assert pp.calc_duration(dummy) == pytest.approx(pp.calc_duration(read))
 
 
 def test_the_gradient_amplitude_is_one_step_of_k_per_dwell(system, hard):
@@ -200,54 +280,8 @@ def test_every_view_traces_the_same_spoke_from_the_centre(system, hard):
 
 
 # ----------------------------------------------------------------------
-# Rotation encoding
+# The ordering: generated or supplied
 # ----------------------------------------------------------------------
-
-
-def test_the_view_rotations_carry_the_designed_view_onto_every_view(system, hard):
-    """The design is a spoke along x, so that is what the rotations turn."""
-    zte = readout(system, hard)
-    placed = np.einsum("vij,j->vi", zte.view_rotations, np.array([1.0, 0.0, 0.0]))
-    assert placed == pytest.approx(zte.directions, abs=1e-9)
-
-
-def test_the_rotations_also_carry_the_transition(system, hard):
-    """A view is played as the designed transition turned, so the rotation has
-    to place where the gradient is *going* too, not only where it is."""
-    zte = readout(system, hard)
-    designed_step = np.array([np.cos(zte.step_rad), np.sin(zte.step_rad), 0.0])
-    following = np.einsum("vij,j->vi", zte.view_rotations[:-1], designed_step)
-    assert following == pytest.approx(zte.directions[1:], abs=1e-9)
-
-
-def test_a_shell_plays_the_directions_it_was_given(system, hard):
-    zte = readout(system, hard, n_views=12)
-    seq = build_shell(system, zte)
-    ends = spokes(zte, seq)[:, -1, :]
-    played = ends / np.linalg.norm(ends, axis=1, keepdims=True)
-    assert played == pytest.approx(zte.directions, abs=1e-4)
-
-
-def test_a_rotated_shell_lands_where_the_shot_rotation_says(system, hard):
-    zte = readout(system, hard, n_views=12, n_shots=5)
-    shot = zte.shot_rotations[3]
-    seq = build_shell(system, zte, shot=shot)
-    ends = spokes(zte, seq)[:, -1, :]
-    played = ends / np.linalg.norm(ends, axis=1, keepdims=True)
-    assert played == pytest.approx(zte.directions @ shot.T, abs=1e-4)
-
-
-def test_an_ordering_whose_step_wanders_is_refused(system, hard):
-    golden = np.pi * (3.0 - np.sqrt(5.0))
-    index = np.arange(24, dtype=float)
-    height = 1.0 - 2.0 * (index + 0.5) / 24
-    radius = np.sqrt(np.maximum(0.0, 1.0 - height**2))
-    azimuth = index * golden
-    phyllotaxis = np.column_stack(
-        (radius * np.cos(azimuth), radius * np.sin(azimuth), height)
-    )
-    with pytest.raises(ValueError, match=r"constant angle|step by"):
-        readout(system, hard, n_views=None, directions=phyllotaxis)
 
 
 def test_a_shorter_shell_steps_further_between_views(system, hard):
@@ -256,11 +290,6 @@ def test_a_shorter_shell_steps_further_between_views(system, hard):
     long = readout(system, hard, n_views=128)
     assert short.step_rad == pytest.approx(np.arccos(1.0 - 2.0 / 31.0))
     assert short.step_rad > long.step_rad
-
-
-# ----------------------------------------------------------------------
-# The ordering: generated or supplied
-# ----------------------------------------------------------------------
 
 
 def test_it_generates_a_nyquist_matched_shell_when_given_none(system, hard):
@@ -344,14 +373,13 @@ def test_the_directions_are_published_read_only(system, hard):
 # ----------------------------------------------------------------------
 
 
-def test_the_repetition_holds_the_gradient_until_the_next_view(system, hard):
+def test_a_longer_repetition_turns_the_gradient_more_slowly(system, hard):
+    """The spare time goes into the slew, not into a wait."""
     tight = readout(system, hard)
     padded = readout(system, hard, tr=tight.tr + 1e-3)
     assert padded.tr == pytest.approx(tight.tr + 1e-3)
-    assert pp.calc_duration(padded.g_read[0]) > pp.calc_duration(tight.g_read[0])
-    assert float(np.asarray(padded.g_read[0].waveform)[-1]) == pytest.approx(
-        float(np.asarray(tight.g_read[0].waveform)[-1])
-    )
+    assert pp.calc_duration(padded.g_read[0][0]) > pp.calc_duration(tight.g_read[0][0])
+    assert plateau(padded.g_read[0], -1) == pytest.approx(plateau(tight.g_read[0], -1))
 
 
 def test_a_repetition_shorter_than_the_slew_is_refused(system, hard):
@@ -362,10 +390,9 @@ def test_a_repetition_shorter_than_the_slew_is_refused(system, hard):
 
 def test_a_shell_takes_one_ramp_and_a_repetition_per_view(system, hard):
     zte = readout(system, hard, n_views=12)
-    seq = build_shell(system, zte)
     ramp = pp.calc_duration(zte.g_ramp[0])
-    closing = zte.tr - pp.calc_duration(zte.g_read[0]) + pp.calc_duration(zte.g_end[0])
-    assert seq.duration()[0] == pytest.approx(ramp + 11 * zte.tr + closing, abs=1e-9)
+    closing = pp.calc_duration(zte.g_hold[-1][0]) + pp.calc_duration(zte.g_read[-1][0])
+    assert zte.duration == pytest.approx(ramp + 11 * zte.tr + closing, abs=1e-9)
 
 
 # ----------------------------------------------------------------------
@@ -397,3 +424,13 @@ def test_an_impossible_request_is_refused(system, hard, kwargs, message):
 def test_a_single_direction_is_not_a_shell(system, hard):
     with pytest.raises(ValueError, match="at least two views"):
         readout(system, hard, n_views=None, directions=[[1.0, 0.0, 0.0]])
+
+
+def test_two_views_in_a_row_may_not_coincide(system, hard):
+    with pytest.raises(ValueError, match="coincide"):
+        readout(
+            system,
+            hard,
+            n_views=None,
+            directions=[[0.0, 0.0, 1.0], [0.0, 0.0, 1.0], [1.0, 0.0, 0.0]],
+        )

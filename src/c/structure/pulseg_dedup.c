@@ -29,7 +29,8 @@
 #define GRAD_DEF_COLS 6
 #define ADC_DEF_COLS 3
 #define ADC_PARAMS_COLS 2
-#define BLOCK_DEF_COLS 5
+#define BLOCK_DEF_COLS 6
+#define BLOCK_GEOMETRY_COLS 5
 
 /* ================================================================== */
 /*  Tiny helpers                                                      */
@@ -585,7 +586,7 @@ static int compute_grad_stats(
     else
         grad_raster_us = opts->grad_raster_us;
 
-    /* Per-shape endpoints, filled as the shapes are visited below.  Sized by
+    /* Per-shape statistics, filled as the shapes are visited below.  Sized by
      * the shape library rather than by anything per definition, which is what
      * makes it uncapped. */
     if (desc && seq->shapes_library_size > 0)
@@ -595,12 +596,15 @@ static int compute_grad_stats(
             (float *)PULSEG_ALLOC((size_t)seq->shapes_library_size * sizeof(float));
         desc->grad_shape_last =
             (float *)PULSEG_ALLOC((size_t)seq->shapes_library_size * sizeof(float));
-        if (!desc->grad_shape_first || !desc->grad_shape_last)
+        desc->grad_shape_slew =
+            (float *)PULSEG_ALLOC((size_t)seq->shapes_library_size * sizeof(float));
+        if (!desc->grad_shape_first || !desc->grad_shape_last || !desc->grad_shape_slew)
             return PULSEG_ERR_ALLOC_FAILED;
         for (i = 0; i < seq->shapes_library_size; ++i)
         {
             desc->grad_shape_first[i] = 0.0f;
             desc->grad_shape_last[i] = 0.0f;
+            desc->grad_shape_slew[i] = 0.0f;
         }
     }
 
@@ -777,6 +781,8 @@ static int compute_grad_stats(
                 cand.energy *= 1e-6f;
                 if (cand.slew_rate > gd->any.max_slew_rate)
                     gd->any.max_slew_rate = cand.slew_rate;
+                if (desc && desc->grad_shape_slew && shape_id <= desc->num_grad_shape_stats)
+                    desc->grad_shape_slew[shape_id - 1] = cand.slew_rate;
 
                 slew_energy = grad_slew_energy(
                     waveform,
@@ -1197,8 +1203,7 @@ static int compute_rf_stats(
             {
                 double mag_d = sqrt(dre * dre + dim * dim);
                 rd->stats.flip_angle_rad =
-                    (float)(2.0 * 3.14159265358979323846 * (double)rd->stats.base_amplitude_hz *
-                            mag_d); /* radians */
+                    (float)(2.0 * 3.14159265358979323846 * (double)rd->stats.base_amplitude_hz * mag_d); /* radians */
             }
         }
         /* b1sq power (neutral) still needs the uniform-grid envelope. */
@@ -1603,6 +1608,10 @@ int pulseg__get_unique_blocks(
     int(*int_rows)[BLOCK_DEF_COLS] = NULL;
     int *unique_defs = NULL;
     int *event_table = NULL;
+    int *geometry_rows = NULL;
+    int *geometry_defs = NULL;
+    int *geometry_of = NULL;
+    int *def_map = NULL;
 
     pulseq_raw_block raw;
     pulseq_raw_extension ext;
@@ -1789,6 +1798,7 @@ int pulseg__get_unique_blocks(
         int_rows[n][2] = (raw.gx >= 0 && tmp_grad_tab) ? tmp_grad_tab[raw.gx].id : -1;
         int_rows[n][3] = (raw.gy >= 0 && tmp_grad_tab) ? tmp_grad_tab[raw.gy].id : -1;
         int_rows[n][4] = (raw.gz >= 0 && tmp_grad_tab) ? tmp_grad_tab[raw.gz].id : -1;
+        int_rows[n][5] = (raw.adc >= 0 && tmp_adc_tab) ? tmp_adc_tab[raw.adc].id : -1;
 
         tmp_blk_tab[n].rf_id = raw.rf;
         tmp_blk_tab[n].gx_id = raw.gx;
@@ -1833,47 +1843,103 @@ int pulseg__get_unique_blocks(
     }
 
     /* step 3: dedup blocks */
-    desc->num_unique_blocks = pulseg__deduplicate_int_rows(
-        unique_defs,
-        event_table,
-        (const int *)int_rows,
-        num_blocks,
-        BLOCK_DEF_COLS);
-    desc->num_blocks = num_blocks;
-
-    for (n = 0; n < desc->num_unique_blocks; ++n)
     {
-        tmp_blk_defs[n].id = unique_defs[n];
-        tmp_blk_defs[n].duration_us = (int)(int_rows[unique_defs[n]][0] * desc->block_raster_us);
-        tmp_blk_defs[n].rf_id = int_rows[unique_defs[n]][1];
-        tmp_blk_defs[n].gx_id = int_rows[unique_defs[n]][2];
-        tmp_blk_defs[n].gy_id = int_rows[unique_defs[n]][3];
-        tmp_blk_defs[n].gz_id = int_rows[unique_defs[n]][4];
-        tmp_blk_defs[n].adc_id = -1; /* no ADC until proven otherwise */
-    }
-    for (n = 0; n < num_blocks; ++n)
-        tmp_blk_tab[n].id = event_table[n];
+        int num_raw_defs, num_geometries, k, g, dense;
 
-    /* step 3b: resolve ADC definition per block definition */
-    for (n = 0; n < num_blocks; ++n)
-    {
-        int blk_def_id, raw_adc, adc_def_id;
-        blk_def_id = tmp_blk_tab[n].id;
-        raw_adc = tmp_blk_tab[n].adc_id;
-        if (raw_adc < 0 || !tmp_adc_tab)
-            continue; /* no ADC in this instance */
-        adc_def_id = tmp_adc_tab[raw_adc].id;
-        if (tmp_blk_defs[blk_def_id].adc_id < 0)
-        {
-            tmp_blk_defs[blk_def_id].adc_id = adc_def_id; /* first encounter */
-        }
-        else if (tmp_blk_defs[blk_def_id].adc_id != adc_def_id)
-        {
-            result = PULSEG_ERR_ADC_DEFINITION_CONFLICT;
-            pulseg_sequence_descriptor_free(desc);
+        num_raw_defs = pulseg__deduplicate_int_rows(
+            unique_defs,
+            event_table,
+            (const int *)int_rows,
+            num_blocks,
+            BLOCK_DEF_COLS);
+        desc->num_blocks = num_blocks;
+
+        /* A non-acquiring instance of an otherwise identical block -- a dummy
+         * shot -- keys to a definition of its own, which would then answer "no
+         * ADC" to every structural question asked of it.  Fold it into the
+         * acquiring definition it stands in for.  The grouping runs over the
+         * definitions, not the blocks, so it costs nothing at scan length. */
+        geometry_rows =
+            (int *)PULSEG_ALLOC((size_t)num_raw_defs * BLOCK_GEOMETRY_COLS * sizeof(int));
+        geometry_defs = (int *)PULSEG_ALLOC((size_t)num_raw_defs * sizeof(int));
+        geometry_of = (int *)PULSEG_ALLOC((size_t)num_raw_defs * sizeof(int));
+        def_map = (int *)PULSEG_ALLOC((size_t)num_raw_defs * sizeof(int));
+        if (!geometry_rows || !geometry_defs || !geometry_of || !def_map)
             goto fail;
+
+        for (k = 0; k < num_raw_defs; ++k)
+            for (g = 0; g < BLOCK_GEOMETRY_COLS; ++g)
+                geometry_rows[k * BLOCK_GEOMETRY_COLS + g] = int_rows[unique_defs[k]][g];
+
+        num_geometries = pulseg__deduplicate_int_rows(
+            geometry_defs,
+            geometry_of,
+            geometry_rows,
+            num_raw_defs,
+            BLOCK_GEOMETRY_COLS);
+
+        /* geometry_defs is reused as "the one acquiring definition of this
+         * geometry", -1 while none is known and -2 once a second one makes the
+         * choice ambiguous. */
+        for (g = 0; g < num_geometries; ++g)
+            geometry_defs[g] = -1;
+        for (k = 0; k < num_raw_defs; ++k)
+        {
+            if (int_rows[unique_defs[k]][5] < 0)
+                continue;
+            g = geometry_of[k];
+            geometry_defs[g] = (geometry_defs[g] == -1) ? k : -2;
         }
+
+        for (k = 0; k < num_raw_defs; ++k)
+        {
+            def_map[k] = k;
+            if (int_rows[unique_defs[k]][5] >= 0)
+                continue;
+            g = geometry_defs[geometry_of[k]];
+            if (g == -2)
+            {
+                /* Two ADC definitions share this block's timing, so which one
+                 * the non-acquiring instances stand in for is not written
+                 * anywhere.  Guessing would silently misdescribe the readout. */
+                result = PULSEG_ERR_ADC_DEFINITION_CONFLICT;
+                pulseg_sequence_descriptor_free(desc);
+                goto fail;
+            }
+            if (g >= 0)
+                def_map[k] = g;
+        }
+
+        dense = 0;
+        for (k = 0; k < num_raw_defs; ++k)
+        {
+            if (def_map[k] != k)
+                continue;
+            tmp_blk_defs[dense].id = unique_defs[k];
+            tmp_blk_defs[dense].duration_us =
+                (int)(int_rows[unique_defs[k]][0] * desc->block_raster_us);
+            tmp_blk_defs[dense].rf_id = int_rows[unique_defs[k]][1];
+            tmp_blk_defs[dense].gx_id = int_rows[unique_defs[k]][2];
+            tmp_blk_defs[dense].gy_id = int_rows[unique_defs[k]][3];
+            tmp_blk_defs[dense].gz_id = int_rows[unique_defs[k]][4];
+            tmp_blk_defs[dense].adc_id = int_rows[unique_defs[k]][5];
+            geometry_of[k] = dense; /* reused as raw definition -> dense index */
+            ++dense;
+        }
+        desc->num_unique_blocks = dense;
+
+        for (n = 0; n < num_blocks; ++n)
+            tmp_blk_tab[n].id = geometry_of[def_map[event_table[n]]];
     }
+
+    PULSEG_FREE(geometry_rows);
+    geometry_rows = NULL;
+    PULSEG_FREE(geometry_defs);
+    geometry_defs = NULL;
+    PULSEG_FREE(geometry_of);
+    geometry_of = NULL;
+    PULSEG_FREE(def_map);
+    def_map = NULL;
 
     PULSEG_FREE(int_rows);
     int_rows = NULL;
@@ -2023,5 +2089,13 @@ fail:
         PULSEG_FREE(unique_defs);
     if (event_table)
         PULSEG_FREE(event_table);
+    if (geometry_rows)
+        PULSEG_FREE(geometry_rows);
+    if (geometry_defs)
+        PULSEG_FREE(geometry_defs);
+    if (geometry_of)
+        PULSEG_FREE(geometry_of);
+    if (def_map)
+        PULSEG_FREE(def_map);
     return result;
 }

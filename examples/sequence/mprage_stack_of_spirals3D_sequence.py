@@ -24,7 +24,7 @@ Examples
 >>> from pulserver.app import mprage_stack_of_spirals3D_sequence
 >>> seq = mprage_stack_of_spirals3D_sequence(n_x=32, n_z=8, ti=100e-3, tr_outer=300e-3)
 >>> seq.num_trs, seq.num_segments
-(9, 2)
+(9, 3)
 
 The inversion and its segment, with spiral interleaves in place of the Cartesian lines:
 

@@ -57,8 +57,8 @@ Some systems additionally limit how much the gradient may change *between
 successive playouts of a segment* — a view-to-view step, which is what a
 rotating non-Cartesian trajectory does at its readout start. Where such a
 limit is configured, it is checked over the instance table rather than over
-the waveform: a ZTE whose views step by more than the amplifier tolerates is
-refused with the pair of views that did it.
+the waveform: a trajectory whose successive views start further apart than the
+amplifier tolerates is refused with the pair of views that did it.
 
 ## What a failure tells you
 

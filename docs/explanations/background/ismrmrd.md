@@ -6,7 +6,8 @@ it. Pulseq describes what the scanner plays; MRD describes what comes back,
 and how it reaches the reconstruction. This page is a recap of the
 [official documentation](https://ismrmrd.readthedocs.io/en/latest/), kept to
 the parts a Pulserver user meets; how Pulserver produces an MRD stream from a
-vendor scanner is the subject of {doc}`../sequence_model/mrd_client`.
+vendor scanner, and reconstructs it, is the subject of
+{doc}`../sequence_model/mrd_architecture`.
 
 ## The header, and the encoding space
 

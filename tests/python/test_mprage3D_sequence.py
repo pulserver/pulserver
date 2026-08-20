@@ -120,3 +120,19 @@ def test_the_protocol_round_trip_is_feasible():
     refused = mprage3D_sequence.PLUGIN.validate_protocol(system, protocol)
     assert refused["valid"] is False
     assert "TI" in refused["info"]
+
+
+def test_a_non_acquiring_dummy_shot_partitions_the_same_as_an_acquiring_one():
+    # A block definition carries the ADC of any instance that acquires, so a
+    # leading shot that acquires nothing is still the same three segments:
+    # the inversion and its crusher, the pure delay, the readout unit.
+    shapes = []
+    for n_dummy in (0, 4):
+        seq = design(n_dummy=n_dummy)
+        segments = seq._structure_for("plot").segments
+        shapes.append(
+            (seq.tr_size, [(seg["num_blocks"], seg["pure_delay"]) for seg in segments])
+        )
+
+    assert shapes[0] == shapes[1]
+    assert shapes[0][1] == [(2, False), (1, True), (4, False)]
