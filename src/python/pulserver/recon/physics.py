@@ -1763,6 +1763,37 @@ class _CoilwiseCartesianMRI(deepinv.physics.MultiCoilMRI):
         return self.A_adjoint(self.A(x, **kwargs))
 
 
+def _single_precision(value: Any) -> Any:
+    """``value`` in the precision every operator here works in.
+
+    A trajectory is what a NUFFT plans on and sensitivities are what it
+    applies, so a double-precision one plans a double-precision transform
+    and then meets single-precision data -- which the backend reports as a
+    dtype mismatch, from inside a plan, far from the call that caused it.
+    Whatever arrives, NumPy or Torch, a sequence of either, leaves single.
+    """
+    import numpy
+    import torch
+
+    if value is None:
+        return None
+    if isinstance(value, (list, tuple)):
+        return type(value)(_single_precision(item) for item in value)
+    if isinstance(value, torch.Tensor):
+        if value.dtype == torch.complex128:
+            return value.to(torch.complex64)
+        if value.dtype == torch.float64:
+            return value.to(torch.float32)
+        return value
+    if isinstance(value, numpy.ndarray):
+        if value.dtype == numpy.complex128:
+            return value.astype(numpy.complex64, copy=False)
+        if value.dtype == numpy.float64:
+            return value.astype(numpy.float32, copy=False)
+        return value
+    return value
+
+
 def _init_cartesian(
     physics: MRIPhysics,
     mask: Any,
@@ -1798,6 +1829,7 @@ def _init_cartesian(
         mask = torch.as_tensor(mask).to(torch.float32)
     if isinstance(coil_maps, numpy.ndarray):
         coil_maps = torch.as_tensor(coil_maps).to(torch.complex64)
+    mask, coil_maps = _single_precision(mask), _single_precision(coil_maps)
     if requested_device is not None:
         if hasattr(mask, "to"):
             mask = mask.to(requested_device)
@@ -2247,6 +2279,9 @@ def _noncartesian(
         raise ValueError(
             f"image_shape must have {spatial_ndim} entries, got {image_shape!r}"
         )
+    trajectory = _single_precision(trajectory)
+    density = _single_precision(density)
+    coil_maps = _single_precision(coil_maps)
     trajectory_shape = getattr(trajectory, "shape", ())
     if not trajectory_shape and isinstance(trajectory, (list, tuple)) and trajectory:
         trajectory_shape = getattr(trajectory[0], "shape", ())
@@ -2487,7 +2522,7 @@ class NonCartesian2D(MRIPhysics):
        radius = np.linspace(-0.5, 0.5, 128)
        trajectory = np.stack(
            [np.outer(np.cos(angles), radius), np.outer(np.sin(angles), radius)], -1
-       ).reshape(-1, 2).astype(np.float32)
+       ).reshape(-1, 2)
 
        physics = recon.NonCartesian2D(trajectory, (64, 64), coil_maps=coil_maps)
        measured = physics.A(truth)

@@ -36,6 +36,20 @@ class Homodyne:
         Number of spatial Fourier dimensions.
     partial_axis
         Axis containing the partial-Fourier acquisition.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> import pulserver.recon as recon
+    >>> truncated = np.zeros((1, 16, 16), dtype=complex)
+    >>> truncated[..., :10] = 1.0
+    >>> readout = np.zeros(16)
+    >>> readout[:10] = 1.0
+    >>> recon.Homodyne(dimension=2, partial_axis=-1)(truncated, readout).shape
+    (1, 16, 16)
+
+    One pass rather than POCS's iteration; ``fill_partial_echo`` reaches it by
+    name, and its figure is the two side by side.
     """
 
     def __init__(self, *, dimension: int = 2, partial_axis: int = -2) -> None:
@@ -77,6 +91,20 @@ class POCS:
         Relative iterate-change tolerance. Set to zero for a fixed count.
     positive
         Also project the demodulated image onto the non-negative real cone.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> import pulserver.recon as recon
+    >>> truncated = np.zeros((1, 16, 16), dtype=complex)
+    >>> truncated[..., :10] = 1.0
+    >>> readout = np.zeros(16)
+    >>> readout[:10] = 1.0
+    >>> recon.POCS(dimension=2, partial_axis=-1, iterations=4)(truncated, readout).shape
+    (1, 16, 16)
+
+    ``fill_partial_echo`` reaches this by name, and its figure is the two
+    estimators side by side.
     """
 
     def __init__(
@@ -216,8 +244,14 @@ def fill_partial_echo(
                ("object", truth),
                ("zero-filled", recon.ifftc(truncated)),
                ("POCS", recon.fill_partial_echo(truncated[None], readout, dimension=2)),
+               (
+                   "Homodyne",
+                   recon.fill_partial_echo(
+                       truncated[None], readout, dimension=2, method="homodyne"
+                   ),
+               ),
            ],
-           title="fill_partial_echo, 62 % of the readout acquired",
+           title="fill_partial_echo: two estimators for the same truncation",
        )
     """
     if method == "pocs":
@@ -857,6 +891,46 @@ def correct_lines(lines: list[tuple[Any, bool]], phase: Any = None) -> list[Any]
     -------
     list of numpy.ndarray
         The corrected lines, all in forward readout order.
+
+    Examples
+    --------
+    A reversed line carries the delay it was played through, and leaving it
+    there is what puts a copy of the object at half the field of view.
+    ``phase=None`` is the same train flipped but not demodulated, which is
+    what the ghost is:
+
+    .. plot::
+
+       import numpy as np
+       import pulserver.recon as recon
+       from _figures import images, phantom
+
+       truth = phantom(64)[0][0].numpy()
+       kspace = recon.fftc(truth)
+       ramp = 0.9 * np.linspace(-1.0, 1.0, 64) + 0.4
+
+       def backwards(line):
+           hybrid = recon.ifftc(line, axes=-1)
+           return recon.fftc(hybrid * np.exp(-1j * ramp), axes=-1)[..., ::-1]
+
+       train = [
+           (line[None], False) if index % 2 == 0 else (backwards(line[None]), True)
+           for index, line in enumerate(kspace)
+       ]
+       middle = kspace[32][None]
+       phase = recon.estimate_epi_phase([middle, backwards(middle)[..., ::-1], middle])
+
+       def placed(fit):
+           return np.stack([recon.correct_lines([line], fit)[0][0] for line in train])
+
+       images(
+           [
+               ("object", truth),
+               ("flipped only", recon.ifftc(placed(None))),
+               ("phase corrected", recon.ifftc(placed(phase))),
+           ],
+           title="an odd/even phase, and the ghost it leaves",
+       )
     """
     import numpy as np
 

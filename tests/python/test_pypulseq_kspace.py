@@ -249,6 +249,24 @@ def test_plotting_the_kspace_of_a_rotated_sequence_needs_no_special_argument():
     assert figure is not None
 
 
+def test_the_two_plots_draw_the_same_resolved_sequence():
+    """``plot`` and ``plot_kspace`` reach upstream through one materialisation,
+    so what one draws the gradients of is what the other draws the trajectory
+    of -- not the base waveform beside the turned one."""
+    matplotlib = pytest.importorskip("matplotlib")
+    matplotlib.use("Agg")
+
+    seq = load("gre_radial_2d")
+    drawn = seq.plot_kspace(plot_now=False).axes[0].lines[0].get_xydata()
+    dense = np.asarray(seq.calculate_kspace()[1])
+
+    assert np.array_equal(np.nan_to_num(drawn.T), np.nan_to_num(dense[:2]))
+    # And that trajectory is the one the resolved window produces, which is
+    # the sequence ``plot`` hands upstream.
+    resolved = seq._upstream_window(1, seq.num_blocks).calculate_kspace()[1]
+    assert np.array_equal(np.nan_to_num(dense), np.nan_to_num(np.asarray(resolved)))
+
+
 def test_the_logical_frame_leaves_rotations_out():
     """Two frames, and the difference is a rotation extension.
 
