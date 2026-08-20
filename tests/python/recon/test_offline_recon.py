@@ -120,13 +120,13 @@ def test_the_file_reaches_the_hooks_exactly_as_the_stream_does(tmp_path, kspace)
 
     class Recording(type(cartesian2D_recon.PLUGIN)):
         def receive(self, acquisition, context):
-            super().receive(acquisition, context)
             seen.append(
                 (
                     int(acquisition.idx.kspace_encode_step_1),
                     int(acquisition.idx.segment),
                 )
             )
+            return super().receive(acquisition, context)
 
     Recording().run(write_file(tmp_path / "scan.h5", kspace))
 

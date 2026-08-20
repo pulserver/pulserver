@@ -437,9 +437,21 @@ def test_writing_warns_about_a_discontinuity_and_can_be_told_not_to(system, tmp_
 
     with warnings.catch_warnings():
         warnings.simplefilter("error")
-        seq.write(
-            tmp_path / "quiet.seq", check_timing=False, check_gradient_continuity=False
-        )
+        seq.write(tmp_path / "quiet.seq", check_timing=False, check_gradients=False)
+
+
+def test_writing_warns_about_a_gradient_beyond_the_system(tmp_path):
+    """`check_gradients` covers amplitude and slew, not only continuity."""
+    modest = pp.Opts(max_grad=10, grad_unit="mT/m", max_slew=100, slew_unit="T/m/s")
+    seq = pp.Sequence(modest)
+    seq.add_block(pp.make_trapezoid(channel="x", area=8000, system=pp.Opts()))
+
+    with pytest.warns(UserWarning, match="exceeds the system limit"):
+        seq.write(tmp_path / "warned.seq", check_timing=False)
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        seq.write(tmp_path / "quiet.seq", check_timing=False, check_gradients=False)
 
 
 def test_check_timing_is_upstreams_answer_over_the_window(seq):

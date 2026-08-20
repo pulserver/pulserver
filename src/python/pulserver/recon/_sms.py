@@ -1,67 +1,26 @@
-"""Simultaneous-multislice data contracts and private encoding machinery."""
+"""Private simultaneous-multislice encoding machinery."""
 
 from __future__ import annotations
 
-__all__ = ["SmsEpiInputs"]
+__all__: list[str] = []
 
-from dataclasses import dataclass
 from typing import Any
 
 import torch
 
 import deepinv
 
-
-@dataclass(frozen=True)
-class SmsEpiInputs:
-    """Inputs a simultaneous-multislice reconstruction needs, checked together.
-
-    Parameters
-    ----------
-    imaging
-        Multiband data, encoded by whatever trajectory the sequence played.
-    coil_maps
-        Per-slice coil maps for the model-based separation. Keep this tensor
-        on the selected Torch CPU/CUDA device.
-    single_band_reference
-        Single-band prescan the coil maps can be derived from, when they were
-        not estimated another way.
-    caipi_encoding
-        The CAIPI phase/modulation model that was played. Required whenever
-        the multiband factor is greater than one, since it is what tells the
-        simultaneously excited slices apart.
-
-    Notes
-    -----
-    This class collects and checks the inputs; the separation itself is
-    :class:`pulserver.recon.physics.SMS`, which composes with any in-plane
-    physics and so does not restrict the acquisition to a Cartesian encode.
-    """
-
-    imaging: Any
-    coil_maps: Any | None = None
-    single_band_reference: Any | None = None
-    caipi_encoding: Any | None = None
-
-    def validate(self, multiband_factor: int) -> None:
-        """Raise ``ValueError`` when an SMS backend lacks essential inputs."""
-        if multiband_factor < 1:
-            raise ValueError("multiband_factor must be at least one")
-        if multiband_factor > 1 and self.caipi_encoding is None:
-            raise ValueError(
-                "SMS reconstruction requires the acquired CAIPI encoding model"
-            )
-        if (
-            multiband_factor > 1
-            and self.coil_maps is None
-            and self.single_band_reference is None
-        ):
-            raise ValueError(
-                "SMS reconstruction requires coil maps or a single-band reference"
-            )
-
-
 # %% private module subroutines
+
+
+def _fits_one_call(physics: Any, batch: int) -> bool:
+    """Whether ``physics`` encodes ``batch`` images in a single call.
+
+    An mri-nufft operator plans for a fixed batch size and refuses any other;
+    a physics that carries no such plan takes whatever batch it is given.
+    """
+    planned = getattr(getattr(physics, "native_operator", None), "n_batchs", None)
+    return planned is None or int(planned) == batch
 
 
 class _SMSLinearPhysics(deepinv.physics.LinearPhysics):
@@ -123,15 +82,15 @@ class _SMSLinearPhysics(deepinv.physics.LinearPhysics):
         if value.ndim < 3 or value.shape[1] != self.n_slices:
             raise ValueError("SMS input must have shape (batch, slices, ...)")
         batch = value.shape[0]
-        if self.shared:
+        if self.shared and _fits_one_call(self.physics[0], batch * self.n_slices):
             flattened = value.reshape(batch * self.n_slices, *value.shape[2:])
             encoded = self.physics[0].A(flattened, **kwargs)
             encoded = encoded.reshape(batch, self.n_slices, *encoded.shape[1:])
         else:
             encoded = torch.stack(
                 [
-                    selected.A(value[:, index], **kwargs)
-                    for index, selected in enumerate(self.physics)
+                    self._for_slice(index).A(value[:, index], **kwargs)
+                    for index in range(self.n_slices)
                 ],
                 dim=1,
             )
@@ -145,24 +104,29 @@ class _SMSLinearPhysics(deepinv.physics.LinearPhysics):
             *value.shape[1:],
         )
         demodulated = self._modulate(expanded, conjugate=True)
-        if self.shared:
+        batch = value.shape[0]
+        if self.shared and _fits_one_call(self.physics[0], batch * self.n_slices):
             flattened = demodulated.reshape(
-                value.shape[0] * self.n_slices,
+                batch * self.n_slices,
                 *value.shape[1:],
             )
             decoded = self.physics[0].A_adjoint(flattened, **kwargs)
             return decoded.reshape(
-                value.shape[0],
+                batch,
                 self.n_slices,
                 *decoded.shape[1:],
             )
         return torch.stack(
             [
-                selected.A_adjoint(demodulated[:, index], **kwargs)
-                for index, selected in enumerate(self.physics)
+                self._for_slice(index).A_adjoint(demodulated[:, index], **kwargs)
+                for index in range(self.n_slices)
             ],
             dim=1,
         )
+
+    def _for_slice(self, index: int) -> Any:
+        """The physics that encodes slice ``index``."""
+        return self.physics[0] if self.shared else self.physics[index]
 
     def A_adjoint_A(self, value: torch.Tensor, **kwargs: Any) -> torch.Tensor:
         """Apply the exact coupled slice normal operator."""

@@ -107,6 +107,23 @@ class T2Preparation(RfModule):
             prep = design.T2Preparation(system, te)
             for block in prep.blocks:
                 seq.add_block(*block)
+
+    Tipped down, refocused twice, tipped back: over the band the refocusing
+    covers, the whole module returns the magnetisation to z, and what it lost
+    on the way is T2 weighting:
+
+    .. plot::
+
+       import pulserver.design as design
+       import pulserver.pypulseq as pp
+       from _figures import rf_profile
+
+       rf_profile(
+           design.T2Preparation(pp.Opts(), 40e-3),
+           title="T2 preparation, TE 40 ms",
+           whole=True,
+           extent=600,
+       )
     """
 
     def init_module(
@@ -237,6 +254,22 @@ class T1T2Preparation(T2Preparation):
     >>> prep = design.T1T2Preparation(pp.Opts(), 50e-3)
     >>> prep.final_tip
     'down'
+
+    The same module tipping down instead of up, so the readout that follows
+    sees an inversion recovering as well as a T2 decay:
+
+    .. plot::
+
+       import pulserver.design as design
+       import pulserver.pypulseq as pp
+       from _figures import rf_profile
+
+       rf_profile(
+           design.T1T2Preparation(pp.Opts(), 40e-3),
+           title="T1-T2 preparation, TE 40 ms",
+           whole=True,
+           extent=600,
+       )
     """
 
     def init_module(self, system: pp.Opts, echo_time_s: float, **kwargs) -> None:

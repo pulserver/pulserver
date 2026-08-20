@@ -123,6 +123,20 @@ change is not.
 - **The examples are shipped code.** A change to `examples/sequence/*` or
   `examples/recon/*` changes the installed `pulserver.app` namespace, and the
   zoo tests hold it.
+- **A zoo module is one complete plugin and nothing else.** `examples/recon/*`
+  holds one `ReconPlugin` subclass, its `PLUGIN`, and the three hooks — never a
+  module-level helper, a private method, or a module demonstrating one step.
+  A step a plugin needs is a name in `pulserver.recon`, general and high-level
+  enough to compose directly in a hook; a local subroutine hides which of the
+  code is the mandatory hook. `examples/sequence/*` holds whole sequences on
+  the same terms.
+- **The three recon hooks divide the work the same way every time.**
+  `startup` lays out the buffers the header's encoding spaces describe.
+  `receive` places each acquisition and, reading its flags, routes the
+  boundaries it closes to a named branch — the sorting and the routing both
+  live there. `recon` takes that branch name and holds the reconstruction of
+  each branch over buffers that are already filled; it never sorts and never
+  decides when it runs.
 
 ## Before you finish
 

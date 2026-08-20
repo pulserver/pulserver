@@ -67,6 +67,48 @@ class OffResonanceSaturation(RfModule):
     ------
     ValueError
         If ``n_pulses`` is below one, or a spoiling argument is out of range.
+
+    Examples
+    --------
+    The pulse is the family's; the train and the spoiler are this class's.
+
+    >>> import numpy as np
+    >>> import pulserver.design as design
+    >>> import pulserver.pypulseq as pp
+    >>> system = pp.Opts()
+    >>> pulse = pp.make_gauss_pulse(
+    ...     flip_angle=np.deg2rad(500), duration=8e-3, freq_offset=-1500.0,
+    ...     use="saturation", system=system,
+    ... )
+    >>> prep = design.OffResonanceSaturation(system, pulse, n_pulses=3)
+    >>> len(prep.blocks)
+    4
+
+    One event replayed, so three pulses cost one waveform:
+
+    >>> prep.blocks[0] == prep.blocks[1] == prep.blocks[2]
+    True
+
+    Three pulses back to back, and what they leave along z:
+
+    .. plot::
+
+       import numpy as np
+       import pulserver.design as design
+       import pulserver.pypulseq as pp
+       from _figures import rf_profile
+
+       system = pp.Opts()
+       pulse = pp.make_gauss_pulse(
+           flip_angle=np.deg2rad(500), duration=8e-3, freq_offset=-1500.0,
+           use="saturation", system=system,
+       )
+       rf_profile(
+           design.OffResonanceSaturation(system, pulse, n_pulses=3),
+           title="three saturation pulses, 1.5 kHz below resonance",
+           whole=True,
+           extent=3000,
+       )
     """
 
     def init_module(
@@ -178,6 +220,21 @@ class MtPreparation(OffResonanceSaturation):
     >>> mt = design.MtPreparation(pp.Opts())
     >>> len(mt.blocks), round(float(mt.rf_prep.freq_offset))
     (2, -1500)
+
+    One band, off resonance, and the free pool left alone at zero:
+
+    .. plot::
+
+       import pulserver.design as design
+       import pulserver.pypulseq as pp
+       from _figures import rf_profile
+
+       rf_profile(
+           design.MtPreparation(pp.Opts()),
+           title="MT saturation, 1.5 kHz below resonance",
+           whole=True,
+           extent=3000,
+       )
     """
 
     def init_module(
@@ -266,6 +323,22 @@ class IhMtPreparation(OffResonanceSaturation):
     >>> ihmt = design.IhMtPreparation(pp.Opts())
     >>> ihmt.band_offsets_hz.tolist()
     [-1500.0, 1500.0]
+
+    Both bands at once, which is the measurement: the same total power as one
+    band, delivered symmetrically:
+
+    .. plot::
+
+       import pulserver.design as design
+       import pulserver.pypulseq as pp
+       from _figures import rf_profile
+
+       rf_profile(
+           design.IhMtPreparation(pp.Opts()),
+           title="ihMT saturation, both sidebands",
+           whole=True,
+           extent=3000,
+       )
     """
 
     def init_module(
@@ -367,6 +440,22 @@ class BlochSiegertPreparation(OffResonanceSaturation):
     >>> pulse = design.BlochSiegertPreparation(pp.Opts())
     >>> len(pulse.blocks), round(pulse.kbs_per_gauss2, 1)
     (1, 86.6)
+
+    The pulse sits far enough off resonance to shift the phase without
+    tipping much, and the residual dip is what "far enough" costs:
+
+    .. plot::
+
+       import pulserver.design as design
+       import pulserver.pypulseq as pp
+       from _figures import rf_profile
+
+       rf_profile(
+           design.BlochSiegertPreparation(pp.Opts()),
+           title="Bloch-Siegert probe, 4 kHz off resonance",
+           whole=True,
+           extent=(-1000, 8000),
+       )
     """
 
     def init_module(

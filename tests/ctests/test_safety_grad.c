@@ -6,6 +6,8 @@
  */
 #include "test_helpers.h"
 
+#include "pulseg_pns_models.h"
+
 /* ================================================================== */
 /*  Shared data-driven helpers                                        */
 /* ================================================================== */
@@ -763,8 +765,53 @@ MU_TEST(test_pns_no_kernel_is_deterministic_exact_path)
     pulseg_collection_free(coll);
 }
 
+/* The shipped Irnich model (pulseg_pns_irnich.c) against this suite's own
+ * implementation of the same published form. The two are independent below
+ * the formula -- the shipped one convolves directly, this one through
+ * pulseg__calc_convolution_fft -- so agreement is evidence about the model,
+ * where memo-versus-exact above is evidence about the machinery. */
+MU_TEST(test_shipped_irnich_matches_an_independent_implementation)
+{
+    pns_test_ctx ctx = {360.0f, 4.25e8f, 0.333f};
+    pulseg_pns_model reference = {&ctx, pns_test_required_padding, pns_test_evaluate, NULL};
+    pulseg_pns_irnich shipped_ctx;
+    pulseg_pns_model shipped;
+    pulseg_collection *coll = NULL;
+    pulseg_pns_result a, b;
+    double peak_a, peak_b;
+    int rc;
+
+    pulseg_pns_irnich_init(&shipped, &shipped_ctx, 360.0f, 4.25e8f, 0.333f);
+
+    mech_resonances_opts_init(&s_opts);
+    rc = load_corpus_seq(&coll, "epi_2d_main.seq", &s_opts);
+    mu_assert(PULSEG_SUCCEEDED(rc), "load_seq failed");
+
+    memset(&a, 0, sizeof(a));
+    memset(&b, 0, sizeof(b));
+    pulseg_diagnostic_init(&s_diag);
+    rc = pulseg_calc_pns(coll, &a, &s_diag, 0, 0, &s_opts, &reference);
+    mu_assert(PULSEG_SUCCEEDED(rc), "reference PNS evaluation failed");
+    pulseg_diagnostic_init(&s_diag);
+    rc = pulseg_calc_pns(coll, &b, &s_diag, 0, 0, &s_opts, &shipped);
+    mu_assert(PULSEG_SUCCEEDED(rc), "shipped Irnich PNS evaluation failed");
+
+    mu_assert_int_eq(a.num_samples, b.num_samples);
+    peak_a = pns_peak(&a);
+    peak_b = pns_peak(&b);
+    mu_assert(peak_a > 0.0, "reference PNS peak is zero: fixture exercises nothing");
+    mu_assert(
+        fabs(peak_a - peak_b) <= PNS_MEMO_TEST_RTOL * peak_a,
+        "shipped Irnich model disagrees with the independent implementation");
+
+    pulseg_pns_result_free(&a);
+    pulseg_pns_result_free(&b);
+    pulseg_collection_free(coll);
+}
+
 MU_TEST_SUITE(suite_pns_memoization)
 {
+    MU_RUN_TEST(test_shipped_irnich_matches_an_independent_implementation);
     MU_RUN_TEST(test_pns_memo_matches_exact_gre);
     MU_RUN_TEST(test_pns_memo_matches_exact_epi);
     MU_RUN_TEST(test_pns_memo_matches_exact_fse);

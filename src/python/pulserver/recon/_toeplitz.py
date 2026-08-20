@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-__all__: list[str] = []
+__all__ = ["CompactToeplitzKernel", "as_torch", "support_indices"]
 
 from concurrent.futures import ThreadPoolExecutor
 from importlib import import_module

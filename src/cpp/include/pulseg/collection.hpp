@@ -555,18 +555,15 @@ namespace pulseg
 
         // ── PNS computation ──────────────────────────────────────────
 
-        /* Templated on the model rather than overloaded per model: the body
-         * only ever calls params.to_c(), so any type publishing that -- the
-         * Irnich PnsParams, the SAFE SafeParams, or a vendor's own -- goes
-         * through unchanged. */
-        template <typename Model>
-        PnsResult calc_pns(int ss, int canonical_tr_idx, const Model& params) const
+        /* Takes the C model rather than a model type: `pulseg_pns_model` is
+         * the interface every model implements -- the published Irnich and
+         * SAFE (pulseg_pns_models.h) and a vendor's own alike. */
+        PnsResult calc_pns(int ss, int canonical_tr_idx, const pulseg_pns_model& model) const
         {
-            pulseg_pns_model cp = params.to_c();
             pulseg_pns_result cr = PULSEG_PNS_RESULT_INIT;
             pulseg_diagnostic diag;
             pulseg_diagnostic_init(&diag);
-            int code = pulseg_calc_pns(coll_, &cr, &diag, ss, canonical_tr_idx, &opts_, &cp);
+            int code = pulseg_calc_pns(coll_, &cr, &diag, ss, canonical_tr_idx, &opts_, &model);
             check(code, diag);
 
             PnsResult r;
@@ -592,20 +589,12 @@ namespace pulseg
 
         void check_safety(
             const std::vector<ForbiddenBand>& bands = {},
-            const PnsParams* pns_params = nullptr,
+            const pulseg_pns_model* pns_model = nullptr,
             float pns_threshold_percent = 100.0f) const
         {
             std::vector<pulseg_forbidden_band> cbands(bands.size());
             for (size_t i = 0; i < bands.size(); ++i)
                 cbands[i] = bands[i].to_c();
-
-            pulseg_pns_model cp;
-            const pulseg_pns_model* cpp = nullptr;
-            if (pns_params)
-            {
-                cp = pns_params->to_c();
-                cpp = &cp;
-            }
 
             pulseg_diagnostic diag;
             pulseg_diagnostic_init(&diag);
@@ -616,7 +605,7 @@ namespace pulseg
                 &opts_,
                 static_cast<int>(cbands.size()),
                 cbands.empty() ? nullptr : cbands.data(),
-                cpp,
+                pns_model,
                 pns_threshold_percent);
             check(code, diag);
         }

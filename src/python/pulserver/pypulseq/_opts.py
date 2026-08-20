@@ -99,43 +99,63 @@ def apply_system_derates(
     *,
     grad_derate: float = MAX_GRAD_DERATE,
     slew_derate: float = MAX_SLEW_DERATE,
-) -> None:
-    """Derate the gradient and slew limits of ``opts`` in place.
+) -> _pp.Opts:
+    """Return a copy of ``opts`` whose gradient and slew limits are derated.
 
-    The base limits are cached on the object the first time this is called, and
-    every later call derates those rather than the current values, so repeating
-    it does not compound.
+    The headroom belongs to the waveform being designed, not to the sequence:
+    a designer that wants to stay clear of the ceiling derates the limits it
+    designs against, while the sequence goes on declaring what the scanner
+    actually has. Handing back a copy is what keeps those two apart -- a
+    derate applied in place would travel back to every module that shares the
+    system object and retroactively put already-designed events over a limit
+    that moved under them.
+
+    The base limits are carried on the copy, and a copy that already has them
+    is derated from those rather than from its current values, so applying
+    this twice does not compound.
 
     Parameters
     ----------
     opts : pypulseq.Opts
-        System limits, modified in place.
+        System limits. Not modified.
     grad_derate, slew_derate : float, optional
         Fraction of the base ``max_grad`` / ``max_slew`` to allow.
 
     Returns
     -------
-    None
+    pypulseq.Opts
+        A copy of ``opts`` with the derated limits.
+
+    See Also
+    --------
+    cap_system : the same copy-not-mutate contract, for an absolute ceiling.
 
     Examples
     --------
     >>> import pulserver.pypulseq as pp
     >>> opts = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
-    >>> base = opts.max_grad
-    >>> pp.apply_system_derates(opts)
-    >>> opts.max_grad == 0.9 * base
+    >>> derated = pp.apply_system_derates(opts)
+    >>> derated.max_grad == 0.9 * opts.max_grad
     True
-    >>> pp.apply_system_derates(opts)
-    >>> opts.max_grad == 0.9 * base
+    >>> derated is opts
+    False
+
+    The caller's own limits are untouched, and repeating does not compound:
+
+    >>> pp.apply_system_derates(derated).max_grad == derated.max_grad
     True
     """
-    if not hasattr(opts, "_pulserver_base_max_grad"):
-        opts._pulserver_base_max_grad = float(opts.max_grad)
-    if not hasattr(opts, "_pulserver_base_max_slew"):
-        opts._pulserver_base_max_slew = float(opts.max_slew)
+    import copy
 
-    opts.max_grad = opts._pulserver_base_max_grad * float(grad_derate)
-    opts.max_slew = opts._pulserver_base_max_slew * float(slew_derate)
+    derated = copy.copy(opts)
+    if not hasattr(derated, "_pulserver_base_max_grad"):
+        derated._pulserver_base_max_grad = float(opts.max_grad)
+    if not hasattr(derated, "_pulserver_base_max_slew"):
+        derated._pulserver_base_max_slew = float(opts.max_slew)
+
+    derated.max_grad = derated._pulserver_base_max_grad * float(grad_derate)
+    derated.max_slew = derated._pulserver_base_max_slew * float(slew_derate)
+    return derated
 
 
 def cap_system(

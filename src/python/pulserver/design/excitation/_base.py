@@ -26,6 +26,39 @@ class RfModule(SequenceModule):
     Adds the one view the sequence-level analyses cannot give: what the pulse
     does to the magnetisation. Everything else -- publication, ``blocks``,
     ``duration``, plotting, k-space -- is :class:`~pulserver.SequenceModule`'s.
+
+    Examples
+    --------
+    Every module whose point is a pulse inherits :meth:`sim_rf`, so what the
+    pulse does to the magnetisation is one call away wherever it comes from:
+
+    >>> import pulserver.design as design
+    >>> import pulserver.pypulseq as pp
+    >>> system = pp.Opts()
+    >>> for module in (
+    ...     design.SpatialSelectiveExcitation(system, 15.0, 5e-3),
+    ...     design.Inversion(system, 8e-3),
+    ...     design.FatSaturation(system),
+    ... ):
+    ...     print(isinstance(module, design.RfModule), module.sim_rf(compat=False).mz_z.ndim)
+    True 1
+    True 1
+    True 1
+
+    An inversion and the excitation it precedes, on the same axis:
+
+    .. plot::
+
+       import pulserver.design as design
+       import pulserver.pypulseq as pp
+       from _figures import rf_profile
+
+       system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+       rf_profile(
+           design.Inversion(system, 8e-3),
+           title="an RfModule reporting its own profile",
+           extent=2500,
+       )
     """
 
     def sim_rf(self, pulse=None, **kwargs):

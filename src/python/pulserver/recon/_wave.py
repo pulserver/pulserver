@@ -9,6 +9,10 @@ from typing import Any
 
 import torch
 
+from ._fourier import fftc as _fftc
+from ._fourier import ifftc as _ifftc
+from ._fourier import resize_centered_axis as _resize_centered
+
 import deepinv
 
 from ._packed import PackedHermitianField
@@ -404,34 +408,3 @@ class _WaveLinearPhysics(deepinv.physics.LinearPhysics):
         if name == "A":
             return torch.cat(results, dim=1)
         return torch.stack(results).sum(dim=0)
-
-
-def _fftc(value: torch.Tensor, axes: tuple[int, ...]) -> torch.Tensor:
-    value = torch.fft.ifftshift(value, dim=axes)
-    value = torch.fft.fftn(value, dim=axes, norm="ortho")
-    return torch.fft.fftshift(value, dim=axes)
-
-
-def _ifftc(value: torch.Tensor, axes: tuple[int, ...]) -> torch.Tensor:
-    value = torch.fft.ifftshift(value, dim=axes)
-    value = torch.fft.ifftn(value, dim=axes, norm="ortho")
-    return torch.fft.fftshift(value, dim=axes)
-
-
-def _resize_centered(value: torch.Tensor, size: int, *, axis: int) -> torch.Tensor:
-    axis %= value.ndim
-    source_size = value.shape[axis]
-    if source_size == size:
-        return value
-    result_shape = list(value.shape)
-    result_shape[axis] = size
-    result = torch.zeros(result_shape, dtype=value.dtype, device=value.device)
-    count = min(source_size, size)
-    source_start = (source_size - count) // 2
-    target_start = (size - count) // 2
-    source = [slice(None)] * value.ndim
-    target = [slice(None)] * value.ndim
-    source[axis] = slice(source_start, source_start + count)
-    target[axis] = slice(target_start, target_start + count)
-    result[tuple(target)] = value[tuple(source)]
-    return result

@@ -9,7 +9,6 @@ import pytest
 
 import pulserver.recon.optim as algorithms
 import pulserver.recon.calibration as calibration
-import pulserver.recon.preprocessing as epi
 from pulserver.recon._mrd.grouping import (
     filter_acquisitions,
     group_by_labels,
@@ -22,7 +21,6 @@ from pulserver.recon._mrd.metadata import (
     has_acquisition_flag,
     user_parameter,
 )
-from pulserver.recon.preprocessing import SmsEpiInputs
 
 
 def test_polynomial_preconditioner_degree_zero_and_call_count():
@@ -57,11 +55,7 @@ def test_nlinv_public_api_is_class_based():
         "WavePSFCalibration",
         "WavePSFResult",
         "calibration_extent",
-        # The two estimators a reconstruction actually calls: one reads the
-        # calibration block off a sampling mask and solves NLINV on it, the
-        # other low-passes coil images a non-Cartesian adjoint produced.
-        "sensitivities",
-        "smooth_sensitivities",
+        "coil_maps_from_reference",
     ]
     assert not hasattr(calibration, "nlinv_sensitivities")
     assert not hasattr(calibration, "estimate_sensitivities")
@@ -184,38 +178,3 @@ def test_the_prescription_turns_the_rotatable_part_only():
     np.testing.assert_allclose(turned, expected, atol=1e-12)
     assert turned[0, 0] == pytest.approx(1100.0, rel=1e-12)
     assert turned[1, 1] == pytest.approx(0.0, abs=1e-9)
-
-
-def test_partition_epi_acquisitions_uses_standard_roles(monkeypatch):
-    navigator = _acquisition(0)
-    reference = _acquisition(1)
-    reverse = _acquisition(2)
-    reverse.idx.set = 1
-    imaging = _acquisition(3)
-    flag_map = {
-        id(navigator): {"ACQ_IS_NAVIGATION_DATA"},
-        id(reference): {"ACQ_IS_PARALLEL_CALIBRATION"},
-    }
-    monkeypatch.setattr(
-        epi,
-        "has_acquisition_flag",
-        lambda acquisition, flag: flag in flag_map.get(id(acquisition), set()),
-    )
-
-    groups = epi.partition_epi_acquisitions([navigator, reference, reverse, imaging])
-    assert groups.phase_correction == [navigator]
-    assert groups.single_band_reference == [reference]
-    assert groups.reverse_polarity == [reverse]
-    assert groups.imaging == [imaging]
-
-
-def test_sms_inputs_require_caipi_and_a_reconstruction_reference():
-    with pytest.raises(ValueError, match="CAIPI"):
-        SmsEpiInputs(imaging=object()).validate(multiband_factor=2)
-    with pytest.raises(ValueError, match="coil maps or a single-band reference"):
-        SmsEpiInputs(imaging=object(), caipi_encoding=object()).validate(
-            multiband_factor=2
-        )
-    SmsEpiInputs(
-        imaging=object(), caipi_encoding=object(), coil_maps=object()
-    ).validate(multiband_factor=2)

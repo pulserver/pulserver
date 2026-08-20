@@ -13,12 +13,13 @@ from pathlib import Path
 
 import pytest
 
-import pulserver
 import pulserver.design as design
 import pulserver.pypulseq as pp
 from pulserver import SequenceModule
 
 API_PAGE = Path(__file__).resolve().parents[2] / "docs" / "api" / "python" / "design.md"
+# The tree is excluded from the wheel, so it is only ever found in the checkout.
+SOURCE_TREE = Path(__file__).resolve().parents[2] / "src" / "python" / "pulserver"
 
 
 def test_everything_exported_is_a_sequence_module():
@@ -98,7 +99,7 @@ def test_the_helpers_a_plugin_needs_are_in_the_event_layer(name):
 
 def test_the_disabled_tree_is_not_importable():
     """Kept to port physics from, and deliberately not a package."""
-    disabled = Path(pulserver.__file__).parent / "design" / "_disabled"
+    disabled = SOURCE_TREE / "design" / "_disabled"
     assert disabled.is_dir()
     assert not (disabled / "__init__.py").exists()
     with pytest.raises(ModuleNotFoundError):

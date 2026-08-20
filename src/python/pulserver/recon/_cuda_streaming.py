@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+__all__ = ["CudaStreaming"]
+
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import suppress
 from copy import deepcopy

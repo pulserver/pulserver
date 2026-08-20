@@ -224,7 +224,7 @@ typedef struct pulseg_adc_table_element
  * added without updating the count, fails the build instead of silently
  * changing the cache layout. */
 #define PULSEG_ASSERT_PACKED(type, nwords) \
-    typedef char pulseg__packed_check_##type[(sizeof(type) == (nwords)*4) ? 1 : -1]
+    typedef char pulseg__packed_check_##type[(sizeof(type) == (nwords) * 4) ? 1 : -1]
 
 typedef struct pulseg_base_block
 {

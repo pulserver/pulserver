@@ -1,11 +1,73 @@
 """Reconstruction for :mod:`pulserver.app.sequence.epi3D_sequence`.
 
-The 2D EPI preprocessing on a volume: the stream is partitioned, the
-navigator's odd/even fit corrects every reversed line, and the volume grids
-over ``(partition, line, readout)`` before a coil-wise 3D Fourier
-reconstruction. The opposite-polarity reference reconstructs alongside as
-its own series, the pair PyHySCO corrects.
+The 2D EPI preprocessing on a volume. A blip-nulled navigator triplet gives the
+odd/even phase fit, every reversed line is flipped and corrected by it as
+it arrives, and the slab fills over ``(partition, line, readout)`` before
+:func:`pulserver.recon.cartesian_recon` inverts it -- the same three
+reconstructions the Cartesian plugins choose between, selected by what the scan
+sampled.
 
+The opposite-polarity reference is the scan's second ``SET``, so it is an axis
+of the same buffer and comes back as its own series: the pair PyHySCO corrects
+leaves the scanner together.
+
+Coil sensitivities come from a separate low-resolution calibration
+(``ACQ_IS_PARALLEL_CALIBRATION``). That prescan is a subsequence, so the header
+gives it an encoding space of its own, its lines never touch the imaging grid,
+and it calibrates once for the whole time series, through
+:func:`pulserver.recon.coil_maps_from_reference`.
+
+A noise scan, when the scanner sends one, is not imaging data and never reaches
+a buffer: it whitens every readout that follows. The prescan is also where the
+array's principal channels are read, and the basis goes into ``context.exam``
+-- the prescan is its own sequence, so it may be its own stream, and the exam
+cache is what carries an artifact from one to the next. Every imaging readout
+is compressed onto that basis as it arrives, so the imaging buffer is allocated
+at the virtual channel count and never holds the full array.
+
+The readout is ramp-sampled -- an EPI train that waits for the plateau throws
+away the time its ramps take -- so k does not advance at a constant rate across
+a readout and the samples are not on the grid. ``receive`` resamples them onto
+it, exactly: a readout is the transform of an object of known width, so where
+its samples fell is a change of basis away from where they belong.
+
+Where they fell is what the acquisition's trajectory says, and only that: the
+client attaches one as soon as it notices the gradient is still moving under
+the ADC, and it is attached per readout, so it describes the lobe that was
+actually played rather than the one a header was told about. It is normalised
+here onto the readout's own extent, so the units it was written in do not
+matter -- which holds for a readout that sweeps the prescribed width. An
+acquisition carrying none was sampled uniformly, which is what a train that
+waits for its plateau is.
+
+Examples
+--------
+Calling the module reconstructs an MRD file: the same three hooks an
+inline reconstruction is driven through, fed from the file in this
+process rather than over a socket.
+
+>>> from pulserver import ReconPlugin
+>>> from pulserver.app import epi3D_recon
+>>> isinstance(epi3D_recon.PLUGIN, ReconPlugin)
+True
+
+The three hooks are the whole plugin, and nothing else is overridden:
+
+>>> sorted(
+...     hook for hook in ("startup", "receive", "recon")
+...     if hook in vars(epi3D_recon.Epi3DRecon)
+... )
+['receive', 'recon', 'startup']
+
+Reconstruct a 3D echo-planar scan and its calibration prescan::
+
+    images = epi3D_recon("scan.h5")
+
+Or re-instantiate the plugin with different settings, and drive it the
+same way::
+
+    plugin = epi3D_recon.Epi3DRecon(coil_compression=8)
+    images = plugin.run("scan.h5")
 """
 
 from __future__ import annotations
@@ -16,24 +78,23 @@ from typing import Any
 
 import numpy as np
 
-from pulserver import AcquisitionBucket, ReconContext, ReconPlugin, ReconResult
+from pulserver import ReconContext, ReconPlugin, ReconResult
 from pulserver.recon import (
     AcquisitionFlag,
-    CartesianGridder,
+    cartesian_recon,
     center_crop,
-    coil_combine,
-    coil_images,
+    coil_compress,
+    coil_maps_from_reference,
     correct_lines,
-    encoded_volume,
-    fill_partial_echo,
+    epi_ramp_operator,
+    estimate_epi_phase,
     has_acquisition_flag,
-    odd_even_fit,
-    partition_epi_acquisitions,
-    receiver_channels,
-    recon_volume,
-    sense,
-    sensitivities,
+    noise_prewhiten,
 )
+
+#: Where the coil basis the prescan established is left for the imaging that
+#: follows it, which may arrive as a stream of its own.
+_BASIS = "epi3D_coil_basis"
 
 
 class Epi3DRecon(ReconPlugin):
@@ -47,6 +108,15 @@ class Epi3DRecon(ReconPlugin):
         Maximum CG iterations.
     pocs_iterations
         Partial-echo POCS iterations.
+    partial_fourier
+        Which estimator fills a truncated readout, ``"pocs"`` or ``"homodyne"``.
+    virtual_coils
+        Channels to compress the array onto. A scan with fewer physical
+        channels keeps them all.
+    phase_order
+        Order of the odd/even phase fitted from the navigator. One is the
+        gradient-delay ramp every product reconstruction corrects; raising it
+        picks up what eddy currents leave beyond that.
     device
         Torch device the reconstruction runs on. ``None`` is the CPU.
     """
@@ -57,144 +127,137 @@ class Epi3DRecon(ReconPlugin):
         regularization: float = 1e-3,
         iterations: int = 40,
         pocs_iterations: int = 12,
+        partial_fourier: str = "pocs",
+        virtual_coils: int = 8,
+        phase_order: int = 1,
         device: Any = None,
     ) -> None:
-        super().__init__(
-            split_on=AcquisitionFlag.LAST_IN_MEASUREMENT,
-            reject_flags=AcquisitionFlag.IS_NOISE_MEASUREMENT,
-        )
+        super().__init__(split_on=AcquisitionFlag.LAST_IN_MEASUREMENT)
         self.regularization = float(regularization)
         self.iterations = int(iterations)
         self.pocs_iterations = int(pocs_iterations)
+        self.partial_fourier = partial_fourier
+        self.virtual_coils = int(virtual_coils)
+        self.phase_order = int(phase_order)
         self.device = device
 
     def startup(self, context: ReconContext) -> None:
-        """Size the volume from the header and collect the stream."""
-        self.grid = encoded_volume(context.header)
-        self.coils = receiver_channels(context.header)
-        self.image_shape = recon_volume(context.header)
-        self.acquisitions: list[Any] = []
+        """Lay the scan's buffers out, and start with no maps and no fit."""
+        super().startup(context)
+        self.coil_maps: Any = None
+        self.navigator: list[Any] = []
+        self.noise: Any = None
+        self.phase: Any = None
+        self.regrid: Any = None
 
-    def receive(self, acquisition: Any, context: ReconContext) -> None:
-        """Keep the stream rather than placing it.
+    def receive(self, acquisition: Any, context: ReconContext) -> Any:
+        """Whiten, correct and compress the line, place it, and route what it closed.
 
-        Two things have to happen to an EPI line before it belongs anywhere:
-        the stream is partitioned by flag into navigator, reverse-polarity
-        reference and imaging, and every reversed line is flipped and phase
-        corrected against a fit that only exists once its slice's navigator
-        triplet has arrived. So this one plugin sorts for itself, which is what
-        overriding the hook is for.
+        The navigator never reaches a buffer: its three blip-nulled lines are a
+        measurement of the readout, not of the object, and what they produce is
+        the fit every reversed line that follows is corrected by.
         """
-        del context
-        self.acquisitions.append(acquisition)
+        line = np.asarray(acquisition.data)
+        if has_acquisition_flag(acquisition, AcquisitionFlag.IS_NOISE_MEASUREMENT):
+            self.noise = (
+                line if self.noise is None else np.concatenate([self.noise, line], -1)
+            )
+            return None
+        if self.noise is not None:
+            line = noise_prewhiten(line, self.noise, coil_axis=0)
+        # An attached trajectory says the gradient was still moving under the
+        # ADC, so the samples are not on the grid. One without says they are.
+        trajectory = getattr(acquisition, "traj", None)
+        samples = line.shape[-1]
+        if trajectory is not None and np.size(trajectory) >= samples:
+            # One lobe is played for every readout of the train, so the change
+            # of basis onto the grid is built once and applied to each. The
+            # space is read rather than the buffer, which would allocate at the
+            # header's channel count before the first compressed line reached
+            # it.
+            if self.regrid is None or self.regrid.shape[1] != samples:
+                space = self.buffers.spaces[0]
+                taken = np.asarray(trajectory).reshape(samples, -1)[:, 0]
+                # k is zero at the echo and a truncated readout still ends
+                # where a full one would, so the largest |k| it reaches is half
+                # the full sweep -- which normalises it whatever units the
+                # client wrote, without assuming this readout swept all of it.
+                taken = taken / (2.0 * np.abs(taken).max())
+                # And the grid is the whole encoded readout, not the part this
+                # one sampled: a partial echo resamples onto the same pitch as
+                # a full one and is right-aligned in it, exactly as the buffer
+                # places it.
+                grid = (np.arange(space.readout) - space.readout // 2) / space.readout
+                self.regrid = epi_ramp_operator(
+                    taken, grid[space.readout - samples :], space.recon_matrix[-1]
+                )
+            line = line @ self.regrid.T
 
-    def recon(
-        self, bucket: AcquisitionBucket, context: ReconContext
-    ) -> list[ReconResult] | None:
-        """Partition, phase-correct, and reconstruct at the end of the scan."""
-        del context
-        if AcquisitionFlag.LAST_IN_MEASUREMENT not in bucket.trigger:
+        backwards = has_acquisition_flag(acquisition, AcquisitionFlag.IS_REVERSE)
+        if has_acquisition_flag(acquisition, AcquisitionFlag.IS_PHASECORR_DATA):
+            self.navigator.append(line[..., :: -1 if backwards else 1])
+            if len(self.navigator) == 3:
+                self.phase = estimate_epi_phase(
+                    self.navigator, polynomial_order=self.phase_order
+                )
+                self.navigator = []
             return None
 
-        groups = partition_epi_acquisitions(self.acquisitions)
+        (line,) = correct_lines([(line, backwards)], self.phase)
+        if has_acquisition_flag(acquisition, AcquisitionFlag.IS_PARALLEL_CALIBRATION):
+            # The prescan fills its own space at full channel count: it is what
+            # the basis is estimated from, so it cannot already be in it.
+            self.buffers.add(acquisition, line)
+            if has_acquisition_flag(acquisition, AcquisitionFlag.LAST_IN_SLICE):
+                return self.recon("calibration", context)
+            return None
 
-        navigator = [
-            np.asarray(item.data)[
-                ...,
-                :: (
-                    -1 if has_acquisition_flag(item, AcquisitionFlag.IS_REVERSE) else 1
-                ),
-            ]
-            for item in groups.phase_correction[:3]
-        ]
-        slope, intercept = (
-            odd_even_fit(navigator) if len(navigator) == 3 else (0.0, 0.0)
-        )
+        basis = context.exam.get(_BASIS)
+        self.buffers.add(acquisition, line if basis is None else basis @ line)
+        if has_acquisition_flag(acquisition, AcquisitionFlag.LAST_IN_MEASUREMENT):
+            return self.recon("imaging", context)
+        return None
 
-        # Coil sensitivities come from the separate low-resolution calibration
-        # (ACQ_IS_PARALLEL_CALIBRATION), estimated once and reused for every
-        # frame; NLINV reads the fully sampled centre off its mask and resamples
-        # to the full matrix. Absent it, an undersampled scan cannot be solved.
-        coil_maps = None
-        if groups.single_band_reference:
-            calibration = CartesianGridder(self.grid, coils=self.coils)
-            for item in groups.single_band_reference:
-                calibration.add(
-                    np.asarray(item.data),
-                    int(item.idx.kspace_encode_step_2),
-                    int(item.idx.kspace_encode_step_1),
-                )
-            coil_maps = sensitivities(
-                calibration.kspace, calibration.mask, device=self.device
+    def recon(self, branch: str, context: ReconContext) -> list[ReconResult] | None:
+        """Calibrate the prescan's slab, or reconstruct the time series."""
+        if branch == "calibration":
+            kspace, mask = self.buffers[1].select()
+            lines = kspace[:, mask.any(axis=-1)].reshape(kspace.shape[0], -1)
+            _, basis = coil_compress(lines, self.virtual_coils)
+            context.exam.set(_BASIS, basis)
+            self.coil_maps = coil_maps_from_reference(
+                np.einsum("vc,c...->v...", basis, kspace)[None], mask, spatial_ndim=3
             )
+            return None
+
+        del context
+        buffer = self.buffers[0]
+        n_repetitions = buffer.extents.get("repetition", 1)
+        n_sets = buffer.extents.get("set", 1)
 
         results = []
-        for series, group in enumerate((groups.imaging, groups.reverse_polarity)):
-            if not group:
-                continue
-            repetitions = sorted({int(item.idx.repetition) for item in group})
-            for repetition in repetitions:
-                buffer = CartesianGridder(self.grid, coils=self.coils)
-                for item in group:
-                    if int(item.idx.repetition) != repetition:
-                        continue
-                    (row,) = correct_lines(
-                        [
-                            (
-                                np.asarray(item.data),
-                                has_acquisition_flag(item, AcquisitionFlag.IS_REVERSE),
-                            )
-                        ],
-                        slope,
-                        intercept,
-                    )
-                    buffer.add(
-                        row,
-                        int(item.idx.kspace_encode_step_2),
-                        int(item.idx.kspace_encode_step_1),
-                    )
-                kspace, mask = buffer.kspace, buffer.mask
-
-                # What the scan sampled selects the reconstruction: a phase
-                # encode with no samples was skipped, and a readout sample
-                # missing from every line is echo never acquired.
-                encodes = mask.any(axis=-1)
-                readout = mask.reshape(-1, mask.shape[-1]).any(axis=0)
-
-                if encodes.all():
-                    coils = (
-                        coil_images(kspace, mask, device=self.device)
-                        if readout.all()
-                        else fill_partial_echo(
-                            kspace,
-                            readout,
-                            self.pocs_iterations,
-                            dimension=3,
-                            device=self.device,
-                        )
-                    )
-                    image = coil_combine(coils, coil_axis=0)
-                else:
-                    maps = (
-                        coil_maps
-                        if coil_maps is not None
-                        else sensitivities(kspace, mask, device=self.device)
-                    )
-                    image = sense(
-                        kspace,
-                        mask,
-                        maps,
-                        readout,
-                        regularization=self.regularization,
-                        iterations=self.iterations,
-                        pocs_iterations=self.pocs_iterations,
-                        device=self.device,
-                    )
+        for set_index in range(n_sets):
+            for repetition in range(n_repetitions):
+                kspace, mask = buffer.select(repetition=repetition, set=set_index)
+                if not mask.any():
+                    continue
+                image = cartesian_recon(
+                    kspace,
+                    mask,
+                    self.coil_maps,
+                    regularization=self.regularization,
+                    iterations=self.iterations,
+                    pocs_iterations=self.pocs_iterations,
+                    partial_fourier=self.partial_fourier,
+                    device=self.device,
+                )
                 results.append(
                     ReconResult(
-                        center_crop(np.abs(image), self.image_shape).transpose(0, 2, 1),
+                        center_crop(np.abs(image), buffer.image_shape).transpose(
+                            0, 2, 1
+                        ),
                         reference=-1,
-                        series_index=series * 1000 + repetition,
+                        series_index=set_index * 1000 + repetition,
                         image_type="magnitude",
                         dicom=True,
                     )

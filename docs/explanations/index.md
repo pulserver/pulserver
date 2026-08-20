@@ -19,7 +19,7 @@ validation/sequence_zoo
 
 | | |
 |---|---|
-| {doc}`background/index` | The formats and tools Pulserver sits between: Pulseq, PulSeg, nimpulseq, and MRD. |
+| {doc}`background/index` | The formats and tools Pulserver sits between: Pulseq, PulSeg, Nimpulseq, and MRD. |
 | {doc}`sequence_model/index` | What a sequence *is* on each side of the download — design, scanner, reconstruction — and how the three views stay one representation. |
 | {doc}`safety/index` | The checks a scanner runs before it will play a sequence, and the physics behind each. |
 | {doc}`performance/index` | Designing, converting and checking a million-block scan while an operator waits — and how the fast paths stay exactly equal to the plain ones. |

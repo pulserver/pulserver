@@ -892,9 +892,8 @@ void pulserver_bind_pulseqpp(py::module_& m)
             // alone, so this registers no shapes.
             .def(
                 "apply_fov_scale",
-                [](Sequence& self, double sx, double sy, double sz, int first, int last) {
-                    pulseq::apply_fov_scale(self, {sx, sy, sz}, first, last);
-                },
+                [](Sequence& self, double sx, double sy, double sz, int first, int last)
+                { pulseq::apply_fov_scale(self, {sx, sy, sz}, first, last); },
                 py::arg("sx"),
                 py::arg("sy"),
                 py::arg("sz"),

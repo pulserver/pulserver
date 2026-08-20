@@ -16,7 +16,7 @@
  *
  * That is a small amount of arithmetic in exchange for a sequence whose
  * playing order is not written anywhere in it.  This does the arithmetic here
- * instead, and writes the answer down: after @ref expand_repeats the block
+ * instead, and writes the answer down: after @ref pulseq::expand_repeats the block
  * table *is* the scan, every repetition is present in the order it plays, and
  * nothing downstream has to be told how many times to read it.
  *
@@ -42,7 +42,7 @@
  *
  * ### On removing the flags
  *
- * @ref ExpandOptions::strip_once drops the `ONCE` labels once they have been
+ * @ref pulseq::ExpandOptions::strip_once drops the `ONCE` labels once they have been
  * resolved: the flags would otherwise say something that is no longer true
  * of the table they sit in.  A Pulserver interpreter gives `ONCE` no
  * structural meaning -- its segmentation and TR detection read only the
@@ -59,7 +59,7 @@ namespace pulseq
 
     class Sequence;
 
-    /** How @ref expand_repeats writes the repetitions down. */
+    /** How @ref pulseq::expand_repeats writes the repetitions down. */
     struct ExpandOptions
     {
         /**

@@ -48,6 +48,20 @@ class NonSelectiveExcitation(RfModule):
     >>> excitation = design.NonSelectiveExcitation(pp.Opts(), flip_angle_deg=10.0)
     >>> round(excitation.center * 1e6)
     500
+
+    With no gradient there is nothing to be selective in but frequency, and
+    the profile is the transform of a rectangle:
+
+    .. plot::
+
+       import pulserver.design as design
+       import pulserver.pypulseq as pp
+       from _figures import rf_profile
+
+       rf_profile(
+           design.NonSelectiveExcitation(pp.Opts(), 90.0, 0.5e-3),
+           title="hard 90, 0.5 ms",
+       )
     """
 
     def init_module(
@@ -143,6 +157,20 @@ class NonSelectiveRefocusing(RfModule):
 
     >>> len(design.NonSelectiveRefocusing(pp.Opts(), spoiling_cycles=0.0).blocks)
     1
+
+    The pulse and both crushers together, integrated as one:
+
+    .. plot::
+
+       import pulserver.design as design
+       import pulserver.pypulseq as pp
+       from _figures import rf_profile
+
+       rf_profile(
+           design.NonSelectiveRefocusing(pp.Opts(), duration_s=0.5e-3),
+           title="hard 180 between crushers",
+           whole=True,
+       )
     """
 
     def init_module(
@@ -228,6 +256,20 @@ class Inversion(RfModule):
     >>> inversion = design.Inversion(pp.Opts(), duration_s=8e-3)
     >>> round(inversion.duration * 1e3, 1)
     8.0
+
+    The sweep, and the band it inverts. The plateau is flat because an
+    adiabatic pulse inverts everything above its threshold equally:
+
+    .. plot::
+
+       import pulserver.design as design
+       import pulserver.pypulseq as pp
+       from _figures import rf_profile
+
+       rf_profile(
+           design.Inversion(pp.Opts(), 8e-3),
+           title="hyperbolic secant inversion, 8 ms",
+       )
     """
 
     def init_module(

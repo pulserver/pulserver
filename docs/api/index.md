@@ -2,7 +2,8 @@
 
 Three interfaces onto one representation. The Python API designs sequences
 and reconstructs data; the C API is what a scanner links against; the C++ API
-is the same library with RAII types plus the reconstruction-side reader.
+is the same library with RAII types plus the sequence library and the
+reconstruction-side reader.
 
 ```{toctree}
 :maxdepth: 2
@@ -17,9 +18,11 @@ cpp/index
 | I want to… | Use |
 |---|---|
 | build a sequence, write a `.seq`, check it | {doc}`python/design`, {doc}`python/pypulseq` |
-| run a ready-made protocol | {doc}`python/app_sequence` |
-| reconstruct, or write a reconstruction plugin | {doc}`python/recon`, {doc}`python/app_recon` |
-| declare what the scanner UI shows | {doc}`python/protocol` |
-| write an interpreter that plays `.seq` on hardware | {doc}`c/index` |
-| add safety checking to an interpreter I already have | {doc}`cpp/pulseg` |
+| run a ready-made protocol | {doc}`python/apps` |
+| reconstruct, or write a reconstruction plugin | {doc}`python/recon`, {doc}`python/apps` |
+| declare what the scanner UI shows | {doc}`python/apps` |
+| write an interpreter that plays `.seq` on hardware | {doc}`c/pulseg` |
+| add safety checking to an interpreter I already have | {doc}`c/safety`, {doc}`cpp/pulseg` |
+| show the sequence's parameters on a console | {doc}`c/protocol` |
+| read or write a `.seq` from C or C++ | {doc}`c/pulseq`, {doc}`cpp/pulseq` |
 | feed a reconstruction service from the sequence file | {doc}`cpp/recon` |

@@ -1,6 +1,6 @@
-# nimpulseq and Nimpulseqgui
+# Nimpulseq and Nimpulseqgui
 
-[nimpulseq](https://github.com/nimpulseq/nimpulseq) is a Pulseq writer in
+[Nimpulseq](https://github.com/nimpulseq/nimpulseq) is a Pulseq writer in
 [Nim](https://nim-lang.org), a compiled language with Python-like syntax.
 [Nimpulseqgui](https://github.com/nimpulseq/nimpulseqgui) sits on top of it:
 a small desktop application that reads a sequence program's declared

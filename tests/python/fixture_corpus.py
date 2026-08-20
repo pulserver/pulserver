@@ -9,8 +9,11 @@ file-consuming tests read stable, reviewable ground truth and so that a
 writer or parser regression shows up as a diff against them.
 
 Regenerate with ``bash scripts/regenerate_fixtures.sh`` (or run
-``tests/utils/generate_fixtures.py`` directly). The output is deterministic:
-running the generator twice leaves the tree unchanged.
+``tests/utils/generate_fixtures.py`` directly). The output is deterministic on
+one host: running the generator twice leaves the tree unchanged. The last of
+the nine digits a shape sample is written with follows the host's libm, so a
+regeneration elsewhere can rewrite that digit across the corpus -- a diff of
+last digits alone carries no change and belongs nowhere near a commit.
 """
 
 from __future__ import annotations

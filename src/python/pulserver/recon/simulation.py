@@ -1,18 +1,5 @@
-"""Sequence-description decoding and EPG signal simulation."""
+"""The sequence description a scan carries, decoded from its MRD waveforms."""
 
-from ._bloch import (
-    BSSFP,
-    FSE,
-    SPGR,
-    SSFPEcho,
-    SSFPFID,
-    EpgInterpreter,
-    SimulationResult,
-    SubspaceBasis,
-    TissueProperties,
-    make_interpreter,
-    simulate_subspace,
-)
 from ._seqdesc import (
     AdcRole,
     EventType,
@@ -29,27 +16,16 @@ from ._seqdesc import (
 )
 
 __all__ = [
-    "BSSFP",
-    "FSE",
-    "SPGR",
-    "SSFPFID",
     "AdcRole",
-    "EpgInterpreter",
     "EventType",
     "RfDefinition",
     "RfShape",
     "RfUse",
-    "SSFPEcho",
     "SequenceDescription",
     "SequenceDescriptionCollection",
     "SequenceEvent",
     "SequenceParameters",
     "ShimDefinition",
-    "SimulationResult",
-    "SubspaceBasis",
-    "TissueProperties",
     "decode_sequence_description",
     "decompress_shape",
-    "make_interpreter",
-    "simulate_subspace",
 ]

@@ -31,33 +31,33 @@ kSpaceCenterSample 0
  1 154   1   0   0   1  0  1
  2  24   0   0   0   2  0  0
  3 110   0   3   4   0  0  2
- 4  32   0   5   6   7  0  2
- 5 680   0   0   0   0  0  0
+ 4  30   0   5   6   7  0  2
+ 5 682   0   0   0   0  0  0
  6 154   1   0   0   1  0  0
  7  24   0   0   0   2  0  0
  8 110   0   3   4   0  0  2
- 9  32   0   5   6   7  0  2
-10 680   0   0   0   0  0  0
+ 9  30   0   5   6   7  0  2
+10 682   0   0   0   0  0  0
 11 154   2   0   0   1  0  3
 12  24   0   0   0   2  0  0
 13 110   0   3   4   0  1  5
-14  32   0   5   6   7  0  2
-15 680   0   0   0   0  0  0
+14  30   0   5   6   7  0  2
+15 682   0   0   0   0  0  0
 16 154   3   0   0   1  0  0
 17  24   0   0   0   2  0  0
 18 110   0   3   4   0  2  8
-19  32   0   5   6   7  0  6
-20 680   0   0   0   0  0  0
+19  30   0   5   6   7  0  6
+20 682   0   0   0   0  0  0
 21 154   4   0   0   1  0  0
 22  24   0   0   0   2  0  0
 23 110   0   3   4   0  3 11
-24  32   0   5   6   7  0  9
-25 680   0   0   0   0  0  0
+24  30   0   5   6   7  0  9
+25 682   0   0   0   0  0  0
 26 154   5   0   0   1  0  0
 27  24   0   0   0   2  0  0
 28 110   0   3   4   0  4 14
-29  32   0   5   6   7  0 12
-30 680   0   0   0   0  0  0
+29  30   0   5   6   7  0 12
+30 682   0   0   0   0  0  0
 
 # Format of RF events:
 # id ampl. mag_id phase_id time_shape_id center delay freqPPm phasePPM freq phase use
@@ -79,7 +79,7 @@ kSpaceCenterSample 0
 4       552640            0       552640 4 0 0
 5       543078       119847            0 5 6 0
 6       552640       552640            0 7 6 0
-7  1.45455e+06            0            0 8 9 0
+7  1.61616e+06            0            0 8 9 0
 
 # Format of trapezoid gradients:
 # id amplitude rise flat fall delay
@@ -1918,8 +1918,8 @@ shape_id 9
 num_samples 4
 0
 12
-20
-32
+18
+30
 
 
 [SIGNATURE]
@@ -1927,4 +1927,4 @@ num_samples 4
 # It can be reproduced/verified with md5sum if the file trimmed to the position right above [SIGNATURE]
 # The new line character preceding [SIGNATURE] BELONGS to the signature (and needs to be stripped away for recalculating/verification)
 Type md5
-Hash eb6f07fe279928acc889db56608f8dbc
+Hash 01a88bcee695aa45f77a87e4c98b9dcd

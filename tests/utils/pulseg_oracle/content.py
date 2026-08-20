@@ -230,10 +230,11 @@ def tr_window_waveforms(
         rotation = getattr(block, "rotation", None)
         norot = bool(norot_flags[start_block + i]) if norot_flags is not None else False
         if rotation is not None and not norot:
-            # Physical composition applies the TRANSPOSE of the quaternion's
-            # matrix -- the interpreter's convention, validated end-to-end
-            # against simulator playout by the SIM rotation suite.
-            vec = quaternion_matrix(rotation).T @ vec
+            # A block's gradients are stored in a logical frame; the physical
+            # vector the amplifiers play is the quaternion's matrix applied to
+            # it, the same sense as the reference toolbox's ``mr.rotate3D``
+            # and as the trajectory core.
+            vec = quaternion_matrix(rotation) @ vec
         out += vec
         t0 += round(float(block.block_duration) * 1e6)
     return out

@@ -11,6 +11,35 @@ The dead-time gap's missing centre samples are declared by the sequence and
 left to the density weighting here; a dedicated gap-filling refinement
 starts by overriding this plugin.
 
+
+Examples
+--------
+Calling the module reconstructs an MRD file: the same three hooks an
+inline reconstruction is driven through, fed from the file in this
+process rather than over a socket.
+
+>>> from pulserver import ReconPlugin
+>>> from pulserver.app import noncartesian3D_recon
+>>> isinstance(noncartesian3D_recon.PLUGIN, ReconPlugin)
+True
+
+The three hooks are the whole plugin, and nothing else is overridden:
+
+>>> sorted(
+...     hook for hook in ("startup", "receive", "recon")
+...     if hook in vars(noncartesian3D_recon.NonCartesian3DRecon)
+... )
+['receive', 'recon', 'startup']
+
+Reconstruct a fully 3D non-Cartesian scan::
+
+    images = noncartesian3D_recon("scan.h5")
+
+Or re-instantiate the plugin with different settings, and drive it the
+same way::
+
+    plugin = noncartesian3D_recon.NonCartesian3DRecon(coil_compression=8)
+    images = plugin.run("scan.h5")
 """
 
 from __future__ import annotations
@@ -21,8 +50,18 @@ from typing import Any
 
 import numpy as np
 
-from pulserver import AcquisitionBucket, ReconContext, ReconPlugin, ReconResult
-from pulserver.recon import AcquisitionFlag, as_numpy, pipe_menon_dcf, recon_volume
+from pulserver import ReconContext, ReconPlugin, ReconResult
+from pulserver.recon import (
+    NLINV,
+    AcquisitionFlag,
+    NonCartesian3D,
+    as_numpy,
+    coil_compress,
+    has_acquisition_flag,
+    noise_prewhiten,
+    pics,
+    pipe_menon_dcf,
+)
 
 
 class NonCartesian3DRecon(ReconPlugin):
@@ -35,6 +74,12 @@ class NonCartesian3DRecon(ReconPlugin):
         design) or ``"pics"`` for an undersampled prescription.
     regularization, iterations
         The CG solve's Tikhonov weight and iteration ceiling, ``pics`` only.
+    virtual_coils
+        Channels to compress the array onto before the solve. A scan with fewer
+        physical channels keeps them all.
+    calibration_width
+        Width of the centred cube NLINV solves the sensitivities over,
+        ``pics`` only.
     device
         Torch device the reconstruction runs on. ``None`` is the CPU.
     """
@@ -45,61 +90,84 @@ class NonCartesian3DRecon(ReconPlugin):
         mode: str = "direct",
         regularization: float = 1e-3,
         iterations: int = 20,
+        virtual_coils: int = 8,
+        calibration_width: int = 16,
         device: Any = None,
     ) -> None:
         super().__init__(
             split_on=AcquisitionFlag.LAST_IN_MEASUREMENT,
-            reject_flags=AcquisitionFlag.IS_NOISE_MEASUREMENT
-            | AcquisitionFlag.IS_PHASECORR_DATA,
+            reject_flags=AcquisitionFlag.IS_PHASECORR_DATA,
         )
         if mode not in ("direct", "pics"):
             raise ValueError(f"mode must be direct or pics, got {mode!r}")
         self.mode = mode
         self.regularization = float(regularization)
         self.iterations = int(iterations)
+        self.virtual_coils = int(virtual_coils)
+        self.calibration_width = int(calibration_width)
         self.device = device
 
     def startup(self, context: ReconContext) -> None:
-        """Lay the scan's buffers out and size the volume from the header."""
+        """Lay the scan's buffers out, with no noise measured yet."""
         super().startup(context)
-        self.volume_shape = recon_volume(context.header)
+        self.noise: Any = None
 
-    def recon(
-        self, bucket: AcquisitionBucket, context: ReconContext
-    ) -> ReconResult | None:
-        """Reconstruct once the measurement is complete."""
-        del context
-        if AcquisitionFlag.LAST_IN_MEASUREMENT not in bucket.trigger:
+    def receive(self, acquisition: Any, context: ReconContext) -> Any:
+        """Whiten the readout and place it, and reconstruct at the end of the scan.
+
+        A noise scan is not imaging data and never reaches a buffer: what it
+        leaves behind is the covariance every readout that follows is whitened
+        by.
+        """
+        line = np.asarray(acquisition.data)
+        if has_acquisition_flag(acquisition, AcquisitionFlag.IS_NOISE_MEASUREMENT):
+            self.noise = (
+                line if self.noise is None else np.concatenate([self.noise, line], -1)
+            )
             return None
+        if self.noise is not None:
+            line = noise_prewhiten(line, self.noise, coil_axis=0)
 
-        from pulserver.recon.physics import NonCartesian3D
+        self.buffers.add(acquisition, line)
+        if has_acquisition_flag(acquisition, AcquisitionFlag.LAST_IN_MEASUREMENT):
+            return self.recon("imaging", context)
+        return None
 
+    def recon(self, branch: str, context: ReconContext) -> ReconResult:
+        """Reconstruct the volume, once the measurement is complete."""
+        del branch, context
         # Spokes laid end to end, and the points they were taken at in the
         # same order: one non-Cartesian measurement of the volume.
         buffer = self.buffers[0]
+        volume_shape = buffer.image_shape
         data = buffer.kspace.reshape(buffer.kspace.shape[0], -1)
         points = buffer.points()[:3].reshape(3, -1).T.astype(np.float32)
 
-        density = pipe_menon_dcf(points, self.volume_shape)
+        data, _ = coil_compress(data, self.virtual_coils)
+        density = pipe_menon_dcf(points, volume_shape)
         n_coils = int(data.shape[0])
-        coil_wise = NonCartesian3D(
-            points, self.volume_shape, density=density, n_coils=n_coils
-        )
-        # Native complex throughout: the measurement crosses the NumPy boundary
-        # and the coil-wise adjoint answers with one complex volume per coil, so
-        # there is no real/complex view juggling to unpack the channel axis.
-        coil_images = coil_wise.A_adjoint(data[None])[0]
 
         if self.mode == "direct":
+            coil_wise = NonCartesian3D(
+                points, volume_shape, density=density, n_coils=n_coils
+            )
+            # Native complex throughout: the measurement crosses the NumPy
+            # boundary and the coil-wise adjoint answers with one complex
+            # volume per coil, so there is no real/complex view juggling to
+            # unpack the channel axis.
+            coil_images = coil_wise.A_adjoint(data[None])[0]
             image = np.sqrt(np.sum(np.abs(coil_images) ** 2, axis=0))
         else:
-            from pulserver.recon import pics
-            from pulserver.recon.calibration import smooth_sensitivities
-
-            maps = smooth_sensitivities(coil_images)
+            maps = NLINV(spatial_ndim=3, calibration_width=self.calibration_width)(
+                data,
+                trajectory=points,
+                image_shape=volume_shape,
+                density=density,
+                device=self.device,
+            )
             sense = NonCartesian3D(
                 points,
-                self.volume_shape,
+                volume_shape,
                 coil_maps=maps,
                 density=density,
                 n_coils=n_coils,
