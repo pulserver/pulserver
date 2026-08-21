@@ -1,35 +1,8 @@
 """2D Cartesian fast spin echo, multi-slice.
 
-A CPMG train per excitation -- :class:`design.FseReadout2D`: one SLR 90, then
-``etl`` refocusing pulses, each echo phase-encoded by its own trapezoid pair
-and unwound before the next 180, which is what survives the train's sign
-flips. The phase-encode lines are dealt across shots so that the centre of
-k-space is acquired at the echo whose time is the requested effective TE --
-the rolled-linear ordering, delegated to :func:`pulserver.pypulseq.make_linear_order`,
-whose wrap every product FSE accepts for the same reason. Slices are dealt into passes exactly as the gradient echo deals
-them. :mod:`pulserver.app.recon.cartesian2D_recon` reads the result back.
-
 ``main`` returns the :class:`pulserver.pypulseq.Sequence`; ``PLUGIN`` is the
 same sequence behind the scanner protocol contract, and running this module
 as a script writes a ``.seq`` from the same controls.
-
-Examples
---------
->>> from pulserver.app import fse2D_sequence
->>> seq = fse2D_sequence(n_x=64, n_y=16, n_slices=1, etl=4, te=20e-3, tr=None)
->>> seq.num_trs, seq.num_segments
-(4, 3)
-
-One excitation and a train of four refocused echoes, each encoding a different line:
-
-.. plot::
-   :include-source:
-
-   from pulserver.app import fse2D_sequence
-
-   seq = fse2D_sequence(n_x=64, n_y=16, n_slices=1, etl=4, te=20e-3, tr=None)
-   seq.plot(tr="worst_case", time_disp="ms", grad_disp="mT/m", stacked=True,
-            plot_now=False)
 """
 
 from __future__ import annotations
@@ -104,6 +77,15 @@ def main(
 ) -> pp.Sequence:
     """Create a 2D Cartesian fast spin-echo sequence.
 
+    A CPMG train per excitation -- :class:`design.FseReadout2D`: one SLR 90, then
+    ``etl`` refocusing pulses, each echo phase-encoded by its own trapezoid pair
+    and unwound before the next 180, which is what survives the train's sign
+    flips. The phase-encode lines are dealt across shots so that the centre of
+    k-space is acquired at the echo whose time is the requested effective TE --
+    the rolled-linear ordering, delegated to :func:`pulserver.pypulseq.make_linear_order`,
+    whose wrap every product FSE accepts for the same reason. Slices are dealt into passes exactly as the gradient echo deals
+    them. :mod:`pulserver.app.cartesian2D_recon` reads the result back.
+
     Parameters
     ----------
     plot : bool, optional
@@ -173,6 +155,111 @@ def main(
     -------
     seq : pulserver.pypulseq.Sequence
         The FSE sequence object.
+
+    Examples
+    --------
+    >>> from pulserver.app import fse2D_sequence
+    >>> seq = fse2D_sequence(n_x=64, n_y=16, n_slices=1, etl=4, te=20e-3, tr=None)
+    >>> seq.num_trs, seq.num_segments
+    (4, 3)
+
+    The waveform figures below are one design, prescribed to be *legible*
+    rather than diagnostic: the shortest TE and TR the train admits, so nothing
+    waits; a long readout, so it is unmistakable against the encodes; and a
+    four-echo train over three slices, so the ordering panels stay readable.
+
+    .. plot::
+       :include-source:
+       :nofigs:
+       :context:
+
+       from pulserver.app import fse2D_sequence
+
+       seq = fse2D_sequence(
+           n_x=256, n_y=16, n_slices=3, slice_gap=1e-3, etl=4, te=None,
+           tr=None, n_acs=0, n_dummy=0, crusher_cycles=4.0,
+       )
+
+    **The pulses.** The excitation, and the refocusing pulse that follows
+    it: an excitation is judged by what it tips, a refocusing pulse by how
+    much of that it brings back, so the two are drawn against different
+    quantities.
+
+    .. plot::
+       :include-source:
+       :context: close-figs
+
+       seq.plot_rf("excitation", title="excitation", plot_now=False)
+       seq.plot_rf("refocusing", title="refocusing", plot_now=False)
+
+    **One canonical TR**: the excitation, then the echo train -- a
+    refocusing pulse between crushers, a phase encode, the readout, and the
+    rewinder that returns ``ky`` to zero before the next refocusing pulse.
+
+    .. plot::
+       :include-source:
+       :context: close-figs
+
+       seq.plot(tr="worst_case", time_disp="ms", grad_disp="mT/m", plot_now=False)
+
+    **The segments**, which are the interpreter's units of playout. Each is
+    drawn as the instance carrying the most gradient energy -- the one the
+    safety checks were run against -- over the span of the scan where it
+    plays.
+
+    .. plot::
+       :include-source:
+       :context: close-figs
+
+       for index in range(seq.num_segments):
+           seq.plot(
+               segment_idx=index, time_disp="ms", grad_disp="mT/m", plot_now=False
+           )
+
+    **What the scan covers.** The echo panel says which echo of its train
+    encoded each line, which is what sets the effective echo time and the
+    modulation transfer function; the shot panel says when in the scan that
+    happened. A 2D scan keeps in the excitation frequency what a 3D scan
+    keeps in ``kz``, so that is the second axis.
+
+    .. plot::
+       :include-source:
+       :context: close-figs
+
+       seq.plot_kspace(plane="yf", color_by="order", plot_now=False)
+
+    **Mechanical resonance.** The repetition is periodic, so its gradients
+    have energy only at multiples of ``1 / T_TR``. Those lines are what a
+    forbidden band is judged against, and the verdict panel is the whole of
+    the acoustic check: every line that falls inside a band, against the
+    amplitude that band allows.
+
+    .. plot::
+       :include-source:
+       :context: close-figs
+
+       gamma = 42.576e3  # Hz/m per mT/m
+       seq.calculate_gradient_spectrum(
+           tr="worst_case",
+           resonance_lines=True,
+           bands=[(550.0, 700.0, 3.0 * gamma), (1150.0, 1300.0, 3.0 * gamma)],
+       )
+
+    **Peripheral nerve stimulation**, under the rheobase/chronaxie model the
+    scanner's own gate applies, over the same repetition played back to back.
+    This design asks for the shortest timing the hardware admits, so its
+    crushers and rewinders ramp as fast as they are allowed to. A lower
+    ``MAX_SLEW``, a longer echo time, or a narrower readout bandwidth each
+    bring the response down.
+
+    .. plot::
+       :include-source:
+       :context: close-figs
+
+       seq.calculate_pns(
+           {"chronaxie_us": 360.0, "rheobase": 20.0, "alpha": 0.333},
+           tr="worst_case",
+       )
     """
     system = pp.Opts() if system is None else system
     system = pp.cap_system(system, max_grad=MAX_GRAD, max_slew=MAX_SLEW)

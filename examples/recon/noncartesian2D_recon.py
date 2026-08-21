@@ -1,48 +1,7 @@
 """Any 2D non-Cartesian scan, one image per slice.
 
-Radial, spiral, PROPELLER: what a reconstruction needs is the trajectory each
-acquisition carries, not which shape the sequence drew with it, so all of them
-come back through this.
-
-Model-based reconstruction, per slice: Pipe--Menon density compensation, NLINV
-sensitivities calibrated from the samples inside the calibration radius --
-selected before any gridding -- and a CG-SENSE solve against the
-:class:`pulserver.recon.physics.NonCartesian2D` operator built from the same
-trajectory. A fully sampled slice finishes with the density-compensated
-adjoint instead, coil images root-sum-of-squares combined.
-
-The trajectory arrives per acquisition, as MRD carries it, scaled to
-MRI-NUFFT's ``[-0.5, 0.5)`` units -- what the LiveSDK's enrichment writes.
-
-
-Examples
---------
-Calling the module reconstructs an MRD file: the same three hooks an
-inline reconstruction is driven through, fed from the file in this
-process rather than over a socket.
-
->>> from pulserver import ReconPlugin
->>> from pulserver.app import noncartesian2D_recon
->>> isinstance(noncartesian2D_recon.PLUGIN, ReconPlugin)
-True
-
-The three hooks are the whole plugin, and nothing else is overridden:
-
->>> sorted(
-...     hook for hook in ("startup", "receive", "recon")
-...     if hook in vars(noncartesian2D_recon.NonCartesian2DRecon)
-... )
-['receive', 'recon', 'startup']
-
-Reconstruct a 2D scan whose acquisitions carry a trajectory::
-
-    images = noncartesian2D_recon("scan.h5")
-
-Or re-instantiate the plugin with different settings, and drive it the
-same way::
-
-    plugin = noncartesian2D_recon.NonCartesian2DRecon(coil_compression=8)
-    images = plugin.run("scan.h5")
+Calling this module reconstructs an MRD file; ``PLUGIN`` is the same
+reconstruction behind the stream contract, driven live by the scanner.
 """
 
 from __future__ import annotations
@@ -51,24 +10,33 @@ __all__ = ["PLUGIN", "NonCartesian2DRecon"]
 
 from typing import Any
 
-import numpy as np
 
 from pulserver import ReconContext, ReconPlugin, ReconResult
 from pulserver.recon import (
-    NLINV,
     AcquisitionFlag,
-    NonCartesian2D,
-    as_numpy,
+    NoiseAdjust,
     coil_compress,
-    has_acquisition_flag,
-    noise_prewhiten,
-    pics,
-    pipe_menon_dcf,
+    image_result,
+    noncartesian_recon,
 )
 
 
 class NonCartesian2DRecon(ReconPlugin):
     """Reconstruct a 2D non-Cartesian gradient echo, one image per slice.
+
+    Radial, spiral, PROPELLER: what a reconstruction needs is the trajectory each
+    acquisition carries, not which shape the sequence drew with it, so all of them
+    come back through this.
+
+    Model-based reconstruction, per slice: Pipe--Menon density compensation, NLINV
+    sensitivities calibrated from the samples inside the calibration radius --
+    selected before any gridding -- and a CG-SENSE solve against the
+    :class:`pulserver.recon.physics.NonCartesian2D` operator built from the same
+    trajectory. A fully sampled slice finishes with the density-compensated
+    adjoint instead, coil images root-sum-of-squares combined.
+
+    The trajectory arrives per acquisition, as MRD carries it, scaled to
+    MRI-NUFFT's ``[-0.5, 0.5)`` units -- what the LiveSDK's enrichment writes.
 
     Parameters
     ----------
@@ -89,6 +57,22 @@ class NonCartesian2DRecon(ReconPlugin):
         Width of the centred square NLINV solves the sensitivities over.
     device
         Torch device the reconstruction runs on. ``None`` is the CPU.
+
+    Examples
+    --------
+    Calling the module reconstructs an MRD file, through the same hooks a
+    scanner's live stream is driven through. Its settings are the arguments
+    of that call:
+
+    >>> import inspect
+    >>> from pulserver.app import noncartesian2D_recon
+    >>> "virtual_coils" in inspect.signature(noncartesian2D_recon).parameters
+    True
+
+    Reconstruct a 2D scan whose acquisitions carry a trajectory::
+
+        images = noncartesian2D_recon("scan.h5")
+        images = noncartesian2D_recon("scan.h5", virtual_coils=4, mode="pics")
     """
 
     def __init__(
@@ -102,7 +86,8 @@ class NonCartesian2DRecon(ReconPlugin):
         device: Any = None,
     ) -> None:
         super().__init__(
-            split_on=AcquisitionFlag.LAST_IN_MEASUREMENT,
+            chain=[NoiseAdjust()],
+            branches={AcquisitionFlag.LAST_IN_MEASUREMENT: "imaging"},
             reject_flags=AcquisitionFlag.IS_PHASECORR_DATA,
         )
         if mode not in ("auto", "direct", "pics"):
@@ -115,98 +100,38 @@ class NonCartesian2DRecon(ReconPlugin):
         self.device = device
 
     def startup(self, context: ReconContext) -> None:
-        """Lay the scan's buffers out, with no noise measured yet."""
+        """Lay the scan's buffers out."""
         super().startup(context)
-        self.noise: Any = None
-
-    def receive(self, acquisition: Any, context: ReconContext) -> Any:
-        """Whiten the readout and place it, and reconstruct at the end of the scan.
-
-        A noise scan is not imaging data and never reaches a buffer: what it
-        leaves behind is the covariance every readout that follows is whitened
-        by.
-        """
-        line = np.asarray(acquisition.data)
-        if has_acquisition_flag(acquisition, AcquisitionFlag.IS_NOISE_MEASUREMENT):
-            self.noise = (
-                line if self.noise is None else np.concatenate([self.noise, line], -1)
-            )
-            return None
-        if self.noise is not None:
-            line = noise_prewhiten(line, self.noise, coil_axis=0)
-
-        self.buffers.add(acquisition, line)
-        if has_acquisition_flag(acquisition, AcquisitionFlag.LAST_IN_MEASUREMENT):
-            return self.recon("imaging", context)
-        return None
 
     def recon(self, branch: str, context: ReconContext) -> list[ReconResult]:
         """Reconstruct every slice, once the measurement is complete."""
         del branch, context
         buffer = self.buffers[0]
-        image_shape = buffer.image_shape
-        n_slices = buffer.extents.get("slice", 1)
         n_views = buffer.extents["phase_encode"]
-        nyquist = int(np.ceil(np.pi / 2 * max(image_shape)))
-        direct = self.mode == "direct" or (self.mode == "auto" and n_views >= nyquist)
 
         results = []
-        for index in range(n_slices):
+        for index in range(buffer.extents.get("slice", 1)):
             # Views laid end to end, and the points they were taken at in the
             # same order: one non-Cartesian measurement of this slice.
             views, _ = buffer.select(slice=index)
-            data = views.reshape(views.shape[0], -1)
+            data, _ = coil_compress(
+                views.reshape(views.shape[0], -1), self.virtual_coils
+            )
             trajectory = (
-                buffer.points(slice=index)[:2]
-                .transpose(1, 2, 0)
-                .reshape(-1, 2)
-                .astype(np.float32)
+                buffer.points(slice=index)[:2].transpose(1, 2, 0).reshape(-1, 2)
             )
-            data, _ = coil_compress(data, self.virtual_coils)
-            density = pipe_menon_dcf(trajectory, image_shape)
-            n_coils = int(data.shape[0])
-
-            if direct:
-                # The density-compensated adjoint is an inverse only at
-                # Nyquist, and a coil-wise one at that: combine by
-                # root-sum-of-squares.
-                coil_wise = NonCartesian2D(
-                    trajectory, image_shape, density=density, n_coils=n_coils
-                )
-                coils = coil_wise.A_adjoint(data[None])[0]
-                image = np.sqrt(np.sum(np.abs(coils) ** 2, axis=0))
-            else:
-                maps = NLINV(spatial_ndim=2, calibration_width=self.calibration_width)(
-                    data,
-                    trajectory=trajectory,
-                    image_shape=image_shape,
-                    density=density,
-                    device=self.device,
-                )
-                unaliasing = NonCartesian2D(
-                    trajectory,
-                    image_shape,
-                    coil_maps=maps,
-                    density=density,
-                    n_coils=n_coils,
-                )
-                # The SENSE solve keeps a singleton coil axis, so index past
-                # both batch and channel to reach the plane.
-                image = pics(
-                    data[None],
-                    unaliasing,
-                    regularization=self.regularization,
-                    iterations=self.iterations,
-                )[0, 0]
-            results.append(
-                ReconResult(
-                    np.abs(as_numpy(image)).transpose(),
-                    reference=-1,
-                    image_index=index,
-                    image_type="magnitude",
-                    dicom=True,
-                )
+            image = noncartesian_recon(
+                data,
+                trajectory,
+                buffer.image_shape,
+                mode=self.mode,
+                n_views=n_views,
+                regularization=self.regularization,
+                iterations=self.iterations,
+                calibration_width=self.calibration_width,
+                device=self.device,
             )
+            results.append(image_result(image, buffer, image_index=index))
         return results
 
 

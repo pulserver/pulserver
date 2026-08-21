@@ -290,6 +290,23 @@ def test_unstacked_is_one_window_of_three_rows_by_two_columns(plain):
     } == {(3, 2)}
 
 
+def test_every_panel_is_drawn_where_the_grid_puts_it(plain):
+    """An axis carries the transforms of the figure it was built on, so moving
+    it onto another draws it at the wrong scale unless the two agree."""
+    plot = plain.plot(plot_now=False)
+    figure = plot.fig1
+    figure.canvas.draw()
+    width, height = figure.bbox.width, figure.bbox.height
+
+    for axis in figure.axes:
+        x0, y0, span_x, span_y = axis.get_position().bounds
+        drawn = axis.patch.get_window_extent()
+        assert (drawn.x0, drawn.y0) == pytest.approx((x0 * width, y0 * height), abs=1)
+        assert (drawn.width, drawn.height) == pytest.approx(
+            (span_x * width, span_y * height), abs=1
+        )
+
+
 def test_the_two_columns_share_their_time_axis(plain):
     """Moving an axis between figures drops it out of the shared group."""
     plot = plain.plot(plot_now=False)
@@ -632,3 +649,124 @@ def test_a_single_transmit_tr_is_left_exactly_as_upstream_drew_it(system):
     _safety.overlay_rf_channels(tr, magnitude, phase, time_factor=1.0)
 
     assert magnitude.get_lines() == [] and magnitude.get_legend() is None
+
+
+def test_a_pulse_is_named_by_the_job_it_does():
+    """``plot_rf`` picks a pulse out of a whole scan by its ``use`` tag."""
+    from pulserver.app import fse3D_sequence
+
+    seq = fse3D_sequence(n_x=64, n_y=8, n_z=4, etl=4, te=20e-3, tr=None)
+    excitation = seq.plot_rf("excitation", plot_now=False)
+    refocusing = seq.plot_rf("refocusing", plot_now=False)
+
+    # Which response answers for a pulse follows from what the pulse is for.
+    assert excitation.axes[1].get_ylabel() == r"$|M_{xy}|$"
+    assert refocusing.axes[1].get_ylabel() == "refocusing efficiency"
+    # Both are slice-selective, so both are drawn against position.
+    assert (
+        excitation.axes[1].get_xlabel() == refocusing.axes[1].get_xlabel() == "z [mm]"
+    )
+
+
+def test_a_pulse_no_one_plays_is_refused():
+    from pulserver.app import gre2D_sequence
+
+    seq = gre2D_sequence(n_x=32, n_y=8, n_slices=1, tr=12e-3, n_dummy=0)
+    with pytest.raises(ValueError, match="no pulse used for 'inversion'"):
+        seq.plot_rf("inversion", plot_now=False)
+
+
+def test_only_the_pulses_own_block_is_simulated():
+    """The window is one block, so the spoilers around the pulse stay out of it."""
+    from pulserver.app import gre2D_sequence
+
+    seq = gre2D_sequence(n_x=32, n_y=8, n_slices=1, tr=12e-3, n_dummy=0)
+    window, _ = seq._rf_window(None, None)
+    assert window.num_blocks == 1
+    assert window.duration()[0] < seq.duration()[0]
+
+
+def test_a_segment_is_drawn_over_its_own_span():
+    """A segment late in a scan fills its axis instead of trailing an empty one."""
+    from pulserver.app import fse2D_sequence
+
+    seq = fse2D_sequence(
+        n_x=64, n_y=16, n_slices=1, etl=4, te=None, tr=None, n_acs=0, n_dummy=0
+    )
+    late = max(range(seq.num_segments), key=lambda index: seq._segment_blocks(index)[0])
+    first, last = seq._segment_blocks(late)
+    start, stop = seq._block_span(first, last)
+    assert start > 0.0
+
+    axis = seq.plot(segment_idx=late, plot_now=False).fig1.axes[0]
+    assert axis.get_xlim() == pytest.approx((start, stop), abs=1e-9)
+
+
+def _lattice_axis(figure):
+    """The one axis a lattice figure draws on."""
+    (axis,) = figure.axes
+    return axis
+
+
+def test_the_lattice_draws_the_grid_the_scan_declares():
+    """Positions no readout reached are cells too, which is the whole point."""
+    from pulserver.app import epi3D_sequence
+
+    seq = epi3D_sequence(
+        n_x=32,
+        n_y=32,
+        n_z=12,
+        te=None,
+        tr=None,
+        n_acs=0,
+        n_acs_z=0,
+        n_dummy=0,
+        acceleration=2,
+        acceleration_z=2,
+    )
+    axis = _lattice_axis(seq.plot_kspace(plane="yz", lattice=True, plot_now=False))
+    # The declared matrix, not the extent of what was sampled.
+    assert axis.get_xlim() == (0, 32)
+    assert axis.get_ylim() == (12, 0)
+
+    mesh = axis.collections[0]
+    sampled = np.asarray(mesh.get_array()).ravel()
+    assert sampled.sum() == 32 * 12 / 4
+
+
+def test_the_lattice_draws_one_shot_across_it():
+    from pulserver.app import epi3D_sequence
+
+    seq = epi3D_sequence(
+        n_x=32,
+        n_y=32,
+        n_z=12,
+        te=None,
+        tr=None,
+        n_acs=0,
+        n_acs_z=0,
+        n_dummy=0,
+        acceleration=2,
+        acceleration_z=2,
+    )
+    axis = _lattice_axis(seq.plot_kspace(plane="yz", lattice=True, plot_now=False))
+    dots = axis.collections[-1].get_offsets()
+    # A shot is a whole train, and it climbs the partitions as it goes.
+    assert len(dots) == seq.get_definition("EPIFactor")
+    assert np.ptp(np.asarray(dots)[:, 1]) > 0
+
+
+def test_a_lattice_of_the_readout_axis_is_refused():
+    from pulserver.app import epi3D_sequence
+
+    seq = epi3D_sequence(n_x=32, n_y=16, n_z=4, te=None, tr=None, n_dummy=0)
+    with pytest.raises(ValueError, match="plane must be two of"):
+        seq.plot_kspace(plane="xy", lattice=True, plot_now=False)
+
+
+def test_a_lattice_tinted_by_the_acquisition_order_is_refused():
+    from pulserver.app import epi3D_sequence
+
+    seq = epi3D_sequence(n_x=32, n_y=16, n_z=4, te=None, tr=None, n_dummy=0)
+    with pytest.raises(ValueError, match="one or the other"):
+        seq.plot_kspace(plane="yz", lattice=True, color_by="shot", plot_now=False)

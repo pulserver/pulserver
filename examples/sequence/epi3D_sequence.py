@@ -1,35 +1,7 @@
 """3D gradient-echo EPI, slab-selective, exported as a linked pair.
 
-The volume counterpart of :mod:`pulserver.app.sequence.epi2D_sequence`: one
-:class:`design.EpiReadout3D` train per ``(segment, shell)``, blips on the
-read ramps, ``REV`` on every line, the partition carried as ``PAR``. A shell
-is one partition for a plain stack of trains, or a band of ``Rz`` partitions
-the CAIPI sawtooth walks for segmented blipped-CAIPI. The
-navigator -- blip-nulled ``NAV``/``REF`` lines at the centre partition plus
-the opposite-phase-encode ``SET = 1`` reference -- is its own sequence,
-linked ahead of the main file through ``NextSequence``, exercising the
-Sequence Collection path. :mod:`pulserver.app.recon.epi3D_recon` reads both back.
-
 ``main`` returns the main :class:`pulserver.pypulseq.Sequence`; ``PLUGIN``
 writes the linked pair.
-
-Examples
---------
->>> from pulserver.app import epi3D_sequence
->>> seq = epi3D_sequence(n_x=32, n_y=32, n_z=4, n_dummy=0)
->>> seq.num_trs, seq.num_segments
-(4, 1)
-
-The same train with partition blips beside the phase blips:
-
-.. plot::
-   :include-source:
-
-   from pulserver.app import epi3D_sequence
-
-   seq = epi3D_sequence(n_x=32, n_y=32, n_z=4, n_dummy=0)
-   seq.plot(tr="worst_case", time_disp="ms", grad_disp="mT/m", stacked=True,
-            plot_now=False)
 """
 
 from __future__ import annotations
@@ -133,6 +105,16 @@ def main(
 ) -> pp.Sequence:
     """Create the main 3D EPI sequence.
 
+    The volume counterpart of :mod:`pulserver.app.epi2D_sequence`: one
+    :class:`design.EpiReadout3D` train per ``(segment, shell)``, blips on the
+    read ramps, ``REV`` on every line, the partition carried as ``PAR``. A shell
+    is one partition for a plain stack of trains, or a band of ``Rz`` partitions
+    the CAIPI sawtooth walks for segmented blipped-CAIPI. The
+    navigator -- blip-nulled ``NAV``/``REF`` lines at the centre partition plus
+    the opposite-phase-encode ``SET = 1`` reference -- is its own sequence,
+    linked ahead of the main file through ``NextSequence``, exercising the
+    Sequence Collection path. :mod:`pulserver.app.epi3D_recon` reads both back.
+
     Parameters
     ----------
     plot : bool, optional
@@ -223,6 +205,104 @@ def main(
     -------
     seq : pulserver.pypulseq.Sequence
         The main EPI sequence object.
+
+    Examples
+    --------
+    >>> from pulserver.app import epi3D_sequence
+    >>> seq = epi3D_sequence(n_x=32, n_y=32, n_z=4, n_dummy=0)
+    >>> seq.num_trs, seq.num_segments
+    (4, 1)
+
+    The waveform figures below are one design, prescribed to be *legible*
+    rather than diagnostic: the shortest TE and TR the readout admits, so
+    nothing waits; heavy spoiling, so that lobe is unmistakable; and a short
+    train over four partitions, so one shot and the whole traversal both stay
+    readable.
+
+    .. plot::
+       :include-source:
+       :nofigs:
+       :context:
+
+       from pulserver.app import epi3D_sequence
+
+       seq = epi3D_sequence(
+           n_x=128, n_y=32, n_z=4, te=None, tr=None, n_acs=0, n_acs_z=0,
+           n_dummy=0, spoiling_cycles=6.0,
+       )
+
+    **The excitation**, and the magnetisation it leaves behind: the pulse's
+    own ``B1`` envelope beside the profile it writes across the selected
+    axis.
+
+    .. plot::
+       :include-source:
+       :context: close-figs
+
+       seq.plot_rf(plot_now=False)
+
+    **One shot**, which is the whole repetition: the excitation, then the
+    oscillating readout with the phase blips riding its ramps, then the
+    spoiler.
+
+    .. plot::
+       :include-source:
+       :context: close-figs
+
+       seq.plot(tr="worst_case", time_disp="ms", grad_disp="mT/m", plot_now=False)
+
+    **What the scan covers**, on a second design that is accelerated in both
+    encoded directions, because that is when the sampling is worth a picture.
+    Each cell is one ``(ky, kz)`` position the scan declares it encodes --
+    light where a readout reached it, dark where none did. The red path is one
+    shot: it steps two lines at a time along ``ky`` and climbs a partition
+    with each step, wrapping at the top of its shell. That climb is what the
+    CAIPI blips on ``Gz`` do, and it is what puts the aliased copies a
+    partition apart instead of on top of one another. The arcs between samples
+    are the blips themselves -- the k-space path of a triangular blip is a
+    pair of parabolas.
+
+    .. plot::
+       :include-source:
+       :context: close-figs
+
+       sampled = epi3D_sequence(
+           n_x=64, n_y=32, n_z=12, te=None, tr=None, n_acs=0, n_acs_z=0,
+           n_dummy=0, acceleration=2, acceleration_z=2, caipi_shift=1,
+       )
+       sampled.plot_kspace(plane="yz", lattice=True, plot_now=False)
+
+    **Mechanical resonance.** The repetition is periodic, so its gradients
+    have energy only at multiples of ``1 / T_TR``. Those lines are what a
+    forbidden band is judged against, and the verdict panel is the whole of
+    the acoustic check: every line that falls inside a band, against the
+    amplitude that band allows.
+
+    .. plot::
+       :include-source:
+       :context: close-figs
+
+       gamma = 42.576e3  # Hz/m per mT/m
+       seq.calculate_gradient_spectrum(
+           tr="worst_case",
+           resonance_lines=True,
+           bands=[(550.0, 700.0, 3.0 * gamma), (1150.0, 1300.0, 3.0 * gamma)],
+       )
+
+    **Peripheral nerve stimulation**, under the rheobase/chronaxie model the
+    scanner's own gate applies, over the same repetition played back to back.
+    This design asks for the shortest timing the hardware admits, so its blips
+    and readout ramps run at the slew limit. A lower ``MAX_SLEW``, a longer
+    echo time, or a narrower readout bandwidth each bring the response down.
+
+    .. plot::
+       :include-source:
+       :context: close-figs
+
+       seq.calculate_pns(
+           {"chronaxie_us": 360.0, "rheobase": 20.0, "alpha": 0.333},
+           tr="worst_case",
+       )
     """
     system = pp.Opts() if system is None else system
     system = pp.cap_system(system, max_grad=MAX_GRAD, max_slew=MAX_SLEW)
@@ -291,7 +371,10 @@ def main(
                 ShotKernel(
                     seq,
                     epi,
-                    origin=(kernel.first_y + segment, shell * acceleration_z),
+                    origin=(
+                        kernel.first_y + segment * acceleration,
+                        shell * acceleration_z,
+                    ),
                     grid=(n_y, n_z),
                     rev_label=rev_label,
                     extra_line_labels=(rep_label,),

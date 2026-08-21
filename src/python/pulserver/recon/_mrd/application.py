@@ -88,9 +88,7 @@ def run_application(
             connection.send(item)
 
     # A stream that ended without an acquisition closing anything still ended.
-    if acquisitions and not any(
-        has_acquisition_flag(last, flag) for flag in app.split_on
-    ):
+    if acquisitions and app.branch_for(last) is None:
         deliver(app.recon("imaging", context))
 
 

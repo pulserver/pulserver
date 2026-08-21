@@ -68,7 +68,7 @@ MU_TEST(test_signature_mismatch_gre)
     int rc;
 
     gre_opts_init(&opts);
-    rc = load_seq_with_signature_check(&coll, "gre_2d_corrupted.seq", &opts);
+    rc = load_seq_with_signature_check(&coll, "malformed/gre_2d_corrupted.seq", &opts);
 
     mu_assert_int_eq(PULSEG_ERR_SIGNATURE_MISMATCH, rc);
     mu_assert(coll == NULL, "collection must remain NULL on signature mismatch");

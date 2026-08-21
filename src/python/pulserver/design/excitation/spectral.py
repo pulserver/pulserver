@@ -77,14 +77,14 @@ class FrequencySelectiveExcitation(RfModule):
     The band it tips, and the rest of the spectrum it leaves where it was:
 
     .. plot::
+       :include-source:
 
        import pulserver.design as design
        import pulserver.pypulseq as pp
-       from _figures import rf_profile
 
-       rf_profile(
-           design.FrequencySelectiveExcitation(pp.Opts(), 90.0, bandwidth_hz=200.0),
+       design.FrequencySelectiveExcitation(pp.Opts(), 90.0, bandwidth_hz=200.0).plot_rf(
            title="water excitation, 200 Hz passband",
+           plot_now=False,
        )
     """
 
@@ -201,28 +201,31 @@ class SpspExcitation(RfModule):
     >>> water.gz.type
     'grad'
 
-    The subpulse train and its spectral response. The passband repeats at the
-    subpulse rate, and where the repeats fall is what the subpulse count
-    buys:
+    The subpulse train, and what it tips over position *and* frequency
+    together -- which is the whole point of the pulse, and is why this one
+    is drawn over a plane rather than along an axis. The passband repeats at
+    the subpulse rate, and where those repeats fall is what the subpulse
+    count buys:
 
     .. plot::
+       :include-source:
 
        import pulserver.design as design
        import pulserver.pypulseq as pp
-       from _figures import rf_profile
 
        system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=180, slew_unit="T/m/s")
-       rf_profile(
-           design.SpspExcitation(
-               system,
-               30.0,
-               thickness_m=10e-3,
-               spectral_bandwidth_hz=300.0,
-               n_subpulses=12,
-           ),
+       design.SpspExcitation(
+           system,
+           30.0,
+           thickness_m=10e-3,
+           spectral_bandwidth_hz=300.0,
+           n_subpulses=12,
+       ).plot_rf(
            title="spectral-spatial, 10 mm and 300 Hz",
-           spatial=False,
-           extent=2500,
+           plane="zf",
+           extent=15.0,
+           samples=71,
+           plot_now=False,
        )
     """
 

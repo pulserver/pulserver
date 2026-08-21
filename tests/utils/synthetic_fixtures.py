@@ -11,6 +11,9 @@ Two lanes:
 * :func:`write_built_cases` -- valid sequences produced through
   ``pulserver.pypulseq`` builders (the 32x32 blipped GRE, the NextSequence
   dedup chain, the corrupted-signature specimen).
+* :data:`MALFORMED_CASES` and the corrupted specimen -- files that must *not*
+  read, written into ``expected/malformed/`` so that the sweeps over
+  ``expected/`` keep their premise that everything in it reads.
 
 ``write_all`` writes both lanes into a directory. Output is deterministic:
 running it twice leaves the tree unchanged.
@@ -908,6 +911,81 @@ _RASTER_CASES["24_raster_block_duration_overrun"] = _seq(
 )
 
 
+_RASTER_CASES["28_unknown_extension_type"] = _seq(
+    "An extension type this reader has no name for, whose reference it cannot resolve.",
+    """\
+[BLOCKS]
+1 100   0   1   0   0  0  1
+
+[TRAP]
+ 1          0.2  20  960  20   0
+
+[EXTENSIONS]
+1 1 7 0
+
+extension VENDOR_THING 1
+1  1 2 3
+""",
+)
+
+
+# -- malformed family (files that must NOT read) ---------------------------
+#
+# Structurally invalid: an id naming a library row that is not there. Every
+# other case in this corpus reads, and the sweeps over ``expected/`` assume it,
+# so these live in their own directory -- a file that must be refused cannot sit
+# in a set whose premise is that reading succeeds.
+
+MALFORMED_CASES: dict[str, str] = {}
+
+MALFORMED_CASES["26_dangling_rotation_ref"] = _seq(
+    "An extension row naming rotation 99 in a file that defines one rotation.",
+    """\
+[BLOCKS]
+1 100   0   1   0   0  0  1
+
+[TRAP]
+ 1          0.2  20  960  20   0
+
+[EXTENSIONS]
+1 1 99 0
+
+extension ROTATIONS 1
+1  1 0 0 0
+""",
+    definitions=_RASTERS + "RequiredExtensions ROTATIONS\n",
+)
+
+MALFORMED_CASES["27_dangling_extension_link"] = _seq(
+    "An extension row whose `next` link points past the end of the chain library.",
+    """\
+[BLOCKS]
+1 100   0   1   0   0  0  1
+
+[TRAP]
+ 1          0.2  20  960  20   0
+
+[EXTENSIONS]
+1 1 1 99
+
+extension ROTATIONS 1
+1  1 0 0 0
+""",
+    definitions=_RASTERS + "RequiredExtensions ROTATIONS\n",
+)
+
+MALFORMED_CASES["25_dangling_rf_id"] = _seq(
+    "A block naming RF 1 in a file with no [RF] section at all.",
+    """\
+[BLOCKS]
+1 100   1   1   0   0  0  0
+
+[TRAP]
+ 1          0.2  20  960  20   0
+""",
+)
+
+
 #: name -> exact file text for every hand-specified case.
 TEXT_CASES: dict[str, str] = {
     **_GRAD_CASES,
@@ -1022,12 +1100,11 @@ def write_built_cases(directory: Path, corpus_dir: Path) -> list[str]:
 
 
 def write_corrupted(directory: Path, source: Path) -> str:
-    """Write ``gre_2d_corrupted.seq``: `source` with block 1 pointing at a
-    dangling extension chain, signature left untouched.
+    """Write ``malformed/gre_2d_corrupted.seq``: `source` with block 1 pointing
+    at a dangling extension chain, signature left untouched.
 
-    Two consumers, two properties: the signature-checking loader must report
-    a mismatch, and deduplication -- the first thing that resolves extension
-    references -- must reject the dangling chain id on block 1.
+    Two consumers, two properties: the signature-checking loader must report a
+    mismatch, and the reader must refuse the dangling chain id outright.
     """
     text = source.read_text()
     lines = text.splitlines(keepends=True)
@@ -1042,9 +1119,11 @@ def write_corrupted(directory: Path, source: Path) -> str:
             fields[-1] = "99"
             lines[i] = " ".join(fields) + "\n"
             break
-    out = directory / "gre_2d_corrupted.seq"
+    malformed = directory / "malformed"
+    malformed.mkdir(exist_ok=True)
+    out = malformed / "gre_2d_corrupted.seq"
     out.write_text("".join(lines))
-    return out.name
+    return f"malformed/{out.name}"
 
 
 def write_all(directory: Path, corpus_dir: Path) -> list[str]:
@@ -1054,5 +1133,10 @@ def write_all(directory: Path, corpus_dir: Path) -> list[str]:
     for name, text in sorted(TEXT_CASES.items()):
         (directory / f"{name}.seq").write_text(text)
         written.append(f"{name}.seq")
+    malformed = directory / "malformed"
+    malformed.mkdir(exist_ok=True)
+    for name, text in sorted(MALFORMED_CASES.items()):
+        (malformed / f"{name}.seq").write_text(text)
+        written.append(f"malformed/{name}.seq")
     written.extend(write_built_cases(directory, corpus_dir))
     return written

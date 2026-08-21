@@ -167,7 +167,7 @@ def calc_sampled_pairs(
     *,
     partial_fourier: tuple[float, float] = (1.0, 1.0),
     caipi_shift: int = 0,
-    elliptical: bool = False,
+    elliptical: bool = True,
     order: str = "calibration_first",
 ) -> tuple[list[tuple[int, int]], int]:
     """Return the ``(line, partition)`` pairs a 2D phase-encode grid samples.
@@ -208,7 +208,9 @@ def calc_sampled_pairs(
         Restrict the sampled support to the inscribed ``(ky, kz)`` ellipse,
         dropping the corners of k-space a round object never occupies. The
         autocalibration rectangle, being central, is kept whatever this is.
-        Default is False.
+        ``False`` samples the full rectangle, which costs the corners' scan
+        time for resolution along the diagonals no anatomy has. Default is
+        True.
     order : str, optional
         ``'calibration_first'`` (the default) leads with the rectangle;
         ``'ascending'`` traverses the whole grid partitions-outer,
@@ -238,12 +240,13 @@ def calc_sampled_pairs(
     >>> pairs[:n_cal]
     [(1, 1), (2, 1), (1, 2), (2, 2)]
 
-    The corners fall away when the support is the inscribed ellipse:
+    The corners are outside the inscribed ellipse, so they are not sampled
+    unless the full rectangle is asked for:
 
-    >>> full, _ = pp.calc_sampled_pairs((8, 8), (1, 1), (0, 0))
-    >>> disk, _ = pp.calc_sampled_pairs((8, 8), (1, 1), (0, 0), elliptical=True)
-    >>> (0, 0) in full, (0, 0) in disk
-    (True, False)
+    >>> disk, _ = pp.calc_sampled_pairs((8, 8), (1, 1), (0, 0))
+    >>> full, _ = pp.calc_sampled_pairs((8, 8), (1, 1), (0, 0), elliptical=False)
+    >>> (0, 0) in disk, (0, 0) in full
+    (False, True)
     """
     if order not in ("ascending", "calibration_first"):
         raise ValueError("order must be 'ascending' or 'calibration_first'")
@@ -268,23 +271,17 @@ def calc_sampled_pairs(
     if acs_lines and acs_partitions:
         sampled[np.ix_(acs_lines, acs_partitions)] = True
 
-    acs_line_set = set(acs_lines)
-    acs_partition_set = set(acs_partitions)
+    # Partition-major over the sampled mask, which is what transposing and
+    # asking for the set indices gives directly.
+    partitions, lines = np.argwhere(sampled.T).T
+    calibrates = np.isin(lines, acs_lines) & np.isin(partitions, acs_partitions)
+    n_calibration = int(np.count_nonzero(calibrates))
 
-    def calibrates(line: int, partition: int) -> bool:
-        return line in acs_line_set and partition in acs_partition_set
+    if order == "calibration_first":
+        rank = np.concatenate((np.flatnonzero(calibrates), np.flatnonzero(~calibrates)))
+        lines, partitions = lines[rank], partitions[rank]
 
-    pairs = [
-        (int(line), int(partition))
-        for partition in range(n_z)
-        for line in range(n_y)
-        if sampled[line, partition]
-    ]
-    rectangle = [pair for pair in pairs if calibrates(*pair)]
-    if order == "ascending":
-        return pairs, len(rectangle)
-    body = [pair for pair in pairs if not calibrates(*pair)]
-    return rectangle + body, len(rectangle)
+    return list(zip(lines.tolist(), partitions.tolist(), strict=True)), n_calibration
 
 
 def _elliptical_support(shape: tuple[int, int]) -> np.ndarray:
@@ -380,7 +377,9 @@ def _deal_echo_major(
     trains: list[list[int | None]] = [[None] * etl for _ in range(n_trains)]
     for rank, group in enumerate(groups):
         echo = echo_of_group[rank]
-        for train, index in enumerate(sorted(group, key=lambda i: secondary[i])):
+        group = np.asarray(group, dtype=int)
+        dealt = group[np.argsort(secondary[group], kind="stable")]
+        for train, index in enumerate(dealt.tolist()):
             trains[train][echo] = index
     return trains
 
@@ -456,7 +455,7 @@ def make_linear_order(
         return []
     n_trains = int(np.ceil(n / train_length))
     radius, _ = _polar(pts, center)
-    order = sorted(range(n), key=lambda i: (pts[i, 1], pts[i, 0]))
+    order = np.lexsort((pts[:, 0], pts[:, 1]))
     trains = _deal_echo_major(
         order,
         pts[:, 0],

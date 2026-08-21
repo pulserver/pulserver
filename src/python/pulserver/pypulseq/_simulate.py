@@ -109,26 +109,110 @@ def _adapted_step(bandwidth: float, dt: float | None) -> float:
     return 10e-6
 
 
-def _spectrum(rf, freq_offset: float, df: float) -> tuple[np.ndarray, np.ndarray]:
-    """Frequency axis and magnitude spectrum of a pulse, at resolution ``df``."""
+def _resample(rf, freq_offset: float) -> tuple[np.ndarray, float]:
+    """The pulse envelope on a uniform grid, and that grid's step."""
     times = np.asarray(rf.t, dtype=float)
     signal = np.asarray(rf.signal, dtype=complex) * np.exp(
         2j * np.pi * freq_offset * times
     )
     if times.size < 2 or not np.any(signal):
-        return np.zeros(0), np.zeros(0)
+        return np.zeros(0, dtype=complex), 0.0
 
     step = float(np.min(np.diff(times)))
     grid = np.arange(times[0], times[-1] + 0.5 * step, step)
     sampled = np.interp(grid, times, signal.real) + 1j * np.interp(
         grid, times, signal.imag
     )
+    return sampled, step
 
-    # Zero-pad until one bin is no wider than the resolution asked for.
-    n = max(round(1.0 / (df * step)), sampled.size)
+
+def _bins(sampled: np.ndarray, step: float, df: float) -> int:
+    """Transform length whose bin is no wider than ``df``."""
+    return max(round(1.0 / (df * step)), sampled.size)
+
+
+def _spectrum(rf, freq_offset: float, df: float) -> tuple[np.ndarray, np.ndarray]:
+    """Frequency axis and magnitude spectrum of a pulse, at resolution ``df``."""
+    sampled, step = _resample(rf, freq_offset)
+    if sampled.size == 0:
+        return np.zeros(0), np.zeros(0)
+
+    n = _bins(sampled, step, df)
     return np.fft.fftshift(np.fft.fftfreq(n, step)), np.abs(
         np.fft.fftshift(np.fft.fft(sampled, n))
     )
+
+
+#: Bin width (Hz) the main lobe is located on before the flanks are read at
+#: full resolution. Any pulse worth measuring is hundreds of hertz wide, so a
+#: lobe spans many bins here.
+_LOCATE_DF = 10.0
+
+#: How far past each flank the fine evaluation reaches, in multiples of the
+#: located lobe width. Wide enough that the flank cannot sit outside it unless
+#: the coarse location was wrong, which the caller checks for.
+_MARGIN = 1.0
+
+
+def _bandwidth(rf, freq_offset: float, cutoff: float, df: float) -> float:
+    """Width of the main lobe at ``cutoff`` of its height, on the ``df`` grid.
+
+    The same number reading the flanks off :func:`_spectrum` gives, without
+    transforming the whole Nyquist range at that resolution. A millisecond
+    pulse is a few thousand samples and a hertz-resolution grid is millions of
+    bins, nearly all of them describing frequencies far outside the lobe: the
+    lobe is located on a coarse transform, and only the band around it is
+    evaluated on the fine grid, at exactly the frequencies the full transform
+    would have put there.
+
+    Returns ``nan`` when the lobe is not bracketed by that band, which is the
+    caller's signal to transform the whole range instead.
+    """
+    from scipy.signal import czt
+
+    sampled, step = _resample(rf, freq_offset)
+    if sampled.size == 0:
+        return 0.0
+
+    fine = _bins(sampled, step, df)
+    coarse = _bins(sampled, step, _LOCATE_DF)
+    if fine <= coarse:
+        frequency, spectrum = _spectrum(rf, freq_offset, df)
+        left, right = _flanks(spectrum, cutoff)
+        return float(frequency[right] - frequency[left])
+
+    located = np.abs(np.fft.fftshift(np.fft.fft(sampled, coarse)))
+    lo, hi = _flanks(located, cutoff)
+    axis = np.fft.fftshift(np.fft.fftfreq(coarse, step))
+    width = max(float(axis[hi] - axis[lo]), _LOCATE_DF)
+
+    # The fine grid is the full transform's own: bin k sits at k / (fine *
+    # step), so evaluating those k directly gives its samples exactly.
+    spacing = 1.0 / (fine * step)
+    first = int(np.floor((axis[lo] - _MARGIN * width) / spacing))
+    last = int(np.ceil((axis[hi] + _MARGIN * width) / spacing))
+    count = last - first + 1
+    if count > fine:
+        return float("nan")
+
+    spectrum = np.abs(
+        czt(
+            sampled,
+            count,
+            w=np.exp(-2j * np.pi * spacing * step),
+            a=np.exp(2j * np.pi * first * spacing * step),
+        )
+    )
+
+    # The flank walk is only the full transform's if the band holds the whole
+    # lobe: its tallest point, and a sample below threshold on either side.
+    peak = float(np.max(spectrum))
+    if peak < float(np.max(located)) * (1.0 - 1e-9):
+        return float("nan")
+    left, right = _flanks(spectrum, cutoff)
+    if left == 0 or right == spectrum.size - 1:
+        return float("nan")
+    return float(right - left) * spacing
 
 
 def _flanks(spectrum: np.ndarray, cutoff: float) -> tuple[int, int]:
@@ -231,7 +315,14 @@ def calc_rf_bandwidth(
     sim_rf : the simulated profile, valid at any flip angle.
     """
     rf = _events.as_namespace(rf)
-    frequency, spectrum = _spectrum(rf, float(getattr(rf, "freq_offset", 0.0)), dw)
+    freq_offset = float(getattr(rf, "freq_offset", 0.0))
+
+    if not (return_spectrum or return_axis):
+        bandwidth = _bandwidth(rf, freq_offset, cutoff, dw)
+        if not np.isnan(bandwidth):
+            return bandwidth
+
+    frequency, spectrum = _spectrum(rf, freq_offset, dw)
     if frequency.size == 0:
         bandwidth = 0.0
     else:

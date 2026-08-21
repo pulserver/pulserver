@@ -1743,6 +1743,8 @@ int pulseq_read_binary_from_buffer(pulseq_file *seq, FILE *f)
     if (!seq || !f)
         return PULSEQ_ERR_NULL_POINTER;
     rc = read_binary_stream(seq, f, 0);
+    if (PULSEQ_SUCCEEDED(rc))
+        rc = pulseq__check_references(seq);
     if (PULSEQ_FAILED(rc))
         pulseq__file_reset(seq);
     return rc;
@@ -1760,6 +1762,8 @@ int pulseq_read_binary(pulseq_file *seq, const char *file_path)
         return PULSEQ_ERR_FILE_NOT_FOUND;
     rc = read_binary_stream(seq, f, 0);
     fclose(f);
+    if (PULSEQ_SUCCEEDED(rc))
+        rc = pulseq__check_references(seq);
     if (PULSEQ_FAILED(rc))
         pulseq__file_reset(seq);
     return rc;

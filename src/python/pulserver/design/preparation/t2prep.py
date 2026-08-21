@@ -113,16 +113,16 @@ class T2Preparation(RfModule):
     on the way is T2 weighting:
 
     .. plot::
+       :include-source:
 
        import pulserver.design as design
        import pulserver.pypulseq as pp
-       from _figures import rf_profile
 
-       rf_profile(
-           design.T2Preparation(pp.Opts(), 40e-3),
+       design.T2Preparation(pp.Opts(), 40e-3).plot_rf(
            title="T2 preparation, TE 40 ms",
            whole=True,
            extent=600,
+           plot_now=False,
        )
     """
 
@@ -259,16 +259,16 @@ class T1T2Preparation(T2Preparation):
     sees an inversion recovering as well as a T2 decay:
 
     .. plot::
+       :include-source:
 
        import pulserver.design as design
        import pulserver.pypulseq as pp
-       from _figures import rf_profile
 
-       rf_profile(
-           design.T1T2Preparation(pp.Opts(), 40e-3),
+       design.T1T2Preparation(pp.Opts(), 40e-3).plot_rf(
            title="T1-T2 preparation, TE 40 ms",
            whole=True,
            extent=600,
+           plot_now=False,
        )
     """
 

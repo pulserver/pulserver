@@ -267,6 +267,100 @@ def test_the_two_plots_draw_the_same_resolved_sequence():
     assert np.array_equal(np.nan_to_num(dense), np.nan_to_num(np.asarray(resolved)))
 
 
+# -- the sampling order the ordering view is drawn from ------------------
+
+
+def per_readout(sequence, values):
+    """``values`` is per sample; take the one each readout starts with."""
+    stride = values.size // sequence._num_adc(None)
+    return values[::stride]
+
+
+def test_an_authored_echo_label_is_the_echo_index():
+    """A train that writes ``ECO`` has already said which echo each line is,
+    and the shot is where that count returns to zero."""
+    seq = load("fse_3d")
+    shot, echo = seq._sampling_order(None)
+
+    assert np.array_equal(per_readout(seq, echo), np.tile(np.arange(8), 4))
+    assert np.array_equal(per_readout(seq, shot), np.repeat(np.arange(4), 8))
+
+
+def test_a_train_under_one_excitation_is_one_shot_of_many_echoes():
+    """No ``ECO`` to read, so the index is the readout's rank in its train --
+    which is what makes a whole EPI plane one shot rather than sixteen."""
+    seq = load("epi_2d")
+    shot, echo = seq._sampling_order(None)
+    echo = per_readout(seq, echo)
+
+    assert per_readout(seq, shot).max() + 1 == 2
+    # The navigator triplet opens the shot; the imaging train follows it.
+    assert np.array_equal(echo[:3], [0, 1, 2])
+    assert echo.max() == 15
+
+
+def test_one_readout_per_excitation_is_one_shot_each():
+    seq = load("gre_2d")
+    shot, echo = seq._sampling_order(None)
+
+    assert np.array_equal(per_readout(seq, shot), np.arange(seq._num_adc(None)))
+    assert not np.any(echo)
+
+
+def test_the_sampling_order_has_one_value_per_sample():
+    """It colours ``k_traj_adc``, so it has to be the same length as it."""
+    seq = load("fse_3d")
+    shot, echo = seq._sampling_order(None)
+    samples = np.asarray(seq.calculate_kspace(dense=False, compat=False).k_traj_adc)
+
+    assert shot.shape == echo.shape == (samples.shape[1],)
+
+
+def kspace_panels(figure):
+    """The panels drawing k-space, which is every axis but the colourbars."""
+    return [axis for axis in figure.axes if axis.get_xlabel().startswith("$k_")]
+
+
+def test_the_ordering_view_draws_both_hierarchies():
+    matplotlib = pytest.importorskip("matplotlib")
+    matplotlib.use("Agg")
+
+    figure = load("fse_3d").plot_kspace(
+        plane="yz", color_by="order", show_trajectory=False, plot_now=False
+    )
+    assert len(kspace_panels(figure)) == 2
+
+
+def test_the_ordering_view_drops_a_panel_whose_index_never_varies():
+    """One line per excitation has no echo axis, so there is no echo panel."""
+    matplotlib = pytest.importorskip("matplotlib")
+    matplotlib.use("Agg")
+
+    figure = load("gre_2d").plot_kspace(color_by="order", plot_now=False)
+    assert len(kspace_panels(figure)) == 1
+
+
+def test_colouring_draws_the_same_samples_as_not_colouring():
+    matplotlib = pytest.importorskip("matplotlib")
+    matplotlib.use("Agg")
+
+    plain = load("gre_radial_2d").plot_kspace(plot_now=False)
+    coloured = load("gre_radial_2d").plot_kspace(color_by="shot", plot_now=False)
+
+    assert np.array_equal(
+        kspace_panels(plain)[0].collections[0].get_offsets(),
+        kspace_panels(coloured)[0].collections[0].get_offsets(),
+    )
+
+
+def test_an_unknown_colour_index_is_refused():
+    matplotlib = pytest.importorskip("matplotlib")
+    matplotlib.use("Agg")
+
+    with pytest.raises(ValueError, match="color_by"):
+        load("gre_2d").plot_kspace(color_by="slice", plot_now=False)
+
+
 def test_the_logical_frame_leaves_rotations_out():
     """Two frames, and the difference is a rotation extension.
 

@@ -53,14 +53,14 @@ class NonSelectiveExcitation(RfModule):
     the profile is the transform of a rectangle:
 
     .. plot::
+       :include-source:
 
        import pulserver.design as design
        import pulserver.pypulseq as pp
-       from _figures import rf_profile
 
-       rf_profile(
-           design.NonSelectiveExcitation(pp.Opts(), 90.0, 0.5e-3),
+       design.NonSelectiveExcitation(pp.Opts(), 90.0, 0.5e-3).plot_rf(
            title="hard 90, 0.5 ms",
+           plot_now=False,
        )
     """
 
@@ -161,15 +161,15 @@ class NonSelectiveRefocusing(RfModule):
     The pulse and both crushers together, integrated as one:
 
     .. plot::
+       :include-source:
 
        import pulserver.design as design
        import pulserver.pypulseq as pp
-       from _figures import rf_profile
 
-       rf_profile(
-           design.NonSelectiveRefocusing(pp.Opts(), duration_s=0.5e-3),
+       design.NonSelectiveRefocusing(pp.Opts(), duration_s=0.5e-3).plot_rf(
            title="hard 180 between crushers",
            whole=True,
+           plot_now=False,
        )
     """
 
@@ -261,14 +261,14 @@ class Inversion(RfModule):
     adiabatic pulse inverts everything above its threshold equally:
 
     .. plot::
+       :include-source:
 
        import pulserver.design as design
        import pulserver.pypulseq as pp
-       from _figures import rf_profile
 
-       rf_profile(
-           design.Inversion(pp.Opts(), 8e-3),
+       design.Inversion(pp.Opts(), 8e-3).plot_rf(
            title="hyperbolic secant inversion, 8 ms",
+           plot_now=False,
        )
     """
 

@@ -12,7 +12,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-import pulserver.app.sequence as zoo
+import pulserver.app as app
 import pulserver.io as io
 import pulserver.pypulseq as pp
 
@@ -91,6 +91,21 @@ def test_every_io_helper_is_documented():
     assert listed("pypulseq.md", "io") == set(io.__all__)
 
 
+def plugins(suffix: str) -> set[str]:
+    """The zoo's plugins of one family, off the one flat namespace."""
+    return {name for name in app.__all__ if name.endswith(suffix)}
+
+
 def test_every_zoo_sequence_is_documented():
     """The zoo is the worked-example corpus, and the page is its index."""
-    assert listed("apps.md", "app_sequence") == set(zoo.__all__)
+    assert listed("apps.md", "app_sequence") == plugins("_sequence")
+
+
+def test_the_plugin_namespace_is_flat():
+    """One access point: a plugin is ``pulserver.app.<name>`` and the families
+    are a way of reading the zoo, not a way of importing from it."""
+    assert not {"sequence", "recon"} & set(app.__all__)
+    assert all(name.endswith(("_sequence", "_recon")) for name in app.__all__), sorted(
+        app.__all__
+    )
+    assert sorted(dir(app)) == sorted(app.__all__)

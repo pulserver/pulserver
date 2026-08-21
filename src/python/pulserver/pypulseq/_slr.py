@@ -8,6 +8,8 @@ SigPy (and its array/optimization stack) a runtime dependency.
 
 from __future__ import annotations
 
+from functools import lru_cache
+
 import numpy as np
 from scipy import signal
 
@@ -184,6 +186,32 @@ def design_slr(
     if not 0 < passband_ripple < 1 or not 0 < stopband_ripple < 1:
         raise ValueError("passband_ripple and stopband_ripple must lie in (0, 1)")
 
+    # The waveform is dimensionless: neither the flip angle it will be scaled
+    # to nor the slab it will select reaches this function, so the arguments
+    # that do reach it are the ones an operator changes least. A console
+    # re-running a plugin for a new echo time asks for a pulse it has already
+    # designed.
+    return _design(
+        n,
+        float(time_bandwidth_product),
+        pulse_type,
+        filter_type,
+        float(passband_ripple),
+        float(stopband_ripple),
+        bool(cancel_alpha_phase),
+    ).copy()
+
+
+@lru_cache(maxsize=32)
+def _design(
+    n: int,
+    time_bandwidth_product: float,
+    pulse_type: str,
+    filter_type: str,
+    passband_ripple: float,
+    stopband_ripple: float,
+    cancel_alpha_phase: bool,
+) -> np.ndarray:
     scale, d1, d2 = _calc_ripples(pulse_type, passband_ripple, stopband_ripple)
     if filter_type == "ls":
         beta = _least_squares(n, time_bandwidth_product, d1, d2)

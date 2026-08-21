@@ -1,17 +1,19 @@
-"""Finite-outer-rep fix tests for the A_eq mechanical-resonance criterion.
+"""The outer repeat is finite, and the spectrum between harmonics is real.
 
-PLAN_safety_mechres_finite_outer_rep.md: the outermost TR repeat (M =
-num_instances) used to be treated as an infinite Dirac comb -- A_eq evaluated
-only at exact TR harmonics k/T_TR, independent of M. That is provably a
-no-op fix if "fixed" by scaling the already-computed exact-harmonic
-amplitude by the Dirichlet ratio (a ratio <=1 can never expose a candidate
-the coarse point didn't already show) -- caught via numeric exploration
-during implementation. The actual fix evaluates S_TR(f) fresh at fractional
-TR harmonics between consecutive exact ones and attenuates by the closed
--form Dirichlet ratio, with sample points geometrically concentrated near
-each adjacent main lobe (where real sidelobes live for large M) rather than
-spread uniformly across the interval (uniform spacing was tried first and
-confirmed to miss every sidelobe once M exceeded the sample count).
+A scan is M = ``num_instances`` repetitions of the canonical TR, not an
+infinite Dirac comb. Its spectrum is the single-TR transform multiplied by
+the Dirichlet kernel of M, so drive exists between the exact TR harmonics
+k/T_TR, peaking at (k + (j + 1/2)/M) with levels 2/(pi(2j+1)).
+
+Two properties are load-bearing and are what these tests hold onto:
+
+* the single-TR transform is evaluated FRESH at each probed frequency and
+  only then attenuated. Scaling the coarse harmonic's amplitude by the
+  Dirichlet ratio instead cannot expose anything, because that ratio never
+  exceeds 1;
+* the probes sit on the lobes. Sampling at integer multiples of 1/M lands on
+  the kernel's nulls, where the attenuation is zero and a probe reports
+  nothing however many are spent.
 
 These tests exercise the low-level ``_calc_mech_resonances`` binding
 directly, so the actual candidate amplitudes -- not just a verdict -- can be
@@ -28,7 +30,7 @@ from pulserver.pypulseq import Opts
 from .conftest import build_collection
 
 RASTER = 20e-6
-BAND = (500.0, 3000.0, 0.0)  # zero-tolerance band, forces eps to the G_max floor
+BAND = (500.0, 3000.0, 0.0)  # zero tolerance: eps falls back to the policy amplitude
 
 
 def _build_two_block_seq(tmp_path: Path) -> Path:
@@ -105,13 +107,12 @@ def test_finite_outer_rep_m1_regression_identity(tmp_path):
 
 
 def test_finite_outer_rep_not_a_noop_for_m_greater_than_1(tmp_path):
-    """The core regression this fix exists to prevent: an earlier, WRONG
-    version of the fix (scaling the coarse amplitude by the Dirichlet ratio
-    instead of evaluating S_TR fresh at the fractional frequency) is a
-    mathematical no-op -- M=2..64 would silently reproduce the M=1 values
-    exactly, because a ratio <=1 can never exceed the value it scales.
-    Assert this doesn't happen: at least one candidate's amplitude must
-    differ from the M=1 baseline once M>1 (real sidelobe energy is found)."""
+    """Repeating the TR finds drive that a single repetition does not.
+
+    Scaling the coarse harmonic by the Dirichlet ratio rather than
+    evaluating the transform afresh would leave every M identical to M=1,
+    since a ratio at most 1 can never exceed the value it scales. At least
+    one candidate must move once M > 1."""
     seq_path = _build_two_block_seq(tmp_path)
     amps_m1 = _candidate_grad_amps(seq_path, num_averages=1)
     amps_m4 = _candidate_grad_amps(seq_path, num_averages=4)

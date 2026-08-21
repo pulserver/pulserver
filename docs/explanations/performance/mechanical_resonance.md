@@ -11,7 +11,7 @@ computes a whole spectrum. It computes, analytically, the spectrum of each
 gradient *waveform* — once — and then evaluates the coherent sum **only at
 the frequencies that actually matter**, over **one** repetition time.
 
-![EPI drive spectrum: the echo-train comb against the forbidden bands](../assets/mechanical_resonance/current_epi.png)
+![The EPI echo-train comb against two zero-tolerance bands: flagged where a band lands on a tooth, clear where it does not](../assets/mechanical_resonance/epi_comb.png)
 
 ## Nothing is rendered
 
@@ -23,6 +23,52 @@ and by time offset, which are a scale and a phase on the stored transform —
 not a reason to transform anything again. A rotation is the same arithmetic
 one step further out: it mixes three stored transforms in fixed proportions,
 so a turned arm needs no transform of its own.
+
+The set of waveforms a sequence brings is therefore the thing that costs
+money, and the whole strategy is to keep that set as small as the sequence
+truly makes it. Call it the **basis**: the distinct gradient waveforms the
+canonical TR plays, each transformed once, everything else expressed as a
+scale, a delay, or a rotation of one of them.
+
+## Three kinds of waveform, three costs
+
+"Piecewise linear" is not a special case — it is the model. An arbitrary
+gradient is samples on the gradient raster with the field interpolated
+between them, so a spiral arm and a trapezoid differ only in how many
+vertices they have. What changes is what each costs to transform, and
+sequences fall into three regimes.
+
+**Trapezoids, and trapezoids bridged into longer runs.** Four vertices, or a
+few dozen when lobes are bridged into an extended shape. The closed form is
+evaluated directly; it is too cheap to be worth any cleverness, and a
+sequence built entirely from them — Cartesian gradient echo, spin echo, most
+preparation — has a basis of a handful of waveforms that never grows with the
+matrix, because a phase encode is the *same* trapezoid at a different
+amplitude.
+
+**One long arbitrary waveform.** A spiral, a rosette, a wave-encoding
+readout: thousands of vertices, but one base shape that every shot reuses.
+Evaluating the closed form point by point would cost vertices × frequencies,
+and both factors are large. Instead, the frequencies the gate asks for are
+not arbitrary — inside a band they are consecutive harmonics of the same TR,
+probed at a fixed set of offsets, so they lie evenly spaced in angle. On such
+a comb the transform reduces to one polynomial, and a chirp-z transform
+produces its value at every candidate in the band at once. The same integral
+of the same interpolant, in the same double precision, at
+`(n + m) log(n + m)` instead of `n × m`. Below sixty-four vertices the direct
+loop wins and the tabulation is skipped, so no trapezoid ever takes this
+path.
+
+**Many long arbitrary waveforms.** A trajectory whose shots are individually
+optimised — a non-Cartesian 3D readout with a numerically distinct arm per
+repetition — has a basis as large as its shot count, and nothing above
+compresses it, because the arms genuinely are different waveforms. This is
+the regime where the cost is real and where the remaining work lies; the
+section on cost below says exactly what it looks like and what is left to do
+about it.
+
+The regime is discovered, never declared. Nothing in the analysis asks what
+kind of sequence it is holding.
 
 ## Only the frequencies that matter
 
@@ -74,11 +120,7 @@ about 4 mT/m rms on each in-plane axis across its 30 ms TR, and no single
 in-plane line carries more than 2.3 mT/m of it. That is what a swept readout
 looks like — its drive is spread across the range it sweeps rather than piled
 onto one frequency, which is what the comb at the top of this page does with
-the same kind of energy. Broadband is not the same as over the limit: the
-tolerance drawn here is 3 mT/m, which is 0.3 G/cm in the unit an ESP row
-states, and the same order as the floor the engine anchors a zero-tolerance
-row to (0.08 × $G_\text{max}$, 3.2 mT/m on this sequence's gradients). Every
-arm, and the bound over them, stays under it.
+the same kind of energy.
 
 The arms of a trajectory are near-copies of one another, so their spectra
 nearly coincide — but *nearly* is the whole problem. Where the interleaves
@@ -99,56 +141,192 @@ than left in the file.
 
 ![The same four arms, turned by a rotation and written out, on the same lines](../assets/mechanical_resonance/spiral_encodings.png)
 
-## What that costs
+The two encodings agree arm by arm, to within the last bits of the transform.
+They do not cost the same, and that is the subject of the cost section: the
+basis of the turned version is one waveform, the basis of the written-out
+version is one per arm.
 
-The same EPI protocol at four scan lengths, with the repetition held fixed:
+## Where the threshold comes from
 
-| Blocks | TRs | Over the timeline | Gate (banded harmonics) | Display comb |
-|---:|---:|---:|---:|---:|
-| 297 | 3 | 21 ms | 33 ms | 6.6 ms |
-| 1 188 | 12 | 80 ms | 36 ms | 6.8 ms |
-| 4 752 | 48 | 311 ms | 36 ms | 7.2 ms |
-| 14 256 | 144 | 1 012 ms | 36 ms | 8.5 ms |
+A band table states a frequency range and, sometimes, an amplitude. It does
+not state what makes that range dangerous, what the resonance's quality
+factor is, or how the amplitude was arrived at — and a great many bands state
+no amplitude at all, which reads as *zero tolerance*.
 
-The two right-hand columns do not move: a 3-TR scan and a 144-TR scan of the
-same sequence cost the same, because they *are* the same sequence and the
-verdict is a property of the repetition. The left-hand column is upstream
-PyPulseq's `calc_gradient_spectrum` over the timeline — which is what `tr=None`
-is, to the bit — and it grows with the scan, as a transform of the scan must.
+Zero cannot be taken literally, and not for a subtle reason: a periodic
+gradient has lines at every harmonic of its own period, and any real band is
+far wider than that spacing, so **every band contains lines of every sequence,
+always**. Sweeping a hundred-hertz band across the whole audio range for every
+shipped plugin, there is not one placement with no line inside it and not one
+line that is exactly zero. A literal reading refuses everything ever written,
+and almost all of those refusals would be a sequence whose in-band content is
+a tenth of a mT/m — real, and utterly harmless. The weak content is not an
+artefact to be filtered away; it is genuinely there, and it is small. What is
+needed is a number that says *how* small stops mattering, and that number is
+nowhere in the table.
 
-The gate costing more than the picture is not a mistake. The comb is one
-chirp-z transform at a fixed resolution; the gate evaluates the coherent sum
-at every guarded harmonic, and refines each candidate with sub-points before
-it will call a peak a peak. It is the more careful of the two, and it is the
-one the scanner runs.
+So it was calibrated, against the only evidence that exists: the vendor's own
+product sequences. Some sequence families ship with a frequency lockout on
+them and some do not, and where a lockout exists it is enforced by steering a
+parameter — a readout spacing, a repetition time — away from the band rather
+than by refusing the scan. Which families those are, and what each steers, is
+the vendor's business and is not reproduced here; what the calibration needs
+from that inspection is one thing, and it is a threshold.
 
-The spiral says what the bound itself costs, because there the same scan can
-be handed over as one waveform or as many:
+The inspection was turned into a measurement. Every shipped plugin was
+designed at protocols a console could plausibly prescribe, on more than one
+set of system limits, and the equivalent sustained amplitude each one puts
+inside the frequency range where vendor bands actually fall was measured the
+way the gate measures it:
 
-| Arms | How the arms are encoded | Distinct waveforms | Over the timeline | Gate |
-|---:|---|---:|---:|---:|
-| 4 | turned by a rotation | 10 | 9.7 ms | 11.7 ms |
-| 4 | written out | 28 | 5.3 ms | 20.3 ms |
-| 16 | turned by a rotation | 10 | 35 ms | 8.5 ms |
-| 16 | written out | 100 | 15 ms | 23.2 ms |
-| 64 | turned by a rotation | 10 | 135 ms | 9.8 ms |
-| 64 | written out | 388 | 56 ms | 43.8 ms |
+![Equivalent sustained amplitude of the shipped plugins across realistic protocols, against the threshold](../assets/mechanical_resonance/threshold_ladder.png)
 
-Sixteen times the arms leaves the gate where it was when they are rotations —
-there is still one readout waveform, turned a different way each shot. Written out, the same
-scan is 388 distinct waveforms and the gate follows them, because each one has
-a transform of its own and the bound has to see all of them. That is the
-honest shape of the cost: **the gate is paid per distinct waveform, never per
-block and never per repetition.**
+The corpus separates, and it separates with a gap. Everything loud is a
+sustained comb — a readout train, or a repetition period short enough that
+the TR harmonic itself lands in the audio range — and everything quiet is
+either broadband or slow. The sequences that resemble the ones a vendor puts
+a lockout on sit above 8.9 mT/m; the sequences that resemble the ones a
+vendor leaves alone top out at 6.1. The threshold is placed in that gap, at
+**7.5 mT/m of equivalent sustained amplitude**, and the corpus is bimodal
+enough that anywhere in the gap gives the same verdicts.
 
-## What is still allowed to scale
+Two things about that number are worth stating plainly. It is a policy, not a
+physical constant, and it is ours rather than a vendor's — the code says so
+where it is defined, so nobody has to reverse-engineer whose authority it
+carries. And it is *below* the thresholds implied by the bands that do state
+an amplitude, which is the right order: a band that forbids a readout outright
+is making a stricter statement than a band that permits one up to a level.
 
-The candidate harmonics are $k/T_\text{TR}$ inside a fixed-width band, so
-there are exactly as many of them as the TR is long: doubling $T_\text{TR}$
-doubles the work. Waveform *length* barely registers — it enters only through
-the size of the transform each waveform needs, and that is computed once per
-waveform rather than once per occurrence. What does register is how many
-distinct waveforms a varying position can take, which is the table above, and
-which is also the one number a sequence author controls: a trajectory whose
-shots are one waveform under a rotation is cheaper to check than the same
-trajectory written out, and reaches the same verdict.
+A band that states an amplitude keeps it. That amplitude describes the
+plateau of a readout train, while the measurement is an equivalent sinusoid,
+so it is converted into the same convention before the comparison — over the
+train shapes a system can play, the equivalent sinusoid runs between $8/\pi^2$
+and $4/\pi$ of the plateau, and the smallest is taken, which makes the
+threshold the quietest waveform the vendor forbade.
+
+None of this reaches into the sequence. The gate never asks what family it is
+holding, never looks for a readout spacing, and never reads a repetition time
+as a parameter to be steered. It measures drive and compares it to a level.
+A gradient-echo sequence whose readouts are made bipolar and numerous enough
+becomes an echo-planar train in everything but name, and is refused on exactly
+the same arithmetic that refuses an EPI — its comb appears at the frequency
+its echo spacing implies, and grows with the length of the train, with nothing
+anywhere in the engine that knows either term.
+
+## What it costs
+
+The gate's cost has three candidate drivers, and measuring against each one
+separately says which of them the design actually removed:
+
+![Gate cost against scan length, basis size, and the number of harmonics in a band](../assets/mechanical_resonance/basis_cost.png)
+
+**Scan length is nearly free.** Thirty-two repetitions and a thousand cost
+0.02 ms and 0.29 ms. What little growth there is comes from the walk that
+collects, per block position, the distinct waveform-amplitude-rotation
+combinations the instances play — that walk visits every repetition. The
+spectral evaluation itself does not: it is a property of one repetition, and
+a scan of ten thousand TRs evaluates the same sum as a scan of ten.
+
+**Basis size is the real driver, and the author controls it.** Sixty-four
+spiral arms cost 0.36 ms written out and 0.04 ms as one waveform under a
+rotation — the same field, the same verdict, nine times the work. Written
+out, each arm has a transform of its own and the bound has to see all of
+them.
+
+| Arms | How the arms are encoded | Gate |
+|---:|---|---:|
+| 4 | turned by a rotation | 0.02 ms |
+| 4 | written out | 0.05 ms |
+| 16 | turned by a rotation | 0.02 ms |
+| 16 | written out | 0.12 ms |
+| 64 | turned by a rotation | 0.04 ms |
+| 64 | written out | 0.36 ms |
+
+**The number of harmonics inside a band is the other driver**, and it is the
+one nobody controls. A band contains `width × T_TR` harmonics, so a long
+repetition time puts hundreds of lines inside a hundred-hertz band and every
+one of them costs a transform of every waveform in the basis. Two harmonics
+cost 0.11 ms and thirty-two cost 1.1 ms, dead linear. This is why the
+expensive sequence in the corpus is not the biggest one: a long-TR
+inversion-prepared scan with spiral readouts has only a few thousand blocks
+and a basis of thirteen waveforms, and it is the slowest thing measured,
+because its two-second repetition puts two hundred lines in every band.
+
+Basis size still has an answer waiting: arms that are individually
+optimised are not *independent*, their span being far smaller than their
+number, so a small set of basis waveforms reproduces every arm as a linear
+combination — and since the transform is linear, transforming the basis
+transforms all of them. That turns cost from the shot count into the rank.
+
+The harmonic count is worth being precise about, because the obvious
+simplifications are wrong. A resonance a hundred hertz wide cannot tell apart
+lines half a hertz apart — it responds to the energy in its whole passband —
+so the physically right quantity is the energy summed across the band rather
+than its loudest line. That is a better *question*, but not a cheaper one: a
+sum over the lines still needs every line.
+
+Nor can the frequencies between the harmonics be skipped. A scan is not an
+infinite repetition of its TR but a finite number of them, and a run of $M$
+repeats resolves frequency only to $1/(M\,T_\text{TR})$, so real drive lives
+between the harmonics of $1/T_\text{TR}$. Its shape is known exactly — the
+single-TR transform times the Dirichlet kernel of $M$ — which fixes where to
+look: the kernel peaks at $(k + (j + \tfrac12)/M)$ with heights
+$2/\pi(2j{+}1)$, that is $0.64$, $0.21$, $0.13$, $0.09$, and so on down. The
+heights do not depend on $M$; only their spacing does. Four probes a side
+therefore cover every lobe above a tenth of the main one for any $M$
+whatever, and the lobes are the whole of the story: sample instead at
+multiples of $1/M$ and every probe lands on one of the kernel's *nulls*,
+where the attenuation is zero and no number of probes reports anything.
+
+What does cut the count is knowing when not to look at all. The drive at any
+frequency is at most the area under the rectified gradient,
+
+$$|S_\text{ax}(f)| \;\le\; \int_\text{TR} |g_\text{ax}(t)|\,dt ,$$
+
+because the phase factor has unit modulus and integrating it away can only
+shrink the result. The right-hand side does not depend on $f$, costs one pass
+over the events, and across the corpus sits only $1.3$–$2\times$ above the
+loudest line a full walk actually finds — close enough to be decisive rather
+than vacuous. Where it already falls below a band's threshold, no line in
+that band can violate, and the probes inside it are skipped as a proven
+negative rather than evaluated into a measured one. Quiet sequences stop
+paying for the search entirely; loud ones pay in full, which is the right way
+round.
+
+For scale, upstream PyPulseq's `calc_gradient_spectrum` over the timeline —
+which is what `tr=None` is, to the bit — takes 37 ms, 66 ms, 309 ms and
+907 ms on the same EPI protocol at 3, 12, 48 and 144 repetitions, growing
+with the scan as a transform of the scan must, while the gate stays under
+2 ms across all four.
+
+## That the fast answer is the same answer
+
+Every shortcut on this page is a claim that two calculations agree, and each
+one is held to that by a test that computes both:
+
+- The closed-form transform against a direct numerical Fourier integral of
+  the rendered TR: they agree to eight parts in a million, and the residual
+  is the reference integral's own sampling.
+- The chirp-z tabulation against the direct closed-form loop, waveform by
+  waveform — a reassociation of the same sum, so the two match to the last
+  bits.
+- The bound against every instance it stands for: for every fixture whose
+  canonical TR repeats, at every guarded line and every axis, the number the
+  gate judges is at least what any single repetition really drives.
+- A sequence with one repetition, where nothing varies and the bound has
+  nothing of its own to add, against the plain coherent sum: bit for bit
+  identical, which is what keeps the bound from being a blanket margin.
+- The same physical scan written with rotation events and with materialised
+  arms: the same verdict, arm by arm.
+- The threshold placed a hair either side of a sequence's own loudest line,
+  over the shipped plugins and bands wide and narrow: the verdict flips
+  exactly on the peak, which is where a ceiling that skipped too much would
+  betray itself.
+- The lines the plot draws against the verdict the predownload gate reaches,
+  on recorded sequences, through two independent paths into the engine — a
+  plot that disagreed with the gate would be worse than no plot.
+
+The point of the list is not the tests. It is that none of the machinery
+above is allowed to be an approximation of the rule on the
+{doc}`safety page <../safety/mechanical_resonance>`: it is the same rule,
+evaluated in an order that costs less.

@@ -105,6 +105,58 @@ MU_TEST(test_alignment_is_judged_against_the_opts_it_is_given)
     pulseg_collection_free(coll);
 }
 
+/*
+ * A 1-based id names a row in another library, and a file is free to name one
+ * that is not there. Every consumer indexes with what the reader hands it, so
+ * refusing the file is the reader's job -- reading it and letting a consumer
+ * walk off the end is what this asserts against.
+ */
+static void assert_refused(const char *filename)
+{
+    pulseg_collection *coll = NULL;
+    int rc;
+
+    coarse_opts_init(&s_opts);
+    rc = load_seq(&coll, filename, &s_opts);
+    mu_assert(PULSEG_FAILED(rc), "a dangling id must not read as a valid sequence");
+
+    if (PULSEG_SUCCEEDED(rc))
+        pulseg_collection_free(coll);
+}
+
+MU_TEST(test_a_block_naming_an_absent_event_is_refused)
+{
+    assert_refused("malformed/25_dangling_rf_id.seq");
+}
+
+MU_TEST(test_an_extension_naming_an_absent_rotation_is_refused)
+{
+    assert_refused("malformed/26_dangling_rotation_ref.seq");
+}
+
+MU_TEST(test_an_extension_chain_running_off_its_library_is_refused)
+{
+    assert_refused("malformed/27_dangling_extension_link.seq");
+}
+
+/*
+ * The other side of the refusals above. An extension type this reader has no
+ * name for carries a reference into a library it cannot identify, so it cannot
+ * judge that reference either -- and never dereferences it. Refusing the file
+ * would reject every vendor extension in existence.
+ */
+MU_TEST(test_an_extension_this_reader_does_not_know_is_kept)
+{
+    pulseg_collection *coll = NULL;
+    int rc;
+
+    coarse_opts_init(&s_opts);
+    rc = load_seq(&coll, "28_unknown_extension_type.seq", &s_opts);
+    mu_assert(PULSEG_SUCCEEDED(rc), "an unknown extension type must not fail the read");
+
+    pulseg_collection_free(coll);
+}
+
 MU_TEST_SUITE(raster_suite)
 {
     MU_RUN_TEST(test_a_sequence_on_a_coarser_system_raster_passes);
@@ -114,6 +166,10 @@ MU_TEST_SUITE(raster_suite)
     MU_RUN_TEST(test_an_event_ending_after_its_block_is_caught);
     MU_RUN_TEST(test_the_declared_grid_check_admits_what_alignment_rejects);
     MU_RUN_TEST(test_alignment_is_judged_against_the_opts_it_is_given);
+    MU_RUN_TEST(test_a_block_naming_an_absent_event_is_refused);
+    MU_RUN_TEST(test_an_extension_naming_an_absent_rotation_is_refused);
+    MU_RUN_TEST(test_an_extension_chain_running_off_its_library_is_refused);
+    MU_RUN_TEST(test_an_extension_this_reader_does_not_know_is_kept);
 }
 
 int test_raster_main(void)

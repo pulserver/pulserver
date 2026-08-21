@@ -50,6 +50,8 @@ from types import SimpleNamespace
 import numpy as np
 import pypulseq as pp
 
+from . import _style
+
 #: Axis order of an ESP lockout table.
 _ESP_AXES = ("gx", "gy", "gz")
 
@@ -298,6 +300,13 @@ class MechResonances:
         ``(C,)`` bool, whether each candidate exceeds its band's tolerance.
     bands : list of tuple
         The forbidden bands the candidates were selected against.
+    envelope_freqs : numpy.ndarray
+        ``(E,)`` a dense frequency grid, in Hz.
+    envelope_a_eq : numpy.ndarray
+        ``(E, 3)`` A_eq per axis over that grid, in Hz/m: the continuous
+        curve the lines are samples of. It is what a line *would* reach at a
+        frequency the TR does not put a harmonic at, so it says how much
+        retiming the sequence could move the verdict by.
 
     Notes
     -----
@@ -306,7 +315,8 @@ class MechResonances:
     :meth:`~.Sequence.calculate_gradient_spectrum` returns a short-time
     Fourier magnitude whose scale depends on the window length. Plotting them
     against a shared vertical axis would be meaningless, which is why
-    :func:`overlay_resonance_lines` twins its own.
+    :func:`plot_resonances` draws the lines on their own and leaves the
+    spectrogram to a call that does not ask for them.
     """
 
     tr_duration: float
@@ -318,6 +328,8 @@ class MechResonances:
     candidate_a_eq: np.ndarray
     violations: np.ndarray
     bands: list
+    envelope_freqs: np.ndarray
+    envelope_a_eq: np.ndarray
 
     @property
     def ok(self) -> bool:
@@ -349,7 +361,39 @@ class MechResonances:
             candidate_a_eq=stack("candidate_amps", num_candidates),
             violations=np.asarray(spectra["candidate_violations"], bool),
             bands=list(bands),
+            envelope_freqs=np.asarray(spectra["envelope_freqs_hz"], float),
+            envelope_a_eq=stack("envelope_amp", int(spectra["num_envelope_bins"])),
         )
+
+    @property
+    def guard_hz(self) -> float:
+        """How far outside a band a line still counts against it, in Hz.
+
+        A resonance is not a point: the narrowest band the vendor declared is
+        the sharpest one they identified, so half its width is the half-width
+        at half maximum every band is widened by before the lines inside it
+        are collected. This is ``SA_GUARD_HWHM_MULT * min_bandwidth / 2`` in
+        ``src/c/safety/pulseg_safety.c``, and it is why a line drawn just
+        outside a shaded band is still a candidate.
+        """
+        widths = [float(band[1]) - float(band[0]) for band in self.bands]
+        widths = [width for width in widths if width > 0.0]
+        return 0.5 * min(widths) if widths else 0.0
+
+    def tolerance_at(self, frequency: float) -> float:
+        """The amplitude the narrowest band covering ``frequency`` allows.
+
+        Zero where no band covers it, and zero where the band declares no
+        limit of its own -- which is the safety core's signal to fall back on
+        its hardware-anchored floor rather than a statement that nothing is
+        allowed.
+        """
+        covering = [
+            float(band[2])
+            for band in self.bands
+            if float(band[0]) <= frequency <= float(band[1])
+        ]
+        return min(covering) if covering else 0.0
 
 
 class TRSequence(pp.Sequence):
@@ -777,6 +821,62 @@ PNS_THRESHOLDS = {
 }
 
 
+#: How the four traces :func:`pypulseq.utils.safe_pns_prediction.safe_plot`
+#: draws are recoloured, in the order it draws them: the three axes in
+#: categorical hues, the combined norm in ink because it is the one the
+#: verdict is read off.
+PNS_TRACES = (
+    (_style.SERIES[0], 1.1),
+    (_style.SERIES[2], 1.1),
+    (_style.SERIES[3], 1.1),
+    (_style.INK, 1.8),
+)
+
+
+def restyle_pns(axes=None) -> None:
+    """Restyle the PNS panel upstream just drew, and move its legend out.
+
+    Upstream picks saturated primaries and ``loc="best"``, which puts the
+    legend wherever there is room -- often over the peak the plot exists to
+    show. The traces, the axis limits and the labels are all upstream's; what
+    changes is the colour they are drawn in and where the legend sits.
+
+    Call before :func:`overlay_pns_thresholds`, which adds lines of its own
+    that this would otherwise recolour.
+
+    Parameters
+    ----------
+    axes : matplotlib.axes.Axes, optional
+        The panel to restyle. Defaults to the current axes.
+    """
+    import matplotlib.pyplot as plt
+
+    axes = plt.gca() if axes is None else axes
+
+    for line, (colour, width) in zip(axes.lines, PNS_TRACES, strict=False):
+        line.set_color(colour)
+        line.set_linewidth(width)
+    for line in axes.lines[len(PNS_TRACES) :]:
+        # Upstream's peak marker, which says the same thing as the legend.
+        line.set_color(_style.FAINT)
+        line.set_linewidth(0.9)
+
+    legend = axes.get_legend()
+    handles, labels = [], []
+    if legend is not None:
+        # Upstream's handles are copies taken when it built the legend, so
+        # they still carry its colours. The traces themselves are what the
+        # new legend has to name.
+        labels = [text.get_text() for text in legend.texts]
+        handles = list(axes.lines[: len(labels)])
+        legend.remove()
+
+    axes.title.set(color=_style.INK, fontsize=10)
+    _style.axis_style(axes, grid=True)
+    _style.legend_below(axes.figure, handles, labels)
+    axes.figure.tight_layout(rect=(0, 0.08, 1, 1))
+
+
 def overlay_pns_thresholds(axes=None) -> None:
     """Mark the stimulation threshold and the 80 % margin on a PNS plot.
 
@@ -834,61 +934,186 @@ def overlay_pns_thresholds(axes=None) -> None:
     axes.set_ylim(bottom, max(top, 1.1 * peak))
 
 
-def overlay_resonance_lines(
-    resonances: MechResonances, axes=None, *, max_frequency=None
-) -> None:
-    """Draw a :class:`MechResonances` line spectrum over a gradient spectrogram.
+def plot_resonances(resonances: MechResonances, *, max_frequency=None):
+    """Draw the acoustic verdict of one TR: the lines, the bands, the calls.
 
-    Adds to the current figure, which -- because upstream draws through
-    pyplot and leaves its figure current -- is the one
-    :meth:`~.Sequence.calculate_gradient_spectrum` just produced.
+    Four panels on one figure. The first is the verdict -- every line that
+    falls inside a guarded band, drawn against the amplitude that band
+    allows, so whether the sequence passes is the whole content of it. The
+    other three are the gradient axes: the continuous A_eq envelope, the
+    harmonics ``k / T_TR`` the periodic waveform actually puts energy at, and
+    the bands shaded behind them.
 
-    The lines go on a **twinned vertical axis** carrying their own Hz/m
-    label. A_eq and a short-time Fourier magnitude are different quantities
-    (see :class:`MechResonances`), and sharing one scale would invite reading
-    a crossing point as meaningful.
+    Everything is in A_eq, one scale throughout, because that is the quantity
+    the verdict is made of -- see :class:`MechResonances`. A short-time
+    Fourier magnitude is a different quantity and is deliberately not drawn
+    beside it.
 
     Parameters
     ----------
     resonances : MechResonances
         What to draw.
-    axes : matplotlib.axes.Axes, optional
-        Where to draw. Defaults to the current axes.
     max_frequency : float, optional
-        Drop lines above this frequency. Defaults to the host axes' limit.
+        Right-hand limit, in Hz. The envelope's own extent by default.
+
+    Returns
+    -------
+    matplotlib.figure.Figure
     """
     import matplotlib.pyplot as plt
 
-    axes = plt.gca() if axes is None else axes
-    limit = axes.get_xlim()[1] if max_frequency is None else float(max_frequency)
+    freqs = np.asarray(resonances.envelope_freqs, dtype=float)
+    limit = (
+        float(np.max(freqs))
+        if max_frequency is None and freqs.size
+        else float(max_frequency or 0.0)
+    )
 
-    twin = axes.twinx()
-    twin.set_ylabel("$A_{eq}$ (Hz/m)")
+    figure, axes = plt.subplots(
+        4,
+        1,
+        figsize=(9.0, 8.4),
+        sharex=True,
+        gridspec_kw={"height_ratios": (0.9, 1.0, 1.0, 1.0)},
+    )
+    for axis in axes:
+        _shade_bands(axis, resonances, limit)
 
-    keep = resonances.line_freqs <= limit
+    _verdict_panel(axes[0], resonances, limit)
+    for index, (axis, name) in enumerate(
+        zip(axes[1:], ("gx", "gy", "gz"), strict=True)
+    ):
+        _axis_panel(axis, resonances, index, name, limit)
+
+    axes[-1].set_xlabel("frequency [Hz]")
+    axes[0].set_xlim(0.0, limit)
+
+    flagged = int(np.count_nonzero(resonances.violations))
+    peak = (
+        float(np.max(resonances.candidate_a_eq))
+        if resonances.candidate_a_eq.size
+        else 0.0
+    )
+    _style.figure_title(
+        figure,
+        f"Mechanical resonance: {resonances.candidate_freqs.size} line(s) in band, "
+        f"{flagged} violating, peak $A_{{eq}}$ {peak:.3g} Hz/m",
+    )
+
+    handles, labels = [], []
+    for axis in axes:
+        for handle, label in zip(*axis.get_legend_handles_labels(), strict=True):
+            if label not in labels:
+                handles.append(handle)
+                labels.append(label)
+    _style.legend_below(figure, handles, labels)
+    figure.tight_layout(rect=(0, 0.06, 1, 0.95))
+    return figure
+
+
+def _shade_bands(axis, resonances: MechResonances, limit: float) -> None:
+    """Shade every forbidden band, and the guard a line still counts inside."""
+    guard = resonances.guard_hz
+    for band in resonances.bands:
+        low, high = float(band[0]), float(band[1])
+        if low - guard > limit:
+            continue
+        if guard > 0.0:
+            axis.axvspan(
+                max(low - guard, 0.0),
+                min(high + guard, limit),
+                color=_style.SERIES[7],
+                alpha=0.06,
+                lw=0,
+            )
+        axis.axvspan(low, min(high, limit), color=_style.SERIES[7], alpha=0.12, lw=0)
+
+
+def _verdict_panel(axis, resonances: MechResonances, limit: float) -> None:
+    """The candidates, each against the tolerance of the band it sits in."""
+    keep = resonances.candidate_freqs <= limit
+    freqs = resonances.candidate_freqs[keep]
+    amps = (
+        resonances.candidate_a_eq[keep].max(axis=-1)
+        if resonances.candidate_a_eq.size
+        else np.zeros(0)
+    )
+    violated = (
+        resonances.violations[keep] if resonances.violations.size else np.zeros(0, bool)
+    )
+
+    for mask, colour, label in (
+        (~violated, _style.SERIES[2], "in band, passes"),
+        (violated, _style.SERIES[7], "in band, violates"),
+    ):
+        if not np.any(mask):
+            continue
+        axis.vlines(freqs[mask], 0.0, amps[mask], color=colour, lw=1.4)
+        axis.plot(freqs[mask], amps[mask], "o", ms=5, color=colour, lw=0, label=label)
+
+    # What each line is judged against, drawn only here: an axis panel scaled
+    # to a tolerance far above it would show a flat envelope and nothing else.
+    for band in resonances.bands:
+        low, high, tolerance = float(band[0]), float(band[1]), float(band[2])
+        if tolerance > 0.0 and low <= limit:
+            axis.hlines(
+                tolerance,
+                low,
+                min(high, limit),
+                color=_style.SERIES[7],
+                linestyle="--",
+                lw=1.2,
+                label="band tolerance",
+            )
+
+    axis.set_ylabel("verdict\n$A_{eq}$ [Hz/m]")
+    axis.set_ylim(bottom=0.0)
+    _style.axis_style(axis, grid=True)
+
+
+def _axis_panel(
+    axis, resonances: MechResonances, index: int, name: str, limit: float
+) -> None:
+    """One gradient axis: its envelope, its harmonics, and what is in band."""
+    freqs = np.asarray(resonances.envelope_freqs, dtype=float)
+    keep = freqs <= limit
     if np.any(keep):
-        twin.vlines(
-            resonances.line_freqs[keep],
-            0.0,
-            resonances.line_a_eq[keep].max(axis=-1),
-            color="0.6",
-            linewidth=0.8,
-            label="$A_{eq}$ at $k/T_{TR}$",
+        axis.plot(
+            freqs[keep],
+            resonances.envelope_a_eq[keep, index],
+            color=_style.MUTED,
+            lw=1.0,
+            label="analytic envelope",
         )
 
-    flagged = resonances.violations & (resonances.candidate_freqs <= limit)
-    if np.any(flagged):
-        twin.vlines(
-            resonances.candidate_freqs[flagged],
+    lines = resonances.line_freqs <= limit
+    if np.any(lines):
+        axis.vlines(
+            resonances.line_freqs[lines],
             0.0,
-            resonances.candidate_a_eq[flagged].max(axis=-1),
-            color="tab:red",
-            linewidth=1.6,
-            label="violating",
+            resonances.line_a_eq[lines, index],
+            color=_style.FAINT,
+            lw=0.9,
+            label="harmonics of $1/T_{TR}$",
         )
 
-    twin.set_ylim(bottom=0.0)
-    twin.legend(loc="upper right", fontsize="small")
+    candidates = resonances.candidate_freqs <= limit
+    if np.any(candidates):
+        flagged = resonances.violations[candidates]
+        for mask, colour in ((~flagged, _style.SERIES[2]), (flagged, _style.SERIES[7])):
+            if np.any(mask):
+                axis.plot(
+                    resonances.candidate_freqs[candidates][mask],
+                    resonances.candidate_a_eq[candidates][mask, index],
+                    "o",
+                    ms=4,
+                    color=colour,
+                    lw=0,
+                )
+
+    axis.set_ylabel(f"{name}\n$A_{{eq}}$ [Hz/m]")
+    axis.set_ylim(bottom=0.0)
+    _style.axis_style(axis, grid=True)
 
 
 def overlay_rf_channels(

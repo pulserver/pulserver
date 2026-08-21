@@ -61,7 +61,14 @@ import copy
 import logging
 from abc import ABC, abstractmethod
 from enum import Flag
-from collections.abc import Callable, Hashable, Iterator, Mapping, MutableMapping
+from collections.abc import (
+    Callable,
+    Hashable,
+    Iterator,
+    Mapping,
+    MutableMapping,
+    Sequence,
+)
 from dataclasses import dataclass, field
 from threading import RLock
 from types import SimpleNamespace
@@ -81,11 +88,11 @@ class AcquisitionFlag(Flag):
     carries them: one line is routinely calibration *and* imaging, or the last
     of its segment *and* the last of its slice.
 
-    Use them wherever a flag is named -- what ends a bucket, what a plugin
-    requires or rejects, what a boundary meant::
+    Use them wherever a flag is named -- which boundary reconstructs what,
+    what a plugin requires or rejects, what a boundary meant::
 
         super().__init__(
-            split_on=AcquisitionFlag.LAST_IN_SEGMENT | AcquisitionFlag.LAST_IN_SLICE,
+            branches={AcquisitionFlag.LAST_IN_SLICE: "imaging"},
             reject_flags=AcquisitionFlag.IS_NOISE_MEASUREMENT,
         )
 
@@ -103,11 +110,14 @@ class AcquisitionFlag(Flag):
     >>> recon.AcquisitionFlag.IS_NOISE_MEASUREMENT.flag
     'ACQ_IS_NOISE_MEASUREMENT'
 
-    Flags combine, which is how a plugin says which boundaries it wants
-    ``receive`` woken on::
+    Flags combine, which is how a plugin routes either of two boundaries to
+    one branch::
 
         super().__init__(
-            split_on=AcquisitionFlag.LAST_IN_SEGMENT | AcquisitionFlag.LAST_IN_SLICE
+            branches={
+                AcquisitionFlag.LAST_IN_SEGMENT
+                | AcquisitionFlag.LAST_IN_SLICE: "imaging"
+            }
         )
     """
 
@@ -601,25 +611,34 @@ class ReconPlugin(ABC):
         already filled. Holds the reconstruction of each branch and nothing
         else. **Required** -- it is the reconstruction.
 
-    Only :meth:`recon` is mandatory. The default :meth:`startup` reads the
-    header, the default :meth:`receive` places each acquisition and routes
-    ``"imaging"`` at every ``split_on`` boundary, so a plugin with one branch
-    overrides :meth:`recon` alone.
+    Only :meth:`recon` is mandatory. What the other two do is *declared* rather
+    than written: a plugin lists the per-acquisition steps its readouts go
+    through as its ``chain``, and the boundaries worth reconstructing at as its
+    ``branches``, and the default :meth:`receive` does the rest.
+
+    The chain
+    ---------
+    A :class:`~pulserver.recon.Gadget` is one per-acquisition step -- noise
+    adjustment, coil compression, the EPI corrections -- run in order as each
+    readout lands, before it is placed. A step that returns ``None`` consumes
+    the acquisition, which is how a noise scan and a navigator line reach no
+    buffer at all::
+
+        super().__init__(chain=[NoiseAdjust(), EpiPhaseCorrection(order=1)])
 
     Branches
     --------
-    A branch is a name :meth:`receive` chooses and :meth:`recon` switches on --
-    ``"calibration"`` and ``"imaging"`` in the scans that have two. A scan
-    whose autocalibration block completes long before the slice does is the
-    case this exists for::
+    A branch is a name :meth:`recon` switches on -- ``"calibration"`` and
+    ``"imaging"`` in the scans that have two. ``branches`` maps the flag that
+    closes each one to its name, and the **order is the priority**::
 
-        def receive(self, acquisition, context):
-            self.buffers.add(acquisition)
-            if has_acquisition_flag(acquisition, AcquisitionFlag.LAST_IN_SLICE):
-                return self.recon("imaging", context)
-            if has_acquisition_flag(acquisition, AcquisitionFlag.LAST_IN_SEGMENT):
-                return self.recon("calibration", context)
-            return None
+        super().__init__(
+            chain=[NoiseAdjust()],
+            branches={
+                AcquisitionFlag.LAST_IN_SLICE: "imaging",
+                AcquisitionFlag.LAST_IN_SEGMENT: "calibration",
+            },
+        )
 
         def recon(self, branch, context):
             if branch == "calibration":
@@ -627,9 +646,10 @@ class ReconPlugin(ABC):
                 return None
             ...                                             # the slice is complete
 
-    Testing the slice before the segment is what makes that read correctly: the
-    final acquisition of a slice closes its segment *and* the slice, so the
-    calibration branch is reached only where nothing larger ended.
+    Listing the slice first is what makes that read correctly: the final
+    acquisition of a slice closes its trailing segment *and* the slice, so the
+    calibration branch is reached only where nothing larger ended. An empty
+    mapping reconstructs once, at the end of the stream.
 
     Whatever :meth:`receive` returns is what the runtime emits, so a branch
     that produces no image simply returns ``None``, exactly as a data sink
@@ -669,10 +689,15 @@ class ReconPlugin(ABC):
 
     Parameters
     ----------
-    split_on
-        The boundary the default :meth:`receive` reconstructs at, as an
-        :class:`AcquisitionFlag` (several may be combined with ``|``) or a
-        named MRD acquisition flag. ``None`` reconstructs at end of stream.
+    chain
+        The :class:`~pulserver.recon.Gadget` steps every readout goes through
+        on arrival, in order.
+    branches
+        Which boundary reconstructs which branch, as
+        ``{AcquisitionFlag: name}``, tried in order. Several flags may be
+        combined with ``|`` to route either of them to one branch. The default
+        reconstructs ``"imaging"`` at the end of the measurement; an empty
+        mapping reconstructs once, at the end of the stream.
     require_flags
         Flags every accepted acquisition must contain.
     reject_flags
@@ -686,9 +711,16 @@ class ReconPlugin(ABC):
 
     Attributes
     ----------
-    split_on : tuple
-        The flags as a tuple, whatever form they were given in. Empty when the
-        stream reconstructs once, at its end.
+    chain : tuple
+        This stream's gadgets. :meth:`spawn` gives each stream its own, so what
+        one learns from its acquisitions is never another's.
+    branches : dict
+        The boundary-to-branch mapping, in priority order.
+    acquisition : object
+        The last acquisition :meth:`receive` accepted, which is the one that
+        closed the branch :meth:`recon` is running -- so a reconstruction that
+        runs per slice reads its index from ``self.acquisition.idx.slice``
+        rather than tracking it. ``None`` before the first one arrives.
     buffers : ReconData
         Every encoding space of the scan, filled as the acquisitions arrive.
         Laid out by :meth:`startup` from the header; empty until then, and
@@ -699,16 +731,23 @@ class ReconPlugin(ABC):
     def __init__(
         self,
         *,
-        split_on: int | str | tuple[int | str, ...] | None = "ACQ_LAST_IN_MEASUREMENT",
+        chain: Sequence[Any] = (),
+        branches: Mapping[Any, str] | None = None,
         require_flags: tuple[int | str, ...] = (),
         reject_flags: tuple[int | str, ...] = (),
         buffered: bool = True,
     ) -> None:
-        self.split_on = _flags(split_on)
+        self.chain = tuple(chain)
+        self.branches = dict(
+            {AcquisitionFlag.LAST_IN_MEASUREMENT: "imaging"}
+            if branches is None
+            else branches
+        )
         self.require_flags = tuple(require_flags)
         self.reject_flags = tuple(reject_flags)
         self.buffered = bool(buffered)
         self.buffers = ReconData()
+        self.acquisition: Any = None
 
     def spawn(self) -> ReconPlugin:
         """Return the working instance one stream reconstructs through.
@@ -716,9 +755,14 @@ class ReconPlugin(ABC):
         A shallow copy, so anything expensive the configured plugin holds -- a
         loaded network, a compiled operator -- is shared rather than duplicated,
         while whatever the lifecycle hooks assign stays private to the stream.
-        Override to isolate something a shallow copy would still share.
+        The gadgets are copied too, because what one learns from its
+        acquisitions -- a noise covariance, a phase fit -- belongs to the scan
+        it learned it from. Override to isolate something a shallow copy would
+        still share.
         """
-        return copy.copy(self)
+        plugin = copy.copy(self)
+        plugin.chain = tuple(copy.copy(gadget) for gadget in self.chain)
+        return plugin
 
     def startup(self, context: ReconContext) -> None:
         """Lay the scan's buffers out, before the first acquisition.
@@ -730,26 +774,88 @@ class ReconPlugin(ABC):
 
         Override to add what the header cannot say -- a trajectory, a
         precomputed operator -- and call ``super().startup(context)`` to keep
-        the buffers.
+        the buffers and the chain.
         """
+        for gadget in self.chain:
+            gadget.startup(context)
         if self.buffered:
             self.buffers = ReconData.from_header(context.header)
 
+    def process(self, acquisition: Any, data: Any = None) -> Any:
+        """Run the chain over one readout, and return what it left.
+
+        Each :class:`~pulserver.recon.Gadget` is handed the acquisition and the
+        readout the step before it produced. Exposed so a plugin writing its
+        own :meth:`receive` still puts every readout through the same steps.
+
+        Parameters
+        ----------
+        acquisition
+            The acquisition, for its flags and counters.
+        data
+            The readout to start from. ``None`` takes the acquisition's own.
+
+        Returns
+        -------
+        ndarray or None
+            The corrected readout, or ``None`` when a step consumed it.
+        """
+        if data is None:
+            data = np.asarray(acquisition.data)
+        for gadget in self.chain:
+            data = gadget(acquisition, data)
+            if data is None:
+                return None
+        return data
+
+    def gadget(self, kind: type) -> Any:
+        """This stream's gadget of one kind.
+
+        :meth:`spawn` gives every stream its own gadgets, so a hook reaching
+        one -- a calibration branch handing its filled buffer to the coil
+        compression to learn from -- has to ask for it rather than hold the
+        configured plugin's.
+
+        Raises
+        ------
+        LookupError
+            If the chain holds no gadget of that kind.
+        """
+        for gadget in self.chain:
+            if isinstance(gadget, kind):
+                return gadget
+        raise LookupError(f"this plugin's chain has no {kind.__name__}")
+
+    def branch_for(self, acquisition: Any) -> str | None:
+        """The branch this acquisition closes, or ``None``.
+
+        The first entry of ``branches`` whose flag the acquisition carries, so
+        the order they were declared in is their priority: a slice listed ahead
+        of a segment is what makes "a segment that closed nothing larger"
+        the calibration block.
+        """
+        if acquisition is None:
+            return None
+        for flag, branch in self.branches.items():
+            if _closes(acquisition, flag):
+                return branch
+        return None
+
     def receive(self, acquisition: Any, context: ReconContext) -> Any:
-        """Place one acquisition, and reconstruct whatever it completed.
+        """Correct one acquisition, place it, and reconstruct what it completed.
 
-        Runs for every accepted acquisition, as it arrives, so both the sorting
-        and the routing overlap acquisition dead time. Placement routes on
-        ``encoding_space_ref`` and indexes by the acquisition's own counters,
-        which is what the header laid the buffers out for. The routing then
-        reads the same acquisition's flags: a boundary it closes selects the
-        branch :meth:`recon` runs, and whatever that returns is returned from
-        here for the runtime to emit.
+        Runs for every accepted acquisition, as it arrives, so the chain, the
+        sorting and the routing all overlap acquisition dead time. The chain
+        runs first, and a step that consumes the readout ends it here.
+        Placement then routes on ``encoding_space_ref`` and indexes by the
+        acquisition's own counters, which is what the header laid the buffers
+        out for. The routing reads the same acquisition's flags: the first
+        boundary of ``branches`` it closes selects what :meth:`recon` runs, and
+        whatever that returns is returned from here for the runtime to emit.
 
-        The default places the acquisition and routes ``"imaging"`` at every
-        ``split_on`` boundary. Override it for a scan with more than one branch,
-        or for work the placement cannot do -- an EPI line that must be phase
-        corrected before it belongs anywhere, a running noise estimate.
+        Overriding it is for placement the declaration cannot express -- an EPI
+        prescan whose lines belong in a different buffer from the imaging ones.
+        Call :meth:`process` from any override, so the chain still runs.
 
         Parameters
         ----------
@@ -764,11 +870,14 @@ class ReconPlugin(ABC):
             What :meth:`recon` produced, or ``None`` when this acquisition
             closed nothing.
         """
+        data = self.process(acquisition)
+        if data is None:
+            return None
+        self.acquisition = acquisition
         if self.buffered:
-            self.buffers.add(acquisition)
-        if _closes(acquisition, self.split_on):
-            return self.recon("imaging", context)
-        return None
+            self.buffers.add(acquisition, data)
+        branch = self.branch_for(acquisition)
+        return None if branch is None else self.recon(branch, context)
 
     @abstractmethod
     def recon(self, branch: str, context: ReconContext) -> Any:
@@ -864,7 +973,7 @@ class ReconPlugin(ABC):
             received = plugin.receive(acquisition, context)
             if received is not None:
                 output = received
-        if output is None and not _closes(_last(bucket.acquisitions), plugin.split_on):
+        if output is None and plugin.branch_for(_last(bucket.acquisitions)) is None:
             output = plugin.recon("imaging", context)
         return output
 
@@ -872,11 +981,19 @@ class ReconPlugin(ABC):
 # %% private module subroutines
 
 
-def _closes(acquisition: Any, split_on: tuple[Any, ...]) -> bool:
-    """Whether this acquisition carries one of the boundaries named."""
-    if acquisition is None:
-        return False
-    return any(has_acquisition_flag(acquisition, flag) for flag in split_on)
+def _closes(acquisition: Any, flag: Any) -> bool:
+    """Whether this acquisition carries the boundary named.
+
+    A combined :class:`AcquisitionFlag` names several at once, and carrying any
+    of them closes the branch it was mapped to.
+    """
+    if isinstance(flag, AcquisitionFlag):
+        return any(
+            has_acquisition_flag(acquisition, member.flag)
+            for member in AcquisitionFlag
+            if member in flag
+        )
+    return has_acquisition_flag(acquisition, flag)
 
 
 def _last(acquisitions: tuple[Any, ...]) -> Any | None:
@@ -912,25 +1029,6 @@ def _split_optional_leading(value: Any | None, length: int) -> tuple[Any | None,
     if len(values) != length:
         raise ValueError("trajectory and data acquisition dimensions must match")
     return values
-
-
-def _flags(value: Any) -> tuple[Any, ...]:
-    """Normalise one boundary, several, or none into a tuple of MRD flags.
-
-    An :class:`AcquisitionFlag` may name several at once, and each becomes its
-    own flag, so ``split_on=AcquisitionFlag.LAST_IN_SLICE |
-    AcquisitionFlag.LAST_IN_SEGMENT`` ends a bucket at either.
-    """
-    if value is None:
-        return ()
-    if isinstance(value, AcquisitionFlag):
-        return tuple(member.flag for member in AcquisitionFlag if member in value)
-    if isinstance(value, (str, int)):
-        return (value,)
-    return tuple(
-        member.flag if isinstance(member, AcquisitionFlag) else member
-        for member in value
-    )
 
 
 def _labels_at(labels: Mapping[str, Any], index: int) -> dict[str, int]:

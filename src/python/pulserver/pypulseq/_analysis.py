@@ -9,7 +9,7 @@ from __future__ import annotations
 import numpy as np
 import pypulseq as pp
 
-from . import _results
+from . import _results, _style
 from .._labels import COUNTER_LABELS, FRAME_COUNTERS, MRD_FLAGS, canonical_label
 from ._common import _per_axis, _rf_use
 from ._pulseqpp import to_upstream
@@ -29,6 +29,27 @@ BOUNDARY_NAMES = {flag for pair in BOUNDARY_FLAGS.values() for flag in pair} | {
 
 #: The labels detection writes, and so the only ones it can be told to skip.
 DETECTED_LABELS = frozenset({"NOISE", "SLC", "REV", "LIN", "PAR", "REP"})
+
+#: What each letter of a ``plot_kspace`` plane draws against: which row of the
+#: sample coordinates, and how the axis is labelled. ``f`` is the frequency the
+#: slice was excited at, which is where a 2D multi-slice scan keeps the axis a
+#: 3D scan keeps in ``kz``.
+PLOT_AXES = {
+    "x": (0, "$k_x$ [1/m]"),
+    "y": (1, "$k_y$ [1/m]"),
+    "z": (2, "$k_z$ [1/m]"),
+    "f": (3, r"$\Delta f_z$ [Hz]"),
+}
+
+#: What a ``plot_kspace`` lattice axis is drawn on: the counter that says which
+#: cell a readout encoded, which entry of the ``Matrix`` definition sizes the
+#: grid, and how the axis is labelled. The slice axis has no matrix entry --
+#: how many slices there are is what ``SLC`` counted.
+LATTICE_AXES = {
+    "y": ("LIN", 1, "$k_y$ index"),
+    "z": ("PAR", 2, "$k_z$ index"),
+    "f": ("SLC", None, "slice index"),
+}
 
 
 def _boundary_flags(counters: dict, wanted: set[str], n_adc: int) -> dict:
@@ -108,6 +129,83 @@ def _label_names(
             f"{sorted(allowed)}"
         )
     return names
+
+
+def _marker_size(points: np.ndarray) -> float:
+    """A scatter marker area suited to how crowded ``points`` is."""
+    span = max(float(np.ptp(points)), 1e-12)
+    grid = np.round(points / (span / 512.0)).astype(np.int64)
+    distinct = max(len(np.unique(grid, axis=1)), 1)
+    return float(np.clip(2.0e3 / distinct, 1.5, 24.0))
+
+
+def _frame(axis, points: np.ndarray) -> None:
+    """Hold ``axis`` to what ``points`` spans, with a small margin."""
+    setters = [axis.set_xlim, axis.set_ylim]
+    if hasattr(axis, "set_zlim"):
+        setters.append(axis.set_zlim)
+    for values, setter in zip(points, setters, strict=False):
+        low, high = float(np.min(values)), float(np.max(values))
+        margin = 0.05 * max(high - low, 1e-12)
+        setter(low - margin, high + margin)
+
+
+def _blip_path(start, stop, points: int = 11) -> tuple:
+    """The k-space path a triangular blip takes between two lattice cells.
+
+    A blip is ramp up, ramp down, so its integral is one parabola into the
+    turn and its mirror out of it. Drawing the step as that curve rather than
+    as a straight line is what makes a sampling picture read as a trajectory.
+    """
+    x = np.linspace(start[0], stop[0], points)
+    run = stop[0] - start[0]
+    if abs(run) < 1e-12:
+        return x, np.linspace(start[1], stop[1], points)
+    curvature = 2.0 * (stop[1] - start[1]) / run**2
+    half = points // 2
+    return x, np.concatenate(
+        (
+            curvature * (x[:half] - start[0]) ** 2 + start[1],
+            -curvature * (x[half:] - stop[0]) ** 2 + stop[1],
+        )
+    )
+
+
+def _lattice_panel(axis, sampled_cells, shot_cells, shape, labels, curved):
+    """Draw the encode grid, the cells that were sampled, and one shot's path.
+
+    Every cell of the declared grid is drawn, so the ones no readout reached
+    are as visible as the ones it did -- which for an accelerated or
+    CAIPI-shifted scan is the whole of what there is to see.
+    """
+    from matplotlib.colors import ListedColormap
+
+    sampled = np.zeros(shape, dtype=float)
+    sampled[sampled_cells[0], sampled_cells[1]] = 1.0
+    axis.pcolormesh(
+        np.arange(shape[0] + 1),
+        np.arange(shape[1] + 1),
+        sampled.T,
+        cmap=ListedColormap(["#3d3d3d", "#ffffff"]),
+        vmin=0.0,
+        vmax=1.0,
+        edgecolors="#6b6b6b",
+        linewidth=0.5,
+    )
+
+    centres = np.asarray(shot_cells, dtype=float) + 0.5
+    for start, stop in zip(centres.T[:-1], centres.T[1:], strict=False):
+        path = _blip_path(start, stop) if curved else np.stack((start, stop), axis=1)
+        axis.plot(*path, color=_style.SERIES[7], lw=1.3, zorder=2)
+    axis.scatter(*centres, color=_style.SERIES[7], s=7, zorder=3)
+
+    axis.set_xlabel(labels[0])
+    axis.set_ylabel(labels[1])
+    axis.set_xlim(0, shape[0])
+    axis.set_ylim(shape[1], 0)
+    axis.set_aspect("equal", adjustable="box")
+    axis.set_xticks([])
+    axis.set_yticks([])
 
 
 class AnalysisMixin:
@@ -671,12 +769,223 @@ class AnalysisMixin:
             )
         self._touch()
 
+    def _readout_trains(self, time_range: list[float] | None) -> tuple:
+        """Every readout in the window, and the excitation that opened it.
+
+        Returns
+        -------
+        counts : numpy.ndarray
+            Samples in each readout, so a per-readout quantity can be spread
+            over the samples that carry it.
+        opened : ~._results.RfTimes
+            The pulses that open a train, in play order.
+        train : numpy.ndarray
+            Which of them each readout follows, one-based, so ``train - 1``
+            indexes ``opened``.
+        """
+        adc = self.adc_times(time_range, compat=False)
+        counts = np.asarray(adc.num_samples, dtype=int)
+        if not counts.size:
+            raise ValueError("plot_kspace(): the window holds no ADC samples")
+        opened = self.rf_times(time_range, compat=False).of("excitation", "undefined")
+        train = np.searchsorted(
+            np.asarray(opened.block), np.asarray(adc.block), side="right"
+        )
+        return counts, opened, train
+
+    def _sampling_order(self, time_range: list[float] | None) -> tuple:
+        """Which shot acquired each ADC sample, and which echo of that shot.
+
+        The echo index is the ``ECO`` label where the sequence authors one --
+        an echo train writes the echo, and a segmented acquisition writes the
+        view's place in its segment, which is the same hierarchy. Where it
+        does not, the index is the readout's rank inside the train its
+        excitation opened, so a whole EPI plane reads as one shot of many
+        echoes and a line-per-excitation scan as many shots of one.
+
+        A shot begins wherever the echo index returns to zero.
+
+        Returns
+        -------
+        shot, echo : numpy.ndarray
+            One value per ADC *sample*, aligned with ``k_traj_adc``.
+        """
+        counts, _, train = self._readout_trains(time_range)
+
+        echo = self._authored_labels(time_range).get("ECO")
+        if echo is None:
+            # ``train`` is non-decreasing, so the first index carrying each
+            # value is where that train started, and the rank follows.
+            echo = np.arange(train.size) - np.searchsorted(train, train, side="left")
+        echo = np.asarray(echo, dtype=int)
+
+        shot = np.maximum(np.cumsum(echo == 0) - 1, 0)
+        return np.repeat(shot, counts), np.repeat(echo, counts)
+
+    def _slice_offsets(self, time_range: list[float] | None) -> np.ndarray:
+        """The transmit frequency each ADC sample's slice was excited at, in Hz.
+
+        A 2D multi-slice scan encodes its third axis in the frequency the
+        excitation was played at rather than in a gradient, so this is what
+        stands in for ``kz`` when there is no ``kz``.
+        """
+        counts, opened, train = self._readout_trains(time_range)
+        offsets = np.asarray(opened.freq_offset, dtype=float)
+        if not offsets.size:
+            return np.zeros(int(counts.sum()))
+        return np.repeat(offsets[np.clip(train - 1, 0, offsets.size - 1)], counts)
+
+    def _encode_lattice(self, time_range, plane: str) -> tuple:
+        """Which cell of the encode grid each readout landed in, and its size.
+
+        The grid is the one the sequence declares in ``Matrix``, not the one
+        the readouts happen to cover: an accelerated scan leaves cells empty,
+        and where the empty cells fall is what a sampling picture is for.
+
+        Returns
+        -------
+        cells : numpy.ndarray
+            ``(2, n_adc)`` integer positions, one per readout.
+        shape : tuple of int
+            How many cells each drawn axis holds.
+        """
+        labels = self._authored_labels(time_range)
+        matrix = self.definitions.get("Matrix")
+        cells, shape = [], []
+        for letter in plane:
+            counter, entry, _ = LATTICE_AXES[letter]
+            values = labels.get(counter)
+            if values is None:
+                raise ValueError(
+                    f"plot_kspace(lattice=True): the {letter!r} axis is drawn on the "
+                    f"{counter} counter, which this sequence does not set -- run "
+                    "auto_label() first, or drop lattice=True"
+                )
+            values = np.asarray(values, dtype=int)
+            declared = 0 if entry is None or matrix is None else int(matrix[entry])
+            cells.append(values)
+            shape.append(max(declared, int(values.max()) + 1))
+        return np.asarray(cells), tuple(shape)
+
+    def plot_rf(
+        self,
+        pulse=None,
+        *,
+        time_range: list[float] | None = None,
+        **kwargs,
+    ):
+        """Draw one of this sequence's pulses beside the profile it produces.
+
+        What :func:`pulserver.pypulseq.sim_rf` computes, as a figure: the
+        ``B1`` envelope, and the magnetisation response beside it -- against
+        position where the pulse is played under a gradient, against
+        off-resonance where it is not, and as a pair of heatmaps when a plane
+        is asked for.
+
+        Only the pulse's own block is simulated, not the scan around it, so
+        this costs the same on a finished sequence as on the module the pulse
+        came from. Widen it with ``time_range`` where the profile is made by
+        more than one block -- an adiabatic pair, or a preparation and the
+        crushers that follow it.
+
+        Parameters
+        ----------
+        pulse : RfEvent or str, optional
+            Which pulse to draw: the event itself, or the ``use`` it is tagged
+            with -- ``"refocusing"`` picks a spin echo's refocusing pulse
+            wherever in the repetition it falls. The default is the first
+            pulse played.
+        time_range : list of float, optional
+            ``[start, stop]`` in seconds, if the profile needs more than the
+            pulse's own block. The default is that block alone.
+        plane : str, optional
+            What to simulate over: one of ``"x"``, ``"y"``, ``"z"`` or ``"f"``
+            for a profile along one axis, or two of them -- ``"zf"``, ``"xy"``
+            -- for a plane, drawn as ``|Mxy|`` and ``Mz`` heatmaps. The
+            default is the axis the pulse is selective along, or ``"f"`` when
+            it is played under no gradient. **A pulse selective in two things
+            at once needs a plane**: a spectral-spatial pulse's passband is a
+            band in position *and* in frequency, and neither one-dimensional
+            cut shows that.
+        kind : str, optional
+            Which response to draw: ``"excitation"``, ``"refocusing"``,
+            ``"inversion"`` or ``"saturation"``. Read off the pulse's ``use``
+            by default. Only for a one-dimensional profile; a plane always
+            draws both components.
+        extent, span : float or tuple of float, optional
+            The first and second axes: a half-width about zero, or an explicit
+            ``(low, high)``, in millimetres for a position and hertz for
+            off-resonance. Wide enough to hold the pulse's own passband by
+            default.
+        samples : int, optional
+            Points along each axis. A plane is simulated over ``samples**2``
+            positions and caps at 91 a side, so this is what the figure costs.
+        dt : float, optional
+            Integration raster, in seconds, wherever the window is integrated
+            rather than the single pulse.
+        whole : bool, optional
+            Integrate everything in the window -- every pulse, every crusher,
+            and the free precession between them -- rather than the one pulse
+            alone. What a preparation's profile means. A plane is always
+            integrated this way.
+        title : str, optional
+            Figure title.
+        plot_now : bool, optional
+            Show the figure before returning.
+
+        Returns
+        -------
+        matplotlib.figure.Figure
+
+        Examples
+        --------
+        >>> from pulserver.app import gre2D_sequence
+        >>> seq = gre2D_sequence(n_x=32, n_y=8, n_slices=1, tr=12e-3, n_dummy=0)
+        >>> figure = seq.plot_rf(plot_now=False)
+        >>> [axis.get_title(loc="left") for axis in figure.axes]
+        ['envelope', 'profile']
+        """
+        from ._rf_profile import plot_rf
+
+        window, selector = self._rf_window(pulse, time_range)
+        return plot_rf(window, selector, **kwargs)
+
+    def _rf_window(self, pulse, time_range: list[float] | None) -> tuple:
+        """The blocks a pulse's profile is simulated over, as their own sequence.
+
+        Returns the window and the ``use`` that names the pulse inside it. The
+        event the caller passed cannot be carried across: the window is rebuilt
+        from the block table, so its events are new objects.
+        """
+        from . import block_to_events
+
+        wanted = pulse if pulse is None or isinstance(pulse, str) else _rf_use(pulse)
+        found = None
+        for number in range(1, self.num_blocks + 1):
+            rf = getattr(self.get_block(number), "rf", None)
+            if rf is not None and wanted in (None, _rf_use(rf)):
+                found = number
+                break
+        if found is None:
+            played = "RF pulse" if wanted is None else f"pulse used for {wanted!r}"
+            raise ValueError(f"this sequence plays no {played}")
+
+        first, last = (
+            self._window_for(time_range) if time_range is not None else (found, found)
+        )
+        window = type(self)(system=self.system)
+        for number in range(first, last + 1):
+            window.add_block(*block_to_events(self.get_block(number)))
+        return window, wanted
+
     def plot_kspace(
         self,
         *,
         time_range: list[float] | None = None,
         plane: str | None = None,
         show_trajectory: bool = True,
+        color_by: str | None = None,
+        lattice: bool = False,
         plot_now: bool = True,
     ):
         """Draw the k-space the ADC samples visit.
@@ -690,6 +999,36 @@ class AnalysisMixin:
             confined to one plane is drawn in it, and anything else in 3D.
         show_trajectory : bool, default True
             Draw the continuous path between samples as well as the samples.
+            The axes are held to what the samples span either way, so a
+            prewinder or a spoiler is clipped rather than setting the scale.
+        color_by : {"echo", "shot", "order"}, optional
+            Colour the samples by where they sit in the acquisition rather
+            than drawing them all alike.
+
+            ``"echo"`` is which echo of its shot encoded a coordinate, which
+            is what the modulation transfer function and the effective echo
+            time are. ``"shot"`` is when in the scan the shot that acquired it
+            played. ``"order"`` draws both, side by side, which is how a
+            sequence with two hierarchies -- an echo train dealt across
+            segments, say -- has to be read. A panel whose index never varies
+            is dropped, so ``"order"`` on a line-per-excitation scan is the
+            shot panel alone.
+
+            :meth:`_sampling_order` says where the two indices come from.
+        lattice : bool, default False
+            Draw the encode grid rather than the k-space coordinates: one cell
+            per position the sequence declares it encodes, light where a
+            readout reached it and dark where none did, with the first shot's
+            path across it.
+
+            This is the picture an accelerated or CAIPI-shifted Cartesian scan
+            needs, because what it does is decide which positions to *leave
+            out*, and a scatter of the ones it kept cannot show that. ``plane``
+            must be two of ``"y"``, ``"z"`` and ``"f"`` -- the readout axis is
+            not an encode and has no grid -- and the counters that say which
+            cell each readout took have to be on the sequence, which
+            :meth:`auto_label` is what puts there. Not combinable with
+            ``color_by``.
         plot_now : bool, default True
             Show the figure before returning.
 
@@ -699,6 +1038,26 @@ class AnalysisMixin:
         """
         from matplotlib import pyplot as plt
 
+        if lattice:
+            return self._plot_lattice(
+                time_range=time_range,
+                plane=plane,
+                color_by=color_by,
+                plot_now=plot_now,
+            )
+
+        panels = {
+            None: (None,),
+            "echo": ("echo",),
+            "shot": ("shot",),
+            "order": ("shot", "echo"),
+        }.get(color_by, ())
+        if not panels:
+            raise ValueError(
+                "plot_kspace(): color_by must be echo, shot, order or None, "
+                f"got {color_by!r}"
+            )
+
         result = self.calculate_kspace(
             time_range=time_range, dense=show_trajectory, compat=False
         )
@@ -706,42 +1065,132 @@ class AnalysisMixin:
         if adc.size == 0:
             raise ValueError("plot_kspace(): the window holds no ADC samples")
 
+        if color_by is None:
+            indices = {}
+        else:
+            shot, echo = self._sampling_order(time_range)
+            indices = {"shot": shot, "echo": echo}
+            # An index that never varies has no picture to draw. Dropping its
+            # panel is the same choice the plane makes just below: show the
+            # hierarchy the scan has, not the one it might have had.
+            panels = tuple(name for name in panels if np.ptp(indices[name])) or (
+                panels[0],
+            )
+
         axes_used = [
             a for a in range(3) if np.ptp(adc[a]) > 1e-9 * max(np.ptp(adc), 1e-12)
         ]
-        if plane is None:
-            plane = (
-                "".join("xyz"[a] for a in axes_used[:2])
-                if len(axes_used) <= 2
-                else None
+        if plane is None and len(axes_used) <= 2:
+            # A trajectory that leaves one axis flat still needs two to be
+            # drawn against, so the unused ones fill the plane out in order.
+            axes_used += [a for a in range(3) if a not in axes_used]
+            plane = "".join("xyz"[a] for a in axes_used[:2])
+        if plane is not None and (
+            len(plane) != 2 or any(c not in PLOT_AXES for c in plane)
+        ):
+            raise ValueError(
+                "plot_kspace(): plane must be two of "
+                f"{', '.join(PLOT_AXES)}, got {plane!r}"
             )
-        labels = {"x": 0, "y": 1, "z": 2}
 
-        figure = plt.figure(figsize=(5.5, 5.0))
-        if plane is None:
-            axis = figure.add_subplot(projection="3d")
-            if show_trajectory:
-                path = np.asarray(result.k_traj, dtype=float)
-                axis.plot(path[0], path[1], path[2], lw=0.4, color="0.7")
-            axis.scatter(adc[0], adc[1], adc[2], s=1.5)
-            axis.set_xlabel("$k_x$ [1/m]")
-            axis.set_ylabel("$k_y$ [1/m]")
-            axis.set_zlabel("$k_z$ [1/m]")
-        else:
-            if len(plane) != 2 or any(c not in labels for c in plane):
-                raise ValueError(
-                    f"plot_kspace(): plane must be two of x, y, z, got {plane!r}"
-                )
-            first, second = labels[plane[0]], labels[plane[1]]
-            axis = figure.add_subplot()
-            if show_trajectory:
-                path = np.asarray(result.k_traj, dtype=float)
-                axis.plot(path[first], path[second], lw=0.4, color="0.7")
-            axis.scatter(adc[first], adc[second], s=1.5)
-            axis.set_xlabel(f"$k_{plane[0]}$ [1/m]")
-            axis.set_ylabel(f"$k_{plane[1]}$ [1/m]")
-            axis.set_aspect("equal", adjustable="datalim")
+        coords = np.vstack([adc, np.zeros(adc.shape[1])])
+        if plane is not None and "f" in plane:
+            coords[3] = self._slice_offsets(time_range)
+        drawn_axes = [PLOT_AXES[c][0] for c in plane] if plane else [0, 1, 2]
+        # The dense path is a k-space curve, so there is none to draw against a
+        # transmit frequency.
+        path = (
+            np.asarray(result.k_traj, dtype=float)
+            if show_trajectory and 3 not in drawn_axes
+            else None
+        )
+        # A colour has to be discernible to be read, so the marker grows as the
+        # samples thin out -- a Cartesian projection stacks a whole readout on
+        # one dot, where a spiral leaves thousands.
+        size = 1.5 if color_by is None else _marker_size(coords[drawn_axes])
 
+        figure = plt.figure(figsize=(5.5 * len(panels), 5.0))
+        for column, name in enumerate(panels, start=1):
+            values = indices.get(name)
+            shared = {
+                "s": size,
+                "c": "C0" if values is None else values,
+                "cmap": None if values is None else _style.SAMPLING,
+            }
+            if plane is None:
+                axis = figure.add_subplot(1, len(panels), column, projection="3d")
+                if path is not None:
+                    axis.plot(path[0], path[1], path[2], lw=0.4, color="0.7")
+                drawn = axis.scatter(adc[0], adc[1], adc[2], **shared)
+                for setter, letter in zip(
+                    (axis.set_xlabel, axis.set_ylabel, axis.set_zlabel),
+                    "xyz",
+                    strict=True,
+                ):
+                    setter(PLOT_AXES[letter][1])
+            else:
+                first, second = drawn_axes
+                axis = figure.add_subplot(1, len(panels), column)
+                if path is not None:
+                    axis.plot(path[first], path[second], lw=0.4, color="0.7")
+                drawn = axis.scatter(coords[first], coords[second], **shared)
+                axis.set_xlabel(PLOT_AXES[plane[0]][1])
+                axis.set_ylabel(PLOT_AXES[plane[1]][1])
+                if 3 not in drawn_axes:
+                    # Both axes are the same quantity; hertz against a
+                    # reciprocal metre is not, so it is left to the layout.
+                    axis.set_aspect("equal", adjustable="box")
+            # The picture is where the samples land. A prewinder or a spoiler
+            # reaches far outside that, so the path is clipped to them rather
+            # than allowed to set the scale.
+            _frame(axis, coords[drawn_axes])
+            if values is not None:
+                figure.colorbar(drawn, ax=axis, label=f"{name} index", shrink=0.85)
+
+        figure.tight_layout()
+        if plot_now:
+            plt.show()
+        return figure
+
+    def _plot_lattice(self, *, time_range, plane, color_by, plot_now):
+        """``plot_kspace(lattice=True)``: the encode grid and one shot on it."""
+        from matplotlib import pyplot as plt
+
+        if color_by is not None:
+            raise ValueError(
+                "plot_kspace(): lattice draws the grid with one shot's path on it "
+                "and color_by draws the samples tinted by where they sit in the "
+                "acquisition -- pass one or the other"
+            )
+        plane = "yz" if plane is None else plane
+        if len(plane) != 2 or any(letter not in LATTICE_AXES for letter in plane):
+            raise ValueError(
+                "plot_kspace(lattice=True): plane must be two of "
+                f"{', '.join(LATTICE_AXES)}, got {plane!r}"
+            )
+
+        cells, shape = self._encode_lattice(time_range, plane)
+        counts, _, _ = self._readout_trains(time_range)
+        shot, _ = self._sampling_order(time_range)
+        # ``shot`` is per sample and a cell is per readout, so it is read back
+        # at the first sample of each.
+        first_sample = np.concatenate(([0], np.cumsum(counts)[:-1]))
+        drawn = cells[:, np.asarray(shot)[first_sample] == 0]
+
+        # The cells are square, so the grid's own proportions decide the
+        # figure's: a wide, shallow lattice in a square window is mostly blank.
+        width = 7.5
+        figure, axis = plt.subplots(
+            figsize=(width, min(7.5, width * shape[1] / shape[0] + 1.2))
+        )
+        _lattice_panel(
+            axis,
+            cells,
+            drawn,
+            shape,
+            tuple(LATTICE_AXES[letter][2] for letter in plane),
+            curved="f" not in plane,
+        )
         figure.tight_layout()
         if plot_now:
             plt.show()

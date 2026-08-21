@@ -4,14 +4,10 @@ Documentation-only. The ``.. plot::`` directives embedded in Pulserver's
 docstrings import this package; nothing in the shipped wheel does, which is
 why it lives beside ``conf.py`` rather than under ``src/``.
 
-Five kinds of picture, one function each:
+Four kinds of picture, one function each:
 
 ``excitation_kspace``
     The path a multidimensional pulse deposits its energy along.
-``rf_profile``
-    What a pulse does to the magnetisation, beside the envelope that does it.
-    The Bloch integration is :func:`pulserver.pypulseq.sim_rf`, reached
-    through :meth:`pulserver.design.RfModule.sim_rf`.
 ``trajectory``
     Where a readout's ADC samples land in k-space, coloured by the echo or
     the shot that acquired them, so an echo train reads as an ordering rather
@@ -24,8 +20,14 @@ Five kinds of picture, one function each:
     what was recovered from it, in DeepInverse's own example shape.
     :func:`phantom` supplies the object and the array those examples measure.
 
-Every function returns the :class:`~matplotlib.figure.Figure` it drew, so a
-directive that wants to add to it can.
+Every one of them returns the :class:`~matplotlib.figure.Figure` it drew, so
+a directive that wants to add to it can.
+
+Two functions supply what a picture is drawn of rather than drawing one.
+:func:`phantom` is the object and the receive array a reconstruction example
+measures; :func:`recon_example` measures it the way a plugin's sequence would
+and drives that plugin over the result, so the row :func:`images` draws is a
+real reconstruction rather than an illustration of one.
 """
 
 from __future__ import annotations
@@ -40,12 +42,13 @@ from matplotlib.colors import LinearSegmentedColormap, Normalize
 
 __all__ = [
     "ORDINAL",
+    "SAMPLING",
     "SERIES",
     "excitation_kspace",
     "images",
     "order_figure",
     "phantom",
-    "rf_profile",
+    "recon_example",
     "trajectory",
 ]
 
@@ -79,6 +82,11 @@ ORDINAL = LinearSegmentedColormap.from_list(
     ["#86b6ef", "#5598e7", "#2a78d6", "#256abf", "#184f95", "#0d366b"],
 )
 
+#: An acquisition order, first to last. The same rainbow
+#: :meth:`~pulserver.pypulseq.Sequence.plot_kspace` colours a sampling with,
+#: so a module's own picture and the finished scan's read the same way.
+SAMPLING = "turbo"
+
 
 def _style(axis, title: str = "") -> None:
     """Recessive frame: two spines, ticks that do not shout, no grid."""
@@ -100,11 +108,11 @@ def _title(figure, text: str | None) -> None:
         figure.suptitle(text, x=0.01, ha="left", fontsize=10, color=INK)
 
 
-def _colorbar(figure, axis, values, label: str, pad: float = 0.03):
+def _colorbar(figure, axis, values, label: str, pad: float = 0.03, cmap=SAMPLING):
     """A discrete ordinal bar, ticked at every step while they are few."""
     norm = Normalize(vmin=float(np.min(values)), vmax=float(np.max(values)))
     bar = figure.colorbar(
-        ScalarMappable(norm=norm, cmap=ORDINAL), ax=axis, fraction=0.045, pad=pad
+        ScalarMappable(norm=norm, cmap=cmap), ax=axis, fraction=0.045, pad=pad
     )
     bar.outline.set_visible(False)
     bar.set_label(label, color=MUTED, fontsize=8)
@@ -120,20 +128,8 @@ def _colorbar(figure, axis, values, label: str, pad: float = 0.03):
 
 
 # ----------------------------------------------------------------------
-# RF: envelope and profile
+# Reading a module
 # ----------------------------------------------------------------------
-
-#: What each ``use`` asks of a pulse, and so which response answers for it.
-#: ``key`` names the :class:`~pulserver.pypulseq.RfResponse` field, and the
-#: label is what the profile axis is called.
-_RESPONSE = {
-    "excitation": ("mz_xy", "$|M_{xy}|$", 0),
-    "refocusing": ("ref_eff", "refocusing efficiency", 2),
-    "inversion": ("mz_z", "$M_z$", 1),
-    "saturation": ("mz_z", "$M_z$", 1),
-    "preparation": ("mz_z", "$M_z$", 1),
-    "other": ("mz_xy", "$|M_{xy}|$", 0),
-}
 
 
 def _system(module):
@@ -148,243 +144,6 @@ def _first_rf(module):
             if getattr(event, "type", None) == "rf":
                 return event
     raise ValueError(f"{type(module).__name__} plays no RF pulse")
-
-
-def _gradient_at(event, time: float) -> float:
-    """The gradient's amplitude at ``time``, in Hz/m, on the block's clock."""
-    delay = float(event.delay)
-    if event.type == "trap":
-        rise, flat, fall = (
-            float(event.rise_time),
-            float(event.flat_time),
-            float(event.fall_time),
-        )
-        times = [delay, delay + rise, delay + rise + flat, delay + rise + flat + fall]
-        amplitudes = [0.0, float(event.amplitude), float(event.amplitude), 0.0]
-    else:
-        times = delay + np.asarray(event.tt, dtype=float)
-        amplitudes = np.asarray(event.waveform, dtype=float)
-    return float(np.interp(time, times, amplitudes, left=0.0, right=0.0))
-
-
-def _selection_amplitude(module, pulse) -> float:
-    """Hz/m the pulse is selective under, or zero when it is not.
-
-    The gradient that makes a pulse spatially selective is the one played in
-    its own block, so it is read from there rather than from a name: a
-    readout calls it ``gz_ref`` where an excitation calls it ``gz``. It is
-    sampled at the pulse's own centre, which is the only amplitude the
-    profile is selective under -- a refocusing lobe with crushers bridged
-    onto it reaches several others either side of the pulse.
-    """
-    centre = float(pulse.delay) + float(pulse.center)
-    for block in module.blocks:
-        if pulse not in block:
-            continue
-        for event in block:
-            if getattr(event, "type", None) in ("trap", "grad"):
-                return _gradient_at(event, centre)
-    return 0.0
-
-
-def _on_one_raster(module, dt: float):
-    """The module's RF and gradients, resampled onto one uniform raster.
-
-    ``waveforms_and_times`` reports each channel as its own ``(time, value)``
-    pair on the breakpoints it needs; a Bloch integration wants all four on
-    the same steps.
-    """
-    channels = module.waveforms_and_times(True, compat=False).waveforms
-    parts = [channels.gx, channels.gy, channels.gz, channels.rf]
-    parts = [np.atleast_2d(np.asarray(p)) if p is not None else None for p in parts]
-    stop = max(float(p[0, -1].real) for p in parts if p is not None and p.size)
-    times = np.arange(0.5 * dt, stop, dt)
-
-    def resample(part, complex_values: bool):
-        empty = np.zeros(times.size, dtype=complex if complex_values else float)
-        if part is None or part.size == 0:
-            return empty
-        clock, values = part[0].real, part[1]
-        sampled = np.interp(times, clock, values.real, left=0.0, right=0.0)
-        if complex_values:
-            sampled = sampled + 1j * np.interp(
-                times, clock, values.imag, left=0.0, right=0.0
-            )
-        return sampled
-
-    gradients = [resample(part, False) for part in parts[:3]]
-    return times, resample(parts[3], True), gradients
-
-
-def _whole_module_response(module, axis_values, spatial: bool, axis: int, dt: float):
-    """Integrate the Bloch equation over everything the module plays.
-
-    :func:`pulserver.pypulseq.sim_rf` answers for one pulse. A preparation is
-    several, with the crushers and the free precession between them, and only
-    the whole of it has a profile worth drawing.
-    """
-    from pulserver import pypulseq as pp
-
-    times, b1, gradients = _on_one_raster(module, dt)
-    if spatial:
-        field = np.outer(1e-3 * axis_values, gradients[axis])
-    else:
-        field = np.asarray(axis_values, dtype=float)[:, None] * np.ones_like(times)
-
-    from_z, from_x, from_y = (
-        pp.bloch(b1, field, dt, initial=start)
-        for start in ([0.0, 0.0, 1.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0])
-    )
-    return {
-        "mz_z": from_z[:, 2],
-        "mz_xy": from_z[:, 0] + 1j * from_z[:, 1],
-        "ref_eff": (
-            (from_x[:, 0] + 1j * from_x[:, 1]) + 1j * (from_y[:, 0] + 1j * from_y[:, 1])
-        )
-        / 2.0,
-    }, (times, b1)
-
-
-def rf_profile(
-    module,
-    *,
-    kind: str | None = None,
-    title: str | None = None,
-    extent=None,
-    spatial: bool | None = None,
-    whole: bool = False,
-    span: float | None = None,
-    samples: int = 401,
-    dt: float = 4e-6,
-    figsize: tuple[float, float] = (8.4, 2.9),
-    **simulation,
-):
-    """Draw a pulse beside the magnetisation profile it produces.
-
-    Parameters
-    ----------
-    module : pulserver.design.RfModule
-        The module whose pulse to simulate.
-    kind : str, optional
-        Which response to draw: ``"excitation"``, ``"refocusing"``,
-        ``"inversion"`` or ``"saturation"``. Read off the pulse's ``use`` by
-        default.
-    title : str, optional
-        Figure title.
-    extent : float or tuple of float, optional
-        The profile axis, in millimetres when the pulse is spatially
-        selective and in hertz when it is not: a half-width about zero, or an
-        explicit ``(low, high)``. The whole simulated axis by default.
-    spatial : bool, optional
-        Plot against position rather than frequency. By default the pulse
-        decides: one played under a gradient is spatially selective, one
-        played without is not.
-    whole : bool, optional
-        Integrate everything the module plays — every pulse, every crusher,
-        and the free precession between them — rather than its first pulse
-        alone. What a preparation module's profile means.
-    span : float, optional
-        Half-width of the simulated axis under ``whole``, in the units of
-        ``extent``. Twice ``extent`` by default.
-    samples : int, optional
-        Points on the simulated axis under ``whole``.
-    dt : float, optional
-        Integration raster under ``whole``, in seconds.
-    figsize : tuple of float, optional
-        Figure size, in inches.
-    **simulation
-        Forwarded to :meth:`pulserver.design.RfModule.sim_rf`.
-
-    Returns
-    -------
-    matplotlib.figure.Figure
-    """
-    pulse = _first_rf(module)
-    use = str(getattr(pulse, "use", "") or "other")
-    field, profile_label, colour = _RESPONSE.get(kind or use, _RESPONSE["other"])
-    amplitude = _selection_amplitude(module, pulse)
-    if spatial is None:
-        spatial = abs(amplitude) > 1.0
-
-    if whole:
-        if span is None and extent is None:
-            # Nothing was asked for, so simulate what the pulse can reach: a
-            # couple of its own bandwidths either side of where it sits.
-            from pulserver import pypulseq as pp
-
-            width = float(pp.calc_rf_bandwidth(pulse))
-            centre = float(getattr(pulse, "freq_offset", 0.0))
-            span = abs(width) + abs(centre)
-            if spatial:
-                span *= 1e3 / abs(amplitude)
-        limits = _limits(extent, span)
-        axis_values = np.linspace(limits[0], limits[1], samples)
-        response, (clock, b1) = _whole_module_response(
-            module, axis_values, spatial, _selection_axis(module, pulse), dt
-        )
-        values = response[field]
-        envelope_t = 1e3 * clock
-        envelope = 1e6 * np.abs(b1) / float(_system(module).gamma)
-    else:
-        simulated = module.sim_rf(pulse, compat=False, **simulation)
-        values = np.asarray(getattr(simulated, field))
-        axis_values = simulated.frequency
-        if spatial:
-            axis_values = 1e3 * axis_values / amplitude
-        envelope_t = 1e3 * np.asarray(pulse.t, dtype=float)
-        envelope = 1e6 * np.abs(np.asarray(pulse.signal)) / float(_system(module).gamma)
-
-    if np.iscomplexobj(values):
-        values = np.abs(values)
-    order = np.argsort(axis_values)
-    axis_values, values = np.asarray(axis_values)[order], np.asarray(values)[order]
-
-    figure, (left, right) = plt.subplots(
-        1, 2, figsize=figsize, gridspec_kw={"width_ratios": (1.0, 1.35)}
-    )
-
-    left.plot(envelope_t, envelope, color=SERIES[0], lw=1.6)
-    left.fill_between(envelope_t, envelope, color=SERIES[0], alpha=0.12, lw=0)
-    left.set_xlabel("time [ms]")
-    left.set_ylabel(r"$|B_1|$ [$\mu$T]")
-    left.set_xlim(envelope_t[0], envelope_t[-1])
-    _style(left, "envelope")
-
-    right.axhline(0.0, color=FAINT, lw=0.8)
-    right.plot(axis_values, values, color=SERIES[colour], lw=1.8)
-    right.set_xlabel("position [mm]" if spatial else "off-resonance [Hz]")
-    right.set_ylabel(profile_label)
-    right.set_xlim(*(_limits(extent) or (axis_values[0], axis_values[-1])))
-    _style(right, "profile")
-
-    _title(figure, title)
-    figure.tight_layout(rect=(0, 0, 1, 0.94 if title else 1.0))
-    return figure
-
-
-def _limits(extent, widen: float | None = None):
-    """``extent`` as a ``(low, high)`` pair, optionally widened."""
-    if extent is None:
-        return None if widen is None else (-widen, widen)
-    if np.ndim(extent) == 0:
-        low, high = -float(extent), float(extent)
-    else:
-        low, high = float(extent[0]), float(extent[1])
-    if widen is None:
-        return low, high
-    centre, half = 0.5 * (low + high), 0.5 * (high - low)
-    return centre - 2.0 * half, centre + 2.0 * half
-
-
-def _selection_axis(module, pulse) -> int:
-    """Which gradient channel the pulse is selective along."""
-    for block in module.blocks:
-        if pulse not in block:
-            continue
-        for event in block:
-            if getattr(event, "type", None) in ("trap", "grad"):
-                return "xyz".index(event.channel)
-    return 2
 
 
 # ----------------------------------------------------------------------
@@ -621,7 +380,7 @@ def trajectory(
         samples[used[0]],
         samples[used[1]],
         c=index,
-        cmap=ORDINAL,
+        cmap=SAMPLING,
         s=5,
         linewidths=0,
         zorder=2,
@@ -656,7 +415,7 @@ def _trajectory3d(samples, index, label, title, figsize):
     figure = plt.figure(figsize=figsize or (5.6, 4.8))
     axis = figure.add_subplot(projection="3d")
     axis.scatter(
-        samples[0], samples[1], samples[2], c=index, cmap=ORDINAL, s=3, linewidths=0
+        samples[0], samples[1], samples[2], c=index, cmap=SAMPLING, s=3, linewidths=0
     )
     axis.set_xlabel("$k_x$ [1/m]", color=MUTED, fontsize=8)
     axis.set_ylabel("$k_y$ [1/m]", color=MUTED, fontsize=8)
@@ -738,7 +497,7 @@ def excitation_kspace(
     right.set_ylabel(f"$k_{plane[1]}$ [1/m]")
     right.set_aspect("equal", adjustable="datalim")
     _style(right, "excitation k-space")
-    _colorbar(figure, right, [0, len(steps) - 1], "sample")
+    _colorbar(figure, right, [0, len(steps) - 1], "sample", cmap=ORDINAL)
 
     _title(figure, title)
     figure.tight_layout(rect=(0, 0, 1, 0.93 if title else 1.0))
@@ -819,7 +578,7 @@ def order_figure(
             points[:, 0],
             points[:, 1],
             c=echoes,
-            cmap=ORDINAL,
+            cmap=SAMPLING,
             s=10 if trains is None else 26,
             linewidths=0,
             zorder=3,
@@ -886,8 +645,7 @@ def phantom(size: int = 64, coils: int = 4):
     sensitivities = torch.stack(
         [
             torch.exp(
-                -((columns - 0.9 * torch.cos(angle)) ** 2)
-                / 1.2
+                -((columns - 0.9 * torch.cos(angle)) ** 2) / 1.2
                 - ((rows - 0.9 * torch.sin(angle)) ** 2) / 1.2
             )
             for angle in angles
@@ -895,6 +653,141 @@ def phantom(size: int = 64, coils: int = 4):
     ).to(torch.complex64)
     sensitivities = sensitivities / sensitivities.abs().pow(2).sum(0).sqrt()
     return Phantom(image, sensitivities[None])
+
+
+class Measurement(NamedTuple):
+    """What a reconstruction plugin was fed, and what it made of it.
+
+    Attributes
+    ----------
+    truth : numpy.ndarray
+        The object that was measured.
+    measured : numpy.ndarray
+        The sampled k-space, coils combined, on the encoded grid -- so the
+        pattern the sampling left is visible in it.
+    image : numpy.ndarray
+        What the plugin returned.
+    """
+
+    truth: object
+    measured: object
+    image: object
+
+
+def _fft2c(image):
+    axes = (-2, -1)
+    return np.fft.fftshift(
+        np.fft.fftn(np.fft.ifftshift(image, axes=axes), axes=axes, norm="ortho"),
+        axes=axes,
+    )
+
+
+def recon_example(
+    plugin,
+    *,
+    size: int = 64,
+    coils: int = 8,
+    acceleration: int = 1,
+    n_acs: int = 0,
+    n_samples: int | None = None,
+):
+    """Measure :func:`phantom` on a 2D Cartesian grid and reconstruct it.
+
+    The stream is the one the scanner would send: the autocalibration block
+    first with its last line flagged, then the remaining phase encodes, and
+    the last line of the scan closing the slice. The plugin is driven through
+    the same three hooks the inline runtime drives, so what comes back is what
+    an online reconstruction would return.
+
+    Parameters
+    ----------
+    plugin : pulserver.ReconPlugin
+        The plugin to drive -- a module's ``PLUGIN``, or an instance
+        configured differently.
+    size : int, optional
+        Matrix size, square.
+    coils : int, optional
+        Elements in the receive array.
+    acceleration : int, optional
+        Uniform phase-encode undersampling factor.
+    n_acs : int, optional
+        Fully sampled autocalibration lines at the centre. Needed for a
+        reconstruction that has to estimate sensitivities.
+    n_samples : int, optional
+        Readout samples acquired, for a partial echo. The full readout by
+        default.
+
+    Returns
+    -------
+    Measurement
+    """
+    import ismrmrd
+
+    from pulserver import AcquisitionBucket, ReconContext
+
+    truth, coil_maps = phantom(size, coils)
+    object_ = np.asarray(_detached(truth))[0]
+    sensitivities = np.asarray(_detached(coil_maps))[0]
+    kspace = _fft2c(sensitivities * object_).astype(np.complex64)
+
+    calibration = list(range(size // 2 - n_acs // 2, size // 2 + n_acs // 2))
+    lines = sorted(set(range(0, size, acceleration)) | set(calibration))
+    ordered = calibration + [line for line in lines if line not in calibration]
+    taken = size if n_samples is None else int(n_samples)
+
+    stream = []
+    for index, line in enumerate(ordered):
+        acquisition = ismrmrd.Acquisition()
+        acquisition.resize(taken, coils)
+        acquisition.data[:] = kspace[:, line, size - taken :]
+        acquisition.idx.kspace_encode_step_1 = int(line)
+        acquisition.idx.segment = int(index >= len(calibration))
+        acquisition.center_sample = taken - size // 2
+        if line in calibration:
+            acquisition.setFlag(
+                ismrmrd.ACQ_IS_PARALLEL_CALIBRATION_AND_IMAGING
+                if line % acceleration == 0
+                else ismrmrd.ACQ_IS_PARALLEL_CALIBRATION
+            )
+        if calibration and index == len(calibration) - 1:
+            acquisition.setFlag(ismrmrd.ACQ_LAST_IN_SEGMENT)
+        if index == len(ordered) - 1:
+            acquisition.setFlag(ismrmrd.ACQ_LAST_IN_SEGMENT)
+            acquisition.setFlag(ismrmrd.ACQ_LAST_IN_SLICE)
+        stream.append(acquisition)
+
+    context = ReconContext.offline(_offline_header(size, coils))
+    result = plugin(AcquisitionBucket(data=tuple(stream)), context)
+    image = np.asarray(result[0].data if isinstance(result, list) else result.data)
+
+    sampled = np.zeros_like(kspace)
+    sampled[:, lines, size - taken :] = kspace[:, lines, size - taken :]
+    return Measurement(
+        truth=object_,
+        measured=np.sqrt((np.abs(sampled) ** 2).sum(axis=0)),
+        # The plugin returns the image in the column/row order it is read in;
+        # the phantom is on the (y, x) grid the physics measured.
+        image=image.T,
+    )
+
+
+def _offline_header(size: int, coils: int, *, slices: int = 1):
+    """The encoded and reconstructed spaces a plugin sizes its buffers from."""
+    from types import SimpleNamespace
+
+    space = SimpleNamespace(matrixSize=SimpleNamespace(x=size, y=size, z=1))
+    return SimpleNamespace(
+        encoding=[
+            SimpleNamespace(
+                encodedSpace=space,
+                reconSpace=space,
+                encodingLimits=SimpleNamespace(
+                    slice=SimpleNamespace(minimum=0, maximum=slices - 1, center=0)
+                ),
+            )
+        ],
+        acquisitionSystemInformation=SimpleNamespace(receiverChannels=coils),
+    )
 
 
 def images(
@@ -915,25 +808,27 @@ def images(
         Figure title.
     figsize : tuple of float, optional
         Figure size, in inches.
-    log : bool, optional
-        Draw ``log(1 + |x|)``, which is what makes k-space legible beside an
-        image.
+    log : bool or sequence of bool, optional
+        Draw the magnitude on a logarithmic ramp, which is what makes k-space
+        legible beside an image. One value per panel, so a mixed row asks for
+        it only where it belongs.
 
     Returns
     -------
     matplotlib.figure.Figure
     """
     panels = list(panels)
+    logarithmic = [log] * len(panels) if isinstance(log, bool) else list(log)
     figure, axes = plt.subplots(
         1,
         len(panels),
         figsize=figsize or (2.9 * len(panels), 3.2),
         squeeze=False,
     )
-    for axis, (label, array) in zip(axes[0], panels, strict=True):
+    for axis, (label, array), ramp in zip(axes[0], panels, logarithmic, strict=True):
         values = np.abs(np.asarray(_detached(array), dtype=complex))
         values = values.reshape(values.shape[-2:]) if values.ndim > 2 else values
-        if log:
+        if ramp:
             # Three decades on a linear grey ramp, which is what makes the
             # centre of k-space and its first tails legible in one picture.
             ceiling = max(values.max(), 1e-12)

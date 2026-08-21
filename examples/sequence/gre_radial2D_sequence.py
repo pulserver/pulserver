@@ -1,48 +1,8 @@
 """RF-spoiled 2D radial gradient echo, multi-slice.
 
-One full spoke per repetition -- :class:`design.RadialReadout2D`, whose
-prephaser, traversal and rewinder are one continuous waveform. By default the
-spoke is turned per shot by a ``ROTATIONS`` extension rather than by
-re-registering gradients: one waveform however many spokes the scan plays,
-which is the mechanism this slot exists to stress. ``use_rotation_ext=False``
-writes every spoke out as its own waveform instead, for a reader that will not
-compose a rotation. The FOV offset goes through ``TransformFOV`` in server
-mode, where a rotated readout defers its ADC shift to the consumer of the base
-trajectory. :mod:`pulserver.app.recon.noncartesian2D_recon` reconstructs by NUFFT against
-the trajectory the file itself carries.
-
 ``main`` returns the :class:`pulserver.pypulseq.Sequence`; ``PLUGIN`` is the
 same sequence behind the scanner protocol contract, and running this module
 as a script writes a ``.seq`` from the same controls.
-
-Examples
---------
->>> from pulserver.app import gre_radial2D_sequence
->>> seq = gre_radial2D_sequence(n_x=32, n_spokes=13, n_slices=1, n_dummy=0)
->>> seq.num_trs, seq.num_segments
-(13, 2)
-
-One spoke per repetition, the waveform stored once and turned by a rotation extension:
-
-.. plot::
-   :include-source:
-
-   from pulserver.app import gre_radial2D_sequence
-
-   seq = gre_radial2D_sequence(n_x=32, n_spokes=13, n_slices=1, n_dummy=0)
-   seq.plot(tr="worst_case", time_disp="ms", grad_disp="mT/m", stacked=True,
-            plot_now=False)
-
-Thirteen golden-angle spokes, each one landing in the widest gap the
-previous ones left:
-
-.. plot::
-   :include-source:
-
-   from pulserver.app import gre_radial2D_sequence
-
-   seq = gre_radial2D_sequence(n_x=32, n_spokes=13, n_slices=1, n_dummy=0)
-   seq.plot_kspace(plot_now=False)
 """
 
 from __future__ import annotations
@@ -121,6 +81,17 @@ def main(
 ) -> pp.Sequence:
     """Create an RF-spoiled 2D radial gradient-echo sequence.
 
+    One full spoke per repetition -- :class:`design.RadialReadout2D`, whose
+    prephaser, traversal and rewinder are one continuous waveform. By default the
+    spoke is turned per shot by a ``ROTATIONS`` extension rather than by
+    re-registering gradients: one waveform however many spokes the scan plays,
+    which is the mechanism this slot exists to stress. ``use_rotation_ext=False``
+    writes every spoke out as its own waveform instead, for a reader that will not
+    compose a rotation. The FOV offset goes through ``TransformFOV`` in server
+    mode, where a rotated readout defers its ADC shift to the consumer of the base
+    trajectory. :mod:`pulserver.app.noncartesian2D_recon` reconstructs by NUFFT against
+    the trajectory the file itself carries.
+
     Parameters
     ----------
     plot : bool, optional
@@ -188,6 +159,94 @@ def main(
     -------
     seq : pulserver.pypulseq.Sequence
         The radial GRE sequence object.
+
+    Examples
+    --------
+    >>> from pulserver.app import gre_radial2D_sequence
+    >>> seq = gre_radial2D_sequence(n_x=32, n_spokes=13, n_slices=1, n_dummy=0)
+    >>> seq.num_trs, seq.num_segments
+    (13, 2)
+
+    The waveform figures below are one design, prescribed to be *legible*
+    rather than diagnostic: the shortest TE and TR the readout admits, so
+    nothing waits; heavy spoiling, so that lobe is unmistakable; and sixteen
+    spokes, so the ordering is legible.
+
+    .. plot::
+       :include-source:
+       :nofigs:
+       :context:
+
+       from pulserver.app import gre_radial2D_sequence
+
+       seq = gre_radial2D_sequence(
+           n_x=256, n_spokes=16, n_slices=1, te=None, tr=None, n_dummy=0,
+           spoiling_cycles=6.0,
+       )
+
+    **The excitation**, and the magnetisation it leaves behind: the pulse's
+    own ``B1`` envelope beside the profile it writes across the selected
+    axis.
+
+    .. plot::
+       :include-source:
+       :context: close-figs
+
+       seq.plot_rf(plot_now=False)
+
+    **One repetition**, which is one spoke: the excitation, the prewinder
+    that reaches the far edge of k-space, the readout straight through the
+    centre, and the spoiler. The waveform is stored once and turned by a
+    rotation extension, so every spoke plays these same shapes.
+
+    .. plot::
+       :include-source:
+       :context: close-figs
+
+       seq.plot(tr="worst_case", time_disp="ms", grad_disp="mT/m", plot_now=False)
+
+    **What the scan covers.** Sixteen golden-angle spokes, each landing in
+    the widest gap the ones before it left, which is what the ordering colour
+    shows.
+
+    .. plot::
+       :include-source:
+       :context: close-figs
+
+       seq.plot_kspace(color_by="order", plot_now=False)
+
+    **Mechanical resonance.** The repetition is periodic, so its gradients
+    have energy only at multiples of ``1 / T_TR``. Those lines are what a
+    forbidden band is judged against, and the verdict panel is the whole of
+    the acoustic check: every line that falls inside a band, against the
+    amplitude that band allows.
+
+    .. plot::
+       :include-source:
+       :context: close-figs
+
+       gamma = 42.576e3  # Hz/m per mT/m
+       seq.calculate_gradient_spectrum(
+           tr="worst_case",
+           resonance_lines=True,
+           bands=[(550.0, 700.0, 3.0 * gamma), (1150.0, 1300.0, 3.0 * gamma)],
+       )
+
+    **Peripheral nerve stimulation**, under the rheobase/chronaxie model the
+    scanner's own gate applies, over the same repetition played back to back.
+    This design asks for the shortest timing the hardware admits, so its
+    prewinder and spoiler ramp as fast as they are allowed to. A lower
+    ``MAX_SLEW``, a longer echo time, or a narrower readout bandwidth each
+    bring the response down.
+
+    .. plot::
+       :include-source:
+       :context: close-figs
+
+       seq.calculate_pns(
+           {"chronaxie_us": 360.0, "rheobase": 20.0, "alpha": 0.333},
+           tr="worst_case",
+       )
     """
     system = pp.Opts() if system is None else system
     system = pp.cap_system(system, max_grad=MAX_GRAD, max_slew=MAX_SLEW)

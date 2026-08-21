@@ -10,7 +10,7 @@ description: >
 # Adding a sequence family
 
 A family in `examples/sequence/` is shipped code: scikit-build installs it as
-`pulserver.app.sequence.<name>`, and `pulserver.app` re-exports it flat. It is
+`pulserver.app.<name>`, one flat namespace for the whole zoo. It is
 not a sample, and the zoo tests hold it.
 
 ## What a plugin has to provide

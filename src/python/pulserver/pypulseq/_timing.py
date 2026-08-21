@@ -138,8 +138,11 @@ def quantize_readout_timing(
 
     m_min = max(m_target, int(np.ceil(min_flat_time_s / (nx_ro * adc_raster_s))))
 
+    # The walk starts at or above the multiple nearest the requested dwell, so
+    # every further step moves away from it: the first candidate that lands on
+    # the gradient raster is the closest one there is, and nothing after it can
+    # win.
     best_m = None
-    best_cost = None
 
     for step in range(MAX_RASTER_SEARCH_STEPS):
         m = m_min + step
@@ -147,12 +150,8 @@ def quantize_readout_timing(
         ratio = flat / grad_raster_s
         if abs(ratio - round(ratio)) > 1e-9:
             continue
-        cost = abs((m * adc_raster_s) - target_dwell)
-        if best_cost is None or cost < best_cost:
-            best_cost = cost
-            best_m = m
-            if cost == 0.0:
-                break
+        best_m = m
+        break
 
     if best_m is None:
         best_m = m_min

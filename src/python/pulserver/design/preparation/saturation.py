@@ -96,18 +96,17 @@ class OffResonanceSaturation(RfModule):
        import numpy as np
        import pulserver.design as design
        import pulserver.pypulseq as pp
-       from _figures import rf_profile
 
        system = pp.Opts()
        pulse = pp.make_gauss_pulse(
            flip_angle=np.deg2rad(500), duration=8e-3, freq_offset=-1500.0,
            use="saturation", system=system,
        )
-       rf_profile(
-           design.OffResonanceSaturation(system, pulse, n_pulses=3),
+       design.OffResonanceSaturation(system, pulse, n_pulses=3).plot_rf(
            title="three saturation pulses, 1.5 kHz below resonance",
            whole=True,
            extent=3000,
+           plot_now=False,
        )
     """
 
@@ -224,16 +223,16 @@ class MtPreparation(OffResonanceSaturation):
     One band, off resonance, and the free pool left alone at zero:
 
     .. plot::
+       :include-source:
 
        import pulserver.design as design
        import pulserver.pypulseq as pp
-       from _figures import rf_profile
 
-       rf_profile(
-           design.MtPreparation(pp.Opts()),
+       design.MtPreparation(pp.Opts()).plot_rf(
            title="MT saturation, 1.5 kHz below resonance",
            whole=True,
            extent=3000,
+           plot_now=False,
        )
     """
 
@@ -328,16 +327,16 @@ class IhMtPreparation(OffResonanceSaturation):
     band, delivered symmetrically:
 
     .. plot::
+       :include-source:
 
        import pulserver.design as design
        import pulserver.pypulseq as pp
-       from _figures import rf_profile
 
-       rf_profile(
-           design.IhMtPreparation(pp.Opts()),
+       design.IhMtPreparation(pp.Opts()).plot_rf(
            title="ihMT saturation, both sidebands",
            whole=True,
            extent=3000,
+           plot_now=False,
        )
     """
 
@@ -445,16 +444,16 @@ class BlochSiegertPreparation(OffResonanceSaturation):
     tipping much, and the residual dip is what "far enough" costs:
 
     .. plot::
+       :include-source:
 
        import pulserver.design as design
        import pulserver.pypulseq as pp
-       from _figures import rf_profile
 
-       rf_profile(
-           design.BlochSiegertPreparation(pp.Opts()),
+       design.BlochSiegertPreparation(pp.Opts()).plot_rf(
            title="Bloch-Siegert probe, 4 kHz off resonance",
            whole=True,
            extent=(-1000, 8000),
+           plot_now=False,
        )
     """
 

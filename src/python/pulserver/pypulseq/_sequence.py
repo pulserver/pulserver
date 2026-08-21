@@ -1060,7 +1060,10 @@ class Sequence(AnalysisMixin, SafetyViewsMixin, SoftDelayMixin):
             the safety checks against it. This draws exactly those blocks, on
             the sequence's own clock, so what is on screen is the instance the
             checks were run on rather than the first one that happened to be
-            played. :attr:`num_segments` says how many there are.
+            played. The axis is held to the segment's own span, so a segment
+            late in a long scan is drawn at the time it plays rather than as a
+            sliver at the end of an empty axis. :attr:`num_segments` says how
+            many there are.
 
             Not combinable with ``tr``: a TR is the core's reconstructed
             canonical waveform and a segment is a run of real blocks, so a
@@ -1113,6 +1116,8 @@ class Sequence(AnalysisMixin, SafetyViewsMixin, SoftDelayMixin):
         if segment_idx is not None:
             first, last = self._segment_blocks(segment_idx)
             window = self._upstream_window(first, last)
+            if tuple(_span(time_range)) == (0.0, np.inf):
+                time_range = self._block_span(first, last)
         elif tr is None:
             first, last = self._blocks_over(*_span(time_range))
             if last - first + 1 > _LOUD_ABOVE:
@@ -2145,6 +2150,11 @@ class Sequence(AnalysisMixin, SafetyViewsMixin, SoftDelayMixin):
         return carrier.rf_from_lib_data(lib_data, use)
 
     # -- internals -------------------------------------------------------
+
+    def _block_span(self, first: int, last: int) -> tuple[float, float]:
+        """When blocks ``first..last`` start and end, on the sequence's clock."""
+        edges = np.cumsum(self._native.block_durations())
+        return (float(edges[first - 2]) if first > 1 else 0.0, float(edges[last - 1]))
 
     def _segment_blocks(self, segment_idx: int) -> tuple[int, int]:
         """Segment ``segment_idx`` as a 1-based inclusive block range.

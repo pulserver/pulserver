@@ -1,56 +1,8 @@
 """3D MPRAGE: inversion-prepared, segmented, RF-spoiled gradient echo.
 
-One adiabatic inversion per segment, a wait that puts the segment's
-centre-of-k-space view at the requested TI, a train of spoiled low-flip
-:class:`design.LineReadout3D` repetitions, and a recovery wait that makes
-every inversion-to-inversion interval the outer TR. The ``(ky, kz)`` views
-are dealt into segments by the same orderings the 3D fast spin echo uses --
-``linear``, ``centric``, ``radial``, ``radial_adaptive`` (coherent,
-TI-targeted) or ``shuffling`` (incoherent, for a subspace reconstruction) --
-with each acquisition carrying its within-segment index as ``ECO``.
-:mod:`pulserver.app.recon.cartesian3D_recon` reads the result back.
-
 ``main`` returns the :class:`pulserver.pypulseq.Sequence`; ``PLUGIN`` is the
 same sequence behind the scanner protocol contract, and running this module
 as a script writes a ``.seq`` from the same controls.
-
-Examples
---------
->>> from pulserver.app import mprage3D_sequence
->>> seq = mprage3D_sequence(n_x=32, n_y=16, n_z=8, views_per_segment=16, ti=100e-3, tr_outer=300e-3)
->>> seq.num_trs, seq.num_segments
-(9, 3)
-
-One inversion, the wait that places the TI, and a segment of spoiled low-flip repetitions:
-
-.. plot::
-   :include-source:
-
-   from pulserver.app import mprage3D_sequence
-
-   seq = mprage3D_sequence(n_x=32, n_y=16, n_z=8, views_per_segment=16, ti=100e-3, tr_outer=300e-3)
-   seq.plot(tr="worst_case", time_disp="ms", grad_disp="mT/m", stacked=True,
-            plot_now=False)
-
-The TI is the time to the segment's *centre-of-k-space* view, so which
-view that is -- and therefore what the inversion weights -- is the
-ordering's:
-
-.. plot::
-
-   from pulserver.app.sequence.fse3D_sequence import order_views
-   from _figures import order_figure
-
-   grid = (32, 32)
-   views = [(y, z) for y in range(grid[0]) for z in range(grid[1])]
-   order_figure(
-       [
-           (name, order_views(views, 64, 0, name, grid))
-           for name in ("linear", "centric", "radial_adaptive")
-       ],
-       views,
-       title="MPRAGE segments, three orderings",
-   )
 """
 
 from __future__ import annotations
@@ -131,6 +83,16 @@ def main(
     spoiling_cycles: float = 4.0,
 ) -> pp.Sequence:
     """Create a 3D MPRAGE sequence.
+
+    One adiabatic inversion per segment, a wait that puts the segment's
+    centre-of-k-space view at the requested TI, a train of spoiled low-flip
+    :class:`design.LineReadout3D` repetitions, and a recovery wait that makes
+    every inversion-to-inversion interval the outer TR. The ``(ky, kz)`` views
+    are dealt into segments by the same orderings the 3D fast spin echo uses --
+    ``linear``, ``centric``, ``radial``, ``radial_adaptive`` (coherent,
+    TI-targeted) or ``shuffling`` (incoherent, for a subspace reconstruction) --
+    with each acquisition carrying its within-segment index as ``ECO``.
+    :mod:`pulserver.app.cartesian3D_recon` reads the result back.
 
     Parameters
     ----------
@@ -216,6 +178,120 @@ def main(
     -------
     seq : pulserver.pypulseq.Sequence
         The MPRAGE sequence object.
+
+    Examples
+    --------
+    >>> from pulserver.app import mprage3D_sequence
+    >>> seq = mprage3D_sequence(n_x=32, n_y=16, n_z=8, views_per_segment=16, ti=100e-3, tr_outer=300e-3)
+    >>> seq.num_trs, seq.num_segments
+    (9, 3)
+
+    The waveform figures below are one design, prescribed to be *legible*
+    rather than diagnostic: the shortest TI, TE, TR and outer TR the inversion
+    and readout admit, so nothing waits longer than the physics requires; a
+    long readout and heavy spoiling, so those lobes are unmistakable; and eight
+    views per segment over a small grid, so a whole shot fits on a page.
+
+    .. plot::
+       :include-source:
+       :nofigs:
+       :context:
+
+       from pulserver.app import mprage3D_sequence
+
+       seq = mprage3D_sequence(
+           n_x=256, n_y=16, n_z=8, views_per_segment=8, ti=55e-3,
+           tr_outer=110e-3, te=None, tr=None, n_acs=0, n_acs_z=0, n_dummy=0,
+           spoiling_cycles=6.0,
+       )
+
+    **The pulses.** The inversion that opens the shot, then the excitation
+    each view is read from -- one drawn against what it leaves along ``z``,
+    the other against what it tips into the transverse plane.
+
+    .. plot::
+       :include-source:
+       :context: close-figs
+
+       seq.plot_rf("inversion", title="inversion", plot_now=False)
+       seq.plot_rf("excitation", title="excitation", plot_now=False)
+
+    **One shot**: the inversion, the wait that places the TI, the segment of
+    spoiled low-flip repetitions read out under the recovering
+    magnetisation, and the recovery delay that closes the outer TR.
+
+    .. plot::
+       :include-source:
+       :context: close-figs
+
+       seq.plot(tr="worst_case", time_disp="ms", grad_disp="mT/m", plot_now=False)
+
+    **The segments**, which are the interpreter's units of playout. Each is
+    drawn as the instance carrying the most gradient energy -- the one the
+    safety checks were run against -- over the span of the scan where it
+    plays.
+
+    .. plot::
+       :include-source:
+       :context: close-figs
+
+       for index in range(seq.num_segments):
+           seq.plot(
+               segment_idx=index, time_disp="ms", grad_disp="mT/m", plot_now=False
+           )
+
+    **What the scan covers**, and in what order, on a second design with a
+    grid worth ordering. This is the whole of the contrast decision: the left
+    panel says which inversion read each view, the right says where in that
+    inversion's segment it fell -- and the right one is the inversion
+    weighting the view carries, view by view. Under ``linear`` the segment
+    walks the partitions, so the weighting varies along ``kz`` and the centre
+    of k-space is read midway through the recovery. The corners are missing
+    because the sampled support is the inscribed ellipse.
+
+    .. plot::
+       :include-source:
+       :context: close-figs
+
+       sampled = mprage3D_sequence(
+           n_x=96, n_y=32, n_z=32, views_per_segment=32, n_acs=12, n_acs_z=8,
+       )
+       sampled.plot_kspace(
+           plane="yz", color_by="order", show_trajectory=False, plot_now=False,
+       )
+
+    **Mechanical resonance.** The repetition is periodic, so its gradients
+    have energy only at multiples of ``1 / T_TR``. Those lines are what a
+    forbidden band is judged against, and the verdict panel is the whole of
+    the acoustic check: every line that falls inside a band, against the
+    amplitude that band allows.
+
+    .. plot::
+       :include-source:
+       :context: close-figs
+
+       gamma = 42.576e3  # Hz/m per mT/m
+       seq.calculate_gradient_spectrum(
+           tr="worst_case",
+           resonance_lines=True,
+           bands=[(550.0, 700.0, 3.0 * gamma), (1150.0, 1300.0, 3.0 * gamma)],
+       )
+
+    **Peripheral nerve stimulation**, under the rheobase/chronaxie model the
+    scanner's own gate applies, over the same repetition played back to back.
+    This design asks for the shortest timing the hardware admits, so its
+    prewinders and spoiler ramp as fast as they are allowed to. A lower
+    ``MAX_SLEW``, a longer echo time, or a narrower readout bandwidth each
+    bring the response down.
+
+    .. plot::
+       :include-source:
+       :context: close-figs
+
+       seq.calculate_pns(
+           {"chronaxie_us": 360.0, "rheobase": 20.0, "alpha": 0.333},
+           tr="worst_case",
+       )
     """
     system = pp.Opts() if system is None else system
     system = pp.cap_system(system, max_grad=MAX_GRAD, max_slew=MAX_SLEW)

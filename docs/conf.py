@@ -35,10 +35,9 @@ def _resolve_pulserver() -> None:
     there.  An editable install pointing at a *different* checkout would
     silently document that one, which is what this refuses.
 
-    The plugin mapping is the second half: the wheel maps ``examples/`` onto
-    ``pulserver.app.sequence`` and ``pulserver.app.recon``, and the plugin
-    objects carry those dotted names -- which is what ``autosummary``
-    follows.
+    The plugin mapping is the second half: the wheel installs ``examples/``
+    into ``pulserver.app``, and ``autosummary`` documents each plugin under
+    the flat name it is reached by.
     """
     import pulserver
     import pulserver.app

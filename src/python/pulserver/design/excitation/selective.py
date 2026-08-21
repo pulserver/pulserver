@@ -99,16 +99,16 @@ class SpatialSelectiveExcitation(RfModule):
     what it was given:
 
     .. plot::
+       :include-source:
 
        import pulserver.design as design
        import pulserver.pypulseq as pp
-       from _figures import rf_profile
 
        system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
-       rf_profile(
-           design.SpatialSelectiveExcitation(system, 90.0, 3e-3),
+       design.SpatialSelectiveExcitation(system, 90.0, 3e-3).plot_rf(
            title="SLR excitation, 90 degrees over 3 mm",
            extent=8,
+           plot_now=False,
        )
     """
 
@@ -260,16 +260,16 @@ class SpatialSelectiveRefocusing(RfModule):
     is designed against and an excitation profile is not:
 
     .. plot::
+       :include-source:
 
        import pulserver.design as design
        import pulserver.pypulseq as pp
-       from _figures import rf_profile
 
        system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
-       rf_profile(
-           design.SpatialSelectiveRefocusing(system, 3e-3),
+       design.SpatialSelectiveRefocusing(system, 3e-3).plot_rf(
            title="SLR refocusing, 3 mm",
            extent=8,
+           plot_now=False,
        )
     """
 

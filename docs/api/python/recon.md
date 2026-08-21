@@ -61,6 +61,37 @@ over buffers that are already filled.
    has_acquisition_flag
 ```
 
+## The chain
+
+What happens to a readout on the way in. Gadgetron puts these steps ahead of
+the buffer, and for the same reason: each is per-acquisition work that has
+nothing to do with the reconstruction after it, and a readout is only worth
+placing once it has had them. A plugin lists the ones it wants as its `chain`,
+and a step that returns `None` consumes the acquisition — which is how a noise
+scan and a navigator line reach no buffer at all.
+
+| Pulserver | Gadgetron |
+|---|---|
+| `chain` | the gadgets ahead of the buffer |
+| `NoiseAdjust` | `NoiseAdjustGadget` |
+| `CoilCompression` | `PCACoilGadget` |
+| `EpiPhaseCorrection` | `EPICorrGadget` |
+| `RampSampling` | `EPIReconXGadget` |
+| `branches` | `AcquisitionAccumulateTriggerGadget` |
+| `ReconData` / `ReconBuffer` | `BucketToBufferGadget` |
+
+```{eval-rst}
+.. autosummary::
+   :toctree: ../generated/recon
+   :template: autosummary/class.rst
+
+   Gadget
+   NoiseAdjust
+   CoilCompression
+   EpiPhaseCorrection
+   RampSampling
+```
+
 ## Buffers
 
 Where the acquisitions go. The header describes every encoding space the scan
@@ -235,10 +266,12 @@ measurement. Every solver takes one of these.
 
 ## Solvers
 
-`pics` is the solve: a measurement, a physics, and a prior. `cartesian_recon`
-is the Cartesian composition of it — the adjoint, the partial-Fourier
-constraint and the CG-SENSE solve, chosen by what the buffer's mask says the
-scan sampled, so a plugin reconstructs a filled buffer in one call.
+`pics` is the solve: a measurement, a physics, and a prior. The other two are
+the compositions of it a filled buffer is reconstructed by, so a plugin does it
+in one call: `cartesian_recon` chooses between the adjoint, the partial-Fourier
+constraint and CG-SENSE by what the buffer's mask says the scan sampled, and
+`noncartesian_recon` between the density-compensated adjoint and CG-SENSE by
+whether the views reach Nyquist.
 
 ```{eval-rst}
 .. autosummary::
@@ -246,6 +279,7 @@ scan sampled, so a plugin reconstructs a filled buffer in one call.
 
    pics
    cartesian_recon
+   noncartesian_recon
 ```
 
 ```{eval-rst}
@@ -388,6 +422,7 @@ gradient-nonlinearity unwarping, distortion correction.
 
    coil_combine
    center_crop
+   image_result
    as_numpy
    run_pyhysco
 ```

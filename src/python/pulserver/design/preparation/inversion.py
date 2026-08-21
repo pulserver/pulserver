@@ -81,16 +81,16 @@ class InversionPreparation(RfModule):
     from:
 
     .. plot::
+       :include-source:
 
        import pulserver.design as design
        import pulserver.pypulseq as pp
-       from _figures import rf_profile
 
-       rf_profile(
-           design.InversionPreparation(pp.Opts(), 8e-3),
+       design.InversionPreparation(pp.Opts(), 8e-3).plot_rf(
            title="inversion preparation, 8 ms",
            whole=True,
            extent=2000,
+           plot_now=False,
        )
     """
 

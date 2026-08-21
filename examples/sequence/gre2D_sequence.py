@@ -1,36 +1,8 @@
 """RF-spoiled 2D Cartesian gradient echo, multi-slice.
 
-One frequency-encoded line per repetition, from a slice-selective SLR
-excitation. Phase encoding may be undersampled with a fully sampled
-autocalibration block and truncated by partial Fourier; the readout may be a
-partial echo. :mod:`pulserver.app.recon.cartesian2D_recon` reads all three back.
-
-The autocalibration block leads the traversal and closes a segment of its own,
-so the reconstruction can calibrate while the rest of the scan is still
-arriving -- which puts the centre of k-space in the transient, hence
-``n_dummy``. More slices than one TR can hold are split into passes.
-
 ``main`` returns the :class:`pulserver.pypulseq.Sequence`; ``PLUGIN`` is the
 same sequence behind the scanner protocol contract, and running this module as
 a script writes a ``.seq`` from the same controls.
-
-Examples
---------
->>> from pulserver.app import gre2D_sequence
->>> seq = gre2D_sequence(n_x=32, n_y=16, n_slices=1, tr=12e-3, n_dummy=0)
->>> seq.num_trs, seq.num_segments
-(16, 2)
-
-One repetition, spoiled and RF-phase-cycled, played once per line:
-
-.. plot::
-   :include-source:
-
-   from pulserver.app import gre2D_sequence
-
-   seq = gre2D_sequence(n_x=32, n_y=16, n_slices=1, tr=12e-3, n_dummy=0)
-   seq.plot(tr="worst_case", time_disp="ms", grad_disp="mT/m", stacked=True,
-            plot_now=False)
 """
 
 from __future__ import annotations
@@ -107,6 +79,16 @@ def main(
     spoiling_cycles: float = 4.0,
 ) -> pp.Sequence:
     """Create an RF-spoiled 2D Cartesian gradient-echo sequence.
+
+    One frequency-encoded line per repetition, from a slice-selective SLR
+    excitation. Phase encoding may be undersampled with a fully sampled
+    autocalibration block and truncated by partial Fourier; the readout may be a
+    partial echo. :mod:`pulserver.app.cartesian2D_recon` reads all three back.
+
+    The autocalibration block leads the traversal and closes a segment of its own,
+    so the reconstruction can calibrate while the rest of the scan is still
+    arriving -- which puts the centre of k-space in the transient, hence
+    ``n_dummy``. More slices than one TR can hold are split into passes.
 
     Parameters
     ----------
@@ -188,6 +170,104 @@ def main(
     -------
     seq : pulserver.pypulseq.Sequence
         The GRE sequence object.
+
+    Examples
+    --------
+    >>> from pulserver.app import gre2D_sequence
+    >>> seq = gre2D_sequence(n_x=32, n_y=16, n_slices=1, tr=12e-3, n_dummy=0)
+    >>> seq.num_trs, seq.num_segments
+    (16, 2)
+
+    The waveform figures below are one design, prescribed to be *legible*
+    rather than diagnostic: the shortest TE and TR the readout admits, so
+    nothing waits; a long readout and heavy spoiling, so those lobes are
+    unmistakable against the encodes; and few phase encodes, so one
+    repetition fits on a page.
+
+    .. plot::
+       :include-source:
+       :nofigs:
+       :context:
+
+       from pulserver.app import gre2D_sequence
+
+       seq = gre2D_sequence(
+           n_x=256, n_y=16, n_slices=1, te=None, tr=None,
+           n_acs=0, n_dummy=0, spoiling_cycles=6.0,
+       )
+
+    **The excitation.** An SLR pulse under a selection gradient, and the
+    slice it tips: a 12 degree flip leaves ``|Mxy| = sin 12`` inside the slab
+    and nothing outside it.
+
+    .. plot::
+       :include-source:
+       :context: close-figs
+
+       seq.plot_rf(title="slice-selective SLR excitation, 5 mm", plot_now=False)
+
+    **One repetition**, which is the whole sequence: excitation and rephaser,
+    the prewinders, the readout, then the spoiler and the phase-encode
+    rewinder that leave the magnetisation ready for the next line.
+
+    .. plot::
+       :include-source:
+       :context: close-figs
+
+       seq.plot(tr="worst_case", time_disp="ms", grad_disp="mT/m", plot_now=False)
+
+    **What the scan covers**, on a second design that has both axes worth
+    drawing. A 2D scan encodes its third axis in the frequency each slice is
+    excited at rather than in a gradient, so that is what stands in for
+    ``kz``: five slices as five rows, interleaved so no two neighbours are
+    excited back to back. Along ``ky`` the contiguous band at the centre is
+    the autocalibration block, acquired first so the reconstruction can
+    calibrate while the rest arrives, and everything outside it is the
+    accelerated traversal that follows.
+
+    .. plot::
+       :include-source:
+       :context: close-figs
+
+       sampled = gre2D_sequence(
+           n_x=64, n_y=48, n_slices=5, slice_gap=1e-3, tr=60e-3,
+           acceleration=2, n_acs=12, n_dummy=0,
+       )
+       sampled.plot_kspace(plane="yf", color_by="order", plot_now=False)
+
+    **Mechanical resonance.** The repetition is periodic, so its gradients
+    have energy only at multiples of ``1 / T_TR``. Those lines are what a
+    forbidden band is judged against, and the verdict panel is the whole of
+    the acoustic check: every line inside a band, against the amplitude that
+    band allows.
+
+    .. plot::
+       :include-source:
+       :context: close-figs
+
+       gamma = 42.576e3  # Hz/m per mT/m
+       seq.calculate_gradient_spectrum(
+           tr="worst_case",
+           resonance_lines=True,
+           bands=[(550.0, 700.0, 3.0 * gamma), (1150.0, 1300.0, 3.0 * gamma)],
+       )
+
+    **Peripheral nerve stimulation**, under the rheobase/chronaxie model the
+    scanner's own gate applies, over the same repetition played back to back.
+    This design asks for the shortest timing the hardware admits, so its
+    prewinders and spoiler ramp as fast as they are allowed to and the
+    response goes over the threshold -- which is the check earning its place
+    rather than a property of the sequence. ``MAX_SLEW``, a longer TE, or a
+    lower readout bandwidth each bring it down.
+
+    .. plot::
+       :include-source:
+       :context: close-figs
+
+       seq.calculate_pns(
+           {"chronaxie_us": 360.0, "rheobase": 20.0, "alpha": 0.333},
+           tr="worst_case",
+       )
     """
     system = pp.Opts() if system is None else system
     system = pp.cap_system(system, max_grad=MAX_GRAD, max_slew=MAX_SLEW)

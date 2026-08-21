@@ -30,7 +30,8 @@ sequence modules — an excitation with its rephaser, one readout TR — live in
 One object, built block by block and read back through the analysis methods on
 it: `calculate_kspace` for where the samples are, `calculate_pns` and
 `calculate_gradient_spectrum` for what the hardware will make of them,
-`evaluate_labels` for the counters, `plot` and `plot_kspace` for a picture.
+`evaluate_labels` for the counters, and `plot`, `plot_kspace` and
+`plot_rf` for a picture.
 `Opts` is the limits everything is designed against.
 
 ```{eval-rst}

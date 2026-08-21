@@ -146,14 +146,32 @@ void pulseg_mech_resonances_spectra_free(pulseg_mech_resonances_spectra *s)
  * explicitly: they emerge from the coherent sum of the individual event
  * instances materialised inside the canonical TR (the only period we know). */
 
-/** Hardware-anchored readout-scale floor for epsilon, used ONLY when the
- *  vendor band is literal zero-tolerance: eps = SA_AEQ_K_GMAX * G_max
- *  (~4 mT/m at G_max = 50 mT/m). Any nonzero vendor limit is trusted as-is,
- *  even below this floor. The "is-this-a-readout" filter that generalises
- *  the vendor's single-frequency zero-tolerance to arbitrary sequences:
- *  eps = 0 is unusable (every GRE has a weak harmonic in any band wider
- *  than its comb spacing). */
-#define SA_AEQ_K_GMAX 0.08f
+/** Least A_eq any train the vendor forbids can produce, as a fraction of the
+ *  plateau amplitude the band's amplitude column states.
+ *
+ *  A band amplitude is the plateau of an alternating readout train at that
+ *  echo spacing, while A_eq is the equivalent-sinusoid amplitude of the whole
+ *  waveform, so the two need one conversion to be comparable. Over the train
+ *  shapes a system can play, A_eq/plateau runs from 8/pi^2 (fully triangular,
+ *  ramp-limited) to 4/pi (square). Taking the smallest makes the threshold the
+ *  quietest waveform the vendor forbade. */
+#define SA_AEQ_TRAIN_SHAPE 0.8106f
+
+/** Epsilon for a band whose amplitude column is zero, in mT/m of A_eq.
+ *
+ *  A zero column forbids the train at any amplitude, which no threshold can
+ *  express, so this is a policy value rather than a vendor one and is
+ *  calibrated empirically: across realistic protocols the in-band A_eq of the
+ *  families GE steers (bSSFP at minimum TR, an EPI tooth landing in a band,
+ *  fast 3D GRE) starts at 8.9 mT/m, while the families it runs unchecked
+ *  (radial, spiral, stack-of-stars, long-TR GRE, FSE, spin echo) top out at
+ *  6.1. This sits in that gap. It is below the converted vendor rows
+ *  (13-24 mT/m), preserving the ordering that an absolute row is the stricter
+ *  statement. */
+#define SA_AEQ_POLICY_MT_PER_M 7.5f
+
+/** Proton gyromagnetic ratio, for the plotting API when no opts are supplied. */
+#define SA_GAMMA_1H_HZ_PER_T 42.576e6f
 
 /** Frequency guard multiplier on the resonance HWHM.  guard = mult * HWHM,
  *  HWHM = min_band_width / 2 (the narrowest band is the sharpest resonance the
@@ -168,19 +186,26 @@ void pulseg_mech_resonances_spectra_free(pulseg_mech_resonances_spectra *s)
  * what can be flagged; it only sets how far the display grid is computed. */
 #define SA_MIN_ANALYSIS_FREQ_HZ 3000.0f
 
-/** Finite-outer-rep fix (docs/explanations/mechanical_resonance_safety.md, "Stage 4"): fixed
- *  point budget (per side, i.e. per coarse TR harmonic there are
- *  2*SA_MECHRES_MAX_DM_SUBDIV/2 extra samples total) for probing the
- *  outer-repeat (M = num_instances) Dirichlet comb's sidelobes, which live
- *  near each of the two adjacent exact TR harmonics. M itself is NOT the
- *  cost driver: this budget is a fixed constant-factor overhead per coarse
- *  candidate, independent of how large M is (geometric spacing resolves
- *  the near-lobe region with a fixed point count regardless of M -- see
- *  the sample-placement comment at the sub-loop itself). Each sample DOES
- *  require a fresh sa_eval_axis_spectrum call (reusing the coarse point's
- *  value is a no-op, not a cache hit -- see PLAN doc "Bug 1"), which is
- *  what the sa_eval_pwl_transform memoization below amortizes. */
-#define SA_MECHRES_MAX_DM_SUBDIV 16
+/** Sidelobe probes per side of a coarse TR harmonic, for the outer repeat
+ *  (M = num_instances). A scan of M repetitions is not an infinite comb: its
+ *  spectrum is the single-TR transform times the Dirichlet kernel
+ *  D_M(x) = sin(M pi x) / (M sin(pi x)), whose local maxima between two
+ *  harmonics sit at x = k + (j + 1/2)/M and whose peak levels are
+ *  2 / (pi (2j + 1)) -- 0.637, 0.212, 0.127, 0.091, 0.071, ... These levels
+ *  do not depend on M; only their spacing does, which is why a fixed count
+ *  per side resolves the region for any M. Four probes cover every lobe
+ *  above 9% of the main lobe; the residual envelope past that is under 7%,
+ *  so reaching eps there would take a single-TR transform more than an order
+ *  of magnitude larger than at the probed lobes.
+ *
+ *  Probe placement is load-bearing, not a resolution knob: sampling at
+ *  integer multiples of 1/M instead lands on the kernel's exact NULLS, where
+ *  D_M is zero and the probe cannot report anything. Each probe needs a
+ *  fresh sa_eval_axis_spectrum call -- the single-TR transform oscillates in
+ *  its own right and is not bounded by its value at a neighbouring harmonic,
+ *  so scaling the coarse value by D_M is a no-op (D_M <= 1 can never expose
+ *  a violation the coarse point did not already show). */
+#define SA_MECHRES_SIDELOBES_PER_SIDE 4
 
 /** Interleaved Horner chains used to evaluate a compressed train's
  *  amplitude-weighted sum (sa_eval_event_spectrum). Power of two. A single
@@ -2216,7 +2241,23 @@ static void sa_w_from_poly(
 
 /** Total offsets a candidate is probed at: the exact harmonic, plus the
  *  sidelobe probes on either side of it. */
-#define SA_MAX_OFFSETS (1 + SA_MECHRES_MAX_DM_SUBDIV)
+#define SA_MAX_OFFSETS (1 + 2 * SA_MECHRES_SIDELOBES_PER_SIDE)
+
+/** Sidelobe probes that fit on one side of a harmonic for this M. The lobes
+ *  are at (j + 1/2)/M and only those strictly inside the half-interval
+ *  exist, so small M is probed exhaustively and large M is capped. */
+static int sa_sidelobes_per_side(int num_instances)
+{
+    int j;
+    if (num_instances <= 1)
+        return 0;
+    for (j = 0; j < SA_MECHRES_SIDELOBES_PER_SIDE; ++j)
+    {
+        if (((double)j + 0.5) / (double)num_instances >= 0.5)
+            break;
+    }
+    return j;
+}
 
 /** The offsets from a candidate harmonic that the loop below evaluates, in
  *  the order it evaluates them -- slot 0 the harmonic itself, then
@@ -2225,23 +2266,16 @@ static void sa_w_from_poly(
  *  sub-point loop and must move with it. */
 static void sa_build_offsets(double *offsets, int *num_offsets, int num_instances)
 {
-    int npts_per_side = SA_MECHRES_MAX_DM_SUBDIV / 2;
-    int side, p, at;
+    int npts_per_side = sa_sidelobes_per_side(num_instances);
+    int side, j, at;
 
     offsets[0] = 0.0;
-    if (num_instances <= 1)
-    {
-        *num_offsets = 1;
-        return;
-    }
     at = 1;
     for (side = 0; side < 2; ++side)
     {
-        for (p = 0; p < npts_per_side; ++p)
+        for (j = 0; j < npts_per_side; ++j)
         {
-            double delta = (0.5 / (double)num_instances) * pow(2.0, (double)p);
-            if (delta >= 0.5)
-                delta = 0.5 - 1e-6;
+            double delta = ((double)j + 0.5) / (double)num_instances;
             offsets[at++] = (side == 0) ? delta : (1.0 - delta);
         }
     }
@@ -2700,6 +2734,173 @@ static void sa_eval_axis_spectrum(
  * position however its rotation mixes the axes; a position that fell back to
  * per-axis amplitudes combines them through its |R| weights instead.
  */
+/** L1 norm of one event's base waveform: integral |w(t)| dt in us, over the
+ *  normalised shape. Trapezoid rule on the PWL vertices, rectangles on raw
+ *  arb samples -- the same two waveform models sa_eval_event_transform()
+ *  evaluates, so the norm belongs to exactly the function being bounded.
+ *  A segment whose endpoints straddle zero is split at the crossing, which
+ *  is what keeps this the integral of |w| rather than |integral of w|. */
+static double sa_event_base_l1_us(const sa_event *ev)
+{
+    double total = 0.0;
+    int k;
+
+    if (ev->arb_num_samples > 0 && ev->arb_samples && ev->arb_times_us)
+    {
+        for (k = 0; k < ev->arb_num_samples; ++k)
+        {
+            double dt;
+            if (ev->arb_num_samples == 1)
+                dt = 0.0;
+            else if (k == 0)
+                dt = (double)(ev->arb_times_us[1] - ev->arb_times_us[0]);
+            else
+                dt = (double)(ev->arb_times_us[k] - ev->arb_times_us[k - 1]);
+            total += fabs((double)ev->arb_samples[k]) * dt;
+        }
+        return total;
+    }
+
+    for (k = 0; k + 1 < ev->pwl_num_vertices; ++k)
+    {
+        double v0 = (double)ev->pwl_values[k];
+        double v1 = (double)ev->pwl_values[k + 1];
+        double dt = (double)(ev->pwl_times_us[k + 1] - ev->pwl_times_us[k]);
+        if (dt <= 0.0)
+            continue;
+        if ((v0 < 0.0 && v1 > 0.0) || (v0 > 0.0 && v1 < 0.0))
+        {
+            double denom = fabs(v0) + fabs(v1);
+            double t0 = dt * (fabs(v0) / denom);
+            total += 0.5 * fabs(v0) * t0 + 0.5 * fabs(v1) * (dt - t0);
+        }
+        else
+        {
+            total += 0.5 * (fabs(v0) + fabs(v1)) * dt;
+        }
+    }
+    return total;
+}
+
+/** Frequency-independent ceiling on |line_k(f)| for one event, in Hz/m*s.
+ *
+ * |integral a w(t) e^{-i omega t} dt| <= |a| integral |w| dt, and the train
+ * and repeat sums are bounded term by term, so this dominates the event's
+ * contribution at EVERY frequency -- there is no band in which it can be
+ * exceeded. */
+static double sa_event_l1(const sa_event *ev)
+{
+    double amp_sum = 0.0;
+    double base;
+    int reps = ev->num_reps > 1 ? ev->num_reps : 1;
+    int j;
+
+    base = sa_event_base_l1_us(ev);
+    if (base <= 0.0)
+        return 0.0;
+
+    if (ev->train_len > 1 && ev->train_amps)
+    {
+        for (j = 0; j < ev->train_len; ++j)
+            amp_sum += fabs((double)ev->train_amps[j]);
+    }
+    else if (ev->train_len > 1)
+    {
+        amp_sum = (double)ev->train_len * fabs((double)ev->amplitude);
+    }
+    else
+    {
+        amp_sum = fabs((double)ev->amplitude);
+    }
+
+    return amp_sum * base * 1.0e-6 * (double)reps;
+}
+
+/** Per-axis frequency-independent ceiling on |S_ax(f)| plus the
+ * varying-position bound, in Hz/m*s. Mirrors sa_eval_axis_spectrum() and
+ * sa_eval_varying_bound() term for term with |W(f)| replaced by the L1 norm
+ * that dominates it everywhere. Computed once per canonical TR; the
+ * per-shape scratch it borrows is rewritten by every sa_eval_varying_bound()
+ * call, which is what that scratch is for. */
+static void sa_axis_l1_sup(
+    sa_structural_events *se,
+    const struct pulseg_sequence_descriptor *desc,
+    double *out_sup)
+{
+    int v, ax, j, t, k;
+
+    for (ax = 0; ax < 3; ++ax)
+    {
+        double total = 0.0;
+        for (k = 0; k < se->axes[ax].num_events; ++k)
+            total += sa_event_l1(&se->axes[ax].events[k]);
+        out_sup[ax] = total;
+    }
+
+    for (v = 0; v < se->num_varying; ++v)
+    {
+        sa_varying_position *vp = &se->varying[v];
+        double best[3];
+
+        best[0] = 0.0;
+        best[1] = 0.0;
+        best[2] = 0.0;
+
+        for (j = 0; j < 3; ++j)
+        {
+            for (k = 0; k < vp->shapes[j].num_events; ++k)
+                vp->w_re[j][k] = (float)sa_event_l1(&vp->shapes[j].events[k]);
+        }
+
+        if (vp->num_tuples > 0)
+        {
+            for (t = 0; t < vp->num_tuples; ++t)
+            {
+                const float *R = NULL;
+                int rot = vp->tuple_rot[t];
+                if (rot >= 0 && rot < desc->num_rotations)
+                    R = desc->rotation_matrices[rot];
+
+                for (ax = 0; ax < 3; ++ax)
+                {
+                    double mag = 0.0;
+                    for (j = 0; j < 3; ++j)
+                    {
+                        int slot = vp->tuple_slot[t * 3 + j];
+                        double w = R ? (double)R[ax * 3 + j] : ((ax == j) ? 1.0 : 0.0);
+                        if (slot < 0 || w == 0.0)
+                            continue;
+                        mag += fabs(w) * fabs((double)vp->tuple_amp[t * 3 + j]) *
+                            (double)vp->w_re[j][slot];
+                    }
+                    if (mag > best[ax])
+                        best[ax] = mag;
+                }
+            }
+        }
+        else
+        {
+            double m[3];
+            for (j = 0; j < 3; ++j)
+            {
+                double largest = 0.0;
+                for (k = 0; k < vp->shapes[j].num_events; ++k)
+                {
+                    if ((double)vp->w_re[j][k] > largest)
+                        largest = (double)vp->w_re[j][k];
+                }
+                m[j] = largest;
+            }
+            for (ax = 0; ax < 3; ++ax)
+                best[ax] = (double)vp->weight[ax * 3 + 0] * m[0] +
+                    (double)vp->weight[ax * 3 + 1] * m[1] + (double)vp->weight[ax * 3 + 2] * m[2];
+        }
+
+        for (ax = 0; ax < 3; ++ax)
+            out_sup[ax] += best[ax];
+    }
+}
+
 static void sa_eval_varying_bound(
     sa_structural_events *se,
     const struct pulseg_sequence_descriptor *desc,
@@ -2834,14 +3035,11 @@ static void sa_tag_repetition(
  * The outermost TR is treated as an infinite-rep (Dirac) comb: only its
  * harmonics carry sustained drive, hence lines live exactly at k/T_TR.
  */
-static float sa_eps_for_band(const pulseg_forbidden_band *band, float g_max_hz_per_m)
+static float sa_eps_for_band(const pulseg_forbidden_band *band, float gamma_hz_per_t)
 {
-    /* The floor only rescues a literal zero-tolerance band (unusable as a
-     * threshold — see SA_AEQ_K_GMAX comment). Any vendor-specified nonzero
-     * limit is trusted as-is, even if tighter than the floor. */
-    if (band->max_amplitude_hz_per_m <= 0.0f)
-        return SA_AEQ_K_GMAX * g_max_hz_per_m;
-    return band->max_amplitude_hz_per_m;
+    if (band->max_amplitude_hz_per_m > 0.0f)
+        return SA_AEQ_TRAIN_SHAPE * band->max_amplitude_hz_per_m;
+    return SA_AEQ_POLICY_MT_PER_M * 1.0e-3f * gamma_hz_per_t;
 }
 
 /**
@@ -2851,23 +3049,17 @@ static float sa_eps_for_band(const pulseg_forbidden_band *band, float g_max_hz_p
  * x = f * T_TR (dimensionless: integer x = exact TR harmonics, fractional
  * x = the sidelobes between them that only exist for finite M).
  *
- * This ratio is exactly 1.0 at integer x (main lobes -- the M-independent
- * regression identity: at exact TR harmonics this fix must reduce to
- * today's infinite-comb formula) and < 1.0 elsewhere, decaying as M grows
- * (large-M sidelobes shrink toward the M=infinity/Dirac-comb limit, which
- * is why large-M scans reproduce today's verdicts).
+ * Exactly 1.0 at integer x (the main lobes, so an exact TR harmonic reduces
+ * to the infinite-comb formula) and < 1.0 elsewhere.
  *
- * The caller must evaluate S_TR(f) FRESH at the fractional x (S_TR is an
- * oscillating function of f in its own right -- it is NOT bounded by, or
- * safely approximated from, its value at a nearby exact TR harmonic; an
- * earlier version of this fix tried reusing the coarse S_TR value scaled
- * by this ratio, which is a mathematical no-op since the ratio is always
- * <=1 and can therefore never expose a violation the coarse point didn't
- * already show -- caught via numeric exploration during implementation).
- * This ratio only supplies the Dirichlet attenuation factor; cost is kept
- * independent of M by capping how many fractional points get evaluated
- * per coarse interval (SA_MECHRES_MAX_DM_SUBDIV), not by skipping the
- * fresh S_TR evaluation.
+ * The caller must evaluate S_TR(f) FRESH at the fractional x. S_TR
+ * oscillates in f in its own right and is neither bounded by nor safely
+ * approximated from its value at a neighbouring exact harmonic; scaling that
+ * neighbour by this ratio instead can expose nothing, since a factor of at
+ * most 1 never exceeds the value it scales. This supplies the attenuation
+ * only. Cost is held independent of M by capping how many sidelobes are
+ * probed per side (SA_MECHRES_SIDELOBES_PER_SIDE), never by skipping the
+ * fresh evaluation.
  */
 static double sa_dirichlet_ratio(double x, int M)
 {
@@ -2876,9 +3068,8 @@ static double sa_dirichlet_ratio(double x, int M)
         return 1.0;
     s = sin(M_PI * x);
     /* Removable singularity at integer x (s -> 0): the true limit is 1.0
-     * (D_M(x)->M), not 0/0. 1e-6 is far tighter than any x offset this
-     * function is ever called with (sub-divisions are 1/SA_MECHRES_MAX_DM_SUBDIV
-     * apart at the very finest), so this only triggers at genuine integers. */
+     * (D_M(x)->M), not 0/0. The nearest offset this is ever called at is
+     * half a lobe away, 0.5/M, so this only triggers at genuine integers. */
     if (fabs(s) < 1e-6)
         return 1.0;
     num = sin((double)M * M_PI * x);
@@ -2899,7 +3090,7 @@ static int sa_check_structural_violations(
     float peak_eps,
     float peak_prominence,
     int num_avgs,
-    float g_max_hz_per_m,
+    float gamma_hz_per_t,
     int compute_dense_envelope,
     int compute_display_products,
     int compress_trains,
@@ -2911,6 +3102,8 @@ static int sa_check_structural_violations(
     float freq_max, guard, min_bw;
     int m_max;
     double bound[3];
+    double l1_sup[3];
+    double l1_sup_max;
 
     /* analytical display grid (TR harmonics; display-only, not the verdict) */
     int num_ana;
@@ -3102,6 +3295,16 @@ static int sa_check_structural_violations(
     /* guard = HWHM = min_band_width / 2 (narrowest band = sharpest resonance;
      * wide bands are keep-out ranges scanned at the same guard). */
     min_bw = -1.0f;
+    /* Frequency-independent ceiling on this TR's drive, from the L1 norm
+     * of its own waveforms: |S_ax(f)| <= integral |g_ax| dt at every f.
+     * Where the ceiling already sits under a band's epsilon, no line in
+     * that band can violate, and the probes that would have looked are
+     * skipped rather than evaluated -- a proven no, not a sampled one. */
+    sa_axis_l1_sup(&se, desc, l1_sup);
+    l1_sup_max = l1_sup[0] > l1_sup[1] ? l1_sup[0] : l1_sup[1];
+    if (l1_sup[2] > l1_sup_max)
+        l1_sup_max = l1_sup[2];
+
     for (b = 0; b < num_forbidden_bands; ++b)
     {
         float w = forbidden_bands[b].freq_max_hz - forbidden_bands[b].freq_min_hz;
@@ -3271,7 +3474,7 @@ static int sa_check_structural_violations(
         ci = 0;
         for (b = 0; b < num_forbidden_bands; ++b)
         {
-            float eps = sa_eps_for_band(&forbidden_bands[b], g_max_hz_per_m);
+            float eps = sa_eps_for_band(&forbidden_bands[b], gamma_hz_per_t);
             double lo = ((double)forbidden_bands[b].freq_min_hz - (double)guard) * T_s;
             double hi = ((double)forbidden_bands[b].freq_max_hz + (double)guard) * T_s;
             int klo = (int)ceil(lo);
@@ -3356,65 +3559,39 @@ static int sa_check_structural_violations(
                     }
                 }
 
-                /* ---- Finite-outer-rep fix (docs/explanations/mechanical_resonance_safety.md, "Stage 4") ----
-                 * The outer repeat (num_instances = M) is no longer treated as an
-                 * infinite Dirac comb: for M>1, real candidate frequencies exist
-                 * between this coarse TR harmonic (kk/T_TR, exact -- already
-                 * max_ga above, unchanged) and the next one, at fractional
-                 * harmonics (kk + j/subdiv)/T_TR. These are NOT found by scaling
-                 * the coarse point's already-computed amplitude by the Dirichlet
-                 * ratio (a ratio <=1 can never exceed the coarse value it scales,
-                 * which would make this a mathematical no-op -- caught via a
-                 * numeric exploration during implementation, see
-                 * docs/explanations/mechanical_resonance_safety.md). S_TR(f) must be
-                 * evaluated FRESH at each fractional frequency (it is an
-                 * oscillating function of f in its own right, not bounded by
-                 * its value at nearby coarse samples) and only THEN attenuated
-                 * by the Dirichlet ratio. Cost stays independent of M because
-                 * the number of coarse candidates (klo..khi) already doesn't
-                 * scale with M, and subdiv is capped at
-                 * SA_MECHRES_MAX_DM_SUBDIV regardless of how large M is --
-                 * this adds a bounded constant-factor number of extra
-                 * sa_eval_axis_spectrum calls per coarse candidate, not a
-                 * per-M-scaling cost. M=1 (e.g. a single-pass hyper-TR) takes
-                 * this branch's early-out and is untouched: no sidelobes exist
-                 * for a single repeat, and the coarse-only max_ga above is
-                 * already the correct/final verdict, matching today's
-                 * exact-harmonic-only behavior. */
-                if (num_instances > 1)
+                /* ---- Finite outer repeat ----
+                 * The scan is M = num_instances repetitions of the TR, not an
+                 * infinite comb, so real drive exists BETWEEN the coarse TR
+                 * harmonics: the single-TR transform is multiplied by the
+                 * Dirichlet kernel D_M, whose sidelobes peak at
+                 * (kk + (j + 1/2)/M) with levels 2/(pi(2j+1)). Each is probed
+                 * with a fresh single-TR transform and only then attenuated by
+                 * D_M -- see SA_MECHRES_SIDELOBES_PER_SIDE for why neither the
+                 * placement nor the fresh evaluation can be economised away.
+                 * M = 1 has no sidelobes and takes no probes, leaving the
+                 * exact-harmonic verdict above untouched. */
                 {
-                    /* Geometrically-spaced sample points concentrated near
-                     * EACH of the two adjacent main lobes (kk and kk+1),
-                     * where the Dirichlet sidelobes actually live for large
-                     * M (the first and largest sidelobe sits within
-                     * ~1/(2M) of its lobe). Uniform spacing across the
-                     * whole [kk,kk+1] interval was tried first and
-                     * confirmed (via numeric exploration) to completely
-                     * miss the sidelobes once M exceeds the sample count --
-                     * e.g. M=64 with 16 uniform points reproduced the M=1
-                     * (no-sidelobe) result exactly, because every sample
-                     * landed in the far sidelobe region where the
-                     * attenuation is negligible. Geometric spacing needs
-                     * only a fixed point count per side to resolve the
-                     * near-lobe region regardless of how large M is: delta_p
-                     * = (0.5/M) * 2^p starting right next to the lobe and
-                     * doubling outward, clamped to stay inside the
-                     * interval. */
-                    int npts_per_side = SA_MECHRES_MAX_DM_SUBDIV / 2;
-                    int side, p;
+                    int npts_per_side = sa_sidelobes_per_side(num_instances);
+                    int side, j;
                     for (side = 0; side < 2; ++side)
                     {
-                        for (p = 0; p < npts_per_side; ++p)
+                        for (j = 0; j < npts_per_side; ++j)
                         {
-                            double delta = (0.5 / (double)num_instances) * pow(2.0, (double)p);
+                            double delta = ((double)j + 0.5) / (double)num_instances;
                             double x_sub;
                             float f_sub_hz;
                             double ratio;
-                            if (delta >= 0.5)
-                                delta = 0.5 - 1e-6;
                             x_sub = (side == 0) ? ((double)kk + delta) : ((double)(kk + 1) - delta);
                             f_sub_hz = (float)(x_sub * f1_hz);
                             ratio = sa_dirichlet_ratio(x_sub, num_instances);
+                            /* The lobe attenuates by `ratio`, so the ceiling
+                             * attenuates with it: under epsilon there is
+                             * nothing here to find. The plotting API keeps
+                             * evaluating every probe, so the drawn lines keep
+                             * their exact amplitudes. */
+                            if (!compute_display_products &&
+                                ratio * 2.0 / T_s * l1_sup_max <= (double)eps)
+                                continue;
                             sa_eval_varying_bound(&se, desc, f_sub_hz, bound);
                             for (ax = 0; ax < 3; ++ax)
                             {
@@ -3422,7 +3599,7 @@ static int sa_check_structural_violations(
                                 if (se.axes[ax].num_events == 0 && bound[ax] == 0.0)
                                     continue;
                                 sub_query.table = &w_tables[ax];
-                                sub_query.offset_slot = 1 + side * npts_per_side + p;
+                                sub_query.offset_slot = 1 + side * npts_per_side + j;
                                 sub_query.point = point;
                                 sa_eval_axis_spectrum(
                                     &se.axes[ax],
@@ -3713,7 +3890,7 @@ static int calc_mech_resonances_from_uniform(
     int start_block,
     int block_count,
     int num_avgs,
-    float g_max_hz_per_m,
+    float gamma_hz_per_t,
     int compute_dense_envelope,
     int compute_display_products,
     int compress_trains,
@@ -3862,7 +4039,7 @@ static int calc_mech_resonances_from_uniform(
             peak_eps,
             peak_prominence,
             num_avgs,
-            g_max_hz_per_m,
+            gamma_hz_per_t,
             compute_dense_envelope,
             compute_display_products,
             compress_trains,
@@ -4023,14 +4200,12 @@ int pulseg_calc_mech_resonances(
         sa_start_block,
         sa_block_count,
         num_avgs,
-        /* Real G_max, not 0: sa_eps_for_band() falls back to
-                                            * SA_AEQ_K_GMAX * G_max for a zero-tolerance band, and
-                                            * a 0 here collapsed that floor to 0, so every
-                                            * candidate of a zero-tolerance band came back flagged.
-                                            * Vendor ESP tables are exactly that shape (amplitude
-                                            * column 0.0), so the plotting API could not reproduce
-                                            * the headless verdict for any real lockout table. */
-        (opts ? opts->max_grad_hz_per_m : 0.0f),
+        /* A real gamma, never 0: sa_eps_for_band() scales the policy epsilon
+         * of a zero-tolerance band by it, and a 0 would collapse that epsilon
+         * to 0 and flag every candidate. Vendor ESP tables are exactly that
+         * shape (amplitude column 0.0), so the plotting API must carry a
+         * usable gamma to reproduce the headless verdict. */
+        (opts && opts->gamma_hz_per_t > 0.0f) ? opts->gamma_hz_per_t : SA_GAMMA_1H_HZ_PER_T,
         (target_resolution_hz > 0.0f) ? 1 : 0,
         /* dense envelope: plotting API only, see
                                             * calc_mech_resonances_from_uniform doc */
@@ -5284,7 +5459,7 @@ int pulseg__check_safety_profiled(
                     sa_start_block,
                     sa_block_count,
                     num_avgs,
-                    opts->max_grad_hz_per_m,
+                    opts->gamma_hz_per_t,
                     0 /* compute_dense_envelope: never on the PSD path */,
                     0 /* compute_display_products: never on the PSD path */,
                     1 /* compress_trains: this is the path being optimised */,
@@ -5319,7 +5494,7 @@ int pulseg__check_safety_profiled(
                         for (b = 0; b < num_forbidden_bands; ++b)
                         {
                             float eps_band =
-                                sa_eps_for_band(&forbidden_bands[b], opts->max_grad_hz_per_m);
+                                sa_eps_for_band(&forbidden_bands[b], opts->gamma_hz_per_t);
                             if (cf_hz < forbidden_bands[b].freq_min_hz - guard_hz ||
                                 cf_hz > forbidden_bands[b].freq_max_hz + guard_hz)
                                 continue;

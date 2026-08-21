@@ -38,6 +38,10 @@ typedef struct pulseq_scale
  */
 void pulseq__read_definitions(pulseq_file *seq);
 
+/* Every 1-based library id a parsed file names is in range, or
+ * PULSEQ_ERR_DANGLING_ID.  Both readers run it before handing a file back. */
+int pulseq__check_references(const pulseq_file *seq);
+
 /**
  * @brief Free every library inside @p seq and return it to its initial state,
  * keeping file_path and design_raster (unlike pulseq_file_free()).

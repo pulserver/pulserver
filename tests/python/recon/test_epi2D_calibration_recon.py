@@ -1,7 +1,7 @@
 """The accelerated non-SMS branch of the 2D EPI reconstruction.
 
 Driven over the acquisitions the runtime would stream from
-:mod:`pulserver.app.sequence.epi2D_sequence` for a plain (non-multiband) accelerated scan: a
+:mod:`pulserver.app.epi2D_sequence` for a plain (non-multiband) accelerated scan: a
 separate low-resolution gradient-echo calibration for each slice, then the
 undersampled imaging lines. The reconstruction has to estimate each slice's coil
 sensitivities from the calibration once and unalias the imaging against them --

@@ -8,6 +8,7 @@ here, rather than image quality, which the per-plugin tests already cover.
 
 from __future__ import annotations
 
+import inspect
 from typing import Any
 
 import numpy as np
@@ -141,15 +142,45 @@ def test_every_recon_plugin_module_is_callable():
     """No plugin implements the offline entry point and none overrides it, so
     every module that carries a ``PLUGIN`` has it."""
     import pulserver.app as app
-    import pulserver.app.recon as family
 
     called = 0
-    for name in family.__all__:
+    for name in [n for n in app.__all__ if n.endswith("_recon")]:
         module = getattr(app, name)
         if hasattr(module, "PLUGIN"):
             assert callable(module), name
             called += 1
     assert called == 7
+
+
+def test_the_entry_point_takes_the_plugin_settings_and_the_stream_arguments():
+    """A reconstruction is a configured object, so its module's ``main`` is
+    built from what that object takes: the file first, then its settings, then
+    what every plugin's ``run`` accepts."""
+    from pulserver.app import cartesian2D_recon
+
+    parameters = inspect.signature(cartesian2D_recon).parameters
+    assert next(iter(parameters)) == "path"
+    assert {"virtual_coils", "partial_fourier", "device"} <= set(parameters)
+    assert {"group", "exam_id", "config"} <= set(parameters)
+    assert parameters["virtual_coils"].default == 8
+    assert "virtual_coils" in (cartesian2D_recon.__doc__ or "")
+
+
+def test_a_setting_given_to_the_call_reaches_the_plugin():
+    """The call configures the plugin it runs, so the plugin's own validation
+    answers before any file is opened."""
+    from pulserver.app import noncartesian2D_recon
+
+    with pytest.raises(ValueError, match="mode must be"):
+        noncartesian2D_recon("nothing.h5", mode="bogus")
+
+
+def test_the_entry_point_refuses_a_setting_the_plugin_does_not_take():
+    """A misspelled setting is a TypeError at the call, not a silent default."""
+    from pulserver.app import cartesian2D_recon
+
+    with pytest.raises(TypeError):
+        cartesian2D_recon("nothing.h5", coil_compression=8)
 
 
 def test_a_file_with_no_header_says_so(tmp_path):
@@ -233,16 +264,53 @@ def test_ending_several_units_at_once_is_not_ending_one():
     assert AcquisitionFlag.LAST_IN_MEASUREMENT in trigger
 
 
-def test_split_on_takes_flags_by_name_or_by_enum():
-    """Both spell the same bit, so a plugin is free to say either."""
+def test_a_combined_flag_routes_either_boundary_to_one_branch():
+    """Flags combine, and carrying any of them closes the branch they name."""
     from pulserver import AcquisitionFlag, ReconPlugin
 
     class Sink(ReconPlugin):
-        def recon(self, bucket, context):
-            del bucket, context
+        def recon(self, branch, context):
+            del branch, context
 
-    by_enum = Sink(
-        split_on=AcquisitionFlag.LAST_IN_SLICE | AcquisitionFlag.LAST_IN_SEGMENT
+    plugin = Sink(
+        branches={
+            AcquisitionFlag.LAST_IN_SLICE | AcquisitionFlag.LAST_IN_SEGMENT: "imaging"
+        }
     )
-    by_name = Sink(split_on=("ACQ_LAST_IN_SEGMENT", "ACQ_LAST_IN_SLICE"))
-    assert sorted(by_enum.split_on) == sorted(by_name.split_on)
+    for flag in (ismrmrd.ACQ_LAST_IN_SLICE, ismrmrd.ACQ_LAST_IN_SEGMENT):
+        acquisition = ismrmrd.Acquisition()
+        acquisition.resize(4, 2)
+        acquisition.setFlag(flag)
+        assert plugin.branch_for(acquisition) == "imaging"
+
+    closes_nothing = ismrmrd.Acquisition()
+    closes_nothing.resize(4, 2)
+    assert plugin.branch_for(closes_nothing) is None
+
+
+def test_the_branches_are_tried_in_the_order_they_were_declared():
+    """The final acquisition of a slice closes its trailing segment too, so
+    listing the slice first is what makes the segment mean "and nothing
+    larger" -- which is how a calibration block is told from an image."""
+    from pulserver import AcquisitionFlag, ReconPlugin
+
+    class Sink(ReconPlugin):
+        def recon(self, branch, context):
+            del branch, context
+
+    plugin = Sink(
+        branches={
+            AcquisitionFlag.LAST_IN_SLICE: "imaging",
+            AcquisitionFlag.LAST_IN_SEGMENT: "calibration",
+        }
+    )
+    both = ismrmrd.Acquisition()
+    both.resize(4, 2)
+    both.setFlag(ismrmrd.ACQ_LAST_IN_SEGMENT)
+    both.setFlag(ismrmrd.ACQ_LAST_IN_SLICE)
+    assert plugin.branch_for(both) == "imaging"
+
+    segment_only = ismrmrd.Acquisition()
+    segment_only.resize(4, 2)
+    segment_only.setFlag(ismrmrd.ACQ_LAST_IN_SEGMENT)
+    assert plugin.branch_for(segment_only) == "calibration"

@@ -1,47 +1,8 @@
 """3D zero-echo-time imaging: a continuous-gradient koosh-ball of spokes.
 
-The auto-SSP-placement stress case: the readout gradient is at full
-amplitude when the hard pulse fires and never returns to zero inside a
-shell -- :class:`design.ZteReadout`, which writes the whole shell out as one
-continuous waveform, view by view, ramping up once at the north pole and
-down once at the south. Each shot replays it turned about ``z``, so the
-sphere costs one shell's worth of waveform memory. The interpreter has almost
-no dead time to hide its SSP packets in, which is exactly what this slot
-exercises.
-The centre of k-space is not acquired -- ``n_missing`` samples fall in the
-dead-time gap and are declared in the definitions for the reconstruction to
-handle. :mod:`pulserver.app.recon.noncartesian3D_recon` reconstructs the sphere by 3D NUFFT
-against the trajectory the acquisitions carry.
-
 ``main`` returns the :class:`pulserver.pypulseq.Sequence`; ``PLUGIN`` is the
 same sequence behind the scanner protocol contract, and running this module
 as a script writes a ``.seq`` from the same controls.
-
-Examples
---------
->>> from pulserver.app import zte3D_sequence
->>> seq = zte3D_sequence(n_x=32, n_views=24, n_shots=2, n_dummy=0)
->>> seq.num_trs, seq.num_segments
-(2, 1)
-
-The gradient is already on when the pulse plays, so a view starts at the centre of k-space and runs outward:
-
-.. plot::
-   :include-source:
-
-   from pulserver.app import zte3D_sequence
-
-   seq = zte3D_sequence(n_x=32, n_views=24, n_shots=2, n_dummy=0)
-   seq.plot(tr="worst_case", time_disp="ms", grad_disp="mT/m", stacked=True,
-            plot_now=False)
-
-.. plot::
-   :include-source:
-
-   from pulserver.app import zte3D_sequence
-
-   seq = zte3D_sequence(n_x=32, n_views=24, n_shots=2, n_dummy=0)
-   seq.plot_kspace(plot_now=False)
 """
 
 from __future__ import annotations
@@ -98,6 +59,19 @@ def main(
 ) -> pp.Sequence:
     """Create a 3D zero-echo-time sequence.
 
+    The auto-SSP-placement stress case: the readout gradient is at full
+    amplitude when the hard pulse fires and never returns to zero inside a
+    shell -- :class:`design.ZteReadout`, which writes the whole shell out as one
+    continuous waveform, view by view, ramping up once at the north pole and
+    down once at the south. Each shot replays it turned about ``z``, so the
+    sphere costs one shell's worth of waveform memory. The interpreter has almost
+    no dead time to hide its SSP packets in, which is exactly what this slot
+    exercises.
+    The centre of k-space is not acquired -- ``n_missing`` samples fall in the
+    dead-time gap and are declared in the definitions for the reconstruction to
+    handle. :mod:`pulserver.app.noncartesian3D_recon` reconstructs the sphere by 3D NUFFT
+    against the trajectory the acquisitions carry.
+
     Parameters
     ----------
     plot : bool, optional
@@ -144,6 +118,89 @@ def main(
     -------
     seq : pulserver.pypulseq.Sequence
         The ZTE sequence object.
+
+    Examples
+    --------
+    >>> from pulserver.app import zte3D_sequence
+    >>> seq = zte3D_sequence(n_x=32, n_views=24, n_shots=2, n_dummy=0)
+    >>> seq.num_trs, seq.num_segments
+    (2, 1)
+
+    The waveform figures below are one design, prescribed to be *legible*
+    rather than diagnostic: a long readout, so the flat top dominates; and
+    sixteen views over four shots, so one shell segment fits on a page.
+
+    .. plot::
+       :include-source:
+       :nofigs:
+       :context:
+
+       from pulserver.app import zte3D_sequence
+
+       seq = zte3D_sequence(n_x=256, n_views=16, n_shots=4, n_dummy=0)
+
+    **The excitation**, and the magnetisation it leaves behind. The pulse is
+    hard and only a few microseconds long, and the readout gradient is already
+    on while it plays -- so the profile is drawn against position, and it is
+    flat across a span far wider than anything the scan images.
+
+    .. plot::
+       :include-source:
+       :context: close-figs
+
+       seq.plot_rf(plot_now=False)
+
+    **One shot**: the gradient is already on when each pulse plays, so a
+    view starts at the centre of k-space and runs outward, and only the
+    small step between successive directions is ramped.
+
+    .. plot::
+       :include-source:
+       :context: close-figs
+
+       seq.plot(tr="worst_case", time_disp="ms", grad_disp="mT/m", plot_now=False)
+
+    **What the scan covers**: radial spokes from the centre outward,
+    coloured by the order the shots were played in.
+
+    .. plot::
+       :include-source:
+       :context: close-figs
+
+       seq.plot_kspace(color_by="order", plot_now=False)
+
+    **Mechanical resonance.** The repetition is periodic, so its gradients
+    have energy only at multiples of ``1 / T_TR``. Those lines are what a
+    forbidden band is judged against, and the verdict panel is the whole of
+    the acoustic check: every line that falls inside a band, against the
+    amplitude that band allows.
+
+    .. plot::
+       :include-source:
+       :context: close-figs
+
+       gamma = 42.576e3  # Hz/m per mT/m
+       seq.calculate_gradient_spectrum(
+           tr="worst_case",
+           resonance_lines=True,
+           bands=[(550.0, 700.0, 3.0 * gamma), (1150.0, 1300.0, 3.0 * gamma)],
+       )
+
+    **Peripheral nerve stimulation**, under the rheobase/chronaxie model the
+    scanner's own gate applies, over the same repetition played back to back.
+    This design asks for the shortest timing the hardware admits, so its
+    readout steps ramp as fast as they are allowed to. A lower ``MAX_SLEW``, a
+    longer echo time, or a narrower readout bandwidth each bring the response
+    down.
+
+    .. plot::
+       :include-source:
+       :context: close-figs
+
+       seq.calculate_pns(
+           {"chronaxie_us": 360.0, "rheobase": 20.0, "alpha": 0.333},
+           tr="worst_case",
+       )
     """
     system = pp.Opts() if system is None else system
     system = pp.cap_system(system, max_grad=MAX_GRAD, max_slew=MAX_SLEW)

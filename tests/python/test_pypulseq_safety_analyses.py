@@ -32,6 +32,13 @@ matplotlib.use("Agg")
 #: engine's own tests.
 EXPECTED = Path(__file__).resolve().parent / "fixtures"
 
+GAMMA_HZ_PER_MT_PER_M = 42.576e3
+
+#: ``SA_AEQ_POLICY_MT_PER_M`` in ``pulseg_safety.c``: the A_eq a band whose
+#: amplitude column is zero is judged against. Restated here so that changing
+#: the engine's threshold without revisiting this file is a test failure.
+POLICY_MT_PER_M = 7.5
+
 #: An Irnich model in the form ``calculate_pns`` recognises, with GE-shaped
 #: constants. Not a calibrated table -- it exists to exercise the branch.
 IRNICH = {"chronaxie": 334e-6, "rheobase": 23.4}
@@ -206,6 +213,57 @@ def test_the_worst_case_bounds_repetitions_that_play_different_waveforms():
         assert window > 0.0
 
 
+def test_the_worst_case_bounds_repetitions_that_differ_only_in_shape():
+    """Repetitions at one amplitude and one timing, differing only in samples.
+
+    A written-out spiral arm differs from its neighbours in gradient
+    *definition*, so grouping on the definition alone already separates them.
+    Two arbitrary gradients that share timing and envelope do not: the
+    definition folds them together and only the shape id tells them apart.
+    Nothing in the amplitude envelope can cover that, because every shot here
+    already sits at the per-axis maximum.
+    """
+    system = pp.Opts(
+        max_grad=40,
+        grad_unit="mT/m",
+        max_slew=200,
+        slew_unit="T/m/s",
+        grad_raster_time=10e-6,
+        block_duration_raster=10e-6,
+        rf_ringdown_time=20e-6,
+        rf_dead_time=100e-6,
+    )
+    samples = 512
+    excite = pp.make_block_pulse(
+        flip_angle=np.deg2rad(8), duration=100e-6, system=system
+    )
+    adc = pp.make_adc(num_samples=samples, duration=samples * 10e-6, system=system)
+    spoiler = pp.make_trapezoid("z", area=4e3, system=system)
+    ramp = np.linspace(0, 1, samples)
+
+    # Shot 0 oscillates fastest and so reaches the nerve least; the later
+    # shots are slower and reach it more. Every one peaks at one amplitude,
+    # which is what leaves the shape as the only thing that differs.
+    built = pp.Sequence(system=system)
+    for turns in np.linspace(6, 1, 6):
+        shape = 0.2 * system.max_grad * np.sin(2 * np.pi * turns * ramp)
+        built.add_block(excite)
+        built.add_block(
+            *(pp.make_arbitrary_grad(axis, shape, system=system) for axis in "xyz"),
+            adc,
+        )
+        built.add_block(spoiler)
+
+    window = built.calculate_pns(IRNICH, do_plots=False, tr="worst_case")[1].max()
+    played = [
+        built.calculate_pns(IRNICH, do_plots=False, tr=index)[1].max()
+        for index in range(built._structure_for("test").num_instances)
+    ]
+    # The shots really do reach the nerve differently, or any window passes.
+    assert max(played) > min(played) * 1.02
+    assert max(played) <= window * (1 + 1e-6)
+
+
 def test_the_instance_index_selects_a_real_and_different_tr(seq, num_trs):
     """``tr=<int>`` reads AMP_ACTUAL, so the phase encode really varies.
 
@@ -310,6 +368,12 @@ def test_the_drawn_lines_and_the_predownload_gate_reach_the_same_verdict(name):
     The gate is called here directly, not through anything this module owns,
     so agreement is between two independent paths into the C engine rather
     than between a value and a copy of itself.
+
+    The verdict each band is expected to draw is stated against
+    ``POLICY_MT_PER_M`` rather than assumed from the ranking, because a
+    fixture's strongest line is not necessarily a loud one: ``fse_2d``'s sits
+    at 3.3 Hz, the fundamental of its 2 s repetition, an order of magnitude
+    under the threshold and far below any band a vendor declares.
     """
     from pulserver._ext.pulseg import _check_safety
 
@@ -328,9 +392,11 @@ def test_the_drawn_lines_and_the_predownload_gate_reach_the_same_verdict(name):
 
     unbanded = lines_for([])
     assert unbanded.line_freqs.size > 1
-    ranked = np.argsort(unbanded.line_a_eq.max(axis=-1))
+    a_eq_mt_per_m = unbanded.line_a_eq.max(axis=-1) / GAMMA_HZ_PER_MT_PER_M
+    ranked = np.argsort(a_eq_mt_per_m)
 
-    for expected_ok, index in ((False, ranked[-1]), (True, ranked[0])):
+    for index in (ranked[-1], ranked[0]):
+        expected_ok = bool(a_eq_mt_per_m[index] <= POLICY_MT_PER_M)
         band = (
             float(unbanded.line_freqs[index]) - 5.0,
             float(unbanded.line_freqs[index]) + 5.0,
@@ -574,11 +640,12 @@ def test_an_unusable_tr_is_named_in_the_error(seq, bad):
 # %% the plots are upstream's
 
 
-def test_the_line_overlay_gets_its_own_axis(seq):
+def test_the_acoustic_figure_is_the_verdict_in_one_quantity(seq):
     """A_eq and a short-time Fourier magnitude are different quantities.
 
-    Drawing them against one vertical scale would invite reading a crossing
-    as meaningful, so the overlay twins the axis.
+    Drawing them together would invite reading a crossing as meaningful, so
+    asking for the lines draws the verdict and its three gradient axes, all
+    in A_eq, and upstream's spectrogram is not drawn at all.
     """
     import matplotlib.pyplot as plt
 
@@ -586,19 +653,57 @@ def test_the_line_overlay_gets_its_own_axis(seq):
     *_, resonances = seq.calculate_gradient_spectrum(
         plot=True, max_frequency=3000.0, tr="worst_case", resonance_lines=True
     )
+    assert len(plt.get_fignums()) == 1
     figure = plt.gcf()
-    assert len(figure.axes) == 2, "expected the spectrogram axis plus a twin"
-    assert figure.axes[1].get_ylabel() == "$A_{eq}$ (Hz/m)"
+    assert [axis.get_ylabel().split("\n")[0] for axis in figure.axes] == [
+        "verdict",
+        "gx",
+        "gy",
+        "gz",
+    ]
+    assert all("A_{eq}" in axis.get_ylabel() for axis in figure.axes)
     assert resonances.line_freqs.size > 0
     plt.close("all")
 
 
-def test_asking_for_the_pns_plots_draws_upstreams_pair(seq):
+def test_the_envelope_is_dense_enough_to_draw(seq):
+    """The lines are what the gate reads; the envelope is what a figure needs."""
+    *_, resonances = seq.calculate_gradient_spectrum(
+        plot=False, max_frequency=3000.0, tr="worst_case", resonance_lines=True
+    )
+    assert resonances.envelope_freqs.size > resonances.line_freqs.size
+    assert resonances.envelope_a_eq.shape == (resonances.envelope_freqs.size, 3)
+
+
+def test_asking_for_the_pns_plot_of_a_tr_draws_the_response_alone(seq):
+    """Upstream draws the gradient waveform beside the response. Under ``tr``
+    the waveform is what ``plot`` is for, so only the response is drawn."""
     import matplotlib.pyplot as plt
 
     plt.close("all")
     seq.calculate_pns(safe_example_hw(), do_plots=True, tr="worst_case")
-    assert len(plt.get_fignums()) == 2
+    assert len(plt.get_fignums()) == 1
+    assert plt.gca().get_ylabel() == "Relative stimulation [%]"
+    plt.close("all")
+
+
+def test_the_pns_legend_is_moved_off_the_traces(seq):
+    """``loc="best"`` lands on the peak often enough to matter, and the peak is
+    what the panel exists to show."""
+    import matplotlib.pyplot as plt
+
+    plt.close("all")
+    seq.calculate_pns(safe_example_hw(), do_plots=True, tr="worst_case")
+    axes = plt.gca()
+    assert axes.get_legend() is None
+    legends = plt.gcf().legends
+    assert len(legends) == 1
+    assert [text.get_text().split()[0] for text in legends[0].texts] == [
+        "X",
+        "Y",
+        "Z",
+        "nrm",
+    ]
     plt.close("all")
 
 

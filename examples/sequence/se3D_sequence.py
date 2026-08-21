@@ -1,38 +1,8 @@
 """3D Cartesian spin echo, slab-selective.
 
-The refocusing k-flip on a volume: a slab-selective SLR excitation, one SLR
-180 with bridged crushers a half-TE later, and one frequency-encoded line
-phase-encoded along y and z at the echo -- :class:`design.LineReadout3D`
-opened by the refocusing pulse. The autocalibration rectangle leads the
-``(ky, kz)`` traversal exactly as :mod:`pulserver.app.sequence.gre3D_sequence` orders it,
-regular undersampling laying a CAIPIRINHA lattice with a selectable kz shift
-per ky block, and :mod:`pulserver.app.recon.cartesian3D_recon` reads it back.
-
-TE spans excitation centre to echo, with the 180 at its midpoint: the readout
-solves the second half (``te = TE/2`` from the refocusing pulse), and a delay
-after the excitation solves the first.
-
 ``main`` returns the :class:`pulserver.pypulseq.Sequence`; ``PLUGIN`` is the
 same sequence behind the scanner protocol contract, and running this module
 as a script writes a ``.seq`` from the same controls.
-
-Examples
---------
->>> from pulserver.app import se3D_sequence
->>> seq = se3D_sequence(n_x=32, n_y=16, n_z=4, te=15e-3, tr=None)
->>> seq.num_trs, seq.num_segments
-(64, 3)
-
-The same spin echo over a slab:
-
-.. plot::
-   :include-source:
-
-   from pulserver.app import se3D_sequence
-
-   seq = se3D_sequence(n_x=32, n_y=16, n_z=4, te=15e-3, tr=None)
-   seq.plot(tr="worst_case", time_disp="ms", grad_disp="mT/m", stacked=True,
-            plot_now=False)
 """
 
 from __future__ import annotations
@@ -106,6 +76,18 @@ def main(
     spoiling_cycles: float = 4.0,
 ) -> pp.Sequence:
     """Create a 3D Cartesian spin-echo sequence.
+
+    The refocusing k-flip on a volume: a slab-selective SLR excitation, one SLR
+    180 with bridged crushers a half-TE later, and one frequency-encoded line
+    phase-encoded along y and z at the echo -- :class:`design.LineReadout3D`
+    opened by the refocusing pulse. The autocalibration rectangle leads the
+    ``(ky, kz)`` traversal exactly as :mod:`pulserver.app.gre3D_sequence` orders it,
+    regular undersampling laying a CAIPIRINHA lattice with a selectable kz shift
+    per ky block, and :mod:`pulserver.app.cartesian3D_recon` reads it back.
+
+    TE spans excitation centre to echo, with the 180 at its midpoint: the readout
+    solves the second half (``te = TE/2`` from the refocusing pulse), and a delay
+    after the excitation solves the first.
 
     Parameters
     ----------
@@ -186,6 +168,109 @@ def main(
     -------
     seq : pulserver.pypulseq.Sequence
         The spin-echo sequence object.
+
+    Examples
+    --------
+    >>> from pulserver.app import se3D_sequence
+    >>> seq = se3D_sequence(n_x=32, n_y=16, n_z=4, te=15e-3, tr=None)
+    >>> seq.num_trs, seq.num_segments
+    (64, 3)
+
+    The waveform figures below are one design, prescribed to be *legible*
+    rather than diagnostic: the shortest TE and TR the readout admits, so
+    nothing waits; a long readout and heavy crushing and spoiling, so those
+    lobes are unmistakable; and a small phase-encode and partition grid, so the
+    whole traversal fits on a page.
+
+    .. plot::
+       :include-source:
+       :nofigs:
+       :context:
+
+       from pulserver.app import se3D_sequence
+
+       seq = se3D_sequence(
+           n_x=256, n_y=16, n_z=4, te=None, tr=None, n_acs=0, n_acs_z=0,
+           n_dummy=0, crusher_cycles=6.0,
+           spoiling_cycles=6.0,
+       )
+
+    **The pulses.** The excitation, and the refocusing pulse that follows
+    it: an excitation is judged by what it tips, a refocusing pulse by how
+    much of that it brings back, so the two are drawn against different
+    quantities.
+
+    .. plot::
+       :include-source:
+       :context: close-figs
+
+       seq.plot_rf("excitation", title="excitation", plot_now=False)
+       seq.plot_rf("refocusing", title="refocusing", plot_now=False)
+
+    **One repetition**: the slab excitation, the refocusing pulse between
+    its crushers, the readout at the echo, then the spoiler.
+
+    .. plot::
+       :include-source:
+       :context: close-figs
+
+       seq.plot(tr="worst_case", time_disp="ms", grad_disp="mT/m", plot_now=False)
+
+    **The segments**, which are the interpreter's units of playout. Each is
+    drawn as the instance carrying the most gradient energy -- the one the
+    safety checks were run against -- over the span of the scan where it
+    plays.
+
+    .. plot::
+       :include-source:
+       :context: close-figs
+
+       for index in range(seq.num_segments):
+           seq.plot(
+               segment_idx=index, time_disp="ms", grad_disp="mT/m", plot_now=False
+           )
+
+    **What the scan covers**, as a phase-encode against partition grid,
+    coloured by when in the scan each coordinate was acquired.
+
+    .. plot::
+       :include-source:
+       :context: close-figs
+
+       seq.plot_kspace(plane="yz", color_by="order", plot_now=False)
+
+    **Mechanical resonance.** The repetition is periodic, so its gradients
+    have energy only at multiples of ``1 / T_TR``. Those lines are what a
+    forbidden band is judged against, and the verdict panel is the whole of
+    the acoustic check: every line that falls inside a band, against the
+    amplitude that band allows.
+
+    .. plot::
+       :include-source:
+       :context: close-figs
+
+       gamma = 42.576e3  # Hz/m per mT/m
+       seq.calculate_gradient_spectrum(
+           tr="worst_case",
+           resonance_lines=True,
+           bands=[(550.0, 700.0, 3.0 * gamma), (1150.0, 1300.0, 3.0 * gamma)],
+       )
+
+    **Peripheral nerve stimulation**, under the rheobase/chronaxie model the
+    scanner's own gate applies, over the same repetition played back to back.
+    This design asks for the shortest timing the hardware admits, so its
+    crushers and spoiler ramp as fast as they are allowed to. A lower
+    ``MAX_SLEW``, a longer echo time, or a narrower readout bandwidth each
+    bring the response down.
+
+    .. plot::
+       :include-source:
+       :context: close-figs
+
+       seq.calculate_pns(
+           {"chronaxie_us": 360.0, "rheobase": 20.0, "alpha": 0.333},
+           tr="worst_case",
+       )
     """
     system = pp.Opts() if system is None else system
     system = pp.cap_system(system, max_grad=MAX_GRAD, max_slew=MAX_SLEW)
@@ -336,9 +421,9 @@ def SE3DKernel(
     """Design the repetition, and the plan that repeats it.
 
     The echo time is solved in two halves around the refocusing pulse
-    exactly as :func:`pulserver.app.sequence.se2D_sequence.SE2DKernel` solves it; the
+    exactly as :func:`pulserver.app.se2D_sequence.SE2DKernel` solves it; the
     ``(ky, kz)`` traversal -- autocalibration rectangle first -- is the one
-    :func:`pulserver.app.sequence.gre3D_sequence.GRE3DKernel` builds. A slab excitation
+    :func:`pulserver.app.gre3D_sequence.GRE3DKernel` builds. A slab excitation
     carries its rephaser inside its selection gradient, so the excitation is
     one block and k is already zero when the 180 flips it.
 

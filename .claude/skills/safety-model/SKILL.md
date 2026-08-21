@@ -69,6 +69,7 @@ Every optimisation here is asserted equal to the calculation it replaces:
 | memoized PNS vs. exact convolution | `run_pns_memo_equivalence`, `tests/ctests/test_safety_grad.c` |
 | compiled SAFE vs. upstream PyPulseq | `test_the_c_safe_model_matches_upstreams_python_one` |
 | plotted resonance lines vs. the gate's verdict | `test_the_drawn_lines_and_the_predownload_gate_reach_the_same_verdict` |
+| the L1 ceiling's probe skip vs. the full walk | `test_the_ceiling_never_swallows_a_violation` |
 | `tr=None` vs. upstream, to the bit | `test_pns_over_the_timeline_is_upstreams_answer_exactly` |
 
 Add the equivalent test with any new fast path. A fast answer that disagrees
@@ -79,9 +80,11 @@ with the slow one is not an optimisation, it is a different check.
 The criterion is the **equivalent sustained amplitude** at the TR harmonics
 inside a guarded band — the amplitude of the pure sinusoid delivering the same
 coherent drive, in the vendor's own units. Two guards make it a verdict: a
-frequency guard of half the narrowest band's width, and an amplitude floor of
-`0.08 * G_max` where a band states literal zero. Changing either changes which
-sequences are refused, so re-run the verdicts over every shipped plugin.
+frequency guard of half the narrowest band's width, and the threshold itself
+— a band's own stated amplitude converted from plateau to equivalent sinusoid
+(`SA_AEQ_TRAIN_SHAPE`), or `SA_AEQ_POLICY_MT_PER_M` where the band states
+literal zero. Changing either changes which sequences are refused, so re-run
+the verdicts over every shipped plugin.
 
 No inner periodicity is ever declared: an echo train or a slice loop is just
 more materialised events inside the one known period, and the comb emerges

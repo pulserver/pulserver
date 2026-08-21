@@ -129,17 +129,17 @@ class FatSaturation(RfModule):
     fat resonance and water is untouched:
 
     .. plot::
+       :include-source:
 
        import pulserver.design as design
        import pulserver.pypulseq as pp
-       from _figures import rf_profile
 
-       rf_profile(
-           design.FatSaturation(pp.Opts(B0=3.0)),
+       design.FatSaturation(pp.Opts(B0=3.0)).plot_rf(
            title="fat saturation at 3 T",
            kind="saturation",
            whole=True,
            extent=(-800, 400),
+           plot_now=False,
        )
     """
 

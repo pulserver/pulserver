@@ -133,9 +133,13 @@ the vendor's limit. Two guards turn it into a verdict:
 - **An amplitude floor.** A zero-tolerance band cannot be taken literally:
   every periodic gradient sprinkles weak harmonics into any band wider than
   its comb spacing, so a literal zero refuses every sequence ever written.
-  When a band states zero, the floor becomes $0.08\,G_\text{max}$ — the scale
-  of a readout on that hardware, i.e. of a drive that is actually sustained.
-  Any nonzero vendor limit is trusted as stated.
+  When a band states zero, the threshold becomes a fixed equivalent
+  amplitude, the scale of a drive that is actually sustained rather than
+  incidental; where the threshold comes from, and why it cannot be derived,
+  is on the {doc}`performance page <../performance/mechanical_resonance>`.
+  A band that does state an amplitude is stating the plateau of a readout
+  train, so it is converted into the same equivalent-sinusoid convention
+  before the comparison — the two sides of a `>` must be the same quantity.
 
 The criterion separates the two cases a per-harmonic zero-tolerance test gets
 wrong in opposite directions. A small Cartesian GRE's phase-encode blip

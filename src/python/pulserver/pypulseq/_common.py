@@ -40,6 +40,12 @@ def _per_axis(value, name: str) -> list[float]:
     raise ValueError(f"{name} must be one value or three, got {array.size}")
 
 
+#: The file format's trailing use character, as the name it stands for. A
+#: block read back from the block table carries the character; one built by a
+#: ``make_*`` call carries the name.
+_USE_NAMES = dict(zip("erispo", RF_USES, strict=False))
+
+
 def _rf_use(rf: SimpleNamespace) -> str:
     """One decoded RF pulse's use tag, as one of :data:`~._results.RF_USES`.
 
@@ -53,4 +59,4 @@ def _rf_use(rf: SimpleNamespace) -> str:
     use = getattr(rf, "use", None)
     if use in RF_USES:
         return use
-    return "undefined"
+    return _USE_NAMES.get(use, "undefined")

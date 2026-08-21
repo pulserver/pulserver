@@ -654,17 +654,17 @@ def test_the_app_page_documents_every_reconstruction():
     import re
     from pathlib import Path
 
-    import pulserver.app.recon as family
+    import pulserver.app as app
 
     page = Path(__file__).resolve().parents[3] / "docs/api/python/apps.md"
     listed: set[str] = set()
     for block in re.findall(
-        r"autosummary::\n\s+:toctree: \.\./generated/app_recon\n\n((?:   \S+\n)+)",
+        r"autosummary::\n(?:\s+:[\w-]+:[^\n]*\n)*\s+:toctree: \.\./generated/app_recon\n(?:\s+:[\w-]+:[^\n]*\n)*\n((?:   \S+\n)+)",
         page.read_text(),
     ):
         listed |= {line.strip() for line in block.splitlines() if line.strip()}
 
-    assert listed == set(family.__all__)
+    assert listed == {name for name in app.__all__ if name.endswith("_recon")}
 
 
 def test_the_toeplitz_wrapper_shares_the_base_operator_and_enables_its_kernel():

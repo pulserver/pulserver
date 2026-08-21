@@ -351,3 +351,29 @@ def test_the_default_protocol_is_feasible():
         )
         assert report["valid"] is True, report["info"]
         assert "ESP" in report["info"]
+
+
+@pytest.mark.parametrize("acceleration", [1, 2, 3])
+@pytest.mark.parametrize("segments", [1, 2, 4])
+def test_segmenting_a_train_does_not_move_the_lattice(segments, acceleration):
+    """Interleaved shots tile the same uniform lattice one shot would.
+
+    A shot blips by ``segments * acceleration``, so the shots have to start a
+    lattice step apart. Starting them one line apart instead samples blocks of
+    ``segments`` adjacent lines with gaps between, which is not the uniform
+    undersampling the reconstruction is told to expect.
+    """
+    seq = design_2d(
+        n_slices=1,
+        te=None,
+        tr=None,
+        n_acs=0,
+        n_dummy=0,
+        segments=segments,
+        acceleration=acceleration,
+    )
+    lines = np.unique(seq.evaluate_labels(evolution="adc")["LIN"])
+    assert lines[0] % acceleration == 0
+    assert np.unique(np.diff(lines)).tolist() == (
+        [] if lines.size < 2 else [acceleration]
+    )

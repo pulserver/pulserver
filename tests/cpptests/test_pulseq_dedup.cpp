@@ -838,22 +838,21 @@ TEST_P(PulseqDedupFixture, TheScanItselfIsUntouched)
 
 TEST(PulseqDedupCorpus, ABlockPointingAtAChainThatIsNotThereIsRejected)
 {
-    // The corrupted fixture is a copy of the corpus gre_2d whose first
-    // block names a dangling extension chain id.  Reading and writing
-    // both carry it through -- neither resolves the reference -- so
-    // deduplication, which does, is where it has to be noticed.
-    const std::string path = std::string(PULSEQ_FIXTURES_DIR) + "/gre_2d_corrupted.seq";
-    Sequence seq = pulseq::read_file(path);
+    // The corrupted fixture is a copy of the corpus gre_2d whose first block
+    // names a dangling extension chain id.  An id names a row in another
+    // library, and the reader is what knows how many rows each library has,
+    // so that is where a file naming one that is not there is refused -- ahead
+    // of every consumer that would otherwise index with it.
+    const std::string path = std::string(PULSEQ_FIXTURES_DIR) + "/malformed/gre_2d_corrupted.seq";
     try
     {
-        seq.remove_duplicates();
+        pulseq::read_file(path);
         FAIL() << "a dangling extension reference went unnoticed";
     }
-    catch (const std::out_of_range &error)
+    catch (const std::runtime_error &error)
     {
-        const std::string message = error.what();
-        EXPECT_NE(message.find("block 1"), std::string::npos) << message;
-        EXPECT_NE(message.find("extension chain"), std::string::npos) << message;
+        EXPECT_NE(std::string(error.what()).find("could not read"), std::string::npos)
+            << error.what();
     }
 }
 

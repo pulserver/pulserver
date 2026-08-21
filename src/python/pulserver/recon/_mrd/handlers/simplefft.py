@@ -24,7 +24,7 @@ class SimpleFftRecon(ReconPlugin):
 
     def __init__(self) -> None:
         super().__init__(
-            split_on=AcquisitionFlag.LAST_IN_SLICE,
+            branches={AcquisitionFlag.LAST_IN_SLICE: "imaging"},
             reject_flags=AcquisitionFlag.IS_NOISE_MEASUREMENT
             | AcquisitionFlag.IS_PHASECORR_DATA,
             # A generic handler takes streams from anywhere, and a header

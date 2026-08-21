@@ -1,35 +1,8 @@
 """RF-spoiled multi-echo 3D Cartesian gradient echo, slab-selective.
 
-The echo-train readout on a volume: every repetition phase-encodes one
-``(ky, kz)`` pair and reads it at each of ``n_echoes`` echo times, monopolar
-or bipolar, each acquisition carrying its echo index as ``ECO``. Everything
-else -- the slab excitation, the autocalibration rectangle leading the
-traversal, the CAIPIRINHA lattice with its selectable kz shift per ky block
-under regular undersampling, partial Fourier, spoiling -- is
-:mod:`pulserver.app.sequence.gre3D_sequence`.
-:mod:`pulserver.app.recon.cartesian3D_recon` reconstructs one volume per echo.
-
 ``main`` returns the :class:`pulserver.pypulseq.Sequence`; ``PLUGIN`` is the
 same sequence behind the scanner protocol contract, and running this module
 as a script writes a ``.seq`` from the same controls.
-
-Examples
---------
->>> from pulserver.app import gre_multiecho3D_sequence
->>> seq = gre_multiecho3D_sequence(n_x=32, n_y=16, n_z=4, n_echoes=3, n_dummy=0)
->>> seq.num_trs, seq.num_segments
-(64, 1)
-
-Three echoes per excitation, over a slab:
-
-.. plot::
-   :include-source:
-
-   from pulserver.app import gre_multiecho3D_sequence
-
-   seq = gre_multiecho3D_sequence(n_x=32, n_y=16, n_z=4, n_echoes=3, n_dummy=0)
-   seq.plot(tr="worst_case", time_disp="ms", grad_disp="mT/m", stacked=True,
-            plot_now=False)
 """
 
 from __future__ import annotations
@@ -110,6 +83,15 @@ def main(
     spoiling_cycles: float = 4.0,
 ) -> pp.Sequence:
     """Create an RF-spoiled multi-echo 3D Cartesian gradient-echo sequence.
+
+    The echo-train readout on a volume: every repetition phase-encodes one
+    ``(ky, kz)`` pair and reads it at each of ``n_echoes`` echo times, monopolar
+    or bipolar, each acquisition carrying its echo index as ``ECO``. Everything
+    else -- the slab excitation, the autocalibration rectangle leading the
+    traversal, the CAIPIRINHA lattice with its selectable kz shift per ky block
+    under regular undersampling, partial Fourier, spoiling -- is
+    :mod:`pulserver.app.gre3D_sequence`.
+    :mod:`pulserver.app.cartesian3D_recon` reconstructs one volume per echo.
 
     Parameters
     ----------
@@ -193,6 +175,94 @@ def main(
     -------
     seq : pulserver.pypulseq.Sequence
         The multi-echo GRE sequence object.
+
+    Examples
+    --------
+    >>> from pulserver.app import gre_multiecho3D_sequence
+    >>> seq = gre_multiecho3D_sequence(n_x=32, n_y=16, n_z=4, n_echoes=3, n_dummy=0)
+    >>> seq.num_trs, seq.num_segments
+    (64, 1)
+
+    The waveform figures below are one design, prescribed to be *legible*
+    rather than diagnostic: the shortest echo spacing and TR the readout
+    admits, so nothing waits; a long readout and heavy spoiling, so those lobes
+    are unmistakable; and three echoes over a small partition grid, so the
+    figures stay readable.
+
+    .. plot::
+       :include-source:
+       :nofigs:
+       :context:
+
+       from pulserver.app import gre_multiecho3D_sequence
+
+       seq = gre_multiecho3D_sequence(
+           n_x=256, n_y=16, n_z=4, n_echoes=3, te=None, tr=None, n_acs=0,
+           n_acs_z=0, n_dummy=0, spoiling_cycles=6.0,
+       )
+
+    **The excitation**, and the magnetisation it leaves behind: the pulse's
+    own ``B1`` envelope beside the profile it writes across the selected
+    axis.
+
+    .. plot::
+       :include-source:
+       :context: close-figs
+
+       seq.plot_rf(plot_now=False)
+
+    **One repetition**, carrying the whole echo train: one slab excitation,
+    then a readout per echo with a rewinder between them, so every echo is
+    read the same way, then the spoiler.
+
+    .. plot::
+       :include-source:
+       :context: close-figs
+
+       seq.plot(tr="worst_case", time_disp="ms", grad_disp="mT/m", plot_now=False)
+
+    **What the scan covers**, as a phase-encode against partition grid.
+    Every coordinate is read once per echo, so the echo panel is the T2*
+    weighting the sample carries.
+
+    .. plot::
+       :include-source:
+       :context: close-figs
+
+       seq.plot_kspace(plane="yz", color_by="order", plot_now=False)
+
+    **Mechanical resonance.** The repetition is periodic, so its gradients
+    have energy only at multiples of ``1 / T_TR``. Those lines are what a
+    forbidden band is judged against, and the verdict panel is the whole of
+    the acoustic check: every line that falls inside a band, against the
+    amplitude that band allows.
+
+    .. plot::
+       :include-source:
+       :context: close-figs
+
+       gamma = 42.576e3  # Hz/m per mT/m
+       seq.calculate_gradient_spectrum(
+           tr="worst_case",
+           resonance_lines=True,
+           bands=[(550.0, 700.0, 3.0 * gamma), (1150.0, 1300.0, 3.0 * gamma)],
+       )
+
+    **Peripheral nerve stimulation**, under the rheobase/chronaxie model the
+    scanner's own gate applies, over the same repetition played back to back.
+    This design asks for the shortest timing the hardware admits, so its
+    readouts and the rewinders between them ramp as fast as they are allowed
+    to. A lower ``MAX_SLEW``, a longer echo time, or a narrower readout
+    bandwidth each bring the response down.
+
+    .. plot::
+       :include-source:
+       :context: close-figs
+
+       seq.calculate_pns(
+           {"chronaxie_us": 360.0, "rheobase": 20.0, "alpha": 0.333},
+           tr="worst_case",
+       )
     """
     system = pp.Opts() if system is None else system
     system = pp.cap_system(system, max_grad=MAX_GRAD, max_slew=MAX_SLEW)
@@ -353,8 +423,8 @@ def Multiecho3DKernel(
 ) -> SimpleNamespace:
     """Design the repetition, and the plan that repeats it.
 
-    :func:`pulserver.app.sequence.gre3D_sequence.GRE3DKernel` with the echo train of
-    :func:`pulserver.app.sequence.gre_multiecho2D_sequence.MultiechoKernel`: the readout
+    :func:`pulserver.app.gre3D_sequence.GRE3DKernel` with the echo train of
+    :func:`pulserver.app.gre_multiecho2D_sequence.MultiechoKernel`: the readout
     carries ``n_echoes`` and the train's polarity, and the echo times are
     read off the built blocks.
 
@@ -371,7 +441,7 @@ n_averages, n_dummy, spoiling_cycles
     Returns
     -------
     types.SimpleNamespace
-        As :func:`pulserver.app.sequence.gre3D_sequence.GRE3DKernel` returns, with
+        As :func:`pulserver.app.gre3D_sequence.GRE3DKernel` returns, with
         ``echo_times`` (one per echo) in place of ``echo_time``.
     """
     fov_x, fov_y = (fov, fov) if isinstance(fov, (int, float)) else fov

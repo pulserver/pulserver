@@ -95,18 +95,18 @@ class SmsExcitation(RfModule):
     Three slices from one pulse, at the gap they were asked for:
 
     .. plot::
+       :include-source:
 
        import pulserver.design as design
        import pulserver.pypulseq as pp
-       from _figures import rf_profile
 
        system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=180, slew_unit="T/m/s")
-       rf_profile(
-           design.SmsExcitation(
-               system, 60.0, thickness_m=3e-3, slice_gap_m=24e-3, n_bands=3
-           ),
+       design.SmsExcitation(
+           system, 60.0, thickness_m=3e-3, slice_gap_m=24e-3, n_bands=3
+       ).plot_rf(
            title="SMS, three bands 24 mm apart",
            extent=40,
+           plot_now=False,
        )
     """
 
@@ -267,18 +267,18 @@ class MultibandExcitation(RfModule):
     saturation rather than a slice selection:
 
     .. plot::
+       :include-source:
 
        import pulserver.design as design
        import pulserver.pypulseq as pp
-       from _figures import rf_profile
 
-       rf_profile(
-           design.MultibandExcitation(
-               pp.Opts(), 7.0, duration_s=2e-3, band_offset_hz=7000.0, n_bands=3
-           ),
+       design.MultibandExcitation(
+           pp.Opts(), 7.0, duration_s=2e-3, band_offset_hz=7000.0, n_bands=3
+       ).plot_rf(
            title="dual-sideband saturation, 7 kHz offsets",
            kind="excitation",
            extent=12000,
+           plot_now=False,
        )
     """
 

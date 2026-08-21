@@ -6,6 +6,7 @@ import ismrmrd
 import numpy as np
 
 from pulserver import ExamCache, ReconContext
+from pulserver.recon import AcquisitionFlag
 from pulserver.recon._mrd.application import run_application
 
 
@@ -192,7 +193,7 @@ def test_the_runtime_drives_the_lifecycle_hooks_in_order():
     acquisitions = _make_acquisitions(n_pe=3, n_ro=8, n_channels=1, n_slices=2)
     connection = FakeConnection(acquisitions)
     run_application(
-        Lifecycle(split_on="ACQ_LAST_IN_SLICE", buffered=False),
+        Lifecycle(branches={AcquisitionFlag.LAST_IN_SLICE: "imaging"}, buffered=False),
         connection,
         _context(_make_header(8, 3)),
     )
@@ -215,7 +216,7 @@ def test_the_runtime_drives_the_lifecycle_hooks_in_order():
 def test_receive_routes_the_branch_the_acquisition_closed():
     """The routing reads the arriving acquisition, not an assembled bucket."""
     from pulserver import ReconPlugin
-    from pulserver.recon import AcquisitionFlag, has_acquisition_flag
+    from pulserver.recon import has_acquisition_flag
 
     seen = []
 
@@ -253,8 +254,12 @@ def test_one_flag_may_be_given_without_wrapping_it():
             del branch, context
             return None
 
-    assert Nothing(split_on="ACQ_LAST_IN_SLICE").split_on == ("ACQ_LAST_IN_SLICE",)
-    assert Nothing(split_on=None).split_on == ()
+    routed = Nothing(branches={AcquisitionFlag.LAST_IN_SLICE: "imaging"})
+    assert routed.branches == {AcquisitionFlag.LAST_IN_SLICE: "imaging"}
+    # No boundary at all: the stream reconstructs once, at its end.
+    assert Nothing(branches={}).branches == {}
+    # And the default is the end of the measurement.
+    assert Nothing().branches == {AcquisitionFlag.LAST_IN_MEASUREMENT: "imaging"}
 
 
 def test_each_stream_reconstructs_through_its_own_instance():
@@ -277,7 +282,7 @@ def test_each_stream_reconstructs_through_its_own_instance():
             seen.append(tuple(self.lines))
             return None
 
-    template = Stateful(split_on=None)
+    template = Stateful(branches={})
     for _ in range(2):
         run_application(
             template,

@@ -48,16 +48,16 @@ class RfModule(SequenceModule):
     An inversion and the excitation it precedes, on the same axis:
 
     .. plot::
+       :include-source:
 
        import pulserver.design as design
        import pulserver.pypulseq as pp
-       from _figures import rf_profile
 
        system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
-       rf_profile(
-           design.Inversion(system, 8e-3),
+       design.Inversion(system, 8e-3).plot_rf(
            title="an RfModule reporting its own profile",
            extent=2500,
+           plot_now=False,
        )
     """
 
@@ -101,3 +101,68 @@ class RfModule(SequenceModule):
                 if getattr(event, "type", None) == "rf"
             )
         return pp.sim_rf(pulse, **kwargs)
+
+    def plot_rf(self, pulse=None, **kwargs):
+        """Draw this module's pulse beside the profile it produces.
+
+        What :meth:`sim_rf` computes, as a figure: the ``B1`` envelope, and
+        the magnetisation response beside it -- against position where the
+        pulse is played under a gradient, against off-resonance where it is
+        not, and as a pair of heatmaps when a plane is asked for.
+
+        Parameters
+        ----------
+        pulse : RfEvent, optional
+            Which pulse to draw. The default is the first one the module
+            plays, as for :meth:`sim_rf`.
+        plane : str, optional
+            What to simulate over: one of ``"x"``, ``"y"``, ``"z"`` or
+            ``"f"`` for a profile along one axis, or two of them -- ``"zf"``,
+            ``"xy"`` -- for a plane, drawn as ``|Mxy|`` and ``Mz`` heatmaps.
+            The default is the axis the pulse is selective along, or ``"f"``
+            when it is played under no gradient. **A pulse selective in two
+            things at once needs a plane**: a spectral-spatial pulse's
+            passband is a band in position *and* in frequency, and neither
+            one-dimensional cut shows that.
+        kind : str, optional
+            Which response to draw: ``"excitation"``, ``"refocusing"``,
+            ``"inversion"`` or ``"saturation"``. Read off the pulse's ``use``
+            by default. Only for a one-dimensional profile; a plane always
+            draws both components.
+        extent, span : float or tuple of float, optional
+            The first and second axes: a half-width about zero, or an explicit
+            ``(low, high)``, in millimetres for a position and hertz for
+            off-resonance. Wide enough to hold the pulse's own passband by
+            default.
+        samples : int, optional
+            Points along each axis. A plane is simulated over ``samples**2``
+            positions and caps at 91 a side, so this is what the figure costs.
+        dt : float, optional
+            Integration raster, in seconds, wherever the whole module is
+            integrated rather than the single pulse.
+        whole : bool, optional
+            Integrate everything the module plays -- every pulse, every
+            crusher, and the free precession between them -- rather than the
+            one pulse alone. What a preparation module's profile means. A
+            plane is always integrated this way.
+        title : str, optional
+            Figure title.
+        plot_now : bool, optional
+            Show the figure before returning.
+
+        Returns
+        -------
+        matplotlib.figure.Figure
+
+        Examples
+        --------
+        >>> import pulserver.design as design
+        >>> import pulserver.pypulseq as pp
+        >>> pulse = design.SpatialSelectiveExcitation(pp.Opts(), 15.0, 5e-3)
+        >>> figure = pulse.plot_rf(plot_now=False)
+        >>> [axis.get_title(loc="left") for axis in figure.axes]
+        ['envelope', 'profile']
+        """
+        from ...pypulseq._rf_profile import plot_rf
+
+        return plot_rf(self, pulse, **kwargs)

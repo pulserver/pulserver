@@ -42,6 +42,14 @@ def _merge_columns(plot, *, show_guides: bool = False) -> None:
     merged = plt.figure(figsize=(14, 7))
     grid = merged.add_gridspec(3, 2)
 
+    # An axis draws through transforms its spines and patch captured when it
+    # was built, which map the figure it was built on. Giving the sources the
+    # size they are moving to is what makes those transforms land where the
+    # grid says, rather than in a corner scaled by the ratio of the two.
+    for figure in sources:
+        if figure is not None:
+            figure.set_size_inches(*merged.get_size_inches())
+
     for column, axes in enumerate(columns):
         for row, axis in enumerate(axes):
             _adopt(axis, merged, grid[row, column])
@@ -78,7 +86,9 @@ def _split_columns(plot) -> None:
     columns = (tuple(plot.ax1), tuple(plot.ax2))
     figures = []
     for axes in columns:
-        figure = plt.figure()
+        # The same size the axes were last laid out for, for the reason
+        # :func:`_merge_columns` gives.
+        figure = plt.figure(figsize=merged.get_size_inches())
         grid = figure.add_gridspec(3, 1)
         for row, axis in enumerate(axes):
             _adopt(axis, figure, grid[row, 0])

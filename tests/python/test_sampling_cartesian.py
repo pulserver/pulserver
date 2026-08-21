@@ -86,16 +86,33 @@ def test_partial_fourier_on_z_drops_leading_partitions():
 
 def test_caipi_shift_staggers_kz_without_changing_the_count():
     # A non-zero shift keeps the same number of samples but moves them.
-    plain, _ = calc_sampled_pairs((16, 16), (2, 2), (0, 0), caipi_shift=0)
-    shifted, _ = calc_sampled_pairs((16, 16), (2, 2), (0, 0), caipi_shift=1)
+    plain, _ = calc_sampled_pairs(
+        (16, 16), (2, 2), (0, 0), caipi_shift=0, elliptical=False
+    )
+    shifted, _ = calc_sampled_pairs(
+        (16, 16), (2, 2), (0, 0), caipi_shift=1, elliptical=False
+    )
     assert len(plain) == len(shifted)
     assert set(plain) != set(shifted)
 
 
 def test_no_acceleration_samples_the_whole_grid():
-    pairs, n_cal = calc_sampled_pairs((8, 8), (1, 1), (0, 0), caipi_shift=1)
+    pairs, n_cal = calc_sampled_pairs(
+        (8, 8), (1, 1), (0, 0), caipi_shift=1, elliptical=False
+    )
     assert len(pairs) == 64  # a shift is a no-op when nothing is skipped
     assert n_cal == 0
+
+
+def test_the_support_is_the_inscribed_ellipse_unless_told_otherwise():
+    """The corners a round object never fills are not worth their scan time."""
+    disk, _ = calc_sampled_pairs((16, 16), (1, 1), (0, 0))
+    full, _ = calc_sampled_pairs((16, 16), (1, 1), (0, 0), elliptical=False)
+    assert set(disk) < set(full)
+    # Every dropped pair is outside the inscribed ellipse, and the corners are.
+    dropped = set(full) - set(disk)
+    assert {(0, 0), (0, 15), (15, 0), (15, 15)} <= dropped
+    assert all(((y - 8) / 8) ** 2 + ((z - 8) / 8) ** 2 > 1.0 for y, z in dropped)
 
 
 def test_caipi_lattice_carries_the_acs_rectangle():

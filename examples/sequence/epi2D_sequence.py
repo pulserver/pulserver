@@ -1,41 +1,8 @@
 """2D gradient-echo EPI, multi-slice, exported as a linked pair of sequences.
 
-The PNS and mechanical-resonance stress case: an EPI train whose blips ride
-the read ramps -- :class:`design.EpiReadout2D` -- played single-shot or in
-interleaved segments. Every line carries ``REV`` for its polarity, so a
-reconstruction reverses what was read backwards instead of guessing.
-
-**The export exercises the Sequence Collection path.** The phase navigator
--- the same train, blips nulled, three lines labelled ``NAV``/``REF``, plus
-one opposite-phase-encode reference shot labelled ``SET = 1`` for a
-distortion correction -- is its own :class:`pulserver.pypulseq.Sequence`,
-written first, carrying ``NextSequence`` in its definitions; the main
-acquisition is the file it points to, written beside it. The interpreter
-follows the chain and treats each file as one subsequence.
-:mod:`pulserver.app.recon.epi2D_recon` reads the navigator back off the flags
-these lines carry.
-
 ``main`` returns the main :class:`pulserver.pypulseq.Sequence` and
 ``navigator`` its partner; ``PLUGIN`` writes the linked pair. Running this
 module as a script writes both from the same controls.
-
-Examples
---------
->>> from pulserver.app import epi2D_sequence
->>> seq = epi2D_sequence(n_x=32, n_y=32, n_slices=1, n_dummy=0)
->>> seq.num_trs, seq.num_segments
-(1, 1)
-
-The whole plane from one excitation, blip by blip:
-
-.. plot::
-   :include-source:
-
-   from pulserver.app import epi2D_sequence
-
-   seq = epi2D_sequence(n_x=32, n_y=32, n_slices=1, n_dummy=0)
-   seq.plot(tr="worst_case", time_disp="ms", grad_disp="mT/m", stacked=True,
-            plot_now=False)
 """
 
 from __future__ import annotations
@@ -134,6 +101,21 @@ def main(
 ) -> pp.Sequence:
     """Create the main 2D EPI sequence.
 
+    The PNS and mechanical-resonance stress case: an EPI train whose blips ride
+    the read ramps -- :class:`design.EpiReadout2D` -- played single-shot or in
+    interleaved segments. Every line carries ``REV`` for its polarity, so a
+    reconstruction reverses what was read backwards instead of guessing.
+
+    **The export exercises the Sequence Collection path.** The phase navigator
+    -- the same train, blips nulled, three lines labelled ``NAV``/``REF``, plus
+    one opposite-phase-encode reference shot labelled ``SET = 1`` for a
+    distortion correction -- is its own :class:`pulserver.pypulseq.Sequence`,
+    written first, carrying ``NextSequence`` in its definitions; the main
+    acquisition is the file it points to, written beside it. The interpreter
+    follows the chain and treats each file as one subsequence.
+    :mod:`pulserver.app.epi2D_recon` reads the navigator back off the flags
+    these lines carry.
+
     Parameters
     ----------
     plot : bool, optional
@@ -210,6 +192,95 @@ def main(
     -------
     seq : pulserver.pypulseq.Sequence
         The main EPI sequence object.
+
+    Examples
+    --------
+    >>> from pulserver.app import epi2D_sequence
+    >>> seq = epi2D_sequence(n_x=32, n_y=32, n_slices=1, n_dummy=0)
+    >>> seq.num_trs, seq.num_segments
+    (1, 1)
+
+    The waveform figures below are one single-shot design, prescribed to be
+    *legible* rather than diagnostic: a long readout so the alternating read
+    lobes are unmistakable, and few lines so one train fits on a page. The
+    sampling figure is a second, segmented design, because interleaves are
+    the thing worth drawing.
+
+    .. plot::
+       :include-source:
+       :nofigs:
+       :context:
+
+       from pulserver.app import epi2D_sequence
+
+       seq = epi2D_sequence(
+           n_x=128, n_y=32, n_slices=1, n_dummy=0, spoiling_cycles=6.0,
+       )
+
+    **The excitation.** One SLR pulse per plane, at a large flip angle
+    because there is only one of them to spend the magnetisation on.
+
+    .. plot::
+       :include-source:
+       :context: close-figs
+
+       seq.plot_rf(
+           title="slice-selective SLR excitation, 70 degrees", plot_now=False
+       )
+
+    **One repetition**, which here is the whole plane: excitation, then a
+    read gradient that alternates sign line after line, with the phase blips
+    riding the ramps between them rather than sitting in a gap of their own.
+
+    .. plot::
+       :include-source:
+       :context: close-figs
+
+       seq.plot(tr="worst_case", time_disp="ms", grad_disp="mT/m", plot_now=False)
+
+    **What the scan covers**, on a second, segmented design: the shot panel
+    says which of the four interleaves took each line, the echo panel where in
+    its train the line was read -- and the second is the T2* weighting the
+    line carries. Drawn in the readout plane, because an EPI's picture is the
+    zigzag: the read axis reverses line after line and the phase blips ride
+    the ramps between, so what joins two lines is the gradient integral, drawn
+    -- a pair of parabolas, which is the k-space path of a trapezoid.
+
+    .. plot::
+       :include-source:
+       :context: close-figs
+
+       segmented = epi2D_sequence(n_x=48, n_y=48, n_slices=1, n_dummy=0, segments=4)
+       segmented.plot_kspace(color_by="order", plot_now=False)
+
+    **Mechanical resonance.** This is the family the check exists for: a read
+    gradient reversing every few hundred microseconds puts a strong line
+    exactly at the echo-spacing frequency, and its harmonics march up the
+    audio range from there. The blip comb on ``Gy`` is the second one.
+
+    .. plot::
+       :include-source:
+       :context: close-figs
+
+       gamma = 42.576e3  # Hz/m per mT/m
+       seq.calculate_gradient_spectrum(
+           tr="worst_case",
+           resonance_lines=True,
+           bands=[(550.0, 700.0, 3.0 * gamma), (1150.0, 1300.0, 3.0 * gamma)],
+       )
+
+    **Peripheral nerve stimulation**, under the rheobase/chronaxie model the
+    scanner's own gate applies. The same reversals are what the nerve model
+    sees, and this is the family that pays for them.
+
+    .. plot::
+       :include-source:
+       :context: close-figs
+
+       seq.calculate_pns(
+           {"chronaxie_us": 360.0, "rheobase": 20.0, "alpha": 0.333},
+           tr="worst_case",
+       )
     """
     system = pp.Opts() if system is None else system
     system = pp.cap_system(system, max_grad=MAX_GRAD, max_slew=MAX_SLEW)
@@ -324,7 +395,7 @@ def main(
                 ShotKernel(
                     seq,
                     epi,
-                    origin_line=segment,
+                    origin_line=segment * acceleration,
                     n_y=n_y,
                     rev_label=rev_label,
                     extra_line_labels=(slc_label, rep_label),
@@ -716,7 +787,7 @@ def SmsSequenceKernel(
                     n_y=n_y,
                     center_m=sms_group_center(group, n_slices, n_bands, slice_step),
                     gz_amplitude=gz_amplitude,
-                    origin_line=segment,
+                    origin_line=segment * acceleration,
                     rev_label=rev_label,
                     extra_line_labels=(slc_label, rep_label, sms_on, ref_off, nav_off),
                 )

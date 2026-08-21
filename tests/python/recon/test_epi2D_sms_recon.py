@@ -1,7 +1,7 @@
 """The multiband (SMS) branch of the 2D EPI reconstruction.
 
 Driven over the acquisitions the runtime would stream from
-:mod:`pulserver.app.sequence.epi2D_sequence` under ``SMS_EXCITATION``: a low-resolution GRE
+:mod:`pulserver.app.epi2D_sequence` under ``SMS_EXCITATION``: a low-resolution GRE
 calibration for each slice, then the blipped-CAIPI multiband shots whose slices
 collapse with the CAIPI phase the sequence played. The reconstruction has to
 estimate each slice's coil maps from the calibration and unfold each group back

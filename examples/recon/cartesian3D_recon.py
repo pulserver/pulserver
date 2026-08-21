@@ -1,57 +1,7 @@
 """Any 3D Cartesian scan, one volume per echo.
 
-The same recipes as :mod:`pulserver.app.recon.cartesian2D_recon`, over a slab:
-one buffer spanning ``(partition, line, readout)``, filled as the acquisitions
-arrive, calibrated when the autocalibration rectangle's segment closes, and
-reconstructed once at the end of the measurement -- a 3D scan has one slab, so
-there is no per-slice boundary to reconstruct at. An MPRAGE, a fast spin echo
-and a balanced SSFP all leave that same grid, so all of them come back through
-this.
-
-Which reconstruction runs is read off the sampling mask by
-:func:`pulserver.recon.cartesian_recon`, not declared here.
-
-The buffer holds every physical channel: an autocalibration rectangle is
-imaging data on the imaging grid, so there is no point before the first line at
-which a coil basis could exist, and the compression happens on the way into the
-solve instead. A noise scan never reaches the buffer -- it whitens every line
-that follows.
-
-Echoes are an axis, not a variant: each is unaliased and filled against the
-same sensitivities, estimated from the first, and a single-echo scan is that
-loop run once.
-
-One magnitude volume per echo, the echo as the image series, cropped to the
-prescribed matrix.
-
-Examples
---------
-Calling the module reconstructs an MRD file: the same three hooks an
-inline reconstruction is driven through, fed from the file in this
-process rather than over a socket.
-
->>> from pulserver import ReconPlugin
->>> from pulserver.app import cartesian3D_recon
->>> isinstance(cartesian3D_recon.PLUGIN, ReconPlugin)
-True
-
-The three hooks are the whole plugin, and nothing else is overridden:
-
->>> sorted(
-...     hook for hook in ("startup", "receive", "recon")
-...     if hook in vars(cartesian3D_recon.Cartesian3DRecon)
-... )
-['receive', 'recon', 'startup']
-
-Reconstruct any 3D Cartesian scan::
-
-    images = cartesian3D_recon("scan.h5")
-
-Or re-instantiate the plugin with different settings, and drive it the
-same way::
-
-    plugin = cartesian3D_recon.Cartesian3DRecon(coil_compression=8)
-    images = plugin.run("scan.h5")
+Calling this module reconstructs an MRD file; ``PLUGIN`` is the same
+reconstruction behind the stream contract, driven live by the scanner.
 """
 
 from __future__ import annotations
@@ -66,16 +16,39 @@ from pulserver import ReconContext, ReconPlugin, ReconResult
 from pulserver.recon import (
     NLINV,
     AcquisitionFlag,
+    NoiseAdjust,
     cartesian_recon,
-    center_crop,
     coil_compress,
-    has_acquisition_flag,
-    noise_prewhiten,
+    image_result,
 )
 
 
 class Cartesian3DRecon(ReconPlugin):
     """Reconstruct a 3D Cartesian scan, one volume per echo.
+
+    The same recipes as :mod:`pulserver.app.cartesian2D_recon`, over a slab:
+    one buffer spanning ``(partition, line, readout)``, filled as the acquisitions
+    arrive, calibrated when the autocalibration rectangle's segment closes, and
+    reconstructed once at the end of the measurement -- a 3D scan has one slab, so
+    there is no per-slice boundary to reconstruct at. An MPRAGE, a fast spin echo
+    and a balanced SSFP all leave that same grid, so all of them come back through
+    this.
+
+    Which reconstruction runs is read off the sampling mask by
+    :func:`pulserver.recon.cartesian_recon`, not declared here.
+
+    The buffer holds every physical channel: an autocalibration rectangle is
+    imaging data on the imaging grid, so there is no point before the first line at
+    which a coil basis could exist, and the compression happens on the way into the
+    solve instead. A noise scan never reaches the buffer -- it whitens every line
+    that follows.
+
+    Echoes are an axis, not a variant: each is unaliased and filled against the
+    same sensitivities, estimated from the first, and a single-echo scan is that
+    loop run once.
+
+    One magnitude volume per echo, the echo as the image series, cropped to the
+    prescribed matrix.
 
     Parameters
     ----------
@@ -97,6 +70,22 @@ class Cartesian3DRecon(ReconPlugin):
         at eight.
     device
         Torch device the reconstruction runs on. ``None`` is the CPU.
+
+    Examples
+    --------
+    Calling the module reconstructs an MRD file, through the same hooks a
+    scanner's live stream is driven through. Its settings are the arguments
+    of that call:
+
+    >>> import inspect
+    >>> from pulserver.app import cartesian3D_recon
+    >>> "virtual_coils" in inspect.signature(cartesian3D_recon).parameters
+    True
+
+    Reconstruct any 3D Cartesian scan::
+
+        images = cartesian3D_recon("scan.h5")
+        images = cartesian3D_recon("scan.h5", virtual_coils=4, partial_fourier="homodyne")
     """
 
     def __init__(
@@ -111,8 +100,11 @@ class Cartesian3DRecon(ReconPlugin):
         device: Any = None,
     ) -> None:
         super().__init__(
-            split_on=AcquisitionFlag.LAST_IN_SEGMENT
-            | AcquisitionFlag.LAST_IN_MEASUREMENT,
+            chain=[NoiseAdjust()],
+            branches={
+                AcquisitionFlag.LAST_IN_MEASUREMENT: "imaging",
+                AcquisitionFlag.LAST_IN_SEGMENT: "calibration",
+            },
             reject_flags=AcquisitionFlag.IS_PHASECORR_DATA,
         )
         self.regularization = float(regularization)
@@ -128,30 +120,6 @@ class Cartesian3DRecon(ReconPlugin):
         super().startup(context)
         self.coil_maps: Any = None
         self.coil_basis: Any = None
-        self.noise: Any = None
-
-    def receive(self, acquisition: Any, context: ReconContext) -> Any:
-        """Whiten the line, place it, then route the boundary it closed.
-
-        The measurement is tested first: its last line closes the trailing
-        segment as well, and only a segment that closed nothing larger is the
-        autocalibration rectangle.
-        """
-        line = np.asarray(acquisition.data)
-        if has_acquisition_flag(acquisition, AcquisitionFlag.IS_NOISE_MEASUREMENT):
-            self.noise = (
-                line if self.noise is None else np.concatenate([self.noise, line], -1)
-            )
-            return None
-        if self.noise is not None:
-            line = noise_prewhiten(line, self.noise, coil_axis=0)
-
-        self.buffers.add(acquisition, line)
-        if has_acquisition_flag(acquisition, AcquisitionFlag.LAST_IN_MEASUREMENT):
-            return self.recon("imaging", context)
-        if has_acquisition_flag(acquisition, AcquisitionFlag.LAST_IN_SEGMENT):
-            return self.recon("calibration", context)
-        return None
 
     def recon(self, branch: str, context: ReconContext) -> list[ReconResult] | None:
         """Calibrate the slab, or reconstruct every echo of it."""
@@ -188,15 +156,7 @@ class Cartesian3DRecon(ReconPlugin):
                 partial_fourier=self.partial_fourier,
                 device=self.device,
             )
-            results.append(
-                ReconResult(
-                    center_crop(np.abs(image), buffer.image_shape).transpose(0, 2, 1),
-                    reference=-1,
-                    series_index=echo,
-                    image_type="magnitude",
-                    dicom=True,
-                )
-            )
+            results.append(image_result(image, buffer, series_index=echo))
         return results
 
 

@@ -26,7 +26,7 @@ a superset of the one below it rather than a reimplementation of it.
 | `src/python/pulserver/` | The Python package. `pypulseq/` is a drop-in PyPulseq replacement over the C++ core; `design/` is the module toolbox; `recon/` is the reconstruction stack. |
 | `src/python/bindings/` | The pybind11 sources. They build into one extension module, `pulserver._ext`, whose submodules are `pulseg`, `pulseqpp`, `arbgrad`, `sampling` and `recon_cpu`. |
 | `src/nim/` | The Nim hosts that let a console drive a Python or MATLAB plugin. |
-| `examples/sequence/`, `examples/recon/` | The sequence zoo and its reconstruction plugins. Installed as `pulserver.app.sequence.*` and `pulserver.app.recon.*`, so they are shipped code, not samples — the deliberate exception to "source lives under `src/`". |
+| `examples/sequence/`, `examples/recon/` | The sequence zoo and its reconstruction plugins. Both are installed into `pulserver.app`, one flat namespace, so they are shipped code, not samples — the deliberate exception to "source lives under `src/`". |
 | `tests/` | `ctests/` (minunit), `cpptests/` (GoogleTest), `python/` (pytest, including the native lanes), `nim/`, and `utils/` with the fixture generators. |
 | `docs/` | Sphinx sources. `_docs/` is a superseded copy — do not add to it. |
 | `scripts/` | The four entry points below, plus the build steps they call. |
@@ -124,19 +124,22 @@ change is not.
   `examples/recon/*` changes the installed `pulserver.app` namespace, and the
   zoo tests hold it.
 - **A zoo module is one complete plugin and nothing else.** `examples/recon/*`
-  holds one `ReconPlugin` subclass, its `PLUGIN`, and the three hooks — never a
+  holds one `ReconPlugin` subclass, its `PLUGIN`, and its hooks — never a
   module-level helper, a private method, or a module demonstrating one step.
   A step a plugin needs is a name in `pulserver.recon`, general and high-level
   enough to compose directly in a hook; a local subroutine hides which of the
   code is the mandatory hook. `examples/sequence/*` holds whole sequences on
   the same terms.
-- **The three recon hooks divide the work the same way every time.**
-  `startup` lays out the buffers the header's encoding spaces describe.
-  `receive` places each acquisition and, reading its flags, routes the
-  boundaries it closes to a named branch — the sorting and the routing both
-  live there. `recon` takes that branch name and holds the reconstruction of
-  each branch over buffers that are already filled; it never sorts and never
-  decides when it runs.
+- **A reconstruction plugin declares its chain and its branches; it does not
+  write them.** The per-acquisition steps go in `chain` as `Gadget`s — noise
+  adjustment, coil compression, the EPI corrections — and the boundaries worth
+  reconstructing at go in `branches`, in priority order. The default `receive`
+  runs the chain, places the readout, and routes the first boundary it closes.
+  `recon` then holds the reconstruction of each branch over buffers that are
+  already filled; it never sorts and never decides when it runs. Override
+  `receive` only for placement the declaration cannot express — both EPI
+  plugins, whose prescan and imaging share a boundary flag — and call
+  `self.process` from it so the chain still runs.
 
 ## Before you finish
 

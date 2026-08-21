@@ -190,3 +190,62 @@ def test_the_gate_refuses_a_band_that_only_a_later_instance_drives():
             ],
             skip_pns=True,
         )
+
+
+#: Envelope resolutions a figure is drawn on, beside the coarse grid that
+#: reaches only the harmonics.
+ENVELOPE_RESOLUTIONS = (5.0, 2.0)
+
+
+@pytest.mark.parametrize("name", ["gre_2d.seq", "epi_2d.seq", "fse_3d.seq"])
+def test_the_verdict_does_not_move_with_the_envelope_resolution(name):
+    """The lines land at ``k / T_TR`` whatever grid the envelope is tabulated on.
+
+    ``target_resolution_hz`` sets how densely the continuous A_eq curve is
+    reported, which is a drawing concern. If it also moved which lines were
+    collected or how they were judged, a figure would be able to disagree
+    with the gate.
+    """
+    structure = _structure(name)
+
+    def spectra(step):
+        return _calc_mech_resonances(
+            structure.collection,
+            0,
+            0,
+            BOUND,
+            target_resolution_hz=step,
+            max_freq_hz=MAX_FREQ_HZ,
+            forbidden_bands=BANDS,
+        )
+
+    coarse = spectra(1.0 / structure.tr_duration)
+    for resolution in ENVELOPE_RESOLUTIONS:
+        fine = spectra(resolution)
+        assert int(fine["num_envelope_bins"]) >= int(coarse["num_envelope_bins"])
+        for key in ("candidate_freqs", "candidate_violations", "candidate_amps_gx"):
+            np.testing.assert_array_equal(
+                np.asarray(coarse[key]),
+                np.asarray(fine[key]),
+                err_msg=f"{name} {key} at {resolution} Hz",
+            )
+
+
+def test_a_finer_envelope_actually_tabulates_more_of_the_curve():
+    """The knob the test above holds the verdict against does something."""
+    structure = _structure("gre_2d.seq")
+    counts = [
+        int(
+            _calc_mech_resonances(
+                structure.collection,
+                0,
+                0,
+                BOUND,
+                target_resolution_hz=step,
+                max_freq_hz=MAX_FREQ_HZ,
+                forbidden_bands=BANDS,
+            )["num_envelope_bins"]
+        )
+        for step in (1.0 / structure.tr_duration, min(ENVELOPE_RESOLUTIONS))
+    ]
+    assert counts[1] > counts[0]

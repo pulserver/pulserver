@@ -387,7 +387,9 @@ def test_a_noise_scan_whitens_what_follows_and_never_reaches_the_buffer(
     for acquisition in stream:
         plugin.receive(acquisition, context)
 
-    assert plugin.noise is not None
+    # The measurement lives on the gadget that made it, not on the plugin.
+    (noise_adjust,) = plugin.chain
+    assert noise_adjust.noise is not None
     # Every phase encode was acquired, and only the phase encodes.
     assert plugin.buffers[0].mask.any(axis=-1).all()
     assert len(plugin.buffers[0].headers) == N

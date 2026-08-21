@@ -1,8 +1,7 @@
-"""The reconstruction half of :mod:`pulserver.app`: one recon per sampling.
+"""The reconstruction half of the zoo: one recon per sampling.
 
-``pyproject.toml`` packages this directory as :mod:`pulserver.app.recon`, and
-every module here is reachable from :mod:`pulserver.app` directly. Each is
-callable, and calling it reconstructs an MRD file::
+Every module here is installed into :mod:`pulserver.app` and reached from
+there. Each is callable, and calling it reconstructs an MRD file::
 
     from pulserver.app import cartesian2D_recon
 
@@ -15,8 +14,8 @@ per slice, so one plugin serves all three. The modules are named for the
 sampling they undo, and are built out of the :mod:`pulserver.recon` toolbox.
 
 Every module here is one complete plugin and nothing else: one
-:class:`pulserver.ReconPlugin` subclass, its ``PLUGIN`` instance, and the
-three hooks. No module-level helper, no private method, no module that
+:class:`pulserver.recon.ReconPlugin` subclass, its ``PLUGIN`` instance, and
+the hooks. No module-level helper, no private method, no module that
 demonstrates a step rather than reconstructing a scan -- a step that a plugin
 needs is a name in :mod:`pulserver.recon`, general enough to compose in a hook,
 because a local subroutine obscures which of the code is the mandatory hook and

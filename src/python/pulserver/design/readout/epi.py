@@ -557,6 +557,11 @@ def _blip_events(
     ramp of the line it leaves, the second on the rising ramp of the line it
     enters. Every step is the same shape scaled, so they all take ``blip_span``
     however far they move and the echo spacing stays constant.
+
+    Which event a line plays is decided entirely by the pair of steps flanking
+    it, and a train of hundreds of lines is built from a handful of distinct
+    pairs, so each one is constructed once and the lines that share it share
+    the event -- as the read lobes of a flyback train already do.
     """
     widest = int(np.max(np.abs(steps))) if len(steps) else 0
     if not widest or blip_span == 0.0:
@@ -564,25 +569,31 @@ def _blip_events(
     template = pp.make_trapezoid(
         channel=channel, area=widest * delta_k, duration=blip_span, system=system
     )
-    halves = [
-        pp.split_gradient_at(
-            grad=pp.scale_grad(template, float(step) / widest),
-            time_point=0.5 * blip_span,
-            system=system,
-        )
-        if step
-        else None
-        for step in steps
-    ]
+
+    halves: dict[int, Any] = {}
+
+    def split(step: int):
+        if step not in halves:
+            halves[step] = pp.split_gradient_at(
+                grad=pp.scale_grad(template, step / widest),
+                time_point=0.5 * blip_span,
+                system=system,
+            )
+        return halves[step]
+
+    flanked: dict[tuple[int, int], Any] = {}
     events = []
     for line in range(etl):
-        leaving = (
-            halves[line][0] if line < etl - 1 and halves[line] is not None else None
-        )
-        entering = (
-            halves[line - 1][1] if line and halves[line - 1] is not None else None
-        )
-        events.append(_flank(system, entering, leaving, anchor))
+        leaves = int(steps[line]) if line < etl - 1 else 0
+        enters = int(steps[line - 1]) if line else 0
+        if (enters, leaves) not in flanked:
+            flanked[(enters, leaves)] = _flank(
+                system,
+                split(enters)[1] if enters else None,
+                split(leaves)[0] if leaves else None,
+                anchor,
+            )
+        events.append(flanked[(enters, leaves)])
     return events
 
 
@@ -606,10 +617,13 @@ def _gap_blips(
     template = pp.make_trapezoid(
         channel=channel, area=widest * delta_k, duration=gap_span, system=system
     )
-    events = [
-        pp.scale_grad(template, float(step) / widest) if step else None
-        for step in steps
-    ]
+    scaled: dict[int, Any] = {}
+    events = []
+    for step in steps:
+        step = int(step)
+        if step and step not in scaled:
+            scaled[step] = pp.scale_grad(template, step / widest)
+        events.append(scaled.get(step))
     return [*events, None]
 
 

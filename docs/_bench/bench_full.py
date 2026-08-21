@@ -77,118 +77,126 @@ PNS_THRESHOLD_PERCENT = 1e6
 SIZES = {
     "gre2D": [
         {"nx": 64, "ny": 64, "nslices": 1},
-        {"nx": 128, "ny": 128, "nslices": 4},
         {"nx": 128, "ny": 128, "nslices": 8},
-        {"nx": 256, "ny": 256, "nslices": 16},
+        {"nx": 256, "ny": 256, "nslices": 20},
+        {"nx": 512, "ny": 512, "nslices": 24},
     ],
     "gre3D": [
         {"nx": 64, "ny": 64, "nslices": 16},
-        {"nx": 128, "ny": 128, "nslices": 32},
-        {"nx": 128, "ny": 128, "nslices": 48},
-        {"nx": 256, "ny": 256, "nslices": 64},
+        {"nx": 128, "ny": 128, "nslices": 64},
+        {"nx": 256, "ny": 256, "nslices": 192},
+        {"nx": 512, "ny": 512, "nslices": 512},
     ],
     "se2D": [
         {"nx": 64, "ny": 64, "nslices": 1},
-        {"nx": 128, "ny": 128, "nslices": 2},
         {"nx": 128, "ny": 128, "nslices": 4},
-        {"nx": 256, "ny": 256, "nslices": 8},
+        {"nx": 256, "ny": 256, "nslices": 10},
+        {"nx": 512, "ny": 512, "nslices": 20, "TE": 20.0},
     ],
     "se3D": [
         {"nx": 64, "ny": 64, "nslices": 8},
-        {"nx": 128, "ny": 128, "nslices": 16},
-        {"nx": 128, "ny": 128, "nslices": 24},
         {"nx": 128, "ny": 128, "nslices": 32},
+        {"nx": 192, "ny": 192, "nslices": 96},
+        {"nx": 256, "ny": 256, "nslices": 256},
     ],
     "fse2D": [
         {"nx": 128, "ny": 128, "nslices": 1},
-        {"nx": 128, "ny": 128, "nslices": 2},
-        {"nx": 128, "ny": 128, "nslices": 4},
-        {"nx": 256, "ny": 256, "nslices": 8},
+        {"nx": 128, "ny": 128, "nslices": 8},
+        {"nx": 256, "ny": 256, "nslices": 20},
+        {"nx": 512, "ny": 512, "nslices": 16},
     ],
     "fse3D": [
         {"nx": 128, "ny": 128, "nslices": 8},
-        {"nx": 128, "ny": 128, "nslices": 16},
-        {"nx": 128, "ny": 128, "nslices": 32},
         {"nx": 128, "ny": 128, "nslices": 48},
+        {"nx": 128, "ny": 128, "nslices": 96},
+        {"nx": 192, "ny": 192, "nslices": 96},
     ],
     "epi2D": [
         {"nx": 64, "ny": 64, "nslices": 1},
-        {"nx": 96, "ny": 96, "nslices": 8},
-        {"nx": 128, "ny": 128, "nslices": 12},
-        {"nx": 128, "ny": 128, "nslices": 16},
+        {"nx": 96, "ny": 96, "nslices": 16},
+        {"nx": 96, "ny": 96, "nslices": 32},
+        {"nx": 128, "ny": 128, "nslices": 60},
     ],
     "epi3D": [
         {"nx": 64, "ny": 64, "nslices": 8},
-        {"nx": 96, "ny": 96, "nslices": 16},
-        {"nx": 128, "ny": 128, "nslices": 24},
-        {"nx": 128, "ny": 128, "nslices": 32},
+        {"nx": 96, "ny": 96, "nslices": 32},
+        {"nx": 96, "ny": 96, "nslices": 64},
+        {"nx": 128, "ny": 128, "nslices": 64},
     ],
     "bssfp2D": [
         {"nx": 128, "ny": 128, "nslices": 1},
-        {"nx": 128, "ny": 128, "nslices": 2},
-        {"nx": 128, "ny": 128, "nslices": 4},
-        {"nx": 256, "ny": 256, "nslices": 8},
+        {"nx": 128, "ny": 128, "nslices": 8},
+        {"nx": 256, "ny": 256, "nslices": 20},
+        {"nx": 256, "ny": 256, "nslices": 60},
     ],
+    # A 3D balanced train has no repeating unit shorter than the scan, so the
+    # window every gradient check runs on is the whole acquisition. The sweep
+    # stops at 48 partitions because the next size up is where the interpreter
+    # declines the file outright.
     "bssfp3D": [
         {"nx": 96, "ny": 96, "nslices": 8},
-        {"nx": 128, "ny": 128, "nslices": 16},
+        {"nx": 128, "ny": 128, "nslices": 24},
         {"nx": 128, "ny": 128, "nslices": 32},
         {"nx": 128, "ny": 128, "nslices": 48},
     ],
     "gre_multiecho2D": [
         {"nx": 64, "ny": 64, "nslices": 1},
-        {"nx": 128, "ny": 128, "nslices": 2},
         {"nx": 128, "ny": 128, "nslices": 4},
-        {"nx": 256, "ny": 256, "nslices": 8},
+        {"nx": 256, "ny": 256, "nslices": 20},
+        {"nx": 512, "ny": 512, "nslices": 40},
     ],
     "gre_multiecho3D": [
         {"nx": 64, "ny": 64, "nslices": 8},
-        {"nx": 128, "ny": 128, "nslices": 16},
-        {"nx": 128, "ny": 128, "nslices": 32},
-        {"nx": 128, "ny": 128, "nslices": 48},
+        {"nx": 128, "ny": 128, "nslices": 64},
+        {"nx": 256, "ny": 256, "nslices": 192},
+        {"nx": 512, "ny": 512, "nslices": 512},
     ],
     "mprage3D": [
         {"nx": 64, "ny": 64, "nslices": 16},
-        {"nx": 128, "ny": 128, "nslices": 32},
         {"nx": 128, "ny": 128, "nslices": 64},
-        {"nx": 192, "ny": 192, "nslices": 128},
+        {"nx": 256, "ny": 256, "nslices": 256},
+        {"nx": 512, "ny": 1024, "nslices": 512},
     ],
     "mprage_stack_of_spirals3D": [
         {"nx": 64, "nslices": 16, "user0_value": 32.0},
-        {"nx": 128, "nslices": 32, "user0_value": 64.0},
-        {"nx": 128, "nslices": 48, "user0_value": 128.0},
         {"nx": 128, "nslices": 64, "user0_value": 128.0},
+        {"nx": 128, "nslices": 128, "user0_value": 256.0, "TR": 5000.0},
+        {"nx": 128, "nslices": 192, "user0_value": 384.0, "TR": 8000.0},
     ],
     "gre_radial2D": [
         {"nx": 64, "nslices": 1, "user0_value": 101.0},
-        {"nx": 128, "nslices": 4, "user0_value": 201.0},
         {"nx": 128, "nslices": 8, "user0_value": 201.0},
-        {"nx": 256, "nslices": 8, "user0_value": 403.0},
+        {"nx": 256, "nslices": 20, "user0_value": 403.0},
+        {"nx": 512, "nslices": 40, "user0_value": 805.0},
     ],
     "gre_spiral2D": [
         {"nx": 64, "nslices": 1, "user0_value": 8.0},
-        {"nx": 128, "nslices": 4, "user0_value": 16.0},
         {"nx": 128, "nslices": 8, "user0_value": 16.0},
-        {"nx": 256, "nslices": 8, "user0_value": 32.0},
+        {"nx": 256, "nslices": 20, "user0_value": 32.0},
+        {"nx": 256, "nslices": 60, "user0_value": 64.0},
     ],
     "gre_stack_of_spirals3D": [
         {"nx": 64, "nslices": 8, "user0_value": 8.0},
-        {"nx": 128, "nslices": 16, "user0_value": 16.0},
         {"nx": 128, "nslices": 32, "user0_value": 16.0},
-        {"nx": 128, "nslices": 48, "user0_value": 32.0},
+        {"nx": 128, "nslices": 128, "user0_value": 32.0},
+        {"nx": 128, "nslices": 256, "user0_value": 64.0},
     ],
     "gre_stack_of_stars3D": [
         {"nx": 64, "nslices": 8, "user0_value": 101.0},
-        {"nx": 128, "nslices": 16, "user0_value": 201.0},
-        {"nx": 128, "nslices": 24, "user0_value": 201.0},
-        {"nx": 128, "nslices": 32, "user0_value": 403.0},
+        {"nx": 128, "nslices": 32, "user0_value": 201.0},
+        {"nx": 256, "nslices": 128, "user0_value": 403.0},
+        {"nx": 256, "nslices": 256, "user0_value": 805.0},
     ],
     "se_propeller2D": [
         {"nx": 64, "nslices": 1, "user0_value": 16.0, "user1_value": 8.0},
-        {"nx": 128, "nslices": 2, "user0_value": 24.0, "user1_value": 12.0},
-        {"nx": 128, "nslices": 4, "user0_value": 24.0, "user1_value": 12.0},
-        {"nx": 256, "nslices": 4, "user0_value": 32.0, "user1_value": 16.0, "TE": 120.0},
+        {"nx": 128, "nslices": 8, "user0_value": 24.0, "user1_value": 12.0},
+        {"nx": 256, "nslices": 20, "user0_value": 32.0, "user1_value": 16.0, "TE": 120.0},
+        {"nx": 256, "nslices": 60, "user0_value": 32.0, "user1_value": 32.0, "TE": 120.0},
     ],
+    # One shell traversed once: no repeating unit either, and here the number
+    # of distinct waveforms grows with the scan as well, so the gate costs the
+    # product of the two. The sweep stops at the size above which the
+    # interpreter declines the file.
     "zte3D": [
         {"nx": 32},
         {"nx": 48},
@@ -212,10 +220,10 @@ def measure(family: str, index: int) -> dict:
 
     import pulserver.pypulseq as pp
     from pulserver import set_protocol_value
-    from pulserver._ext.pulseg import _PulseqCollection, _check_safety
+    from pulserver._ext.pulseg import _check_safety, _find_tr, _PulseqCollection
 
     system = pp.Opts()
-    module = importlib.import_module(f"pulserver.app.sequence.{family}_sequence")
+    module = getattr(importlib.import_module("pulserver.app"), f"{family}_sequence")
     plugin = module.PLUGIN
 
     protocol = plugin.get_default_protocol(system)
@@ -272,6 +280,8 @@ def measure(family: str, index: int) -> dict:
         collection = _PulseqCollection(str(path), *collection_args)
         t_convert = time.perf_counter() - start
 
+        window = _find_tr(collection)
+
         start = time.perf_counter()
         _check_safety(
             collection,
@@ -289,6 +299,9 @@ def measure(family: str, index: int) -> dict:
     return {
         "protocol": SIZES[family][index],
         "blocks": blocks[0],
+        "tr_size": int(window["tr_size"]),
+        "num_trs": int(window["num_trs"]),
+        "tr_duration_s": float(window["tr_duration_us"]) * 1e-6,
         "duration_s": report.get("duration"),
         "validate_ms": validate_ms[0],
         "validate_ms_median": validate_ms[len(validate_ms) // 2],
@@ -363,13 +376,74 @@ def sweep(names: list[str]) -> dict:
 #: One scatter per quantity: (file stem, record field, scale onto the axis
 #: unit, axis label, y scale). A logarithmic y is for the quantities that span
 #: decades; peak RSS does not, and a linear axis shows what it does do.
+#: ``reference`` is the annotation that gives the panel its scale: a band of
+#: acceptable values, or a proportional-to-the-scan line labelled with the
+#: bytes it works out at per block.
 PANELS = [
-    ("validate", "validate_ms", 1.0, "validate_protocol() [ms]", "log"),
-    ("save_rx", "save_rx_s", 1.0, "design + convert + safety + cache [s]", "log"),
-    ("peak_rss", "peak_rss_mb", 1.0, "peak resident set size [MB]", "linear"),
-    ("seq_size", "seq_bytes", 1e-6, "binary sequence file [MB]", "log"),
-    ("cache_size", "cache_bytes", 1e-6, "interpreter cache [MB]", "log"),
+    ("validate", "validate_ms", 1.0, "validate_protocol()  [ms]", "log", ("band", 50.0)),
+    ("save_rx", "save_rx_s", 1.0, "Save Rx, end to end  [s]", "log", None),
+    ("peak_rss", "peak_rss_mb", 1e-3, "peak resident set size  [GB]", "linear", None),
+    ("seq_size", "seq_bytes", 1e-6, "binary sequence file  [MB]", "log", ("per_block", "B/block")),
+    ("cache_size", "cache_bytes", 1e-6, "interpreter cache  [MB]", "log", ("per_block", "B/block")),
 ]
+
+#: Marker and colour per family, held in one place so a family keeps its
+#: identity across all five panels. Colours are a qualitative set with no
+#: implied order; the marker carries the distinction where two are close.
+FAMILY_STYLE = [
+    ("gre2D", "#1f4e79", "o"),
+    ("gre3D", "#1f4e79", "s"),
+    ("se2D", "#2e75b6", "o"),
+    ("se3D", "#2e75b6", "s"),
+    ("fse2D", "#4ea3d1", "o"),
+    ("fse3D", "#4ea3d1", "s"),
+    ("epi2D", "#c00000", "o"),
+    ("epi3D", "#c00000", "s"),
+    ("bssfp2D", "#e8734a", "o"),
+    ("bssfp3D", "#e8734a", "s"),
+    ("gre_multiecho2D", "#7030a0", "o"),
+    ("gre_multiecho3D", "#7030a0", "s"),
+    ("mprage3D", "#1a7a4c", "^"),
+    ("mprage_stack_of_spirals3D", "#1a7a4c", "D"),
+    ("gre_radial2D", "#b8860b", "o"),
+    ("gre_stack_of_stars3D", "#b8860b", "s"),
+    ("gre_spiral2D", "#8c6d4f", "o"),
+    ("gre_stack_of_spirals3D", "#8c6d4f", "s"),
+    ("se_propeller2D", "#d43f8d", "o"),
+    ("zte3D", "#3c3c3c", "v"),
+]
+
+
+def _style() -> None:
+    import matplotlib.pyplot as plt
+
+    plt.rcParams.update(
+        {
+            "figure.dpi": 160,
+            "savefig.dpi": 160,
+            "font.size": 8.5,
+            "axes.titlesize": 9,
+            "axes.labelsize": 9,
+            "axes.linewidth": 0.7,
+            "axes.edgecolor": "#444444",
+            "axes.grid": True,
+            "grid.color": "#cccccc",
+            "grid.linewidth": 0.4,
+            "grid.alpha": 0.7,
+            "xtick.direction": "out",
+            "ytick.direction": "out",
+            "xtick.major.width": 0.7,
+            "ytick.major.width": 0.7,
+            "xtick.labelsize": 8,
+            "ytick.labelsize": 8,
+            "legend.fontsize": 7,
+            "legend.handletextpad": 0.4,
+            "legend.columnspacing": 1.0,
+            "legend.labelspacing": 0.35,
+            "figure.facecolor": "white",
+            "axes.facecolor": "white",
+        }
+    )
 
 
 def figures(results: dict) -> None:
@@ -379,61 +453,184 @@ def figures(results: dict) -> None:
     import matplotlib.pyplot as plt
     import numpy as np
 
-    families = [f for f in SIZES if f in results]
-    colors = plt.get_cmap("tab20")(np.linspace(0.0, 1.0, 20))
-    markers = ["o", "s", "^", "D", "v"]
+    _style()
     ASSETS.mkdir(parents=True, exist_ok=True)
+    styled = [(f, c, m) for f, c, m in FAMILY_STYLE if f in results]
 
-    for stem, field, scale, label, yscale in PANELS:
-        fig, ax = plt.subplots(figsize=(9.0, 5.0))
-        for i, family in enumerate(families):
+    for stem, field, scale, label, yscale, reference in PANELS:
+        fig, ax = plt.subplots(figsize=(6.8, 4.1))
+        ax.set_axisbelow(True)
+        every_x, every_y = [], []
+
+        for family, color, marker in styled:
             points = [e for e in results[family] if "error" not in e]
             if not points:
                 continue
             x = np.array([e["blocks"] for e in points], dtype=float)
             y = np.array([e[field] for e in points], dtype=float) * scale
-            color = colors[i % 20]
-            ax.scatter(
+            every_x.append(x)
+            every_y.append(y)
+
+            if len(x) >= 2 and np.ptp(x) > 0:
+                if yscale == "log" and y.min() > 0:
+                    # A guide fitted in the space the axes are drawn in, so a
+                    # straight line is a power law and slope one is a cost
+                    # proportional to the scan.
+                    slope, intercept = np.polyfit(np.log(x), np.log(y), 1)
+                    span = np.geomspace(x.min(), x.max(), 64)
+                    ax.plot(
+                        span,
+                        np.exp(intercept) * span**slope,
+                        color=color,
+                        lw=0.9,
+                        alpha=0.45,
+                        zorder=2,
+                    )
+                else:
+                    # No power law to fit against a linear axis; the line only
+                    # joins one family's points so the eye can follow them.
+                    ax.plot(x, y, color=color, lw=0.9, alpha=0.45, zorder=2)
+
+            ax.plot(
                 x,
                 y,
-                s=26,
+                linestyle="none",
+                marker=marker,
+                markersize=4.4,
+                markerfacecolor=color,
+                markeredgecolor="white",
+                markeredgewidth=0.5,
                 color=color,
-                marker=markers[i % len(markers)],
                 label=family,
                 zorder=3,
             )
-            # The guide is fitted in the space the axes are drawn in, so a
-            # straight line means what it looks like it means: a power law
-            # where both axes are logarithmic, a proportionality where the
-            # y axis is linear.
-            if len(x) >= 2 and np.ptp(x) > 0:
-                span = np.array([x.min(), x.max()])
-                if yscale == "log" and y.min() > 0:
-                    slope, intercept = np.polyfit(np.log(x), np.log(y), 1)
-                    guide = np.exp(intercept) * span**slope
-                else:
-                    slope, intercept = np.polyfit(np.log(x), y, 1)
-                    guide = slope * np.log(span) + intercept
-                ax.plot(span, guide, color=color, lw=1.0, alpha=0.55)
 
         ax.set_xscale("log")
         ax.set_yscale(yscale)
         if yscale == "linear":
             ax.set_ylim(bottom=0.0)
-        ax.set_xlabel("sequence size [blocks]")
+
+        if reference and every_x:
+            x_all = np.concatenate(every_x)
+            y_all = np.concatenate(every_y)
+            if reference[0] == "band":
+                ax.axhspan(
+                    ax.get_ylim()[0], reference[1], color="#2e75b6", alpha=0.06, zorder=0
+                )
+                ax.axhline(reference[1], color="#2e75b6", lw=0.7, ls=(0, (4, 3)), zorder=1)
+                ax.annotate(
+                    f"{reference[1]:.0f} ms",
+                    xy=(1.0, reference[1]),
+                    xycoords=("axes fraction", "data"),
+                    xytext=(-2, 3),
+                    textcoords="offset points",
+                    ha="right",
+                    color="#2e75b6",
+                    fontsize=7,
+                )
+            elif reference[0] == "per_block":
+                # Read off the largest protocol of each family, where the
+                # per-block term has left the fixed header behind.
+                largest = [float(y[-1] / x[-1]) for x, y in zip(every_x, every_y, strict=True)]
+                per_block = float(np.median(largest)) / scale
+                span = np.geomspace(x_all.min(), x_all.max(), 2)
+                ax.plot(
+                    span,
+                    per_block * scale * span,
+                    color="#666666",
+                    lw=0.8,
+                    ls=(0, (4, 3)),
+                    zorder=1,
+                )
+                ax.annotate(
+                    f"{per_block:.0f} {reference[1]}",
+                    xy=(span[-1], per_block * scale * span[-1]),
+                    xytext=(-4, -11),
+                    textcoords="offset points",
+                    ha="right",
+                    color="#666666",
+                    fontsize=7,
+                )
+
+        ax.set_xlabel("sequence size  [blocks]")
         ax.set_ylabel(label)
-        ax.grid(True, which="both", lw=0.3, alpha=0.4)
+        ax.grid(True, which="major", lw=0.4)
+        ax.grid(True, which="minor", lw=0.25, alpha=0.4)
+        for side in ("top", "right"):
+            ax.spines[side].set_visible(False)
         ax.legend(
-            fontsize=7,
             frameon=False,
             loc="upper left",
-            bbox_to_anchor=(1.01, 1.0),
+            bbox_to_anchor=(1.02, 1.02),
             borderaxespad=0.0,
+            handlelength=1.0,
         )
         fig.tight_layout()
-        fig.savefig(ASSETS / f"{stem}.png", dpi=140)
+        fig.savefig(ASSETS / f"{stem}.png", bbox_inches="tight")
         plt.close(fig)
         print(f"  {ASSETS / (stem + '.png')}", flush=True)
+
+
+#: What each plugin's own controls are called, for the summary table. The
+#: prescribed quantities read the same everywhere and are named centrally.
+CONTROL_NAMES = {
+    "nx": "Nx",
+    "ny": "Ny",
+    "nslices": "slices",
+    "nex": "NEX",
+    "TE": "TE ms",
+}
+FAMILY_CONTROLS = {
+    "mprage_stack_of_spirals3D": {"user0_value": "arms"},
+    "gre_radial2D": {"user0_value": "spokes"},
+    "gre_stack_of_stars3D": {"user0_value": "spokes"},
+    "gre_spiral2D": {"user0_value": "arms"},
+    "gre_stack_of_spirals3D": {"user0_value": "arms"},
+    "se_propeller2D": {"user0_value": "blade width", "user1_value": "blades"},
+}
+
+
+def _prescription(family: str, protocol: dict) -> str:
+    names = {**CONTROL_NAMES, **FAMILY_CONTROLS.get(family, {})}
+    return ", ".join(
+        f"{value:g} {names[key]}" for key, value in protocol.items() if key in names
+    )
+
+
+def _megabytes(value: int) -> str:
+    megabytes = value / 1e6
+    return f"{megabytes:.1f}" if megabytes < 10 else f"{megabytes:.0f}"
+
+
+def table(results: dict) -> str:
+    """The summary table the page opens with, as Markdown."""
+    thin = "\u2009"
+    lines = [
+        "| Family | Largest protocol | Blocks | TR window | "
+        "`validate_protocol` | Save Rx | Peak RSS | `.seq` | Cache |",
+        "|---|---|---:|---:|---:|---:|---:|---:|---:|",
+    ]
+    for family, _, _ in FAMILY_STYLE:
+        points = [e for e in results.get(family, []) if "error" not in e]
+        if not points:
+            continue
+        big = points[-1]
+        window = big.get("tr_duration_s")
+        blocks = f"{big['blocks']:,}".replace(",", thin)
+        milliseconds = (
+            "" if window is None else f"{window * 1e3:,.0f}".replace(",", thin) + f"{thin}ms"
+        )
+        lines.append(
+            f"| `{family}` | {_prescription(family, big['protocol'])}"
+            f" | {blocks}"
+            f" | {milliseconds}"
+            f" | {big['validate_ms']:.0f}{thin}ms"
+            f" | {big['save_rx_s']:.1f}{thin}s"
+            f" | {big['peak_rss_mb'] / 1024:.2f}{thin}GB"
+            f" | {_megabytes(big['seq_bytes'])}{thin}MB"
+            f" | {_megabytes(big['cache_bytes'])}{thin}MB |"
+        )
+    return "\n".join(lines)
 
 
 def main() -> int:
@@ -441,6 +638,7 @@ def main() -> int:
     parser.add_argument("--only", help="run one family")
     parser.add_argument("--case", nargs=2, metavar=("FAMILY", "INDEX"), help=argparse.SUPPRESS)
     parser.add_argument("--figures-only", action="store_true", help="redraw from the JSON")
+    parser.add_argument("--table-only", action="store_true", help="print the summary table")
     parser.add_argument("--no-figures", action="store_true")
     args = parser.parse_args()
 
@@ -453,9 +651,14 @@ def main() -> int:
         figures(json.loads(RESULTS.read_text()))
         return 0
 
+    if args.table_only:
+        print(table(json.loads(RESULTS.read_text())))
+        return 0
+
     results = sweep([args.only] if args.only else list(SIZES))
     if not args.no_figures:
         figures(results)
+    print(table(results))
     print(f"results -> {RESULTS}")
     return 0
 

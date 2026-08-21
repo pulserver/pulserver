@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
-"""The multishot figures for ``explanations/performance/mechanical_resonance``.
+"""The figures for ``explanations/performance/mechanical_resonance``.
 
-Documentation-only tooling. It draws the claim the acoustic gate rests on --
-that one canonical TR's answer covers every instance of it -- for the case
-where the instances genuinely differ: a spiral GRE whose arms are a different
-waveform every shot.
+Documentation-only tooling. Everything on that page is drawn here, in the
+same units the vendor tables and the safety pages use -- A_eq in mT/m.
 
-Two pictures, from one build of the sequence each way:
+Three pictures:
+
+``epi_comb``
+    The page's opening claim: a blipped echo train is a comb, and the verdict
+    is those teeth read against the guarded bands -- flagged where a band
+    lands on one, clear where it does not.
+
+The spiral pictures come from one build of the sequence each way:
 
 ``spiral_bound``
     The arms, and the A_eq line spectrum of each of them under the canonical
@@ -34,14 +39,14 @@ from pathlib import Path
 import matplotlib
 
 matplotlib.use("Agg")
-import matplotlib.pyplot as plt  # noqa: E402
-import numpy as np  # noqa: E402
-from matplotlib.lines import Line2D  # noqa: E402
+import matplotlib.pyplot as plt
+import numpy as np
+from matplotlib.lines import Line2D
 
-import sys  # noqa: E402
+import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from _figures import INK, MUTED, SERIES, _style  # noqa: E402
+from _figures import INK, MUTED, SERIES, _style
 
 OUT_DIR = Path(__file__).resolve().parents[1] / "explanations" / "assets"
 
@@ -67,6 +72,16 @@ BANDS = [
 ]
 
 MAX_FREQ_HZ = 2000.0
+
+#: The EPI hero: the checked-in fixture, read as a scanner would read it.
+FIXTURES = Path(__file__).resolve().parents[2] / "tests" / "python" / "fixtures"
+
+#: Zero-tolerance bands for the EPI figure, one on the echo-train tooth and
+#: one in the quiet between teeth, so the same comb shows a flag and a pass.
+#: Zero tolerance means the verdict falls back to the hardware-anchored floor,
+#: 0.08 x G_max.
+EPI_BANDS = [(1200.0, 1300.0, 0.0), (1550.0, 1650.0, 0.0)]
+EPI_MAX_FREQ_HZ = 3000.0
 
 
 def build(rotated: bool):
@@ -144,6 +159,56 @@ def _shade(index: int, total: int) -> str:
     """One hue per interleaf: an identity, not an order."""
     del total
     return SERIES[index % len(SERIES)]
+
+
+def epi_comb() -> Path:
+    """The echo-train comb, read against two guarded bands."""
+    import pulserver.io as pio
+
+    sequence = pio.read(FIXTURES / "epi_2d.seq")
+    floor = 0.08 * float(sequence.system.max_grad) / GAMMA_HZ_PER_MT_PER_M
+    resonances = sequence.calculate_gradient_spectrum(
+        EPI_MAX_FREQ_HZ,
+        plot=False,
+        tr="worst_case",
+        resonance_lines=True,
+        bands=EPI_BANDS,
+        compat=False,
+    ).resonance_lines
+
+    figure, axis = plt.subplots(figsize=(9.0, 3.8))
+    amps = resonances.line_a_eq / GAMMA_HZ_PER_MT_PER_M
+    for channel, label in enumerate(("$G_x$ (the echo train)", "$G_y$", "$G_z$")):
+        axis.plot(
+            resonances.line_freqs,
+            amps[:, channel],
+            color=SERIES[channel],
+            lw=1.2 if channel == 0 else 0.9,
+            alpha=1.0 if channel == 0 else 0.75,
+            label=label,
+        )
+
+    for low, high, _ in EPI_BANDS:
+        axis.axvspan(low, high, color="#e34948", alpha=0.08, lw=0)
+        axis.plot([low, high], [floor] * 2, color="#e34948", lw=1.2, ls=(0, (4, 2)), zorder=5)
+    flagged = resonances.violations
+    candidates = resonances.candidate_a_eq.max(axis=1) / GAMMA_HZ_PER_MT_PER_M
+    for real, color, label in ((~flagged, SERIES[2], "in-band line, under the floor"),
+                               (flagged, "#e34948", "in-band line, flagged")):
+        if np.any(real):
+            axis.plot(resonances.candidate_freqs[real], candidates[real],
+                      "o", color=color, ms=5, mew=0, lw=0, label=label, zorder=6)
+
+    _style(axis, "the echo-train comb, against two zero-tolerance bands")
+    axis.set_xlabel("frequency (Hz)")
+    axis.set_ylabel("$A_{eq}$ (mT/m)")
+    axis.set_xlim(0, EPI_MAX_FREQ_HZ)
+    axis.set_ylim(0, None)
+    legend = axis.legend(fontsize=8, frameon=False, loc="upper right", ncols=2)
+    for text in legend.get_texts():
+        text.set_color(MUTED)
+
+    return save(figure, "epi_comb")
 
 
 def spiral_bound(sequence) -> Path:
@@ -275,7 +340,7 @@ def main() -> None:
     rotated = build(rotated=True)
     explicit = build(rotated=False)
 
-    written = [spiral_bound(explicit), spiral_encodings(rotated, explicit)]
+    written = [epi_comb(), spiral_bound(explicit), spiral_encodings(rotated, explicit)]
     for path in written:
         print(path.relative_to(OUT_DIR.parent))
 

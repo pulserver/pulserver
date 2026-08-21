@@ -1,76 +1,8 @@
 """3D Cartesian fast spin echo, slab-selective, with selectable view ordering.
 
-One long CPMG train per excitation over a ``(ky, kz)`` grid --
-:class:`design.FseReadout3D` -- with the two decisions a long train forces
-made explicit, after Busse et al. 2008 (MRM 60:640), followed loosely:
-
-**View ordering** maps the train's signal modulation into k-space, and is
-delegated to the :mod:`pulserver.pypulseq` echo-train ordering builtins. The
-*coherent* orderings sort views so successive echoes stay close in k-space
-and the centre lands at the echo whose time is the requested effective TE:
-``linear`` (raster bands rolled onto the target echo), ``centric`` (global
-centre-out radius bands, rolled onto the target echo), ``radial`` (centre-out
-by radius, effective TE at the first echo), and ``radial_adaptive`` (by
-radius, but the bands assigned outward from the target echo, so the centre is
-late without a seam). The *incoherent* ordering, ``shuffling``, scatters views
-across echoes for a subspace reconstruction. Every acquisition carries its echo
-index as ``ECO``, which is what any of them reconstruct from.
-
-**Sampling** is undersampled through the same builtins: the regular orderings
-lay a CAIPIRINHA lattice (``caipi_shift`` staggers kz per ky block) around a
-fully sampled autocalibration rectangle, while ``shuffling`` draws an
-incoherent variable-density Poisson-disc set when accelerated.
-
-**Refocusing flip modulation** trades signal for blur over long trains. The
-optional variable train is a TRAPS-style piecewise ramp in flip space --
-``alpha_max`` at the first echo, down to ``alpha_min``, back up to
-``alpha_center`` at the effective-TE echo, and on to ``alpha_max`` by the
-train's end -- the shape Busse's prescribed-envelope method produces,
-without the EPG inversion. The played angles are written into the
-``RefocusingFlipAngles`` definition.
-
 ``main`` returns the :class:`pulserver.pypulseq.Sequence`; ``PLUGIN`` is the
 same sequence behind the scanner protocol contract, and running this module
 as a script writes a ``.seq`` from the same controls.
-
-Examples
---------
->>> from pulserver.app import fse3D_sequence
->>> seq = fse3D_sequence(n_x=64, n_y=16, n_z=4, etl=4, te=20e-3, tr=None)
->>> seq.num_trs, seq.num_segments
-(16, 3)
-
-A non-selective refocusing train over a slab, which is what makes single-slab 3D FSE efficient:
-
-.. plot::
-   :include-source:
-
-   from pulserver.app import fse3D_sequence
-
-   seq = fse3D_sequence(n_x=64, n_y=16, n_z=4, etl=4, te=20e-3, tr=None)
-   seq.plot(tr="worst_case", time_disp="ms", grad_disp="mT/m", stacked=True,
-            plot_now=False)
-
-Which view each echo encodes is what the effective echo time is, and the
-ordering is where that is decided. All five are dealt from the same
-``(ky, kz)`` grid; only the rank they sort on differs:
-
-.. plot::
-
-   import numpy as np
-   from pulserver.app.sequence.fse3D_sequence import ORDERINGS, order_views
-   from _figures import order_figure
-
-   grid = (32, 32)
-   views = [(y, z) for y in range(grid[0]) for z in range(grid[1])]
-   order_figure(
-       [
-           (name, order_views(views, 32, 0, name, grid))
-           for name in ("linear", "centric", "radial", "shuffling")
-       ],
-       views,
-       title="the same views, four orderings",
-   )
 """
 
 from __future__ import annotations
@@ -152,6 +84,35 @@ def main(
 ) -> pp.Sequence:
     """Create a 3D Cartesian fast spin-echo sequence.
 
+    One long CPMG train per excitation over a ``(ky, kz)`` grid --
+    :class:`design.FseReadout3D` -- with the two decisions a long train forces
+    made explicit, after Busse et al. 2008 (MRM 60:640), followed loosely:
+
+    **View ordering** maps the train's signal modulation into k-space, and is
+    delegated to the :mod:`pulserver.pypulseq` echo-train ordering builtins. The
+    *coherent* orderings sort views so successive echoes stay close in k-space
+    and the centre lands at the echo whose time is the requested effective TE:
+    ``linear`` (raster bands rolled onto the target echo), ``centric`` (global
+    centre-out radius bands, rolled onto the target echo), ``radial`` (centre-out
+    by radius, effective TE at the first echo), and ``radial_adaptive`` (by
+    radius, but the bands assigned outward from the target echo, so the centre is
+    late without a seam). The *incoherent* ordering, ``shuffling``, scatters views
+    across echoes for a subspace reconstruction. Every acquisition carries its echo
+    index as ``ECO``, which is what any of them reconstruct from.
+
+    **Sampling** is undersampled through the same builtins: the regular orderings
+    lay a CAIPIRINHA lattice (``caipi_shift`` staggers kz per ky block) around a
+    fully sampled autocalibration rectangle, while ``shuffling`` draws an
+    incoherent variable-density Poisson-disc set when accelerated.
+
+    **Refocusing flip modulation** trades signal for blur over long trains. The
+    optional variable train is a TRAPS-style piecewise ramp in flip space --
+    ``alpha_max`` at the first echo, down to ``alpha_min``, back up to
+    ``alpha_center`` at the effective-TE echo, and on to ``alpha_max`` by the
+    train's end -- the shape Busse's prescribed-envelope method produces,
+    without the EPG inversion. The played angles are written into the
+    ``RefocusingFlipAngles`` definition.
+
     Parameters
     ----------
     plot : bool, optional
@@ -231,6 +192,138 @@ def main(
     -------
     seq : pulserver.pypulseq.Sequence
         The FSE sequence object.
+
+    Examples
+    --------
+    >>> from pulserver.app import fse3D_sequence
+    >>> seq = fse3D_sequence(n_x=64, n_y=16, n_z=4, etl=4, te=20e-3, tr=None)
+    >>> seq.num_trs, seq.num_segments
+    (16, 3)
+
+    The waveform figures below are one design, prescribed to be *legible*
+    rather than diagnostic: the shortest echo spacing and TR the train
+    admits, a long readout so the read lobe stands out against the encodes,
+    and a short train over few views so one repetition fits on a page. The
+    sampling figure is a second design, because a picture of the ordering
+    wants a matrix worth ordering.
+
+    .. plot::
+       :include-source:
+       :nofigs:
+       :context:
+
+       from pulserver.app import fse3D_sequence
+
+       seq = fse3D_sequence(n_x=256, n_y=16, n_z=4, etl=8, te=None, tr=None)
+
+    **The pulses.** A slab-selective SLR excitation, and the refocusing pulse
+    the train repeats -- selective over the same slab, and drawn as
+    refocusing efficiency because that, not a flip angle, is what a CPMG
+    train carries from echo to echo.
+
+    .. plot::
+       :include-source:
+       :context: close-figs
+
+       seq.plot_rf(
+           "excitation", title="slab-selective SLR excitation, 128 mm", plot_now=False
+       )
+       seq.plot_rf(
+           "refocusing", title="slab-selective refocusing, 128 mm", plot_now=False
+       )
+
+    **One repetition**: the excitation, then eight refocused echoes, each
+    with its own ``(ky, kz)`` encode and the rewinder that undoes it before
+    the next refocusing pulse. The refocusing amplitudes are the TRAPS ramp
+    -- high, down, back up through the effective-TE echo -- and the crushers
+    either side of each pulse are the tall lobes on ``Gz``.
+
+    .. plot::
+       :include-source:
+       :context: close-figs
+
+       seq.plot(tr="worst_case", time_disp="ms", grad_disp="mT/m", plot_now=False)
+
+    **The segments**, which are the interpreter's units of playout. Each is
+    drawn as the instance carrying the most gradient energy -- the one the
+    safety checks were run against -- over the span of the scan where it
+    plays.
+
+    .. plot::
+       :include-source:
+       :context: close-figs
+
+       for index in range(seq.num_segments):
+           seq.plot(
+               segment_idx=index, time_disp="ms", grad_disp="mT/m", plot_now=False
+           )
+
+    **What the scan covers**, and in what order. This is the whole of the
+    contrast decision: the left panel says when in the scan each view was
+    acquired, the right says which echo of its train encoded it -- and the
+    right one is the effective echo time, view by view. Under
+    ``radial_adaptive`` the centre is encoded early and the periphery late,
+    so the image sees the top of the decay where it matters.
+
+    .. plot::
+       :include-source:
+       :context: close-figs
+
+       sampled = fse3D_sequence(
+           n_x=96, n_y=32, n_z=32, etl=8, te=None, tr=None, n_acs=12, n_acs_z=8,
+       )
+       sampled.plot_kspace(
+           plane="yz", color_by="order", show_trajectory=False, plot_now=False,
+       )
+
+    The five orderings deal the same views into their trains differently, and
+    that is the only thing that separates them:
+
+    .. plot::
+       :context: close-figs
+
+       from pulserver.app import fse3D_sequence
+       from _figures import order_figure
+
+       grid = (32, 32)
+       views = [(y, z) for y in range(grid[0]) for z in range(grid[1])]
+       order_figure(
+           [
+               (name, fse3D_sequence.order_views(views, 32, 0, name, grid))
+               for name in ("linear", "centric", "radial", "shuffling")
+           ],
+           views,
+           title="the same views, four orderings",
+       )
+
+    **Mechanical resonance.** The repetition is periodic, so its gradients
+    have energy only at multiples of ``1 / T_TR``; a long train puts many of
+    them in the audio range, and the verdict panel says which ones land in a
+    guarded band.
+
+    .. plot::
+       :include-source:
+       :context: close-figs
+
+       gamma = 42.576e3  # Hz/m per mT/m
+       seq.calculate_gradient_spectrum(
+           tr="worst_case",
+           resonance_lines=True,
+           bands=[(550.0, 700.0, 3.0 * gamma), (1150.0, 1300.0, 3.0 * gamma)],
+       )
+
+    **Peripheral nerve stimulation**, under the rheobase/chronaxie model the
+    scanner's own gate applies, over the same repetition played back to back.
+    The crushers are what it sees: they are the fastest thing in the train.
+
+    .. plot::
+       :include-source:
+       :context: close-figs
+
+       seq.calculate_pns(
+           {"chronaxie_us": 360.0, "rheobase": 20.0, "alpha": 0.333},
+           tr="worst_case",
+       )
     """
     system = pp.Opts() if system is None else system
     system = pp.cap_system(system, max_grad=MAX_GRAD, max_slew=MAX_SLEW)
@@ -462,10 +555,8 @@ def order_views(
     # views centred on the k-space middle and normalised by the matrix -- what
     # makes the radius isotropic in fractional k-space -- and index the shots of
     # positions they return back into the original ``(line, partition)`` views.
-    coords = [
-        ((line - n_y / 2) / n_y, (partition - n_z / 2) / n_z)
-        for line, partition in views
-    ]
+    grid_centre = np.array([n_y / 2, n_z / 2])
+    coords = (np.asarray(views, dtype=float) - grid_centre) / np.array([n_y, n_z])
     if ordering == "shuffling":
         shots = pp.make_shuffling_order(coords, etl, seed=seed, pad=True)
     elif ordering == "linear":

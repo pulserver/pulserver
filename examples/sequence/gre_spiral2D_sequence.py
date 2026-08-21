@@ -1,41 +1,8 @@
 """RF-spoiled 2D spiral gradient echo, multi-slice.
 
-One solved spiral interleave -- :class:`design.SpiralReadout2D` -- turned per
-shot by a ``ROTATIONS`` extension: one registered waveform however many arms
-the scan plays. The FOV offset goes through ``TransformFOV`` in server mode,
-where a rotated readout defers its ADC shift to the consumer of the base
-trajectory. :mod:`pulserver.app.recon.noncartesian2D_recon` reconstructs by NUFFT
-against the trajectory the file itself carries.
-
 ``main`` returns the :class:`pulserver.pypulseq.Sequence`; ``PLUGIN`` is the
 same sequence behind the scanner protocol contract, and running this module
 as a script writes a ``.seq`` from the same controls.
-
-Examples
---------
->>> from pulserver.app import gre_spiral2D_sequence
->>> seq = gre_spiral2D_sequence(n_x=32, n_slices=1, n_dummy=0)
->>> seq.num_trs, seq.num_segments
-(16, 2)
-
-One interleave per repetition, prephaser and rewinder bridged onto the solved waveform:
-
-.. plot::
-   :include-source:
-
-   from pulserver.app import gre_spiral2D_sequence
-
-   seq = gre_spiral2D_sequence(n_x=32, n_slices=1, n_dummy=0)
-   seq.plot(tr="worst_case", time_disp="ms", grad_disp="mT/m", stacked=True,
-            plot_now=False)
-
-.. plot::
-   :include-source:
-
-   from pulserver.app import gre_spiral2D_sequence
-
-   seq = gre_spiral2D_sequence(n_x=32, n_slices=1, n_dummy=0)
-   seq.plot_kspace(plot_now=False)
 """
 
 from __future__ import annotations
@@ -115,6 +82,13 @@ def main(
 ) -> pp.Sequence:
     """Create an RF-spoiled 2D spiral gradient-echo sequence.
 
+    One solved spiral interleave -- :class:`design.SpiralReadout2D` -- turned per
+    shot by a ``ROTATIONS`` extension: one registered waveform however many arms
+    the scan plays. The FOV offset goes through ``TransformFOV`` in server mode,
+    where a rotated readout defers its ADC shift to the consumer of the base
+    trajectory. :mod:`pulserver.app.noncartesian2D_recon` reconstructs by NUFFT
+    against the trajectory the file itself carries.
+
     Parameters
     ----------
     plot : bool, optional
@@ -175,6 +149,89 @@ def main(
     -------
     seq : pulserver.pypulseq.Sequence
         The spiral GRE sequence object.
+
+    Examples
+    --------
+    >>> from pulserver.app import gre_spiral2D_sequence
+    >>> seq = gre_spiral2D_sequence(n_x=32, n_slices=1, n_dummy=0)
+    >>> seq.num_trs, seq.num_segments
+    (16, 2)
+
+    Every figure below is one design, prescribed to be *legible* rather than
+    diagnostic: the shortest TE and TR the readout admits, heavy spoiling so
+    that lobe stands out against the solved waveform, and few arms so each
+    one is its own colour in the trajectory.
+
+    .. plot::
+       :include-source:
+       :nofigs:
+       :context:
+
+       from pulserver.app import gre_spiral2D_sequence
+
+       seq = gre_spiral2D_sequence(
+           n_x=128, n_arms=8, n_slices=1, te=None, tr=None,
+           n_dummy=0, spoiling_cycles=6.0,
+       )
+
+    **The excitation.** The same slice-selective SLR pulse a Cartesian
+    gradient echo uses: what makes this sequence spiral is entirely what
+    happens after it.
+
+    .. plot::
+       :include-source:
+       :context: close-figs
+
+       seq.plot_rf(title="slice-selective SLR excitation, 5 mm", plot_now=False)
+
+    **One repetition.** The readout is a solved waveform rather than a
+    trapezoid, and both in-plane axes carry it: ``Gx`` and ``Gy`` are the
+    same spiral a quarter turn apart, with the prephaser and the rewinder
+    bridged onto its ends so the shot starts and finishes at the origin.
+
+    .. plot::
+       :include-source:
+       :context: close-figs
+
+       seq.plot(tr="worst_case", time_disp="ms", grad_disp="mT/m", plot_now=False)
+
+    **What the scan covers.** One arm per repetition, each the same stored
+    waveform turned by a ``ROTATIONS`` extension -- so the eight colours here
+    are eight rotations of one shape, not eight waveforms.
+
+    .. plot::
+       :include-source:
+       :context: close-figs
+
+       seq.plot_kspace(color_by="order", plot_now=False)
+
+    **Mechanical resonance.** A spiral sweeps its gradients through a range
+    of frequencies rather than holding one, so its envelope is broad where a
+    Cartesian readout's is a comb -- which is what makes a forbidden band
+    harder to clear by retiming and easier to clear by slowing the arm down.
+
+    .. plot::
+       :include-source:
+       :context: close-figs
+
+       gamma = 42.576e3  # Hz/m per mT/m
+       seq.calculate_gradient_spectrum(
+           tr="worst_case",
+           resonance_lines=True,
+           bands=[(550.0, 700.0, 3.0 * gamma), (1150.0, 1300.0, 3.0 * gamma)],
+       )
+
+    **Peripheral nerve stimulation**, under the rheobase/chronaxie model the
+    scanner's own gate applies, over the same repetition played back to back.
+
+    .. plot::
+       :include-source:
+       :context: close-figs
+
+       seq.calculate_pns(
+           {"chronaxie_us": 360.0, "rheobase": 20.0, "alpha": 0.333},
+           tr="worst_case",
+       )
     """
     system = pp.Opts() if system is None else system
     system = pp.cap_system(system, max_grad=MAX_GRAD, max_slew=MAX_SLEW)

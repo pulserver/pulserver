@@ -16,6 +16,10 @@ from . import _results, _safety
 from ._common import _UPSTREAM_WINDOW_WIDTH, _span
 from ._structure import _Structure
 
+#: How many points the acoustic envelope is tabulated over. Enough to draw a
+#: smooth curve; the lines and the verdict do not depend on it.
+_ENVELOPE_BINS = 600
+
 
 class SafetyViewsMixin:
     """PNS and gradient-spectrum views. Mixed into :class:`Sequence`."""
@@ -103,8 +107,9 @@ class SafetyViewsMixin:
             )
             if do_plots:
                 # Upstream draws through pyplot and leaves its PNS panel
-                # current, so the thresholds go on afterwards rather than
-                # forking its plotting.
+                # current, so the restyling and the thresholds go on
+                # afterwards rather than forking its plotting.
+                _safety.restyle_pns()
                 _safety.overlay_pns_thresholds()
             return answer if compat else _results.Pns(*answer)
 
@@ -128,12 +133,7 @@ class SafetyViewsMixin:
         times = np.arange(components.shape[0]) * raster
 
         if do_plots:
-            # The window the core judged, not the first group's: under
-            # `worst_case` the check evaluates one window per group of
-            # instances sharing their gradient definitions, and reports which
-            # one it took.
-            drawn = structure.waveform(tr, group=result.get("worst_group"))
-            _plot_pns(drawn, components, raster)
+            _plot_pns(components, raster)
 
         verdict = (bool(np.all(norm < 1)), norm, components, times)
         return verdict if compat else _results.Pns(*verdict)
@@ -283,7 +283,10 @@ class SafetyViewsMixin:
             window_width=structure.tr_duration,
             frequency_oversampling=frequency_oversampling,
             time_range=None,
-            plot=plot,
+            # Under ``resonance_lines`` the picture is the acoustic verdict,
+            # in A_eq, and a short-time Fourier magnitude is a different
+            # quantity that must not share its axes.
+            plot=plot and not resonance_lines,
             combine_mode=combine_mode,
             use_derivative=use_derivative,
             acoustic_resonances=acoustic_resonances,
@@ -302,8 +305,8 @@ class SafetyViewsMixin:
             ]
         resonances = _resonance_lines(structure, tr, max_frequency, bands)
 
-        if plot and combine_mode != "none":
-            _safety.overlay_resonance_lines(resonances, max_frequency=max_frequency)
+        if plot:
+            _safety.plot_resonances(resonances, max_frequency=max_frequency)
 
         if not compat:
             return _results.GradientSpectrum(*spectrum, resonance_lines=resonances)
@@ -329,25 +332,18 @@ def _native_pns(structure: _Structure, hardware: object, mode: int, index: int) 
     return _calc_pns(structure.collection, 0, index, chronaxie_us, rheobase, alpha)
 
 
-def _plot_pns(
-    waveform: _safety.TRSequence, components: np.ndarray, raster: float
-) -> None:
-    """Upstream's two PNS figures, drawn over a TR waveform.
+def _plot_pns(components: np.ndarray, raster: float) -> None:
+    """The PNS response of one TR, as ``safe_plot`` draws it.
 
-    The same pair :func:`pypulseq.Sequence.calc_pns.calc_pns` draws, from
-    the same two calls -- the gradient trace off the PPoly upstream itself
-    built, and ``safe_plot`` on the components -- plus the thresholds,
-    which upstream draws in neither mode. ``raster`` is the safety core's,
-    half the gradient raster, not the sequence's.
+    Upstream's plotter, on the components the C core produced, plus the
+    thresholds it draws in neither mode and the restyling that keeps its
+    legend off them. The gradient waveform it also draws is left out: under
+    ``tr`` the waveform is what :meth:`~.Sequence.plot` is for, and drawing it
+    again here says nothing new. ``raster`` is the safety core's, half the
+    gradient raster, not the sequence's.
     """
     import matplotlib.pyplot as plt
     from pypulseq.utils.safe_pns_prediction import safe_plot
-
-    plt.figure()
-    for gradient in waveform.get_gradients():
-        if gradient is not None:
-            plt.plot(gradient.x[1:-1], gradient.c[1, :-1])
-    plt.title("gradient wave form, in Hz/m")
 
     plt.figure()
     # Magnitudes, because either polarity of slew stimulates and ``safe_plot``
@@ -356,6 +352,7 @@ def _plot_pns(
     # would be drawn off the bottom of the panel and read as that axis
     # contributing nothing. The norm is a root-sum-square, so it is unchanged.
     safe_plot(np.abs(components) * 100, raster)
+    _safety.restyle_pns()
     _safety.overlay_pns_thresholds()
 
 
@@ -376,10 +373,11 @@ def _resonance_lines(
         0,
         index,
         mode,
-        # A resolution fine enough that the harmonic grid the core
-        # tabulates reaches max_frequency; the lines themselves land at
-        # k / T_TR regardless of what is asked for here.
-        target_resolution_hz=1.0 / structure.tr_duration,
+        # Fine enough to draw the continuous envelope with. The lines
+        # themselves land at k / T_TR regardless of what is asked for here,
+        # and so does the verdict -- see
+        # ``test_the_verdict_does_not_move_with_the_envelope_resolution``.
+        target_resolution_hz=max(float(max_frequency) / _ENVELOPE_BINS, 0.5),
         max_freq_hz=float(max_frequency),
         forbidden_bands=[tuple(float(value) for value in band[:3]) for band in bands],
     )

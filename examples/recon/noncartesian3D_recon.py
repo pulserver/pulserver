@@ -1,45 +1,7 @@
 """Any 3D non-Cartesian scan, one volume per measurement.
 
-A reconstruction over the whole sampled ball -- ZTE, and any other sequence
-whose readouts leave a genuinely three-dimensional trajectory rather than a
-stack of planes: Pipe--Menon
-density compensation and a coil-wise adjoint NUFFT through
-:class:`pulserver.recon.physics.NonCartesian3D` -- the direct finish, valid
-because a ZTE shell set is designed at Nyquist -- with a CG solve available
-for anything undersampled, exactly as the 2D non-Cartesian plugin branches.
-The dead-time gap's missing centre samples are declared by the sequence and
-left to the density weighting here; a dedicated gap-filling refinement
-starts by overriding this plugin.
-
-
-Examples
---------
-Calling the module reconstructs an MRD file: the same three hooks an
-inline reconstruction is driven through, fed from the file in this
-process rather than over a socket.
-
->>> from pulserver import ReconPlugin
->>> from pulserver.app import noncartesian3D_recon
->>> isinstance(noncartesian3D_recon.PLUGIN, ReconPlugin)
-True
-
-The three hooks are the whole plugin, and nothing else is overridden:
-
->>> sorted(
-...     hook for hook in ("startup", "receive", "recon")
-...     if hook in vars(noncartesian3D_recon.NonCartesian3DRecon)
-... )
-['receive', 'recon', 'startup']
-
-Reconstruct a fully 3D non-Cartesian scan::
-
-    images = noncartesian3D_recon("scan.h5")
-
-Or re-instantiate the plugin with different settings, and drive it the
-same way::
-
-    plugin = noncartesian3D_recon.NonCartesian3DRecon(coil_compression=8)
-    images = plugin.run("scan.h5")
+Calling this module reconstructs an MRD file; ``PLUGIN`` is the same
+reconstruction behind the stream contract, driven live by the scanner.
 """
 
 from __future__ import annotations
@@ -48,24 +10,30 @@ __all__ = ["PLUGIN", "NonCartesian3DRecon"]
 
 from typing import Any
 
-import numpy as np
 
 from pulserver import ReconContext, ReconPlugin, ReconResult
 from pulserver.recon import (
-    NLINV,
     AcquisitionFlag,
-    NonCartesian3D,
-    as_numpy,
+    NoiseAdjust,
     coil_compress,
-    has_acquisition_flag,
-    noise_prewhiten,
-    pics,
-    pipe_menon_dcf,
+    image_result,
+    noncartesian_recon,
 )
 
 
 class NonCartesian3DRecon(ReconPlugin):
     """Reconstruct a ZTE sphere, one volume per measurement.
+
+    A reconstruction over the whole sampled ball -- ZTE, and any other sequence
+    whose readouts leave a genuinely three-dimensional trajectory rather than a
+    stack of planes: Pipe--Menon
+    density compensation and a coil-wise adjoint NUFFT through
+    :class:`pulserver.recon.physics.NonCartesian3D` -- the direct finish, valid
+    because a ZTE shell set is designed at Nyquist -- with a CG solve available
+    for anything undersampled, exactly as the 2D non-Cartesian plugin branches.
+    The dead-time gap's missing centre samples are declared by the sequence and
+    left to the density weighting here; a dedicated gap-filling refinement
+    starts by overriding this plugin.
 
     Parameters
     ----------
@@ -82,6 +50,22 @@ class NonCartesian3DRecon(ReconPlugin):
         ``pics`` only.
     device
         Torch device the reconstruction runs on. ``None`` is the CPU.
+
+    Examples
+    --------
+    Calling the module reconstructs an MRD file, through the same hooks a
+    scanner's live stream is driven through. Its settings are the arguments
+    of that call:
+
+    >>> import inspect
+    >>> from pulserver.app import noncartesian3D_recon
+    >>> "virtual_coils" in inspect.signature(noncartesian3D_recon).parameters
+    True
+
+    Reconstruct a fully 3D non-Cartesian scan::
+
+        images = noncartesian3D_recon("scan.h5")
+        images = noncartesian3D_recon("scan.h5", virtual_coils=4, mode="pics")
     """
 
     def __init__(
@@ -95,7 +79,8 @@ class NonCartesian3DRecon(ReconPlugin):
         device: Any = None,
     ) -> None:
         super().__init__(
-            split_on=AcquisitionFlag.LAST_IN_MEASUREMENT,
+            chain=[NoiseAdjust()],
+            branches={AcquisitionFlag.LAST_IN_MEASUREMENT: "imaging"},
             reject_flags=AcquisitionFlag.IS_PHASECORR_DATA,
         )
         if mode not in ("direct", "pics"):
@@ -108,30 +93,8 @@ class NonCartesian3DRecon(ReconPlugin):
         self.device = device
 
     def startup(self, context: ReconContext) -> None:
-        """Lay the scan's buffers out, with no noise measured yet."""
+        """Lay the scan's buffers out."""
         super().startup(context)
-        self.noise: Any = None
-
-    def receive(self, acquisition: Any, context: ReconContext) -> Any:
-        """Whiten the readout and place it, and reconstruct at the end of the scan.
-
-        A noise scan is not imaging data and never reaches a buffer: what it
-        leaves behind is the covariance every readout that follows is whitened
-        by.
-        """
-        line = np.asarray(acquisition.data)
-        if has_acquisition_flag(acquisition, AcquisitionFlag.IS_NOISE_MEASUREMENT):
-            self.noise = (
-                line if self.noise is None else np.concatenate([self.noise, line], -1)
-            )
-            return None
-        if self.noise is not None:
-            line = noise_prewhiten(line, self.noise, coil_axis=0)
-
-        self.buffers.add(acquisition, line)
-        if has_acquisition_flag(acquisition, AcquisitionFlag.LAST_IN_MEASUREMENT):
-            return self.recon("imaging", context)
-        return None
 
     def recon(self, branch: str, context: ReconContext) -> ReconResult:
         """Reconstruct the volume, once the measurement is complete."""
@@ -139,57 +102,20 @@ class NonCartesian3DRecon(ReconPlugin):
         # Spokes laid end to end, and the points they were taken at in the
         # same order: one non-Cartesian measurement of the volume.
         buffer = self.buffers[0]
-        volume_shape = buffer.image_shape
-        data = buffer.kspace.reshape(buffer.kspace.shape[0], -1)
-        points = buffer.points()[:3].reshape(3, -1).T.astype(np.float32)
-
-        data, _ = coil_compress(data, self.virtual_coils)
-        density = pipe_menon_dcf(points, volume_shape)
-        n_coils = int(data.shape[0])
-
-        if self.mode == "direct":
-            coil_wise = NonCartesian3D(
-                points, volume_shape, density=density, n_coils=n_coils
-            )
-            # Native complex throughout: the measurement crosses the NumPy
-            # boundary and the coil-wise adjoint answers with one complex
-            # volume per coil, so there is no real/complex view juggling to
-            # unpack the channel axis.
-            coil_images = coil_wise.A_adjoint(data[None])[0]
-            image = np.sqrt(np.sum(np.abs(coil_images) ** 2, axis=0))
-        else:
-            maps = NLINV(spatial_ndim=3, calibration_width=self.calibration_width)(
-                data,
-                trajectory=points,
-                image_shape=volume_shape,
-                density=density,
-                device=self.device,
-            )
-            sense = NonCartesian3D(
-                points,
-                volume_shape,
-                coil_maps=maps,
-                density=density,
-                n_coils=n_coils,
-            )
-            # NumPy in, NumPy out: the unaliased complex volume comes straight
-            # back from the solve, which keeps a singleton coil axis, so index
-            # past both batch and channel to the volume.
-            image = np.abs(
-                pics(
-                    data[None],
-                    sense,
-                    regularization=self.regularization,
-                    iterations=self.iterations,
-                )[0, 0]
-            )
-
-        return ReconResult(
-            as_numpy(image).transpose(0, 2, 1),
-            reference=-1,
-            image_type="magnitude",
-            dicom=True,
+        data, _ = coil_compress(
+            buffer.kspace.reshape(buffer.kspace.shape[0], -1), self.virtual_coils
         )
+        image = noncartesian_recon(
+            data,
+            buffer.points()[:3].reshape(3, -1).T,
+            buffer.image_shape,
+            mode=self.mode,
+            regularization=self.regularization,
+            iterations=self.iterations,
+            calibration_width=self.calibration_width,
+            device=self.device,
+        )
+        return image_result(image, buffer)
 
 
 PLUGIN = NonCartesian3DRecon()

@@ -1,41 +1,8 @@
 """3D MPRAGE on a golden-angle stack of spirals.
 
-Partitions are the outer loop: one inversion per train, and a train plays
-``etl`` arms of one partition with its first echo at the requested TI. Arms
-step by the golden angle, so any prefix of the scan covers the disc
-near-uniformly, and a given arm is played at the same angle in every partition.
-A partition angle offset turns it a little further with each one instead,
-staggering the sampling along kz the way a CAIPIRINHA shift does.
-
-By default the arm is held once and turned per shot by a ``ROTATIONS``
-extension. ``use_rotation_ext=False`` writes every shot out as its own
-gradient waveform instead, with the shape library growing with the shot count
--- the untemplatable-waveform case, which is exactly the path an interpreter's
-waveform streaming has to survive.
-:mod:`pulserver.app.recon.noncartesian_stack_recon` reconstructs the stack
-against the trajectory the acquisitions carry.
-
 ``main`` returns the :class:`pulserver.pypulseq.Sequence`; ``PLUGIN`` is the
 same sequence behind the scanner protocol contract, and running this module
 as a script writes a ``.seq`` from the same controls.
-
-Examples
---------
->>> from pulserver.app import mprage_stack_of_spirals3D_sequence
->>> seq = mprage_stack_of_spirals3D_sequence(n_x=32, n_z=8, ti=100e-3, tr_outer=300e-3)
->>> seq.num_trs, seq.num_segments
-(9, 3)
-
-The inversion and its segment, with spiral interleaves in place of the Cartesian lines:
-
-.. plot::
-   :include-source:
-
-   from pulserver.app import mprage_stack_of_spirals3D_sequence
-
-   seq = mprage_stack_of_spirals3D_sequence(n_x=32, n_z=8, ti=100e-3, tr_outer=300e-3)
-   seq.plot(tr="worst_case", time_disp="ms", grad_disp="mT/m", stacked=True,
-            plot_now=False)
 """
 
 from __future__ import annotations
@@ -131,6 +98,21 @@ def main(
 ) -> pp.Sequence:
     """Create a golden-angle stack-of-spirals 3D MPRAGE.
 
+    Partitions are the outer loop: one inversion per train, and a train plays
+    ``etl`` arms of one partition with its first echo at the requested TI. Arms
+    step by the golden angle, so any prefix of the scan covers the disc
+    near-uniformly, and a given arm is played at the same angle in every partition.
+    A partition angle offset turns it a little further with each one instead,
+    staggering the sampling along kz the way a CAIPIRINHA shift does.
+
+    By default the arm is held once and turned per shot by a ``ROTATIONS``
+    extension. ``use_rotation_ext=False`` writes every shot out as its own
+    gradient waveform instead, with the shape library growing with the shot count
+    -- the untemplatable-waveform case, which is exactly the path an interpreter's
+    waveform streaming has to survive.
+    :mod:`pulserver.app.noncartesian_stack_recon` reconstructs the stack
+    against the trajectory the acquisitions carry.
+
     Parameters
     ----------
     plot : bool, optional
@@ -210,6 +192,109 @@ def main(
     -------
     seq : pulserver.pypulseq.Sequence
         The MPRAGE sequence object.
+
+    Examples
+    --------
+    >>> from pulserver.app import mprage_stack_of_spirals3D_sequence
+    >>> seq = mprage_stack_of_spirals3D_sequence(n_x=32, n_z=8, ti=100e-3, tr_outer=300e-3)
+    >>> seq.num_trs, seq.num_segments
+    (9, 3)
+
+    The waveform figures below are one design, prescribed to be *legible*
+    rather than diagnostic: the shortest TI, TE and outer TR the inversion and
+    readout admit, so nothing waits longer than the physics requires; heavy
+    spoiling, so that lobe is unmistakable; and eight arms over eight
+    partitions, so a whole shot fits on a page.
+
+    .. plot::
+       :include-source:
+       :nofigs:
+       :context:
+
+       from pulserver.app import mprage_stack_of_spirals3D_sequence
+
+       seq = mprage_stack_of_spirals3D_sequence(
+           n_x=128, n_z=8, n_arms=8, ti=55e-3, tr_outer=175e-3, te=None,
+           n_dummy=0, spoiling_cycles=6.0,
+       )
+
+    **The pulses.** The inversion that opens the shot, then the excitation
+    each view is read from -- one drawn against what it leaves along ``z``,
+    the other against what it tips into the transverse plane.
+
+    .. plot::
+       :include-source:
+       :context: close-figs
+
+       seq.plot_rf("inversion", title="inversion", plot_now=False)
+       seq.plot_rf("excitation", title="excitation", plot_now=False)
+
+    **One shot**: the inversion, the wait that places the TI, the segment of
+    spiral readouts taken under the recovering magnetisation, and the
+    recovery delay that closes the outer TR.
+
+    .. plot::
+       :include-source:
+       :context: close-figs
+
+       seq.plot(tr="worst_case", time_disp="ms", grad_disp="mT/m", plot_now=False)
+
+    **The segments**, which are the interpreter's units of playout. Each is
+    drawn as the instance carrying the most gradient energy -- the one the
+    safety checks were run against -- over the span of the scan where it
+    plays.
+
+    .. plot::
+       :include-source:
+       :context: close-figs
+
+       for index in range(seq.num_segments):
+           seq.plot(
+               segment_idx=index, time_disp="ms", grad_disp="mT/m", plot_now=False
+           )
+
+    **What the scan covers**: the in-plane spiral repeated at every
+    partition, coloured by the order the views were acquired in. Under one
+    inversion that order *is* the inversion weighting, so this is also the
+    contrast map.
+
+    .. plot::
+       :include-source:
+       :context: close-figs
+
+       seq.plot_kspace(color_by="order", plot_now=False)
+
+    **Mechanical resonance.** The repetition is periodic, so its gradients
+    have energy only at multiples of ``1 / T_TR``. Those lines are what a
+    forbidden band is judged against, and the verdict panel is the whole of
+    the acoustic check: every line that falls inside a band, against the
+    amplitude that band allows.
+
+    .. plot::
+       :include-source:
+       :context: close-figs
+
+       gamma = 42.576e3  # Hz/m per mT/m
+       seq.calculate_gradient_spectrum(
+           tr="worst_case",
+           resonance_lines=True,
+           bands=[(550.0, 700.0, 3.0 * gamma), (1150.0, 1300.0, 3.0 * gamma)],
+       )
+
+    **Peripheral nerve stimulation**, under the rheobase/chronaxie model the
+    scanner's own gate applies, over the same repetition played back to back.
+    This design asks for the shortest timing the hardware admits, so its spiral
+    runs close to the slew limit throughout. A lower ``MAX_SLEW``, a longer
+    echo time, or a narrower readout bandwidth each bring the response down.
+
+    .. plot::
+       :include-source:
+       :context: close-figs
+
+       seq.calculate_pns(
+           {"chronaxie_us": 360.0, "rheobase": 20.0, "alpha": 0.333},
+           tr="worst_case",
+       )
     """
     system = pp.Opts() if system is None else system
     system = pp.cap_system(system, max_grad=MAX_GRAD, max_slew=MAX_SLEW)

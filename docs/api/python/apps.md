@@ -14,14 +14,24 @@ from pulserver.app import gre3D_sequence, cartesian3D_recon
 seq = gre3D_sequence(n_x=128, n_y=128, n_z=64, slab_thickness=0.128)
 seq.write("gre3D.seq")
 
-images = cartesian3D_recon("scan.h5")
+images = cartesian3D_recon("scan.h5", virtual_coils=8)
 ```
 
-Each carries two entry points over one implementation. `main(...)` is the whole
-design under explicit keyword controls, written in the style of a PyPulseq
-example script — what to read, copy and edit. `PLUGIN` is the same thing behind
-the scanner protocol contract, so the bridge can offer it in the UI and running
-the module as a script does the job offline.
+That call is the module's `main`, and it is what is documented below: a sequence
+writes one, in the style of a PyPulseq example script — what to read, copy and
+edit — and a reconstruction has one built from the settings its plugin takes, so
+the signature answers for the call either way.
+
+Beside it, `PLUGIN` is the same thing behind the scanner contract: a
+`SequencePlugin`, so the bridge can offer the sequence in the UI and running the
+module as a script writes a `.seq` offline, or a `ReconPlugin`, so the
+reconstruction can be driven over a live stream. A file holds what the scanner
+sent, so calling a reconstruction streams it to that same plugin in this
+process — there is no second code path.
+
+One flat namespace: every plugin is `pulserver.app.<name>`. The grouping below —
+gradient echo, spin echo, Cartesian, EPI — is a way of reading the zoo rather
+than a way of importing from it.
 
 ```{eval-rst}
 .. currentmodule:: pulserver.app
@@ -38,6 +48,7 @@ safety verdicts, so a change that moves any of them has to say so.
 ```{eval-rst}
 .. autosummary::
    :toctree: ../generated/app_sequence
+   :template: autosummary/plugin.rst
 
    gre2D_sequence
    gre3D_sequence
@@ -52,6 +63,7 @@ safety verdicts, so a change that moves any of them has to say so.
 ```{eval-rst}
 .. autosummary::
    :toctree: ../generated/app_sequence
+   :template: autosummary/plugin.rst
 
    se2D_sequence
    se3D_sequence
@@ -65,6 +77,7 @@ safety verdicts, so a change that moves any of them has to say so.
 ```{eval-rst}
 .. autosummary::
    :toctree: ../generated/app_sequence
+   :template: autosummary/plugin.rst
 
    mprage3D_sequence
    mprage_stack_of_spirals3D_sequence
@@ -75,6 +88,7 @@ safety verdicts, so a change that moves any of them has to say so.
 ```{eval-rst}
 .. autosummary::
    :toctree: ../generated/app_sequence
+   :template: autosummary/plugin.rst
 
    epi2D_sequence
    epi3D_sequence
@@ -85,6 +99,7 @@ safety verdicts, so a change that moves any of them has to say so.
 ```{eval-rst}
 .. autosummary::
    :toctree: ../generated/app_sequence
+   :template: autosummary/plugin.rst
 
    gre_radial2D_sequence
    gre_spiral2D_sequence
@@ -101,15 +116,14 @@ after. A spin echo, a gradient echo, an MPRAGE and a balanced SSFP all leave one
 Cartesian grid, so one plugin serves them all, and a radial, spiral or PROPELLER
 scan differs only in the trajectory its acquisitions carry.
 
-Every plugin here is three hooks and nothing else. `startup` lays out the
-buffers the header's encoding spaces describe, `receive` places each acquisition
-and routes the boundaries it closes to a named branch, and `recon` holds the
-reconstruction of each branch over buffers that are already filled. There is no
-local helper between them: what a step needs is a name in {doc}`recon`, so a
-plugin reads as the composition it is.
+Every plugin here is a declaration and one hook. The per-acquisition steps go
+in its `chain` — `NoiseAdjust`, `CoilCompression`, `EpiPhaseCorrection`,
+`RampSampling`, all of them names in {doc}`recon` — and the boundaries worth
+reconstructing at go in its `branches`. What is left to write is `recon`, over
+buffers that are already filled, so a plugin reads as the composition it is.
 
 A noise scan measures the receiver, not the object, so it never reaches a
-buffer: `receive` keeps it and whitens every readout that follows against it.
+buffer: the chain keeps it and whitens every readout that follows against it.
 Coil compression is the same idea one step later, and where it can happen
 depends on what the sequence acquired. A scan whose calibration is a separate
 prescan — both EPI plugins — reads the array's principal channels off it when
@@ -128,6 +142,7 @@ maps when phase encodes are missing.
 ```{eval-rst}
 .. autosummary::
    :toctree: ../generated/app_recon
+   :template: autosummary/plugin.rst
 
    cartesian2D_recon
    cartesian3D_recon
@@ -143,6 +158,7 @@ Cartesian, so an inverse FFT along z turns the volume into independent planes.
 ```{eval-rst}
 .. autosummary::
    :toctree: ../generated/app_recon
+   :template: autosummary/plugin.rst
 
    noncartesian2D_recon
    noncartesian3D_recon
@@ -152,14 +168,17 @@ Cartesian, so an inverse FFT along z turns the volume into independent planes.
 ### EPI
 
 The one family that corrects before it places: a reversed line has to be flipped
-and phase corrected against the fit its navigator triplet produced before it
-belongs on the grid, so `receive` does that as each line arrives. The
-calibration prescan is a subsequence, so it is an encoding space of its own and
-never touches the imaging grid.
+and phase corrected against the fit its navigator triplet produced, and a
+ramp-sampled one resampled onto the grid, before either belongs on it — which is
+what those two gadgets do as each line arrives. The calibration prescan is a
+subsequence, so it is an encoding space of its own and never touches the imaging
+grid; it is also the one case whose routing needs two flags at once, so these
+two plugins write a `receive` where the others declare one.
 
 ```{eval-rst}
 .. autosummary::
    :toctree: ../generated/app_recon
+   :template: autosummary/plugin.rst
 
    epi2D_recon
    epi3D_recon

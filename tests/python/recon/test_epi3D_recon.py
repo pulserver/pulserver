@@ -1,10 +1,10 @@
 """The sequence/reconstruction contract for accelerated 3D EPI.
 
-The blipped-CAIPI train of :mod:`pulserver.app.sequence.epi3D_sequence` lays down an
+The blipped-CAIPI train of :mod:`pulserver.app.epi3D_sequence` lays down an
 undersampled ``make_caipirinha_mask`` lattice plus a fully sampled
-autocalibration rectangle. The reconstruction of :mod:`pulserver.app.recon.epi3D_recon`
+autocalibration rectangle. The reconstruction of :mod:`pulserver.app.epi3D_recon`
 composes the same CG-SENSE and NLINV primitives as
-:mod:`pulserver.app.recon.cartesian3D_recon`, whose image math is exercised in
+:mod:`pulserver.app.cartesian3D_recon`, whose image math is exercised in
 :mod:`test_cartesian3D_recon`. What this file pins is the join between sequence
 and reconstruction: the coil-sensitivity calibration must succeed on the mask
 the sequence actually produces -- i.e. the rectangle the sequence acquires is

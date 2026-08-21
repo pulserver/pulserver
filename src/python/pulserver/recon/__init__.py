@@ -38,13 +38,16 @@ _MEMBERS = {
     "Cartesian2D": "physics",
     "Cartesian3D": "physics",
     "CoefficientAccessor": "postprocessing",
+    "CoilCompression": "gadgets",
     "ConjugateGradient": "optim.cg",
     "ContextAgnosticDenoiser": "models",
     "CudaStreaming": "execution",
     "EncodingSpace": "plugin",
+    "EpiPhaseCorrection": "gadgets",
     "EventType": "simulation",
     "ExamCache": "plugin",
     "FISTA": "optim.fista",
+    "Gadget": "gadgets",
     "GradientCoefficients": "postprocessing",
     "GradientDataConsistency": "learned",
     "Gradunwarp": "postprocessing",
@@ -61,6 +64,7 @@ _MEMBERS = {
     "NLINV": "calibration",
     "NLINVPhysics": "calibration",
     "NLINVResult": "calibration",
+    "NoiseAdjust": "gadgets",
     "NonCartesian2D": "physics",
     "NonCartesian3D": "physics",
     "OffResonance": "physics",
@@ -71,6 +75,7 @@ _MEMBERS = {
     "PhasePoleCorrection": "calibration",
     "PolynomialPreconditioner": "optim._algorithms",
     "Positive": "denoisers",
+    "RampSampling": "gadgets",
     "ReconBuffer": "plugin",
     "ReconContext": "plugin",
     "ReconData": "plugin",
@@ -124,8 +129,10 @@ _MEMBERS = {
     "fill_partial_echo": "preprocessing",
     "has_acquisition_flag": "plugin",
     "ifftc": "preprocessing",
+    "image_result": "postprocessing",
     "load_model": "weights",
     "noise_prewhiten": "preprocessing",
+    "noncartesian_recon": "noncartesian",
     "pics": "optim._algorithms",
     "pipe_menon_dcf": "preprocessing",
     "remove_readout_oversampling": "preprocessing",
@@ -171,6 +178,11 @@ if TYPE_CHECKING:
     from .calibration import WavePSFResult as WavePSFResult
     from .calibration import calibration_extent as calibration_extent
     from .calibration import coil_maps_from_reference as coil_maps_from_reference
+    from .gadgets import CoilCompression as CoilCompression
+    from .gadgets import EpiPhaseCorrection as EpiPhaseCorrection
+    from .gadgets import Gadget as Gadget
+    from .gadgets import NoiseAdjust as NoiseAdjust
+    from .gadgets import RampSampling as RampSampling
     from .datasets import IXI as IXI
     from .datasets import IXITiny as IXITiny
     from .datasets import TorchIODataset as TorchIODataset
@@ -230,6 +242,8 @@ if TYPE_CHECKING:
     from .postprocessing import Gradunwarp as Gradunwarp
     from .postprocessing import ImageGeometry as ImageGeometry
     from .postprocessing import as_numpy as as_numpy
+    from .postprocessing import image_result as image_result
+    from .noncartesian import noncartesian_recon as noncartesian_recon
     from .postprocessing import center_crop as center_crop
     from .postprocessing import coil_combine as coil_combine
     from .postprocessing import run_pyhysco as run_pyhysco

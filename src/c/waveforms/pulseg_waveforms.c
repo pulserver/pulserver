@@ -399,7 +399,7 @@ int pulseg__compute_variable_grad_flags(pulseg_sequence_descriptor *desc)
 /* ================================================================== */
 
 /** Ints of signature per block position: base block, duration, gx, gy, gz. */
-#define SHAPE_SIGNATURE_WIDTH 5
+#define SHAPE_SIGNATURE_WIDTH 8
 
 /** One position's identity: which block, how long, and which definition per
  *  axis. Amplitude is deliberately absent -- it is what the envelope bounds. */
@@ -425,7 +425,21 @@ static void shape_signature_at(const pulseg_sequence_descriptor *desc, int bt_id
     for (axis = 0; axis < 3; ++axis)
     {
         raw = ids[axis];
-        out[2 + axis] = (raw >= 0 && raw < desc->grad_table_size) ? desc->grad_table[raw].id : -1;
+        if (raw >= 0 && raw < desc->grad_table_size)
+        {
+            out[2 + axis] = desc->grad_table[raw].id;
+            /* Definition dedup folds together arbitrary gradients that share
+             * timing and envelope but not samples, so the definition alone
+             * would group two unrelated waveforms. The shape carries what is
+             * actually played; it is 0 for every trapezoid, whose definition
+             * already states the timing. */
+            out[5 + axis] = desc->grad_table[raw].shape_id;
+        }
+        else
+        {
+            out[2 + axis] = -1;
+            out[5 + axis] = -1;
+        }
     }
 }
 

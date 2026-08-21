@@ -1903,7 +1903,14 @@ static int read_extensions_library(pulseq_file *seq, FILE *f)
     }
     if (seq->extension_lut_size > 0)
     {
-        seq->extension_lut = (int *)PULSEQ_ALLOC(sizeof(int) * (seq->extension_lut_size + 1));
+        seq->extension_lut =
+            (int *)PULSEQ_ALLOC(sizeof(int) * (size_t)(seq->extension_lut_size + 1));
+        if (!seq->extension_lut)
+            return PULSEQ_ERR_ALLOC_FAILED;
+        /* A type number the file never declared still indexes this table, so
+         * every entry has to mean something before any of them are set. */
+        for (n = 0; n <= seq->extension_lut_size; ++n)
+            seq->extension_lut[n] = PULSEQ_EXT_UNKNOWN;
         for (n = 0; n < 8; n++)
         {
             if (seq->extension_map[n] > 0)
@@ -1995,10 +2002,135 @@ int pulseq_decompress_shape(pulseq_shape *result, const pulseq_shape *encoded, P
 /*  Read seq from buffer / file (cross-file)                          */
 /* ================================================================== */
 
+/* ================================================================== */
+/*  Reference validation                                              */
+/* ================================================================== */
+
+/*
+ * An id in a Pulseq file is a 1-based row number in another library, and 0
+ * means "no event".  Nothing in the format stops a file naming a row that is
+ * not there, and every consumer downstream indexes with what it is given --
+ * so a file that does is caught here, once, rather than read out of bounds
+ * later by whichever consumer gets to it first.
+ */
+static int id_in_range(PULSEQ_REAL id, int library_size)
+{
+    int n = (int)id;
+    return n >= 0 && n <= library_size;
+}
+
+/*
+ * Which library an extension row's reference names depends on its type, so
+ * the target size does too.  An extension this reader does not know carries a
+ * reference it cannot resolve and therefore cannot judge -- and never
+ * dereferences it either, so it is left alone.
+ */
+static int ext_ref_in_range(const pulseq_file *seq, int ext_type, int ref)
+{
+    switch (ext_type)
+    {
+    case PULSEQ_EXT_LABELSET:
+        return ref <= seq->labelset_library_size;
+    case PULSEQ_EXT_LABELINC:
+        return ref <= seq->labelinc_library_size;
+    case PULSEQ_EXT_ROTATION:
+        return ref <= seq->rotation_library_size;
+    case PULSEQ_EXT_RF_SHIM:
+        return ref <= seq->rf_shim_library_size;
+    case PULSEQ_EXT_TRIGGER:
+        return ref <= seq->trigger_library_size;
+    case PULSEQ_EXT_DELAY:
+        return ref <= seq->soft_delay_library_size;
+    default:
+        return 1;
+    }
+}
+
+static int check_extension_references(const pulseq_file *seq)
+{
+    int i, type, ref, next;
+    PULSEQ_REAL *row;
+
+    if (!seq->is_extensions_library_parsed || !seq->extensions_library)
+        return PULSEQ_SUCCESS;
+
+    for (i = 0; i < seq->extensions_library_size; ++i)
+    {
+        row = seq->extensions_library[i];
+        type = (int)row[0];
+        ref = (int)row[1];
+        next = (int)row[2];
+
+        if (ref < 0 || next < 0 || next > seq->extensions_library_size)
+            return PULSEQ_ERR_DANGLING_ID;
+        if (seq->extension_lut && type >= 0 && type <= seq->extension_lut_size &&
+            !ext_ref_in_range(seq, seq->extension_lut[type], ref))
+            return PULSEQ_ERR_DANGLING_ID;
+    }
+    return PULSEQ_SUCCESS;
+}
+
+static int check_references(const pulseq_file *seq)
+{
+    int i;
+    PULSEQ_REAL *row;
+
+    if (!seq->is_block_library_parsed || !seq->block_library)
+        return PULSEQ_SUCCESS;
+
+    for (i = 0; i < seq->num_blocks; ++i)
+    {
+        row = seq->block_library[i];
+        if (!id_in_range(row[1], seq->rf_library_size) ||
+            !id_in_range(row[2], seq->grad_library_size) ||
+            !id_in_range(row[3], seq->grad_library_size) ||
+            !id_in_range(row[4], seq->grad_library_size) ||
+            !id_in_range(row[5], seq->adc_library_size) ||
+            !id_in_range(row[6], seq->extensions_library_size))
+            return PULSEQ_ERR_DANGLING_ID;
+    }
+
+    for (i = 0; i < seq->rf_library_size; ++i)
+    {
+        row = seq->rf_library[i];
+        if (!id_in_range(row[1], seq->shapes_library_size) ||
+            !id_in_range(row[2], seq->shapes_library_size) ||
+            !id_in_range(row[3], seq->shapes_library_size))
+            return PULSEQ_ERR_DANGLING_ID;
+    }
+
+    /* An arbitrary gradient names its waveform in column 4 and its optional
+     * time shape in column 5; a trapezoid carries times in those columns and
+     * names no shape at all. */
+    for (i = 0; i < seq->grad_library_size; ++i)
+    {
+        row = seq->grad_library[i];
+        if ((int)row[0] == 0)
+            continue;
+        if (!id_in_range(row[4], seq->shapes_library_size) ||
+            !id_in_range(row[5], seq->shapes_library_size))
+            return PULSEQ_ERR_DANGLING_ID;
+    }
+
+    for (i = 0; i < seq->adc_library_size; ++i)
+        if (!id_in_range(seq->adc_library[i][7], seq->shapes_library_size))
+            return PULSEQ_ERR_DANGLING_ID;
+
+    return check_extension_references(seq);
+}
+
+int pulseq__check_references(const pulseq_file *seq)
+{
+    if (!seq)
+        return PULSEQ_ERR_NULL_POINTER;
+    return check_references(seq);
+}
+
 int pulseq_read_from_buffer(pulseq_file *seq, FILE *f)
 {
     unsigned char magic[8];
     size_t got;
+    int code;
 
     if (!seq || !f)
         return PULSEQ_ERR_NULL_POINTER;
@@ -2029,7 +2161,10 @@ int pulseq_read_from_buffer(pulseq_file *seq, FILE *f)
     read_grad_library(seq, f);
     read_adc_library(seq, f);
     read_shapes_library(seq, f);
-    return read_extensions_library(seq, f);
+    code = read_extensions_library(seq, f);
+    if (PULSEQ_FAILED(code))
+        return code;
+    return check_references(seq);
 }
 
 int pulseq_read(pulseq_file *seq, const char *file_path)
