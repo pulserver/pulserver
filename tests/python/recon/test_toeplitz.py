@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
+from math import prod
 from os import cpu_count
 from types import SimpleNamespace
 
 import numpy as np
 import pytest
 
-from pulserver.recon._toeplitz import CompactToeplitzKernel, support_indices
+from pulserver.recon._toeplitz import (
+    CompactToeplitzKernel,
+    mirror_indices,
+    support_indices,
+)
 from pulserver.recon.execution import CudaStreaming
 import pulserver.recon.physics as physics
 
@@ -1086,8 +1091,13 @@ def _spiral(turns: int, samples: int) -> np.ndarray:
         pytest.param(_spiral(6, 512), id="spiral"),
     ],
 )
-def test_the_default_normal_operator_equals_the_one_it_replaces(trajectory):
-    """Toeplitz is on out of the box, and it is the same arithmetic."""
+def test_the_default_normal_operator_stands_in_for_the_one_it_replaces(trajectory):
+    """Toeplitz is on out of the box, over the support the scan reached.
+
+    The default stores the locations the trajectory landed on, which is what
+    makes a large three-dimensional kernel fit; ``support="full"`` keeps every
+    location and is the exact one, held to machine precision here beside it.
+    """
     pytest.importorskip("mrinufft")
     pytest.importorskip("finufft")
     generator = torch.Generator().manual_seed(5)
@@ -1099,18 +1109,26 @@ def test_the_default_normal_operator_equals_the_one_it_replaces(trajectory):
     default = physics.NonCartesian2D(
         trajectory, image_shape, coil_maps=maps, backend="finufft"
     )
+    whole = physics.NonCartesian2D(
+        trajectory,
+        image_shape,
+        coil_maps=maps,
+        backend="finufft",
+        toeplitz={"support": "full"},
+    )
     exact = physics.NonCartesian2D(
         trajectory, image_shape, coil_maps=maps, backend="finufft", toeplitz=False
     )
 
     assert default.normal_mode == "toeplitz"
     assert exact.normal_mode == "exact"
+    reference = exact.A_adjoint(exact.A(image))
     torch.testing.assert_close(
-        default.A_adjoint_A(image),
-        exact.A_adjoint(exact.A(image)),
-        atol=3e-5,
-        rtol=3e-5,
+        whole.A_adjoint_A(image), reference, atol=3e-5, rtol=3e-5
     )
+    scale = reference.abs().max()
+    assert float((default.A_adjoint_A(image) - reference).abs().max() / scale) < 5e-2
+    assert default.operator.toeplitz_kernel.n_locations < 4 * prod(image_shape)
 
 
 def test_a_stack_accelerates_its_planes_by_default():
@@ -1134,12 +1152,9 @@ def test_a_stack_accelerates_its_planes_by_default():
     )
 
     assert default.normal_mode == "toeplitz"
-    torch.testing.assert_close(
-        default.A_adjoint_A(image),
-        exact.A_adjoint(exact.A(image)),
-        atol=3e-5,
-        rtol=3e-5,
-    )
+    reference = exact.A_adjoint(exact.A(image))
+    error = (default.A_adjoint_A(image) - reference).abs().max() / reference.abs().max()
+    assert float(error) < 5e-2
 
 
 def test_a_shape_that_cannot_carry_a_kernel_falls_back_rather_than_raising():
@@ -1161,15 +1176,15 @@ def test_a_shape_that_cannot_carry_a_kernel_falls_back_rather_than_raising():
         insisted.A_adjoint_A(image)
 
 
-def test_ball_packing_waits_for_margin_between_the_trajectory_and_the_cut():
-    """A kernel location is not a sample, so the cut needs room.
+def test_the_trajectory_support_keeps_what_the_scan_reached():
+    """``support="trajectory"`` reads the support off the acquisition.
 
-    Keeping only the disk or the ball is what saves the memory, and it is the
-    trajectory interpolated onto the transfer grid that is being cut: an
-    off-grid sample spreads over every location, with tails the cut clips.
-    A scan sampled to Nyquist reaches the edge of the largest disk the grid
-    holds and has no room at all, so it keeps every location; one that stops
-    short by ``radial_margin`` can afford the packing.
+    The locations the samples land on, and the neighbourhood the interpolation
+    spreads into -- so a projection scan leaves a ball and the grid's corners
+    hold nothing worth storing. ``trajectory_width`` trades the saving against
+    the tails the cut clips, and it is the caller's to set: the width a scan
+    needs depends on how sparse its samples are against the grid, so this is
+    not the default.
     """
     pytest.importorskip("mrinufft")
     pytest.importorskip("finufft")
@@ -1177,27 +1192,39 @@ def test_ball_packing_waits_for_margin_between_the_trajectory_and_the_cut():
     generator = torch.Generator().manual_seed(11)
     maps = torch.ones(4, *image_shape, dtype=torch.complex64) / 2
     image = torch.randn(1, 1, *image_shape, generator=generator, dtype=torch.complex64)
-    locations = 4 * image_shape[0] * image_shape[1]
+    trajectory = _radial_to(32, 51, 0.5)
+    locations = 4 * prod(image_shape)
 
-    for extent, packed in ((0.5, False), (1.0 / 3.0, True)):
-        trajectory = _radial_to(32, 51, extent)
-        exact = physics.NonCartesian2D(
-            trajectory, image_shape, coil_maps=maps, backend="finufft", toeplitz=False
-        )
-        auto = physics.NonCartesian2D(
-            trajectory, image_shape, coil_maps=maps, backend="finufft"
-        )
-        reference = exact.A_adjoint(exact.A(image))
-        error = (
-            auto.A_adjoint_A(image) - reference
-        ).abs().max() / reference.abs().max()
-        kernel = auto.operator.toeplitz_kernel
+    exact = physics.NonCartesian2D(
+        trajectory, image_shape, coil_maps=maps, backend="finufft", toeplitz=False
+    )
+    reference = exact.A_adjoint(exact.A(image))
+    scale = reference.abs().max()
 
-        # Symmetric packing halves the locations either way; the ball is what
-        # the margin decides.
-        assert kernel.symmetric
-        assert (kernel.n_locations < locations // 2) is packed
-        assert float(error) < (2e-3 if packed else 1e-4)
+    previous = None
+    for width in (2, 4, 8):
+        physics_object = physics.NonCartesian2D(
+            trajectory,
+            image_shape,
+            coil_maps=maps,
+            backend="finufft",
+            toeplitz={"support": "trajectory", "trajectory_width": width},
+        )
+        error = float(
+            (physics_object.A_adjoint_A(image) - reference).abs().max() / scale
+        )
+        kept = physics_object.operator.toeplitz_kernel.n_locations
+        assert kept < locations
+        if previous is not None:
+            # A wider neighbourhood keeps more and clips less.
+            assert kept > previous[0] and error < previous[1]
+        previous = (kept, error)
+
+    # A Cartesian encoding states no trajectory, so it keeps everything.
+    cartesian = physics.Cartesian2D(
+        torch.ones(1, 1, *image_shape), maps[None], toeplitz=True
+    )
+    assert cartesian.normal_mode == "exact-fft"
 
 
 def test_an_even_transfer_is_stored_once_and_applied_twice():
@@ -1286,3 +1313,100 @@ def test_symmetric_packing_survives_every_path_the_sense_normal_takes(device):
     # Still halved after the application, on whichever device ran it.
     assert stored.symmetric
     assert stored.storage_nbytes < whole.operator.toeplitz_kernel.storage_nbytes
+
+
+@pytest.mark.parametrize("complex_basis", [False, True])
+def test_a_subspace_kernel_packs_whatever_its_basis_is(complex_basis):
+    """What decides the packing is the acquisition, not the value dtype.
+
+    A subspace transfer is even when the scan pairs a sample with its opposite
+    under the same temporal weight -- a full-diameter readout, whose two ends
+    are one time point -- and that is as true of a complex basis as a real one.
+    """
+    generator = torch.Generator().manual_seed(31)
+    image_shape = (6, 6)
+    spatial_shape = (12, 12)
+    rank, frames = 3, 5
+    mirror = mirror_indices(torch.arange(prod(spatial_shape)), spatial_shape)
+    scalar_kernels = [
+        torch.randn(prod(spatial_shape), generator=generator) for _ in range(frames)
+    ]
+    # Even frame transfers, which is what a full-diameter readout leaves.
+    scalar_kernels = [
+        (0.5 * (kernel + kernel[mirror])).reshape(spatial_shape)
+        for kernel in scalar_kernels
+    ]
+    frame_physics = [
+        SimpleNamespace(
+            native_operator=SimpleNamespace(
+                shape=image_shape,
+                smaps=None,
+                compute_toeplitz_kernel=lambda kernel=kernel: kernel,
+            )
+        )
+        for kernel in scalar_kernels
+    ]
+    basis = torch.randn(rank, frames, generator=generator)
+    if complex_basis:
+        basis = torch.complex(basis, torch.randn(rank, frames, generator=generator))
+
+    packed = physics._build_subspace_toeplitz(
+        frame_physics, basis, physics._toeplitz_options(support="full")
+    )
+    whole = physics._build_subspace_toeplitz(
+        frame_physics,
+        basis,
+        physics._toeplitz_options(support="full", symmetric=False),
+    )
+    coefficients = torch.randn(
+        2, rank, *image_shape, generator=generator, dtype=torch.complex64
+    )
+
+    assert packed.symmetric and not whole.symmetric
+    assert packed.is_real is not complex_basis
+    assert 2 * packed.n_locations == whole.n_locations + 2 ** len(image_shape)
+    torch.testing.assert_close(packed.apply(coefficients), whole.apply(coefficients))
+
+
+def test_a_truncated_kernel_reports_what_it_dropped_and_the_solve_damps_past_it():
+    """The cut is safe because the solve knows how far it can fall.
+
+    A support read off the trajectory drops weight that was not zero, and the
+    exact normal operator of an undersampled scan has eigenvalues at zero --
+    so the smallest can go negative, by at most the largest value dropped.
+    The kernel reports that, and ``pics`` damps past it, reading the bound
+    after the first normal-operator call because that is when the kernel is
+    built.
+    """
+    pytest.importorskip("mrinufft")
+    pytest.importorskip("finufft")
+    from pulserver.recon.optim import pics
+
+    image_shape = (32, 32)
+    trajectory = _radial_to(64, 17, 0.5)
+    generator = torch.Generator().manual_seed(41)
+    maps = torch.randn(4, *image_shape, generator=generator, dtype=torch.complex64)
+    maps /= torch.linalg.vector_norm(maps, dim=0, keepdim=True)
+    image = torch.randn(1, 1, *image_shape, generator=generator, dtype=torch.complex64)
+
+    sparse = physics.NonCartesian2D(
+        trajectory, image_shape, coil_maps=maps, n_coils=4, backend="finufft"
+    )
+    whole = physics.NonCartesian2D(
+        trajectory,
+        image_shape,
+        coil_maps=maps,
+        n_coils=4,
+        backend="finufft",
+        toeplitz={"support": "full"},
+    )
+    # The bound is only known once the kernel exists.
+    assert sparse.truncation_bound == 0.0
+    sparse.A_adjoint_A(image)
+    whole.A_adjoint_A(image)
+    assert sparse.truncation_bound > 0.0
+    assert whole.truncation_bound == 0.0
+
+    # And the solve runs on it rather than tripping over an indefinite operator.
+    data = whole.A(image)
+    pics(data, sparse, iterations=10, regularization=1e-6)

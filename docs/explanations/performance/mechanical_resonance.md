@@ -19,10 +19,14 @@ band is far wider than that spacing, so *every band contains lines of every
 sequence*. A literal reading refuses everything ever written. The number that
 says how small stops mattering is nowhere in the table.
 
-**How to compute it in the time an operator will wait.** $S_\text{ax}$ is a
-transform of the scan — minutes of waveform on a microsecond raster. It has to
-be evaluated at every frequency a band contains, and it has to hold for every
-repetition, not just the first one.
+**How to compute it in the time predownload can spend.** Nothing checks a
+forbidden band before there are gradient waveforms to check it against, and
+those exist only once a protocol is finished and written -- the interpreter
+runs this analysis when the ``.seq`` file comes back in, not while an operator
+is still choosing a parameter. $S_\text{ax}$ is a transform of the scan —
+minutes of waveform on a microsecond raster. It has to be evaluated at every
+frequency a band contains, and it has to hold for every repetition, not just
+the first one.
 
 This page settles both. Everything on it is the safety page's rule evaluated in
 a cheaper order, and every shortcut is drawn against the calculation it replaces.
@@ -131,9 +135,9 @@ well. Getting that wrong hands every arm the first arm's spectrum.
 ## 3. The canonical TR, and the three ways repetitions differ
 
 The analysis runs on a single window and the verdict is taken to hold for the
-scan. That is sound only if no repetition can be louder than the window — and
-repetitions are not all the same waveform. Position by position, three
-situations arise:
+scan. That is sound only if nothing the scan does can be louder than the
+window — and repetitions are not all the same waveform. Position by position,
+three situations arise:
 
 **A — nothing varies.** Excitation, slice select, spoiler, an unrotated
 readout: the same definition at the same amplitude and rotation in every
@@ -142,27 +146,83 @@ exact, and it is where a comb gets its sharpness.
 
 **B — an amplitude or a rotation varies.** A phase encode steps; a radial or
 spiral shot is turned by a rotation extension. One waveform, several
-$(\text{amplitude}, \text{rotation})$ combinations. The position contributes the
-largest magnitude over the combinations the scan really plays — not over an
-envelope of them, over the real list.
+$(\text{amplitude}, \text{rotation})$ combinations. The position contributes
+the largest magnitude over the combinations the scan really plays — not over
+an envelope of them, over the real list.
 
 **C — the waveform varies.** A multishot readout written out shot by shot, a
-sparkling trajectory: different shapes at the same position. Same rule, over the
-distinct (shape, amplitude, rotation) tuples the position actually takes.
+trajectory optimised shot by shot: different shapes at the same position. Same
+rule, over the distinct (shape, amplitude, rotation) tuples the position
+actually takes.
 
-In B and C, coherence within the position is given up because there is no single
-value to be coherent with; everything else in the TR keeps it. The result is at
-least what any repetition drives, at every harmonic and on every axis — which
-is a claim you can look at:
+Neither B nor C changes the period the analysis runs on. Amplitude is an
+instance parameter, so a phase encode stepping through its table never enters
+the structural TR. Neither does the waveform: a gradient definition is its
+delay and its time shape — or its sample count where there is no time shape —
+and the sample values are not part of it, exactly as the
+{doc}`representation <../background/pulseg>` says. So a written-out multishot
+readout keeps the one-shot period its structure implies. The shipped 3D
+stack-of-spirals scan with eight arms written out across eight partitions is
+detected as 64 repetitions of one 6.5 ms shot, not as one 52 ms shot: the arms
+are exactly the case-C variation the window has to bound, and there is no
+longer period for them to hide in.
 
-![The canonical window against every repetition it stands for, in the three cases](../assets/mechanical_resonance/canonical_tr.png)
+The figure below switches each kind of variation on alone, on one shipped 3D
+stack-of-spirals repetition played sixteen times. Same excitation, same
+spiral, same partition encode, same 10 ms period in all four panels; only what
+changes from one repetition to the next is different.
 
-Case A costs nothing: the window *is* the repetition, ratio 1.000 at every line.
-Where something varies the window is 1.2× the loudest repetition on the median
-line, and never below it. That is the whole price of not transforming the scan.
+![One repetition played sixteen times, with each kind of variation switched on alone](../assets/mechanical_resonance/canonical_tr.png)
 
-Bounding position by position also avoids a choice that cannot be made well. The
-arms of a trajectory are near-copies, so their spectra nearly coincide, and
+Each panel is drawn against the **whole scan**, not against one repetition:
+what it drives at each TR harmonic, summed from the engine's own
+per-repetition evaluation so that both sides of the comparison describe the
+same field, and faintly behind it what it drives at every frequency, from the
+rendered record.
+
+That answers the obvious objection — *a phase encode that steps is not itself
+periodic, so how can it drive a resonance?* It cannot, and the figure shows it
+not doing so. With nothing varying (A) the scan is a clean comb at the
+harmonics of $T_\text{TR}$ and nothing between them. Switch a variation on and
+its energy does not move onto that comb: it **spreads off** it, into fine
+structure at multiples of $1/(M\,T_\text{TR})$, the period the scan actually
+has.
+
+The window covers both, and that is provable rather than merely measured.
+Whatever the repetitions do,
+
+$$\Bigl|\sum_m S_m(f)\,e^{-2\pi i f m T}\Bigr| \;\le\; \sum_m |S_m(f)|
+  \;\le\; M\,\max_m |S_m(f)| \;\le\; M\bigl(|C(f)| + b(f)\bigr),$$
+
+with $C$ the coherent sum over the invariant positions and $b$ the sum of the
+per-position bounds. Divide by $M T_\text{TR}$: the scan's equivalent
+sustained amplitude is at most the window's own line, **at every frequency**,
+not only at the harmonics. The window is a ceiling on the scan, not an
+estimate of it.
+
+It is not a loose ceiling either:
+
+| | judged / driven, median | at the loudest in-band line |
+|---|---:|---:|
+| A nothing varies | 1.000× | 1.000× |
+| B the encode amplitude varies | 1.025× | 1.038× |
+| C the readout waveform varies | 1.061× | 1.070× |
+| D both vary | 1.071× | 1.075× |
+
+An amplitude bound is nearly free: one waveform's largest amplitude *is* its
+largest contribution, so the bound is something a repetition really plays. A
+shape bound costs a little more, because the loudest shape at one frequency is
+rarely the loudest at the next and the bound takes the best of each.
+
+Above about 1.2 kHz in C and D the two curves separate widely, and that is the
+mechanism working rather than failing. Where the arms decorrelate, what they
+have in common at a harmonic cancels, so the scan's *harmonic* content
+collapses — while the drive between the harmonics, the faint trace, does not.
+The verdict is a statement about every frequency a band contains, so the
+window has to stay up there.
+
+Bounding position by position also avoids a choice that cannot be made well.
+The arms of a trajectory are near-copies, so their spectra nearly coincide, and
 where they separate they separate at the harmonics. There is no reason the
 loudest arm at a guarded frequency should be the loudest arm overall — one can
 be quieter everywhere except inside the band. Picking a representative shot by
@@ -195,9 +255,27 @@ $$G_k(f) \;=\; \sum_r c_{k,r}\,V_r(f) ,$$
 so one transform per basis vector replaces one per waveform. The truncated tail
 is not dropped: it is bounded when the basis is built and added to every
 magnitude the basis produces, so a compressed position reads louder, never
-quieter. Compression is attempted, never assumed — waveforms too few to pay for
-a decomposition, or that do not share a sampling, or whose span is not
-appreciably smaller than their number, keep their full basis.
+quieter.
+
+**Compression is attempted, never assumed, and it is refused rather than
+half-taken.** A rank is accepted only if it is at most half the number of
+waveforms *and* its discarded tail stays under $10^{-6}$ of the set's own L1
+norm — a level far below the last bit of the amplitudes being compared, so the
+conservatism it adds is not something a verdict can turn on. If no rank meets
+both conditions, if the waveforms do not share a sampling, if there are fewer
+than four of them, or if the decomposition itself would cost more than the
+transforms it saves, no basis is built and every waveform is transformed
+individually. That fallback is exact — nothing is approximated away — but it
+is paid per waveform.
+
+Which puts one thing in the sequence author's hands. A trajectory whose shots
+are a base shot turned, or a small set of templates recombined, is low rank and
+costs the same however many shots it has. A trajectory whose shots are each
+separately optimised — a sparkling-type design is the obvious case — is
+genuinely high rank, the basis is refused, and the check pays for every shot.
+The analysis cannot invent a span that is not there, so keeping the shot family
+low rank is a design decision, and it is the one that decides what this check
+costs.
 
 The payoff a sequence author sees is that the analysis stops caring how the arms
 were written. The right-hand panel above is the same scan encoded both ways —
@@ -340,10 +418,15 @@ anywhere is 0.006 mT/m against a 7.5 mT/m threshold.
 
 ### The lines a finite scan actually has
 
-A scan is not an *infinite* repetition, and the difference is not decoration.
-$M$ repetitions multiply the single-TR transform by the Dirichlet kernel
-$D_M(x) = \sin(M\pi x)/\bigl(M\sin(\pi x)\bigr)$, $x = f\,T_\text{TR}$, which
-puts real drive between the harmonics:
+A resonance does not know where the harmonics of a repetition time are. It
+responds to drive at *its* frequency, wherever that drive happens to sit, so
+any frequency inside a guarded band counts — and the frequencies between the
+harmonics are not empty.
+
+They would be, for an infinite repetition. A real scan is $M$ of them, which
+multiplies the single-TR transform by the Dirichlet kernel
+$D_M(x) = \sin(M\pi x)/\bigl(M\sin(\pi x)\bigr)$, $x = f\,T_\text{TR}$, and
+that puts real drive between the teeth:
 
 ![One harmonic of a finite scan, its Dirichlet lobes, and where the probes have to sit](../assets/mechanical_resonance/finite_reps.png)
 
@@ -360,9 +443,22 @@ and every probe lands on a **null** of the kernel: the open markers in the
 figure read exactly zero, while the record they are sampling carries up to
 0.02 mT/m there. No number of probes placed that way reports anything.
 
-Each probe also needs its own transform. The single-TR transform oscillates in
-its own right, so scaling a neighbouring harmonic by the kernel can only ever
-expose less — a factor of at most one never exceeds what it scales.
+Each probe also needs its own transform, and this is the part that cannot be
+economised. $S_\text{TR}(f)$ is not smooth between the harmonics: it is a
+coherent complex sum over every event in the repetition, so where the
+repetition carries nested periods of its own — an echo train inside a slice
+loop inside a TR — those factors multiply, and their product can cancel a peak,
+split it into a pair, or shift its maximum off the harmonic it belongs to.
+Seginer et al. document exactly this on EPI, and the {doc}`safety page
+<../safety/mechanical_resonance>` reproduces it: commensurate periods keep one
+dominant peak, a sub-millisecond slip spreads it into a comb of comparable
+ones. Multiply that by the finite-repeat kernel and the loudest frequency in a
+band is routinely not a harmonic.
+
+So a probe cannot be a harmonic's value scaled down. Taking a neighbouring
+harmonic and applying the kernel can only ever expose *less* — a factor of at
+most one never exceeds what it scales — while the thing it would be hiding is
+a peak that moved.
 
 Asking for a *picture* is a different question with a different answer: a dense
 comb over the whole displayed range, from the same chirp-z.
@@ -371,20 +467,29 @@ comb over the whole displayed range, from the same chirp-z.
 
 ## 6. The verdict
 
-Put together, this is what the predownload gate decides on: the harmonics inside
-each guarded band, each judged against the loudest thing found in its
-neighbourhood, against the threshold that band carries.
+A guarded band is not *searched* — it is **covered**. The analysis evaluates a
+fixed, known set of frequencies inside it: every harmonic $k/T_\text{TR}$ the
+band contains, and between each pair of them the peaks of the finite-repeat
+kernel. Every one of those is an exact evaluation of $A_\text{eq}$ at that
+frequency, compared with the band's threshold on its own. Nothing is measured
+against a local baseline, nothing is promoted for standing out from its
+neighbours, and no peak is picked: the band passes when every evaluated
+frequency passes.
+
+The per-harmonic markers are a reporting convention laid on top of that. Each
+harmonic's row carries the worst of the frequencies in the interval up to the
+next harmonic, so a row can be flagged by a lobe rather than by its own line.
 
 ![An echo train's teeth read against two bands that state no amplitude](../assets/mechanical_resonance/epi_comb.png)
 
 A single-shot echo train is the clearest case — its teeth are the harmonics of
-the echo spacing — and the comb is what the analysis produces without ever being
-told there is an echo spacing. Twenty lines fall inside the two bands and two
-are refused: the tooth at 693 Hz, which carries 14.5 mT/m on its own harmonic,
-and the harmonic below it at 674 Hz, whose own line is only 0.5 mT/m but whose
-probes run up into the tooth's first sidelobe and find 9.2. Each marker is the
-loudest thing found around its line, which is why one can sit well above the
-on-harmonic curve beneath it.
+the echo spacing — and the comb is what the analysis produces without ever
+being told there is an echo spacing. Twenty harmonics fall inside the two
+bands and two rows are flagged. One is the tooth at 693 Hz, 14.5 mT/m on its
+own harmonic. The other is the harmonic below it at 674 Hz, whose own line is
+0.5 mT/m: the frequencies its row covers run up to the tooth's first sidelobe
+at 9.2 mT/m, and that is over the threshold. That 9.2 is not inferred from the
+shape of the comb — it is what the scan drives at 693.9 Hz, computed there.
 
 ```python
 freqs, spectrum, *_ , lines = seq.calculate_gradient_spectrum(
@@ -396,27 +501,6 @@ lines.ok              # the verdict the predownload gate will reach
 ```
 
 ---
-
-## Two things deliberately not done
-
-**Summing a band instead of taking its loudest line.** A resonance a hundred
-hertz wide cannot resolve lines half a hertz apart; it responds to its whole
-passband, so the sum looks like the better question. It is not cheaper — a sum
-over the lines still needs every line — and it cannot be calibrated against the
-corpus the threshold came from. Summing leaves a comb where it was and lifts a
-diffuse spectrum by roughly the square root of the number of lines carrying it:
-measured over the shipped plugins, 1.00 for balanced and gradient-echo combs,
-1.29 for an echo-planar train, 1.65–1.71 for spirals. The corpus separates loud
-from quiet with both kinds of spectrum on the boundary, so no rescaling moves
-them together. Hold the threshold and an eight-arm spiral is newly refused,
-though no product sequence checks a spiral; rescale by the echo-planar factor
-that set the threshold and a fast 3D gradient echo is newly permitted, though
-that family is steered. The verdict stays on the loudest line, which is also the
-quantity the vendor's own limits are written in.
-
-**Compressing genuinely independent shots.** The rank basis finds a span; it
-cannot invent one. A trajectory whose arms are separately optimised pays for
-every arm, and that is the sequence's cost rather than a gap in the analysis.
 
 ## The same answer, checked
 
@@ -433,12 +517,20 @@ computes both:
 | the ceiling | the search it skips | the threshold placed either side of a sequence's own loudest line, over bands wide and narrow: the verdict flips exactly on the peak |
 | the drawn lines | the predownload verdict | on recorded sequences, through two independent paths into the engine |
 
-**End to end.** In the {doc}`full benchmark <full_benchmark>` — largest protocol
-of every shipped family, two bands, gradient and nerve checks included —
-`validate_protocol` runs in 6–42 ms per family, the one outlier being that
-inversion-prepared case at 316 ms on 1.7 million blocks. What the analysis holds
-in memory is the basis and the tabulated transforms for one band, both bounded
-by the window and released with it.
+**End to end.** This is a predownload cost, not a UI one: `validate_protocol`
+never touches it, because it designs one repetition to answer *is this
+feasible and how long will it take* and returns before any gradient exists to
+transform. The number that matters is what the interpreter pays when the
+finished file comes back in — `pulseg_check_safety`, gradient continuity and
+slew, PNS, and this acoustic analysis together — and that is what the
+{doc}`full benchmark <full_benchmark>` reports as *Safety*, over the largest
+protocol of every shipped family with two guarded bands: 2 ms to 11.3 s. The
+top of that range is not the biggest scan; it is, as that page shows, a ZTE
+shell, where the number of distinct waveforms grows with the scan as well as
+the window does — every shot is its own shell — which is exactly the case the
+rank basis cannot help with. What the analysis holds in memory is the basis
+and the tabulated transforms for one band, both bounded by the window and
+released with it.
 
 The point is not the tests. It is that none of this machinery is allowed to be
 an approximation of the rule on the

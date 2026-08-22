@@ -212,6 +212,63 @@ def support_indices(
     )
 
 
+def occupancy_indices(
+    samples: Any,
+    spatial_shape: tuple[int, ...],
+    *,
+    width: int = 2,
+) -> Any:
+    """Locations a trajectory reaches on the transfer grid.
+
+    The support a Toeplitz kernel actually needs, read off the acquisition
+    rather than assumed: the samples are placed on the grid and every location
+    within ``width`` of one is kept, which is the neighbourhood a gridding
+    kernel spreads into. A trajectory that fills a ball leaves a ball, one that
+    fills a cylinder leaves a cylinder, and one that fills the box keeps every
+    location -- no shape is presumed of it.
+
+    Parameters
+    ----------
+    samples
+        Trajectory in the backend's ``[-pi, pi)`` units, ``(..., ndim)``.
+    spatial_shape
+        The transfer grid, twice the image in each dimension.
+    width
+        Grid steps kept around each sample, matching the spread of the
+        interpolation the operator grids with.
+
+    Returns
+    -------
+    Flat unshifted-FFT indices, sorted and unique.
+    """
+    torch = _torch()
+    ndim = len(spatial_shape)
+    if isinstance(samples, (list, tuple)):
+        # A subspace kernel is one transfer over every frame, so the support it
+        # needs is the union of what the frames reached.
+        coordinates = torch.cat([as_torch(item).reshape(-1, ndim) for item in samples])
+    else:
+        coordinates = as_torch(samples)
+    if coordinates.ndim < 2 or coordinates.shape[-1] != ndim:
+        raise ValueError("samples must end in one coordinate per spatial axis")
+    coordinates = coordinates.reshape(-1, ndim).to(torch.float32)
+    sizes = torch.tensor(spatial_shape, device=coordinates.device)
+    # [-pi, pi) spans the grid, and the transfer is stored unshifted, so the
+    # centre of k-space is index zero.
+    placed = torch.round(coordinates / (2.0 * torch.pi) * sizes).to(torch.int64)
+
+    span = torch.arange(-int(width), int(width) + 1, device=coordinates.device)
+    offsets = torch.cartesian_prod(*([span] * ndim)).reshape(-1, ndim)
+    keep = torch.zeros(prod(spatial_shape), dtype=torch.bool, device=coordinates.device)
+    stride = torch.ones(ndim, dtype=torch.int64, device=coordinates.device)
+    for axis in range(ndim - 2, -1, -1):
+        stride[axis] = stride[axis + 1] * spatial_shape[axis + 1]
+    for offset in offsets:
+        neighbour = (placed + offset) % sizes
+        keep[(neighbour * stride).sum(-1)] = True
+    return torch.nonzero(keep, as_tuple=False).flatten().to(torch.int32)
+
+
 def mirror_indices(indices: Any, spatial_shape: tuple[int, ...]) -> Any:
     """The locations diametrically opposite ``indices`` on a periodic grid.
 
@@ -239,13 +296,19 @@ def _symmetric_halving(
     """One representative per ``+/-f`` pair, when the transfer is even.
 
     A trajectory closed under ``k -> -k`` -- radial diameters, a koosh ball,
-    a symmetric spiral pair -- has a real, even transfer, so half of what is
-    stored repeats the other half. ``None`` when the locations are not closed
-    under the mirror or the values disagree across it, which is what an
-    asymmetric acquisition leaves.
+    a symmetric spiral pair -- leaves an even transfer, so half of what is
+    stored repeats the other half. Subspace kernels are included: what decides
+    is whether the acquisition pairs a sample with its opposite under the same
+    temporal weight, not whether the values are real.
+
+    Evenness is measured rather than derived. A transfer is even as a function
+    of frequency but is sampled on a grid that is not closed under negation --
+    it holds ``-M / 2`` and not ``+M / 2`` -- so whether the stored array is
+    even is a question about this acquisition on this grid. ``None`` when the
+    locations are not closed under the mirror or the values disagree across it.
     """
     torch = _torch()
-    if values.is_complex() or indices.numel() == 0:
+    if indices.numel() == 0:
         return None
     mirrored = mirror_indices(indices, spatial_shape)
     order = torch.argsort(indices.to(torch.int64))
@@ -379,6 +442,9 @@ class CompactToeplitzKernel:
         self._cuda_value_cache: dict[tuple[Any, ...], Any] = {}
         self._last_cuda_mode: str | None = None
         self._last_cuda_algorithm: str | None = None
+        #: Largest transfer value a truncated support left behind, which is
+        #: how far below zero this kernel's normal operator can reach.
+        self.truncation_bound = 0.0
 
     @property
     def is_real(self) -> bool:

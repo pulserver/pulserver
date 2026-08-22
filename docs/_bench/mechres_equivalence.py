@@ -150,6 +150,46 @@ def numerical_lines(sequence, freqs, index=0, oversample=32):
     return out
 
 
+def engine_lines_complex(sequence, index, mode, max_freq=2000.0):
+    """``(f, amp[3, n], phase[3, n])`` -- the engine's own complex line values."""
+    structure = sequence._structure_for("bound")
+    spectra = _calc_mech_resonances(
+        structure.collection,
+        0,
+        int(index),
+        mode,
+        target_resolution_hz=1.0 / structure.tr_duration,
+        max_freq_hz=max_freq,
+        forbidden_bands=[],
+    )
+    freqs = np.asarray(spectra["analytical_peak_freqs"], float)
+    amps = np.stack(
+        [np.asarray(spectra[f"analytical_peak_amp_g{ax}"], float) for ax in "xyz"]
+    )
+    phases = np.stack(
+        [np.asarray(spectra[f"analytical_peak_phase_g{ax}"], float) for ax in "xyz"]
+    )
+    return freqs, amps / GAMMA, phases
+
+
+def scan_at_harmonics(sequence, max_freq=2000.0):
+    """``(f, A_eq[n])`` of the whole scan at the TR harmonics, worst axis.
+
+    Summed from the engine's own per-repetition complex lines, so both sides
+    of the bound comparison describe the same field. At a TR harmonic the
+    inter-repetition phase factor is unity, so the scan's line is simply the
+    mean of what the repetitions put there:
+    ``A_eq_scan(f_k) = |sum_m A_eq_m(f_k) e^{i phi_m}| / M``.
+    """
+    reps = sequence._structure_for("bound").num_trs
+    total = None
+    for m in range(reps):
+        freqs, amps, phases = engine_lines_complex(sequence, m, ACTUAL, max_freq)
+        term = amps * np.exp(1j * phases)
+        total = term if total is None else total + term
+    return freqs, (np.abs(total) / reps).max(0)
+
+
 def record_spectrum(sequence, freqs):
     """``A_eq[n]`` of the whole scan, worst axis, rendered repetition by repetition.
 
@@ -311,10 +351,9 @@ TERRITORY = (515.0, 1650.0)
 
 #: The controlled scan: one 3D stack-of-spirals repetition, played sixteen
 #: times, with the two things that can vary across repetitions switched on
-#: and off independently. Sixteen distinct golden-angle arms rather than a
-#: short cycle of them, because a waveform that cycles with a short period is
-#: found by TR detection and folded into a longer repetition -- at which point
-#: nothing varies and there is no approximation left to show.
+#: and off independently. Sixteen distinct golden-angle arms, which is what a
+#: real interleaved scan plays; the structural TR stays at one shot either
+#: way, since a waveform's samples are not part of a gradient definition.
 STACK = dict(n_x=64, n_z=8, n_arms=16, angle_scheme="golden", n_dummy=0,
              tr=10e-3, readout_bandwidth_hz=250e3, use_rotation_ext=False)
 REPETITIONS = 16
@@ -363,60 +402,71 @@ MAX_FREQ = 2000.0
 
 def canonical_tr():
     kernel = stack_kernel()
-    dense = np.linspace(2.0, MAX_FREQ, 3600)
 
-    figure, axes = plt.subplots(2, 4, figsize=(11.0, 5.6), height_ratios=(1.0, 0.52))
-    figure.subplots_adjust(hspace=0.56, wspace=0.22, top=0.80, bottom=0.10,
+    figure, axes = plt.subplots(2, 4, figsize=(11.0, 6.0), height_ratios=(1.0, 0.52))
+    figure.subplots_adjust(hspace=0.55, wspace=0.22, top=0.775, bottom=0.09,
                            left=0.065, right=0.99)
 
     for column, (letter, what, arm_varies, encode_varies) in enumerate(CASES):
         sequence = controlled_scan(kernel, arm_varies, encode_varies)
         reps = sequence._structure_for("bound").num_trs
-        freqs, bound = engine_lines(sequence, mode=BOUND, max_freq=MAX_FREQ)
-        bound = bound.max(0)
-        played = np.stack(
-            [engine_lines(sequence, i, ACTUAL, MAX_FREQ)[1].max(0) for i in range(reps)]
-        )
-        scan = record_spectrum(sequence, dense)
+
+        # Both sides of the bound, in the engine's own model, at the harmonics.
+        freqs, scan = scan_at_harmonics(sequence, MAX_FREQ)
+        _, window = engine_lines(sequence, mode=BOUND, max_freq=MAX_FREQ)
+        window = window.max(0)
+
+        # And, as context, where the scan's energy actually sits: the rendered
+        # record, which has structure between the harmonics that no single
+        # repetition has.
+        dense_f, _ = engine_envelope(sequence, 0.5, MAX_FREQ, mode=BOUND)
+        dense_scan = record_spectrum(sequence, dense_f)
 
         top = axes[0, column]
         top.axvspan(*TERRITORY, color=FAINT, alpha=0.30, lw=0, zorder=0)
-        top.plot(dense, np.maximum(scan, 1e-3), color=SERIES[1], lw=0.7, zorder=2)
-        top.plot(freqs, bound, color=INK, lw=1.0, ls=(0, (4, 2)), zorder=4)
-        top.plot(freqs, bound, "o", color=INK, ms=2.6, mew=0, zorder=5)
+        top.plot(dense_f, np.maximum(dense_scan, 1e-3), color=SERIES[1], lw=0.5,
+                 alpha=0.55, zorder=1)
+        top.plot(freqs, scan, color=SERIES[1], lw=1.2, zorder=3)
+        top.plot(freqs, window, color=INK, lw=1.3, ls=(0, (4, 2)), zorder=4)
         frame(top, f"{letter}   {what}", MAX_FREQ, column == 0)
         inside = (freqs >= TERRITORY[0]) & (freqs <= TERRITORY[1])
-        top.text(0.035, 0.055, f"{bound[inside].max():.1f} mT/m in band",
-                 transform=top.transAxes, fontsize=7.6, color=MUTED)
+        top.text(0.035, 0.055,
+                 f"in band: {window[inside].max():.2f} judged,"
+                 f"\n{scan[inside].max():.2f} driven",
+                 transform=top.transAxes, fontsize=7.4, color=MUTED)
 
-        ratio = bound / np.maximum(played.max(0), 1e-12)
+        ratio = window / np.maximum(scan, 1e-12)
+        loud = scan > 0.05 * scan.max()
         bottom = axes[1, column]
         bottom.axvspan(*TERRITORY, color=FAINT, alpha=0.30, lw=0, zorder=0)
-        bottom.plot(freqs, ratio, color=SERIES[0], lw=1.0, zorder=2)
+        bottom.plot(freqs[loud], ratio[loud], color=SERIES[0], lw=0, marker="o",
+                    ms=2.6, mew=0, zorder=2)
         bottom.axhline(1.0, color=MUTED, lw=0.8, ls=(0, (4, 3)))
-        _style(bottom, f"median {np.median(ratio):.3f}×, worst {ratio.max():.2f}×")
+        _style(bottom, f"never below 1 · median {np.median(ratio[loud]):.3f}×")
         bottom.set_xlim(0, MAX_FREQ)
-        bottom.set_ylim(0.94, 2.15)
+        bottom.set_ylim(0.97, 1.35)
         bottom.set_xlabel("frequency (Hz)", fontsize=8)
         if column == 0:
-            bottom.set_ylabel("window / loudest\nrepetition", fontsize=8)
-        print(f"    {letter} {what:28} in band {bound[inside].max():.2f} mT/m · "
-              f"ratio median {np.median(ratio):.4f} worst {ratio.max():.2f} · "
-              f"scan peak {scan.max():.2f} vs window {bound.max():.2f}")
+            bottom.set_ylabel("judged / driven", fontsize=8)
+        print(f"    {letter} {what:28} min {ratio.min():.4f} median {np.median(ratio[loud]):.3f} "
+              f"| in band judged {window[inside].max():.3f} driven {scan[inside].max():.3f} "
+              f"({window[inside].max()/scan[inside].max():.3f}x)")
 
     legend(
         figure,
-        [Line2D([], [], color=SERIES[1], lw=1.0),
-         Line2D([], [], color=INK, lw=1.0, ls=(0, (4, 2)), marker="o", ms=3),
+        [Line2D([], [], color=SERIES[1], lw=1.2),
+         Line2D([], [], color=INK, lw=1.3, ls=(0, (4, 2))),
+         Line2D([], [], color=SERIES[1], lw=0.8, alpha=0.55),
          Line2D([], [], color=FAINT, lw=7)],
-        ["the whole scan, rendered and transformed",
+        ["what the whole scan drives, at the TR harmonics",
          "the canonical window, which is what the gate judges",
+         "the whole scan at every frequency",
          "where vendor bands fall"],
-        loc="upper center", bbox_to_anchor=(0.5, 0.965), ncols=3,
+        loc="upper center", bbox_to_anchor=(0.5, 0.905), ncols=4,
     )
     figure.suptitle(
-        "One 3D stack-of-spirals repetition, played sixteen times — with each kind of "
-        "variation switched on alone",
+        "One repetition played sixteen times, each kind of variation switched on alone — "
+        "the window is above the scan at every line, and by a few percent",
         x=0.02, ha="left", fontsize=10, color=INK,
     )
     return save(figure, "canonical_tr")
@@ -621,8 +671,8 @@ def finite_reps(repetitions=16):
         [np.arange(1, 5) / repetitions, -np.arange(1, 5) / repetitions]
     )
 
-    figure, axes = plt.subplots(1, 2, figsize=(9.8, 3.3), width_ratios=(1.35, 1.0))
-    figure.subplots_adjust(wspace=0.26, top=0.76, bottom=0.20)
+    figure, axes = plt.subplots(1, 2, figsize=(9.8, 4.3), width_ratios=(1.35, 1.0))
+    figure.subplots_adjust(wspace=0.26, top=0.68, bottom=0.16)
 
     axis = axes[0]
     axis.plot(dense, record, color=SERIES[1], lw=1.4, alpha=0.65, zorder=1)
@@ -642,7 +692,7 @@ def finite_reps(repetitions=16):
     axis.set_xlim(dense[0], dense[-1])
     axis.set_ylim(0, 1.12 * float(exact[0]))
     legend(
-        axis,
+        figure,
         [
             Line2D([], [], color=SERIES[1], lw=1.4, alpha=0.65),
             Line2D([], [], color="#e34948", lw=0, marker="o", ms=6.5),
@@ -655,8 +705,9 @@ def finite_reps(repetitions=16):
             "probes at $(j+\\frac{1}{2})/M$",
             "probes at $j/M$ — the kernel's nulls",
         ],
-        loc="upper right",
-        ncols=1,
+        loc="upper center",
+        bbox_to_anchor=(0.5, 0.92),
+        ncols=2,
     )
 
     axis = axes[1]
@@ -688,13 +739,15 @@ def finite_reps(repetitions=16):
             f"{heights[index]:.2f}", fontsize=7.2, color=MUTED,
         )
     axis.text(
-        0.52, 0.93,
-        "peak heights do not depend on $M$,\nonly their spacing does",
+        0.42, 0.93,
+        "peak heights do not depend on $M$,\nonly their spacing does — so four\n"
+        "probes a side cover any scan length",
         transform=axis.transAxes, fontsize=7.4, color=MUTED, va="top",
     )
 
     figure.suptitle(
-        "A finite scan is not an infinite comb, and the drive between its harmonics is real",
+        "Between the harmonics sits drive a resonance would feel, and only a finite\n"
+        "scan has it — which is why the check cannot stop at the harmonics",
         x=0.02, ha="left", fontsize=10, color=INK,
     )
 
@@ -715,8 +768,8 @@ def finite_reps(repetitions=16):
 EPI_BANDS = ((650.0, 750.0, 0.0), (1500.0, 1600.0, 0.0))
 
 
-def epi_comb():
-    sequence = epi_series(16)
+def epi_comb(repetitions=16):
+    sequence = epi_series(repetitions)
     structure = sequence._structure_for("bound")
     spectra = _calc_mech_resonances(
         structure.collection,
@@ -732,38 +785,49 @@ def epi_comb():
         [np.asarray(spectra[f"analytical_peak_amp_g{ax}"], float) for ax in "xyz"]
     ).max(0) / GAMMA
     candidates = np.asarray(spectra["candidate_freqs"], float)
-    judged = np.asarray(spectra["candidate_grad_amps"], float) / GAMMA
+    on_line = np.stack(
+        [np.asarray(spectra[f"candidate_amps_g{ax}"], float) for ax in "xyz"]
+    ).max(0) / GAMMA
     refused = np.asarray(spectra["candidate_violations"], int).astype(bool)
 
-    figure, axis = plt.subplots(figsize=(9.6, 3.4))
-    figure.subplots_adjust(top=0.84, bottom=0.20)
-    axis.plot(freqs, amps, color=SERIES[0], lw=1.1, zorder=2)
+    figure, axis = plt.subplots(figsize=(9.8, 3.8))
+    figure.subplots_adjust(top=0.72, bottom=0.18)
+    axis.plot(freqs, amps, color=SERIES[0], lw=1.1, zorder=3)
+
+    # The rest of what the verdict evaluates: the finite-repeat lobes between
+    # the harmonics, at the frequencies the probes actually sit on. Drawing
+    # them is what keeps the per-harmonic markers from reading as a
+    # peak-finding -- the verdict covers the band, not a search over it.
+    spacing = 1.0 / structure.tr_duration
+    offsets = np.concatenate(
+        [(np.arange(4) + 0.5) / repetitions, 1.0 - (np.arange(4) + 0.5) / repetitions]
+    )
+    probes = np.unique(
+        np.concatenate([(k / spacing + offsets) * spacing for k in candidates])
+    )
+    axis.plot(probes, record_spectrum(sequence, probes), "o", color=SERIES[1],
+              ms=2.6, mfc="none", mew=0.8, zorder=4,
+              label="the finite-repeat lobes between them, evaluated too")
     draw_bands(axis, EPI_BANDS)
+
     for mask, colour, label in (
-        (~refused, SERIES[2], "in band, under the threshold"),
-        (refused, "#e34948", "in band, refused"),
+        (~refused, SERIES[2], "harmonic in band, its interval clears the threshold"),
+        (refused, "#e34948", "harmonic in band, something in its interval does not"),
     ):
         if mask.any():
-            axis.plot(
-                candidates[mask],
-                judged[mask],
-                "o",
-                color=colour,
-                ms=5,
-                mew=0,
-                label=label,
-                zorder=7,
-            )
+            axis.plot(candidates[mask], on_line[mask], "o", color=colour, ms=5,
+                      mew=0, label=label, zorder=7)
     frame(axis, "", 2500.0)
-    legend(axis, loc="lower left", ncols=2)
+    legend(axis, loc="upper center", bbox_to_anchor=(0.5, 1.20), ncols=3)
+    axis.set_ylim(0.1, 40.0)
     figure.suptitle(
-        "The verdict: an echo train's teeth against two bands that state no amplitude",
-        x=0.02,
-        ha="left",
-        fontsize=10,
-        color=INK,
+        "The verdict: every frequency a band covers, against the level that band allows",
+        x=0.02, ha="left", fontsize=10, color=INK,
     )
-    print(f"    candidates {candidates.size}, refused {int(refused.sum())}, peak {judged.max():.2f} mT/m")
+    print(f"    candidates {candidates.size}, refused {int(refused.sum())}")
+    for f_hz, a, bad in zip(candidates, on_line, refused):
+        if bad:
+            print(f"      refused at {f_hz:.1f} Hz (on the harmonic itself: {a:.2f} mT/m)")
     return save(figure, "epi_comb")
 
 

@@ -258,7 +258,13 @@ def _pics(
 
         def normal(x: Any) -> Any:
             result = linear.A_adjoint_A(x)
-            return result + regularization * x if regularization else result
+            # A Toeplitz kernel is built on the first normal-operator call, so
+            # what its support dropped is only known once that has run. Read
+            # the floor here rather than before the solve: the exact normal
+            # operator of an undersampled scan has eigenvalues at zero, and
+            # damping past what the cut dropped is what keeps them above it.
+            damping = max(regularization, _truncation_floor(linear))
+            return result + damping * x if damping else result
 
         if init is None:
             init = import_module("torch").zeros_like(rhs)
@@ -453,6 +459,14 @@ def pics(
         kwargs["init"] = torch.as_tensor(init).to(tensor.dtype).to(device)
     result = _pics(tensor, physics, denoiser, **kwargs)
     return result.detach().to("cpu").numpy() if hasattr(result, "detach") else result
+
+
+def _truncation_floor(physics: Any) -> float:
+    """The damping a truncated Toeplitz kernel needs to stay definite."""
+    try:
+        return float(getattr(physics, "truncation_bound", 0.0) or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
 
 
 def _complex_denoiser(denoiser: Any | None) -> Any | None:

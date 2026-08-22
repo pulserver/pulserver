@@ -35,7 +35,12 @@ from typing import Any
 
 import deepinv
 
-from ._toeplitz import CompactToeplitzKernel, as_torch, support_indices
+from ._toeplitz import (
+    CompactToeplitzKernel,
+    as_torch,
+    occupancy_indices,
+    support_indices,
+)
 from .execution import _resolve_device
 from ._views import image_as_cpx as _image_as_cpx
 from ._views import image_as_real as _image_as_real
@@ -277,6 +282,7 @@ def _toeplitz_options(
     support: str = "auto",
     radius: float = 1.0,
     radial_margin: float = 1.5,
+    trajectory_width: int = 4,
     symmetric: bool | str = "auto",
     chunk_size: int = 65536,
     coil_batch_size: int = 1,
@@ -284,8 +290,10 @@ def _toeplitz_options(
     cuda_max_device_fraction: float = 0.85,
     cuda_transfer_precision: str = "auto",
 ) -> dict[str, Any]:
-    if support not in {"auto", "full", "radial"}:
-        raise ValueError("Toeplitz support must be 'auto', 'full', or 'radial'")
+    if support not in {"auto", "full", "radial", "trajectory"}:
+        raise ValueError(
+            "Toeplitz support must be 'auto', 'full', 'radial', or 'trajectory'"
+        )
     if radius <= 0.0 or radius > 1.0:
         raise ValueError("Toeplitz radius must be in the interval (0, 1]")
     if radial_margin < 1.0:
@@ -314,6 +322,7 @@ def _toeplitz_options(
         "support": support,
         "radius": float(radius),
         "radial_margin": float(radial_margin),
+        "trajectory_width": int(trajectory_width),
         "symmetric": symmetric,
         "chunk_size": int(chunk_size),
         "coil_batch_size": int(coil_batch_size),
@@ -344,22 +353,44 @@ def _trajectory_extent(samples: Any) -> float | None:
 def _resolved_support(options: dict[str, Any], samples: Any) -> str:
     """Settle ``support="auto"`` against the trajectory the kernel comes from.
 
-    Keeping only a disk or a ball is exact for the samples themselves but not
-    for the kernel, whose locations are the trajectory interpolated onto the
-    transfer grid -- an off-grid sample spreads over every location, with tails
-    that the cut clips. Margin is what makes the clipped tails negligible, so
-    the packing is taken only when the trajectory stops short of the cut by
-    ``radial_margin``; a trajectory sampled to Nyquist has no margin at all and
-    keeps the full grid.
+    A trajectory that states where it sampled gets the support read off it:
+    the locations it reaches on the transfer grid, and no others. That adapts
+    to the acquisition -- a ball for a projection scan, a cylinder for a stack
+    -- without presuming a shape, and it is what the memory-efficient Toeplitz
+    implementations do.
+
+    A kernel with no trajectory to read, which is what a Cartesian encoding
+    leaves, keeps every location.
     """
     if options["support"] != "auto":
         return options["support"]
-    extent = _trajectory_extent(samples)
-    if extent is None or extent <= 0.0:
-        return "full"
-    if extent * options["radial_margin"] <= options["radius"]:
-        return "radial"
-    return "full"
+    return "full" if samples is None else "trajectory"
+
+
+def _support_locations(
+    options: dict[str, Any],
+    samples: Any,
+    spatial_shape: tuple[int, ...],
+    device: Any,
+) -> Any:
+    """The transfer locations one kernel retains.
+
+    ``support="trajectory"`` needs samples to read; a kernel built without
+    them, which is what a Cartesian encoding leaves, keeps every location.
+    """
+    support = _resolved_support(options, samples)
+    if support == "trajectory" and samples is not None:
+        return occupancy_indices(
+            samples,
+            spatial_shape,
+            width=options["trajectory_width"],
+        ).to(device)
+    return support_indices(
+        spatial_shape,
+        support="full" if support == "trajectory" else support,
+        radius=options["radius"],
+        device=device,
+    )
 
 
 def _toeplitz_request(
@@ -418,6 +449,19 @@ class MRIPhysics(deepinv.physics.LinearPhysics):
         self._streaming_parameters: dict[str, Any] | None = None
         self._replicate: Callable[[Any, Any], MRIPhysics] | None = None
         self._streaming_replicas: dict[str, MRIPhysics] = {}
+
+    @property
+    def truncation_bound(self) -> float:
+        """How far a sampled support can pull the normal operator below zero.
+
+        A kernel stored over the locations its trajectory reached drops weight
+        that was not zero. The exact normal operator of an undersampled scan
+        has eigenvalues at zero, so that is what can take them negative, and a
+        solve regularized by more than this is back on a positive-definite
+        operator. Zero when the kernel keeps every location.
+        """
+        kernel = getattr(self.operator, "toeplitz_kernel", None)
+        return float(getattr(kernel, "truncation_bound", 0.0) or 0.0)
 
     @property
     def normal_mode(self) -> str:
@@ -1284,14 +1328,14 @@ def _build_scalar_toeplitz(
     image_shape = tuple(int(size) for size in base.shape)
     spatial_shape = tuple(2 * size for size in image_shape)
     transfer = as_torch(_compute_toeplitz_transfer(base)).flatten()
-    indices = support_indices(
+    indices = _support_locations(
+        options,
+        getattr(base, "samples", None),
         spatial_shape,
-        support=_resolved_support(options, getattr(base, "samples", None)),
-        radius=options["radius"],
-        device="cpu" if streaming is not None else transfer.device,
+        "cpu" if streaming is not None else transfer.device,
     )
     values = _selected_transfer(transfer, indices, streaming=streaming).real[None]
-    return CompactToeplitzKernel(
+    kernel = CompactToeplitzKernel(
         values,
         indices,
         spatial_shape,
@@ -1303,6 +1347,27 @@ def _build_scalar_toeplitz(
         cuda_transfer_precision=options["cuda_transfer_precision"],
         symmetric=options["symmetric"],
     )
+    kernel.truncation_bound = _dropped_bound(transfer, indices)
+    return kernel
+
+
+def _dropped_bound(transfer: Any, indices: Any) -> float:
+    """The largest transfer value a truncated support left behind.
+
+    A sampled support drops locations whose weight was not zero, which pulls
+    the normal operator down by at most this much: the exact operator of an
+    undersampled scan has eigenvalues at zero, so what is dropped is what can
+    take them negative. A solve that regularizes by more than this is back on
+    a positive-definite operator, which is what makes the sparse kernel safe.
+    """
+    torch = import_module("torch")
+    flat = as_torch(transfer).abs().flatten()
+    if indices.numel() >= flat.numel():
+        return 0.0
+    keep = torch.zeros(flat.numel(), dtype=torch.bool, device=flat.device)
+    keep[indices.to(torch.int64)] = True
+    dropped = flat[~keep]
+    return float(dropped.max()) if dropped.numel() else 0.0
 
 
 def _configure_base_toeplitz(
@@ -1421,10 +1486,23 @@ def _build_subspace_toeplitz(
             for frame, item in enumerate(frame_physics)
         )
 
+    # The support has to come from every frame, not the first one, and a lazy
+    # provider cannot be read without materialising each frame's plan -- so a
+    # lazy bank keeps the whole grid.
+    frame_samples: list[Any] | None = None
+    if not lazy:
+        collected = [
+            getattr(getattr(item, "native_operator", None), "samples", None)
+            for item in frame_physics
+        ]
+        if all(item is not None for item in collected):
+            frame_samples = collected
+
     image_shape = None
     spatial_shape = None
     packed = None
     indices = None
+    dropped = 0.0
     for native, coefficients in entries:
         if native is None or hasattr(native, "B"):
             raise RuntimeError(
@@ -1439,12 +1517,15 @@ def _build_subspace_toeplitz(
         scalar = as_torch(_compute_toeplitz_transfer(native)).flatten()
         if indices is None:
             assert spatial_shape is not None
-            indices = support_indices(
+            indices = _support_locations(
+                options,
+                frame_samples,
                 spatial_shape,
-                support=_resolved_support(options, getattr(native, "samples", None)),
-                radius=options["radius"],
-                device="cpu" if streaming is not None else scalar.device,
+                "cpu" if streaming is not None else scalar.device,
             )
+        # Each frame contributes its dropped weight, scaled by the largest
+        # coefficient it enters the packed matrix with.
+        dropped += _dropped_bound(scalar, indices) * float(coefficients.abs().max())
         selected = _selected_transfer(
             scalar,
             indices,
@@ -1478,7 +1559,7 @@ def _build_subspace_toeplitz(
     values = (
         packed.to(basis.dtype) if basis.is_complex() else packed.real.to(basis.dtype)
     )
-    return CompactToeplitzKernel(
+    kernel = CompactToeplitzKernel(
         values,
         indices,
         spatial_shape,
@@ -1490,6 +1571,8 @@ def _build_subspace_toeplitz(
         cuda_transfer_precision=options["cuda_transfer_precision"],
         symmetric=options["symmetric"],
     )
+    kernel.truncation_bound = dropped
+    return kernel
 
 
 def _build_cartesian_subspace_toeplitz(
@@ -1524,14 +1607,8 @@ def _build_cartesian_subspace_toeplitz(
             "Cartesian subspace mask must be shared or have one mask per frame"
         )
     masks = torch.fft.ifftshift(masks, dim=(-2, -1)).abs().square()
-    indices = support_indices(
-        image_shape,
-        # A Cartesian mask fills the corners of its own grid, so there is
-        # nothing a ball would leave out and nothing it could safely drop.
-        support=_resolved_support(options, None),
-        radius=options["radius"],
-        device=masks.device,
-    )
+    # A Cartesian mask fills its own grid, so there is nothing to leave out.
+    indices = _support_locations(options, None, image_shape, masks.device)
     rows, columns = torch.triu_indices(rank, rank, device=basis.device)
     packed = torch.zeros(
         (rows.numel(), indices.numel()),
@@ -1608,11 +1685,11 @@ def _off_resonance_scalar_transfers(
         ).flatten()
         if indices is None:
             kernel_device = "cpu" if streaming is not None else scalar.device
-            indices = support_indices(
+            indices = _support_locations(
+                options,
+                getattr(base, "samples", None),
                 spatial_shape,
-                support=_resolved_support(options, getattr(base, "samples", None)),
-                radius=options["radius"],
-                device=kernel_device,
+                kernel_device,
             )
         packed.append(
             _selected_transfer(
@@ -3476,6 +3553,7 @@ def _enable_toeplitz(
     support: str = "auto",
     radius: float = 1.0,
     radial_margin: float = 1.5,
+    trajectory_width: int = 4,
     symmetric: bool | str = "auto",
     chunk_size: int = 65536,
     coil_batch_size: int = 1,
@@ -3487,26 +3565,30 @@ def _enable_toeplitz(
 
     Subspace and off-resonance decorators use a Torch-native matrix-valued
     transfer kernel. Its Hermitian upper triangle is packed, real bases retain
-    real storage, and only ``support`` locations are stored.
+    real storage, and only ``support`` locations are stored. ``symmetric``
+    applies to these as it does to a scalar kernel: what decides it is whether
+    the acquisition pairs a sample with its opposite under the same temporal
+    weight, not the dtype of the basis.
 
-    ``support="auto"``, the default, keeps the disk or ball when the
-    trajectory stops short of it by ``radial_margin`` and the whole grid
-    otherwise. ``"full"`` and ``"radial"`` force one.
+    ``support="auto"``, the default, keeps the locations the trajectory
+    reaches on the transfer grid and drops the rest. The support is read off
+    the acquisition rather than assumed, so a projection scan leaves a ball, a
+    stack leaves a cylinder, and an encoding with no trajectory to read keeps
+    every location. ``"full"``, ``"radial"`` and ``"trajectory"`` force one.
 
-    The packing saves a quarter of the locations in two dimensions and half of
-    them in three, and what it costs depends entirely on that margin. A kernel
-    location is not a sample: it is the trajectory interpolated onto the
-    transfer grid, and an off-grid sample spreads over every location with
-    slowly decaying tails. Cutting at the trajectory's own radius clips those
-    tails where they are still large -- for a radial scan sampled to Nyquist
-    that is a fifth of the kernel's mass and a normal operator wrong by 2e-1,
-    enough to cost a conjugate-gradient solve its positive-definiteness. At
-    ``radial_margin`` of 1.5 the same cut costs 5e-3, and at 2 it costs 2e-3.
+    A kernel location is not a sample: it is the trajectory interpolated onto
+    the transfer grid, and an off-grid sample spreads into its neighbourhood
+    with slowly decaying tails. ``trajectory_width`` is how much of that
+    neighbourhood is kept, so it trades the saving against the tails that are
+    clipped -- at the default of 4 a 3D spiral projection keeps a little over
+    half its locations for a normal operator accurate to a few parts in a
+    thousand, and raising it converges on the whole grid.
 
-    Zero-padding does not create margin: the transfer grid always spans the
-    image grid's own Nyquist range, however far the kernel is padded, so a
-    trajectory that reaches Nyquist reaches the edge of the largest disk the
-    grid holds.
+    ``"radial"`` cuts a geometric ball instead, which presumes the shape. It
+    is only safe with margin: a trajectory sampled to Nyquist reaches the edge
+    of the largest ball the grid holds, and zero-padding cannot create margin
+    because the transfer grid always spans the image grid's own Nyquist range
+    however far the kernel is padded.
 
     ``symmetric="auto"`` stores half of an even transfer and mirrors it as it
     is applied, which is exact and independent of the margin. ``True`` demands
@@ -3518,6 +3600,7 @@ def _enable_toeplitz(
         support=support,
         radius=radius,
         radial_margin=radial_margin,
+        trajectory_width=trajectory_width,
         symmetric=symmetric,
         chunk_size=chunk_size,
         coil_batch_size=coil_batch_size,

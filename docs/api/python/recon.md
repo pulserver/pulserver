@@ -250,19 +250,36 @@ The kernel is stored compactly, by two means that the operator applies on its
 own. A transfer that is **even** — which is what a trajectory closed under
 `k → -k` leaves, so radial diameters, a koosh ball, a symmetric spiral pair —
 is stored over half its locations and mirrored as it is applied, which is
-exact and stays halved wherever the solve runs. On top of that, only the
+exact and stays halved wherever the solve runs. Subspace kernels are included:
+what decides it is whether the scan pairs a sample with its opposite under the
+same temporal weight — a full-diameter readout, whose two ends are one time
+point — and not whether the basis is real or complex. Evenness is measured
+when the kernel is built, never assumed, so an acquisition that does not pair
+keeps every location. On top of that, only the
 **disk or ball** is kept when the trajectory stops short of it by
 `radial_margin`, which saves a further quarter of the locations in two
-dimensions and half of them in three. Together that is 39% of a full kernel in
-2D and 26% in 3D.
+dimensions and half of them in three.
 
-The margin is what makes the second one safe. A kernel location is not a
-sample: it is the trajectory interpolated onto the transfer grid, and an
-off-grid sample spreads over every location with slowly decaying tails. Cutting
-at the trajectory's own radius clips those tails where they are still large, so
-a scan sampled to Nyquist keeps the whole grid; zero-padding does not help,
-because the transfer grid always spans the image grid's own Nyquist range
-however far the kernel is padded.
+The support itself is read off the acquisition rather than presumed:
+`support="auto"`, the default, keeps the locations the samples reach on the
+transfer grid plus the neighbourhood the interpolation spreads into, so a
+projection scan leaves a ball and the grid's corners hold nothing. This is the
+sparse formulation `MRISubspaceRecon.jl` and BART use, and it is what makes a
+large 3D subspace kernel fit. On a 3D spiral projection it costs a few parts in
+a thousand, and the fraction of the grid it keeps falls as the matrix grows —
+47% of a full kernel at a 16 matrix, 36% at 40, and less beyond.
+
+What the cut drops was not zero, and the exact normal operator of an
+undersampled scan has eigenvalues at zero — so a sampled support can carry the
+smallest of them slightly negative, by at most the largest value it left
+behind. The kernel reports that as `MRIPhysics.truncation_bound`, and `pics`
+damps past it, reading the bound after the first normal-operator call because
+that is when the kernel is built. The damping is self-scaling: on a 3D
+subspace kernel it is well under a percent of the transfer's peak and falls as
+the matrix grows, while on a single coefficient solved from a sparse 2D radial
+scan it is tens of percent — small where the cut belongs, and loud where it
+does not. A kernel with no trajectory to read, which is what a Cartesian
+encoding leaves, keeps everything and reports a bound of zero.
 
 ```{eval-rst}
 .. autosummary::

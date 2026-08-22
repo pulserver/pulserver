@@ -841,7 +841,10 @@ class NLINV(torch.nn.Module):
             backend=self.backend,
             n_coils=data.shape[1],
             n_batchs=data.shape[0],
-            toeplitz=self.toeplitz,
+            # The calibration solves over a small centred window, so its kernel
+            # costs nothing to keep whole -- and a window that small holds too
+            # few samples for a support read off them to stay definite.
+            toeplitz={"support": "full"} if self.toeplitz else False,
             viewed_as_real=False,
         )
         return data, selected_encoding, solve_shape, output_shape, leading_shape

@@ -26,13 +26,38 @@ Three questions, on three different clocks:
 | Is *this* protocol valid, and how long would it take? | on every edit | interactive — tens of ms |
 | Give me the file. | on Download | seconds |
 
-Answering the second one honestly is the hard part, and it is why the safety
-engine exists at design time rather than only on the scanner. "Valid" cannot
-mean "the script ran": it has to mean the gradients fit the system, the slew
-fits, the PNS model stays under threshold, the acoustic response avoids the
-forbidden bands — the same checks the scanner will run before it downloads,
-run early enough that the operator can change a parameter instead of being
-refused at the magnet.
+Answering the second one honestly does not mean running the full physics
+gate on every keystroke — that would blow the "tens of ms" the row states.
+`validate_protocol` estimates *feasibility and duration*: whether the
+parameters make a physically realisable timing given the modules' own
+durations, and how long the resulting scan would take. It builds no
+waveform, so there is nothing yet to check the gradients, the PNS model or
+the acoustic response against.
+
+"Valid" in the full sense — gradients fit the system, slew fits, the PNS
+model stays under threshold, the acoustic response avoids the forbidden
+bands — only means something once a sequence has actually been built, and
+even then it is not evaluated on the console's clock. Writing straight to a
+scanner, `write_sequence(seq, path, offline=False)` leaves the binary
+unchecked, because the interpreter checks timing and gradients at
+predownload against its *real* rasters and limits once the finished file
+comes back in, and that is the authoritative pass — checking again on the
+way out would only duplicate it. A plugin cannot make predownload run any
+earlier, because at *validate* time there is no sequence yet to check.
+Writing anywhere else — a bench, a foreign toolbox, a colleague — nothing
+downstream will check it, so `write_sequence(..., offline=True)` runs every
+check inline, because it is the only chance those checks get. See
+{doc}`../performance/sequence_creation` for where each check sits in the
+write path.
+
+What design time buys, then, is not an earlier verdict on the operator's
+clock. It is the *same compiled engine* available before a sequence ever
+reaches a scanner at all — to a plugin author testing it, to a CI run, to
+anyone who wants the answer without a magnet to ask — so a violation is
+caught while the sequence is being written rather than reported back from
+the exam room. See {doc}`../safety/index` for what runs, and
+{doc}`../performance/sequence_creation` for where each check actually sits
+in the write path.
 
 ## The declaration is part of the sequence
 
