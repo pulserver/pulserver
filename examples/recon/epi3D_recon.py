@@ -91,7 +91,8 @@ class Epi3DRecon(ReconPlugin):
         gradient-delay ramp every product reconstruction corrects; raising it
         picks up what eddy currents leave beyond that.
     device
-        Torch device the reconstruction runs on. ``None`` is the CPU.
+        Torch device the reconstruction runs on. ``"auto"`` is the host's
+        GPU when it has one, and the CPU when it does not.
 
     Examples
     --------
@@ -108,6 +109,29 @@ class Epi3DRecon(ReconPlugin):
 
         images = epi3D_recon("scan.h5")
         images = epi3D_recon("scan.h5", virtual_coils=4, phase_order=2)
+
+    A single shot with a one-sample gradient delay, which is what a reversed
+    line comes back displaced by. Without the navigator the displacement stays
+    on the alternate lines and lands as a ghost at half the field of view;
+    with it, the fit removes it.
+
+    .. plot::
+
+       from pulserver.app import epi3D_recon
+       from _figures import epi_example, images
+
+       plugin = epi3D_recon.PLUGIN
+       ghost = epi_example(plugin, size=48, coils=8, corrected=False)
+       clean = epi_example(plugin, size=48, coils=8)
+
+       images(
+           [
+               ("object", clean.truth),
+               ("no navigator", ghost.image),
+               ("navigator fitted", clean.image),
+           ],
+           title="the odd/even phase, and the fit that removes it",
+       )
     """
 
     def __init__(
@@ -119,7 +143,7 @@ class Epi3DRecon(ReconPlugin):
         partial_fourier: str = "pocs",
         virtual_coils: int = 8,
         phase_order: int = 1,
-        device: Any = None,
+        device: Any = "auto",
     ) -> None:
         super().__init__(
             chain=[

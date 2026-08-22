@@ -70,6 +70,7 @@ Every optimisation here is asserted equal to the calculation it replaces:
 | compiled SAFE vs. upstream PyPulseq | `test_the_c_safe_model_matches_upstreams_python_one` |
 | plotted resonance lines vs. the gate's verdict | `test_the_drawn_lines_and_the_predownload_gate_reach_the_same_verdict` |
 | the L1 ceiling's probe skip vs. the full walk | `test_the_ceiling_never_swallows_a_violation` |
+| the rank (SVD) basis vs. the encoding that needs none | `test_a_multishot_scan_reads_the_same_however_its_arms_are_encoded` |
 | `tr=None` vs. upstream, to the bit | `test_pns_over_the_timeline_is_upstreams_answer_exactly` |
 
 Add the equivalent test with any new fast path. A fast answer that disagrees

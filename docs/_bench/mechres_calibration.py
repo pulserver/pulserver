@@ -2,7 +2,8 @@
 
 ``threshold_ladder.png``  the measured in-band drive of the shipped plugins
                           across realistic protocols, against the threshold
-``basis_cost.png``        gate cost against each of its three candidate drivers
+``basis_cost.png``        gate cost against each of its three candidate drivers,
+                          and against a transform of the whole timeline
 
 Vendor-side detail is deliberately absent: which product sequences carry a
 frequency lockout, and on what parameter, is the vendor's business. What the
@@ -179,40 +180,51 @@ def _gate_ms(collection, bands, repeats=3):
 def basis_cost():
     band = [(600.0, 700.0, 0.0)]
 
-    scans, arms_free, arms_bound, harmonics = [], [], [], []
+    #: The arm sweep needs a band with many lines in it, or it measures the
+    #: fixed cost of reading the waveforms in rather than the cost of
+    #: transforming them, and the basis is not what is being varied.
+    dense = [(500.0, 2500.0, 0.0)]
+
+    scans, timeline, arms_free, arms_bound, harmonics = [], [], [], [], []
     for n_y in (32, 64, 128, 256, 512, 1024):
-        structure = _build("gre2D_sequence", "b", n_x=128, n_y=n_y, tr=15e-3)._structure_for("bound")
+        sequence = _build("gre2D_sequence", "b", n_x=128, n_y=n_y, tr=15e-3)
+        structure = sequence._structure_for("bound")
         scans.append((structure.num_trs, _gate_ms(structure.collection, band)))
+        start = time.perf_counter()
+        sequence.calculate_gradient_spectrum(3000.0, plot=False, tr=None, compat=False)
+        timeline.append((structure.num_trs, 1e3 * (time.perf_counter() - start)))
     for n_arms in (4, 8, 16, 32, 64):
         for rotated, sink in ((False, arms_free), (True, arms_bound)):
             structure = _build("gre_spiral2D_sequence", "b", n_x=64, n_arms=n_arms,
-                               tr=20e-3, use_rotation_ext=rotated)._structure_for("bound")
-            sink.append((n_arms, _gate_ms(structure.collection, band)))
+                               tr=200e-3, use_rotation_ext=rotated)._structure_for("bound")
+            sink.append((n_arms, _gate_ms(structure.collection, dense)))
     for tr in (20e-3, 40e-3, 80e-3, 160e-3, 320e-3):
         structure = _build("gre_spiral2D_sequence", "b", n_x=64, n_arms=16, tr=tr,
                            use_rotation_ext=False)._structure_for("bound")
         harmonics.append((100.0 * structure.tr_duration, _gate_ms(structure.collection, band)))
 
-    figure, axes = plt.subplots(1, 3, figsize=(9.4, 3.0), dpi=170)
-    figure.subplots_adjust(wspace=0.34, top=0.80, bottom=0.20, left=0.08, right=0.985)
+    figure, axes = plt.subplots(1, 3, figsize=(9.6, 3.0), dpi=170)
+    figure.subplots_adjust(wspace=0.34, top=0.78, bottom=0.20, left=0.08, right=0.985)
 
     axis = axes[0]
+    x, y = zip(*timeline)
+    axis.plot(x, y, "o-", color=SERIES[1], lw=1.4, ms=4, label="a transform of the timeline")
     x, y = zip(*scans)
-    axis.plot(x, y, "o-", color=SERIES[2], lw=1.4, ms=4)
+    axis.plot(x, y, "o-", color=SERIES[2], lw=1.4, ms=4, label="the gate")
     axis.set_xscale("log")
-    axis.set_ylim(0, max(y) * 2.2)
+    axis.set_yscale("log")
+    axis.set_ylim(1e-2, 1e4)
     _style(axis, "scan length")
     axis.set_xlabel("repetitions", fontsize=8)
-    axis.set_ylabel("gate (ms)", fontsize=8)
-    axis.text(0.04, 0.92, "the coherent sum is a property of\none repetition; what grows is the\nwalk that bounds the others",
-              transform=axis.transAxes, fontsize=7.0, color=MUTED, va="top")
-    axis.set_ylim(0, max(max(y), 0.05) * 2.4)
+    axis.set_ylabel("ms", fontsize=8)
+    axis.legend(frameon=False, fontsize=7.4, loc="upper left")
 
     axis = axes[1]
     for data, color, label in ((arms_free, SERIES[1], "written out"),
                                (arms_bound, SERIES[2], "one wave, turned")):
         x, y = zip(*data)
         axis.plot(x, y, "o-", color=color, lw=1.4, ms=4, label=label)
+    axis.set_ylim(0, max(v for _, v in arms_free) * 1.6)
     _style(axis, "basis size")
     axis.set_xlabel("spiral arms", fontsize=8)
     axis.set_ylabel("gate (ms)", fontsize=8)
@@ -221,6 +233,7 @@ def basis_cost():
     axis = axes[2]
     x, y = zip(*harmonics)
     axis.plot(x, y, "o-", color=SERIES[3], lw=1.4, ms=4)
+    axis.set_ylim(0, max(y) * 1.4)
     _style(axis, "harmonics inside the band")
     axis.set_xlabel("band width × $T_{TR}$", fontsize=8)
     axis.set_ylabel("gate (ms)", fontsize=8)
@@ -229,7 +242,8 @@ def basis_cost():
                     fontsize=9.5, color=INK)
     figure.savefig(ASSETS / "basis_cost.png", facecolor="white")
     plt.close(figure)
-    return dict(scans=scans, written=arms_free, turned=arms_bound, harmonics=harmonics)
+    return dict(scans=scans, timeline=timeline, written=arms_free, turned=arms_bound,
+                harmonics=harmonics)
 
 
 if __name__ == "__main__":

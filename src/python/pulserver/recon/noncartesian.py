@@ -27,7 +27,7 @@ def noncartesian_recon(
     regularization: float = 1e-3,
     iterations: int = 30,
     calibration_width: int = 24,
-    device: Any = None,
+    device: Any = "auto",
 ) -> np.ndarray:
     """Reconstruct one non-Cartesian measurement, in the plane or the volume.
 
@@ -66,7 +66,8 @@ def noncartesian_recon(
         Width of the centred square or cube NLINV solves the sensitivities
         over.
     device
-        Torch device the reconstruction runs on. ``None`` is the CPU.
+        Torch device the reconstruction runs on. ``"auto"`` is the host's
+        GPU when it has one, and the CPU when it does not.
 
     Returns
     -------
@@ -80,6 +81,7 @@ def noncartesian_recon(
         plane nor a volume.
     """
     from .calibration import NLINV
+    from .execution import _resolve_device
     from .optim import pics
     from .physics import NonCartesian2D, NonCartesian3D
     from .postprocessing import as_numpy
@@ -98,6 +100,16 @@ def noncartesian_recon(
     if density is None:
         density = pipe_menon_dcf(trajectory, image_shape)
     n_coils = int(data.shape[0])
+
+    device = _resolve_device(device)
+    if device is not None:
+        # A NUFFT plans on the device its trajectory is on, so placing the
+        # samples places the whole reconstruction.
+        import torch
+
+        data = torch.as_tensor(data).to(device)
+        trajectory = torch.as_tensor(trajectory).to(device)
+        density = torch.as_tensor(density).to(device)
 
     if _direct(mode, n_views, image_shape):
         # The density-compensated adjoint is an inverse only at Nyquist, and a

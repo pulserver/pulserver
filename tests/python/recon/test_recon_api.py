@@ -683,3 +683,31 @@ def test_the_toeplitz_wrapper_shares_the_base_operator_and_enables_its_kernel():
     assert "toeplitz" in base.modifiers
     assert wrapper.toeplitz_options["coil_batch_size"] == 2
     assert wrapper.normal_mode == "exact-fft"
+
+
+def test_auto_selects_a_device_without_moving_the_answer():
+    """``device="auto"`` is a placement, not a change of what comes back."""
+    torch = pytest.importorskip("torch")
+    from pulserver.recon.execution import _resolve_device
+
+    expected = torch.device("cuda") if torch.cuda.is_available() else None
+    assert _resolve_device("auto") == expected
+    assert _resolve_device(None) is None
+    assert _resolve_device("cpu") == "cpu"
+
+
+def test_a_calibration_answers_where_its_data_was():
+    """The default placement is invisible: the maps come back beside the data."""
+    torch = pytest.importorskip("torch")
+    pytest.importorskip("deepinv")
+
+    generator = torch.Generator().manual_seed(12)
+    kspace = torch.randn(1, 2, 6, 6, generator=generator, dtype=torch.complex64)
+    model = recon.NLINV(
+        calibration_width=4, max_iter=2, cg_max_iter=4, residual_tolerance=None
+    )
+
+    maps = model(kspace)
+
+    assert maps.device == kspace.device
+    assert isinstance(model(kspace.numpy()), np.ndarray)

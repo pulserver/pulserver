@@ -23,6 +23,7 @@
 
 #include "external_kiss_fft.h"
 #include "external_kiss_fftr.h"
+#include "external_svd.h"
 
 /* ================================================================== */
 /*  Canonical-TR window selection                                     */
@@ -207,6 +208,29 @@ void pulseg_mech_resonances_spectra_free(pulseg_mech_resonances_spectra *s)
  *  a violation the coarse point did not already show). */
 #define SA_MECHRES_SIDELOBES_PER_SIDE 4
 
+/** Fewest distinct waveforms at one position before a rank basis is worth
+ *  looking for. Below this the decomposition costs more than the transforms
+ *  it would save. */
+#define SA_SVD_MIN_WAVEFORMS 4
+
+/** Largest rank kept, as a fraction of the waveform count: a basis that is
+ *  not substantially smaller than the set it stands for buys nothing, so the
+ *  attempt is abandoned rather than half-taken. */
+#define SA_SVD_MAX_RANK_FRACTION 0.5
+
+/** How much of each waveform's own L1 norm the discarded tail of the
+ *  decomposition is allowed to reach. The tail is not dropped -- it is
+ *  bounded and added back as a magnitude -- so this only sets how much
+ *  conservatism the compression introduces, and at this level it is far
+ *  below the last bit of the amplitudes being compared. */
+#define SA_SVD_RESIDUAL_FRACTION 1.0e-6f
+
+/** Work budget for one decomposition, in multiply-adds. A set that would
+ *  cost more than this to decompose is evaluated waveform by waveform
+ *  instead: the basis is an accelerator, and an accelerator that costs more
+ *  than the thing it replaces is not one. */
+#define SA_SVD_MAX_WORK 4.0e8
+
 /** Interleaved Horner chains used to evaluate a compressed train's
  *  amplitude-weighted sum (sa_eval_event_spectrum). Power of two. A single
  *  chain runs at the latency of one complex multiply-add (~12 cycles per
@@ -345,6 +369,37 @@ static void sa_transform_cache_insert(sa_transform_cache *cache, int w_key, floa
 }
 
 /**
+ * A rank basis standing in for one axis's distinct waveforms at one varying
+ * position.
+ *
+ * The waveforms at such a position are rarely independent: a multishot
+ * readout written out shot by shot is one arm turned through a set of angles,
+ * so its span is two-dimensional however many arms there are. Writing
+ * g_k(t) = sum_r c_{k,r} v_r(t) and using the linearity of the transform,
+ *
+ *     G_k(f) = sum_r c_{k,r} V_r(f)
+ *
+ * turns num_events transforms per frequency into `rank` of them plus a
+ * combination. The tail the truncation leaves out is not discarded: its
+ * magnitude is bounded once, at build time, and added to every magnitude the
+ * basis produces, so a compressed position can only ever read louder than an
+ * uncompressed one.
+ */
+typedef struct sa_svd_basis_s sa_svd_basis;
+static void sa_free_svd_basis(sa_svd_basis *b);
+
+struct sa_svd_basis_s
+{
+    int rank;             /**< 0 = no basis; evaluate the waveforms directly */
+    int num_events;       /**< waveforms the basis stands for                */
+    sa_axis_events basis; /**< [rank] synthetic unit-amplitude events         */
+    float *coeff;         /**< [num_events*rank] c_{k,r}                      */
+    float *residual;      /**< [num_events] ceiling on the discarded tail     */
+    float *basis_re;      /**< [rank] scratch, one frequency                  */
+    float *basis_im;
+};
+
+/**
  * One block position whose gradients are not the same in every TR instance.
  *
  * The instances of a canonical TR share a block structure and a timing, but
@@ -376,6 +431,7 @@ typedef struct
     float weight[9];          /**< num_tuples == 0: |R| bounded over its rotations   */
     float *w_re[3];           /**< [shapes[ax].num_events] scratch, one frequency    */
     float *w_im[3];
+    sa_svd_basis svd[3]; /**< rank basis per axis; rank 0 = evaluate directly   */
 } sa_varying_position;
 
 /** Structural analysis: event lists for all three axes. */
@@ -420,6 +476,7 @@ static void sa_free_structural_events(sa_structural_events *se)
         sa_varying_position *vp = &se->varying[v];
         for (ax = 0; ax < 3; ++ax)
         {
+            sa_free_svd_basis(&vp->svd[ax]);
             sa_free_axis_events(&vp->shapes[ax]);
             if (vp->w_re[ax])
                 PULSEG_FREE(vp->w_re[ax]);
@@ -2816,6 +2873,249 @@ static double sa_event_l1(const sa_event *ev)
     return amp_sum * base * 1.0e-6 * (double)reps;
 }
 
+/** Release a rank basis. */
+static void sa_free_svd_basis(sa_svd_basis *b)
+{
+    if (!b)
+        return;
+    sa_free_axis_events(&b->basis);
+    if (b->coeff)
+        PULSEG_FREE(b->coeff);
+    if (b->residual)
+        PULSEG_FREE(b->residual);
+    if (b->basis_re)
+        PULSEG_FREE(b->basis_re);
+    if (b->basis_im)
+        PULSEG_FREE(b->basis_im);
+    memset(b, 0, sizeof(*b));
+}
+
+/** The waveform one event carries, whichever of the two models holds it. */
+static int sa_svd_waveform(const sa_event *ev, const float **times, const float **values)
+{
+    if (ev->arb_num_samples > 0)
+    {
+        if (!ev->arb_samples || !ev->arb_times_us)
+            return 0;
+        *times = ev->arb_times_us;
+        *values = ev->arb_samples;
+        return ev->arb_num_samples;
+    }
+    if (ev->pwl_num_vertices > 0)
+    {
+        *times = ev->pwl_times_us;
+        *values = ev->pwl_values;
+        return ev->pwl_num_vertices;
+    }
+    return 0;
+}
+
+/** Can this set be decomposed at all?
+ *
+ * The decomposition treats the waveforms as rows of one matrix, so they must
+ * share a sampling: one model, the same number of points at the same times,
+ * played at the same position under the same repetition. That is exactly what
+ * a multishot readout gives -- its shots differ in their samples and in
+ * nothing else -- and anything that does not is left to the direct path. */
+static int sa_svd_set_is_uniform(const sa_axis_events *ae, int *out_n, int *out_is_arb)
+{
+    const float *t0, *v0, *tk, *vk;
+    int k, i, n, n0, is_arb;
+
+    if (!ae || ae->num_events < SA_SVD_MIN_WAVEFORMS)
+        return 0;
+    n0 = sa_svd_waveform(&ae->events[0], &t0, &v0);
+    if (n0 < 2)
+        return 0;
+    is_arb = ae->events[0].arb_num_samples > 0;
+    for (k = 0; k < ae->num_events; ++k)
+    {
+        const sa_event *ev = &ae->events[k];
+        n = sa_svd_waveform(ev, &tk, &vk);
+        if (n != n0 || (ev->arb_num_samples > 0) != is_arb)
+            return 0;
+        if (ev->train_len > 1 || ev->num_reps != ae->events[0].num_reps)
+            return 0;
+        if (ev->start_time_us != ae->events[0].start_time_us)
+            return 0;
+        for (i = 0; i < n; ++i)
+        {
+            if (tk[i] != t0[i])
+                return 0;
+        }
+    }
+    *out_n = n0;
+    *out_is_arb = is_arb;
+    return 1;
+}
+
+/** Build a rank basis for one axis's waveforms at one varying position.
+ *
+ * Never fails the caller: a set that cannot be decomposed, or whose rank is
+ * not small enough to pay for itself, simply leaves rank 0 behind and is
+ * evaluated the direct way. */
+static void sa_try_build_svd(sa_svd_basis *out, const sa_axis_events *ae)
+{
+    int m, n, r_full, k, i, r, rank, max_rank, is_arb;
+    const float *t0 = NULL, *v0 = NULL, *tk = NULL, *vk = NULL;
+    float *a = NULL, *u = NULL, *sv = NULL, *v = NULL;
+    double dt_max, l1_scale, tail_scale;
+    double *tail = NULL;
+
+    memset(out, 0, sizeof(*out));
+    if (!sa_svd_set_is_uniform(ae, &n, &is_arb))
+        return;
+
+    m = ae->num_events;
+    r_full = (m < n) ? m : n;
+    max_rank = (int)((double)m * SA_SVD_MAX_RANK_FRACTION);
+    if (max_rank < 1)
+        return;
+    if ((double)m * (double)n * (double)r_full > SA_SVD_MAX_WORK)
+        return;
+
+    a = (float *)PULSEG_ALLOC((size_t)m * (size_t)n * sizeof(float));
+    u = (float *)PULSEG_ALLOC((size_t)m * (size_t)r_full * sizeof(float));
+    sv = (float *)PULSEG_ALLOC((size_t)r_full * sizeof(float));
+    v = (float *)PULSEG_ALLOC((size_t)n * (size_t)r_full * sizeof(float));
+    tail = (double *)PULSEG_ALLOC((size_t)m * sizeof(double));
+    if (!a || !u || !sv || !v || !tail)
+        goto done;
+
+    (void)sa_svd_waveform(&ae->events[0], &t0, &v0);
+    for (k = 0; k < m; ++k)
+    {
+        double amp = (double)ae->events[k].amplitude;
+        (void)sa_svd_waveform(&ae->events[k], &tk, &vk);
+        for (i = 0; i < n; ++i)
+            a[k * n + i] = (float)(amp * (double)vk[i]);
+    }
+
+    if (svd_decompose(a, (size_t)m, (size_t)n, u, sv, v) != SVD_OK)
+        goto done;
+
+    /* |V_r(f)| <= integral |v_r| dt <= dt_max * sqrt(n) for a unit-norm row,
+     * which is what turns a discarded singular value into a bound on the
+     * transform it would have contributed. */
+    dt_max = 0.0;
+    for (i = 1; i < n; ++i)
+    {
+        double d = (double)(t0[i] - t0[i - 1]);
+        if (d > dt_max)
+            dt_max = d;
+    }
+    if (dt_max <= 0.0)
+        goto done;
+    tail_scale = dt_max * sqrt((double)n);
+
+    /* The smallest rank whose discarded tail stays under the tolerance for
+     * every waveform in the set. */
+    l1_scale = 0.0;
+    for (k = 0; k < m; ++k)
+    {
+        double l1 = sa_event_base_l1_us(&ae->events[k]) * fabs((double)ae->events[k].amplitude);
+        if (l1 > l1_scale)
+            l1_scale = l1;
+    }
+    if (l1_scale <= 0.0)
+        goto done;
+
+    rank = 0;
+    for (r = 1; r <= max_rank; ++r)
+    {
+        double worst = 0.0;
+        for (k = 0; k < m; ++k)
+        {
+            double t = 0.0;
+            for (i = r; i < r_full; ++i)
+                t += (double)sv[i] * fabs((double)u[k * r_full + i]);
+            t *= tail_scale;
+            tail[k] = t;
+            if (t > worst)
+                worst = t;
+        }
+        if (worst <= (double)SA_SVD_RESIDUAL_FRACTION * l1_scale)
+        {
+            rank = r;
+            break;
+        }
+    }
+    if (rank < 1)
+        goto done;
+
+    out->basis.events = (sa_event *)PULSEG_ALLOC((size_t)rank * sizeof(sa_event));
+    out->coeff = (float *)PULSEG_ALLOC((size_t)m * (size_t)rank * sizeof(float));
+    out->residual = (float *)PULSEG_ALLOC((size_t)m * sizeof(float));
+    out->basis_re = (float *)PULSEG_ALLOC((size_t)rank * sizeof(float));
+    out->basis_im = (float *)PULSEG_ALLOC((size_t)rank * sizeof(float));
+    if (!out->basis.events || !out->coeff || !out->residual || !out->basis_re || !out->basis_im)
+    {
+        sa_free_svd_basis(out);
+        goto done;
+    }
+    memset(out->basis.events, 0, (size_t)rank * sizeof(sa_event));
+    out->basis.num_events = rank;
+
+    for (r = 0; r < rank; ++r)
+    {
+        sa_event *be = &out->basis.events[r];
+        be->def_id = -1 - r;
+        be->def_index = -1;
+        be->w_key = -1;
+        be->start_time_us = ae->events[0].start_time_us;
+        be->amplitude = 1.0f;
+        be->num_reps = ae->events[0].num_reps;
+        be->rep_period_us = ae->events[0].rep_period_us;
+        be->train_len = 1;
+        if (is_arb)
+        {
+            be->arb_num_samples = n;
+            be->arb_samples = (float *)PULSEG_ALLOC((size_t)n * sizeof(float));
+            be->arb_times_us = (float *)PULSEG_ALLOC((size_t)n * sizeof(float));
+            if (!be->arb_samples || !be->arb_times_us)
+            {
+                sa_free_svd_basis(out);
+                goto done;
+            }
+            for (i = 0; i < n; ++i)
+            {
+                be->arb_samples[i] = v[i * r_full + r];
+                be->arb_times_us[i] = t0[i];
+            }
+        }
+        else
+        {
+            be->pwl_num_vertices = n;
+            for (i = 0; i < n; ++i)
+            {
+                be->pwl_values[i] = v[i * r_full + r];
+                be->pwl_times_us[i] = t0[i];
+            }
+        }
+    }
+
+    for (k = 0; k < m; ++k)
+    {
+        for (r = 0; r < rank; ++r)
+            out->coeff[k * rank + r] = (float)((double)sv[r] * (double)u[k * r_full + r]);
+        out->residual[k] = (float)(tail[k] * 1.0e-6);
+    }
+    out->rank = rank;
+    out->num_events = m;
+
+done:
+    if (a)
+        PULSEG_FREE(a);
+    if (u)
+        PULSEG_FREE(u);
+    if (sv)
+        PULSEG_FREE(sv);
+    if (v)
+        PULSEG_FREE(v);
+    if (tail)
+        PULSEG_FREE(tail);
+}
+
 /** Per-axis frequency-independent ceiling on |S_ax(f)| plus the
  * varying-position bound, in Hz/m*s. Mirrors sa_eval_axis_spectrum() and
  * sa_eval_varying_bound() term for term with |W(f)| replaced by the L1 norm
@@ -2849,7 +3149,12 @@ static void sa_axis_l1_sup(
         for (j = 0; j < 3; ++j)
         {
             for (k = 0; k < vp->shapes[j].num_events; ++k)
-                vp->w_re[j][k] = (float)sa_event_l1(&vp->shapes[j].events[k]);
+            {
+                double l1 = sa_event_l1(&vp->shapes[j].events[k]);
+                if (vp->svd[j].rank > 0)
+                    l1 += (double)vp->svd[j].residual[k];
+                vp->w_re[j][k] = (float)l1;
+            }
         }
 
         if (vp->num_tuples > 0)
@@ -2924,6 +3229,34 @@ static void sa_eval_varying_bound(
 
         for (j = 0; j < 3; ++j)
         {
+            sa_svd_basis *sb = &vp->svd[j];
+            if (sb->rank > 0)
+            {
+                /* rank transforms, then one combination each, in place of a
+                 * transform per waveform. */
+                int r;
+                for (r = 0; r < sb->rank; ++r)
+                    sa_eval_event_line(
+                        &sb->basis.events[r],
+                        &sb->basis_re[r],
+                        &sb->basis_im[r],
+                        f_hz,
+                        NULL,
+                        NULL);
+                for (k = 0; k < vp->shapes[j].num_events; ++k)
+                {
+                    double re = 0.0, im = 0.0;
+                    for (r = 0; r < sb->rank; ++r)
+                    {
+                        double c = (double)sb->coeff[k * sb->rank + r];
+                        re += c * (double)sb->basis_re[r];
+                        im += c * (double)sb->basis_im[r];
+                    }
+                    vp->w_re[j][k] = (float)re;
+                    vp->w_im[j][k] = (float)im;
+                }
+                continue;
+            }
             for (k = 0; k < vp->shapes[j].num_events; ++k)
             {
                 float re, im;
@@ -2946,6 +3279,7 @@ static void sa_eval_varying_bound(
                 {
                     double sum_re = 0.0;
                     double sum_im = 0.0;
+                    double tail = 0.0;
                     double mag;
                     for (j = 0; j < 3; ++j)
                     {
@@ -2957,8 +3291,10 @@ static void sa_eval_varying_bound(
                         a = w * (double)vp->tuple_amp[t * 3 + j];
                         sum_re += a * (double)vp->w_re[j][slot];
                         sum_im += a * (double)vp->w_im[j][slot];
+                        if (vp->svd[j].rank > 0)
+                            tail += fabs(a) * (double)vp->svd[j].residual[slot];
                     }
-                    mag = sqrt(sum_re * sum_re + sum_im * sum_im);
+                    mag = sqrt(sum_re * sum_re + sum_im * sum_im) + tail;
                     if (mag > best[ax])
                         best[ax] = mag;
                 }
@@ -2975,6 +3311,8 @@ static void sa_eval_varying_bound(
                     double mag = sqrt(
                         (double)vp->w_re[j][k] * (double)vp->w_re[j][k] +
                         (double)vp->w_im[j][k] * (double)vp->w_im[j][k]);
+                    if (vp->svd[j].rank > 0)
+                        mag += (double)vp->svd[j].residual[k];
                     if (mag > largest)
                         largest = mag;
                 }
@@ -3274,6 +3612,20 @@ static int sa_check_structural_violations(
                 sa_free_structural_events(&se);
                 return result;
             }
+        }
+    }
+
+    /* --- Rank basis for the varying positions ---
+     * Runs after the tagging and compression above, so a basis event inherits
+     * the repetition its set was tagged with. A position whose waveforms do
+     * not share a sampling, or whose span is not appreciably smaller than
+     * their number, keeps rank 0 and is evaluated waveform by waveform. */
+    {
+        int v;
+        for (v = 0; v < se.num_varying; ++v)
+        {
+            for (ax = 0; ax < 3; ++ax)
+                sa_try_build_svd(&se.varying[v].svd[ax], &se.varying[v].shapes[ax]);
         }
     }
 

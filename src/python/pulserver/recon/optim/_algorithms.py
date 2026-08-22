@@ -441,12 +441,16 @@ def pics(
         return _pics(data, physics, denoiser, **kwargs)
     import torch
 
+    from ..physics import _operator_device
+
+    device = _operator_device(physics)
     tensor = torch.as_tensor(data)
     if tensor.is_complex():
         tensor = tensor.to(torch.complex64)
+    tensor = tensor.to(device)
     init = kwargs.get("init")
     if isinstance(init, numpy.ndarray):
-        kwargs["init"] = torch.as_tensor(init).to(tensor.dtype)
+        kwargs["init"] = torch.as_tensor(init).to(tensor.dtype).to(device)
     result = _pics(tensor, physics, denoiser, **kwargs)
     return result.detach().to("cpu").numpy() if hasattr(result, "detach") else result
 

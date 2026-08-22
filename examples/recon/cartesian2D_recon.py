@@ -75,7 +75,8 @@ class Cartesian2DRecon(ReconPlugin):
         autocalibration block is small enough that the solve is still moving
         at eight.
     device
-        Torch device the reconstruction runs on. ``None`` is the CPU.
+        Torch device the reconstruction runs on. ``"auto"`` is the host's
+        GPU when it has one, and the CPU when it does not.
 
     Examples
     --------
@@ -139,7 +140,7 @@ class Cartesian2DRecon(ReconPlugin):
         partial_fourier: str = "pocs",
         virtual_coils: int = 8,
         calibration_iterations: int = 16,
-        device: Any = None,
+        device: Any = "auto",
     ) -> None:
         super().__init__(
             chain=[NoiseAdjust()],

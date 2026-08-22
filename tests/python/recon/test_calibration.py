@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import numpy as np
 import pytest
 
 torch = pytest.importorskip("torch")
@@ -315,3 +316,77 @@ def test_the_residual_check_can_be_switched_off():
         residual_tolerance=None,
     )
     assert permissive(kspace).shape == (1, 6, 64, 64)
+
+
+def test_a_narrower_calibration_window_estimates_smoother_maps_not_worse_ones():
+    """Cropping k-space crops the grid, so the trajectory follows it.
+
+    A sensitivity is smooth, so solving it over a narrower window of k-space
+    is the better-conditioned estimate, and the agreement with the truth has
+    to improve as the window closes. It can only do that if the samples that
+    survived the crop are renormalised to the grid they are now solved on --
+    a trajectory says where it sampled as a fraction of a grid's own Nyquist
+    range, and the crop changed the grid.
+    """
+    pytest.importorskip("mrinufft")
+    pytest.importorskip("finufft")
+    from pulserver.recon import NonCartesian2D
+
+    size, coils = 48, 4
+    axis = np.linspace(-1.0, 1.0, size)
+    rows, columns = np.meshgrid(axis, axis, indexing="ij")
+    image = (
+        0.3 + np.where((columns / 0.9) ** 2 + (rows / 0.9) ** 2 < 1.0, 0.7, 0.0)
+    ).astype(np.complex64)
+    angles = np.linspace(0, 2 * np.pi, coils, endpoint=False)
+    maps = np.stack(
+        [
+            np.exp(
+                -((columns - 1.5 * np.cos(a)) ** 2 + (rows - 1.5 * np.sin(a)) ** 2)
+                / 3.0
+            )
+            for a in angles
+        ]
+    )
+    maps = (maps / np.sqrt((np.abs(maps) ** 2).sum(0, keepdims=True))).astype(
+        np.complex64
+    )
+
+    radius = np.linspace(-0.5, 0.5, size, endpoint=False)
+    spokes = int(np.ceil(np.pi / 2 * size))
+    trajectory = (
+        np.stack(
+            [
+                np.stack([radius * np.cos(a), radius * np.sin(a)], -1)
+                for a in np.arange(spokes) * np.pi / spokes
+            ]
+        )
+        .astype(np.float32)
+        .reshape(-1, 2)
+    )
+    operator = NonCartesian2D(
+        trajectory, (size, size), coil_maps=torch.as_tensor(maps), n_coils=coils
+    )
+    data = operator.A(torch.as_tensor(image)[None]).detach().cpu().numpy()[0]
+
+    inside = np.abs(image) > 0.4
+
+    def agreement(estimated):
+        estimated = np.asarray(estimated)
+        overlap = np.abs((estimated.conj() * maps)[:, inside].sum())
+        return float(
+            overlap
+            / (np.linalg.norm(estimated[:, inside]) * np.linalg.norm(maps[:, inside]))
+        )
+
+    scores = [
+        agreement(
+            NLINV(spatial_ndim=2, calibration_width=width, residual_tolerance=None)(
+                data, trajectory=trajectory, image_shape=(size, size)
+            )
+        )
+        for width in (32, 24, 16)
+    ]
+
+    assert min(scores) > 0.99
+    assert scores == sorted(scores)

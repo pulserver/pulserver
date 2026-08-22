@@ -69,7 +69,8 @@ class Cartesian3DRecon(ReconPlugin):
         autocalibration block is small enough that the solve is still moving
         at eight.
     device
-        Torch device the reconstruction runs on. ``None`` is the CPU.
+        Torch device the reconstruction runs on. ``"auto"`` is the host's
+        GPU when it has one, and the CPU when it does not.
 
     Examples
     --------
@@ -86,6 +87,31 @@ class Cartesian3DRecon(ReconPlugin):
 
         images = cartesian3D_recon("scan.h5")
         images = cartesian3D_recon("scan.h5", virtual_coils=4, partial_fourier="homodyne")
+
+    A slab, fully sampled and then twofold accelerated with a calibration
+    block at the centre of the phase-encode axis. Which reconstruction runs is
+    read off the mask, so both are the same call; the panels are the volume's
+    central partition.
+
+    .. plot::
+
+       from pulserver.app import cartesian3D_recon
+       from _figures import images, slab_example
+
+       plugin = cartesian3D_recon.PLUGIN
+       full = slab_example(plugin, size=32, coils=8, partitions=8)
+       fast = slab_example(
+           plugin, size=32, coils=8, partitions=8, acceleration=2, n_acs=10
+       )
+
+       images(
+           [
+               ("object", full.truth),
+               ("fully sampled", full.image),
+               ("2x, CG-SENSE against NLINV maps", fast.image),
+           ],
+           title="one partition of the slab",
+       )
     """
 
     def __init__(
@@ -97,7 +123,7 @@ class Cartesian3DRecon(ReconPlugin):
         partial_fourier: str = "pocs",
         virtual_coils: int = 8,
         calibration_iterations: int = 16,
-        device: Any = None,
+        device: Any = "auto",
     ) -> None:
         super().__init__(
             chain=[NoiseAdjust()],

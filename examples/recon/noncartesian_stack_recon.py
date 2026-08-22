@@ -56,7 +56,8 @@ class NonCartesianStackRecon(ReconPlugin):
     calibration_width
         Width of the centred square NLINV solves the sensitivities over.
     device
-        Torch device the reconstruction runs on. ``None`` is the CPU.
+        Torch device the reconstruction runs on. ``"auto"`` is the host's
+        GPU when it has one, and the CPU when it does not.
 
     Examples
     --------
@@ -73,6 +74,30 @@ class NonCartesianStackRecon(ReconPlugin):
 
         images = noncartesian_stack_recon("scan.h5")
         images = noncartesian_stack_recon("scan.h5", virtual_coils=4, mode="pics")
+
+    Every partition repeats one in-plane trajectory, so the picture of where
+    a stack sampled is one plane's, and the volume comes back a plane at a
+    time:
+
+    .. plot::
+
+       from pulserver.app import noncartesian_stack_recon
+       from _figures import images, sampling, stack_example
+
+       measurement = stack_example(
+           noncartesian_stack_recon.PLUGIN, size=48, coils=8, partitions=6
+       )
+       sampling(
+           [("one plane's spokes", measurement.measured)],
+           title="where a stack of stars sampled",
+       )
+       images(
+           [
+               ("object, central partition", measurement.truth),
+               ("reconstructed", measurement.image),
+           ],
+           title="and what came back",
+       )
     """
 
     def __init__(
@@ -83,7 +108,7 @@ class NonCartesianStackRecon(ReconPlugin):
         iterations: int = 30,
         virtual_coils: int = 8,
         calibration_width: int = 24,
-        device: Any = None,
+        device: Any = "auto",
     ) -> None:
         super().__init__(
             chain=[NoiseAdjust()],

@@ -22,6 +22,7 @@ import torch
 
 import deepinv
 
+from .execution import _resolve_device
 from ._fourier import fftc as _fftc
 from ._fourier import torch_or_numpy as _torch_or_numpy
 from ._fourier import ifftc as _ifftc
@@ -543,7 +544,7 @@ class NLINV(torch.nn.Module):
         image_shape: tuple[int, ...] | None = None,
         density: Any | None = None,
         encoding: deepinv.physics.LinearPhysics | None = None,
-        device: Any = None,
+        device: Any = "auto",
         return_info: bool = False,
     ) -> Any:
         """Estimate sensitivity maps from Cartesian or non-Cartesian data.
@@ -569,7 +570,10 @@ class NLINV(torch.nn.Module):
         encoding
             Optional coil-preserving custom DeepInverse linear physics.
         device
-            Torch device the calibration runs on. ``None`` keeps the data's.
+            Torch device the calibration runs on. ``"auto"``, the default, is
+            the host's GPU when it has one and answers where the data was, so
+            it costs nothing to leave on. A device named outright also returns
+            there; ``None`` keeps the data's.
         return_info
             Return image and synthesized calibration data with the maps.
 
@@ -586,6 +590,9 @@ class NLINV(torch.nn.Module):
             raise TypeError("kspace must be complex")
         if kspace.dtype != torch.complex64:
             kspace = kspace.to(torch.complex64)
+        source = kspace.device
+        borrowed = device == "auto"
+        device = _resolve_device(device)
         if device is not None:
             kspace = kspace.to(device)
 
@@ -667,6 +674,10 @@ class NLINV(torch.nn.Module):
             leading_shape,
             (n_coils, *solve_shape),
         )
+        if borrowed:
+            sensitivities = sensitivities.to(source)
+            reconstructed = reconstructed.to(source)
+            calibration = calibration.to(source)
         if return_numpy:
             sensitivities = sensitivities.cpu().numpy()
             reconstructed = reconstructed.cpu().numpy()
@@ -804,6 +815,18 @@ class NLINV(torch.nn.Module):
             data = data[..., retained]
             if selected_density is not None:
                 selected_density = selected_density[retained.cpu().numpy()]
+            # The solve grid is the centre of the encoded one cropped out, so
+            # the samples that survived have to be renormalised to it: a
+            # trajectory states where it sampled as a fraction of the grid's
+            # own Nyquist range, and it is the grid that shrank.
+            trajectory = trajectory * torch.tensor(
+                [
+                    encoded / solved
+                    for encoded, solved in zip(output_shape, solve_shape, strict=True)
+                ],
+                device=trajectory.device,
+                dtype=trajectory.dtype,
+            )
         if selected_density is None:
             from .preprocessing import pipe_menon_dcf
 

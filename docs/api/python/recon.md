@@ -239,6 +239,31 @@ maps read off one reference share a scale a per-image solve does not guarantee.
 The forward model: what the scanner did to the image to produce the
 measurement. Every solver takes one of these.
 
+A solve spends nearly all of its time in the normal operator, so the
+non-Cartesian operators build a Toeplitz transfer kernel for it on first use
+and run on the host's GPU when there is one. Both are defaults rather than
+options — `toeplitz=False` and `device=None` opt out — and neither changes the
+answer, only what it costs. `Toeplitz` is the spelling for building the kernel
+with different options.
+
+The kernel is stored compactly, by two means that the operator applies on its
+own. A transfer that is **even** — which is what a trajectory closed under
+`k → -k` leaves, so radial diameters, a koosh ball, a symmetric spiral pair —
+is stored over half its locations and mirrored as it is applied, which is
+exact and stays halved wherever the solve runs. On top of that, only the
+**disk or ball** is kept when the trajectory stops short of it by
+`radial_margin`, which saves a further quarter of the locations in two
+dimensions and half of them in three. Together that is 39% of a full kernel in
+2D and 26% in 3D.
+
+The margin is what makes the second one safe. A kernel location is not a
+sample: it is the trajectory interpolated onto the transfer grid, and an
+off-grid sample spreads over every location with slowly decaying tails. Cutting
+at the trajectory's own radius clips those tails where they are still large, so
+a scan sampled to Nyquist keeps the whole grid; zero-padding does not help,
+because the transfer grid always spans the image grid's own Nyquist range
+however far the kernel is padded.
+
 ```{eval-rst}
 .. autosummary::
    :toctree: ../generated/recon

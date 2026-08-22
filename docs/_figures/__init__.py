@@ -46,10 +46,20 @@ __all__ = [
     "SERIES",
     "excitation_kspace",
     "images",
+    "epi_example",
+    "koosh_spokes",
+    "noncartesian_example",
     "order_figure",
     "phantom",
+    "radial_spokes",
     "recon_example",
+    "sampling",
+    "slab_example",
+    "stack_example",
+    "stack_of_stars",
     "trajectory",
+    "volume",
+    "volume_example",
 ]
 
 # ----------------------------------------------------------------------
@@ -771,21 +781,690 @@ def recon_example(
     )
 
 
-def _offline_header(size: int, coils: int, *, slices: int = 1):
+def radial_spokes(size: int, spokes: int, *, angle_scheme: str = "uniform"):
+    """The spokes :func:`~pulserver.app.gre_radial2D_sequence` draws.
+
+    Designed, then read back the way a reconstruction reads it: the sequence's
+    own k-space, normalised to MRI-NUFFT's ``[-0.5, 0.5)``. So the picture a
+    reconstruction docstring draws is of the trajectory the design side would
+    actually have put on the scanner.
+
+    Parameters
+    ----------
+    size : int
+        Readout matrix, which is the samples per spoke.
+    spokes : int
+        Spokes over half a turn.
+    angle_scheme : str, optional
+        ``"uniform"`` or ``"golden"``. Uniform is the even spacing a picture
+        of a reconstruction wants; golden is what a scan that has to be
+        interruptible plays, and its spacing is only quasi-even.
+
+    Returns
+    -------
+    numpy.ndarray
+        ``(spokes, samples, 2)``, float32.
+    """
+    from pulserver.app import gre_radial2D_sequence
+
+    sequence = gre_radial2D_sequence(
+        n_x=size,
+        n_spokes=spokes,
+        n_slices=1,
+        n_dummy=0,
+        angle_scheme=angle_scheme,
+    )
+    samples = np.asarray(sequence.calculate_kspace()[0])[:2]
+    samples = samples / (2.0 * np.linalg.norm(samples, axis=0).max())
+    return samples.T.reshape(spokes, -1, 2).astype(np.float32)
+
+
+def _sampled(trajectory, image, coil_maps, coils: int):
+    """Measure an object along a trajectory, by forward NUFFT.
+
+    The trajectory's coordinate dimension picks the operator, so a plane and a
+    volume are the same call.
+    """
+    from pulserver.recon import NonCartesian2D, NonCartesian3D
+
+    dimensions = trajectory.shape[-1]
+    operator = NonCartesian2D if dimensions == 2 else NonCartesian3D
+    physics = operator(
+        trajectory.reshape(-1, dimensions),
+        tuple(int(size) for size in image.shape[-dimensions:]),
+        coil_maps=coil_maps[0],
+        n_coils=coils,
+    )
+    measured = np.asarray(_detached(physics.A(image)))[0]
+    return measured.reshape(coils, *trajectory.shape[:-1]).astype(np.complex64)
+
+
+def volume(size: int = 32, coils: int = 8, depth: int | None = None):
+    """The :func:`phantom` given a third dimension.
+
+    The same Shepp-Logan through the slab, tapered along it so the volume has
+    structure to resolve in every direction, and the ring of elements extended
+    the same way.
+
+    Parameters
+    ----------
+    size : int, optional
+        In-plane matrix, square.
+    coils : int, optional
+        Elements in the ring.
+    depth : int, optional
+        Partitions. Half the in-plane matrix by default.
+
+    Returns
+    -------
+    Phantom
+        ``image`` is ``(1, depth, size, size)`` and ``coil_maps`` is
+        ``(1, coils, depth, size, size)``.
+    """
+    import torch
+
+    depth = size // 2 if depth is None else int(depth)
+    plane, maps = phantom(size, coils)
+    axis = torch.linspace(-1.0, 1.0, depth)
+    taper = (1.0 - 0.7 * axis.square()).to(torch.complex64)
+    image = plane[0][None] * taper[:, None, None]
+    sensitivities = maps[0][:, None] * torch.ones(depth, 1, 1, dtype=torch.complex64)
+    return Phantom(image[None], sensitivities[None])
+
+
+def _view(data, points, *, view: int, coils: int, partition: int = 0, last=False):
+    """One non-Cartesian readout, carrying where it was taken."""
+    import ismrmrd
+
+    acquisition = ismrmrd.Acquisition()
+    acquisition.resize(points.shape[0], coils, trajectory_dimensions=points.shape[1])
+    acquisition.data[:] = data.astype(np.complex64)
+    acquisition.traj[:] = points
+    acquisition.idx.kspace_encode_step_1 = int(view)
+    acquisition.idx.kspace_encode_step_2 = int(partition)
+    if last:
+        acquisition.setFlag(ismrmrd.ACQ_LAST_IN_MEASUREMENT)
+    return acquisition
+
+
+def noncartesian_example(
+    plugin,
+    *,
+    size: int = 48,
+    coils: int = 8,
+    spokes: int | None = None,
+):
+    """Measure :func:`phantom` along radial spokes and reconstruct it.
+
+    The stream is what a radial scan sends: one readout per spoke, each
+    carrying the points it was taken at, and the last one closing the
+    measurement. The plugin is driven through the same hooks the inline
+    runtime drives, so what comes back is what an online reconstruction
+    would return.
+
+    Parameters
+    ----------
+    plugin : pulserver.ReconPlugin
+        The plugin to drive -- a module's ``PLUGIN``, or an instance
+        configured differently.
+    size : int, optional
+        Matrix size, square, and the samples per spoke.
+    coils : int, optional
+        Elements in the receive array.
+    spokes : int, optional
+        Spokes acquired. The radial Nyquist count by default, which is what
+        sends a scan down the direct branch.
+
+    Returns
+    -------
+    Measurement
+        ``measured`` holds the spokes themselves, ``(spokes, samples, 2)``,
+        for :func:`sampling` to draw.
+    """
+    from pulserver import AcquisitionBucket, ReconContext
+
+    spokes = int(np.ceil(np.pi / 2 * size)) if spokes is None else int(spokes)
+    truth, coil_maps = phantom(size, coils)
+    trajectory = radial_spokes(size, spokes)
+    readout = trajectory.shape[1]
+    measured = _sampled(trajectory, truth, coil_maps, coils)
+
+    stream = [
+        _view(
+            measured[:, view],
+            trajectory[view],
+            view=view,
+            coils=coils,
+            last=view == spokes - 1,
+        )
+        for view in range(spokes)
+    ]
+    header = _offline_header(
+        size,
+        coils,
+        spaces=[
+            _encoding(
+                readout=readout,
+                phase_encodes=size,
+                views=spokes,
+                recon=_matrix(size, size, 1),
+                trajectory="RADIAL",
+            )
+        ],
+    )
+    result = plugin(AcquisitionBucket(data=tuple(stream)), ReconContext.offline(header))
+    image = np.asarray(result[0].data if isinstance(result, list) else result.data)
+    return Measurement(
+        truth=np.asarray(_detached(truth))[0],
+        measured=trajectory,
+        # The plugin returns the image in the column/row order it is read in;
+        # the phantom is on the (y, x) grid the physics measured.
+        image=image.T,
+    )
+
+
+def epi_example(
+    plugin,
+    *,
+    size: int = 48,
+    coils: int = 8,
+    partitions: int = 1,
+    delay: float = 1.0,
+    corrected: bool = True,
+):
+    """Measure :func:`phantom` with an echo-planar train and reconstruct it.
+
+    The stream is what one shot sends: the blip-nulled navigator triplet
+    first, then the phase encodes in a single train with every other line
+    reversed. A gradient delay puts a linear phase on the reversed lines,
+    which is the ghost the navigator is played to remove.
+
+    Parameters
+    ----------
+    plugin : pulserver.ReconPlugin
+        The plugin to drive.
+    size : int, optional
+        In-plane matrix, square.
+    coils : int, optional
+        Elements in the receive array.
+    partitions : int, optional
+        Partitions along the slab axis. One is a plane.
+    delay : float, optional
+        Gradient delay, in samples, that shifts the reversed lines.
+    corrected : bool, optional
+        Send the navigator. Without it there is no fit and the reversed lines
+        keep their phase, which is what the ghost looks like.
+
+    Returns
+    -------
+    Measurement
+        ``truth`` and ``image`` are the slab's central partition.
+    """
+    import ismrmrd
+
+    from pulserver import AcquisitionBucket, ReconContext
+
+    plane = partitions == 1
+    truth, coil_maps = phantom(size, coils) if plane else volume(size, coils, partitions)
+    object_ = np.asarray(_detached(truth))[0]
+    sensitivities = np.asarray(_detached(coil_maps))[0]
+    axes = (-2, -1) if plane else (-3, -2, -1)
+    kspace = np.fft.fftshift(
+        np.fft.fftn(
+            np.fft.ifftshift(sensitivities * object_, axes=axes),
+            axes=axes,
+            norm="ortho",
+        ),
+        axes=axes,
+    ).astype(np.complex64)
+    if plane:
+        kspace = kspace[:, None]
+        object_ = object_[None]
+
+    # A delay shifts a readout along itself, and the train alternates
+    # direction, so it is the reversed lines that come back displaced.
+    ramp = np.exp(
+        2j * np.pi * delay * np.fft.fftshift(np.fft.fftfreq(size))
+    ).astype(np.complex64)
+    shifted = np.fft.ifft(np.fft.fft(kspace, axis=-1) * ramp, axis=-1)
+
+    def readout(data, *, line, partition=0, flags=(), last=False):
+        acquisition = ismrmrd.Acquisition()
+        acquisition.resize(size, coils)
+        acquisition.data[:] = data.astype(np.complex64)
+        acquisition.idx.kspace_encode_step_1 = int(line)
+        acquisition.idx.kspace_encode_step_2 = int(partition)
+        acquisition.center_sample = size // 2
+        for flag in flags:
+            acquisition.setFlag(getattr(ismrmrd, flag))
+        if last:
+            acquisition.setFlag(ismrmrd.ACQ_LAST_IN_MEASUREMENT)
+        return acquisition
+
+    stream = []
+    if corrected:
+        # Blip-nulled: three readouts of the same line, alternating direction.
+        centre = size // 2
+        for index in range(3):
+            backwards = index % 2 == 1
+            flags = ["ACQ_IS_PHASECORR_DATA"]
+            if backwards:
+                flags.append("ACQ_IS_REVERSE")
+            line = (shifted if backwards else kspace)[:, 0, centre]
+            stream.append(
+                readout(
+                    line[:, ::-1] if backwards else line,
+                    line=centre,
+                    flags=tuple(flags),
+                )
+            )
+    for line in range(size):
+        backwards = line % 2 == 1
+        source = shifted if backwards else kspace
+        for partition in range(partitions):
+            data = source[:, partition, line]
+            stream.append(
+                readout(
+                    data[:, ::-1] if backwards else data,
+                    line=line,
+                    partition=partition,
+                    flags=("ACQ_IS_REVERSE",) if backwards else (),
+                    last=line == size - 1 and partition == partitions - 1,
+                )
+            )
+
+    header = _offline_header(
+        size,
+        coils,
+        spaces=[
+            _encoding(
+                readout=size,
+                phase_encodes=size,
+                partitions=partitions,
+                recon=_matrix(size, size, partitions),
+            )
+        ],
+    )
+    result = plugin(AcquisitionBucket(data=tuple(stream)), ReconContext.offline(header))
+    image = np.asarray(result[0].data if isinstance(result, list) else result.data)
+    middle = partitions // 2
+    return Measurement(
+        truth=object_[middle],
+        measured=np.sqrt((np.abs(kspace[:, middle]) ** 2).sum(axis=0)),
+        image=(image if plane else image[middle]).T,
+    )
+
+
+def slab_example(
+    plugin,
+    *,
+    size: int = 32,
+    coils: int = 8,
+    partitions: int = 8,
+    acceleration: int = 1,
+    n_acs: int = 0,
+):
+    """Measure :func:`volume` on a 3D Cartesian lattice and reconstruct it.
+
+    The 3D counterpart of :func:`recon_example`: the autocalibration block
+    first, its last encode flagged, then the rest of the ``(partition, line)``
+    lattice, and the last encode closing the measurement.
+
+    Parameters
+    ----------
+    plugin : pulserver.ReconPlugin
+        The plugin to drive.
+    size : int, optional
+        In-plane matrix, square.
+    coils : int, optional
+        Elements in the receive array.
+    partitions : int, optional
+        Partitions along the slab axis.
+    acceleration : int, optional
+        Uniform phase-encode undersampling factor.
+    n_acs : int, optional
+        Fully sampled autocalibration lines at the centre of the phase-encode
+        axis.
+
+    Returns
+    -------
+    Measurement
+        ``truth`` and ``image`` are the slab's central partition; ``measured``
+        is that partition's k-space.
+    """
+    import ismrmrd
+
+    from pulserver import AcquisitionBucket, ReconContext
+
+    truth, coil_maps = volume(size, coils, partitions)
+    object_ = np.asarray(_detached(truth))[0]
+    sensitivities = np.asarray(_detached(coil_maps))[0]
+    axes = (-3, -2, -1)
+    kspace = np.fft.fftshift(
+        np.fft.fftn(
+            np.fft.ifftshift(sensitivities * object_, axes=axes),
+            axes=axes,
+            norm="ortho",
+        ),
+        axes=axes,
+    ).astype(np.complex64)
+
+    calibration = list(range(size // 2 - n_acs // 2, size // 2 + n_acs // 2))
+    lines = sorted(set(range(0, size, acceleration)) | set(calibration))
+    ordered = calibration + [line for line in lines if line not in calibration]
+
+    stream = []
+    for index, line in enumerate(ordered):
+        for partition in range(partitions):
+            acquisition = ismrmrd.Acquisition()
+            acquisition.resize(size, coils)
+            acquisition.data[:] = kspace[:, partition, line]
+            acquisition.idx.kspace_encode_step_1 = int(line)
+            acquisition.idx.kspace_encode_step_2 = int(partition)
+            acquisition.idx.segment = int(index >= len(calibration))
+            acquisition.center_sample = size // 2
+            if line in calibration:
+                acquisition.setFlag(ismrmrd.ACQ_IS_PARALLEL_CALIBRATION_AND_IMAGING)
+            closing = partition == partitions - 1
+            if closing and calibration and index == len(calibration) - 1:
+                acquisition.setFlag(ismrmrd.ACQ_LAST_IN_SEGMENT)
+            if closing and index == len(ordered) - 1:
+                acquisition.setFlag(ismrmrd.ACQ_LAST_IN_MEASUREMENT)
+            stream.append(acquisition)
+
+    header = _offline_header(
+        size,
+        coils,
+        spaces=[
+            _encoding(
+                readout=size,
+                phase_encodes=size,
+                partitions=partitions,
+                recon=_matrix(size, size, partitions),
+            )
+        ],
+    )
+    result = plugin(AcquisitionBucket(data=tuple(stream)), ReconContext.offline(header))
+    image = np.asarray(result[0].data if isinstance(result, list) else result.data)
+    middle = partitions // 2
+    sampled = np.zeros_like(kspace)
+    sampled[:, :, lines] = kspace[:, :, lines]
+    return Measurement(
+        truth=object_[middle],
+        measured=np.sqrt((np.abs(sampled[:, middle]) ** 2).sum(axis=0)),
+        image=image[middle].T,
+    )
+
+
+def koosh_spokes(size: int, spokes: int):
+    """A koosh ball: full diameters through k-space, spread over the sphere.
+
+    Directions come from the golden-means spiral, which is what a 3D radial
+    sequence uses to keep every prefix of the scan approximately uniform.
+
+    Parameters
+    ----------
+    size : int
+        Readout matrix, which is the samples per spoke.
+    spokes : int
+        Diameters acquired.
+
+    Returns
+    -------
+    numpy.ndarray
+        ``(spokes, samples, 3)``, float32.
+    """
+    index = np.arange(spokes)
+    height = 1.0 - 2.0 * (index + 0.5) / spokes
+    azimuth = index * np.pi * (3.0 - np.sqrt(5.0))
+    radial = np.sqrt(np.maximum(1.0 - height**2, 0.0))
+    directions = np.stack(
+        [radial * np.cos(azimuth), radial * np.sin(azimuth), height], axis=-1
+    )
+    radius = np.linspace(-0.5, 0.5, size, endpoint=False)
+    return (directions[:, None, :] * radius[None, :, None]).astype(np.float32)
+
+
+def volume_example(
+    plugin,
+    *,
+    size: int = 24,
+    coils: int = 4,
+    spokes: int | None = None,
+):
+    """Measure :func:`volume` along a koosh ball and reconstruct it.
+
+    Parameters
+    ----------
+    plugin : pulserver.ReconPlugin
+        The plugin to drive.
+    size : int, optional
+        Matrix, cubic, and the samples per spoke.
+    coils : int, optional
+        Elements in the receive array.
+    spokes : int, optional
+        Diameters acquired. The spherical Nyquist count by default: the
+        k-sphere has area ``pi * size ** 2`` and a diameter crosses it twice,
+        so ``pi * size ** 2 / 2`` spokes cover it.
+
+    Returns
+    -------
+    Measurement
+        ``truth`` and ``image`` are the volume's central partition;
+        ``measured`` is the koosh ball.
+    """
+    from pulserver import AcquisitionBucket, ReconContext
+
+    if spokes is None:
+        spokes = int(np.ceil(np.pi * size**2 / 2))
+    truth, coil_maps = volume(size, coils, size)
+    trajectory = koosh_spokes(size, int(spokes))
+    measured = _sampled(trajectory, truth, coil_maps, coils)
+
+    stream = [
+        _view(
+            measured[:, view],
+            trajectory[view],
+            view=view,
+            coils=coils,
+            last=view == trajectory.shape[0] - 1,
+        )
+        for view in range(trajectory.shape[0])
+    ]
+    header = _offline_header(
+        size,
+        coils,
+        spaces=[
+            _encoding(
+                readout=size,
+                phase_encodes=size,
+                partitions=size,
+                views=trajectory.shape[0],
+                recon=_matrix(size, size, size),
+                trajectory="RADIAL",
+            )
+        ],
+    )
+    result = plugin(AcquisitionBucket(data=tuple(stream)), ReconContext.offline(header))
+    image = np.asarray(result[0].data if isinstance(result, list) else result.data)
+    middle = size // 2
+    return Measurement(
+        truth=np.asarray(_detached(truth))[0, middle],
+        measured=trajectory,
+        image=image[middle].T,
+    )
+
+
+def stack_of_stars(size: int, spokes: int, partitions: int):
+    """The in-plane spokes of a stack, and the partition each plane sits at.
+
+    A stack is Cartesian along its axis, so the trajectory a reconstruction
+    needs is one plane's -- every partition repeats it.
+
+    Returns
+    -------
+    numpy.ndarray
+        ``(spokes, samples, 2)``, float32.
+    """
+    del partitions
+    return radial_spokes(size, spokes)
+
+
+def stack_example(
+    plugin,
+    *,
+    size: int = 32,
+    coils: int = 8,
+    spokes: int | None = None,
+    partitions: int = 8,
+):
+    """Measure :func:`volume` on a stack of stars and reconstruct it.
+
+    The stream is what a stack sends: every plane's spokes at every partition,
+    the same in-plane trajectory throughout, and the last readout closing the
+    measurement.
+
+    Parameters
+    ----------
+    plugin : pulserver.ReconPlugin
+        The plugin to drive.
+    size : int, optional
+        In-plane matrix, square, and the samples per spoke.
+    coils : int, optional
+        Elements in the receive array.
+    spokes : int, optional
+        Spokes per plane. The radial Nyquist count by default.
+    partitions : int, optional
+        Planes along the stack axis.
+
+    Returns
+    -------
+    Measurement
+        ``truth`` and ``image`` are the volume's central partition;
+        ``measured`` is the in-plane trajectory.
+    """
+    from pulserver import AcquisitionBucket, ReconContext
+
+    spokes = int(np.ceil(np.pi / 2 * size)) if spokes is None else int(spokes)
+    truth, coil_maps = volume(size, coils, partitions)
+    trajectory = stack_of_stars(size, spokes, partitions)
+    readout = trajectory.shape[1]
+
+    # A stack is a Cartesian axis, so its measurement is the plane-wise
+    # trajectory applied to every partition of the volume's own transform.
+    import torch
+
+    axes = (-3,)
+    planes = torch.fft.fftshift(
+        torch.fft.fftn(torch.fft.ifftshift(truth, dim=axes), dim=axes, norm="ortho"),
+        dim=axes,
+    )
+    measured = np.stack(
+        [
+            _sampled(trajectory, planes[:, index], coil_maps[:, :, index], coils)
+            for index in range(partitions)
+        ],
+        axis=1,
+    )
+
+    stream = []
+    for partition in range(partitions):
+        for view in range(spokes):
+            stream.append(
+                _view(
+                    measured[:, partition, view],
+                    trajectory[view],
+                    view=view,
+                    coils=coils,
+                    partition=partition,
+                    last=partition == partitions - 1 and view == spokes - 1,
+                )
+            )
+    header = _offline_header(
+        size,
+        coils,
+        spaces=[
+            _encoding(
+                readout=readout,
+                phase_encodes=size,
+                partitions=partitions,
+                views=spokes,
+                stack=partitions,
+                recon=_matrix(size, size, partitions),
+                trajectory="RADIAL",
+            )
+        ],
+    )
+    result = plugin(AcquisitionBucket(data=tuple(stream)), ReconContext.offline(header))
+    image = np.asarray(result[0].data if isinstance(result, list) else result.data)
+    middle = partitions // 2
+    return Measurement(
+        truth=np.asarray(_detached(truth))[0, middle],
+        measured=trajectory,
+        image=image[middle].T,
+    )
+
+
+def _matrix(x: int, y: int, z: int = 1):
+    """One MRD matrix size."""
+    from types import SimpleNamespace
+
+    return SimpleNamespace(matrixSize=SimpleNamespace(x=x, y=y, z=z))
+
+
+def _encoding(
+    *,
+    readout: int,
+    phase_encodes: int,
+    partitions: int = 1,
+    slices: int = 1,
+    views: int = 0,
+    stack: int = 0,
+    recon=None,
+    trajectory: str | None = None,
+):
+    """One encoding space of an offline header.
+
+    ``views`` and ``stack`` are the ``kspace_encoding_step_1`` and ``_2``
+    limits, which is what a non-Cartesian space is sized from -- its views
+    bear no relation to the image matrix, so the limit answers rather than
+    the encoded matrix. ``recon`` is the matrix the images come back on,
+    which is the encoded one unless the scan oversampled or gridded.
+    """
+    from types import SimpleNamespace
+
+    limits = SimpleNamespace(
+        slice=SimpleNamespace(minimum=0, maximum=slices - 1, center=0)
+    )
+    if views:
+        limits.kspace_encoding_step_1 = SimpleNamespace(
+            minimum=0, maximum=views - 1, center=views // 2
+        )
+    if stack:
+        limits.kspace_encoding_step_2 = SimpleNamespace(
+            minimum=0, maximum=stack - 1, center=stack // 2
+        )
+    encoded = _matrix(readout, phase_encodes, partitions)
+    space = SimpleNamespace(
+        encodedSpace=encoded,
+        reconSpace=recon if recon is not None else encoded,
+        encodingLimits=limits,
+    )
+    if trajectory is not None:
+        space.trajectory = SimpleNamespace(name=trajectory)
+    return space
+
+
+def _offline_header(size: int, coils: int, *, slices: int = 1, spaces=None):
     """The encoded and reconstructed spaces a plugin sizes its buffers from."""
     from types import SimpleNamespace
 
-    space = SimpleNamespace(matrixSize=SimpleNamespace(x=size, y=size, z=1))
+    if spaces is None:
+        spaces = [
+            _encoding(readout=size, phase_encodes=size, slices=slices),
+        ]
     return SimpleNamespace(
-        encoding=[
-            SimpleNamespace(
-                encodedSpace=space,
-                reconSpace=space,
-                encodingLimits=SimpleNamespace(
-                    slice=SimpleNamespace(minimum=0, maximum=slices - 1, center=0)
-                ),
-            )
-        ],
+        encoding=list(spaces),
         acquisitionSystemInformation=SimpleNamespace(receiverChannels=coils),
     )
 
@@ -838,6 +1517,72 @@ def images(
         axis.set_yticks([])
         for spine in axis.spines.values():
             spine.set_color(FAINT)
+        axis.set_title(label, loc="left", fontsize=9, color=INK)
+
+    _title(figure, title)
+    figure.tight_layout(rect=(0, 0, 1, 0.92 if title else 1.0))
+    return figure
+
+
+def sampling(
+    panels,
+    *,
+    title: str | None = None,
+    figsize: tuple[float, float] | None = None,
+):
+    """Draw a row of trajectories: where each scan put its samples.
+
+    The non-Cartesian counterpart of :func:`images`' k-space panel. A gridded
+    scan shows what it left on the grid; a trajectory has no grid, so it shows
+    the path itself, coloured in acquisition order.
+
+    Parameters
+    ----------
+    panels : sequence of tuple
+        ``(label, points)`` per panel, ``points`` shaped
+        ``(views, samples, dimensions)`` or ``(samples, dimensions)``. Three
+        coordinates are drawn on a 3D axis; a scan with more views than the
+        eye can separate is thinned to a representative subset.
+    title : str, optional
+        Figure title.
+    figsize : tuple of float, optional
+        Figure size, in inches.
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+    """
+    panels = list(panels)
+    figure = plt.figure(figsize=figsize or (2.9 * len(panels), 3.2))
+    for position, (label, points) in enumerate(panels, start=1):
+        values = np.asarray(_detached(points))
+        views = values.reshape(-1, values.shape[-2], values.shape[-1])
+        spatial = views.shape[-1]
+        axis = figure.add_subplot(
+            1,
+            len(panels),
+            position,
+            projection="3d" if spatial == 3 else None,
+        )
+        drawn = views[:: max(1, len(views) // (120 if spatial == 3 else 220))]
+        colours = plt.get_cmap(SAMPLING)(np.linspace(0.0, 1.0, len(drawn)))
+        for view, colour in zip(drawn, colours, strict=True):
+            axis.plot(*view.T, color=colour, linewidth=0.7)
+        axis.set_xlim(-0.55, 0.55)
+        axis.set_ylim(-0.55, 0.55)
+        axis.set_xticks([])
+        axis.set_yticks([])
+        if spatial == 3:
+            axis.set_zlim(-0.55, 0.55)
+            axis.set_zticks([])
+            axis.view_init(elev=22, azim=-58)
+            for pane in (axis.xaxis, axis.yaxis, axis.zaxis):
+                pane.pane.set_visible(False)
+                pane.line.set_color(FAINT)
+        else:
+            axis.set_aspect("equal")
+            for spine in axis.spines.values():
+                spine.set_color(FAINT)
         axis.set_title(label, loc="left", fontsize=9, color=INK)
 
     _title(figure, title)

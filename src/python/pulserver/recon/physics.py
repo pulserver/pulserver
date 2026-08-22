@@ -28,7 +28,7 @@ from collections.abc import Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from functools import wraps
 from importlib import import_module
-from itertools import product
+from itertools import chain, product
 from math import prod
 from types import MethodType, SimpleNamespace
 from typing import Any
@@ -36,6 +36,7 @@ from typing import Any
 import deepinv
 
 from ._toeplitz import CompactToeplitzKernel, as_torch, support_indices
+from .execution import _resolve_device
 from ._views import image_as_cpx as _image_as_cpx
 from ._views import image_as_real as _image_as_real
 from ._views import kspace_as_cpx as _kspace_as_cpx
@@ -119,12 +120,21 @@ def _cartesian_image_as_cpx(value: Any) -> Any:
 
 
 def _operator_device(physics: Any) -> Any:
-    """Best-effort device of a physics object, defaulting to the CPU."""
+    """Where a physics object computes, defaulting to the CPU.
+
+    An operator carries tensors of several kinds -- a mask, sensitivities, a
+    trajectory, a stack of per-slice operators -- and placing it moves the ones
+    the arithmetic runs on while small host-side ones stay behind. So any
+    tensor on an accelerator is the answer, and only an operator with none of
+    them computes on the host.
+    """
     torch = import_module("torch")
-    for tensor in physics.buffers():
-        return tensor.device
-    for tensor in physics.parameters():
-        return tensor.device
+    buffers = getattr(physics, "buffers", None)
+    parameters = getattr(physics, "parameters", None)
+    if callable(buffers) and callable(parameters):
+        for tensor in chain(buffers(), parameters()):
+            if tensor.device.type != "cpu":
+                return tensor.device
     return torch.device("cpu")
 
 
@@ -264,18 +274,24 @@ class _CartesianComplexView(deepinv.physics.LinearPhysics):
 
 def _toeplitz_options(
     *,
-    support: str = "full",
+    support: str = "auto",
     radius: float = 1.0,
+    radial_margin: float = 1.5,
+    symmetric: bool | str = "auto",
     chunk_size: int = 65536,
     coil_batch_size: int = 1,
     cuda_mode: str = "auto",
     cuda_max_device_fraction: float = 0.85,
     cuda_transfer_precision: str = "auto",
 ) -> dict[str, Any]:
-    if support not in {"full", "radial"}:
-        raise ValueError("Toeplitz support must be 'full' or 'radial'")
+    if support not in {"auto", "full", "radial"}:
+        raise ValueError("Toeplitz support must be 'auto', 'full', or 'radial'")
     if radius <= 0.0 or radius > 1.0:
         raise ValueError("Toeplitz radius must be in the interval (0, 1]")
+    if radial_margin < 1.0:
+        raise ValueError("Toeplitz radial_margin must be at least 1")
+    if symmetric not in {True, False, "auto"}:
+        raise ValueError("Toeplitz symmetric must be True, False, or 'auto'")
     if chunk_size <= 0:
         raise ValueError("Toeplitz chunk_size must be positive")
     if coil_batch_size <= 0:
@@ -297,6 +313,8 @@ def _toeplitz_options(
     return {
         "support": support,
         "radius": float(radius),
+        "radial_margin": float(radial_margin),
+        "symmetric": symmetric,
         "chunk_size": int(chunk_size),
         "coil_batch_size": int(coil_batch_size),
         "cuda_mode": cuda_mode,
@@ -305,10 +323,60 @@ def _toeplitz_options(
     }
 
 
-def _toeplitz_request(value: bool | dict[str, Any]) -> tuple[bool, dict[str, Any]]:
+def _trajectory_extent(samples: Any) -> float | None:
+    """How far a trajectory reaches, as a fraction of the transfer grid's radius.
+
+    A transfer kernel is indexed over the same frequency range the image grid
+    is band-limited to, so a trajectory sampled all the way to Nyquist reaches
+    exactly 1 and leaves nothing between its own support and the largest disk
+    the grid holds. ``None`` when the samples cannot be read.
+    """
+    if samples is None:
+        return None
+    torch = import_module("torch")
+    coordinates = as_torch(samples)
+    if coordinates.ndim < 2:
+        return None
+    radius = coordinates.reshape(-1, coordinates.shape[-1]).square().sum(-1).max()
+    return float(radius.sqrt() / torch.pi)
+
+
+def _resolved_support(options: dict[str, Any], samples: Any) -> str:
+    """Settle ``support="auto"`` against the trajectory the kernel comes from.
+
+    Keeping only a disk or a ball is exact for the samples themselves but not
+    for the kernel, whose locations are the trajectory interpolated onto the
+    transfer grid -- an off-grid sample spreads over every location, with tails
+    that the cut clips. Margin is what makes the clipped tails negligible, so
+    the packing is taken only when the trajectory stops short of the cut by
+    ``radial_margin``; a trajectory sampled to Nyquist has no margin at all and
+    keeps the full grid.
+    """
+    if options["support"] != "auto":
+        return options["support"]
+    extent = _trajectory_extent(samples)
+    if extent is None or extent <= 0.0:
+        return "full"
+    if extent * options["radial_margin"] <= options["radius"]:
+        return "radial"
+    return "full"
+
+
+def _toeplitz_request(
+    value: bool | str | dict[str, Any],
+) -> tuple[bool, bool, dict[str, Any]]:
+    """Decode a ``toeplitz=`` argument into enabled, best-effort and options.
+
+    ``"auto"`` asks for the acceleration wherever it is available, so a shape
+    or a backend that cannot carry a transfer kernel falls back to the exact
+    normal operator rather than raising. ``True`` and an options mapping ask
+    for it outright, and say so if it cannot be built.
+    """
     if isinstance(value, dict):
-        return True, _toeplitz_options(**value)
-    return bool(value), _toeplitz_options()
+        return True, False, _toeplitz_options(**value)
+    if value == "auto":
+        return True, True, _toeplitz_options()
+    return bool(value), False, _toeplitz_options()
 
 
 class MRIPhysics(deepinv.physics.LinearPhysics):
@@ -1041,7 +1109,9 @@ def _apply_sense_toeplitz(
         # fan its Toeplitz work across a multi-GPU recon host.
         coil_batch_size = max(coil_batch_size, streaming.device_count)
     maps = _sense_maps(native_operator, image)
-    batched_maps = maps.ndim == image.ndim
+    # An image is (batch, *spatial) and unbatched maps are (coils, *spatial),
+    # so the two carry the same rank; only the maps' own rank separates them.
+    batched_maps = maps.ndim == len(kernel.image_shape) + 2
     if batched_maps:
         if maps.shape[0] == 1:
             maps = maps.expand(image.shape[0], *maps.shape[1:])
@@ -1216,7 +1286,7 @@ def _build_scalar_toeplitz(
     transfer = as_torch(_compute_toeplitz_transfer(base)).flatten()
     indices = support_indices(
         spatial_shape,
-        support=options["support"],
+        support=_resolved_support(options, getattr(base, "samples", None)),
         radius=options["radius"],
         device="cpu" if streaming is not None else transfer.device,
     )
@@ -1231,6 +1301,7 @@ def _build_scalar_toeplitz(
         cuda_mode=options["cuda_mode"],
         cuda_max_device_fraction=options["cuda_max_device_fraction"],
         cuda_transfer_precision=options["cuda_transfer_precision"],
+        symmetric=options["symmetric"],
     )
 
 
@@ -1239,10 +1310,18 @@ def _configure_base_toeplitz(
     native_operator: Any,
     *,
     enabled: bool,
+    best_effort: bool = False,
     options: dict[str, Any],
 ) -> Any:
-    """Install Pulserver's lazy scalar normal on a native NUFFT adapter."""
+    """Install Pulserver's lazy scalar normal on a native NUFFT adapter.
+
+    The kernel is built on the first normal-operator call, so an operator that
+    only ever encodes or decodes pays nothing for carrying one. ``best_effort``
+    is what ``toeplitz="auto"`` asks for: a shape the backend cannot embed
+    circulantly reverts to the exact normal instead of raising.
+    """
     operator.use_toeplitz = enabled
+    operator.toeplitz_best_effort = best_effort
     operator.toeplitz_kernel = None
     operator._toeplitz_options = dict(options)
     operator.streaming_policy = None
@@ -1250,6 +1329,7 @@ def _configure_base_toeplitz(
 
     def enable_toeplitz(self: Any, new_options: dict[str, Any]) -> None:
         self.use_toeplitz = True
+        self.toeplitz_best_effort = False
         self._toeplitz_options = dict(new_options)
         self.toeplitz_kernel = None
 
@@ -1263,11 +1343,17 @@ def _configure_base_toeplitz(
             return self.A_adjoint(self.A(x))
         image = _image_as_cpx(x) if self.viewed_as_real else x
         if self.toeplitz_kernel is None:
-            self.toeplitz_kernel = _build_scalar_toeplitz(
-                native_operator,
-                self._toeplitz_options,
-                self.streaming_policy,
-            )
+            try:
+                self.toeplitz_kernel = _build_scalar_toeplitz(
+                    native_operator,
+                    self._toeplitz_options,
+                    self.streaming_policy,
+                )
+            except (ValueError, NotImplementedError):
+                if not self.toeplitz_best_effort:
+                    raise
+                self.use_toeplitz = False
+                return self.A_adjoint(self.A(x))
         base = _base_fourier_operator(native_operator)
         if getattr(base, "uses_sense", False):
             result = _apply_sense_toeplitz(
@@ -1355,7 +1441,7 @@ def _build_subspace_toeplitz(
             assert spatial_shape is not None
             indices = support_indices(
                 spatial_shape,
-                support=options["support"],
+                support=_resolved_support(options, getattr(native, "samples", None)),
                 radius=options["radius"],
                 device="cpu" if streaming is not None else scalar.device,
             )
@@ -1402,6 +1488,7 @@ def _build_subspace_toeplitz(
         cuda_mode=options["cuda_mode"],
         cuda_max_device_fraction=options["cuda_max_device_fraction"],
         cuda_transfer_precision=options["cuda_transfer_precision"],
+        symmetric=options["symmetric"],
     )
 
 
@@ -1439,7 +1526,9 @@ def _build_cartesian_subspace_toeplitz(
     masks = torch.fft.ifftshift(masks, dim=(-2, -1)).abs().square()
     indices = support_indices(
         image_shape,
-        support=options["support"],
+        # A Cartesian mask fills the corners of its own grid, so there is
+        # nothing a ball would leave out and nothing it could safely drop.
+        support=_resolved_support(options, None),
         radius=options["radius"],
         device=masks.device,
     )
@@ -1470,6 +1559,7 @@ def _build_cartesian_subspace_toeplitz(
         cuda_mode=options["cuda_mode"],
         cuda_max_device_fraction=options["cuda_max_device_fraction"],
         cuda_transfer_precision=options["cuda_transfer_precision"],
+        symmetric=options["symmetric"],
     )
     proxy = SimpleNamespace(
         shape=image_shape,
@@ -1520,7 +1610,7 @@ def _off_resonance_scalar_transfers(
             kernel_device = "cpu" if streaming is not None else scalar.device
             indices = support_indices(
                 spatial_shape,
-                support=options["support"],
+                support=_resolved_support(options, getattr(base, "samples", None)),
                 radius=options["radius"],
                 device=kernel_device,
             )
@@ -1568,6 +1658,7 @@ def _build_off_resonance_toeplitz(
         cuda_mode=options["cuda_mode"],
         cuda_max_device_fraction=options["cuda_max_device_fraction"],
         cuda_transfer_precision=options["cuda_transfer_precision"],
+        symmetric=options["symmetric"],
     )
     return kernel, spatial
 
@@ -1675,6 +1766,7 @@ def _build_subspace_off_resonance_toeplitz(
         cuda_mode=options["cuda_mode"],
         cuda_max_device_fraction=options["cuda_max_device_fraction"],
         cuda_transfer_precision=options["cuda_transfer_precision"],
+        symmetric=options["symmetric"],
     )
     return kernel, spatial_factors
 
@@ -1816,7 +1908,7 @@ def _init_cartesian(
     Cartesian normal operations already use exact FFTs; ``toeplitz=True`` is
     accepted for API symmetry and reports ``normal_mode == "exact-fft"``.
     """
-    toeplitz_enabled, options = _toeplitz_request(toeplitz)
+    toeplitz_enabled, _, options = _toeplitz_request(toeplitz)
     physics_module = _require_deepinv()
     # Direct imports rather than the module's ``import_module`` so the array
     # boundary keeps working when a test stubs the latter for operator
@@ -1824,7 +1916,7 @@ def _init_cartesian(
     import numpy
     import torch
 
-    requested_device = kwargs.pop("device", None)
+    requested_device = _resolve_device(kwargs.pop("device", None))
     if isinstance(mask, numpy.ndarray):
         mask = torch.as_tensor(mask).to(torch.float32)
     if isinstance(coil_maps, numpy.ndarray):
@@ -2269,12 +2361,12 @@ def _noncartesian(
     n_batchs: int,
     stacked: bool,
     z_index: Any,
-    toeplitz: bool | dict[str, Any],
+    toeplitz: bool | str | dict[str, Any],
     viewed_as_real: bool,
     streaming: Any | None,
     operator_kwargs: dict[str, Any],
 ) -> MRIPhysics:
-    toeplitz_enabled, toeplitz_config = _toeplitz_request(toeplitz)
+    toeplitz_enabled, best_effort, toeplitz_config = _toeplitz_request(toeplitz)
     if len(image_shape) != spatial_ndim:
         raise ValueError(
             f"image_shape must have {spatial_ndim} entries, got {image_shape!r}"
@@ -2370,6 +2462,7 @@ def _noncartesian(
             operator,
             native,
             enabled=toeplitz_enabled,
+            best_effort=best_effort,
             options=toeplitz_config,
         )
 
@@ -2476,7 +2569,12 @@ class NonCartesian2D(MRIPhysics):
     n_coils, n_batchs
         Coil and batch counts the backend plans for.
     toeplitz
-        Use the Toeplitz normal operator, or a dict of its options.
+        How the normal operator is computed. ``"auto"``, the default, builds a
+        transfer kernel on the first normal-operator call -- exact, and what
+        makes an iterative solve worth running -- and falls back to the plain
+        adjoint-of-forward for a shape no kernel can embed. ``False`` is the
+        plain one outright, ``True`` insists on the kernel, and a dict is the
+        kernel with these options.
     viewed_as_real
         Exchange images and measurements through real views.
     streaming
@@ -2549,7 +2647,7 @@ class NonCartesian2D(MRIPhysics):
         backend: str = "auto",
         n_coils: int = 1,
         n_batchs: int = 1,
-        toeplitz: bool | dict[str, Any] = False,
+        toeplitz: bool | str | dict[str, Any] = "auto",
         viewed_as_real: bool = False,
         streaming: Any | None = None,
         **kwargs: Any,
@@ -2570,9 +2668,9 @@ class NonCartesian2D(MRIPhysics):
             streaming=streaming,
             operator_kwargs=kwargs,
         )
-        enabled, options = _toeplitz_request(toeplitz)
+        enabled, best_effort, options = _toeplitz_request(toeplitz)
         if enabled:
-            _enable_toeplitz(base, **options)
+            _enable_toeplitz(base, best_effort=best_effort, **options)
         _init_from(self, base)
 
 
@@ -2606,7 +2704,12 @@ class NonCartesian3D(MRIPhysics):
         Stack-frequency planes to encode. ``"auto"`` takes them from the
         trajectory.
     toeplitz
-        Use the Toeplitz normal operator, or a dict of its options.
+        How the normal operator is computed. ``"auto"``, the default, builds a
+        transfer kernel on the first normal-operator call -- exact, and what
+        makes an iterative solve worth running -- and falls back to the plain
+        adjoint-of-forward for a shape no kernel can embed. ``False`` is the
+        plain one outright, ``True`` insists on the kernel, and a dict is the
+        kernel with these options.
     viewed_as_real
         Exchange images and measurements through real views.
     streaming
@@ -2631,7 +2734,7 @@ class NonCartesian3D(MRIPhysics):
         n_batchs: int = 1,
         stacked: bool = False,
         z_index: Any = "auto",
-        toeplitz: bool | dict[str, Any] = False,
+        toeplitz: bool | str | dict[str, Any] = "auto",
         viewed_as_real: bool = False,
         streaming: Any | None = None,
         **kwargs: Any,
@@ -2652,9 +2755,9 @@ class NonCartesian3D(MRIPhysics):
             streaming=streaming,
             operator_kwargs=kwargs,
         )
-        enabled, options = _toeplitz_request(toeplitz)
+        enabled, best_effort, options = _toeplitz_request(toeplitz)
         if enabled:
-            _enable_toeplitz(base, **options)
+            _enable_toeplitz(base, best_effort=best_effort, **options)
         _init_from(self, base)
 
 
@@ -3369,8 +3472,11 @@ class OffResonance(MRIPhysics):
 def _enable_toeplitz(
     physics: MRIPhysics,
     *,
-    support: str = "full",
+    best_effort: bool = False,
+    support: str = "auto",
     radius: float = 1.0,
+    radial_margin: float = 1.5,
+    symmetric: bool | str = "auto",
     chunk_size: int = 65536,
     coil_batch_size: int = 1,
     cuda_mode: str = "auto",
@@ -3381,14 +3487,38 @@ def _enable_toeplitz(
 
     Subspace and off-resonance decorators use a Torch-native matrix-valued
     transfer kernel. Its Hermitian upper triangle is packed, real bases retain
-    real storage, and only ``support`` locations are stored. ``support="full"``
-    preserves the complete embedding. ``support="radial"`` keeps the centered
-    circle/sphere with normalized ``radius`` and therefore assumes the same
-    radial/spherical filtering in the reconstruction model.
+    real storage, and only ``support`` locations are stored.
+
+    ``support="auto"``, the default, keeps the disk or ball when the
+    trajectory stops short of it by ``radial_margin`` and the whole grid
+    otherwise. ``"full"`` and ``"radial"`` force one.
+
+    The packing saves a quarter of the locations in two dimensions and half of
+    them in three, and what it costs depends entirely on that margin. A kernel
+    location is not a sample: it is the trajectory interpolated onto the
+    transfer grid, and an off-grid sample spreads over every location with
+    slowly decaying tails. Cutting at the trajectory's own radius clips those
+    tails where they are still large -- for a radial scan sampled to Nyquist
+    that is a fifth of the kernel's mass and a normal operator wrong by 2e-1,
+    enough to cost a conjugate-gradient solve its positive-definiteness. At
+    ``radial_margin`` of 1.5 the same cut costs 5e-3, and at 2 it costs 2e-3.
+
+    Zero-padding does not create margin: the transfer grid always spans the
+    image grid's own Nyquist range, however far the kernel is padded, so a
+    trajectory that reaches Nyquist reaches the edge of the largest disk the
+    grid holds.
+
+    ``symmetric="auto"`` stores half of an even transfer and mirrors it as it
+    is applied, which is exact and independent of the margin. ``True`` demands
+    it and says so when the transfer is not even; ``False`` keeps every
+    location. Together with the ball the two leave 39% of a full kernel in two
+    dimensions and 26% in three.
     """
     options = _toeplitz_options(
         support=support,
         radius=radius,
+        radial_margin=radial_margin,
+        symmetric=symmetric,
         chunk_size=chunk_size,
         coil_batch_size=coil_batch_size,
         cuda_mode=cuda_mode,
@@ -3403,18 +3533,24 @@ def _enable_toeplitz(
         enable(options)
     elif physics.native_operator is not None:
         physics.operator.use_toeplitz = True
+    if best_effort and hasattr(physics.operator, "toeplitz_best_effort"):
+        physics.operator.toeplitz_best_effort = True
 
 
 class Toeplitz(MRIPhysics):
     """A physics object whose normal operator uses a precomputed kernel.
+
+    The non-Cartesian operators already build one, so this is the spelling for
+    building it with different options, and for accelerating a physics that
+    was made without one.
 
     Parameters
     ----------
     physics
         Base physics to accelerate.
     **options
-        Toeplitz options: ``support``, ``radius``, ``chunk_size``,
-        ``coil_batch_size`` and the CUDA transfer settings.
+        Toeplitz options: ``support``, ``radius``, ``radial_margin``,
+        ``chunk_size``, ``coil_batch_size`` and the CUDA transfer settings.
     """
 
     def __init__(self, physics: MRIPhysics, **kwargs: Any) -> None:

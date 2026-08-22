@@ -15,7 +15,7 @@ from typing import Any
 
 import numpy as np
 
-from .postprocessing import coil_combine
+from .postprocessing import as_numpy, coil_combine
 from .preprocessing import fftc, fill_partial_echo, ifftc
 
 
@@ -28,7 +28,7 @@ def cartesian_recon(
     iterations: int = 40,
     pocs_iterations: int = 12,
     partial_fourier: str = "pocs",
-    device: Any = None,
+    device: Any = "auto",
 ) -> np.ndarray:
     """Reconstruct one Cartesian k-space, the mask selecting which way.
 
@@ -70,7 +70,8 @@ def cartesian_recon(
         Which partial-Fourier estimator fills a truncated readout, ``"pocs"``
         or ``"homodyne"``; see :func:`~pulserver.recon.fill_partial_echo`.
     device
-        Torch device the reconstruction runs on. ``None`` is the CPU.
+        Torch device the reconstruction runs on. ``"auto"`` is the host's
+        GPU when it has one, and the CPU when it does not.
 
     Returns
     -------
@@ -98,9 +99,11 @@ def cartesian_recon(
     (16, 16)
     """
     from .calibration import NLINV
+    from .execution import _resolve_device
     from .optim import pics
     from .physics import Cartesian2D, Cartesian3D
 
+    device = _resolve_device(device)
     kspace = np.asarray(kspace)
     mask = np.asarray(mask)
     if mask.ndim not in (2, 3):
@@ -144,11 +147,13 @@ def cartesian_recon(
         )
     else:
         physics = Cartesian2D if mask.ndim == 2 else Cartesian3D
-        image = pics(
-            kspace[None],
-            physics(mask[None], coil_maps, device=device),
-            regularization=regularization,
-            iterations=iterations,
+        image = as_numpy(
+            pics(
+                _staged(kspace[None], device),
+                physics(mask[None], coil_maps, device=device),
+                regularization=regularization,
+                iterations=iterations,
+            )
         )[0]
 
     if readout.all():
@@ -195,9 +200,18 @@ def _sense_by_readout_plane(
     lattice = np.broadcast_to(plane, (n_x, 1, n_z, n_y)).copy()
 
     image = pics(
-        data,
+        _staged(data, device),
         Cartesian2D(lattice, np.ascontiguousarray(maps), device=device),
         regularization=regularization,
         iterations=iterations,
     )
-    return np.moveaxis(image, 0, -1)
+    return np.moveaxis(as_numpy(image), 0, -1)
+
+
+def _staged(array: Any, device: Any) -> Any:
+    """Put a host array where the physics it meets was built."""
+    if device is None:
+        return array
+    import torch
+
+    return torch.as_tensor(array).to(device)

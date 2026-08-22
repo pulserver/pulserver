@@ -50,6 +50,7 @@ set(PULSEG_SOURCES
     safety/pulseg_pns_irnich.c
     safety/pulseg_pns_safe.c
     cache/pulseg_cache.c
+    vendor/external_svd.c
 )
 
 add_library(pulseg STATIC ${PULSEG_SOURCES})

@@ -56,7 +56,8 @@ class NonCartesian2DRecon(ReconPlugin):
     calibration_width
         Width of the centred square NLINV solves the sensitivities over.
     device
-        Torch device the reconstruction runs on. ``None`` is the CPU.
+        Torch device the reconstruction runs on. ``"auto"`` is the host's
+        GPU when it has one, and the CPU when it does not.
 
     Examples
     --------
@@ -73,6 +74,55 @@ class NonCartesian2DRecon(ReconPlugin):
 
         images = noncartesian2D_recon("scan.h5")
         images = noncartesian2D_recon("scan.h5", virtual_coils=4, mode="pics")
+
+    Below, the spokes are the ones
+    :func:`~pulserver.app.gre_radial2D_sequence` draws, read back out of the
+    designed sequence: a scan at the radial Nyquist count, and one at a third
+    of it.
+
+    .. plot::
+
+       from _figures import radial_spokes, sampling
+
+       size = 48
+       sampling(
+           [
+               ("76 spokes, Nyquist", radial_spokes(size, 76)),
+               ("24 spokes", radial_spokes(size, 24)),
+           ],
+           title="where each scan sampled",
+       )
+
+    Which branch runs is read off the view count, so the same call answers
+    both. The density-compensated adjoint inverts the Nyquist scan; below it
+    the same adjoint is forced on the undersampled one, which is what the
+    streaks are, and then the branch the plugin would actually have taken.
+
+    .. plot::
+
+       from pulserver.app import noncartesian2D_recon
+       from _figures import images, noncartesian_example
+
+       plugin = noncartesian2D_recon.PLUGIN
+       size, coils = 48, 8
+       full = noncartesian_example(plugin, size=size, coils=coils)
+       streaky = noncartesian_example(
+           noncartesian2D_recon.NonCartesian2DRecon(mode="direct"),
+           size=size,
+           coils=coils,
+           spokes=24,
+       )
+       solved = noncartesian_example(plugin, size=size, coils=coils, spokes=24)
+
+       images(
+           [
+               ("object", full.truth),
+               ("76 spokes, adjoint", full.image),
+               ("24 spokes, adjoint", streaky.image),
+               ("24 spokes, CG-SENSE", solved.image),
+           ],
+           title="and what came back",
+       )
     """
 
     def __init__(
@@ -83,7 +133,7 @@ class NonCartesian2DRecon(ReconPlugin):
         iterations: int = 30,
         virtual_coils: int = 8,
         calibration_width: int = 24,
-        device: Any = None,
+        device: Any = "auto",
     ) -> None:
         super().__init__(
             chain=[NoiseAdjust()],

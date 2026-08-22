@@ -101,12 +101,18 @@ def test_a_sequence_of_one_tr_is_summed_coherently_and_nothing_is_added(name):
     np.testing.assert_array_equal(bound, played)
 
 
-def test_a_multishot_scan_reads_the_same_however_its_arms_are_encoded():
+@pytest.mark.parametrize("n_arms", [3, 8, 16])
+def test_a_multishot_scan_reads_the_same_however_its_arms_are_encoded(n_arms):
     """A rotation extension and a written-out arm are the same gradient.
 
     The arms of a spiral can be one waveform under a rotation or one
     waveform each; a scanner plays the identical field either way, so the
     acoustic verdict may not depend on which the author wrote.
+
+    Written out, the arms are also what the rank basis compresses -- their
+    span is two-dimensional however many there are. Three arms are below the
+    count that triggers it and eight and sixteen are above, so this holds the
+    compressed path to the same answer as the uncompressed one.
     """
     from pulserver.app import gre_spiral2D_sequence
 
@@ -114,7 +120,7 @@ def test_a_multishot_scan_reads_the_same_however_its_arms_are_encoded():
     for rotated in (True, False):
         sequence = gre_spiral2D_sequence.main(
             n_x=32,
-            n_arms=3,
+            n_arms=n_arms,
             n_dummy=0,
             tr=20e-3,
             readout_bandwidth_hz=125e3,

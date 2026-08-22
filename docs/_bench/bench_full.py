@@ -62,8 +62,15 @@ IRNICH_ALPHA = 0.333
 #: energy, with the amplitude limit left wide open. The gate is being timed,
 #: not exercised for verdicts: a band table decides how much spectral work
 #: ``pulseg_check_safety`` does -- the resolution and the analysis range come
-#: from it -- while a limit no sequence can reach keeps every case running the
-#: whole check instead of returning early on the first violation.
+#: from it -- while a limit no sequence can reach keeps every case running to
+#: the end instead of returning early on the first violation.
+#:
+#: A limit that far out also puts every band under the gate's own ceiling on
+#: the drive, so the sidelobe probing is skipped as provably unnecessary and
+#: what these numbers time is the cost of a sequence that passes with room to
+#: spare. That is the common case; a sequence close enough to its limit for
+#: the ceiling not to settle it pays for the probing as well, and one over the
+#: limit returns early and costs less than either.
 BANDS = [(550.0, 650.0, 1e12), (1100.0, 1250.0, 1e12)]
 
 #: A PNS ceiling no case reaches, for the same reason.

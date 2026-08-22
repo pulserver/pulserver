@@ -13,6 +13,7 @@ from __future__ import annotations
 __all__ = ["register_torch_cufinufft"]
 
 from functools import partial
+from math import prod
 from typing import Any
 
 import numpy as np
@@ -88,6 +89,9 @@ def register_torch_cufinufft() -> bool:
         ) -> None:
             del smaps_cached, verbose
             FourierOperatorBase.__init__(self)
+            # The setter below moves the maps to the device and keeps them
+            # there, which is what upstream's flag reports.
+            self.smaps_cached = True
             # Some MRI-NUFFT releases initialize this cache only in concrete
             # backend constructors; this adapter intentionally bypasses the
             # CuPy constructor.
@@ -135,10 +139,11 @@ def register_torch_cufinufft() -> bool:
             maps = torch.as_tensor(
                 value, dtype=self.torch_cpx_dtype, device=self.device
             )
-            if tuple(maps.shape[1:]) != self.shape:
+            if tuple(maps.shape[1:]) == self.shape:
+                self.n_coils = maps.shape[0]
+            elif maps.numel() != self.n_coils * prod(self.shape):
                 raise ValueError("sensitivity-map shape does not match image shape")
-            self.n_coils = maps.shape[0]
-            self._smaps = maps.contiguous()
+            self._smaps = maps.reshape(self.n_coils, *self.shape).contiguous()
 
         @FourierOperatorBase.density.setter
         def density(self, value: Any) -> None:

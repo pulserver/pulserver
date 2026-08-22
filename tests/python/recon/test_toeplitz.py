@@ -1044,3 +1044,245 @@ def test_cuda_auto_rejects_resident_banks_outside_memory_fraction():
     assert automatic.last_cuda_mode == "compact"
     with pytest.raises(MemoryError, match="resident Toeplitz banks require"):
         forced.apply(image)
+
+
+def _radial_to(samples: int, spokes: int, extent: float) -> np.ndarray:
+    """Spokes reaching ``extent``, with a sample set closed under k -> -k."""
+    radius = np.linspace(-extent, extent, samples + 1)[:-1] + extent / samples
+    angles = np.arange(spokes) * np.pi / spokes
+    return (
+        np.stack(
+            [np.stack([radius * np.cos(a), radius * np.sin(a)], -1) for a in angles]
+        )
+        .reshape(-1, 2)
+        .astype(np.float32)
+    )
+
+
+def _radial(spokes: int, samples: int) -> np.ndarray:
+    angles = np.linspace(0, np.pi, spokes, endpoint=False)
+    radius = np.linspace(-0.5, 0.5, samples, endpoint=False)
+    return (
+        np.stack(
+            [np.outer(np.cos(angles), radius), np.outer(np.sin(angles), radius)], -1
+        )
+        .reshape(-1, 2)
+        .astype(np.float32)
+    )
+
+
+def _spiral(turns: int, samples: int) -> np.ndarray:
+    angle = np.linspace(0, 2 * np.pi * turns, samples)
+    radius = np.linspace(0, 0.5, samples, endpoint=False)
+    return np.stack([radius * np.cos(angle), radius * np.sin(angle)], -1).astype(
+        np.float32
+    )
+
+
+@pytest.mark.parametrize(
+    "trajectory",
+    [
+        pytest.param(_radial(24, 32), id="radial"),
+        pytest.param(_spiral(6, 512), id="spiral"),
+    ],
+)
+def test_the_default_normal_operator_equals_the_one_it_replaces(trajectory):
+    """Toeplitz is on out of the box, and it is the same arithmetic."""
+    pytest.importorskip("mrinufft")
+    pytest.importorskip("finufft")
+    generator = torch.Generator().manual_seed(5)
+    image_shape = (16, 16)
+    maps = torch.randn(4, *image_shape, generator=generator, dtype=torch.complex64)
+    maps /= torch.linalg.vector_norm(maps, dim=0, keepdim=True)
+    image = torch.randn(1, 1, *image_shape, generator=generator, dtype=torch.complex64)
+
+    default = physics.NonCartesian2D(
+        trajectory, image_shape, coil_maps=maps, backend="finufft"
+    )
+    exact = physics.NonCartesian2D(
+        trajectory, image_shape, coil_maps=maps, backend="finufft", toeplitz=False
+    )
+
+    assert default.normal_mode == "toeplitz"
+    assert exact.normal_mode == "exact"
+    torch.testing.assert_close(
+        default.A_adjoint_A(image),
+        exact.A_adjoint(exact.A(image)),
+        atol=3e-5,
+        rtol=3e-5,
+    )
+
+
+def test_a_stack_accelerates_its_planes_by_default():
+    pytest.importorskip("mrinufft")
+    pytest.importorskip("finufft")
+    generator = torch.Generator().manual_seed(7)
+    image_shape = (8, 8, 4)
+    trajectory = _radial(12, 16)
+    image = torch.randn(1, 1, *image_shape, generator=generator, dtype=torch.complex64)
+
+    default = physics.NonCartesian3D(
+        trajectory, image_shape, stacked=True, z_index=[0, 1], backend="finufft"
+    )
+    exact = physics.NonCartesian3D(
+        trajectory,
+        image_shape,
+        stacked=True,
+        z_index=[0, 1],
+        backend="finufft",
+        toeplitz=False,
+    )
+
+    assert default.normal_mode == "toeplitz"
+    torch.testing.assert_close(
+        default.A_adjoint_A(image),
+        exact.A_adjoint(exact.A(image)),
+        atol=3e-5,
+        rtol=3e-5,
+    )
+
+
+def test_a_shape_that_cannot_carry_a_kernel_falls_back_rather_than_raising():
+    """``toeplitz="auto"`` asks; ``toeplitz=True`` insists."""
+    pytest.importorskip("mrinufft")
+    pytest.importorskip("finufft")
+    trajectory = _radial(12, 16)
+    image = torch.zeros(1, 1, 15, 15, dtype=torch.complex64)
+
+    asked = physics.NonCartesian2D(trajectory, (15, 15), backend="finufft")
+    assert asked.normal_mode == "toeplitz"
+    asked.A_adjoint_A(image)
+    assert asked.normal_mode == "exact"
+
+    insisted = physics.NonCartesian2D(
+        trajectory, (15, 15), backend="finufft", toeplitz=True
+    )
+    with pytest.raises(ValueError, match="even image"):
+        insisted.A_adjoint_A(image)
+
+
+def test_ball_packing_waits_for_margin_between_the_trajectory_and_the_cut():
+    """A kernel location is not a sample, so the cut needs room.
+
+    Keeping only the disk or the ball is what saves the memory, and it is the
+    trajectory interpolated onto the transfer grid that is being cut: an
+    off-grid sample spreads over every location, with tails the cut clips.
+    A scan sampled to Nyquist reaches the edge of the largest disk the grid
+    holds and has no room at all, so it keeps every location; one that stops
+    short by ``radial_margin`` can afford the packing.
+    """
+    pytest.importorskip("mrinufft")
+    pytest.importorskip("finufft")
+    image_shape = (32, 32)
+    generator = torch.Generator().manual_seed(11)
+    maps = torch.ones(4, *image_shape, dtype=torch.complex64) / 2
+    image = torch.randn(1, 1, *image_shape, generator=generator, dtype=torch.complex64)
+    locations = 4 * image_shape[0] * image_shape[1]
+
+    for extent, packed in ((0.5, False), (1.0 / 3.0, True)):
+        trajectory = _radial_to(32, 51, extent)
+        exact = physics.NonCartesian2D(
+            trajectory, image_shape, coil_maps=maps, backend="finufft", toeplitz=False
+        )
+        auto = physics.NonCartesian2D(
+            trajectory, image_shape, coil_maps=maps, backend="finufft"
+        )
+        reference = exact.A_adjoint(exact.A(image))
+        error = (
+            auto.A_adjoint_A(image) - reference
+        ).abs().max() / reference.abs().max()
+        kernel = auto.operator.toeplitz_kernel
+
+        # Symmetric packing halves the locations either way; the ball is what
+        # the margin decides.
+        assert kernel.symmetric
+        assert (kernel.n_locations < locations // 2) is packed
+        assert float(error) < (2e-3 if packed else 1e-4)
+
+
+def test_an_even_transfer_is_stored_once_and_applied_twice():
+    """Half of a symmetric kernel repeats the other half, exactly."""
+    pytest.importorskip("mrinufft")
+    pytest.importorskip("finufft")
+    image_shape = (24, 24)
+    generator = torch.Generator().manual_seed(13)
+    image = torch.randn(2, 1, *image_shape, generator=generator, dtype=torch.complex64)
+    trajectory = _radial_to(24, 38, 0.5)
+
+    packed = physics.NonCartesian2D(
+        trajectory, image_shape, backend="finufft", toeplitz={"support": "full"}
+    )
+    whole = physics.NonCartesian2D(
+        trajectory,
+        image_shape,
+        backend="finufft",
+        toeplitz={"support": "full", "symmetric": False},
+    )
+    torch.testing.assert_close(packed.A_adjoint_A(image), whole.A_adjoint_A(image))
+
+    stored = packed.operator.toeplitz_kernel
+    full = whole.operator.toeplitz_kernel
+    assert stored.symmetric and not full.symmetric
+    # Half, plus the locations that are their own mirror: on a grid whose
+    # every axis has even length those are the corners of {0, size / 2}.
+    fixed = 2 ** len(image_shape)
+    assert 2 * stored.n_locations == full.n_locations + fixed
+
+
+def test_an_asymmetric_trajectory_keeps_the_whole_kernel():
+    """Evenness is a property of the acquisition, so it is checked, not assumed."""
+    pytest.importorskip("mrinufft")
+    pytest.importorskip("finufft")
+    rng = np.random.default_rng(17)
+    # Half a disk: no sample has its opposite, so the transfer is not even.
+    angles = rng.uniform(0.0, np.pi, 400)
+    radius = rng.uniform(0.02, 0.45, 400)
+    trajectory = np.stack(
+        [radius * np.cos(angles), radius * np.sin(angles)], -1
+    ).astype(np.float32)
+    physics_object = physics.NonCartesian2D(
+        trajectory, (16, 16), backend="finufft", toeplitz={"support": "full"}
+    )
+    physics_object.A_adjoint_A(torch.zeros(1, 1, 16, 16, dtype=torch.complex64))
+
+    assert not physics_object.operator.toeplitz_kernel.symmetric
+
+
+@pytest.mark.parametrize("device", ["cpu", "cuda"])
+def test_symmetric_packing_survives_every_path_the_sense_normal_takes(device):
+    """A packed kernel is halved; whoever cannot mirror as it goes expands it.
+
+    The SENSE normal operator reaches the CUDA kernels without going through
+    ``apply``, so every one of them has to visit both location sets: a kernel
+    that applied only what it stored would hand back half an operator, and one
+    that expanded to compensate would give the memory back.
+    """
+    pytest.importorskip("mrinufft")
+    pytest.importorskip("finufft")
+    if device == "cuda" and not torch.cuda.is_available():
+        pytest.skip("CUDA unavailable")
+    image_shape = (32, 32)
+    trajectory = _radial_to(32, 51, 0.5)
+    generator = torch.Generator().manual_seed(23)
+    maps = torch.randn(4, *image_shape, generator=generator, dtype=torch.complex64)
+    maps /= torch.linalg.vector_norm(maps, dim=0, keepdim=True)
+    image = torch.randn(1, 1, *image_shape, generator=generator, dtype=torch.complex64)
+    maps, image = maps.to(device), image.to(device)
+
+    packed = physics.NonCartesian2D(
+        trajectory, image_shape, coil_maps=maps, toeplitz={"support": "full"}
+    )
+    whole = physics.NonCartesian2D(
+        trajectory,
+        image_shape,
+        coil_maps=maps,
+        toeplitz={"support": "full", "symmetric": False},
+    )
+    torch.testing.assert_close(
+        packed.A_adjoint_A(image), whole.A_adjoint_A(image), atol=2e-5, rtol=2e-5
+    )
+
+    stored = packed.operator.toeplitz_kernel
+    # Still halved after the application, on whichever device ran it.
+    assert stored.symmetric
+    assert stored.storage_nbytes < whole.operator.toeplitz_kernel.storage_nbytes
