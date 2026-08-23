@@ -368,6 +368,33 @@ def _symmetric_halving(
     return values[:, keep].contiguous(), indices[keep].contiguous()
 
 
+def _banked_transform(
+    bank: Any, axes: tuple[int, ...], *, inverse: bool = False
+) -> None:
+    """Transform a padded bank in place, in as few passes as the device allows.
+
+    A transform plans a workspace of about the size of what it is handed. Where
+    that does not fit what is left on the device it falls back to an algorithm
+    several times slower -- and the bank is what left no room. Coefficients are
+    independent here, so handing them over in groups that do fit costs nothing
+    and is exact.
+    """
+    torch = _torch()
+    transform = torch.fft.ifftn if inverse else torch.fft.fftn
+    coefficients = bank.shape[1]
+    chunk = coefficients
+    if bank.device.type == "cuda":
+        slice_bytes = bank[:, :1].numel() * bank.element_size()
+        free, _ = torch.cuda.mem_get_info(bank.device)
+        chunk = min(coefficients, max(1, int(free // (2 * max(slice_bytes, 1)))))
+    if chunk >= coefficients:
+        transform(bank, dim=axes, out=bank)
+        return
+    for start in range(0, coefficients, chunk):
+        view = bank[:, start : start + chunk]
+        transform(view, dim=axes, out=view)
+
+
 class CompactToeplitzKernel:
     """Packed Hermitian transfer matrices over selected k-space locations.
 
@@ -848,7 +875,7 @@ class CompactToeplitzKernel:
             input_crop.copy_(image)
         else:
             torch.mul(image, right_factor, out=input_crop)
-        torch.fft.fftn(input_bank, dim=axes, out=input_bank)
+        _banked_transform(input_bank, axes)
         output_bank.zero_()
         for target in workspace["indices"]:
             self._last_cuda_algorithm = _packed_cuda_matvec_direct(
@@ -857,7 +884,7 @@ class CompactToeplitzKernel:
                 workspace["values"],
                 target,
             )
-        torch.fft.ifftn(output_bank, dim=axes, out=output_bank)
+        _banked_transform(output_bank, axes, inverse=True)
         output_crop = output_bank[image_slices]
         if output is None:
             result = output_crop.clone()
