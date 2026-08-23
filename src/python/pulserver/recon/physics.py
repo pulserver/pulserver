@@ -1062,8 +1062,11 @@ def _psf_upsampling(shape: tuple[int, ...], samples: Any) -> float | None:
     if "cuda" not in str(device):
         return None
     free, _ = torch.cuda.mem_get_info(device)
-    # Spreading grid, plus the transfer it answers on and the sample weights.
-    wide = 8 * ((2 * prod(shape)) + prod(shape)) + 8 * int(samples.shape[0])
+    # The wide spreading grid doubles every axis, so in three dimensions it is
+    # eight times the transfer it answers on -- which is what a build of this
+    # size runs out of, not the transfer.
+    spreading = 8 * (2 ** len(shape)) * prod(shape)
+    wide = spreading + 8 * prod(shape) + 8 * int(samples.shape[0])
     return None if wide < 0.6 * free else 1.25
 
 
@@ -1518,6 +1521,24 @@ def _subspace_frame_blocks(
     return [blocks[key] for key in order], backend, image_shape
 
 
+def _centring_signs(indices: Any, spatial_shape: tuple[int, ...]) -> Any:
+    """The sign that centres a transfer, at the locations it is kept over.
+
+    Shifting a point-spread function by half the grid before transforming it
+    multiplies every output by ``(-1)`` raised to the sum of its coordinates,
+    so the shift never has to be performed and no copy of the doubled grid is
+    made to hold it.
+    """
+    torch = import_module("torch")
+    flat = as_torch(indices).to(torch.int64)
+    parity = torch.zeros_like(flat)
+    stride = 1
+    for size in reversed(spatial_shape):
+        parity = parity + (flat // stride) % size
+        stride *= size
+    return torch.where(parity % 2 == 0, 1.0, -1.0).to(torch.complex64)
+
+
 def _subspace_pair_transfers(
     blocks: Sequence[tuple[Any, Any, Any]],
     backend: str,
@@ -1541,42 +1562,47 @@ def _subspace_pair_transfers(
     """
     torch = import_module("torch")
     spatial_shape = tuple(2 * size for size in image_shape)
-    weights = []
-    for (_, density, _), count in zip(blocks, counts, strict=True):
-        if density is None:
-            weights.append(None)
-        else:
-            weights.append(as_torch(density).reshape(-1).to(samples.device))
-            if weights[-1].numel() != count:
+    # One weight per sample, assembled in a single pass: a dynamic acquisition
+    # has as many blocks as it has frames, and touching each of them per basis
+    # pair is thousands of launches for one vector.
+    weights = None
+    if any(block[1] is not None for block in blocks):
+        pieces = []
+        for (_, density, _), count in zip(blocks, counts, strict=True):
+            if density is None:
+                pieces.append(torch.ones(count, device=samples.device))
+                continue
+            piece = as_torch(density).reshape(-1).to(samples.device)
+            if piece.numel() != count:
                 raise ValueError("density and samples must have the same length")
+            pieces.append(piece)
+        weights = torch.cat(pieces).to(torch.complex64)
+    repeats = torch.tensor(counts, device=samples.device)
+    coefficients = torch.stack([block[2] for block in blocks], dim=1)
 
     operator = _psf_operator(samples, backend, spatial_shape)
     axes = tuple(range(len(spatial_shape)))
+    signs = _centring_signs(indices, spatial_shape)
     scale = float(operator.norm_factor) / _mrinufft_norm_factor(image_shape) ** 2
     n_pairs = int(blocks[0][2].numel())
-    total = sum(counts)
 
     packed = None
+    coefficients = coefficients.to(device=samples.device, dtype=torch.complex64)
     for pair in range(n_pairs):
-        values = torch.empty(total, dtype=torch.complex64, device=samples.device)
-        offset = 0
-        for (_, _, coefficients), count, density in zip(
-            blocks, counts, weights, strict=True
-        ):
-            block = values[offset : offset + count]
-            coefficient = coefficients[pair].to(torch.complex64)
-            if density is None:
-                block.fill_(coefficient)
-            else:
-                torch.mul(density.to(torch.complex64), coefficient, out=block)
-            offset += count
+        values = torch.repeat_interleave(coefficients[pair], repeats)
+        if weights is not None:
+            values = values * weights
         values_view = values.reshape(1, 1, -1)
         del values
         psf = as_torch(operator.adj_op(values_view)).reshape(spatial_shape)
-        transfer = torch.fft.fftn(torch.fft.ifftshift(psf, dim=axes), dim=axes)
+        # Transformed in place, and the centring folded into a sign on the
+        # locations kept: shifting the point-spread function by half the grid
+        # is the same as alternating the sign of what comes out, and a copy of
+        # the doubled grid is the largest thing a build holds after the plan.
+        torch.fft.fftn(psf, dim=axes, out=psf)
+        selected = _selected_transfer(psf.reshape(-1), indices, streaming=streaming)
         del psf
-        selected = _selected_transfer(transfer, indices, streaming=streaming)
-        del transfer
+        selected = selected * signs
         if packed is None:
             packed = torch.empty(
                 (n_pairs, selected.numel()),

@@ -318,6 +318,19 @@ def mirror_indices(indices: Any, spatial_shape: tuple[int, ...]) -> Any:
     return mirrored
 
 
+def _agrees(
+    values: Any,
+    where: Any,
+    partner: Any,
+    scale: Any,
+    tolerance: float,
+) -> bool:
+    """Whether the transfer matches its mirror over the given locations."""
+    difference = values[:, where] - values[:, partner]
+    return float(difference.abs().max() / scale) <= tolerance
+
+
+_SYMMETRY_PROBE = 1 << 14
 _SYMMETRY_BLOCK = 1 << 22
 
 
@@ -345,24 +358,43 @@ def _symmetric_halving(
     if indices.numel() == 0:
         return None
     located = indices.to(torch.int64)
-    mirrored = mirror_indices(indices, spatial_shape)
-    order = torch.argsort(located)
-    ranked = located[order]
-    position = torch.searchsorted(ranked, mirrored)
-    if int(position.max()) >= ranked.numel():
-        return None
-    partner = order[position]
-    if not bool((ranked[position] == mirrored).all()):
+    # Locations come off the support scan in ascending order, so the ranking
+    # the lookup needs is usually already the identity.
+    ordered = bool((located[1:] >= located[:-1]).all())
+    order = None if ordered else torch.argsort(located)
+    ranked = located if ordered else located[order]
+
+    def partners(where):
+        # Where the mirrors of these locations are held, or None if any is
+        # missing -- looked up only for the locations asked about.
+        wanted = mirror_indices(located[where], spatial_shape)
+        position = torch.searchsorted(ranked, wanted)
+        if int(position.max()) >= ranked.numel():
+            return None
+        found = order[position] if order is not None else position
+        return None if not bool((located[found] == wanted).all()) else found
+
+    # A kernel that is not even almost always says so at a handful of
+    # locations, and answering over all of them costs a lookup and a gather
+    # across the whole kernel. Probe first, then confirm.
+    count = values.shape[1]
+    probe = torch.arange(0, count, max(1, count // _SYMMETRY_PROBE))
+    probed = partners(probe)
+    if probed is None:
         return None
     scale = values.abs().max()
     if scale > 0:
-        # Compared a block at a time: gathering the mirror of a kernel this is
-        # worth halving would cost several times the kernel.
-        for start in range(0, values.shape[1], _SYMMETRY_BLOCK):
-            stop = min(start + _SYMMETRY_BLOCK, values.shape[1])
-            block = values[:, start:stop] - values[:, partner[start:stop]]
-            if float(block.abs().max() / scale) > tolerance:
+        if not _agrees(values, probe, probed, scale, tolerance):
+            return None
+        for start in range(0, count, _SYMMETRY_BLOCK):
+            span = torch.arange(start, min(start + _SYMMETRY_BLOCK, count))
+            spanned = partners(span)
+            if spanned is None or not _agrees(values, span, spanned, scale, tolerance):
                 return None
+    partner = partners(torch.arange(count))
+    if partner is None:
+        return None
+    mirrored = mirror_indices(indices, spatial_shape)
     # One of each pair: the location that is its own mirror is its own
     # representative, and every other pair is represented by its lower index.
     keep = located <= mirrored
