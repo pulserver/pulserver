@@ -317,6 +317,9 @@ def mirror_indices(indices: Any, spatial_shape: tuple[int, ...]) -> Any:
     return mirrored
 
 
+_SYMMETRY_BLOCK = 1 << 22
+
+
 def _symmetric_halving(
     values: Any,
     indices: Any,
@@ -340,9 +343,10 @@ def _symmetric_halving(
     torch = _torch()
     if indices.numel() == 0:
         return None
+    located = indices.to(torch.int64)
     mirrored = mirror_indices(indices, spatial_shape)
-    order = torch.argsort(indices.to(torch.int64))
-    ranked = indices.to(torch.int64)[order]
+    order = torch.argsort(located)
+    ranked = located[order]
     position = torch.searchsorted(ranked, mirrored)
     if int(position.max()) >= ranked.numel():
         return None
@@ -350,14 +354,17 @@ def _symmetric_halving(
     if not bool((ranked[position] == mirrored).all()):
         return None
     scale = values.abs().max()
-    if (
-        scale > 0
-        and float((values - values[:, partner]).abs().max() / scale) > tolerance
-    ):
-        return None
+    if scale > 0:
+        # Compared a block at a time: gathering the mirror of a kernel this is
+        # worth halving would cost several times the kernel.
+        for start in range(0, values.shape[1], _SYMMETRY_BLOCK):
+            stop = min(start + _SYMMETRY_BLOCK, values.shape[1])
+            block = values[:, start:stop] - values[:, partner[start:stop]]
+            if float(block.abs().max() / scale) > tolerance:
+                return None
     # One of each pair: the location that is its own mirror is its own
     # representative, and every other pair is represented by its lower index.
-    keep = indices.to(torch.int64) <= mirrored
+    keep = located <= mirrored
     return values[:, keep].contiguous(), indices[keep].contiguous()
 
 

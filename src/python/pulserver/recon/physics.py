@@ -1019,6 +1019,10 @@ def _psf_operator(
         operator.update_samples(samples)
         return operator
     build = mrinufft.get_operator(backend)
+    settings: dict[str, Any] = {"eps": _PSF_TOLERANCE}
+    upsampling = _psf_upsampling(shape, samples)
+    if upsampling is not None:
+        settings["upsampfac"] = upsampling
     try:
         operator = build(
             samples=samples,
@@ -1026,7 +1030,7 @@ def _psf_operator(
             density=None,
             n_coils=1,
             squeeze_dims=False,
-            eps=_PSF_TOLERANCE,
+            **settings,
         )
     except TypeError:
         operator = build(
@@ -1041,6 +1045,26 @@ def _psf_operator(
     _PSF_OPERATOR_SLOT.clear()
     _PSF_OPERATOR_SLOT[key] = operator
     return operator
+
+
+def _psf_upsampling(shape: tuple[int, ...], samples: Any) -> float | None:
+    """The interpolation grid to plan on, or ``None`` for the backend's own.
+
+    A NUFFT spreads onto a grid coarser or finer than the one it answers on,
+    and either meets the tolerance it was asked for. The wider one is faster
+    where it fits; on the doubled grid a kernel is built on it is eight times
+    the transfer, so at the sizes this is for it does not fit a consumer card
+    and the narrow one is what makes the build run at all.
+    """
+    torch = import_module("torch")
+    # NumPy answers `device` with a plain string, Torch with an object.
+    device = getattr(samples, "device", None)
+    if "cuda" not in str(device):
+        return None
+    free, _ = torch.cuda.mem_get_info(device)
+    # Spreading grid, plus the transfer it answers on and the sample weights.
+    wide = 8 * ((2 * prod(shape)) + prod(shape)) + 8 * int(samples.shape[0])
+    return None if wide < 0.6 * free else 1.25
 
 
 def _within_psf_plans(build: Any) -> Any:
@@ -1498,6 +1522,11 @@ def _subspace_pair_transfers(
     blocks: Sequence[tuple[Any, Any, Any]],
     backend: str,
     image_shape: tuple[int, ...],
+    samples: Any,
+    counts: Sequence[int],
+    indices: Any,
+    *,
+    streaming: Any | None = None,
 ) -> Any:
     """Grid one transfer per upper-triangular basis pair, over every sample.
 
@@ -1505,15 +1534,13 @@ def _subspace_pair_transfers(
     basis product, times whatever density the acquisition carries -- so the
     whole dynamic acquisition grids in a single pass and the count of NUFFTs
     is the size of the basis, not the length of the scan.
+
+    Each is cut to ``indices`` as it is gridded, so one whole transfer is live
+    at a time rather than one per pair. At the sizes this is for, that is the
+    difference between the doubled grid once and the doubled grid ten times.
     """
     torch = import_module("torch")
     spatial_shape = tuple(2 * size for size in image_shape)
-    samples = torch.cat(
-        [as_torch(block[0]).reshape(-1, len(image_shape)) for block in blocks]
-    )
-    counts = [
-        as_torch(block[0]).reshape(-1, len(image_shape)).shape[0] for block in blocks
-    ]
     weights = []
     for (_, density, _), count in zip(blocks, counts, strict=True):
         if density is None:
@@ -1529,7 +1556,7 @@ def _subspace_pair_transfers(
     n_pairs = int(blocks[0][2].numel())
     total = sum(counts)
 
-    transfers = []
+    packed = None
     for pair in range(n_pairs):
         values = torch.empty(total, dtype=torch.complex64, device=samples.device)
         offset = 0
@@ -1543,12 +1570,23 @@ def _subspace_pair_transfers(
             else:
                 torch.mul(density.to(torch.complex64), coefficient, out=block)
             offset += count
-        psf = as_torch(operator.adj_op(values.reshape(1, 1, -1))).reshape(spatial_shape)
-        transfers.append(
-            torch.fft.fftn(torch.fft.ifftshift(psf, dim=axes), dim=axes).flatten()
-            * scale
-        )
-    return torch.stack(transfers)
+        values_view = values.reshape(1, 1, -1)
+        del values
+        psf = as_torch(operator.adj_op(values_view)).reshape(spatial_shape)
+        transfer = torch.fft.fftn(torch.fft.ifftshift(psf, dim=axes), dim=axes)
+        del psf
+        selected = _selected_transfer(transfer, indices, streaming=streaming)
+        del transfer
+        if packed is None:
+            packed = torch.empty(
+                (n_pairs, selected.numel()),
+                dtype=selected.dtype,
+                device=selected.device,
+            )
+        packed[pair] = selected * scale
+        del selected
+    assert packed is not None
+    return packed
 
 
 @_within_psf_plans
@@ -1571,18 +1609,27 @@ def _build_subspace_toeplitz(
         columns,
     )
     spatial_shape = tuple(2 * size for size in image_shape)
-    transfers = _subspace_pair_transfers(blocks, backend, image_shape)
-
     # The support is the union of what the frames reached, read off their
-    # trajectories and needing none of their transfers.
+    # trajectories and needing none of their transfers -- so it is known before
+    # the first one is gridded, and each can be cut as it comes.
+    ndim = len(image_shape)
+    counts = [as_torch(block[0]).reshape(-1, ndim).shape[0] for block in blocks]
+    samples = torch.cat([as_torch(block[0]).reshape(-1, ndim) for block in blocks])
+    blocks = [(None, block[1], block[2]) for block in blocks]
     indices = _support_locations(
-        [block[0] for block in blocks],
+        samples,
         spatial_shape,
-        "cpu" if streaming is not None else transfers.device,
+        "cpu" if streaming is not None else samples.device,
         options["compress"],
     )
-    packed = torch.stack(
-        [_selected_transfer(row, indices, streaming=streaming) for row in transfers]
+    packed = _subspace_pair_transfers(
+        blocks,
+        backend,
+        image_shape,
+        samples,
+        counts,
+        indices,
+        streaming=streaming,
     )
 
     values = (
