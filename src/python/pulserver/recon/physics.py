@@ -27,7 +27,7 @@ from collections import OrderedDict
 from collections.abc import Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from functools import wraps
-from contextlib import contextmanager, suppress
+from contextlib import ExitStack, contextmanager, suppress
 from importlib import import_module
 from itertools import chain
 from math import prod, sqrt
@@ -1615,6 +1615,36 @@ def _subspace_pair_transfers(
     return packed
 
 
+@contextmanager
+def _frames_release_their_plans(
+    frame_physics: Sequence[MRIPhysics | _LazyFramePhysics],
+) -> Any:
+    """Give a build the device to itself.
+
+    Building a kernel needs the samples and the basis, not the operator that
+    encodes with them -- and that operator holds a plan the size of the one the
+    gridding is about to ask for. Two of them on a card sized for one is what
+    turns a transform into several. Frames plan again the next time they are
+    asked to encode, which costs one plan against the several a build spends
+    starved of memory.
+    """
+    providers = {
+        id(item.provider): item.provider
+        for item in frame_physics
+        if isinstance(item, _LazyFramePhysics)
+    }
+    for provider in providers.values():
+        provider.shared = None
+        provider.target = None
+        provider.cache.clear()
+    if providers:
+        with suppress(ImportError, AttributeError):
+            torch = import_module("torch")
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+    yield
+
+
 @_within_psf_plans
 def _build_subspace_toeplitz(
     frame_physics: Sequence[MRIPhysics | _LazyFramePhysics],
@@ -1634,6 +1664,8 @@ def _build_subspace_toeplitz(
         rows,
         columns,
     )
+    stack = ExitStack()
+    stack.enter_context(_frames_release_their_plans(frame_physics))
     spatial_shape = tuple(2 * size for size in image_shape)
     # The support is the union of what the frames reached, read off their
     # trajectories and needing none of their transfers -- so it is known before
@@ -1658,6 +1690,7 @@ def _build_subspace_toeplitz(
         streaming=streaming,
     )
 
+    stack.close()
     values = (
         packed.to(basis.dtype) if basis.is_complex() else packed.real.to(basis.dtype)
     )
