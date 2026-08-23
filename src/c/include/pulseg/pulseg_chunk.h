@@ -170,12 +170,39 @@ extern "C"
         /**
          * Points in the longest single wave.
          *
-         * A hardware waveform slot is reserved at a fixed size, so the pool
-         * has to be cut to the largest thing that will ever be swapped into
-         * it.  `peak_wave_samples` is a whole chunk and answers a different
-         * question -- how much memory the pool needs in total.
+         * The size a *generic* hardware slot has to be cut to -- one that any
+         * wave in the scan may be swapped into, which is what the streamed
+         * ping-pong halves are.  `peak_wave_samples` is a whole chunk and
+         * answers a different question: how much memory the pool needs in
+         * total.
          */
         int max_wave_points;
+
+        /**
+         * Size the slot holding wave `w` must be reserved at; `num_waves` long.
+         *
+         * At least the wave's own point count, and at least the reservation of
+         * every block that swaps it in -- a played instruction reads its own
+         * reserved length from wherever it is pointed, so a slot shorter than
+         * the instruction pointing at it runs off the end.
+         */
+        int *wave_slot_points;
+
+        /**
+         * What each block of each segment definition must reserve, indexed
+         * `[segment * block_stride + block]`; 0 where the block materialises
+         * nothing.  `num_block_points` is the array length.
+         *
+         * A block's waveform slot is reserved once, at pulse generation, and
+         * every instance of that block swaps into it -- so the reservation
+         * covers the longest wave *that block* is ever handed, and the
+         * instruction plays exactly that long.  Cutting every block to
+         * `max_wave_points` instead makes the shortest rotated block reserve,
+         * and play, the longest one's duration.
+         */
+        int block_stride;
+        int num_block_points;
+        int *block_wave_points;
 
         /**
          * Which wave each exec-stream position plays, indexed by position;
@@ -191,7 +218,7 @@ extern "C"
 
     /* clang-format off */
 #define PULSEG_CHUNK_PLAN_INIT \
-    {PULSEG_WAVE_RESIDENT, 0, NULL, 0, NULL, NULL, 0, 0, 0, 0, 0, NULL}
+    {PULSEG_WAVE_RESIDENT, 0, NULL, 0, NULL, NULL, 0, 0, 0, 0, NULL, 0, 0, NULL, 0, NULL}
     /* clang-format on */
 
     /**

@@ -9,7 +9,7 @@
  * planner remembers the last one that still fitted and cuts there.
  */
 
-#include "pulseg/pulseg_chunk.h"
+#include "pulseg_chunk.h"
 
 #include "pulseg_internal.h"
 
@@ -166,17 +166,25 @@ void pulseg_free_chunk_plan(pulseg_chunk_plan *plan)
         PULSEG_FREE(plan->chunk_waves);
     if (plan->position_wave)
         PULSEG_FREE(plan->position_wave);
+    if (plan->wave_slot_points)
+        PULSEG_FREE(plan->wave_slot_points);
+    if (plan->block_wave_points)
+        PULSEG_FREE(plan->block_wave_points);
     plan->mode = PULSEG_WAVE_RESIDENT;
     plan->chunks = NULL;
     plan->waves = NULL;
     plan->chunk_waves = NULL;
     plan->position_wave = NULL;
+    plan->wave_slot_points = NULL;
+    plan->block_wave_points = NULL;
     plan->num_chunks = 0;
     plan->num_waves = 0;
     plan->num_chunk_waves = 0;
     plan->total_wave_points = 0;
     plan->peak_wave_samples = 0;
     plan->max_wave_points = 0;
+    plan->block_stride = 0;
+    plan->num_block_points = 0;
     plan->position_count = 0;
 }
 
@@ -216,11 +224,15 @@ int pulseg_plan_chunks(
     pulseg_chunk *chunks = NULL;
     int *position_wave = NULL;
     int *chunk_waves = NULL;
+    int *wave_slot_points = NULL;
+    int *block_wave_points = NULL;
     pulseg_wave_key key;
     int cap_waves, num_waves;
     int cap_chunks, num_chunks;
     int cap_cw, num_cw;
     int pos, block_idx, seg_id, prev_seg, k;
+    int block_stride, num_block_points;
+    int blk_in_seg;
 
     if (!coll || !budget || !out)
         return PULSEG_ERR_INVALID_ARGUMENT;
@@ -244,6 +256,10 @@ int pulseg_plan_chunks(
     out->total_wave_points = 0;
     out->peak_wave_samples = 0;
     out->max_wave_points = 0;
+    out->wave_slot_points = NULL;
+    out->block_stride = 0;
+    out->num_block_points = 0;
+    out->block_wave_points = NULL;
     out->position_count = 0;
     out->position_wave = NULL;
 
@@ -258,21 +274,60 @@ int pulseg_plan_chunks(
     if (!waves || !position_wave)
         goto oom;
 
+    block_stride = 0;
+    for (k = 0; k < desc->num_unique_segments; ++k)
+        if (desc->segment_definitions[k].num_blocks > block_stride)
+            block_stride = desc->segment_definitions[k].num_blocks;
+    num_block_points = desc->num_unique_segments * block_stride;
+    if (num_block_points > 0)
+    {
+        block_wave_points = (int *)PULSEG_ALLOC((size_t)num_block_points * sizeof(int));
+        if (!block_wave_points)
+            goto oom;
+        memset(block_wave_points, 0, (size_t)num_block_points * sizeof(int));
+    }
+
+    prev_seg = -1;
+    blk_in_seg = 0;
     for (pos = 0; pos < desc->exec_stream_len; ++pos)
     {
         position_wave[pos] = -1;
+        seg_id = pulseg__exec_seg_id(desc, pos);
+
+        /* Block position within the segment INSTANCE, tracked the same way
+         * pass 2 finds instance boundaries: a definition replays unchanged, so
+         * only exhausting its block count ends one. */
+        if (pos == 0 || seg_id != prev_seg)
+            blk_in_seg = 0;
+        else if (seg_id >= 0 && seg_id < desc->num_unique_segments &&
+                 blk_in_seg >= desc->segment_definitions[seg_id].num_blocks)
+            blk_in_seg = 0;
+        prev_seg = seg_id;
+
         block_idx = pulseg__exec_block_idx(desc, pos);
-        if (!wave_key_for_block(desc, block_idx, budget->ratio_tolerance, &key))
-            continue;
-        position_wave[pos] = intern_wave(&waves, &num_waves, &cap_waves, &key);
-        if (position_wave[pos] < 0)
-            goto oom;
+        if (wave_key_for_block(desc, block_idx, budget->ratio_tolerance, &key))
+        {
+            position_wave[pos] = intern_wave(&waves, &num_waves, &cap_waves, &key);
+            if (position_wave[pos] < 0)
+                goto oom;
+            if (block_wave_points && seg_id >= 0 && seg_id < desc->num_unique_segments &&
+                blk_in_seg < block_stride)
+            {
+                int *slot = &block_wave_points[seg_id * block_stride + blk_in_seg];
+                if (key.num_points > *slot)
+                    *slot = key.num_points;
+            }
+        }
+        blk_in_seg++;
     }
 
     out->num_waves = num_waves;
     out->waves = waves;
     out->position_count = desc->exec_stream_len;
     out->position_wave = position_wave;
+    out->block_stride = block_stride;
+    out->num_block_points = num_block_points;
+    out->block_wave_points = block_wave_points;
     for (k = 0; k < num_waves; ++k)
     {
         long pts = (long)waves[k].num_points * (long)waves[k].num_axes;
@@ -280,6 +335,46 @@ int pulseg_plan_chunks(
         if (waves[k].num_points > out->max_wave_points)
             out->max_wave_points = waves[k].num_points;
     }
+
+    /* A slot has to hold the wave AND satisfy every instruction pointed at
+     * it: playout reads the instruction's own reserved length from wherever
+     * the pointer lands, so a slot shorter than one of its blocks runs past
+     * the end. */
+    if (num_waves > 0)
+    {
+        wave_slot_points = (int *)PULSEG_ALLOC((size_t)num_waves * sizeof(int));
+        if (!wave_slot_points)
+            goto oom;
+        for (k = 0; k < num_waves; ++k)
+            wave_slot_points[k] = waves[k].num_points;
+        if (block_wave_points)
+        {
+            prev_seg = -1;
+            blk_in_seg = 0;
+            for (pos = 0; pos < desc->exec_stream_len; ++pos)
+            {
+                int w, reserved;
+                seg_id = pulseg__exec_seg_id(desc, pos);
+                if (pos == 0 || seg_id != prev_seg)
+                    blk_in_seg = 0;
+                else if (seg_id >= 0 && seg_id < desc->num_unique_segments &&
+                         blk_in_seg >= desc->segment_definitions[seg_id].num_blocks)
+                    blk_in_seg = 0;
+                prev_seg = seg_id;
+
+                w = position_wave[pos];
+                if (w >= 0 && seg_id >= 0 && seg_id < desc->num_unique_segments &&
+                    blk_in_seg < block_stride)
+                {
+                    reserved = block_wave_points[seg_id * block_stride + blk_in_seg];
+                    if (reserved > wave_slot_points[w])
+                        wave_slot_points[w] = reserved;
+                }
+                blk_in_seg++;
+            }
+        }
+    }
+    out->wave_slot_points = wave_slot_points;
 
     /* ---- The easy answer ----
      *
@@ -463,6 +558,10 @@ oom:
         PULSEG_FREE(waves);
     if (position_wave && position_wave != out->position_wave)
         PULSEG_FREE(position_wave);
+    if (block_wave_points && block_wave_points != out->block_wave_points)
+        PULSEG_FREE(block_wave_points);
+    if (wave_slot_points && wave_slot_points != out->wave_slot_points)
+        PULSEG_FREE(wave_slot_points);
     if (chunks)
         PULSEG_FREE(chunks);
     if (chunk_waves)

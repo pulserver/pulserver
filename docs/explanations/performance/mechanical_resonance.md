@@ -153,7 +153,10 @@ an envelope of them, over the real list.
 **C — the waveform varies.** A multishot readout written out shot by shot, a
 trajectory optimised shot by shot: different shapes at the same position. Same
 rule, over the distinct (shape, amplitude, rotation) tuples the position
-actually takes.
+actually takes. This is where the two gradient-side checks part company: a
+spectrum at one frequency is a single number, so it can be bounded here,
+whereas the {doc}`stimulation check <pns>` has a peak to find and groups the
+repetitions by the shapes they play instead.
 
 Neither B nor C changes the period the analysis runs on. Amplitude is an
 instance parameter, so a phase encode stepping through its table never enters
@@ -233,12 +236,16 @@ its peak amplitude or its peak slew would pick by the wrong number.
 ## 4. Making it cheap: one response per distinct shape
 
 Walk the TR once and collect, per position and per axis, the distinct waveforms
-it plays and how many there are. Then:
+it plays and how many there are — the same walk, on the same shape identity,
+that the {doc}`stimulation check <pns>` makes. Then:
 
 **Multiplicity one.** The waveform is its own basis. Nothing to compress.
 
-**Multiplicity greater than one.** Stack the waveforms into a matrix and take
-its singular value decomposition. If they share a sampling — the same raster and
+**Multiplicity greater than one.** Where the stimulation check stops — it
+accepts a further occurrence only when it is a scalar multiple of a template —
+this one goes a step further, because a spectrum is linear in the waveform and
+a truncated tail can be bounded and added back. Stack the waveforms into a
+matrix and take its singular value decomposition. If they share a sampling — the same raster and
 the same sample count, resampled onto one grid if a time shape says otherwise —
 this is where a multishot readout collapses. Written out shot by shot, a spiral
 gives one waveform per arm, but every arm is the base arm turned, so on each
@@ -285,10 +292,14 @@ $10^7$, most lines identical bit for bit and the rest at float epsilon.
 
 **Then collect every distinct waveform across every basis and every channel, and
 transform each one once.** From there, the whole per-axis spectrum at a
-frequency is bookkeeping: each occurrence takes its base response out of the
-table, scales it by its amplitude, mixes the three logical axes by its rotation
-matrix, multiplies by $e^{-2\pi i f t_k}$ for its start time, and adds into a
-complex accumulator.
+frequency is bookkeeping — the same memoize-once, place-many pattern the
+{doc}`stimulation check <pns>` uses, with a transform where that one has a
+convolution: each occurrence takes its base response out of the table, scales
+it by its amplitude, mixes the three logical axes by its rotation matrix,
+multiplies by $e^{-2\pi i f t_k}$ for its start time, and adds into a complex
+accumulator. Where stimulation combines its axes by root-sum-square at the
+end, this combines them coherently on the way in, because a rotation mixes
+axes and a spectrum is complex.
 
 Compare that with the alternative: walk every block of the scan, render its
 gradients, and transform whatever you find. That is what a timeline analysis

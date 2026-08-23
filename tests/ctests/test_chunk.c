@@ -447,6 +447,131 @@ MU_TEST(test_chunk_position_waves_stay_inside_their_chunk)
     pulseg_collection_free(coll);
 }
 
+/* Block position inside the segment INSTANCE at exec-stream position @p pos.
+ * A definition replays unchanged, so only exhausting its block count ends an
+ * instance; *blk is advanced by the caller between calls. */
+static int chunk_walk_block(const pulseg_sequence_descriptor *desc, int pos, int *prev_seg, int *blk)
+{
+    int seg_id = pulseg__exec_seg_id(desc, pos);
+
+    if (pos == 0 || seg_id != *prev_seg)
+        *blk = 0;
+    else if (seg_id >= 0 && seg_id < desc->num_unique_segments &&
+             *blk >= desc->segment_definitions[seg_id].num_blocks)
+        *blk = 0;
+    *prev_seg = seg_id;
+    return seg_id;
+}
+
+/*
+ * A block's reservation is also the length it plays, so it has to be the
+ * longest wave that block is handed -- and nothing more.  Read off
+ * position_wave, which is the plan's own statement of which wave each block
+ * instance plays.
+ */
+MU_TEST(test_chunk_a_block_reserves_the_longest_wave_it_plays)
+{
+    pulseg_collection *coll = NULL;
+    pulseg_chunk_plan plan = PULSEG_CHUNK_PLAN_INIT;
+    pulseg_chunk_budget budget = PULSEG_CHUNK_BUDGET_INIT;
+    pulseg_diagnostic diag = PULSEG_DIAGNOSTIC_INIT;
+    const pulseg_sequence_descriptor *desc;
+    int *expected;
+    int prev_seg, blk, pos, i, seg_id, longest;
+
+    chunk_load(&coll);
+    budget.max_wave_samples = 1000000000L;
+    budget.build_us_per_sample = 0.0f;
+    mu_assert(PULSEG_SUCCEEDED(pulseg_plan_chunks(coll, 0, &budget, &plan, &diag)), "plan failed");
+    mu_assert(plan.num_block_points > 0, "plan carries no per-block reservations");
+
+    expected = (int *)calloc((size_t)plan.num_block_points, sizeof(int));
+    mu_assert(expected != NULL, "out of memory");
+
+    desc = &coll->descriptors[0];
+    prev_seg = -1;
+    blk = 0;
+    for (pos = 0; pos < plan.position_count; ++pos)
+    {
+        int w = plan.position_wave[pos];
+        seg_id = chunk_walk_block(desc, pos, &prev_seg, &blk);
+        if (w >= 0 && seg_id >= 0 && blk < plan.block_stride)
+        {
+            i = seg_id * plan.block_stride + blk;
+            if (plan.waves[w].num_points > expected[i])
+                expected[i] = plan.waves[w].num_points;
+        }
+        blk++;
+    }
+
+    longest = 0;
+    for (i = 0; i < plan.num_block_points; ++i)
+    {
+        mu_assert_int_eq(expected[i], plan.block_wave_points[i]);
+        if (plan.block_wave_points[i] > longest)
+            longest = plan.block_wave_points[i];
+    }
+    mu_assert(longest > 0, "no block reserves anything");
+    mu_assert_int_eq(plan.max_wave_points, longest);
+
+    free(expected);
+    pulseg_free_chunk_plan(&plan);
+    pulseg_collection_free(coll);
+}
+
+/*
+ * Playout reads an instruction's own reserved length from wherever it is
+ * pointed, so a slot shorter than any block pointed at it runs off the end.
+ */
+MU_TEST(test_chunk_a_slot_holds_every_block_pointed_at_it)
+{
+    pulseg_collection *coll = NULL;
+    pulseg_chunk_plan plan = PULSEG_CHUNK_PLAN_INIT;
+    pulseg_chunk_budget budget = PULSEG_CHUNK_BUDGET_INIT;
+    pulseg_diagnostic diag = PULSEG_DIAGNOSTIC_INIT;
+    const pulseg_sequence_descriptor *desc;
+    int prev_seg, blk, pos, seg_id, w, checked;
+
+    chunk_load(&coll);
+    budget.max_wave_samples = 1000000000L;
+    budget.build_us_per_sample = 0.0f;
+    mu_assert(PULSEG_SUCCEEDED(pulseg_plan_chunks(coll, 0, &budget, &plan, &diag)), "plan failed");
+    mu_assert(plan.wave_slot_points != NULL, "plan carries no slot sizes");
+
+    for (w = 0; w < plan.num_waves; ++w)
+    {
+        mu_assert(
+            plan.wave_slot_points[w] >= plan.waves[w].num_points,
+            "a slot is shorter than the wave it holds");
+        mu_assert(
+            plan.wave_slot_points[w] <= plan.max_wave_points,
+            "a slot is longer than the longest wave in the scan");
+    }
+
+    desc = &coll->descriptors[0];
+    prev_seg = -1;
+    blk = 0;
+    checked = 0;
+    for (pos = 0; pos < plan.position_count; ++pos)
+    {
+        w = plan.position_wave[pos];
+        seg_id = chunk_walk_block(desc, pos, &prev_seg, &blk);
+        if (w >= 0 && seg_id >= 0 && blk < plan.block_stride)
+        {
+            mu_assert(
+                plan.wave_slot_points[w] >=
+                    plan.block_wave_points[seg_id * plan.block_stride + blk],
+                "a block reserves more than the slot it is pointed at");
+            checked++;
+        }
+        blk++;
+    }
+    mu_assert(checked > 0, "no position played a wave");
+
+    pulseg_free_chunk_plan(&plan);
+    pulseg_collection_free(coll);
+}
+
 MU_TEST_SUITE(suite_chunk)
 {
     MU_RUN_TEST(test_chunk_generous_budget_is_one_chunk);
@@ -458,6 +583,8 @@ MU_TEST_SUITE(suite_chunk)
     MU_RUN_TEST(test_chunk_materialise_reports_required_size);
     MU_RUN_TEST(test_chunk_corner_times_strictly_increase);
     MU_RUN_TEST(test_chunk_position_waves_stay_inside_their_chunk);
+    MU_RUN_TEST(test_chunk_a_block_reserves_the_longest_wave_it_plays);
+    MU_RUN_TEST(test_chunk_a_slot_holds_every_block_pointed_at_it);
 }
 
 int test_chunk_main(void)
