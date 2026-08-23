@@ -280,16 +280,23 @@ def occupancy_indices(
     # centre of k-space is index zero.
     placed = torch.round(coordinates / (2.0 * torch.pi) * sizes).to(torch.int64)
 
-    span = torch.arange(-int(width), int(width) + 1, device=coordinates.device)
-    offsets = torch.cartesian_prod(*([span] * ndim)).reshape(-1, ndim)
-    keep = torch.zeros(prod(spatial_shape), dtype=torch.bool, device=coordinates.device)
     stride = torch.ones(ndim, dtype=torch.int64, device=coordinates.device)
     for axis in range(ndim - 2, -1, -1):
         stride[axis] = stride[axis + 1] * spatial_shape[axis + 1]
-    for offset in offsets:
-        neighbour = (placed + offset) % sizes
-        keep[(neighbour * stride).sum(-1)] = True
-    return torch.nonzero(keep, as_tuple=False).flatten().to(torch.int32)
+    keep = torch.zeros(prod(spatial_shape), dtype=torch.bool, device=coordinates.device)
+    keep[((placed % sizes) * stride).sum(-1)] = True
+    # Grow the marked cells by the interpolation's reach one axis at a time.
+    # The neighbourhood is a box, so it separates, and each pass costs the grid
+    # rather than the scan -- an acquisition has far more samples than the grid
+    # has cells to grow into.
+    keep = keep.reshape(spatial_shape)
+    for axis in range(ndim):
+        grown = keep.clone()
+        for shift in range(1, int(width) + 1):
+            grown |= keep.roll(shift, axis)
+            grown |= keep.roll(-shift, axis)
+        keep = grown
+    return torch.nonzero(keep.reshape(-1), as_tuple=False).flatten().to(torch.int32)
 
 
 def mirror_indices(indices: Any, spatial_shape: tuple[int, ...]) -> Any:

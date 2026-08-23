@@ -993,6 +993,11 @@ def _base_fourier_operator(native_operator: Any) -> Any:
 
 _PSF_OPERATOR_SLOT: dict[tuple[Any, ...], Any] = {}
 
+# The transfer is held as complex64 and then cut to the support the scan
+# reached, so gridding it tighter than this buys nothing that survives either
+# step and costs several times the build.
+_PSF_TOLERANCE = 1e-4
+
 
 def _psf_operator(
     samples: Any,
@@ -1013,13 +1018,24 @@ def _psf_operator(
     if operator is not None:
         operator.update_samples(samples)
         return operator
-    operator = mrinufft.get_operator(backend)(
-        samples=samples,
-        shape=shape,
-        density=None,
-        n_coils=1,
-        squeeze_dims=False,
-    )
+    build = mrinufft.get_operator(backend)
+    try:
+        operator = build(
+            samples=samples,
+            shape=shape,
+            density=None,
+            n_coils=1,
+            squeeze_dims=False,
+            eps=_PSF_TOLERANCE,
+        )
+    except TypeError:
+        operator = build(
+            samples=samples,
+            shape=shape,
+            density=None,
+            n_coils=1,
+            squeeze_dims=False,
+        )
     # One slot: a plan on the doubled grid is the largest device allocation a
     # build makes, and holding a second one is what makes a build run out.
     _PSF_OPERATOR_SLOT.clear()
