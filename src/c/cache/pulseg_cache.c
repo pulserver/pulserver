@@ -33,7 +33,7 @@
 /* The full (major, minor, revision) triple must match exactly on read: a
  * cache at any other revision is rejected outright and the .seq is
  * re-parsed, never partially or heuristically read. */
-#define PULSEG_CACHE_VERSION_REVISION 12
+#define PULSEG_CACHE_VERSION_REVISION 13
 
 /* Per-consumer sections. Each carries its own distinct payload.
  * COMMON establishes the collection + descriptor framing; the others
@@ -172,11 +172,7 @@ static int write_common(FILE *f, const pulseg_sequence_descriptor *d)
         return 0;
     if (!pulseg__write4(f, &d->block_raster_us, 1))
         return 0;
-    if (!pulseg__write4(f, &d->ignore_fov_shift, 1))
-        return 0;
     if (!pulseg__write4(f, &d->enable_pmc, 1))
-        return 0;
-    if (!pulseg__write4(f, &d->ignore_averages, 1))
         return 0;
     if (!pulseg__write4(f, &d->num_gain_cal_readouts, 1))
         return 0;
@@ -597,10 +593,10 @@ static int write_instances(FILE *f, const pulseg_sequence_descriptor *d)
 
 static int write_scanloop(FILE *f, const pulseg_sequence_descriptor *d)
 {
-    /* Execution stream, compact form. The four per-position arrays
-     * (block_idx / tr_id / seg_id / avg_id) are build-time scratch and are
-     * never serialized: exec_runs reproduces the first three, the seg RLE
-     * the fourth, and tr_start is derived. See pulseg_exec_run. */
+    /* Execution stream, compact form. The per-position arrays are
+     * build-time scratch and are never serialized: exec_runs reproduces
+     * block_idx, the seg RLE reproduces seg_id, and tr_start is derived.
+     * See pulseg_exec_run. */
     if (!pulseg__write4(f, &d->exec_stream_len, 1))
         return 0;
     if (d->exec_stream_len > 0)
@@ -615,8 +611,6 @@ static int write_scanloop(FILE *f, const pulseg_sequence_descriptor *d)
             if (!pulseg__write4(f, &d->exec_runs[i].block_start, 1))
                 return 0;
             if (!pulseg__write4(f, &d->exec_runs[i].length, 1))
-                return 0;
-            if (!pulseg__write4(f, &d->exec_runs[i].avg_id, 1))
                 return 0;
         }
         if (!pulseg__write4(f, &d->num_seg_runs, 1))
@@ -671,11 +665,7 @@ static int read_common(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
         return 0;
     if (!pulseg__read4(f, &d->block_raster_us, 1))
         return 0;
-    if (!pulseg__read4(f, &d->ignore_fov_shift, 1))
-        return 0;
     if (!pulseg__read4(f, &d->enable_pmc, 1))
-        return 0;
-    if (!pulseg__read4(f, &d->ignore_averages, 1))
         return 0;
     if (!pulseg__read4(f, &d->num_gain_cal_readouts, 1))
         return 0;
@@ -1366,10 +1356,8 @@ static int read_scanloop(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
                     return 0;
                 if (!pulseg__read4(f, &d->exec_runs[i].length, 1))
                     return 0;
-                if (!pulseg__read4(f, &d->exec_runs[i].avg_id, 1))
-                    return 0;
                 if (do_swap)
-                    pulseg__swap4_array(&d->exec_runs[i].emit_start, 4);
+                    pulseg__swap4_array(&d->exec_runs[i].emit_start, 3);
             }
         }
 

@@ -66,6 +66,32 @@ namespace mrdserver
         float sample_time_us;   /**< ADC dwell time (us)                */
         int encoding_space_ref; /**< encoding space index                */
         int32_t off = 0;        /**< Pulseq LABELSET OFF flag (1=discard) */
+        /**
+         * k at the start of this readout's block, per axis, 1/m.
+         *
+         * A kshot holds the block's NORMALISED base, so what it costs is one
+         * row per distinct *shape* rather than one per instance: interleaves
+         * that differ only in gradient amplitude -- cones, floret -- share it,
+         * as do those differing only in rotation. The two things that make a
+         * readout its own is the amplitude triple and this origin, and both
+         * are three floats.
+         *
+         * The origin is the moment accumulated since the last excitation, in
+         * earlier blocks, and is not recoverable from the readout's own block.
+         */
+        float k_origin[3] = {0.0f, 0.0f, 0.0f};
+        /**
+         * 1 when this readout's off-isocentre FOV shift was left for the
+         * consumer rather than baked into the sequence.
+         *
+         * A design that writes for a consumer bakes the shift as two scalars
+         * where it can -- a Cartesian, unrotated readout -- and leaves it
+         * alone where it cannot, storing the readout's base trajectory
+         * instead. Only the second kind wants @ref demodulate_fov_shift; the
+         * first already carries the phase, and applying it twice mirrors the
+         * offset. A natively-shifted sequence sets this on nothing.
+         */
+        int32_t defers_fov_shift = 0;
     };
 
     /* ------------------------------------------------------------------ */

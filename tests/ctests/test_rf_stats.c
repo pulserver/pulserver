@@ -521,7 +521,6 @@ static int build_divergent_variable_rf_collection(
     desc->num_blocks = 4;
     desc->block_table = blocks;
     desc->rf_amplitude_variable = 1;
-    desc->num_averages = 1;
     desc->tr_descriptor.tr_size = 2;
     desc->tr_descriptor.num_trs = 2;
 

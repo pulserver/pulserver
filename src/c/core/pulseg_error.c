@@ -79,16 +79,10 @@ const char *pulseg_get_error_message(int code)
         return "Number of waveform shots exceeds maximum allowed";
     case PULSEG_ERR_TR_NO_BLOCKS:
         return "Sequence contains no blocks";
-    case PULSEG_ERR_TR_NO_IMAGING_REGION:
-        return "No imaging region found (preparation + cooldown >= total blocks)";
     case PULSEG_ERR_TR_NO_PERIODIC_PATTERN:
-        return "No periodic TR pattern found in imaging region";
+        return "No periodic TR pattern found";
     case PULSEG_ERR_TR_PATTERN_MISMATCH:
-        return "TR pattern does not repeat consistently across imaging region";
-    case PULSEG_ERR_TR_PREP_TOO_LONG:
-        return "Non-standard preparation section exceeds duration threshold";
-    case PULSEG_ERR_TR_COOLDOWN_TOO_LONG:
-        return "Non-standard cooldown section exceeds duration threshold";
+        return "TR pattern does not repeat consistently across the block table";
     case PULSEG_ERR_SEG_NONZERO_START_GRAD:
         return "TR does not start with zero gradient amplitude";
     case PULSEG_ERR_SEG_NONZERO_END_GRAD:
@@ -153,9 +147,6 @@ const char *pulseg_get_error_hint(int code)
     case PULSEG_ERR_SIGNATURE_MISSING:
         return "The .seq file does not contain a [SIGNATURE] section. "
                "Re-export the sequence to include a signature.";
-    case PULSEG_ERR_TR_NO_IMAGING_REGION:
-        return "Make sure to use ONCE flags either at beginning (preparation) or end (cooldown) of "
-               "the sequence.";
     case PULSEG_ERR_TR_NO_PERIODIC_PATTERN:
         return "This often occurs when phase-encoding gradients are created inside "
                "the sequence loop with varying amplitudes. Instead, create gradient "
@@ -172,10 +163,6 @@ const char *pulseg_get_error_hint(int code)
                "keep one ADC structure per block.";
     case PULSEG_ERR_TOO_MANY_GRAD_SHOTS:
         return "The sequence contains a waveform with more than 16 distinct waveform shapes.";
-    case PULSEG_ERR_TR_PREP_TOO_LONG:
-    case PULSEG_ERR_TR_COOLDOWN_TOO_LONG:
-        return "The preparation or cooldown section differs from the main TR pattern and is too "
-               "long.";
     case PULSEG_ERR_MAX_GRAD_EXCEEDED:
         return "The gradient sum-of-squares amplitude exceeds the system limit. "
                "See diagnostic message for details.";

@@ -54,7 +54,7 @@ static void run_smoke_case(const char *seq_file)
     mu_assert(sinfo.tr_size >= 1, "tr_size must be at least 1");
     mu_assert(sinfo.num_trs >= 1, "num_trs must be at least 1");
     mu_assert(sinfo.tr_duration_us > 0.0f, "tr duration must be positive");
-    mu_assert_int_eq(sinfo.num_averages * sinfo.num_trs, sinfo.num_tr_instances);
+    mu_assert_int_eq(sinfo.num_trs, sinfo.num_tr_instances);
     mu_assert(sinfo.num_unique_rf > 0, "corpus fixtures all carry RF");
 
     /* Every segment the collection reports must resolve. */
@@ -122,81 +122,6 @@ MU_TEST(test_smoke_zte_3d)
     run_smoke_case(kSmokeFixtures[7]);
 }
 
-/*
- * Copy a corpus .seq, adding one line to its [DEFINITIONS].
- *
- * The design side no longer writes IgnoreAverages -- whether a sequence
- * carries its own repetitions is stated by whether it was tiled -- so a file
- * that exercises the interpreter's clamp has to be made here rather than
- * found among the fixtures.  Writes to @p out_path; returns 1 on success.
- */
-static int copy_with_definition(
-    const char *filename,
-    const char *line,
-    char *out_path,
-    size_t out_size)
-{
-    char in_path[512];
-    char buffer[1024];
-    FILE *src;
-    FILE *dst;
-    int inserted = 0;
-
-    (void)snprintf(in_path, sizeof(in_path), "%s%s", TEST_CORPUS_DIR, filename);
-    (void)snprintf(out_path, out_size, "%signore_averages_probe.seq", TEST_TMP_DIR);
-
-    src = fopen(in_path, "r");
-    if (!src)
-        return 0;
-    dst = fopen(out_path, "w");
-    if (!dst)
-    {
-        fclose(src);
-        return 0;
-    }
-
-    while (fgets(buffer, (int)sizeof(buffer), src))
-    {
-        fputs(buffer, dst);
-        if (!inserted && strncmp(buffer, "[DEFINITIONS]", 13) == 0)
-        {
-            fputs(line, dst);
-            inserted = 1;
-        }
-    }
-
-    fclose(src);
-    fclose(dst);
-    return inserted;
-}
-
-/* A file carrying IgnoreAverages materialized its repeats at design time;
- * a console-side average count must NOT multiply it a second time. */
-MU_TEST(test_ignore_averages_is_honored)
-{
-    pulseg_opts opts;
-    pulseg_diagnostic diag = PULSEG_DIAGNOSTIC_INIT;
-    pulseg_collection *coll = NULL;
-    pulseg_subseq_info sinfo = PULSEG_SUBSEQ_INFO_INIT;
-    char path[512];
-    int rc;
-
-    mu_assert(
-        copy_with_definition("gre_2d.seq", "IgnoreAverages 1 \n", path, sizeof(path)),
-        "could not stage a file carrying IgnoreAverages");
-
-    gre_opts_init(&opts);
-    rc = pulseg_read(&coll, &diag, path, &opts, 0, 0, 0, 3);
-    mu_assert(PULSEG_SUCCEEDED(rc), "load failed");
-
-    rc = pulseg_get_subseq_info(coll, &sinfo, 0);
-    mu_assert(PULSEG_SUCCEEDED(rc), "subseq info failed");
-    mu_assert_int_eq(1, sinfo.num_averages);
-    mu_assert_int_eq(sinfo.num_trs, sinfo.num_tr_instances);
-
-    pulseg_collection_free(coll);
-    (void)remove(path);
-}
 
 MU_TEST_SUITE(suite_sequences_smoke)
 {
@@ -208,7 +133,6 @@ MU_TEST_SUITE(suite_sequences_smoke)
     MU_RUN_TEST(test_smoke_gre_radial_2d);
     MU_RUN_TEST(test_smoke_gre_stack_of_spirals_3d);
     MU_RUN_TEST(test_smoke_zte_3d);
-    MU_RUN_TEST(test_ignore_averages_is_honored);
 }
 
 /* ================================================================== */

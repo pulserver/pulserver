@@ -36,8 +36,7 @@ namespace pulseg
             const int* sizes,
             int num_buffers,
             const Opts& opts,
-            bool parse_labels = true,
-            int num_averages = 1)
+            bool parse_labels = true)
         {
             pulseg_opts copts = opts.to_c();
             pulseg_diagnostic diag;
@@ -49,8 +48,7 @@ namespace pulseg
                 sizes,
                 num_buffers,
                 &copts,
-                parse_labels ? 1 : 0,
-                num_averages);
+                parse_labels ? 1 : 0);
             check(code, diag);
             opts_ = copts;
         }
@@ -61,8 +59,7 @@ namespace pulseg
             const Opts& opts,
             bool cache_binary = false,
             bool verify_signature = false,
-            bool parse_labels = true,
-            int num_averages = 1)
+            bool parse_labels = true)
         {
             pulseg_opts copts = opts.to_c();
             pulseg_diagnostic diag;
@@ -74,8 +71,7 @@ namespace pulseg
                 &copts,
                 cache_binary ? 1 : 0,
                 verify_signature ? 1 : 0,
-                parse_labels ? 1 : 0,
-                num_averages);
+                parse_labels ? 1 : 0);
             check(code, diag);
             opts_ = copts;
         }
@@ -192,10 +188,10 @@ namespace pulseg
 
         // ── Scan time ────────────────────────────────────────────────
 
-        ScanTimeInfo get_scan_time(int num_reps) const
+        ScanTimeInfo get_scan_time() const
         {
             pulseg_scan_time_info cinfo = PULSEG_SCAN_TIME_INFO_INIT;
-            check(pulseg_get_scan_time(coll_, &cinfo, num_reps));
+            check(pulseg_get_scan_time(coll_, &cinfo));
             return ScanTimeInfo::from_c(cinfo);
         }
 
@@ -369,8 +365,7 @@ namespace pulseg
             int ss = 0,
             int amplitude_mode = PULSEG_AMP_MAX_POS,
             int tr_index = 0,
-            bool collapse_delays = false,
-            int num_averages = 0) const
+            bool collapse_delays = false) const
         {
             pulseg_tr_waveforms cw;
             pulseg_diagnostic diag;
@@ -384,8 +379,7 @@ namespace pulseg
                 ss,
                 amplitude_mode,
                 tr_index,
-                collapse_delays ? 1 : 0,
-                num_averages);
+                collapse_delays ? 1 : 0);
             check(code, diag);
 
             TrWaveforms w;

@@ -24,6 +24,7 @@
 #include "sequence_file_reader.h"
 
 #include "pulseq/kspace.hpp"
+#include "pulseq/trajectory.hpp"
 #include "pulseq/sequence.hpp"
 #include "pulseq/sequence_file.hpp"
 #include "pulseq/shape.hpp"
@@ -38,7 +39,6 @@ extern "C"
 #include <cmath>
 #include <cstdio>
 #include <cstring>
-#include <filesystem>
 #include <map>
 #include <set>
 #include <stdexcept>
@@ -304,19 +304,7 @@ namespace mrdserver
             return amp * (wave[j] + w * (wave[j + 1] - wave[j]));
         }
 
-        /** The physical peak amplitude of a gradient id, Hz/m. */
-        double grad_amplitude(const pulseq::Sequence& seq, int id)
-        {
-            switch (seq.grad_kind(id))
-            {
-            case pulseq::GradKind::Trap:
-                return seq.trap_library().row(seq.grad_row(id))[0];
-            case pulseq::GradKind::Arbitrary:
-                return seq.arb_library().row(seq.grad_row(id))[0];
-            default:
-                return 0.0;
-            }
-        }
+        const std::array<double, 3> kNoOrigin{{0.0, 0.0, 0.0}};
 
         /** Content-deduplicating kshot library builder. */
         struct KshotLibrary
@@ -335,23 +323,6 @@ namespace mrdserver
                 return id;
             }
         };
-
-        /** Whether one axis row of a readout is a straight counter-placeable
-         * line: constant gradient over the window means uniformly spaced k,
-         * i.e. constant increments. */
-        bool axis_is_linear(const float* k, int nsamples)
-        {
-            if (nsamples < 3)
-                return true;
-            const float step = k[1] - k[0];
-            const float scale = std::max(1.0f, std::abs(k[nsamples - 1] - k[0]));
-            for (int i = 2; i < nsamples; ++i)
-            {
-                if (std::abs((k[i] - k[i - 1]) - step) > 1e-6f * scale)
-                    return false;
-            }
-            return true;
-        }
 
         struct SubseqTrajectory
         {
@@ -398,8 +369,7 @@ namespace mrdserver
         SubseqTrajectory build_subseq_trajectory(
             pulseq::Sequence& seq,
             const pulseq::KSpace& ks,
-            int subseq_idx,
-            int num_averages)
+            int subseq_idx)
         {
             SubseqTrajectory out;
 
@@ -416,26 +386,50 @@ namespace mrdserver
 
             const int rotations_id_type = seq.find_extension_type_id("ROTATIONS");
 
+            /* A file written for a consumer says so, and then a readout that
+             * stored a base trajectory is one whose shift was left for us. */
+            const bool shift_deferred_anywhere = pulseq::has_base_trajectory(seq);
+
+            /* k at the start of every block, logical frame.  The base a
+             * readout stores is its own block's normalised moment and carries
+             * no history, so the accumulated moment has to come from here. */
+            const std::vector<std::array<double, 3>> origins = pulseq::block_k_origins(seq);
+
             KshotLibrary library;
-            std::vector<TrajTableEntry> one_average;
-            one_average.reserve(ks.readouts.size());
+            out.table.reserve(ks.readouts.size());
 
             for (size_t r = 0; r < ks.readouts.size(); ++r)
             {
                 const pulseq::Readout& readout = ks.readouts[r];
                 const int nsamples = readout.num_samples;
-                const double* base = ks.k_adc.data() + readout.sample_offset * 3;
+                const pulseq::Block block = seq.get_block(readout.block_index);
+
+                /* The trajectory this readout samples, as the FILE states it.
+                 *
+                 * The design side already integrated the gradients and wrote
+                 * the result into the ADC's phase_modulation, normalised so
+                 * one row serves every instance that differs by amplitude.
+                 * Re-integrating it here would be the same arithmetic done a
+                 * second time, and would throw that sharing away.
+                 *
+                 * A readout with no stored base gets no trajectory at all:
+                 * that is a Cartesian line, which the encoding counters
+                 * locate, and an MRD acquisition is entitled to carry none. */
+                const pulseq::BaseTrajectory stored =
+                    pulseq::read_base_trajectory(seq, readout.block_index);
 
                 /* Axis-major within the readout: x, then y, then z. */
                 std::array<std::vector<float>, 3> rows;
-                for (int axis = 0; axis < 3; ++axis)
+                if (stored.has_adc)
                 {
-                    rows[axis].resize(static_cast<size_t>(nsamples));
-                    for (int s = 0; s < nsamples; ++s)
-                        rows[axis][s] = static_cast<float>(base[axis * nsamples + s]);
+                    for (int axis = 0; axis < 3; ++axis)
+                    {
+                        rows[axis].assign(static_cast<size_t>(nsamples), 0.0f);
+                        const std::vector<double>& b = stored.axis[axis].base;
+                        for (int i = 0; i < nsamples && i < static_cast<int>(b.size()); ++i)
+                            rows[axis][static_cast<size_t>(i)] = static_cast<float>(b[static_cast<size_t>(i)]);
+                    }
                 }
-
-                const pulseq::Block block = seq.get_block(readout.block_index);
 
                 int rotation_id = 0;
                 {
@@ -453,34 +447,34 @@ namespace mrdserver
                 }
 
                 TrajTableEntry entry{};
-                const int grad_ids[3] = {block.gx, block.gy, block.gz};
+                if (shift_deferred_anywhere && block.adc > 0)
+                {
+                    const double* adc_row = seq.adc_library().row(static_cast<int>(block.adc));
+                    entry.defers_fov_shift = (adc_row[7] != 0.0) ? 1 : 0;
+                }
+                int shot_ids[3] = {-1, -1, -1};
                 float* amplitudes[3] = {
                     &entry.gx_amplitude,
                     &entry.gy_amplitude,
                     &entry.gz_amplitude};
-                int shot_ids[3];
-                for (int axis = 0; axis < 3; ++axis)
+                if (stored.has_adc)
                 {
-                    *amplitudes[axis] = grad_ids[axis]
-                        ? static_cast<float>(grad_amplitude(seq, grad_ids[axis]))
-                        : 0.0f;
-                    /* The classifier is per-axis event presence plus the
-                     * gradient over the ADC window. An axis with no gradient
-                     * event in the block is implied (-1): whatever constant
-                     * k it carries lives in counters and geometry, and
-                     * rotation composed downstream fills it from the active
-                     * axes. An axis with an event under a rotation is ALWAYS
-                     * a real shot -- the rotated frame needs it even when
-                     * the gradient is flat (a radial spoke). Unrotated, a
-                     * constant gradient is a counter-placeable line (-1). */
-                    if (grad_ids[axis] == 0)
-                        shot_ids[axis] = -1;
-                    else if (rotation_id != 0)
+                    const std::array<double, 3>& origin =
+                        (readout.block_index >= 0 &&
+                         readout.block_index < static_cast<int>(origins.size()))
+                        ? origins[static_cast<size_t>(readout.block_index)]
+                        : kNoOrigin;
+                    for (int axis = 0; axis < 3; ++axis)
+                    {
+                        /* Every axis, including one the block does not drive:
+                         * its k is constant at the origin across the window,
+                         * and a rotation downstream mixes it into the others.
+                         * The zero row it interns is one row for the whole
+                         * scan. */
+                        *amplitudes[axis] = static_cast<float>(stored.axis[axis].amplitude);
                         shot_ids[axis] = library.add(rows[axis]);
-                    else if (axis_is_linear(rows[axis].data(), nsamples))
-                        shot_ids[axis] = -1;
-                    else
-                        shot_ids[axis] = library.add(rows[axis]);
+                        entry.k_origin[axis] = static_cast<float>(origin[static_cast<size_t>(axis)]);
+                    }
                 }
                 entry.kx_shot_id = shot_ids[0];
                 entry.ky_shot_id = shot_ids[1];
@@ -515,33 +509,15 @@ namespace mrdserver
                     entry.flags |= FLAG_NOISE;
 
                 entry.encoding_space_ref = (entry.flags & FLAG_NAV) ? 1 : 0;
-                one_average.push_back(entry);
+                out.table.push_back(entry);
             }
 
             out.kshots = std::move(library.shots);
 
-            /* NEX: the scanner replays the whole stream per average, and the
-             * AVG counter carries the replay index -- REP stays whatever the
-             * file's labels say. With one average the file's own AVG labels
-             * pass through untouched. */
-            const int averages = std::max(1, num_averages);
-            out.table.reserve(one_average.size() * static_cast<size_t>(averages));
-            for (int avg = 0; avg < averages; ++avg)
-            {
-                for (TrajTableEntry entry : one_average)
-                {
-                    if (averages > 1)
-                        entry.avg = avg;
-                    out.table.push_back(entry);
-                }
-            }
             if (!out.table.empty())
                 out.table.back().flags |= FLAG_LAST_IN_MEASUREMENT;
 
-            std::set<std::string> written = written_labels(labels);
-            if (averages > 1)
-                written.insert("AVG");
-            set_boundary_flags(out.table, written);
+            set_boundary_flags(out.table, written_labels(labels));
 
             bool has_nav = false;
             for (const TrajTableEntry& entry : out.table)
@@ -1200,25 +1176,41 @@ namespace mrdserver
             return std::strtof(it->second.front().c_str(), nullptr);
         }
 
+        bool file_exists(const std::string& path)
+        {
+            std::FILE* f = std::fopen(path.c_str(), "rb");
+            if (!f)
+                return false;
+            std::fclose(f);
+            return true;
+        }
+
+        /* A successor is named relative to the file that names it. */
+        std::string sibling_of(const std::string& path, const std::string& name)
+        {
+            const std::size_t cut = path.find_last_of("/\\");
+            if (cut == std::string::npos)
+                return name;
+            return path.substr(0, cut + 1) + name;
+        }
+
     } // namespace
 
-    SequenceCache read_sequence_files(const std::string& lead_path, int num_averages)
+    SequenceCache read_sequence_files(const std::string& lead_path)
     {
-        namespace fs = std::filesystem;
-
         SequenceCache cache;
 
         std::vector<std::string> chain;
         std::string cursor = lead_path;
         while (!cursor.empty())
         {
-            if (!fs::exists(cursor))
+            if (!file_exists(cursor))
                 throw std::runtime_error("sequence chain link not found: " + cursor);
             chain.push_back(cursor);
 
             pulseq::SequenceFile link(cursor);
             const std::string next = link.next_sequence();
-            cursor = next.empty() ? "" : (fs::path(cursor).parent_path() / next).string();
+            cursor = next.empty() ? "" : sibling_of(cursor, next);
             if (chain.size() > 64)
                 throw std::runtime_error("NextSequence chain does not terminate");
         }
@@ -1248,9 +1240,7 @@ namespace mrdserver
             options.apply_rotation = false; /* the LOGICAL frame */
             const pulseq::KSpace ks = pulseq::calculate_kspace(seq, options);
 
-            merge_subseq(
-                cache,
-                build_subseq_trajectory(seq, ks, static_cast<int>(s), num_averages));
+            merge_subseq(cache, build_subseq_trajectory(seq, ks, static_cast<int>(s)));
 
             if (tr_size > 0)
             {
@@ -1260,7 +1250,7 @@ namespace mrdserver
                     cache.seq_descs.push_back(std::move(sd));
             }
 
-            total_duration += seq.duration() * std::max(1, num_averages);
+            total_duration += seq.duration();
         }
         cache.has_seq_desc = !cache.seq_descs.empty();
 

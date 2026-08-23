@@ -145,34 +145,7 @@ static TEST_MAYBE_UNUSED int load_seq(
         opts,
         0,  /* cache_binary     */
         0,  /* verify_signature */
-        0,  /* parse_labels     */
-        1); /* num_averages     */
-}
-
-/**
- * Load a .seq file from TEST_DATA_DIR with a custom num_averages.
- *
- * Identical to load_seq but accepts num_averages as a parameter.
- */
-static TEST_MAYBE_UNUSED int load_seq_with_averages(
-    pulseg_collection **coll,
-    const char *filename,
-    const pulseg_opts *opts,
-    int num_averages)
-{
-    pulseg_diagnostic diag = PULSEG_DIAGNOSTIC_INIT;
-    char path[512];
-
-    (void)snprintf(path, sizeof(path), "%s%s", TEST_DATA_DIR, filename);
-    return pulseg_read(
-        coll,
-        &diag,
-        path,
-        opts,
-        0, /* cache_binary     */
-        0, /* verify_signature */
-        0, /* parse_labels     */
-        num_averages);
+        0); /* parse_labels     */
 }
 
 /**
@@ -194,32 +167,7 @@ static TEST_MAYBE_UNUSED int load_corpus_seq(
         opts,
         0,  /* cache_binary     */
         0,  /* verify_signature */
-        0,  /* parse_labels     */
-        1); /* num_averages     */
-}
-
-/**
- * Load a .seq file from TEST_CORPUS_DIR with a custom num_averages.
- */
-static TEST_MAYBE_UNUSED int load_corpus_seq_with_averages(
-    pulseg_collection **coll,
-    const char *filename,
-    const pulseg_opts *opts,
-    int num_averages)
-{
-    pulseg_diagnostic diag = PULSEG_DIAGNOSTIC_INIT;
-    char path[512];
-
-    (void)snprintf(path, sizeof(path), "%s%s", TEST_CORPUS_DIR, filename);
-    return pulseg_read(
-        coll,
-        &diag,
-        path,
-        opts,
-        0, /* cache_binary     */
-        0, /* verify_signature */
-        0, /* parse_labels     */
-        num_averages);
+        0); /* parse_labels     */
 }
 
 /**
@@ -241,15 +189,14 @@ static TEST_MAYBE_UNUSED int load_corpus_seq_with_signature_check(
         opts,
         0,  /* cache_binary     */
         1,  /* verify_signature */
-        0,  /* parse_labels     */
-        1); /* num_averages     */
+        0); /* parse_labels     */
 }
 
 /**
  * Load a .seq file from TEST_DATA_DIR with signature verification enabled.
  *
- * Identical to load_seq_with_averages(num_averages=1) but passes
- * verify_signature=1, so an MD5 mismatch returns
+ * Identical to load_seq but passes verify_signature=1, so an MD5
+ * mismatch returns
  * PULSEG_ERR_SIGNATURE_MISMATCH instead of loading successfully.
  */
 static TEST_MAYBE_UNUSED int load_seq_with_signature_check(
@@ -268,8 +215,7 @@ static TEST_MAYBE_UNUSED int load_seq_with_signature_check(
         opts,
         0,  /* cache_binary     */
         1,  /* verify_signature — enabled */
-        0,  /* parse_labels     */
-        1); /* num_averages     */
+        0); /* parse_labels     */
 }
 
 /* ------------------------------------------------------------------ */

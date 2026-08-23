@@ -176,11 +176,6 @@ void pulseg_sequence_descriptor_free(pulseg_sequence_descriptor *d)
         PULSEG_FREE(d->exec_stream_seg_id);
         d->exec_stream_seg_id = NULL;
     }
-    if (d->exec_stream_avg_id)
-    {
-        PULSEG_FREE(d->exec_stream_avg_id);
-        d->exec_stream_avg_id = NULL;
-    }
     if (d->exec_stream_tr_start)
     {
         PULSEG_FREE(d->exec_stream_tr_start);
@@ -1113,8 +1108,7 @@ int pulseg_convert_collection(
     const pulseq_file *files,
     int n,
     const pulseg_opts *opts,
-    int parse_labels,
-    int num_averages)
+    int parse_labels)
 {
     int i, j, result, rc;
     int adc_off = 0, seg_off = 0, blk_off = 0;
@@ -1187,7 +1181,7 @@ int pulseg_convert_collection(
             goto fail;
         }
 
-        result = pulseg__build_exec_stream(&desc, diag, num_averages);
+        result = pulseg__build_exec_stream(&desc, diag);
         if (PULSEG_FAILED(diag->code))
             goto fail;
 
@@ -1315,8 +1309,7 @@ int pulseg_read(
     const pulseg_opts *opts,
     int cache_binary,
     int verify_signature,
-    int parse_labels,
-    int num_averages)
+    int parse_labels)
 {
     pulseq_file_set raw_coll;
     pulseq_raster raster;
@@ -1385,8 +1378,7 @@ int pulseg_read(
         raw_coll.sequences,
         raw_coll.num_sequences,
         opts,
-        parse_labels,
-        num_averages);
+        parse_labels);
     if (PULSEG_FAILED(diag->code))
     {
         rc = diag->code;
@@ -1419,8 +1411,7 @@ int pulseg_read_from_buffers(
     const int *buffer_sizes,
     int num_buffers,
     const pulseg_opts *opts,
-    int parse_labels,
-    int num_averages)
+    int parse_labels)
 {
     pulseq_file_set raw_coll;
     pulseq_raster raster;
@@ -1502,8 +1493,7 @@ int pulseg_read_from_buffers(
         raw_coll.sequences,
         raw_coll.num_sequences,
         opts,
-        parse_labels,
-        num_averages);
+        parse_labels);
     if (PULSEG_FAILED(diag->code))
     {
         rc = diag->code;

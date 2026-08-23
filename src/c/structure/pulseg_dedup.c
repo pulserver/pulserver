@@ -1649,9 +1649,7 @@ int pulseg__get_unique_blocks(
         : opts->block_raster_us;
 
     /* per-subsequence flags */
-    desc->ignore_fov_shift = seq->reserved_definitions_library.ignore_fov_shift;
     desc->enable_pmc = seq->reserved_definitions_library.enable_pmc;
-    desc->ignore_averages = seq->reserved_definitions_library.ignore_averages;
     desc->num_gain_cal_readouts = seq->reserved_definitions_library.num_gain_cal_readouts;
     desc->vendor = opts->vendor;
     desc->label_column_map[0] = opts->label_column_map[0];

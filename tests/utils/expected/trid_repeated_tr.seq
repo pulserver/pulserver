@@ -1,5 +1,5 @@
 # Pulseq sequence file
-# One TRID group spanning the whole single-block stream; loaded with num_averages=3 so repeats of the SAME TRID across TR boundaries must split into separate occurrences.
+# One TRID group, three identical TRs back to back: repeats of the SAME TRID across a TR boundary must split into separate occurrences rather than merge into one run.
 # Written by tests/utils/synthetic_fixtures.py
 
 [VERSION]
@@ -15,6 +15,8 @@ RadiofrequencyRasterTime 1e-06
 
 [BLOCKS]
 1 10   0   0   0   0  0  1
+2 10   0   0   0   0  0  1
+3 10   0   0   0   0  0  1
 
 [EXTENSIONS]
 1 1 1 0

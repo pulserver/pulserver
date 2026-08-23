@@ -40,7 +40,6 @@ extern "C"
      * @param[in]  verify_signature 1 = verify MD5 signature for every .seq
      *                              file in the chain.
      * @param[in]  parse_labels     1 = build ADC label table via dry-run.
-     * @param[in]  num_averages     Number of scan averages (>= 1).
      * @return PULSEG_SUCCESS on success, negative error code on failure.
      */
     int pulseg_read(
@@ -50,8 +49,7 @@ extern "C"
         const pulseg_opts *opts,
         int cache_binary,
         int verify_signature,
-        int parse_labels,
-        int num_averages);
+        int parse_labels);
 
     /**
      * @brief Read one or more Pulseq subsequences from in-memory buffers.
@@ -67,7 +65,6 @@ extern "C"
      * @param[in]  buffer_sizes  Byte length of each buffer (excl. NUL).
      * @param[in]  num_buffers   Number of buffers (>= 1).
      * @param[in]  opts          Scanner limits / rasters.
-     * @param[in]  num_averages  Number of scan averages (>= 1).
      * @return PULSEG_SUCCESS on success, negative error code on failure.
      */
     int pulseg_read_from_buffers(
@@ -77,8 +74,7 @@ extern "C"
         const int *buffer_sizes,
         int num_buffers,
         const pulseg_opts *opts,
-        int parse_labels,
-        int num_averages);
+        int parse_labels);
 
     /* ================================================================== */
     /*  Diagnostic helpers                                                */
@@ -230,26 +226,14 @@ extern "C"
     /**
      * @brief Compute scan-time info from a fully loaded collection.
      *
-     * Accounts for every block duration in each pass and the
-     * number-of-averages multiplier (controlled by @c IgnoreAverages per
-     * subsequence).
+     * Accounts for every block duration and every segment boundary the
+     * scan table holds.
      *
-     * @c num_reps is the number of repetitions the consumer intends to
-     * play (>= 1).  For subsequences whose @c IgnoreAverages flag is
-     * set, the multiplier is clamped to 1.
-     *
-     * Both @c total_duration_us and @c total_segment_boundaries are
-     * populated.
-     *
-     * @param[in]  coll      Loaded collection.
-     * @param[in]  num_reps  Number of repetitions (>= 1).
-     * @param[out] info      Receives scan time summary.
+     * @param[in]  coll  Loaded collection.
+     * @param[out] info  Receives scan time summary.
      * @return PULSEG_SUCCESS on success, negative error code on failure.
      */
-    int pulseg_get_scan_time(
-        const pulseg_collection *coll,
-        pulseg_scan_time_info *info,
-        int num_reps);
+    int pulseg_get_scan_time(const pulseg_collection *coll, pulseg_scan_time_info *info);
 
     /* ================================================================== */
     /*  Segment table getters (copy to caller buffer)                     */

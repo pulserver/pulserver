@@ -9,12 +9,17 @@
 
 #include "sequence_file_reader.h"
 
+#include "pulseq/expand.hpp"
+#include "pulseq/read.hpp"
 #include "pulseq/sequence_file.hpp"
+#include "pulseq/write.hpp"
 
 #include <gtest/gtest.h>
 
+#include <array>
 #include <cmath>
 #include <filesystem>
+#include <fstream>
 #include <map>
 #include <set>
 #include <string>
@@ -40,6 +45,16 @@ constexpr uint64_t kFirstInAverage = 1ULL << 4;
 constexpr uint64_t kLastInAverage = 1ULL << 5;
 constexpr uint64_t kFirstInSlice = 1ULL << 6;
 constexpr uint64_t kLastInSlice = 1ULL << 7;
+
+/** A corpus sequence with its repetitions written into the block table, as
+ *  the design side hands one to the scanner.  Returns the path it wrote. */
+std::string expanded_copy(const std::string &name, int repeats, const std::string &out_path)
+{
+    pulseq::Sequence seq = pulseq::read_file(corpus(name));
+    pulseq::expand_repeats(seq, repeats);
+    std::ofstream(out_path) << pulseq::write_text(seq, false);
+    return out_path;
+}
 
 /** The positions carrying `flag`. */
 std::set<size_t> flagged(const SequenceCache &cache, uint64_t flag)
@@ -233,14 +248,16 @@ TEST(SequenceReaderBoundaries, ACounterTheScanNeverWritesIsNeverBounded)
 
 TEST(SequenceReaderBoundaries, AnAverageIsAFrameCounterLikeTheOthers)
 {
-    // AVG carries the NEX replay index and nothing else. A replay is a whole
-    // image, so its boundary is read within the other frame counters: an
-    // average closes once per slice, where that slice's share of the replay
-    // ends -- and a scan of one average closes none, because there was no
-    // replay to bound.
-    const std::string path = corpus("gre_2d_3sl.seq");
-    const SequenceCache once = mrdserver::read_sequence_files(path, 1);
-    const SequenceCache thrice = mrdserver::read_sequence_files(path, 3);
+    // AVG carries the repetition index the design side stamped and nothing
+    // else. A repetition is a whole image, so its boundary is read within the
+    // other frame counters: an average closes once per slice, where that
+    // slice's share of the repetition ends -- and a scan of one average closes
+    // none, because there was no repetition to bound.
+    const std::string thrice_path =
+        (fs::temp_directory_path() / "reader_avg_boundaries_x3.seq").string();
+    const SequenceCache once = mrdserver::read_sequence_files(corpus("gre_2d_3sl.seq"));
+    const SequenceCache thrice =
+        mrdserver::read_sequence_files(expanded_copy("gre_2d_3sl.seq", 3, thrice_path));
 
     EXPECT_TRUE(flagged(once, kLastInAverage).empty());
     EXPECT_EQ(flagged(thrice, kLastInSlice).size(), 3 * flagged(once, kLastInSlice).size());
@@ -262,6 +279,111 @@ TEST(SequenceReaderBoundaries, AnAverageIsAFrameCounterLikeTheOthers)
 
     EXPECT_EQ(flagged(thrice, kFirstInAverage), expect_first);
     EXPECT_EQ(flagged(thrice, kLastInAverage), expect_last);
+
+    fs::remove(thrice_path);
+}
+
+/*
+ * The cache holds k in the logical gradient frame with the rotation left as an
+ * id; an acquisition has to say where the sample physically sits. So the
+ * rotation is composed when the acquisition is written -- and before the
+ * trailing-zero axes are pruned, because a rotation mixes axes and an axis
+ * pruned first is one the mixing can no longer reach.
+ */
+TEST(SequenceReaderRotation, AnAcquisitionCarriesTheRotatedTrajectory)
+{
+    const SequenceCache cache = mrdserver::read_sequence_files(corpus("gre_radial_2d.seq"));
+    const auto trajectories = mrdserver::pre_compute_trajectories(cache);
+
+    // Readout index within its encoding space, the way the emitter builds it.
+    std::vector<int> readout_index_in_es(cache.table.size(), -1);
+    std::vector<int> seen(cache.encoding_spaces.size(), 0);
+    for (size_t t = 0; t < cache.table.size(); ++t)
+    {
+        const int es = cache.table[t].encoding_space_ref;
+        if (es >= 0 && es < static_cast<int>(seen.size()))
+            readout_index_in_es[t] = seen[es]++;
+    }
+
+    // A spoke whose rotation actually turns something. The id alone is not
+    // enough: a radial set's first spoke carries a rotation event whose matrix
+    // is (near) identity, and it would pass a rotate-then-compare test that
+    // never rotated anything.
+    int rotated = -1;
+    for (size_t t = 0; t < cache.table.size() && rotated < 0; ++t)
+    {
+        const int id = cache.table[t].rotation_id;
+        if (id <= 0 || id >= static_cast<int>(cache.rotations.size()))
+            continue;
+        const std::array<float, 9> &R = cache.rotations[static_cast<size_t>(id)];
+        for (int e = 0; e < 9; ++e)
+        {
+            const float identity = (e % 4 == 0) ? 1.0f : 0.0f;
+            if (std::fabs(R[static_cast<size_t>(e)] - identity) > 1e-3f)
+            {
+                rotated = static_cast<int>(t);
+                break;
+            }
+        }
+    }
+    ASSERT_GE(rotated, 0) << "the radial fixture carries no non-identity rotation";
+
+    const auto &entry = cache.table[static_cast<size_t>(rotated)];
+    const auto &pt = trajectories[static_cast<size_t>(entry.encoding_space_ref)];
+    ASSERT_GT(pt.ndim, 0);
+
+    // What the cache holds, unrotated, back on its real axes.
+    std::vector<float> packed(static_cast<size_t>(pt.ndim) * pt.num_samples);
+    ASSERT_TRUE(mrdserver::materialize_readout(
+        cache, pt, entry.encoding_space_ref, readout_index_in_es[static_cast<size_t>(rotated)],
+        packed.data()));
+
+    std::vector<float> logical(3 * static_cast<size_t>(pt.num_samples), 0.0f);
+    int col = 0;
+    for (int axis = 0; axis < 3; ++axis)
+    {
+        if (!pt.axis_active[axis])
+            continue;
+        for (int s = 0; s < pt.num_samples; ++s)
+            logical[static_cast<size_t>(axis) * pt.num_samples + s] =
+                packed[static_cast<size_t>(s) * pt.ndim + col];
+        ++col;
+    }
+
+    ISMRMRD::Acquisition acq;
+    acq.resize(static_cast<uint16_t>(pt.num_samples), 1, 0);
+    mrdserver::enrich_ismrmrd_acquisition(
+        acq, rotated, 1u, 0.0f, cache, trajectories, readout_index_in_es);
+
+    const int ndim = static_cast<int>(acq.trajectory_dimensions());
+    ASSERT_GT(ndim, 0);
+    const float *k = acq.getTrajPtr();
+    const std::array<float, 9> &R = cache.rotations[static_cast<size_t>(entry.rotation_id)];
+
+    double worst = 0.0, scale = 0.0;
+    for (int s = 0; s < pt.num_samples; ++s)
+        for (int a = 0; a < ndim; ++a)
+        {
+            double expected = 0.0;
+            for (int d = 0; d < 3; ++d)
+                expected += R[static_cast<size_t>(a) * 3 + d] *
+                    logical[static_cast<size_t>(d) * pt.num_samples + s];
+            worst = std::max(worst, std::fabs(static_cast<double>(k[s * ndim + a]) - expected));
+            scale = std::max(scale, std::fabs(expected));
+        }
+    ASSERT_GT(scale, 0.0) << "the rotated spoke came back identically zero";
+    EXPECT_LT(worst, 1e-3 * scale);
+
+    // And it is genuinely a rotation, not a copy: at least one sample moved.
+    double moved = 0.0;
+    for (int s = 0; s < pt.num_samples; ++s)
+        for (int a = 0; a < ndim; ++a)
+            moved = std::max(
+                moved,
+                std::fabs(
+                    static_cast<double>(k[s * ndim + a]) -
+                    static_cast<double>(logical[static_cast<size_t>(a) * pt.num_samples + s])));
+    EXPECT_GT(moved, 1e-6 * scale);
 }
 
 TEST(SequenceReaderChain, TheEpiChainBecomesOneCacheOfSubsequences)
@@ -281,20 +403,27 @@ TEST(SequenceReaderChain, TheEpiChainBecomesOneCacheOfSubsequences)
     EXPECT_TRUE(has_nav_space);
 }
 
-TEST(SequenceReaderAverages, TheAvgCounterCarriesTheReplayIndex)
+TEST(SequenceReaderAverages, TheTableIsWhatTheFileSays)
 {
-    const std::string path = corpus("gre_2d.seq");
-    const SequenceCache once = mrdserver::read_sequence_files(path, 1);
-    const SequenceCache thrice = mrdserver::read_sequence_files(path, 3);
+    // The reader tiles nothing: repetitions reach it already written into the
+    // block table, so a file expanded three times has three times the rows and
+    // the AVG counter the expansion stamped.
+    const std::string thrice_path =
+        (fs::temp_directory_path() / "reader_avg_table_x3.seq").string();
+    const SequenceCache once = mrdserver::read_sequence_files(corpus("gre_2d.seq"));
+    const SequenceCache thrice =
+        mrdserver::read_sequence_files(expanded_copy("gre_2d.seq", 3, thrice_path));
 
     ASSERT_EQ(thrice.table.size(), once.table.size() * 3);
     for (size_t i = 0; i < thrice.table.size(); ++i)
     {
         const auto &entry = thrice.table[i];
         EXPECT_EQ(entry.avg, static_cast<int>(i / once.table.size()));
-        // REP passes through from the file's labels, untouched by NEX.
+        // REP passes through from the file's labels, untouched.
         EXPECT_EQ(entry.rep, once.table[i % once.table.size()].rep);
     }
     EXPECT_EQ(thrice.table.back().flags & kLastFlag, kLastFlag);
     EXPECT_EQ(once.table.back().flags & kLastFlag, kLastFlag);
+
+    fs::remove(thrice_path);
 }

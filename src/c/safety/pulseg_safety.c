@@ -39,12 +39,10 @@ static void select_canonical_tr_window_idx(
     int canonical_tr_idx)
 {
     const struct pulseg_tr_descriptor *trd = &desc->tr_descriptor;
-    int num_avgs = (desc->num_averages > 1) ? desc->num_averages : 1;
 
-    /* canonical_tr_idx selects a TR; averages are accounted for here. */
     *start_block = canonical_tr_idx * trd->tr_size;
     *block_count = trd->tr_size;
-    *num_instances = trd->num_trs * num_avgs;
+    *num_instances = trd->num_trs;
     *tr_duration_us = trd->tr_duration_us;
 }
 
@@ -276,8 +274,6 @@ typedef struct
     int pwl_num_vertices;                    /**< >0 -> use piecewise-linear W(f)       */
     float pwl_times_us[SA_MAX_PWL_VERTICES]; /**< vertex times (us from event start) */
     float pwl_values[SA_MAX_PWL_VERTICES];   /**< vertex amplitudes (normalised)     */
-    int num_reps;                            /**< repetition count (1=once, N=imaging repeat) */
-    double rep_period_us;                    /**< repetition period in us (0 if num_reps==1) */
     /* Occurrence-train compression (sa_compress_axis_events).  A train stands
      * for train_len occurrences of the SAME definition at start_time_us +
      * j*train_period_us, j = 0..train_len-1.  train_len == 1 is a plain
@@ -950,16 +946,12 @@ static int sa_build_axis_events(
 /**
  * May occurrences @p a and @p b belong to the same compressed train?
  *
- * Same base waveform (hence the same W_d(f)) and same outer
- * repetition tagging.  Including the (num_reps, rep_period_us) pair in the
- * key is what stops a train from straddling the prep / imaging / cooldown
- * regions that the NEX tagging distinguishes: events in different regions
- * carry different tags and therefore never fuse.
+ * Same base waveform, hence the same W_d(f).
  */
 static int sa_train_compatible(const sa_event *a, const sa_event *b)
 {
-    return a->w_key == b->w_key && a->def_index == b->def_index && a->num_reps == b->num_reps &&
-        a->rep_period_us == b->rep_period_us && a->train_len == 1 && b->train_len == 1;
+    return a->w_key == b->w_key && a->def_index == b->def_index && a->train_len == 1 &&
+        b->train_len == 1;
 }
 
 /**
@@ -2673,17 +2665,12 @@ static void sa_eval_event_spectrum(
 }
 
 /**
- * Complex spectral line of one event at frequency f, including the Dirichlet
- * repetition kernel for events repeated N times with period T:
- *   line_k(f) = a_k(f) * D_{N_k}(f),
- *   D_N(f,T)  = sum_{n=0}^{N-1} e^{-j 2 pi f n T}
- *             = e^{-j(N-1)phi/2} sin(N phi/2)/sin(phi/2),  phi = -2 pi f T.
- * (N==1 -> D_1 = 1.)
+ * Complex spectral line of one event at frequency f.
  *
- * This is the OUTER (NEX / num_averages) repeat.  When the event is also a
- * compressed intra-TR train, sa_eval_event_spectrum() has already applied
- * that train's own sum; the two kernels simply multiply, since the train
- * lies wholly inside the imaging block that NEX repeats.
+ * A compressed intra-TR train has already had its own sum applied by
+ * sa_eval_event_spectrum(); the repetition of the canonical TR itself is
+ * the Dirichlet kernel of @c num_instances, applied by the caller against
+ * the TR period rather than per event.
  */
 static void sa_eval_event_line(
     const sa_event *ev,
@@ -2693,28 +2680,7 @@ static void sa_eval_event_line(
     sa_transform_cache *cache,
     const sa_w_query *query)
 {
-    float d_re, d_im;
-    int N = ev->num_reps;
-    if (N < 1)
-        N = 1;
-
-    sa_eval_event_spectrum(ev, &d_re, &d_im, f_hz, cache, query);
-
-    if (N > 1 && ev->rep_period_us > 0.0)
-    {
-        double phi = -2.0 * M_PI * (double)f_hz * ev->rep_period_us * 1.0e-6;
-        double dk_re, dk_im, new_re, new_im;
-
-        sa_geometric_sum(&dk_re, &dk_im, phi, N);
-
-        new_re = (double)d_re * dk_re - (double)d_im * dk_im;
-        new_im = (double)d_re * dk_im + (double)d_im * dk_re;
-        d_re = (float)new_re;
-        d_im = (float)new_im;
-    }
-
-    *out_re = d_re;
-    *out_im = d_im;
+    sa_eval_event_spectrum(ev, out_re, out_im, f_hz, cache, query);
 }
 
 /**
@@ -2849,7 +2815,6 @@ static double sa_event_l1(const sa_event *ev)
 {
     double amp_sum = 0.0;
     double base;
-    int reps = ev->num_reps > 1 ? ev->num_reps : 1;
     int j;
 
     base = sa_event_base_l1_us(ev);
@@ -2870,7 +2835,7 @@ static double sa_event_l1(const sa_event *ev)
         amp_sum = fabs((double)ev->amplitude);
     }
 
-    return amp_sum * base * 1.0e-6 * (double)reps;
+    return amp_sum * base * 1.0e-6;
 }
 
 /** Release a rank basis. */
@@ -2934,7 +2899,7 @@ static int sa_svd_set_is_uniform(const sa_axis_events *ae, int *out_n, int *out_
         n = sa_svd_waveform(ev, &tk, &vk);
         if (n != n0 || (ev->arb_num_samples > 0) != is_arb)
             return 0;
-        if (ev->train_len > 1 || ev->num_reps != ae->events[0].num_reps)
+        if (ev->train_len > 1)
             return 0;
         if (ev->start_time_us != ae->events[0].start_time_us)
             return 0;
@@ -3064,8 +3029,6 @@ static void sa_try_build_svd(sa_svd_basis *out, const sa_axis_events *ae)
         be->w_key = -1;
         be->start_time_us = ae->events[0].start_time_us;
         be->amplitude = 1.0f;
-        be->num_reps = ae->events[0].num_reps;
-        be->rep_period_us = ae->events[0].rep_period_us;
         be->train_len = 1;
         if (is_arb)
         {
@@ -3328,31 +3291,6 @@ static void sa_eval_varying_bound(
     }
 }
 
-/** Tag one event list with the outer (NEX) repetition it takes part in. */
-static void sa_tag_repetition(
-    sa_axis_events *ae,
-    int num_avgs,
-    double prep_dur_us,
-    double img_dur_us,
-    double img_end_us)
-{
-    int k;
-    for (k = 0; k < ae->num_events; ++k)
-    {
-        sa_event *ev = &ae->events[k];
-        if (num_avgs > 1 && ev->start_time_us >= prep_dur_us && ev->start_time_us < img_end_us)
-        {
-            ev->num_reps = num_avgs;
-            ev->rep_period_us = img_dur_us;
-            continue;
-        }
-        if (num_avgs > 1 && ev->start_time_us >= img_end_us)
-            ev->start_time_us += (double)(num_avgs - 1) * img_dur_us;
-        ev->num_reps = 1;
-        ev->rep_period_us = 0.0;
-    }
-}
-
 /* ================================================================== */
 /*  Structural acoustic analysis — top-level violation check          */
 /* ================================================================== */
@@ -3363,8 +3301,7 @@ static void sa_tag_repetition(
  *   1. Build the event model of the canonical (outer) TR — every gradient
  *      instance materialised at its time within the TR (inner periodicities
  *      such as echo trains / slices are NOT declared; they emerge from the
- *      coherent sum of the instances).  NEX (num_avgs) repetition is tagged
- *      as a Dirichlet kernel on the imaging events.
+ *      coherent sum of the instances).
  *   2. (display) A_eq at every TR harmonic k/T_TR up to freq_max, for plots.
  *   3. (verdict) For each forbidden band, enumerate the TR-harmonic lines that
  *      fall inside the guarded range [f_min-guard, f_max+guard], evaluate
@@ -3427,7 +3364,6 @@ static int sa_check_structural_violations(
     float peak_norm_scale,
     float peak_eps,
     float peak_prominence,
-    int num_avgs,
     float gamma_hz_per_t,
     int compute_dense_envelope,
     int compute_display_products,
@@ -3529,72 +3465,7 @@ static int sa_check_structural_violations(
     if (PULSEG_FAILED(result))
         return result;
 
-    /* --- Tag imaging events with repetition info ---
-     * For non-degenerate sequences (num_avgs > 1), imaging events repeat
-     * num_avgs times with period = imaging pass duration.  Cooldown events
-     * are shifted to their position in the expanded pass.  This lets the
-     * Dirichlet kernel handle repetition analytically (O(1) per event per
-     * frequency) instead of enumerating all N copies (O(N)). */
-    if (num_avgs > 1)
-    {
-        const struct pulseg_tr_descriptor *trd = &desc->tr_descriptor;
-        int prep_blk = 0;
-        int img_len = trd->num_trs * trd->tr_size;
-        /* double, to match the exact whole-us accumulation in
-         * sa_extract_raw_occurrences() -- these bounds are compared against
-         * event start times, and the cooldown shift below is added to them. */
-        double prep_dur_us = 0.0;
-        double img_dur_us = 0.0;
-        double img_end_us;
-        int bi;
-
-        for (bi = 0; bi < prep_blk; ++bi)
-        {
-            int idx = start_block + bi;
-            const struct pulseg_block_table_element *bte = &desc->block_table[idx];
-            const struct pulseg_base_block *bdef = &desc->base_blocks[bte->id];
-            prep_dur_us +=
-                (bte->duration_us >= 0) ? (double)bte->duration_us : (double)bdef->duration_us;
-        }
-        for (bi = 0; bi < img_len; ++bi)
-        {
-            int idx = start_block + prep_blk + bi;
-            const struct pulseg_block_table_element *bte = &desc->block_table[idx];
-            const struct pulseg_base_block *bdef = &desc->base_blocks[bte->id];
-            img_dur_us +=
-                (bte->duration_us >= 0) ? (double)bte->duration_us : (double)bdef->duration_us;
-        }
-        img_end_us = prep_dur_us + img_dur_us;
-
-        for (ax = 0; ax < 3; ++ax)
-        {
-            int v;
-            sa_tag_repetition(&se.axes[ax], num_avgs, prep_dur_us, img_dur_us, img_end_us);
-            for (v = 0; v < se.num_varying; ++v)
-                sa_tag_repetition(
-                    &se.varying[v].shapes[ax],
-                    num_avgs,
-                    prep_dur_us,
-                    img_dur_us,
-                    img_end_us);
-        }
-    }
-    else
-    {
-        for (ax = 0; ax < 3; ++ax)
-        {
-            int v;
-            sa_tag_repetition(&se.axes[ax], 1, 0.0, 0.0, 0.0);
-            for (v = 0; v < se.num_varying; ++v)
-                sa_tag_repetition(&se.varying[v].shapes[ax], 1, 0.0, 0.0, 0.0);
-        }
-    }
-
     /* --- Compress equally-spaced occurrence trains ---
-     * Runs AFTER the NEX tagging above, so the (num_reps, rep_period_us)
-     * pair is part of the fusion key and no train can straddle the prep /
-     * imaging / cooldown boundary the tagging just drew.
-     *
      * Independent of compute_display_products, so the plotting API can draw
      * exactly the lines the headless gate decides on (the default) while a
      * caller chasing a discrepancy can turn compression off and get the
@@ -4241,7 +4112,6 @@ static int calc_mech_resonances_from_uniform(
     const struct pulseg_sequence_descriptor *desc,
     int start_block,
     int block_count,
-    int num_avgs,
     float gamma_hz_per_t,
     int compute_dense_envelope,
     int compute_display_products,
@@ -4390,7 +4260,6 @@ static int calc_mech_resonances_from_uniform(
             peak_norm_scale,
             peak_eps,
             peak_prominence,
-            num_avgs,
             gamma_hz_per_t,
             compute_dense_envelope,
             compute_display_products,
@@ -4424,13 +4293,7 @@ static void select_canonical_tr_window(
 
     *start_block = 0;
     *block_count = trd->tr_size;
-    /* Aligns with select_canonical_tr_window_idx's degenerate branch, which
-     * multiplies by num_averages; display-only (min-2 clamp + FWHM), does
-     * not change the structural/spectral verdict. */
-    {
-        int num_avgs = (desc->num_averages > 1) ? desc->num_averages : 1;
-        *num_instances = trd->num_trs * num_avgs;
-    }
+    *num_instances = trd->num_trs;
     *tr_duration_us = trd->tr_duration_us;
 }
 
@@ -4456,7 +4319,7 @@ int pulseg_calc_mech_resonances(
     pulseg__uniform_grad_waveforms uw;
     pulseg_diagnostic local_diag;
     int rc, start_block, block_count, num_instances, bound_over_instances;
-    int sa_start_block, sa_block_count, num_avgs;
+    int sa_start_block, sa_block_count;
     int *block_order;
     float tr_duration_us;
     float peak_log10_threshold;
@@ -4516,7 +4379,6 @@ int pulseg_calc_mech_resonances(
 
     sa_start_block = start_block;
     sa_block_count = block_count;
-    num_avgs = 1;
 
     rc = pulseg__get_gradient_waveforms_range(
         desc,
@@ -4551,7 +4413,6 @@ int pulseg_calc_mech_resonances(
         desc,
         sa_start_block,
         sa_block_count,
-        num_avgs,
         /* A real gamma, never 0: sa_eps_for_band() scales the policy epsilon
          * of a zero-tolerance band by it, and a 0 would collapse that epsilon
          * to 0 and flag every candidate. Vendor ESP tables are exactly that
@@ -5612,7 +5473,7 @@ int pulseg__check_safety_profiled(
     pulseg_mech_resonances_spectra spectra;
     pulseg_pns_result pns_result;
     int start_block, block_count, num_instances;
-    int sa_start_block, sa_block_count, num_avgs;
+    int sa_start_block, sa_block_count;
     int *block_order;
     float tr_duration_us;
     float pns_combined, max_pns;
@@ -5737,7 +5598,6 @@ int pulseg__check_safety_profiled(
             &tr_duration_us);
         sa_start_block = start_block;
         sa_block_count = block_count;
-        num_avgs = 1;
         block_order = NULL;
 
         /* Evaluate one canonical TR per shot-ID combination. */
@@ -5810,7 +5670,6 @@ int pulseg__check_safety_profiled(
                     desc,
                     sa_start_block,
                     sa_block_count,
-                    num_avgs,
                     opts->gamma_hz_per_t,
                     0 /* compute_dense_envelope: never on the PSD path */,
                     0 /* compute_display_products: never on the PSD path */,

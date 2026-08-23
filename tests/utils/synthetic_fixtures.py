@@ -806,11 +806,13 @@ extension LABELSET 1
 """,
 )
 
-_OTHER_CASES["trid_single_nex"] = _trid(
-    "One TRID group spanning the whole single-block stream; loaded with num_averages=3 "
-    "so repeats of the SAME TRID across TR boundaries must split into separate occurrences.",
+_OTHER_CASES["trid_repeated_tr"] = _trid(
+    "One TRID group, three identical TRs back to back: repeats of the SAME TRID across "
+    "a TR boundary must split into separate occurrences rather than merge into one run.",
     """\
 1 10   0   0   0   0  0  1
+2 10   0   0   0   0  0  1
+3 10   0   0   0   0  0  1
 """,
     """\
 1 1 1 0

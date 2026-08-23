@@ -167,7 +167,7 @@ static void check_fixture_in(const char *dir, const char *filename)
     /* cache_binary = 1: writes the sectioned cache beside the .seq, at the
      * DEFAULT extension (.pseg) -- the committed fixtures use the GE .pge
      * extension, so the write and the clear below cannot touch them. */
-    rc = pulseg_read(&full, &diag, seq_path, &opts, 1, 0, 0, 1);
+    rc = pulseg_read(&full, &diag, seq_path, &opts, 1, 0, 0);
     mu_assert(PULSEG_SUCCEEDED(rc), "pulseg_read with cache_binary failed");
 
     rc = pulseg_load_geninstructions_cache(&cached, seq_path);

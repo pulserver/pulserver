@@ -33,16 +33,12 @@ namespace mrdserver
     /**
      * @brief Build a SequenceCache from a seqfile and its NextSequence chain.
      *
-     * @param lead_path     First file of the chain (text or binary Pulseq).
-     *                      Successors are resolved relative to its directory.
-     * @param num_averages  NEX replay count: the acquisition table is tiled
-     *                      this many times with the `rep` counter carrying
-     *                      the average index, matching how the scanner plays
-     *                      the scan. 1 leaves the table as the file states it.
+     * @param lead_path  First file of the chain (text or binary Pulseq).
+     *                   Successors are resolved relative to its directory.
      * @throws std::runtime_error on I/O or parse errors, or when a chain
      *         link names a file that does not exist.
      */
-    SequenceCache read_sequence_files(const std::string& lead_path, int num_averages = 1);
+    SequenceCache read_sequence_files(const std::string& lead_path);
 
 } // namespace mrdserver
 

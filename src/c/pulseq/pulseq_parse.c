@@ -1165,17 +1165,9 @@ void pulseq__read_definitions(pulseq_file *seq)
             seq->reserved_definitions_library
                 .next_sequence[sizeof(seq->reserved_definitions_library.next_sequence) - 1] = '\0';
         }
-        else if (strcmp(key, "IgnoreFovShift") == 0)
-        {
-            seq->reserved_definitions_library.ignore_fov_shift = atoi(value);
-        }
         else if (strcmp(key, "EnablePmc") == 0)
         {
             seq->reserved_definitions_library.enable_pmc = atoi(value);
-        }
-        else if (strcmp(key, "IgnoreAverages") == 0)
-        {
-            seq->reserved_definitions_library.ignore_averages = atoi(value);
         }
         else if (strcmp(key, "NumGainCalibrationReadouts") == 0)
         {

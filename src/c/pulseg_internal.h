@@ -313,13 +313,14 @@ typedef struct pulseg_block_initial_state
 
     /* Can this excitation be moved by a frequency offset alone?
      *
-     * Set when the position has RF, has at least one accompanying gradient,
-     * and every accompanying gradient is FLAT across the RF's active window
-     * -- so the whole pulse sees one gradient vector G, and translating what
-     * it excites by dr is exactly a carrier offset of G.dr.  That is the one
-     * case where prospective motion correction can move a *selective*
-     * excitation at run time, which the interpreter otherwise cannot do: the
-     * RF waveform is fixed at design time.
+     * Set when the position has RF and every accompanying gradient is FLAT
+     * across the RF's active window -- so the whole pulse sees one gradient
+     * vector G, and translating what it excites by dr is exactly a carrier
+     * offset of G.dr.  That is the one case where prospective motion
+     * correction can move a *selective* excitation at run time, which the
+     * interpreter otherwise cannot do: the RF waveform is fixed at design
+     * time.  A pulse with no gradient at all qualifies with G = 0: it excites
+     * everything, so the offset is zero and there is nothing to get wrong.
      *
      * AND-reduced over every instance of the position, and 0 when the block
      * carries a rotation extension -- the rotated gradient is still flat, but
@@ -393,11 +394,10 @@ typedef struct pulseg_segment_table_result
 /* ================================================================== */
 /*  Compact execution stream                                          */
 /* ================================================================== */
-/* The stream pulseg__build_exec_stream emits is one full walk of the
- * block table per average, in table order, so the block_table index
- * advances by exactly 1 within an average.  Storing (emit_start,
- * block_start, length, avg_id) per run reproduces exec_stream_block_idx /
- * _avg_id exactly, at one run per average instead of one int per block.
+/* The stream pulseg__build_exec_stream emits walks the block table in
+ * table order, so the block_table index advances by exactly 1.  Storing
+ * (emit_start, block_start, length) per run reproduces
+ * exec_stream_block_idx at a handful of ints instead of one per block.
  *
  * exec_stream_seg_id is piecewise-constant over segment instances and is
  * run-length encoded separately below. */
@@ -406,7 +406,6 @@ typedef struct pulseg_exec_run
     int emit_start;  /* first execution-stream position in this run     */
     int block_start; /* block_table index at emit_start                 */
     int length;      /* number of stream positions covered              */
-    int avg_id;      /* average index, constant over the run            */
 } pulseg_exec_run;
 
 /* ================================================================== */
@@ -418,11 +417,8 @@ typedef struct pulseg_sequence_descriptor
     float grad_raster_us;
     float adc_raster_us;
     float block_raster_us;
-    int ignore_fov_shift;
     int enable_pmc;
-    int ignore_averages;
     int num_gain_cal_readouts; /**< calibration readouts for APS2 receive gain (pislquant) */
-    int num_averages;          /**< number of averages (1 if ignore_averages)       */
     int vendor;                /**< PULSEG_VENDOR_* runtime constant */
     int label_column_map[3];   /**< copy of pulseg_opts.label_column_map at dedup time */
 
@@ -504,7 +500,6 @@ typedef struct pulseg_sequence_descriptor
     int exec_stream_len;
     int *exec_stream_block_idx; /* [exec_stream_len] index into block_table */
     int *exec_stream_seg_id;    /* [exec_stream_len] segment id             */
-    int *exec_stream_avg_id;    /* [exec_stream_len] average (rep) index 0..num_averages-1 */
     int *exec_stream_tr_start;  /* [exec_stream_len] 1 at the first block of each TR */
 
     /* Compact form of the arrays above. Built by
@@ -567,12 +562,12 @@ typedef struct pulseg_sequence_descriptor
 /* clang-format off */
 #define PULSEG_SEQUENCE_DESCRIPTOR_INIT \
     { \
-    0.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0, 1, 0, {0, 1, 2}, {0, 0, 0}, {0, 0, \
+    0.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, {0, 1, 2}, {0, 0, 0}, {0, 0, \
     0}, {0, 0, 0}, {0, 0, 0}, 0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, /* rf_amplitude_variable */ \
     0, NULL, 0, NULL, /* grad shape stats */ 0, NULL, NULL, NULL, \
     0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, NULL, \
     PULSEG_TR_DESCRIPTOR_INIT, 0, NULL, PULSEG_SEGMENT_TABLE_RESULT_INIT, 0, NULL, NULL, \
-    NULL, NULL, /* exec_runs */ 0, NULL, /* seg runs */ 0, 0, NULL, NULL, \
+    NULL, /* exec_runs */ 0, NULL, /* seg runs */ 0, 0, NULL, NULL, \
     /* hints */ 0, 0, /* tr_start anchor */ -1, NULL, 0, 0, NULL, \
     {{0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, \
     {0, 0}, {0, 0}, {0, 0}, {0, 0}}, NULL, \
@@ -837,10 +832,7 @@ int pulseg__get_unique_blocks(
 
 /* --- pulseg_structure.c --- */
 int pulseg__get_tr_in_sequence(pulseg_sequence_descriptor *desc, pulseg_diagnostic *diag);
-int pulseg__build_exec_stream(
-    pulseg_sequence_descriptor *desc,
-    pulseg_diagnostic *diag,
-    int num_averages);
+int pulseg__build_exec_stream(pulseg_sequence_descriptor *desc, pulseg_diagnostic *diag);
 int pulseg__get_exec_stream_segments(
     pulseg_sequence_descriptor *desc,
     pulseg_diagnostic *diag,
@@ -850,7 +842,6 @@ void pulseg__compute_exec_stream_tr_start(pulseg_sequence_descriptor *desc);
 /* Compact execution stream: O(log num_exec_runs) equivalents of the
  * exec_stream_* arrays (see pulseg_exec_run). */
 int pulseg__exec_block_idx(const pulseg_sequence_descriptor *desc, int n);
-int pulseg__exec_avg_id(const pulseg_sequence_descriptor *desc, int n);
 int pulseg__exec_seg_id(const pulseg_sequence_descriptor *desc, int n);
 int pulseg__exec_tr_start(const pulseg_sequence_descriptor *desc, int n);
 int pulseg__build_seg_runs(pulseg_sequence_descriptor *desc);

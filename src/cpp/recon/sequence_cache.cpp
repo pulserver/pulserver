@@ -31,20 +31,25 @@ namespace mrdserver
 
     namespace
     {
-        /* The three logical-frame k rows of one table entry, unpacked from the
+        /* The three logical-frame k rows of one table entry, composed from the
          * kshot library.
          *
-         * kshot already holds the full-amplitude k-space waveform in 1/m
-         * (compute_block_kspace integrates g_amp*shape*dt).  Do NOT multiply
-         * by entry.g*_amplitude again -- that would scale by the gradient
-         * amplitude a second time and yield ~10^4x too-large k-values for
-         * noncartesian fixtures.  The amplitude field is retained in the
-         * table only as a trivial-shot indicator.
+         * A kshot is the block's NORMALISED base -- the shape, with the
+         * amplitude divided out -- exactly as the seqfile stores it. So a
+         * readout is its base plus two triples of scalars:
+         *
+         *     k_axis(t) = k_origin_axis + amplitude_axis * base_axis(t)
+         *
+         * which is what lets interleaves differing only in amplitude (cones,
+         * floret) share one row, the way interleaves differing only in
+         * rotation already did.
          *
          * Per-ADC rotation (entry.rotation_id) is intentionally NOT applied:
-         * the cache stores k in the LOGICAL gradient frame and rotation is
-         * composed downstream by livesdk, which is what keeps this agreeing
-         * with TruthBuilder.exportTrajectory.
+         * the cache stores k in the LOGICAL gradient frame, which is the frame
+         * the design side works in and the one an FOV shift is invariant under.
+         * enrich_ismrmrd_acquisition composes the rotation when it writes an
+         * acquisition, which is the first point anything needs where a sample
+         * physically sits.
          */
         void compose_entry_rows(
             const SequenceCache& cache,
@@ -54,20 +59,26 @@ namespace mrdserver
             float* py,
             float* pz)
         {
-            auto compose = [&](int shot_id, float* dst)
+            const int shots[3] = {entry.kx_shot_id, entry.ky_shot_id, entry.kz_shot_id};
+            const float amps[3] = {
+                entry.gx_amplitude,
+                entry.gy_amplitude,
+                entry.gz_amplitude};
+            float* dsts[3] = {px, py, pz};
+
+            for (int axis = 0; axis < 3; ++axis)
             {
+                float* dst = dsts[axis];
+                const float origin = entry.k_origin[axis];
                 for (int i = 0; i < nsamples; ++i)
-                    dst[i] = 0.0f;
-                if (shot_id >= 0 && shot_id < static_cast<int>(cache.kshots.size()))
-                {
-                    const auto& sk = cache.kshots[shot_id].k;
-                    for (int i = 0; i < std::min(nsamples, static_cast<int>(sk.size())); ++i)
-                        dst[i] = sk[i];
-                }
-            };
-            compose(entry.kx_shot_id, px);
-            compose(entry.ky_shot_id, py);
-            compose(entry.kz_shot_id, pz);
+                    dst[i] = origin;
+                const int shot_id = shots[axis];
+                if (shot_id < 0 || shot_id >= static_cast<int>(cache.kshots.size()))
+                    continue;
+                const auto& sk = cache.kshots[shot_id].k;
+                for (int i = 0; i < std::min(nsamples, static_cast<int>(sk.size())); ++i)
+                    dst[i] += amps[axis] * sk[i];
+            }
         }
 
         /* Interleave the active axes of one readout into `dst`. */
@@ -659,23 +670,71 @@ namespace mrdserver
             : -1;
         if (pt.ndim > 0 && ro_idx >= 0 && ro_idx < pt.num_readouts)
         {
-            const float* src = &pt.data[static_cast<size_t>(ro_idx) * pt.ndim * pt.num_samples];
+            std::vector<float> packed(
+                static_cast<size_t>(pt.ndim) * static_cast<size_t>(pt.num_samples));
+            if (!materialize_readout(cache, pt, es, ro_idx, packed.data()))
+                return;
 
-            // pt.ndim reflects whether an axis is active for ANY readout in the
-            // encoding space; a readout whose gradient rotation doesn't touch
-            // one of them (e.g. a z-axis rotation that leaves gz untouched
-            // while another readout in the same space does use it) can be
-            // identically zero on that axis here even though pt.ndim > that
-            // axis's index. Trim trailing all-zero axes for THIS acquisition so
-            // the ISMRMRD trajectory (and anything reading the file back)
-            // reflects its real dimensionality instead of carrying a spurious
-            // all-zero axis.
-            int effective_ndim = pt.ndim;
+            /* Back to three axes.
+             *
+             * The packed columns are the axes ACTIVE ACROSS THE ENCODING SPACE
+             * (pt.axis_active), so column d is not axis d: a space that drives
+             * only y and z packs two columns holding y and z. Anything that
+             * multiplies the trajectory by something per-axis -- the rotation
+             * below, the shift in demodulate_fov_shift -- has to be told which
+             * axis it is looking at, and the only place that is known is here. */
+            std::vector<float> k(3 * static_cast<size_t>(pt.num_samples), 0.0f);
+            {
+                int col = 0;
+                for (int axis = 0; axis < 3; ++axis)
+                {
+                    if (!pt.axis_active[axis])
+                        continue;
+                    for (int sample = 0; sample < pt.num_samples; ++sample)
+                        k[static_cast<size_t>(axis) * pt.num_samples + sample] =
+                            packed[static_cast<size_t>(sample) * pt.ndim + col];
+                    ++col;
+                }
+            }
+
+            /* The rotation the block plays.
+             *
+             * The cache holds k in the LOGICAL gradient frame with the rotation
+             * left as an id, because that is the frame the design side works in
+             * and the one the shift is invariant under. An acquisition is not
+             * that: what a reconstruction needs on `traj` is where the sample
+             * actually sits, so the rotation is composed here, once, before
+             * anything reads the result. */
+            const int rot_id = entry.rotation_id;
+            if (rot_id > 0 && rot_id < static_cast<int>(cache.rotations.size()))
+            {
+                const std::array<float, 9>& R = cache.rotations[rot_id];
+                std::vector<float> rotated(k.size(), 0.0f);
+                for (int sample = 0; sample < pt.num_samples; ++sample)
+                {
+                    for (int out_axis = 0; out_axis < 3; ++out_axis)
+                    {
+                        float acc = 0.0f;
+                        for (int in_axis = 0; in_axis < 3; ++in_axis)
+                            acc += R[static_cast<size_t>(out_axis) * 3 + in_axis] *
+                                k[static_cast<size_t>(in_axis) * pt.num_samples + sample];
+                        rotated[static_cast<size_t>(out_axis) * pt.num_samples + sample] = acc;
+                    }
+                }
+                k.swap(rotated);
+            }
+
+            /* Trailing all-zero axes go, so the acquisition states this
+             * readout's real dimensionality rather than the encoding space's.
+             * After the rotation, never before it: a rotation mixes axes, and
+             * an axis pruned first is one the mixing can no longer reach. */
+            int effective_ndim = 3;
             while (effective_ndim > 0)
             {
                 bool axis_all_zero = true;
-                for (int s = 0; s < pt.num_samples && axis_all_zero; ++s)
-                    if (src[s * pt.ndim + (effective_ndim - 1)] != 0.0f)
+                for (int sample = 0; sample < pt.num_samples && axis_all_zero; ++sample)
+                    if (k[static_cast<size_t>(effective_ndim - 1) * pt.num_samples + sample] !=
+                        0.0f)
                         axis_all_zero = false;
                 if (!axis_all_zero)
                     break;
@@ -686,19 +745,10 @@ namespace mrdserver
             {
                 acq.resize(acq.number_of_samples(), acq.active_channels(), effective_ndim);
                 float* dst = acq.getTrajPtr();
-                if (effective_ndim == pt.ndim)
-                {
-                    std::memcpy(
-                        dst,
-                        src,
-                        static_cast<size_t>(pt.ndim) * pt.num_samples * sizeof(float));
-                }
-                else
-                {
-                    for (int s = 0; s < pt.num_samples; ++s)
-                        for (int d = 0; d < effective_ndim; ++d)
-                            dst[s * effective_ndim + d] = src[s * pt.ndim + d];
-                }
+                for (int sample = 0; sample < pt.num_samples; ++sample)
+                    for (int d = 0; d < effective_ndim; ++d)
+                        dst[static_cast<size_t>(sample) * effective_ndim + d] =
+                            k[static_cast<size_t>(d) * pt.num_samples + sample];
             }
         }
     }

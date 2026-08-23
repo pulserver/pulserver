@@ -109,8 +109,7 @@ void pulseg_opts_get_design_raster(pulseq_raster *raster, const pulseg_opts *opt
 int pulseg_peek_scan_time(
     pulseg_scan_time_info *info,
     const char *file_path,
-    const pulseg_opts *opts,
-    int num_reps)
+    const pulseg_opts *opts)
 {
     pulseq_raster raster;
     char *current_path;
@@ -120,8 +119,6 @@ int pulseg_peek_scan_time(
 
     if (!info || !file_path || !opts)
         return PULSEG_ERR_NULL_POINTER;
-    if (num_reps < 1)
-        return PULSEG_ERR_INVALID_ARGUMENT;
 
     info->total_duration_us = 0.0f;
     info->total_segment_boundaries = 0;
@@ -155,12 +152,7 @@ int pulseg_peek_scan_time(
             return result;
         }
 
-        {
-            /* IgnoreAverages clamps this subsequence's repeat multiplier to 1. */
-            int navg = temp.reserved_definitions_library.ignore_averages ? 1 : num_reps;
-            info->total_duration_us +=
-                temp.reserved_definitions_library.total_duration * 1e6f * (float)navg;
-        }
+        info->total_duration_us += temp.reserved_definitions_library.total_duration * 1e6f;
         count++;
 
         PULSEG_FREE(current_path);

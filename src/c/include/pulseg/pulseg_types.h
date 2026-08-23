@@ -818,15 +818,12 @@ typedef struct pulseg_cursor_info
  * @brief Scan-time summary.
  *
  * When returned by pulseg_peek_scan_time(), only
- * @c total_duration_us is populated (approximated from the
- * [DEFINITIONS] section, multiplied by @c num_reps with
- * per-subsequence @c IgnoreAverages clamping) and
- * @c total_segment_boundaries is left at 0.
+ * @c total_duration_us is populated (summed from the [DEFINITIONS]
+ * sections of the chain) and @c total_segment_boundaries is left at 0.
  *
  * When computed from a fully-loaded collection via
- * pulseg_get_scan_time(), both fields are accurate and
- * account for prep/cooldown block durations, degenerate
- * TR folding, and the consumer-supplied @c num_reps.
+ * pulseg_get_scan_time(), both fields are accurate: every block duration
+ * and every segment boundary in the scan table.
  */
 typedef struct pulseg_scan_time_info
 {
@@ -880,19 +877,17 @@ typedef struct pulseg_subseq_info
     int segment_offset;        /**< global segment index offset         */
     int num_adc_occurrences;   /**< ADC entries in label table          */
     int num_label_columns;     /**< label columns (vendor-dependent)    */
-    int num_averages;          /**< number of averages (>=1)            */
     int num_canonical_trs;     /**< unique shot-ID combinations (>=1)   */
     int num_gain_cal_readouts; /**< calibration readouts for APS2 gain cal (pislquant) */
     /** How many TR instances pulseg_get_tr_waveforms() can name for this
-     *  subsequence: every TR the scanner plays, averages included.
-     *  Always >= 1. */
+     *  subsequence: every TR the scanner plays.  Always >= 1. */
     int num_tr_instances;
 } pulseg_subseq_info;
 
 /* clang-format off */
 #define PULSEG_SUBSEQ_INFO_INIT \
     { \
-    0.0f, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 1 \
+    0.0f, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1 \
     }
 /* clang-format on */
 
@@ -1013,12 +1008,12 @@ typedef struct pulseg_block_info
                             *   duration is runtime-adjustable via setperiod, so
                             *   two segments differing only in such a block's
                             *   duration share one segment definition. */
-    int rf_grad_constant;   /**< 1 if RF is present, at least one gradient accompanies
-                            *   it, and every accompanying gradient is flat across the
-                            *   RF's active window -- the excitation can then be moved
-                            *   at run time by a carrier offset alone.  0 when the
-                            *   block carries a rotation extension.  See
-                            *   pulseg_block_instance::rf_grad_constant. */
+    int rf_grad_constant;   /**< 1 if RF is present and every accompanying gradient is
+                            *   flat across the RF's active window -- the excitation
+                            *   can then be moved at run time by a carrier offset
+                            *   alone.  A nonselective pulse qualifies with a zero
+                            *   level.  0 when the block carries a rotation extension,
+                            *   and 0 for a block with no RF. */
     float rf_grad_level[3]; /**< normalised gradient level over that window, per axis;
                              *   multiply by the instance amplitude for the physical
                              *   gradient.  Meaningless when rf_grad_constant is 0. */

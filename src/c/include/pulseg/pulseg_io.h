@@ -92,23 +92,17 @@ extern "C"
      * approximation: dead time between segments is not accounted for
      * and @c total_segment_boundaries is left at 0.
      *
-     * @c num_reps controls the number of repetitions the consumer
-     * intends to play (>= 1).  For subsequences whose
-     * @c IgnoreAverages definition is set, the multiplier is clamped to 1.
-     *
      * Both @c total_duration_us and @c total_segment_boundaries are populated.
      *
      * @param[out] info       Receives scan time summary.
      * @param[in]  file_path  Path to the first .seq file (may be chained).
      * @param[in]  opts       Library options.
-     * @param[in]  num_reps   Number of repetitions (>= 1).
      * @return PULSEG_SUCCESS on success, negative error code on failure.
      */
     int pulseg_peek_scan_time(
         pulseg_scan_time_info *info,
         const char *file_path,
-        const pulseg_opts *opts,
-        int num_reps);
+        const pulseg_opts *opts);
 
 #ifdef __cplusplus
 }

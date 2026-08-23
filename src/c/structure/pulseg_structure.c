@@ -258,8 +258,7 @@ static int first_repeating_segment_structural(
 /* ================================================================== */
 
 /*
- * Build the scan table: the block table played once per average, in table
- * order, as a flat array.
+ * Build the scan table: the block table in table order, as a flat array.
  *
  * Each entry stores the block_table index.
  * seg_id column is initialised to -1 (filled later by segment detection).
@@ -267,13 +266,10 @@ static int first_repeating_segment_structural(
 
 static int build_exec_runs(pulseg_sequence_descriptor *desc);
 
-int pulseg__build_exec_stream(
-    pulseg_sequence_descriptor *desc,
-    pulseg_diagnostic *diag,
-    int num_averages)
+int pulseg__build_exec_stream(pulseg_sequence_descriptor *desc, pulseg_diagnostic *diag)
 {
     pulseg_diagnostic local_diag;
-    int avg, blk, count, idx;
+    int blk, count;
 
     if (!diag)
     {
@@ -288,19 +284,12 @@ int pulseg__build_exec_stream(
         diag->code = PULSEG_ERR_NULL_POINTER;
         return diag->code;
     }
-    if (num_averages < 1)
-        num_averages = 1;
-    if (desc->ignore_averages)
-        num_averages = 1;
-    desc->num_averages = num_averages;
-
-    count = num_averages * desc->num_blocks;
+    count = desc->num_blocks;
 
     desc->exec_stream_len = count;
     desc->exec_stream_block_idx = (int *)PULSEG_ALLOC((size_t)count * sizeof(int));
     desc->exec_stream_seg_id = (int *)PULSEG_ALLOC((size_t)count * sizeof(int));
-    desc->exec_stream_avg_id = (int *)PULSEG_ALLOC((size_t)count * sizeof(int));
-    if (!desc->exec_stream_block_idx || !desc->exec_stream_seg_id || !desc->exec_stream_avg_id)
+    if (!desc->exec_stream_block_idx || !desc->exec_stream_seg_id)
     {
         if (desc->exec_stream_block_idx)
         {
@@ -312,26 +301,15 @@ int pulseg__build_exec_stream(
             PULSEG_FREE(desc->exec_stream_seg_id);
             desc->exec_stream_seg_id = NULL;
         }
-        if (desc->exec_stream_avg_id)
-        {
-            PULSEG_FREE(desc->exec_stream_avg_id);
-            desc->exec_stream_avg_id = NULL;
-        }
         desc->exec_stream_len = 0;
         diag->code = PULSEG_ERR_ALLOC_FAILED;
         return diag->code;
     }
 
-    idx = 0;
-    for (avg = 0; avg < num_averages; ++avg)
+    for (blk = 0; blk < count; ++blk)
     {
-        for (blk = 0; blk < desc->num_blocks; ++blk)
-        {
-            desc->exec_stream_block_idx[idx] = blk;
-            desc->exec_stream_seg_id[idx] = -1;
-            desc->exec_stream_avg_id[idx] = avg;
-            ++idx;
-        }
+        desc->exec_stream_block_idx[blk] = blk;
+        desc->exec_stream_seg_id[blk] = -1;
     }
 
     /* Compact mirror of the arrays just filled. */
@@ -402,12 +380,6 @@ int pulseg__exec_block_idx(const pulseg_sequence_descriptor *desc, int n)
 {
     const pulseg_exec_run *r = find_exec_run(desc, n);
     return r ? r->block_start + (n - r->emit_start) : -1;
-}
-
-int pulseg__exec_avg_id(const pulseg_sequence_descriptor *desc, int n)
-{
-    const pulseg_exec_run *r = find_exec_run(desc, n);
-    return r ? r->avg_id : 0;
 }
 
 int pulseg__exec_seg_id(const pulseg_sequence_descriptor *desc, int n)
@@ -481,7 +453,7 @@ static int build_exec_runs(pulseg_sequence_descriptor *desc)
         return PULSEG_SUCCESS;
 
     /* A new run starts whenever the block index is not contiguous with the
-     * previous position, or avg_id changes. */
+     * previous position. */
     cap = 8;
     runs = (pulseg_exec_run *)PULSEG_ALLOC((size_t)cap * sizeof(pulseg_exec_run));
     if (!runs)
@@ -491,13 +463,12 @@ static int build_exec_runs(pulseg_sequence_descriptor *desc)
     for (n = 0; n < desc->exec_stream_len; ++n)
     {
         int b = desc->exec_stream_block_idx[n];
-        int a = desc->exec_stream_avg_id[n];
         int extend = 0;
 
         if (count > 0)
         {
             pulseg_exec_run *last = &runs[count - 1];
-            extend = (last->avg_id == a && last->block_start + last->length == b);
+            extend = (last->block_start + last->length == b);
         }
         if (extend)
         {
@@ -522,7 +493,6 @@ static int build_exec_runs(pulseg_sequence_descriptor *desc)
         runs[count].emit_start = n;
         runs[count].block_start = b;
         runs[count].length = 1;
-        runs[count].avg_id = a;
         ++count;
     }
 
@@ -562,7 +532,7 @@ int pulseg__build_seg_runs(pulseg_sequence_descriptor *desc)
 
     /* Pick the smallest candidate period that actually verifies. The
      * candidates are the two structural repeats the converter already
-     * knows about (one imaging TR, one average); each is CHECKED, and if
+     * knows about (one TR); each is CHECKED, and if
      * neither holds the encoding stays flat. */
     cand[0] = desc->tr_descriptor.tr_size;
     cand[1] = desc->num_blocks;
@@ -642,11 +612,6 @@ void pulseg__free_exec_stream_scratch(pulseg_sequence_descriptor *desc)
         PULSEG_FREE(desc->exec_stream_seg_id);
         desc->exec_stream_seg_id = NULL;
     }
-    if (desc->exec_stream_avg_id)
-    {
-        PULSEG_FREE(desc->exec_stream_avg_id);
-        desc->exec_stream_avg_id = NULL;
-    }
     if (desc->exec_stream_tr_start)
     {
         PULSEG_FREE(desc->exec_stream_tr_start);
@@ -667,8 +632,6 @@ long pulseg__verify_exec_runs(const pulseg_sequence_descriptor *desc)
     {
         if (desc->exec_stream_block_idx &&
             pulseg__exec_block_idx(desc, n) != desc->exec_stream_block_idx[n])
-            ++bad;
-        if (desc->exec_stream_avg_id && pulseg__exec_avg_id(desc, n) != desc->exec_stream_avg_id[n])
             ++bad;
         if (desc->exec_stream_seg_id && pulseg__exec_seg_id(desc, n) != desc->exec_stream_seg_id[n])
             ++bad;
@@ -725,7 +688,7 @@ int pulseg__get_tr_in_sequence(pulseg_sequence_descriptor *desc, pulseg_diagnost
     pulseg_tr_descriptor *tr = &desc->tr_descriptor;
     pulseg_diagnostic local_diag;
     int i, n;
-    int imaging_start, imaging_end, imaging_len;
+    int nblocks;
     int *seq_pat = NULL;
     int *base_pat = NULL;
     int *block_dur = NULL;
@@ -756,16 +719,8 @@ int pulseg__get_tr_in_sequence(pulseg_sequence_descriptor *desc, pulseg_diagnost
     tr->num_trs = 0;
     tr->tr_duration_us = 0.0f;
 
-    imaging_start = 0;
-    imaging_end = desc->num_blocks;
-    imaging_len = imaging_end - imaging_start;
-    pulseg__diag_printf(diag, "imaging region length=%d", imaging_len);
-
-    if (imaging_len <= 0)
-    {
-        diag->code = PULSEG_ERR_TR_NO_IMAGING_REGION;
-        return diag->code;
-    }
+    nblocks = desc->num_blocks;
+    pulseg__diag_printf(diag, "block count=%d", nblocks);
 
     /* unique-block count for diagnostics */
     {
@@ -811,31 +766,29 @@ int pulseg__get_tr_in_sequence(pulseg_sequence_descriptor *desc, pulseg_diagnost
      * Per-instance RF amplitude or shim patterns are validated by
      * dedicated safety consistency checks, not by TR-period finding. */
 
-    l = first_repeating_segment(&seq_pat[imaging_start], imaging_len);
-    if (l == imaging_len)
+    l = first_repeating_segment(seq_pat, nblocks);
+    if (l == nblocks)
     {
-        int l_struct = first_repeating_segment_structural(desc, imaging_start, imaging_len);
+        int l_struct = first_repeating_segment_structural(desc, 0, nblocks);
         if (l_struct > 0 && l_struct < l)
             l = l_struct;
     }
     pulseg__diag_printf(diag, " candidate TR=%d", l);
 
-    /* l == imaging_len means neither search found a period: the region is its
+    /* l == nblocks means neither search found a period: the region is its
      * own shortest repeat.  That is not a discovery, so it must not short
      * circuit past the fallback chain below -- the single-TR branch there is
      * where such a region is length-checked before being accepted. */
-    found = (l > 0 && l < imaging_len) ? 1 : 0;
+    found = (l > 0 && l < nblocks) ? 1 : 0;
 
     if (found)
     {
-        for (i = 0; i < imaging_len; ++i)
+        for (i = 0; i < nblocks; ++i)
         {
-            n = imaging_start + i;
-            if (seq_pat[n] != seq_pat[imaging_start + (i % l)])
+            if (seq_pat[i] != seq_pat[i % l])
             {
                 mismatch_pos = i;
-                pulseg__diag_printf(diag, " mismatch at offset=%d", i);
-                pulseg__diag_printf(diag, " block=%d", n);
+                pulseg__diag_printf(diag, " mismatch at block=%d", i);
                 found = 0;
                 break;
             }
@@ -853,14 +806,14 @@ int pulseg__get_tr_in_sequence(pulseg_sequence_descriptor *desc, pulseg_diagnost
          * reject them instead of falling through to single-TR.
          * --------------------------------------------------------- */
         int base_l, base_ok;
-        base_l = first_repeating_segment(&base_pat[imaging_start], imaging_len);
+        base_l = first_repeating_segment(base_pat, nblocks);
         base_ok = 0;
-        if (base_l > 0 && base_l < imaging_len)
+        if (base_l > 0 && base_l < nblocks)
         {
             base_ok = 1;
-            for (i = 0; i < imaging_len && base_ok; ++i)
+            for (i = 0; i < nblocks && base_ok; ++i)
             {
-                if (base_pat[imaging_start + i] != base_pat[imaging_start + (i % base_l)])
+                if (base_pat[i] != base_pat[i % base_l])
                     base_ok = 0;
             }
         }
@@ -869,11 +822,10 @@ int pulseg__get_tr_in_sequence(pulseg_sequence_descriptor *desc, pulseg_diagnost
         {
             int structural_l;
 
-            /* Fallback for degenerate/no-prep-no-cool flows where
-             * block IDs differ across interleaves but the ordered
-             * block structure is periodic. */
-            structural_l = first_repeating_segment_structural(desc, imaging_start, imaging_len);
-            if (structural_l > 0 && structural_l < imaging_len)
+            /* Fallback for flows where block IDs differ across
+             * interleaves but the ordered block structure is periodic. */
+            structural_l = first_repeating_segment_structural(desc, 0, nblocks);
+            if (structural_l > 0 && structural_l < nblocks)
             {
                 l = structural_l;
                 found = 1;
@@ -897,7 +849,7 @@ int pulseg__get_tr_in_sequence(pulseg_sequence_descriptor *desc, pulseg_diagnost
 
                 if (span_dur_us <= (double)SINGLE_TR_MAX_DURATION_US)
                 {
-                    l = imaging_len; /* single-TR = the entire table */
+                    l = nblocks; /* single-TR = the entire table */
                     found = 1;
                 }
             }
@@ -918,12 +870,12 @@ int pulseg__get_tr_in_sequence(pulseg_sequence_descriptor *desc, pulseg_diagnost
 
     tr->tr_size = l;
     tr_dur = 0.0f;
-    tr_start = imaging_start;
+    tr_start = 0;
     for (i = 0; i < l; ++i)
         tr_dur += (float)block_dur[tr_start + i];
     tr->tr_duration_us = tr_dur;
 
-    tr->num_trs = imaging_len / l;
+    tr->num_trs = nblocks / l;
 
     diag->code = PULSEG_SUCCESS;
     PULSEG_FREE(seq_pat);
@@ -1615,7 +1567,7 @@ static int rf_grad_constant_at(
     const pulseg_rf_definition *rdef;
     int ax_raw[3];
     float t0_us, t1_us;
-    int ax, rf_def_id, have_grad;
+    int ax, rf_def_id;
 
     level_out[0] = 0.0f;
     level_out[1] = 0.0f;
@@ -1654,19 +1606,19 @@ static int rf_grad_constant_at(
     ax_raw[1] = bte->gy_id;
     ax_raw[2] = bte->gz_id;
 
-    have_grad = 0;
     for (ax = 0; ax < 3; ++ax)
     {
         if (ax_raw[ax] < 0 || ax_raw[ax] >= desc->grad_table_size)
             continue; /* no gradient on this axis: flat at zero, nothing to add */
         if (!grad_flat_over_window(desc, ax_raw[ax], t0_us, t1_us, &level_out[ax]))
             return 0;
-        have_grad = 1;
     }
 
-    /* No accompanying gradient at all is a nonselective pulse: nothing to
-     * offset, and the caller has no correction to apply. */
-    return have_grad;
+    /* A pulse with no accompanying gradient at all excites everything, so
+     * there is nothing to move it relative to.  The zero level says so, and
+     * the caller's offset comes out zero -- which is the answer, not a
+     * refusal. */
+    return 1;
 }
 
 /*
@@ -2860,13 +2812,7 @@ int pulseg__get_exec_stream_segments(
      * Step 10 only populated flags from the first expanded instance of
      * each segment.  Flags like has_digitalout, has_rotation, norot,
      * and nopos must reflect ANY instance, not just the first one
-     * that happened to be expanded.
-     *
-     * Repetitions (num_averages > 1) share the same block_table
-     * entries.  For multi-pass sequences the pass dimension is the
-     * outer loop (passes are interleaved), but all passes have the
-     * same structure by definition.  Walking just the first pass
-     * (0 .. pass_size-1) is therefore sufficient.                     */
+     * that happened to be expanded.                                  */
     for (i = 0; i < num_unique; ++i)
     {
         nb = desc->segment_definitions[i].num_blocks;

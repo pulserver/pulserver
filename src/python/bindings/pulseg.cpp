@@ -51,7 +51,6 @@ public:
         float adc_raster_time,
         float block_duration_raster,
         bool parse_labels,
-        int num_averages,
         const std::vector<int>& label_column_map)
     {
         pulseg::Opts opts;
@@ -81,8 +80,7 @@ public:
             buf_sizes.data(),
             n,
             opts,
-            parse_labels,
-            num_averages));
+            parse_labels));
         source_size_ = (n > 0) ? buf_sizes[0] : 0;
     }
 
@@ -98,7 +96,6 @@ public:
         float adc_raster_time,
         float block_duration_raster,
         bool parse_labels,
-        int num_averages,
         const std::vector<int>& label_column_map)
     {
         pulseg::Opts opts;
@@ -117,8 +114,7 @@ public:
             opts,
             /*cache_binary=*/true,
             /*verify_signature=*/false,
-            parse_labels,
-            num_averages));
+            parse_labels));
         source_size_ = 0;
     }
 
@@ -150,7 +146,6 @@ static py::dict _find_tr(_PulseqCollection& pc, int subsequence_idx = 0)
     out["tr_size"] = si.tr_size;
     out["num_trs"] = si.num_trs;
     out["tr_duration_us"] = si.tr_duration_us;
-    out["num_averages"] = si.num_averages;
     out["num_canonical_trs"] = si.num_canonical_trs;
     out["num_tr_instances"] = si.num_tr_instances;
     return out;
@@ -348,15 +343,13 @@ static py::dict _get_tr_waveforms(
     int subsequence_idx,
     int amplitude_mode,
     int tr_index,
-    bool collapse_delays,
-    int num_averages)
+    bool collapse_delays)
 {
     const auto w = pc.coll().get_tr_waveforms(
         subsequence_idx,
         amplitude_mode,
         tr_index,
-        collapse_delays,
-        num_averages);
+        collapse_delays);
 
     auto axis = [](const pulseg::ChannelWaveform& ch)
     {
@@ -840,7 +833,6 @@ void pulserver_bind_pulseg(py::module_& m)
                 float,
                 float,
                 bool,
-                int,
                 std::vector<int>>(),
             py::arg("seq_bytes_list"),
             py::arg("gamma"),
@@ -852,7 +844,6 @@ void pulserver_bind_pulseg(py::module_& m)
             py::arg("adc_raster_time"),
             py::arg("block_duration_raster"),
             py::arg("parse_labels") = true,
-            py::arg("num_averages") = 1,
             py::arg("label_column_map") = std::vector<int>())
         .def(
             py::init<
@@ -866,7 +857,6 @@ void pulserver_bind_pulseg(py::module_& m)
                 float,
                 float,
                 bool,
-                int,
                 std::vector<int>>(),
             py::arg("file_path"),
             py::arg("gamma"),
@@ -878,7 +868,6 @@ void pulserver_bind_pulseg(py::module_& m)
             py::arg("adc_raster_time"),
             py::arg("block_duration_raster"),
             py::arg("parse_labels") = true,
-            py::arg("num_averages") = 1,
             py::arg("label_column_map") = std::vector<int>());
 
     m.def("_find_tr", &_find_tr, py::arg("collection"), py::arg("subsequence_idx") = 0);
@@ -926,8 +915,7 @@ void pulserver_bind_pulseg(py::module_& m)
         py::arg("subsequence_idx") = 0,
         py::arg("amplitude_mode") = 0,
         py::arg("tr_index") = 0,
-        py::arg("collapse_delays") = false,
-        py::arg("num_averages") = 0);
+        py::arg("collapse_delays") = false);
 
     m.def(
         "_get_sequence_description",

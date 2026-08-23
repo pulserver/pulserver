@@ -113,14 +113,6 @@ namespace pulseq
             put_u64(out, code);
         }
 
-        /** Format a definition value the way the text writer prints it. */
-        std::string format_number(double value)
-        {
-            char buffer[64];
-            std::snprintf(buffer, sizeof(buffer), "%0.9g", value);
-            return buffer;
-        }
-
         void write_definitions(std::string& out, const Sequence& seq)
         {
             put_i64(out, static_cast<int64_t>(seq.definitions().size()));

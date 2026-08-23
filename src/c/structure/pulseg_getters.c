@@ -202,7 +202,7 @@ static float get_total_duration_us(const pulseg_collection *coll)
     return coll->total_duration_us;
 }
 
-int pulseg_get_scan_time(const pulseg_collection *coll, pulseg_scan_time_info *info, int num_reps)
+int pulseg_get_scan_time(const pulseg_collection *coll, pulseg_scan_time_info *info)
 {
     int i, n, bt_idx;
     const pulseg_sequence_descriptor *desc;
@@ -212,12 +212,8 @@ int pulseg_get_scan_time(const pulseg_collection *coll, pulseg_scan_time_info *i
 
     if (!coll || !info)
         return PULSEG_ERR_NULL_POINTER;
-    if (num_reps < 1)
-        return PULSEG_ERR_INVALID_ARGUMENT;
     if (coll->num_subsequences <= 0)
         return PULSEG_ERR_COLLECTION_EMPTY;
-
-    (void)num_reps; /* averages already baked into scan table */
 
     info->total_duration_us = 0.0f;
     info->total_segment_boundaries = 0;
@@ -510,11 +506,9 @@ int pulseg_get_rf_array(const pulseg_collection *coll, pulseg_rf_stats **out_pul
 
     use_exec_stream = 0;
     {
-        int num_avgs = (desc->num_averages > 1) ? desc->num_averages : 1;
         start = 0;
         count = trd->tr_size;
-        /* Total TR instances: TRs replicated by NEX. */
-        num_instances = num_avgs * trd->num_trs;
+        num_instances = trd->num_trs;
         if (num_instances < 0)
             num_instances = 0;
 
@@ -670,11 +664,9 @@ int pulseg_get_rf_event_array(
 
     use_exec_stream = 0;
     {
-        int num_avgs = (desc->num_averages > 1) ? desc->num_averages : 1;
         start = 0;
         count = trd->tr_size;
-        /* Total TR instances: TRs replicated by NEX. */
-        num_instances = num_avgs * trd->num_trs;
+        num_instances = trd->num_trs;
         if (num_instances < 0)
             num_instances = 0;
     }
@@ -2958,15 +2950,13 @@ int pulseg_get_subseq_info(const pulseg_collection *coll, pulseg_subseq_info *in
     info->segment_offset = get_subseq_segment_offset(coll, subseq_idx);
     info->num_adc_occurrences = get_num_adc_occurrences(coll, subseq_idx);
     info->num_label_columns = get_num_label_columns(coll, subseq_idx);
-    info->num_averages = coll->descriptors[subseq_idx].num_averages;
     info->num_gain_cal_readouts = coll->descriptors[subseq_idx].num_gain_cal_readouts;
 
-    /* The TR-instance contract of pulseg_get_tr_waveforms: every played
-     * TR (averages included) is a unit. */
+    /* The TR-instance contract of pulseg_get_tr_waveforms: every played TR
+     * is a unit. */
     {
         const pulseg_tr_descriptor *trd = &coll->descriptors[subseq_idx].tr_descriptor;
-        int navg = (info->num_averages > 1) ? info->num_averages : 1;
-        info->num_tr_instances = navg * trd->num_trs;
+        info->num_tr_instances = trd->num_trs;
         if (info->num_tr_instances < 1)
             info->num_tr_instances = 1;
     }

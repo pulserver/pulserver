@@ -300,9 +300,7 @@ typedef struct pulseq_reserved_definitions
     PULSEQ_REAL nav_matrix[3];
     PULSEQ_REAL total_duration;
     char next_sequence[PULSEQ_SEQUENCE_FILENAME_LENGTH];
-    int ignore_fov_shift;
     int enable_pmc;
-    int ignore_averages;
     int num_gain_cal_readouts; /**< calibration readouts for receive gain */
 } pulseq_reserved_definitions;
 

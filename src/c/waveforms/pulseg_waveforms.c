@@ -1562,8 +1562,7 @@ int pulseg_get_tr_waveforms(
     int subseq_idx,
     int amplitude_mode,
     int tr_index,
-    int collapse_delays,
-    int num_averages)
+    int collapse_delays)
 {
     const pulseg_sequence_descriptor *desc;
     const pulseg_tr_descriptor *tr;
@@ -1591,10 +1590,8 @@ int pulseg_get_tr_waveforms(
     int interp_result, n_uniform, blk_n, rot_id, s;
     float target_raster_us, blk_end, t_sample_rot, vec[3], rot_out[3];
     const float *R;
-    /* average-expansion variables */
     int *block_order;
     int pass_scan_start; /* scan-table offset for output slot 0 of this pass */
-    int eff_num_averages;
     int *can_group_labels;
     int *can_group_first;
     int num_canonical;
@@ -1632,7 +1629,6 @@ int pulseg_get_tr_waveforms(
 
     desc = &coll->descriptors[subseq_idx];
     tr = &desc->tr_descriptor;
-    eff_num_averages = (num_averages > 0) ? num_averages : desc->num_averages;
 
     if (tr->tr_size <= 0)
     {
@@ -1643,18 +1639,12 @@ int pulseg_get_tr_waveforms(
     /* ---- determine block range ---- */
     if (amplitude_mode == PULSEG_AMP_ACTUAL)
     {
-        /* Flat TR index with average expansion: TRs wrap modulo num_trs
-         * so repeated averages map back to canonical block positions. */
-        int num_avgs = eff_num_averages;
-        int total_actual_trs = num_avgs * tr->num_trs;
-        int canonical_idx;
-        if (tr_index < 0 || tr_index >= total_actual_trs)
+        if (tr_index < 0 || tr_index >= tr->num_trs)
         {
             diag->code = PULSEG_ERR_INVALID_ARGUMENT;
             return diag->code;
         }
-        canonical_idx = tr_index % tr->num_trs;
-        tr_block_start = canonical_idx * tr->tr_size;
+        tr_block_start = tr_index * tr->tr_size;
         block_start = tr_block_start;
         block_count = tr->tr_size;
     }

@@ -83,7 +83,6 @@ extern "C"
      * @param[in]  amplitude_mode     PULSEG_AMP_MAX_POS / _ZERO_VAR / _ACTUAL.
      * @param[in]  tr_index           TR instance (only for _ACTUAL mode).
      * @param[in]  collapse_delays    Non-zero to shrink pure-delay blocks.
-     * @param[in]  num_averages       Override average count (0 = use descriptor default).
      * @param[out] out                Output waveforms (caller frees).
      * @param[out] diag               Diagnostic on error.
      * @return PULSEG_SUCCESS on success, negative error code on failure.
@@ -95,8 +94,7 @@ extern "C"
         int subseq_idx,
         int amplitude_mode,
         int tr_index,
-        int collapse_delays,
-        int num_averages);
+        int collapse_delays);
 
     /** @brief Free all arrays inside a pulseg_tr_waveforms. */
     void pulseg_tr_waveforms_free(pulseg_tr_waveforms *w);

@@ -64,13 +64,11 @@ MU_TEST(test_trid_none_returns_zero)
     pulseg_collection_free(coll);
 }
 
-/* One TRID spanning the entire (single-block) TR, loaded with
- * num_averages=3: NEX/pass repeats of the SAME TRID across a TR
- * boundary must split into separate occurrences (exec_stream_tr_start),
- * not merge into one giant run. Without that fix this would report
- * num_instances=1, one_instance_duration_us=300 instead of
- * num_instances=3, one_instance_duration_us=100. */
-MU_TEST(test_trid_nex_repeat_splits_on_tr_boundary)
+/* One TRID spanning three identical TRs: repeats of the SAME TRID across a
+ * TR boundary must split into separate occurrences (exec_stream_tr_start),
+ * not merge into one giant run -- num_instances=3 at 100us each, not
+ * num_instances=1 at 300us. */
+MU_TEST(test_trid_repeat_splits_on_tr_boundary)
 {
     pulseg_opts opts;
     pulseg_collection *coll = NULL;
@@ -78,8 +76,8 @@ MU_TEST(test_trid_nex_repeat_splits_on_tr_boundary)
     int rc, ngroups;
 
     default_opts_init(&opts);
-    rc = load_seq_with_averages(&coll, "trid_single_nex.seq", &opts, 3);
-    mu_assert(PULSEG_SUCCEEDED(rc), "load_seq_with_averages failed");
+    rc = load_seq(&coll, "trid_repeated_tr.seq", &opts);
+    mu_assert(PULSEG_SUCCEEDED(rc), "load_seq failed");
 
     ngroups = pulseg_get_tr_groups(coll, &groups, 0);
     mu_assert(ngroups >= 0, "pulseg_get_tr_groups failed");
@@ -117,7 +115,7 @@ MU_TEST(test_trid_structural_mismatch_hard_fails)
 
 /* pulseg_get_rf_array()'s trid per-entry tag must reflect the originating
  * block's sticky TRID, not the deduplicated RF definition (which carries no
- * group identity). Reuses the RF fixture with num_averages default (1); the
+ * group identity). Reuses the RF fixture; the
  * fixture has no TRID labels, so every rf_stats[i].trid must come back 0
  * (ungrouped default). */
 MU_TEST(test_rf_array_trid_defaults_zero)
@@ -144,7 +142,7 @@ MU_TEST_SUITE(suite_trid_labels)
 {
     MU_RUN_TEST(test_trid_two_groups_one_pass);
     MU_RUN_TEST(test_trid_none_returns_zero);
-    MU_RUN_TEST(test_trid_nex_repeat_splits_on_tr_boundary);
+    MU_RUN_TEST(test_trid_repeat_splits_on_tr_boundary);
     MU_RUN_TEST(test_trid_structural_mismatch_hard_fails);
     MU_RUN_TEST(test_rf_array_trid_defaults_zero);
 }

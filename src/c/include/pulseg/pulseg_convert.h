@@ -52,8 +52,6 @@ extern "C"
      * @param[in]  n             Number of entries in @p files (>= 1).
      * @param[in]  opts          Scanner limits, rasters and vendor hooks.
      * @param[in]  parse_labels  1 to also build the ADC label table.
-     * @param[in]  num_averages  Number of averages (>= 1; see
-     *                           pulseg_read()'s parameter of the same name).
      * @return Number of subsequences converted on success (== @p n),
      *         0 on failure (diag->code holds the negative error code).
      */
@@ -63,8 +61,7 @@ extern "C"
         const pulseq_file *files,
         int n,
         const pulseg_opts *opts,
-        int parse_labels,
-        int num_averages);
+        int parse_labels);
 
     /* ================================================================== */
     /*  Sequence description (SEQDESC section)                            */

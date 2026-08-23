@@ -1284,7 +1284,7 @@ int pulseg_get_sequence_parameters(pulseg_sequence_parameters *out, const pulseg
     out->min_te_us = 1e30f;
     out->min_tr_us = 1e30f;
     out->num_subseqs = coll->num_subsequences;
-    if (pulseg_get_scan_time(coll, &st, 1) == PULSEG_SUCCESS)
+    if (pulseg_get_scan_time(coll, &st) == PULSEG_SUCCESS)
         out->total_scan_time_us = st.total_duration_us;
 
     for (ss = 0; ss < coll->num_subsequences; ++ss)

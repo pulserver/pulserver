@@ -221,11 +221,98 @@ MU_TEST(test_block_instance_at_rejects_bad_indices)
     pulseg_collection_free(coll);
 }
 
+/* ================================================================== */
+/*  Moving an excitation with the carrier alone                        */
+/* ================================================================== */
+
+/*
+ * rf_grad_constant is what lets prospective motion correction translate a
+ * *selective* excitation: the pulse sees one gradient vector across its
+ * window, so moving what it excites by dr is a carrier offset of G.dr.  A
+ * slice-selective sequence must offer that on every RF block, with the level
+ * on the slice axis and nowhere else.
+ */
+MU_TEST(test_a_slice_selective_excitation_can_be_moved_by_its_carrier)
+{
+    pulseg_collection *coll = NULL;
+    pulseg_opts opts;
+    pulseg_collection_info ci = PULSEG_COLLECTION_INFO_INIT;
+    int seg, blk, rf_blocks;
+
+    gre_opts_init(&opts);
+    mu_assert(PULSEG_SUCCEEDED(load_corpus_seq(&coll, "gre_2d.seq", &opts)), "load failed");
+    pulseg_get_collection_info(coll, &ci);
+
+    rf_blocks = 0;
+    for (seg = 0; seg < ci.num_segments; ++seg)
+    {
+        pulseg_segment_info si = PULSEG_SEGMENT_INFO_INIT;
+        pulseg_get_segment_info(coll, &si, seg);
+        for (blk = 0; blk < si.num_blocks; ++blk)
+        {
+            pulseg_block_info bi = PULSEG_BLOCK_INFO_INIT;
+            pulseg_get_block_info(coll, &bi, seg, blk);
+            if (!bi.has_rf)
+                continue;
+            rf_blocks++;
+            mu_assert(bi.rf_grad_constant, "a slice-selective pulse is not carrier-movable");
+            mu_assert(
+                bi.rf_grad_level[2] > 0.5f || bi.rf_grad_level[2] < -0.5f,
+                "no slice-select level reported");
+        }
+    }
+    mu_assert(rf_blocks > 0, "fixture has no RF");
+
+    pulseg_collection_free(coll);
+}
+
+/*
+ * A hard pulse excites everything, so there is nothing to move it relative
+ * to.  That is a zero offset, not a refusal -- the distinction is what a
+ * motion-correction gate reads to decide whether it can run at all.
+ */
+MU_TEST(test_a_nonselective_excitation_is_movable_at_zero_offset)
+{
+    pulseg_collection *coll = NULL;
+    pulseg_opts opts;
+    pulseg_collection_info ci = PULSEG_COLLECTION_INFO_INIT;
+    int seg, blk, ax, hard_pulses;
+
+    gre_opts_init(&opts);
+    mu_assert(PULSEG_SUCCEEDED(load_corpus_seq(&coll, "mprage_3d.seq", &opts)), "load failed");
+    pulseg_get_collection_info(coll, &ci);
+
+    hard_pulses = 0;
+    for (seg = 0; seg < ci.num_segments; ++seg)
+    {
+        pulseg_segment_info si = PULSEG_SEGMENT_INFO_INIT;
+        pulseg_get_segment_info(coll, &si, seg);
+        for (blk = 0; blk < si.num_blocks; ++blk)
+        {
+            pulseg_block_info bi = PULSEG_BLOCK_INFO_INIT;
+            int quiet = 1;
+            pulseg_get_block_info(coll, &bi, seg, blk);
+            if (!bi.has_rf || !bi.rf_grad_constant)
+                continue;
+            for (ax = 0; ax < 3; ++ax)
+                if (bi.rf_grad_level[ax] > 1.0e-6f || bi.rf_grad_level[ax] < -1.0e-6f)
+                    quiet = 0;
+            if (quiet)
+                hard_pulses++;
+        }
+    }
+    mu_assert(hard_pulses > 0, "no nonselective pulse reported a zero-level offset");
+
+    pulseg_collection_free(coll);
+}
+
 MU_TEST_SUITE(suite_block_instance)
 {
     MU_RUN_TEST(test_block_instance_view_cartesian);
     MU_RUN_TEST(test_block_instance_view_rotated);
     MU_RUN_TEST(test_block_instance_at_rejects_bad_indices);
+    MU_RUN_TEST(test_a_slice_selective_excitation_can_be_moved_by_its_carrier);
+    MU_RUN_TEST(test_a_nonselective_excitation_is_movable_at_zero_offset);
 }
 
 /* ================================================================== */

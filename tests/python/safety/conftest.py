@@ -14,12 +14,12 @@ EXPECTED = Path(__file__).resolve().parents[2] / "utils" / "expected"
 CORPUS = Path(__file__).resolve().parents[1] / "fixtures"
 
 
-def build_collection(seq_path, system, *, num_averages: int = 1) -> _PulseqCollection:
+def build_collection(seq_path, system) -> _PulseqCollection:
     """Load a ``.seq`` file into the C collection the safety engine runs on.
 
     Loads from raw bytes rather than by path: the path constructor picks up a
-    ``.pge`` cache beside the file when one exists, which would silently
-    override the requested ``num_averages``.
+    ``.pge`` cache beside the file when one exists, and a stale one would be
+    read instead of the sequence under test.
     """
     return _PulseqCollection(
         [Path(seq_path).read_bytes()],
@@ -32,7 +32,6 @@ def build_collection(seq_path, system, *, num_averages: int = 1) -> _PulseqColle
         float(system.adc_raster_time),
         float(system.block_duration_raster),
         True,
-        num_averages,
     )
 
 
