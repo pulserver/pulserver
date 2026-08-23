@@ -27,9 +27,10 @@ from collections import OrderedDict
 from collections.abc import Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from functools import wraps
+from contextlib import contextmanager, suppress
 from importlib import import_module
-from itertools import chain, product
-from math import prod
+from itertools import chain
+from math import prod, sqrt
 from types import MethodType, SimpleNamespace
 from typing import Any
 
@@ -279,27 +280,28 @@ class _CartesianComplexView(deepinv.physics.LinearPhysics):
 
 def _toeplitz_options(
     *,
-    support: str = "auto",
-    radius: float = 1.0,
-    radial_margin: float = 1.5,
-    trajectory_width: int = 4,
-    symmetric: bool | str = "auto",
+    compress: bool = True,
     chunk_size: int = 65536,
     coil_batch_size: int = 1,
     cuda_mode: str = "auto",
     cuda_max_device_fraction: float = 0.85,
     cuda_transfer_precision: str = "auto",
 ) -> dict[str, Any]:
-    if support not in {"auto", "full", "radial", "trajectory"}:
-        raise ValueError(
-            "Toeplitz support must be 'auto', 'full', 'radial', or 'trajectory'"
-        )
-    if radius <= 0.0 or radius > 1.0:
-        raise ValueError("Toeplitz radius must be in the interval (0, 1]")
-    if radial_margin < 1.0:
-        raise ValueError("Toeplitz radial_margin must be at least 1")
-    if symmetric not in {True, False, "auto"}:
-        raise ValueError("Toeplitz symmetric must be True, False, or 'auto'")
+    """Validate how a Toeplitz kernel is applied.
+
+    Nothing here says how the kernel is built. It is gridded onto the doubled
+    grid the way BART and MRISubspaceRecon.jl build theirs, and that is not a
+    choice. What is left is what it is stored and executed on: whether the
+    locations the trajectory never reached are dropped, how much is unpacked
+    at a time, how many coils share a pass, and what a CUDA device holds.
+
+    ``compress`` is BART's ``--compress-psf``. Dropping the untouched
+    locations is what makes a large three-dimensional kernel fit, and it
+    perturbs the normal operator by what it discards -- immaterial for a solve
+    whose spectrum is clear of zero, and enough to cost a rank-deficient one
+    its positive definiteness. A calibration solved over a small window turns
+    it off for that reason.
+    """
     if chunk_size <= 0:
         raise ValueError("Toeplitz chunk_size must be positive")
     if coil_batch_size <= 0:
@@ -308,22 +310,13 @@ def _toeplitz_options(
         raise ValueError("Toeplitz cuda_mode must be 'auto', 'resident', or 'compact'")
     if not 0.0 < cuda_max_device_fraction <= 1.0:
         raise ValueError("Toeplitz cuda_max_device_fraction must be in (0, 1]")
-    if cuda_transfer_precision not in {
-        "auto",
-        "float32",
-        "float16",
-        "bfloat16",
-    }:
+    if cuda_transfer_precision not in {"auto", "float32", "float16", "bfloat16"}:
         raise ValueError(
             "Toeplitz cuda_transfer_precision must be 'auto', 'float32', "
             "'float16', or 'bfloat16'"
         )
     return {
-        "support": support,
-        "radius": float(radius),
-        "radial_margin": float(radial_margin),
-        "trajectory_width": int(trajectory_width),
-        "symmetric": symmetric,
+        "compress": bool(compress),
         "chunk_size": int(chunk_size),
         "coil_batch_size": int(coil_batch_size),
         "cuda_mode": cuda_mode,
@@ -332,64 +325,29 @@ def _toeplitz_options(
     }
 
 
-def _trajectory_extent(samples: Any) -> float | None:
-    """How far a trajectory reaches, as a fraction of the transfer grid's radius.
-
-    A transfer kernel is indexed over the same frequency range the image grid
-    is band-limited to, so a trajectory sampled all the way to Nyquist reaches
-    exactly 1 and leaves nothing between its own support and the largest disk
-    the grid holds. ``None`` when the samples cannot be read.
-    """
-    if samples is None:
-        return None
-    torch = import_module("torch")
-    coordinates = as_torch(samples)
-    if coordinates.ndim < 2:
-        return None
-    radius = coordinates.reshape(-1, coordinates.shape[-1]).square().sum(-1).max()
-    return float(radius.sqrt() / torch.pi)
-
-
-def _resolved_support(options: dict[str, Any], samples: Any) -> str:
-    """Settle ``support="auto"`` against the trajectory the kernel comes from.
-
-    A trajectory that states where it sampled gets the support read off it:
-    the locations it reaches on the transfer grid, and no others. That adapts
-    to the acquisition -- a ball for a projection scan, a cylinder for a stack
-    -- without presuming a shape, and it is what the memory-efficient Toeplitz
-    implementations do.
-
-    A kernel with no trajectory to read, which is what a Cartesian encoding
-    leaves, keeps every location.
-    """
-    if options["support"] != "auto":
-        return options["support"]
-    return "full" if samples is None else "trajectory"
+#: Cells either side of a sample that the backend's interpolation spreads
+#: into. The gridded transfer is non-zero within this reach of the trajectory
+#: and nowhere else, which is the support the kernel is stored over.
+_SPREAD_HALF_WIDTH = 4
 
 
 def _support_locations(
-    options: dict[str, Any],
     samples: Any,
     spatial_shape: tuple[int, ...],
     device: Any,
+    compress: bool = True,
 ) -> Any:
-    """The transfer locations one kernel retains.
+    """The locations a gridded transfer holds weight at.
 
-    ``support="trajectory"`` needs samples to read; a kernel built without
-    them, which is what a Cartesian encoding leaves, keeps every location.
+    Where the trajectory landed on the doubled grid, plus the neighbourhood the
+    interpolation spread into. An encoding with no trajectory to read, which is
+    what a Cartesian one leaves, keeps every location, and so does one that
+    asks not to be compressed.
     """
-    support = _resolved_support(options, samples)
-    if support == "trajectory" and samples is not None:
-        return occupancy_indices(
-            samples,
-            spatial_shape,
-            width=options["trajectory_width"],
-        ).to(device)
-    return support_indices(
-        spatial_shape,
-        support="full" if support == "trajectory" else support,
-        radius=options["radius"],
-        device=device,
+    if samples is None or not compress:
+        return support_indices(spatial_shape, support="full", radius=1.0, device=device)
+    return occupancy_indices(samples, spatial_shape, width=_SPREAD_HALF_WIDTH).to(
+        device
     )
 
 
@@ -449,19 +407,6 @@ class MRIPhysics(deepinv.physics.LinearPhysics):
         self._streaming_parameters: dict[str, Any] | None = None
         self._replicate: Callable[[Any, Any], MRIPhysics] | None = None
         self._streaming_replicas: dict[str, MRIPhysics] = {}
-
-    @property
-    def truncation_bound(self) -> float:
-        """How far a sampled support can pull the normal operator below zero.
-
-        A kernel stored over the locations its trajectory reached drops weight
-        that was not zero. The exact normal operator of an undersampled scan
-        has eigenvalues at zero, so that is what can take them negative, and a
-        solve regularized by more than this is back on a positive-definite
-        operator. Zero when the kernel keeps every location.
-        """
-        kernel = getattr(self.operator, "toeplitz_kernel", None)
-        return float(getattr(kernel, "truncation_bound", 0.0) or 0.0)
 
     @property
     def normal_mode(self) -> str:
@@ -797,18 +742,73 @@ class _FramePhysicsProvider:
         self.policy = policy
         self.cache: OrderedDict[int, MRIPhysics] = OrderedDict()
         self.toeplitz_options = physics.toeplitz_options
+        self.shared: MRIPhysics | None = None
+        self.target: int | None = None
+        native = _base_fourier_operator(physics.native_operator)
+        self.has_density = getattr(native, "density", None) is not None
+        # A ragged acquisition has to keep a plan per frame: a NUFFT is planned
+        # for a fixed number of points.
+        self.shareable = (
+            hasattr(native, "update_samples")
+            and len(
+                {int(prod(getattr(frame, "shape", (0,))[:-1])) for frame in trajectory}
+            )
+            == 1
+        )
+
+    def samples(self, index: int) -> Any:
+        """One frame's sample set, without building the plan that reads it."""
+        _require_mrinufft()
+        return import_module("mrinufft._utils").proper_trajectory(
+            self.trajectory[index],
+            normalize="pi",
+        )
+
+    def density(self, index: int) -> Any:
+        """One frame's sample weights, without building its plan."""
+        native = _base_fourier_operator(self.physics.native_operator)
+        return _frame_density(
+            getattr(native, "density", None),
+            self.trajectory,
+            index,
+            prod(getattr(self.trajectory, "shape", (0, 0))[1:-1]),
+        )
+
+    def _build(self, index: int) -> MRIPhysics:
+        result = self.physics.rebuild(self.trajectory[index], index)
+        if self.policy is not None:
+            result.enable_streaming(self.policy)
+        if self.toeplitz_options is not None:
+            _enable_toeplitz(result, **self.toeplitz_options)
+        return result
 
     def get(self, index: int) -> MRIPhysics:
+        """The physics for one frame, planned once and retargeted after that.
+
+        Frames of a dynamic acquisition differ only in where their samples
+        fall, so they share the plan -- by far the most expensive part of a
+        frame, and on CUDA the part that holds device memory for as long as
+        the physics lives. Callers use one frame at a time.
+        """
+        if self.shared is not None:
+            if self.target != index:
+                native = _base_fourier_operator(self.shared.native_operator)
+                native.update_samples(self.samples(index))
+                if self.has_density:
+                    native.density = self.density(index)
+                self.target = index
+            return self.shared
         if index in self.cache:
             result = self.cache.pop(index)
             self.cache[index] = result
             return result
-        result = self.physics.rebuild(self.trajectory[index], index)
-        result.enable_streaming(self.policy)
-        if self.toeplitz_options is not None:
-            _enable_toeplitz(result, **self.toeplitz_options)
+        result = self._build(index)
+        if self.shareable:
+            self.shared, self.target = result, index
+            return result
         self.cache[index] = result
-        while len(self.cache) > self.policy.frame_cache_size:
+        limit = 1 if self.policy is None else self.policy.frame_cache_size
+        while len(self.cache) > limit:
             self.cache.popitem(last=False)
         return result
 
@@ -847,6 +847,28 @@ class _LazyFramePhysics:
 
     def enable_toeplitz(self, options: dict[str, Any]) -> None:
         self.provider.toeplitz_options = options
+
+    @property
+    def samples(self) -> Any:
+        """This frame's trajectory, in the units a NUFFT plans on."""
+        return self.provider.samples(self.index)
+
+    @property
+    def density(self) -> Any:
+        """This frame's sample weights, if the acquisition carries any."""
+        return self.provider.density(self.index)
+
+    @property
+    def backend(self) -> str:
+        """The NUFFT backend the frames are planned on."""
+        reference = _base_fourier_operator(self.provider.physics.native_operator)
+        return getattr(reference, "backend", "finufft")
+
+    @property
+    def image_shape(self) -> tuple[int, ...]:
+        """The image grid every frame shares."""
+        reference = _base_fourier_operator(self.provider.physics.native_operator)
+        return tuple(int(size) for size in reference.shape)
         self.modifiers = tuple(dict.fromkeys((*self.modifiers, "toeplitz")))
 
 
@@ -934,9 +956,104 @@ def _native_linear_physics(
     return _MRIThinPhysics()
 
 
+def _mrinufft_norm_factor(shape: tuple[int, ...]) -> float:
+    """The normalization an mri-nufft operator on ``shape`` divides by."""
+    return sqrt(prod(shape) * 2 ** len(shape))
+
+
+def _frame_density(
+    density: Any,
+    trajectory: Any,
+    frame_index: int | None,
+    frame_samples: int,
+) -> Any:
+    """One frame's share of a density given for a whole dynamic trajectory.
+
+    A density may be given per frame, flat over every sample, or once for a
+    trajectory every frame shares; only the first two are split.
+    """
+    if frame_index is None or density is None:
+        return density
+    density_shape = getattr(density, "shape", ())
+    trajectory_shape = getattr(trajectory, "shape", ())
+    if not trajectory_shape:
+        return density
+    if len(density_shape) > 1 and density_shape[0] == trajectory_shape[0]:
+        return density[frame_index]
+    if prod(density_shape) == trajectory_shape[0] * frame_samples:
+        start = frame_index * frame_samples
+        return density.reshape(-1)[start : start + frame_samples]
+    return density
+
+
 def _base_fourier_operator(native_operator: Any) -> Any:
     """Return the undecorated Fourier operator beneath mri-nufft wrappers."""
     return getattr(native_operator, "_fourier_op", native_operator)
+
+
+_PSF_OPERATOR_SLOT: dict[tuple[Any, ...], Any] = {}
+
+
+def _psf_operator(
+    samples: Any,
+    backend: str,
+    spatial_shape: tuple[int, ...],
+) -> Any:
+    """A NUFFT on the doubled grid, for gridding the transfer onto it.
+
+    One plan is kept per (backend, grid, sample count) and retargeted at each
+    trajectory it is asked for. Planning a NUFFT is the expensive part of
+    building a kernel, and holding a second plan on the doubled grid is what
+    makes a build run out of device memory.
+    """
+    mrinufft = _require_mrinufft()
+    shape = tuple(int(size) for size in spatial_shape)
+    key = (backend, shape, int(samples.shape[0]))
+    operator = _PSF_OPERATOR_SLOT.get(key)
+    if operator is not None:
+        operator.update_samples(samples)
+        return operator
+    operator = mrinufft.get_operator(backend)(
+        samples=samples,
+        shape=shape,
+        density=None,
+        n_coils=1,
+        squeeze_dims=False,
+    )
+    # One slot: a plan on the doubled grid is the largest device allocation a
+    # build makes, and holding a second one is what makes a build run out.
+    _PSF_OPERATOR_SLOT.clear()
+    _PSF_OPERATOR_SLOT[key] = operator
+    return operator
+
+
+def _within_psf_plans(build: Any) -> Any:
+    """Release the gridding plan a builder makes when its build ends."""
+
+    @wraps(build)
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        with _psf_plans():
+            return build(*args, **kwargs)
+
+    return wrapper
+
+
+@contextmanager
+def _psf_plans() -> Any:
+    """Hold one gridding plan for the length of a build, then release it.
+
+    A plan on the doubled grid is the largest device allocation a build makes
+    -- larger than the kernel it produces -- and the solve that follows needs
+    that memory for its own transforms.
+    """
+    try:
+        yield
+    finally:
+        _PSF_OPERATOR_SLOT.clear()
+        with suppress(ImportError, AttributeError):
+            torch = import_module("torch")
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
 
 
 def _compute_toeplitz_transfer(
@@ -945,171 +1062,53 @@ def _compute_toeplitz_transfer(
     *,
     complex_weights: bool = False,
 ) -> Any:
-    """Compute Pulserver's scalar transfer from MRI-NUFFT primitives."""
-    if weights is None:
-        method = getattr(native_operator, "compute_toeplitz_kernel", None)
-        if method is not None:
-            return method()
+    """The transfer a Toeplitz normal operator multiplies by.
 
-    try:
-        compute = import_module("mrinufft.operators.toeplitz").compute_toeplitz_kernel
-    except (ImportError, AttributeError):
-        compute = _compute_toeplitz_transfer_from_adjoint
+    The point-spread function is the adjoint of the sample weights taken on a
+    grid twice the image in every dimension -- ones for a plain normal, the
+    density for a compensated one, a basis product for a subspace frame or an
+    off-resonance segment -- and the transfer is its transform.
 
-    if weights is None:
-        return compute(native_operator)
-    real_kernel = compute(native_operator, weights=weights.real)
-    if not complex_weights:
-        return real_kernel
-    imaginary_kernel = compute(native_operator, weights=weights.imag)
-    return real_kernel + 1j * imaginary_kernel
-
-
-def _compute_toeplitz_transfer_from_adjoint(
-    native_operator: Any,
-    weights: Any | None = None,
-) -> Any:
-    """Build a scalar Toeplitz spectrum using bounded native adjoints.
-
-    The construction needs two adjoints in 2D and four in 3D. It is kept here
-    because older MRI-NUFFT releases expose the required raw adjoint but not
-    their newer convenience function.
+    Gridding is what puts the weight where the trajectory is. The adjoint
+    interpolates each sample onto the doubled grid with the backend's own
+    kernel, so the transfer holds weight where the scan reached and in the rim
+    that interpolation spreads into, and nowhere else. That is the same
+    operator the forward NUFFT applies, so the normal is the Gram of the
+    transform actually being inverted.
     """
+    del complex_weights
     torch = import_module("torch")
-    numpy = import_module("numpy")
-    proper_trajectory = import_module("mrinufft._utils").proper_trajectory
-    shape = tuple(int(size) for size in native_operator.shape)
-    if len(shape) not in {2, 3}:
-        raise ValueError("Toeplitz kernels require a two- or three-dimensional NUFFT")
-    if any(size % 2 for size in shape):
-        raise ValueError(
-            f"Toeplitz kernel computation requires even image sizes, got {shape}"
-        )
+    base = _base_fourier_operator(native_operator)
+    image_shape = tuple(int(size) for size in base.shape)
+    spatial_shape = tuple(2 * size for size in image_shape)
+    operator = _psf_operator(
+        base.samples,
+        getattr(base, "backend", "finufft"),
+        spatial_shape,
+    )
 
-    samples = native_operator.samples
-    is_torch = isinstance(samples, torch.Tensor)
-    if is_torch:
-        real_dtype = torch.float64 if samples.dtype == torch.float64 else torch.float32
-        complex_dtype = (
-            torch.complex128 if real_dtype == torch.float64 else torch.complex64
-        )
-        omega = proper_trajectory(samples, normalize="pi").to(real_dtype)
-    else:
-        real_dtype = (
-            numpy.float64
-            if numpy.dtype(native_operator.dtype) == numpy.dtype(numpy.float64)
-            else numpy.float32
-        )
-        complex_dtype = (
-            numpy.complex128 if real_dtype == numpy.float64 else numpy.complex64
-        )
-        omega = numpy.asarray(
-            proper_trajectory(samples, normalize="pi"),
-            dtype=real_dtype,
-        )
-
-    density = getattr(native_operator, "density", None)
     if weights is None:
-        weights = density
+        # The plain normal is weighted by whatever the operator itself carries:
+        # its adjoint applies the density once, so the Gram does too.
+        weights = getattr(base, "density", None)
     if weights is None:
-        weights = (
-            torch.ones(
-                native_operator.n_samples,
-                dtype=complex_dtype,
-                device=samples.device,
-            )
-            if is_torch
-            else numpy.ones(native_operator.n_samples, dtype=complex_dtype)
+        values = torch.ones(
+            operator.n_samples,
+            dtype=torch.complex64,
+            device=as_torch(base.samples).device,
         )
-    elif is_torch:
-        weights = torch.as_tensor(
-            weights,
-            dtype=complex_dtype,
-            device=samples.device,
-        ).reshape(-1)
     else:
-        weights = numpy.asarray(weights, dtype=complex_dtype).reshape(-1)
-    weight_count = weights.numel() if is_torch else weights.size
-    if weight_count != native_operator.n_samples:
-        raise ValueError("Toeplitz weights must have one value per NUFFT sample")
+        values = as_torch(weights).reshape(-1).to(torch.complex64)
 
-    spatial_shape = tuple(2 * size for size in shape)
-    kernel = (
-        torch.zeros(spatial_shape, dtype=complex_dtype, device=samples.device)
-        if is_torch
-        else numpy.zeros(spatial_shape, dtype=complex_dtype)
-    )
-    temporary = (
-        torch.empty(shape, dtype=complex_dtype, device=samples.device)
-        if is_torch
-        else numpy.empty(shape, dtype=complex_dtype)
-    )
-    halves = tuple(size // 2 for size in shape)
-
-    saved_density = density
-    saved_density_method = getattr(native_operator, "_density_method", None)
-    if density is not None:
-        native_operator.density = None
-        if hasattr(native_operator, "_density_method"):
-            native_operator._density_method = None
-    try:
-        for signs in product((1, -1), repeat=len(shape) - 1):
-            shifts = (
-                halves[0],
-                *(sign * half for sign, half in zip(signs, halves[1:], strict=True)),
-            )
-            if is_torch:
-                shift = torch.as_tensor(shifts, dtype=omega.dtype, device=omega.device)
-                modulated = (weights * torch.exp(1j * (omega @ shift))).to(
-                    complex_dtype
-                )
-            else:
-                shift = numpy.asarray(shifts, dtype=omega.dtype)
-                modulated = numpy.asarray(
-                    weights * numpy.exp(1j * (omega @ shift)),
-                    dtype=complex_dtype,
-                )
-            native_operator._adj_op(modulated, temporary)
-
-            target = [slice(0, shape[0])]
-            source = [slice(None)]
-            for axis, sign in enumerate(signs, start=1):
-                if sign > 0:
-                    target.append(slice(0, shape[axis]))
-                    source.append(slice(None))
-                else:
-                    target.append(slice(shape[axis] + 1, 2 * shape[axis]))
-                    source.append(slice(1, shape[axis]))
-            kernel[tuple(target)] = temporary[tuple(source)]
-    finally:
-        if saved_density is not None:
-            native_operator.density = saved_density
-            if hasattr(native_operator, "_density_method"):
-                native_operator._density_method = saved_density_method
-
-    axes = tuple(range(len(shape)))
-    if is_torch:
-        symmetric = torch.roll(
-            torch.flip(kernel, dims=axes),
-            shifts=(1,) * len(shape),
-            dims=axes,
-        ).conj()
-    else:
-        symmetric = numpy.roll(
-            numpy.flip(kernel, axis=axes),
-            shift=(1,) * len(shape),
-            axis=axes,
-        ).conj()
-    kernel[(slice(shape[0] + 1, None), *([slice(None)] * (len(shape) - 1)))] = (
-        symmetric[(slice(shape[0] + 1, None), *([slice(None)] * (len(shape) - 1)))]
-    )
-    kernel = kernel / native_operator.norm_factor
-    if is_torch:
-        return torch.fft.fftn(kernel, dim=axes, norm="ortho").real
-    return numpy.fft.fftn(kernel, axes=axes, norm="ortho").real.astype(
-        real_dtype,
-        copy=False,
-    )
+    # Backends differ on whether they take a bare sample vector, so the
+    # batch and coil axes are stated and dropped again.
+    psf = as_torch(operator.adj_op(values.reshape(1, 1, -1))).reshape(spatial_shape)
+    axes = tuple(range(len(spatial_shape)))
+    # ``adj_op`` answers a centred image and divides by the doubled grid's own
+    # normalization, while the normal operator this stands in for carries the
+    # image grid's twice -- once in the forward and once in the adjoint.
+    scale = float(operator.norm_factor) / float(base.norm_factor) ** 2
+    return torch.fft.fftn(torch.fft.ifftshift(psf, dim=axes), dim=axes) * scale
 
 
 def _sense_maps(native_operator: Any, reference: Any) -> Any:
@@ -1318,6 +1317,7 @@ def _selected_transfer(
     return selected.to("cpu") if streaming is not None else selected
 
 
+@_within_psf_plans
 def _build_scalar_toeplitz(
     native_operator: Any,
     options: dict[str, Any],
@@ -1329,10 +1329,10 @@ def _build_scalar_toeplitz(
     spatial_shape = tuple(2 * size for size in image_shape)
     transfer = as_torch(_compute_toeplitz_transfer(base)).flatten()
     indices = _support_locations(
-        options,
         getattr(base, "samples", None),
         spatial_shape,
         "cpu" if streaming is not None else transfer.device,
+        options["compress"],
     )
     values = _selected_transfer(transfer, indices, streaming=streaming).real[None]
     kernel = CompactToeplitzKernel(
@@ -1345,29 +1345,8 @@ def _build_scalar_toeplitz(
         cuda_mode=options["cuda_mode"],
         cuda_max_device_fraction=options["cuda_max_device_fraction"],
         cuda_transfer_precision=options["cuda_transfer_precision"],
-        symmetric=options["symmetric"],
     )
-    kernel.truncation_bound = _dropped_bound(transfer, indices)
     return kernel
-
-
-def _dropped_bound(transfer: Any, indices: Any) -> float:
-    """The largest transfer value a truncated support left behind.
-
-    A sampled support drops locations whose weight was not zero, which pulls
-    the normal operator down by at most this much: the exact operator of an
-    undersampled scan has eigenvalues at zero, so what is dropped is what can
-    take them negative. A solve that regularizes by more than this is back on
-    a positive-definite operator, which is what makes the sparse kernel safe.
-    """
-    torch = import_module("torch")
-    flat = as_torch(transfer).abs().flatten()
-    if indices.numel() >= flat.numel():
-        return 0.0
-    keep = torch.zeros(flat.numel(), dtype=torch.bool, device=flat.device)
-    keep[indices.to(torch.int64)] = True
-    dropped = flat[~keep]
-    return float(dropped.max()) if dropped.numel() else 0.0
 
 
 def _configure_base_toeplitz(
@@ -1447,113 +1426,147 @@ def _configure_base_toeplitz(
     return operator
 
 
+def _subspace_frame_blocks(
+    frame_physics: Sequence[MRIPhysics | _LazyFramePhysics],
+    basis: Any,
+    rows: Any,
+    columns: Any,
+) -> tuple[list[tuple[Any, Any, Any]], str, tuple[int, ...]]:
+    """Group the frames onto the distinct trajectories they were acquired on.
+
+    Returns one entry per distinct trajectory -- its samples, its sample
+    weights and the coefficient every upper-triangular basis pair enters it
+    with, summed over the frames that share it -- alongside the backend and
+    the image grid they all agree on.
+    """
+    torch = import_module("torch")
+    order: list[Any] = []
+    blocks: dict[Any, tuple[Any, Any, Any]] = {}
+    backend = None
+    image_shape = None
+    for frame, item in enumerate(frame_physics):
+        coefficients = basis[rows, frame] * basis[columns, frame].conj()
+        if isinstance(item, _LazyFramePhysics):
+            key: Any = ("lazy", id(item.provider), item.index)
+            samples, weights = item.samples, item.density
+            frame_backend, frame_shape = item.backend, item.image_shape
+        else:
+            native = item.native_operator
+            if native is None or hasattr(native, "B"):
+                raise RuntimeError(
+                    "A combined subspace kernel requires undecorated frame NUFFTs."
+                )
+            base = _base_fourier_operator(native)
+            key = id(base)
+            samples, weights = base.samples, getattr(base, "density", None)
+            frame_backend = getattr(base, "backend", "finufft")
+            frame_shape = tuple(int(size) for size in base.shape)
+        if image_shape is None:
+            backend, image_shape = frame_backend, frame_shape
+        elif frame_shape != image_shape:
+            raise ValueError("all subspace frames must share one image shape")
+        if key in blocks:
+            held = blocks[key]
+            blocks[key] = (held[0], held[1], held[2] + coefficients.to(held[2].device))
+        else:
+            order.append(key)
+            blocks[key] = (samples, weights, coefficients)
+    if image_shape is None:
+        raise ValueError("a subspace kernel needs at least one frame")
+    assert backend is not None
+    del torch
+    return [blocks[key] for key in order], backend, image_shape
+
+
+def _subspace_pair_transfers(
+    blocks: Sequence[tuple[Any, Any, Any]],
+    backend: str,
+    image_shape: tuple[int, ...],
+) -> Any:
+    """Grid one transfer per upper-triangular basis pair, over every sample.
+
+    A pair's transfer is the adjoint of one weight per sample -- the frame's
+    basis product, times whatever density the acquisition carries -- so the
+    whole dynamic acquisition grids in a single pass and the count of NUFFTs
+    is the size of the basis, not the length of the scan.
+    """
+    torch = import_module("torch")
+    spatial_shape = tuple(2 * size for size in image_shape)
+    samples = torch.cat(
+        [as_torch(block[0]).reshape(-1, len(image_shape)) for block in blocks]
+    )
+    counts = [
+        as_torch(block[0]).reshape(-1, len(image_shape)).shape[0] for block in blocks
+    ]
+    weights = []
+    for (_, density, _), count in zip(blocks, counts, strict=True):
+        if density is None:
+            weights.append(None)
+        else:
+            weights.append(as_torch(density).reshape(-1).to(samples.device))
+            if weights[-1].numel() != count:
+                raise ValueError("density and samples must have the same length")
+
+    operator = _psf_operator(samples, backend, spatial_shape)
+    axes = tuple(range(len(spatial_shape)))
+    scale = float(operator.norm_factor) / _mrinufft_norm_factor(image_shape) ** 2
+    n_pairs = int(blocks[0][2].numel())
+    total = sum(counts)
+
+    transfers = []
+    for pair in range(n_pairs):
+        values = torch.empty(total, dtype=torch.complex64, device=samples.device)
+        offset = 0
+        for (_, _, coefficients), count, density in zip(
+            blocks, counts, weights, strict=True
+        ):
+            block = values[offset : offset + count]
+            coefficient = coefficients[pair].to(torch.complex64)
+            if density is None:
+                block.fill_(coefficient)
+            else:
+                torch.mul(density.to(torch.complex64), coefficient, out=block)
+            offset += count
+        psf = as_torch(operator.adj_op(values.reshape(1, 1, -1))).reshape(spatial_shape)
+        transfers.append(
+            torch.fft.fftn(torch.fft.ifftshift(psf, dim=axes), dim=axes).flatten()
+            * scale
+        )
+    return torch.stack(transfers)
+
+
+@_within_psf_plans
 def _build_subspace_toeplitz(
     frame_physics: Sequence[MRIPhysics | _LazyFramePhysics],
     basis: Any,
     options: dict[str, Any],
     streaming: Any | None = None,
 ) -> CompactToeplitzKernel:
-    """Mix scalar frame transfers directly into packed coefficient matrices."""
+    """Grid one transfer per basis pair and pack them as coefficient matrices."""
     torch = import_module("torch")
     basis = torch.as_tensor(basis)
     rank, _ = basis.shape
     rows, columns = torch.triu_indices(rank, rank, device=basis.device)
 
-    lazy = any(isinstance(item, _LazyFramePhysics) for item in frame_physics)
-    grouped: dict[int, tuple[Any, Any]] = {}
-    if not lazy:
-        for frame, item in enumerate(frame_physics):
-            native = item.native_operator
-            if native is None or hasattr(native, "B"):
-                raise RuntimeError(
-                    "A combined subspace kernel requires undecorated frame NUFFTs."
-                )
-            coefficients = basis[rows, frame] * basis[columns, frame].conj()
-            key = id(native)
-            if key in grouped:
-                grouped[key] = (native, grouped[key][1] + coefficients)
-            else:
-                grouped[key] = (native, coefficients)
-        entries = iter(grouped.values())
-    else:
-        # Resolve one native NUFFT at a time through the bounded frame LRU.
-        # A generator is important here: a list would retain every CUDA plan.
-        entries = (
-            (
-                item.native_operator,
-                basis[rows, frame] * basis[columns, frame].conj(),
-            )
-            for frame, item in enumerate(frame_physics)
-        )
+    blocks, backend, image_shape = _subspace_frame_blocks(
+        frame_physics,
+        basis,
+        rows,
+        columns,
+    )
+    spatial_shape = tuple(2 * size for size in image_shape)
+    transfers = _subspace_pair_transfers(blocks, backend, image_shape)
 
-    # The support has to come from every frame, not the first one, and a lazy
-    # provider cannot be read without materialising each frame's plan -- so a
-    # lazy bank keeps the whole grid.
-    frame_samples: list[Any] | None = None
-    if not lazy:
-        collected = [
-            getattr(getattr(item, "native_operator", None), "samples", None)
-            for item in frame_physics
-        ]
-        if all(item is not None for item in collected):
-            frame_samples = collected
-
-    image_shape = None
-    spatial_shape = None
-    packed = None
-    indices = None
-    dropped = 0.0
-    for native, coefficients in entries:
-        if native is None or hasattr(native, "B"):
-            raise RuntimeError(
-                "A combined subspace kernel requires undecorated frame NUFFTs."
-            )
-        current_shape = tuple(int(size) for size in native.shape)
-        if image_shape is None:
-            image_shape = current_shape
-            spatial_shape = tuple(2 * size for size in image_shape)
-        elif current_shape != image_shape:
-            raise ValueError("all subspace frames must share one image shape")
-        scalar = as_torch(_compute_toeplitz_transfer(native)).flatten()
-        if indices is None:
-            assert spatial_shape is not None
-            indices = _support_locations(
-                options,
-                frame_samples,
-                spatial_shape,
-                "cpu" if streaming is not None else scalar.device,
-            )
-        # Each frame contributes its dropped weight, scaled by the largest
-        # coefficient it enters the packed matrix with.
-        dropped += _dropped_bound(scalar, indices) * float(coefficients.abs().max())
-        selected = _selected_transfer(
-            scalar,
-            indices,
-            streaming=streaming,
-        )
-        coefficients = coefficients.to(selected.device)
-        dtype = torch.promote_types(coefficients.dtype, selected.dtype)
-        if streaming is not None:
-            selected = selected.to(dtype)
-            if packed is None:
-                packed = torch.zeros(
-                    (coefficients.numel(), selected.numel()),
-                    dtype=dtype,
-                    device="cpu",
-                )
-            for packed_index, coefficient in enumerate(coefficients):
-                packed[packed_index].add_(
-                    selected,
-                    alpha=coefficient.item(),
-                )
-        else:
-            contribution = coefficients[:, None].to(dtype) * selected[None].to(dtype)
-            packed = contribution if packed is None else packed + contribution
-    assert (
-        packed is not None
-        and indices is not None
-        and image_shape is not None
-        and spatial_shape is not None
+    # The support is the union of what the frames reached, read off their
+    # trajectories and needing none of their transfers.
+    indices = _support_locations(
+        [block[0] for block in blocks],
+        spatial_shape,
+        "cpu" if streaming is not None else transfers.device,
+        options["compress"],
+    )
+    packed = torch.stack(
+        [_selected_transfer(row, indices, streaming=streaming) for row in transfers]
     )
 
     values = (
@@ -1569,12 +1582,11 @@ def _build_subspace_toeplitz(
         cuda_mode=options["cuda_mode"],
         cuda_max_device_fraction=options["cuda_max_device_fraction"],
         cuda_transfer_precision=options["cuda_transfer_precision"],
-        symmetric=options["symmetric"],
     )
-    kernel.truncation_bound = dropped
     return kernel
 
 
+@_within_psf_plans
 def _build_cartesian_subspace_toeplitz(
     frame_physics: Sequence[MRIPhysics],
     basis: Any,
@@ -1608,7 +1620,7 @@ def _build_cartesian_subspace_toeplitz(
         )
     masks = torch.fft.ifftshift(masks, dim=(-2, -1)).abs().square()
     # A Cartesian mask fills its own grid, so there is nothing to leave out.
-    indices = _support_locations(options, None, image_shape, masks.device)
+    indices = _support_locations(None, image_shape, masks.device, options["compress"])
     rows, columns = torch.triu_indices(rank, rank, device=basis.device)
     packed = torch.zeros(
         (rows.numel(), indices.numel()),
@@ -1636,7 +1648,6 @@ def _build_cartesian_subspace_toeplitz(
         cuda_mode=options["cuda_mode"],
         cuda_max_device_fraction=options["cuda_max_device_fraction"],
         cuda_transfer_precision=options["cuda_transfer_precision"],
-        symmetric=options["symmetric"],
     )
     proxy = SimpleNamespace(
         shape=image_shape,
@@ -1651,7 +1662,7 @@ def _off_resonance_scalar_transfers(
     indices: Any | None = None,
     streaming: Any | None = None,
 ) -> tuple[Any, Any]:
-    """Return upper-triangular segment transfers at retained locations."""
+    """Return upper-triangular segment transfers at their retained locations."""
     torch = import_module("torch")
     base = _base_fourier_operator(corrected_operator)
     temporal = corrected_operator.B
@@ -1686,10 +1697,10 @@ def _off_resonance_scalar_transfers(
         if indices is None:
             kernel_device = "cpu" if streaming is not None else scalar.device
             indices = _support_locations(
-                options,
                 getattr(base, "samples", None),
                 spatial_shape,
                 kernel_device,
+                options["compress"],
             )
         packed.append(
             _selected_transfer(
@@ -1709,6 +1720,7 @@ def _off_resonance_scalar_transfers(
     return values, indices
 
 
+@_within_psf_plans
 def _build_off_resonance_toeplitz(
     corrected_operator: Any,
     options: dict[str, Any],
@@ -1735,7 +1747,6 @@ def _build_off_resonance_toeplitz(
         cuda_mode=options["cuda_mode"],
         cuda_max_device_fraction=options["cuda_max_device_fraction"],
         cuda_transfer_precision=options["cuda_transfer_precision"],
-        symmetric=options["symmetric"],
     )
     return kernel, spatial
 
@@ -1843,7 +1854,6 @@ def _build_subspace_off_resonance_toeplitz(
         cuda_mode=options["cuda_mode"],
         cuda_max_device_fraction=options["cuda_max_device_fraction"],
         cuda_transfer_precision=options["cuda_transfer_precision"],
-        symmetric=options["symmetric"],
     )
     return kernel, spatial_factors
 
@@ -2547,26 +2557,12 @@ def _noncartesian(
         new_trajectory: Any,
         frame_index: int | None = None,
     ) -> MRIPhysics:
-        frame_density = density
-        density_shape = getattr(density, "shape", ())
-        trajectory_shape = getattr(trajectory, "shape", ())
-        frame_samples = prod(getattr(new_trajectory, "shape", (0,))[:-1])
-        if (
-            frame_index is not None
-            and density is not None
-            and len(density_shape) > 1
-            and trajectory_shape
-            and density_shape[0] == trajectory_shape[0]
-        ):
-            frame_density = density[frame_index]
-        elif (
-            frame_index is not None
-            and density is not None
-            and trajectory_shape
-            and prod(density_shape) == trajectory_shape[0] * frame_samples
-        ):
-            start = frame_index * frame_samples
-            frame_density = density.reshape(-1)[start : start + frame_samples]
+        frame_density = _frame_density(
+            density,
+            trajectory,
+            frame_index,
+            prod(getattr(new_trajectory, "shape", (0,))[:-1]),
+        )
         return _noncartesian(
             new_trajectory,
             image_shape,
@@ -3227,15 +3223,10 @@ def _subspace(
         and len(trajectory_shape) >= 3
         and trajectory_shape[0] == n_frames
     ):
-        if streaming is None:
-            frame_physics = [
-                physics.rebuild(trajectory[index], index) for index in range(n_frames)
-            ]
-        else:
-            provider = _FramePhysicsProvider(physics, trajectory, streaming)
-            frame_physics = [
-                _LazyFramePhysics(provider, index) for index in range(n_frames)
-            ]
+        provider = _FramePhysicsProvider(physics, trajectory, streaming)
+        frame_physics = [
+            _LazyFramePhysics(provider, index) for index in range(n_frames)
+        ]
     else:
         frame_physics = [physics] * n_frames
 
@@ -3350,6 +3341,24 @@ def _configure_off_resonance_toeplitz(
     return operator
 
 
+def _host_array(value: Any) -> Any:
+    """A field model as NumPy, contiguous, for the interpolation to plan on.
+
+    The singular-value decomposition the interpolator runs on hands back a
+    reversed view, and a Torch array on the way in means a Torch array on the
+    way out -- of something whose columns run backwards, which Torch cannot
+    wrap. Planning on the host settles it, and the operator's own arrays are
+    unaffected: this is the field model, not the data.
+    """
+    if value is None:
+        return None
+    numpy = import_module("numpy")
+    detach = getattr(value, "detach", None)
+    if callable(detach):
+        value = detach().cpu().numpy()
+    return numpy.ascontiguousarray(value)
+
+
 def _off_resonance(
     physics: MRIPhysics,
     field_map: Any,
@@ -3359,7 +3368,14 @@ def _off_resonance(
     mask: Any | None = None,
     interpolator: str | dict[str, Any] | tuple[Any, Any] = "svd",
 ) -> MRIPhysics:
-    """Decorate non-Cartesian physics with mri-nufft off-resonance correction."""
+    """Decorate non-Cartesian physics with mri-nufft off-resonance correction.
+
+    The field model is fitted with a dense decomposition. The partial one is
+    an ARPACK routine that answers a reversed view, which is not something a
+    Torch array can wrap, and the matrix it decomposes is small enough -- one
+    row per readout sample, one column per field bin -- that the dense
+    factorization is the simpler thing to depend on.
+    """
     if physics.native_operator is None:
         raise TypeError("OffResonance requires base non-Cartesian physics")
     if "stacked" in physics.modifiers:
@@ -3380,6 +3396,10 @@ def _off_resonance(
         raise ImportError("Off-resonance physics requires mri-nufft.") from error
 
     corrected_interpolator = interpolator
+    if isinstance(interpolator, str):
+        corrected_interpolator = {"name": interpolator, "partial_svd": False}
+    elif isinstance(interpolator, dict):
+        corrected_interpolator = {"partial_svd": False, **interpolator}
     corrected_readout_time = readout_time
     trajectory_shape = getattr(physics.trajectory, "shape", ())
     time_shape = getattr(readout_time, "shape", ())
@@ -3428,10 +3448,10 @@ def _off_resonance(
 
     native = corrected_class(
         physics.native_operator,
-        b0_map=field_map,
-        readout_time=corrected_readout_time,
-        r2star_map=r2star_map,
-        mask=mask,
+        b0_map=_host_array(field_map),
+        readout_time=_host_array(corrected_readout_time),
+        r2star_map=_host_array(r2star_map),
+        mask=_host_array(mask),
         interpolator=corrected_interpolator,
     )
     toeplitz_enabled = "toeplitz" in physics.modifiers
@@ -3550,58 +3570,28 @@ def _enable_toeplitz(
     physics: MRIPhysics,
     *,
     best_effort: bool = False,
-    support: str = "auto",
-    radius: float = 1.0,
-    radial_margin: float = 1.5,
-    trajectory_width: int = 4,
-    symmetric: bool | str = "auto",
+    compress: bool = True,
     chunk_size: int = 65536,
     coil_batch_size: int = 1,
     cuda_mode: str = "auto",
     cuda_max_device_fraction: float = 0.85,
     cuda_transfer_precision: str = "auto",
 ) -> None:
-    """Enable a Toeplitz normal operator wherever the backend supports it.
+    """Give a physics object a Toeplitz normal operator.
 
-    Subspace and off-resonance decorators use a Torch-native matrix-valued
-    transfer kernel. Its Hermitian upper triangle is packed, real bases retain
-    real storage, and only ``support`` locations are stored. ``symmetric``
-    applies to these as it does to a scalar kernel: what decides it is whether
-    the acquisition pairs a sample with its opposite under the same temporal
-    weight, not the dtype of the basis.
+    The kernel is the trajectory gridded onto a grid twice the image in every
+    dimension, stored over the locations it reached. Subspace and off-resonance
+    decorators carry a matrix-valued transfer built the same way, whose
+    Hermitian upper triangle is packed and whose real bases keep real storage.
+    An even transfer -- what a trajectory closed under ``k -> -k`` leaves -- is
+    stored over half its locations and mirrored as it is applied.
 
-    ``support="auto"``, the default, keeps the locations the trajectory
-    reaches on the transfer grid and drops the rest. The support is read off
-    the acquisition rather than assumed, so a projection scan leaves a ball, a
-    stack leaves a cylinder, and an encoding with no trajectory to read keeps
-    every location. ``"full"``, ``"radial"`` and ``"trajectory"`` force one.
-
-    A kernel location is not a sample: it is the trajectory interpolated onto
-    the transfer grid, and an off-grid sample spreads into its neighbourhood
-    with slowly decaying tails. ``trajectory_width`` is how much of that
-    neighbourhood is kept, so it trades the saving against the tails that are
-    clipped -- at the default of 4 a 3D spiral projection keeps a little over
-    half its locations for a normal operator accurate to a few parts in a
-    thousand, and raising it converges on the whole grid.
-
-    ``"radial"`` cuts a geometric ball instead, which presumes the shape. It
-    is only safe with margin: a trajectory sampled to Nyquist reaches the edge
-    of the largest ball the grid holds, and zero-padding cannot create margin
-    because the transfer grid always spans the image grid's own Nyquist range
-    however far the kernel is padded.
-
-    ``symmetric="auto"`` stores half of an even transfer and mirrors it as it
-    is applied, which is exact and independent of the margin. ``True`` demands
-    it and says so when the transfer is not even; ``False`` keeps every
-    location. Together with the ball the two leave 39% of a full kernel in two
-    dimensions and 26% in three.
+    None of that is a choice. What the arguments settle is execution: how much
+    is unpacked at a time, how many coils share a pass, and what a CUDA device
+    holds.
     """
     options = _toeplitz_options(
-        support=support,
-        radius=radius,
-        radial_margin=radial_margin,
-        trajectory_width=trajectory_width,
-        symmetric=symmetric,
+        compress=compress,
         chunk_size=chunk_size,
         coil_batch_size=coil_batch_size,
         cuda_mode=cuda_mode,
@@ -3632,8 +3622,8 @@ class Toeplitz(MRIPhysics):
     physics
         Base physics to accelerate.
     **options
-        Toeplitz options: ``support``, ``radius``, ``radial_margin``,
-        ``chunk_size``, ``coil_batch_size`` and the CUDA transfer settings.
+        Toeplitz options: ``compress``, ``chunk_size``, ``coil_batch_size``
+        and the CUDA transfer settings.
     """
 
     def __init__(self, physics: MRIPhysics, **kwargs: Any) -> None:

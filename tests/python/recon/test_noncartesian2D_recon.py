@@ -142,9 +142,17 @@ def test_an_undersampled_scan_goes_through_the_solve_and_beats_the_adjoint(
     kspace = sample(phantom, coil_maps, trajectory)
 
     # At toy size the sixteen spokes only sample a calibration radius of
-    # sixteen densely enough for NLINV to reproduce its own data.
+    # sixteen densely enough for NLINV to reproduce its own data, and the
+    # sensitivities they yield leave part of the matrix unobserved -- a normal
+    # operator with eigenvalues at zero, which a compressed kernel perturbs
+    # below it. The solve has to damp past that to be a solve at all.
     solved = reconstruct(
-        kspace, trajectory, mode="pics", iterations=25, calibration_width=16
+        kspace,
+        trajectory,
+        mode="pics",
+        iterations=25,
+        calibration_width=16,
+        regularization=0.3,
     )
     adjoint = reconstruct(kspace, trajectory, mode="direct")
     assert relative_error(solved, phantom) < relative_error(adjoint, phantom)

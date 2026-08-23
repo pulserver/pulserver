@@ -246,40 +246,29 @@ options — `toeplitz=False` and `device=None` opt out — and neither changes t
 answer, only what it costs. `Toeplitz` is the spelling for building the kernel
 with different options.
 
-The kernel is stored compactly, by two means that the operator applies on its
-own. A transfer that is **even** — which is what a trajectory closed under
-`k → -k` leaves, so radial diameters, a koosh ball, a symmetric spiral pair —
-is stored over half its locations and mirrored as it is applied, which is
-exact and stays halved wherever the solve runs. Subspace kernels are included:
-what decides it is whether the scan pairs a sample with its opposite under the
-same temporal weight — a full-diameter readout, whose two ends are one time
-point — and not whether the basis is real or complex. Evenness is measured
-when the kernel is built, never assumed, so an acquisition that does not pair
-keeps every location. On top of that, only the
-**disk or ball** is kept when the trajectory stops short of it by
-`radial_margin`, which saves a further quarter of the locations in two
-dimensions and half of them in three.
+The transfer is the trajectory **gridded** onto a grid twice the image in
+every dimension: the adjoint of the sample weights — ones for a plain normal,
+the density for a compensated one, a basis product for a subspace frame or an
+off-resonance segment — transformed. That is the Gram of the transform
+actually being inverted, and it is what puts the weight where the scan is:
+a projection scan leaves a ball, so the cube's corners hold little.
 
-The support itself is read off the acquisition rather than presumed:
-`support="auto"`, the default, keeps the locations the samples reach on the
-transfer grid plus the neighbourhood the interpolation spreads into, so a
-projection scan leaves a ball and the grid's corners hold nothing. This is the
-sparse formulation `MRISubspaceRecon.jl` and BART use, and it is what makes a
-large 3D subspace kernel fit. On a 3D spiral projection it costs a few parts in
-a thousand, and the fraction of the grid it keeps falls as the matrix grows —
-47% of a full kernel at a 16 matrix, 36% at 40, and less beyond.
+Two things then make the kernel small. `compress=True`, the default, keeps
+only the locations the gridding actually reached, the way BART's
+`--compress-psf` and `MRISubspaceRecon.jl`'s `calculate_kmask_indcs` do; for a
+subspace kernel the mask is the union over every frame. How much it saves is
+the scan's business — a 3D projection keeps under half the grid and less as
+the matrix grows, a 2D radial at Nyquist keeps nearly all of it, because in
+two dimensions the transfer really is dense. `compress=False` keeps the whole
+grid, which is what a calibration wants: `NLINV` solves over a small centred
+window where dropping what the trajectory never reached would cost the solve
+its positive definiteness.
 
-What the cut drops was not zero, and the exact normal operator of an
-undersampled scan has eigenvalues at zero — so a sampled support can carry the
-smallest of them slightly negative, by at most the largest value it left
-behind. The kernel reports that as `MRIPhysics.truncation_bound`, and `pics`
-damps past it, reading the bound after the first normal-operator call because
-that is when the kernel is built. The damping is self-scaling: on a 3D
-subspace kernel it is well under a percent of the transfer's peak and falls as
-the matrix grows, while on a single coefficient solved from a sparse 2D radial
-scan it is tens of percent — small where the cut belongs, and loud where it
-does not. A kernel with no trajectory to read, which is what a Cartesian
-encoding leaves, keeps everything and reports a bound of zero.
+A transfer that is **even** — what a trajectory closed under `k → -k` leaves,
+so radial diameters, a koosh ball, a symmetric spiral pair — is then stored
+over half of those locations and mirrored as it is applied, which is exact and
+stays halved wherever the solve runs. Subspace kernels included, whatever the
+basis dtype; evenness is measured when the kernel is built, never assumed.
 
 ```{eval-rst}
 .. autosummary::

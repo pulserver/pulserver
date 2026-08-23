@@ -212,6 +212,29 @@ def support_indices(
     )
 
 
+def significant_indices(transfer: Any, tolerance: float) -> Any:
+    """Locations a transfer actually holds weight at.
+
+    The support a Toeplitz kernel needs, read off the transfer rather than
+    guessed from the trajectory's geometry: everything above ``tolerance``
+    times the peak is kept, so what is dropped is bounded by that and the
+    kernel is the exact one to within it. A transfer that is dense -- which is
+    what a trajectory filling k-space leaves, corners included -- keeps every
+    location and the storage is unchanged.
+    """
+    torch = _torch()
+    magnitude = as_torch(transfer).abs().flatten()
+    if magnitude.numel() == 0:
+        return torch.zeros(0, dtype=torch.int32, device=magnitude.device)
+    peak = magnitude.max()
+    if peak <= 0:
+        return torch.arange(
+            magnitude.numel(), dtype=torch.int32, device=magnitude.device
+        )
+    keep = magnitude > tolerance * peak
+    return torch.nonzero(keep, as_tuple=False).flatten().to(torch.int32)
+
+
 def occupancy_indices(
     samples: Any,
     spatial_shape: tuple[int, ...],
@@ -442,9 +465,6 @@ class CompactToeplitzKernel:
         self._cuda_value_cache: dict[tuple[Any, ...], Any] = {}
         self._last_cuda_mode: str | None = None
         self._last_cuda_algorithm: str | None = None
-        #: Largest transfer value a truncated support left behind, which is
-        #: how far below zero this kernel's normal operator can reach.
-        self.truncation_bound = 0.0
 
     @property
     def is_real(self) -> bool:

@@ -782,8 +782,9 @@ def pipe_menon_dcf(
     >>> trajectory = np.stack(
     ...     [np.outer(np.cos(angles), radius), np.outer(np.sin(angles), radius)], -1
     ... ).reshape(-1, 2)
-    >>> np.asarray(recon.pipe_menon_dcf(trajectory, (16, 16))).shape
-    (256,)
+    >>> weights = np.asarray(recon.pipe_menon_dcf(trajectory, (16, 16)))
+    >>> weights.shape, weights.dtype.kind
+    ((256,), 'f')
     """
     if len(image_shape) not in (2, 3) or any(int(item) < 1 for item in image_shape):
         raise ValueError("image_shape must contain two or three positive entries")
@@ -794,12 +795,24 @@ def pipe_menon_dcf(
             "Pipe-Menon DCF estimation requires mri-nufft, which ships "
             "with pulserver; reinstall the package to restore it."
         ) from error
-    return density.pipe(
+    weights = density.pipe(
         trajectory,
         tuple(int(item) for item in image_shape),
         backend=backend,
         **kwargs,
     )
+    # The estimator works in the complex domain and answers there; a density
+    # is real, and a complex one propagates into every operator that carries
+    # it and into the transfer kernels built from it. The real part of a
+    # complex array is a strided view, which the backends will not take, so it
+    # is materialized here.
+    real = getattr(weights, "real", None)
+    if real is None:
+        return weights
+    contiguous = getattr(real, "contiguous", None)
+    if callable(contiguous):
+        return contiguous()
+    return import_module("numpy").ascontiguousarray(real)
 
 
 def estimate_epi_phase(
