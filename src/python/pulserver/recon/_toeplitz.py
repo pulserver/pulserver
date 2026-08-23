@@ -5,6 +5,7 @@ from __future__ import annotations
 __all__ = ["CompactToeplitzKernel", "as_torch", "support_indices"]
 
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import suppress
 from importlib import import_module
 from math import prod
 from typing import Any
@@ -1438,6 +1439,27 @@ class CompactToeplitzKernel:
         torch.cuda.current_stream(policy.torch_device).synchronize()
         return result
 
+    def _pin_host_storage(self) -> None:
+        """Hold the kernel where the device can read it without a staging copy.
+
+        A streamed application sends the whole kernel across for every coil, and
+        out of pageable memory each chunk is copied once more on the way and
+        overlaps the transform less. Pinned memory cannot be paged out, so this
+        is declined for a kernel large against what the host has free.
+        """
+        if self.values.device.type != "cpu" or self.values.is_pinned():
+            return
+        try:
+            import psutil
+
+            available = psutil.virtual_memory().available
+        except Exception:
+            return
+        if self.storage_nbytes > 0.25 * available:
+            return
+        with suppress(RuntimeError):
+            self.values = self.values.pin_memory()
+
     def apply_streamed(
         self,
         image: Any,
@@ -1454,6 +1476,8 @@ class CompactToeplitzKernel:
         """
         torch = _torch()
         policy.ensure_available()
+        if policy.pin_memory:
+            self._pin_host_storage()
         if self.values.dtype in {
             torch.float16,
             torch.bfloat16,
