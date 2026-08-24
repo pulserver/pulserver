@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from math import prod
 from typing import Any
 from os import cpu_count
 from types import SimpleNamespace
@@ -1498,6 +1499,104 @@ def test_a_kernel_hands_the_allocator_its_blocks_back_exactly_once():
         kernel.settle_allocator()
 
     assert released.call_count == 1
+
+
+def test_the_resident_layout_asks_for_two_banks_and_a_workspace():
+    """The estimate covers the banks it allocates, not a third one it does not."""
+    generator = torch.Generator().manual_seed(23)
+    image_shape = (4, 5)
+    spatial_shape = (8, 10)
+    rank = 3
+    raw = torch.randn(rank, rank, *spatial_shape, generator=generator)
+    kernel = _packed_kernel(0.5 * (raw + raw.movedim(0, 1)), image_shape)
+    image = torch.zeros(2, rank, *image_shape, dtype=torch.complex64)
+
+    required = kernel._resident_additional_bytes(image)
+
+    volume = 2 * prod(spatial_shape) * image.element_size()
+    banks = rank * volume
+    result = image.numel() * image.element_size()
+    assert required == 2 * banks + volume + result
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is unavailable")
+def test_a_device_that_refuses_the_banks_falls_back_instead_of_raising():
+    """A tight estimate is only safe if being wrong costs speed, not the run."""
+    generator = torch.Generator().manual_seed(24)
+    image_shape = (4, 5)
+    spatial_shape = (8, 10)
+    rank = 3
+    raw = torch.randn(rank, rank, *spatial_shape, generator=generator)
+    transfer = 0.5 * (raw + raw.movedim(0, 1))
+    kernel = _packed_kernel(transfer, image_shape).to("cuda")
+    kernel.cuda_transfer_precision = "float32"
+    image = torch.randn(
+        2, rank, *image_shape, generator=generator, dtype=torch.complex64
+    ).cuda()
+    expected = _dense_apply(image, transfer.to(image.dtype).cuda(), image_shape)
+
+    with mock.patch.object(
+        kernel,
+        "_apply_cuda_resident",
+        side_effect=RuntimeError("CUDA out of memory. Tried to allocate 2 GiB"),
+    ):
+        result = kernel.apply(image)
+
+    torch.testing.assert_close(result, expected, atol=2e-5, rtol=2e-5)
+    assert kernel._resident_denied
+    assert kernel.last_cuda_mode == "compact"
+    assert kernel._select_cuda_mode(image) == "compact"
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is unavailable")
+def test_a_narrow_encoding_replaces_the_canonical_values_rather_than_joining_them():
+    """Half-width storage is only a saving if the full-width copy leaves."""
+    generator = torch.Generator().manual_seed(31)
+    image_shape = (4, 5)
+    spatial_shape = (8, 10)
+    rank = 3
+    raw = torch.randn(rank, rank, *spatial_shape, generator=generator)
+    kernel = _packed_kernel(0.5 * (raw + raw.movedim(0, 1)), image_shape).to("cuda")
+    assert kernel.values.device.type == "cuda"
+
+    encoded = kernel._encoded_values_for("cuda", "bfloat16")
+
+    assert encoded.dtype is torch.bfloat16
+    assert encoded.device.type == "cuda"
+    assert kernel.values.device.type == "cpu"
+    assert kernel._encoded_values_for("cuda", "bfloat16") is encoded
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is unavailable")
+def test_maps_are_read_where_they_rest_and_staged_a_coil_at_a_time():
+    """Maps the caller left on the host are not moved to the device whole."""
+    generator = torch.Generator().manual_seed(37)
+    image_shape = (8, 8)
+    coils, rank = 4, 2
+    maps = torch.randn(
+        coils, *image_shape, generator=generator, dtype=torch.complex64
+    )
+    maps = maps / maps.abs().pow(2).sum(0, keepdim=True).sqrt()
+    operator = SimpleNamespace(shape=image_shape, smaps=maps, uses_sense=True)
+    image = torch.zeros(1, rank, *image_shape, dtype=torch.complex64).cuda()
+
+    held = physics._sense_maps(operator, image)
+
+    assert held.device.type == "cpu"
+
+    raw = torch.randn(rank, rank, *[2 * size for size in image_shape], generator=generator)
+    kernel = _packed_kernel(0.5 * (raw + raw.movedim(0, 1)), image_shape).to("cuda")
+    kernel.cuda_transfer_precision = "float32"
+
+    staged = physics._apply_sense_toeplitz(kernel, image, operator)
+    whole = physics._apply_sense_toeplitz(
+        kernel,
+        image,
+        SimpleNamespace(shape=image_shape, smaps=maps.cuda(), uses_sense=True),
+    )
+
+    assert maps.device.type == "cpu"
+    torch.testing.assert_close(staged, whole, atol=2e-5, rtol=2e-5)
 
 
 def test_asking_a_dynamic_physics_for_toeplitz_turns_it_on():

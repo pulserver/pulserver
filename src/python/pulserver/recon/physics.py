@@ -38,6 +38,7 @@ import deepinv
 
 from ._toeplitz import (
     CompactToeplitzKernel,
+    _device_is_full,
     as_torch,
     occupancy_indices,
     support_indices,
@@ -1255,7 +1256,12 @@ def _compute_toeplitz_transfer(
 
 
 def _sense_maps(native_operator: Any, reference: Any) -> Any:
-    """Return sensitivity maps as a Torch tensor on ``reference.device``."""
+    """Return sensitivity maps as a Torch tensor, on whatever device holds them.
+
+    A normal application reads one coil at a time, so maps the caller left on
+    the host are staged coil by coil rather than moved whole -- the difference
+    is the whole bank against one map of it.
+    """
     torch = import_module("torch")
     base = _base_fourier_operator(native_operator)
     maps = getattr(base, "smaps", None)
@@ -1265,7 +1271,7 @@ def _sense_maps(native_operator: Any, reference: Any) -> Any:
             dtype=reference.dtype,
             device=reference.device,
         )
-    maps = as_torch(maps, device=reference.device).to(reference.dtype)
+    maps = as_torch(maps).to(reference.dtype)
     spatial_ndim = len(base.shape)
     if maps.ndim == spatial_ndim:
         return maps[None]
@@ -1348,11 +1354,11 @@ def _apply_sense_toeplitz(
 
     for start in range(0, n_coils, coil_batch_size):
         if batched_maps:
-            coil_maps = maps[:, start : start + coil_batch_size]
+            coil_maps = maps[:, start : start + coil_batch_size].to(image.device)
             left = image[:, None]
             right = coil_maps[:, :, None]
         else:
-            coil_maps = maps[start : start + coil_batch_size]
+            coil_maps = maps[start : start + coil_batch_size].to(image.device)
             left = image[:, None]
             right = coil_maps[None, :, None]
         coil_count = coil_maps.shape[1] if batched_maps else coil_maps.shape[0]
@@ -1374,14 +1380,20 @@ def _apply_sense_toeplitz(
                 )
             )
             factor = maps_batch[:, None].expand_as(image)
-            kernel._last_cuda_mode = "resident"
-            kernel._apply_cuda_resident(
-                image,
-                right_factor=factor,
-                left_factor=factor.conj(),
-                output=result,
-            )
-            continue
+            try:
+                kernel._apply_cuda_resident(
+                    image,
+                    right_factor=factor,
+                    left_factor=factor.conj(),
+                    output=result,
+                )
+            except RuntimeError as error:
+                if kernel.cuda_mode == "resident" or not _device_is_full(error):
+                    raise
+                kernel._resident_refused()
+            else:
+                kernel._last_cuda_mode = "resident"
+                continue
         fused_streaming = (
             streaming is not None and image.device.type == "cpu" and coil_count == 1
         )
@@ -2206,7 +2218,7 @@ def _apply_subspace_off_resonance_toeplitz(
     )
     result = torch.zeros_like(image)
     for start in range(0, maps.shape[0], coil_batch_size):
-        coil_maps = maps[start : start + coil_batch_size]
+        coil_maps = maps[start : start + coil_batch_size].to(image.device)
         coil_images = image[:, None] * coil_maps[None, :, None]
         expanded = coil_images[:, :, :, None] * spatial_factors[None, None, None]
         expanded = expanded.flatten(0, 1).flatten(1, 2)

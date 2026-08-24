@@ -264,6 +264,131 @@ MU_TEST(test_corner_stream_is_not_a_raster)
         check_not_a_raster(ROTATED_SEQS[i]);
 }
 
+
+/* ------------------------------------------------------------------ *
+ *  Max-energy segment instance
+ * ------------------------------------------------------------------ */
+
+/* Energy of one segment instance, read off the tables the same way the
+ * canonical TR is composed: every row's own shape, scaled by that row's own
+ * amplitude, summed over the three axes and over the instance's blocks. */
+static double instance_energy(
+    const pulseg_sequence_descriptor *desc, int start, int num_blocks)
+{
+    double total = 0.0;
+    int b, ax;
+
+    for (b = 0; b < num_blocks; ++b)
+    {
+        int blk = pulseg__exec_block_idx(desc, start + b);
+        const pulseg_block_table_element *bte = &desc->block_table[blk];
+        const pulseg_base_block *bdef = &desc->base_blocks[bte->id];
+        int grad_ids[3], def_ids[3];
+
+        grad_ids[0] = bte->gx_id;
+        grad_ids[1] = bte->gy_id;
+        grad_ids[2] = bte->gz_id;
+        def_ids[0] = bdef->gx_id;
+        def_ids[1] = bdef->gy_id;
+        def_ids[2] = bdef->gz_id;
+
+        for (ax = 0; ax < 3; ++ax)
+        {
+            float amp, e;
+            if (grad_ids[ax] < 0 || grad_ids[ax] >= desc->grad_table_size)
+                continue;
+            if (def_ids[ax] < 0 || def_ids[ax] >= desc->num_unique_grads)
+                continue;
+            amp = desc->grad_table[grad_ids[ax]].amplitude;
+            e = pulseg__grad_instance_energy(
+                desc, &desc->grad_definitions[def_ids[ax]],
+                desc->grad_table[grad_ids[ax]].shape_id);
+            total += (double)e * amp * amp;
+        }
+    }
+    return total;
+}
+
+/* The recorded instance must be the one that carries the most gradient
+ * energy, ranked per instance.  A definition can cover several shapes -- a
+ * multishot spiral covers six -- so ranking on anything the definition holds
+ * rather than on the shape each row actually plays selects a different, and
+ * cooler, instance. */
+static void check_max_energy_instance(const char *filename)
+{
+    pulseg_collection *coll = NULL;
+    int s;
+
+    mu_assert(
+        PULSEG_SUCCEEDED(load_corpus_seq(&coll, filename, &s_opts)),
+        "load_corpus_seq failed");
+
+    for (s = 0; s < coll->num_subsequences; ++s)
+    {
+        const pulseg_sequence_descriptor *desc = &coll->descriptors[s];
+        int seg;
+
+        for (seg = 0; seg < desc->num_unique_segments; ++seg)
+        {
+            const pulseg_virtual_segment *sd = &desc->segment_definitions[seg];
+            int nb = sd->num_blocks;
+            int n, best_start = -1;
+            double best = -1.0;
+
+            if (nb <= 0 || sd->max_energy_start_block < 0)
+                continue;
+
+            for (n = 0; n + nb <= desc->exec_stream_len;)
+            {
+                int ok = 1, b;
+                if (pulseg__exec_seg_id(desc, n) != seg)
+                {
+                    ++n;
+                    continue;
+                }
+                for (b = 1; b < nb; ++b)
+                    if (pulseg__exec_seg_id(desc, n + b) != seg)
+                    {
+                        ok = 0;
+                        break;
+                    }
+                if (!ok)
+                {
+                    ++n;
+                    continue;
+                }
+                {
+                    double e = instance_energy(desc, n, nb);
+                    if (e > best)
+                    {
+                        best = e;
+                        best_start = n;
+                    }
+                }
+                n += nb;
+            }
+
+            if (best_start < 0)
+                continue;
+            mu_assert_double_eq(
+                best, instance_energy(desc, sd->max_energy_start_block, nb));
+        }
+    }
+    pulseg_collection_free(coll);
+}
+
+MU_TEST(test_max_energy_instance_is_the_hottest)
+{
+    int i;
+    for (i = 0; i < N_PLAIN; ++i)
+        check_max_energy_instance(PLAIN_SEQS[i]);
+    for (i = 0; i < N_ROTATED; ++i)
+        check_max_energy_instance(ROTATED_SEQS[i]);
+    /* A definition covering six distinct spiral shapes, whose energies span
+     * 2.09x and whose largest is played at the smallest amplitude. */
+    check_max_energy_instance("mprage_stack_of_spirals_3d.seq");
+}
+
 MU_TEST_SUITE(test_corner_points_suite)
 {
     pulseg_opts_init(
@@ -273,6 +398,7 @@ MU_TEST_SUITE(test_corner_points_suite)
     MU_RUN_TEST(test_corner_stream_matches_uniform_path);
     MU_RUN_TEST(test_corner_stream_matches_uniform_path_rotated);
     MU_RUN_TEST(test_corner_stream_is_not_a_raster);
+    MU_RUN_TEST(test_max_energy_instance_is_the_hottest);
 }
 
 int test_corner_points_main(void)

@@ -1411,6 +1411,25 @@ float pulseg__grad_shape_slew(const pulseg_sequence_descriptor *desc, int shape_
     return desc->grad_shape_slew[shape_id - 1];
 }
 
+float pulseg__grad_instance_energy(
+    const pulseg_sequence_descriptor *desc,
+    const pulseg_grad_definition *gd,
+    int shape_id)
+{
+    if (shape_id > 0)
+    {
+        if (!desc || !desc->grad_shape_energy || shape_id > desc->num_grad_shape_stats)
+            return 0.0f;
+        return desc->grad_shape_energy[shape_id - 1];
+    }
+    if (!gd || gd->type != 0)
+        return 0.0f;
+    return pulseg__trap_energy(
+        (float)gd->rise_time_or_unused,
+        (float)gd->flat_time_or_unused,
+        (float)gd->fall_time_or_num_uncompressed_samples);
+}
+
 float pulseg__grad_boundary_first(const pulseg_sequence_descriptor *desc, int raw_id)
 {
     return grad_boundary_value(desc, raw_id, 0);
@@ -2618,9 +2637,10 @@ int pulseg__get_exec_stream_segments(
                     ax_def_ids[ax] >= 0 && ax_def_ids[ax] < desc->num_unique_grads)
                 {
                     amp = desc->grad_table[ax_grad_ids[ax]].amplitude;
-                    /* The definition's own worst instance by energy; see
-                     * pulseg_grad_representative. */
-                    e = desc->grad_definitions[ax_def_ids[ax]].heat.energy;
+                    e = pulseg__grad_instance_energy(
+                        desc,
+                        &desc->grad_definitions[ax_def_ids[ax]],
+                        desc->grad_table[ax_grad_ids[ax]].shape_id);
                     inst_energy += e * amp * amp;
                 }
             }
@@ -2786,9 +2806,10 @@ int pulseg__get_exec_stream_segments(
                     ax_def_ids[ax] >= 0 && ax_def_ids[ax] < desc->num_unique_grads)
                 {
                     amp = desc->grad_table[ax_grad_ids[ax]].amplitude;
-                    /* The definition's own worst instance by energy; see
-                     * pulseg_grad_representative. */
-                    e = desc->grad_definitions[ax_def_ids[ax]].heat.energy;
+                    e = pulseg__grad_instance_energy(
+                        desc,
+                        &desc->grad_definitions[ax_def_ids[ax]],
+                        desc->grad_table[ax_grad_ids[ax]].shape_id);
                     inst_energy += e * amp * amp;
                 }
             }

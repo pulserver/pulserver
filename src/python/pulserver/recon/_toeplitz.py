@@ -298,6 +298,15 @@ def occupancy_indices(
     return torch.nonzero(keep.reshape(-1), as_tuple=False).flatten().to(torch.int32)
 
 
+def _device_is_full(error: BaseException) -> bool:
+    """Whether a runtime error is the allocator declining an allocation."""
+    torch = _torch()
+    refusal = getattr(torch.cuda, "OutOfMemoryError", None)
+    if refusal is not None and isinstance(error, refusal):
+        return True
+    return "out of memory" in str(error).lower()
+
+
 def _banked_transform(
     bank: Any, axes: tuple[int, ...], *, inverse: bool = False
 ) -> None:
@@ -412,6 +421,7 @@ class CompactToeplitzKernel:
         self._last_cuda_mode: str | None = None
         self._last_cuda_algorithm: str | None = None
         self._allocator_settled = False
+        self._resident_denied = False
 
     @property
     def is_real(self) -> bool:
@@ -465,6 +475,7 @@ class CompactToeplitzKernel:
             self._resident_workspaces.clear()
             self._packed_workspaces.clear()
             self._allocator_settled = False
+            self._resident_denied = False
         self._metadata_to(device)
         return self
 
@@ -505,21 +516,37 @@ class CompactToeplitzKernel:
             return "float32"
         return _resolved_cuda_precision(requested, device)
 
-    def _encoded_values_for(self, device: Any, precision: str) -> Any:
-        """Cache one encoded representation on a host or CUDA device."""
-        torch = _torch()
-        device = torch.device(device)
-        key = (
+    def _encoding_key(self, device: Any, precision: str) -> tuple[Any, ...]:
+        return (
             device,
             precision,
             self.values.device,
             self.values.data_ptr(),
             self.values._version,
         )
+
+    def _encoded_values_for(self, device: Any, precision: str) -> Any:
+        """Cache one encoded representation on a host or CUDA device.
+
+        An encoding narrower than the canonical values carries everything the
+        device reads, so the canonical copy goes back to the host rather than
+        sitting beside it -- the narrower encoding is worth having for the room
+        it leaves, and keeping both spends more than either.
+        """
+        torch = _torch()
+        device = torch.device(device)
+        key = self._encoding_key(device, precision)
         encoded = self._cuda_value_cache.get(key)
-        if encoded is None:
-            encoded = _cuda_transfer_values(self.values, precision, device)
-            self._cuda_value_cache[key] = encoded
+        if encoded is not None:
+            return encoded
+        encoded = _cuda_transfer_values(self.values, precision, device)
+        if encoded is not self.values and encoded.element_size() < (
+            self.values.element_size()
+        ):
+            self.values = self.values.to("cpu")
+            self._cuda_value_cache.clear()
+            key = self._encoding_key(device, precision)
+        self._cuda_value_cache[key] = encoded
         return encoded
 
     def _cuda_storage_nbytes(self, precision: str) -> int:
@@ -588,8 +615,15 @@ class CompactToeplitzKernel:
                     "optimized CUDA Toeplitz execution requires complex64 images"
                 )
             if self._select_cuda_mode(image) == "resident":
-                self._last_cuda_mode = "resident"
-                return self._apply_cuda_resident(image)
+                try:
+                    result = self._apply_cuda_resident(image)
+                except RuntimeError as error:
+                    if self.cuda_mode == "resident" or not _device_is_full(error):
+                        raise
+                    self._resident_refused()
+                else:
+                    self._last_cuda_mode = "resident"
+                    return result
             self._last_cuda_mode = "compact"
             return self._apply_cuda_packed(image)
 
@@ -632,10 +666,11 @@ class CompactToeplitzKernel:
         )
 
     def _resident_additional_bytes(self, image: Any) -> int:
-        """Conservative peak bytes for two banks plus a cuFFT work bank."""
-        bank_bytes = (
-            image.shape[0] * self.rank * prod(self.spatial_shape) * image.element_size()
+        """Peak bytes for the two banks, a transform workspace and the result."""
+        volume_bytes = (
+            image.shape[0] * prod(self.spatial_shape) * image.element_size()
         )
+        bank_bytes = self.rank * volume_bytes
         result_bytes = image.numel() * image.element_size()
         transfer_precision = self._cuda_precision(
             self.cuda_transfer_precision,
@@ -644,6 +679,8 @@ class CompactToeplitzKernel:
         transfer_bytes = self._cuda_storage_nbytes(transfer_precision)
         already_encoded = (
             transfer_precision == "float32" and self.values.device == image.device
+        ) or self._encoding_key(image.device, transfer_precision) in (
+            self._cuda_value_cache
         )
         transfer_conversion = 0 if already_encoded else transfer_bytes
         transfer_residency = (
@@ -651,10 +688,17 @@ class CompactToeplitzKernel:
             if self.indices.device == image.device
             else self.indices.numel() * self.indices.element_size()
         )
-        # cuFFT work areas depend on shape and CUDA version. Reserving one
-        # additional bank keeps automatic selection conservative and prevents
-        # a fast-path choice from turning into an allocator OOM.
-        return 3 * bank_bytes + result_bytes + transfer_conversion + transfer_residency
+        # A transform plans a workspace of about the size of what it is handed,
+        # and ``_banked_transform`` hands it as little as one coefficient when
+        # that is what fits, so one volume covers it. Where the device still
+        # refuses, ``_resident_refused`` drops the layout rather than raising.
+        return (
+            2 * bank_bytes
+            + volume_bytes
+            + result_bytes
+            + transfer_conversion
+            + transfer_residency
+        )
 
     def _resident_fits(self, image: Any) -> tuple[bool, int, int]:
         """Return whether the Julia-style banks fit the configured VRAM budget."""
@@ -672,9 +716,19 @@ class CompactToeplitzKernel:
         available = min(physical_headroom, fraction_headroom)
         return required <= available, required, available
 
+    def _resident_refused(self) -> None:
+        """Give the resident layout up after the device declined its banks."""
+        torch = _torch()
+        self._resident_denied = True
+        self._resident_workspaces.clear()
+        with suppress(RuntimeError):
+            torch.cuda.empty_cache()
+
     def _select_cuda_mode(self, image: Any) -> str:
         """Select resident banks when they already exist or safely fit."""
         if self.cuda_mode == "compact":
+            return "compact"
+        if self._resident_denied and self.cuda_mode != "resident":
             return "compact"
         if self._resident_workspace_key(image) in self._resident_workspaces:
             return "resident"

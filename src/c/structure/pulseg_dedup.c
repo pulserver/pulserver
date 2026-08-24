@@ -490,6 +490,11 @@ static float normalize_waveform(float *waveform, int n)
 /*  Trapezoid statistics                                               */
 /* ================================================================== */
 
+float pulseg__trap_energy(float rise_us, float flat_us, float fall_us)
+{
+    return (rise_us / 3.0f + flat_us + fall_us / 3.0f) * 1e-6f;
+}
+
 static void compute_trapezoid_stats(
     float *slew,
     float *energy,
@@ -500,7 +505,6 @@ static void compute_trapezoid_stats(
     float fall_us)
 {
     float rise_s = rise_us * 1e-6f;
-    float flat_s = flat_us * 1e-6f;
     float fall_s = fall_us * 1e-6f;
     float sr, sf;
 
@@ -511,7 +515,7 @@ static void compute_trapezoid_stats(
     sf = (fall_s > 0.0f) ? (1.0f / fall_s) : 0.0f;
     *slew = (sr > sf) ? sr : sf;
 
-    *energy = rise_s / 3.0f + flat_s + fall_s / 3.0f;
+    *energy = pulseg__trap_energy(rise_us, flat_us, fall_us);
 }
 
 /*
@@ -598,13 +602,17 @@ static int compute_grad_stats(
             (float *)PULSEG_ALLOC((size_t)seq->shapes_library_size * sizeof(float));
         desc->grad_shape_slew =
             (float *)PULSEG_ALLOC((size_t)seq->shapes_library_size * sizeof(float));
-        if (!desc->grad_shape_first || !desc->grad_shape_last || !desc->grad_shape_slew)
+        desc->grad_shape_energy =
+            (float *)PULSEG_ALLOC((size_t)seq->shapes_library_size * sizeof(float));
+        if (!desc->grad_shape_first || !desc->grad_shape_last ||
+            !desc->grad_shape_slew || !desc->grad_shape_energy)
             return PULSEG_ERR_ALLOC_FAILED;
         for (i = 0; i < seq->shapes_library_size; ++i)
         {
             desc->grad_shape_first[i] = 0.0f;
             desc->grad_shape_last[i] = 0.0f;
             desc->grad_shape_slew[i] = 0.0f;
+            desc->grad_shape_energy[i] = 0.0f;
         }
     }
 
@@ -622,7 +630,6 @@ static int compute_grad_stats(
 
         {
             pulseg_grad_representative empty = PULSEG_GRAD_REPRESENTATIVE_INIT;
-            gd->heat = empty;
             gd->spectral = empty;
         }
         {
@@ -680,8 +687,6 @@ static int compute_grad_stats(
             if (cand.slew_rate > gd->any.max_slew_rate)
                 gd->any.max_slew_rate = cand.slew_rate;
 
-            cand.score = amp2 * cand.energy;
-            grad_keep_best(&gd->heat, &cand);
             cand.score = amp2 * slew_energy;
             grad_keep_best(&gd->spectral, &cand);
         }
@@ -783,6 +788,8 @@ static int compute_grad_stats(
                     gd->any.max_slew_rate = cand.slew_rate;
                 if (desc && desc->grad_shape_slew && shape_id <= desc->num_grad_shape_stats)
                     desc->grad_shape_slew[shape_id - 1] = cand.slew_rate;
+                if (desc && desc->grad_shape_energy && shape_id <= desc->num_grad_shape_stats)
+                    desc->grad_shape_energy[shape_id - 1] = cand.energy;
 
                 slew_energy = grad_slew_energy(
                     waveform,
@@ -794,8 +801,6 @@ static int compute_grad_stats(
                 cand.amplitude = gd->any.max_amplitude;
                 amp2 = cand.amplitude * cand.amplitude;
 
-                cand.score = amp2 * cand.energy;
-                grad_keep_best(&gd->heat, &cand);
                 cand.score = amp2 * slew_energy;
                 grad_keep_best(&gd->spectral, &cand);
 

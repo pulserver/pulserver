@@ -105,31 +105,29 @@ typedef struct pulseg_rf_shim_definition
  * arbitrary gradient -- with different waveforms.  Enumerating them all in the
  * definition is what imposed the old 16-shot ceiling; the per-instance shape
  * id lives in the grad table (and so in the exec stream) instead, and what the
- * definition keeps is the instances safety actually has to look at.
+ * definition keeps is the instance safety has to look at when it cannot look
+ * at the instance that actually plays.
  *
- * ### Why two, and why these two
- *
- * Both are moments of the same quantity.  Write the per-axis spectrum of an
- * instance as G(f); the rotation-invariant object is
+ * `spectral` maximises the second moment of
  *
  *     S(f) = |Gx(f)|^2 + |Gy(f)|^2 + |Gz(f)|^2
  *
- * -- invariant because a rotation sends G to RG and R preserves norms, which
- * is exactly why it can rank instances without the rotation confounding the
- * comparison.  The two representatives are its zeroth and second moments,
- * and Parseval turns both into time-domain integrals that need no FFT:
- *
- *     heat      integral of g^2 dt        -- gradient heating, duty cycle
- *     spectral  integral of (dg/dt)^2 dt  -- PNS, mechanical resonance, SPL
+ * -- rotation-invariant, because a rotation sends G to RG and R preserves
+ * norms, which is what lets it rank instances without the rotation
+ * confounding the comparison.  Parseval turns it into a time-domain integral
+ * of (dg/dt)^2 that needs no FFT: PNS, mechanical resonance, SPL.
  *
  * Selection is per definition, i.e. per axis, and S is additive over axes, so
  * maximising each axis independently bounds the maximum of the sum.  That is
  * conservative, which is the direction a safety gate has to err in.
  *
- * The honest limit: the second moment is broadband, and mechanical resonance
- * is not.  A shape with the largest total slew energy is not necessarily the
- * worst inside a narrow resonance band, so `spectral` is a proxy there and the
- * band-resolved check still runs on the materialised waveform.
+ * Two honest limits.  The second moment is broadband and mechanical resonance
+ * is not, so a shape with the largest total slew energy is not necessarily the
+ * worst inside a narrow resonance band, and the band-resolved check still runs
+ * on the materialised waveform.  And a representative pairs the steepest shape
+ * with the largest amplitude, which need not be the same instance -- so where
+ * the instance that plays is known, ask it directly rather than asking the
+ * definition.  Gradient heating does exactly that, via `grad_shape_energy`.
  */
 typedef struct pulseg_grad_representative
 {
@@ -180,7 +178,6 @@ typedef struct pulseg_grad_definition
     int unused_or_time_shape_id;
     int delay;
     pulseg_grad_aggregate any;
-    pulseg_grad_representative heat;
     pulseg_grad_representative spectral;
 } pulseg_grad_definition;
 
@@ -453,24 +450,27 @@ typedef struct pulseg_sequence_descriptor
     /* Per-SHAPE statistics of the normalised waveform, indexed by pulseq
      * shape id - 1; `num_grad_shape_stats` is the shape library's size.
      * `grad_shape_slew` is the steepest normalised slew the shape reaches,
-     * in 1/s, over its own time shape where it has one.
+     * in 1/s, and `grad_shape_energy` the integral of its square over the
+     * event, in s -- both over the shape's own time shape where it has one.
      *
      * These live here rather than on the definition because they are
      * properties of the shape alone, and because the questions they answer
      * are per instance rather than worst case: "is the gradient at zero
-     * across this junction" and "how steep is what plays here" both have to
-     * be asked of the instance that actually plays there.  Grad definitions
-     * are deduplicated without the magnitude shape id, so one definition
-     * covers every shape of equal sample count -- its representatives pair
-     * the steepest shape with the largest amplitude, which need not be the
-     * same instance.
+     * across this junction", "how steep is what plays here" and "how much
+     * energy does this instance carry" all have to be asked of the instance
+     * that actually plays there.  Grad definitions are deduplicated without
+     * the magnitude shape id, so one definition covers every shape of equal
+     * sample count, and its representative pairs the steepest shape with the
+     * largest amplitude -- which need not be the same instance.
      *
      * A trapezoid has no shape id and no entry; its endpoints are zero by
-     * construction and its slew follows from its ramp times. */
+     * construction, and its slew and energy both follow from its ramp times
+     * (pulseg__trap_energy). */
     int num_grad_shape_stats;
     float *grad_shape_first;
     float *grad_shape_last;
     float *grad_shape_slew;
+    float *grad_shape_energy;
 
     int num_unique_adcs;
     pulseg_adc_definition *adc_definitions;
@@ -564,7 +564,7 @@ typedef struct pulseg_sequence_descriptor
     { \
     0.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, {0, 1, 2}, {0, 0, 0}, {0, 0, \
     0}, {0, 0, 0}, {0, 0, 0}, 0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, /* rf_amplitude_variable */ \
-    0, NULL, 0, NULL, /* grad shape stats */ 0, NULL, NULL, NULL, \
+    0, NULL, 0, NULL, /* grad shape stats */ 0, NULL, NULL, NULL, NULL, \
     0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, NULL, \
     PULSEG_TR_DESCRIPTOR_INIT, 0, NULL, PULSEG_SEGMENT_TABLE_RESULT_INIT, 0, NULL, NULL, \
     NULL, /* exec_runs */ 0, NULL, /* seg runs */ 0, 0, NULL, NULL, \
@@ -724,6 +724,30 @@ float pulseg__grad_shape_last(const pulseg_sequence_descriptor *desc, int shape_
  * 1/s, or 0 when there is no such shape.  Multiply by an instance's own
  * amplitude for the slew that instance actually plays. */
 float pulseg__grad_shape_slew(const pulseg_sequence_descriptor *desc, int shape_id);
+
+/**
+ * @brief Integral of w^2 over one gradient instance, in s.
+ *
+ * @param desc      Descriptor holding the per-shape statistics.
+ * @param gd        Definition the instance belongs to (supplies the ramp
+ *                  times when @p shape_id is 0).
+ * @param shape_id  Pulseq shape id of THIS instance; 0 for a trapezoid.
+ * @return The normalised waveform's energy; 0 if it cannot be determined.
+ */
+float pulseg__grad_instance_energy(
+    const pulseg_sequence_descriptor *desc,
+    const pulseg_grad_definition *gd,
+    int shape_id);
+
+/**
+ * @brief Integral of w^2 over a normalised trapezoid, in s.
+ *
+ * @param rise_us  Ramp-up duration (us).
+ * @param flat_us  Plateau duration (us).
+ * @param fall_us  Ramp-down duration (us).
+ * @return rise/3 + flat + fall/3, converted to seconds.
+ */
+float pulseg__trap_energy(float rise_us, float flat_us, float fall_us);
 int pulseg__block_defs_structurally_equal(
     const pulseg_sequence_descriptor *desc,
     int id_a,

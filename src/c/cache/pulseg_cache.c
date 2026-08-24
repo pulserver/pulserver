@@ -33,7 +33,7 @@
 /* The full (major, minor, revision) triple must match exactly on read: a
  * cache at any other revision is rejected outright and the .seq is
  * re-parsed, never partially or heuristically read. */
-#define PULSEG_CACHE_VERSION_REVISION 13
+#define PULSEG_CACHE_VERSION_REVISION 14
 
 /* Per-consumer sections. Each carries its own distinct payload.
  * COMMON establishes the collection + descriptor framing; the others
@@ -285,8 +285,6 @@ static int write_common(FILE *f, const pulseg_sequence_descriptor *d)
             return 0;
         if (!pulseg__write4(f, &gd->any, (int)(sizeof(gd->any) / 4)))
             return 0;
-        if (!pulseg__write4(f, &gd->heat, (int)(sizeof(gd->heat) / 4)))
-            return 0;
         if (!pulseg__write4(f, &gd->spectral, (int)(sizeof(gd->spectral) / 4)))
             return 0;
     }
@@ -301,6 +299,8 @@ static int write_common(FILE *f, const pulseg_sequence_descriptor *d)
         if (!pulseg__write4(f, d->grad_shape_last, d->num_grad_shape_stats))
             return 0;
         if (!pulseg__write4(f, d->grad_shape_slew, d->num_grad_shape_stats))
+            return 0;
+        if (!pulseg__write4(f, d->grad_shape_energy, d->num_grad_shape_stats))
             return 0;
     }
 
@@ -814,10 +814,6 @@ static int read_common(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
             return 0;
         if (do_swap)
             pulseg__swap4_array(&gd->any, (int)(sizeof(gd->any) / 4));
-        if (!pulseg__read4(f, &gd->heat, (int)(sizeof(gd->heat) / 4)))
-            return 0;
-        if (do_swap)
-            pulseg__swap4_array(&gd->heat, (int)(sizeof(gd->heat) / 4));
         if (!pulseg__read4(f, &gd->spectral, (int)(sizeof(gd->spectral) / 4)))
             return 0;
         if (do_swap)
@@ -835,7 +831,10 @@ static int read_common(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
             (float *)PULSEG_ALLOC((size_t)d->num_grad_shape_stats * sizeof(float));
         d->grad_shape_last = (float *)PULSEG_ALLOC((size_t)d->num_grad_shape_stats * sizeof(float));
         d->grad_shape_slew = (float *)PULSEG_ALLOC((size_t)d->num_grad_shape_stats * sizeof(float));
-        if (!d->grad_shape_first || !d->grad_shape_last || !d->grad_shape_slew)
+        d->grad_shape_energy =
+            (float *)PULSEG_ALLOC((size_t)d->num_grad_shape_stats * sizeof(float));
+        if (!d->grad_shape_first || !d->grad_shape_last || !d->grad_shape_slew ||
+            !d->grad_shape_energy)
             return 0;
         if (!pulseg__read4(f, d->grad_shape_first, d->num_grad_shape_stats))
             return 0;
@@ -843,11 +842,14 @@ static int read_common(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
             return 0;
         if (!pulseg__read4(f, d->grad_shape_slew, d->num_grad_shape_stats))
             return 0;
+        if (!pulseg__read4(f, d->grad_shape_energy, d->num_grad_shape_stats))
+            return 0;
         if (do_swap)
         {
             pulseg__swap4_array(d->grad_shape_first, d->num_grad_shape_stats);
             pulseg__swap4_array(d->grad_shape_last, d->num_grad_shape_stats);
             pulseg__swap4_array(d->grad_shape_slew, d->num_grad_shape_stats);
+            pulseg__swap4_array(d->grad_shape_energy, d->num_grad_shape_stats);
         }
     }
 
