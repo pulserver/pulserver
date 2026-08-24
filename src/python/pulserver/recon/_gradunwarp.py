@@ -340,6 +340,19 @@ class ImageGeometry:
     the corresponding NumPy image index increases.  ``fov_mm`` is independent
     of matrix size, so a zero-filled reconstruction must use its *actual*
     output ``shape`` with the unchanged physical FOV.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> import pulserver.recon as recon
+    >>> geometry = recon.ImageGeometry(
+    ...     shape=(4, 4, 4),
+    ...     fov_mm=(240.0, 240.0, 240.0),
+    ...     direction=np.eye(3),
+    ...     center_mm=(0.0, 0.0, 0.0),
+    ... )
+    >>> geometry.shape, geometry.fov_mm[0]
+    ((4, 4, 4), 240.0)
     """
 
     shape: tuple[int, ...]

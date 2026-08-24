@@ -485,6 +485,25 @@ _RF_CASES["00_basic_rfstat"] = _seq(
 )
 
 
+_RF_CASES["01_bipolar_rfstat"] = _seq(
+    "A bipolar block pulse: constant magnitude, phase 0 then pi. Its signed "
+    "area cancels to zero, so it separates the signed integral from |integral|.",
+    """\
+[BLOCKS]
+1 100   1   0   0   0  0  0
+
+[RF]
+1          500 1 2 3 500 0 0 0 0 0 e
+
+"""
+    + _shapes3(
+        "1 1 1 1",          # magnitude: flat
+        "0 0 0.5 0.5",      # phase / (2 pi): second half inverted
+        "0 333 666 999",    # time, raster units
+    ),
+)
+
+
 def _rf_interleaved(rf_rows: list[str], block_rf_ids: list[int]) -> str:
     """Blocks alternating an RF id with a readout trapezoid, 100 raster units each."""
     lines = ["[BLOCKS]"]

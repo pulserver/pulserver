@@ -79,6 +79,14 @@ def dicom_folder_to_mrd(
     ------
     FileNotFoundError
         If *folder* contains no DICOM files.
+
+    Examples
+    --------
+    Bring a stored study back into the format a reconstruction reads::
+
+        import pulserver.mrd as mrd
+
+        mrd.dicom_folder_to_mrd("study/series_4", "series_4.h5")
     """
     folder = Path(folder)
     output_file = Path(output_file)

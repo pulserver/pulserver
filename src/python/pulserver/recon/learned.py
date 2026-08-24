@@ -166,6 +166,14 @@ class UnrollState:
         Number of completed reconstruction steps.
     auxiliary
         Method-specific values carried between steps.
+
+    Examples
+    --------
+    >>> import torch
+    >>> import pulserver.recon as recon
+    >>> state = recon.UnrollState(estimate=torch.zeros(2), rhs=torch.zeros(2))
+    >>> state.iteration
+    0
     """
 
     estimate: torch.Tensor
@@ -195,6 +203,17 @@ class UnrollResult:
         Final reconstruction state.
     history
         Requested estimates indexed by completed step count.
+
+    Examples
+    --------
+    >>> import torch
+    >>> import pulserver.recon as recon
+    >>> state = recon.UnrollState(estimate=torch.zeros(2), rhs=torch.zeros(2))
+    >>> result = recon.UnrollResult(
+    ...     reconstruction=torch.zeros(2), state=state, history=[0.5]
+    ... )
+    >>> len(result.history)
+    1
     """
 
     reconstruction: torch.Tensor

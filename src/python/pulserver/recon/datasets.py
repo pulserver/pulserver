@@ -49,6 +49,14 @@ class TorchIODataset(_ImageDataset):
         ``num_patches`` in its call method.
     samples_per_volume
         Number of samples exposed for each subject in one epoch.
+
+    Examples
+    --------
+    Any TorchIO subject list, read as pairs a reconstruction can train on::
+
+        import pulserver.recon as recon
+
+        dataset = recon.TorchIODataset(subjects, x="image", y="label")
     """
 
     def __init__(
@@ -149,6 +157,14 @@ class IXI(TorchIODataset):
         If no modality is selected.
     ImportError
         If TorchIO is unavailable or does not provide IXI.
+
+    Examples
+    --------
+    The IXI brain corpus, downloaded once and read many times::
+
+        import pulserver.recon as recon
+
+        dataset = recon.IXI("data/ixi", download=True, modalities=("T1", "T2"))
     """
 
     def __init__(
@@ -215,6 +231,14 @@ class IXITiny(TorchIODataset):
     ------
     ImportError
         If TorchIO is unavailable or does not provide IXITiny.
+
+    Examples
+    --------
+    The small IXI subset, which is what a test or a first experiment wants::
+
+        import pulserver.recon as recon
+
+        dataset = recon.IXITiny("data/ixi-tiny", download=True)
     """
 
     def __init__(

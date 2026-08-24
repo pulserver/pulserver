@@ -225,6 +225,18 @@ class NLINVResult:
         Reconstructed image with the sensitivity scaling absorbed.
     calibration
         Synthesized Cartesian calibration k-space on the solve matrix.
+
+    Examples
+    --------
+    >>> import torch
+    >>> import pulserver.recon as recon
+    >>> estimate = recon.NLINVResult(
+    ...     sensitivities=torch.zeros(2, 4, 4),
+    ...     image=torch.zeros(4, 4),
+    ...     calibration=None,
+    ... )
+    >>> tuple(estimate.sensitivities.shape)
+    (2, 4, 4)
     """
 
     sensitivities: torch.Tensor

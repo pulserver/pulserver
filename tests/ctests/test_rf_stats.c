@@ -99,6 +99,42 @@ static int test_ge_rf_stats_cb(void *ctx, const pulseg_rf_view *rf, float out_st
  * back at 8000 Hz.
  */
 
+/*
+ * A Pulseq RF phase shape stores phase/(2*pi), so a pi flip is a sample of
+ * 0.5.  Reading it as radians leaves cos(0.5) = 0.8776 in place of -1, and the
+ * negative half of a waveform stops cancelling: `area` collapses onto
+ * |integral| and `flip_angle_rad` inflates with it.
+ *
+ * This pulse is flat with its second half inverted, so the signed integral is
+ * exactly zero while the unsigned one is the full duration.  Reading the phase
+ * as radians would report ~0.88 of the duration instead.
+ */
+MU_TEST(test_bipolar_pulse_area_cancels)
+{
+    pulseg_opts opts;
+    pulseg_collection *coll = NULL;
+    pulseg_rf_stats stats = PULSEG_RF_STATS_INIT;
+    int rc;
+
+    default_opts_init(&opts);
+    opts.vendor_rf_stats_fn = test_ge_rf_stats_cb;
+    opts.vendor_rf_stats_ctx = NULL;
+    rc = load_seq(&coll, "01_bipolar_rfstat.seq", &opts);
+    mu_assert(PULSEG_SUCCEEDED(rc), "load_seq failed");
+
+    rc = pulseg_get_rf_stats(coll, &stats, 0, 0);
+    mu_assert(PULSEG_SUCCEEDED(rc), "get_rf_stats failed");
+
+    mu_assert_float_near("signed area cancels", 0.0f, stats.area, 1e-6f);
+    mu_assert_float_near("flip angle cancels", 0.0f, stats.flip_angle_rad, 1e-3f);
+    /* abswidth is the mean |B1|: it must NOT cancel with the signed integral.
+     * Left as a bound because its exact value depends on where the
+     * uniform-grid resampling puts the sign change. */
+    mu_assert(stats.vendor_stat[0] > 0.5f, "abswidth must not cancel");
+
+    pulseg_collection_free(coll);
+}
+
 MU_TEST(test_rf180_block_pulse_stats)
 {
     pulseg_opts opts;
@@ -158,6 +194,7 @@ MU_TEST(test_rf_array_basic_canonical_tr)
 MU_TEST_SUITE(suite_rf_stats)
 {
     MU_RUN_TEST(test_rf180_block_pulse_stats);
+    MU_RUN_TEST(test_bipolar_pulse_area_cancels);
     MU_RUN_TEST(test_rf_array_basic_canonical_tr);
 }
 

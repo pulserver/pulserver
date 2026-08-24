@@ -38,6 +38,22 @@ def user_parameter(metadata: Any, name: str, default: Any = None) -> Any:
     All standard MRD parameter collections (long, double, string, and base64)
     are searched in order.  The value is returned unmodified by the XML
     binding, except that a missing parameter yields ``default``.
+
+    Examples
+    --------
+    >>> from types import SimpleNamespace
+    >>> import pulserver.mrd as mrd
+    >>> metadata = SimpleNamespace(
+    ...     userParameters=SimpleNamespace(
+    ...         userParameterLong=[SimpleNamespace(name="EchoTrainLength", value=8)],
+    ...         userParameterDouble=[],
+    ...         userParameterString=[],
+    ...     )
+    ... )
+    >>> mrd.user_parameter(metadata, "EchoTrainLength")
+    8
+    >>> mrd.user_parameter(metadata, "NotThere", 0)
+    0
     """
     parameters = getattr(metadata, "userParameters", None)
     if parameters is None:
@@ -66,6 +82,20 @@ def acquisition_label(acquisition: Any, name: str, default: Any = None) -> Any:
     ``kspace_encode_step_1``) are read from ``acquisition.idx``.  Header
     labels such as ``encoding_space_ref`` are read directly from the
     acquisition object.
+
+    Examples
+    --------
+    >>> from types import SimpleNamespace
+    >>> import pulserver.mrd as mrd
+    >>> acquisition = SimpleNamespace(
+    ...     idx=SimpleNamespace(slice=2), encoding_space_ref=0
+    ... )
+    >>> mrd.acquisition_label(acquisition, "slice")
+    2
+    >>> mrd.acquisition_label(acquisition, "encoding_space_ref")
+    0
+    >>> mrd.acquisition_label(acquisition, "repetition", 0)
+    0
     """
     index = getattr(acquisition, "idx", None)
     if index is not None and hasattr(index, name):
@@ -116,6 +146,18 @@ def diffusion_table(metadata: Any, *, rotation: Any = None) -> Any:
     ``table.axis`` names the MRD counter whose value indexes a row, so an
     acquisition's encoding is ``table.b_tensors[acq.idx.set]`` when it is
     ``"SET"``.
+
+    Examples
+    --------
+    >>> from types import SimpleNamespace
+    >>> import pulserver.mrd as mrd
+    >>> plain = SimpleNamespace(
+    ...     userParameters=SimpleNamespace(
+    ...         userParameterLong=[], userParameterDouble=[], userParameterString=[]
+    ...     )
+    ... )
+    >>> mrd.diffusion_table(plain) is None
+    True
     """
     from pulserver.pypulseq import DiffusionTable
 
@@ -130,7 +172,17 @@ def diffusion_table(metadata: Any, *, rotation: Any = None) -> Any:
 
 
 def acquisition_labels(acquisition: Any) -> dict[str, Any]:
-    """Return the standard MRD index and encoding labels as a dictionary."""
+    """Return the standard MRD index and encoding labels as a dictionary.
+
+    Examples
+    --------
+    >>> from types import SimpleNamespace
+    >>> import pulserver.mrd as mrd
+    >>> acquisition = SimpleNamespace(idx=SimpleNamespace(slice=2, repetition=1))
+    >>> labels = mrd.acquisition_labels(acquisition)
+    >>> labels["slice"], labels["repetition"]
+    (2, 1)
+    """
     names = (
         "encoding_space_ref",
         "kspace_encode_step_1",
@@ -155,6 +207,19 @@ def has_acquisition_flag(acquisition: Any, flag: int | str) -> bool:
     under, as in ``"LASTSCAN"``.  All reach the same bit, so a plugin can say
     what it is waiting for in the same words the sequence used.  This helper
     does not import ISMRMRD unless a named flag is requested.
+
+    Examples
+    --------
+    >>> import ismrmrd
+    >>> import pulserver.mrd as mrd
+    >>> acquisition = ismrmrd.Acquisition()
+    >>> acquisition.setFlag(ismrmrd.ACQ_LAST_IN_SLICE)
+    >>> mrd.has_acquisition_flag(acquisition, mrd.AcquisitionFlag.LAST_IN_SLICE)
+    True
+    >>> mrd.has_acquisition_flag(acquisition, "ACQ_LAST_IN_SLICE")
+    True
+    >>> mrd.has_acquisition_flag(acquisition, "ACQ_IS_NOISE_MEASUREMENT")
+    False
     """
     name = getattr(flag, "flag", None)
     if name is not None and not isinstance(flag, (str, int)):
@@ -206,5 +271,5 @@ class MrdMetadata:
         return float(fov.x), float(fov.y), float(fov.z)
 
     def user_parameter(self, name: str, default: Any = None) -> Any:
-        """Return an MRD user parameter by name."""
+        """Return an MRD user parameter by name, off the header held here."""
         return user_parameter(self.header, name, default)

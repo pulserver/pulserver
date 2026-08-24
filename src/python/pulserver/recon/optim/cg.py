@@ -25,6 +25,13 @@ class CGInfo:
         Whether every independent system met the stopping criterion.
     residual_norm
         Final residual norm for each independent system.
+
+    Examples
+    --------
+    >>> import pulserver.recon as recon
+    >>> info = recon.CGInfo(iterations=12, converged=True, residual_norm=1e-6)
+    >>> info.iterations, info.converged
+    (12, True)
     """
 
     iterations: int
@@ -54,6 +61,36 @@ class ConjugateGradient(torch.nn.Module):
         Dimension indexing independent systems. Use ``None`` for one system.
     preconditioner
         Optional fixed positive-definite preconditioner.
+
+    Examples
+    --------
+    The solver takes an operator and a right-hand side, so a SENSE reconstruction
+    is ``A^H A x = A^H y`` -- which is what :func:`~pulserver.recon.pics` builds
+    when no prior is given.
+
+    .. plot::
+
+       import pulserver.recon as recon
+       from _figures import images, phantom, radial_spokes
+
+       truth, coil_maps = phantom(64, coils=4)
+       physics = recon.NonCartesian2D(
+           radial_spokes(64, 16), (64, 64), coil_maps=coil_maps[0]
+       )
+       measured = physics.A(truth)
+       rhs = physics.A_adjoint(measured)
+
+       solver = recon.ConjugateGradient(max_iter=10)
+       solved, info = solver(physics.A_adjoint_A, rhs, return_info=True)
+
+       images(
+           [
+               ("truth", truth[0]),
+               ("right-hand side", rhs[0, 0]),
+               (f"after {info.iterations} iterations", solved[0, 0]),
+           ],
+           title="conjugate gradients on the normal equations",
+       )
     """
 
     def __init__(

@@ -35,6 +35,38 @@ class FISTA(deepinv.optim.FISTA):
         Number of FISTA iterations.
     unfold
         Enable end-to-end differentiation through the iterations.
+
+    Examples
+    --------
+    For MRI this is reached through :func:`~pulserver.recon.pics`, which wraps a
+    denoiser as a plug-and-play prior and estimates the stepsize from the
+    operator's own norm.
+
+    .. plot::
+
+       import pulserver.recon as recon
+       from _figures import images, phantom, radial_spokes
+
+       truth, coil_maps = phantom(64, coils=4)
+       physics = recon.NonCartesian2D(
+           radial_spokes(64, 16), (64, 64), coil_maps=coil_maps[0]
+       )
+       measured = physics.A(truth)
+
+       images(
+           [
+               ("truth", truth[0]),
+               ("no prior, CG", recon.pics(measured, physics, iterations=8)[0, 0]),
+               (
+                   "TV prior, FISTA",
+                   recon.pics(
+                       measured, physics, recon.TV(), iterations=8,
+                       regularization=0.01,
+                   )[0, 0],
+               ),
+           ],
+           title="plug-and-play FISTA behind pics",
+       )
     """
 
     def __init__(

@@ -103,6 +103,14 @@ class ReconResult:
         Additional MRD image attributes.
     dicom
         Convert the MRD image to DICOM before sending it inline.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> import pulserver.recon as recon
+    >>> result = recon.ReconResult(np.zeros((4, 4)), series_index=2)
+    >>> result.data.shape, result.series_index, result.image_type
+    ((4, 4), 2, 'magnitude')
     """
 
     data: Any
@@ -125,6 +133,14 @@ class ExamCache(MutableMapping[Hashable, Any]):
     ----------
     exam_id
         Stable identifier for the exam owning this cache.
+
+    Examples
+    --------
+    >>> import pulserver.recon as recon
+    >>> cache = recon.ExamCache("exam-1")
+    >>> cache["coil_maps"] = "maps"
+    >>> "coil_maps" in cache, len(cache)
+    (True, 1)
     """
 
     def __init__(self, exam_id: Hashable) -> None:

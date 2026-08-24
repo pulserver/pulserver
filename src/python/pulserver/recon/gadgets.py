@@ -56,6 +56,18 @@ class Gadget(ABC):
     ----------
     context : ReconContext
         The scan context, from :meth:`startup`.
+
+    Examples
+    --------
+    A gadget is one per-acquisition step. It returns the data it was given, or
+    ``None`` to consume the acquisition so no buffer ever sees it.
+
+    >>> import pulserver.recon as recon
+    >>> class DropNavigators(recon.Gadget):
+    ...     def __call__(self, acquisition, data):
+    ...         return None if data is None else data
+    >>> isinstance(DropNavigators(), recon.Gadget)
+    True
     """
 
     def startup(self, context: Any) -> None:
@@ -93,6 +105,15 @@ class NoiseAdjust(Gadget):
     receiver rather than of the object, so it is consumed: what it leaves
     behind is the covariance every readout that follows is decorrelated
     against. A scan whose scanner sends none passes through untouched.
+
+    Examples
+    --------
+    Listed first in a plugin's ``chain``: it consumes the noise scan and whitens
+    every line that follows.
+
+    >>> import pulserver.recon as recon
+    >>> isinstance(recon.NoiseAdjust(), recon.Gadget)
+    True
     """
 
     def startup(self, context: Any) -> None:
@@ -135,6 +156,13 @@ class CoilCompression(Gadget):
     learn_from
         Flag marking the acquisitions the basis is learned from, which are
         therefore passed through uncompressed.
+
+    Examples
+    --------
+    >>> import pulserver.recon as recon
+    >>> gadget = recon.CoilCompression(virtual_coils=8)
+    >>> gadget.virtual_coils
+    8
     """
 
     def __init__(
@@ -197,6 +225,15 @@ class EpiPhaseCorrection(Gadget):
         Order of the fitted phase. One is the gradient-delay ramp every product
         reconstruction corrects; raising it picks up what an eddy current
         leaves beyond a ramp.
+
+    Examples
+    --------
+    The navigator triplet is consumed; the lines after it are flipped and
+    demodulated with the phase it measured.
+
+    >>> import pulserver.recon as recon
+    >>> isinstance(recon.EpiPhaseCorrection(order=1), recon.Gadget)
+    True
     """
 
     def __init__(self, *, order: int = 1) -> None:
@@ -238,6 +275,12 @@ class RampSampling(Gadget):
     wrote do not matter. An acquisition carrying no trajectory was sampled
     uniformly, which is what a train that waits for its plateau is, and passes
     through.
+
+    Examples
+    --------
+    >>> import pulserver.recon as recon
+    >>> isinstance(recon.RampSampling(), recon.Gadget)
+    True
     """
 
     def startup(self, context: Any) -> None:

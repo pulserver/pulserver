@@ -21,6 +21,14 @@ class OptimState:
         Algorithm-owned primal and auxiliary variables.
     iteration
         Number of completed iterations.
+
+    Examples
+    --------
+    >>> import torch
+    >>> import pulserver.recon as recon
+    >>> state = recon.OptimState(variables={"x": torch.zeros(2)})
+    >>> state.iteration, sorted(state.variables)
+    (0, ['x'])
     """
 
     variables: dict[str, Any]
@@ -48,6 +56,17 @@ class OptimResult:
         Final optimizer state.
     history
         Mapping from iteration number to requested intermediate estimates.
+
+    Examples
+    --------
+    >>> import torch
+    >>> import pulserver.recon as recon
+    >>> state = recon.OptimState(variables={"x": torch.zeros(2)})
+    >>> result = recon.OptimResult(
+    ...     reconstruction=torch.zeros(2), state=state, history=[1.0, 0.5]
+    ... )
+    >>> len(result.history), result.state.iteration
+    (2, 0)
     """
 
     reconstruction: torch.Tensor

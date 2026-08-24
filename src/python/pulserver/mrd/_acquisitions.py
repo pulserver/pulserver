@@ -159,6 +159,13 @@ class AcquisitionBucketStats:
 
     The field names match Gadgetron's ``AcquisitionBucketStats``. Each value is
     a frozen set because stats describe a completed bucket.
+
+    Examples
+    --------
+    >>> import pulserver.mrd as mrd
+    >>> stats = mrd.AcquisitionBucketStats(kspace_encode_step_1=frozenset({0, 1, 2}))
+    >>> sorted(stats.kspace_encode_step_1)
+    [0, 1, 2]
     """
 
     kspace_encode_step_1: frozenset[int] = frozenset()
@@ -203,6 +210,17 @@ class AcquisitionBucket:
     ``ismrmrd.Waveform`` objects, preserving the fields familiar to Gadgetron
     users. :meth:`kspace`, :meth:`trajectory`, and :meth:`labels` provide the
     compact array-level path used by most reconstruction algorithms.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> import pulserver.mrd as mrd
+    >>> bucket = mrd.AcquisitionBucket.from_arrays(
+    ...     np.ones((4, 2, 8), dtype=np.complex64),
+    ...     labels={"kspace_encode_step_1": np.arange(4)},
+    ... )
+    >>> len(bucket.data)
+    4
     """
 
     data: tuple[Any, ...]

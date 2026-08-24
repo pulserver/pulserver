@@ -148,6 +148,12 @@ def as_numpy(array: Any) -> Any:
     -------
     numpy.ndarray
         The same values, on the host.
+
+    Examples
+    --------
+    >>> import pulserver.mrd as mrd
+    >>> mrd.as_numpy([1.0, 2.0])
+    array([1., 2.])
     """
     import numpy as np
 

@@ -78,7 +78,17 @@ def _require_mrinufft() -> Any:
 
 
 def available_nufft_backends() -> list[str]:
-    """Return available MRI-NUFFT backends, including Pulserver's Torch CUDA adapter."""
+    """Return available MRI-NUFFT backends, including Pulserver's Torch CUDA adapter.
+
+    Examples
+    --------
+    Which non-Cartesian backends this installation can actually use -- the CUDA
+    ones appear only where a card and its libraries are present.
+
+    >>> import pulserver.recon as recon
+    >>> "finufft" in recon.available_nufft_backends()
+    True
+    """
     try:
         _require_mrinufft()
     except ImportError:
@@ -375,6 +385,35 @@ class MRIPhysics(deepinv.physics.LinearPhysics):
     numerical contract (``A``, ``A_adjoint``, ``A_adjoint_A``, ``A_dagger``)
     to DeepInverse. ``native_operator`` is the underlying mri-nufft operator
     for non-Cartesian acquisitions and is intentionally read-only.
+
+    Examples
+    --------
+    Every operator on this page is one of these: it can encode an image, take the
+    adjoint of a measurement, and apply its own normal operator -- which is what a
+    solver spends its time in.
+
+    .. plot::
+
+       import pulserver.recon as recon
+       from _figures import images, phantom, radial_spokes
+
+       truth, coil_maps = phantom(64, coils=4)
+       physics = recon.NonCartesian2D(
+           radial_spokes(64, 24), (64, 64), coil_maps=coil_maps[0]
+       )
+
+       measured = physics.A(truth)
+       adjoint = physics.A_adjoint(measured)
+       normal = physics.A_adjoint_A(truth)
+
+       images(
+           [
+               ("truth", truth[0]),
+               ("A then A-adjoint", adjoint[0, 0]),
+               ("the normal operator", normal[0, 0]),
+           ],
+           title="what a physics operator does",
+       )
     """
 
     def __init__(
@@ -3226,6 +3265,36 @@ class NonCartesian3D(MRIPhysics):
     Notes
     -----
     Images are ``(batch, 2, d, h, w)``, measurements ``(batch, coils, k, 2)``.
+
+    Examples
+    --------
+    A koosh ball is a projection scan: every spoke starts at the centre, so the
+    adjoint alone is heavily weighted there and needs the density compensation a
+    solve applies for it.
+
+    .. plot::
+
+       import matplotlib.pyplot as plt
+       import pulserver.recon as recon
+       from _figures import images, koosh_spokes, volume
+
+       truth, coil_maps = volume(24, coils=4, depth=24)
+       trajectory = koosh_spokes(24, 60)
+
+       physics = recon.NonCartesian3D(trajectory, (24, 24, 24), coil_maps=coil_maps[0])
+       measured = physics.A(truth)
+       adjoint = physics.A_adjoint(measured)
+       solved = recon.pics(measured, physics, iterations=10)
+
+       middle = 12
+       images(
+           [
+               ("truth", truth[0, middle]),
+               ("adjoint", adjoint[0, 0, middle]),
+               ("CG-SENSE, 10 iterations", solved[0, 0, middle]),
+           ],
+           title="NonCartesian3D over a 60-spoke koosh ball",
+       )
     """
 
     def __init__(

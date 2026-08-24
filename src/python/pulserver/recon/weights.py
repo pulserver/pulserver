@@ -51,6 +51,19 @@ class ModelBundle:
         Optional key containing the state dict in a checkpoint mapping.
     strip_prefix
         Optional prefix removed from every state-dict key.
+
+    Examples
+    --------
+    What :func:`load_model` resolves a name to before it builds anything: where
+    the manifest is, what architecture it describes, and the checkpoint it is
+    paired with.
+
+    A bundle is read off disk rather than constructed by hand::
+
+        import pulserver.recon as recon
+
+        bundle = recon.ModelStore().resolve("unrolled-vn:1.0")
+        model = recon.load_model(bundle.manifest_path)
     """
 
     manifest_path: Path
@@ -307,6 +320,13 @@ class ModelStore:
     ----------
     paths
         Search roots. ``None`` uses :func:`default_model_paths`.
+
+    Examples
+    --------
+    >>> import pulserver.recon as recon
+    >>> store = recon.ModelStore()
+    >>> tuple(store.paths) == tuple(recon.default_model_paths())
+    True
     """
 
     def __init__(
@@ -400,6 +420,14 @@ def default_model_paths() -> tuple[Path, ...]:
     -------
     tuple[pathlib.Path, ...]
         Search paths in precedence order.
+
+    Examples
+    --------
+    Where a model is looked for when a caller names no directory of its own.
+
+    >>> import pulserver.recon as recon
+    >>> len(recon.default_model_paths()) >= 1
+    True
     """
     configured = os.environ.get(MODEL_PATH_ENV, "")
     environment = [
@@ -430,6 +458,14 @@ def load_model(
     -------
     torch.nn.Module
         Populated model.
+
+    Examples
+    --------
+    A model is named, and found on the search path unless a directory is given::
+
+        import pulserver.recon as recon
+
+        model = recon.load_model("unrolled-vn:1.0")
     """
     return ModelStore(paths).load(spec, **kwargs)
 
@@ -472,6 +508,20 @@ def save_bundle(
     ------
     FileExistsError
         If ``destination`` already exists.
+
+    Examples
+    --------
+    Write a trained model where :func:`load_model` will find it::
+
+        import pulserver.recon as recon
+
+        recon.save_bundle(
+            model,
+            "weights/unrolled-vn",
+            name="unrolled-vn",
+            version="1.0",
+            architecture="UnrolledReconstructor",
+        )
     """
     selected_name = _nonempty_string(name, name="name")
     selected_version = _nonempty_string(version, name="version")

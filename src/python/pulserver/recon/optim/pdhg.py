@@ -54,6 +54,24 @@ class PDHG(_IterativeOptimizer):
         Number of primal-dual iterations.
     unfold
         Register selected algorithm parameters as trainable tensors.
+
+    Examples
+    --------
+    The primal-dual pair, for the same simultaneous-regularizer case ADMM covers,
+    without the inner linear solve::
+
+        import deepinv
+        import pulserver.recon as recon
+
+        solver = recon.PDHG(
+            data_fidelity=deepinv.optim.L2(),
+            prior=recon.StackedPrior([wavelet_prior, tv_prior]),
+            lambda_reg=0.01,
+            stepsize=0.4,
+            stepsize_dual=0.4,
+            max_iter=100,
+        )
+        image = solver(measured, physics)
     """
 
     def __init__(

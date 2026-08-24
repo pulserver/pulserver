@@ -85,6 +85,16 @@ def reconstruct_file(
     ValueError
         If the file carries no XML header, and so does not say what was
         acquired.
+
+    Examples
+    --------
+    A recording is replayed through the plugin the scanner would have driven, so
+    the same reconstruction runs offline::
+
+        import pulserver.app as app
+        import pulserver.mrd as mrd
+
+        images = mrd.reconstruct_file(app.cartesian2D_recon.PLUGIN, "scan.h5")
     """
     dataset = ismrmrd.Dataset(path, group, create_if_needed=False)
     try:

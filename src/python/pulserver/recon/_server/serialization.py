@@ -25,6 +25,16 @@ def images_to_dicom(images: Iterable[Any], metadata: Any) -> list[DicomWithName]
         ``ismrmrd.Image`` objects to serialise.
     metadata : object
         Parsed MRD XML header passed to :class:`MrdDicomBuilder`.
+
+    Examples
+    --------
+    What leaves at the end of a reconstruction, ready to be written or sent::
+
+        import pulserver.mrd as mrd
+
+        datasets = mrd.images_to_dicom(images, header)
+        for name, dataset in datasets:
+            dataset.save_as(name)
     """
     builder = MrdDicomBuilder(metadata)
     return [builder(image) for image in images]

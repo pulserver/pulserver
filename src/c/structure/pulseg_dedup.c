@@ -997,7 +997,11 @@ static int compute_rf_stats(
         /* decompress phase (optional) */
         if (phase_id > 0 && phase_id <= seq->shapes_library_size)
         {
-            if (!pulseq_decompress_shape(&decomp_phase, &seq->shapes_library[phase_id - 1], 1.0f))
+            /* Pulseq stores an RF phase shape as phase/(2*pi), so a pi phase
+             * flip is a sample of 0.5.  The reconstruction below and the
+             * real-valued test treat phase as radians. */
+            if (!pulseq_decompress_shape(&decomp_phase, &seq->shapes_library[phase_id - 1],
+                                         (float)(2.0 * M_PI)))
                 goto fail;
             phase = (float *)PULSEG_ALLOC(num_samples * sizeof(float));
             if (!phase)

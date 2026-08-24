@@ -52,7 +52,17 @@ _SEQDESC_IDS = {
 
 
 class EventType(IntEnum):
-    """SEQDESC event type."""
+    """SEQDESC event type.
+
+    A canonical event is one of three things: time passing, an RF pulse, or an
+    ADC window.
+
+    Examples
+    --------
+    >>> import pulserver.mrd as mrd
+    >>> [event.name for event in mrd.EventType]
+    ['WAIT', 'RF', 'ADC']
+    """
 
     WAIT = 0
     RF = 1
@@ -70,6 +80,14 @@ class RfUse(IntEnum):
     enumeration at ``SATURATION`` made that a ``ValueError`` at decode time --
     a whole scan failing to decode over a pulse tag that changes nothing about
     how the pulse is played.
+
+    Examples
+    --------
+    >>> import pulserver.mrd as mrd
+    >>> mrd.RfUse.EXCITATION.name
+    'EXCITATION'
+    >>> mrd.RfUse(0).name
+    'UNKNOWN'
     """
 
     UNKNOWN = 0
@@ -82,7 +100,16 @@ class RfUse(IntEnum):
 
 
 class AdcRole(IntEnum):
-    """Legacy relationship between ADCs in one canonical event stream."""
+    """Legacy relationship between ADCs in one canonical event stream.
+
+    Examples
+    --------
+    >>> import pulserver.mrd as mrd
+    >>> mrd.AdcRole.ECHO_CENTER.name
+    'ECHO_CENTER'
+    >>> int(mrd.AdcRole.SINGLE)
+    1
+    """
 
     NON_ACQUIRED = 0
     SINGLE = 1
@@ -92,7 +119,22 @@ class AdcRole(IntEnum):
 
 @dataclass(frozen=True)
 class SequenceParameters:
-    """Scan-global SEQDESC header (waveform 999)."""
+    """Scan-global SEQDESC header (waveform 999).
+
+    Examples
+    --------
+    >>> import pulserver.mrd as mrd
+    >>> parameters = mrd.SequenceParameters(
+    ...     num_subsequences=1,
+    ...     min_te_us=2000,
+    ...     min_tr_us=8000,
+    ...     max_tr_us=8000,
+    ...     max_flip_angle_deg=15.0,
+    ...     total_scan_time_us=8_000_000,
+    ... )
+    >>> parameters.total_scan_time_us / 1e6
+    8.0
+    """
 
     num_subsequences: int
     min_te_us: float
@@ -104,7 +146,15 @@ class SequenceParameters:
 
 @dataclass(frozen=True)
 class SequenceEvent:
-    """One WAIT, RF, or ADC state-machine event."""
+    """One WAIT, RF, or ADC state-machine event.
+
+    Examples
+    --------
+    >>> import pulserver.mrd as mrd
+    >>> event = mrd.SequenceEvent(type=mrd.EventType.RF, timestamp_us=1200, params=(0,))
+    >>> event.type.name, event.timestamp_us
+    ('RF', 1200)
+    """
 
     type: EventType
     timestamp_us: float
@@ -171,7 +221,15 @@ class SequenceEvent:
 
 @dataclass(frozen=True)
 class RfShape:
-    """One still-compressed Pulseq shape."""
+    """One still-compressed Pulseq shape.
+
+    Examples
+    --------
+    >>> import pulserver.mrd as mrd
+    >>> shape = mrd.RfShape(num_uncompressed=4, samples=(1.0, 1.0, 1.0, 1.0))
+    >>> shape.num_uncompressed
+    4
+    """
 
     num_uncompressed: int
     samples: np.ndarray = field(repr=False, compare=False)
@@ -184,7 +242,26 @@ class RfShape:
 
 @dataclass(frozen=True)
 class RfDefinition:
-    """RF definition referenced by RF events."""
+    """RF definition referenced by RF events.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> import pulserver.mrd as mrd
+    >>> pulse = mrd.RfDefinition(
+    ...     id=0,
+    ...     bandwidth_hz=2000.0,
+    ...     num_bands=1,
+    ...     band_frequency_offsets_hz=(0.0,),
+    ...     band_bandwidth_hz=(2000.0,),
+    ...     total_b1sq_power=1.0,
+    ...     magnitude=np.ones(4),
+    ...     phase=np.zeros(4),
+    ...     time=np.linspace(0.0, 3e-3, 4),
+    ... )
+    >>> pulse.num_bands, pulse.bandwidth_hz
+    (1, 2000.0)
+    """
 
     id: int
     bandwidth_hz: float
@@ -239,7 +316,15 @@ class RfDefinition:
 
 @dataclass(frozen=True)
 class ShimDefinition:
-    """One transmit-shim definition."""
+    """One transmit-shim definition.
+
+    Examples
+    --------
+    >>> import pulserver.mrd as mrd
+    >>> shim = mrd.ShimDefinition(id=0, magnitudes=(1.0, 0.5), phases_rad=(0.0, 3.14))
+    >>> len(shim.magnitudes)
+    2
+    """
 
     id: int
     magnitudes: tuple[float, ...]
@@ -248,7 +333,21 @@ class ShimDefinition:
 
 @dataclass(frozen=True)
 class SequenceDescription:
-    """Decoded event stream and RF resources for one subsequence."""
+    """Decoded event stream and RF resources for one subsequence.
+
+    Examples
+    --------
+    >>> import pulserver.mrd as mrd
+    >>> description = mrd.SequenceDescription(
+    ...     subsequence_index=0,
+    ...     tr_duration_us=8000.0,
+    ...     events=(),
+    ...     rf_definitions=(),
+    ...     shim_definitions=(),
+    ... )
+    >>> description.tr_duration_us
+    8000.0
+    """
 
     subsequence_index: int
     tr_duration_us: float
@@ -300,7 +399,25 @@ class SequenceDescription:
 
 @dataclass(frozen=True)
 class SequenceDescriptionCollection:
-    """Complete decoded SEQDESC resource set for a scan."""
+    """Complete decoded SEQDESC resource set for a scan.
+
+    Examples
+    --------
+    >>> import pulserver.mrd as mrd
+    >>> collection = mrd.SequenceDescriptionCollection(
+    ...     parameters=mrd.SequenceParameters(
+    ...         num_subsequences=1,
+    ...         min_te_us=2000,
+    ...         min_tr_us=8000,
+    ...         max_tr_us=8000,
+    ...         max_flip_angle_deg=15.0,
+    ...         total_scan_time_us=8_000_000,
+    ...     ),
+    ...     subsequences={},
+    ... )
+    >>> collection.parameters.num_subsequences
+    1
+    """
 
     parameters: SequenceParameters
     subsequences: dict[int, SequenceDescription]
@@ -355,7 +472,17 @@ def decompress_shape(
     *,
     scale: float = 1.0,
 ) -> np.ndarray:
-    """Decode Pulseq derivative/RLE shape compression."""
+    """Decode Pulseq derivative/RLE shape compression.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> import pulserver.mrd as mrd
+    >>> mrd.decompress_shape(np.array([0.0, 0.25, 0.0]), 3)
+    array([0.  , 0.25, 0.  ], dtype=float32)
+    >>> mrd.decompress_shape(np.array([0.0, 1.0, 0.0]), 3, scale=2.0)
+    array([0., 2., 0.], dtype=float32)
+    """
 
     packed = np.asarray(packed, dtype=np.float32).reshape(-1)
     if num_uncompressed < 0:
@@ -400,6 +527,35 @@ def decode_sequence_description(
 
     Non-SEQDESC waveforms (for example ECG or respiratory traces) are ignored.
     The input order is irrelevant.
+
+    Examples
+    --------
+    The inverse of :meth:`SequenceDescriptionCollection.to_mrd`, so a description
+    survives the round trip through the waveforms a scan carries it in.
+
+    >>> import pulserver.mrd as mrd
+    >>> collection = mrd.SequenceDescriptionCollection(
+    ...     parameters=mrd.SequenceParameters(
+    ...         num_subsequences=1,
+    ...         min_te_us=2000,
+    ...         min_tr_us=8000,
+    ...         max_tr_us=8000,
+    ...         max_flip_angle_deg=15.0,
+    ...         total_scan_time_us=8_000_000,
+    ...     ),
+    ...     subsequences={
+    ...         0: mrd.SequenceDescription(
+    ...             subsequence_index=0,
+    ...             tr_duration_us=8000.0,
+    ...             events=(),
+    ...             rf_definitions={},
+    ...             shim_definitions={},
+    ...         )
+    ...     },
+    ... )
+    >>> decoded = mrd.decode_sequence_description(collection.to_mrd())
+    >>> decoded.parameters.min_te_us
+    2000.0
     """
 
     parameters: SequenceParameters | None = None

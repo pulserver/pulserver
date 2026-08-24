@@ -50,6 +50,13 @@ class CudaStreaming:
     complex64 for complex-Hermitian kernels. Supported spectra are held on the
     device and accumulation stays complex64/FP32. Denoisers operate on
     overlapping slabs along their first spatial axis.
+
+    Examples
+    --------
+    >>> import pulserver.recon as recon
+    >>> policy = recon.CudaStreaming(streams=2)
+    >>> policy.streams, policy.device
+    (2, 'cuda')
     """
 
     device: str = "cuda"

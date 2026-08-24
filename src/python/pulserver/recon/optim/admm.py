@@ -53,6 +53,24 @@ class ADMM(_IterativeOptimizer):
         Fixed CG preconditioner, for example DCF-derived diagonal weights.
     unfold
         Enable implicit gradients and selected trainable algorithm parameters.
+
+    Examples
+    --------
+    Where :func:`~pulserver.recon.pics` takes one denoiser, ADMM takes a
+    :class:`~pulserver.recon.StackedPrior` and so minimises against several at
+    once::
+
+        import deepinv
+        import pulserver.recon as recon
+
+        solver = recon.ADMM(
+            data_fidelity=deepinv.optim.L2(),
+            prior=recon.StackedPrior([wavelet_prior, tv_prior]),
+            lambda_reg=0.01,
+            stepsize=1.0,
+            max_iter=20,
+        )
+        image = solver(measured, physics)
     """
 
     def __init__(

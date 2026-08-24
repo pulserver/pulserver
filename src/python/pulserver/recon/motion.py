@@ -34,6 +34,18 @@ class RigidMotionEstimate:
         Final registration metric value, when available.
     stop_condition
         SimpleITK optimizer stop description, when available.
+
+    Examples
+    --------
+    Six parameters -- three rotations and three translations -- about a centre.
+
+    >>> import torch
+    >>> import pulserver.recon as recon
+    >>> estimate = recon.RigidMotionEstimate(
+    ...     parameters=torch.zeros(6), center=torch.zeros(3)
+    ... )
+    >>> tuple(estimate.parameters.shape), estimate.metric is None
+    ((6,), True)
     """
 
     parameters: np.ndarray

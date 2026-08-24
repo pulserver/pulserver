@@ -37,6 +37,34 @@ class Wavelet(_ModuleBase):
     Batch entries are independent, which makes the same object suitable for
     slices, contrasts, and dynamic frames. ``dimension`` selects only the
     spatial transform dimensionality.
+
+    Examples
+    --------
+    .. plot::
+
+       import pulserver.recon as recon
+       from _figures import images, phantom, radial_spokes
+
+       truth, coil_maps = phantom(64, coils=4)
+       physics = recon.NonCartesian2D(
+           radial_spokes(64, 16), (64, 64), coil_maps=coil_maps[0]
+       )
+       measured = physics.A(truth)
+
+       images(
+           [
+               ("truth", truth[0]),
+               ("no prior", recon.pics(measured, physics, iterations=8)[0, 0]),
+               (
+                   "wavelet",
+                   recon.pics(
+                       measured, physics, recon.Wavelet(), iterations=8,
+                       regularization=0.01,
+                   )[0, 0],
+               ),
+           ],
+           title="a wavelet prior on a 16-spoke radial scan",
+       )
     """
 
     def __init__(
@@ -76,6 +104,15 @@ class AverageDenoiser(_ModuleBase):
     arithmetic mean, so it is directly compatible with DeepInverse's
     plug-and-play prior and with :func:`pulserver.recon.pics`. Denoisers may
     be passed positionally or as one sequence.
+
+    Examples
+    --------
+    Several priors applied as one, by averaging what each of them returns.
+
+    >>> import pulserver.recon as recon
+    >>> combined = recon.AverageDenoiser(recon.TV(), recon.Wavelet())
+    >>> isinstance(combined, recon.AverageDenoiser)
+    True
     """
 
     def __init__(self, *denoisers: Any) -> None:
@@ -112,6 +149,17 @@ class Positive(_ModuleBase):
         complex channels, matching Pulserver's default MRI physics interface.
     tolerance
         Numerical tolerance used only when evaluating the indicator cost.
+
+    Examples
+    --------
+    The proximity operator is a projection, so it is its own illustration: what
+    is below the cone is moved onto it and everything else is left alone.
+
+    >>> import torch
+    >>> import pulserver.recon as recon
+    >>> recon.Positive().prox(torch.tensor([[-1.0, 0.5], [2.0, -0.25]]), 1.0)
+    tensor([[0.0000, 0.5000],
+            [2.0000, 0.0000]])
     """
 
     def __init__(
@@ -266,6 +314,34 @@ class LLR(_ModuleBase):
     implementation. ``block_batch_size`` bounds the simultaneous patch/SVD
     workspace for large 3D volumes; use ``None`` to process every block in one
     vectorized batch.
+
+    Examples
+    --------
+    .. plot::
+
+       import pulserver.recon as recon
+       from _figures import images, phantom, radial_spokes
+
+       truth, coil_maps = phantom(64, coils=4)
+       physics = recon.NonCartesian2D(
+           radial_spokes(64, 16), (64, 64), coil_maps=coil_maps[0]
+       )
+       measured = physics.A(truth)
+
+       images(
+           [
+               ("truth", truth[0]),
+               ("no prior", recon.pics(measured, physics, iterations=8)[0, 0]),
+               (
+                   "LLR",
+                   recon.pics(
+                       measured, physics, recon.LLR(), iterations=8,
+                       regularization=0.01,
+                   )[0, 0],
+               ),
+           ],
+           title="locally low rank on a 16-spoke radial scan",
+       )
     """
 
     def __init__(
@@ -506,7 +582,36 @@ class TV(_ModuleBase):
 
 
 class TGV(_ModuleBase):
-    """DeepInverse's spatially 2D/3D-agnostic total-generalized-variation denoiser."""
+    """DeepInverse's spatially 2D/3D-agnostic total-generalized-variation denoiser.
+
+    Examples
+    --------
+    .. plot::
+
+       import pulserver.recon as recon
+       from _figures import images, phantom, radial_spokes
+
+       truth, coil_maps = phantom(64, coils=4)
+       physics = recon.NonCartesian2D(
+           radial_spokes(64, 16), (64, 64), coil_maps=coil_maps[0]
+       )
+       measured = physics.A(truth)
+
+       images(
+           [
+               ("truth", truth[0]),
+               ("no prior", recon.pics(measured, physics, iterations=8)[0, 0]),
+               (
+                   "TGV",
+                   recon.pics(
+                       measured, physics, recon.TGV(), iterations=8,
+                       regularization=0.01,
+                   )[0, 0],
+               ),
+           ],
+           title="total generalized variation on a 16-spoke radial scan",
+       )
+    """
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__()

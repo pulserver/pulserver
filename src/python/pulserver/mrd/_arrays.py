@@ -634,6 +634,16 @@ def epi_ramp_operator(
     ValueError
         If either position set does not describe a readout, or ``support`` is
         not positive.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> import pulserver.mrd as mrd
+    >>> sampled = np.sin(np.linspace(-np.pi / 2, np.pi / 2, 16))
+    >>> uniform = np.linspace(-1, 1, 16)
+    >>> operator = mrd.epi_ramp_operator(sampled, uniform, 3)
+    >>> operator.shape
+    (16, 16)
     """
     import numpy as np
 
@@ -860,6 +870,17 @@ def estimate_epi_phase(
     ValueError
         If fewer than three navigator lines are given, or the order is
         negative.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> import pulserver.mrd as mrd
+    >>> line = np.exp(-np.linspace(-2, 2, 32) ** 2).astype(np.complex64)
+    >>> line = line[None].repeat(2, 0)
+    >>> ramp = np.exp(1j * 0.15 * np.arange(32)).astype(np.complex64)
+    >>> fit = mrd.estimate_epi_phase([line * ramp, line, line * ramp])
+    >>> fit.shape
+    (2,)
     """
     import numpy as np
 
@@ -944,6 +965,15 @@ def correct_lines(lines: list[tuple[Any, bool]], phase: Any = None) -> list[Any]
            ],
            title="an odd/even phase, and the ghost it leaves",
        )
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> import pulserver.mrd as mrd
+    >>> line = np.ones((2, 32), dtype=np.complex64)
+    >>> corrected = mrd.correct_lines([(line, False), (line, True)])
+    >>> len(corrected), corrected[0].shape
+    (2, (2, 32))
     """
     import numpy as np
 
