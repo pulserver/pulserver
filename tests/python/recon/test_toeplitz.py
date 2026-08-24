@@ -1638,6 +1638,52 @@ def test_coils_split_over_devices_sum_to_the_undivided_answer(batched_maps):
     torch.testing.assert_close(divided, whole, atol=2e-5, rtol=2e-5)
 
 
+@pytest.mark.parametrize("real_transfer", [True, False])
+def test_the_dense_host_multiply_equals_the_gathered_one(real_transfer):
+    """Widening the multiply to the whole grid must not change the answer."""
+    generator = torch.Generator().manual_seed(61)
+    image_shape = (3, 4)
+    spatial_shape = (6, 8)
+    rank = 3
+    raw = torch.randn(rank, rank, *spatial_shape, generator=generator)
+    if real_transfer:
+        transfer = 0.5 * (raw + raw.movedim(0, 1))
+    else:
+        imaginary = torch.randn(rank, rank, *spatial_shape, generator=generator)
+        full = torch.complex(raw, imaginary)
+        transfer = 0.5 * (full + full.movedim(0, 1).conj())
+    image = torch.randn(
+        2, rank, *image_shape, generator=generator, dtype=torch.complex64
+    )
+
+    kernel = _packed_kernel(transfer, image_shape)
+    kernel.host_dense = "always"
+    dense = kernel.apply(image)
+    kernel.host_dense = "never"
+    gathered = kernel.apply(image)
+    reference = _dense_apply(image, transfer.to(image.dtype), image_shape)
+
+    torch.testing.assert_close(dense, gathered, atol=2e-5, rtol=2e-5)
+    torch.testing.assert_close(dense, reference, atol=2e-5, rtol=2e-5)
+
+
+def test_the_host_multiply_stays_lean_when_the_grid_would_not_fit():
+    """The dense form is taken only when the host has room for it."""
+    generator = torch.Generator().manual_seed(62)
+    image_shape = (3, 4)
+    spatial_shape = (6, 8)
+    rank = 2
+    raw = torch.randn(rank, rank, *spatial_shape, generator=generator)
+    kernel = _packed_kernel(0.5 * (raw + raw.movedim(0, 1)), image_shape)
+    image = torch.zeros(1, rank, *image_shape, dtype=torch.complex64)
+
+    assert kernel._host_multiply_is_dense(image)
+
+    kernel.host_max_memory_fraction = 1e-12
+
+    assert not kernel._host_multiply_is_dense(image)
+
+
 def test_asking_a_dynamic_physics_for_toeplitz_turns_it_on():
     """The explicit opt-in reaches a subspace physics built without it.
 

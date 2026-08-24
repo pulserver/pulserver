@@ -161,12 +161,13 @@ def packed_hermitian_matvec(
     spectrum: torch.Tensor,
     *,
     coordinates: tuple[tuple[int, int], ...] | None = None,
+    out: torch.Tensor | None = None,
 ) -> torch.Tensor:
     """Apply one packed field without materializing dense tiny matrices."""
     rank = int(spectrum.shape[1])
     if values.shape != (rank * (rank + 1) // 2, spectrum.shape[2]):
         raise ValueError("packed values and spectrum shapes disagree")
-    accelerated = _cpu_packed_matvec(values, spectrum)
+    accelerated = _cpu_packed_matvec(values, spectrum, out)
     if accelerated is not None:
         return accelerated
     if coordinates is None:

@@ -109,7 +109,7 @@ def _cuda_transfer_spec(
     return (values.shape[0], locations), dtype
 
 
-def _cpu_packed_matvec(packed: Any, spectrum: Any) -> Any | None:
+def _cpu_packed_matvec(packed: Any, spectrum: Any, out: Any = None) -> Any | None:
     """Use the precompiled CPU kernel when its zero-copy contract is met."""
     torch = _torch()
     if (
@@ -124,7 +124,7 @@ def _cpu_packed_matvec(packed: Any, spectrum: Any) -> Any | None:
     matvec = require("recon_cpu", attribute="packed_hermitian_matvec")
     packed = packed.contiguous()
     spectrum = spectrum.contiguous()
-    result = torch.empty_like(spectrum)
+    result = torch.empty_like(spectrum) if out is None else out
     matvec(
         packed.numpy(),
         spectrum.numpy(),
@@ -357,6 +357,8 @@ class CompactToeplitzKernel:
         chunk_size: int = 65536,
         cuda_mode: str = "auto",
         cuda_max_device_fraction: float = 0.85,
+        host_dense: str = "auto",
+        host_max_memory_fraction: float = 0.5,
         cuda_transfer_precision: str = "auto",
     ) -> None:
         torch = _torch()
@@ -389,6 +391,10 @@ class CompactToeplitzKernel:
             raise ValueError("cuda_mode must be 'auto', 'resident', or 'compact'")
         if not 0.0 < cuda_max_device_fraction <= 1.0:
             raise ValueError("cuda_max_device_fraction must be in (0, 1]")
+        if host_dense not in {"auto", "always", "never"}:
+            raise ValueError("host_dense must be 'auto', 'always', or 'never'")
+        if not 0.0 < host_max_memory_fraction <= 1.0:
+            raise ValueError("host_max_memory_fraction must be in (0, 1]")
         if cuda_transfer_precision not in {"auto", "float32", "bfloat16"}:
             raise ValueError(
                 "cuda_transfer_precision must be 'auto', 'float32', or 'bfloat16'"
@@ -408,6 +414,8 @@ class CompactToeplitzKernel:
         self.chunk_size = int(chunk_size)
         self.cuda_mode = cuda_mode
         self.cuda_max_device_fraction = float(cuda_max_device_fraction)
+        self.host_dense = host_dense
+        self.host_max_memory_fraction = float(host_max_memory_fraction)
         self.cuda_transfer_precision = cuda_transfer_precision
         self._rows = rows
         self._columns = columns
@@ -419,6 +427,8 @@ class CompactToeplitzKernel:
         self._resident_workspaces: dict[tuple[Any, ...], dict[str, Any]] = {}
         self._packed_workspaces: dict[tuple[Any, ...], dict[str, Any]] = {}
         self._cuda_value_cache: dict[tuple[Any, ...], Any] = {}
+        self._dense_cache: Any = None
+        self._host_workspaces: dict[tuple[Any, ...], dict[str, Any]] = {}
         self._last_cuda_mode: str | None = None
         self._last_cuda_algorithm: str | None = None
         self._allocator_settled = False
@@ -475,6 +485,8 @@ class CompactToeplitzKernel:
             self._stream_workspaces.clear()
             self._resident_workspaces.clear()
             self._packed_workspaces.clear()
+            self._dense_cache = None
+            self._host_workspaces.clear()
             self._allocator_settled = False
             self._resident_denied = False
         self._metadata_to(device)
@@ -594,7 +606,112 @@ class CompactToeplitzKernel:
         matrix[:, self._columns[off], self._rows[off]] = packed[off].T.conj().to(dtype)
         return matrix
 
-    def _matmul(self, packed: Any, spectrum: Any) -> Any:
+    def _host_workspace(self, image: Any, dense: bool) -> dict[str, Any]:
+        """Buffers a host application reuses, sized by the images it is given.
+
+        Fresh pages cost more on a host than the arithmetic written into them,
+        and a normal application asks for the same shapes once per coil.
+        """
+        torch = _torch()
+        key = (image.device, image.dtype, int(image.shape[0]), dense)
+        workspace = self._host_workspaces.get(key)
+        if workspace is None:
+            batch = int(image.shape[0])
+            padded = torch.zeros(
+                (batch, self.rank, *self.spatial_shape)
+                if dense
+                else (batch, *self.spatial_shape),
+                dtype=image.dtype,
+                device=image.device,
+            )
+            workspace = {"padded": padded}
+            workspace["multiplied"] = (
+                torch.empty_like(padded)
+                if dense
+                else torch.empty(
+                    (batch, self.rank, self.n_locations),
+                    dtype=image.dtype,
+                    device=image.device,
+                )
+            )
+            self._host_workspaces[key] = workspace
+        return workspace
+
+    def _host_multiply_is_dense(self, image: Any) -> bool:
+        """Whether the host has room to multiply over the whole grid."""
+        if self.host_dense == "never":
+            return False
+        if self.host_dense == "always":
+            return True
+        try:
+            available = import_module("psutil").virtual_memory().available
+        except Exception:
+            # Anything that stops us reading the host's memory means take the
+            # path that does not need to know it.
+            return False
+        return self._dense_host_bytes(image) <= self.host_max_memory_fraction * (
+            available
+        )
+
+    def _apply_host_dense(self, image: Any) -> Any:
+        """Multiply over every location, so nothing has to be gathered.
+
+        The transforms stay one coefficient at a time, which is what a host
+        transform is fastest given; only the multiply between them widens.
+        """
+        torch = _torch()
+        workspace = self._host_workspace(image, dense=True)
+        padded = workspace["padded"]
+        multiplied = workspace["multiplied"]
+        image_slices = (
+            slice(None),
+            slice(None),
+            *(slice(0, size) for size in self.image_shape),
+        )
+        padded.zero_()
+        padded[image_slices] = image
+        axes = tuple(range(1, padded.ndim - 1))
+        for coefficient in range(self.rank):
+            view = padded[:, coefficient]
+            torch.fft.fftn(view, dim=axes, out=view)
+
+        self._matmul(
+            self._dense_values(),
+            padded.flatten(start_dim=2),
+            out=multiplied.flatten(start_dim=2),
+        )
+
+        for coefficient in range(self.rank):
+            view = multiplied[:, coefficient]
+            torch.fft.ifftn(view, dim=axes, out=view)
+        return multiplied[image_slices].clone()
+
+    def _dense_values(self) -> Any:
+        """The transfer over every location of the grid, zero where unsampled.
+
+        A host multiply reads its locations in order, so giving it the whole
+        grid costs the locations the scan never reached and saves gathering
+        the ones it did -- and on a host the gathering is dearer than the
+        arithmetic it feeds.
+        """
+        torch = _torch()
+        if self._dense_cache is None:
+            dense = torch.zeros(
+                (self.values.shape[0], prod(self.spatial_shape)),
+                dtype=self.values.dtype,
+                device=self.values.device,
+            )
+            dense.index_copy_(1, self.indices.to(torch.int64), self.values)
+            self._dense_cache = dense
+        return self._dense_cache
+
+    def _dense_host_bytes(self, image: Any) -> int:
+        """Bytes the dense host multiply needs beyond the images it is given."""
+        grid = prod(self.spatial_shape)
+        volumes = 2 * image.shape[0] * self.rank * grid * image.element_size()
+        return volumes + self.values.shape[0] * grid * self.values.element_size()
+
+    def _matmul(self, packed: Any, spectrum: Any, out: Any = None) -> Any:
         """Multiply packed matrices by ``(batch, rank, locations)`` data."""
         from ._packed import packed_hermitian_matvec
 
@@ -602,6 +719,7 @@ class CompactToeplitzKernel:
             packed,
             spectrum,
             coordinates=self._packed_coordinates,
+            out=out,
         )
 
     def apply(self, image: Any) -> Any:
@@ -648,19 +766,15 @@ class CompactToeplitzKernel:
             self._last_cuda_mode = "compact"
             return self._apply_cuda_packed(image)
 
+        if self._host_multiply_is_dense(image):
+            return self._apply_host_dense(image)
+
         # One coefficient volume at a time: a host transform is fastest handed
         # a single volume, and the gathered support is what carries the rest of
         # the coefficients across the multiply.
-        padded = torch.zeros(
-            (image.shape[0], *self.spatial_shape),
-            dtype=image.dtype,
-            device=image.device,
-        )
-        supported = torch.empty(
-            (image.shape[0], self.rank, self.n_locations),
-            dtype=image.dtype,
-            device=image.device,
-        )
+        workspace = self._host_workspace(image, dense=False)
+        padded = workspace["padded"]
+        supported = workspace["multiplied"]
         image_slices = (
             slice(None),
             *(slice(0, size) for size in self.image_shape),
