@@ -1483,6 +1483,36 @@ def test_a_dynamic_scan_encodes_through_one_plan_over_every_sample(
     assert flat_image.shape == (1, rank, *image_shape)
 
 
+def test_the_encoding_operator_survives_giving_its_plan_up():
+    """A build takes the encoding plan and gives it back.
+
+    The gridding plan answers on a grid eight times the encoding one, so the
+    two cannot be the same object; they take turns instead, and encoding has
+    to work exactly as before once the build is done.
+    """
+    pytest.importorskip("mrinufft")
+    pytest.importorskip("finufft")
+    generator = torch.Generator().manual_seed(41)
+    image_shape = (12, 12)
+    rank, frames = 3, 5
+    trajectory = _framed_radial(frames, 9, image_shape[0])
+    basis = torch.randn(rank, frames, generator=generator)
+    built = physics.Subspace(
+        physics.NonCartesian2D(
+            trajectory, image_shape, backend="finufft", toeplitz=True
+        ),
+        basis,
+    )
+    coefficients = torch.randn(
+        1, rank, *image_shape, generator=generator, dtype=torch.complex64
+    )
+    before = built.A(coefficients)
+
+    built.A_adjoint_A(coefficients)
+
+    torch.testing.assert_close(built.A(coefficients), before, atol=2e-6, rtol=2e-6)
+
+
 def test_asking_a_dynamic_physics_for_toeplitz_turns_it_on():
     """The explicit opt-in reaches a subspace physics built without it.
 

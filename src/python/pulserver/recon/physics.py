@@ -1717,6 +1717,55 @@ def _subspace_pair_transfers(
     return packed
 
 
+_PLAN_SETTINGS = "_pulserver_plan_settings"
+
+
+def _remember_plan_settings(native_operator: Any, settings: dict[str, Any]) -> None:
+    """Keep what an operator was planned with, so it can be planned again."""
+    base = _base_fourier_operator(native_operator)
+    with suppress(AttributeError):
+        setattr(base, _PLAN_SETTINGS, dict(settings))
+
+
+@contextmanager
+def _plans_given_up(native_operator: Any) -> Any:
+    """Release an operator's NUFFT plans, and plan again on the way out.
+
+    A plan is bound to the grid it answers on, so an encoding plan and the
+    gridding plan of a kernel built from the same points cannot be one object.
+    They can, however, take turns: the samples outlive the plan, so the
+    encoding side gives its plan up for the length of a build and takes it
+    back afterwards, which costs one planning pass instead of leaving the
+    gridding to run against a card it has to share.
+    """
+    base = _base_fourier_operator(native_operator)
+    raw = getattr(base, "raw_op", None)
+    settings = getattr(base, _PLAN_SETTINGS, None)
+    samples = getattr(base, "_samples", None)
+    held = getattr(raw, "plans", None)
+    reusable = (
+        settings is not None
+        and samples is not None
+        and held is not None
+        and getattr(raw, "grad_plan", None) is None
+        and "cuda" in str(getattr(samples, "device", ""))
+    )
+    if not reusable:
+        yield
+        return
+    # The plans go only when nothing refers to them, this frame included.
+    width = len(held)
+    del held
+    raw.plans = [None] * width
+    _yield_cached_device_memory(getattr(samples, "device", None))
+    try:
+        yield
+    finally:
+        for typ in (1, 2):
+            raw._make_plan(typ, **settings)
+            raw._set_pts(typ, samples)
+
+
 @contextmanager
 def _frames_release_their_plans(
     frame_physics: Sequence[MRIPhysics | _LazyFramePhysics],
@@ -1744,7 +1793,10 @@ def _frames_release_their_plans(
             torch = import_module("torch")
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
-    yield
+    with ExitStack() as encoding:
+        for provider in providers.values():
+            encoding.enter_context(_plans_given_up(provider.physics.native_operator))
+        yield
 
 
 @_within_psf_plans
@@ -2777,6 +2829,7 @@ def _noncartesian(
             squeeze_dims=False,
             **operator_kwargs,
         )
+        _remember_plan_settings(native, operator_kwargs)
         operator = _native_linear_physics(native, viewed_as_real=viewed_as_real)
         operator = _configure_base_toeplitz(
             operator,
