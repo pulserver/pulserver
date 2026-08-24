@@ -6,6 +6,7 @@ __all__ = ["CompactToeplitzKernel", "as_torch", "support_indices"]
 
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import suppress
+from copy import copy
 from importlib import import_module
 from math import prod
 from typing import Any
@@ -479,6 +480,26 @@ class CompactToeplitzKernel:
         self._metadata_to(device)
         return self
 
+    def for_device(self, device: Any) -> CompactToeplitzKernel:
+        """Return an independent view of this kernel bound to one device.
+
+        Workers on separate GPUs read the same transfer but cannot share the
+        buffers cached against it, so each is given its own caches over its own
+        copy of the values. The kernel this was taken from is left as it was.
+        """
+        torch = _torch()
+        device = torch.device(device)
+        clone = copy(self)
+        clone._stream_workspaces = {}
+        clone._resident_workspaces = {}
+        clone._packed_workspaces = {}
+        clone._cuda_value_cache = {}
+        clone._allocator_settled = False
+        clone._resident_denied = False
+        clone.values = self.values.to(device)
+        clone.indices = self.indices.to(device)
+        return clone
+
     def _metadata_to(self, device: Any) -> None:
         """Move the small index metadata without moving canonical FP32 values."""
         torch = _torch()
@@ -627,32 +648,52 @@ class CompactToeplitzKernel:
             self._last_cuda_mode = "compact"
             return self._apply_cuda_packed(image)
 
+        # One coefficient volume at a time: a host transform is fastest handed
+        # a single volume, and the gathered support is what carries the rest of
+        # the coefficients across the multiply.
         padded = torch.zeros(
-            (image.shape[0], self.rank, *self.spatial_shape),
+            (image.shape[0], *self.spatial_shape),
+            dtype=image.dtype,
+            device=image.device,
+        )
+        supported = torch.empty(
+            (image.shape[0], self.rank, self.n_locations),
             dtype=image.dtype,
             device=image.device,
         )
         image_slices = (
             slice(None),
-            slice(None),
             *(slice(0, size) for size in self.image_shape),
         )
-        padded[image_slices] = image
-        axes = tuple(range(2, padded.ndim))
-        spectrum = torch.fft.fftn(padded, dim=axes)
-        spectrum_flat = spectrum.flatten(start_dim=2)
-        output_flat = torch.zeros_like(spectrum_flat)
+        axes = tuple(range(1, padded.ndim))
+        flattened = padded.flatten(start_dim=1)
+        scatter_index = self.indices.to(torch.int64)
+
+        for coefficient in range(self.rank):
+            padded.zero_()
+            padded[image_slices] = image[:, coefficient]
+            torch.fft.fftn(padded, dim=axes, out=padded)
+            torch.index_select(
+                flattened,
+                1,
+                self.indices,
+                out=supported[:, coefficient],
+            )
 
         for start in range(0, self.n_locations, self.chunk_size):
             stop = min(start + self.chunk_size, self.n_locations)
-            index = self.indices[start:stop]
-            chunk = self.values[:, start:stop]
-            selected = torch.index_select(spectrum_flat, 2, index)
-            transformed = self._matmul(chunk, selected)
-            output_flat.index_copy_(2, index.to(torch.int64), transformed)
+            supported[:, :, start:stop] = self._matmul(
+                self.values[:, start:stop],
+                supported[:, :, start:stop],
+            )
 
-        output = torch.fft.ifftn(output_flat.reshape_as(spectrum), dim=axes)
-        return output[image_slices]
+        result = torch.empty_like(image)
+        for coefficient in range(self.rank):
+            padded.zero_()
+            flattened.index_copy_(1, scatter_index, supported[:, coefficient])
+            torch.fft.ifftn(padded, dim=axes, out=padded)
+            result[:, coefficient] = padded[image_slices]
+        return result
 
     def _resident_workspace_key(self, image: Any) -> tuple[Any, ...]:
         return (
@@ -911,92 +952,6 @@ class CompactToeplitzKernel:
             torch.fft.ifftn(padded, dim=axes, out=padded)
             result[:, coefficient].copy_(padded[image_slices])
         return result
-
-    def _streamed_multiply(
-        self,
-        spectrum: Any,
-        policy: Any,
-    ) -> Any:
-        """Multiply host spectra by sample-parallel packed CUDA kernels."""
-        torch = _torch()
-        batch = spectrum.shape[0]
-        chunk_size = min(policy.transfer_chunk_size, self.n_locations)
-        precision = self._cuda_precision(
-            policy.transfer_precision,
-            policy.torch_device,
-        )
-        encoded_host = self._encoded_values_for("cpu", precision)
-        packed_shape, packed_dtype = _cuda_transfer_spec(
-            self.values,
-            precision,
-            chunk_size,
-        )
-        output = torch.empty_like(
-            spectrum,
-            device="cpu",
-        )
-        streams = [
-            torch.cuda.Stream(device=policy.torch_device) for _ in range(policy.streams)
-        ]
-        host_inputs = [
-            torch.empty(
-                (batch, self.rank, chunk_size),
-                dtype=spectrum.dtype,
-                pin_memory=policy.pin_memory,
-            )
-            for _ in streams
-        ]
-        host_values = [
-            torch.empty(
-                packed_shape,
-                dtype=packed_dtype,
-                pin_memory=policy.pin_memory,
-            )
-            for _ in streams
-        ]
-        host_outputs = [torch.empty_like(item) for item in host_inputs]
-        pending: list[tuple[int, int] | None] = [None] * len(streams)
-
-        def finish(slot: int) -> None:
-            location = pending[slot]
-            if location is None:
-                return
-            streams[slot].synchronize()
-            start, stop = location
-            output[:, :, start:stop].copy_(host_outputs[slot][:, :, : stop - start])
-            pending[slot] = None
-
-        for chunk_index, start in enumerate(range(0, self.n_locations, chunk_size)):
-            stop = min(start + chunk_size, self.n_locations)
-            count = stop - start
-            slot = chunk_index % policy.streams
-            finish(slot)
-            host_inputs[slot][:, :, :count].copy_(spectrum[:, :, start:stop])
-            host_values[slot][:, :count].copy_(encoded_host[:, start:stop])
-            stream = streams[slot]
-            with torch.cuda.stream(stream):
-                selected = host_inputs[slot][:, :, :count].to(
-                    policy.torch_device,
-                    non_blocking=policy.pin_memory,
-                )
-                packed = host_values[slot][:, :count].to(
-                    policy.torch_device,
-                    non_blocking=policy.pin_memory,
-                )
-                _packed_cuda_matvec(
-                    selected,
-                    packed,
-                    location_start=0,
-                    count=count,
-                )
-                host_outputs[slot][:, :, :count].copy_(
-                    selected,
-                    non_blocking=policy.pin_memory,
-                )
-            pending[slot] = (start, stop)
-        for slot in range(policy.streams):
-            finish(slot)
-        return output
 
     def _packed_index(self, row: int, column: int) -> tuple[int, bool]:
         """Return packed upper-triangle index and whether conjugation is needed."""
@@ -1411,11 +1366,11 @@ class CompactToeplitzKernel:
         right_factor: Any | None = None,
         left_factor: Any | None = None,
     ) -> Any:
-        """Apply the kernel with CPU-resident state and bounded CUDA buffers.
+        """Apply the kernel to host-resident images with bounded CUDA buffers.
 
-        Only one padded coefficient volume is transformed at a time. Supported
-        spectra are retained on the host; packed matrix multiplication is
-        double-buffered across the policy's two CUDA streams.
+        The canonical transfer stays on the host and reaches the device in
+        chunks double-buffered across the policy's streams; supported spectra
+        are held on the device, where the multiply reads them.
         """
         torch = _torch()
         policy.ensure_available()
@@ -1515,158 +1470,9 @@ class CompactToeplitzKernel:
                 for start in range(0, image.shape[0], policy.physics_batch_size)
             ]
             return torch.cat(chunks, dim=0)
-        chunk_size = min(policy.transfer_chunk_size, self.n_locations)
-        complex_size = image.element_size()
-        transfer_precision = self._cuda_precision(
-            policy.transfer_precision,
-            policy.torch_device,
+        return self._apply_device_spectra(
+            image,
+            policy,
+            right_factor=right_factor,
+            left_factor=left_factor,
         )
-        transfer_chunk_bytes = (
-            self._cuda_storage_nbytes(transfer_precision)
-            * chunk_size
-            // max(1, self.n_locations)
-        )
-        fused_packed = self.values.dtype in {
-            torch.bfloat16,
-            torch.float32,
-            torch.complex64,
-        }
-        fft_buffers = 1 if fused_packed else 2
-        fft_bytes = (
-            fft_buffers * image.shape[0] * prod(self.spatial_shape) * complex_size
-        )
-        free_device_bytes, total_device_bytes = torch.cuda.mem_get_info(
-            policy.torch_device
-        )
-        reclaimable_cache = torch.cuda.memory_reserved(
-            policy.torch_device
-        ) - torch.cuda.memory_allocated(policy.torch_device)
-        available_device_bytes = free_device_bytes + reclaimable_cache
-        device_spectrum_bytes = (
-            image.shape[0]
-            * (self.rank + (0 if fused_packed else 1))
-            * self.n_locations
-            * complex_size
-            + fft_bytes
-            + policy.streams * transfer_chunk_bytes
-        )
-        workspace_prefix = (
-            policy.torch_device,
-            image.dtype,
-            image.shape[0],
-            chunk_size,
-            policy.streams,
-            policy.pin_memory,
-        )
-        reusable_device_spectra = any(
-            key[: len(workspace_prefix)] == workspace_prefix
-            for key in self._stream_workspaces
-        )
-        device_spectra = (
-            reusable_device_spectra
-            or policy.spectrum_residency == "device"
-            or (
-                policy.spectrum_residency == "auto"
-                and device_spectrum_bytes
-                <= min(
-                    available_device_bytes,
-                    int(total_device_bytes * policy.max_device_fraction),
-                )
-            )
-        )
-        if device_spectra:
-            return self._apply_device_spectra(
-                image,
-                policy,
-                right_factor=right_factor,
-                left_factor=left_factor,
-            )
-        if right_factor is not None or left_factor is not None:
-
-            def expanded_factor(factor: Any) -> Any:
-                if factor.ndim == len(self.image_shape):
-                    return factor[None, None].expand_as(image)
-                if factor.ndim == len(self.image_shape) + 1:
-                    return factor[None].expand_as(image)
-                return factor
-
-            factored = (
-                image if right_factor is None else image * expanded_factor(right_factor)
-            )
-            transformed = self.apply_streamed(factored, policy)
-            return (
-                transformed
-                if left_factor is None
-                else transformed * expanded_factor(left_factor)
-            )
-
-        if self.values.device.type != "cpu":
-            self.to("cpu")
-
-        targets_device = [self.indices.to(policy.torch_device, dtype=torch.int32)]
-        banks = [
-            torch.empty(
-                (image.shape[0], self.rank, self.n_locations),
-                dtype=image.dtype,
-                device="cpu",
-            )
-            for _ in targets_device
-        ]
-        image_slices = (
-            slice(None),
-            *(slice(0, size) for size in self.image_shape),
-        )
-        axes = tuple(range(1, len(self.spatial_shape) + 1))
-
-        for coefficient in range(self.rank):
-            device_image = image[:, coefficient].to(
-                policy.torch_device,
-                non_blocking=policy.pin_memory and image.is_pinned(),
-            )
-            padded = torch.zeros(
-                (image.shape[0], *self.spatial_shape),
-                dtype=image.dtype,
-                device=policy.torch_device,
-            )
-            padded[image_slices] = device_image
-            spectrum = torch.fft.fftn(padded, dim=axes)
-            flattened = spectrum.flatten(start_dim=1)
-            for bank, target in zip(banks, targets_device, strict=True):
-                selected = torch.index_select(flattened, 1, target)
-                bank[:, coefficient].copy_(selected.to("cpu"))
-                del selected
-            del device_image, padded, spectrum, flattened
-
-        multiplied = [self._streamed_multiply(bank, policy) for bank in banks]
-        result = torch.empty(
-            (image.shape[0], self.rank, *self.image_shape),
-            dtype=image.dtype,
-            device="cpu",
-            pin_memory=policy.pin_memory,
-        )
-        chunk_size = policy.transfer_chunk_size
-        for coefficient in range(self.rank):
-            spectrum = torch.zeros(
-                (image.shape[0], prod(self.spatial_shape)),
-                dtype=image.dtype,
-                device=policy.torch_device,
-            )
-            for transformed, target in zip(multiplied, targets_device, strict=True):
-                for start in range(0, self.n_locations, chunk_size):
-                    stop = min(start + chunk_size, self.n_locations)
-                    values = transformed[:, coefficient, start:stop].to(
-                        policy.torch_device,
-                        non_blocking=(policy.pin_memory and transformed.is_pinned()),
-                    )
-                    spectrum.index_copy_(
-                        1,
-                        target[start:stop].to(torch.int64),
-                        values,
-                    )
-            spatial = torch.fft.ifftn(
-                spectrum.reshape(image.shape[0], *self.spatial_shape),
-                dim=axes,
-            )
-            result[:, coefficient].copy_(spatial[image_slices].to("cpu"))
-            del spectrum, spatial
-        return result

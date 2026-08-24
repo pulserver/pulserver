@@ -145,6 +145,10 @@ def register_torch_cufinufft() -> bool:
                 raise ValueError("sensitivity-map shape does not match image shape")
             self._smaps = maps.reshape(self.n_coils, *self.shape).contiguous()
 
+        def _staged_maps(self, coils: Any) -> Any:
+            """Return a coil group on the device that encodes with it."""
+            return self._smaps[coils].to(self.device)
+
         @FourierOperatorBase.density.setter
         def density(self, value: Any) -> None:
             if value is None:
@@ -226,7 +230,8 @@ def register_torch_cufinufft() -> bool:
                 for batch_index in range(batch):
                     for start in range(0, coils, self.n_trans):
                         stop = start + self.n_trans
-                        coil_images = images[batch_index][None] * self.smaps[start:stop]
+                        maps = self._staged_maps(slice(start, stop))
+                        coil_images = images[batch_index][None] * maps
                         self._op(coil_images, ksp[batch_index, start:stop])
             else:
                 images = data.reshape(batch * coils, *self.shape)
@@ -265,8 +270,9 @@ def register_torch_cufinufft() -> bool:
                             ],
                             coil_images,
                         )
+                        maps = self._staged_maps(slice(start, stop))
                         result[batch_index, 0].add_(
-                            (coil_images * self.smaps[start:stop].conj()).sum(dim=0)
+                            (coil_images * maps.conj()).sum(dim=0)
                         )
             else:
                 result = torch.empty(
@@ -387,9 +393,10 @@ def register_torch_cufinufft() -> bool:
                 )
                 for batch_index in range(batch):
                     for coil in range(coils):
-                        encoded = images[batch_index] * self.smaps[coil]
+                        maps = self._staged_maps(coil)
+                        encoded = images[batch_index] * maps
                         result[batch_index, 0].add_(
-                            self._gram_raw(encoded) * self.smaps[coil].conj()
+                            self._gram_raw(encoded) * maps.conj()
                         )
             else:
                 images = data.reshape(batch * coils, *self.shape)

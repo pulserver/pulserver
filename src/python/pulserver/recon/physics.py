@@ -1289,6 +1289,54 @@ def _frame_coil_view(frame: MRIPhysics | _LazyFramePhysics) -> Any:
     return frame.native_operator if view is None else view
 
 
+def _coils_split_across_devices(
+    kernel: CompactToeplitzKernel,
+    image: Any,
+    maps: Any,
+    streaming: Any,
+    *,
+    batched_maps: bool,
+    n_coils: int,
+) -> Any:
+    """Sum a normal application over coils divided between CUDA devices.
+
+    Coils are independent until the sum that ends them, so each device is given
+    a share of them, its own copy of the transfer and its own copy of the
+    image, and returns the part of the sum it computed.
+
+    This has not been run on a machine with more than one GPU. What it assumes
+    of a second device is what ``for_device`` and ``_apply_sense_toeplitz``
+    already assume of the first.
+    """
+    devices = streaming.torch_devices[: min(streaming.device_count, n_coils)]
+    edges = [(index * n_coils) // len(devices) for index in range(len(devices) + 1)]
+
+    def share(position: int) -> Any:
+        device = devices[position]
+        start, stop = edges[position], edges[position + 1]
+        coils = (
+            maps[:, start:stop] if batched_maps else maps[start:stop]
+        ).to(device)
+        held = SimpleNamespace(
+            shape=kernel.image_shape,
+            smaps=coils,
+            uses_sense=True,
+        )
+        return _apply_sense_toeplitz(
+            kernel.for_device(device),
+            image.to(device),
+            held,
+            coil_batch_size=1,
+        )
+
+    with ThreadPoolExecutor(max_workers=len(devices)) as workers:
+        parts = list(workers.map(share, range(len(devices))))
+    total = parts[0].to(image.device)
+    for part in parts[1:]:
+        total = total + part.to(image.device)
+    return total
+
+
 def _apply_sense_toeplitz(
     kernel: CompactToeplitzKernel,
     image: Any,
@@ -1320,6 +1368,21 @@ def _apply_sense_toeplitz(
         n_coils = maps.shape[1]
     else:
         n_coils = maps.shape[0]
+    if (
+        streaming is not None
+        and streaming.device_count > 1
+        and n_coils > 1
+        and left_factors is None
+        and right_factors is None
+    ):
+        return _coils_split_across_devices(
+            kernel,
+            image,
+            maps,
+            streaming,
+            batched_maps=batched_maps,
+            n_coils=n_coils,
+        )
     result_rank = 1 if left_factors is not None else kernel.rank
     result = torch.zeros(
         (image.shape[0], result_rank, *kernel.image_shape),
@@ -1668,6 +1731,7 @@ def _subspace_pair_transfers(
     indices: Any,
     *,
     streaming: Any | None = None,
+    keep_complex: bool = True,
 ) -> Any:
     """Grid one transfer per upper-triangular basis pair, over every sample.
 
@@ -1676,9 +1740,9 @@ def _subspace_pair_transfers(
     whole dynamic acquisition grids in a single pass and the count of NUFFTs
     is the size of the basis, not the length of the scan.
 
-    Each is cut to ``indices`` as it is gridded, so one whole transfer is live
-    at a time rather than one per pair. At the sizes this is for, that is the
-    difference between the doubled grid once and the doubled grid ten times.
+    Each is cut to ``indices`` as it is gridded and put down on the host in the
+    form it is kept in, so a build holds one row of the device rather than the
+    whole packed set twice over -- once complex and once made real.
     """
     torch = import_module("torch")
     spatial_shape = tuple(2 * size for size in image_shape)
@@ -1722,15 +1786,18 @@ def _subspace_pair_transfers(
         torch.fft.fftn(psf, dim=axes, out=psf)
         selected = _selected_transfer(psf.reshape(-1), indices, streaming=streaming)
         del psf
-        selected = selected * signs
+        row = selected * signs * scale
+        del selected
+        if not keep_complex:
+            row = row.real
         if packed is None:
             packed = torch.empty(
-                (n_pairs, selected.numel()),
-                dtype=selected.dtype,
-                device=selected.device,
+                (n_pairs, row.numel()),
+                dtype=row.dtype,
+                device="cpu",
             )
-        packed[pair] = selected * scale
-        del selected
+        packed[pair].copy_(row)
+        del row
     assert packed is not None
     return packed
 
@@ -1824,6 +1891,24 @@ def _plans_given_up(native_operator: Any) -> Any:
         _plans_made_when_asked(raw, settings, samples)
 
 
+def _maps_parked_on_host(native_operator: Any) -> None:
+    """Send an operator's sensitivities to the host for a kernel's lifetime.
+
+    Sensitivities have the same lifetime on a device as the plans beside them:
+    a normal operator that is a kernel reads its own copy a coil at a time, and
+    the operator they belong to encodes once, if at all. It stages them back a
+    coil at a time when it is next asked to.
+    """
+    base = _base_fourier_operator(native_operator)
+    maps = getattr(base, "_smaps", None)
+    device = getattr(maps, "device", None)
+    # A host array carries a device too, spelled as a bare string.
+    if maps is None or getattr(device, "type", "cpu") == "cpu":
+        return
+    with suppress(AttributeError, RuntimeError):
+        base._smaps = maps.to("cpu")
+
+
 @contextmanager
 def _frames_release_their_plans(
     frame_physics: Sequence[MRIPhysics | _LazyFramePhysics],
@@ -1846,6 +1931,7 @@ def _frames_release_their_plans(
         provider.shared = None
         provider.target = None
         provider.cache.clear()
+        _maps_parked_on_host(provider.physics.native_operator)
     if providers:
         with suppress(ImportError, AttributeError):
             torch = import_module("torch")
@@ -1900,6 +1986,7 @@ def _build_subspace_toeplitz(
         counts,
         indices,
         streaming=streaming,
+        keep_complex=bool(basis.is_complex()),
     )
 
     stack.close()

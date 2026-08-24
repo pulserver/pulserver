@@ -47,9 +47,9 @@ class CudaStreaming:
     Hermitian CUDA multiplication. ``transfer_chunk_size`` bounds packed
     transfer staging. ``transfer_precision="auto"`` uses BF16 coefficient
     storage for real Toeplitz kernels on natively capable GPUs and retains
-    complex64 for complex-Hermitian kernels. Spectra and accumulation remain
-    complex64/FP32. Denoisers operate on overlapping slabs along their first
-    spatial axis.
+    complex64 for complex-Hermitian kernels. Supported spectra are held on the
+    device and accumulation stays complex64/FP32. Denoisers operate on
+    overlapping slabs along their first spatial axis.
     """
 
     device: str = "cuda"
@@ -58,7 +58,6 @@ class CudaStreaming:
     pin_memory: bool = True
     transfer_chunk_size: int = 1048576
     physics_batch_size: int = 1
-    spectrum_residency: str = "auto"
     kernel_residency: str = "auto"
     transfer_precision: str = "auto"
     max_device_fraction: float = 0.85
@@ -93,8 +92,6 @@ class CudaStreaming:
             raise ValueError(
                 "transfer_precision must be 'auto', 'float32', or 'bfloat16'"
             )
-        if self.spectrum_residency not in {"auto", "host", "device"}:
-            raise ValueError("spectrum_residency must be 'auto', 'host', or 'device'")
         if not 0.0 < self.max_device_fraction <= 1.0:
             raise ValueError("max_device_fraction must be in (0, 1]")
         if self.denoiser_slab_size < 1:

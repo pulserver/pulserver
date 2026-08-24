@@ -1599,6 +1599,45 @@ def test_maps_are_read_where_they_rest_and_staged_a_coil_at_a_time():
     torch.testing.assert_close(staged, whole, atol=2e-5, rtol=2e-5)
 
 
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is unavailable")
+@pytest.mark.parametrize("batched_maps", [False, True])
+def test_coils_split_over_devices_sum_to_the_undivided_answer(batched_maps):
+    """Coils are independent until the sum, so dividing them must change nothing.
+
+    One device standing in for several exercises the division, the per-device
+    kernel views and the sum; it cannot speak for what two cards do between
+    themselves.
+    """
+    generator = torch.Generator().manual_seed(51)
+    image_shape = (4, 5)
+    spatial_shape = (8, 10)
+    rank, coils, batch = 3, 5, 2
+    raw = torch.randn(rank, rank, *spatial_shape, generator=generator)
+    kernel = _packed_kernel(0.5 * (raw + raw.movedim(0, 1)), image_shape).to("cuda")
+    kernel.cuda_transfer_precision = "float32"
+    shape = (batch, coils, *image_shape) if batched_maps else (coils, *image_shape)
+    maps = torch.randn(*shape, generator=generator, dtype=torch.complex64).cuda()
+    image = torch.randn(
+        batch, rank, *image_shape, generator=generator, dtype=torch.complex64
+    ).cuda()
+    operator = SimpleNamespace(shape=image_shape, smaps=maps, uses_sense=True)
+
+    whole = physics._apply_sense_toeplitz(kernel, image, operator)
+
+    policy = CudaStreaming(streams=2, pin_memory=False)
+    with mock.patch.object(
+        type(policy),
+        "torch_devices",
+        property(lambda self: (torch.device("cuda:0"),) * 2),
+    ):
+        assert policy.device_count == 2
+        divided = physics._apply_sense_toeplitz(
+            kernel, image, operator, streaming=policy
+        )
+
+    torch.testing.assert_close(divided, whole, atol=2e-5, rtol=2e-5)
+
+
 def test_asking_a_dynamic_physics_for_toeplitz_turns_it_on():
     """The explicit opt-in reaches a subspace physics built without it.
 

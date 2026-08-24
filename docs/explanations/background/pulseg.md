@@ -82,6 +82,6 @@ The specification recovers these structures from a Pulseq file, but not
 automatically: segment boundaries are **declared**, by the sequence designer,
 through a `TRID` label — an annotation placed on the first block of each
 repeating unit. The segmentation is manual. A file written without the
-labels, or with labels that no longer match blocks that were later edited,
+labels, or with labels that do not match the blocks as they now stand,
 cannot be segmented as specified, and every existing Pulseq sequence has to
 be annotated before it can benefit.

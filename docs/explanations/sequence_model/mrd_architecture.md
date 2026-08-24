@@ -130,7 +130,7 @@ is ever shared by accident.
 Observing a header with a different exam identity retires the current
 generation immediately — the next patient never inherits the previous
 patient's calibration. Retiring is not freeing: a reconstruction that already
-leased the old generation keeps it alive and valid until it finishes, and the
+leased the outgoing generation keeps it alive and valid until it finishes, and the
 artifacts are released on the last lease returned. The cache is generational
 rather than invalidated in place because a scanner can start the next exam
 while the previous scan is still reconstructing.
