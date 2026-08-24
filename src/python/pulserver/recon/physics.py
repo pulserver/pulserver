@@ -310,10 +310,9 @@ def _toeplitz_options(
         raise ValueError("Toeplitz cuda_mode must be 'auto', 'resident', or 'compact'")
     if not 0.0 < cuda_max_device_fraction <= 1.0:
         raise ValueError("Toeplitz cuda_max_device_fraction must be in (0, 1]")
-    if cuda_transfer_precision not in {"auto", "float32", "float16", "bfloat16"}:
+    if cuda_transfer_precision not in {"auto", "float32", "bfloat16"}:
         raise ValueError(
-            "Toeplitz cuda_transfer_precision must be 'auto', 'float32', "
-            "'float16', or 'bfloat16'"
+            "Toeplitz cuda_transfer_precision must be 'auto', 'float32', or 'bfloat16'"
         )
     return {
         "compress": bool(compress),

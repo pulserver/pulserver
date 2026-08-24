@@ -862,56 +862,6 @@ def test_resident_cuda_banks_match_compact_cuda(real_transfer):
     )
 
 
-@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is unavailable")
-def test_resident_cuda_fp16_transfer_uses_fp32_accumulation():
-    generator = torch.Generator().manual_seed(52)
-    image_shape = (6, 5)
-    spatial_shape = (12, 10)
-    rank = 3
-    raw = torch.randn(rank, rank, *spatial_shape, generator=generator)
-    transfer = 0.5 * (raw + raw.movedim(0, 1))
-    rows, columns = torch.triu_indices(rank, rank)
-    values = transfer[rows, columns].reshape(rows.numel(), -1).cuda()
-    indices = support_indices(spatial_shape, support="full", device="cuda")
-    image = torch.randn(
-        1,
-        rank,
-        *image_shape,
-        generator=generator,
-        dtype=torch.complex64,
-    ).cuda()
-    fp32 = CompactToeplitzKernel(
-        values.clone(),
-        indices,
-        spatial_shape,
-        rank,
-        image_shape=image_shape,
-        cuda_mode="resident",
-        cuda_transfer_precision="float32",
-    )
-    fp16 = CompactToeplitzKernel(
-        values.clone(),
-        indices,
-        spatial_shape,
-        rank,
-        image_shape=image_shape,
-        cuda_mode="resident",
-        cuda_transfer_precision="float16",
-    )
-
-    reference = fp32.apply(image)
-    result = fp16.apply(image)
-
-    torch.testing.assert_close(result, reference, atol=2e-3, rtol=2e-3)
-    workspace = fp16._resident_workspaces[fp16._resident_workspace_key(image)]
-    assert workspace["values"].dtype == torch.float16
-
-
-@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is unavailable")
-@pytest.mark.skipif(
-    not torch.cuda.is_bf16_supported(),
-    reason="native CUDA BF16 is unavailable",
-)
 def test_resident_cuda_uses_cached_bfloat16_transfer():
     generator = torch.Generator().manual_seed(53)
     image_shape = (6, 5)

@@ -89,14 +89,9 @@ class CudaStreaming:
             raise ValueError("physics_batch_size must be positive")
         if self.kernel_residency not in {"auto", "host", "device"}:
             raise ValueError("kernel_residency must be 'auto', 'host', or 'device'")
-        if self.transfer_precision not in {
-            "auto",
-            "float32",
-            "float16",
-            "bfloat16",
-        }:
+        if self.transfer_precision not in {"auto", "float32", "bfloat16"}:
             raise ValueError(
-                "transfer_precision must be 'auto', 'float32', 'float16', or 'bfloat16'"
+                "transfer_precision must be 'auto', 'float32', or 'bfloat16'"
             )
         if self.spectrum_residency not in {"auto", "host", "device"}:
             raise ValueError("spectrum_residency must be 'auto', 'host', or 'device'")

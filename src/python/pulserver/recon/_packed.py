@@ -54,15 +54,9 @@ class PackedHermitianField(torch.nn.Module):
                 f"values must have shape ({packed_rank}, locations), "
                 f"got {tuple(values.shape)}"
             )
-        if cuda_transfer_precision not in {
-            "auto",
-            "float32",
-            "float16",
-            "bfloat16",
-        }:
+        if cuda_transfer_precision not in {"auto", "float32", "bfloat16"}:
             raise ValueError(
-                "cuda_transfer_precision must be 'auto', 'float32', "
-                "'float16', or 'bfloat16'"
+                "cuda_transfer_precision must be 'auto', 'float32', or 'bfloat16'"
             )
         if values.is_complex() and cuda_transfer_precision not in {
             "auto",

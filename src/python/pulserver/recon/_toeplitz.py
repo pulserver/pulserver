@@ -86,7 +86,6 @@ def _cuda_transfer_values(values: Any, precision: str, device: Any) -> Any:
     torch = _torch()
     dtype = {
         "float32": torch.float32,
-        "float16": torch.float16,
         "bfloat16": torch.bfloat16,
     }[precision]
     target_dtype = torch.complex64 if values.is_complex() else dtype
@@ -102,7 +101,6 @@ def _cuda_transfer_spec(
     torch = _torch()
     dtype = {
         "float32": torch.float32,
-        "float16": torch.float16,
         "bfloat16": torch.bfloat16,
     }[precision]
     if values.is_complex():
@@ -381,15 +379,9 @@ class CompactToeplitzKernel:
             raise ValueError("cuda_mode must be 'auto', 'resident', or 'compact'")
         if not 0.0 < cuda_max_device_fraction <= 1.0:
             raise ValueError("cuda_max_device_fraction must be in (0, 1]")
-        if cuda_transfer_precision not in {
-            "auto",
-            "float32",
-            "float16",
-            "bfloat16",
-        }:
+        if cuda_transfer_precision not in {"auto", "float32", "bfloat16"}:
             raise ValueError(
-                "cuda_transfer_precision must be 'auto', 'float32', "
-                "'float16', or 'bfloat16'"
+                "cuda_transfer_precision must be 'auto', 'float32', or 'bfloat16'"
             )
         if values.is_complex() and cuda_transfer_precision not in {
             "auto",
@@ -531,7 +523,6 @@ class CompactToeplitzKernel:
         torch = _torch()
         itemsize = {
             "float32": torch.float32.itemsize,
-            "float16": torch.float16.itemsize,
             "bfloat16": torch.bfloat16.itemsize,
         }[precision]
         components = 2 if self.values.is_complex() else 1
@@ -584,7 +575,6 @@ class CompactToeplitzKernel:
         else:
             self.to(image.device)
         if image.device.type == "cuda" and self.values.dtype in {
-            torch.float16,
             torch.bfloat16,
             torch.float32,
             torch.complex64,
@@ -942,7 +932,6 @@ class CompactToeplitzKernel:
             self.to("cpu")
         chunk_size = min(policy.transfer_chunk_size, self.n_locations)
         fused_packed = self.values.dtype in {
-            torch.float16,
             torch.bfloat16,
             torch.float32,
             torch.complex64,
@@ -1342,7 +1331,6 @@ class CompactToeplitzKernel:
         if policy.pin_memory:
             self._pin_host_storage()
         if self.values.dtype in {
-            torch.float16,
             torch.bfloat16,
             torch.float32,
             torch.complex64,
@@ -1448,7 +1436,6 @@ class CompactToeplitzKernel:
             // max(1, self.n_locations)
         )
         fused_packed = self.values.dtype in {
-            torch.float16,
             torch.bfloat16,
             torch.float32,
             torch.complex64,
