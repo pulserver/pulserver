@@ -659,6 +659,20 @@ typedef struct pulseg__uniform_grad_waveforms
 #define PULSEG__UNIFORM_GRAD_WAVEFORMS_INIT {0, 0.0f, NULL, NULL, NULL}
 /* clang-format on */
 
+/* Native gradient corner points, before any resampling.  Each axis keeps
+ * its own time base: a trapezoid contributes its ramp and plateau corners,
+ * an arbitrary waveform its raster samples. */
+typedef struct pulseg__grad_corner_arrays
+{
+    int num_gx, num_gy, num_gz;
+    float *time_gx, *time_gy, *time_gz; /* us, per-axis time base */
+    float *wf_gx, *wf_gy, *wf_gz;       /* Hz / m */
+} pulseg__grad_corner_arrays;
+
+/* clang-format off */
+#define PULSEG__GRAD_CORNER_ARRAYS_INIT {0, 0, 0, NULL, NULL, NULL, NULL, NULL, NULL}
+/* clang-format on */
+
 /* ================================================================== */
 /*  Internal constants                                                */
 /* ================================================================== */
@@ -937,6 +951,19 @@ int pulseg__calc_pns_memoized(
 
 /* Extract gradient waveforms for an arbitrary block range,
  * interpolated to uniform raster (half gradient raster). */
+int pulseg__collect_grad_corners_range(
+    const pulseg_sequence_descriptor *desc,
+    pulseg__grad_corner_arrays *out,
+    pulseg_diagnostic *diag,
+    int block_start,
+    int block_count,
+    int amplitude_mode,
+    const int *tr_group_labels,
+    int target_group,
+    const int *block_order);
+
+void pulseg__grad_corner_arrays_free(pulseg__grad_corner_arrays *c);
+
 int pulseg__get_gradient_waveforms_range(
     const pulseg_sequence_descriptor *desc,
     pulseg__uniform_grad_waveforms *out,

@@ -60,10 +60,7 @@ namespace mrdserver
             float* pz)
         {
             const int shots[3] = {entry.kx_shot_id, entry.ky_shot_id, entry.kz_shot_id};
-            const float amps[3] = {
-                entry.gx_amplitude,
-                entry.gy_amplitude,
-                entry.gz_amplitude};
+            const float amps[3] = {entry.gx_amplitude, entry.gy_amplitude, entry.gz_amplitude};
             float* dsts[3] = {px, py, pz};
 
             for (int axis = 0; axis < 3; ++axis)

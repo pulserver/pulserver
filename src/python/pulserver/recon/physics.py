@@ -1446,6 +1446,7 @@ def _apply_sense_toeplitz(
                 if not batched_maps
                 else (transformed * coil_maps.conj()[:, :, None]).sum(dim=1)
             )
+    kernel.settle_allocator()
     return result
 
 
@@ -1567,6 +1568,7 @@ def _configure_base_toeplitz(
                 if self.streaming_policy is not None and flattened.device.type == "cpu"
                 else self.toeplitz_kernel.apply(flattened)
             ).reshape(batch, channels, *spatial)
+        self.toeplitz_kernel.settle_allocator()
         return _image_as_real(result) if self.viewed_as_real else result
 
     operator.enable_toeplitz = MethodType(enable_toeplitz, operator)
@@ -1722,6 +1724,7 @@ def _subspace_pair_transfers(
 
 
 _PLAN_SETTINGS = "_pulserver_plan_settings"
+_LAZY_PLANS = "_pulserver_lazy_plans"
 
 
 def _remember_plan_settings(native_operator: Any, settings: dict[str, Any]) -> None:
@@ -1731,16 +1734,57 @@ def _remember_plan_settings(native_operator: Any, settings: dict[str, Any]) -> N
         setattr(base, _PLAN_SETTINGS, dict(settings))
 
 
+def _plans_made_when_asked(raw: Any, settings: dict[str, Any], samples: Any) -> None:
+    """Let each transform of ``raw`` plan itself the first time it runs.
+
+    Points are held rather than set while a plan is absent, so an operator can
+    be aimed at new samples without a plan to aim, and arrives at the transform
+    pointed where its last caller asked.
+    """
+    state = getattr(raw, _LAZY_PLANS, None)
+    if state is not None:
+        state["settings"] = dict(settings)
+        state["samples"] = {1: samples, 2: samples}
+        return
+
+    state = {"settings": dict(settings), "samples": {1: samples, 2: samples}}
+    set_pts = raw._set_pts
+
+    def points(typ: Any, new_samples: Any) -> None:
+        if typ in state["samples"] and raw.plans[typ] is None:
+            state["samples"][typ] = new_samples
+            return
+        set_pts(typ, new_samples)
+
+    def planned(typ: int) -> Any:
+        if raw.plans[typ] is None:
+            raw._make_plan(typ, **state["settings"])
+            set_pts(typ, state["samples"][typ])
+        return raw.plans[typ]
+
+    def type1(coefficients: Any, grid: Any) -> Any:
+        return planned(1).execute(coefficients, grid)
+
+    def type2(grid: Any, coefficients: Any) -> Any:
+        return planned(2).execute(grid, coefficients)
+
+    raw._set_pts = points
+    raw.type1 = type1
+    raw.type2 = type2
+    setattr(raw, _LAZY_PLANS, state)
+
+
 @contextmanager
 def _plans_given_up(native_operator: Any) -> Any:
-    """Release an operator's NUFFT plans, and plan again on the way out.
+    """Release an operator's NUFFT plans, and plan again when one is asked for.
 
     A plan is bound to the grid it answers on, so an encoding plan and the
     gridding plan of a kernel built from the same points cannot be one object.
     They can, however, take turns: the samples outlive the plan, so the
-    encoding side gives its plan up for the length of a build and takes it
-    back afterwards, which costs one planning pass instead of leaving the
-    gridding to run against a card it has to share.
+    encoding side gives its plan up for the length of a build. It takes the
+    plan back on its next transform rather than at the end of the build,
+    because what a kernel is for is standing in for that transform -- a solve
+    that has one applies it many times over and encodes no further.
     """
     base = _base_fourier_operator(native_operator)
     raw = getattr(base, "raw_op", None)
@@ -1765,9 +1809,7 @@ def _plans_given_up(native_operator: Any) -> Any:
     try:
         yield
     finally:
-        for typ in (1, 2):
-            raw._make_plan(typ, **settings)
-            raw._set_pts(typ, samples)
+        _plans_made_when_asked(raw, settings, samples)
 
 
 @contextmanager
@@ -2183,6 +2225,7 @@ def _apply_subspace_off_resonance_toeplitz(
             (image.shape[0], coil_maps.shape[0]),
         )
         result += (transformed * coil_maps.conj()[None, :, None]).sum(dim=1)
+    kernel.settle_allocator()
     return result
 
 

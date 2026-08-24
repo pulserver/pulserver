@@ -396,6 +396,27 @@ typedef struct pulseg_channel_waveform
 /* clang-format on */
 
 /**
+ * @brief Joined gradient corner points for one TR.
+ *
+ * All three axes share @c time_us: the union of their native breakpoints,
+ * with coincident times collapsed.  Between consecutive points every axis
+ * is linear, so this is the whole waveform, not a sampling of it.  Block
+ * rotations are already applied.
+ */
+typedef struct pulseg_corner_point_stream
+{
+    int num_points;
+    float *time_us;      /**< [num_points] shared time base (us)  */
+    float *gx_hz_per_m;  /**< [num_points]                        */
+    float *gy_hz_per_m;  /**< [num_points]                        */
+    float *gz_hz_per_m;  /**< [num_points]                        */
+} pulseg_corner_point_stream;
+
+/* clang-format off */
+#define PULSEG_CORNER_POINT_STREAM_INIT {0, NULL, NULL, NULL, NULL}
+/* clang-format on */
+
+/**
  * @brief ADC event descriptor within a TR.
  */
 typedef struct pulseg_adc_event

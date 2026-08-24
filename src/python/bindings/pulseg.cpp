@@ -75,12 +75,8 @@ public:
             buf_sizes[i] = static_cast<int>(buffers[i].size());
         }
 
-        coll_ = std::unique_ptr<pulseg::Collection>(new pulseg::Collection(
-            buf_ptrs.data(),
-            buf_sizes.data(),
-            n,
-            opts,
-            parse_labels));
+        coll_ = std::unique_ptr<pulseg::Collection>(
+            new pulseg::Collection(buf_ptrs.data(), buf_sizes.data(), n, opts, parse_labels));
         source_size_ = (n > 0) ? buf_sizes[0] : 0;
     }
 
@@ -345,11 +341,8 @@ static py::dict _get_tr_waveforms(
     int tr_index,
     bool collapse_delays)
 {
-    const auto w = pc.coll().get_tr_waveforms(
-        subsequence_idx,
-        amplitude_mode,
-        tr_index,
-        collapse_delays);
+    const auto w =
+        pc.coll().get_tr_waveforms(subsequence_idx, amplitude_mode, tr_index, collapse_delays);
 
     auto axis = [](const pulseg::ChannelWaveform& ch)
     {

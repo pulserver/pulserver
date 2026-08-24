@@ -10,6 +10,7 @@
 #include "sequence_file_reader.h"
 
 #include "pulseq/expand.hpp"
+#include "pulseq/kspace.hpp"
 #include "pulseq/read.hpp"
 #include "pulseq/sequence_file.hpp"
 #include "pulseq/write.hpp"
@@ -335,7 +336,10 @@ TEST(SequenceReaderRotation, AnAcquisitionCarriesTheRotatedTrajectory)
     // What the cache holds, unrotated, back on its real axes.
     std::vector<float> packed(static_cast<size_t>(pt.ndim) * pt.num_samples);
     ASSERT_TRUE(mrdserver::materialize_readout(
-        cache, pt, entry.encoding_space_ref, readout_index_in_es[static_cast<size_t>(rotated)],
+        cache,
+        pt,
+        entry.encoding_space_ref,
+        readout_index_in_es[static_cast<size_t>(rotated)],
         packed.data()));
 
     std::vector<float> logical(3 * static_cast<size_t>(pt.num_samples), 0.0f);
@@ -353,7 +357,13 @@ TEST(SequenceReaderRotation, AnAcquisitionCarriesTheRotatedTrajectory)
     ISMRMRD::Acquisition acq;
     acq.resize(static_cast<uint16_t>(pt.num_samples), 1, 0);
     mrdserver::enrich_ismrmrd_acquisition(
-        acq, rotated, 1u, 0.0f, cache, trajectories, readout_index_in_es);
+        acq,
+        rotated,
+        1u,
+        0.0f,
+        cache,
+        trajectories,
+        readout_index_in_es);
 
     const int ndim = static_cast<int>(acq.trajectory_dimensions());
     ASSERT_GT(ndim, 0);
@@ -385,6 +395,97 @@ TEST(SequenceReaderRotation, AnAcquisitionCarriesTheRotatedTrajectory)
                     static_cast<double>(logical[static_cast<size_t>(a) * pt.num_samples + s])));
     EXPECT_GT(moved, 1e-6 * scale);
 }
+
+/*
+ * The reader reads the trajectory the design side wrote into the seqfile
+ * instead of integrating the gradients again. Those are two routes to one
+ * number, so they are held equal here -- and the equality is what makes
+ * dropping the second route safe.
+ *
+ * The other half of this test is that the trajectory exists at all. When the
+ * reader was first switched over against a corpus that carried no stored
+ * bases, every non-Cartesian sequence came back with none, and 626 of 627
+ * tests still passed: nothing else in the suite looks at trajectory content.
+ */
+class SequenceReaderNonCartesian : public ::testing::TestWithParam<const char *>
+{
+};
+
+TEST_P(SequenceReaderNonCartesian, TheStoredBaseComposesToWhatTheGradientsIntegrateTo)
+{
+    const std::string name = GetParam();
+    const SequenceCache cache = mrdserver::read_sequence_files(corpus(name + ".seq"));
+    const auto trajectories = mrdserver::pre_compute_trajectories(cache);
+
+    bool any_trajectory = false;
+    for (const auto &pt : trajectories)
+        any_trajectory = any_trajectory || pt.ndim > 0;
+    ASSERT_TRUE(any_trajectory) << name << " came back with no trajectory on any encoding space";
+
+    // The reference: integrate the gradients, logical frame, as the design
+    // side did when it wrote the base.
+    pulseq::SequenceFile file(corpus(name + ".seq"));
+    pulseq::Sequence &seq = file.sequence();
+    pulseq::KSpaceOptions options;
+    options.apply_rotation = false;
+    const pulseq::KSpace ks = pulseq::calculate_kspace(seq, options);
+    ASSERT_EQ(cache.table.size(), ks.readouts.size()) << "single-subsequence fixture expected";
+
+    std::vector<int> readout_index_in_es(cache.table.size(), -1);
+    std::vector<int> seen(cache.encoding_spaces.size(), 0);
+    for (size_t t = 0; t < cache.table.size(); ++t)
+    {
+        const int es = cache.table[t].encoding_space_ref;
+        if (es >= 0 && es < static_cast<int>(seen.size()))
+            readout_index_in_es[t] = seen[es]++;
+    }
+
+    double worst = 0.0, scale = 0.0;
+    size_t compared = 0;
+    for (size_t t = 0; t < cache.table.size(); ++t)
+    {
+        const int es = cache.table[t].encoding_space_ref;
+        if (es < 0 || es >= static_cast<int>(trajectories.size()))
+            continue;
+        const auto &pt = trajectories[static_cast<size_t>(es)];
+        if (pt.ndim <= 0)
+            continue;
+
+        std::vector<float> packed(static_cast<size_t>(pt.ndim) * pt.num_samples);
+        ASSERT_TRUE(
+            mrdserver::materialize_readout(cache, pt, es, readout_index_in_es[t], packed.data()));
+
+        const pulseq::Readout &readout = ks.readouts[t];
+        const double *reference = ks.k_adc.data() + static_cast<size_t>(readout.sample_offset) * 3;
+
+        int col = 0;
+        for (int axis = 0; axis < 3; ++axis)
+        {
+            if (!pt.axis_active[axis])
+                continue;
+            for (int sample = 0; sample < pt.num_samples && sample < readout.num_samples; ++sample)
+            {
+                const double expected =
+                    reference[static_cast<size_t>(axis) * readout.num_samples + sample];
+                const double got =
+                    static_cast<double>(packed[static_cast<size_t>(sample) * pt.ndim + col]);
+                worst = std::max(worst, std::fabs(got - expected));
+                scale = std::max(scale, std::fabs(expected));
+                ++compared;
+            }
+            ++col;
+        }
+    }
+
+    ASSERT_GT(compared, 0u) << "no readout of " << name << " carried a trajectory";
+    ASSERT_GT(scale, 0.0) << name << "'s trajectory is identically zero";
+    EXPECT_LT(worst, 1e-3 * scale) << "worst " << worst << " against scale " << scale;
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    Corpus,
+    SequenceReaderNonCartesian,
+    ::testing::Values("gre_spiral_2d", "gre_radial_2d", "gre_stack_of_stars_3d"));
 
 TEST(SequenceReaderChain, TheEpiChainBecomesOneCacheOfSubsequences)
 {

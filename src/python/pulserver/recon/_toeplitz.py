@@ -407,9 +407,11 @@ class CompactToeplitzKernel:
         self._off_diagonal = rows != columns
         self._stream_workspaces: dict[tuple[Any, ...], dict[str, Any]] = {}
         self._resident_workspaces: dict[tuple[Any, ...], dict[str, Any]] = {}
+        self._packed_workspaces: dict[tuple[Any, ...], dict[str, Any]] = {}
         self._cuda_value_cache: dict[tuple[Any, ...], Any] = {}
         self._last_cuda_mode: str | None = None
         self._last_cuda_algorithm: str | None = None
+        self._allocator_settled = False
 
     @property
     def is_real(self) -> bool:
@@ -461,6 +463,8 @@ class CompactToeplitzKernel:
             self._cuda_value_cache.clear()
             self._stream_workspaces.clear()
             self._resident_workspaces.clear()
+            self._packed_workspaces.clear()
+            self._allocator_settled = False
         self._metadata_to(device)
         return self
 
@@ -756,25 +760,58 @@ class CompactToeplitzKernel:
             output.addcmul_(output_crop, left_factor)
         return output
 
+    def settle_allocator(self) -> None:
+        """Hand back the blocks a build left, once an application's own exist.
+
+        A build and an application ask for different shapes, and the allocator
+        keeps the build's until something makes it let go -- so every later
+        application pays to work around them. Call this at the end of a whole
+        normal-operator application, the first moment the allocator holds only
+        the shapes the rest of a solve reuses; it releases once and then does
+        nothing.
+        """
+        torch = _torch()
+        if self._allocator_settled:
+            return
+        self._allocator_settled = True
+        with suppress(RuntimeError):
+            torch.cuda.empty_cache()
+
+    def _packed_workspace(self, image: Any) -> dict[str, Any]:
+        """Scratch the compact path reuses, sized by the images it is given.
+
+        These are gigabytes at a working matrix, and an allocator asked for
+        them once per call spends longer finding them than the transforms
+        spend on them.
+        """
+        torch = _torch()
+        key = (image.device, image.dtype, int(image.shape[0]))
+        workspace = self._packed_workspaces.get(key)
+        if workspace is None:
+            batch = int(image.shape[0])
+            workspace = {
+                "supported": torch.empty(
+                    (batch, self.rank, self.n_locations),
+                    dtype=image.dtype,
+                    device=image.device,
+                ),
+                "padded": torch.empty(
+                    (batch, *self.spatial_shape),
+                    dtype=image.dtype,
+                    device=image.device,
+                ),
+            }
+            self._packed_workspaces[key] = workspace
+        return workspace
+
     def _apply_cuda_packed(self, image: Any) -> Any:
         """Apply a resident packed transfer with bounded CUDA buffers."""
         torch = _torch()
         self._metadata_to(image.device)
-        batch = image.shape[0]
+        workspace = self._packed_workspace(image)
         targets = (self.indices,)
-        supported = [
-            torch.empty(
-                (batch, self.rank, self.n_locations),
-                dtype=image.dtype,
-                device=image.device,
-            )
-            for _ in targets
-        ]
-        padded = torch.empty(
-            (batch, *self.spatial_shape),
-            dtype=image.dtype,
-            device=image.device,
-        )
+        supported = [workspace["supported"]]
+        padded = workspace["padded"]
         result = torch.empty_like(image)
         image_slices = (
             slice(None),

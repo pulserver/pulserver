@@ -16,6 +16,7 @@ Matrix 32 32 1
 Name gre_radial_2d 
 NumGainCalibrationReadouts 1 
 NumSpokes 8 
+PhaseModulationMode base_trajectory 
 RadiofrequencyRasterTime 2e-06 
 SliceThickness 0.00483375 
 TE 0.0025 
@@ -114,14 +115,14 @@ kSpaceCenterSample 16
 # id num dwell delay freqPPM phasePPM freq phase phase_id
 # ..  ..    ns    us     ppm  rad/MHz   Hz   rad       ..
 [ADC]
-1 32 10000 320 0 0 0 2.04204 0
-2 32 10000 320 0 0 0 6.12611 0
-3 32 10000 320 0 0 0 5.96903 0
-4 32 10000 320 0 0 0 1.5708 0
-5 32 10000 320 0 0 0 5.49779 0
-6 32 10000 320 0 0 0 5.18363 0
-7 32 10000 320 0 0 0 0.628319 0
-8 32 10000 320 0 0 0 4.39823 0
+1 32 10000 320 0 0 0 2.04204 7
+2 32 10000 320 0 0 0 6.12611 7
+3 32 10000 320 0 0 0 5.96903 7
+4 32 10000 320 0 0 0 1.5708 7
+5 32 10000 320 0 0 0 5.49779 7
+6 32 10000 320 0 0 0 5.18363 7
+7 32 10000 320 0 0 0 0.628319 7
+8 32 10000 320 0 0 0 4.39823 7
 
 # Format of extension lists:
 # id type ref next_id
@@ -1739,10 +1740,25 @@ num_samples 4
 18
 30
 
+shape_id 7
+num_samples 96
+0.290625
+-0.01875
+-0.01875
+29
+0.58125
+-0.01875
+-0.01875
+29
+0.290625
+0
+0
+29
+
 
 [SIGNATURE]
 # This is the hash of the Pulseq file, calculated right before the [SIGNATURE] section was added
 # It can be reproduced/verified with md5sum if the file trimmed to the position right above [SIGNATURE]
 # The new line character preceding [SIGNATURE] BELONGS to the signature (and needs to be stripped away for recalculating/verification)
 Type md5
-Hash 3fb066f5bad2f9c8d90eb7ce05f9ca48
+Hash 3a41e195a2c697cd5a1197d906066de2

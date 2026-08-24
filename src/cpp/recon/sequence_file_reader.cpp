@@ -427,7 +427,8 @@ namespace mrdserver
                         rows[axis].assign(static_cast<size_t>(nsamples), 0.0f);
                         const std::vector<double>& b = stored.axis[axis].base;
                         for (int i = 0; i < nsamples && i < static_cast<int>(b.size()); ++i)
-                            rows[axis][static_cast<size_t>(i)] = static_cast<float>(b[static_cast<size_t>(i)]);
+                            rows[axis][static_cast<size_t>(i)] =
+                                static_cast<float>(b[static_cast<size_t>(i)]);
                     }
                 }
 
@@ -473,7 +474,8 @@ namespace mrdserver
                          * scan. */
                         *amplitudes[axis] = static_cast<float>(stored.axis[axis].amplitude);
                         shot_ids[axis] = library.add(rows[axis]);
-                        entry.k_origin[axis] = static_cast<float>(origin[static_cast<size_t>(axis)]);
+                        entry.k_origin[axis] =
+                            static_cast<float>(origin[static_cast<size_t>(axis)]);
                     }
                 }
                 entry.kx_shot_id = shot_ids[0];

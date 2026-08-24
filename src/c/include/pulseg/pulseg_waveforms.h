@@ -55,12 +55,13 @@ extern "C"
     /* ================================================================== */
 
     /**
-     * @brief Extract native-timing TR waveforms for all channels.
+     * @brief Extract TR waveforms for all channels.
      *
      * Returns gradient (gx, gy, gz), RF (magnitude, phase), and ADC
-     * event descriptors for the requested TR view.  Gradient waveforms
-     * use native timing (trap corner-points, arb raster samples) and are
-     * NOT interpolated to a uniform raster.  RF uses the RF raster.
+     * event descriptors for the requested TR view.  The three gradient
+     * axes are interpolated onto one uniform time base at half the
+     * gradient raster, which is what lets each block's rotation be
+     * applied sample-wise.  RF uses the RF raster.
      *
      * Amplitude modes:
      *   - PULSEG_AMP_MAX_POS  (0) — position-max across all TRs
@@ -95,6 +96,46 @@ extern "C"
         int amplitude_mode,
         int tr_index,
         int collapse_delays);
+
+    /* ================================================================== */
+    /*  TR corner points (native breakpoints, joined)                     */
+    /* ================================================================== */
+
+    /**
+     * @brief Extract one TR as a joined gradient corner-point stream.
+     *
+     * Walks the TR's blocks in playout order, emitting each gradient's
+     * native breakpoints -- ramp and plateau corners for a trapezoid, raster
+     * samples for an arbitrary waveform -- onto a running timeline, so a
+     * pure-delay block contributes its full duration as idle.  The three
+     * axes are then placed on the union of their breakpoints and each
+     * block's rotation is applied.
+     *
+     * Unlike pulseg_get_tr_waveforms() this does not resample: the output
+     * is piecewise linear between consecutive points and carries the
+     * waveform exactly, at a point count set by the sequence rather than by
+     * the TR duration.
+     *
+     * Each segment contributes its highest-energy instance, scored at
+     * structure time by gradient energy summed over all three axes
+     * (pulseg_virtual_segment.max_energy_start_block).  Summing across axes
+     * makes that score rotation-invariant, and the instance it names is one
+     * the sequence actually plays -- so every block carries its own
+     * amplitudes and its own rotation rather than a per-axis composite.
+     *
+     * @param[in]  coll        Loaded collection.
+     * @param[out] out         Output stream (caller frees).
+     * @param[out] diag        Diagnostic on error.
+     * @param[in]  subseq_idx  Subsequence index.
+     * @return PULSEG_SUCCESS on success, negative error code on failure.
+     */
+    int pulseg_get_tr_corner_points(
+        const pulseg_collection *coll,
+        pulseg_corner_point_stream *out,
+        pulseg_diagnostic *diag,
+        int subseq_idx);
+    /** @brief Free all arrays inside a pulseg_corner_point_stream. */
+    void pulseg_corner_point_stream_free(pulseg_corner_point_stream *s);
 
     /** @brief Free all arrays inside a pulseg_tr_waveforms. */
     void pulseg_tr_waveforms_free(pulseg_tr_waveforms *w);

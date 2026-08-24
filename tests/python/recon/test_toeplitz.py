@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import Any
 from os import cpu_count
 from types import SimpleNamespace
 from unittest import mock
@@ -1372,6 +1373,131 @@ def test_the_encoding_operator_survives_giving_its_plan_up():
     built.A_adjoint_A(coefficients)
 
     torch.testing.assert_close(built.A(coefficients), before, atol=2e-6, rtol=2e-6)
+
+
+def test_a_released_plan_is_made_by_the_transform_that_needs_it():
+    """Nothing plans until a transform runs, and then exactly one does."""
+    made: list[int] = []
+    pointed: list[tuple[Any, int]] = []
+    executed: list[str] = []
+
+    class _Plan:
+        def __init__(self, typ: int) -> None:
+            self.typ = typ
+
+        def execute(self, first, second):
+            executed.append(f"{self.typ}:{first}{second}")
+            return first
+
+    class _Raw:
+        def __init__(self) -> None:
+            self.plans = [None, None, None]
+
+        def _make_plan(self, typ, **_settings):
+            made.append(typ)
+            self.plans[typ] = _Plan(typ)
+
+        def _set_pts(self, typ, samples):
+            pointed.append((samples, typ))
+
+    raw = _Raw()
+    physics._plans_made_when_asked(raw, {"eps": 1e-6}, "build")
+
+    assert made == []
+
+    assert raw.type1("a", "b") == "a"
+    assert made == [1]
+    assert pointed == [("build", 1)]
+    assert executed == ["1:ab"]
+
+    raw.type2("c", "d")
+
+    assert made == [1, 2]
+    assert executed == ["1:ab", "2:cd"]
+
+
+def test_an_unplanned_operator_can_still_be_aimed_at_new_samples():
+    """Points wait for the plan instead of asking an absent one to take them."""
+    pointed: list[tuple[Any, int]] = []
+
+    class _Plan:
+        def execute(self, first, _second):
+            return first
+
+    class _Raw:
+        def __init__(self) -> None:
+            self.plans = [None, None, None]
+
+        def _make_plan(self, typ, **_settings):
+            self.plans[typ] = _Plan()
+
+        def _set_pts(self, typ, samples):
+            pointed.append((samples, typ))
+
+    raw = _Raw()
+    physics._plans_made_when_asked(raw, {"eps": 1e-6}, "build")
+
+    raw._set_pts(1, "frame")
+    raw._set_pts(2, "frame")
+
+    assert pointed == []
+
+    raw.type1("a", "b")
+
+    assert pointed == [("frame", 1)]
+
+    raw._set_pts(1, "next")
+
+    assert pointed == [("frame", 1), ("next", 1)]
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is unavailable")
+def test_a_build_leaves_the_card_to_the_kernel_it_built():
+    """The encoding plans go for the build and do not come back on their own.
+
+    A kernel exists to stand in for the transform, so the transform's plan is
+    only worth the memory once someone encodes again.
+    """
+    generator = torch.Generator().manual_seed(43)
+    image_shape = (12, 12)
+    rank, frames = 3, 5
+    trajectory = torch.from_numpy(_framed_radial(frames, 9, image_shape[0])).cuda()
+    basis = torch.randn(rank, frames, generator=generator).cuda()
+    built = physics.Subspace(
+        physics.NonCartesian2D(
+            trajectory, image_shape, backend="cufinufft", toeplitz=True
+        ),
+        basis,
+    )
+    coefficients = torch.randn(
+        1, rank, *image_shape, generator=generator, dtype=torch.complex64
+    ).cuda()
+    before = built.A(coefficients)
+    encoding = built.frame_physics[0].provider.physics.native_operator
+    raw = physics._base_fourier_operator(encoding).raw_op
+
+    built.A_adjoint_A(coefficients)
+
+    assert raw.plans[1] is None
+    torch.testing.assert_close(built.A(coefficients), before, atol=2e-6, rtol=2e-6)
+
+
+def test_a_kernel_hands_the_allocator_its_blocks_back_exactly_once():
+    """A whole application settles the allocator, and only the first one does."""
+    generator = torch.Generator().manual_seed(19)
+    image_shape = (3, 4)
+    spatial_shape = (6, 8)
+    rank = 2
+    raw = torch.randn(rank, rank, *spatial_shape, generator=generator)
+    transfer = 0.5 * (raw + raw.movedim(0, 1))
+    kernel = _packed_kernel(transfer, image_shape)
+
+    with mock.patch("torch.cuda.empty_cache") as released:
+        kernel.settle_allocator()
+        kernel.settle_allocator()
+        kernel.settle_allocator()
+
+    assert released.call_count == 1
 
 
 def test_asking_a_dynamic_physics_for_toeplitz_turns_it_on():

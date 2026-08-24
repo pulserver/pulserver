@@ -99,7 +99,9 @@ class TransformFOV:
         k-space trajectory and leaves its ADC side to a consumer of ours;
         that keeps one shape per distinct trajectory rather than one per
         readout, and a fully Cartesian sequence comes out identical in both
-        modes.
+        modes. The stored base is also what a reconstruction reads as the
+        readout's k, so it is written whenever this is ``True``, shift or no
+        shift.
     prior_phase_cycle : float, default 0.0
         Accepted for signature parity with MATLAB, where it lets a caller
         chain two transform objects by hand. It is not used: the phase this
@@ -247,7 +249,18 @@ class TransformFOV:
         )
         rotation = self.rotation
 
-        if count == 0 or (scale is None and translation is None and rotation is None):
+        # Server mode has something to do even when the prescription asks for
+        # nothing: the base trajectory it attaches is what a reconstruction
+        # reads as the readout's k, and a scan prescribed at isocentre needs
+        # that just as much as an offset one.
+        if count == 0:
+            return target
+        if (
+            scale is None
+            and translation is None
+            and rotation is None
+            and not self.server_mode
+        ):
             return target
 
         # Deduplicate first, and not only to save the writer a pass: a scan
@@ -293,7 +306,13 @@ class TransformFOV:
                     last=run_last,
                 )
 
-        if self.server_mode and translation is not None:
+        if self.server_mode:
+            # Not conditional on there being a shift. The base trajectory is
+            # two things at once: what lets a deferred readout finish its FOV
+            # shift downstream, and what the reconstruction reads as the
+            # readout's k. Only the first needs a translation, and gating on it
+            # left a server-mode spiral prescribed at isocentre with no
+            # trajectory for the recon to use.
             target._native.attach_base_trajectory()
 
         # The waveforms moved, so anything derived from them has to be

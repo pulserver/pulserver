@@ -17,6 +17,7 @@ Name gre_stack_of_stars_3d
 NumGainCalibrationReadouts 1 
 NumSpokes 4 
 PartitionAngleOffset 0 
+PhaseModulationMode base_trajectory 
 RadiofrequencyRasterTime 2e-06 
 SliceThickness 0.064 
 TE 0.00232 
@@ -149,21 +150,21 @@ kSpaceCenterSample 16
 # id num dwell delay freqPPM phasePPM freq phase phase_id
 # ..  ..    ns    us     ppm  rad/MHz   Hz   rad       ..
 [ADC]
-1 32 10000 320 0 0 0 2.04204 0
-2 32 10000 320 0 0 0 6.12611 0
-3 32 10000 320 0 0 0 5.96903 0
-4 32 10000 320 0 0 0 1.5708 0
-5 32 10000 320 0 0 0 5.49779 0
-6 32 10000 320 0 0 0 5.18363 0
-7 32 10000 320 0 0 0 0.628319 0
-8 32 10000 320 0 0 0 4.39823 0
-9 32 10000 320 0 0 0 3.92699 0
-10 32 10000 320 0 0 0 2.82743 0
-11 32 10000 320 0 0 0 2.19911 0
-12 32 10000 320 0 0 0 3.61283 0
-13 32 10000 320 0 0 0 0.785398 0
-14 32 10000 320 0 0 0 6.28319 0
-15 32 10000 320 0 0 0 1.25664 0
+1 32 10000 320 0 0 0 2.04204 9
+2 32 10000 320 0 0 0 6.12611 9
+3 32 10000 320 0 0 0 5.96903 9
+4 32 10000 320 0 0 0 1.5708 9
+5 32 10000 320 0 0 0 5.49779 9
+6 32 10000 320 0 0 0 5.18363 9
+7 32 10000 320 0 0 0 0.628319 9
+8 32 10000 320 0 0 0 4.39823 9
+9 32 10000 320 0 0 0 3.92699 9
+10 32 10000 320 0 0 0 2.82743 9
+11 32 10000 320 0 0 0 2.19911 9
+12 32 10000 320 0 0 0 3.61283 9
+13 32 10000 320 0 0 0 0.785398 9
+14 32 10000 320 0 0 0 6.28319 9
+15 32 10000 320 0 0 0 1.25664 9
 
 # Format of extension lists:
 # id type ref next_id
@@ -1806,10 +1807,25 @@ num_samples 4
 18
 30
 
+shape_id 9
+num_samples 96
+0.290625
+-0.01875
+-0.01875
+29
+0.58125
+-0.01875
+-0.01875
+29
+0.290625
+0
+0
+29
+
 
 [SIGNATURE]
 # This is the hash of the Pulseq file, calculated right before the [SIGNATURE] section was added
 # It can be reproduced/verified with md5sum if the file trimmed to the position right above [SIGNATURE]
 # The new line character preceding [SIGNATURE] BELONGS to the signature (and needs to be stripped away for recalculating/verification)
 Type md5
-Hash f2f8b0c31a327a5439e2240e4e3ea839
+Hash 6fab9c8d6344ec94a2061438915291d1

@@ -850,9 +850,28 @@ int pulseg__interpolate_to_uniform(
  *    PULSEG_AMP_ZERO_VAR (1) = zero variable grads, keep constant (k-space)
  *    PULSEG_AMP_ACTUAL   (2) = actual block amplitude (single-TR)
  */
-int pulseg__get_gradient_waveforms_range(
+void pulseg__grad_corner_arrays_free(pulseg__grad_corner_arrays *c)
+{
+    if (!c)
+        return;
+    if (c->time_gx)
+        PULSEG_FREE(c->time_gx);
+    if (c->time_gy)
+        PULSEG_FREE(c->time_gy);
+    if (c->time_gz)
+        PULSEG_FREE(c->time_gz);
+    if (c->wf_gx)
+        PULSEG_FREE(c->wf_gx);
+    if (c->wf_gy)
+        PULSEG_FREE(c->wf_gy);
+    if (c->wf_gz)
+        PULSEG_FREE(c->wf_gz);
+    memset(c, 0, sizeof(*c));
+}
+
+int pulseg__collect_grad_corners_range(
     const pulseg_sequence_descriptor *desc,
-    pulseg__uniform_grad_waveforms *out,
+    pulseg__grad_corner_arrays *out,
     pulseg_diagnostic *diag,
     int block_start,
     int block_count,
@@ -866,8 +885,7 @@ int pulseg__get_gradient_waveforms_range(
     int total_gx, total_gy, total_gz;
     int idx_gx, idx_gy, idx_gz;
     int num_gx, num_gy, num_gz;
-    int result;
-    float t0, block_dur_us, target_raster_us;
+    float t0, block_dur_us;
     int block_def_id;
     const pulseg_base_block *bdef;
     const pulseg_block_table_element *bte;
@@ -1166,6 +1184,67 @@ int pulseg__get_gradient_waveforms_range(
     num_gy = idx_gy;
     num_gz = idx_gz;
 
+    out->num_gx = num_gx;
+    out->num_gy = num_gy;
+    out->num_gz = num_gz;
+    out->time_gx = time_gx;
+    out->time_gy = time_gy;
+    out->time_gz = time_gz;
+    out->wf_gx = wf_gx;
+    out->wf_gy = wf_gy;
+    out->wf_gz = wf_gz;
+
+    diag->code = PULSEG_SUCCESS;
+    return PULSEG_SUCCESS;
+}
+
+int pulseg__get_gradient_waveforms_range(
+    const pulseg_sequence_descriptor *desc,
+    pulseg__uniform_grad_waveforms *out,
+    pulseg_diagnostic *diag,
+    int block_start,
+    int block_count,
+    int amplitude_mode,
+    const int *tr_group_labels,
+    int target_group,
+    const int *block_order)
+{
+    pulseg__grad_corner_arrays corners;
+    pulseg_diagnostic local_diag;
+    int result;
+    int num_gx, num_gy, num_gz;
+    float target_raster_us;
+    float *time_gx, *time_gy, *time_gz;
+    float *wf_gx, *wf_gy, *wf_gz;
+
+    if (!diag)
+    {
+        pulseg_diagnostic_init(&local_diag);
+        diag = &local_diag;
+    }
+    if (!out)
+    {
+        diag->code = PULSEG_ERR_NULL_POINTER;
+        return diag->code;
+    }
+    memset(out, 0, sizeof(*out));
+
+    result = pulseg__collect_grad_corners_range(
+        desc, &corners, diag, block_start, block_count,
+        amplitude_mode, tr_group_labels, target_group, block_order);
+    if (PULSEG_FAILED(result))
+        return result;
+
+    num_gx = corners.num_gx;
+    num_gy = corners.num_gy;
+    num_gz = corners.num_gz;
+    time_gx = corners.time_gx;
+    time_gy = corners.time_gy;
+    time_gz = corners.time_gz;
+    wf_gx = corners.wf_gx;
+    wf_gy = corners.wf_gy;
+    wf_gz = corners.wf_gz;
+
     /* interpolate each axis to uniform raster (half gradient raster) */
     target_raster_us = 0.5f * desc->grad_raster_us;
 
@@ -1233,6 +1312,342 @@ int pulseg__get_gradient_waveforms_range(
     PULSEG_FREE(time_gx);
     PULSEG_FREE(time_gy);
     PULSEG_FREE(time_gz);
+
+    diag->code = PULSEG_SUCCESS;
+    return PULSEG_SUCCESS;
+}
+
+/* A block that drives nothing: no gradient on any axis, no RF, no ADC.
+ * Its only content is the time it occupies. */
+static int block_is_pure_delay(const pulseg_sequence_descriptor *desc, int blk)
+{
+    const pulseg_block_table_element *bte;
+
+    if (blk < 0 || blk >= desc->num_blocks)
+        return 0;
+    bte = &desc->block_table[blk];
+    return bte->gx_id < 0 && bte->gy_id < 0 && bte->gz_id < 0 && bte->rf_id < 0 &&
+           bte->adc_id < 0;
+}
+
+static float block_duration_us(const pulseg_sequence_descriptor *desc, int blk)
+{
+    const pulseg_block_table_element *bte = &desc->block_table[blk];
+    const pulseg_base_block *bdef = &desc->base_blocks[bte->id];
+
+    return (bte->duration_us >= 0) ? (float)bte->duration_us : (float)bdef->duration_us;
+}
+
+/* The shortest instance of one delay position.  Each position is minimised
+ * against its own instances only, so a variable TI wait and a separate
+ * recovery wait each keep their own shortest value rather than collapsing to
+ * a single figure. */
+static int shortest_delay_instance(
+    const pulseg_sequence_descriptor *desc, int position, int tr_size, int num_trs)
+{
+    float best_dur, dur;
+    int best, t, blk;
+
+    best = position;
+    best_dur = block_duration_us(desc, position);
+    for (t = 1; t < num_trs; ++t)
+    {
+        blk = t * tr_size + position;
+        if (blk >= desc->num_blocks)
+            break;
+        dur = block_duration_us(desc, blk);
+        if (dur < best_dur)
+        {
+            best_dur = dur;
+            best = blk;
+        }
+    }
+    return best;
+}
+
+/* ================================================================== */
+/*  get_tr_corner_points                                              */
+/* ================================================================== */
+
+static int corner_time_cmp(const void *a, const void *b)
+{
+    float fa = *(const float *)a;
+    float fb = *(const float *)b;
+    if (fa < fb)
+        return -1;
+    if (fa > fb)
+        return 1;
+    return 0;
+}
+
+void pulseg_corner_point_stream_free(pulseg_corner_point_stream *s)
+{
+    if (!s)
+        return;
+    if (s->time_us)
+        PULSEG_FREE(s->time_us);
+    if (s->gx_hz_per_m)
+        PULSEG_FREE(s->gx_hz_per_m);
+    if (s->gy_hz_per_m)
+        PULSEG_FREE(s->gy_hz_per_m);
+    if (s->gz_hz_per_m)
+        PULSEG_FREE(s->gz_hz_per_m);
+    memset(s, 0, sizeof(*s));
+}
+
+int pulseg_get_tr_corner_points(
+    const pulseg_collection *coll,
+    pulseg_corner_point_stream *out,
+    pulseg_diagnostic *diag,
+    int subseq_idx)
+{
+    const pulseg_sequence_descriptor *desc;
+    const pulseg_block_table_element *bte;
+    const pulseg_base_block *bdef;
+    pulseg__grad_corner_arrays c;
+    pulseg_diagnostic local_diag;
+    float *merged;
+    float *gx;
+    float *gy;
+    float *gz;
+    const float *R;
+    float prev, blk_end, block_dur_us;
+    float vec[3], rot_out[3];
+    int total, n_union, i, rc, blk_n, rot_id, block_count;
+    int *block_order;
+    int *seg_ids;
+    int nsegs, k, n, j, seg_id, written, num_trs;
+
+    memset(&c, 0, sizeof(c));
+    merged = NULL;
+    gx = NULL;
+    gy = NULL;
+    gz = NULL;
+
+    if (!diag)
+    {
+        pulseg_diagnostic_init(&local_diag);
+        diag = &local_diag;
+    }
+    else
+    {
+        pulseg_diagnostic_init(diag);
+    }
+
+    if (!coll || !out || subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
+    {
+        diag->code = PULSEG_ERR_INVALID_ARGUMENT;
+        return diag->code;
+    }
+
+    memset(out, 0, sizeof(*out));
+    desc = &coll->descriptors[subseq_idx];
+    block_count = desc->tr_descriptor.tr_size;
+    if (block_count <= 0)
+    {
+        diag->code = PULSEG_ERR_TR_NO_BLOCKS;
+        return diag->code;
+    }
+
+    /* Walk the canonical segment sequence, taking each segment's
+     * highest-energy instance (pulseg_virtual_segment.max_energy_start_block,
+     * scored at structure time over all three axes).  Every block therefore
+     * comes from an instance the sequence actually plays, carrying its own
+     * amplitudes and its own rotation. */
+    nsegs = pulseg_get_canonical_segment_sequence(coll, NULL, subseq_idx);
+    if (nsegs <= 0)
+    {
+        diag->code = PULSEG_ERR_TR_NO_BLOCKS;
+        return diag->code;
+    }
+
+    block_order = (int *)PULSEG_ALLOC((size_t)block_count * sizeof(int));
+    seg_ids = (int *)PULSEG_ALLOC((size_t)nsegs * sizeof(int));
+    if (!block_order || !seg_ids)
+    {
+        if (block_order)
+            PULSEG_FREE(block_order);
+        if (seg_ids)
+            PULSEG_FREE(seg_ids);
+        diag->code = PULSEG_ERR_ALLOC_FAILED;
+        return diag->code;
+    }
+    if (pulseg_get_canonical_segment_sequence(coll, seg_ids, subseq_idx) != nsegs)
+    {
+        PULSEG_FREE(block_order);
+        PULSEG_FREE(seg_ids);
+        diag->code = PULSEG_ERR_INVALID_ARGUMENT;
+        return diag->code;
+    }
+
+    num_trs = desc->num_blocks / block_count;
+    if (num_trs < 1)
+        num_trs = 1;
+
+    written = 0;
+    for (k = 0; k < nsegs; ++k)
+    {
+        seg_id = seg_ids[k];
+        if (seg_id < 0 || seg_id >= desc->num_unique_segments)
+            continue;
+        n = desc->segment_definitions[seg_id].num_blocks;
+        if (written + n > block_count)
+            break;
+        if (pulseg_get_subseq_segment_block_indices(
+                coll, &block_order[written], subseq_idx, seg_id) != n)
+        {
+            PULSEG_FREE(block_order);
+            PULSEG_FREE(seg_ids);
+            diag->code = PULSEG_ERR_INVALID_ARGUMENT;
+            return diag->code;
+        }
+        /* Energy cannot choose between instances of a delay -- they all carry
+         * none -- so a delay position takes its shortest instance instead,
+         * which is the one that leaves the least room for heat to sink. */
+        for (j = 0; j < n; ++j)
+        {
+            if (block_is_pure_delay(desc, written + j))
+                block_order[written + j] =
+                    shortest_delay_instance(desc, written + j, block_count, num_trs);
+        }
+        written += n;
+    }
+    PULSEG_FREE(seg_ids);
+
+    if (written <= 0)
+    {
+        PULSEG_FREE(block_order);
+        diag->code = PULSEG_ERR_TR_NO_BLOCKS;
+        return diag->code;
+    }
+    block_count = written;
+
+    rc = pulseg__collect_grad_corners_range(
+        desc, &c, diag, 0, block_count, PULSEG_AMP_ACTUAL, NULL, 0, block_order);
+    if (PULSEG_FAILED(rc))
+    {
+        PULSEG_FREE(block_order);
+        return rc;
+    }
+
+    /* ---- union of the three axes' breakpoints ---- */
+    total = c.num_gx + c.num_gy + c.num_gz;
+    if (total <= 0)
+    {
+        pulseg__grad_corner_arrays_free(&c);
+        PULSEG_FREE(block_order);
+        diag->code = PULSEG_SUCCESS;
+        return PULSEG_SUCCESS;
+    }
+
+    merged = (float *)PULSEG_ALLOC((size_t)total * sizeof(float));
+    if (!merged)
+    {
+        pulseg__grad_corner_arrays_free(&c);
+        PULSEG_FREE(block_order);
+        diag->code = PULSEG_ERR_ALLOC_FAILED;
+        return diag->code;
+    }
+
+    n_union = 0;
+    for (i = 0; i < c.num_gx; ++i)
+        merged[n_union++] = c.time_gx[i];
+    for (i = 0; i < c.num_gy; ++i)
+        merged[n_union++] = c.time_gy[i];
+    for (i = 0; i < c.num_gz; ++i)
+        merged[n_union++] = c.time_gz[i];
+    qsort(merged, (size_t)n_union, sizeof(float), corner_time_cmp);
+
+    /* Collapse coincident breakpoints; a shared corner is one corner. */
+    total = 0;
+    prev = 0.0f;
+    for (i = 0; i < n_union; ++i)
+    {
+        if (i == 0 || merged[i] > prev)
+        {
+            merged[total++] = merged[i];
+            prev = merged[i];
+        }
+    }
+    n_union = total;
+
+    /* ---- place every axis on the union ---- */
+    gx = (float *)PULSEG_ALLOC((size_t)n_union * sizeof(float));
+    gy = (float *)PULSEG_ALLOC((size_t)n_union * sizeof(float));
+    gz = (float *)PULSEG_ALLOC((size_t)n_union * sizeof(float));
+    if (!gx || !gy || !gz)
+    {
+        if (gx)
+            PULSEG_FREE(gx);
+        if (gy)
+            PULSEG_FREE(gy);
+        if (gz)
+            PULSEG_FREE(gz);
+        PULSEG_FREE(merged);
+        pulseg__grad_corner_arrays_free(&c);
+        PULSEG_FREE(block_order);
+        diag->code = PULSEG_ERR_ALLOC_FAILED;
+        return diag->code;
+    }
+
+    /* Each axis is linear between its own corners, so resampling onto a
+     * superset of those corners is exact. */
+    if (c.num_gx > 0)
+        pulseg__interp1_linear(gx, merged, n_union, c.time_gx, c.wf_gx, c.num_gx);
+    else
+        memset(gx, 0, (size_t)n_union * sizeof(float));
+    if (c.num_gy > 0)
+        pulseg__interp1_linear(gy, merged, n_union, c.time_gy, c.wf_gy, c.num_gy);
+    else
+        memset(gy, 0, (size_t)n_union * sizeof(float));
+    if (c.num_gz > 0)
+        pulseg__interp1_linear(gz, merged, n_union, c.time_gz, c.wf_gz, c.num_gz);
+    else
+        memset(gz, 0, (size_t)n_union * sizeof(float));
+
+    pulseg__grad_corner_arrays_free(&c);
+
+    /* ---- rotation, per block ----
+     * Rotation is linear, so applying it at the union corners is exact and
+     * needs no raster. */
+    blk_n = 0;
+    bte = &desc->block_table[block_order[0]];
+    bdef = &desc->base_blocks[bte->id];
+    blk_end = (bte->duration_us >= 0) ? (float)bte->duration_us : (float)bdef->duration_us;
+    for (i = 0; i < n_union; ++i)
+    {
+        while (blk_n + 1 < block_count && merged[i] >= blk_end)
+        {
+            blk_n++;
+            bte = &desc->block_table[block_order[blk_n]];
+            bdef = &desc->base_blocks[bte->id];
+            block_dur_us =
+                (bte->duration_us >= 0) ? (float)bte->duration_us : (float)bdef->duration_us;
+            blk_end += block_dur_us;
+        }
+        bte = &desc->block_table[block_order[blk_n]];
+        rot_id = bte->rotation_id;
+        if (rot_id < 0 || rot_id >= desc->num_rotations)
+            continue;
+        if (bte->norot_flag)
+            continue;
+        R = desc->rotation_matrices[rot_id];
+        vec[0] = gx[i];
+        vec[1] = gy[i];
+        vec[2] = gz[i];
+        pulseg__apply_rotation(rot_out, R, vec, 0);;;;;
+        gx[i] = rot_out[0];
+        gy[i] = rot_out[1];
+        gz[i] = rot_out[2];
+    }
+
+    PULSEG_FREE(block_order);
+
+    out->num_points = n_union;
+    out->time_us = merged;
+    out->gx_hz_per_m = gx;
+    out->gy_hz_per_m = gy;
+    out->gz_hz_per_m = gz;
 
     diag->code = PULSEG_SUCCESS;
     return PULSEG_SUCCESS;

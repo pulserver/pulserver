@@ -122,7 +122,6 @@ MU_TEST(test_smoke_zte_3d)
     run_smoke_case(kSmokeFixtures[7]);
 }
 
-
 MU_TEST_SUITE(suite_sequences_smoke)
 {
     MU_RUN_TEST(test_smoke_gre_2d);

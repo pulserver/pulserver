@@ -98,8 +98,8 @@ MU_TEST(test_cache_stage_loaders_and_clear)
         &diag,
         seq_path,
         &opts,
-        1, /* cache_binary */
-        1, /* verify_signature */
+        1,  /* cache_binary */
+        1,  /* verify_signature */
         0); /* parse_labels */
     mu_assert(PULSEG_SUCCEEDED(rc), "pulseg_read failed with cache enabled");
     mu_assert(cache_file_exists(cache_path), "cache file should be created by pulseg_read");

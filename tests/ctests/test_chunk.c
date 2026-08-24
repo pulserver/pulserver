@@ -450,14 +450,19 @@ MU_TEST(test_chunk_position_waves_stay_inside_their_chunk)
 /* Block position inside the segment INSTANCE at exec-stream position @p pos.
  * A definition replays unchanged, so only exhausting its block count ends an
  * instance; *blk is advanced by the caller between calls. */
-static int chunk_walk_block(const pulseg_sequence_descriptor *desc, int pos, int *prev_seg, int *blk)
+static int chunk_walk_block(
+    const pulseg_sequence_descriptor *desc,
+    int pos,
+    int *prev_seg,
+    int *blk)
 {
     int seg_id = pulseg__exec_seg_id(desc, pos);
 
     if (pos == 0 || seg_id != *prev_seg)
         *blk = 0;
-    else if (seg_id >= 0 && seg_id < desc->num_unique_segments &&
-             *blk >= desc->segment_definitions[seg_id].num_blocks)
+    else if (
+        seg_id >= 0 && seg_id < desc->num_unique_segments &&
+        *blk >= desc->segment_definitions[seg_id].num_blocks)
         *blk = 0;
     *prev_seg = seg_id;
     return seg_id;

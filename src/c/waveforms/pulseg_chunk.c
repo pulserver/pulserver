@@ -299,8 +299,9 @@ int pulseg_plan_chunks(
          * only exhausting its block count ends one. */
         if (pos == 0 || seg_id != prev_seg)
             blk_in_seg = 0;
-        else if (seg_id >= 0 && seg_id < desc->num_unique_segments &&
-                 blk_in_seg >= desc->segment_definitions[seg_id].num_blocks)
+        else if (
+            seg_id >= 0 && seg_id < desc->num_unique_segments &&
+            blk_in_seg >= desc->segment_definitions[seg_id].num_blocks)
             blk_in_seg = 0;
         prev_seg = seg_id;
 
@@ -357,8 +358,9 @@ int pulseg_plan_chunks(
                 seg_id = pulseg__exec_seg_id(desc, pos);
                 if (pos == 0 || seg_id != prev_seg)
                     blk_in_seg = 0;
-                else if (seg_id >= 0 && seg_id < desc->num_unique_segments &&
-                         blk_in_seg >= desc->segment_definitions[seg_id].num_blocks)
+                else if (
+                    seg_id >= 0 && seg_id < desc->num_unique_segments &&
+                    blk_in_seg >= desc->segment_definitions[seg_id].num_blocks)
                     blk_in_seg = 0;
                 prev_seg = seg_id;
 

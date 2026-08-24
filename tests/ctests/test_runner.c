@@ -25,6 +25,7 @@ int test_pulseq_binary_main(void);
 int test_pulseq_rf_main(void);
 int test_czt_main(void);
 int test_chunk_main(void);
+int test_corner_points_main(void);
 
 typedef struct
 {
@@ -46,6 +47,7 @@ static const test_suite suites[] = {
     {"test_pulseq_rf", test_pulseq_rf_main},
     {"test_czt", test_czt_main},
     {"test_chunk", test_chunk_main},
+    {"test_corner_points", test_corner_points_main},
 };
 
 #define NUM_SUITES (sizeof(suites) / sizeof(suites[0]))
