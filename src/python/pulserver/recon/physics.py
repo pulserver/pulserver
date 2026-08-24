@@ -848,6 +848,7 @@ class _LazyFramePhysics:
 
     def enable_toeplitz(self, options: dict[str, Any]) -> None:
         self.provider.toeplitz_options = options
+        self.modifiers = tuple(dict.fromkeys((*self.modifiers, "toeplitz")))
 
     @property
     def samples(self) -> Any:
@@ -870,7 +871,73 @@ class _LazyFramePhysics:
         """The image grid every frame shares."""
         reference = _base_fourier_operator(self.provider.physics.native_operator)
         return tuple(int(size) for size in reference.shape)
-        self.modifiers = tuple(dict.fromkeys((*self.modifiers, "toeplitz")))
+
+    @property
+    def coil_view(self) -> Any:
+        """The coils and the grid, without a plan built to read them off.
+
+        Applying a kernel needs the sensitivities and the image shape, and the
+        frames share both with the acquisition they came from.
+        """
+        reference = _base_fourier_operator(self.provider.physics.native_operator)
+        return SimpleNamespace(
+            shape=tuple(int(size) for size in reference.shape),
+            smaps=getattr(reference, "smaps", None),
+            uses_sense=getattr(reference, "uses_sense", False),
+            n_coils=int(getattr(reference, "n_coils", 1) or 1),
+        )
+
+
+def _plan_batch_width(native_operator: Any, batch: int) -> int:
+    """How many images an mri-nufft operator can be pointed at in one call.
+
+    ``n_batchs`` only tells the operator how to fold its input; the plan is
+    sized by ``n_trans``, which has to divide the transforms a call asks for.
+    """
+    trans = int(getattr(native_operator, "n_trans", 1) or 1)
+    coils = int(getattr(native_operator, "n_coils", 1) or 1)
+    if trans == 1 or (batch * coils) % trans == 0:
+        return batch
+    return int(getattr(native_operator, "n_batchs", 1) or 1)
+
+
+@contextmanager
+def _batches_of(native_operator: Any, width: int) -> Any:
+    """The operator seen as folding its input into ``width`` images."""
+    held = getattr(native_operator, "n_batchs", None)
+    if held is None or int(held) == width:
+        yield
+        return
+    native_operator.n_batchs = width
+    try:
+        yield
+    finally:
+        native_operator.n_batchs = held
+
+
+def _over_batches(apply: Any, native_operator: Any, value: Any) -> Any:
+    """Apply an operator to any number of images, whatever it plans for.
+
+    The leading axis is the batch on both sides of a NUFFT, so a call the plan
+    cannot take in one go is served in groups of the width it can, the last of
+    them padded up and cut back.
+    """
+    torch = import_module("torch")
+    batch = int(value.shape[0])
+    width = _plan_batch_width(native_operator, batch)
+    if width == batch:
+        with _batches_of(native_operator, batch):
+            return apply(value)
+    results = []
+    for start in range(0, batch, width):
+        group = value[start : start + width]
+        short = width - int(group.shape[0])
+        if short:
+            group = torch.cat((group, group[-1:].expand(short, *group.shape[1:])), 0)
+        with _batches_of(native_operator, width):
+            outcome = apply(group)
+        results.append(outcome[: width - short] if short else outcome)
+    return torch.cat(results, 0)
 
 
 def _native_linear_physics(
@@ -905,19 +972,31 @@ def _native_linear_physics(
             def A(self, x: Any, **kwargs: Any) -> Any:
                 if self.viewed_as_real:
                     x = _image_as_cpx(x)
-                result = self.inner.A(x, **kwargs)
+                result = _over_batches(
+                    lambda value: self.inner.A(value, **kwargs),
+                    native_operator,
+                    x,
+                )
                 return _kspace_as_real(result) if self.viewed_as_real else result
 
             def A_adjoint(self, y: Any, **kwargs: Any) -> Any:
                 if self.viewed_as_real:
                     y = _kspace_as_cpx(y)
-                result = self.inner.A_adjoint(y, **kwargs)
+                result = _over_batches(
+                    lambda value: self.inner.A_adjoint(value, **kwargs),
+                    native_operator,
+                    y,
+                )
                 return _image_as_real(result) if self.viewed_as_real else result
 
             def A_dagger(self, y: Any, **kwargs: Any) -> Any:
                 if self.viewed_as_real:
                     y = _kspace_as_cpx(y)
-                result = self.inner.A_dagger(y, **kwargs)
+                result = _over_batches(
+                    lambda value: self.inner.A_dagger(value, **kwargs),
+                    native_operator,
+                    y,
+                )
                 return _image_as_real(result) if self.viewed_as_real else result
 
             def A_adjoint_A(self, x: Any, **kwargs: Any) -> Any:
@@ -937,14 +1016,14 @@ def _native_linear_physics(
             del kwargs
             if self.viewed_as_real:
                 x = _image_as_cpx(x)
-            result = self.native_operator.op(x)
+            result = _over_batches(self.native_operator.op, self.native_operator, x)
             return _kspace_as_real(result) if self.viewed_as_real else result
 
         def A_adjoint(self, y: Any, **kwargs: Any) -> Any:
             del kwargs
             if self.viewed_as_real:
                 y = _kspace_as_cpx(y)
-            result = self.native_operator.adj_op(y)
+            result = _over_batches(self.native_operator.adj_op, self.native_operator, y)
             return _image_as_real(result) if self.viewed_as_real else result
 
         def A_adjoint_A(self, x: Any, **kwargs: Any) -> Any:
@@ -1176,6 +1255,12 @@ def _sense_maps(native_operator: Any, reference: Any) -> Any:
         "sensitivity maps must have shape (coils, *image_shape) or "
         "(batch, coils, *image_shape)"
     )
+
+
+def _frame_coil_view(frame: MRIPhysics | _LazyFramePhysics) -> Any:
+    """What a kernel needs of a frame: its coils and its grid, never a plan."""
+    view = getattr(frame, "coil_view", None)
+    return frame.native_operator if view is None else view
 
 
 def _apply_sense_toeplitz(
@@ -3388,7 +3473,7 @@ def _subspace_linear_physics(
                     selected_native = (
                         self._toeplitz_native_proxy
                         if self._compact_toeplitz == "cartesian-subspace"
-                        else self.frame_physics[0].native_operator
+                        else _frame_coil_view(self.frame_physics[0])
                     )
                     result = _apply_sense_toeplitz(
                         self.toeplitz_kernel,
@@ -3401,7 +3486,7 @@ def _subspace_linear_physics(
                     result = _apply_subspace_off_resonance_toeplitz(
                         self.toeplitz_kernel,
                         coefficients,
-                        self.frame_physics[0].native_operator,
+                        _frame_coil_view(self.frame_physics[0]),
                         self._toeplitz_spatial_factors,
                         coefficient_rank=self.basis.shape[0],
                         coil_batch_size=self._toeplitz_options["coil_batch_size"],

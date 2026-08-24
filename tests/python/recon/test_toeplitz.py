@@ -1483,6 +1483,110 @@ def test_a_dynamic_scan_encodes_through_one_plan_over_every_sample(
     assert flat_image.shape == (1, rank, *image_shape)
 
 
+def test_asking_a_dynamic_physics_for_toeplitz_turns_it_on():
+    """The explicit opt-in reaches a subspace physics built without it.
+
+    A subspace physics decides whether it has a kernel from what its frames
+    report, so a frame asked to use one has to say so afterwards.
+    """
+    pytest.importorskip("mrinufft")
+    pytest.importorskip("finufft")
+    generator = torch.Generator().manual_seed(31)
+    image_shape = (12, 12)
+    rank, frames = 3, 6
+    built = physics.Subspace(
+        physics.NonCartesian2D(
+            _framed_radial(frames, 9, image_shape[0]),
+            image_shape,
+            backend="finufft",
+            toeplitz=False,
+        ),
+        torch.randn(rank, frames, generator=generator),
+    )
+    assert built.normal_mode == "exact"
+
+    turned = physics.Toeplitz(built)
+
+    assert turned.normal_mode == "toeplitz"
+    assert turned.operator.use_toeplitz
+    coefficients = torch.randn(
+        1, rank, *image_shape, generator=generator, dtype=torch.complex64
+    )
+    torch.testing.assert_close(
+        turned.A_adjoint_A(coefficients),
+        built.A_adjoint(built.A(coefficients)),
+        atol=2e-4,
+        rtol=2e-4,
+    )
+
+
+@pytest.mark.parametrize("planned", [1, 2])
+@pytest.mark.parametrize("kind", ["scalar", "subspace"])
+def test_a_non_cartesian_operator_takes_any_number_of_images(kind, planned):
+    """A batch of three answers what three separate calls answer.
+
+    An mri-nufft plan is sized by ``n_trans``; ``n_batchs`` only says how to
+    fold the input. A call carrying a different number of images than the
+    operator was told to expect is served either way, so the leading axis is a
+    batch axis here as it is for a Cartesian operator.
+    """
+    pytest.importorskip("mrinufft")
+    pytest.importorskip("finufft")
+    generator = torch.Generator().manual_seed(29)
+    image_shape = (12, 12)
+    coils, batch = 3, 3
+    maps = torch.randn(coils, *image_shape, generator=generator, dtype=torch.complex64)
+    maps = maps / maps.abs().pow(2).sum(0, keepdim=True).sqrt()
+
+    if kind == "scalar":
+        trajectory = _framed_radial(1, 9, image_shape[0])[0]
+        built = physics.NonCartesian2D(
+            trajectory,
+            image_shape,
+            coil_maps=maps,
+            backend="finufft",
+            n_batchs=planned,
+        )
+        image = torch.randn(
+            batch, *image_shape, generator=generator, dtype=torch.complex64
+        )
+    else:
+        rank, frames = 3, 7
+        trajectory = _framed_radial(frames, 9, image_shape[0])
+        built = physics.Subspace(
+            physics.NonCartesian2D(
+                trajectory,
+                image_shape,
+                coil_maps=maps,
+                backend="finufft",
+                n_batchs=planned,
+            ),
+            torch.randn(rank, frames, generator=generator),
+        )
+        image = torch.randn(
+            batch, rank, *image_shape, generator=generator, dtype=torch.complex64
+        )
+
+    measurement = built.A(image)
+    adjoint = built.A_adjoint(measurement)
+    normal = built.A_adjoint_A(image)
+
+    one_at_a_time = torch.cat([built.A(image[i : i + 1]) for i in range(batch)])
+    torch.testing.assert_close(measurement, one_at_a_time, atol=2e-5, rtol=2e-5)
+    torch.testing.assert_close(
+        adjoint,
+        torch.cat([built.A_adjoint(measurement[i : i + 1]) for i in range(batch)]),
+        atol=2e-5,
+        rtol=2e-5,
+    )
+    torch.testing.assert_close(
+        normal,
+        torch.cat([built.A_adjoint_A(image[i : i + 1]) for i in range(batch)]),
+        atol=2e-5,
+        rtol=2e-5,
+    )
+
+
 def test_one_plan_serves_a_dynamic_scan_however_many_frames_it_has():
     """The encoding plans once, not once per frame."""
     pytest.importorskip("mrinufft")
