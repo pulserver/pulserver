@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from math import prod
 from os import cpu_count
 from types import SimpleNamespace
 from unittest import mock
@@ -12,7 +11,6 @@ import pytest
 
 from pulserver.recon._toeplitz import (
     CompactToeplitzKernel,
-    mirror_indices,
     support_indices,
 )
 from pulserver.recon.execution import CudaStreaming
@@ -1231,25 +1229,6 @@ def test_a_kernel_is_built_for_any_image_shape():
         assert float(error) < 2e-2
 
 
-def test_an_asymmetric_trajectory_keeps_the_whole_kernel():
-    """Evenness is a property of the acquisition, so it is checked, not assumed."""
-    pytest.importorskip("mrinufft")
-    pytest.importorskip("finufft")
-    rng = np.random.default_rng(17)
-    # Half a disk: no sample has its opposite, so the transfer is not even.
-    angles = rng.uniform(0.0, np.pi, 400)
-    radius = rng.uniform(0.02, 0.45, 400)
-    trajectory = np.stack(
-        [radius * np.cos(angles), radius * np.sin(angles)], -1
-    ).astype(np.float32)
-    physics_object = physics.NonCartesian2D(
-        trajectory, (16, 16), backend="finufft", toeplitz=True
-    )
-    physics_object.A_adjoint_A(torch.zeros(1, 1, 16, 16, dtype=torch.complex64))
-
-    assert not physics_object.operator.toeplitz_kernel.symmetric
-
-
 @pytest.mark.parametrize("spokes", [51, 17])
 def test_the_accelerated_solve_reproduces_the_exact_one(spokes):
     """A CG-SENSE solve does not care which normal operator it ran on.
@@ -1353,74 +1332,6 @@ def test_the_kernel_is_stored_over_the_support_the_scan_reached():
     assert kernel.n_locations < 8 * size**3
     error = (result - reference).abs().max() / reference.abs().max()
     assert float(error) < 2e-2
-
-
-def test_an_even_transfer_is_stored_once_and_applied_twice():
-    """Half of a symmetric kernel repeats the other half, exactly."""
-    generator = torch.Generator().manual_seed(13)
-    image_shape, spatial_shape = (12, 12), (24, 24)
-    mirror = mirror_indices(torch.arange(prod(spatial_shape)), spatial_shape)
-    transfer = torch.randn(1, prod(spatial_shape), generator=generator)
-    transfer = 0.5 * (transfer + transfer[:, mirror])
-    indices = torch.arange(prod(spatial_shape), dtype=torch.int32)
-    image = torch.randn(2, 1, *image_shape, generator=generator, dtype=torch.complex64)
-
-    packed, whole = (
-        CompactToeplitzKernel(
-            transfer,
-            indices,
-            spatial_shape,
-            1,
-            image_shape=image_shape,
-            symmetric=symmetric,
-        )
-        for symmetric in ("auto", False)
-    )
-
-    assert packed.symmetric and not whole.symmetric
-    # Half, plus the locations that are their own mirror.
-    assert 2 * packed.n_locations == whole.n_locations + 2 ** len(image_shape)
-    torch.testing.assert_close(packed.apply(image), whole.apply(image))
-
-
-@pytest.mark.parametrize("device", ["cpu", "cuda"])
-def test_symmetric_packing_survives_every_path_that_applies_it(device):
-    """Every application visits both location sets, on whichever device runs.
-
-    The CUDA kernels are reached without going through ``apply``, so a kernel
-    that applied only what it stored would hand back half an operator, and one
-    that expanded to compensate would give the memory back.
-    """
-    if device == "cuda" and not torch.cuda.is_available():
-        pytest.skip("CUDA unavailable")
-    generator = torch.Generator().manual_seed(23)
-    image_shape, spatial_shape = (16, 16), (32, 32)
-    mirror = mirror_indices(torch.arange(prod(spatial_shape)), spatial_shape)
-    transfer = torch.randn(1, prod(spatial_shape), generator=generator)
-    transfer = 0.5 * (transfer + transfer[:, mirror])
-    indices = torch.arange(prod(spatial_shape), dtype=torch.int32)
-    image = torch.randn(
-        1, 1, *image_shape, generator=generator, dtype=torch.complex64
-    ).to(device)
-
-    packed, whole = (
-        CompactToeplitzKernel(
-            transfer,
-            indices,
-            spatial_shape,
-            1,
-            image_shape=image_shape,
-            symmetric=symmetric,
-            cuda_transfer_precision="float32",
-        )
-        for symmetric in ("auto", False)
-    )
-    torch.testing.assert_close(
-        packed.apply(image), whole.apply(image), atol=2e-5, rtol=2e-5
-    )
-    # Still halved after the application, on whichever device ran it.
-    assert packed.symmetric
-    assert packed.storage_nbytes < whole.storage_nbytes
 
 
 @pytest.mark.parametrize("complex_basis", [False, True])

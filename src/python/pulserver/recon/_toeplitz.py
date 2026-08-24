@@ -300,113 +300,6 @@ def occupancy_indices(
     return torch.nonzero(keep.reshape(-1), as_tuple=False).flatten().to(torch.int32)
 
 
-def mirror_indices(indices: Any, spatial_shape: tuple[int, ...]) -> Any:
-    """The locations diametrically opposite ``indices`` on a periodic grid.
-
-    ``H(-f)`` for every ``f``, in the flat unshifted-FFT indexing the kernel
-    stores. Derived arithmetically so a symmetric kernel keeps half its
-    locations without storing the other half's addresses.
-    """
-    torch = _torch()
-    flat = as_torch(indices).to(torch.int64)
-    stride = 1
-    mirrored = torch.zeros_like(flat)
-    for size in reversed(spatial_shape):
-        coordinate = (flat // stride) % size
-        mirrored = mirrored + (-coordinate) % size * stride
-        stride *= size
-    return mirrored
-
-
-def _agrees(
-    values: Any,
-    where: Any,
-    partner: Any,
-    scale: Any,
-    tolerance: float,
-) -> bool:
-    """Whether the transfer matches its mirror over the given locations."""
-    difference = values[:, where] - values[:, partner]
-    return float(difference.abs().max() / scale) <= tolerance
-
-
-_SYMMETRY_PROBE = 1 << 14
-_SYMMETRY_BLOCK = 1 << 22
-
-
-def _symmetric_halving(
-    values: Any,
-    indices: Any,
-    spatial_shape: tuple[int, ...],
-    tolerance: float,
-) -> tuple[Any, Any] | None:
-    """One representative per ``+/-f`` pair, when the transfer is even.
-
-    A trajectory closed under ``k -> -k`` -- radial diameters, a koosh ball,
-    a symmetric spiral pair -- leaves an even transfer, so half of what is
-    stored repeats the other half. Subspace kernels are included: what decides
-    is whether the acquisition pairs a sample with its opposite under the same
-    temporal weight, not whether the values are real.
-
-    Evenness is measured rather than derived. A transfer is even as a function
-    of frequency but is sampled on a grid that is not closed under negation --
-    it holds ``-M / 2`` and not ``+M / 2`` -- so whether the stored array is
-    even is a question about this acquisition on this grid. ``None`` when the
-    locations are not closed under the mirror or the values disagree across it.
-    """
-    torch = _torch()
-    if indices.numel() == 0:
-        return None
-    located = indices.to(torch.int64)
-    # Locations come off the support scan in ascending order, so the ranking
-    # the lookup needs is usually already the identity.
-    ordered = bool((located[1:] >= located[:-1]).all())
-    order = None if ordered else torch.argsort(located)
-    ranked = located if ordered else located[order]
-
-    def partners(where):
-        # Where the mirrors of these locations are held, or None if any is
-        # missing -- looked up only for the locations asked about.
-        wanted = mirror_indices(located[where], spatial_shape)
-        position = torch.searchsorted(ranked, wanted)
-        if int(position.max()) >= ranked.numel():
-            return None
-        found = order[position] if order is not None else position
-        return None if not bool((located[found] == wanted).all()) else found
-
-    # A kernel that is not even almost always says so at a handful of
-    # locations, and answering over all of them costs a lookup and a gather
-    # across the whole kernel. Probe first, then confirm.
-    count = values.shape[1]
-    probe = torch.arange(0, count, max(1, count // _SYMMETRY_PROBE))
-    probed = partners(probe)
-    if probed is None:
-        return None
-    # The probe is measured against its own largest value rather than the
-    # kernel's: finding that costs a pass over the whole kernel, and a probe
-    # spread evenly over a transfer comes close enough to it that a kernel
-    # worth halving still gets asked. Erring here declines a halving, never
-    # performs a wrong one -- the pass below answers against the true scale.
-    sampled = values[:, probe].abs().max()
-    if sampled > 0 and not _agrees(values, probe, probed, sampled, tolerance):
-        return None
-    scale = values.abs().max()
-    if scale > 0:
-        for start in range(0, count, _SYMMETRY_BLOCK):
-            span = torch.arange(start, min(start + _SYMMETRY_BLOCK, count))
-            spanned = partners(span)
-            if spanned is None or not _agrees(values, span, spanned, scale, tolerance):
-                return None
-    partner = partners(torch.arange(count))
-    if partner is None:
-        return None
-    mirrored = mirror_indices(indices, spatial_shape)
-    # One of each pair: the location that is its own mirror is its own
-    # representative, and every other pair is represented by its lower index.
-    keep = located <= mirrored
-    return values[:, keep].contiguous(), indices[keep].contiguous()
-
-
 def _banked_transform(
     bank: Any, axes: tuple[int, ...], *, inverse: bool = False
 ) -> None:
@@ -443,10 +336,6 @@ class CompactToeplitzKernel:
     matrix multiplication; the dense matrix-valued spatial kernel is never
     retained.
 
-    A transfer that is even -- which is what a trajectory closed under
-    ``k -> -k`` leaves -- is stored over half its locations, and the mirror of
-    each is derived when it is applied. That is exact and halves the kernel;
-    :attr:`symmetric` says whether it happened.
     """
 
     def __init__(
@@ -461,8 +350,6 @@ class CompactToeplitzKernel:
         cuda_mode: str = "auto",
         cuda_max_device_fraction: float = 0.85,
         cuda_transfer_precision: str = "auto",
-        symmetric: bool | str = "auto",
-        symmetry_tolerance: float = 1e-5,
     ) -> None:
         torch = _torch()
         values = as_torch(values)
@@ -509,21 +396,7 @@ class CompactToeplitzKernel:
             "float32",
         }:
             raise ValueError("complex Toeplitz kernels require complex64 CUDA storage")
-        if symmetric not in {True, False, "auto"}:
-            raise ValueError("symmetric must be True, False, or 'auto'")
-        self.symmetric = False
-        if symmetric is not False:
-            halved = _symmetric_halving(
-                values,
-                indices,
-                tuple(int(size) for size in spatial_shape),
-                symmetry_tolerance,
-            )
-            if halved is not None:
-                values, indices = halved
-                self.symmetric = True
-            elif symmetric is True:
-                raise ValueError("the transfer is not even over these locations")
+
         rows, columns = torch.triu_indices(rank, rank, device=values.device)
         self.values = values.contiguous()
         self.indices = indices.contiguous()
@@ -664,42 +537,6 @@ class CompactToeplitzKernel:
         components = 2 if self.values.is_complex() else 1
         return self.values.numel() * itemsize * components
 
-    def _mirror(self, index: Any) -> Any:
-        """The opposite locations of one chunk, in the stored index dtype."""
-        return mirror_indices(index, self.spatial_shape).to(index.dtype)
-
-    def _targets(self, index: Any) -> tuple[Any, ...]:
-        """Every location one stored value stands for.
-
-        A symmetric kernel stores one of each ``+/-f`` pair, so each value is
-        applied at its own location and at the opposite one. A location that is
-        its own mirror appears in both and is written twice with the same
-        result, which is why the two sets can share a value array rather than
-        being trimmed against each other.
-        """
-        return (index, self._mirror(index)) if self.symmetric else (index,)
-
-    def _densify(self) -> None:
-        """Restore every location, for a consumer that cannot mirror as it goes.
-
-        Every application mirrors as it goes except
-        :meth:`_apply_device_spectra`, which schedules its packed rows against
-        a stream double-buffer; that one calls this first and gives up the
-        halving for the life of the kernel.
-        """
-        if not self.symmetric:
-            return
-        torch = _torch()
-        mirrored = self._mirror(self.indices)
-        distinct = mirrored != self.indices
-        # The locations and the values they belong to are moved to a device
-        # independently, so the mask has to follow each of them.
-        selected = self.values[:, distinct.to(self.values.device)]
-        self.values = torch.cat([self.values, selected], dim=1).contiguous()
-        self.indices = torch.cat([self.indices, mirrored[distinct]]).contiguous()
-        self.symmetric = False
-        self._cuda_value_cache.clear()
-
     def _unpack(self, packed: Any, dtype: Any) -> Any:
         """Unpack one location chunk to Hermitian matrices."""
         torch = _torch()
@@ -782,10 +619,9 @@ class CompactToeplitzKernel:
             stop = min(start + self.chunk_size, self.n_locations)
             index = self.indices[start:stop]
             chunk = self.values[:, start:stop]
-            for target in self._targets(index):
-                selected = torch.index_select(spectrum_flat, 2, target)
-                transformed = self._matmul(chunk, selected)
-                output_flat.index_copy_(2, target.to(torch.int64), transformed)
+            selected = torch.index_select(spectrum_flat, 2, index)
+            transformed = self._matmul(chunk, selected)
+            output_flat.index_copy_(2, index.to(torch.int64), transformed)
 
         output = torch.fft.ifftn(output_flat.reshape_as(spectrum), dim=axes)
         return output[image_slices]
@@ -816,13 +652,10 @@ class CompactToeplitzKernel:
             transfer_precision == "float32" and self.values.device == image.device
         )
         transfer_conversion = 0 if already_encoded else transfer_bytes
-        # A symmetric kernel keeps a second location set for the mirrors, and
-        # both are resident once the workspace exists.
-        location_sets = 2 if self.symmetric else 1
         transfer_residency = (
             0
             if self.indices.device == image.device
-            else location_sets * self.indices.numel() * self.indices.element_size()
+            else self.indices.numel() * self.indices.element_size()
         )
         # cuFFT work areas depend on shape and CUDA version. Reserving one
         # additional bank keeps automatic selection conservative and prevents
@@ -892,10 +725,7 @@ class CompactToeplitzKernel:
                     dtype=image.dtype,
                     device=image.device,
                 ),
-                "indices": [
-                    target.to(image.device, dtype=torch.int32)
-                    for target in self._targets(self.indices)
-                ],
+                "indices": [self.indices.to(image.device, dtype=torch.int32)],
                 "values": transfer_values,
             }
             self._resident_workspaces[key] = workspace
@@ -941,10 +771,7 @@ class CompactToeplitzKernel:
         torch = _torch()
         self._metadata_to(image.device)
         batch = image.shape[0]
-        targets = self._targets(self.indices)
-        # One supported bank per location set. A symmetric kernel has half as
-        # many locations in each, so the banks, the transforms and the matrix
-        # multiplications all come to what a whole kernel needs.
+        targets = (self.indices,)
         supported = [
             torch.empty(
                 (batch, self.rank, self.n_locations),
@@ -1107,12 +934,10 @@ class CompactToeplitzKernel:
     ) -> Any:
         """Keep supported spectra on CUDA while streaming packed matrix rows.
 
-        The one application that does not mirror as it goes: its packed rows
-        are indexed directly against a double-buffered stream schedule, so a
-        symmetric kernel is expanded here rather than visited twice.
+        Packed rows are indexed directly against a double-buffered stream
+        schedule.
         """
         torch = _torch()
-        self._densify()
         if self.values.device.type != "cpu":
             self.to("cpu")
         chunk_size = min(policy.transfer_chunk_size, self.n_locations)
@@ -1700,10 +1525,7 @@ class CompactToeplitzKernel:
         if self.values.device.type != "cpu":
             self.to("cpu")
 
-        targets_device = [
-            target.to(policy.torch_device, dtype=torch.int32)
-            for target in self._targets(self.indices)
-        ]
+        targets_device = [self.indices.to(policy.torch_device, dtype=torch.int32)]
         banks = [
             torch.empty(
                 (image.shape[0], self.rank, self.n_locations),

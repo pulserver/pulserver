@@ -264,12 +264,6 @@ grid, which is what a calibration wants: `NLINV` solves over a small centred
 window where dropping what the trajectory never reached would cost the solve
 its positive definiteness.
 
-A transfer that is **even** — what a trajectory closed under `k → -k` leaves,
-so radial diameters, a koosh ball, a symmetric spiral pair — is then stored
-over half of those locations and mirrored as it is applied, which is exact and
-stays halved wherever the solve runs. Subspace kernels included, whatever the
-basis dtype; evenness is measured when the kernel is built, never assumed.
-
 ```{eval-rst}
 .. autosummary::
    :toctree: ../generated/recon
