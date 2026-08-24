@@ -382,10 +382,16 @@ def _symmetric_halving(
     probed = partners(probe)
     if probed is None:
         return None
+    # The probe is measured against its own largest value rather than the
+    # kernel's: finding that costs a pass over the whole kernel, and a probe
+    # spread evenly over a transfer comes close enough to it that a kernel
+    # worth halving still gets asked. Erring here declines a halving, never
+    # performs a wrong one -- the pass below answers against the true scale.
+    sampled = values[:, probe].abs().max()
+    if sampled > 0 and not _agrees(values, probe, probed, sampled, tolerance):
+        return None
     scale = values.abs().max()
     if scale > 0:
-        if not _agrees(values, probe, probed, scale, tolerance):
-            return None
         for start in range(0, count, _SYMMETRY_BLOCK):
             span = torch.arange(start, min(start + _SYMMETRY_BLOCK, count))
             spanned = partners(span)
