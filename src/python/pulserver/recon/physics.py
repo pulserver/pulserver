@@ -1078,6 +1078,14 @@ _PSF_OPERATOR_SLOT: dict[tuple[Any, ...], Any] = {}
 # step and costs several times the build.
 _PSF_TOLERANCE = 1e-4
 
+# The tolerance to ask the narrow spreading grid for. Interpolation width is
+# set by the pair, not by either alone: the narrow grid reaches the same
+# five-wide kernel here that the wide grid reaches at _PSF_TOLERANCE, so the
+# fallback costs a factor on the transfer's accuracy rather than on the
+# spreading, which is what it would cost at the tighter tolerance.
+_NARROW_PSF_TOLERANCE = 1e-3
+_NARROW_PSF_UPSAMPLING = 1.25
+
 
 def _psf_operator(
     samples: Any,
@@ -1099,11 +1107,8 @@ def _psf_operator(
         operator.update_samples(samples)
         return operator
     build = mrinufft.get_operator(backend)
-    settings: dict[str, Any] = {"eps": _PSF_TOLERANCE}
     _yield_cached_device_memory(getattr(samples, "device", None))
-    upsampling = _psf_upsampling(shape, samples)
-    if upsampling is not None:
-        settings["upsampfac"] = upsampling
+    settings: dict[str, Any] = _psf_settings(shape, samples)
     try:
         operator = build(
             samples=samples,
@@ -1143,27 +1148,27 @@ def _yield_cached_device_memory(device: Any) -> None:
         torch.cuda.empty_cache()
 
 
-def _psf_upsampling(shape: tuple[int, ...], samples: Any) -> float | None:
-    """The interpolation grid to plan on, or ``None`` for the backend's own.
+def _psf_settings(shape: tuple[int, ...], samples: Any) -> dict[str, Any]:
+    """What to plan the gridding NUFFT with, given what the device has room for.
 
-    A NUFFT spreads onto a grid coarser or finer than the one it answers on,
-    and either meets the tolerance it was asked for. The wider one is faster
-    where it fits; on the doubled grid a kernel is built on it is eight times
-    the transfer, so at the sizes this is for it does not fit a consumer card
-    and the narrow one is what makes the build run at all.
+    A NUFFT spreads onto a grid of its own on the way to the one it answers
+    on; that grid is internal and does not touch the transfer, so it is chosen
+    for what it costs. The wide one is the default. On the doubled grid a
+    kernel is built on it is eight times the transfer, so at these sizes it
+    stops fitting, and the narrow one is asked for a looser tolerance -- which
+    keeps its interpolation kernel the width the wide one has, and spends the
+    difference on the transfer rather than on every point spread onto it.
     """
     torch = import_module("torch")
+    narrow = {"eps": _NARROW_PSF_TOLERANCE, "upsampfac": _NARROW_PSF_UPSAMPLING}
     # NumPy answers `device` with a plain string, Torch with an object.
     device = getattr(samples, "device", None)
     if "cuda" not in str(device):
-        return None
+        return {"eps": _PSF_TOLERANCE}
     free, _ = torch.cuda.mem_get_info(device)
-    # The wide spreading grid doubles every axis, so in three dimensions it is
-    # eight times the transfer it answers on -- which is what a build of this
-    # size runs out of, not the transfer.
     spreading = 8 * (2 ** len(shape)) * prod(shape)
     wide = spreading + 8 * prod(shape) + 8 * int(samples.shape[0])
-    return None if wide < 0.6 * free else 1.25
+    return {"eps": _PSF_TOLERANCE} if wide < 0.6 * free else narrow
 
 
 def _within_psf_plans(build: Any) -> Any:
