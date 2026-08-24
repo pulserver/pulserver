@@ -58,7 +58,7 @@ dev = [
   # The C and C++ reference is the headers' own comments, pulled in through
   # Doxygen's XML. Doxygen itself is a system package, so the pages say so
   # and the rest of the documentation builds without it.
-  "breathe>=4.35",
+  "breathe>=4.36.0",
   "build>=1.5.0",
 ]
 
