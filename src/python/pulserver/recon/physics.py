@@ -1100,6 +1100,7 @@ def _psf_operator(
         return operator
     build = mrinufft.get_operator(backend)
     settings: dict[str, Any] = {"eps": _PSF_TOLERANCE}
+    _yield_cached_device_memory(getattr(samples, "device", None))
     upsampling = _psf_upsampling(shape, samples)
     if upsampling is not None:
         settings["upsampfac"] = upsampling
@@ -1125,6 +1126,21 @@ def _psf_operator(
     _PSF_OPERATOR_SLOT.clear()
     _PSF_OPERATOR_SLOT[key] = operator
     return operator
+
+
+def _yield_cached_device_memory(device: Any) -> None:
+    """Hand the allocator's spare blocks back to the driver.
+
+    A NUFFT plan is allocated outside Torch, so blocks Torch is holding for
+    reuse are neither available to it nor counted as free -- and Torch does
+    not release them when another library runs out. What a build measures and
+    what it can take are both only true once these are returned.
+    """
+    torch = import_module("torch")
+    if "cuda" not in str(device):
+        return
+    with suppress(RuntimeError):
+        torch.cuda.empty_cache()
 
 
 def _psf_upsampling(shape: tuple[int, ...], samples: Any) -> float | None:
