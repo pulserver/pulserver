@@ -9,7 +9,7 @@ CLI usage::
 
 Or equivalently::
 
-    python -m pulserver.recon._mrd.dicom2mrd /path/to/dicom_folder -o output.h5
+    python -m pulserver.recon._server.dicom2mrd /path/to/dicom_folder -o output.h5
 """
 
 from __future__ import annotations

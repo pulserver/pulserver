@@ -66,7 +66,12 @@ asked for. Parameters are declared with their kind, bounds and defaults, and
 the console renders that:
 
 ```python
-from pulserver import DropdownFloatParam, TypeinIntParam, UIParam, protocol_to_dict
+from pulserver.design import (
+    DropdownFloatParam,
+    TypeinIntParam,
+    UIParam,
+    protocol_to_dict,
+)
 
 
 class Gre2D(SequencePlugin):

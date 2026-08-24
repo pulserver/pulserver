@@ -6,7 +6,7 @@ import ismrmrd
 import numpy as np
 import pytest
 
-from pulserver.recon.simulation import (
+from pulserver.mrd import (
     AdcRole,
     EventType,
     RfUse,

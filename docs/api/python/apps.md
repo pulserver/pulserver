@@ -184,118 +184,13 @@ two plugins write a `receive` where the others declare one.
    epi3D_recon
 ```
 
-## The plugin contracts
+## The contract behind them
 
-What a plugin subclasses, and what the runtime hands it.
-
-```{eval-rst}
-.. currentmodule:: pulserver
-
-.. autosummary::
-   :toctree: ../generated/app
-   :template: autosummary/class.rst
-
-   SequencePlugin
-   SequenceModule
-```
-
-```{eval-rst}
-.. currentmodule:: pulserver.app
-
-.. autosummary::
-   :toctree: ../generated/app
-   :template: autosummary/class.rst
-
-   PluginModule
-```
-
-{class}`pulserver.ReconPlugin`, the reconstruction half of the contract, is
-documented with the toolbox it drives, in {doc}`recon`.
-
-```{eval-rst}
-.. currentmodule:: pulserver
-```
-
-```{eval-rst}
-.. autosummary::
-   :toctree: ../generated/app
-
-   run_cli
-   main_kwargs
-   write_sequence
-```
-
-## Protocol
-
-What the scanner UI shows, declared as typed parameters rather than as a form.
-A plugin publishes a `Protocol` — the alias for a mapping from a `UIParam` key
-to a `ProtocolValue`, one of the parameter kinds below — and the bridge builds
-the UI from it, validates what comes back against it, and hands the plugin the
-values.
-
-```{eval-rst}
-.. autosummary::
-   :toctree: ../generated/app
-   :template: autosummary/class.rst
-
-   UIParam
-   ParamKind
-   Description
-   Validate
-```
-
-### Parameter kinds
-
-```{eval-rst}
-.. autosummary::
-   :toctree: ../generated/app
-   :template: autosummary/class.rst
-
-   TypeinFloatParam
-   TypeinIntParam
-   DropdownFloatParam
-   DropdownIntParam
-   OffFloatParam
-   OffIntParam
-   BoolParam
-   StringListParam
-```
-
-### Enumerations
-
-```{eval-rst}
-.. autosummary::
-   :toctree: ../generated/app
-   :template: autosummary/class.rst
-
-   ImagingMode
-   InputMode
-   PreparationType
-   SequenceType
-   TriggerType
-   TEPreset
-   TRPreset
-   BoolKey
-   EnumKey
-   FloatKey
-   IntKey
-```
-
-### Reading and writing one
-
-`params` is the accessor module: index by canonical key, unwrap the parameter
-object and coerce its value, once, with the type the key declares.
-
-```{eval-rst}
-.. autosummary::
-   :toctree: ../generated/app
-
-   params
-   make_enum_param
-   dict_to_protocol
-   protocol_to_dict
-   validate_protocol
-```
+A sequence plugin declares what the scanner UI shows and builds the sequence
+the console asks for; a reconstruction plugin receives the acquisitions that
+come back. Both contracts, and the typed protocol parameters a console builds
+its controls from, are documented where they live: {doc}`design` for the
+sequence side, {doc}`recon` for the reconstruction side.
 
 ## See also
 

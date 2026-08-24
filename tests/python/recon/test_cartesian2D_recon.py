@@ -16,7 +16,7 @@ import numpy as np
 import pytest
 
 import pulserver.pypulseq as pp
-from pulserver import ReconContext
+from pulserver.recon import ReconContext
 from pulserver.app import cartesian2D_recon
 
 N = 64
@@ -120,7 +120,7 @@ def acquisitions(kspace, lines, *, n_samples=N, calibration=(), n_slices=1, slic
 
 def bucket(kspace, lines, n_samples=N, calibration=()):
     """One slice's acquisitions, classified as the runtime classifies them."""
-    from pulserver.recon._mrd.application import _make_bucket
+    from pulserver.recon._server.application import _make_bucket
 
     return _make_bucket(
         acquisitions(kspace, lines, n_samples=n_samples, calibration=calibration), []
@@ -314,7 +314,7 @@ def test_a_second_slice_reconstructs_its_own_data(kspace, phantom):
     plugin.startup(ReconContext.offline(header(n_slices=2)))
     for acquisition in stream:
         plugin.receive(acquisition, ReconContext.offline(header(n_slices=2)))
-    from pulserver.recon._mrd.application import _make_bucket
+    from pulserver.recon._server.application import _make_bucket
 
     image = plugin.recon(
         _make_bucket(stream, []), ReconContext.offline(header(n_slices=2))
@@ -379,7 +379,7 @@ def test_a_noise_scan_whitens_what_follows_and_never_reaches_the_buffer(
     kspace, context
 ):
     """It measures the receiver, not the object, so it has no place on a grid."""
-    from pulserver.recon._mrd.application import _make_bucket
+    from pulserver.recon._server.application import _make_bucket
 
     stream = [noise_scan(), *acquisitions(kspace, list(range(N)))]
     plugin = cartesian2D_recon.PLUGIN.spawn()

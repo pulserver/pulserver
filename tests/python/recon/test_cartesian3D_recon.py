@@ -15,7 +15,7 @@ import numpy as np
 import pytest
 
 import pulserver.pypulseq as pp
-from pulserver import ReconContext
+from pulserver.recon import ReconContext
 from pulserver.app import cartesian3D_recon
 
 N = 32
@@ -150,7 +150,7 @@ def acquisitions(kspace, pairs, *, n_samples=N, n_calibration=0, measurement_end
 
 
 def bucket(kspace, pairs, n_samples=N, n_calibration=0):
-    from pulserver.recon._mrd.application import _make_bucket
+    from pulserver.recon._server.application import _make_bucket
 
     return _make_bucket(
         acquisitions(kspace, pairs, n_samples=n_samples, n_calibration=n_calibration),

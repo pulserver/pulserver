@@ -422,7 +422,7 @@ class ScanLoop(Sequence[np.ndarray]):
            import pulserver.design as design
            from pulserver.design import _lowlevel
            import pulserver.pypulseq as pp
-           from pulserver import ScanLoop
+           from pulserver.design import ScanLoop
            from _figures import pattern_figure
            mask = _lowlevel.make_poisson_disc_mask((48, 48), 4.0, calib=(10, 10), seed=0)
            pattern_figure(ScanLoop.from_mask(mask, train_length=16, ordering="radial"),

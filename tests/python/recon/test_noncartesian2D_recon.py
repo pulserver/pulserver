@@ -15,7 +15,7 @@ import pytest
 
 pytest.importorskip("mrinufft")
 
-from pulserver import ReconContext
+from pulserver.recon import ReconContext
 from pulserver.app import noncartesian2D_recon
 
 N = 32
@@ -98,7 +98,7 @@ def relative_error(image, reference):
 
 def reconstruct(kspace, trajectory, **kwargs):
     """Drive the plugin over the streamed views and return the magnitude."""
-    from pulserver.recon._mrd.application import _make_bucket
+    from pulserver.recon._server.application import _make_bucket
 
     import ismrmrd
 
@@ -159,7 +159,7 @@ def test_an_undersampled_scan_goes_through_the_solve_and_beats_the_adjoint(
 
 
 def test_the_plugin_reconstructs_a_streamed_measurement(phantom, coil_maps):
-    from pulserver.recon._mrd.application import _make_bucket
+    from pulserver.recon._server.application import _make_bucket
 
     trajectory = spoke_trajectory(NYQUIST)
     kspace = sample(phantom, coil_maps, trajectory)

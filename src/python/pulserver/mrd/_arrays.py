@@ -40,12 +40,12 @@ class Homodyne:
     Examples
     --------
     >>> import numpy as np
-    >>> import pulserver.recon as recon
+    >>> import pulserver.mrd as mrd
     >>> truncated = np.zeros((1, 16, 16), dtype=complex)
     >>> truncated[..., :10] = 1.0
     >>> readout = np.zeros(16)
     >>> readout[:10] = 1.0
-    >>> recon.Homodyne(dimension=2, partial_axis=-1)(truncated, readout).shape
+    >>> mrd.Homodyne(dimension=2, partial_axis=-1)(truncated, readout).shape
     (1, 16, 16)
 
     One pass rather than POCS's iteration; ``fill_partial_echo`` reaches it by
@@ -95,12 +95,12 @@ class POCS:
     Examples
     --------
     >>> import numpy as np
-    >>> import pulserver.recon as recon
+    >>> import pulserver.mrd as mrd
     >>> truncated = np.zeros((1, 16, 16), dtype=complex)
     >>> truncated[..., :10] = 1.0
     >>> readout = np.zeros(16)
     >>> readout[:10] = 1.0
-    >>> recon.POCS(dimension=2, partial_axis=-1, iterations=4)(truncated, readout).shape
+    >>> mrd.POCS(dimension=2, partial_axis=-1, iterations=4)(truncated, readout).shape
     (1, 16, 16)
 
     ``fill_partial_echo`` reaches this by name, and its figure is the two
@@ -208,10 +208,10 @@ def fill_partial_echo(
     Examples
     --------
     >>> import numpy as np
-    >>> import pulserver.recon as recon
+    >>> import pulserver.mrd as mrd
     >>> image = np.zeros((16, 16), dtype=complex)
     >>> image[6:10, 6:10] = 1.0
-    >>> truncated = recon.fftc(image)
+    >>> truncated = mrd.fftc(image)
     >>> truncated[:, 12:] = 0
     >>> readout = np.ones(16)
     >>> readout[12:] = 0
@@ -219,8 +219,8 @@ def fill_partial_echo(
     Both estimators answer for the same truncation, and the name is what a
     plugin exposes as its ``partial_fourier`` setting:
 
-    >>> pocs = recon.fill_partial_echo(truncated[None], readout, dimension=2)
-    >>> homodyne = recon.fill_partial_echo(
+    >>> pocs = mrd.fill_partial_echo(truncated[None], readout, dimension=2)
+    >>> homodyne = mrd.fill_partial_echo(
     ...     truncated[None], readout, dimension=2, method="homodyne"
     ... )
     >>> pocs.shape == homodyne.shape
@@ -231,22 +231,22 @@ def fill_partial_echo(
     .. plot::
 
        import numpy as np
-       import pulserver.recon as recon
+       import pulserver.mrd as mrd
        from _figures import images, phantom
 
        truth = phantom(64)[0][0].numpy()
-       truncated = recon.fftc(truth)
+       truncated = mrd.fftc(truth)
        truncated[:, 40:] = 0.0
        readout = np.ones(64)
        readout[40:] = 0.0
        images(
            [
                ("object", truth),
-               ("zero-filled", recon.ifftc(truncated)),
-               ("POCS", recon.fill_partial_echo(truncated[None], readout, dimension=2)),
+               ("zero-filled", mrd.ifftc(truncated)),
+               ("POCS", mrd.fill_partial_echo(truncated[None], readout, dimension=2)),
                (
                    "Homodyne",
-                   recon.fill_partial_echo(
+                   mrd.fill_partial_echo(
                        truncated[None], readout, dimension=2, method="homodyne"
                    ),
                ),
@@ -290,17 +290,17 @@ def fftc(data: Any, *, axes: int | tuple[int, ...] = (-2, -1)) -> Any:
     Examples
     --------
     >>> import numpy as np
-    >>> import pulserver.recon as recon
+    >>> import pulserver.mrd as mrd
     >>> image = np.zeros((8, 8), dtype=complex)
     >>> image[4, 4] = 1.0
-    >>> kspace = recon.fftc(image)
+    >>> kspace = mrd.fftc(image)
 
     A point at the centre of the image is flat in k-space, and the round trip
     is exact:
 
     >>> bool(np.allclose(np.abs(kspace), np.abs(kspace).mean()))
     True
-    >>> bool(np.allclose(recon.ifftc(kspace), image, atol=1e-12))
+    >>> bool(np.allclose(mrd.ifftc(kspace), image, atol=1e-12))
     True
     """
     axes = (axes,) if isinstance(axes, int) else tuple(axes)
@@ -328,10 +328,10 @@ def ifftc(data: Any, *, axes: int | tuple[int, ...] = (-2, -1)) -> Any:
     Examples
     --------
     >>> import numpy as np
-    >>> import pulserver.recon as recon
+    >>> import pulserver.mrd as mrd
     >>> kspace = np.ones((8, 8), dtype=complex)
-    >>> image = recon.ifftc(kspace)
-    >>> bool(np.allclose(recon.fftc(image), kspace, atol=1e-12))
+    >>> image = mrd.ifftc(kspace)
+    >>> bool(np.allclose(mrd.fftc(image), kspace, atol=1e-12))
     True
     """
     axes = (axes,) if isinstance(axes, int) else tuple(axes)
@@ -374,9 +374,9 @@ def remove_readout_oversampling(
     Examples
     --------
     >>> import numpy as np
-    >>> import pulserver.recon as recon
-    >>> readout = recon.ifftc(np.ones((4, 128)), axes=-1)
-    >>> recon.remove_readout_oversampling(readout, 64).shape
+    >>> import pulserver.mrd as mrd
+    >>> readout = mrd.ifftc(np.ones((4, 128)), axes=-1)
+    >>> mrd.remove_readout_oversampling(readout, 64).shape
     (4, 64)
     """
     current = data.shape[readout_axis]
@@ -442,7 +442,7 @@ def coil_compress(
     Examples
     --------
     >>> import numpy as np
-    >>> import pulserver.recon as recon
+    >>> import pulserver.mrd as mrd
     >>> rng = np.random.default_rng(0)
     >>> lines = rng.normal(size=(8, 256)) + 1j * rng.normal(size=(8, 256))
 
@@ -451,7 +451,7 @@ def coil_compress(
     follows:
 
     >>> lines[4:] = lines[:4]
-    >>> compressed, basis = recon.coil_compress(lines, 4)
+    >>> compressed, basis = mrd.coil_compress(lines, 4)
     >>> compressed.shape, basis.shape
     ((4, 256), (4, 8))
     """
@@ -536,14 +536,14 @@ def noise_prewhiten(
     Examples
     --------
     >>> import numpy as np
-    >>> import pulserver.recon as recon
+    >>> import pulserver.mrd as mrd
     >>> rng = np.random.default_rng(0)
     >>> noise = rng.normal(size=(4, 512)) + 1j * rng.normal(size=(4, 512))
 
     Whitening the noise scan against itself leaves an identity covariance,
     which is what every readout that follows is measured against:
 
-    >>> whitened = recon.noise_prewhiten(noise, noise, coil_axis=0)
+    >>> whitened = mrd.noise_prewhiten(noise, noise, coil_axis=0)
     >>> covariance = whitened @ whitened.conj().T / whitened.shape[-1]
     >>> bool(np.allclose(covariance, np.eye(4), atol=5e-2))
     True
@@ -776,13 +776,13 @@ def pipe_menon_dcf(
     Examples
     --------
     >>> import numpy as np
-    >>> import pulserver.recon as recon
+    >>> import pulserver.mrd as mrd
     >>> angles = np.linspace(0, np.pi, 8, endpoint=False)
     >>> radius = np.linspace(-0.5, 0.5, 32)
     >>> trajectory = np.stack(
     ...     [np.outer(np.cos(angles), radius), np.outer(np.sin(angles), radius)], -1
     ... ).reshape(-1, 2)
-    >>> weights = np.asarray(recon.pipe_menon_dcf(trajectory, (16, 16)))
+    >>> weights = np.asarray(mrd.pipe_menon_dcf(trajectory, (16, 16)))
     >>> weights.shape, weights.dtype.kind
     ((256,), 'f')
     """
@@ -915,32 +915,32 @@ def correct_lines(lines: list[tuple[Any, bool]], phase: Any = None) -> list[Any]
     .. plot::
 
        import numpy as np
-       import pulserver.recon as recon
+       import pulserver.mrd as mrd
        from _figures import images, phantom
 
        truth = phantom(64)[0][0].numpy()
-       kspace = recon.fftc(truth)
+       kspace = mrd.fftc(truth)
        ramp = 0.9 * np.linspace(-1.0, 1.0, 64) + 0.4
 
        def backwards(line):
-           hybrid = recon.ifftc(line, axes=-1)
-           return recon.fftc(hybrid * np.exp(-1j * ramp), axes=-1)[..., ::-1]
+           hybrid = mrd.ifftc(line, axes=-1)
+           return mrd.fftc(hybrid * np.exp(-1j * ramp), axes=-1)[..., ::-1]
 
        train = [
            (line[None], False) if index % 2 == 0 else (backwards(line[None]), True)
            for index, line in enumerate(kspace)
        ]
        middle = kspace[32][None]
-       phase = recon.estimate_epi_phase([middle, backwards(middle)[..., ::-1], middle])
+       phase = mrd.estimate_epi_phase([middle, backwards(middle)[..., ::-1], middle])
 
        def placed(fit):
-           return np.stack([recon.correct_lines([line], fit)[0][0] for line in train])
+           return np.stack([mrd.correct_lines([line], fit)[0][0] for line in train])
 
        images(
            [
                ("object", truth),
-               ("flipped only", recon.ifftc(placed(None))),
-               ("phase corrected", recon.ifftc(placed(phase))),
+               ("flipped only", mrd.ifftc(placed(None))),
+               ("phase corrected", mrd.ifftc(placed(phase))),
            ],
            title="an odd/even phase, and the ghost it leaves",
        )

@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from pulserver.recon._mrd.gradunwarp import MrdCoefficientAccessor
+from pulserver.recon._server.gradunwarp import MrdCoefficientAccessor
 from pulserver.recon._gradunwarp import _evaluate_harmonics
 from pulserver.recon.postprocessing import (
     GradientCoefficients,

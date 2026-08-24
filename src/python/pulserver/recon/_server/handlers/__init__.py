@@ -5,8 +5,8 @@ from __future__ import annotations
 import numpy as np
 import numpy.fft as fft
 
-from ...postprocessing import coil_combine
-from ..metadata import max_stored_value
+from ....mrd._images import coil_combine
+from ....mrd._metadata import max_stored_value
 
 
 def _fft_combine_scaled(stacked: np.ndarray, header) -> np.ndarray:

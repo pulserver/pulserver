@@ -138,7 +138,7 @@ def test_a_new_name_survives_a_file_round_trip(tmp_path):
 
 
 def test_a_plugin_may_name_a_flag_the_way_the_sequence_did():
-    from pulserver.recon import has_acquisition_flag
+    from pulserver.mrd import has_acquisition_flag
 
     acquisition = ismrmrd.Acquisition()
     acquisition.setFlag(ismrmrd.ACQ_LAST_IN_SEGMENT)
@@ -152,7 +152,7 @@ def test_a_plugin_may_name_a_flag_the_way_the_sequence_did():
 
 def test_every_named_flag_resolves_against_ismrmrd():
     """The whole table, not a sample of it: a typo in one row is a dead name."""
-    from pulserver.recon import has_acquisition_flag
+    from pulserver.mrd import has_acquisition_flag
 
     acquisition = ismrmrd.Acquisition()
     for name, constant in MRD_FLAGS.items():

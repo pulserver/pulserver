@@ -12,17 +12,19 @@ from typing import Any
 
 import numpy as np
 
-from pulserver import ReconContext, ReconPlugin, ReconResult
+from pulserver.recon import ReconContext, ReconPlugin, ReconResult
 from pulserver.recon import (
-    AcquisitionFlag,
     CoilCompression,
     EpiPhaseCorrection,
     NoiseAdjust,
     RampSampling,
     cartesian_recon,
     coil_maps_from_reference,
-    has_acquisition_flag,
     image_result,
+)
+from pulserver.mrd import (
+    AcquisitionFlag,
+    has_acquisition_flag,
 )
 
 #: Where the coil basis the prescan established is left for the imaging that

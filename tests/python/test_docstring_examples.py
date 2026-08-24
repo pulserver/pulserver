@@ -26,6 +26,7 @@ ROOTS = (
     "pulserver.design",
     "pulserver.pypulseq",
     "pulserver.recon",
+    "pulserver.mrd",
     "pulserver.app",
 )
 

@@ -6,7 +6,7 @@ import ismrmrd
 import numpy as np
 import pydicom
 import pytest
-from pulserver.recon._mrd.mrd2dicom import (
+from pulserver.recon._server.mrd2dicom import (
     DicomWithName,
     MrdDicomBuilder,
     _quantize,

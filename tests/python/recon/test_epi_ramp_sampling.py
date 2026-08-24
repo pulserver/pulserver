@@ -16,7 +16,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from pulserver.recon import epi_ramp_operator
+from pulserver.mrd import epi_ramp_operator
 
 N = 128
 #: The object occupies half the digitised readout, which is what the twofold

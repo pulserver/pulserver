@@ -141,4 +141,62 @@ READOUT = (
 #: Base classes, for a readout family this package does not ship.
 BASES = ("NonCartesianReadout", "OffResonanceSaturation", "RfModule")
 
-__all__ = sorted({*EXCITATION, *PREPARATION, *READOUT, *BASES})
+#: The contract a scanner drives a sequence through: what a plugin is, the
+#: typed parameters its protocol is built from, and the ways one is read,
+#: written and run.
+PROTOCOL = (
+    "SequencePlugin",
+    "SequenceModule",
+    "UIParam",
+    "params",
+    "TypeinFloatParam",
+    "DropdownFloatParam",
+    "TypeinIntParam",
+    "DropdownIntParam",
+    "OffFloatParam",
+    "OffIntParam",
+    "BoolParam",
+    "StringListParam",
+    "Description",
+    "TEPreset",
+    "TRPreset",
+    "SequenceType",
+    "ImagingMode",
+    "PreparationType",
+    "TriggerType",
+    "make_enum_param",
+    "protocol_to_dict",
+    "dict_to_protocol",
+    "main_kwargs",
+    "run_cli",
+    "write_sequence",
+)
+
+from ._base import SequencePlugin
+from ._cli import run_cli, write_sequence
+from ._module import SequenceModule
+from ._params import (
+    BoolParam,
+    Description,
+    DropdownFloatParam,
+    DropdownIntParam,
+    ImagingMode,
+    OffFloatParam,
+    OffIntParam,
+    PreparationType,
+    SequenceType,
+    StringListParam,
+    TEPreset,
+    TriggerType,
+    TRPreset,
+    TypeinFloatParam,
+    TypeinIntParam,
+    UIParam,
+    dict_to_protocol,
+    make_enum_param,
+    protocol_to_dict,
+)
+from . import _protocol as params
+from ._protocol import main_kwargs
+
+__all__ = sorted({*EXCITATION, *PREPARATION, *READOUT, *BASES, *PROTOCOL})

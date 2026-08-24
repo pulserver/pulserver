@@ -5,9 +5,9 @@ from __future__ import annotations
 import ismrmrd
 import numpy as np
 
-from pulserver import ExamCache, ReconContext
-from pulserver.recon import AcquisitionFlag
-from pulserver.recon._mrd.application import run_application
+from pulserver.recon import ExamCache, ReconContext
+from pulserver.mrd import AcquisitionFlag
+from pulserver.recon._server.application import run_application
 
 
 class FakeConnection:
@@ -86,7 +86,7 @@ def _context(header) -> ReconContext:
 
 
 def test_simplefft_emits_one_image_per_slice():
-    from pulserver.recon._mrd.handlers.simplefft import PLUGIN
+    from pulserver.recon._server.handlers.simplefft import PLUGIN
 
     acquisitions = _make_acquisitions(n_pe=8, n_ro=16, n_channels=2, n_slices=3)
     connection = FakeConnection(acquisitions)
@@ -98,7 +98,7 @@ def test_simplefft_emits_one_image_per_slice():
 
 
 def test_simplefft_passes_non_acquisition_items_through():
-    from pulserver.recon._mrd.handlers.simplefft import PLUGIN
+    from pulserver.recon._server.handlers.simplefft import PLUGIN
 
     acquisitions = _make_acquisitions(n_pe=4, n_ro=8, n_channels=1)
     incoming_image = ismrmrd.Image.from_array(np.ones((2, 2), dtype=np.float32))
@@ -110,8 +110,8 @@ def test_simplefft_passes_non_acquisition_items_through():
 
 
 def test_fftrecon_emits_one_dicom_per_slice(monkeypatch):
-    import pulserver.recon._mrd.application as application
-    from pulserver.recon._mrd.handlers.fftrecon import PLUGIN
+    import pulserver.recon._server.application as application
+    from pulserver.recon._server.handlers.fftrecon import PLUGIN
 
     monkeypatch.setattr(
         application,
@@ -129,7 +129,7 @@ def test_fftrecon_emits_one_dicom_per_slice(monkeypatch):
 
 def test_the_waveforms_of_a_measurement_reach_every_bucket():
     """A scanner sends its waveforms once, ahead of the data."""
-    from pulserver.recon._mrd.application import _make_bucket
+    from pulserver.recon._server.application import _make_bucket
 
     acquisitions = _make_acquisitions(n_pe=4, n_ro=8, n_channels=1)
     waveform = ismrmrd.Waveform()
@@ -142,7 +142,7 @@ def test_the_waveforms_of_a_measurement_reach_every_bucket():
 
 
 def test_bucket_matches_gadgetron_data_and_reference_classification():
-    from pulserver.recon._mrd.application import _make_bucket
+    from pulserver.recon._server.application import _make_bucket
 
     imaging, calibration, combined, phase = _make_acquisitions(
         n_pe=4,
@@ -162,7 +162,7 @@ def test_bucket_matches_gadgetron_data_and_reference_classification():
 
 
 def test_savedataonly_consumes_without_output():
-    from pulserver.recon._mrd.handlers.savedataonly import PLUGIN
+    from pulserver.recon._server.handlers.savedataonly import PLUGIN
 
     connection = FakeConnection(_make_acquisitions(n_pe=4, n_ro=8, n_channels=1))
     run_application(PLUGIN, connection, _context(_make_header(8, 4)))
@@ -172,7 +172,7 @@ def test_savedataonly_consumes_without_output():
 def test_the_runtime_drives_the_lifecycle_hooks_in_order():
     """startup once, then receive per acquisition on arrival -- and receive is
     what calls recon, at the boundary it routes."""
-    from pulserver import ReconPlugin, ReconResult
+    from pulserver.recon import ReconPlugin, ReconResult
 
     events = []
 
@@ -215,8 +215,8 @@ def test_the_runtime_drives_the_lifecycle_hooks_in_order():
 
 def test_receive_routes_the_branch_the_acquisition_closed():
     """The routing reads the arriving acquisition, not an assembled bucket."""
-    from pulserver import ReconPlugin
-    from pulserver.recon import has_acquisition_flag
+    from pulserver.recon import ReconPlugin
+    from pulserver.mrd import has_acquisition_flag
 
     seen = []
 
@@ -247,7 +247,7 @@ def test_receive_routes_the_branch_the_acquisition_closed():
 
 
 def test_one_flag_may_be_given_without_wrapping_it():
-    from pulserver import ReconPlugin
+    from pulserver.recon import ReconPlugin
 
     class Nothing(ReconPlugin):
         def recon(self, branch, context):
@@ -264,7 +264,7 @@ def test_one_flag_may_be_given_without_wrapping_it():
 
 def test_each_stream_reconstructs_through_its_own_instance():
     """The configured plugin is a template; two streams cannot see each other."""
-    from pulserver import ReconPlugin
+    from pulserver.recon import ReconPlugin
 
     seen = []
 

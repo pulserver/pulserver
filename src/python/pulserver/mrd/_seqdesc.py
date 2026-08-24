@@ -1,6 +1,6 @@
 """The sequence description a scan carries, decoded from its MRD waveforms."""
 
-from ._seqdesc import (
+from ._description import (
     AdcRole,
     EventType,
     RfDefinition,

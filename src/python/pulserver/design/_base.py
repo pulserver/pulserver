@@ -2,7 +2,7 @@
 
 Examples
 --------
->>> from pulserver import SequencePlugin, TypeinFloatParam, UIParam
+>>> from pulserver.design import SequencePlugin, TypeinFloatParam, UIParam
 >>> class DemoSequence(SequencePlugin):
 ...     def get_default_protocol(self, system):
 ...         return {UIParam.TR: TypeinFloatParam(value=500.0, unit="ms")}
@@ -40,7 +40,7 @@ class SequencePlugin(ABC):
     A complete, minimal plugin:
 
     >>> import pulserver.pypulseq as pp
-    >>> from pulserver import (
+    >>> from pulserver.design import (
     ...     SequencePlugin, TypeinFloatParam, UIParam, params, write_sequence
     ... )
     >>> class DemoSequence(SequencePlugin):
@@ -83,7 +83,7 @@ class SequencePlugin(ABC):
 
         Examples
         --------
-        >>> from pulserver import TypeinFloatParam, UIParam
+        >>> from pulserver.design import TypeinFloatParam, UIParam
         >>> protocol = {UIParam.TR: TypeinFloatParam(value=500.0, unit="ms")}
         >>> protocol[UIParam.TR].value
         500.0

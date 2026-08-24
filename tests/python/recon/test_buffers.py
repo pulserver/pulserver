@@ -16,12 +16,14 @@ import numpy as np
 import pytest
 
 from pulserver.recon import (
-    AcquisitionBucket,
-    EncodingSpace,
     ReconBuffer,
     ReconContext,
     ReconData,
     ReconPlugin,
+)
+from pulserver.mrd import (
+    AcquisitionBucket,
+    EncodingSpace,
 )
 
 N_X = 8

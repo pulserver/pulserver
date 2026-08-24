@@ -15,15 +15,22 @@ import pytest
 
 import pulserver.design as design
 import pulserver.pypulseq as pp
-from pulserver import SequenceModule
+from pulserver.design import SequenceModule
 
 API_PAGE = Path(__file__).resolve().parents[2] / "docs" / "api" / "python" / "design.md"
 # The tree is excluded from the wheel, so it is only ever found in the checkout.
 SOURCE_TREE = Path(__file__).resolve().parents[2] / "src" / "python" / "pulserver"
 
 
-def test_everything_exported_is_a_sequence_module():
-    for name in design.__all__:
+MODULE_CATEGORIES = ("EXCITATION", "PREPARATION", "READOUT", "BASES")
+
+
+def _module_names() -> list[str]:
+    return [name for group in MODULE_CATEGORIES for name in getattr(design, group)]
+
+
+def test_everything_filed_as_a_module_is_a_sequence_module():
+    for name in _module_names():
         exported = getattr(design, name)
         assert inspect.isclass(exported), name
         assert issubclass(exported, SequenceModule), name
@@ -31,19 +38,22 @@ def test_everything_exported_is_a_sequence_module():
 
 def test_the_categories_partition_the_public_surface():
     """Every export is filed under exactly one heading, and nothing else is."""
-    categorised = [
-        *design.EXCITATION,
-        *design.PREPARATION,
-        *design.READOUT,
-        *design.BASES,
-    ]
+    categorised = [*_module_names(), *design.PROTOCOL]
     assert sorted(categorised) == sorted(design.__all__)
     assert len(set(categorised)) == len(categorised)
 
 
+def test_the_protocol_contract_is_reachable_and_is_not_a_module():
+    """The contract sits beside the toolbox, and is not part of it."""
+    modules = set(_module_names())
+    for name in design.PROTOCOL:
+        assert hasattr(design, name), name
+        assert name not in modules, name
+
+
 def test_every_shipped_module_can_actually_be_built():
     """Only a base is allowed to be abstract; everything else is a design."""
-    for name in design.__all__:
+    for name in _module_names():
         if name in design.BASES:
             continue
         assert inspect.isabstract(getattr(design, name)) is False, name
@@ -62,7 +72,7 @@ def _listed_on_the_page() -> set[str]:
     return {
         name.rpartition(".")[2]
         for name in re.findall(
-            r"^\s+((?:pulserver\.design\.)?[A-Z]\w+)\s*$", page, re.M
+            r"^\s+((?:pulserver\.design\.)?[A-Za-z]\w+)\s*$", page, re.M
         )
     }
 

@@ -13,7 +13,6 @@ import re
 from pathlib import Path
 
 import pulserver.app as app
-import pulserver.io as io
 import pulserver.pypulseq as pp
 
 PAGES = Path(__file__).resolve().parents[2] / "docs" / "api" / "python"
@@ -74,6 +73,7 @@ _MEMBERSHIP = {
     "SAMPLING",
     "SYSTEM",
     "SLOTTED",
+    "FILES",
 }
 
 
@@ -85,10 +85,6 @@ def test_the_event_layer_page_names_nothing_that_is_gone():
 def test_the_membership_sets_the_page_documents_all_exist():
     for name in _MEMBERSHIP:
         assert isinstance(getattr(pp, name), frozenset), name
-
-
-def test_every_io_helper_is_documented():
-    assert listed("pypulseq.md", "io") == set(io.__all__)
 
 
 def plugins(suffix: str) -> set[str]:

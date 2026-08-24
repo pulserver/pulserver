@@ -14,7 +14,7 @@ from types import SimpleNamespace
 import numpy as np
 import pulserver.design as design
 import pulserver.pypulseq as pp
-from pulserver import (
+from pulserver.design import (
     Description,
     DropdownFloatParam,
     DropdownIntParam,

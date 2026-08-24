@@ -48,17 +48,7 @@ over buffers that are already filled.
    ReconPlugin
    ReconContext
    ReconResult
-   AcquisitionBucket
-   AcquisitionBucketStats
-   AcquisitionFlag
    ExamCache
-```
-
-```{eval-rst}
-.. autosummary::
-   :toctree: ../generated/recon
-
-   has_acquisition_flag
 ```
 
 ## The chain
@@ -106,99 +96,6 @@ a plugin reconstructing sorted k-space overrides no hook at all.
 
    ReconData
    ReconBuffer
-   EncodingSpace
-```
-
-## Reading the header
-
-Almost nothing is here, and that is the point: the header's encoding spaces are
-what `ReconBuffer` is laid out from, so it answers for them — `.extents` for
-how far each axis runs, `.image_shape` for the matrix to crop to. A second
-reading of the same fields could only disagree with the buffer a plugin
-actually fills.
-
-What is left is what the encoding spaces do not describe: the free-form
-parameters a sequence attached to the scan. MRD splits those across four typed
-collections of `name`/`value` pairs, so `user_parameter` searches all four and
-answers with the value, whichever it was written as.
-
-```{eval-rst}
-.. autosummary::
-   :toctree: ../generated/recon
-
-   user_parameter
-   diffusion_table
-```
-
-## Preprocessing
-
-What happens to the measurement before it is inverted: noise, oversampling,
-coil count, and the corrections a particular readout demands. The first two are
-per-acquisition work, which is why a plugin does them in `receive` rather than
-waiting for a trigger.
-
-```{eval-rst}
-.. autosummary::
-   :toctree: ../generated/recon
-
-   noise_prewhiten
-   coil_compress
-   remove_readout_oversampling
-   fftc
-   ifftc
-   pipe_menon_dcf
-```
-
-### Partial Fourier
-
-Recovering the k-space edge a partial acquisition never took, from the
-conjugate symmetry an image with slowly varying phase carries. `POCS` iterates
-towards an image that reproduces every acquired sample and `Homodyne` reaches
-an answer in one pass; `fill_partial_echo` takes either by name, and that name
-is what a plugin exposes as its `partial_fourier` setting.
-
-```{eval-rst}
-.. autosummary::
-   :toctree: ../generated/recon
-
-   fill_partial_echo
-```
-
-```{eval-rst}
-.. autosummary::
-   :toctree: ../generated/recon
-   :template: autosummary/class.rst
-
-   POCS
-   Homodyne
-```
-
-### EPI
-
-A reversed EPI line carries a phase its forward neighbours do not, and leaving
-it there puts a ghost at half the field of view. `estimate_epi_phase` reads that
-phase off a blip-nulled navigator triplet and `correct_lines` flips and
-demodulates by it — which is what a plugin does in `receive`, before the readout
-is placed, because a corrected line is what belongs on the grid.
-
-One estimator, with the order as its parameter: first order is the
-gradient-delay ramp every product reconstruction corrects, and raising it picks
-up what an eddy current leaves beyond a ramp.
-
-A train worth playing samples across its read ramps rather than waiting for the
-plateau, so k does not advance at a constant rate along a readout and the
-samples are not on the grid. Where they fell is the trajectory the acquisition
-carries — a client attaches one exactly when the gradient was still moving
-under the ADC — and `epi_ramp_operator` is the change of basis onto the grid,
-which is exact while the samples outnumber the pixels they determine.
-
-```{eval-rst}
-.. autosummary::
-   :toctree: ../generated/recon
-
-   estimate_epi_phase
-   correct_lines
-   epi_ramp_operator
 ```
 
 ## Calibration
@@ -394,36 +291,6 @@ be packed or unpacked by the caller.
    IXITiny
 ```
 
-## Sequence description
-
-The description of itself a scan carries, decoded from its MRD waveforms --
-the same object the design side writes.
-
-```{eval-rst}
-.. autosummary::
-   :toctree: ../generated/recon
-   :template: autosummary/class.rst
-
-   SequenceDescription
-   SequenceDescriptionCollection
-   SequenceEvent
-   SequenceParameters
-   RfDefinition
-   RfShape
-   RfUse
-   ShimDefinition
-   AdcRole
-   EventType
-```
-
-```{eval-rst}
-.. autosummary::
-   :toctree: ../generated/recon
-
-   decode_sequence_description
-   decompress_shape
-```
-
 ## Motion
 
 ```{eval-rst}
@@ -438,17 +305,16 @@ the same object the design side writes.
 
 ## Postprocessing
 
-What happens to the image on its way out: coil combination, cropping,
-gradient-nonlinearity unwarping, distortion correction.
+What happens to the image on its way out: packaging it as a result the
+runtime can send, unwarping gradient nonlinearity, correcting susceptibility
+distortion. The array operations underneath -- combining coils, cropping,
+bringing a result off its device -- are {mod}`pulserver.mrd`'s.
 
 ```{eval-rst}
 .. autosummary::
    :toctree: ../generated/recon
 
-   coil_combine
-   center_crop
    image_result
-   as_numpy
    run_pyhysco
 ```
 

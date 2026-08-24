@@ -3067,7 +3067,7 @@ class NonCartesian2D(MRIPhysics):
         single channel.
     density
         Density-compensation weights, or a name MRI-NUFFT recognises. See
-        :func:`pulserver.recon.preprocessing.pipe_menon_dcf`.
+        :func:`pulserver.mrd.pipe_menon_dcf`.
     backend
         MRI-NUFFT backend. ``"auto"`` picks FINUFFT on CPU and Pulserver's
         Torch-native CUFINUFFT adapter on a CUDA host.
@@ -3118,6 +3118,7 @@ class NonCartesian2D(MRIPhysics):
        import numpy as np
        import torch
        import pulserver.recon as recon
+       import pulserver.mrd as mrd
        from _figures import images, phantom
 
        truth, coil_maps = phantom(64, coils=4)
@@ -3130,7 +3131,7 @@ class NonCartesian2D(MRIPhysics):
        physics = recon.NonCartesian2D(trajectory, (64, 64), coil_maps=coil_maps)
        measured = physics.A(truth)
        weights = torch.as_tensor(
-           np.asarray(recon.pipe_menon_dcf(trajectory, (64, 64))), dtype=torch.complex64
+           np.asarray(mrd.pipe_menon_dcf(trajectory, (64, 64))), dtype=torch.complex64
        )
        images(
            [

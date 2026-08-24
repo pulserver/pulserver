@@ -105,7 +105,7 @@ def run_cli(
 
     Examples
     --------
-    >>> from pulserver import UIParam, run_cli
+    >>> from pulserver.design import UIParam, run_cli
     >>> _ARG_MAP = [
     ...     ("--te-ms", UIParam.TE, float, "Echo time [ms]"),
     ...     ("--inversion-mode", UIParam.user_value(1),

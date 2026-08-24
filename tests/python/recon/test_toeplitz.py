@@ -1192,7 +1192,7 @@ def test_the_accelerated_solve_reproduces_the_exact_one(spokes):
     """
     pytest.importorskip("mrinufft")
     pytest.importorskip("finufft")
-    from pulserver.recon import pipe_menon_dcf
+    from pulserver.mrd import pipe_menon_dcf
     from pulserver.recon.optim import pics
 
     size, coils = 32, 4

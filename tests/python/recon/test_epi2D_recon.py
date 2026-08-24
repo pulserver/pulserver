@@ -12,7 +12,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from pulserver.recon import correct_lines, estimate_epi_phase
+from pulserver.mrd import correct_lines, estimate_epi_phase
 
 N = 64
 COILS = 3

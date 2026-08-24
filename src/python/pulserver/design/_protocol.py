@@ -13,7 +13,7 @@ and which physical gradient axes the readout and phase encode map onto after
 
 Examples
 --------
->>> from pulserver import TypeinFloatParam, UIParam, params
+>>> from pulserver.design import TypeinFloatParam, UIParam, params
 >>> protocol = {UIParam.TR: TypeinFloatParam(value=500.0, unit="ms")}
 >>> params.param_float(protocol, UIParam.TR)
 500.0
@@ -28,16 +28,15 @@ Use it inside a plugin's two protocol-reading methods::
 
 See Also
 --------
-pulserver.protocol_to_dict : produce the serialized form these read.
-pulserver.set_protocol_value : write a value back, dropdowns included.
+pulserver.design.protocol_to_dict : produce the serialized form these read.
+pulserver.design.params.set_protocol_value : write a value back, dropdowns included.
 """
 
 from __future__ import annotations
 
 import inspect
 
-from pulserver import UIParam
-
+from ._params import UIParam
 from ._params import set_protocol_value as _set_protocol_value
 
 
@@ -58,8 +57,8 @@ def param_float(protocol: dict, key: UIParam) -> float:
 
     Examples
     --------
-    >>> from pulserver import UIParam
-    >>> from pulserver import params
+    >>> from pulserver.design import UIParam
+    >>> from pulserver.design import params
     >>> from types import SimpleNamespace
     >>> protocol = {str(UIParam.TE): SimpleNamespace(value=5.0)}
     >>> params.param_float(protocol, UIParam.TE)
@@ -85,8 +84,8 @@ def param_int(protocol: dict, key: UIParam) -> int:
 
     Examples
     --------
-    >>> from pulserver import UIParam
-    >>> from pulserver import params
+    >>> from pulserver.design import UIParam
+    >>> from pulserver.design import params
     >>> from types import SimpleNamespace
     >>> protocol = {str(UIParam.NX): SimpleNamespace(value=128)}
     >>> params.param_int(protocol, UIParam.NX)
@@ -114,8 +113,8 @@ def param_float_optional(protocol: dict, key: UIParam | str, default: float) -> 
 
     Examples
     --------
-    >>> from pulserver import UIParam
-    >>> from pulserver import params
+    >>> from pulserver.design import UIParam
+    >>> from pulserver.design import params
     >>> params.param_float_optional({}, UIParam.TE, 3.0)
     3.0
     """
@@ -144,8 +143,8 @@ def param_int_optional(protocol: dict, key: UIParam | str, default: int) -> int:
 
     Examples
     --------
-    >>> from pulserver import UIParam
-    >>> from pulserver import params
+    >>> from pulserver.design import UIParam
+    >>> from pulserver.design import params
     >>> params.param_int_optional({}, UIParam.NX, 64)
     64
     """
@@ -174,8 +173,8 @@ def param_bool_optional(protocol: dict, key: UIParam | str, default: bool) -> bo
 
     Examples
     --------
-    >>> from pulserver import UIParam
-    >>> from pulserver import params
+    >>> from pulserver.design import UIParam
+    >>> from pulserver.design import params
     >>> params.param_bool_optional({}, UIParam.SWAP_PHASE_FREQ, False)
     False
     """
@@ -204,7 +203,7 @@ def user_float(protocol: dict, slot: int, default: float) -> float:
 
     Examples
     --------
-    >>> from pulserver import params
+    >>> from pulserver.design import params
     >>> params.user_float({}, 0, 1.5)
     1.5
     """
@@ -230,8 +229,8 @@ def phase_fov_mm_from_protocol(protocol: dict) -> float:
 
     Examples
     --------
-    >>> from pulserver import UIParam
-    >>> from pulserver import params
+    >>> from pulserver.design import UIParam
+    >>> from pulserver.design import params
     >>> from types import SimpleNamespace
     >>> protocol = {str(UIParam.FOV): SimpleNamespace(value=240.0)}
     >>> params.phase_fov_mm_from_protocol(protocol)
@@ -263,7 +262,7 @@ def acs_lines_from_protocol(protocol: dict, ny_pe: int, slot: int) -> int:
 
     Examples
     --------
-    >>> from pulserver import params
+    >>> from pulserver.design import params
     >>> params.acs_lines_from_protocol({}, 128, 0)
     0
     """
@@ -291,7 +290,7 @@ def resolve_readout_phase_axes(protocol: dict) -> tuple[str, str]:
 
     Examples
     --------
-    >>> from pulserver import params
+    >>> from pulserver.design import params
     >>> params.resolve_readout_phase_axes({})
     ('x', 'y')
     """
@@ -321,8 +320,8 @@ def set_protocol_value(protocol: dict, key: UIParam | str, value) -> None:
 
     Examples
     --------
-    >>> from pulserver import UIParam
-    >>> from pulserver import params
+    >>> from pulserver.design import UIParam
+    >>> from pulserver.design import params
     >>> protocol = {str(UIParam.TE): {"value": 5.0, "type": "float"}}
     >>> params.set_protocol_value(protocol, UIParam.TE, 7.0)
     >>> protocol[str(UIParam.TE)]["value"]
@@ -442,7 +441,7 @@ def main_kwargs(main, system, protocol: dict, **overrides) -> dict:
     Examples
     --------
     >>> import pulserver.pypulseq as pp
-    >>> from pulserver import TypeinFloatParam, UIParam, main_kwargs, protocol_to_dict
+    >>> from pulserver.design import TypeinFloatParam, UIParam, main_kwargs, protocol_to_dict
     >>> def main(*, system=None, te=8e-3, n_acs=24): ...
     >>> protocol = protocol_to_dict({UIParam.TE: TypeinFloatParam(value=5.0, unit="ms")})
     >>> kwargs = main_kwargs(main, pp.Opts(), protocol, n_acs=8)

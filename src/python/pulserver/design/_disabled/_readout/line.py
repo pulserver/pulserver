@@ -122,7 +122,7 @@ from .._system import (
     quantize_readout_timing,
     round_to_raster,
 )
-from ..._core._module import _block_payload, _locate_payload
+from ..._module import _block_payload, _locate_payload
 from ._base import Readout, normalize_rotation, normalize_slice_rephasing, rescale_trap
 
 READOUT_GRAD_MARGIN = 0.95  # headroom below max_grad for the readout plateau

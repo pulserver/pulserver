@@ -11,15 +11,10 @@ from typing import Any
 import ismrmrd
 import numpy as np
 
-from ..plugin import (
-    AcquisitionBucket,
-    AcquisitionBucketStats,
-    ReconPlugin,
-    ReconContext,
-    ReconResult,
-)
-from ..postprocessing import as_numpy
-from .metadata import acquisition_label, has_acquisition_flag
+from ...mrd._acquisitions import AcquisitionBucket, AcquisitionBucketStats
+from ..plugin import ReconPlugin, ReconContext, ReconResult
+from ...mrd._images import as_numpy
+from ...mrd._metadata import acquisition_label, has_acquisition_flag
 from .mrd2dicom import MrdDicomBuilder
 
 

@@ -84,8 +84,8 @@ def noncartesian_recon(
     from .execution import _resolve_device
     from .optim import pics
     from .physics import NonCartesian2D, NonCartesian3D
-    from .postprocessing import as_numpy
-    from .preprocessing import pipe_menon_dcf
+    from ..mrd._images import as_numpy
+    from ..mrd._arrays import pipe_menon_dcf
 
     if mode not in ("auto", "direct", "pics"):
         raise ValueError(f"mode must be auto, direct or pics, got {mode!r}")

@@ -226,7 +226,7 @@ def measure(family: str, index: int) -> dict:
     import time
 
     import pulserver.pypulseq as pp
-    from pulserver import set_protocol_value
+    from pulserver.design._params import set_protocol_value
     from pulserver._ext.pulseg import _check_safety, _find_tr, _PulseqCollection
 
     system = pp.Opts()

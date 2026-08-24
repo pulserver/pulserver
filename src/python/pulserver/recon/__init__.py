@@ -17,7 +17,7 @@ how to import from it.
 Names resolve on first use, so importing this module needs neither an MRD
 server environment nor any optional numerical backend; only the names actually
 touched pull their dependencies in. The Gadgetron/MRD transport machinery
-stays private under :mod:`pulserver.recon._mrd`.
+stays private under :mod:`pulserver.recon._server`.
 """
 
 from __future__ import annotations
@@ -29,10 +29,6 @@ from typing import TYPE_CHECKING, Any
 #: is the only place the file layout is written down.
 _MEMBERS = {
     "ADMM": "optim.admm",
-    "AcquisitionBucket": "plugin",
-    "AcquisitionBucketStats": "plugin",
-    "AcquisitionFlag": "plugin",
-    "AdcRole": "simulation",
     "AverageDenoiser": "denoisers",
     "CGInfo": "optim.cg",
     "Cartesian2D": "physics",
@@ -42,16 +38,13 @@ _MEMBERS = {
     "ConjugateGradient": "optim.cg",
     "ContextAgnosticDenoiser": "models",
     "CudaStreaming": "execution",
-    "EncodingSpace": "plugin",
     "EpiPhaseCorrection": "gadgets",
-    "EventType": "simulation",
     "ExamCache": "plugin",
     "FISTA": "optim.fista",
     "Gadget": "gadgets",
     "GradientCoefficients": "postprocessing",
     "GradientDataConsistency": "learned",
     "Gradunwarp": "postprocessing",
-    "Homodyne": "preprocessing",
     "IRGNM": "optim.irgnm",
     "IXI": "datasets",
     "IXITiny": "datasets",
@@ -71,7 +64,6 @@ _MEMBERS = {
     "OptimResult": "optim.state",
     "OptimState": "optim.state",
     "PDHG": "optim.pdhg",
-    "POCS": "preprocessing",
     "PhasePoleCorrection": "calibration",
     "PolynomialPreconditioner": "optim._algorithms",
     "Positive": "denoisers",
@@ -81,19 +73,11 @@ _MEMBERS = {
     "ReconData": "plugin",
     "ReconPlugin": "plugin",
     "ReconResult": "plugin",
-    "RfDefinition": "simulation",
-    "RfShape": "simulation",
-    "RfUse": "simulation",
     "RigidMotionEKF": "motion",
     "RigidMotionEstimate": "motion",
     "RigidRegistration": "motion",
     "SMS": "physics",
     "ScaledAdjoint": "learned",
-    "SequenceDescription": "simulation",
-    "SequenceDescriptionCollection": "simulation",
-    "SequenceEvent": "simulation",
-    "SequenceParameters": "simulation",
-    "ShimDefinition": "simulation",
     "StackedPrior": "optim.prior",
     "StatefulReconstructor": "learned",
     "Subspace": "physics",
@@ -110,35 +94,17 @@ _MEMBERS = {
     "WavePSFResult": "calibration",
     "WaveShuffling": "physics",
     "Wavelet": "denoisers",
-    "as_numpy": "postprocessing",
     "available_nufft_backends": "physics",
     "calibration_extent": "calibration",
     "cartesian_recon": "cartesian",
-    "center_crop": "postprocessing",
-    "coil_combine": "postprocessing",
     "coil_maps_from_reference": "calibration",
-    "coil_compress": "preprocessing",
-    "correct_lines": "preprocessing",
-    "decode_sequence_description": "simulation",
-    "decompress_shape": "simulation",
     "default_model_paths": "weights",
-    "diffusion_table": "_mrd.metadata",
-    "epi_ramp_operator": "preprocessing",
-    "estimate_epi_phase": "preprocessing",
-    "fftc": "preprocessing",
-    "fill_partial_echo": "preprocessing",
-    "has_acquisition_flag": "plugin",
-    "ifftc": "preprocessing",
     "image_result": "postprocessing",
     "load_model": "weights",
-    "noise_prewhiten": "preprocessing",
     "noncartesian_recon": "noncartesian",
     "pics": "optim._algorithms",
-    "pipe_menon_dcf": "preprocessing",
-    "remove_readout_oversampling": "preprocessing",
     "run_pyhysco": "postprocessing",
     "save_bundle": "weights",
-    "user_parameter": "_mrd.metadata",
 }
 
 __all__ = sorted(_MEMBERS)
@@ -166,8 +132,6 @@ def __dir__() -> list[str]:
 
 
 if TYPE_CHECKING:
-    from ._mrd.metadata import diffusion_table as diffusion_table
-    from ._mrd.metadata import user_parameter as user_parameter
     from .cartesian import cartesian_recon as cartesian_recon
     from .calibration import NLINV as NLINV
     from .calibration import NLINVPhysics as NLINVPhysics
@@ -226,51 +190,19 @@ if TYPE_CHECKING:
     from .physics import WaveEncoding as WaveEncoding
     from .physics import WaveShuffling as WaveShuffling
     from .physics import available_nufft_backends as available_nufft_backends
-    from .plugin import AcquisitionBucket as AcquisitionBucket
-    from .plugin import AcquisitionBucketStats as AcquisitionBucketStats
-    from .plugin import AcquisitionFlag as AcquisitionFlag
-    from .plugin import EncodingSpace as EncodingSpace
     from .plugin import ExamCache as ExamCache
     from .plugin import ReconBuffer as ReconBuffer
     from .plugin import ReconContext as ReconContext
     from .plugin import ReconData as ReconData
     from .plugin import ReconPlugin as ReconPlugin
     from .plugin import ReconResult as ReconResult
-    from .plugin import has_acquisition_flag as has_acquisition_flag
     from .postprocessing import CoefficientAccessor as CoefficientAccessor
     from .postprocessing import GradientCoefficients as GradientCoefficients
     from .postprocessing import Gradunwarp as Gradunwarp
     from .postprocessing import ImageGeometry as ImageGeometry
-    from .postprocessing import as_numpy as as_numpy
     from .postprocessing import image_result as image_result
     from .noncartesian import noncartesian_recon as noncartesian_recon
-    from .postprocessing import center_crop as center_crop
-    from .postprocessing import coil_combine as coil_combine
     from .postprocessing import run_pyhysco as run_pyhysco
-    from .preprocessing import Homodyne as Homodyne
-    from .preprocessing import POCS as POCS
-    from .preprocessing import coil_compress as coil_compress
-    from .preprocessing import correct_lines as correct_lines
-    from .preprocessing import epi_ramp_operator as epi_ramp_operator
-    from .preprocessing import estimate_epi_phase as estimate_epi_phase
-    from .preprocessing import fftc as fftc
-    from .preprocessing import fill_partial_echo as fill_partial_echo
-    from .preprocessing import ifftc as ifftc
-    from .preprocessing import noise_prewhiten as noise_prewhiten
-    from .preprocessing import pipe_menon_dcf as pipe_menon_dcf
-    from .preprocessing import remove_readout_oversampling as remove_readout_oversampling
-    from .simulation import AdcRole as AdcRole
-    from .simulation import EventType as EventType
-    from .simulation import RfDefinition as RfDefinition
-    from .simulation import RfShape as RfShape
-    from .simulation import RfUse as RfUse
-    from .simulation import SequenceDescription as SequenceDescription
-    from .simulation import SequenceDescriptionCollection as SequenceDescriptionCollection
-    from .simulation import SequenceEvent as SequenceEvent
-    from .simulation import SequenceParameters as SequenceParameters
-    from .simulation import ShimDefinition as ShimDefinition
-    from .simulation import decode_sequence_description as decode_sequence_description
-    from .simulation import decompress_shape as decompress_shape
     from .weights import MODEL_PATH_ENV as MODEL_PATH_ENV
     from .weights import ModelBundle as ModelBundle
     from .weights import ModelStore as ModelStore

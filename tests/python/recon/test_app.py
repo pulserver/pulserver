@@ -8,14 +8,16 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from pulserver import (
-    AcquisitionBucket,
+from pulserver.recon import (
     ExamCache,
-    ReconPlugin,
     ReconContext,
+    ReconPlugin,
     ReconResult,
 )
-from pulserver.recon._mrd.exam import ExamCacheManager, resolve_exam_id
+from pulserver.mrd import (
+    AcquisitionBucket,
+)
+from pulserver.recon._server.exam import ExamCacheManager, resolve_exam_id
 
 
 class SumRecon(ReconPlugin):

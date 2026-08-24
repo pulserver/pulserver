@@ -9,7 +9,7 @@ convenience subclasses for GE UI behavior:
 - `DropdownFloatParam` / `DropdownIntParam`: GE shows type-in plus dropdown
   entries computed from explicit `options` or inferred from `min/max/incr`
 
-    from pulserver._core import (
+    from pulserver.design import (
         DropdownFloatParam,
         DropdownIntParam,
         SequenceType,
@@ -47,7 +47,22 @@ from __future__ import annotations
 
 import sys
 from dataclasses import asdict, dataclass, field
-from enum import IntEnum, StrEnum
+from enum import Enum, IntEnum
+
+if sys.version_info >= (3, 11):
+    from enum import StrEnum
+else:
+
+    class StrEnum(str, Enum):
+        """``enum.StrEnum`` for interpreters that do not carry one.
+
+        Members are strings, compare equal to their value and format as it, so
+        a value written into the bridge protocol reads the same whichever
+        interpreter the scanner runs.
+        """
+
+        __str__ = str.__str__
+        __format__ = str.__format__
 
 
 class TEPreset(IntEnum):
@@ -63,7 +78,7 @@ class TEPreset(IntEnum):
 
     Examples
     --------
-    >>> from pulserver import DropdownFloatParam, TEPreset
+    >>> from pulserver.design import DropdownFloatParam, TEPreset
     >>> te = DropdownFloatParam(value=8.0, min=1.0, max=80.0, unit="ms",
     ...                         options=[TEPreset.MINIMUM, 5.0, 8.0, 15.0])
     >>> te.options[0]
@@ -86,7 +101,7 @@ class TRPreset(IntEnum):
 
     Examples
     --------
-    >>> from pulserver import DropdownFloatParam, TRPreset
+    >>> from pulserver.design import DropdownFloatParam, TRPreset
     >>> tr = DropdownFloatParam(value=250.0, min=5.0, max=5000.0, unit="ms",
     ...                         options=[TRPreset.MINIMUM, 250.0, 500.0])
     >>> tr.options[0]
@@ -106,7 +121,8 @@ class Validate(StrEnum):
 
     Examples
     --------
-    >>> from pulserver import TypeinFloatParam, UIParam, Validate
+    >>> from pulserver.design import TypeinFloatParam, UIParam
+    >>> from pulserver.design._params import Validate
     >>> protocol = {UIParam.TR: TypeinFloatParam(value=500.0, validate=Validate.NONE)}
     >>> protocol[UIParam.TR].validate
     <Validate.NONE: 'none'>
@@ -130,7 +146,8 @@ class InputMode(StrEnum):
 
     Examples
     --------
-    >>> from pulserver import DropdownIntParam, InputMode, TypeinIntParam
+    >>> from pulserver.design import DropdownIntParam, TypeinIntParam
+    >>> from pulserver.design._params import InputMode
     >>> TypeinIntParam(value=1).mode is InputMode.TYPEIN
     True
     >>> DropdownIntParam(value=128, options=[64, 128]).num_entries
@@ -147,7 +164,7 @@ class SequenceType(StrEnum):
 
     Examples
     --------
-    >>> from pulserver import SequenceType, UIParam, make_enum_param
+    >>> from pulserver.design import SequenceType, UIParam, make_enum_param
     >>> make_enum_param(UIParam.SEQUENCE_TYPE, SequenceType.GRADIENT_ECHO).value
     'gradient_echo'
     """
@@ -161,7 +178,7 @@ class ImagingMode(StrEnum):
 
     Examples
     --------
-    >>> from pulserver import ImagingMode
+    >>> from pulserver.design import ImagingMode
     >>> str(ImagingMode.THREE_D)
     '3d'
     """
@@ -179,7 +196,7 @@ class PreparationType(StrEnum):
 
     Examples
     --------
-    >>> from pulserver import PreparationType
+    >>> from pulserver.design import PreparationType
     >>> str(PreparationType.T2_PREP)
     't2_prep'
     """
@@ -202,7 +219,7 @@ class TriggerType(StrEnum):
 
     Examples
     --------
-    >>> from pulserver import TriggerType, UIParam, make_enum_param
+    >>> from pulserver.design import TriggerType, UIParam, make_enum_param
     >>> make_enum_param(UIParam.TRIGGER_TYPE, TriggerType.ECG).value
     'physio2'
 
@@ -226,7 +243,8 @@ class ParamKind(StrEnum):
 
     Examples
     --------
-    >>> from pulserver import ParamKind, UIParam, expected_param_kind
+    >>> from pulserver.design import UIParam
+    >>> from pulserver.design._params import ParamKind, expected_param_kind
     >>> expected_param_kind(UIParam.TR) is ParamKind.FLOAT
     True
     """
@@ -252,7 +270,8 @@ class FloatKey(StrEnum):
 
     Examples
     --------
-    >>> from pulserver import FloatKey, UIParam
+    >>> from pulserver.design import UIParam
+    >>> from pulserver.design._params import FloatKey
     >>> UIParam.TR is FloatKey.TR
     True
     """
@@ -306,7 +325,7 @@ class IntKey(StrEnum):
 
     Examples
     --------
-    >>> from pulserver import IntKey, ParamKind, expected_param_kind
+    >>> from pulserver.design._params import IntKey, ParamKind, expected_param_kind
     >>> expected_param_kind(IntKey.NUM_ECHOES) is ParamKind.INT
     True
     """
@@ -331,7 +350,7 @@ class BoolKey(StrEnum):
 
     Examples
     --------
-    >>> from pulserver import BoolKey, ParamKind, expected_param_kind
+    >>> from pulserver.design._params import BoolKey, ParamKind, expected_param_kind
     >>> expected_param_kind(BoolKey.RECORD_PHYSIO) is ParamKind.BOOL
     True
     """
@@ -349,7 +368,7 @@ class EnumKey(StrEnum):
 
     Examples
     --------
-    >>> from pulserver import EnumKey, enum_options
+    >>> from pulserver.design._params import EnumKey, enum_options
     >>> enum_options(EnumKey.IMAGING_MODE)
     ['2d', '3d']
     """
@@ -368,7 +387,7 @@ class UIParam:
 
     Examples
     --------
-    >>> from pulserver import UIParam, TypeinFloatParam
+    >>> from pulserver.design import UIParam, TypeinFloatParam
     >>> protocol = {UIParam.TR: TypeinFloatParam(value=500.0, unit="ms")}
     >>> str(UIParam.TR)
     'TR'
@@ -513,7 +532,7 @@ class FloatParam:
 
     Examples
     --------
-    >>> from pulserver import DropdownFloatParam
+    >>> from pulserver.design import DropdownFloatParam
     >>> te = DropdownFloatParam(value=12.0, min=5.0, max=20.0, incr=5.0)
     >>> te.options
     [5.0, 10.0, 15.0, 20.0]
@@ -596,7 +615,7 @@ class TypeinFloatParam(FloatParam):
 
     Examples
     --------
-    >>> from pulserver import TypeinFloatParam
+    >>> from pulserver.design import TypeinFloatParam
     >>> TypeinFloatParam(value=500.0, unit="ms").num_entries
     1
     """
@@ -615,7 +634,7 @@ class DropdownFloatParam(FloatParam):
 
     Examples
     --------
-    >>> from pulserver import DropdownFloatParam
+    >>> from pulserver.design import DropdownFloatParam
     >>> te = DropdownFloatParam(value=8.0, min=2.0, max=80.0, unit="ms",
     ...                         options=[4.0, 8.0, 16.0])
     >>> te.num_entries
@@ -639,7 +658,7 @@ class IntParam:
 
     Examples
     --------
-    >>> from pulserver import DropdownIntParam
+    >>> from pulserver.design import DropdownIntParam
     >>> nx = DropdownIntParam(value=128, min=64, max=256, incr=64)
     >>> nx.options
     [64, 128, 192, 256]
@@ -709,7 +728,7 @@ class TypeinIntParam(IntParam):
 
     Examples
     --------
-    >>> from pulserver import TypeinIntParam
+    >>> from pulserver.design import TypeinIntParam
     >>> etl = TypeinIntParam(value=16, min=1, max=64)
     >>> etl.num_entries
     1
@@ -725,7 +744,7 @@ class DropdownIntParam(IntParam):
 
     Examples
     --------
-    >>> from pulserver import DropdownIntParam
+    >>> from pulserver.design import DropdownIntParam
     >>> matrix = DropdownIntParam(value=128, min=32, max=512,
     ...                           options=[64, 128, 256])
     >>> matrix.num_entries
@@ -749,7 +768,7 @@ class BoolParam:
 
     Examples
     --------
-    >>> from pulserver import BoolParam
+    >>> from pulserver.design import BoolParam
     >>> BoolParam(value=True).value
     True
     """
@@ -778,7 +797,7 @@ class StringListParam:
 
     Examples
     --------
-    >>> from pulserver import StringListParam
+    >>> from pulserver.design import StringListParam
     >>> trigger = StringListParam(options=["none", "physio1", "physio2"], value="physio2")
     >>> trigger.index
     2
@@ -825,7 +844,7 @@ class Description:
 
     Examples
     --------
-    >>> from pulserver import Description
+    >>> from pulserver.design import Description
     >>> header = Description(text="Diffusion preparation")
     >>> header.type
     'description'
@@ -938,7 +957,8 @@ def expected_param_kind(key: UIParam | str) -> ParamKind | None:
 
     Examples
     --------
-    >>> from pulserver import ParamKind, UIParam, expected_param_kind
+    >>> from pulserver.design import UIParam
+    >>> from pulserver.design._params import ParamKind, expected_param_kind
     >>> expected_param_kind(UIParam.TR)
     <ParamKind.FLOAT: 'float'>
     >>> expected_param_kind("not_a_key") is None
@@ -983,8 +1003,8 @@ def validate_protocol_entry(key: ProtocolKey, value: ProtocolValue) -> None:
 
     Examples
     --------
-    >>> from pulserver import TypeinFloatParam, TypeinIntParam, UIParam
-    >>> from pulserver import validate_protocol_entry
+    >>> from pulserver.design import TypeinFloatParam, TypeinIntParam, UIParam
+    >>> from pulserver.design._params import validate_protocol_entry
     >>> validate_protocol_entry(UIParam.TR, TypeinFloatParam(value=500.0, unit="ms"))
     >>> validate_protocol_entry(UIParam.TR, TypeinIntParam(value=500))
     Traceback (most recent call last):
@@ -1025,7 +1045,8 @@ def validate_protocol(protocol: Protocol) -> None:
 
     Examples
     --------
-    >>> from pulserver import TypeinFloatParam, UIParam, validate_protocol
+    >>> from pulserver.design import TypeinFloatParam, UIParam
+    >>> from pulserver.design._params import validate_protocol
     >>> validate_protocol({UIParam.TR: TypeinFloatParam(value=500.0, unit="ms")})
 
     See Also
@@ -1041,7 +1062,8 @@ def enum_options(key: UIParam | str) -> list[str]:
 
     Examples
     --------
-    >>> from pulserver import UIParam, enum_options
+    >>> from pulserver.design import UIParam
+    >>> from pulserver.design._params import enum_options
     >>> enum_options(UIParam.IMAGING_MODE)
     ['2d', '3d']
     """
@@ -1053,7 +1075,7 @@ def make_enum_param(key: UIParam | str, value: StrEnum | str) -> StringListParam
 
     Examples
     --------
-    >>> from pulserver import TriggerType, UIParam, make_enum_param
+    >>> from pulserver.design import TriggerType, UIParam, make_enum_param
     >>> param = make_enum_param(UIParam.TRIGGER_TYPE, TriggerType.ECG)
     >>> param.value
     'physio2'
@@ -1085,7 +1107,8 @@ def param_to_dict(p: ProtocolValue) -> dict:
 
     Examples
     --------
-    >>> from pulserver import TypeinFloatParam, param_to_dict
+    >>> from pulserver.design import TypeinFloatParam
+    >>> from pulserver.design._params import param_to_dict
     >>> entry = param_to_dict(TypeinFloatParam(value=500.0, unit="ms"))
     >>> entry["type"], entry["value"], entry["unit"]
     ('float', 500.0, 'ms')
@@ -1117,7 +1140,8 @@ def dict_to_param(d: dict) -> ProtocolValue:
 
     Examples
     --------
-    >>> from pulserver import TypeinFloatParam, dict_to_param, param_to_dict
+    >>> from pulserver.design import TypeinFloatParam
+    >>> from pulserver.design._params import dict_to_param, param_to_dict
     >>> original = TypeinFloatParam(value=500.0, unit="ms")
     >>> dict_to_param(param_to_dict(original)) == original
     True
@@ -1180,7 +1204,7 @@ def protocol_to_dict(protocol: Protocol) -> dict[str, dict]:
 
     Examples
     --------
-    >>> from pulserver import TypeinFloatParam, UIParam, protocol_to_dict
+    >>> from pulserver.design import TypeinFloatParam, UIParam, protocol_to_dict
     >>> serialized = protocol_to_dict({UIParam.TR: TypeinFloatParam(value=500.0, unit="ms")})
     >>> sorted(serialized)
     ['TR']
@@ -1210,8 +1234,8 @@ def dict_to_protocol(d: dict[str, dict]) -> Protocol:
 
     Examples
     --------
-    >>> from pulserver import TypeinFloatParam, UIParam
-    >>> from pulserver import dict_to_protocol, protocol_to_dict
+    >>> from pulserver.design import TypeinFloatParam, UIParam
+    >>> from pulserver.design import dict_to_protocol, protocol_to_dict
     >>> original = {UIParam.TR: TypeinFloatParam(value=500.0, unit="ms")}
     >>> dict_to_protocol(protocol_to_dict(original))["TR"].value
     500.0
@@ -1249,8 +1273,9 @@ def set_protocol_value(protocol: dict, key: UIParam | str, value) -> None:
 
     Examples
     --------
-    >>> from pulserver import TriggerType, UIParam
-    >>> from pulserver import make_enum_param, protocol_to_dict, set_protocol_value
+    >>> from pulserver.design import TriggerType, UIParam
+    >>> from pulserver.design import make_enum_param, protocol_to_dict
+    >>> from pulserver.design._params import set_protocol_value
     >>> serialized = protocol_to_dict(
     ...     {UIParam.TRIGGER_TYPE: make_enum_param(UIParam.TRIGGER_TYPE, TriggerType.NONE)}
     ... )

@@ -11,7 +11,7 @@ import numpy as np
 import pytest
 
 import pulserver.pypulseq as pp
-from pulserver import UIParam, dict_to_protocol, params, protocol_to_dict
+from pulserver.design import UIParam, dict_to_protocol, params, protocol_to_dict
 from pulserver.app import gre2D_sequence
 
 N_X = 32

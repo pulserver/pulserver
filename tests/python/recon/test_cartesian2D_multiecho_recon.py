@@ -13,7 +13,7 @@ import ismrmrd
 import numpy as np
 import pytest
 
-from pulserver import ReconContext
+from pulserver.recon import ReconContext
 from pulserver.app import cartesian2D_recon
 
 N = 32
@@ -72,7 +72,7 @@ def header():
 
 
 def bucket(kspace):
-    from pulserver.recon._mrd.application import _make_bucket
+    from pulserver.recon._server.application import _make_bucket
 
     stream = []
     total = N * N_ECHOES

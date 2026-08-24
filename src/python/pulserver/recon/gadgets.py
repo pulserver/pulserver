@@ -34,8 +34,8 @@ from typing import Any
 import numpy as np
 
 from ._buffers import EncodingSpace
-from ._mrd.metadata import has_acquisition_flag
-from .preprocessing import (
+from ..mrd._metadata import has_acquisition_flag
+from ..mrd._arrays import (
     coil_compress,
     correct_lines,
     epi_ramp_operator,

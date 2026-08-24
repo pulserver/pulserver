@@ -590,7 +590,7 @@ def make_fse_readout(system, fov, matrix, echo_train_length, refocusing, **kwarg
     Combine a variable flip schedule with a centre-out echo ordering and
     append one ordered train::
 
-        from pulserver import ScanLoop
+        from pulserver.design import ScanLoop
 
         mask = np.ones(128, dtype=bool)
         sampling = ScanLoop.from_mask(mask, train_length=16, ordering="radial")

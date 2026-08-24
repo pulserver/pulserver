@@ -8,14 +8,12 @@ version = "0.1.0"
 description = "Pulseq MRI sequence runtime — contracts, C library, and reconstruction server"
 readme = "README.md"
 license = { file = "LICENSE.txt" }
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 authors = [{ name = "pulserver" }]
 
-# One installation covers both sides of the scanner. Sequence design and
-# reconstruction used to be separate extras, and a scanner that runs both --
-# every scanner Pulserver targets -- then carried two Python environments and
-# two copies of Torch. Design is moving onto Torch as well, so the split cost
-# memory to express a difference that no longer exists.
+# One installation covers both sides of the scanner. Every scanner Pulserver
+# targets runs sequence design and reconstruction alike, and both are built on
+# Torch, so there is one dependency set and one environment to install.
 dependencies = [
   "numpy>=2.0",
   "scipy",
@@ -52,9 +50,9 @@ dev = [
   "coverage>=7.15.4",
   "ruff>=0.16.3",
   "pre-commit>=4.6.2",
-  "sphinx>=9.0.4",
-  "myst-parser>=5.1.0",
-  "sphinx-book-theme>=1.4.0",
+  "sphinx>=8.1.3",
+  "myst-parser>=4.0.1",
+  "sphinx-book-theme>=1.1.4",
   # The C and C++ reference is the headers' own comments, pulled in through
   # Doxygen's XML. Doxygen itself is a system package, so the pages say so
   # and the rest of the documentation builds without it.
@@ -166,17 +164,17 @@ convention = "numpy"
 "src/python/pulserver/design/_disabled/_readout/_surgery.py" = ["ARG001"]
 "src/python/pulserver/design/_disabled/_readout/fse.py" = ["ARG002"]
 "src/python/pulserver/io.py" = ["S324"]
-"src/python/pulserver/recon/_mrd/connection.py" = ["A003", "PTH", "S108", "S110"]
-"src/python/pulserver/recon/_mrd/constants.py" = ["A001"]
-"src/python/pulserver/recon/_mrd/dicom2mrd.py" = ["S110"]
+"src/python/pulserver/recon/_server/connection.py" = ["A003", "PTH", "S108", "S110"]
+"src/python/pulserver/recon/_server/constants.py" = ["A001"]
+"src/python/pulserver/recon/_server/dicom2mrd.py" = ["S110"]
 "src/python/pulserver/recon/_distortion.py" = ["S603"]
-"src/python/pulserver/recon/_mrd/handlers/savedataonly.py" = ["ARG001"]
-"src/python/pulserver/recon/_mrd/main.py" = ["PTH", "S104", "S108"]
-"src/python/pulserver/recon/_mrd/readers.py" = ["A002", "ARG001", "PTH123"]
-"src/python/pulserver/recon/_mrd/replay.py" = ["PTH", "S110"]
-"src/python/pulserver/recon/_mrd/rtp_connection.py" = ["S104"]
-"src/python/pulserver/recon/_mrd/server.py" = ["ARG001", "ARG004", "PTH", "S104", "S110"]
-"src/python/pulserver/recon/_mrd/writers.py" = ["A002"]
+"src/python/pulserver/recon/_server/handlers/savedataonly.py" = ["ARG001"]
+"src/python/pulserver/recon/_server/main.py" = ["PTH", "S104", "S108"]
+"src/python/pulserver/recon/_server/readers.py" = ["A002", "ARG001", "PTH123"]
+"src/python/pulserver/recon/_server/replay.py" = ["PTH", "S110"]
+"src/python/pulserver/recon/_server/rtp_connection.py" = ["S104"]
+"src/python/pulserver/recon/_server/server.py" = ["ARG001", "ARG004", "PTH", "S104", "S110"]
+"src/python/pulserver/recon/_server/writers.py" = ["A002"]
 # The native lanes run the suites they just built: the executables are the
 # build scripts' own output, and the toolchain names they resolve on PATH are
 # the point of the lane.

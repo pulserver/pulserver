@@ -86,7 +86,7 @@ from .._system import (
     quantize_readout_timing,
     round_to_raster,
 )
-from ..._core._module import _CHANNEL_KEY
+from ..._module import _CHANNEL_KEY
 from ._base import Readout, adopt_waveform, rescale_trap
 
 RF_REFOCUS_TIME_S = 3.0e-3

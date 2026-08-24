@@ -128,3 +128,73 @@ spoiler and explicit-rotation path are inherited. See
 
    RfModule
 ```
+
+## The scanner protocol
+
+A sequence reaches a scanner as a *plugin*: a class the console can ask for
+its default protocol, hand a filled-in one back, and run. The protocol itself
+is a mapping from {class}`UIParam` to typed parameters — each carrying the
+value, its unit, and what the user interface may do with it — so the console
+can build its own controls without knowing the sequence.
+
+```{eval-rst}
+.. autosummary::
+   :toctree: ../generated/design
+   :template: autosummary/class.rst
+
+   SequencePlugin
+   SequenceModule
+```
+
+The parameter kinds. A *typein* accepts any value in range; a *dropdown*
+offers a fixed set; an *off* variant adds a disabled state; the presets carry
+the echo and repetition times a protocol may offer.
+
+```{eval-rst}
+.. autosummary::
+   :toctree: ../generated/design
+   :template: autosummary/class.rst
+
+   UIParam
+   TypeinFloatParam
+   DropdownFloatParam
+   TypeinIntParam
+   DropdownIntParam
+   OffFloatParam
+   OffIntParam
+   BoolParam
+   StringListParam
+   Description
+   TEPreset
+   TRPreset
+```
+
+The option enumerations a dropdown draws on.
+
+```{eval-rst}
+.. autosummary::
+   :toctree: ../generated/design
+   :template: autosummary/class.rst
+
+   SequenceType
+   ImagingMode
+   PreparationType
+   TriggerType
+```
+
+Reading a protocol, writing one, and running a plugin from a shell.
+{mod}`~pulserver.design.params` holds the readers a sequence uses to pull
+typed values out of the protocol it was handed.
+
+```{eval-rst}
+.. autosummary::
+   :toctree: ../generated/design
+
+   params
+   make_enum_param
+   protocol_to_dict
+   dict_to_protocol
+   main_kwargs
+   run_cli
+   write_sequence
+```

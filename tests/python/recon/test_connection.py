@@ -7,8 +7,8 @@ from unittest.mock import MagicMock
 
 import ismrmrd
 import pytest
-from pulserver.recon._mrd import constants
-from pulserver.recon._mrd.connection import (
+from pulserver.recon._server import constants
+from pulserver.recon._server.connection import (
     MID_TO_TYPE,
     NAME_TO_TYPE,
     Connection,

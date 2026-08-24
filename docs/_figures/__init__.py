@@ -733,7 +733,8 @@ def recon_example(
     """
     import ismrmrd
 
-    from pulserver import AcquisitionBucket, ReconContext
+    from pulserver.recon import ReconContext
+    from pulserver.mrd import AcquisitionBucket
 
     truth, coil_maps = phantom(size, coils)
     object_ = np.asarray(_detached(truth))[0]
@@ -921,7 +922,8 @@ def noncartesian_example(
         ``measured`` holds the spokes themselves, ``(spokes, samples, 2)``,
         for :func:`sampling` to draw.
     """
-    from pulserver import AcquisitionBucket, ReconContext
+    from pulserver.recon import ReconContext
+    from pulserver.mrd import AcquisitionBucket
 
     spokes = int(np.ceil(np.pi / 2 * size)) if spokes is None else int(spokes)
     truth, coil_maps = phantom(size, coils)
@@ -1002,7 +1004,8 @@ def epi_example(
     """
     import ismrmrd
 
-    from pulserver import AcquisitionBucket, ReconContext
+    from pulserver.recon import ReconContext
+    from pulserver.mrd import AcquisitionBucket
 
     plane = partitions == 1
     truth, coil_maps = phantom(size, coils) if plane else volume(size, coils, partitions)
@@ -1134,7 +1137,8 @@ def slab_example(
     """
     import ismrmrd
 
-    from pulserver import AcquisitionBucket, ReconContext
+    from pulserver.recon import ReconContext
+    from pulserver.mrd import AcquisitionBucket
 
     truth, coil_maps = volume(size, coils, partitions)
     object_ = np.asarray(_detached(truth))[0]
@@ -1253,7 +1257,8 @@ def volume_example(
         ``truth`` and ``image`` are the volume's central partition;
         ``measured`` is the koosh ball.
     """
-    from pulserver import AcquisitionBucket, ReconContext
+    from pulserver.recon import ReconContext
+    from pulserver.mrd import AcquisitionBucket
 
     if spokes is None:
         spokes = int(np.ceil(np.pi * size**2 / 2))
@@ -1343,7 +1348,8 @@ def stack_example(
         ``truth`` and ``image`` are the volume's central partition;
         ``measured`` is the in-plane trajectory.
     """
-    from pulserver import AcquisitionBucket, ReconContext
+    from pulserver.recon import ReconContext
+    from pulserver.mrd import AcquisitionBucket
 
     spokes = int(np.ceil(np.pi / 2 * size)) if spokes is None else int(spokes)
     truth, coil_maps = volume(size, coils, partitions)

@@ -17,7 +17,7 @@ from typing import Any, TypeVar
 
 import numpy as np
 
-from ..._core._module import Block, SequenceModule
+from ..._module import Block, SequenceModule
 from .._rotation import normalize_rotation
 
 

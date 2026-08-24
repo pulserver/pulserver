@@ -36,7 +36,7 @@ import pypulseq as pp
 
 from .._system import DEFAULT_BANDWIDTH_HZ_PX, apply_system_derates, ceil_to_raster, copy_event, scale_grad
 from .._traj2grad import traj2grad
-from ..._core._module import _CHANNEL_KEY
+from ..._module import _CHANNEL_KEY
 from ._base import Readout, normalize_rotation
 
 _AXES = ("x", "y", "z")

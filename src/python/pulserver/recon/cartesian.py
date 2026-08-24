@@ -15,8 +15,8 @@ from typing import Any
 
 import numpy as np
 
-from .postprocessing import as_numpy, coil_combine
-from .preprocessing import fftc, fill_partial_echo, ifftc
+from ..mrd._images import as_numpy, coil_combine
+from ..mrd._arrays import fftc, fill_partial_echo, ifftc
 
 
 def cartesian_recon(
@@ -68,7 +68,7 @@ def cartesian_recon(
         Partial-echo POCS iterations.
     partial_fourier
         Which partial-Fourier estimator fills a truncated readout, ``"pocs"``
-        or ``"homodyne"``; see :func:`~pulserver.recon.fill_partial_echo`.
+        or ``"homodyne"``; see :func:`~pulserver.mrd.fill_partial_echo`.
     device
         Torch device the reconstruction runs on. ``"auto"`` is the host's
         GPU when it has one, and the CPU when it does not.
@@ -87,10 +87,11 @@ def cartesian_recon(
     --------
     >>> import numpy as np
     >>> import pulserver.recon as recon
+    >>> import pulserver.mrd as mrd
     >>> image = np.zeros((16, 16), dtype=complex)
     >>> image[6:10, 6:10] = 1.0
     >>> mask = np.ones((16, 16))
-    >>> kspace = recon.fftc(image)[None] * mask
+    >>> kspace = mrd.fftc(image)[None] * mask
 
     A fully sampled buffer takes the coil-wise adjoint, and which of the three
     reconstructions runs is read off the mask rather than declared:

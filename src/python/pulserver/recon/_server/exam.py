@@ -12,7 +12,7 @@ from threading import RLock
 from typing import Any
 
 from ..plugin import ExamCache
-from .metadata import user_parameter
+from ...mrd._metadata import user_parameter
 
 
 @dataclass

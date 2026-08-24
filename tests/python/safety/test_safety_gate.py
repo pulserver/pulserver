@@ -12,7 +12,7 @@ from pulserver._ext.pulseg import (
     _check_safety,
     _PulseqCollection,
 )
-from pulserver.io import bands_to_hz_per_m
+from pulserver.pypulseq import bands_to_hz_per_m
 from pulserver.pypulseq import Opts
 
 from .conftest import CORPUS, build_collection

@@ -296,7 +296,7 @@ class Server:
 
         Called when all recon slots are busy.  The incoming stream is still
         fully consumed so the client (VRE) sees a clean connection lifecycle.
-        A :class:`~pulserver.recon._mrd.replay.ReplayWorker` will pick up the sidecar
+        A :class:`~pulserver.recon._server.replay.ReplayWorker` will pick up the sidecar
         and replay the session through *config* when a slot becomes available.
         """
         from .replay import enqueue

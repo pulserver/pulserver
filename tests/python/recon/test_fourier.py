@@ -7,8 +7,8 @@ import pytest
 
 torch = pytest.importorskip("torch")
 
-from pulserver.recon import fftc, ifftc
-from pulserver.recon._fourier import centered_fftn, resize_centered_axis
+from pulserver.mrd import fftc, ifftc
+from pulserver.mrd._fourier import centered_fftn, resize_centered_axis
 
 
 def test_centered_fft_matches_the_numpy_reference_on_both_backends():

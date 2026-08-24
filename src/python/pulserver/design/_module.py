@@ -342,7 +342,7 @@ class SequenceModule(ABC):
 #: Built on first use, because :mod:`pulserver.pypulseq` needs the optional
 #: ``pypulseq`` dependency and this module must import without it --
 #: ``pulserver.recon`` runs in the scanner's recon environment, which has no
-#: PyPulseq, and reaches ``_core`` for the protocol types.
+#: PyPulseq, and reaches the protocol types beside it.
 _RECORDING_SEQUENCE = None
 
 

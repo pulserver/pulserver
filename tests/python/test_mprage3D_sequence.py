@@ -12,7 +12,7 @@ import numpy as np
 import pytest
 
 import pulserver.pypulseq as pp
-from pulserver import UIParam, params
+from pulserver.design import UIParam, params
 from pulserver.app import mprage3D_sequence
 
 N_Y, N_Z = 8, 4

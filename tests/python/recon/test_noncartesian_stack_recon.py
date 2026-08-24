@@ -17,7 +17,7 @@ import pytest
 
 pytest.importorskip("mrinufft")
 
-from pulserver import ReconContext
+from pulserver.recon import ReconContext
 from pulserver.app import noncartesian_stack_recon
 
 N = 32
@@ -137,7 +137,7 @@ def relative_error(image, reference):
 
 
 def reconstruct(kspace, trajectory, **kwargs):
-    from pulserver.recon._mrd.application import _make_bucket
+    from pulserver.recon._server.application import _make_bucket
 
     acquisitions = stream(kspace, trajectory)
     context = ReconContext.offline(header(trajectory.shape[0]))
@@ -180,7 +180,7 @@ def test_the_spoke_index_comes_from_the_label_not_from_arrival_order(
     kspace = sample(phantom, coil_maps, trajectory)
     ordered, _ = reconstruct(kspace, trajectory)
 
-    from pulserver.recon._mrd.application import _make_bucket
+    from pulserver.recon._server.application import _make_bucket
 
     acquisitions = stream(kspace, trajectory)
     last = acquisitions[-1]

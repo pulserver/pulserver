@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import pytest
-from pulserver import SequencePlugin
+from pulserver.design import SequencePlugin
 
 
 class _EmptySequence(SequencePlugin):

@@ -13,7 +13,7 @@ import numpy as np
 import pytest
 
 import pulserver.pypulseq as pp
-from pulserver import SequenceModule
+from pulserver.design import SequenceModule
 
 
 @pytest.fixture

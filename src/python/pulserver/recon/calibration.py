@@ -23,10 +23,10 @@ import torch
 import deepinv
 
 from .execution import _resolve_device
-from ._fourier import fftc as _fftc
-from ._fourier import torch_or_numpy as _torch_or_numpy
-from ._fourier import ifftc as _ifftc
-from ._fourier import resize_centered as _resize_centered
+from ..mrd._fourier import fftc as _fftc
+from ..mrd._fourier import torch_or_numpy as _torch_or_numpy
+from ..mrd._fourier import ifftc as _ifftc
+from ..mrd._fourier import resize_centered as _resize_centered
 from .optim import IRGNM, ConjugateGradient
 from .physics import NonCartesian2D, NonCartesian3D
 from ._phase_poles import PhasePoleCorrection
@@ -459,13 +459,14 @@ class NLINV(torch.nn.Module):
 
        import numpy as np
        import pulserver.recon as recon
+       import pulserver.mrd as mrd
        from _figures import images, phantom
 
        truth, coil_maps = phantom(64, coils=4)
        mask = np.zeros((64, 64), dtype=np.float32)
        mask[::2] = 1.0
        mask[26:38] = 1.0
-       measured = recon.fftc((truth * coil_maps[0]).numpy()) * mask
+       measured = mrd.fftc((truth * coil_maps[0]).numpy()) * mask
 
        estimated = recon.NLINV(spatial_ndim=2, max_iter=10)(measured[None], mask=mask)
        images(
@@ -828,7 +829,7 @@ class NLINV(torch.nn.Module):
                 dtype=trajectory.dtype,
             )
         if selected_density is None:
-            from .preprocessing import pipe_menon_dcf
+            from ..mrd._arrays import pipe_menon_dcf
 
             selected_density = _host_density(
                 pipe_menon_dcf(trajectory.cpu().numpy(), solve_shape)

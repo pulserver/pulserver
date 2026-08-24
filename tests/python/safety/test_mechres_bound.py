@@ -71,7 +71,7 @@ def _lines(collection, index, mode, tr_duration_s):
 
 
 def _structure(name):
-    import pulserver.io as pio
+    import pulserver.pypulseq as pio
 
     sequence = pio.read(CORPUS / name)
     return sequence._structure_for("bound")

@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from pulserver import SequencePlugin
+from pulserver.design import SequencePlugin
 
 PHASE_ENCODE_STEPS = 128
 MILLISECONDS_PER_SECOND = 1000.0

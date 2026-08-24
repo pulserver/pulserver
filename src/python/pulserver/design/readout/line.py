@@ -9,7 +9,7 @@ from typing import Any
 import numpy as np
 
 from ... import pypulseq as pp
-from ..._core._module import SequenceModule
+from .._module import SequenceModule
 from ._common import (
     AXES,
     as_tuple,

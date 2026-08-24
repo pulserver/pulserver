@@ -92,7 +92,7 @@ class ReplayConnection:
     """Connection-like facade that reads from a saved ISMRMRD HDF5 file.
 
     Handlers see the same ``__iter__`` / ``send`` / ``socket.write``
-    interface as a live :class:`~pulserver.recon._mrd.connection.Connection`.
+    interface as a live :class:`~pulserver.recon._server.connection.Connection`.
     Outputs (DICOM images, MRD images) are written to *output_dir*.
 
     Parameters
@@ -221,7 +221,7 @@ class ReplayWorker(threading.Thread):
     Parameters
     ----------
     server : Server
-        The running :class:`~pulserver.recon._mrd.server.Server` instance.  The worker
+        The running :class:`~pulserver.recon._server.server.Server` instance.  The worker
         calls ``server._slots.acquire()`` / ``server._slots.release()``
         and ``server._resolve_app()`` / ``server.output_dir``.
     """

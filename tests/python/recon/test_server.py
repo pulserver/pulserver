@@ -6,8 +6,8 @@ import sys
 import types
 from unittest.mock import patch
 
-from pulserver import ReconPlugin
-from pulserver.recon._mrd.server import Server, _NullApp
+from pulserver.recon import ReconPlugin
+from pulserver.recon._server.server import Server, _NullApp
 
 
 class _TestApp(ReconPlugin):
@@ -58,7 +58,7 @@ def test_null_config_uses_default_app():
 def test_resolve_app_from_handler_dir(tmp_path):
     plugin_file = tmp_path / "custom_recon.py"
     plugin_file.write_text(
-        "from pulserver import ReconPlugin\n"
+        "from pulserver.recon import ReconPlugin\n"
         "class CustomRecon(ReconPlugin):\n"
         "    def recon(self, bucket, context):\n"
         "        return None\n"

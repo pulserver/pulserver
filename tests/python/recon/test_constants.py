@@ -1,6 +1,6 @@
 """Tests for private MRD struct sizes and message identifiers."""
 
-from pulserver.recon._mrd import constants
+from pulserver.recon._server import constants
 
 
 def test_gadget_message_identifier_size():

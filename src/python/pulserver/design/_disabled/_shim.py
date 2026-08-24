@@ -31,7 +31,7 @@ from types import ModuleType
 from typing import Any
 
 import pulserver.pypulseq as pp
-from pulserver._core._params import set_protocol_value
+from pulserver.design._params import set_protocol_value
 
 _PACKAGE = __name__.rpartition(".")[0]
 
@@ -297,7 +297,7 @@ def _factory_doc(name: str, fields: list[tuple[str, object, object, str]], plugi
 This is the REPL callback for ``examples/sequences/{name}.py``.  It accepts
 only the plugin's sequence controls as keyword arguments; it does not accept
 a bridge protocol dictionary.  The returned sequence has not been written.
-Use :func:`pulserver.io.write` when a ``.seq`` file is wanted.
+Use :func:`pulserver.pypulseq.write` when a ``.seq`` file is wanted.
 
 The representative acquisition timeline below uses this callback directly,
 not a hand-built surrogate.  EPI shows both structural and fMRI volumes.

@@ -77,6 +77,11 @@ from ._matlab_parity import make_hexagon_gradient_area as _make_hexagon_gradient
 from ._matlab_parity import verify_file_signature as _verify_file_signature
 from ._rf_pulses import make_2d_selective_pulse as _make_2d_selective_pulse
 from ._rf_pulses import make_sigpy_pulse as _make_sigpy_pulse
+from ._files import bands_to_hz_per_m as _bands_to_hz_per_m
+from ._files import read as _read
+from ._files import read_asc_bands as _read_asc_bands
+from ._files import read_esp_bands as _read_esp_bands
+from ._files import write as _write
 from ._rf_pulses import make_slr_pulse as _make_slr_pulse
 from ._rf_pulses import make_sms_pulse as _make_sms_pulse
 from ._rf_pulses import make_spsp_pulse as _make_spsp_pulse
@@ -219,6 +224,11 @@ make_phase_encoding = _make_phase_encoding
 make_2d_selective_pulse = _make_2d_selective_pulse
 make_sigpy_pulse = _make_sigpy_pulse
 make_slr_pulse = _make_slr_pulse
+read = _read
+write = _write
+read_asc_bands = _read_asc_bands
+read_esp_bands = _read_esp_bands
+bands_to_hz_per_m = _bands_to_hz_per_m
 make_sms_pulse = _make_sms_pulse
 make_spsp_pulse = _make_spsp_pulse
 traj_to_grad = _traj_to_grad
@@ -362,6 +372,18 @@ SYSTEM = frozenset(
     }
 )
 
+#: Reading a sequence from a file and writing one to it, and the gradient
+#: response bands a scanner ships beside its own.
+FILES = frozenset(
+    {
+        "read",
+        "write",
+        "read_asc_bands",
+        "read_esp_bands",
+        "bands_to_hz_per_m",
+    }
+)
+
 OVERRIDES = frozenset(
     {
         *RESULTS,
@@ -369,6 +391,7 @@ OVERRIDES = frozenset(
         *BASE_FACTORIES,
         *SAMPLING,
         *SYSTEM,
+        *FILES,
         "COUNTER_LABELS",
         "ENCODING_COUNTERS",
         "FLAG_LABELS",

@@ -4,17 +4,11 @@ import warnings
 
 import pulserver
 import pytest
-from pulserver import (
-    BoolKey,
+from pulserver.design import (
     BoolParam,
     DropdownFloatParam,
     DropdownIntParam,
-    EnumKey,
-    FloatKey,
     ImagingMode,
-    InputMode,
-    IntKey,
-    ParamKind,
     PreparationType,
     SequenceType,
     StringListParam,
@@ -22,12 +16,20 @@ from pulserver import (
     TypeinFloatParam,
     TypeinIntParam,
     UIParam,
-    Validate,
     dict_to_protocol,
-    enum_options,
-    expected_param_kind,
     make_enum_param,
     protocol_to_dict,
+)
+from pulserver.design._params import (
+    BoolKey,
+    EnumKey,
+    FloatKey,
+    InputMode,
+    IntKey,
+    ParamKind,
+    Validate,
+    enum_options,
+    expected_param_kind,
     validate_protocol_entry,
 )
 
@@ -274,12 +276,14 @@ def test_protocol_validation_rejects_invalid_key_value_pairs():
         protocol_to_dict({UIParam.SEQUENCE_TYPE: BoolParam(value=True)})
 
 
-def test_top_level_package_re_exports_core_api():
-    assert pulserver.SequencePlugin is not None
-    assert pulserver.UIParam.TE == UIParam.TE
-    assert pulserver.TypeinFloatParam is TypeinFloatParam
-    assert not hasattr(pulserver, "FloatParam")
-    assert not hasattr(pulserver, "IntParam")
+def test_the_root_holds_the_namespaces_and_nothing_else():
+    """One name per role at the root; everything else is inside one of them."""
+    assert pulserver.__all__ == ["app", "design", "mrd", "pypulseq", "recon"]
+    assert sorted(pulserver.__dir__()) == pulserver.__all__
+    for name in pulserver.__all__:
+        assert getattr(pulserver, name).__name__ == f"pulserver.{name}"
+    for moved in ("SequencePlugin", "UIParam", "TypeinFloatParam", "ReconPlugin"):
+        assert not hasattr(pulserver, moved), moved
 
 
 def test_typed_key_sets_are_disjoint():
@@ -301,7 +305,7 @@ def test_typed_key_sets_are_disjoint():
 
 def test_main_kwargs_fills_only_what_main_declares():
     """A plugin's signature decides; the protocol only supplies."""
-    from pulserver import main_kwargs
+    from pulserver.design import main_kwargs
 
     def main(*, system=None, te=8e-3, n_x=128, n_acs=24): ...
 
@@ -319,7 +323,7 @@ def test_main_kwargs_fills_only_what_main_declares():
 
 
 def test_main_kwargs_lets_the_plugin_have_the_last_word():
-    from pulserver import main_kwargs
+    from pulserver.design import main_kwargs
 
     def main(*, n_x=128, n_acs=24): ...
 
@@ -328,7 +332,7 @@ def test_main_kwargs_lets_the_plugin_have_the_last_word():
 
 
 def test_main_kwargs_refuses_an_override_main_cannot_take():
-    from pulserver import main_kwargs
+    from pulserver.design import main_kwargs
 
     def main(*, n_x=128): ...
 
@@ -338,7 +342,7 @@ def test_main_kwargs_refuses_an_override_main_cannot_take():
 
 def test_a_timing_preset_asks_for_whatever_the_sequence_can_reach():
     """Both presets are negative, and `None` is what a readout module reads."""
-    from pulserver import TEPreset, TRPreset, main_kwargs
+    from pulserver.design import TEPreset, TRPreset, main_kwargs
 
     def main(*, te=8e-3, tr=250e-3): ...
 
@@ -352,7 +356,7 @@ def test_a_timing_preset_asks_for_whatever_the_sequence_can_reach():
 
 
 def test_a_preset_survives_a_dropdown_round_trip():
-    from pulserver import DropdownFloatParam, TEPreset
+    from pulserver.design import DropdownFloatParam, TEPreset
 
     te = DropdownFloatParam(
         value=8.0, min=1.0, max=80.0, unit="ms", options=[TEPreset.MINIMUM, 5.0, 8.0]
@@ -370,7 +374,7 @@ def test_a_preset_survives_a_dropdown_round_trip():
 def test_the_scanner_form_is_binary_and_unchecked(tmp_path):
     """Everything skipped here the interpreter does at predownload."""
     import pulserver.pypulseq as pp
-    from pulserver import write_sequence
+    from pulserver.design import write_sequence
 
     seq = pp.Sequence()
     seq.add_block(pp.make_trapezoid(channel="x", area=1000, system=pp.Opts()))
@@ -382,7 +386,7 @@ def test_the_scanner_form_is_binary_and_unchecked(tmp_path):
 
 def test_the_offline_form_is_text_and_signed(tmp_path):
     import pulserver.pypulseq as pp
-    from pulserver import write_sequence
+    from pulserver.design import write_sequence
 
     seq = pp.Sequence()
     seq.add_block(pp.make_trapezoid(channel="x", area=1000, system=pp.Opts()))
@@ -399,7 +403,7 @@ def test_the_offline_form_is_text_and_signed(tmp_path):
 def test_the_offline_form_says_when_a_gradient_is_beyond_the_system(tmp_path):
     """The check nothing downstream will run, because nothing downstream is."""
     import pulserver.pypulseq as pp
-    from pulserver import write_sequence
+    from pulserver.design import write_sequence
 
     modest = pp.Opts(max_grad=10, grad_unit="mT/m", max_slew=100, slew_unit="T/m/s")
     seq = pp.Sequence(modest)

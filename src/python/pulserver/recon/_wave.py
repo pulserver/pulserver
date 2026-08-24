@@ -9,9 +9,9 @@ from typing import Any
 
 import torch
 
-from ._fourier import fftc as _fftc
-from ._fourier import ifftc as _ifftc
-from ._fourier import resize_centered_axis as _resize_centered
+from ..mrd._fourier import fftc as _fftc
+from ..mrd._fourier import ifftc as _ifftc
+from ..mrd._fourier import resize_centered_axis as _resize_centered
 
 import deepinv
 

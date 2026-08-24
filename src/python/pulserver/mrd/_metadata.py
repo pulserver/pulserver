@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from ..._labels import MRD_FLAGS, canonical_label
+from .._labels import MRD_FLAGS, canonical_label
 
 __all__ = [
     "MrdMetadata",

@@ -213,14 +213,14 @@ or `isinstance`-check what it was handed.
 
 Reading and writing `.seq` files, and the vendor band tables the mechanical
 resonance check is run against. {meth}`Sequence.write` writes to a path;
-`pulserver.io.write` also returns the payload, which is what a design service
+`pulserver.pypulseq.write` also returns the payload, which is what a design service
 sends over a socket.
 
 ```{eval-rst}
-.. currentmodule:: pulserver.io
+.. currentmodule:: pulserver.pypulseq
 
 .. autosummary::
-   :toctree: ../generated/io
+   :toctree: ../generated/pypulseq
 
    read
    write

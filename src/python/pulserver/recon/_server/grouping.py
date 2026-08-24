@@ -11,7 +11,7 @@ from collections import OrderedDict
 from collections.abc import Iterable, Iterator
 from typing import Any
 
-from .metadata import acquisition_label, has_acquisition_flag
+from ...mrd._metadata import acquisition_label, has_acquisition_flag
 
 __all__ = ["filter_acquisitions", "group_by_labels", "split_on_flag"]
 

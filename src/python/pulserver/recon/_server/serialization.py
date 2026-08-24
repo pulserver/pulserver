@@ -1,7 +1,7 @@
 """Private DICOM serialization for reconstructed MRD images.
 
 The implementation delegates image/header conversion to the established
-:class:`~pulserver.recon._mrd.mrd2dicom.MrdDicomBuilder`; this module only makes a
+:class:`~pulserver.recon._server.mrd2dicom.MrdDicomBuilder`; this module only makes a
 complete Gadgetron-style series operation convenient for handlers.
 """
 

@@ -8,7 +8,7 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import BinaryIO
 
-from pulserver.pypulseq._safety import bands_to_hz_per_m, read_asc_bands, read_esp_bands
+from ._safety import bands_to_hz_per_m, read_asc_bands, read_esp_bands
 
 
 def write(

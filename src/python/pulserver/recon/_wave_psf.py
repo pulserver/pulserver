@@ -10,8 +10,8 @@ from typing import Any
 
 import torch
 
-from ._fourier import fftc as _fftc
-from ._fourier import ifftc as _ifftc
+from ..mrd._fourier import fftc as _fftc
+from ..mrd._fourier import ifftc as _ifftc
 
 from .._accelerators import require
 

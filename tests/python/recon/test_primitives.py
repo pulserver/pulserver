@@ -9,12 +9,12 @@ import pytest
 
 import pulserver.recon.optim as algorithms
 import pulserver.recon.calibration as calibration
-from pulserver.recon._mrd.grouping import (
+from pulserver.recon._server.grouping import (
     filter_acquisitions,
     group_by_labels,
     split_on_flag,
 )
-from pulserver.recon._mrd.metadata import (
+from pulserver.mrd._metadata import (
     MrdMetadata,
     acquisition_labels,
     diffusion_table,

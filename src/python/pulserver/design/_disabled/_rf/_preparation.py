@@ -938,7 +938,7 @@ def make_diffusion_prep(
 
     Sweep directions and b-values from the single design::
 
-        from pulserver import ScanLoop
+        from pulserver.design import ScanLoop
 
         directions = _lowlevel.make_golden_means_3d_tilt(6).positions
         for rotation in ScanLoop(directions, (np.arange(len(directions)),)).to_rotations():

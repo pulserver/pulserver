@@ -15,7 +15,7 @@ import numpy as np
 import pytest
 
 import pulserver.pypulseq as pp
-from pulserver.recon.simulation import (
+from pulserver.mrd import (
     RfDefinition,
     RfShape,
     SequenceDescription,

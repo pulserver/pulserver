@@ -18,7 +18,7 @@ import pytest
 ismrmrd = pytest.importorskip("ismrmrd")
 pytest.importorskip("torch")
 
-from pulserver import ReconContext
+from pulserver.recon import ReconContext
 from pulserver.app import epi2D_recon
 
 N = 40
@@ -177,7 +177,7 @@ def relative_error(image, reference):
 
 
 def test_the_calibration_maps_unalias_the_accelerated_slices(kspace, phantom, context):
-    from pulserver.recon._mrd.application import _make_bucket
+    from pulserver.recon._server.application import _make_bucket
 
     plugin = epi2D_recon.Epi2DRecon(iterations=60)
     bucket = _make_bucket(stream(kspace), [])
@@ -203,7 +203,7 @@ def test_the_calibration_maps_unalias_the_accelerated_slices(kspace, phantom, co
 def test_the_calibration_is_not_mistaken_for_multiband(kspace, context):
     """The calibration visits every imaged slice, so the imaging does not
     collapse bands: one image per imaged slice, not one per band."""
-    from pulserver.recon._mrd.application import _make_bucket
+    from pulserver.recon._server.application import _make_bucket
 
     plugin = epi2D_recon.Epi2DRecon()
     results = plugin(_make_bucket(stream(kspace), []), context)

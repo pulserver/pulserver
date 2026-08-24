@@ -14,10 +14,11 @@ import pulserver.recon as recon
 import pulserver.recon.optim as algorithms
 import pulserver.recon.optim._algorithms as _algorithms
 import pulserver.recon.denoisers as denoisers
-import pulserver.recon.preprocessing as preprocessing
+import pulserver.mrd as mrd_tools
+import pulserver.mrd._arrays as arrays
 import pulserver.recon.physics as physics
-from pulserver.recon._mrd import metadata
-from pulserver.recon.preprocessing import (
+from pulserver.mrd import _metadata as metadata
+from pulserver.mrd import (
     Homodyne,
     POCS,
     noise_prewhiten,
@@ -39,8 +40,6 @@ RECON_MODULES = (
     "physics",
     "plugin",
     "postprocessing",
-    "preprocessing",
-    "simulation",
     "weights",
 )
 
@@ -71,9 +70,34 @@ def test_every_public_name_resolves():
         assert getattr(recon, name) is not None
 
 
+#: Where the MRD toolbox's names actually live, for the same reason.
+MRD_MODULES = ("_acquisitions", "_header", "_arrays", "_images", "_seqdesc", "_files")
+
+
+def test_every_name_the_mrd_toolbox_publishes_is_reachable_flat():
+    import importlib
+
+    flat = set(mrd_tools.__all__)
+    for module in MRD_MODULES:
+        published = set(
+            getattr(importlib.import_module(f"pulserver.mrd.{module}"), "__all__", ())
+        )
+        assert published <= flat, f"{module}: {sorted(published - flat)}"
+
+
+def test_every_public_mrd_name_resolves():
+    for name in mrd_tools.__all__:
+        assert getattr(mrd_tools, name) is not None
+
+
+def test_the_two_namespaces_share_no_name():
+    """A name lives in one of them, so an import says which layer it is from."""
+    assert not set(recon.__all__) & set(mrd_tools.__all__)
+
+
 def test_the_flat_name_is_the_same_object_as_the_module_one():
     assert recon.pics is algorithms.pics
-    assert recon.diffusion_table is metadata.diffusion_table
+    assert mrd_tools.diffusion_table is metadata.diffusion_table
     assert recon.ReconPlugin is recon.plugin.ReconPlugin
     assert recon.calibration_extent is recon.calibration.calibration_extent
 
@@ -89,7 +113,7 @@ def test_importing_public_root_does_not_load_private_mrd_stack():
 import sys
 import pulserver.recon
 
-loaded = [name for name in sys.modules if name.startswith("pulserver.recon._mrd")]
+loaded = [name for name in sys.modules if name.startswith("pulserver.recon._server")]
 if loaded:
     raise SystemExit(f"private MRD modules imported: {loaded}")
 """
@@ -119,7 +143,7 @@ def test_scientific_apis_expose_only_deepinverse_style_classes():
     assert inspect.isclass(denoisers.LLR)
     assert "noncartesian_2d" not in physics.__all__
     assert "llr" not in denoisers.__all__
-    assert "PipeMenonDCF" not in preprocessing.__all__
+    assert "PipeMenonDCF" not in mrd_tools.__all__
 
 
 class _IdentityPhysics:
@@ -422,13 +446,13 @@ def test_pipe_menon_dcf_delegates_to_mrinufft(monkeypatch):
         return "weights"
 
     monkeypatch.setattr(
-        preprocessing,
+        arrays,
         "import_module",
         lambda name: SimpleNamespace(pipe=pipe) if name == "mrinufft.density" else None,
     )
     trajectory = np.zeros((32, 2))
     assert (
-        preprocessing.pipe_menon_dcf(
+        mrd_tools.pipe_menon_dcf(
             trajectory,
             (64, 64),
             backend="finufft",
@@ -469,7 +493,7 @@ def test_cartesian_without_coil_maps_keeps_the_coils():
     """
     torch = pytest.importorskip("torch")
     pytest.importorskip("deepinv")
-    from pulserver.recon.postprocessing import coil_combine
+    from pulserver.mrd import coil_combine
 
     n, coils = 8, 4
     axes = (-2, -1)
@@ -496,7 +520,7 @@ def test_cartesian_without_coil_maps_keeps_the_coils():
 
 
 def test_center_crop_takes_the_middle_of_the_trailing_axes():
-    from pulserver.recon.postprocessing import center_crop
+    from pulserver.mrd import center_crop
 
     image = np.arange(2 * 4 * 8).reshape(2, 4, 8)
     cropped = center_crop(image, (2, 4))
@@ -639,7 +663,7 @@ def test_the_acquisition_flags_are_the_ismrmrd_ones():
     makes agreeing with it something to check rather than something given."""
     import ismrmrd
 
-    from pulserver.recon import AcquisitionFlag
+    from pulserver.mrd import AcquisitionFlag
 
     for member in AcquisitionFlag:
         assert getattr(ismrmrd, member.flag) == member.position, member.name

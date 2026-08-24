@@ -14,8 +14,8 @@ from ...plugin import (
     ReconPlugin,
     ReconResult,
 )
-from ...postprocessing import center_crop
-from ..metadata import max_stored_value
+from ....mrd._images import center_crop
+from ....mrd._metadata import max_stored_value
 from . import _fft_combine_scaled
 
 

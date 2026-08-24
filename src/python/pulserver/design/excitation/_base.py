@@ -6,7 +6,7 @@ __all__ = ["RfModule", "rf_reference"]
 
 from typing import Any
 
-from ..._core._module import SequenceModule
+from .._module import SequenceModule
 
 
 def rf_reference(rf: Any) -> float:

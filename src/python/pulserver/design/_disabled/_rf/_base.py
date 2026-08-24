@@ -10,7 +10,7 @@ from typing import TypeVar
 
 import numpy as np
 
-from ..._core._module import Block, SequenceModule, _block_payload, _peak
+from ..._module import Block, SequenceModule, _block_payload, _peak
 from .._rotation import normalize_rotation
 from .._system import copy_event
 

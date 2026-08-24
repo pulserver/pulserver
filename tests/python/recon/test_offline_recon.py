@@ -228,7 +228,7 @@ def test_the_exam_cache_defaults_to_the_file(tmp_path, kspace):
 
 def test_a_bucket_reports_only_the_boundaries_it_ended_on():
     """An acquisition's other flags say what it *is*, not what it closed."""
-    from pulserver import AcquisitionBucket, AcquisitionFlag
+    from pulserver.mrd import AcquisitionBucket, AcquisitionFlag
 
     acquisition = ismrmrd.Acquisition()
     acquisition.resize(4, 2)
@@ -247,7 +247,7 @@ def test_ending_several_units_at_once_is_not_ending_one():
     """The final acquisition of a scan closes its segment, its slice and the
     measurement, which is what makes ``is`` the right test for a calibration
     boundary and ``in`` the right test for the end of the scan."""
-    from pulserver import AcquisitionBucket, AcquisitionFlag
+    from pulserver.mrd import AcquisitionBucket, AcquisitionFlag
 
     acquisition = ismrmrd.Acquisition()
     acquisition.resize(4, 2)
@@ -266,7 +266,8 @@ def test_ending_several_units_at_once_is_not_ending_one():
 
 def test_a_combined_flag_routes_either_boundary_to_one_branch():
     """Flags combine, and carrying any of them closes the branch they name."""
-    from pulserver import AcquisitionFlag, ReconPlugin
+    from pulserver.recon import ReconPlugin
+    from pulserver.mrd import AcquisitionFlag
 
     class Sink(ReconPlugin):
         def recon(self, branch, context):
@@ -292,7 +293,8 @@ def test_the_branches_are_tried_in_the_order_they_were_declared():
     """The final acquisition of a slice closes its trailing segment too, so
     listing the slice first is what makes the segment mean "and nothing
     larger" -- which is how a calibration block is told from an image."""
-    from pulserver import AcquisitionFlag, ReconPlugin
+    from pulserver.recon import ReconPlugin
+    from pulserver.mrd import AcquisitionFlag
 
     class Sink(ReconPlugin):
         def recon(self, branch, context):

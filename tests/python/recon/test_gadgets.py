@@ -15,13 +15,15 @@ import ismrmrd
 import numpy as np
 import pytest
 
-from pulserver import ExamCache, ReconContext, ReconPlugin
+from pulserver.recon import ExamCache, ReconContext, ReconPlugin
 from pulserver.recon import (
-    AcquisitionFlag,
     CoilCompression,
     EpiPhaseCorrection,
     NoiseAdjust,
     RampSampling,
+)
+from pulserver.mrd import (
+    AcquisitionFlag,
     coil_compress,
     correct_lines,
     epi_ramp_operator,

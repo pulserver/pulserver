@@ -5,7 +5,8 @@ import sys
 from pathlib import Path
 
 import pytest
-from pulserver import Protocol, TypeinFloatParam, UIParam
+from pulserver.design import TypeinFloatParam, UIParam
+from pulserver.design._params import Protocol
 
 # Shared helper modules beside the tests (fixture_corpus, comparison helpers
 # in test modules) and the generators/oracle under tests/utils import by
