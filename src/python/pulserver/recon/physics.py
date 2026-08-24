@@ -822,6 +822,7 @@ class _LazyFramePhysics:
         self.kind = provider.physics.kind
         self.viewed_as_real = provider.physics.viewed_as_real
         self.modifiers = provider.physics.modifiers
+        self.spatial_ndim = provider.physics.spatial_ndim
 
     @property
     def normal_mode(self) -> str:
@@ -2639,6 +2640,15 @@ def _noncartesian(
         and density_shape[0] == trajectory_shape[0]
     ):
         native_density = density[0]
+    elif (
+        density is not None
+        and len(trajectory_shape) >= 3
+        and len(density_shape) > 1
+        and prod(density_shape) == prod(trajectory_shape[:-1])
+    ):
+        # The operator plans on every frame's samples at once, so a density
+        # given one row per frame is flat to it.
+        native_density = density.reshape(-1)
     if stacked:
         operator, native = _stacked_linear_physics(
             mrinufft,
@@ -2956,12 +2966,122 @@ class NonCartesian3D(MRIPhysics):
         _init_from(self, base)
 
 
+class _FlatSubspaceEncoding:
+    """Encode a dynamic acquisition through one plan over every sample.
+
+    A subspace acquisition is a NUFFT per frame only if you insist on frames.
+    The transform is linear in the data, so weighting a frame's samples by its
+    basis coefficient and gridding the whole trajectory at once gives the same
+    answer with one plan instead of one per frame -- and without accumulating a
+    volume per frame, which is what a frame-at-a-time adjoint really spends.
+
+    Sample sets that large are held one group of coils at a time: the data for
+    every coil at once is the largest array in a reconstruction, and there is
+    no reason for a second one beside it.
+    """
+
+    def __init__(self, physics: MRIPhysics, trajectory: Any) -> None:
+        self.physics = physics
+        shape = tuple(int(size) for size in trajectory.shape)
+        self.n_frames = shape[0]
+        self.per_frame = prod(shape[1:-1])
+        native = _base_fourier_operator(physics.native_operator)
+        self.n_coils = int(getattr(native, "n_coils", 1))
+        self.uses_sense = getattr(native, "smaps", None) is not None
+
+    def _chunks(self, reference: Any) -> list[range]:
+        """Coil groups sized to what the device has room for."""
+        if not self.uses_sense:
+            return [range(self.n_coils)]
+        torch = import_module("torch")
+        per_coil = 8 * self.n_frames * self.per_frame * max(reference.shape[0], 1)
+        if reference.device.type == "cuda":
+            free, _ = torch.cuda.mem_get_info(reference.device)
+            budget = int(0.2 * free)
+        else:
+            budget = 4 * 1024**3
+        width = max(1, min(self.n_coils, budget // max(2 * per_coil, 1)))
+        return [
+            range(start, min(start + width, self.n_coils))
+            for start in range(0, self.n_coils, width)
+        ]
+
+    @contextmanager
+    def _restricted(self, coils: range) -> Any:
+        """The encoding operator seen as carrying only these coils."""
+        native = _base_fourier_operator(self.physics.native_operator)
+        if not self.uses_sense or len(coils) == self.n_coils:
+            yield self.physics
+            return
+        held = native.smaps
+        native.smaps = held[coils.start : coils.stop]
+        try:
+            yield self.physics
+        finally:
+            native.smaps = held
+
+    def encode(self, coefficients: Any, basis: Any) -> Any:
+        """Measurements ``(batch, frames, coils, samples)`` from coefficients."""
+        torch = import_module("torch")
+        batch, rank = coefficients.shape[0], coefficients.shape[1]
+        weights = basis.to(device=coefficients.device, dtype=coefficients.dtype).conj()
+        measurements = None
+        for coils in self._chunks(coefficients):
+            part = None
+            for index in range(rank):
+                with self._restricted(coils) as operator:
+                    full = operator.A(coefficients[:, index])
+                full = full.reshape(batch, len(coils), self.n_frames, self.per_frame)
+                scaled = full * weights[index].reshape(1, 1, -1, 1)
+                part = scaled if part is None else part + scaled
+                del full, scaled
+            part = part.transpose(1, 2)
+            if measurements is None:
+                measurements = torch.empty(
+                    (batch, self.n_frames, self.n_coils, self.per_frame),
+                    dtype=part.dtype,
+                    device=part.device,
+                )
+            measurements[:, :, coils.start : coils.stop] = part
+            del part
+        assert measurements is not None
+        return measurements
+
+    def decode(self, measurements: Any, basis: Any, rank: int) -> Any:
+        """Coefficients ``(batch, rank, *image)`` from measurements."""
+        torch = import_module("torch")
+        batch = measurements.shape[0]
+        weights = basis.to(device=measurements.device, dtype=measurements.dtype)
+        coefficients = None
+        for coils in self._chunks(measurements):
+            block = measurements[:, :, coils.start : coils.stop]
+            for index in range(rank):
+                weighted = block * weights[index].reshape(1, -1, 1, 1)
+                weighted = weighted.transpose(1, 2).reshape(batch, len(coils), -1)
+                with self._restricted(coils) as operator:
+                    image = operator.A_adjoint(weighted)
+                del weighted
+                image = image.reshape(batch, *image.shape[-self.physics.spatial_ndim :])
+                if coefficients is None:
+                    coefficients = torch.zeros(
+                        (batch, rank, *image.shape[1:]),
+                        dtype=image.dtype,
+                        device=image.device,
+                    )
+                coefficients[:, index] += image
+                del image
+            del block
+        assert coefficients is not None
+        return coefficients
+
+
 def _subspace_linear_physics(
     frame_physics: Sequence[MRIPhysics | _LazyFramePhysics],
     basis: Any,
     *,
     viewed_as_real: bool,
     toeplitz_config: dict[str, Any] | None,
+    flat_encoding: _FlatSubspaceEncoding | None = None,
 ) -> Any:
     physics_module = _require_deepinv()
     try:
@@ -2973,6 +3093,10 @@ def _subspace_linear_physics(
         def __init__(self) -> None:
             super().__init__()
             self.__dict__["frame_physics"] = tuple(frame_physics)
+            self.__dict__["flat_encoding"] = flat_encoding
+            self.__dict__["spatial_rank"] = int(
+                getattr(frame_physics[0], "spatial_ndim", 2)
+            )
             self.__dict__["basis"] = torch.as_tensor(basis)
             self.viewed_as_real = viewed_as_real
             self.use_toeplitz = bool(frame_physics) and all(
@@ -3109,6 +3233,8 @@ def _subspace_linear_physics(
                     measurements[:, index].copy_(measurement)
                 assert measurements is not None
                 return measurements
+            if self.flat_encoding is not None:
+                return self.flat_encoding.encode(coefficients, self.basis)
             frames = self._expand(coefficients)
             measurements = []
             for index, physics in enumerate(self.frame_physics):
@@ -3166,7 +3292,9 @@ def _subspace_linear_physics(
                     if frame_physics_item.viewed_as_real:
                         frame = self._image_as_cpx(frame)
                     else:
-                        frame = frame[:, None]
+                        frame = frame.reshape(
+                            frame.shape[0], 1, *frame.shape[-self.spatial_rank :]
+                        )
                     frame = frame.to("cpu")
                     if coefficients is None:
                         coefficients = torch.zeros(
@@ -3191,14 +3319,28 @@ def _subspace_linear_physics(
                     if self.viewed_as_real
                     else coefficients
                 )
+            if self.flat_encoding is not None:
+                coefficients = self.flat_encoding.decode(
+                    y,
+                    self.basis,
+                    int(self.basis.shape[0]),
+                )
+                return (
+                    self._image_as_real(coefficients)
+                    if self.viewed_as_real
+                    else coefficients
+                )
             frames = []
             for index, physics in enumerate(self.frame_physics):
                 frame = physics.A_adjoint(y[:, index])
                 if physics.viewed_as_real:
                     frame = self._image_as_cpx(frame)
                 else:
-                    # Restore the coefficient axis a complex frame physics drops.
-                    frame = frame[:, None]
+                    # One coefficient axis, whether or not the frame physics
+                    # answered with a coil axis of its own.
+                    frame = frame.reshape(
+                        frame.shape[0], 1, *frame.shape[-self.spatial_rank :]
+                    )
                 frames.append(frame)
             coefficients = self._project(torch.cat(frames, dim=1))
             return (
@@ -3338,6 +3480,7 @@ def _subspace(
         streaming = physics.streaming_policy
 
     frame_physics: list[MRIPhysics | _LazyFramePhysics]
+    flat_encoding: _FlatSubspaceEncoding | None = None
     trajectory = physics.trajectory
     trajectory_shape = getattr(trajectory, "shape", ())
     if (
@@ -3349,6 +3492,15 @@ def _subspace(
         frame_physics = [
             _LazyFramePhysics(provider, index) for index in range(n_frames)
         ]
+        native = _base_fourier_operator(physics.native_operator)
+        if (
+            physics.kind.startswith("noncartesian")
+            and "stacked" not in physics.modifiers
+            and not physics.viewed_as_real
+            and native is not None
+            and not hasattr(native, "B")
+        ):
+            flat_encoding = _FlatSubspaceEncoding(physics, trajectory)
     else:
         frame_physics = [physics] * n_frames
 
@@ -3357,6 +3509,7 @@ def _subspace(
         basis,
         viewed_as_real=physics.viewed_as_real,
         toeplitz_config=physics.toeplitz_options,
+        flat_encoding=flat_encoding,
     )
     result = MRIPhysics(
         operator,

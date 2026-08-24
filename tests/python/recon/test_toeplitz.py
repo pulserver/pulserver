@@ -1421,3 +1421,89 @@ def test_symmetric_packing_survives_every_path_that_applies_it(device):
     # Still halved after the application, on whichever device ran it.
     assert packed.symmetric
     assert packed.storage_nbytes < whole.storage_nbytes
+
+
+@pytest.mark.parametrize("complex_basis", [False, True])
+@pytest.mark.parametrize("coils", [1, 3])
+def test_a_dynamic_scan_encodes_through_one_plan_over_every_sample(
+    complex_basis, coils
+):
+    """One plan over the whole trajectory answers what a frame at a time does.
+
+    A subspace acquisition is linear in its data, so weighting each frame's
+    samples by its basis coefficient and gridding all of them at once is the
+    same encoding as gridding frame by frame -- with one plan rather than one
+    per frame, and without a volume accumulated per frame.
+    """
+    pytest.importorskip("mrinufft")
+    pytest.importorskip("finufft")
+    generator = torch.Generator().manual_seed(19)
+    image_shape = (12, 12)
+    rank, frames = 3, 7
+    trajectory = _framed_radial(frames, 9, image_shape[0])
+    basis = torch.randn(rank, frames, generator=generator)
+    if complex_basis:
+        basis = torch.complex(basis, torch.randn(rank, frames, generator=generator))
+    maps = None
+    if coils > 1:
+        maps = torch.randn(
+            coils, *image_shape, generator=generator, dtype=torch.complex64
+        )
+        maps = maps / maps.abs().pow(2).sum(0, keepdim=True).sqrt()
+
+    built = physics.Subspace(
+        physics.NonCartesian2D(
+            trajectory,
+            image_shape,
+            coil_maps=maps,
+            n_coils=coils,
+            backend="finufft",
+            toeplitz=False,
+        ),
+        basis,
+    )
+    assert built.operator.flat_encoding is not None
+
+    coefficients = torch.randn(
+        1, rank, *image_shape, generator=generator, dtype=torch.complex64
+    )
+    flat_measurement = built.A(coefficients)
+    flat_image = built.A_adjoint(flat_measurement)
+
+    built.operator.__dict__["flat_encoding"] = None
+    framewise_measurement = built.A(coefficients)
+    framewise_image = built.A_adjoint(framewise_measurement)
+
+    torch.testing.assert_close(
+        flat_measurement, framewise_measurement, atol=2e-5, rtol=2e-5
+    )
+    torch.testing.assert_close(flat_image, framewise_image, atol=2e-5, rtol=2e-5)
+    # The adjoint answers the shape the normal operator does, one axis per
+    # coefficient and none for coils.
+    assert flat_image.shape == (1, rank, *image_shape)
+
+
+def test_one_plan_serves_a_dynamic_scan_however_many_frames_it_has():
+    """The encoding plans once, not once per frame."""
+    pytest.importorskip("mrinufft")
+    pytest.importorskip("finufft")
+    generator = torch.Generator().manual_seed(23)
+    image_shape = (12, 12)
+    rank = 3
+    for frames in (4, 16):
+        trajectory = _framed_radial(frames, 9, image_shape[0])
+        basis = torch.randn(rank, frames, generator=generator)
+        built = physics.Subspace(
+            physics.NonCartesian2D(
+                trajectory, image_shape, backend="finufft", toeplitz=False
+            ),
+            basis,
+        )
+        provider = built.operator.frame_physics[0].provider
+        built.A_adjoint(
+            torch.zeros(1, frames, 1, 9 * image_shape[0], dtype=torch.complex64)
+        )
+        # The frame-at-a-time provider is never asked for an operator, so the
+        # plan it would build per frame is never built at all.
+        assert provider.shared is None
+        assert not provider.cache
