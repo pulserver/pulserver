@@ -209,6 +209,10 @@ def test_streamed_complex_hermitian_toeplitz_matches_in_core_cuda():
         rank,
         image_shape=image_shape,
         chunk_size=31,
+        # What is under test is the streaming, so the transfer is held at the
+        # width the host copy has: a narrowed one would put its own error into
+        # the comparison.
+        cuda_transfer_precision="float32",
     )
     image = torch.randn(
         1,

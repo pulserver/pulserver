@@ -929,27 +929,39 @@ def test_resident_cuda_uses_cached_bfloat16_transfer():
     not torch.cuda.is_bf16_supported(),
     reason="native CUDA BF16 is unavailable",
 )
-def test_cuda_auto_precision_uses_bfloat16_only_for_real_kernels():
+def test_a_narrowed_transfer_is_bfloat16_whether_or_not_it_is_complex():
+    """BF16 is the storage width, and complex is a shape rather than a dtype.
+
+    Torch has no complex BF16, so a narrowed complex transfer carries its
+    components in a trailing pair axis. Both forms interleave real words the
+    same way, which is what lets one kernel read either.
+    """
     rank, locations = 3, 8192
     values = torch.randn(rank * (rank + 1) // 2, locations)
-    kernel = CompactToeplitzKernel(
-        values,
-        torch.arange(locations, dtype=torch.int32),
-        (locations,),
-        rank,
-        image_shape=(locations // 2,),
-    )
 
-    complex_kernel = CompactToeplitzKernel(
-        torch.complex(values, torch.randn_like(values)),
-        torch.arange(locations, dtype=torch.int32),
-        (locations,),
-        rank,
-        image_shape=(locations // 2,),
-    )
+    def built(data):
+        return CompactToeplitzKernel(
+            data,
+            torch.arange(locations, dtype=torch.int32),
+            (locations,),
+            rank,
+            image_shape=(locations // 2,),
+        )
 
-    assert kernel._cuda_precision("auto", "cuda") == "bfloat16"
-    assert complex_kernel._cuda_precision("auto", "cuda") == "float32"
+    real = built(values)
+    complex_kernel = built(torch.complex(values, torch.randn_like(values)))
+
+    assert real._cuda_precision("auto", "cuda") == "bfloat16"
+    assert complex_kernel._cuda_precision("auto", "cuda") == "bfloat16"
+
+    _, narrowed = complex_kernel._cuda_values_for("cuda", "bfloat16")
+    assert narrowed.dtype == torch.bfloat16
+    assert narrowed.shape == (rank * (rank + 1) // 2, locations, 2)
+
+    # Half of what complex64 costs, which is the whole point of narrowing.
+    assert complex_kernel._cuda_storage_nbytes(
+        "bfloat16"
+    ) * 2 == complex_kernel._cuda_storage_nbytes("float32")
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is unavailable")

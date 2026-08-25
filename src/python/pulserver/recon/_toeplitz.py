@@ -83,14 +83,35 @@ def _resolved_cuda_precision(requested: str, device: Any) -> str:
 
 
 def _cuda_transfer_values(values: Any, precision: str, device: Any) -> Any:
-    """Encode real values while retaining complex kernels as complex64."""
+    """Encode a transfer for a CUDA device at the requested precision.
+
+    Torch has no complex BF16, so a complex transfer narrowed to BF16 is held
+    as its real and imaginary parts in a trailing pair axis. That is the same
+    interleaving a complex64 buffer already has when the kernels read it as
+    pairs of real words, so the appliers index it identically and only the word
+    size changes.
+    """
     torch = _torch()
     dtype = {
         "float32": torch.float32,
         "bfloat16": torch.bfloat16,
     }[precision]
-    target_dtype = torch.complex64 if values.is_complex() else dtype
-    return values.to(device=device, dtype=target_dtype).contiguous()
+    if values.is_complex():
+        if precision != "bfloat16":
+            return values.to(device=device, dtype=torch.complex64).contiguous()
+        paired = torch.view_as_real(values.to(torch.complex64))
+        return paired.to(device=device, dtype=dtype).contiguous()
+    return values.to(device=device, dtype=dtype).contiguous()
+
+
+def _packed_is_complex(packed: Any) -> bool:
+    """Whether a packed transfer carries complex coefficients.
+
+    True for a complex dtype, and for the paired real form a BF16 complex
+    transfer takes, which carries its components in a trailing axis rather
+    than in the dtype.
+    """
+    return bool(packed.is_complex() or packed.ndim == 3)
 
 
 def _cuda_transfer_spec(
@@ -105,7 +126,9 @@ def _cuda_transfer_spec(
         "bfloat16": torch.bfloat16,
     }[precision]
     if values.is_complex():
-        dtype = torch.complex64
+        if precision != "bfloat16":
+            return (values.shape[0], locations), torch.complex64
+        return (values.shape[0], locations, 2), dtype
     return (values.shape[0], locations), dtype
 
 
@@ -144,7 +167,7 @@ def _packed_cuda_matvec(
     packed_real_matvec_inplace, packed_complex_matvec_inplace = _triton_matvecs()
     implementation = (
         packed_complex_matvec_inplace
-        if packed.is_complex()
+        if _packed_is_complex(packed)
         else packed_real_matvec_inplace
     )
     implementation(
@@ -165,7 +188,7 @@ def _packed_cuda_matvec_direct(
     packed_real_matvec_direct, packed_complex_matvec_direct = _triton_direct_matvecs()
     implementation = (
         packed_complex_matvec_direct
-        if packed.is_complex()
+        if _packed_is_complex(packed)
         else packed_real_matvec_direct
     )
     return implementation(output, spectrum, packed, indices)
@@ -405,12 +428,6 @@ class CompactToeplitzKernel:
             raise ValueError(
                 "cuda_transfer_precision must be 'auto', 'float32', or 'bfloat16'"
             )
-        if values.is_complex() and cuda_transfer_precision not in {
-            "auto",
-            "float32",
-        }:
-            raise ValueError("complex Toeplitz kernels require complex64 CUDA storage")
-
         rows, columns = torch.triu_indices(rank, rank, device=values.device)
         self.values = values.contiguous()
         self.indices = indices.contiguous()
@@ -544,15 +561,9 @@ class CompactToeplitzKernel:
         requested: str,
         device: Any,
     ) -> str:
-        """Use automatic BF16 only for real packed coefficient kernels."""
+        """Resolve the CUDA storage precision for this transfer."""
         torch = _torch()
         device = torch.device(device)
-        if self.values.is_complex():
-            if requested not in {"auto", "float32"}:
-                raise ValueError(
-                    "complex Toeplitz kernels require complex64 CUDA storage"
-                )
-            return "float32"
         return _resolved_cuda_precision(requested, device)
 
     def _encoding_key(self, device: Any, precision: str) -> tuple[Any, ...]:

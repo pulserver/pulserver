@@ -124,12 +124,12 @@ def _packed_complex_matvec_direct_reuse(
                 packed_ptr + weight_index,
                 mask=mask,
                 other=0.0,
-            )
+            ).to(tl.float32)
             weight_imaginary = tl.load(
                 packed_ptr + weight_index + 1,
                 mask=mask,
                 other=0.0,
-            )
+            ).to(tl.float32)
             if output_coefficient > input_coefficient:
                 weight_imaginary = -weight_imaginary
             real += weight_real * value_real - weight_imaginary * value_imaginary
@@ -363,12 +363,12 @@ def _packed_complex_matvec_inplace(
                 packed_ptr + weight_index,
                 mask=mask,
                 other=0.0,
-            )
+            ).to(tl.float32)
             weight_imaginary = tl.load(
                 packed_ptr + weight_index + 1,
                 mask=mask,
                 other=0.0,
-            )
+            ).to(tl.float32)
             if output_coefficient > input_coefficient:
                 weight_imaginary = -weight_imaginary
             real += weight_real * value_real - weight_imaginary * value_imaginary
@@ -548,12 +548,22 @@ def packed_complex_matvec_direct(
 
 
 def _complex_storage(packed: Any) -> tuple[Any, int, int]:
-    """Expose interleaved complex64 components to Triton."""
+    """Expose interleaved complex components to Triton.
+
+    Two storage forms reach here and they interleave identically: a complex64
+    transfer, whose real and imaginary words already alternate, and the paired
+    BF16 form a narrowed complex transfer takes. Both are read as a stream of
+    real words, so the kernels differ only in the width of the word they load.
+    """
     import torch
 
-    if packed.dtype != torch.complex64 or packed.ndim != 2:
-        raise TypeError("packed complex CUDA kernels require complex64 storage")
-    return packed.view(torch.float32), packed.stride(0) * 2, 2
+    if packed.dtype == torch.complex64 and packed.ndim == 2:
+        return packed.view(torch.float32), packed.stride(0) * 2, 2
+    if packed.dtype == torch.bfloat16 and packed.ndim == 3 and packed.shape[-1] == 2:
+        return packed.reshape(packed.shape[0], -1), packed.stride(0), packed.stride(1)
+    raise TypeError(
+        "packed complex CUDA kernels require complex64 or paired bfloat16 storage"
+    )
 
 
 def _autotuned_direct(
