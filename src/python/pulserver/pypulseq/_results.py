@@ -691,9 +691,9 @@ class DiffusionTable:
     by volume.
 
     ``axis`` names the MRD counter whose value is the row index -- ``"SET"``,
-    ``"ECO"``, whichever the design's :class:`~pulserver.ScanLoop` declared for
-    its diffusion dimension. It is carried rather than guessed because nothing
-    in the tensors themselves says which counter moved with them.
+    ``"ECO"``, whichever counter the scan stepped along its diffusion
+    dimension. It is carried rather than guessed because nothing in the
+    tensors themselves says which counter moved with them.
 
     Units are the diffusion community's throughout: ``b_tensors`` is
     ``(N, 3, 3)`` in **s/mm^2** with trace equal to the b-value, which is

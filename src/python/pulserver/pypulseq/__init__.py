@@ -28,6 +28,7 @@ from __future__ import annotations
 import pypulseq as _pypulseq
 
 import functools as _functools
+import inspect as _inspect
 
 from . import _events
 from ._angles import (
@@ -135,15 +136,24 @@ _EXCLUDED_UPSTREAM = {
 #: and wrapping a class would replace its constructor with a plain function.
 _UNWRAPPED_UPSTREAM = {"SigpyPulseOpts"}
 
-# Upstream's own imports -- ``np``, ``math``, ``importlib``, the submodules its
-# ``__init__`` happens to touch -- come across too. They are noise in a plugin's
-# namespace, but ``import pulserver.pypulseq as pp`` promises to cover
-# everything ``import pypulseq as pp`` would, and a contract test holds us to
-# it. Completeness wins over tidiness; that is what drop-in means.
+#: Upstream names that are modules rather than authoring vocabulary -- ``np``,
+#: ``math``, ``importlib``, and the submodules upstream's ``__init__`` happens
+#: to touch. They stay reachable, because ``import pulserver.pypulseq as pp``
+#: promises that every ``pp.x`` an upstream script writes still resolves, and a
+#: contract test holds us to it. They are kept out of :data:`UPSTREAM`, and so
+#: out of ``__all__`` and the API page, because reachable and advertised are
+#: different promises: a plugin author reading the namespace should see the
+#: vocabulary, not the imports it was built from.
+_UPSTREAM_MODULES: set[str] = set()
+
 for _name in dir(_pypulseq):
     if _name.startswith("_") or _name in _EXCLUDED_UPSTREAM:
         continue
     _value = getattr(_pypulseq, _name)
+    if _inspect.ismodule(_value):
+        _UPSTREAM_MODULES.add(_name)
+        globals()[_name] = _value
+        continue
     # Every callable in the namespace goes through the interoperation
     # decorator, not only the ``make_*`` factories. ``calc_duration(gx)``,
     # ``align(...)``, ``split_gradient(g)``, ``scale_grad(g, 2)`` and
@@ -265,7 +275,7 @@ verify_file_signature = _verify_file_signature
 #: Upstream's factories, wrapped so the event they build comes back with its
 #: fields in slots rather than in a dictionary.  Same validation, same
 #: defaults, same bug fixes when upstream ships them -- see
-#: :mod:`pulserver.pypulseq._events`.
+#: the event interoperation layer.
 SLOTTED = frozenset(_events.__all__) - _EXCLUDED_UPSTREAM
 
 for _name in SLOTTED:
@@ -297,7 +307,7 @@ RESULTS = frozenset(
 
 #: Routines MATLAB Pulseq defines that upstream PyPulseq has never ported.
 #: Present here so a script translated from MATLAB finds them under the name it
-#: already uses; see :mod:`pulserver.pypulseq._matlab_parity`.
+#: already uses; see the MATLAB-parity layer.
 MATLAB_PARITY = frozenset(
     {
         "calc_rf_power",
@@ -420,6 +430,7 @@ OVERRIDES = frozenset(
 UPSTREAM = (
     frozenset({_name for _name in dir(_pypulseq) if not _name.startswith("_")})
     - _EXCLUDED_UPSTREAM
+    - _UPSTREAM_MODULES
     - OVERRIDES
 )
 

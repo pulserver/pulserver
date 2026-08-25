@@ -177,10 +177,25 @@ def test_a_trigger_gets_the_channel_name_upstream_expects(pair):
 
 
 def test_the_namespace_is_still_complete(pair):
-    """Wrapping must not drop a name -- the drop-in promise is that this import
-    covers everything ``import pypulseq`` would."""
-    missing = {n for n in dir(upstream) if not n.startswith("_")} - set(pp.__all__)
+    """Wrapping must not drop a name -- the drop-in promise is that every
+    ``pp.x`` an upstream script writes still resolves here.
+
+    Held against what is *reachable* rather than what is exported, because the
+    two answer different questions: a script that says ``pp.np`` must keep
+    working, and a plugin author reading the namespace should still be shown
+    the authoring vocabulary rather than the imports it was built from.
+    """
+    missing = {n for n in dir(upstream) if not n.startswith("_")} - set(dir(pp))
     assert missing <= set(pp._EXCLUDED_UPSTREAM)
+
+
+def test_the_advertised_namespace_is_vocabulary_not_imports():
+    """``__all__`` carries what a sequence is written with, and nothing else."""
+    import inspect
+
+    modules = [name for name in pp.__all__ if inspect.ismodule(getattr(pp, name))]
+    assert not modules, f"modules advertised as public API: {modules}"
+    assert set(dir(pp)) >= pp._UPSTREAM_MODULES
 
 
 def test_a_wrapped_helper_keeps_its_upstream_signature():

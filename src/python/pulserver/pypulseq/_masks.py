@@ -847,7 +847,7 @@ def make_random_mask(
     --------
     make_poisson_disc_mask : incoherent but locally uniform alternative.
     make_caipirinha_mask : deterministic lattice for parallel imaging.
-    ScanLoop.from_mask : turn a mask into shots.
+    calc_sampled_lines : the lines a mask keeps, as an index array.
     """
     if accel <= 1:
         raise ValueError(f"accel must be greater than 1, got {accel}")

@@ -402,7 +402,7 @@ def sim_rf(
         and ``gamma`` to become Hz.
     compat : bool, default True
         Return MATLAB's six-tuple ``(mz_z, mz_xy, f, ref_eff, mx_xy,
-        my_xy)`` rather than :class:`~._results.RfResponse`.
+        my_xy)`` rather than :class:`~pulserver.pypulseq.RfResponse`.
 
     Returns
     -------

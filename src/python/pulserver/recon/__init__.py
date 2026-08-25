@@ -17,7 +17,7 @@ how to import from it.
 Names resolve on first use, so importing this module needs neither an MRD
 server environment nor any optional numerical backend; only the names actually
 touched pull their dependencies in. The Gadgetron/MRD transport machinery
-stays private under :mod:`pulserver.recon._server`.
+stays private under the streaming transport.
 """
 
 from __future__ import annotations

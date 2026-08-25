@@ -51,7 +51,7 @@ def make_rotation(rot_quaternion: Any) -> SimpleNamespace:
 
     See Also
     --------
-    pulserver.ScanLoop.to_rotations : plan directions to rotation matrices.
+    calc_projection_shell : directions spread over the sphere, to rotate onto.
     """
     event = SimpleNamespace()
     event.type = "rot3D"

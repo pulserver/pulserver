@@ -264,7 +264,6 @@ Imported here unchanged from PyPulseq. Their documentation is upstream's.
    calc_ramp
    calc_rf_center
    calc_adc_segments
-   check_timing
    calc_SAR
    round_half_up
    enable_trace

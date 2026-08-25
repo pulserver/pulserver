@@ -102,7 +102,7 @@ class SoftDelayMixin:
         equivalent of. Two of its three outputs: the ``softDelayState`` cell
         array is MATLAB's intermediate, and its ``min``/``max`` are carried on
         the dict's values here instead --- each is a
-        :class:`~._results.SoftDelay`, whose ``value`` is what the mapping
+        :class:`~pulserver.pypulseq.SoftDelay`, whose ``value`` is what the mapping
         compares and prints, so the dict reads as MATLAB's ``easyStruct``
         while still carrying the range the delay may be set over.
 

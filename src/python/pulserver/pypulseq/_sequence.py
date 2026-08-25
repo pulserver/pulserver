@@ -217,7 +217,7 @@ class Sequence(AnalysisMixin, SafetyViewsMixin, SoftDelayMixin):
         The *structural* repeat, which is not the number of TRs the scanner
         plays -- averages multiply it, and prep and cooldown TRs sit outside
         it. The bound on what ``tr=<int>`` can name is
-        :attr:`~._sequence._Structure.num_instances`, reached through
+        the structure's instance count, reached through
         ``plot(tr=...)``, not this.
         """
         return self._structure_for("num_trs").num_trs
@@ -1097,7 +1097,7 @@ class Sequence(AnalysisMixin, SafetyViewsMixin, SoftDelayMixin):
         Under ``tr`` it is the TR the **C safety core** built --- one
         ``pulseg_get_tr_waveforms`` call, giving gradients, RF magnitude and
         phase, ADC events and block boundaries together --- wrapped in a
-        :class:`~._safety.TRSequence` so upstream's plotter can walk it. None
+        the extracted repetition time so upstream's plotter can walk it. None
         of it is reconstructed here, so the picture is the waveform the
         interpreter's checks were run on, down to which instance's gradient
         won at each position.
@@ -1209,7 +1209,7 @@ class Sequence(AnalysisMixin, SafetyViewsMixin, SoftDelayMixin):
         compat : bool, optional
             MATLAB's ``(B, m1, m2, m3)`` by default -- ``B`` shaped
             ``(R, 3, 3)`` in s/m^2, the moments ``(R, 3)``. ``False`` returns a
-            :class:`~._results.BTensor`, which adds the b-values, b-vectors and
+            :class:`~pulserver.pypulseq.BTensor`, which adds the b-values, b-vectors and
             per-shot tensors in the units and shapes a diffusion pipeline
             takes, the deduplicated table, and the split by what the console's
             prescription rotates.
@@ -1497,8 +1497,8 @@ class Sequence(AnalysisMixin, SafetyViewsMixin, SoftDelayMixin):
         ----------
         axis : str
             The label counter whose value selects a row -- ``"SET"``,
-            ``"ECO"``, whichever the design's
-            :class:`~pulserver.ScanLoop` declared for its diffusion dimension.
+            ``"ECO"``, whichever counter the scan stepped along its diffusion
+            dimension.
         n_dummy : int, default 0
             Leading excitations to skip.
         time_range : list of float, optional
@@ -1522,7 +1522,7 @@ class Sequence(AnalysisMixin, SafetyViewsMixin, SoftDelayMixin):
         Notes
         -----
         Three matrices rather than one, because the console's FOV rotation is
-        not in the ``.seq`` -- see :class:`~._results.BTensor`. They are
+        not in the ``.seq`` -- see :class:`~pulserver.pypulseq.BTensor`. They are
         written verbatim into the MRD header by
         ``mrdserver::add_diffusion_parameters`` and composed with the
         acquisition's direction cosines on the reconstruction side, so the
@@ -1590,8 +1590,9 @@ class Sequence(AnalysisMixin, SafetyViewsMixin, SoftDelayMixin):
         if evolution is None:
             raise ValueError(
                 f"diffusion_definitions(): the sequence never sets a {axis!r} label, so "
-                f"there is nothing for a reconstruction to index the table by. Give the "
-                f"ScanLoop an axis for the diffusion dimension, or name the one it has."
+                f"there is nothing for a reconstruction to index the table by. Set "
+                f"that label on the blocks of each diffusion encoding, or name the "
+                f"counter the scan already steps along."
             )
 
         ends = np.cumsum(np.asarray(self.block_durations, dtype=float))
@@ -1658,7 +1659,7 @@ class Sequence(AnalysisMixin, SafetyViewsMixin, SoftDelayMixin):
             blocks, so a short window on long blocks over-reports.
         compat : bool, optional
             MATLAB's ``(mean_pwr, peak_pwr, rf_rms, total_energy)`` by
-            default. ``False`` returns an :class:`~._results.RfPower`.
+            default. ``False`` returns an :class:`~pulserver.pypulseq.RfPower`.
 
         Returns
         -------
@@ -2202,7 +2203,7 @@ class Sequence(AnalysisMixin, SafetyViewsMixin, SoftDelayMixin):
     def _upstream_window(self, first: int, last: int) -> pp.Sequence:
         """Blocks ``first..last`` as a :class:`pypulseq.Sequence` upstream can read.
 
-        The transfer itself is :func:`~._pulseqpp.to_upstream`, a bulk copy of
+        The transfer itself is ``to_upstream``, a bulk copy of
         the rows the window names. What happens here first is the part upstream
         has no vocabulary for: a block carrying a rotation or an RF shim is
         replayed with that resolved into its events, because PyPulseq's

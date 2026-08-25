@@ -260,7 +260,7 @@ def interoperating(function: Callable[..., Any]) -> Callable[..., Any]:
         "    -----\n"
         "    This is PyPulseq's function. Events go in as the namespaces it\n"
         "    expects and come back with their fields in slots. See\n"
-        "    :mod:`pulserver.pypulseq._events`.\n"
+        "    the event interoperation layer.\n"
     )
     return wrapper
 
@@ -288,7 +288,7 @@ def _converting(factory: Callable[..., Any]) -> Callable[..., Any]:
         "    Notes\n"
         "    -----\n"
         "    This is PyPulseq's factory; the event it builds is returned with\n"
-        "    its fields in slots. See :mod:`pulserver.pypulseq._events`.\n"
+        "    its fields in slots. See the event interoperation layer.\n"
     )
     return wrapper
 

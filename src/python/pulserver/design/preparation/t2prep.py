@@ -23,9 +23,9 @@ class T2Preparation(RfModule):
     gradient echo can carry T2 contrast it could never generate itself.
 
     Every pulse is adiabatic and non-selective. The 90s are half passages, run
-    forwards to tip down and time-reversed to store; see
-    :func:`~pulserver.design.preparation._common.half_passages` for why the
-    mirror matters. The 180s in the middle are full passages.
+    forwards to tip down and time-reversed to store -- the mirror is what
+    makes the storage undo the excitation rather than repeat it. The 180s in
+    the middle are full passages.
 
     **Refocusing pulses come in pairs, and the count must be even.** An
     adiabatic full passage inverts z cleanly but leaves transverse

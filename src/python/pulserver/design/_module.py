@@ -378,7 +378,7 @@ def _recording_sequence_class():
     Recording is not something a module should have to ask for. An event that
     reaches a block is an event the module plays, and playing it is what makes
     it worth publishing -- so the sequence notes it on the way past. That is
-    also what lets :meth:`SequenceModule._finalize` tell what a constructor
+    also what lets the finalizing pass tell what a constructor
     *uses* from what it merely built along the way.
     """
     global _RECORDING_SEQUENCE

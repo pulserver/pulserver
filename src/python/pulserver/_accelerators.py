@@ -1,6 +1,6 @@
 """Loading the compiled kernels that ship inside the wheel.
 
-:mod:`pulserver._ext` is one extension module, built for each interpreter
+``pulserver._ext`` is one extension module, built for each interpreter
 Pulserver supports and holding every kernel as a submodule. A kernel that
 will not import therefore means a broken installation -- most often a wheel
 built for one interpreter imported from another -- and never an optional
@@ -42,7 +42,7 @@ def require(name: str, *, attribute: str | None = None) -> Any:
     Parameters
     ----------
     name
-        Submodule of :mod:`pulserver._ext`, e.g. ``"recon_cpu"``.
+        Submodule of ``pulserver._ext``, e.g. ``"recon_cpu"``.
     attribute
         Symbol the caller needs. Checked here, so a binary that predates
         the symbol fails at the load rather than at the call.

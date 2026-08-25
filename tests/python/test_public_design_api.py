@@ -107,10 +107,16 @@ def test_the_helpers_a_plugin_needs_are_in_the_event_layer(name):
     assert not hasattr(design, name)
 
 
-def test_the_disabled_tree_is_not_importable():
-    """Kept to port physics from, and deliberately not a package."""
-    disabled = SOURCE_TREE / "design" / "_disabled"
-    assert disabled.is_dir()
-    assert not (disabled / "__init__.py").exists()
-    with pytest.raises(ModuleNotFoundError):
-        __import__("pulserver.design._disabled._readout.epi")
+def test_the_design_tree_holds_only_what_ships():
+    """Every module under ``design`` is part of the installed package.
+
+    The toolbox is what a plugin composes from, so a directory here that
+    nothing imports is a second answer to a question the package already
+    answers -- which is what a reader grepping for a readout would find.
+    """
+    staged = [
+        path
+        for path in (SOURCE_TREE / "design").rglob("*")
+        if path.is_dir() and path.name.startswith("_disabled")
+    ]
+    assert not staged, [str(path) for path in staged]

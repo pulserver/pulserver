@@ -180,7 +180,7 @@ class SafetyViewsMixin:
             Transform the slew rate rather than the gradient.
         acoustic_resonances : list of dict, optional
             Resonances to mark, as ``{'frequency': ..., 'bandwidth': ...}``.
-            See :func:`~._safety.bands_to_resonances`.
+            See ``bands_to_resonances``.
         tr : {"worst_case"} or int, optional
             Analyse one repetition time rather than the timeline. ``None``,
             the default, is upstream PyPulseq exactly. ``"worst_case"`` is the
@@ -226,7 +226,7 @@ class SafetyViewsMixin:
 
         Those harmonics are what ``resonance_lines`` draws over the result,
         on **its own vertical axis** -- see
-        :class:`~._safety.MechResonances` for why the two scales must not be
+        the mechanical-resonance result for why the two scales must not be
         shared.
         """
         from pypulseq.Sequence.calc_grad_spectrum import calculate_gradient_spectrum

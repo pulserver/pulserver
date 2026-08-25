@@ -55,8 +55,8 @@ def calc_golden_angles(n: int, *, full_circle: bool = False) -> np.ndarray:
     interleaf -- covers the whole turn, so its golden angle is the classic
     full-circle ``2 * pi / phi**2`` (137.51 degrees).
 
-    A flat angle array rather than a :class:`~pulserver.ScanLoop`, accumulated
-    modulo ``2 * pi``: pair it directly with a base waveform and
+    A flat angle array, accumulated modulo ``2 * pi``: index it per shot,
+    pair it with a base waveform and
     :func:`pulserver.pypulseq.make_rotation`. Use :func:`make_radial_tilt` when
     the angular period or the segmentation matters.
 

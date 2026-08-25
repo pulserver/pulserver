@@ -710,13 +710,13 @@ class RestoringSequence(pp.Sequence):
     sequence asks for.
 
     Overriding ``waveforms()`` and nothing else is deliberate, and follows
-    :class:`~._safety.TRSequence`: every upstream analysis path reaches the
+    the extracted repetition time: every upstream analysis path reaches the
     gradients through ``waveforms()`` -> ``get_gradients()`` -> ``PPoly``, so
     ``calculate_pns`` and ``calculate_gradient_spectrum`` inherit the
     reconstruction without knowing this class exists.
 
     On a shape the reconstruction does not describe -- a spiral, most often --
-    :func:`~._shapes.restore_additional_shape_samples` falls back to the
+    :func:`~pulserver.pypulseq.restore_additional_shape_samples` falls back to the
     waveform as stored, which is what upstream returns unconditionally. So this
     agrees with upstream everywhere except on the shapes upstream approximates.
     """

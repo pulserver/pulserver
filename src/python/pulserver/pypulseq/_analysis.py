@@ -1224,7 +1224,7 @@ class AnalysisMixin:
             ``[start, stop]`` in seconds. The whole sequence by default.
         compat : bool, optional
             Upstream's return -- a list of ``(2, n)`` arrays -- by default.
-            ``False`` returns a :class:`~._results.Waveforms` instead, whose
+            ``False`` returns a :class:`~pulserver.pypulseq.Waveforms` instead, whose
             channels are named rather than positional.
 
         Notes
@@ -1235,7 +1235,7 @@ class AnalysisMixin:
         corners where the sequence put them, rather than rounded over a raster
         interval -- exactly, on a fixture, against upstream's 1.25% at the
         corner, and in four samples rather than eighty-two. See
-        :class:`~._pulseqpp.RestoringSequence`.
+        ``RestoringSequence``.
         """
         first, last = self._window_for(time_range)
         channels = self._upstream_window(first, last).waveforms(append_RF=append_RF)
@@ -1267,7 +1267,7 @@ class AnalysisMixin:
         compat : bool, optional
             Upstream's five-tuple ``(wave_data, tfp_excitation, tfp_refocusing,
             t_adc, fp_adc)`` by default. ``False`` returns a
-            :class:`~._results.WaveformsAndTimes`.
+            :class:`~pulserver.pypulseq.WaveformsAndTimes`.
 
         Notes
         -----
@@ -1325,7 +1325,7 @@ class AnalysisMixin:
             Upstream's ``(t_excitation, fp_excitation, t_refocusing,
             fp_refocusing)`` by default, which describes two of Pulseq's seven
             RF uses and drops the rest. ``False`` returns a
-            :class:`~._results.RfTimes` covering all of them.
+            :class:`~pulserver.pypulseq.RfTimes` covering all of them.
         """
         first, last = self._window_for(time_range)
         window = self._upstream_window(first, last)
@@ -1354,7 +1354,7 @@ class AnalysisMixin:
         compat : bool, optional
             Upstream's ``(t_adc, fp_adc)`` by default, where ``fp_adc`` is one
             row per ADC *event* carrying its raw frequency and phase offsets.
-            ``False`` returns an :class:`~._results.AdcTimes`, which adds the
+            ``False`` returns an :class:`~pulserver.pypulseq.AdcTimes`, which adds the
             per-*sample* phase -- ppm terms, phase modulation and accumulated
             ``2*pi*f*t`` folded in, the number a demodulator wants.
         """

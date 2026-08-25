@@ -19,8 +19,7 @@ import pkgutil
 
 import pytest
 
-#: Where to look. Every module under these, minus the tree kept only to port
-#: physics from.
+#: Where to look: every module under these.
 ROOTS = (
     "pulserver",
     "pulserver.design",
@@ -47,7 +46,6 @@ def _modules() -> list[str]:
             for module in pkgutil.walk_packages(
                 getattr(package, "__path__", []), root + ".", onerror=_raise
             )
-            if "_disabled" not in module.name
         ]
     return sorted(set(found))
 

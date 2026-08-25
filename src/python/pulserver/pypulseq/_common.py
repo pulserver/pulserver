@@ -47,7 +47,7 @@ _USE_NAMES = dict(zip("erispo", RF_USES, strict=False))
 
 
 def _rf_use(rf: SimpleNamespace) -> str:
-    """One decoded RF pulse's use tag, as one of :data:`~._results.RF_USES`.
+    """One decoded RF pulse's use tag, as one of ``RF_USES``.
 
     A row with no use character reads back as ``"undefined"``, which is a
     distinct thing from ``"other"``: ``"other"`` was chosen by whoever wrote
