@@ -70,21 +70,21 @@ class NonCartesian3DRecon(ReconPlugin):
         images = noncartesian3D_recon("scan.h5")
         images = noncartesian3D_recon("scan.h5", virtual_coils=4, mode="pics")
 
-    A ball of diameters through k-space rather than a stack of planes, and the
-    central partition of the volume it returns:
+    Spiral interleaves winding outward through the whole volume rather than a
+    stack of planes, and the central partition of the volume it returns:
 
     .. plot::
 
        from pulserver.app import noncartesian3D_recon
-       from _figures import images, koosh_spokes, sampling, volume_example
+       from _figures import images, sampling, volume_example
 
        size = 32
        measurement = volume_example(
            noncartesian3D_recon.PLUGIN, size=size, coils=4
        )
        sampling(
-           [("the sampled ball", measurement.measured)],
-           title="where a 3D radial scan sampled",
+           [("the sampled interleaves", measurement.measured)],
+           title="where a spiral projection scan sampled",
        )
        images(
            [

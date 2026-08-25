@@ -363,6 +363,12 @@ class CompactToeplitzKernel:
     ) -> None:
         torch = _torch()
         values = as_torch(values)
+        # Every applier -- the AVX kernel, the four Triton kernels, the dense
+        # host matvec -- is written for single precision, so a transfer built
+        # from a double-precision basis is coerced rather than reinterpreted a
+        # word at a time. This is where a NumPy basis, which is double unless
+        # it was asked not to be, stops being one.
+        values = values.to(torch.complex64 if values.is_complex() else torch.float32)
         indices = as_torch(indices, device=values.device).to(torch.int32)
         packed_rank = rank * (rank + 1) // 2
         if values.ndim != 2 or values.shape[0] != packed_rank:

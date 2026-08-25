@@ -3279,18 +3279,18 @@ class NonCartesian3D(MRIPhysics):
 
     Examples
     --------
-    A koosh ball is a projection scan: every spoke starts at the centre, so the
-    adjoint alone is heavily weighted there and needs the density compensation a
-    solve applies for it.
+    Spiral projection imaging is a centre-out scan: every interleave starts at
+    the middle of k-space and winds outward in a plane through it, so the
+    adjoint alone is heavily weighted there and needs the density compensation
+    a solve applies for it.
 
     .. plot::
 
-       import matplotlib.pyplot as plt
        import pulserver.recon as recon
-       from _figures import images, koosh_spokes, volume
+       from _figures import images, spiral_projections, volume
 
        truth, coil_maps = volume(24, coils=4, depth=24)
-       trajectory = koosh_spokes(24, 60)
+       trajectory = spiral_projections(24, 48)
 
        physics = recon.NonCartesian3D(trajectory, (24, 24, 24), coil_maps=coil_maps[0])
        measured = physics.A(truth)
@@ -3304,7 +3304,7 @@ class NonCartesian3D(MRIPhysics):
                ("adjoint", adjoint[0, 0, middle]),
                ("CG-SENSE, 10 iterations", solved[0, 0, middle]),
            ],
-           title="NonCartesian3D over a 60-spoke koosh ball",
+           title="NonCartesian3D over 48 spiral projections",
        )
     """
 

@@ -48,6 +48,7 @@ __all__ = [
     "images",
     "epi_example",
     "koosh_spokes",
+    "spiral_projections",
     "noncartesian_example",
     "order_figure",
     "phantom",
@@ -1229,41 +1230,94 @@ def koosh_spokes(size: int, spokes: int):
     return (directions[:, None, :] * radius[None, :, None]).astype(np.float32)
 
 
+def spiral_projections(size: int, projections: int, *, turns: int | None = None):
+    """Spiral projection imaging: a spiral disk through the centre, rotated.
+
+    Every interleave is a spiral that starts at the centre of k-space and
+    winds outward in a plane through it, and the planes are turned so their
+    normals walk the golden-means spiral over the sphere. Each interleave
+    therefore fills a disk rather than tracing a line, which is what lets a
+    volume be covered by far fewer of them than a radial scan needs spokes,
+    and what leaves the centre of k-space densely visited by every one of
+    them -- the property a sensitivity calibration lives on.
+
+    Parameters
+    ----------
+    size : int
+        Matrix, which sets how tightly the spiral has to wind.
+    projections : int
+        Plane orientations acquired.
+    turns : int, optional
+        Revolutions per interleave. Enough to reach the matrix by default.
+
+    Returns
+    -------
+    numpy.ndarray
+        ``(projections, samples, 3)``, float32.
+    """
+    if turns is None:
+        turns = int(np.ceil(0.75 * size))
+    samples = int(np.ceil(np.pi * turns * size / 4))
+
+    index = np.arange(projections)
+    height = 1.0 - 2.0 * (index + 0.5) / projections
+    azimuth = index * np.pi * (3.0 - np.sqrt(5.0))
+    radial = np.sqrt(np.maximum(1.0 - height**2, 0.0))
+    normal = np.stack(
+        [radial * np.cos(azimuth), radial * np.sin(azimuth), height], axis=-1
+    )
+
+    # Two orthonormal directions spanning the plane each normal defines. The
+    # helper is swapped near the poles so the cross product cannot vanish.
+    helper = np.tile(np.array([0.0, 0.0, 1.0]), (projections, 1))
+    helper[np.abs(normal[:, 2]) > 0.9] = np.array([1.0, 0.0, 0.0])
+    first = np.cross(normal, helper)
+    first /= np.linalg.norm(first, axis=-1, keepdims=True)
+    second = np.cross(normal, first)
+
+    step = np.linspace(0.0, 1.0, samples)
+    reach = 0.5 * step
+    angle = 2.0 * np.pi * turns * step
+    return (
+        (reach * np.cos(angle))[None, :, None] * first[:, None, :]
+        + (reach * np.sin(angle))[None, :, None] * second[:, None, :]
+    ).astype(np.float32)
+
+
 def volume_example(
     plugin,
     *,
     size: int = 24,
     coils: int = 4,
-    spokes: int | None = None,
+    projections: int | None = None,
 ):
-    """Measure :func:`volume` along a koosh ball and reconstruct it.
+    """Measure :func:`volume` along spiral projections and reconstruct it.
 
     Parameters
     ----------
     plugin : pulserver.ReconPlugin
         The plugin to drive.
     size : int, optional
-        Matrix, cubic, and the samples per spoke.
+        Matrix, cubic.
     coils : int, optional
         Elements in the receive array.
-    spokes : int, optional
-        Diameters acquired. The spherical Nyquist count by default: the
-        k-sphere has area ``pi * size ** 2`` and a diameter crosses it twice,
-        so ``pi * size ** 2 / 2`` spokes cover it.
+    projections : int, optional
+        Plane orientations acquired. Four times the matrix by default, which
+        fills the sphere at the sizes a figure is drawn at.
 
     Returns
     -------
     Measurement
         ``truth`` and ``image`` are the volume's central partition;
-        ``measured`` is the koosh ball.
+        ``measured`` holds the interleaves themselves.
     """
     from pulserver.recon import ReconContext
     from pulserver.mrd import AcquisitionBucket
 
-    if spokes is None:
-        spokes = int(np.ceil(np.pi * size**2 / 2))
+    if projections is None:
+        projections = 4 * size
     truth, coil_maps = volume(size, coils, size)
-    trajectory = koosh_spokes(size, int(spokes))
+    trajectory = spiral_projections(size, int(projections))
     measured = _sampled(trajectory, truth, coil_maps, coils)
 
     stream = [
@@ -1281,12 +1335,17 @@ def volume_example(
         coils,
         spaces=[
             _encoding(
-                readout=size,
-                phase_encodes=size,
-                partitions=size,
+                # A projection readout already traverses all three axes, so
+                # the encoded space has views and samples and nothing else.
+                # Declaring phase encodes or partitions beside them would have
+                # the buffer place every sample once per position of an axis
+                # the scan never stepped.
+                readout=trajectory.shape[1],
+                phase_encodes=1,
+                partitions=1,
                 views=trajectory.shape[0],
                 recon=_matrix(size, size, size),
-                trajectory="RADIAL",
+                trajectory="SPIRAL",
             )
         ],
     )
