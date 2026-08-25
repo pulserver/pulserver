@@ -254,6 +254,7 @@ class ParamKind(StrEnum):
     BOOL = "bool"
     STRINGLIST = "stringlist"
     DESCRIPTION = "description"
+    CONFIG = "config"
 
 
 MAX_DROPDOWN_OPTIONS = 5
@@ -263,10 +264,11 @@ MAX_INFERRED_DROPDOWN_OPTIONS = 4
 class FloatKey(StrEnum):
     """Canonical keys whose values must be float parameters.
 
-    One of four key groups (see also :class:`IntKey`, :class:`BoolKey`,
-    :class:`EnumKey`) that together define which value type each canonical key
-    accepts. Reach them through :class:`UIParam`; the groups exist so
-    validation can classify a key without a lookup table.
+    One of four groups of console controls (see also :class:`IntKey`,
+    :class:`BoolKey`, :class:`EnumKey`) that together define which value type
+    each canonical key accepts. Reach them through :class:`UIParam`; the
+    groups exist so validation can classify a key without a lookup table.
+    :class:`ConfigKey` sits outside them: it is not a control.
 
     Examples
     --------
@@ -358,6 +360,23 @@ class BoolKey(StrEnum):
     SWAP_PHASE_FREQ = "swap_phase_freq"
     ENABLE_SATURATION_UI = "enable_saturation_ui"
     RECORD_PHYSIO = "record_physio"
+
+
+class ConfigKey(StrEnum):
+    """Canonical keys that configure the interpreter rather than the scan.
+
+    A configuration key is a statement the sequence makes about itself, not a
+    control the operator turns: it has no widget, the console never writes it
+    back, and the interpreter reads it once while setting the scan up. Its
+    value is a :class:`ConfigParam`.
+
+    Examples
+    --------
+    >>> from pulserver.design._params import ConfigKey, ParamKind, expected_param_kind
+    >>> expected_param_kind(ConfigKey.ENABLE_SAR_BURST_MODE) is ParamKind.CONFIG
+    True
+    """
+
     ENABLE_SAR_BURST_MODE = "enable_sar_burst_mode"
 
 
@@ -381,10 +400,11 @@ class EnumKey(StrEnum):
 
 
 class UIParam:
-    """Convenience namespace exposing all canonical protocol keys.
+    """Convenience namespace exposing the console controls.
 
     Use `UIParam.TE`, `UIParam.NX`, `UIParam.SEQUENCE_TYPE`, etc. while the
-    implementation keeps separate typed enums underneath.
+    implementation keeps separate typed enums underneath. Keys that are not
+    controls live in :class:`ConfigKey` and are reached from there.
 
     Examples
     --------
@@ -447,7 +467,6 @@ class UIParam:
     SWAP_PHASE_FREQ = BoolKey.SWAP_PHASE_FREQ
     ENABLE_SATURATION_UI = BoolKey.ENABLE_SATURATION_UI
     RECORD_PHYSIO = BoolKey.RECORD_PHYSIO
-    ENABLE_SAR_BURST_MODE = BoolKey.ENABLE_SAR_BURST_MODE
 
     # Enum-backed keys
     SEQUENCE_TYPE = EnumKey.SEQUENCE_TYPE
@@ -858,6 +877,30 @@ class StringListParam:
 
 
 @dataclass
+class ConfigParam:
+    """A configuration value the sequence declares about itself.
+
+    Unlike the control parameters, this one never becomes a widget: it is
+    read by the interpreter while the scan is being set up and is not sent
+    back. The value is an integer, which covers both a flag and a small
+    enumerated mode.
+
+    Examples
+    --------
+    >>> from pulserver.design import ConfigKey, ConfigParam
+    >>> protocol = {ConfigKey.ENABLE_SAR_BURST_MODE: ConfigParam(value=1)}
+    >>> protocol[ConfigKey.ENABLE_SAR_BURST_MODE].type
+    'config'
+    """
+
+    value: int
+    type: str = "config"
+
+    def __post_init__(self) -> None:
+        self.value = int(self.value)
+
+
+@dataclass
 class Description:
     """Read-only text row: a section header or an explanatory note.
 
@@ -876,8 +919,10 @@ class Description:
     type: str = "description"
 
 
-ProtocolValue = FloatParam | IntParam | BoolParam | StringListParam | Description
-ProtocolKey = FloatKey | IntKey | BoolKey | EnumKey | str
+ProtocolValue = (
+    FloatParam | IntParam | BoolParam | StringListParam | ConfigParam | Description
+)
+ProtocolKey = FloatKey | IntKey | BoolKey | EnumKey | ConfigKey | str
 Protocol = dict[ProtocolKey, ProtocolValue]
 
 
@@ -890,6 +935,7 @@ _TYPE_MAP: dict[str, type] = {
     "int": IntParam,
     "bool": BoolParam,
     "stringlist": StringListParam,
+    "config": ConfigParam,
     "description": Description,
 }
 
@@ -898,6 +944,7 @@ _PARAM_KIND_TO_TYPES: dict[ParamKind, tuple[type, ...]] = {
     ParamKind.INT: (IntParam,),
     ParamKind.BOOL: (BoolParam,),
     ParamKind.STRINGLIST: (StringListParam,),
+    ParamKind.CONFIG: (ConfigParam,),
     ParamKind.DESCRIPTION: (Description,),
 }
 
@@ -954,7 +1001,7 @@ _PARAM_KINDS: dict[str, ParamKind] = {
     EnumKey.PREPARATION_TYPE.value: ParamKind.STRINGLIST,
     EnumKey.TRIGGER_TYPE.value: ParamKind.STRINGLIST,
     BoolKey.RECORD_PHYSIO.value: ParamKind.BOOL,
-    BoolKey.ENABLE_SAR_BURST_MODE.value: ParamKind.BOOL,
+    ConfigKey.ENABLE_SAR_BURST_MODE.value: ParamKind.CONFIG,
 }
 
 _ENUM_OPTIONS: dict[str, list[str]] = {

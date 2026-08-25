@@ -26,7 +26,7 @@ __all__ = [
 from collections import OrderedDict
 from collections.abc import Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor
-from functools import wraps
+from functools import cache, wraps
 from contextlib import ExitStack, contextmanager, suppress
 from importlib import import_module
 from itertools import chain
@@ -3952,18 +3952,7 @@ def _configure_off_resonance_toeplitz(
     enabled: bool,
     options: dict[str, Any],
 ) -> Any:
-    """Install a lazy segmented Toeplitz normal on a DeepInverse adapter.
-
-    ``enabled`` is honoured only when the segmented kernel is trustworthy. It
-    is not: measured against ``A_adjoint(A(x))`` on a radial trajectory the
-    scalar kernel matches to 2e-05 and this one does not match at all, so the
-    normal is computed rather than looked up until the segment transfers are
-    derived and held by a differential test. The cost is one pair of
-    transforms per segment, which is what an uncorrected non-Cartesian normal
-    costs anyway.
-    """
-    del enabled
-    enabled = False
+    """Install a lazy segmented Toeplitz normal on a DeepInverse adapter."""
     operator.use_toeplitz = enabled
     operator.toeplitz_kernel = None
     operator._toeplitz_options = dict(options)
@@ -3971,7 +3960,7 @@ def _configure_off_resonance_toeplitz(
     operator.streaming_methods = {"A_adjoint_A"}
 
     def enable_toeplitz(self: Any, new_options: dict[str, Any]) -> None:
-        # Deliberately does not set use_toeplitz: see the note above.
+        self.use_toeplitz = True
         self._toeplitz_options = dict(new_options)
         self.toeplitz_kernel = None
 
@@ -4008,18 +3997,12 @@ def _configure_off_resonance_toeplitz(
     return operator
 
 
-def _field_model_array(value: Any, device: Any = None) -> Any:
-    """A field model in the array module the corrected operator computes in.
+def _host_array(value: Any) -> Any:
+    """A field model as NumPy, contiguous, for the interpolation to plan on.
 
-    mri-nufft reads the interpolators' array module off the field model and
-    then works in it throughout, so the model decides where the correction
-    runs: NumPy keeps it on the host, CuPy keeps it on the device beside the
-    samples. Torch is not one of the two it offers, and the decomposition the
-    interpolator runs hands back a reversed view Torch cannot wrap in any
-    case, so a Torch model is handed over as one of them.
-
-    ``device`` is where the base operator computes. Without CuPy the model
-    stays on the host, which is where an operator without a GPU wanted it.
+    The decomposition the interpolator runs hands back a reversed view, which
+    is not something a Torch array can wrap. Planning on the host settles it;
+    the factors it produces are moved to the operator afterwards.
     """
     if value is None:
         return None
@@ -4027,14 +4010,73 @@ def _field_model_array(value: Any, device: Any = None) -> Any:
     detach = getattr(value, "detach", None)
     if callable(detach):
         value = detach().cpu().numpy()
-    value = numpy.ascontiguousarray(value)
-    if getattr(device, "type", str(device)) != "cuda":
-        return value
-    try:
-        cupy = import_module("cupy")
-    except ImportError:
-        return value
-    return cupy.asarray(value)
+    return numpy.ascontiguousarray(value)
+
+
+@cache
+def _torch_corrected_class() -> Any:
+    """mri-nufft's off-resonance operator, summed in Torch.
+
+    The correction itself is upstream's -- the field model, the interpolators
+    fitted from it, the segment count. What is replaced is the two loops that
+    add the segments up, because upstream writes them for NumPy and CuPy and
+    reaches for CuPy to put them on a GPU. Ours is one Torch operator over
+    Torch factors, so the sum runs wherever the samples already are and the
+    package needs no second array library to use a card.
+    """
+    corrected_class = import_module("mrinufft.operators").MRIFourierCorrected
+    numpy = import_module("numpy")
+    torch = import_module("torch")
+
+    class TorchFourierCorrected(corrected_class):  # type: ignore[misc,valid-type]
+        """Off-resonance correction whose segment sum is Torch throughout."""
+
+        def to_torch(self, device: Any) -> None:
+            """Hold the interpolators as Torch tensors on ``device``."""
+
+            def held(factor: Any) -> Any:
+                if not isinstance(factor, torch.Tensor):
+                    factor = torch.as_tensor(numpy.asarray(factor))
+                factor = factor.to(torch.complex64, copy=False)
+                return factor if device is None else factor.to(device)
+
+            self.B, self.C = held(self.B), held(self.C)
+
+        def _staged(self, factor: Any, like: Any) -> Any:
+            return factor.to(device=like.device, dtype=like.dtype)
+
+        def op(self, data: Any, *args: Any) -> Any:
+            """Distorted k-space: the segments, weighted and summed."""
+            data = torch.as_tensor(data)
+            batches, coils = self.n_batchs, self.n_coils
+            shots, per_shot = self.n_shots, self.n_samples_per_shot
+            kspace = None
+            for segment in range(self.n_interpolators):
+                spatial = self._staged(self.C[segment], data)
+                partial = self._fourier_op.op(spatial * data, *args)
+                partial = partial.reshape(batches, coils, shots, per_shot)
+                temporal = self._staged(self.B[:, segment], partial)
+                weighted = (temporal * partial).reshape(batches, coils, self.n_samples)
+                kspace = weighted if kspace is None else kspace + weighted
+            return self._safe_squeeze(kspace)
+
+        def adj_op(self, coeffs: Any, *args: Any) -> Any:
+            """The adjoint of that sum, segment by conjugated segment."""
+            coeffs = torch.as_tensor(coeffs)
+            batches, coils = self.n_batchs, self.n_coils
+            shots, per_shot = self.n_shots, self.n_samples_per_shot
+            folded = coeffs.reshape(batches, coils, shots, per_shot)
+            image = None
+            for segment in range(self.n_interpolators):
+                temporal = self._staged(self.B[:, segment], folded).conj()
+                weighted = (temporal * folded).reshape(batches, coils, self.n_samples)
+                partial = self._fourier_op.adj_op(weighted, *args)
+                spatial = self._staged(self.C[segment], partial).conj()
+                contribution = spatial * partial
+                image = contribution if image is None else image + contribution
+            return self._safe_squeeze(image)
+
+    return TorchFourierCorrected
 
 
 def _off_resonance(
@@ -4069,7 +4111,7 @@ def _off_resonance(
     if "off_resonance" in physics.modifiers:
         raise ValueError("physics already has an off-resonance decorator")
     try:
-        corrected_class = import_module("mrinufft.operators").MRIFourierCorrected
+        _torch_corrected_class()
     except ImportError as error:
         raise ImportError("Off-resonance physics requires mri-nufft.") from error
 
@@ -4124,17 +4166,15 @@ def _off_resonance(
 
         corrected_interpolator = supplied_interpolator
 
-    field_device = getattr(
-        _base_fourier_operator(physics.native_operator), "device", None
-    )
-    native = corrected_class(
+    native = _torch_corrected_class()(
         physics.native_operator,
-        b0_map=_field_model_array(field_map, field_device),
-        readout_time=_field_model_array(corrected_readout_time, field_device),
-        r2star_map=_field_model_array(r2star_map, field_device),
-        mask=_field_model_array(mask, field_device),
+        b0_map=_host_array(field_map),
+        readout_time=_host_array(corrected_readout_time),
+        r2star_map=_host_array(r2star_map),
+        mask=_host_array(mask),
         interpolator=corrected_interpolator,
     )
+    native.to_torch(getattr(physics.native_operator, "device", None))
     toeplitz_enabled = "toeplitz" in physics.modifiers
     options = physics.toeplitz_options or _toeplitz_options()
     operator = _native_linear_physics(
@@ -4235,14 +4275,46 @@ class OffResonance(MRIPhysics):
 
     Examples
     --------
-    A long readout accumulates phase wherever the field is off resonance, and the
-    correction is a time-segmented model of it: the field map and the time each
-    sample was taken::
+    A long readout accumulates phase wherever the field is off resonance, so a
+    spiral or a radial train blurs where the field is wrong. The correction is
+    a time-segmented model of that phase: the field map, and the time each
+    sample was taken.
 
-        import pulserver.recon as recon
+    .. plot::
 
-        physics = recon.OffResonance(base_physics, field_map_hz, readout_time_s)
-        image = recon.pics(measured, physics)
+       import numpy as np
+       import pulserver.recon as recon
+       from _figures import images, phantom, radial_spokes
+
+       truth, coil_maps = phantom(64, coils=4)
+       spokes = radial_spokes(64, 48)
+       trajectory = np.asarray(spokes).reshape(-1, 2).astype(np.float32)
+
+       # Half the field offset by 500 Hz, over a 16 ms readout.
+       field_map = np.zeros((64, 64), dtype=np.float32)
+       field_map[:, 32:] = 500.0
+       readout_time = np.tile(
+           np.linspace(0, 16e-3, np.asarray(spokes).shape[1], dtype=np.float32),
+           np.asarray(spokes).shape[0],
+       )
+
+       encoding = recon.NonCartesian2D(
+           trajectory, (64, 64), coil_maps=coil_maps[0], n_coils=4
+       )
+       corrected = recon.OffResonance(encoding, field_map, readout_time)
+       measured = corrected.A(truth)
+
+       ignored = recon.pics(measured, encoding, iterations=10)[0]
+       modelled = recon.pics(measured, corrected, iterations=10)[0]
+
+       images(
+           [
+               ("truth", truth[0]),
+               ("field ignored", ignored),
+               ("field modelled", modelled),
+           ],
+           title="A 16 ms readout through a 500 Hz offset",
+       )
 
     The field model is fitted once, when the operator is built, so a solve pays
     for it only at the start.

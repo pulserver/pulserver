@@ -1865,13 +1865,13 @@ def test_the_noncartesian_solve_keeps_the_whole_kernel():
     assert np.abs(solved)[inside].mean() > 3 * np.abs(solved)[~inside].mean()
 
 
-def test_the_off_resonance_normal_equals_the_operator_it_stands_for():
-    """A fast normal that disagrees is a different operator, not a shortcut.
+def test_the_off_resonance_kernel_equals_the_normal_it_stands_for():
+    """The segmented kernel is the Gram of the corrected operator.
 
-    The segmented kernel is not currently trusted to reproduce
-    ``A_adjoint(A(x))`` for a corrected physics, so the normal is computed.
-    This holds whatever path is taken to the answer it has to agree with, and
-    is what a re-enabled kernel has to pass before it is believed.
+    One transfer per pair of interpolation segments, weighted by the temporal
+    factors of the pair, between the spatial factor of the segment it enters
+    and the conjugate of the one it leaves by. Held against the operator it
+    replaces, because a fast normal that disagrees is a different operator.
     """
     import numpy as np
 
@@ -1901,7 +1901,67 @@ def test_the_off_resonance_normal_equals_the_operator_it_stands_for():
     image = torch.randn(1, 1, size, size, dtype=torch.complex64)
     exact = corrected(False)
     reference = exact.A_adjoint(exact.A(image))
-    accelerated = corrected("auto").A_adjoint_A(image)
+    scale = reference.abs().max()
 
-    error = (accelerated - reference).abs().max() / reference.abs().max()
-    assert float(error) < 1e-5
+    whole = corrected({"compress": False}).A_adjoint_A(image)
+    assert float((whole - reference).abs().max() / scale) < 1e-4
+
+    # Keeping only the locations the samples reached is an approximation, and
+    # a far coarser one than the transform's own error.
+    compressed = corrected({"compress": True}).A_adjoint_A(image)
+    assert float((compressed - reference).abs().max() / scale) < 1e-2
+
+
+def test_the_correction_is_worth_making():
+    """A corrected solve beats an uncorrected one on off-resonant data.
+
+    The kernel agreeing with its operator says nothing about whether the
+    operator is the right one, so this holds the physics as well: a readout
+    long enough to accumulate phase reconstructs blurred when the field is
+    ignored and sharp when it is not.
+    """
+    import numpy as np
+
+    from pulserver import recon as recon_module
+
+    size, spokes, samples = 64, 48, 64
+    angles = np.linspace(0, np.pi, spokes, endpoint=False)
+    radius = np.linspace(-0.5, 0.5, samples, endpoint=False)
+    trajectory = (
+        np.stack(
+            [np.outer(np.cos(angles), radius), np.outer(np.sin(angles), radius)], -1
+        )
+        .reshape(-1, 2)
+        .astype(np.float32)
+    )
+    readout_time = np.tile(np.linspace(0, 16e-3, samples, dtype=np.float32), spokes)
+    field_map = np.zeros((size, size), dtype=np.float32)
+    field_map[:, size // 2 :] = 500.0
+
+    truth = torch.zeros(1, size, size, dtype=torch.complex64)
+    rows, columns = torch.meshgrid(
+        torch.arange(size), torch.arange(size), indexing="ij"
+    )
+    truth[0][((rows - size / 2) ** 2 + (columns - size / 2) ** 2) < (size / 3) ** 2] = (
+        1.0
+    )
+    truth[0][
+        ((rows - size / 2 - 8) ** 2 + (columns - size / 2 + 8) ** 2) < (size / 12) ** 2
+    ] = 2.0
+    maps = torch.ones(4, size, size, dtype=torch.complex64) / 2.0
+
+    base = recon_module.NonCartesian2D(
+        trajectory, (size, size), coil_maps=maps, n_coils=4
+    )
+    corrected = recon_module.OffResonance(base, field_map, readout_time)
+    measured = corrected.A(truth)
+
+    def error(operator):
+        solved = recon_module.pics(
+            measured, operator, regularization=1e-3, iterations=10
+        )[0]
+        solved = solved.detach().abs().squeeze()
+        scale = (solved * truth[0].abs()).sum() / solved.pow(2).sum().clamp_min(1e-12)
+        return float((scale * solved - truth[0].abs()).norm() / truth[0].abs().norm())
+
+    assert error(corrected) < 0.5 * error(base)

@@ -148,6 +148,7 @@ PROTOCOL = (
     "SequencePlugin",
     "SequenceModule",
     "UIParam",
+    "ConfigKey",
     "params",
     "TypeinFloatParam",
     "DropdownFloatParam",
@@ -157,6 +158,7 @@ PROTOCOL = (
     "OffIntParam",
     "BoolParam",
     "StringListParam",
+    "ConfigParam",
     "Description",
     "TEPreset",
     "TRPreset",
@@ -177,6 +179,8 @@ from ._cli import run_cli, write_sequence
 from ._module import SequenceModule
 from ._params import (
     BoolParam,
+    ConfigKey,
+    ConfigParam,
     Description,
     DropdownFloatParam,
     DropdownIntParam,
