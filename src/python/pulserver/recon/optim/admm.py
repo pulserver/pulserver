@@ -57,20 +57,48 @@ class ADMM(_IterativeOptimizer):
     Examples
     --------
     Where :func:`~pulserver.recon.pics` takes one denoiser, ADMM takes a
-    :class:`~pulserver.recon.StackedPrior` and so minimises against several at
-    once::
+    :class:`~pulserver.recon.StackedPrior` and so minimises against several
+    regularizers at once, each with its own weight. The priors are the ones
+    with a closed-form proximal operator, and they act on the image as real
+    numbers, which is what ``viewed_as_real`` presents.
 
-        import deepinv
-        import pulserver.recon as recon
+    .. plot::
 
-        solver = recon.ADMM(
-            data_fidelity=deepinv.optim.L2(),
-            prior=recon.StackedPrior([wavelet_prior, tv_prior]),
-            lambda_reg=0.01,
-            stepsize=1.0,
-            max_iter=20,
-        )
-        image = solver(measured, physics)
+       import deepinv
+       import torch
+       import pulserver.recon as recon
+       from _figures import images, phantom, radial_spokes
+
+       truth, coil_maps = phantom(64, coils=4)
+       physics = recon.NonCartesian2D(
+           radial_spokes(64, 16), (64, 64), coil_maps=coil_maps[0],
+           viewed_as_real=True,
+       )
+       image = torch.view_as_real(truth).moveaxis(-1, 1).squeeze(2)
+       measured = physics.A(image)
+
+       def magnitude(value):
+           return torch.view_as_complex(value.moveaxis(1, -1).contiguous())[0]
+
+       one = recon.ADMM(
+           prior=recon.StackedPrior([deepinv.optim.TVPrior()]),
+           lambda_reg=0.01, stepsize=1.0, max_iter=15, cg_max_iter=5,
+       )
+       both = recon.ADMM(
+           prior=recon.StackedPrior(
+               [deepinv.optim.TVPrior(), deepinv.optim.L1Prior()],
+               weights=[0.7, 0.3],
+           ),
+           lambda_reg=0.01, stepsize=1.0, max_iter=15, cg_max_iter=5,
+       )
+       images(
+           [
+               ("truth", truth[0]),
+               ("TV alone", magnitude(one(measured, physics))),
+               ("TV + L1", magnitude(both(measured, physics))),
+           ],
+           title="ADMM minimises against several regularizers at once",
+       )
     """
 
     def __init__(

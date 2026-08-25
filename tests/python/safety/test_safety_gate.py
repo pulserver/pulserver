@@ -194,7 +194,6 @@ def test_multi_sequence_collections_load_from_payloads():
         float(system.adc_raster_time),
         float(system.block_duration_raster),
         True,
-        1,
     )
     _check_consistency(collection)
     _check_safety(collection, skip_pns=True)

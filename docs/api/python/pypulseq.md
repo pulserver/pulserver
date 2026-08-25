@@ -270,10 +270,11 @@ Imported here unchanged from PyPulseq. Their documentation is upstream's.
    disable_trace
 ```
 
-## Sets
+## Whose name is whose
 
-The membership tests the API page and its contract test are both written
-against.
+The namespace is a drop-in for PyPulseq, so it answers to names from both
+sides. Two sets say which is which: `OVERRIDES` is every name this project
+defines itself, `UPSTREAM` every name it hands through untouched.
 
 ```{eval-rst}
 .. autosummary::
@@ -281,10 +282,4 @@ against.
 
    OVERRIDES
    UPSTREAM
-   RESULTS
-   MATLAB_PARITY
-   BASE_FACTORIES
-   SAMPLING
-   SYSTEM
-   SLOTTED
 ```

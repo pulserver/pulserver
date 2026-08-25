@@ -61,19 +61,13 @@ def test_the_names_left_to_prose_are_named_there():
         assert f"`{name}`" in page, name
 
 
-#: The membership sets are reachable on the namespace but deliberately not in
-#: ``__all__``: they say what the namespace is made of rather than being part
-#: of the authoring vocabulary.
+#: The two sets the page documents. They are reachable on the namespace but
+#: deliberately not in ``__all__``: they say which half of a drop-in namespace
+#: a name comes from rather than being part of the authoring vocabulary. The
+#: finer sets the contract tests are written against stay off the page.
 _MEMBERSHIP = {
     "OVERRIDES",
     "UPSTREAM",
-    "RESULTS",
-    "MATLAB_PARITY",
-    "BASE_FACTORIES",
-    "SAMPLING",
-    "SYSTEM",
-    "SLOTTED",
-    "FILES",
 }
 
 

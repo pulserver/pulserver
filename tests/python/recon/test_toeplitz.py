@@ -17,6 +17,8 @@ from pulserver.recon._toeplitz import (
 )
 from pulserver.recon.execution import CudaStreaming
 import pulserver.recon.physics as physics
+from pulserver.recon.physics import _common as physics_common
+from pulserver.recon.physics import _kernel as physics_kernel
 
 
 torch = pytest.importorskip("torch")
@@ -267,7 +269,7 @@ def test_one_gridding_pass_serves_every_frame():
     pairs = rank * (rank + 1) // 2
     plans: list[int] = []
     griddings: list[int] = []
-    original = physics._psf_operator
+    original = physics_kernel._psf_operator
 
     def counted(samples, backend, spatial_shape):
         plans.append(int(samples.shape[0]))
@@ -296,7 +298,7 @@ def test_one_gridding_pass_serves_every_frame():
             ),
             basis,
         )
-        with mock.patch.object(physics, "_psf_operator", counted):
+        with mock.patch.object(physics_kernel, "_psf_operator", counted):
             accelerated.A_adjoint_A(
                 torch.zeros(1, rank, *image_shape, dtype=torch.complex64)
             )
@@ -324,11 +326,11 @@ def test_cartesian_subspace_builder_matches_centered_fft_normal():
     )
     operator = SimpleNamespace(mask=masks, coil_maps=smaps)
     frame_physics = [SimpleNamespace(operator=operator) for _ in range(frames)]
-    options = physics._toeplitz_options(
+    options = physics_common._toeplitz_options(
         chunk_size=5,
         coil_batch_size=2,
     )
-    kernel, proxy = physics._build_cartesian_subspace_toeplitz(
+    kernel, proxy = physics_kernel._build_cartesian_subspace_toeplitz(
         frame_physics,
         basis,
         options,
@@ -340,7 +342,7 @@ def test_cartesian_subspace_builder_matches_centered_fft_normal():
         generator=generator,
         dtype=torch.complex64,
     )
-    result = physics._apply_sense_toeplitz(
+    result = physics_kernel._apply_sense_toeplitz(
         kernel,
         image,
         proxy,
@@ -563,12 +565,14 @@ def test_off_resonance_builder_matches_segmented_normal(monkeypatch):
             features.to(weights.dtype),
         )
 
-    monkeypatch.setattr(physics, "_compute_toeplitz_transfer", compute)
-    options = physics._toeplitz_options(
+    monkeypatch.setattr(physics_kernel, "_compute_toeplitz_transfer", compute)
+    options = physics_common._toeplitz_options(
         chunk_size=4,
         coil_batch_size=2,
     )
-    kernel, returned_spatial = physics._build_off_resonance_toeplitz(corrected, options)
+    kernel, returned_spatial = physics_kernel._build_off_resonance_toeplitz(
+        corrected, options
+    )
     image = torch.randn(
         2,
         1,
@@ -576,7 +580,7 @@ def test_off_resonance_builder_matches_segmented_normal(monkeypatch):
         generator=generator,
         dtype=torch.complex64,
     )
-    result = physics._apply_sense_toeplitz(
+    result = physics_kernel._apply_sense_toeplitz(
         kernel,
         image,
         corrected,
@@ -670,13 +674,13 @@ def test_combined_subspace_off_resonance_matches_framewise_normal(monkeypatch):
             native.features.to(weights.dtype),
         )
 
-    monkeypatch.setattr(physics, "_compute_toeplitz_transfer", compute)
+    monkeypatch.setattr(physics_kernel, "_compute_toeplitz_transfer", compute)
     frame_physics = [SimpleNamespace(native_operator=native) for native in corrected]
-    options = physics._toeplitz_options(
+    options = physics_common._toeplitz_options(
         chunk_size=3,
         coil_batch_size=2,
     )
-    kernel, factors = physics._build_subspace_off_resonance_toeplitz(
+    kernel, factors = physics_kernel._build_subspace_off_resonance_toeplitz(
         frame_physics,
         basis,
         options,
@@ -688,7 +692,7 @@ def test_combined_subspace_off_resonance_matches_framewise_normal(monkeypatch):
         generator=generator,
         dtype=torch.complex64,
     )
-    result = physics._apply_subspace_off_resonance_toeplitz(
+    result = physics_kernel._apply_subspace_off_resonance_toeplitz(
         kernel,
         image,
         corrected[0],
@@ -753,14 +757,14 @@ def test_combined_subspace_off_resonance_matches_framewise_normal(monkeypatch):
             transfer_precision="float32",
         )
         streamed_kernel, streamed_factors = (
-            physics._build_subspace_off_resonance_toeplitz(
+            physics_kernel._build_subspace_off_resonance_toeplitz(
                 frame_physics,
                 basis,
                 options,
                 streaming=policy,
             )
         )
-        streamed = physics._apply_subspace_off_resonance_toeplitz(
+        streamed = physics_kernel._apply_subspace_off_resonance_toeplitz(
             streamed_kernel,
             image,
             corrected[0],
@@ -1008,13 +1012,13 @@ def test_resident_cuda_fuses_sense_factors_and_accumulation():
         cuda_transfer_precision="float32",
     )
 
-    reference = physics._apply_sense_toeplitz(
+    reference = physics_kernel._apply_sense_toeplitz(
         compact,
         image,
         native,
         coil_batch_size=1,
     )
-    result = physics._apply_sense_toeplitz(
+    result = physics_kernel._apply_sense_toeplitz(
         resident,
         image,
         native,
@@ -1414,7 +1418,7 @@ def test_a_released_plan_is_made_by_the_transform_that_needs_it():
             pointed.append((samples, typ))
 
     raw = _Raw()
-    physics._plans_made_when_asked(raw, {"eps": 1e-6}, "build")
+    physics_kernel._plans_made_when_asked(raw, {"eps": 1e-6}, "build")
 
     assert made == []
 
@@ -1448,7 +1452,7 @@ def test_an_unplanned_operator_can_still_be_aimed_at_new_samples():
             pointed.append((samples, typ))
 
     raw = _Raw()
-    physics._plans_made_when_asked(raw, {"eps": 1e-6}, "build")
+    physics_kernel._plans_made_when_asked(raw, {"eps": 1e-6}, "build")
 
     raw._set_pts(1, "frame")
     raw._set_pts(2, "frame")
@@ -1487,7 +1491,7 @@ def test_a_build_leaves_the_card_to_the_kernel_it_built():
     ).cuda()
     before = built.A(coefficients)
     encoding = built.frame_physics[0].provider.physics.native_operator
-    raw = physics._base_fourier_operator(encoding).raw_op
+    raw = physics_common._base_fourier_operator(encoding).raw_op
 
     built.A_adjoint_A(coefficients)
 
@@ -1590,7 +1594,7 @@ def test_maps_are_read_where_they_rest_and_staged_a_coil_at_a_time():
     operator = SimpleNamespace(shape=image_shape, smaps=maps, uses_sense=True)
     image = torch.zeros(1, rank, *image_shape, dtype=torch.complex64).cuda()
 
-    held = physics._sense_maps(operator, image)
+    held = physics_kernel._sense_maps(operator, image)
 
     assert held.device.type == "cpu"
 
@@ -1600,8 +1604,8 @@ def test_maps_are_read_where_they_rest_and_staged_a_coil_at_a_time():
     kernel = _packed_kernel(0.5 * (raw + raw.movedim(0, 1)), image_shape).to("cuda")
     kernel.cuda_transfer_precision = "float32"
 
-    staged = physics._apply_sense_toeplitz(kernel, image, operator)
-    whole = physics._apply_sense_toeplitz(
+    staged = physics_kernel._apply_sense_toeplitz(kernel, image, operator)
+    whole = physics_kernel._apply_sense_toeplitz(
         kernel,
         image,
         SimpleNamespace(shape=image_shape, smaps=maps.cuda(), uses_sense=True),
@@ -1634,7 +1638,7 @@ def test_coils_split_over_devices_sum_to_the_undivided_answer(batched_maps):
     ).cuda()
     operator = SimpleNamespace(shape=image_shape, smaps=maps, uses_sense=True)
 
-    whole = physics._apply_sense_toeplitz(kernel, image, operator)
+    whole = physics_kernel._apply_sense_toeplitz(kernel, image, operator)
 
     policy = CudaStreaming(streams=2, pin_memory=False)
     with mock.patch.object(
@@ -1643,7 +1647,7 @@ def test_coils_split_over_devices_sum_to_the_undivided_answer(batched_maps):
         property(lambda self: (torch.device("cuda:0"),) * 2),
     ):
         assert policy.device_count == 2
-        divided = physics._apply_sense_toeplitz(
+        divided = physics_kernel._apply_sense_toeplitz(
             kernel, image, operator, streaming=policy
         )
 

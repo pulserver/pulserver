@@ -177,7 +177,7 @@ class _StackedNUFFTLinearPhysics(deepinv.physics.LinearPhysics):
         key = id(native)
         kernel = self.toeplitz_kernels.get(key)
         if kernel is None:
-            from .physics import _build_scalar_toeplitz
+            from .physics._kernel import _build_scalar_toeplitz
 
             kernel = _build_scalar_toeplitz(
                 native,

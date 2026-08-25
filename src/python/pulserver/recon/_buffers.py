@@ -93,6 +93,10 @@ class ReconBuffer:
 
     Examples
     --------
+    A plugin receives its buffers already laid out, from what the header
+    says. Stating a layout directly is how a test asks for one without a scan
+    file -- four channels, two slices, a 32-line readout of 64 samples:
+
     >>> import pulserver.recon as recon
     >>> import pulserver.mrd as mrd
     >>> space = mrd.EncodingSpace(
@@ -362,6 +366,9 @@ class ReconData(Mapping):
 
     Examples
     --------
+    :meth:`from_header` is what a stream uses. Stating the spaces directly is
+    the offline spelling of the same thing:
+
     >>> import pulserver.recon as recon
     >>> import pulserver.mrd as mrd
     >>> space = mrd.EncodingSpace(

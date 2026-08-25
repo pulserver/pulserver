@@ -17,6 +17,8 @@ import pulserver.recon.denoisers as denoisers
 import pulserver.mrd as mrd_tools
 import pulserver.mrd._arrays as arrays
 import pulserver.recon.physics as physics
+from pulserver.recon.physics import _common as physics_common
+from pulserver.recon.physics import _noncartesian as physics_noncartesian
 from pulserver.mrd import _metadata as metadata
 from pulserver.mrd import (
     Homodyne,
@@ -474,7 +476,7 @@ def test_cartesian_factory_returns_uniform_facade(monkeypatch):
             calls.update(kwargs)
 
     module = SimpleNamespace(MultiCoilMRI=Cartesian)
-    monkeypatch.setattr(physics, "import_module", lambda _name: module)
+    monkeypatch.setattr(physics_common, "import_module", lambda _name: module)
     mask = SimpleNamespace(device="cpu")
     coil_maps = SimpleNamespace(device="cuda:0")
     result = physics.Cartesian2D(mask, coil_maps, toeplitz=True)
@@ -540,9 +542,9 @@ def test_noncartesian_factory_owns_mrinufft_construction(monkeypatch):
 
     mrinufft = SimpleNamespace(get_operator=lambda _backend: constructor)
     adapter = SimpleNamespace(use_toeplitz=False)
-    monkeypatch.setattr(physics, "_require_mrinufft", lambda: mrinufft)
+    monkeypatch.setattr(physics_noncartesian, "_require_mrinufft", lambda: mrinufft)
     monkeypatch.setattr(
-        physics,
+        physics_noncartesian,
         "_native_linear_physics",
         lambda *_args, **_kwargs: adapter,
     )
@@ -570,9 +572,9 @@ def test_noncartesian_frame_rebuild_slices_flattened_density(monkeypatch):
         return SimpleNamespace()
 
     mrinufft = SimpleNamespace(get_operator=lambda _backend: constructor)
-    monkeypatch.setattr(physics, "_require_mrinufft", lambda: mrinufft)
+    monkeypatch.setattr(physics_noncartesian, "_require_mrinufft", lambda: mrinufft)
     monkeypatch.setattr(
-        physics,
+        physics_noncartesian,
         "_native_linear_physics",
         lambda *_args, **_kwargs: SimpleNamespace(use_toeplitz=False),
     )
@@ -597,9 +599,9 @@ def test_streamed_noncartesian_factory_only_builds_first_dynamic_frame(monkeypat
         return SimpleNamespace()
 
     mrinufft = SimpleNamespace(get_operator=lambda _backend: constructor)
-    monkeypatch.setattr(physics, "_require_mrinufft", lambda: mrinufft)
+    monkeypatch.setattr(physics_noncartesian, "_require_mrinufft", lambda: mrinufft)
     monkeypatch.setattr(
-        physics,
+        physics_noncartesian,
         "_native_linear_physics",
         lambda *_args, **_kwargs: SimpleNamespace(use_toeplitz=False),
     )

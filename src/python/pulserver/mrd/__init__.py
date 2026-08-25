@@ -67,7 +67,14 @@ _MEMBERS = {
     "user_parameter": "_header",
 }
 
-__all__ = sorted(_MEMBERS)
+#: Reachable on the namespace but not part of its vocabulary. The encoding
+#: space is the layout a header states; the stream contract builds it and a
+#: plugin reads it off ``buffer.space``. Stating one directly is how a test
+#: asks for a buffer of a given shape without a scan file, so the name
+#: resolves -- it is not something a plugin writes.
+_INTERNAL = frozenset({"EncodingSpace"})
+
+__all__ = sorted(_MEMBERS.keys() - _INTERNAL)
 
 
 def __getattr__(name: str) -> Any:

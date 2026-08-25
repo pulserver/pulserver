@@ -36,7 +36,6 @@ def collection_for(paths: list[str]) -> object:
         0.1e-6,
         10e-6,
         True,
-        1,
     )
 
 

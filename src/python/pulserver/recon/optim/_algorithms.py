@@ -454,7 +454,7 @@ def pics(
         return _pics(data, physics, denoiser, **kwargs)
     import torch
 
-    from ..physics import _operator_device
+    from ..physics._common import _operator_device
 
     device = _operator_device(physics)
     tensor = torch.as_tensor(data)

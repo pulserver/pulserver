@@ -20,7 +20,7 @@ from pulserver.recon._cuda_streaming import (
     tensor_nbytes,
 )
 from pulserver.recon._toeplitz import CompactToeplitzKernel, support_indices
-from pulserver.recon.physics import _apply_sense_toeplitz
+from pulserver.recon.physics._kernel import _apply_sense_toeplitz
 
 
 torch = pytest.importorskip("torch")

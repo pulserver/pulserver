@@ -151,10 +151,9 @@ def test_the_composed_tr_waveform_is_the_rotated_gradient(rotation):
         float(system.adc_raster_time),
         float(system.block_duration_raster),
         True,
-        1,
         [],
     )
-    window = _get_tr_waveforms(collection, 0, 1, 0, False, 0)
+    window = _get_tr_waveforms(collection, 0, 1, 0, False)
     amplitudes = np.array(
         [np.asarray(window[axis]["amplitude"]) for axis in ("gx", "gy", "gz")]
     )

@@ -85,7 +85,7 @@ def test_a_three_dimensional_cartesian_operator_does_the_same():
 def test_single_precision_input_is_not_copied():
     """The coercion is a no-op where there is nothing to coerce, so the common
     case pays nothing for it."""
-    from pulserver.recon.physics import _single_precision
+    from pulserver.recon.physics._cartesian import _single_precision
 
     trajectory = torch.as_tensor(radial()).float()
     assert _single_precision(trajectory) is trajectory

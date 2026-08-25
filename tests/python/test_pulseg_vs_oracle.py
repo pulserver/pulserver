@@ -59,7 +59,6 @@ def collection_for(files: list[str]):
         0.1e-6,
         10e-6,
         True,
-        1,
         label_column_map=LABEL_COLUMN_MAP,
     )
 
@@ -244,7 +243,7 @@ def test_the_tr_waveforms_are_the_composed_file_gradients(case):
         num = tr["num_tr_instances"]
         norot = instance_table(seq, GAMMA, B0)["norot_flag"]
         for tr_idx in {0, num - 1}:
-            got = wrapper._get_tr_waveforms(coll, subseq, actual, tr_idx, False, 0)
+            got = wrapper._get_tr_waveforms(coll, subseq, actual, tr_idx, False)
             start = (tr_idx % tr["num_trs"]) * tr_size
             times = np.asarray(got["gx"]["time_us"], dtype=float)
             raster = times[1] - times[0] if times.size > 1 else 10.0

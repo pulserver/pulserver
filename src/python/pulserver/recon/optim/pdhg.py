@@ -57,21 +57,46 @@ class PDHG(_IterativeOptimizer):
 
     Examples
     --------
-    The primal-dual pair, for the same simultaneous-regularizer case ADMM covers,
-    without the inner linear solve::
+    The primal-dual pair, for the same simultaneous-regularizer case
+    :class:`~pulserver.recon.ADMM` covers, without the inner linear solve. It
+    reaches the same picture from more iterations of cheaper steps.
 
-        import deepinv
-        import pulserver.recon as recon
+    .. plot::
 
-        solver = recon.PDHG(
-            data_fidelity=deepinv.optim.L2(),
-            prior=recon.StackedPrior([wavelet_prior, tv_prior]),
-            lambda_reg=0.01,
-            stepsize=0.4,
-            stepsize_dual=0.4,
-            max_iter=100,
-        )
-        image = solver(measured, physics)
+       import deepinv
+       import torch
+       import pulserver.recon as recon
+       from _figures import images, phantom, radial_spokes
+
+       truth, coil_maps = phantom(64, coils=4)
+       physics = recon.NonCartesian2D(
+           radial_spokes(64, 16), (64, 64), coil_maps=coil_maps[0],
+           viewed_as_real=True,
+       )
+       image = torch.view_as_real(truth).moveaxis(-1, 1).squeeze(2)
+       measured = physics.A(image)
+
+       def magnitude(value):
+           return torch.view_as_complex(value.moveaxis(1, -1).contiguous())[0]
+
+       stack = recon.StackedPrior(
+           [deepinv.optim.TVPrior(), deepinv.optim.L1Prior()], weights=[0.7, 0.3]
+       )
+       admm = recon.ADMM(
+           prior=stack, lambda_reg=0.01, stepsize=1.0, max_iter=15, cg_max_iter=5
+       )
+       pdhg = recon.PDHG(
+           prior=stack, lambda_reg=0.01, stepsize=0.4, stepsize_dual=0.4,
+           max_iter=60,
+       )
+       images(
+           [
+               ("truth", truth[0]),
+               ("ADMM, 15 iterations", magnitude(admm(measured, physics))),
+               ("PDHG, 60 iterations", magnitude(pdhg(measured, physics))),
+           ],
+           title="the same stacked prior, with and without an inner linear solve",
+       )
     """
 
     def __init__(

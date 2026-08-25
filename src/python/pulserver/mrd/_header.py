@@ -7,7 +7,7 @@ leaves what no standard field has a place for.
 
 from __future__ import annotations
 
-__all__ = ["EncodingSpace", "diffusion_table", "user_parameter"]
+__all__ = ["diffusion_table", "user_parameter"]
 
 from dataclasses import dataclass
 from typing import Any

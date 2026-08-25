@@ -14,7 +14,8 @@ from pulserver.recon.learned import (
     _as_real_channels,
     _ComplexAdapter,
 )
-from pulserver.recon.physics import Cartesian2D, _measurement_to_channels
+from pulserver.recon.physics import Cartesian2D
+from pulserver.recon.physics._common import _measurement_to_channels
 
 
 class _Scale(torch.nn.Module):

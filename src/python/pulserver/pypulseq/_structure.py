@@ -59,7 +59,6 @@ class _Structure:
             float(system.adc_raster_time),
             float(system.block_duration_raster),
             True,
-            1,
         )
         self.tr = _find_tr(self.collection)
         self._segments: list | None = None
