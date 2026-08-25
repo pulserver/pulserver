@@ -3952,7 +3952,18 @@ def _configure_off_resonance_toeplitz(
     enabled: bool,
     options: dict[str, Any],
 ) -> Any:
-    """Install a lazy segmented Toeplitz normal on a DeepInverse adapter."""
+    """Install a lazy segmented Toeplitz normal on a DeepInverse adapter.
+
+    ``enabled`` is honoured only when the segmented kernel is trustworthy. It
+    is not: measured against ``A_adjoint(A(x))`` on a radial trajectory the
+    scalar kernel matches to 2e-05 and this one does not match at all, so the
+    normal is computed rather than looked up until the segment transfers are
+    derived and held by a differential test. The cost is one pair of
+    transforms per segment, which is what an uncorrected non-Cartesian normal
+    costs anyway.
+    """
+    del enabled
+    enabled = False
     operator.use_toeplitz = enabled
     operator.toeplitz_kernel = None
     operator._toeplitz_options = dict(options)
@@ -3960,7 +3971,7 @@ def _configure_off_resonance_toeplitz(
     operator.streaming_methods = {"A_adjoint_A"}
 
     def enable_toeplitz(self: Any, new_options: dict[str, Any]) -> None:
-        self.use_toeplitz = True
+        # Deliberately does not set use_toeplitz: see the note above.
         self._toeplitz_options = dict(new_options)
         self.toeplitz_kernel = None
 
@@ -3997,14 +4008,18 @@ def _configure_off_resonance_toeplitz(
     return operator
 
 
-def _host_array(value: Any) -> Any:
-    """A field model as NumPy, contiguous, for the interpolation to plan on.
+def _field_model_array(value: Any, device: Any = None) -> Any:
+    """A field model in the array module the corrected operator computes in.
 
-    The singular-value decomposition the interpolator runs on hands back a
-    reversed view, and a Torch array on the way in means a Torch array on the
-    way out -- of something whose columns run backwards, which Torch cannot
-    wrap. Planning on the host settles it, and the operator's own arrays are
-    unaffected: this is the field model, not the data.
+    mri-nufft reads the interpolators' array module off the field model and
+    then works in it throughout, so the model decides where the correction
+    runs: NumPy keeps it on the host, CuPy keeps it on the device beside the
+    samples. Torch is not one of the two it offers, and the decomposition the
+    interpolator runs hands back a reversed view Torch cannot wrap in any
+    case, so a Torch model is handed over as one of them.
+
+    ``device`` is where the base operator computes. Without CuPy the model
+    stays on the host, which is where an operator without a GPU wanted it.
     """
     if value is None:
         return None
@@ -4012,7 +4027,14 @@ def _host_array(value: Any) -> Any:
     detach = getattr(value, "detach", None)
     if callable(detach):
         value = detach().cpu().numpy()
-    return numpy.ascontiguousarray(value)
+    value = numpy.ascontiguousarray(value)
+    if getattr(device, "type", str(device)) != "cuda":
+        return value
+    try:
+        cupy = import_module("cupy")
+    except ImportError:
+        return value
+    return cupy.asarray(value)
 
 
 def _off_resonance(
@@ -4102,12 +4124,15 @@ def _off_resonance(
 
         corrected_interpolator = supplied_interpolator
 
+    field_device = getattr(
+        _base_fourier_operator(physics.native_operator), "device", None
+    )
     native = corrected_class(
         physics.native_operator,
-        b0_map=_host_array(field_map),
-        readout_time=_host_array(corrected_readout_time),
-        r2star_map=_host_array(r2star_map),
-        mask=_host_array(mask),
+        b0_map=_field_model_array(field_map, field_device),
+        readout_time=_field_model_array(corrected_readout_time, field_device),
+        r2star_map=_field_model_array(r2star_map, field_device),
+        mask=_field_model_array(mask, field_device),
         interpolator=corrected_interpolator,
     )
     toeplitz_enabled = "toeplitz" in physics.modifiers

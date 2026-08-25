@@ -156,6 +156,12 @@ def noncartesian_recon(
         coil_maps=maps,
         density=density,
         n_coils=n_coils,
+        # The whole kernel, not the locations the samples reached. This solve
+        # is the regime where the normal operator has eigenvalues at zero, so
+        # dropping any of the transfer carries the smallest ones negative and
+        # CG stops on a non-positive recurrence. One plane's kernel is small
+        # enough that keeping all of it costs nothing worth having.
+        toeplitz={"compress": False},
     )
     # The SENSE solve keeps a singleton coil axis, so index past both batch and
     # channel to reach the image.

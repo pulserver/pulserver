@@ -1812,3 +1812,96 @@ def test_one_plan_serves_a_dynamic_scan_however_many_frames_it_has():
         # plan it would build per frame is never built at all.
         assert provider.shared is None
         assert not provider.cache
+
+
+def test_the_noncartesian_solve_keeps_the_whole_kernel():
+    """CG needs a positive-definite normal, which truncation cannot promise.
+
+    The exact normal operator of a SENSE solve has eigenvalues at zero, so a
+    kernel cut to the locations the samples reached carries the smallest ones
+    negative and CG stops on a non-positive recurrence. One plane's kernel is
+    small enough that keeping all of it costs nothing worth having, so the
+    recipe asks for the whole thing.
+    """
+    import numpy as np
+
+    from pulserver.recon import NonCartesian2D, noncartesian_recon
+
+    size, spokes = 64, int(np.ceil(np.pi / 2 * 64))
+    angles = np.linspace(0, np.pi, spokes, endpoint=False)
+    radius = np.linspace(-0.5, 0.5, 2 * size, endpoint=False)
+    trajectory = (
+        np.stack(
+            [np.outer(np.cos(angles), radius), np.outer(np.sin(angles), radius)], -1
+        )
+        .reshape(-1, 2)
+        .astype(np.float32)
+    )
+
+    truth = np.zeros((size, size), dtype=np.complex64)
+    rows, columns = np.mgrid[0:size, 0:size]
+    truth[((rows - size / 2) ** 2 + (columns - size / 2) ** 2) < (size / 3) ** 2] = 1.0
+
+    axes = np.meshgrid(*(np.linspace(-1, 1, size),) * 2, indexing="ij")
+    maps = np.stack(
+        [
+            np.exp(-((axes[0] - x) ** 2 + (axes[1] - y) ** 2))
+            for x, y in ((-0.6, -0.6), (-0.6, 0.6), (0.6, -0.6), (0.6, 0.6))
+        ]
+    ).astype(np.complex64)
+    maps /= np.sqrt((abs(maps) ** 2).sum(0, keepdims=True))
+
+    encoding = NonCartesian2D(
+        trajectory, (size, size), coil_maps=torch.as_tensor(maps), n_coils=4
+    )
+    measured = encoding.A(torch.as_tensor(truth)[None]).detach()[0]
+
+    solved = noncartesian_recon(
+        np.asarray(measured.cpu()), trajectory, (size, size), mode="pics"
+    )
+
+    assert np.isfinite(solved).all()
+    inside = np.abs(truth) > 0
+    assert np.abs(solved)[inside].mean() > 3 * np.abs(solved)[~inside].mean()
+
+
+def test_the_off_resonance_normal_equals_the_operator_it_stands_for():
+    """A fast normal that disagrees is a different operator, not a shortcut.
+
+    The segmented kernel is not currently trusted to reproduce
+    ``A_adjoint(A(x))`` for a corrected physics, so the normal is computed.
+    This holds whatever path is taken to the answer it has to agree with, and
+    is what a re-enabled kernel has to pass before it is believed.
+    """
+    import numpy as np
+
+    from pulserver.recon import NonCartesian2D, OffResonance
+
+    size, spokes, samples = 64, 48, 64
+    angles = np.linspace(0, np.pi, spokes, endpoint=False)
+    radius = np.linspace(-0.5, 0.5, samples, endpoint=False)
+    trajectory = (
+        np.stack(
+            [np.outer(np.cos(angles), radius), np.outer(np.sin(angles), radius)], -1
+        )
+        .reshape(-1, 2)
+        .astype(np.float32)
+    )
+    readout_time = np.tile(np.linspace(0, 8e-3, samples, dtype=np.float32), spokes)
+    field_map = np.zeros((size, size), dtype=np.float32)
+    field_map[:, size // 2 :] = 150.0
+    maps = torch.ones(4, size, size, dtype=torch.complex64) / 2.0
+
+    def corrected(toeplitz):
+        base = NonCartesian2D(
+            trajectory, (size, size), coil_maps=maps, n_coils=4, toeplitz=toeplitz
+        )
+        return OffResonance(base, field_map, readout_time)
+
+    image = torch.randn(1, 1, size, size, dtype=torch.complex64)
+    exact = corrected(False)
+    reference = exact.A_adjoint(exact.A(image))
+    accelerated = corrected("auto").A_adjoint_A(image)
+
+    error = (accelerated - reference).abs().max() / reference.abs().max()
+    assert float(error) < 1e-5

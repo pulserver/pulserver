@@ -358,6 +358,7 @@ class BoolKey(StrEnum):
     SWAP_PHASE_FREQ = "swap_phase_freq"
     ENABLE_SATURATION_UI = "enable_saturation_ui"
     RECORD_PHYSIO = "record_physio"
+    ENABLE_SAR_BURST_MODE = "enable_sar_burst_mode"
 
 
 class EnumKey(StrEnum):
@@ -446,6 +447,7 @@ class UIParam:
     SWAP_PHASE_FREQ = BoolKey.SWAP_PHASE_FREQ
     ENABLE_SATURATION_UI = BoolKey.ENABLE_SATURATION_UI
     RECORD_PHYSIO = BoolKey.RECORD_PHYSIO
+    ENABLE_SAR_BURST_MODE = BoolKey.ENABLE_SAR_BURST_MODE
 
     # Enum-backed keys
     SEQUENCE_TYPE = EnumKey.SEQUENCE_TYPE
@@ -952,6 +954,7 @@ _PARAM_KINDS: dict[str, ParamKind] = {
     EnumKey.PREPARATION_TYPE.value: ParamKind.STRINGLIST,
     EnumKey.TRIGGER_TYPE.value: ParamKind.STRINGLIST,
     BoolKey.RECORD_PHYSIO.value: ParamKind.BOOL,
+    BoolKey.ENABLE_SAR_BURST_MODE.value: ParamKind.BOOL,
 }
 
 _ENUM_OPTIONS: dict[str, list[str]] = {

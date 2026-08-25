@@ -24,6 +24,7 @@ def register_torch_cufinufft() -> bool:
     try:
         import cufinufft
         import torch
+        from mrinufft._array_compat import with_torch
         from mrinufft._utils import proper_trajectory
         from mrinufft.density import get_density
         from mrinufft.operators.base import FourierOperatorBase
@@ -213,6 +214,7 @@ def register_torch_cufinufft() -> bool:
             host = value.device.type == "cpu"
             return value.to(self.device, dtype=self.torch_cpx_dtype), host
 
+        @with_torch
         def op(self, data: Any, ksp: Any = None) -> Any:
             self.check_shape(image=data)
             data, return_host = self._input(data)
@@ -243,6 +245,7 @@ def register_torch_cufinufft() -> bool:
             result = self._safe_squeeze(ksp)
             return result.cpu() if return_host else result
 
+        @with_torch
         def adj_op(self, coeffs: Any, image: Any = None) -> Any:
             self.check_shape(ksp=coeffs)
             coeffs, return_host = self._input(coeffs)
