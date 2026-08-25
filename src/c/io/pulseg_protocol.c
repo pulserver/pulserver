@@ -58,6 +58,8 @@ static const pulseg_param_entry g_param_table[] = {
     {"swap_phase_freq", PULSEG_PARAM_SWAP_PF, PULSEG_PTYPE_BOOL},
     {"enable_saturation_ui", PULSEG_PARAM_ENABLE_SAT_UI, PULSEG_PTYPE_BOOL},
     {"record_physio", PULSEG_PARAM_RECORD_PHYSIO, PULSEG_PTYPE_BOOL},
+    /* Configuration */
+    {"enable_sar_burst_mode", PULSEG_PARAM_ENABLE_SAR_BURST, PULSEG_PTYPE_CONFIG},
     /* Acceleration */
     {"Ry", PULSEG_PARAM_RY, PULSEG_PTYPE_FLOAT},
     {"Rz", PULSEG_PARAM_RZ, PULSEG_PTYPE_FLOAT},
@@ -436,6 +438,16 @@ static int try_parse_rich(pulseg_protocol_value *pv, const char *valstr)
         }
         return 1;
     }
+    else if (strcmp(field, "config") == 0)
+    {
+        pv->type = PULSEG_PTYPE_CONFIG;
+        pv->mode = PULSEG_MODE_OFF; /* configuration never reaches a widget */
+        /* Field 1: value */
+        if (next_pipe_field(&p, field, sizeof(field)) < 0)
+            return 0;
+        pv->v.i = atoi(field);
+        return 1;
+    }
     else if (strcmp(field, "description") == 0)
     {
         pv->type = PULSEG_PTYPE_DESCRIPTION;
@@ -594,6 +606,12 @@ int pulseg_protocol_parse(pulseg_protocol *out, const char *preamble)
                         pv.v.desc[_n] = '\0';
                         break;
                     }
+                    case PULSEG_PTYPE_CONFIG:
+                        /* The simple format is the direction the console
+                         * talks back in, and configuration does not travel
+                         * that way: a value arriving here is not the
+                         * sequence's, so it is dropped rather than believed. */
+                        continue;
                     default:
                         continue;
                     }
@@ -661,6 +679,12 @@ int pulseg_protocol_serialize(const pulseg_protocol *p, char *buf, int bufsz)
         case PULSEG_PTYPE_DESCRIPTION:
             sprintf(tmp, "%s: %s\n", wn, p->values[i].v.desc);
             break;
+        case PULSEG_PTYPE_CONFIG:
+            /* Declared by the sequence, read by the vendor layer, never
+             * edited: sending it back would say nothing the other side
+             * does not already know. */
+            tmp[0] = '\0';
+            break;
         default:
             tmp[0] = '\0';
             break;
@@ -725,6 +749,16 @@ int pulseg_protocol_get_bool(const pulseg_protocol *p, int *out, int param_id)
         return -1;
     if (out)
         *out = p->values[idx].v.b;
+    return 0;
+}
+
+int pulseg_protocol_get_config(const pulseg_protocol *p, int *out, int param_id)
+{
+    int idx = pulseg_protocol_find(p, param_id);
+    if (idx < 0 || p->values[idx].type != PULSEG_PTYPE_CONFIG)
+        return -1;
+    if (out)
+        *out = p->values[idx].v.i;
     return 0;
 }
 

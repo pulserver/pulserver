@@ -176,3 +176,32 @@ int pulseg_peek_scan_time(
     PULSEG_FREE(base_path);
     return (count > 0) ? PULSEG_SUCCESS : PULSEG_ERR_COLLECTION_EMPTY;
 }
+
+/* ================================================================== */
+/*  Collection-level flag peek                                        */
+/* ================================================================== */
+
+int pulseg_peek_sequence_flags(
+    pulseg_sequence_flags *flags,
+    const char *file_path,
+    const pulseg_opts *opts)
+{
+    pulseq_raster raster;
+    pulseq_file head;
+    int result;
+
+    if (!flags || !file_path || !opts)
+        return PULSEG_ERR_NULL_POINTER;
+
+    flags->enable_sar_burst_mode = 0;
+
+    pulseg_opts_get_design_raster(&raster, opts);
+    pulseq_file_init(&head, &raster);
+
+    result = pulseq_read_definitions_only(&head, file_path);
+    if (PULSEG_SUCCEEDED(result))
+        flags->enable_sar_burst_mode = head.reserved_definitions_library.enable_sar_burst_mode;
+
+    pulseq_file_free(&head);
+    return result;
+}

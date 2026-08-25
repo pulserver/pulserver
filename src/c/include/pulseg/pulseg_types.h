@@ -406,10 +406,10 @@ typedef struct pulseg_channel_waveform
 typedef struct pulseg_corner_point_stream
 {
     int num_points;
-    float *time_us;      /**< [num_points] shared time base (us)  */
-    float *gx_hz_per_m;  /**< [num_points]                        */
-    float *gy_hz_per_m;  /**< [num_points]                        */
-    float *gz_hz_per_m;  /**< [num_points]                        */
+    float *time_us;     /**< [num_points] shared time base (us)  */
+    float *gx_hz_per_m; /**< [num_points]                        */
+    float *gy_hz_per_m; /**< [num_points]                        */
+    float *gz_hz_per_m; /**< [num_points]                        */
 } pulseg_corner_point_stream;
 
 /* clang-format off */
@@ -854,6 +854,25 @@ typedef struct pulseg_scan_time_info
 
 /* clang-format off */
 #define PULSEG_SCAN_TIME_INFO_INIT {0.0f, 0}
+/* clang-format on */
+
+/* ================================================================== */
+/*  Collection-level sequence flags                                   */
+/* ================================================================== */
+
+/**
+ * @brief Flags a collection declares about itself.
+ *
+ * These are properties of the whole scan, so they are read from the head
+ * .seq of a NextSequence chain; the rest of the chain does not carry them.
+ */
+typedef struct pulseg_sequence_flags
+{
+    int enable_sar_burst_mode; /**< 1 if the scan asks for SAR burst limits */
+} pulseg_sequence_flags;
+
+/* clang-format off */
+#define PULSEG_SEQUENCE_FLAGS_INIT {0}
 /* clang-format on */
 
 /* ================================================================== */

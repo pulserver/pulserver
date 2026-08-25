@@ -156,7 +156,12 @@ extern "C"
 #define PULSEG_PARAM_FOV_OFFSET_X 91
 #define PULSEG_PARAM_FOV_OFFSET_Y 92
 #define PULSEG_PARAM_FOV_OFFSET_Z 93
-#define PULSEG_PARAM_COUNT 94 /* sentinel */
+/* --- Configuration (PULSEG_PTYPE_CONFIG; see below) --- */
+/* The scan's request to be costed against the scanner's SAR burst limits
+ * rather than its continuous ones.  A request, not a setting: the vendor
+ * layer offers it to the scanner, which grants or refuses it. */
+#define PULSEG_PARAM_ENABLE_SAR_BURST 94
+#define PULSEG_PARAM_COUNT 95 /* sentinel */
 
     /* ================================================================== */
     /*  Parameter types                                                   */
@@ -169,6 +174,11 @@ extern "C"
 #define PULSEG_PTYPE_BOOL 2
 #define PULSEG_PTYPE_STRINGLIST 3
 #define PULSEG_PTYPE_DESCRIPTION 4
+/* A configuration value: an integer the sequence declares about itself, which
+ * the vendor layer reads once while it is setting the scan up.  It carries no
+ * schema because there is no widget to build from one, and it is not
+ * serialized back, because nothing on the console side can change it. */
+#define PULSEG_PTYPE_CONFIG 5
 
     /* ================================================================== */
     /*  Input mode (mirrors Python InputMode enum)                        */
@@ -316,6 +326,8 @@ extern "C"
     int pulseg_protocol_get_int(const pulseg_protocol *p, int *out, int param_id);
     /** @copydoc pulseg_protocol_get_float */
     int pulseg_protocol_get_bool(const pulseg_protocol *p, int *out, int param_id);
+    /** @copydoc pulseg_protocol_get_float */
+    int pulseg_protocol_get_config(const pulseg_protocol *p, int *out, int param_id);
 
     /**
      * @brief Set a parameter's value, appending the entry if not yet present.

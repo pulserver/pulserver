@@ -104,6 +104,28 @@ extern "C"
         const char *file_path,
         const pulseg_opts *opts);
 
+    /* ================================================================== */
+    /*  Collection-level flag peek                                        */
+    /* ================================================================== */
+
+    /**
+     * @brief Peek the collection-level flags a scan declares about itself.
+     *
+     * Reads only the [DEFINITIONS] section of @p file_path, which must be the
+     * head of the chain: these flags describe the whole scan, so the rest of
+     * a NextSequence chain is neither read nor consulted.
+     *
+     * @param[out] flags      Receives the declared flags; zeroed on entry, so
+     *                        a file that declares none leaves every default.
+     * @param[in]  file_path  Path to the head .seq file.
+     * @param[in]  opts       Library options.
+     * @return PULSEG_SUCCESS on success, negative error code on failure.
+     */
+    int pulseg_peek_sequence_flags(
+        pulseg_sequence_flags *flags,
+        const char *file_path,
+        const pulseg_opts *opts);
+
 #ifdef __cplusplus
 }
 #endif

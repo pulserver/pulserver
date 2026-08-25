@@ -3,6 +3,7 @@
  *
  * Covers:
  *   - MD5 signature validation for .seq loading
+ *   - Collection-level flag peek from the head .seq of a chain
  *   - Stage cache loaders (check/geninstructions/scanloop)
  *   - Cache clear API behavior
  */
@@ -14,9 +15,15 @@ static void build_seq_path(char *out_path, size_t out_size, const char *filename
     (void)snprintf(out_path, out_size, "%s%s", TEST_CORPUS_DIR, filename);
 }
 
-static void build_cache_path(char *out_path, size_t out_size, const char *seq_path)
+/* The cache sits beside the .seq under pulseg_opts.cache_ext, which the
+ * vendor layer sets; it is not a constant. */
+static void build_cache_path(
+    char *out_path,
+    size_t out_size,
+    const char *seq_path,
+    const char *cache_ext)
 {
-    const char *dot;
+    char *dot;
     const char *slash_fwd;
     const char *slash_back;
 
@@ -26,15 +33,10 @@ static void build_cache_path(char *out_path, size_t out_size, const char *seq_pa
     slash_fwd = strrchr(out_path, '/');
     slash_back = strrchr(out_path, '\\');
     if (dot && dot > slash_fwd && dot > slash_back)
-    {
-        (void)snprintf((char *)dot, out_size - (size_t)(dot - out_path), ".pge");
-    }
-    else
-    {
-        size_t len = strlen(out_path);
-        if (len + 4 < out_size)
-            strcat(out_path, ".pge");
-    }
+        *dot = '\0';
+
+    if (strlen(out_path) + strlen(cache_ext) < out_size)
+        strcat(out_path, cache_ext);
 }
 
 static int cache_file_exists(const char *cache_path)
@@ -74,6 +76,29 @@ MU_TEST(test_signature_mismatch_gre)
     mu_assert(coll == NULL, "collection must remain NULL on signature mismatch");
 }
 
+MU_TEST(test_sequence_flags_read_from_head_file)
+{
+    pulseg_opts opts;
+    pulseg_sequence_flags flags = PULSEG_SEQUENCE_FLAGS_INIT;
+    char path[512];
+    int rc;
+
+    gre_opts_init(&opts);
+
+    (void)snprintf(path, sizeof(path), "%s%s", TEST_DATA_DIR, "sar_burst_requested.seq");
+    rc = pulseg_peek_sequence_flags(&flags, path, &opts);
+    mu_assert(PULSEG_SUCCEEDED(rc), "peek failed on a file declaring the flag");
+    mu_assert_int_eq(1, flags.enable_sar_burst_mode);
+
+    /* A file that declares nothing keeps the continuous-limit default, and
+     * says so over a caller's stale value rather than leaving it standing. */
+    flags.enable_sar_burst_mode = 1;
+    (void)snprintf(path, sizeof(path), "%s%s", TEST_DATA_DIR, "00_basic_rfstat.seq");
+    rc = pulseg_peek_sequence_flags(&flags, path, &opts);
+    mu_assert(PULSEG_SUCCEEDED(rc), "peek failed on a file declaring nothing");
+    mu_assert_int_eq(0, flags.enable_sar_burst_mode);
+}
+
 MU_TEST(test_cache_stage_loaders_and_clear)
 {
     pulseg_opts opts;
@@ -87,7 +112,7 @@ MU_TEST(test_cache_stage_loaders_and_clear)
 
     gre_opts_init(&opts);
     build_seq_path(seq_path, sizeof(seq_path), "gre_2d.seq");
-    build_cache_path(cache_path, sizeof(cache_path), seq_path);
+    build_cache_path(cache_path, sizeof(cache_path), seq_path, opts.cache_ext);
 
     rc = pulseg_clear_cache(seq_path);
     mu_assert_int_eq(PULSEG_SUCCESS, rc);
@@ -137,6 +162,7 @@ MU_TEST_SUITE(suite_io)
 {
     MU_RUN_TEST(test_signature_valid_gre);
     MU_RUN_TEST(test_signature_mismatch_gre);
+    MU_RUN_TEST(test_sequence_flags_read_from_head_file);
     MU_RUN_TEST(test_cache_stage_loaders_and_clear);
 }
 

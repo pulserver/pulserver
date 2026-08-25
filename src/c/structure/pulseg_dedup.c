@@ -604,8 +604,8 @@ static int compute_grad_stats(
             (float *)PULSEG_ALLOC((size_t)seq->shapes_library_size * sizeof(float));
         desc->grad_shape_energy =
             (float *)PULSEG_ALLOC((size_t)seq->shapes_library_size * sizeof(float));
-        if (!desc->grad_shape_first || !desc->grad_shape_last ||
-            !desc->grad_shape_slew || !desc->grad_shape_energy)
+        if (!desc->grad_shape_first || !desc->grad_shape_last || !desc->grad_shape_slew ||
+            !desc->grad_shape_energy)
             return PULSEG_ERR_ALLOC_FAILED;
         for (i = 0; i < seq->shapes_library_size; ++i)
         {
@@ -1000,8 +1000,10 @@ static int compute_rf_stats(
             /* Pulseq stores an RF phase shape as phase/(2*pi), so a pi phase
              * flip is a sample of 0.5.  The reconstruction below and the
              * real-valued test treat phase as radians. */
-            if (!pulseq_decompress_shape(&decomp_phase, &seq->shapes_library[phase_id - 1],
-                                         (float)(2.0 * M_PI)))
+            if (!pulseq_decompress_shape(
+                    &decomp_phase,
+                    &seq->shapes_library[phase_id - 1],
+                    (float)(2.0 * M_PI)))
                 goto fail;
             phase = (float *)PULSEG_ALLOC(num_samples * sizeof(float));
             if (!phase)

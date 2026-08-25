@@ -166,6 +166,61 @@ MU_TEST(test_roundtrip)
 }
 
 /* ================================================================== */
+/*  Test: configuration entries                                       */
+/* ================================================================== */
+
+static const char *PREAMBLE_CONFIG = "[NimPulseqGUI Protocol]\n"
+                                     "TE: float|5.0|0.5|100.0|0.1|ms\n"
+                                     "enable_sar_burst_mode: config|1\n"
+                                     "[NimPulseqGUI Protocol End]\n";
+
+MU_TEST(test_config_is_read_but_never_sent_back)
+{
+    pulseg_protocol proto;
+    char buf[2048];
+    int idx, ival, n;
+
+    mu_assert_int_eq(2, pulseg_protocol_parse(&proto, PREAMBLE_CONFIG));
+
+    mu_assert_int_eq(0, pulseg_protocol_get_config(&proto, &ival, PULSEG_PARAM_ENABLE_SAR_BURST));
+    mu_assert_int_eq(1, ival);
+
+    /* Nothing builds a widget from it, so it declares no input mode. */
+    idx = pulseg_protocol_find(&proto, PULSEG_PARAM_ENABLE_SAR_BURST);
+    mu_assert(idx >= 0, "config entry must be present");
+    mu_assert_int_eq(PULSEG_PTYPE_CONFIG, proto.values[idx].type);
+    mu_assert_int_eq(PULSEG_MODE_OFF, proto.values[idx].mode);
+
+    /* Reading it as any other type is a type error, not a silent 0. */
+    mu_assert(
+        pulseg_protocol_get_bool(&proto, &ival, PULSEG_PARAM_ENABLE_SAR_BURST) != 0,
+        "a config entry must not read back as a bool");
+    mu_assert(
+        pulseg_protocol_get_int(&proto, &ival, PULSEG_PARAM_ENABLE_SAR_BURST) != 0,
+        "a config entry must not read back as an int");
+
+    /* The console has nothing to say about it, so it is not serialized. */
+    n = pulseg_protocol_serialize(&proto, buf, sizeof(buf));
+    mu_assert(n > 0, "serialize should succeed");
+    mu_assert(strstr(buf, "TE:") != NULL, "controls are still serialized");
+    mu_assert(strstr(buf, "enable_sar_burst_mode") == NULL, "a config entry must not be sent back");
+
+    /* And a value arriving in the direction the console talks back in is not
+     * the sequence's, so it is dropped rather than believed. */
+    mu_assert_int_eq(
+        1,
+        pulseg_protocol_parse(
+            &proto,
+            "[NimPulseqGUI Protocol]\n"
+            "TE: 5.0\n"
+            "enable_sar_burst_mode: 1\n"
+            "[NimPulseqGUI Protocol End]\n"));
+    mu_assert(
+        pulseg_protocol_find(&proto, PULSEG_PARAM_ENABLE_SAR_BURST) < 0,
+        "a config entry must not be accepted from the console");
+}
+
+/* ================================================================== */
 /*  Test: rich schema format "type|value|min|max|incr|unit"           */
 /* ================================================================== */
 
@@ -371,6 +426,7 @@ MU_TEST_SUITE(protocol_suite)
     MU_RUN_TEST(test_parse_commented);
     MU_RUN_TEST(test_setters);
     MU_RUN_TEST(test_roundtrip);
+    MU_RUN_TEST(test_config_is_read_but_never_sent_back);
     MU_RUN_TEST(test_parse_rich);
     MU_RUN_TEST(test_parse_mixed);
     MU_RUN_TEST(test_parse_dropdown);

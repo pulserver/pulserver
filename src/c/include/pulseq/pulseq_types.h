@@ -302,6 +302,7 @@ typedef struct pulseq_reserved_definitions
     char next_sequence[PULSEQ_SEQUENCE_FILENAME_LENGTH];
     int enable_pmc;
     int num_gain_cal_readouts; /**< calibration readouts for receive gain */
+    int enable_sar_burst_mode; /**< sequence asks to be costed under SAR burst limits */
 } pulseq_reserved_definitions;
 
 /** @brief One RF_SHIMS library entry (parallel-transmit channel weights). */

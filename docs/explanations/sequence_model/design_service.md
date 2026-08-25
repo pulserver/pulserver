@@ -94,6 +94,12 @@ off, a list. `UIParam` names the slot — `TE`, `TR`, `FLIP`, `FOV`, `NX`,
 `NY`, `NSLICES` — so a console that already has a field for TE puts the
 sequence's TE in it rather than in a generic property table.
 
+Not everything in a protocol is a control. A `ConfigParam`, keyed by
+`ConfigKey`, is something the sequence states about itself for the
+interpreter's benefit — the SAR regime it should be costed against, say. It
+has no widget, no range, and the console never sends it back; it goes out
+once with the default protocol and is read while the scan is being set up.
+
 The point is that the *sequence* owns its parameter space. A console does not
 carry a table of what a GRE needs; it asks. Adding a parameter is a change in
 one place, and a protocol saved against one version can be validated against

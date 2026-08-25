@@ -28,7 +28,7 @@ kSpaceCenterSample 16
 # Format of blocks:
 # NUM DUR RF  GX  GY  GZ  ADC  EXT
 [BLOCKS]
-1 154 1 0 0 1 0 99
+  1 154   1   0   0   1  0  0
   2 149   0   0   0   2  0  0
   3  12   0   3   4   0  0  0
   4  20   0   5   0   0  0  0
@@ -2064,4 +2064,4 @@ num_samples 4
 # It can be reproduced/verified with md5sum if the file trimmed to the position right above [SIGNATURE]
 # The new line character preceding [SIGNATURE] BELONGS to the signature (and needs to be stripped away for recalculating/verification)
 Type md5
-Hash 7ad8a2e64262eda111319658aabb125b
+Hash 0ad8a2e64262eda111319658aabb125b

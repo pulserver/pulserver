@@ -374,6 +374,8 @@ proc makeProtocolSchemaPreambleFromPy*(pyDict: PyObject): string =
       for option in options:
         fields.add(option)
       lines.add(fields.join("|"))
+    of "config":
+      lines.add(k & ": config|" & $d["value"].to(int))
     of "description":
       let text = pyDictGet(d, "text", "")
       lines.add(k & ": description|" & text.replace("\n", "\\n"))
@@ -413,6 +415,11 @@ proc pyDictToProt*(pyDict: PyObject): MRProtocolRef =
       result[k] = newStringListProperty(d["value"].to(string), options, validate=validate)
     of "description":
       result[k] = newDescriptionProperty(d["text"].to(string))
+    of "config":
+      # A configuration value is declared by the plugin and never edited, so it
+      # has no MRProtocolRef counterpart: it reaches the scanner in the
+      # LIST_PROTOCOL preamble and stops there.
+      discard
     else:
       echo "WARNING: unknown property type '", ptype, "' for key '", k, "'"
 

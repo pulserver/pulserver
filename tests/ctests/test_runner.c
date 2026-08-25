@@ -16,6 +16,7 @@ int test_safety_grad_main(void);
 int test_raster_main(void);
 int test_rf_stats_main(void);
 int test_sequences_main(void);
+int test_io_main(void);
 int test_protocol_main(void);
 int test_ptx_getters_main(void);
 int test_trid_labels_main(void);
@@ -38,6 +39,7 @@ static const test_suite suites[] = {
     {"test_raster", test_raster_main},
     {"test_rf_stats", test_rf_stats_main},
     {"test_sequences", test_sequences_main},
+    {"test_io", test_io_main},
     {"test_protocol", test_protocol_main},
     {"test_ptx_getters", test_ptx_getters_main},
     {"test_trid_labels", test_trid_labels_main},

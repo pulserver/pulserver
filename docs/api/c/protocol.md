@@ -53,7 +53,9 @@ compilers reject C enums — the same reason the rest of `src/c/` is C89.
 ### Reading and writing a value
 
 Typed accessors, one pair per kind. A string list is addressed by index,
-because the wire format carries the choice rather than the text.
+because the wire format carries the choice rather than the text. A
+configuration value is read-only: it comes from the sequence, so there is
+nothing for the console side to set.
 
 ````{only} doxygen
 ```{doxygenfunction} pulseg_protocol_get_float
@@ -66,6 +68,9 @@ because the wire format carries the choice rather than the text.
 ```
 
 ```{doxygenfunction} pulseg_protocol_get_stringlist
+```
+
+```{doxygenfunction} pulseg_protocol_get_config
 ```
 
 ```{doxygenfunction} pulseg_protocol_set_float

@@ -150,6 +150,10 @@ The parameter kinds. A *typein* accepts any value in range; a *dropdown*
 offers a fixed set; an *off* variant adds a disabled state; the presets carry
 the echo and repetition times a protocol may offer.
 
+{class}`ConfigParam` is the exception: it is something the sequence declares
+about itself rather than something the operator sets, so it has no widget, no
+range, and no way back. Its keys live in {class}`ConfigKey`.
+
 ```{eval-rst}
 .. autosummary::
    :toctree: ../generated/design
@@ -165,6 +169,8 @@ the echo and repetition times a protocol may offer.
    BoolParam
    StringListParam
    Description
+   ConfigKey
+   ConfigParam
    TEPreset
    TRPreset
 ```

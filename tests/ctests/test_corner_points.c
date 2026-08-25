@@ -46,8 +46,7 @@ static int blk_is_delay(const pulseg_sequence_descriptor *desc, int blk)
 {
     const pulseg_block_table_element *bte = &desc->block_table[blk];
 
-    return bte->gx_id < 0 && bte->gy_id < 0 && bte->gz_id < 0 && bte->rf_id < 0 &&
-           bte->adc_id < 0;
+    return bte->gx_id < 0 && bte->gy_id < 0 && bte->gz_id < 0 && bte->rf_id < 0 && bte->adc_id < 0;
 }
 
 static float tr_duration_us(const pulseg_sequence_descriptor *desc)
@@ -184,15 +183,27 @@ static void check_matches_uniform(const char *name)
 
     pulseg__interp1_linear(resampled, w.gx.time_us, n, s.time_us, s.gx_hz_per_m, s.num_points);
     for (i = 0; i < n; ++i)
-        mu_assert_float_near("gx must match the rasterised path", w.gx.amplitude[i], resampled[i], tol);
+        mu_assert_float_near(
+            "gx must match the rasterised path",
+            w.gx.amplitude[i],
+            resampled[i],
+            tol);
 
     pulseg__interp1_linear(resampled, w.gy.time_us, n, s.time_us, s.gy_hz_per_m, s.num_points);
     for (i = 0; i < n; ++i)
-        mu_assert_float_near("gy must match the rasterised path", w.gy.amplitude[i], resampled[i], tol);
+        mu_assert_float_near(
+            "gy must match the rasterised path",
+            w.gy.amplitude[i],
+            resampled[i],
+            tol);
 
     pulseg__interp1_linear(resampled, w.gz.time_us, n, s.time_us, s.gz_hz_per_m, s.num_points);
     for (i = 0; i < n; ++i)
-        mu_assert_float_near("gz must match the rasterised path", w.gz.amplitude[i], resampled[i], tol);
+        mu_assert_float_near(
+            "gz must match the rasterised path",
+            w.gz.amplitude[i],
+            resampled[i],
+            tol);
 
     free(resampled);
     pulseg_tr_waveforms_free(&w);
@@ -264,7 +275,6 @@ MU_TEST(test_corner_stream_is_not_a_raster)
         check_not_a_raster(ROTATED_SEQS[i]);
 }
 
-
 /* ------------------------------------------------------------------ *
  *  Max-energy segment instance
  * ------------------------------------------------------------------ */
@@ -272,8 +282,7 @@ MU_TEST(test_corner_stream_is_not_a_raster)
 /* Energy of one segment instance, read off the tables the same way the
  * canonical TR is composed: every row's own shape, scaled by that row's own
  * amplitude, summed over the three axes and over the instance's blocks. */
-static double instance_energy(
-    const pulseg_sequence_descriptor *desc, int start, int num_blocks)
+static double instance_energy(const pulseg_sequence_descriptor *desc, int start, int num_blocks)
 {
     double total = 0.0;
     int b, ax;
@@ -301,7 +310,8 @@ static double instance_energy(
                 continue;
             amp = desc->grad_table[grad_ids[ax]].amplitude;
             e = pulseg__grad_instance_energy(
-                desc, &desc->grad_definitions[def_ids[ax]],
+                desc,
+                &desc->grad_definitions[def_ids[ax]],
                 desc->grad_table[grad_ids[ax]].shape_id);
             total += (double)e * amp * amp;
         }
@@ -370,8 +380,7 @@ static void check_max_energy_instance(const char *filename)
 
             if (best_start < 0)
                 continue;
-            mu_assert_double_eq(
-                best, instance_energy(desc, sd->max_energy_start_block, nb));
+            mu_assert_double_eq(best, instance_energy(desc, sd->max_energy_start_block, nb));
         }
     }
     pulseg_collection_free(coll);
@@ -391,8 +400,7 @@ MU_TEST(test_max_energy_instance_is_the_hottest)
 
 MU_TEST_SUITE(test_corner_points_suite)
 {
-    pulseg_opts_init(
-        &s_opts, GAMMA_HZ_PER_T, 3.0f, 1.0e7f, 1.0e11f, 1.0f, 10.0f, 0.1f, 10.0f);
+    pulseg_opts_init(&s_opts, GAMMA_HZ_PER_T, 3.0f, 1.0e7f, 1.0e11f, 1.0f, 10.0f, 0.1f, 10.0f);
     MU_RUN_TEST(test_corner_stream_spans_whole_tr);
     MU_RUN_TEST(test_corner_times_strictly_increase);
     MU_RUN_TEST(test_corner_stream_matches_uniform_path);

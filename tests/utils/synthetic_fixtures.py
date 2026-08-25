@@ -12,7 +12,7 @@ Two lanes:
   ``pulserver.pypulseq`` builders (the 32x32 blipped GRE, the NextSequence
   dedup chain, the corrupted-signature specimen).
 * :data:`MALFORMED_CASES` and the corrupted specimen -- files that must *not*
-  read, written into ``expected/malformed/`` so that the sweeps over
+  load, written into ``expected/malformed/`` so that the sweeps over
   ``expected/`` keep their premise that everything in it reads.
 
 ``write_all`` writes both lanes into a directory. Output is deterministic:
@@ -798,6 +798,29 @@ _OTHER_CASES["99_interior_delay_dynamic"] = _seq(
 )
 
 
+_OTHER_CASES["sar_burst_requested"] = _seq(
+    "A single block pulse whose [DEFINITIONS] ask to be costed against the "
+    "scanner's SAR burst limits.",
+    """\
+[BLOCKS]
+1 100   1   0   0   0  0  0
+
+[RF]
+1          500 1 2 3 500 0 0 0 0 0 e
+
+"""
+    + _RF_SHAPES,
+    definitions="""\
+[DEFINITIONS]
+AdcRasterTime 1e-07
+BlockDurationRaster 1e-05
+EnableSarBurstMode 1
+GradientRasterTime 1e-05
+RadiofrequencyRasterTime 1e-06
+""",
+)
+
+
 # -- TRID label fixtures (test_trid_labels.c) -------------------------------
 
 
@@ -1121,24 +1144,20 @@ def write_built_cases(directory: Path, corpus_dir: Path) -> list[str]:
 
 
 def write_corrupted(directory: Path, source: Path) -> str:
-    """Write ``malformed/gre_2d_corrupted.seq``: `source` with block 1 pointing
-    at a dangling extension chain, signature left untouched.
+    """Write ``malformed/gre_2d_corrupted.seq``: `source` carrying a hash that
+    is not its own.
 
-    Two consumers, two properties: the signature-checking loader must report a
-    mismatch, and the reader must refuse the dangling chain id outright.
+    Every section is left intact, so the signature is the only thing wrong
+    with the file: a loader that verifies signatures has nothing else to
+    refuse it for first.  Dangling ids are the subject of the ``25_``-``27_``
+    specimens, which a signature check never reaches.
     """
-    text = source.read_text()
-    lines = text.splitlines(keepends=True)
-    in_blocks = False
+    lines = source.read_text().splitlines(keepends=True)
     for i, line in enumerate(lines):
-        stripped = line.strip()
-        if stripped == "[BLOCKS]":
-            in_blocks = True
-            continue
-        if in_blocks and stripped and not stripped.startswith("#"):
-            fields = line.split()
-            fields[-1] = "99"
-            lines[i] = " ".join(fields) + "\n"
+        if line.startswith("Hash "):
+            digest = line.split()[1]
+            flipped = "1" if digest[0] == "0" else "0"
+            lines[i] = f"Hash {flipped}{digest[1:]}\n"
             break
     malformed = directory / "malformed"
     malformed.mkdir(exist_ok=True)

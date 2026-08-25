@@ -1230,8 +1230,15 @@ int pulseg__get_gradient_waveforms_range(
     memset(out, 0, sizeof(*out));
 
     result = pulseg__collect_grad_corners_range(
-        desc, &corners, diag, block_start, block_count,
-        amplitude_mode, tr_group_labels, target_group, block_order);
+        desc,
+        &corners,
+        diag,
+        block_start,
+        block_count,
+        amplitude_mode,
+        tr_group_labels,
+        target_group,
+        block_order);
     if (PULSEG_FAILED(result))
         return result;
 
@@ -1326,8 +1333,7 @@ static int block_is_pure_delay(const pulseg_sequence_descriptor *desc, int blk)
     if (blk < 0 || blk >= desc->num_blocks)
         return 0;
     bte = &desc->block_table[blk];
-    return bte->gx_id < 0 && bte->gy_id < 0 && bte->gz_id < 0 && bte->rf_id < 0 &&
-           bte->adc_id < 0;
+    return bte->gx_id < 0 && bte->gy_id < 0 && bte->gz_id < 0 && bte->rf_id < 0 && bte->adc_id < 0;
 }
 
 static float block_duration_us(const pulseg_sequence_descriptor *desc, int blk)
@@ -1343,7 +1349,10 @@ static float block_duration_us(const pulseg_sequence_descriptor *desc, int blk)
  * recovery wait each keep their own shortest value rather than collapsing to
  * a single figure. */
 static int shortest_delay_instance(
-    const pulseg_sequence_descriptor *desc, int position, int tr_size, int num_trs)
+    const pulseg_sequence_descriptor *desc,
+    int position,
+    int tr_size,
+    int num_trs)
 {
     float best_dur, dur;
     int best, t, blk;
@@ -1494,7 +1503,10 @@ int pulseg_get_tr_corner_points(
         if (written + n > block_count)
             break;
         if (pulseg_get_subseq_segment_block_indices(
-                coll, &block_order[written], subseq_idx, seg_id) != n)
+                coll,
+                &block_order[written],
+                subseq_idx,
+                seg_id) != n)
         {
             PULSEG_FREE(block_order);
             PULSEG_FREE(seg_ids);
@@ -1523,7 +1535,15 @@ int pulseg_get_tr_corner_points(
     block_count = written;
 
     rc = pulseg__collect_grad_corners_range(
-        desc, &c, diag, 0, block_count, PULSEG_AMP_ACTUAL, NULL, 0, block_order);
+        desc,
+        &c,
+        diag,
+        0,
+        block_count,
+        PULSEG_AMP_ACTUAL,
+        NULL,
+        0,
+        block_order);
     if (PULSEG_FAILED(rc))
     {
         PULSEG_FREE(block_order);
@@ -1635,7 +1655,11 @@ int pulseg_get_tr_corner_points(
         vec[0] = gx[i];
         vec[1] = gy[i];
         vec[2] = gz[i];
-        pulseg__apply_rotation(rot_out, R, vec, 0);;;;;
+        pulseg__apply_rotation(rot_out, R, vec, 0);
+        ;
+        ;
+        ;
+        ;
         gx[i] = rot_out[0];
         gy[i] = rot_out[1];
         gz[i] = rot_out[2];

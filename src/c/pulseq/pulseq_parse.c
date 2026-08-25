@@ -1173,6 +1173,10 @@ void pulseq__read_definitions(pulseq_file *seq)
         {
             seq->reserved_definitions_library.num_gain_cal_readouts = atoi(value);
         }
+        else if (strcmp(key, "EnableSarBurstMode") == 0)
+        {
+            seq->reserved_definitions_library.enable_sar_burst_mode = atoi(value);
+        }
     }
 }
 
