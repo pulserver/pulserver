@@ -64,6 +64,29 @@ class Waveforms:
     Each channel is a ``(2, n)`` array of times in seconds over amplitudes in
     Hz/m, which is upstream's layout. ``rf`` is complex and is ``None`` unless
     ``append_RF`` was set.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> import pulserver.pypulseq as pp
+    >>> seq = pp.Sequence()
+    >>> _ = seq.add_block(pp.make_block_pulse(flip_angle=1.57, duration=1e-3, use="excitation"))
+    >>> _ = seq.add_block(pp.make_trapezoid("x", area=-500, duration=6e-4))
+    >>> gx = pp.make_trapezoid("x", flat_area=1000, flat_time=2.56e-3, rise_time=2e-4)
+    >>> _ = seq.add_block(gx, pp.make_adc(num_samples=80, dwell=3.2e-5, delay=gx.rise_time))
+
+    >>> waveforms = seq.waveforms_and_times(compat=False).waveforms
+    >>> waveforms.gx.shape
+    (2, 7)
+
+    Three channels, because ``append_RF`` was left alone:
+
+    >>> len(waveforms.channels)
+    3
+    >>> waveforms.rf is None
+    True
+    >>> round(waveforms.duration, 6)
+    0.00456
     """
 
     gx: np.ndarray
@@ -98,6 +121,32 @@ class RfTimes:
     ``freq_offset`` and ``phase_offset`` include the ppm terms, and the phase
     includes the ``2*pi*f*t_centre`` term that carries it to the pulse's
     centre -- the same convention upstream and MATLAB both use.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> import pulserver.pypulseq as pp
+    >>> seq = pp.Sequence()
+    >>> _ = seq.add_block(pp.make_block_pulse(flip_angle=1.57, duration=1e-3, use="excitation"))
+    >>> _ = seq.add_block(pp.make_trapezoid("x", area=-500, duration=6e-4))
+    >>> gx = pp.make_trapezoid("x", flat_area=1000, flat_time=2.56e-3, rise_time=2e-4)
+    >>> _ = seq.add_block(gx, pp.make_adc(num_samples=80, dwell=3.2e-5, delay=gx.rise_time))
+
+    >>> rf = seq.waveforms_and_times(compat=False).rf
+    >>> len(rf)
+    1
+    >>> rf.use
+    ('excitation',)
+    >>> rf.tfp.shape
+    (3, 1)
+
+    Upstream's excitation bucket is one tag away, and an inversion pulse would
+    appear here rather than being dropped:
+
+    >>> len(rf.of("excitation", "undefined"))
+    1
+    >>> len(rf.of("refocusing"))
+    0
     """
 
     t: np.ndarray
@@ -151,6 +200,34 @@ class AdcTimes:
       each individual sample is acquired with, ppm and phase modulation and the
       accumulated ``2*pi*f*t`` all included. That is the number a simulation or
       a demodulator actually wants.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> import pulserver.pypulseq as pp
+    >>> seq = pp.Sequence()
+    >>> _ = seq.add_block(pp.make_block_pulse(flip_angle=1.57, duration=1e-3, use="excitation"))
+    >>> _ = seq.add_block(pp.make_trapezoid("x", area=-500, duration=6e-4))
+    >>> gx = pp.make_trapezoid("x", flat_area=1000, flat_time=2.56e-3, rise_time=2e-4)
+    >>> _ = seq.add_block(gx, pp.make_adc(num_samples=80, dwell=3.2e-5, delay=gx.rise_time))
+
+    >>> adc = seq.waveforms_and_times(compat=False).adc
+    >>> len(adc)
+    80
+    >>> adc.num_samples
+    array([80])
+
+    Per event is upstream's ``fp_adc``; per sample is what a demodulator wants:
+
+    >>> adc.fp.shape
+    (1, 2)
+    >>> adc.sample_phase.shape
+    (80,)
+
+    The echo centre costs a k-space trajectory, so it is read on demand:
+
+    >>> adc.echo_center_index
+    array([36])
     """
 
     t: np.ndarray
@@ -205,6 +282,32 @@ class WaveformsAndTimes:
     ``rf.of("excitation").tfp``, ``rf.of("refocusing").tfp``, ``adc.t`` and
     ``adc.fp``. What upstream cannot express is the other five RF uses, the
     per-sample ADC phase, and the echo centres.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> import pulserver.pypulseq as pp
+    >>> seq = pp.Sequence()
+    >>> _ = seq.add_block(pp.make_block_pulse(flip_angle=1.57, duration=1e-3, use="excitation"))
+    >>> _ = seq.add_block(pp.make_trapezoid("x", area=-500, duration=6e-4))
+    >>> gx = pp.make_trapezoid("x", flat_area=1000, flat_time=2.56e-3, rise_time=2e-4)
+    >>> _ = seq.add_block(gx, pp.make_adc(num_samples=80, dwell=3.2e-5, delay=gx.rise_time))
+
+    >>> everything = seq.waveforms_and_times(compat=False)
+    >>> everything.waveforms.gx.shape
+    (2, 7)
+    >>> everything.rf.use
+    ('excitation',)
+    >>> len(everything.adc)
+    80
+
+    Upstream's five-tuple, reassembled from the same object:
+
+    >>> wave_data = everything.waveforms.channels
+    >>> tfp_excitation = everything.rf.of("excitation", "undefined").tfp
+    >>> t_adc, fp_adc = everything.adc.t, everything.adc.fp
+    >>> tfp_excitation.shape, t_adc.shape, fp_adc.shape
+    ((3, 1), (80,), (1, 2))
     """
 
     waveforms: Waveforms
@@ -221,6 +324,32 @@ class KSpace:
     the gradient *breakpoint* grid: the same curve in five to ten times fewer
     points, with ``t_breakpoints`` as its time base. Upstream's tuple has
     nowhere to put the latter, which is the reason this class exists.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> import pulserver.pypulseq as pp
+    >>> seq = pp.Sequence()
+    >>> _ = seq.add_block(pp.make_block_pulse(flip_angle=1.57, duration=1e-3, use="excitation"))
+    >>> _ = seq.add_block(pp.make_trapezoid("x", area=-500, duration=6e-4))
+    >>> gx = pp.make_trapezoid("x", flat_area=1000, flat_time=2.56e-3, rise_time=2e-4)
+    >>> _ = seq.add_block(gx, pp.make_adc(num_samples=80, dwell=3.2e-5, delay=gx.rise_time))
+
+    >>> k = seq.calculate_kspace(compat=False)
+    >>> k.k_traj_adc.shape
+    (3, 80)
+
+    The breakpoint grid carries the same curve in far fewer points:
+
+    >>> k.k_traj.shape
+    (3, 131)
+    >>> k.k_traj_breakpoints.shape
+    (3, 8)
+
+    The prewinder puts k-space zero inside the readout, not at its start:
+
+    >>> k.readout_center_sample.tolist()
+    [36]
     """
 
     k_traj_adc: np.ndarray
@@ -240,6 +369,25 @@ class Pns:
 
     ``total`` and ``components`` are upstream's, in percent of the limit.
     ``ok`` is upstream's boolean verdict.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> import pulserver.pypulseq as pp
+    >>> seq = pp.Sequence()
+    >>> _ = seq.add_block(pp.make_block_pulse(flip_angle=1.57, duration=1e-3, use="excitation"))
+    >>> _ = seq.add_block(pp.make_trapezoid("x", area=-500, duration=6e-4))
+    >>> gx = pp.make_trapezoid("x", flat_area=1000, flat_time=2.56e-3, rise_time=2e-4)
+    >>> _ = seq.add_block(gx, pp.make_adc(num_samples=80, dwell=3.2e-5, delay=gx.rise_time))
+
+    >>> from pypulseq.utils.safe_pns_prediction import safe_example_hw
+    >>> pns = seq.calculate_pns(safe_example_hw(), do_plots=False, compat=False)
+    >>> pns.ok
+    True
+    >>> pns.components.shape[1]
+    3
+    >>> bool(pns.total.max() < 1.0)
+    True
     """
 
     ok: bool
@@ -253,9 +401,30 @@ class GradientSpectrum:
     """The gradient waveform's spectrum, and any acoustic resonance verdict.
 
     ``resonance_lines`` is the mechanical-resonance analysis, which upstream
-    has no equivalent of. It used to be smuggled out as a fifth tuple element
-    when ``resonance_lines=True`` was passed; it is a field here, which is what
-    the ``compat`` flag is for.
+    has no equivalent of: the line spectrum at the TR harmonics and which of
+    them violate a band. It is populated only under ``tr=``, since a line
+    spectrum exists for a repetition time and not for a stretch of timeline.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> import pulserver.pypulseq as pp
+    >>> seq = pp.Sequence()
+    >>> _ = seq.add_block(pp.make_block_pulse(flip_angle=1.57, duration=1e-3, use="excitation"))
+    >>> _ = seq.add_block(pp.make_trapezoid("x", area=-500, duration=6e-4))
+    >>> gx = pp.make_trapezoid("x", flat_area=1000, flat_time=2.56e-3, rise_time=2e-4)
+    >>> _ = seq.add_block(gx, pp.make_adc(num_samples=80, dwell=3.2e-5, delay=gx.rise_time))
+
+    >>> spectrum = seq.calculate_gradient_spectrum(
+    ...     plot=False, window_width=0.002, compat=False
+    ... )
+    >>> len(spectrum.spectrograms)
+    3
+    >>> spectrum.resonance_lines is None
+    True
+
+    A resonance verdict exists only for a repetition time, which is what
+    ``resonance_lines`` under ``tr=`` asks for.
     """
 
     spectrograms: list
@@ -273,6 +442,19 @@ class RfResponse:
     saturation profile is read off. ``mx_xy`` and ``my_xy`` start from ``+x``
     and ``+y``, and ``ref_eff`` combines them: its magnitude is the refocused
     fraction and its phase the axis of the flip.
+
+    Examples
+    --------
+    >>> import pulserver.pypulseq as pp
+    >>> inversion = pp.make_block_pulse(flip_angle=3.14159, duration=1e-3, use="inversion")
+    >>> response = pp.sim_rf(inversion, compat=False)
+    >>> response.frequency.shape
+    (660,)
+
+    On resonance a pi pulse takes ``+z`` to ``-z``:
+
+    >>> round(float(response.mz_z.real.min()), 3)
+    -1.0
     """
 
     mz_z: np.ndarray
@@ -349,6 +531,26 @@ class BTensor:
     ``table_index`` says which row each shot used -- a diffusion scan plays a
     few dozen directions over many thousands of shots, and the short list is
     what a reconstruction and an MRD header want.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> import pulserver.pypulseq as pp
+    >>> seq = pp.Sequence()
+    >>> _ = seq.add_block(pp.make_block_pulse(flip_angle=1.57, duration=1e-3, use="excitation"))
+    >>> _ = seq.add_block(pp.make_trapezoid("x", area=-500, duration=6e-4))
+    >>> gx = pp.make_trapezoid("x", flat_area=1000, flat_time=2.56e-3, rise_time=2e-4)
+    >>> _ = seq.add_block(gx, pp.make_adc(num_samples=80, dwell=3.2e-5, delay=gx.rise_time))
+
+    >>> moments = seq.calc_moments_btensor(compat=False)
+    >>> moments.B.shape
+    (1, 3, 3)
+
+    There is no diffusion pair here, so the b-value is only what the readout
+    and its prewinder encode on their own:
+
+    >>> float(moments.b_values[0].round(3))
+    0.007
     """
 
     B: np.ndarray
@@ -504,6 +706,24 @@ class DiffusionTable:
     :meth:`BTensor.diffusion_table`, and the reconstruction side, from the MRD
     header the scanner wrote. A second type for the second producer is the
     mistake this one exists to avoid.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> import pulserver.pypulseq as pp
+    >>> tensors = np.zeros((2, 3, 3))
+    >>> tensors[0, 0, 0] = tensors[1, 1, 1] = 1e9   # s/m^2, one x and one y
+    >>> table = pp.DiffusionTable.of(tensors, axis="SET")
+    >>> table.b_values
+    array([1000., 1000.])
+    >>> table.b_vectors
+    array([[1., 0., 0.],
+           [0., 1., 0.]])
+
+    ``axis`` is the MRD counter a reconstruction indexes the table by:
+
+    >>> table.axis
+    'SET'
     """
 
     b_tensors: np.ndarray
@@ -604,6 +824,28 @@ class RfPower:
     sliding window ``mean_power`` and ``rf_rms`` were maximised over, or
     ``None`` when they are averages over the whole of it. ``total_energy`` is
     always the whole window's, never one slice of it.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> import pulserver.pypulseq as pp
+    >>> seq = pp.Sequence()
+    >>> _ = seq.add_block(pp.make_block_pulse(flip_angle=1.57, duration=1e-3, use="excitation"))
+    >>> _ = seq.add_block(pp.make_trapezoid("x", area=-500, duration=6e-4))
+    >>> gx = pp.make_trapezoid("x", flat_area=1000, flat_time=2.56e-3, rise_time=2e-4)
+    >>> _ = seq.add_block(gx, pp.make_adc(num_samples=80, dwell=3.2e-5, delay=gx.rise_time))
+
+    >>> power = seq.calc_rf_power(compat=False)
+    >>> round(power.total_energy, 6)
+    0.249747
+    >>> round(power.duration, 6)
+    0.00456
+
+    ``window_duration`` is ``None`` when nothing was maximised over a sliding
+    window, so ``mean_power`` averages the whole of it:
+
+    >>> power.window_duration is None
+    True
     """
 
     mean_power: float
@@ -627,6 +869,23 @@ class SoftDelay:
     only bound the sequence itself states. A value inside them can still be
     impossible for a different reason -- events that no longer fit the block --
     and neither this nor MATLAB catches that.
+
+    Examples
+    --------
+    >>> import pulserver.pypulseq as pp
+    >>> seq = pp.Sequence()
+    >>> _ = seq.add_block(pp.make_block_pulse(flip_angle=1.57, duration=1e-3))
+    >>> _ = seq.add_block(pp.make_delay(5e-3), pp.make_soft_delay(hint="TE", numID=0))
+    >>> defaults, _hints = seq.get_default_soft_delay_values()
+    >>> te = defaults["TE"]
+    >>> te.hint, te.numeric_id
+    ('TE', 0)
+    >>> float(te)
+    0.005
+
+    The value alone is what most callers want, so the object is usable as one:
+
+    >>> seq.apply_soft_delay(TE=float(te))
     """
 
     hint: str

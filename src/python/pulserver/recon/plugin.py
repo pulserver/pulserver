@@ -285,6 +285,22 @@ class ReconContext:
         Exam-scoped artifact cache.
     config
         Configuration payload selecting the application.
+
+    Examples
+    --------
+    What the runtime hands a plugin: the scan's header, the exam-wide cache that
+    outlives one measurement, and whatever configuration the console sent.
+
+    >>> from types import SimpleNamespace
+    >>> import pulserver.recon as recon
+    >>> matrix = SimpleNamespace(matrixSize=SimpleNamespace(x=8, y=4, z=1))
+    >>> header = SimpleNamespace(
+    ...     encoding=[SimpleNamespace(encodedSpace=matrix, reconSpace=matrix)],
+    ...     acquisitionSystemInformation=SimpleNamespace(receiverChannels=2),
+    ... )
+    >>> context = recon.ReconContext.offline(header)
+    >>> isinstance(context.exam, recon.ExamCache)
+    True
     """
 
     header: Any
@@ -447,6 +463,32 @@ class ReconPlugin(ABC):
         Laid out by :meth:`startup` from the header; empty until then, and
         empty for a bucket assembled from arrays, which carries no header to
         lay anything out from.
+
+    Examples
+    --------
+    A plugin declares the per-acquisition steps it wants and the boundaries worth
+    reconstructing at, then says what to do with a filled buffer.
+
+    >>> import numpy as np
+    >>> import pulserver.recon as recon
+    >>> import pulserver.mrd as mrd
+    >>> class RootSumOfSquares(recon.ReconPlugin):
+    ...     def __init__(self):
+    ...         super().__init__(
+    ...             chain=[recon.NoiseAdjust()],
+    ...             branches={mrd.AcquisitionFlag.LAST_IN_MEASUREMENT: "imaging"},
+    ...         )
+    ...     def recon(self, branch, context):
+    ...         del branch, context
+    ...         kspace = self.buffers[0].kspace
+    ...         return recon.ReconResult(
+    ...             np.sqrt(np.sum(np.abs(kspace) ** 2, axis=0))
+    ...         )
+    >>> plugin = RootSumOfSquares()
+    >>> len(plugin.chain)
+    1
+    >>> plugin.branches[mrd.AcquisitionFlag.LAST_IN_MEASUREMENT]
+    'imaging'
     """
 
     def __init__(

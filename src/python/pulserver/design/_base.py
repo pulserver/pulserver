@@ -58,7 +58,7 @@ class SequencePlugin(ABC):
     >>> plugin.get_default_protocol(pp.Opts())[UIParam.TR].value
     500.0
 
-    Expose it as an offline CLI with :func:`pulserver.run_cli`.
+    Expose it as an offline CLI with :func:`pulserver.design.run_cli`.
 
     See Also
     --------
@@ -135,8 +135,8 @@ class SequencePlugin(ABC):
         offline : bool, default False
             Whether the file is going somewhere other than a scanner, which
             decides the form it is written in. Hand it to
-            :func:`pulserver.write_sequence` rather than reading it: the
-            default is the scanner's form, and :func:`pulserver.run_cli`
+            :func:`pulserver.design.write_sequence` rather than reading it: the
+            default is the scanner's form, and :func:`pulserver.design.run_cli`
             passes ``True``.
         """
         ...

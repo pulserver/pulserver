@@ -74,6 +74,28 @@ def restore_additional_shape_samples(
         interior samples of straight segments removed. On a shape the
         reconstruction does not describe, the waveform as stored, bracketed by
         ``first`` and ``last`` -- which is what PyPulseq returns always.
+
+    Examples
+    --------
+    A trapezoid stored on sample centres: three ramp samples, four flat, three
+    down.
+
+    >>> import numpy as np
+    >>> import pulserver.pypulseq as pp
+    >>> raster = 10e-6
+    >>> waveform = np.array([0.5, 1.5, 2.5, 3.0, 3.0, 3.0, 3.0, 2.5, 1.5, 0.5]) / 3.0
+    >>> tt = (np.arange(waveform.size) + 0.5) * raster
+
+    The straight segments collapse onto their endpoints, so ten samples come
+    back as the four vertices that define them, on the raster edges:
+
+    >>> times, amplitudes = pp.restore_additional_shape_samples(
+    ...     tt, waveform, 0.0, 0.0, raster
+    ... )
+    >>> (times / raster).round(3)
+    array([ 0.,  3.,  7., 10.])
+    >>> amplitudes.round(4)
+    array([0., 1., 1., 0.])
     """
     waveform = np.asarray(waveform, dtype=float).ravel()
     tt = np.asarray(tt, dtype=float).ravel()

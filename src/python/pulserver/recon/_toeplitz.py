@@ -822,9 +822,7 @@ class CompactToeplitzKernel:
 
     def _resident_additional_bytes(self, image: Any) -> int:
         """Peak bytes for the two banks, a transform workspace and the result."""
-        volume_bytes = (
-            image.shape[0] * prod(self.spatial_shape) * image.element_size()
-        )
+        volume_bytes = image.shape[0] * prod(self.spatial_shape) * image.element_size()
         bank_bytes = self.rank * volume_bytes
         result_bytes = image.numel() * image.element_size()
         transfer_precision = self._cuda_precision(

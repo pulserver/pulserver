@@ -263,6 +263,37 @@ def get_supported_labels() -> tuple[str, ...]:
     MRD_COUNTERS, MRD_FLAGS : the ISMRMRD map, as dictionaries.
     canonical_label : resolve one name from either spelling.
     pulserver.pypulseq.Sequence.auto_label : derive counters and boundary flags.
+
+    Examples
+    --------
+    >>> import pulserver.pypulseq as pp
+    >>> labels = pp.get_supported_labels()
+    >>> "LIN" in labels, "TRID" in labels
+    (True, True)
+
+    Only the canonical spellings are listed; the ISMRMRD one is accepted
+    everywhere a name is taken, and resolves to it:
+
+    >>> "kspace_encode_step_1" in labels
+    False
+    >>> pp.canonical_label("kspace_encode_step_1")
+    'LIN'
+
+    The two splits partition what is here. A counter carries an ISMRMRD
+    field:
+
+    >>> set(pp.COUNTER_LABELS) <= set(labels)
+    True
+    >>> pp.MRD_COUNTERS["LIN"]
+    'kspace_encode_step_1'
+
+    A scanner flag carries none, which is what makes it unable to reach a
+    reconstruction:
+
+    >>> set(pp.SCANNER_FLAGS) & set(pp.MRD_FLAGS)
+    set()
+    >>> pp.STICKY_FLAGS
+    ('ONCE', 'TRID')
     """
     return _SUPPORTED_LABELS
 

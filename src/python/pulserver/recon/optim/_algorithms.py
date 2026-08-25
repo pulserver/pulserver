@@ -33,6 +33,19 @@ class PolynomialPreconditioner:
         Lower and upper bounds of the scaled normal-operator spectrum.
     scale
         Positive scaling applied to each normal-operator evaluation.
+
+    Examples
+    --------
+    A polynomial in the normal operator, applied where the operator's spectrum is
+    known well enough to flatten it -- fewer iterations for the same answer.
+
+    >>> import torch
+    >>> import pulserver.recon as recon
+    >>> preconditioner = recon.PolynomialPreconditioner(
+    ...     lambda x: x, degree=2, spectrum=(0.0, 1.0)
+    ... )
+    >>> tuple(preconditioner(torch.ones(4)).shape)
+    (4,)
     """
 
     def __init__(

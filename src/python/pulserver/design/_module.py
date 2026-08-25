@@ -101,6 +101,32 @@ class SequenceModule(ABC):
     See Also
     --------
     pulserver.design : the shipped excitation, preparation and readout modules.
+
+    Examples
+    --------
+    >>> import pulserver.pypulseq as pp
+    >>> from pulserver.design import SequenceModule
+    >>> class Readout(SequenceModule):
+    ...     def init_module(self, system, num_arms=2):
+    ...         rf = pp.make_block_pulse(flip_angle=0.2, duration=1e-3, system=system)
+    ...         gread = [pp.make_trapezoid("x", area=100 * (n + 1), system=system)
+    ...                  for n in range(num_arms)]
+    ...         adc = pp.make_adc(num_samples=256, duration=2e-3, system=system)
+    ...         self.seq = pp.Sequence(system)
+    ...         for n in range(num_arms):
+    ...             self.seq.add_block(rf)
+    ...             self.seq.add_block(gread[n], adc)
+    >>> readout = Readout(pp.Opts())
+
+    One pulse played on every arm is published as the event itself; one
+    gradient per arm stays a list, in play order:
+
+    >>> readout.rf.type
+    'rf'
+    >>> len(readout.gread)
+    2
+    >>> round(readout.duration, 6)
+    0.006
     """
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:

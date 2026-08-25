@@ -43,7 +43,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
-import pulserver.io as pio
+import pulserver.pypulseq as pp
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 FIXTURES = REPO_ROOT / "tests" / "python" / "fixtures"
@@ -307,7 +307,7 @@ def fastest(call, *args, repeats: int = 3, **kwargs) -> tuple[float, object]:
 
 def assembly_figure() -> Path:
     """Direct convolution against per-shape assembly, over an EPI shot."""
-    seq = pio.read(FIXTURES / "epi_2d.seq")
+    seq = pp.read(FIXTURES / "epi_2d.seq")
     axes, lengths, dt = canonical_window(seq, "worst_case")
     gamma = float(seq.system.gamma)
     kernel = irnich_kernel(dt, IRNICH)

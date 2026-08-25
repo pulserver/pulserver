@@ -119,7 +119,20 @@ class _ComplexAdapter(torch.nn.Module):
 
 @runtime_checkable
 class StatefulReconstructor(Protocol):
-    """Interface implemented by step-wise reconstruction models."""
+    """Interface implemented by step-wise reconstruction models.
+
+    Examples
+    --------
+    The base an unrolled network subclasses: it carries an
+    :class:`~pulserver.recon.UnrollState` from one stage to the next, so a block
+    sees what the previous one left rather than only the current estimate::
+
+        import pulserver.recon as recon
+
+        class MyNetwork(recon.StatefulReconstructor):
+            def step(self, state, physics):
+                ...
+    """
 
     @property
     def iterations(self) -> int:
@@ -230,6 +243,15 @@ class ScaledAdjoint(torch.nn.Module):
         Scale the adjoint so its re-encoding norm matches the measurements.
     epsilon
         Minimum denominator used in the per-batch norm ratio.
+
+    Examples
+    --------
+    The adjoint, rescaled so its output is on the order of the image -- the usual
+    first step of an unrolled network.
+
+    >>> import pulserver.recon as recon
+    >>> isinstance(recon.ScaledAdjoint(), recon.ScaledAdjoint)
+    True
     """
 
     def __init__(self, *, normalize: bool = True, epsilon: float = 1e-8) -> None:
@@ -268,6 +290,17 @@ class GradientDataConsistency(torch.nn.Module):
         Scalar or one initial step size per update.
     trainable
         Register step sizes as trainable parameters.
+
+    Examples
+    --------
+    The data-consistency block an unrolled network alternates with its denoiser:
+    a fixed number of gradient steps on ``||Ax - y||``, with a stepsize that can
+    be learned.
+
+    >>> import pulserver.recon as recon
+    >>> block = recon.GradientDataConsistency(iterations=2)
+    >>> block.iterations
+    2
     """
 
     def __init__(

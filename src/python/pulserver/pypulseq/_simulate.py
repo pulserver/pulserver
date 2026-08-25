@@ -60,6 +60,32 @@ def bloch(b1_hz, bz_hz, dt: float, *, initial=None) -> np.ndarray:
     -------
     numpy.ndarray
         Final magnetisation, shape ``(P, 3)``.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> import pulserver.pypulseq as pp
+
+    A hard pulse of 250 Hz held for 1 ms is a 90 degree flip; on resonance it
+    takes ``+z`` onto ``-y``:
+
+    >>> on_resonance = np.zeros((1, 1))
+    >>> pp.bloch(np.full(1000, 250.0 + 0j), on_resonance, 1e-6).round(3)
+    array([[ 0., -1.,  0.]])
+
+    Twice the amplitude inverts it:
+
+    >>> pp.bloch(np.full(1000, 500.0 + 0j), on_resonance, 1e-6).round(3)
+    array([[ 0., -0., -1.]])
+
+    ``bz_hz`` carries one row per position, so a whole slice profile comes
+    back at once:
+
+    >>> offsets = np.array([[0.0], [500.0], [-500.0]])
+    >>> pp.bloch(np.full(1000, 250.0 + 0j), offsets, 1e-6).round(3)
+    array([[ 0.   , -1.   ,  0.   ],
+           [ 0.773,  0.162,  0.614],
+           [-0.773,  0.162,  0.614]])
     """
     b1_hz = np.asarray(b1_hz, dtype=complex)
     bz_hz = np.atleast_2d(np.asarray(bz_hz, dtype=float))

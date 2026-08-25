@@ -88,6 +88,35 @@ def coil_maps_from_reference(
     ValueError
         If ``kspace`` has no coil axis before its spatial ones, ``mask`` does
         not describe its grid, or ``taper`` is outside ``[0, 1]``.
+
+    Examples
+    --------
+    Sensitivities read straight off a prescan, which is what several images solved
+    against each other need: maps from one reference share a scale a per-image
+    solve does not guarantee.
+
+    .. plot::
+
+       import torch
+       import pulserver.recon as recon
+       from _figures import images, phantom
+
+       truth, coil_maps = phantom(64, coils=4)
+       coil_images = truth[0] * coil_maps[0]
+       kspace = torch.fft.fftshift(
+           torch.fft.fft2(torch.fft.ifftshift(coil_images, dim=(-2, -1))), dim=(-2, -1)
+       )
+
+       estimated = recon.coil_maps_from_reference(kspace)
+
+       images(
+           [
+               ("coil 0, true", coil_maps[0, 0]),
+               ("coil 0, estimated", estimated[0]),
+               ("coil 1, estimated", estimated[1]),
+           ],
+           title="sensitivities off a fully-sampled reference",
+       )
     """
     if spatial_ndim not in (2, 3):
         raise ValueError("spatial_ndim must be 2 or 3")
@@ -263,6 +292,19 @@ class NLINVPhysics(deepinv.physics.Physics):
         Number of receive coils.
     viewed_as_real
         Expose joint states and measurements through real views.
+
+    Examples
+    --------
+    The operator NLINV solves through: image and sensitivities are one unknown,
+    so the forward model is bilinear in them and the Sobolev weights are what keep
+    the map half smooth::
+
+        import pulserver.recon as recon
+
+        physics = recon.NLINVPhysics(encoding, sobolev_weights, n_coils=8)
+
+    :class:`~pulserver.recon.NLINV` builds this itself; it is exposed for a solve
+    that wants to drive the Gauss-Newton iteration directly.
     """
 
     def __init__(

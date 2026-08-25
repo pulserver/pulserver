@@ -32,6 +32,17 @@ class StackedPrior(torch.nn.Module):
         Register ``weights`` as a trainable parameter.
     trainable_g_params
         Register numeric prior parameters as trainable parameters.
+
+    Examples
+    --------
+    Several priors as one, which is what :class:`~pulserver.recon.ADMM` and
+    :class:`~pulserver.recon.PDHG` take when a reconstruction is regularized
+    against more than one thing at a time.
+
+    >>> import pulserver.recon as recon
+    >>> stack = recon.StackedPrior([recon.TV(), recon.Wavelet()])
+    >>> len(stack.priors)
+    2
     """
 
     def __init__(

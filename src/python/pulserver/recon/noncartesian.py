@@ -79,6 +79,31 @@ def noncartesian_recon(
     ValueError
         If ``mode`` is not one of the three, or ``image_shape`` is neither a
         plane nor a volume.
+
+    Examples
+    --------
+    One call from a filled buffer to an image: the density-compensated adjoint
+    when the views do not reach Nyquist, CG-SENSE when they do.
+
+    .. plot::
+
+       import numpy as np
+       import pulserver.recon as recon
+       from _figures import images, phantom, radial_spokes
+
+       truth, coil_maps = phantom(64, coils=4)
+       spokes = radial_spokes(64, 24)
+       physics = recon.NonCartesian2D(spokes, (64, 64), coil_maps=coil_maps[0])
+
+       measured = physics.A(truth)[0]
+       image = recon.noncartesian_recon(
+           measured, np.asarray(spokes).reshape(-1, 2), (64, 64), mode="direct"
+       )
+
+       images(
+           [("truth", truth[0]), ("density-compensated adjoint", image)],
+           title="noncartesian_recon over 24 radial spokes",
+       )
     """
     from .calibration import NLINV
     from .execution import _resolve_device

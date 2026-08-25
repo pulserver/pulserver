@@ -31,6 +31,16 @@ class PhasePoleCorrection(torch.nn.Module):
     spatial_ndim
         Coil-map spatial dimensionality. It is inferred from ordinary batched
         2D/3D tensors when omitted.
+
+    Examples
+    --------
+    Finds and unwinds the phase singularities a partial-Fourier or a
+    low-resolution phase estimate leaves behind.
+
+    >>> import pulserver.recon as recon
+    >>> correction = recon.PhasePoleCorrection(segments=12)
+    >>> correction.segments
+    12
     """
 
     def __init__(

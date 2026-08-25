@@ -5,7 +5,7 @@ Documentation-only tooling: produces the per-sequence figures embedded in
 ``explanations/safety/pns.md`` and ``explanations/safety/mechanical_resonance.md``.
 Not part of the shipped package.
 
-Everything is drawn through the public ``pulserver.io.read`` /
+Everything is drawn through the public ``pulserver.pypulseq.read`` /
 ``pulserver.pypulseq.Sequence`` API, so the figures are what a sequence author
 sees from ``Sequence.plot()`` and ``Sequence.calculate_pns()`` while writing a
 sequence.
@@ -30,7 +30,6 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
-import pulserver.io as pio  # noqa: E402
 import pulserver.pypulseq as pp  # noqa: E402
 from pypulseq.utils.safe_pns_prediction import safe_example_hw  # noqa: E402
 
@@ -60,7 +59,7 @@ TR = "worst_case"
 
 
 def load(name: str) -> pp.Sequence:
-    return pio.read(FIXTURES / f"{name}.seq")
+    return pp.read(FIXTURES / f"{name}.seq")
 
 
 def save(fig, subdir: str, stem: str) -> Path:

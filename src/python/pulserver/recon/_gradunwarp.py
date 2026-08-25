@@ -80,7 +80,18 @@ _DAT_Z_FACTORS = np.asarray(
 
 @runtime_checkable
 class CoefficientAccessor(Protocol):
-    """Interface used by scanner/LiveSDK integrations for private tables."""
+    """Interface used by scanner/LiveSDK integrations for private tables.
+
+    Examples
+    --------
+    Reads a vendor gradient coefficient file into the harmonic basis the unwarping
+    evaluates::
+
+        import pulserver.recon as recon
+
+        coefficients = recon.CoefficientAccessor.from_file("coeff.grad")
+        unwarp = recon.Gradunwarp(coefficients)
+    """
 
     def read_coefficients(self) -> CoefficientPayload:
         """Return coefficient-file contents without writing them to disk."""
@@ -143,6 +154,16 @@ class GradientCoefficients:
     contain the real cosine (``alpha``) and sine (``beta``) terms.  Coefficient
     arrays are deliberately excluded from ``repr`` so private scanner tables
     are not accidentally logged.
+
+    Examples
+    --------
+    The spherical-harmonic description of a gradient coil, as the vendor ships it.
+    :class:`~pulserver.recon.Gradunwarp` evaluates these over an image's geometry
+    to find where each voxel really was::
+
+        import pulserver.recon as recon
+
+        coefficients = recon.CoefficientAccessor.from_file("coeff.grad")
     """
 
     basis: HarmonicBasis

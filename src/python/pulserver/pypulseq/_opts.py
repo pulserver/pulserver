@@ -28,6 +28,29 @@ class Opts(_pp.Opts):
     Coarser gradient rasters quantise ramps more coarsely, so a short blip
     designed at 20 us may come out longer than one designed at 10 us. Pass
     ``grad_raster_time`` explicitly when targeting one vendor.
+
+    Examples
+    --------
+    >>> import pulserver.pypulseq as pp
+    >>> system = pp.Opts()
+    >>> system.grad_raster_time, system.rf_raster_time
+    (2e-05, 2e-06)
+
+    Targeting one vendor means naming its raster and its limits:
+
+    >>> ge = pp.Opts(
+    ...     grad_raster_time=4e-6,
+    ...     max_grad=50, grad_unit="mT/m",
+    ...     max_slew=200, slew_unit="T/m/s",
+    ... )
+    >>> ge.grad_raster_time
+    4e-06
+
+    Amplitudes are held in Hz/m, so reading one back in mT/m divides by
+    ``gamma``:
+
+    >>> round(ge.max_grad / ge.gamma * 1e3, 1)
+    50.0
     """
 
     def __init__(

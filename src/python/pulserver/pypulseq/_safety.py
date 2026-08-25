@@ -70,7 +70,7 @@ def _esp_rows(lines: list[str]) -> list[str]:
 
 
 def read_esp_bands(path: str | Path) -> list[tuple[float, float, float, str]]:
-    """Read mechanical resonance bands from a vendor ESP lockout table.
+    r"""Read mechanical resonance bands from a vendor ESP lockout table.
 
     The file lists three axes in X, Y, Z order. Each axis is a count line
     followed by that many ``esp_min_us esp_max_us max_amplitude_G_per_cm``
@@ -97,6 +97,24 @@ def read_esp_bands(path: str | Path) -> list[tuple[float, float, float, str]]:
         If the table is malformed. This mirrors the scanner-side behaviour,
         where a present-but-corrupt lockout table fails closed rather than
         degrading to "no bands".
+
+    Examples
+    --------
+    A table is a count line per axis, then that many echo-spacing rows. One
+    band on X, one on Y, none on Z:
+
+    >>> import os, pathlib, tempfile
+    >>> import pulserver.pypulseq as pp
+    >>> path = os.path.join(tempfile.mkdtemp(), "epiesp.dat")
+    >>> _ = pathlib.Path(path).write_text("1\n500 700 0.2\n1\n480 720 0.15\n0\n")
+
+    Echo spacings in microseconds come back as a frequency band in Hz, and
+    the amplitude limit as mT/m:
+
+    >>> for fmin, fmax, limit, channel in pp.read_esp_bands(path):
+    ...     print(f"{channel} {fmin:7.1f} {fmax:7.1f} Hz  {limit:.2f} mT/m")
+    gx   714.3  1000.0 Hz  2.00 mT/m
+    gy   694.4  1041.7 Hz  1.50 mT/m
     """
     rows = _esp_rows(Path(path).read_text().splitlines())
     bands: list[tuple[float, float, float, str]] = []
@@ -145,7 +163,7 @@ def read_esp_bands(path: str | Path) -> list[tuple[float, float, float, str]]:
 
 
 def read_asc_bands(path: str | Path) -> list[tuple[float, float, float]]:
-    """Read mechanical resonance bands from a Siemens ``.asc`` file.
+    r"""Read mechanical resonance bands from a Siemens ``.asc`` file.
 
     The same tables :meth:`pypulseq.Sequence.calculate_pns` reads for its SAFE
     hardware description also declare the gradient coil's acoustic resonances,
@@ -169,6 +187,25 @@ def read_asc_bands(path: str | Path) -> list[tuple[float, float, float]]:
     -------
     list of tuple
         ``(freq_min_hz, freq_max_hz, max_amplitude_mT_per_m)``.
+
+    Examples
+    --------
+    The two entries a table declares per resonance are a centre frequency and
+    a bandwidth:
+
+    >>> import os, pathlib, tempfile
+    >>> import pulserver.pypulseq as pp
+    >>> path = os.path.join(tempfile.mkdtemp(), "gradient.asc")
+    >>> _ = pathlib.Path(path).write_text(
+    ...     "aflGCAcousticResonanceFrequency[0] = 590.0\n"
+    ...     "aflGCAcousticResonanceBandwidth[0] = 100.0\n"
+    ... )
+
+    They come back as the band they span, with no amplitude limit, which is
+    what leaves the safety core on its own floor:
+
+    >>> pp.read_asc_bands(path)
+    [(540.0, 640.0, 0.0)]
     """
     from pypulseq.utils.siemens.asc_to_hw import asc_to_acoustic_resonances
     from pypulseq.utils.siemens.readasc import readasc
@@ -236,6 +273,19 @@ def bands_to_hz_per_m(
     -------
     list of tuple
         ``(freq_min_hz, freq_max_hz, max_amplitude_hz_per_m[, channel])``.
+
+    Examples
+    --------
+    >>> import pulserver.pypulseq as pp
+    >>> pp.bands_to_hz_per_m([(500.0, 900.0, 2.0)])
+    [(500.0, 900.0, 85152.0)]
+
+    The frequencies are untouched; only the amplitude changes units, by
+    ``1e-3 * gamma``:
+
+    >>> band = pp.bands_to_hz_per_m([(500.0, 900.0, 2.0)])[0]
+    >>> round(band[2] / (1e-3 * pp.Opts.default.gamma), 3)
+    2.0
     """
     if gamma is None:
         gamma = float(pp.Opts.default.gamma)

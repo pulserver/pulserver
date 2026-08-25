@@ -397,7 +397,7 @@ def _typed(protocol: dict) -> dict:
 def _time_or_preset(milliseconds: float) -> float | None:
     """Seconds, or ``None`` for the presets a UI shows as words.
 
-    :class:`pulserver.TEPreset` and :class:`pulserver.TRPreset` are negative
+    :class:`pulserver.design.TEPreset` and :class:`pulserver.design.TRPreset` are negative
     numbers standing for "whatever the sequence can reach", which is what every
     readout module means by ``None``.
     """
@@ -422,7 +422,7 @@ def main_kwargs(main, system, protocol: dict, **overrides) -> dict:
         System limits, passed on as ``system`` if ``main`` takes one.
     protocol : dict
         The protocol as the bridge hands it over, or as
-        :func:`pulserver.protocol_to_dict` produces it.
+        :func:`pulserver.design.protocol_to_dict` produces it.
     **overrides
         Values that win over anything read from the protocol. Names ``main``
         does not declare raise, rather than being passed to a call that would

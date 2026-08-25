@@ -73,7 +73,7 @@ class TEPreset(IntEnum):
     ``epic_ui_control.h``; a plugin puts them in a dropdown's ``options``.
 
     Every one of them is a request for a TE the sequence works out for itself,
-    so :func:`pulserver.main_kwargs` passes them on as ``te=None`` -- which is
+    so :func:`pulserver.design.main_kwargs` passes them on as ``te=None`` -- which is
     what a readout module reads as "as short as possible".
 
     Examples
@@ -646,7 +646,17 @@ class DropdownFloatParam(FloatParam):
 
 @dataclass
 class OffFloatParam(FloatParam):
-    """Float parameter hidden from the GE UI while remaining serializable."""
+    """Float parameter hidden from the GE UI while remaining serializable.
+
+    Examples
+    --------
+    >>> from pulserver.design import OffFloatParam, protocol_to_dict
+    >>> slice_gap = OffFloatParam(value=2.5)
+    >>> slice_gap.mode.value
+    'off'
+    >>> protocol_to_dict({"slice_gap": slice_gap})["slice_gap"]["value"]
+    2.5
+    """
 
     mode: InputMode = InputMode.OFF
     options: list[float] = field(default_factory=list)
@@ -756,7 +766,17 @@ class DropdownIntParam(IntParam):
 
 @dataclass
 class OffIntParam(IntParam):
-    """Int parameter hidden from the GE UI while remaining serializable."""
+    """Int parameter hidden from the GE UI while remaining serializable.
+
+    Examples
+    --------
+    >>> from pulserver.design import OffIntParam, protocol_to_dict
+    >>> shots = OffIntParam(value=4)
+    >>> shots.mode.value
+    'off'
+    >>> protocol_to_dict({"shots": shots})["shots"]["value"]
+    4
+    """
 
     mode: InputMode = InputMode.OFF
     options: list[int] = field(default_factory=list)

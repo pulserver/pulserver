@@ -54,6 +54,17 @@ class ContextAgnosticDenoiser(_Denoiser):
     ValueError
         If ``spatial_ndim``, ``channels_per_group``, or ``max_batch_size`` is
         invalid.
+
+    Examples
+    --------
+    Wraps a denoiser so it can be applied to whatever a reconstruction is
+    carrying -- coil images, subspace coefficients, a stack of slices -- by
+    folding the extra axes into the channel dimension it expects.
+
+    >>> import pulserver.recon as recon
+    >>> wrapped = recon.ContextAgnosticDenoiser(recon.TV(), spatial_ndim=2)
+    >>> isinstance(wrapped, recon.ContextAgnosticDenoiser)
+    True
     """
 
     def __init__(

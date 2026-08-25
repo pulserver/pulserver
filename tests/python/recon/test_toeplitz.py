@@ -1573,9 +1573,7 @@ def test_maps_are_read_where_they_rest_and_staged_a_coil_at_a_time():
     generator = torch.Generator().manual_seed(37)
     image_shape = (8, 8)
     coils, rank = 4, 2
-    maps = torch.randn(
-        coils, *image_shape, generator=generator, dtype=torch.complex64
-    )
+    maps = torch.randn(coils, *image_shape, generator=generator, dtype=torch.complex64)
     maps = maps / maps.abs().pow(2).sum(0, keepdim=True).sqrt()
     operator = SimpleNamespace(shape=image_shape, smaps=maps, uses_sense=True)
     image = torch.zeros(1, rank, *image_shape, dtype=torch.complex64).cuda()
@@ -1584,7 +1582,9 @@ def test_maps_are_read_where_they_rest_and_staged_a_coil_at_a_time():
 
     assert held.device.type == "cpu"
 
-    raw = torch.randn(rank, rank, *[2 * size for size in image_shape], generator=generator)
+    raw = torch.randn(
+        rank, rank, *[2 * size for size in image_shape], generator=generator
+    )
     kernel = _packed_kernel(0.5 * (raw + raw.movedim(0, 1)), image_shape).to("cuda")
     kernel.cuda_transfer_precision = "float32"
 

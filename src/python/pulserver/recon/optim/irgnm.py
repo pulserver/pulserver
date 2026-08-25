@@ -64,6 +64,16 @@ class IRGNM(_IterativeOptimizer):
         It may return a gauge-equivalent or otherwise projected estimate.
     unfold
         Enable differentiation through outer iterations.
+
+    Examples
+    --------
+    Iteratively regularized Gauss-Newton: each step linearises the model and
+    solves the linearisation with the inner solver, with the damping reduced as
+    the estimate improves. This is what :class:`~pulserver.recon.NLINV` runs::
+
+        import pulserver.recon as recon
+
+        solver = recon.IRGNM(recon.ConjugateGradient(max_iter=30), max_iter=8)
     """
 
     def __init__(

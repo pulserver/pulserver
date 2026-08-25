@@ -1173,7 +1173,7 @@ def write_pair(
         ``<stem>_navigator.seq`` and ``<stem>_main.seq``.
     offline : bool, optional
         The form every file of the chain is written in, as
-        :func:`pulserver.write_sequence` reads it. Default is True.
+        :func:`pulserver.design.write_sequence` reads it. Default is True.
     **kwargs
         Forwarded to :func:`calibration` and :func:`navigator`, each taking the
         subset it declares.

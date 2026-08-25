@@ -20,6 +20,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+#: The environment variable naming extra directories to search for a model,
+#: separated the way the platform separates a path. What it names is looked in
+#: before the defaults :func:`default_model_paths` returns.
 MODEL_PATH_ENV = "PULSERVER_MODEL_PATH"
 _MANIFEST = "manifest.json"
 _SCHEMA_VERSION = 1

@@ -294,6 +294,17 @@ class RigidMotionEKF:
         Scalar or per-pose-coordinate registration variance.
     initial_covariance
         Initial pose/velocity covariance scale.
+
+    Examples
+    --------
+    Tracks rigid motion across a scan rather than registering each volume
+    independently: the filter carries the estimate forward, so a noisy
+    registration is smoothed by what came before it::
+
+        import pulserver.recon as recon
+
+        tracker = recon.RigidMotionEKF(recon.RigidRegistration(), dimension=3)
+        estimate = tracker(volume, reference)
     """
 
     def __init__(

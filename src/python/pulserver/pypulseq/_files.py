@@ -45,6 +45,29 @@ def write(
     --------
     read : the inverse.
     pulserver.pypulseq.Sequence.write : the same file, written to a path.
+
+    Examples
+    --------
+    >>> import os, tempfile
+    >>> import pulserver.pypulseq as pp
+    >>> seq = pp.Sequence()
+    >>> _ = seq.add_block(pp.make_block_pulse(flip_angle=1.57, duration=1e-3))
+    >>> gx = pp.make_trapezoid("x", flat_area=1000, flat_time=2.56e-3, rise_time=2e-4)
+    >>> _ = seq.add_block(gx, pp.make_adc(num_samples=80, dwell=3.2e-5, delay=gx.rise_time))
+
+    With no ``output`` the payload comes back, which is what to hand a stream
+    or a checksum:
+
+    >>> payload = pp.write(seq)
+    >>> payload.splitlines()[0]
+    b'# Pulseq sequence file'
+
+    With one, the file is written and a signature returned if it was asked
+    for:
+
+    >>> path = os.path.join(tempfile.mkdtemp(), "scan.seq")
+    >>> len(pp.write(seq, path, create_signature=True))
+    32
     """
     from pulserver.pypulseq._sequence import _signature_of
 
@@ -150,6 +173,31 @@ def read(source: str | Path | bytes, *, system=None):
     Block rotations, pTx shim vectors and label strings outside Pulseq's
     built-in set are decoded natively, which upstream PyPulseq 1.5.0 cannot
     do. Nothing is replayed through it.
+
+    Examples
+    --------
+    >>> import os, tempfile
+    >>> import pulserver.pypulseq as pp
+    >>> seq = pp.Sequence()
+    >>> _ = seq.add_block(pp.make_block_pulse(flip_angle=1.57, duration=1e-3))
+    >>> gx = pp.make_trapezoid("x", flat_area=1000, flat_time=2.56e-3, rise_time=2e-4)
+    >>> _ = seq.add_block(gx, pp.make_adc(num_samples=80, dwell=3.2e-5, delay=gx.rise_time))
+    >>> path = os.path.join(tempfile.mkdtemp(), "scan.seq")
+    >>> _ = pp.write(seq, path)
+
+    What comes back is the sequence, not a copy of the text:
+
+    >>> back = pp.read(path)
+    >>> len(back.block_events)
+    2
+    >>> round(back.duration()[0], 6)
+    0.00396
+
+    The rasters come off the file's own ``[DEFINITIONS]``, so a sequence
+    designed for one scanner reads back on its own grid:
+
+    >>> back.system.grad_raster_time
+    2e-05
     """
     from pulserver.pypulseq._sequence import Sequence
 

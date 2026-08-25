@@ -497,9 +497,9 @@ _RF_CASES["01_bipolar_rfstat"] = _seq(
 
 """
     + _shapes3(
-        "1 1 1 1",          # magnitude: flat
-        "0 0 0.5 0.5",      # phase / (2 pi): second half inverted
-        "0 333 666 999",    # time, raster units
+        "1 1 1 1",  # magnitude: flat
+        "0 0 0.5 0.5",  # phase / (2 pi): second half inverted
+        "0 333 666 999",  # time, raster units
     ),
 )
 

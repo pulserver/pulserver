@@ -39,6 +39,25 @@ class WavePSFResult:
         deconvolution.
     objective_history
         Objective values before and after each bounded optimization stage.
+
+    Examples
+    --------
+    What a :class:`WavePSFCalibration` returns: the fitted point-spread function,
+    the phase it corresponds to, and how far that was from the prescription.
+
+    >>> import torch
+    >>> import pulserver.recon as recon
+    >>> result = recon.WavePSFResult(
+    ...     psf=torch.zeros(4),
+    ...     phase=torch.zeros(4),
+    ...     phase_error=0.1,
+    ...     spatial_offset=0.0,
+    ...     frequency_indices=torch.arange(4),
+    ...     corrected=torch.zeros(4),
+    ...     objective_history=[1.0, 0.5],
+    ... )
+    >>> result.phase_error, len(result.objective_history)
+    (0.1, 2)
     """
 
     psf: torch.Tensor
@@ -65,6 +84,17 @@ class WavePSF(torch.nn.Module):
     cuda_kernel
         Use the fused Triton inference kernel when available. Autograd always
         uses the native Torch formulation.
+
+    Examples
+    --------
+    The corkscrew a wave-encoded readout draws, as the phase it applies along the
+    two encoded axes. Built once from the calibrated gradients and reused by every
+    solve::
+
+        import pulserver.recon as recon
+
+        psf = recon.WavePSF(phase_axis=phase_gradients, partition_axis=partition_gradients)
+        physics = recon.WaveEncoding(sampling, coil_maps, psf)
     """
 
     def __init__(
@@ -312,6 +342,19 @@ class WavePSFCalibration(torch.nn.Module):
         shared hardware PSF used by Wave-Shuffling and Wave-CAIPI.
     cuda_kernel
         Use fused Triton PSF synthesis outside autograd when available.
+
+    Examples
+    --------
+    Fits the point-spread function from a calibration scan, rather than trusting
+    the nominal gradients -- the delays and eddy currents that make the corkscrew
+    differ from its prescription are exactly what it measures::
+
+        import pulserver.recon as recon
+
+        calibration = recon.WavePSFCalibration(
+            phase_axis=phase_gradients, partition_axis=partition_gradients
+        )
+        fitted = calibration(reference_lines)
     """
 
     def __init__(

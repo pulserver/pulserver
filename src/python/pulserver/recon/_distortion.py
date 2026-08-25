@@ -27,6 +27,16 @@ def run_pyhysco(
     Parameters match PyHySCO's ``pyhysco --file_1 --file_2 --ped`` command.
     The inputs must be reconstructed NIfTI files; raw MRD data is first
     reconstructed with the regular Pulserver/MRPro workflow.
+
+    Examples
+    --------
+    Susceptibility distortion is corrected from a reversed-polarity pair: the two
+    acquisitions distort in opposite directions, and the field that explains both
+    is what unwarps them::
+
+        import pulserver.recon as recon
+
+        corrected = recon.run_pyhysco("blip_up.nii", "blip_down.nii", "AP")
     """
     if shutil.which(executable) is None:
         raise ImportError(

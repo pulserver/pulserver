@@ -55,6 +55,25 @@ def rotate3D(
     -------
     list of SimpleNamespace
         Bypassed events first, then the rotated gradients.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> import pulserver.pypulseq as pp
+    >>> gx = pp.make_trapezoid("x", area=1000, duration=1e-3)
+
+    A quarter turn about z carries a readout off x onto y, area and all:
+
+    >>> about_z = np.array([[0.0, -1.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]])
+    >>> (rotated,) = pp.rotate3D(gx, rotation_matrix=about_z)
+    >>> rotated.channel, round(float(rotated.area), 3)
+    ('y', 1000.0)
+
+    Anything that is not a gradient comes back untouched, and first:
+
+    >>> adc = pp.make_adc(num_samples=64, duration=1e-3)
+    >>> [event.type for event in pp.rotate3D(gx, adc, rotation_matrix=about_z)]
+    ['adc', 'trap']
     """
     system = default_system(system)
 

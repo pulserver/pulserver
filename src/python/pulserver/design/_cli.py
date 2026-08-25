@@ -49,6 +49,28 @@ def write_sequence(seq: pp.Sequence, output_path: str, *, offline: bool) -> str 
     -----
     UserWarning
         Under ``offline``, once per failed check.
+
+    Examples
+    --------
+    >>> import os, tempfile
+    >>> import pulserver.pypulseq as pp
+    >>> from pulserver.design import write_sequence
+    >>> seq = pp.Sequence()
+    >>> _ = seq.add_block(pp.make_block_pulse(flip_angle=0.2, duration=1e-3))
+    >>> gx = pp.make_trapezoid("x", flat_area=100, flat_time=2.56e-3, rise_time=2e-4)
+    >>> _ = seq.add_block(gx, pp.make_adc(num_samples=80, dwell=3.2e-5, delay=gx.rise_time))
+    >>> folder = tempfile.mkdtemp()
+
+    Offline text is signed, so the caller is handed a signature:
+
+    >>> signature = write_sequence(seq, os.path.join(folder, "scan.seq"), offline=True)
+    >>> len(signature)
+    32
+
+    The scanner form is binary and unsigned:
+
+    >>> write_sequence(seq, os.path.join(folder, "scan.bin"), offline=False) is None
+    True
     """
     if not offline:
         seq.remove_duplicates().write_binary(output_path)
@@ -69,14 +91,14 @@ def run_cli(
 
     Owns the shared options (``-o/--output``, ``--max-grad-mtm``,
     ``--max-slew-tm-s``, ``--validate-only``), protocol defaulting, per-flag
-    overrides via :func:`pulserver.set_protocol_value`,
+    overrides via :func:`pulserver.design.params.set_protocol_value`,
     validation (prints ``info``, returns 2 when invalid), and the final
     ``make_sequence`` + "Wrote sequence" print.
 
     ``make_sequence`` is called with ``offline=True``: a file written here is
     not going straight to a scanner, so it is written as `.seq` text with
     every check run and a signature appended. See
-    :func:`pulserver.write_sequence`.
+    :func:`pulserver.design.write_sequence`.
 
     Parameters
     ----------

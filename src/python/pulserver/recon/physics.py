@@ -1353,9 +1353,7 @@ def _coils_split_across_devices(
     def share(position: int) -> Any:
         device = devices[position]
         start, stop = edges[position], edges[position + 1]
-        coils = (
-            maps[:, start:stop] if batched_maps else maps[start:stop]
-        ).to(device)
+        coils = (maps[:, start:stop] if batched_maps else maps[start:stop]).to(device)
         held = SimpleNamespace(
             shape=kernel.image_shape,
             smaps=coils,
@@ -2664,6 +2662,19 @@ class SMS(MRIPhysics):
         Slice count when a shared physics and no encoding tensor are supplied.
     streaming
         Optional Pulserver CUDA streaming policy forwarded to the base physics.
+
+    Examples
+    --------
+    Simultaneous multi-slice: the slices are excited together and arrive summed,
+    with a CAIPI phase telling them apart. The operator carries that phase, so a
+    solve unfolds the slices rather than a separate unaliasing step doing it.
+
+    >>> import torch
+    >>> import pulserver.recon as recon
+    >>> base = recon.Cartesian2D(torch.ones(16, 16))
+    >>> physics = recon.SMS(base, n_slices=2)
+    >>> isinstance(physics, recon.MRIPhysics)
+    True
     """
 
     def __init__(
@@ -4196,6 +4207,20 @@ class OffResonance(MRIPhysics):
     ------
     TypeError
         If ``physics`` is Cartesian.
+
+    Examples
+    --------
+    A long readout accumulates phase wherever the field is off resonance, and the
+    correction is a time-segmented model of it: the field map and the time each
+    sample was taken::
+
+        import pulserver.recon as recon
+
+        physics = recon.OffResonance(base_physics, field_map_hz, readout_time_s)
+        image = recon.pics(measured, physics)
+
+    The field model is fitted once, when the operator is built, so a solve pays
+    for it only at the start.
     """
 
     def __init__(
@@ -4269,6 +4294,28 @@ class Toeplitz(MRIPhysics):
     **options
         Toeplitz options: ``compress``, ``chunk_size``, ``coil_batch_size``
         and the CUDA transfer settings.
+
+    Examples
+    --------
+    The kernel is the normal operator, not an approximation of it: a scan's
+    transfer gridded onto a doubled grid, so ``A^H A`` becomes pad, transform,
+    multiply, transform back, crop -- and gives the same answer the two transforms
+    would have.
+
+    >>> import torch
+    >>> import pulserver.recon as recon
+    >>> import sys; sys.path.insert(0, "docs")
+    >>> from _figures import phantom, radial_spokes
+    >>> truth, coil_maps = phantom(64, coils=4)
+    >>> plain = recon.NonCartesian2D(
+    ...     radial_spokes(64, 24), (64, 64), coil_maps=coil_maps[0], toeplitz=False
+    ... )
+    >>> kernelled = recon.Toeplitz(plain)
+    >>> exact = plain.A_adjoint_A(truth)
+    >>> through_kernel = kernelled.A_adjoint_A(truth)
+    >>> error = torch.linalg.vector_norm(exact - through_kernel)
+    >>> bool(error / torch.linalg.vector_norm(exact) < 1e-5)
+    True
     """
 
     def __init__(self, physics: MRIPhysics, **kwargs: Any) -> None:
@@ -4298,6 +4345,17 @@ class WaveShuffling(MRIPhysics):
         Temporal basis shaped ``(rank, echoes)``.
     **kwargs
         Forwarded to the wave-shuffling operator.
+
+    Examples
+    --------
+    Wave encoding and a temporal subspace at once: the corkscrew separates the
+    aliasing, the basis carries the contrast change through the echo train, and
+    one solve recovers the coefficient images both describe::
+
+        import pulserver.recon as recon
+
+        physics = recon.WaveShuffling(sampling, coil_maps, wave_psf, basis)
+        coefficients = recon.pics(measured, physics)
     """
 
     def __init__(
@@ -4359,6 +4417,17 @@ class WaveEncoding(MRIPhysics):
         Precision of host-to-device transfers when streaming.
     streaming
         Optional :class:`pulserver.recon.execution.CudaStreaming` policy.
+
+    Examples
+    --------
+    Wave encoding plays sinusoidal gradients during the readout, so each line is
+    smeared along the encoded axes by a corkscrew point-spread function. Spreading
+    the aliasing that way is what lets a higher acceleration still separate::
+
+        import pulserver.recon as recon
+
+        physics = recon.WaveEncoding(sampling, coil_maps, wave_psf)
+        image = recon.pics(measured, physics)
     """
 
     def __init__(
