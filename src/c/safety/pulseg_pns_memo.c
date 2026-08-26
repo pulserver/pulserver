@@ -27,11 +27,12 @@
  *  - The templates are *slices of the very waveform the exact path would
  *    convolve*, not a re-rendering of it, so there is no second copy of the
  *    gradient renderer that could drift away from the first.
- *  - Before accepting an occurrence as a scaled copy of a template, the
- *    builder checks that it really is one, against the materialised
- *    waveform. That check is O(samples); the convolution it avoids is
- *    O(samples x kernel). If any occurrence fails, the memoized path reports
- *    "not applicable" and the caller runs the exact model.
+ *  - Templates are keyed on pulseg__wave_key, the identity the representation
+ *    already carries: the definition fixes the timing skeleton, the shape id
+ *    the samples, the duration the span. This path works in the logical
+ *    frame, so no rotation participates and a key match is a scalar multiple
+ *    by construction. Building with PULSEG_DEBUG_MEMO asserts that against
+ *    the materialised samples.
  *
  * Exactness. The window is partitioned into per-block slices, and each
  * slice's contribution to the forward difference is taken zero-extended on
@@ -94,14 +95,12 @@ static double pns_memo_transform_ops(int n, int kernel_len)
 
 typedef struct
 {
-    int def_id;    /* index into desc->grad_definitions */
-    int shape_id;  /* pulseq shape this instance plays */
-    int dur_us;    /* block duration: type-1 shapes hold to the block end */
-    int axis;      /* 0 = x, 1 = y, 2 = z */
-    int first;     /* block position whose slice defines the shape */
-    int pivot;     /* index within that slice of its largest-magnitude sample */
-    float pivot_v; /* that sample's value: the shape's amplitude handle */
-    float *resp;   /* [resp_len] kernel convolved with the slice's dG/dt */
+    pulseg__wave_key key; /* what makes two slices the same waveform */
+    int axis;             /* 0 = x, 1 = y, 2 = z: which output this response feeds */
+    int first;            /* block position whose slice defines the shape */
+    int pivot;            /* index within that slice of its largest-magnitude sample */
+    float pivot_v;        /* that sample's value: the shape's amplitude handle */
+    float *resp;          /* [resp_len] kernel convolved with the slice's dG/dt */
     int resp_len;
 } pns_memo_template;
 
@@ -192,30 +191,6 @@ static int pns_memo_block_offsets(
 /*  Slice helpers                                                     */
 /* ================================================================== */
 
-/* The definition and shot slot driving one axis of one block, or def_id -1
- * when the block is silent on that axis. */
-static void pns_memo_axis_key(
-    const pulseg_sequence_descriptor *desc,
-    const pulseg_block_table_element *bte,
-    int axis,
-    int *def_id,
-    int *shape_id)
-{
-    int raw;
-    const pulseg_grad_table_element *tab;
-
-    raw = (axis == 0) ? bte->gx_id : (axis == 1) ? bte->gy_id : bte->gz_id;
-    *def_id = -1;
-    *shape_id = 0;
-    if (raw < 0 || raw >= desc->grad_table_size)
-        return;
-    tab = &desc->grad_table[raw];
-    if (tab->id < 0 || tab->id >= desc->num_unique_grads)
-        return;
-    *def_id = tab->id;
-    *shape_id = tab->shape_id;
-}
-
 /* Doubly zero-extended forward difference of one block's slice: len+1
  * samples, opening with the step up into the block and closing with the step
  * back down out of it. Written to land at absolute index (offset - 1), which
@@ -259,9 +234,12 @@ static int pns_memo_pivot(const float *waveform, int offset, int len)
     return best;
 }
 
-/* Verify a slice really is `scale` times the template's slice. This is the
- * guard that lets the fast path be trusted: it compares against the same
- * materialised waveform the exact path would have convolved. */
+#ifdef PULSEG_DEBUG_MEMO
+/* Assert that a key match really is proportional. The key already implies it
+ * -- same definition, same shape, same span, logical frame, whole-sample
+ * offsets -- so this is a net for a build under test, not a hot-path guard.
+ * It compares against the same materialised waveform the exact path would
+ * have convolved. */
 static int pns_memo_proportional(
     const float *waveform,
     int offset,
@@ -285,6 +263,7 @@ static int pns_memo_proportional(
     }
     return 1;
 }
+#endif /* PULSEG_DEBUG_MEMO */
 
 /* Time-domain, deliberately: a template is one block long against a kernel
  * spanning tens of chronaxie times, so a transform of the padded template
@@ -376,12 +355,12 @@ int pulseg__calc_pns_memoized(
     pns_memo_occurrence *occurrences;
     float *scratch;
     int num_templates, num_occurrences, cap;
-    int n_uniform, axis, i, t, block_idx, def_id, shape_id, dur_us, pivot;
+    int n_uniform, axis, i, t, block_idx, pivot;
+    pulseg__wave_key key;
     int rc, max_len, len, off;
     double assembly_ops;
     float inv_gamma, dt_s, scale, pivot_v;
     const pulseg_block_table_element *bte;
-    const pulseg_base_block *bdef;
 
     *applied = 0;
     offsets = NULL;
@@ -446,41 +425,39 @@ int pulseg__calc_pns_memoized(
         {
             block_idx = block_order ? block_order[i] : block_start + i;
             bte = &desc->block_table[block_idx];
-            bdef = &desc->base_blocks[bte->id];
-            dur_us = (bte->duration_us >= 0) ? bte->duration_us : bdef->duration_us;
-
             pivot = pns_memo_pivot(axis_wave[axis], offsets[i], lengths[i]);
             if (pivot < 0)
                 continue; /* silent slice: contributes nothing at all */
             pivot_v = axis_wave[axis][offsets[i] + pivot];
 
-            pns_memo_axis_key(desc, bte, axis, &def_id, &shape_id);
-            if (def_id < 0)
+            /* The logical frame, so no rotation participates: see
+             * pulseg__wave_key. */
+            if (!pulseg__wave_key_axis(desc, bte, axis, 0, &key))
                 goto done; /* non-silent slice with no definition: bail out */
 
             scale = 1.0f;
             for (t = 0; t < num_templates; ++t)
             {
-                if (templates[t].def_id != def_id || templates[t].shape_id != shape_id ||
-                    templates[t].dur_us != dur_us || templates[t].axis != axis ||
-                    templates[t].pivot != pivot || lengths[templates[t].first] != lengths[i])
+                if (!pulseg__wave_key_equal(&templates[t].key, &key) || templates[t].axis != axis ||
+                    lengths[templates[t].first] != lengths[i])
                     continue;
                 scale = pivot_v / templates[t].pivot_v;
-                if (pns_memo_proportional(
+#ifdef PULSEG_DEBUG_MEMO
+                if (!pns_memo_proportional(
                         axis_wave[axis],
                         offsets[i],
                         offsets[templates[t].first],
                         lengths[i],
                         scale,
                         (float)fabs(templates[t].pivot_v)))
-                    break;
+                    continue;
+#endif
+                break;
             }
 
             if (t == num_templates)
             {
-                templates[t].def_id = def_id;
-                templates[t].shape_id = shape_id;
-                templates[t].dur_us = dur_us;
+                templates[t].key = key;
                 templates[t].axis = axis;
                 templates[t].first = i;
                 templates[t].pivot = pivot;

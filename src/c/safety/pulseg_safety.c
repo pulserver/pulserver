@@ -624,9 +624,7 @@ static int sa_waveform_key(
     const struct pulseg_sequence_descriptor *desc,
     const sa_raw_occurrence *occ)
 {
-    if (occ->shape_id > 0)
-        return desc->num_unique_grads + occ->shape_id;
-    return occ->def_index;
+    return pulseg__wave_key_flat(desc, occ->def_index, occ->shape_id);
 }
 
 /**

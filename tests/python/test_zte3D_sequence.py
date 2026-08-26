@@ -35,9 +35,9 @@ def test_the_sequence_is_valid_pulseq():
 def test_a_view_is_two_blocks_under_one_rotation():
     """Pulse then read, both turned the same way.
 
-    True of a dummy view as well as an acquired one -- the steady-state views
-    at the head of the first shell are the same pair without the ADC, since
-    what has to settle is the magnetisation and the gradient never stops.
+    True of a dummy view as well as an acquired one: a preparation shell is
+    an acquiring shell with the ADC left off, so every view in it is the same
+    pair of blocks under the same rotation.
     """
     seq = design()
     rf_blocks = [
@@ -51,7 +51,9 @@ def test_a_view_is_two_blocks_under_one_rotation():
         assert pulse.adc is None
         assert pulse.rotation is not None and read.rotation is not None
         acquired += read.adc is not None
-    assert acquired == len(rf_blocks) - N_DUMMY
+    # A dummy is a whole shell, so preparation costs N_DUMMY * N_VIEWS
+    # non-acquiring views rather than N_DUMMY of them.
+    assert acquired == len(rf_blocks) - N_DUMMY * N_VIEWS
     assert acquired > 0
 
 
@@ -131,3 +133,19 @@ def test_the_default_protocol_is_feasible():
     )
     assert report["valid"] is True, report["info"]
     assert "missing" in report["info"]
+
+
+def test_a_non_acquiring_dummy_shell_partitions_the_same_as_an_acquiring_one():
+    # A dummy is a whole shell with the ADC left off. Whether a block acquires
+    # is not part of the structure a repetition is read from, so preparation
+    # must not change the detected period -- if it does, the whole scan is
+    # read as one TR and every window-based check pays for it.
+    from pulserver.app import zte3D_sequence
+
+    sizes = []
+    for n_dummy in (0, 2):
+        seq = zte3D_sequence.main(
+            n_x=32, n_dummy=n_dummy, n_gain_calibration_readouts=0
+        )
+        sizes.append(seq.tr_size)
+    assert sizes[0] == sizes[1]

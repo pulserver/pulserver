@@ -3309,3 +3309,62 @@ int pulseg_get_subseq_segment_block_indices(
     }
     return seg->num_blocks;
 }
+
+/* ================================================================== */
+/*  Waveform identity, shared by the gradient-side safety checks       */
+/* ================================================================== */
+
+int pulseg__wave_key_axis(
+    const pulseg_sequence_descriptor *desc,
+    const pulseg_block_table_element *bte,
+    int axis,
+    int physical_frame,
+    pulseg__wave_key *out)
+{
+    const pulseg_grad_table_element *tab;
+    const pulseg_base_block *bdef;
+    int raw;
+
+    if (!out)
+        return 0;
+    out->def_id = -1;
+    out->shape_id = 0;
+    out->dur_us = 0;
+    out->axis = -1;
+    out->rotation_id = -1;
+    if (!desc || !bte)
+        return 0;
+
+    raw = (axis == 0) ? bte->gx_id : (axis == 1) ? bte->gy_id : bte->gz_id;
+    if (raw < 0 || raw >= desc->grad_table_size)
+        return 0;
+    tab = &desc->grad_table[raw];
+    if (tab->id < 0 || tab->id >= desc->num_unique_grads)
+        return 0;
+
+    bdef = &desc->base_blocks[bte->id];
+    out->def_id = tab->id;
+    out->shape_id = tab->shape_id;
+    out->dur_us = (bte->duration_us >= 0) ? bte->duration_us : bdef->duration_us;
+    if (physical_frame)
+    {
+        out->axis = axis;
+        out->rotation_id = bte->norot_flag ? -1 : bte->rotation_id;
+    }
+    return 1;
+}
+
+int pulseg__wave_key_equal(const pulseg__wave_key *a, const pulseg__wave_key *b)
+{
+    if (!a || !b)
+        return 0;
+    return a->def_id == b->def_id && a->shape_id == b->shape_id && a->dur_us == b->dur_us &&
+        a->axis == b->axis && a->rotation_id == b->rotation_id;
+}
+
+int pulseg__wave_key_flat(const pulseg_sequence_descriptor *desc, int def_index, int shape_id)
+{
+    if (shape_id > 0)
+        return desc->num_unique_grads + shape_id;
+    return def_index;
+}

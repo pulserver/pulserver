@@ -1450,6 +1450,17 @@ class AnalysisMixin:
                 if modulation is None or len(modulation) == 0:
                     modulation = np.zeros(count)
                 modulation = np.asarray(modulation, dtype=float).ravel()
+                if modulation.size == 3 * count:
+                    # The field doubles as the carrier for a non-Cartesian
+                    # readout's normalised base trajectory, stored as
+                    # [3, nsamples]. A trajectory is not a phase, so the
+                    # samples of such a readout carry none.
+                    modulation = np.zeros(count)
+                elif modulation.size != count:
+                    raise ValueError(
+                        f"block {number}: phase_modulation carries "
+                        f"{modulation.size} entries for {count} ADC samples"
+                    )
 
                 sample_times.append(elapsed + adc.delay + within)
                 sample_phases.append(

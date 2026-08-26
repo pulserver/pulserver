@@ -203,19 +203,6 @@ def test_the_shell_stays_within_the_slew_limit(system, hard):
     assert slew.max() <= system.max_slew * 1.001
 
 
-def test_a_dummy_view_holds_the_gradient_still(system, hard):
-    """A preparation view drives the magnetisation without moving the orbit."""
-    zte = readout(system, hard)
-    for dummy, hold, read in zip(
-        zte.g_dummy, zte.g_hold[0], zte.g_read[0], strict=True
-    ):
-        assert np.ptp(np.asarray(dummy.waveform)) == pytest.approx(0.0)
-        assert float(np.asarray(dummy.waveform)[0]) == pytest.approx(
-            float(np.asarray(hold.waveform)[0])
-        )
-        assert pp.calc_duration(dummy) == pytest.approx(pp.calc_duration(read))
-
-
 def test_the_gradient_amplitude_is_one_step_of_k_per_dwell(system, hard):
     zte = readout(system, hard)
     assert zte.gradient_amplitude == pytest.approx(zte.delta_k * zte.bandwidth_hz)

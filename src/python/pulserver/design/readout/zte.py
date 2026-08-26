@@ -73,11 +73,6 @@ class ZteReadout(SequenceModule):
     g_read : list of list of GradEvent
         Per view, the plateau under the acquisition and then the turn onto the
         next view. The last entry slews to zero instead, closing the shell.
-    g_dummy : list of GradEvent
-        The same span as a ``g_read``, held at the first view's direction. A
-        view played on this one drives the magnetisation without moving the
-        gradient, which is what a ZTE preparation wants: the pulse train has to
-        settle, the orbit does not.
     adc : AdcEvent
         The acquisition, delayed past the gap.
     adc_labels : LabelSetEvent or list of LabelSetEvent
@@ -339,10 +334,6 @@ class ZteReadout(SequenceModule):
                 [vertices[-1], vertices[-1], np.zeros(3)],
             )
         )
-        g_dummy = _gradients(
-            system, [0.0, read_span + turn_span], [vertices[0], vertices[0]]
-        )
-
         adc_labels = [
             pp.make_label(type="SET", label=name, value=0) for name in labels or ()
         ]
@@ -354,7 +345,7 @@ class ZteReadout(SequenceModule):
             self.seq.add_block(adc, *g_read[view], *adc_labels)
 
         self.register(
-            g_hold=g_hold, g_read=g_read, g_dummy=g_dummy, directions=directions
+            g_hold=g_hold, g_read=g_read, directions=directions
         )
         if shot_rotations is not None:
             self.register(shot_rotations=shot_rotations)

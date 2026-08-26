@@ -559,6 +559,47 @@ typedef struct pulseg_sequence_descriptor
     char cache_ext[PULSEG_CACHE_EXT_MAX];
 } pulseg_sequence_descriptor;
 
+/* Identity of the waveform one block drives one axis with, up to amplitude.
+ *
+ * def_id fixes the timing skeleton (delay, rise/flat/fall or sample count,
+ * time shape), shape_id fixes the samples, and dur_us fixes the span a held
+ * type runs to and therefore the slice length. Two blocks agreeing on all
+ * three drive that axis with the same waveform scaled by their amplitudes.
+ *
+ * axis and rotation_id participate only for consumers working in the
+ * physical frame, where a rotation mixes the logical axes and one shape at
+ * two orientations is no longer a scalar multiple of itself. The Irnich
+ * stimulation path works in the logical frame -- its verdict is a
+ * root-sum-square under one kernel, which an orthogonal rotation leaves
+ * alone -- and leaves both at -1.
+ */
+typedef struct pulseg__wave_key
+{
+    int def_id;
+    int shape_id;
+    int dur_us;
+    int axis;        /* -1 in the logical frame */
+    int rotation_id; /* -1 in the logical frame */
+} pulseg__wave_key;
+
+/* Fill @p out for the gradient @p bte drives @p axis with. Returns 0 when the
+ * block is silent on that axis, in which case @p out is left cleared. */
+int pulseg__wave_key_axis(
+    const pulseg_sequence_descriptor *desc,
+    const pulseg_block_table_element *bte,
+    int axis,
+    int physical_frame,
+    pulseg__wave_key *out);
+
+int pulseg__wave_key_equal(const pulseg__wave_key *a, const pulseg__wave_key *b);
+
+/* The same identity folded into one int, for callers holding an int-keyed
+ * cache. Definitions deduplicate on timing and sample count, so a
+ * materialised multishot readout plays many shapes under one definition id --
+ * folding the shape in is what keeps every arm from being handed the first
+ * arm's answer. */
+int pulseg__wave_key_flat(const pulseg_sequence_descriptor *desc, int def_index, int shape_id);
+
 /* clang-format off */
 #define PULSEG_SEQUENCE_DESCRIPTOR_INIT \
     { \

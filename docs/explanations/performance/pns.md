@@ -90,6 +90,7 @@ position. This is sound because the same shape driven harder is a larger
 response on that axis at every instant, and the combination across axes only
 grows with each of them.
 
+(pns-shape-groups)=
 **C — the waveform varies.** A multishot readout written out shot by shot:
 different shapes at the same position. **This is where the two checks part
 company.** The acoustic analysis bounds such a position by the loudest
@@ -188,23 +189,31 @@ shapes it plays. Then:
 
 **Multiplicity one.** The shape is its own template. Nothing to share.
 
-**Multiplicity greater than one.** Every further occurrence is accepted as
-`scale × template` — but only after it is checked to really be one. The
-builder compares the occurrence against the template sample by sample, to a
-relative tolerance of $10^{-5}$, *against the same materialised waveform the
-direct route would have convolved*. That check costs a pass over the samples;
-the convolution it avoids costs samples × kernel. If any occurrence fails, the
-whole memoized path reports "not applicable" and the exact route runs instead.
+**Multiplicity greater than one.** Occurrences are matched on the identity
+the representation already carries — the gradient definition, the waveform
+shape id, the block duration, the axis, and the slice's length. Nothing is
+re-derived to decide that two blocks play the same thing; the shape id is the
+same one the {doc}`acoustic check <mechanical_resonance>` keys on.
 
-This is the same shape identity the {doc}`acoustic check <mechanical_resonance>`
-uses — keyed on the definition and, for an arbitrary gradient, on the waveform
-shape too — and it stops one step earlier. Deduplication here is by
-*proportionality*: a set of occurrences collapses when each is a scalar
-multiple of one template. The acoustic check goes further, decomposing a set
-that is *not* scalar multiples into a low-rank basis, because a spectrum is
-linear in the waveform and a truncated tail can be bounded and added back. A
-stimulation peak offers no such handle, so a shape that is not a scaled copy
-of another is convolved on its own.
+That identity does not carry **rotation**, and the slices are cut from the
+materialised, already-rotated waveform. One shape played at two orientations
+therefore has per-axis slices that are not scalar multiples of each other, and
+would be silently wrong if the id alone were trusted. So the builder confirms
+proportionality against the samples before accepting a match, to a relative
+tolerance of $10^{-5}$; an occurrence that fails simply becomes a template of
+its own. The confirmation costs one pass over the samples, against the
+samples × kernel of the convolution it saves.
+
+Where the two checks part company is what happens next. Deduplication here
+stops at *proportionality*: a set collapses only when each member is a scalar
+multiple of one template, and a shape that is not is convolved on its own. The
+acoustic check goes on to decompose such a set into a low-rank basis. Its
+position-by-position bound is what a spectrum admits and a peak does not — but
+the assembly underneath is the same linear algebra, so a set of shapes at one
+position is compressible here too. What the stimulation path does with a
+position whose waveform genuinely varies is
+{ref}`build one window per shape group <pns-shape-groups>` and take the worst,
+which costs a full evaluation per group.
 
 **Then convolve each distinct template once and store the result.** From
 there, the whole window is bookkeeping: each occurrence takes its stored

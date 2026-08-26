@@ -54,7 +54,7 @@ def main(
     flip_angle_deg: float = 3.0,
     pulse_duration: float = 10e-6,
     readout_bandwidth_hz: float = 250e3,
-    n_dummy: int = 32,
+    n_dummy: int = 2,
     n_gain_calibration_readouts: int = 1,
 ) -> pp.Sequence:
     """Create a 3D zero-echo-time sequence.
@@ -105,11 +105,10 @@ def main(
     readout_bandwidth_hz : float, optional
         Requested receiver bandwidth in Hz. Default is 250e3.
     n_dummy : int, optional
-        Views played without acquiring before the first acquired one, at the
-        first view's orientation and with the gradient held, so the first
-        spoke sees the magnetisation every later spoke sees. The gradient
-        does not move through them: ZTE never turns it off, and what has to
-        settle is the magnetisation, not the direction. Default is 32.
+        Whole shells played without acquiring before the first acquired one,
+        so the first acquired spoke sees the magnetisation every later spoke
+        sees. A dummy shell is an acquiring shell with the ADC left off --
+        same pulses, same trajectory, same duration. Default is 2.
     n_gain_calibration_readouts : int, optional
         Written as the ``NumGainCalibrationReadouts`` definition. Default
         is 1.
@@ -232,13 +231,25 @@ def main(
         # One rotation for the whole shell. The shell itself is written out
         # spoke by spoke, so this only says where the shot samples.
         turn = pp.make_rotation(Rotation.from_matrix(shot))
-        seq.add_block(*zte.g_ramp, turn)
         if shot_index == 0:
+            # A dummy is a whole shell, played exactly as an acquiring one but
+            # without the ADC. Structure is what the interpreter reads a
+            # repetition from, and whether a block acquires is not part of it,
+            # so a preparation shell partitions identically to a real one.
             for i_dummy in range(n_dummy):
-                mark = pp.make_label("ONCE", "SET", 1) if i_dummy == 0 else None
-                seq.add_block(zte.rf, *zte.g_hold[0], turn, *([mark] if mark else ()))
-                seq.add_block(*zte.g_dummy, turn)
+                seq.add_block(*zte.g_ramp, turn)
+                for view in range(len(zte.directions)):
+                    mark = (
+                        pp.make_label("ONCE", "SET", 1)
+                        if i_dummy == 0 and view == 0
+                        else None
+                    )
+                    seq.add_block(
+                        zte.rf, *zte.g_hold[view], turn, *([mark] if mark else ())
+                    )
+                    seq.add_block(*zte.g_read[view], turn)
             clear_once = pp.make_label("ONCE", "SET", 0) if n_dummy else None
+        seq.add_block(*zte.g_ramp, turn)
         for view in range(len(zte.directions)):
             lin_label.value = int(view)
             seq.add_block(
