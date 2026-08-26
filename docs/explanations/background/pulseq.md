@@ -87,23 +87,27 @@ remain — none of them a flaw in the format, all of them the motivation for
 the rest of this documentation.
 
 **Structure.** The file carries every event, but not how the events are
-organised. Within one event, the fixed skeleton — a gradient's delay, its
-rise, flat and fall times, its time shape — is not separated from what varies
-playout to playout, the amplitude or the waveform shape it points at. Above
-the event, nothing groups the events that play together into a parent block
-that recurs *as a unit*, nothing groups reused ordered runs of blocks into
-segments, and nothing identifies the periodic pattern of segments — the TR —
-that the scan is a repetition of. All of that information exists, implicit in
-the content, but no field carries it. A platform whose sequencer prepares a
-segment once and replays it (GE's, for one) has to reconstruct that grouping
-before it can play the file at all. The safety quantities — SAR, gradient
-heating, the acoustic drive — are not defined over a repetition either: each
-is a window sliding along the whole scan, and evaluating one without knowing
-the structure means sweeping every block. Where a repetition does exist the
-sweep collapses onto a single period, which is how the check becomes cheap
-enough for some vendors to do it that way; and since a sequence is almost
-always periodic at some level — a hyper-TR if nothing smaller — recovering
-that pattern is where most of the saving comes from.
+organised. At four levels, the information exists implicitly in the content
+and no field carries it:
+
+| Level | What the file does not say |
+|---|---|
+| within an event | which part is the fixed skeleton — a gradient's delay, its rise, flat and fall times, its time shape — and which varies playout to playout, the amplitude or the waveform shape it points at |
+| the block | that the events playing together recur *as a unit* |
+| the segment | that a reused ordered run of blocks is a unit a sequencer could prepare once |
+| the TR | which periodic pattern of segments the scan is a repetition of |
+
+Two consumers need that structure before they can do their job. A sequencer
+that prepares a segment once and replays it — GE's, for one — has to
+reconstruct the grouping before it can play the file at all. And the safety
+quantities are not defined over a block: SAR, gradient heating and the
+acoustic drive are each a window sliding along the whole scan, so evaluating
+one without knowing the period means sweeping every block of it.
+
+Where a repetition does exist, that sweep collapses onto a single period —
+which is how the check becomes cheap enough for some vendors to run it that
+way. A sequence is almost always periodic at some level, a hyper-TR if nothing
+smaller, so recovering the pattern is where most of the saving comes from.
 
 **Prescription-time adjustment.** A product sequence is edited at the
 console: the operator changes TE, TR, FOV, matrix, orientation minutes before

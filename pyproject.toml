@@ -23,7 +23,6 @@ dependencies = [
   # FINUFFT is the portable CPU backend. See the `cuda` extra for GPU.
   "mri-nufft[finufft]",
   "torch>=2.13.0",
-  "torchio>=1.2.1",
   "deepinv>=0.4.1",
   "ptwt",
   "PyWavelets",
@@ -32,6 +31,7 @@ dependencies = [
   "pydicom",
   "psutil",
   "SimpleITK>=2.5.6",
+  "torchio>=1.2.1",
 ]
 
 [project.optional-dependencies]

@@ -22,9 +22,9 @@ specification's four structures carry is carried here:
 | `SegmentInstance` — the per-playout parameters | instance tables: amplitudes, phase and frequency offsets, shot index, labels, and a reference into a shared rotation library |
 | `ExecutionStream` — which instance plays when | runs (“positions *i*..*j* play instances *i*..*j* in order”) plus one period of the segment order |
 
-The representation is lossless with respect to what plays: hydrating the
-definitions and applying the instance parameters recovers the playout the
-`.seq` describes, sample for sample.
+The representation is lossless with respect to what plays: filling the
+definitions back in and applying the instance parameters recovers the playout
+the `.seq` describes, sample for sample.
 
 ## The extension: the structural TR
 

@@ -409,20 +409,34 @@ def test_the_optim_namespace_is_derived_from_the_recon_map():
     assert set(optim.__all__) == derived
 
 
-def test_every_stepwise_solver_satisfies_the_stateful_reconstructor_protocol():
+def test_every_stepwise_solver_exposes_the_same_step_contract():
     """One step-wise contract: iterations, init_state, step, get_output."""
-    from pulserver.recon.learned import StatefulReconstructor, UnrolledReconstructor
-
-    class _Identity(torch.nn.Module):
-        def forward(self, value, *_args, **_kwargs):
-            return value
-
     solvers = [
         FISTA(max_iter=2),
         ADMM(max_iter=2),
         PDHG(max_iter=2),
         IRGNM(ConjugateGradient(max_iter=2), max_iter=2),
-        UnrolledReconstructor(_Identity(), iterations=1),
     ]
     for solver in solvers:
-        assert isinstance(solver, StatefulReconstructor), type(solver).__name__
+        for member in ("iterations", "init_state", "step", "get_output"):
+            assert hasattr(solver, member), f"{type(solver).__name__}.{member}"
+
+
+def test_cg_steps_through_negative_curvature_and_says_so():
+    """An indefinite operator is reported, not raised on and not stepped around.
+
+    The quadratic is unbounded where the curvature is negative, so the answer
+    is not a minimizer and the caller is told. Refusing the step instead would
+    freeze the iteration short of what it can still reach, so the step is
+    taken and the solve returns what CG returns: its last iterate.
+    """
+    values = torch.tensor([1.0, 0.5, -1e-3], dtype=torch.float64)
+
+    def operator(x):
+        return values * x
+
+    rhs = torch.ones(3, dtype=torch.float64)
+    solver = ConjugateGradient(max_iter=50, rtol=0.0, atol=0.0, batch_dim=None)
+    with pytest.warns(UserWarning, match="not positive definite"):
+        solution = solver(operator, rhs)
+    assert torch.isfinite(solution).all()

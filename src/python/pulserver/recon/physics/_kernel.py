@@ -19,8 +19,10 @@ from typing import Any
 
 from .._toeplitz import (
     CompactToeplitzKernel,
+    PolyphaseToeplitzKernel,
     _device_is_full,
     as_torch,
+    polyphase_components,
 )
 from .._views import image_as_cpx as _image_as_cpx
 from .._views import image_as_real as _image_as_real
@@ -393,6 +395,9 @@ def _apply_sense_toeplitz(
             and coil_count == 1
             and right_factors is None
             and left_factors is None
+            # The fused lane folds the coil map into one resident pass over
+            # the doubled grid; a transfer filed by parity has no such pass.
+            and hasattr(kernel, "_apply_cuda_resident")
             and kernel._select_cuda_mode(image) == "resident"
         )
         if resident_sense:
@@ -487,6 +492,76 @@ def _apply_sense_toeplitz(
     return result
 
 
+def _complement_of(indices: Any, count: int, device: Any) -> Any | None:
+    """A mask over the locations ``indices`` leaves out, or None for none."""
+    torch = import_module("torch")
+    if indices.numel() >= count:
+        return None
+    left_out = torch.ones(count, dtype=torch.bool, device=device)
+    left_out[indices.to(device=device, dtype=torch.int64)] = False
+    return left_out
+
+
+def _largest_left_out(stored: Any, left_out: Any | None) -> float:
+    """The largest magnitude of ``stored`` at the locations left out."""
+    if left_out is None:
+        return 0.0
+    return float(stored.abs().flatten()[left_out].max())
+
+
+def _make_kernel(
+    values: Any,
+    indices: Any,
+    spatial_shape: tuple[int, ...],
+    rank: int,
+    *,
+    image_shape: tuple[int, ...],
+    options: dict[str, Any],
+    truncation_bound: float = 0.0,
+) -> Any:
+    """Build the kernel in the layout the options ask for.
+
+    A transfer on the doubled grid is filed by the parity of its coordinates
+    unless asked otherwise, which puts every transform the application makes
+    on the image grid. One that is already the image's size -- a Cartesian
+    subspace transfer, which needs no padding -- has no parities to split.
+    """
+    image_shape = tuple(int(size) for size in image_shape)
+    spatial_shape = tuple(int(size) for size in spatial_shape)
+    settings: dict[str, Any] = {
+        "image_shape": image_shape,
+        "chunk_size": options["chunk_size"],
+        "cuda_mode": options["cuda_mode"],
+        "cuda_max_device_fraction": options["cuda_max_device_fraction"],
+        "cuda_transfer_precision": options["cuda_transfer_precision"],
+    }
+    doubled = tuple(2 * size for size in image_shape) == spatial_shape
+    if not options.get("polyphase", True) or not doubled:
+        return CompactToeplitzKernel(
+            values,
+            indices,
+            spatial_shape,
+            rank,
+            truncation_bound=truncation_bound,
+            **settings,
+        )
+    components = [
+        (
+            parity,
+            CompactToeplitzKernel(part, where, image_shape, rank, **settings),
+        )
+        for parity, part, where in polyphase_components(
+            values, indices, spatial_shape, image_shape
+        )
+    ]
+    return PolyphaseToeplitzKernel(
+        components,
+        image_shape,
+        rank,
+        truncation_bound=truncation_bound,
+    )
+
+
 def _selected_transfer(
     transfer: Any,
     indices: Any,
@@ -521,17 +596,16 @@ def _build_scalar_toeplitz(
         "cpu" if streaming is not None else transfer.device,
         options["compress"],
     )
+    left_out = _complement_of(indices, transfer.numel(), transfer.device)
     values = _selected_transfer(transfer, indices, streaming=streaming).real[None]
-    kernel = CompactToeplitzKernel(
+    kernel = _make_kernel(
         values,
         indices,
         spatial_shape,
         1,
         image_shape=image_shape,
-        chunk_size=options["chunk_size"],
-        cuda_mode=options["cuda_mode"],
-        cuda_max_device_fraction=options["cuda_max_device_fraction"],
-        cuda_transfer_precision=options["cuda_transfer_precision"],
+        options=options,
+        truncation_bound=_largest_left_out(transfer.real, left_out),
     )
     return kernel
 
@@ -694,7 +768,7 @@ def _subspace_pair_transfers(
     *,
     streaming: Any | None = None,
     keep_complex: bool = True,
-) -> Any:
+) -> tuple[Any, float]:
     """Grid one transfer per upper-triangular basis pair, over every sample.
 
     A pair's transfer is the adjoint of one weight per sample -- the frame's
@@ -704,7 +778,8 @@ def _subspace_pair_transfers(
 
     Each is cut to ``indices`` as it is gridded and put down on the host in the
     form it is kept in, so a build holds one row of the device rather than the
-    whole packed set twice over -- once complex and once made real.
+    whole packed set twice over -- once complex and once made real. Returns
+    the packed rows and the largest value that fell outside ``indices``.
     """
     torch = import_module("torch")
     spatial_shape = tuple(2 * size for size in image_shape)
@@ -731,6 +806,8 @@ def _subspace_pair_transfers(
     signs = _centring_signs(indices, spatial_shape)
     scale = float(operator.norm_factor) / _mrinufft_norm_factor(image_shape) ** 2
     n_pairs = int(blocks[0][2].numel())
+    left_out = _complement_of(indices, prod(spatial_shape), samples.device)
+    dropped = 0.0
 
     packed = None
     coefficients = coefficients.to(device=samples.device, dtype=torch.complex64)
@@ -746,8 +823,12 @@ def _subspace_pair_transfers(
         # is the same as alternating the sign of what comes out, and a copy of
         # the doubled grid is the largest thing a build holds after the plan.
         torch.fft.fftn(psf, dim=axes, out=psf)
-        selected = _selected_transfer(psf.reshape(-1), indices, streaming=streaming)
-        del psf
+        flat = psf.reshape(-1)
+        if left_out is not None:
+            stored = flat.real if not keep_complex else flat
+            dropped = max(dropped, _largest_left_out(stored, left_out))
+        selected = _selected_transfer(flat, indices, streaming=streaming)
+        del psf, flat
         row = selected * signs * scale
         del selected
         if not keep_complex:
@@ -761,7 +842,7 @@ def _subspace_pair_transfers(
         packed[pair].copy_(row)
         del row
     assert packed is not None
-    return packed
+    return packed, dropped
 
 
 _PLAN_SETTINGS = "_pulserver_plan_settings"
@@ -940,7 +1021,7 @@ def _build_subspace_toeplitz(
         "cpu" if streaming is not None else samples.device,
         options["compress"],
     )
-    packed = _subspace_pair_transfers(
+    packed, dropped = _subspace_pair_transfers(
         blocks,
         backend,
         image_shape,
@@ -955,16 +1036,14 @@ def _build_subspace_toeplitz(
     values = (
         packed.to(basis.dtype) if basis.is_complex() else packed.real.to(basis.dtype)
     )
-    kernel = CompactToeplitzKernel(
+    kernel = _make_kernel(
         values,
         indices,
         spatial_shape,
         rank,
         image_shape=image_shape,
-        chunk_size=options["chunk_size"],
-        cuda_mode=options["cuda_mode"],
-        cuda_max_device_fraction=options["cuda_max_device_fraction"],
-        cuda_transfer_precision=options["cuda_transfer_precision"],
+        options=options,
+        truncation_bound=dropped,
     )
     return kernel
 
@@ -1021,16 +1100,13 @@ def _build_cartesian_subspace_toeplitz(
     packed = (
         packed.to(basis.dtype) if basis.is_complex() else packed.real.to(basis.dtype)
     )
-    kernel = CompactToeplitzKernel(
+    kernel = _make_kernel(
         packed,
         indices,
         image_shape,
         rank,
         image_shape=image_shape,
-        chunk_size=options["chunk_size"],
-        cuda_mode=options["cuda_mode"],
-        cuda_max_device_fraction=options["cuda_max_device_fraction"],
-        cuda_transfer_precision=options["cuda_transfer_precision"],
+        options=options,
     )
     proxy = SimpleNamespace(
         shape=image_shape,
@@ -1044,8 +1120,8 @@ def _off_resonance_scalar_transfers(
     options: dict[str, Any],
     indices: Any | None = None,
     streaming: Any | None = None,
-) -> tuple[Any, Any]:
-    """Return upper-triangular segment transfers at their retained locations."""
+) -> tuple[Any, Any, float]:
+    """Return segment transfers, their locations, and what fell outside them."""
     torch = import_module("torch")
     base = _base_fourier_operator(corrected_operator)
     temporal = corrected_operator.B
@@ -1057,6 +1133,8 @@ def _off_resonance_scalar_transfers(
     density = getattr(base, "density", None)
     packed = []
     kernel_device = indices.device if indices is not None else None
+    left_out = None
+    dropped = 0.0
     for row, column in zip(rows.tolist(), columns.tolist(), strict=True):
         weights = temporal[:, row].conj() * temporal[:, column]
         if corrected_operator.n_shots > 1:
@@ -1085,6 +1163,11 @@ def _off_resonance_scalar_transfers(
                 kernel_device,
                 options["compress"],
             )
+        if left_out is None:
+            left_out = _complement_of(indices, scalar.numel(), scalar.device)
+        if left_out is not None:
+            stored = scalar if temporal_is_complex else scalar.real
+            dropped = max(dropped, _largest_left_out(stored, left_out))
         packed.append(
             _selected_transfer(
                 scalar,
@@ -1100,7 +1183,7 @@ def _off_resonance_scalar_transfers(
         if temporal_is_complex
         else values.real.to(temporal_dtype)
     )
-    return values, indices
+    return values, indices, dropped
 
 
 @_within_psf_plans
@@ -1115,21 +1198,19 @@ def _build_off_resonance_toeplitz(
     rank = int(corrected_operator.B.shape[1])
     image_shape = tuple(int(size) for size in base.shape)
     spatial_shape = tuple(2 * size for size in image_shape)
-    values, indices = _off_resonance_scalar_transfers(
+    values, indices, dropped = _off_resonance_scalar_transfers(
         corrected_operator,
         options,
         streaming=streaming,
     )
-    kernel = CompactToeplitzKernel(
+    kernel = _make_kernel(
         values,
         indices,
         spatial_shape,
         rank,
         image_shape=image_shape,
-        chunk_size=options["chunk_size"],
-        cuda_mode=options["cuda_mode"],
-        cuda_max_device_fraction=options["cuda_max_device_fraction"],
-        cuda_transfer_precision=options["cuda_transfer_precision"],
+        options=options,
+        truncation_bound=dropped,
     )
     return kernel, spatial
 
@@ -1186,17 +1267,19 @@ def _build_subspace_off_resonance_toeplitz(
     spatial_shape = tuple(2 * size for size in image_shape)
     packed = None
     indices = None
+    dropped = 0.0
     for frame, item in enumerate(frame_physics):
         native = item.native_operator
         assert native is not None
         if tuple(native.shape) != image_shape:
             raise ValueError("all frames must share one image shape")
-        segment_values, indices = _off_resonance_scalar_transfers(
+        segment_values, indices, frame_dropped = _off_resonance_scalar_transfers(
             native,
             options,
             indices,
             streaming,
         )
+        dropped = max(dropped, frame_dropped)
         device = segment_values.device
         basis_device = basis.to(device)
         mixing = (
@@ -1227,16 +1310,14 @@ def _build_subspace_off_resonance_toeplitz(
             packed = contribution if packed is None else packed + contribution
     assert packed is not None and indices is not None
     packed = packed.to(torch.promote_types(basis.dtype, as_torch(first.B).dtype))
-    kernel = CompactToeplitzKernel(
+    kernel = _make_kernel(
         packed,
         indices,
         spatial_shape,
         combined_rank,
         image_shape=image_shape,
-        chunk_size=options["chunk_size"],
-        cuda_mode=options["cuda_mode"],
-        cuda_max_device_fraction=options["cuda_max_device_fraction"],
-        cuda_transfer_precision=options["cuda_transfer_precision"],
+        options=options,
+        truncation_bound=dropped,
     )
     return kernel, spatial_factors
 
@@ -1295,6 +1376,7 @@ def _enable_toeplitz(
     *,
     best_effort: bool = False,
     compress: bool = True,
+    polyphase: bool = True,
     chunk_size: int = 65536,
     coil_batch_size: int = 1,
     cuda_mode: str = "auto",
@@ -1307,15 +1389,14 @@ def _enable_toeplitz(
     dimension, stored over the locations it reached. Subspace and off-resonance
     decorators carry a matrix-valued transfer built the same way, whose
     Hermitian upper triangle is packed and whose real bases keep real storage.
-    An even transfer -- what a trajectory closed under ``k -> -k`` leaves -- is
-    stored over half its locations and mirrored as it is applied.
 
-    None of that is a choice. What the arguments settle is execution: how much
-    is unpacked at a time, how many coils share a pass, and what a CUDA device
-    holds.
+    None of that is a choice. What the arguments settle is execution: whether
+    the locations the gridding never reached are stored, how much is unpacked
+    at a time, how many coils share a pass, and what a CUDA device holds.
     """
     options = _toeplitz_options(
         compress=compress,
+        polyphase=polyphase,
         chunk_size=chunk_size,
         coil_batch_size=coil_batch_size,
         cuda_mode=cuda_mode,

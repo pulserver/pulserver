@@ -1,8 +1,9 @@
 # Mechanical resonance
 
-A gradient coil in a static field is a loudspeaker, and a magnet has mechanical
-modes it must not be driven on. The {doc}`safety page <../safety/mechanical_resonance>`
-sets out the physics and fixes the quantity to measure: for each axis, at each
+A gradient coil in a static field is a loudspeaker, and a magnet has
+mechanical modes it must not be driven on. The
+{doc}`safety page <../safety/mechanical_resonance>` sets out the physics and
+fixes the quantity to measure: for each axis, at each
 frequency, the **equivalent sustained amplitude**
 
 $$A_\text{eq}(f) \;=\; \frac{2}{T_\text{TR}}\bigl|S_\text{ax}(f)\bigr| ,$$
@@ -21,8 +22,8 @@ says how small stops mattering is nowhere in the table.
 
 **How to compute it in the time predownload can spend.** Nothing checks a
 forbidden band before there are gradient waveforms to check it against, and
-those exist only once a protocol is finished and written -- the interpreter
-runs this analysis when the ``.seq`` file comes back in, not while an operator
+those exist only once a protocol is finished and written — the interpreter
+runs this analysis when the `.seq` file comes back in, not while an operator
 is still choosing a parameter. $S_\text{ax}$ is a transform of the scan —
 minutes of waveform on a microsecond raster. It has to be evaluated at every
 frequency a band contains, and it has to hold for every repetition, not just
@@ -97,8 +98,9 @@ name, and is refused on exactly the arithmetic that refuses an EPI.
 
 ## 2. What the analysis is given
 
-A scan is $M$ repetitions of one structural TR — the smallest block period over
-which the {doc}`normalized structure repeats <../sequence_model/tr_and_segmentation>`,
+A scan is $M$ repetitions of one structural TR — the smallest block period
+over which the
+{doc}`normalized structure repeats <../sequence_model/tr_and_segmentation>`,
 derived from the block content rather than annotated.
 
 One TR is an ordered list of **base block** ids. A base block is the
@@ -245,8 +247,9 @@ that the {doc}`stimulation check <pns>` makes. Then:
 accepts a further occurrence only when it is a scalar multiple of a template —
 this one goes a step further, because a spectrum is linear in the waveform and
 a truncated tail can be bounded and added back. Stack the waveforms into a
-matrix and take its singular value decomposition. If they share a sampling — the same raster and
-the same sample count, resampled onto one grid if a time shape says otherwise —
+matrix and take its singular value decomposition. If they share a sampling —
+the same raster and the same sample count, resampled onto one grid if a time
+shape says otherwise —
 this is where a multishot readout collapses. Written out shot by shot, a spiral
 gives one waveform per arm, but every arm is the base arm turned, so on each
 physical axis they span exactly two dimensions however many arms there are:

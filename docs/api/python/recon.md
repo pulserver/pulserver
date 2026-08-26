@@ -154,12 +154,17 @@ Two things then make the kernel small. `compress=True`, the default, keeps
 only the locations the gridding actually reached, the way BART's
 `--compress-psf` and `MRISubspaceRecon.jl`'s `calculate_kmask_indcs` do; for a
 subspace kernel the mask is the union over every frame. How much it saves is
-the scan's business — a 3D projection keeps under half the grid and less as
-the matrix grows, a 2D radial at Nyquist keeps nearly all of it, because in
-two dimensions the transfer really is dense. `compress=False` keeps the whole
-grid, which is what a calibration wants: `NLINV` solves over a small centred
-window where dropping what the trajectory never reached would cost the solve
-its positive definiteness.
+the scan's business — a projection scan keeps its sphere and the rim the
+interpolation spreads into, and the cube's corners fall out. What falls out
+is not exactly zero — an off-grid sample lands on the transfer grid as a
+small blob with slowly decaying ripples, not a point — so the kernel records
+the largest value it left behind as its `truncation_bound`, and a
+conjugate-gradient solve that meets the resulting indefiniteness answers
+with its last valid iterate instead of diverging. `compress=False` keeps the
+whole grid, which is what a
+calibration wants: `NLINV` solves over a small centred window where dropping
+what the trajectory never reached would cost the solve its positive
+definiteness.
 
 ```{eval-rst}
 .. autosummary::
@@ -238,27 +243,55 @@ Priors the iterative solvers minimize against.
    AverageDenoiser
 ```
 
-## Learned reconstruction
+## DeepInverse integration
 
-Unrolled networks and the stores their weights come from. A real-valued
-network sees complex data through adapters applied internally; nothing has to
-be packed or unpacked by the caller.
+The learned reconstructions are DeepInverse's. Any of its optimizers becomes
+an unrolled network by taking `unfold=True`, and its model zoo — DnCNN,
+DRUNet, MoDL, VarNet and the rest — is imported directly.
+
+What DeepInverse expects is one real image with two or three channels. MRI
+carries complex volumes with a contrast, echo, or frame axis above the spatial
+ones. These adapters close that gap, and they compose: a two-dimensional
+network reaches a complex 3D+t reconstruction through three of them.
 
 ```{eval-rst}
 .. autosummary::
    :toctree: ../generated/recon
    :template: autosummary/class.rst
 
-   UnrolledReconstructor
-   StatefulReconstructor
-   UnrollResult
-   UnrollState
-   GradientDataConsistency
-   ScaledAdjoint
    ContextAgnosticDenoiser
+   ComplexDenoiser
+   NoiseConditioned
+   Checkpointed
 ```
 
-### Weights
+The algorithm side takes two more: an initializer to pass as `custom_init`,
+and a data-fidelity term that reaches the physics through its normal operator
+so an accelerated scan pays one apply per step rather than a transform pair.
+
+```{eval-rst}
+.. autosummary::
+   :toctree: ../generated/recon
+   :template: autosummary/class.rst
+
+   ScaledAdjoint
+   NormalEquationL2
+   StepwiseUnroll
+```
+
+### Datasets
+
+```{eval-rst}
+.. autosummary::
+   :toctree: ../generated/recon
+   :template: autosummary/class.rst
+
+   TorchIODataset
+   IXI
+   IXITiny
+```
+
+### Deploying weights to a scanner
 
 ```{eval-rst}
 .. autosummary::
@@ -277,18 +310,7 @@ be packed or unpacked by the caller.
    save_bundle
    default_model_paths
    MODEL_PATH_ENV
-```
-
-### Datasets
-
-```{eval-rst}
-.. autosummary::
-   :toctree: ../generated/recon
-   :template: autosummary/class.rst
-
-   TorchIODataset
-   IXI
-   IXITiny
+   ARCHITECTURE_ROOTS
 ```
 
 ## Motion
@@ -307,8 +329,8 @@ be packed or unpacked by the caller.
 
 What happens to the image on its way out: packaging it as a result the
 runtime can send, unwarping gradient nonlinearity, correcting susceptibility
-distortion. The array operations underneath -- combining coils, cropping,
-bringing a result off its device -- are {mod}`pulserver.mrd`'s.
+distortion. The array operations underneath — combining coils, cropping,
+bringing a result off its device — are {mod}`pulserver.mrd`'s.
 
 ```{eval-rst}
 .. autosummary::

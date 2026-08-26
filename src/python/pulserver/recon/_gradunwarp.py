@@ -82,15 +82,18 @@ _DAT_Z_FACTORS = np.asarray(
 class CoefficientAccessor(Protocol):
     """Interface used by scanner/LiveSDK integrations for private tables.
 
+    A site whose coefficients are not a file on disk -- held in a system
+    table, or fetched over a service -- satisfies this instead, and
+    :meth:`GradientCoefficients.from_file` accepts it wherever a path goes.
+
     Examples
     --------
-    Reads a vendor gradient coefficient file into the harmonic basis the unwarping
-    evaluates::
-
-        import pulserver.recon as recon
-
-        coefficients = recon.CoefficientAccessor.from_file("coeff.grad")
-        unwarp = recon.Gradunwarp(coefficients)
+    >>> import pulserver.recon as recon
+    >>> class SystemTable:
+    ...     def read_coefficients(self):
+    ...         return ("0.25 m = R0", "system")
+    >>> isinstance(SystemTable(), recon.CoefficientAccessor)
+    True
     """
 
     def read_coefficients(self) -> CoefficientPayload:
@@ -148,7 +151,7 @@ def _source_text(source: CoefficientSource) -> tuple[str, str | None]:
 
 @dataclass(frozen=True)
 class GradientCoefficients:
-    """Neutral spherical-harmonic coefficient representation.
+    r"""Neutral spherical-harmonic coefficient representation.
 
     Arrays have shape ``(3, order + 1, order + 1)`` for scanner X/Y/Z and
     contain the real cosine (``alpha``) and sine (``beta``) terms.  Coefficient
@@ -157,13 +160,23 @@ class GradientCoefficients:
 
     Examples
     --------
-    The spherical-harmonic description of a gradient coil, as the vendor ships it.
-    :class:`~pulserver.recon.Gradunwarp` evaluates these over an image's geometry
-    to find where each voxel really was::
+    The spherical-harmonic description of a gradient coil, as the vendor ships
+    it. :class:`~pulserver.recon.Gradunwarp` evaluates these over an image's
+    geometry to find where each voxel really was. ``R0`` is the radius the
+    expansion is normalised to, and each row is one harmonic on one axis.
 
-        import pulserver.recon as recon
-
-        coefficients = recon.CoefficientAccessor.from_file("coeff.grad")
+    >>> import tempfile
+    >>> from pathlib import Path
+    >>> import pulserver.recon as recon
+    >>> table = Path(tempfile.mkdtemp()) / "coeff.grad"
+    >>> _ = table.write_text(
+    ...     "0.25 m = R0\n"
+    ...     "  1 A( 1, 0)   1.000000  x\n"
+    ...     "  2 A( 3, 0)  -0.025000  x\n"
+    ... )
+    >>> coefficients = recon.GradientCoefficients.from_file(table)
+    >>> coefficients.reference_radius_mm, coefficients.max_order
+    (250.0, 3)
     """
 
     basis: HarmonicBasis

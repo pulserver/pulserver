@@ -34,7 +34,8 @@ The format is upstream Pulseq's own, not invented here, and **detection is by
 content**: an eight-byte magic decides how a file is read, so a `.seq` holding
 binary still reads, and every existing caller works on either form with no new
 argument. That is why the scanner path writes binary and the offline path
-writes text — see `write_sequence` on the {doc}`previous page <sequence_creation>`.
+writes text — see `write_sequence` on the
+{doc}`previous page <sequence_creation>`.
 
 ## Structure comes almost free
 
@@ -44,11 +45,10 @@ identities the conversion has already computed, so asking "is block $n$ the
 same structure as block $n+P$?" is an integer comparison, not a re-derivation.
 Segmentation is a millisecond on top.
 
-That is worth stating plainly because the alternative was rejected on other
-grounds: the TR is derived from the content rather than annotated in the file,
-because an annotation is a second source of truth that can disagree with the
-sequence — see {doc}`../sequence_model/tr_and_segmentation`. It happens to
-also be free.
+Worth stating plainly, because speed is not why the TR is derived rather than
+annotated: an annotation is a second source of truth that can disagree with
+the sequence — see {doc}`../sequence_model/tr_and_segmentation`. Deriving it
+is free as well, which is a bonus rather than the argument.
 
 Consistency checking, at about 60 ms, is the largest of the three and still a
 rounding error against the parse.

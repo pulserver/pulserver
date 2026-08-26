@@ -67,13 +67,46 @@ class IRGNM(_IterativeOptimizer):
 
     Examples
     --------
-    Iteratively regularized Gauss-Newton: each step linearises the model and
-    solves the linearisation with the inner solver, with the damping reduced as
-    the estimate improves. This is what :class:`~pulserver.recon.NLINV` runs::
+    Each step linearises the model and solves the linearisation with the inner
+    solver, with the damping decayed as the estimate improves, so the
+    sensitivities and the object sharpen together.
+    :class:`~pulserver.recon.NLINV` is this solver applied to the joint
+    image-and-coils model, and its ``max_iter``, ``damping``,
+    ``damping_decay``, ``cg_max_iter`` and ``cg_rtol`` are the ones below.
+    Too few steps and the maps do not reproduce the data, which NLINV refuses
+    rather than returns.
 
-        import pulserver.recon as recon
+    .. plot::
 
-        solver = recon.IRGNM(recon.ConjugateGradient(max_iter=30), max_iter=8)
+       import numpy as np
+       import pulserver.recon as recon
+       import pulserver.mrd as mrd
+       from _figures import images, phantom
+
+       truth, coil_maps = phantom(64, coils=4)
+       mask = np.zeros((64, 64), dtype=np.float32)
+       mask[::2] = 1.0
+       mask[26:38] = 1.0
+       measured = mrd.fftc((truth * coil_maps[0]).numpy()) * mask
+
+       panels = [("object", truth)]
+       for steps in (4, 6, 12):
+           maps = recon.NLINV(spatial_ndim=2, max_iter=steps)(
+               measured[None], mask=mask
+           )
+           panels.append((f"{steps} steps", recon.cartesian_recon(measured, mask, maps)))
+       images(
+           panels,
+           title="each Gauss-Newton step relinearises, with the damping decayed",
+       )
+
+    Driving the iteration directly takes a linear inner solver and a physics
+    that can linearise itself:
+
+    >>> import pulserver.recon as recon
+    >>> solver = recon.IRGNM(recon.ConjugateGradient(max_iter=30), max_iter=8)
+    >>> solver.max_iter
+    8
     """
 
     def __init__(

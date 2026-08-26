@@ -31,12 +31,11 @@ from pulserver.mrd import (
 #: Where the public names actually live. Reaching them is not supposed to
 #: require knowing this -- that is what the test below is about.
 RECON_MODULES = (
+    "adapters",
     "calibration",
     "datasets",
     "denoisers",
     "execution",
-    "learned",
-    "models",
     "motion",
     "optim",
     "physics",
@@ -227,7 +226,7 @@ def test_pics_selects_fista_with_a_denoiser(monkeypatch):
         )
         == "reconstructed"
     )
-    from pulserver.recon.learned import _ComplexAdapter
+    from pulserver.recon.adapters import ComplexDenoiser
 
     assert calls["g_param"] == 0.05
     assert calls["stepsize"] == 0.2
@@ -236,7 +235,7 @@ def test_pics_selects_fista_with_a_denoiser(monkeypatch):
     # the native-complex image; the wrapped model is the one that was passed.
     tag, wrapped = calls["prior"]
     assert tag == "pnp"
-    assert isinstance(wrapped, _ComplexAdapter)
+    assert isinstance(wrapped, ComplexDenoiser)
     assert wrapped.model is model
 
 

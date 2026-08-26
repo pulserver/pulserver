@@ -41,7 +41,7 @@ def _save(
 ) -> ModelBundle:
     return save_bundle(
         _linear(weight),
-        root / name / version,
+        root,
         name=name,
         version=version,
         architecture="test.linear",
@@ -73,11 +73,44 @@ def test_bundle_can_populate_existing_model_and_preserve_training_mode(tmp_path)
     torch.testing.assert_close(model.weight, torch.tensor([[2.0, -1.0]]))
 
 
-def test_bundle_does_not_interpret_architecture_as_a_pulserver_model_api(tmp_path):
+def test_an_architecture_outside_the_allowed_roots_is_refused(tmp_path):
+    """A manifest names what to build; it cannot reach outside the stack."""
     bundle = _save(tmp_path)
 
-    with pytest.raises(ValueError, match="native model or factory"):
+    with pytest.raises(ValueError, match="not an importable path"):
         bundle.load()
+
+
+def test_a_manifest_naming_an_importable_class_builds_it_without_a_factory(tmp_path):
+    bundle = save_bundle(
+        _linear((2.0, -1.0)),
+        tmp_path,
+        name="linear",
+        version="1.0",
+        architecture="torch.nn.Linear",
+        kwargs={"in_features": 2, "out_features": 1, "bias": False},
+    )
+
+    model = bundle.load()
+
+    torch.testing.assert_close(model.weight, torch.tensor([[2.0, -1.0]]))
+
+
+def test_promoting_a_version_makes_the_bare_name_resolve_to_it(tmp_path):
+    _save(tmp_path, version="1.0", weight=(2.0, -1.0))
+    save_bundle(
+        _linear((3.0, 4.0)),
+        tmp_path,
+        name="subspace-recon",
+        version="2.0",
+        architecture="torch.nn.Linear",
+        kwargs={"in_features": 2, "out_features": 1, "bias": False},
+        promote=True,
+    )
+
+    resolved = ModelStore([tmp_path]).resolve("subspace-recon")
+
+    assert resolved.version == "2.0"
 
 
 def test_bundle_constructs_a_native_deepinverse_model(tmp_path):
@@ -90,7 +123,7 @@ def test_bundle_constructs_a_native_deepinverse_model(tmp_path):
     model = deepinv.models.UNet(**kwargs)
     bundle = save_bundle(
         model,
-        tmp_path / "deepinv-unet",
+        tmp_path,
         name="deepinv-unet",
         version="1.0",
         architecture="deepinv.models.UNet",

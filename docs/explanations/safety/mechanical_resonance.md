@@ -156,8 +156,8 @@ gradient drive among the three physical axes; it cannot move energy to a
 frequency, so no sequence can hide a dangerous line by rotating it onto an
 axis the check is not watching.
 
-This is the check the interpreter runs at **predownload** -- once
-``make_sequence`` has written the finished ``.seq`` and the file comes back
+This is the check the interpreter runs at **predownload** — once
+`make_sequence` has written the finished `.seq` and the file comes back
 in, not while an operator is still choosing a parameter. Nothing before that
 point has built the actual gradient waveforms to check: a console's live
 feasibility estimate is a duration computed from module lengths, and has

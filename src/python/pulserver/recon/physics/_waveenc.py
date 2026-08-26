@@ -113,14 +113,53 @@ class WaveEncoding(MRIPhysics):
 
     Examples
     --------
-    Wave encoding plays sinusoidal gradients during the readout, so each line is
-    smeared along the encoded axes by a corkscrew point-spread function. Spreading
-    the aliasing that way is what lets a higher acceleration still separate::
+    Wave encoding plays sinusoidal gradients during the readout, so each line
+    is smeared along the encoded axes by a corkscrew point-spread function.
+    Spreading the aliasing that way is what lets a higher acceleration still
+    separate: at sixteen-fold the same coils and the same solver recover the
+    object with the corkscrew and lose it without.
 
-        import pulserver.recon as recon
+    .. plot::
 
-        physics = recon.WaveEncoding(sampling, coil_maps, wave_psf)
-        image = recon.pics(measured, physics)
+       import torch
+       import pulserver.recon as recon
+       from _figures import images, volume, wave_gradients
+
+       truth, coil_maps = volume(size=24, coils=4, depth=16)
+       image, maps = truth[:, None], coil_maps[0]
+       shape = tuple(truth.shape[1:])
+
+       gradients, raster, times = wave_gradients(samples=2 * shape[0])
+       phase = recon.WavePSF.phase_from_gradients(gradients, raster, times)
+       axis_1 = torch.linspace(-0.10, 0.10, shape[1])
+       axis_2 = torch.linspace(-0.10, 0.10, shape[2])
+       corkscrew = recon.WavePSF(axis_1, axis_2)(phase)
+
+       # Four-fold along each encoded axis, sixteen-fold overall.
+       grid = torch.stack(
+           torch.meshgrid(
+               torch.arange(0, shape[1], 4),
+               torch.arange(0, shape[2], 4),
+               indexing="ij",
+           ),
+           -1,
+       )
+       sampling = grid.reshape(-1, 2)
+
+       def solved(point_spread):
+           physics = recon.WaveEncoding(sampling, maps, point_spread)
+           return recon.pics(physics.A(image), physics, iterations=8)[
+               0, 0, shape[0] // 2
+           ]
+
+       images(
+           [
+               ("object", truth[0, shape[0] // 2]),
+               ("no wave gradients", solved(torch.ones_like(corkscrew))),
+               ("wave encoded", solved(corkscrew)),
+           ],
+           title="sixteen-fold undersampled: spreading the aliasing separates it",
+       )
     """
 
     def __init__(

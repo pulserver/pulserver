@@ -39,7 +39,7 @@ to grey out its Build button.
 Each sequence is written in Nim and compiled — its own program, built per
 sequence. That buys the speed, and it costs interoperability: a Nim sequence
 cannot call into the Python ecosystem the MR community designs in — pulse
-design toolboxes, optimization, simulation, PyTorch — and a Python sequence
+design toolboxes, optimisation, simulation, PyTorch — and a Python sequence
 cannot be driven by the GUI without something in between.
 
 Pulserver keeps the workflow — the sequence as a parameter-declaring program

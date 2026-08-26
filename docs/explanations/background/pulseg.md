@@ -72,7 +72,7 @@ The specification's top level is small:
 | `SegmentInstance` | the per-playout parameters: amplitudes, offsets, shot index, rotation, labels |
 | `ExecutionStream` | which segment instance plays when |
 
-A Pulseq file is recovered from this by hydrating the definitions and
+A Pulseq file is recovered from this by filling the definitions back in and
 applying the instance parameters; the representation is lossless with respect
 to what plays.
 

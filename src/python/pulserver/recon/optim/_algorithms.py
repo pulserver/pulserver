@@ -481,9 +481,9 @@ def _complex_denoiser(denoiser: Any | None) -> Any | None:
         return denoiser
     if isinstance(denoiser, Sequence):
         return denoiser
-    from ..learned import _ComplexAdapter
+    from ..adapters import ComplexDenoiser
 
-    return _ComplexAdapter(denoiser)
+    return ComplexDenoiser(denoiser)
 
 
 # %% private module subroutines

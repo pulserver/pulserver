@@ -12,7 +12,7 @@ builds it stays available, the console asks it for a protocol, and it
 answers. {doc}`Nimpulseq <../background/nimpulseqgui>` reached the same
 conclusion and pays for it by writing every sequence in a compiled language.
 Pulserver keeps the sequence in Python — where the MR community's design,
-optimization and simulation tools live — and recovers the speed underneath
+optimisation and simulation tools live — and recovers the speed underneath
 it, once, in a compiled sequence core that every sequence shares. No sequence
 is ever individually compiled.
 
@@ -36,28 +36,24 @@ the acoustic response against.
 
 "Valid" in the full sense — gradients fit the system, slew fits, the PNS
 model stays under threshold, the acoustic response avoids the forbidden
-bands — only means something once a sequence has actually been built, and
-even then it is not evaluated on the console's clock. Writing straight to a
-scanner, `write_sequence(seq, path, offline=False)` leaves the binary
-unchecked, because the interpreter checks timing and gradients at
-predownload against its *real* rasters and limits once the finished file
-comes back in, and that is the authoritative pass — checking again on the
-way out would only duplicate it. A plugin cannot make predownload run any
-earlier, because at *validate* time there is no sequence yet to check.
-Writing anywhere else — a bench, a foreign toolbox, a colleague — nothing
-downstream will check it, so `write_sequence(..., offline=True)` runs every
-check inline, because it is the only chance those checks get. See
-{doc}`../performance/sequence_creation` for where each check sits in the
-write path.
+bands — only means something once a sequence has actually been built. A
+plugin cannot make that happen earlier: at *validate* time there is no
+sequence yet to check.
+
+So the full verdict is not on the console's clock either. Writing straight to
+a scanner, `write_sequence(seq, path, offline=False)` leaves the binary
+unchecked, because the interpreter checks timing and gradients at predownload
+against its *real* rasters and limits once the finished file comes back in.
+Writing anywhere else, `write_sequence(..., offline=True)` runs every check
+inline instead — see {doc}`../safety/index`.
 
 What design time buys, then, is not an earlier verdict on the operator's
 clock. It is the *same compiled engine* available before a sequence ever
 reaches a scanner at all — to a plugin author testing it, to a CI run, to
 anyone who wants the answer without a magnet to ask — so a violation is
 caught while the sequence is being written rather than reported back from
-the exam room. See {doc}`../safety/index` for what runs, and
-{doc}`../performance/sequence_creation` for where each check actually sits
-in the write path.
+the exam room. {doc}`../performance/sequence_creation` shows where each check
+sits in the write path.
 
 ## The declaration is part of the sequence
 

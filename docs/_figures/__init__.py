@@ -32,6 +32,7 @@ real reconstruction rather than an illustration of one.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import NamedTuple
 
 import numpy as np
@@ -41,7 +42,9 @@ from matplotlib.collections import LineCollection
 from matplotlib.colors import LinearSegmentedColormap, Normalize
 
 __all__ = [
+    "MODELS",
     "ORDINAL",
+    "brain",
     "SAMPLING",
     "SERIES",
     "excitation_kspace",
@@ -649,21 +652,108 @@ def phantom(size: int = 64, coils: int = 4):
     from deepinv.utils.phantoms import generate_shepp_logan
 
     image = generate_shepp_logan(size).to(torch.complex64)[None]
+    return Phantom(image, _coil_ring(size, coils)[None])
 
-    axis = torch.linspace(-1.0, 1.0, size)
+
+#: Where ``docs/_bench/train_denoiser.py`` writes the bundle a figure
+#: reconstructs with. A figure names the model; this is the search path.
+MODELS = Path(__file__).resolve().parent.parent / "_models"
+
+
+#: Where the loop elements sit, in units of the field of view, and how big
+#: they are. The ring stands just outside the object it surrounds.
+_COIL_DISTANCE = 0.6
+_COIL_RADIUS = 0.2
+_COIL_SEGMENTS = 50
+
+
+def _coil_ring(size: int, coils: int):
+    """Receive sensitivities of a ring of loop elements around the object.
+
+    Each element is a circular current loop, and what it receives at a point
+    is the transverse field it would produce there -- ``b_x + i b_y`` by
+    Biot-Savart, summed over the segments the loop is drawn with. The phase
+    that carries is the whole point: an array whose maps are real has no
+    coil-to-coil phase for a parallel-imaging solve to unfold, and undoes an
+    aliased scan visibly worse than a physical one does.
+    """
+    import math
+
+    import torch
+
+    axis = torch.linspace(-0.5, 0.5, size + 1, dtype=torch.float64)[:-1]
     rows, columns = torch.meshgrid(axis, axis, indexing="ij")
-    angles = 2.0 * torch.pi * torch.arange(coils) / coils
-    sensitivities = torch.stack(
-        [
-            torch.exp(
-                -((columns - 0.9 * torch.cos(angle)) ** 2) / 1.2
-                - ((rows - 0.9 * torch.sin(angle)) ** 2) / 1.2
-            )
-            for angle in angles
-        ]
-    ).to(torch.complex64)
-    sensitivities = sensitivities / sensitivities.abs().pow(2).sum(0).sqrt()
-    return Phantom(image, sensitivities[None])
+    points = torch.stack(
+        [columns.reshape(-1), rows.reshape(-1), torch.zeros(size * size, dtype=torch.float64)],
+        dim=-1,
+    )
+    turn = (
+        2.0
+        * math.pi
+        * torch.arange(_COIL_SEGMENTS, dtype=torch.float64)
+        / _COIL_SEGMENTS
+    )
+    sensitivities = []
+    for element in range(coils):
+        angle = 2.0 * math.pi * element / coils
+        centre = torch.tensor(
+            [_COIL_DISTANCE * math.sin(angle), _COIL_DISTANCE * math.cos(angle), 0.0],
+            dtype=torch.float64,
+        )
+        # The loop lies in the plane its normal -- the radial direction -- is
+        # perpendicular to, which z and the tangential direction span.
+        along = torch.tensor([0.0, 0.0, 1.0], dtype=torch.float64)
+        across = torch.tensor(
+            [math.cos(angle), -math.sin(angle), 0.0], dtype=torch.float64
+        )
+        curve = centre + _COIL_RADIUS * (
+            torch.cos(turn)[:, None] * along + torch.sin(turn)[:, None] * across
+        )
+        segment = torch.roll(curve, -1, dims=0) - curve
+        offset = points[:, None, :] - curve[None, :, :]
+        distance = offset.norm(dim=-1).clamp_min(1e-9)
+        field = (
+            torch.cross(segment.expand_as(offset), offset, dim=-1)
+            / distance[..., None] ** 3
+        ).sum(1) / (4.0 * math.pi)
+        sensitivities.append(
+            torch.complex(field[:, 0], field[:, 1]).reshape(size, size)
+        )
+    stacked = torch.stack(sensitivities).to(torch.complex64)
+    return stacked / stacked.abs().pow(2).sum(0).sqrt().clamp_min(1e-12)
+
+
+def brain(size: int = 160, coils: int = 4):
+    """A brain slice and a ring of receive coils around it.
+
+    The object is a complex fastMRI brain slice DeepInverse distributes, cropped
+    about its centre, so a picture of a learned reconstruction is made on the
+    kind of anatomy the model was trained for rather than on a phantom. The
+    sensitivities are the analytic ring :func:`phantom` uses.
+
+    Parameters
+    ----------
+    size : int, optional
+        Matrix size, square, cropped from the 320-by-320 slice.
+    coils : int, optional
+        Elements in the ring.
+
+    Returns
+    -------
+    Phantom
+        ``image`` is a complex ``(1, size, size)`` slice scaled to a unit
+        maximum; ``coil_maps`` carries a leading batch.
+    """
+    import torch
+    from deepinv.utils import load_example
+
+    slab = load_example("demo_mini_subset_fastmri_brain_0.pt")
+    start = (slab.shape[-1] - size) // 2
+    window = slice(start, start + size)
+    cropped = slab[..., window, window]
+    image = torch.complex(cropped[:, 0], cropped[:, 1])
+    image = image / image.abs().max()
+    return Phantom(image, _coil_ring(size, coils)[None])
 
 
 class Measurement(NamedTuple):
@@ -1659,3 +1749,43 @@ def _detached(array):
     """``array`` as something NumPy will take, Torch or not."""
     detach = getattr(array, "detach", None)
     return detach().cpu().numpy() if callable(detach) else array
+
+
+def wave_gradients(
+    samples: int = 256,
+    *,
+    cycles: int = 8,
+    amplitude: float = 3e-3,
+    duration: float = 10e-3,
+):
+    """Sinusoidal wave-encoding gradients, a quarter period apart.
+
+    Parameters
+    ----------
+    samples
+        ADC samples along the readout.
+    cycles
+        Periods of the sinusoid across the readout.
+    amplitude
+        Peak gradient on each encoded axis, in T/m.
+    duration
+        Readout duration, in seconds.
+
+    Returns
+    -------
+    gradients : torch.Tensor
+        Shape ``(2, samples)`` in T/m: phase axis then partition axis.
+    raster : float
+        Time between gradient samples, in seconds.
+    times : torch.Tensor
+        ADC sample times relative to the first gradient sample, in seconds.
+    """
+    import torch
+
+    raster = duration / (samples - 1)
+    times = torch.arange(samples) * raster
+    rate = 2 * torch.pi * cycles / duration
+    gradients = torch.stack(
+        [amplitude * torch.sin(rate * times), amplitude * torch.cos(rate * times)]
+    )
+    return gradients, raster, times

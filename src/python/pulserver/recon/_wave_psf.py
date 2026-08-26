@@ -87,14 +87,33 @@ class WavePSF(torch.nn.Module):
 
     Examples
     --------
-    The corkscrew a wave-encoded readout draws, as the phase it applies along the
-    two encoded axes. Built once from the calibrated gradients and reused by every
-    solve::
+    The gradients are integrated to the phase each voxel accrues, and the axes
+    say where the voxels are. A voxel at the centre keeps its place along the
+    readout; one at the edge of the field of view is smeared across it, which
+    is the spreading that lets parallel imaging separate a higher acceleration.
 
-        import pulserver.recon as recon
+    .. plot::
 
-        psf = recon.WavePSF(phase_axis=phase_gradients, partition_axis=partition_gradients)
-        physics = recon.WaveEncoding(sampling, coil_maps, psf)
+       import numpy as np
+       import torch
+       import pulserver.recon as recon
+       from _figures import images, wave_gradients
+
+       gradients, raster, times = wave_gradients()
+       phase = recon.WavePSF.phase_from_gradients(gradients, raster, times)
+
+       # Voxel coordinates over a 20 cm field of view, in metres.
+       axis = torch.linspace(-0.10, 0.10, 32)
+       psf = recon.WavePSF(axis, axis)(phase)
+
+       centre = psf.shape[-1] // 2
+       spread = np.abs(
+           np.fft.fftshift(np.fft.ifft(psf[:, :, centre].numpy(), axis=0), axes=0)
+       )
+       images(
+           [("readout against position along the phase axis", spread)],
+           title="a voxel is smeared along the readout, the further out the more",
+       )
     """
 
     def __init__(
@@ -345,16 +364,19 @@ class WavePSFCalibration(torch.nn.Module):
 
     Examples
     --------
-    Fits the point-spread function from a calibration scan, rather than trusting
-    the nominal gradients -- the delays and eddy currents that make the corkscrew
-    differ from its prescription are exactly what it measures::
+    Fits the point-spread function from a calibration scan, rather than
+    trusting the nominal gradients -- the delays and eddy currents that make
+    the corkscrew differ from its prescription are exactly what it measures.
+    The axes are voxel coordinates, as they are for :class:`WavePSF`; the
+    calibrator is then called on a reconstructed calibration volume together
+    with the phase the prescription predicts.
 
-        import pulserver.recon as recon
-
-        calibration = recon.WavePSFCalibration(
-            phase_axis=phase_gradients, partition_axis=partition_gradients
-        )
-        fitted = calibration(reference_lines)
+    >>> import torch
+    >>> import pulserver.recon as recon
+    >>> axis = torch.linspace(-0.10, 0.10, 32)
+    >>> calibration = recon.WavePSFCalibration(axis, axis, max_iter=25)
+    >>> calibration.n_harmonics
+    1
     """
 
     def __init__(

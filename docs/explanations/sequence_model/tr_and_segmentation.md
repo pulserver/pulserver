@@ -9,7 +9,7 @@ repetition is written in the file.
 
 Pulserver derives both from the block content, and derives them the same way
 on every file. This page explains what is derived, what it is used for, and
-why the alternative — annotating the file — was rejected.
+why deriving it beats reading an annotation.
 
 ## The repeating unit is a property of the content
 
@@ -43,8 +43,8 @@ Two properties make this well-posed:
 For a gradient echo the answer is the obvious one: excitation, prewinder,
 readout, a combined rewinder and spoiler, pad — five blocks, repeated once per
 line. For an FSE it is the whole echo train, because that is the unit that
-repeats. For a ZTE it is the whole shell -- the ramp onto the first spoke,
-then a pulse and an acquisition per view -- because the shell opens and closes
+repeats. For a ZTE it is the whole shell — the ramp onto the first spoke,
+then a pulse and an acquisition per view — because the shell opens and closes
 differently from the way it runs, and it is the shell a shot repeats.
 Detection reports what the sequence is, not what its author called it.
 
@@ -84,8 +84,8 @@ that repeat identically across instances. A gradient echo yields one segment
 train, and the frame-counter block, because those three do not repeat with
 the same period as each other.
 
-The partition satisfies the constraints the PulSeg IR specification places on
-a virtual segment: every instance has the same block count and the same
+The partition satisfies the constraints the PulSeg specification places on a
+virtual segment: every instance has the same block count and the same
 normalized structure.
 
 ### Two decompositions

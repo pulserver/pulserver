@@ -24,8 +24,8 @@ Two clocks, because an operator feels two.
 ## Every family, at its largest
 
 Each family at the largest protocol it can be prescribed at. "TR window" is the
-duration of the structural repeating unit -- the window every gradient-side
-check runs on -- and it is the column that explains most of the rest.
+duration of the structural repeating unit — the window every gradient-side
+check runs on — and it is the column that explains most of the rest.
 
 | Family | Largest protocol | Blocks | TR window | `validate_protocol` | Save Rx | Peak RSS | `.seq` | Cache |
 |---|---|---:|---:|---:|---:|---:|---:|---:|
@@ -89,11 +89,11 @@ power law and slope one is a cost proportional to the scan.
 Flat, and in the tens of milliseconds. That is the whole point of the call: it
 designs *one repetition* and reports the feasibility and the scan duration that
 follow from it, so what it costs is a property of the family rather than of the
-prescription -- eighteen of the twenty stay between 6 and 25 ms across four
+prescription — eighteen of the twenty stay between 6 and 25 ms across four
 orders of magnitude of scan size.
 
 The exception is the largest MPRAGE, at 334 ms. What scales there is not the
-sequence but the *encoding plan*: an inversion-prepared 512 x 1024 x 512
+sequence but the *encoding plan*: an inversion-prepared 512 × 1024 × 512
 acquisition ranks and deals half a million views into echo trains, and the
 ordering is the answer to "how many shots, therefore how long". At an ordinary
 256-cubed prescription the same call is about 40 ms.
@@ -124,7 +124,7 @@ window is long. Reading the extremes off the table:
 Two million blocks over a 40 ms window is checked in a fifth of a second;
 twenty-six thousand blocks over an eight-second window take fifty times as
 long. ZTE is the worst of both, because there the number of distinct waveforms
-grows with the scan as well -- every shot is its own shell -- and the gate costs
+grows with the scan as well — every shot is its own shell — and the gate costs
 the product of the two.
 
 ## Peak memory
@@ -139,7 +139,7 @@ three spiral families sit on their own shelf from their smallest protocol
 onwards, because what allocates is the arm solver, once.
 
 Nothing here approaches what a scanner host has, which is why footprint is the
-least interesting of the five charts -- but it is the one that would stop being
+least interesting of the five charts — but it is the one that would stop being
 uninteresting first if a design loop started holding per-block objects.
 
 ## The two files
@@ -150,7 +150,7 @@ uninteresting first if a design loop started holding per-block objects.
 
 One line each, for every family: **37 bytes per block** written and **63 bytes
 per block** cached, whatever the sequence is. That is the representation doing
-its job -- a block is a row of indices into libraries that hold each waveform
+its job — a block is a row of indices into libraries that hold each waveform
 once, so the file is the block table and the block table is a row per block.
 The offset at the left is the fixed header, which stops mattering above a few
 thousand blocks.

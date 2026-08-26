@@ -89,8 +89,7 @@ places.
   against the scanner's *real* rasters and limits, not the ones the script
   declared. That is the authoritative pass, which is why the scanner path
   writes without checking: running it twice buys nothing.
-- A file written for anywhere else — a bench, a foreign toolbox, a colleague
-  — gets every check at design time instead, because nothing downstream will
-  run them.
+- A file written for anywhere else is checked at design time instead, since
+  nothing downstream will check it — see {doc}`../safety/index`.
 
 See {doc}`../safety/index` for what each check refuses and why.

@@ -98,9 +98,9 @@ reconstruction are downloaded together and no server-side registration step
 exists. A stream naming nothing recognisable falls back to a handler that
 records the data and returns.
 
-Each connection reconstructs through its own instance of the plugin
-(`plugin.spawn()`, a shallow copy), so the configured `PLUGIN` a module
-exposes stays a template: an expensive thing it holds — a loaded network, a
+Each connection reconstructs through its own copy of the plugin
+(`plugin.spawn()`), so the configured `PLUGIN` a module exposes stays a
+template: an expensive thing it holds — a loaded network, a
 compiled operator — is shared across concurrent scans, while everything the
 lifecycle hooks assign stays private to one stream. Acquisitions are handed
 to the plugin as they arrive; waveforms are collected and given to every
@@ -131,9 +131,9 @@ Observing a header with a different exam identity retires the current
 generation immediately — the next patient never inherits the previous
 patient's calibration. Retiring is not freeing: a reconstruction that already
 leased the outgoing generation keeps it alive and valid until it finishes, and the
-artifacts are released on the last lease returned. The cache is generational
-rather than invalidated in place because a scanner can start the next exam
-while the previous scan is still reconstructing.
+artifacts are released on the last lease returned. A new exam therefore starts a fresh generation rather than emptying the old
+one, because a scanner can begin the next exam while the previous scan is
+still reconstructing.
 
 Keys should carry what an artifact actually depends on — geometry, coil
 configuration, trajectory or basis identity. Sharing an exam does not by
@@ -166,14 +166,14 @@ the client has nowhere to put the data. Stalling the client is not one
 either: the acquisition system needs its buffers back.
 
 So when every slot is busy, the server still consumes the stream in full,
-writing it to an MRD file as it goes, and drops a small JSON sidecar beside
-it naming the reconstruction that was requested. The client sees an ordinary,
-complete session. A background worker then picks up the oldest sidecar,
-waits for a slot, and runs the requested reconstruction against the file.
-The sidecar is renamed as it goes — queued, processing, then processed or
-failed — which is both the record of what happened and the lock that stops
-two workers taking the same session; a `processing` sidecar found at startup
-belonged to a process that died, and is retried.
+writing it to an MRD file as it goes, and drops a small JSON file beside it
+naming the reconstruction that was requested. The client sees an ordinary,
+complete session. A background worker then picks up the oldest of those,
+waits for a slot, and runs the requested reconstruction against the file. Its
+name changes as it goes — queued, processing, then processed or failed —
+which is both the record of what happened and what stops two workers taking
+the same session; one still marked `processing` at startup belonged to a
+process that died, and is retried.
 
 The replayed scan runs through the same plugin lifecycle, the same exam
 lease and the same output handling as a live one; only the source of the

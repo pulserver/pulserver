@@ -156,7 +156,6 @@ write_sequence(seq, path, offline=False)  # to the scanner: binary, unchecked
 write_sequence(seq, path, offline=True)   # anywhere else: .seq text, checked, signed
 ```
 
-Going to the scanner, the interpreter checks timing and gradients at
-predownload against its *real* rasters and limits, so checking again here buys
-nothing. Going anywhere else — a bench, a foreign toolbox, a colleague —
-nothing downstream will check, so everything is checked here.
+Which of the two a plugin wants follows from where the file is going, and
+{doc}`../safety/index` sets out why: the scanner re-checks against its own
+rasters and limits, and nothing else does.

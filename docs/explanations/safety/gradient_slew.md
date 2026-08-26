@@ -41,7 +41,7 @@ So continuity is checked as itself: every gradient's first sample must meet
 its predecessor's last, per axis, and a mismatch is reported as a
 discontinuity rather than as a slew number. A sequence built from Pulserver's
 own modules cannot produce one; a sequence assembled by hand, or one whose
-rewinders were re-solved per rotation angle rather than materialized from a
+rewinders were re-solved per rotation angle rather than materialised from a
 base waveform, can.
 
 ```{note}

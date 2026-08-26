@@ -42,9 +42,10 @@ Pulserver runs the same checks, and turns those two views into verdicts.
 What it moves is *when*.
 
 Amplitude, slew and continuity are deferred to `write()` rather than paid at
-every `add_block`, and they go together under one flag. The pass runs over the gradient library, so it costs one
-evaluation per distinct waveform however many times the scan plays it, which
-is what makes a protocol-scale sequence affordable to check at all.
+every `add_block`, and they go together under one flag. The pass runs over
+the gradient library, so it costs one evaluation per distinct waveform however
+many times the scan plays it, which is what makes a protocol-scale sequence
+affordable to check at all.
 
 They can also be switched off, and on the scanner path they are. The
 interpreter checks amplitude, slew, continuity and timing at predownload

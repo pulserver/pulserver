@@ -29,21 +29,23 @@ from typing import TYPE_CHECKING, Any
 #: is the only place the file layout is written down.
 _MEMBERS = {
     "ADMM": "optim.admm",
+    "ARCHITECTURE_ROOTS": "weights",
     "AverageDenoiser": "denoisers",
     "CGInfo": "optim.cg",
     "Cartesian2D": "physics",
     "Cartesian3D": "physics",
+    "Checkpointed": "adapters",
     "CoefficientAccessor": "postprocessing",
     "CoilCompression": "gadgets",
+    "ComplexDenoiser": "adapters",
     "ConjugateGradient": "optim.cg",
-    "ContextAgnosticDenoiser": "models",
+    "ContextAgnosticDenoiser": "adapters",
     "CudaStreaming": "execution",
     "EpiPhaseCorrection": "gadgets",
     "ExamCache": "plugin",
     "FISTA": "optim.fista",
     "Gadget": "gadgets",
     "GradientCoefficients": "postprocessing",
-    "GradientDataConsistency": "learned",
     "Gradunwarp": "postprocessing",
     "IRGNM": "optim.irgnm",
     "IXI": "datasets",
@@ -58,8 +60,10 @@ _MEMBERS = {
     "NLINVPhysics": "calibration",
     "NLINVResult": "calibration",
     "NoiseAdjust": "gadgets",
+    "NoiseConditioned": "adapters",
     "NonCartesian2D": "physics",
     "NonCartesian3D": "physics",
+    "NormalEquationL2": "adapters",
     "OffResonance": "physics",
     "OptimResult": "optim.state",
     "OptimState": "optim.state",
@@ -77,17 +81,14 @@ _MEMBERS = {
     "RigidMotionEstimate": "motion",
     "RigidRegistration": "motion",
     "SMS": "physics",
-    "ScaledAdjoint": "learned",
+    "ScaledAdjoint": "adapters",
     "StackedPrior": "optim.prior",
-    "StatefulReconstructor": "learned",
+    "StepwiseUnroll": "adapters",
     "Subspace": "physics",
     "TGV": "denoisers",
     "TV": "denoisers",
     "Toeplitz": "physics",
     "TorchIODataset": "datasets",
-    "UnrollResult": "learned",
-    "UnrollState": "learned",
-    "UnrolledReconstructor": "learned",
     "WaveEncoding": "physics",
     "WavePSF": "calibration",
     "WavePSFCalibration": "calibration",
@@ -111,9 +112,9 @@ __all__ = sorted(_MEMBERS)
 
 #: Reachable as attributes for anyone who wants them, but not part of the
 #: public namespace: the flat names above are.
-_SUBMODULES = frozenset(
-    value.split(".", 1)[0] for value in _MEMBERS.values()
-) - {"_mrd"}
+_SUBMODULES = frozenset(value.split(".", 1)[0] for value in _MEMBERS.values()) - {
+    "_mrd"
+}
 
 
 def __getattr__(name: str) -> Any:
@@ -157,13 +158,13 @@ if TYPE_CHECKING:
     from .denoisers import TV as TV
     from .denoisers import Wavelet as Wavelet
     from .execution import CudaStreaming as CudaStreaming
-    from .learned import GradientDataConsistency as GradientDataConsistency
-    from .learned import ScaledAdjoint as ScaledAdjoint
-    from .learned import StatefulReconstructor as StatefulReconstructor
-    from .learned import UnrollResult as UnrollResult
-    from .learned import UnrollState as UnrollState
-    from .learned import UnrolledReconstructor as UnrolledReconstructor
-    from .models import ContextAgnosticDenoiser as ContextAgnosticDenoiser
+    from .adapters import NormalEquationL2 as NormalEquationL2
+    from .adapters import ScaledAdjoint as ScaledAdjoint
+    from .adapters import StepwiseUnroll as StepwiseUnroll
+    from .adapters import Checkpointed as Checkpointed
+    from .adapters import ComplexDenoiser as ComplexDenoiser
+    from .adapters import ContextAgnosticDenoiser as ContextAgnosticDenoiser
+    from .adapters import NoiseConditioned as NoiseConditioned
     from .motion import RigidMotionEKF as RigidMotionEKF
     from .motion import RigidMotionEstimate as RigidMotionEstimate
     from .motion import RigidRegistration as RigidRegistration
@@ -203,6 +204,7 @@ if TYPE_CHECKING:
     from .postprocessing import image_result as image_result
     from .noncartesian import noncartesian_recon as noncartesian_recon
     from .postprocessing import run_pyhysco as run_pyhysco
+    from .weights import ARCHITECTURE_ROOTS as ARCHITECTURE_ROOTS
     from .weights import MODEL_PATH_ENV as MODEL_PATH_ENV
     from .weights import ModelBundle as ModelBundle
     from .weights import ModelStore as ModelStore

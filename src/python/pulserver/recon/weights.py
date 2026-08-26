@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 __all__ = [
+    "ARCHITECTURE_ROOTS",
     "MODEL_PATH_ENV",
     "ModelBundle",
     "ModelStore",
@@ -12,8 +13,10 @@ __all__ = [
 ]
 
 import hashlib
+import importlib
 import json
 import os
+import shutil
 import sys
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
@@ -24,6 +27,10 @@ from typing import Any
 #: separated the way the platform separates a path. What it names is looked in
 #: before the defaults :func:`default_model_paths` returns.
 MODEL_PATH_ENV = "PULSERVER_MODEL_PATH"
+#: Module prefixes a manifest's ``architecture`` may be imported from. A
+#: bundle names what to build; confining that to the reconstruction stack and
+#: its numerical libraries keeps a manifest from reaching anywhere else.
+ARCHITECTURE_ROOTS = ("pulserver", "deepinv", "torch")
 _MANIFEST = "manifest.json"
 _SCHEMA_VERSION = 1
 
@@ -61,12 +68,24 @@ class ModelBundle:
     the manifest is, what architecture it describes, and the checkpoint it is
     paired with.
 
-    A bundle is read off disk rather than constructed by hand::
+    A bundle is read off disk rather than constructed by hand.
 
-        import pulserver.recon as recon
-
-        bundle = recon.ModelStore().resolve("unrolled-vn:1.0")
-        model = recon.load_model(bundle.manifest_path)
+    >>> import tempfile
+    >>> from pathlib import Path
+    >>> import torch
+    >>> import pulserver.recon as recon
+    >>> store = Path(tempfile.mkdtemp())
+    >>> _ = recon.save_bundle(
+    ...     torch.nn.Conv2d(1, 1, 3),
+    ...     store,
+    ...     name="denoiser",
+    ...     version="1.0",
+    ...     architecture="torch.nn.Conv2d",
+    ...     kwargs={"in_channels": 1, "out_channels": 1, "kernel_size": 3},
+    ... )
+    >>> bundle = recon.ModelStore(paths=[store]).resolve("denoiser")
+    >>> bundle.architecture, bundle.checkpoint_path.name
+    ('torch.nn.Conv2d', 'weights.pt')
     """
 
     manifest_path: Path
@@ -258,6 +277,41 @@ class ModelBundle:
             }
         return state
 
+    def architecture_factory(self) -> Callable[..., Any]:
+        """Resolve the manifest's ``architecture`` to the callable it names.
+
+        Returns
+        -------
+        collections.abc.Callable
+            Constructor taking the manifest ``kwargs``.
+
+        Raises
+        ------
+        ValueError
+            If ``architecture`` is not an importable dotted path under one of
+            :data:`ARCHITECTURE_ROOTS`.
+        """
+        path = self.architecture
+        module_name, separator, attribute = path.rpartition(".")
+        if not separator or not any(
+            module_name == root or module_name.startswith(f"{root}.")
+            for root in ARCHITECTURE_ROOTS
+        ):
+            raise ValueError(
+                f"manifest architecture {path!r} is not an importable path under "
+                f"{', '.join(ARCHITECTURE_ROOTS)}; pass factory= to build it"
+            )
+        try:
+            module = importlib.import_module(module_name)
+        except ImportError as error:
+            raise ValueError(
+                f"cannot import architecture module {module_name!r}"
+            ) from error
+        resolved = getattr(module, attribute, None)
+        if not callable(resolved):
+            raise ValueError(f"architecture {path!r} does not name a callable")
+        return resolved
+
     def load(
         self,
         model: Any | None = None,
@@ -276,8 +330,9 @@ class ModelBundle:
         model
             Existing native Torch or DeepInverse model.
         factory
-            Native model factory used when ``model`` is ``None``. It receives
-            the manifest ``kwargs`` without modification.
+            Native model factory overriding the manifest. It receives the
+            manifest ``kwargs`` without modification. When omitted, the
+            manifest's own ``architecture`` is resolved.
         device
             Device receiving the populated model.
         map_location
@@ -297,11 +352,8 @@ class ModelBundle:
         if model is not None and factory is not None:
             raise ValueError("provide model or factory, not both")
         if model is None:
-            if factory is None:
-                raise ValueError(
-                    "provide a native model or factory when loading a bundle"
-                )
-            model = factory(**dict(self.kwargs))
+            selected = factory if factory is not None else self.architecture_factory()
+            model = selected(**dict(self.kwargs))
         load_state_dict = getattr(model, "load_state_dict", None)
         if not callable(load_state_dict):
             raise TypeError("model factories must return a Torch-compatible module")
@@ -464,43 +516,68 @@ def load_model(
 
     Examples
     --------
-    A model is named, and found on the search path unless a directory is given::
+    A model is named and found on the search path, or given as a directory.
+    The manifest says what to build and the recorded ``kwargs`` are its
+    arguments, so a plugin deploys a model by naming it.
 
-        import pulserver.recon as recon
-
-        model = recon.load_model("unrolled-vn:1.0")
+    >>> import tempfile
+    >>> from pathlib import Path
+    >>> import torch
+    >>> import pulserver.recon as recon
+    >>> store = Path(tempfile.mkdtemp())
+    >>> _ = recon.save_bundle(
+    ...     torch.nn.Conv2d(1, 1, 3),
+    ...     store,
+    ...     name="denoiser",
+    ...     version="1.0",
+    ...     architecture="torch.nn.Conv2d",
+    ...     kwargs={"in_channels": 1, "out_channels": 1, "kernel_size": 3},
+    ... )
+    >>> model = recon.load_model("denoiser", paths=[store])
+    >>> tuple(model.weight.shape)
+    (1, 1, 3, 3)
     """
     return ModelStore(paths).load(spec, **kwargs)
 
 
 def save_bundle(
     model: Any,
-    destination: str | os.PathLike[str],
+    root: str | os.PathLike[str],
     *,
     name: str,
     version: str,
     architecture: str,
     kwargs: Mapping[str, Any] | None = None,
     metadata: Mapping[str, Any] | None = None,
+    promote: bool = False,
 ) -> ModelBundle:
     """Write a weights-only model bundle for scanner deployment.
+
+    The bundle lands at ``<root>/<name>/<version>/``, which is where a
+    :class:`ModelStore` looks for ``name@version``. Point the scanner's
+    :data:`MODEL_PATH_ENV` at ``root`` and the model is deployed.
 
     Parameters
     ----------
     model
         Torch module providing ``state_dict``.
-    destination
-        New bundle directory.
+    root
+        Deployment root holding one directory per model.
     name
         Deployment name used by reconstruction applications.
     version
         Application-defined model version.
     architecture
-        Application-defined architecture identifier.
+        Importable dotted path of the class to build, for example
+        ``"deepinv.models.DnCNN"``. A bare name records what was trained but
+        leaves the caller to pass :meth:`ModelBundle.load`'s ``factory``.
     kwargs
         JSON-compatible architecture arguments.
     metadata
         JSON-compatible application metadata.
+    promote
+        Point ``<root>/<name>/current`` at this version, which is what a
+        plugin naming the model without a version then resolves to.
 
     Returns
     -------
@@ -510,21 +587,41 @@ def save_bundle(
     Raises
     ------
     FileExistsError
-        If ``destination`` already exists.
+        If the bundle directory already exists.
 
     Examples
     --------
-    Write a trained model where :func:`load_model` will find it::
+    A bundle is a directory holding the manifest that describes the model and
+    the checkpoint it is paired with. ``architecture`` and ``kwargs`` record
+    what has to be constructed before the weights can be poured into it, and
+    the layout is the one :func:`load_model` addresses.
 
-        import pulserver.recon as recon
+    >>> import tempfile
+    >>> from pathlib import Path
+    >>> import torch
+    >>> import pulserver.recon as recon
+    >>> store = Path(tempfile.mkdtemp())
+    >>> bundle = recon.save_bundle(
+    ...     torch.nn.Conv2d(1, 1, 3),
+    ...     store,
+    ...     name="denoiser",
+    ...     version="1.0",
+    ...     architecture="torch.nn.Conv2d",
+    ...     kwargs={"in_channels": 1, "out_channels": 1, "kernel_size": 3},
+    ...     promote=True,
+    ... )
+    >>> bundle.name, bundle.version
+    ('denoiser', '1.0')
+    >>> sorted(path.name for path in (store / "denoiser" / "1.0").iterdir())
+    ['manifest.json', 'weights.pt']
 
-        recon.save_bundle(
-            model,
-            "weights/unrolled-vn",
-            name="unrolled-vn",
-            version="1.0",
-            architecture="UnrolledReconstructor",
-        )
+    The manifest says what to build, so nothing has to be passed at load time
+    and the name alone resolves to the promoted version.
+
+    >>> recon.load_model("denoiser@1.0", paths=[store]).weight.shape
+    torch.Size([1, 1, 3, 3])
+    >>> recon.load_model("denoiser", paths=[store]).weight.shape
+    torch.Size([1, 1, 3, 3])
     """
     selected_name = _nonempty_string(name, name="name")
     selected_version = _nonempty_string(version, name="version")
@@ -547,7 +644,7 @@ def save_bundle(
     state_dict = getattr(model, "state_dict", None)
     if not callable(state_dict):
         raise TypeError("model must provide state_dict")
-    destination_path = Path(destination).expanduser()
+    destination_path = Path(root).expanduser() / selected_name / selected_version
     destination_path.mkdir(parents=True, exist_ok=False)
     checkpoint_path = destination_path / payload["checkpoint"]
     try:
@@ -568,7 +665,22 @@ def save_bundle(
         json.dumps(payload, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
+    if promote:
+        _promote(destination_path)
     return ModelBundle.from_path(manifest_path)
+
+
+def _promote(bundle_path: Path) -> None:
+    """Point the model's ``current`` entry at this bundle."""
+    pointer = bundle_path.parent / "current"
+    if pointer.is_symlink() or pointer.is_file():
+        pointer.unlink()
+    elif pointer.is_dir():
+        shutil.rmtree(pointer)
+    try:
+        pointer.symlink_to(bundle_path.name, target_is_directory=True)
+    except OSError:
+        shutil.copytree(bundle_path, pointer)
 
 
 def _sha256(path: Path) -> str:

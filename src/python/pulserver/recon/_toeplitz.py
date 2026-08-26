@@ -2,8 +2,14 @@
 
 from __future__ import annotations
 
-__all__ = ["CompactToeplitzKernel", "as_torch", "support_indices"]
+__all__ = [
+    "CompactToeplitzKernel",
+    "PolyphaseToeplitzKernel",
+    "as_torch",
+    "support_indices",
+]
 
+from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import suppress
 from copy import copy
@@ -322,6 +328,230 @@ def occupancy_indices(
     return torch.nonzero(keep.reshape(-1), as_tuple=False).flatten().to(torch.int32)
 
 
+def polyphase_components(
+    values: Any,
+    indices: Any,
+    spatial_shape: tuple[int, ...],
+    image_shape: tuple[int, ...],
+) -> list[tuple[tuple[int, ...], Any, Any]]:
+    """Split a doubled-grid transfer by the parity of its coordinates.
+
+    Returns ``(parity, values, indices)`` per component, the indices being
+    positions on the image grid rather than the doubled one.
+    """
+    torch = _torch()
+    ndim = len(spatial_shape)
+    flat = as_torch(indices).to(torch.int64)
+    coordinates = []
+    rest = flat
+    for size in reversed(spatial_shape):
+        coordinates.append(rest % size)
+        rest = rest // size
+    coordinates.reverse()
+
+    position = coordinates[0] // 2
+    identity = coordinates[0] % 2
+    for axis in range(1, ndim):
+        position = position * image_shape[axis] + coordinates[axis] // 2
+        identity = identity * 2 + coordinates[axis] % 2
+
+    values = as_torch(values)
+    # Every component is stored over the same locations -- the union of what
+    # the parities reach, which is what BART's shared mask over the image grid
+    # amounts to. It costs the few locations only some parities landed on and
+    # buys the components one set of scratch buffers between them, since they
+    # then agree on every shape an application allocates.
+    shared = torch.unique(position)
+    lookup = torch.full(
+        (int(prod(image_shape)),),
+        -1,
+        dtype=torch.int64,
+        device=position.device,
+    )
+    lookup[shared] = torch.arange(shared.numel(), device=position.device)
+
+    components = []
+    for index in range(2**ndim):
+        chosen = torch.nonzero(identity == index, as_tuple=False).flatten()
+        parity = tuple((index >> (ndim - 1 - axis)) & 1 for axis in range(ndim))
+        part = torch.zeros(
+            (values.shape[0], shared.numel()),
+            dtype=values.dtype,
+            device=values.device,
+        )
+        part[:, lookup[position.index_select(0, chosen)].to(values.device)] = (
+            values.index_select(1, chosen.to(values.device))
+        )
+        components.append((parity, part, shared.to(torch.int32)))
+    return components
+
+
+class PolyphaseToeplitzKernel:
+    """The doubled-grid transfer, filed as image-sized components.
+
+    A transfer indexed by frequency on the doubled grid splits by the parity
+    of each coordinate: component ``a`` holds the locations whose coordinates
+    are congruent to ``a``, at half their index. Each component is then a
+    transfer over the image grid itself, so the convolution runs there --
+    every transform, every spectrum and every accumulator is image-sized and
+    the doubled grid is never materialised. The half-index each component
+    stands for is a linear phase on the image, applied before its transform
+    and taken off after it.
+    """
+
+    def __init__(
+        self,
+        components: Sequence[tuple[tuple[int, ...], Any]],
+        image_shape: tuple[int, ...],
+        rank: int,
+        *,
+        truncation_bound: float = 0.0,
+    ) -> None:
+        if not components:
+            raise ValueError("a polyphase kernel needs at least one component")
+        self.components = list(components)
+        self.image_shape = tuple(int(size) for size in image_shape)
+        self.spatial_shape = tuple(2 * size for size in self.image_shape)
+        self.rank = int(rank)
+        self.truncation_bound = float(truncation_bound)
+        self._phases: dict[tuple[Any, ...], Any] = {}
+        self._share_workspaces()
+
+    def _share_workspaces(self) -> None:
+        """Let the components reuse one set of scratch buffers.
+
+        They are applied one after another over identically shaped images, so
+        the buffers an application needs are the same for each. Holding a set
+        per component would cost what filing the transfer this way saves --
+        the values each keeps are its own, and are not shared.
+        """
+        first = self.components[0][1]
+        for _, kernel in self.components[1:]:
+            # Streaming stages each transfer's own encoded rows in its
+            # workspace, so that one stays with the component it belongs to.
+            kernel._resident_workspaces = first._resident_workspaces
+            kernel._packed_workspaces = first._packed_workspaces
+            kernel._host_workspaces = first._host_workspaces
+
+    @property
+    def is_real(self) -> bool:
+        return all(kernel.is_real for _, kernel in self.components)
+
+    @property
+    def n_locations(self) -> int:
+        return sum(kernel.n_locations for _, kernel in self.components)
+
+    @property
+    def storage_nbytes(self) -> int:
+        return sum(kernel.storage_nbytes for _, kernel in self.components)
+
+    @property
+    def dense_nbytes(self) -> int:
+        return sum(kernel.dense_nbytes for _, kernel in self.components)
+
+    @property
+    def compression_ratio(self) -> float:
+        dense = self.dense_nbytes
+        return self.storage_nbytes / dense if dense else 1.0
+
+    @property
+    def values(self) -> Any:
+        """Every stored value, in component order. A diagnostic: it copies."""
+        torch = _torch()
+        return torch.cat([kernel.values for _, kernel in self.components], dim=1)
+
+    @property
+    def indices(self) -> Any:
+        torch = _torch()
+        return torch.cat([kernel.indices for _, kernel in self.components])
+
+    @property
+    def last_cuda_mode(self) -> str | None:
+        return self.components[0][1].last_cuda_mode
+
+    @property
+    def last_cuda_algorithm(self) -> str | None:
+        return self.components[0][1].last_cuda_algorithm
+
+    def to(self, device: Any) -> PolyphaseToeplitzKernel:
+        for _, kernel in self.components:
+            kernel.to(device)
+        self._share_workspaces()
+        self._phases.clear()
+        return self
+
+    def for_device(self, device: Any) -> PolyphaseToeplitzKernel:
+        clone = copy(self)
+        clone.components = [
+            (parity, kernel.for_device(device)) for parity, kernel in self.components
+        ]
+        clone._phases = {}
+        clone._share_workspaces()
+        return clone
+
+    def settle_allocator(self) -> None:
+        for _, kernel in self.components:
+            kernel.settle_allocator()
+
+    def _phase(self, parity: tuple[int, ...], reference: Any) -> Any | None:
+        """The linear phase standing for a component's half-index shift."""
+        torch = _torch()
+        if not any(parity):
+            return None
+        key = (parity, reference.device, reference.dtype)
+        cached = self._phases.get(key)
+        if cached is not None:
+            return cached
+        phase = None
+        for axis, offset in enumerate(parity):
+            if offset == 0:
+                continue
+            size = self.image_shape[axis]
+            steps = torch.arange(size, device=reference.device, dtype=torch.float32)
+            factor = torch.exp(-1j * torch.pi * offset * steps / size).to(
+                reference.dtype
+            )
+            shape = [1] * (len(self.image_shape) + 2)
+            shape[axis + 2] = size
+            factor = factor.reshape(shape)
+            phase = factor if phase is None else phase * factor
+        self._phases[key] = phase
+        return phase
+
+    def _accumulate(self, image: Any, run: Any) -> Any:
+        torch = _torch()
+        result = None
+        staged = None
+        for parity, kernel in self.components:
+            phase = self._phase(parity, image)
+            if phase is None:
+                part = run(kernel, image)
+            else:
+                if staged is None:
+                    staged = torch.empty_like(image)
+                torch.mul(image, phase, out=staged)
+                part = run(kernel, staged)
+                part.mul_(phase.conj())
+            if result is None:
+                result = part
+            else:
+                result.add_(part)
+                del part
+        assert result is not None
+        return result.div_(float(2 ** len(self.image_shape)))
+
+    def apply(self, image: Any) -> Any:
+        """Apply the matrix-valued convolution, component by component."""
+        return self._accumulate(image, lambda kernel, value: kernel.apply(value))
+
+    def apply_streamed(self, image: Any, streaming: Any) -> Any:
+        """Apply with each component's transfer streamed from host storage."""
+        return self._accumulate(
+            image,
+            lambda kernel, value: kernel.apply_streamed(value, streaming),
+        )
+
+
 def _device_is_full(error: BaseException) -> bool:
     """Whether a runtime error is the allocator declining an allocation."""
     torch = _torch()
@@ -367,6 +597,10 @@ class CompactToeplitzKernel:
     matrix multiplication; the dense matrix-valued spatial kernel is never
     retained.
 
+    ``truncation_bound`` is the largest transfer value that fell outside the
+    stored locations. The transfer multiplies the spectrum pointwise, so it
+    bounds how far the stored operator sits from the whole one, entry by
+    entry -- and how far below zero a compressed normal operator can dip.
     """
 
     def __init__(
@@ -383,6 +617,7 @@ class CompactToeplitzKernel:
         host_dense: str = "auto",
         host_max_memory_fraction: float = 0.5,
         cuda_transfer_precision: str = "auto",
+        truncation_bound: float = 0.0,
     ) -> None:
         torch = _torch()
         values = as_torch(values)
@@ -428,6 +663,8 @@ class CompactToeplitzKernel:
             raise ValueError(
                 "cuda_transfer_precision must be 'auto', 'float32', or 'bfloat16'"
             )
+        if truncation_bound < 0.0:
+            raise ValueError("truncation_bound must be non-negative")
         rows, columns = torch.triu_indices(rank, rank, device=values.device)
         self.values = values.contiguous()
         self.indices = indices.contiguous()
@@ -440,6 +677,7 @@ class CompactToeplitzKernel:
         self.host_dense = host_dense
         self.host_max_memory_fraction = float(host_max_memory_fraction)
         self.cuda_transfer_precision = cuda_transfer_precision
+        self.truncation_bound = float(truncation_bound)
         self._rows = rows
         self._columns = columns
         self._packed_coordinates = tuple(
@@ -928,10 +1166,6 @@ class CompactToeplitzKernel:
         key = self._resident_workspace_key(image)
         workspace = self._resident_workspaces.get(key)
         if workspace is None:
-            _, transfer_values = self._cuda_values_for(
-                image.device,
-                self.cuda_transfer_precision,
-            )
             workspace = {
                 "input": torch.empty(
                     (image.shape[0], self.rank, *self.spatial_shape),
@@ -943,10 +1177,15 @@ class CompactToeplitzKernel:
                     dtype=image.dtype,
                     device=image.device,
                 ),
-                "indices": [self.indices.to(image.device, dtype=torch.int32)],
-                "values": transfer_values,
             }
             self._resident_workspaces[key] = workspace
+        # The banks are scratch and may be shared with another transfer of the
+        # same shape; the transfer and the locations it sits at are not.
+        _, transfer_values = self._cuda_values_for(
+            image.device,
+            self.cuda_transfer_precision,
+        )
+        targets = [self.indices.to(image.device, dtype=torch.int32)]
         input_bank = workspace["input"]
         output_bank = workspace["output"]
         image_slices = (
@@ -964,11 +1203,11 @@ class CompactToeplitzKernel:
             torch.mul(image, right_factor, out=input_crop)
         _banked_transform(input_bank, axes)
         output_bank.zero_()
-        for target in workspace["indices"]:
+        for target in targets:
             self._last_cuda_algorithm = _packed_cuda_matvec_direct(
                 output_bank,
                 input_bank,
-                workspace["values"],
+                transfer_values,
                 target,
             )
         _banked_transform(output_bank, axes, inverse=True)
@@ -1042,10 +1281,17 @@ class CompactToeplitzKernel:
             *(slice(0, size) for size in self.image_shape),
         )
         axes = tuple(range(1, padded.ndim))
+        # A component of a transfer filed by parity is already the image's
+        # size, so there is nothing to pad it into and nothing to clear: the
+        # transform reads the coefficient where it lies.
+        unpadded = self.spatial_shape == self.image_shape
         for coefficient in range(self.rank):
-            padded.zero_()
-            padded[image_slices].copy_(image[:, coefficient])
-            torch.fft.fftn(padded, dim=axes, out=padded)
+            if unpadded:
+                torch.fft.fftn(image[:, coefficient], dim=axes, out=padded)
+            else:
+                padded.zero_()
+                padded[image_slices].copy_(image[:, coefficient])
+                torch.fft.fftn(padded, dim=axes, out=padded)
             flattened = padded.flatten(start_dim=1)
             for bank, target in zip(supported, targets, strict=True):
                 torch.index_select(

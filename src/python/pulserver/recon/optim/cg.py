@@ -9,6 +9,8 @@ from dataclasses import dataclass
 from math import isfinite
 from typing import Any
 
+import warnings
+
 import torch
 from torch.autograd.function import once_differentiable
 
@@ -319,6 +321,12 @@ def _solve(
         applied = operator(direction)
         denominator = _real_inner(direction, applied, batch_dim)
         active = residual_norm > threshold if check_stopping else residual_norm > 0.0
+        # Negative curvature is not a reason to stop stepping. The operator a
+        # compressed Toeplitz normal stands for carries eigenvalues just below
+        # zero, and the iteration keeps reducing the residual through them --
+        # refusing the step freezes it instead, well short of the answer it
+        # would have reached. What the sign is recorded for is the diagnosis
+        # and the choice of which iterate to answer with.
         recurrence_valid = (~active) | (
             torch.isfinite(rho)
             & torch.isfinite(denominator)
@@ -326,12 +334,14 @@ def _solve(
             & (denominator > 0.0)
         )
         valid = valid & recurrence_valid
+        # Only an exactly zero curvature has no step to take.
+        usable = active & (denominator != 0.0)
         safe_denominator = torch.where(
-            recurrence_valid,
+            usable,
             denominator,
             torch.ones_like(denominator),
         )
-        step = torch.where(active & recurrence_valid, rho / safe_denominator, 0.0)
+        step = torch.where(usable, rho / safe_denominator, 0.0)
         solution = solution + step * direction
         residual = residual - step * applied
         next_preconditioned = (
@@ -340,7 +350,7 @@ def _solve(
         next_rho = _real_inner(residual, next_preconditioned, batch_dim)
         safe_rho = torch.where(rho > 0.0, rho, torch.ones_like(rho))
         momentum = torch.where(
-            active & recurrence_valid & torch.isfinite(next_rho) & (next_rho >= 0.0),
+            usable & torch.isfinite(next_rho) & (next_rho >= 0.0),
             next_rho / safe_rho,
             0.0,
         )
@@ -351,9 +361,18 @@ def _solve(
     residual_norm = _reported_norm(residual, batch_dim)
     converged = bool(torch.all(_norm(residual, batch_dim) <= threshold))
     if not bool(torch.all(valid)):
-        raise RuntimeError(
-            "CG encountered a non-positive or non-finite recurrence; operator "
-            "and preconditioner must be Hermitian positive definite"
+        # The operator carries a negative eigenvalue -- a compressed Toeplitz
+        # normal can dip below zero by the largest transfer value its support
+        # left out -- so the quadratic the iteration descends is unbounded in
+        # that direction and the answer is whatever the last step left. The
+        # iteration is not stopped for it: the residual keeps falling through
+        # negative curvature, and refusing the step only freezes it short.
+        warnings.warn(
+            "CG met a non-positive recurrence; the operator is not positive "
+            "definite and the answer is not a minimizer. Raise the "
+            "regularization, stop earlier, or keep the whole Toeplitz "
+            "transfer (toeplitz={'compress': False}) if it is compressed.",
+            stacklevel=2,
         )
     return solution, iterations, residual_norm.detach(), converged
 

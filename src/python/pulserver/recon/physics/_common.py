@@ -261,6 +261,7 @@ class _CartesianComplexView(deepinv.physics.LinearPhysics):
 def _toeplitz_options(
     *,
     compress: bool = True,
+    polyphase: bool = True,
     chunk_size: int = 65536,
     coil_batch_size: int = 1,
     cuda_mode: str = "auto",
@@ -275,12 +276,19 @@ def _toeplitz_options(
     locations the trajectory never reached are dropped, how much is unpacked
     at a time, how many coils share a pass, and what a CUDA device holds.
 
-    ``compress`` is BART's ``--compress-psf``. Dropping the untouched
-    locations is what makes a large three-dimensional kernel fit, and it
-    perturbs the normal operator by what it discards -- immaterial for a solve
-    whose spectrum is clear of zero, and enough to cost a rank-deficient one
-    its positive definiteness. A calibration solved over a small window turns
-    it off for that reason.
+    ``compress`` is BART's ``--compress-psf``: the transfer is kept where the
+    gridded trajectory is non-zero -- the sampled region plus the rim the
+    interpolation spreads into -- and dropped outside, which is what makes a
+    large three-dimensional kernel fit. The transfer multiplies the spectrum
+    pointwise, so what compression leaves out perturbs the normal operator by
+    at most the largest value dropped, which the kernel records as its
+    truncation bound. A conjugate-gradient solve that meets the resulting
+    indefiniteness stops on its last valid iterate rather than diverging. A
+    calibration solved over a small window keeps the whole transfer instead.
+
+    ``polyphase`` files the transfer as one component per parity of the
+    doubled grid's coordinates, so the convolution runs on the image grid and
+    the doubled one is never materialised. It is the same operator either way.
     """
     if chunk_size <= 0:
         raise ValueError("Toeplitz chunk_size must be positive")
@@ -296,6 +304,7 @@ def _toeplitz_options(
         )
     return {
         "compress": bool(compress),
+        "polyphase": bool(polyphase),
         "chunk_size": int(chunk_size),
         "coil_batch_size": int(coil_batch_size),
         "cuda_mode": cuda_mode,

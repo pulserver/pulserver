@@ -1,0 +1,25 @@
+{
+  "architecture": "deepinv.models.DnCNN",
+  "checkpoint": "weights.pt",
+  "kwargs": {
+    "depth": 8,
+    "in_channels": 3,
+    "nf": 32,
+    "out_channels": 3,
+    "pretrained": null
+  },
+  "metadata": {
+    "conditioning": "noise level as a third input channel",
+    "patch": 64,
+    "sigma_range": [
+      0.005,
+      0.205
+    ],
+    "steps": 2500,
+    "trained_on": "fastMRI demo subset, knee and brain, 4 slices"
+  },
+  "name": "fastmri-denoiser",
+  "schema_version": 1,
+  "sha256": "0f16d0f5146eb7e4cf902a47e80e1a02e76d88b1a0a6c6c79e10f98c17423a96",
+  "version": "1.0"
+}

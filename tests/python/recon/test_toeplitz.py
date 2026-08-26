@@ -910,22 +910,20 @@ def test_resident_cuda_uses_cached_bfloat16_transfer():
         cuda_transfer_precision="bfloat16",
     )
 
+    def encoded():
+        _, transfer = automatic._cuda_values_for(image.device, "bfloat16")
+        return transfer
+
     expected = reference.apply(image)
     result = automatic.apply(image)
-    workspace = automatic._resident_workspaces[automatic._resident_workspace_key(image)]
-    first_pointer = workspace["values"].data_ptr()
+    first_pointer = encoded().data_ptr()
     repeated = automatic.apply(image)
 
     torch.testing.assert_close(result, expected, atol=5e-3, rtol=5e-3)
     torch.testing.assert_close(repeated, result, atol=0, rtol=0)
-    assert workspace["values"].dtype == torch.bfloat16
-    assert workspace["values"].ndim == 2
-    assert (
-        automatic._resident_workspaces[automatic._resident_workspace_key(image)][
-            "values"
-        ].data_ptr()
-        == first_pointer
-    )
+    assert encoded().dtype == torch.bfloat16
+    assert encoded().ndim == 2
+    assert encoded().data_ptr() == first_pointer
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is unavailable")
@@ -1830,14 +1828,12 @@ def test_one_plan_serves_a_dynamic_scan_however_many_frames_it_has():
         assert not provider.cache
 
 
-def test_the_noncartesian_solve_keeps_the_whole_kernel():
-    """CG needs a positive-definite normal, which truncation cannot promise.
+def test_the_noncartesian_solve_compresses_its_kernel():
+    """The recipe takes the compression every other non-Cartesian solve takes.
 
-    The exact normal operator of a SENSE solve has eigenvalues at zero, so a
-    kernel cut to the locations the samples reached carries the smallest ones
-    negative and CG stops on a non-positive recurrence. One plane's kernel is
-    small enough that keeping all of it costs nothing worth having, so the
-    recipe asks for the whole thing.
+    Its normal operator is density-weighted, which is what makes conjugate
+    gradients converge in the iterations a reconstruction has, and its kernel
+    is stored over the locations the trajectory reached like any other.
     """
     import numpy as np
 
@@ -1879,6 +1875,13 @@ def test_the_noncartesian_solve_keeps_the_whole_kernel():
     assert np.isfinite(solved).all()
     inside = np.abs(truth) > 0
     assert np.abs(solved)[inside].mean() > 3 * np.abs(solved)[~inside].mean()
+
+    # The kernel the recipe built is stored over what the scan reached.
+    encoding = NonCartesian2D(
+        trajectory, (size, size), coil_maps=torch.as_tensor(maps), n_coils=4
+    )
+    encoding.A_adjoint_A(torch.zeros(1, 1, size, size, dtype=torch.complex64))
+    assert encoding.operator.toeplitz_kernel.n_locations < 4 * size**2
 
 
 def test_the_off_resonance_kernel_equals_the_normal_it_stands_for():
@@ -1981,3 +1984,87 @@ def test_the_correction_is_worth_making():
         return float((scale * solved - truth[0].abs()).norm() / truth[0].abs().norm())
 
     assert error(corrected) < 0.5 * error(base)
+
+
+def _undersampled_radial_physics(**kwargs):
+    """32 spokes on a 64 grid: an angularly undersampled scan.
+
+    The gridded-trajectory mask leaves wedge gaps between the spokes at high
+    radius, and the transfer holds real weight there -- the near shoulders of
+    the neighbouring samples -- so compression genuinely perturbs this normal
+    operator, which is what the tests below hold the machinery against.
+    """
+    generator = torch.Generator().manual_seed(11)
+    maps = torch.randn(4, 64, 64, generator=generator, dtype=torch.complex64)
+    maps /= torch.linalg.vector_norm(maps, dim=0, keepdim=True)
+    return physics.NonCartesian2D(
+        _radial(32, 64), (64, 64), coil_maps=maps, backend="finufft", **kwargs
+    )
+
+
+def test_the_kernel_records_the_largest_value_compression_dropped():
+    """The truncation bound is the distance to the whole kernel, measured.
+
+    The transfer multiplies the spectrum pointwise, so the largest value left
+    outside the stored locations is exactly how far the compressed operator
+    can sit from the whole one -- and how far below zero it can dip.
+    """
+    pytest.importorskip("mrinufft")
+    pytest.importorskip("finufft")
+    probe = torch.randn(1, 1, 64, 64, dtype=torch.complex64)
+
+    def built_kernel(compress):
+        # The bound is a property of the transfer, not of how it is filed, so
+        # this reads it off the one layout that keeps the doubled grid whole.
+        operator = _undersampled_radial_physics(
+            toeplitz={"compress": compress, "polyphase": False}
+        )
+        operator.A_adjoint_A(probe)
+        return operator.operator.toeplitz_kernel
+
+    whole = built_kernel(False)
+    compressed = built_kernel(True)
+    assert whole.truncation_bound == 0.0
+    assert compressed.truncation_bound > 0.0
+
+    total = whole.values.shape[1]
+    dense_whole = torch.zeros(total)
+    dense_whole[whole.indices.to(torch.int64)] = whole.values[0]
+    dense_compressed = torch.zeros(total)
+    dense_compressed[compressed.indices.to(torch.int64)] = compressed.values[0]
+    distance = float((dense_whole - dense_compressed).abs().max())
+    assert distance == pytest.approx(compressed.truncation_bound, rel=1e-5)
+
+
+def test_deep_cg_on_a_compressed_kernel_answers_instead_of_diverging():
+    """Eighty unregularized CG iterations on noisy undersampled data complete.
+
+    The compressed normal operator can dip below zero by its truncation
+    bound, and a deep Krylov iteration can find that subspace where random
+    probes cannot. The solve must come back with an answer of the whole
+    kernel's quality either way -- by converging, or by stopping on its last
+    valid iterate when the recurrence turns.
+    """
+    pytest.importorskip("mrinufft")
+    pytest.importorskip("finufft")
+    from pulserver.recon import pics
+
+    compressed = _undersampled_radial_physics()
+    whole = _undersampled_radial_physics(toeplitz={"compress": False})
+    image = torch.zeros(64, 64, dtype=torch.complex64)
+    image[16:48, 20:44] = 1.0
+    image[24:40, 28:36] = 0.5
+    generator = torch.Generator().manual_seed(3)
+    data = compressed.A(image[None, None])
+    data = data + 0.02 * data.abs().max() * torch.complex(
+        torch.randn(data.shape, generator=generator),
+        torch.randn(data.shape, generator=generator),
+    )
+
+    for regularization in (0.0, 1e-3):
+        result = pics(data, compressed, regularization=regularization, iterations=80)
+        reference = pics(data, whole, regularization=regularization, iterations=80)
+        assert torch.isfinite(result).all()
+        error = float((result[0, 0].abs() - image.abs()).norm() / image.norm())
+        against = float((reference[0, 0].abs() - image.abs()).norm() / image.norm())
+        assert abs(error - against) < 0.03
