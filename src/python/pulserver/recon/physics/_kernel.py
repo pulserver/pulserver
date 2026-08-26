@@ -509,6 +509,33 @@ def _largest_left_out(stored: Any, left_out: Any | None) -> float:
     return float(stored.abs().flatten()[left_out].max())
 
 
+def _polyphase_wanted(
+    options: dict[str, Any],
+    spatial_shape: tuple[int, ...],
+    rank: int,
+    reference: Any,
+) -> bool:
+    """Whether to file the transfer by parity rather than keep it doubled.
+
+    Asked for outright, or judged by what the device can hold: the doubled
+    grid's two banks are the largest thing an application allocates, and once
+    they no longer fit the budget the solve drops to a lane several times
+    slower. Filing by parity puts every bank on the image grid instead, which
+    is what keeps it resident.
+    """
+    setting = options.get("polyphase", "auto")
+    if setting != "auto":
+        return bool(setting)
+    torch = import_module("torch")
+    if not torch.cuda.is_available():
+        return False
+    banks = 2 * rank * prod(spatial_shape) * 8
+    device = getattr(reference, "device", None)
+    index = device if getattr(device, "type", None) == "cuda" else None
+    total = torch.cuda.get_device_properties(index).total_memory
+    return banks > options["cuda_max_device_fraction"] * total
+
+
 def _make_kernel(
     values: Any,
     indices: Any,
@@ -536,7 +563,7 @@ def _make_kernel(
         "cuda_transfer_precision": options["cuda_transfer_precision"],
     }
     doubled = tuple(2 * size for size in image_shape) == spatial_shape
-    if not options.get("polyphase", True) or not doubled:
+    if not _polyphase_wanted(options, spatial_shape, rank, values) or not doubled:
         return CompactToeplitzKernel(
             values,
             indices,
@@ -1376,7 +1403,7 @@ def _enable_toeplitz(
     *,
     best_effort: bool = False,
     compress: bool = True,
-    polyphase: bool = True,
+    polyphase: bool | str = "auto",
     chunk_size: int = 65536,
     coil_batch_size: int = 1,
     cuda_mode: str = "auto",

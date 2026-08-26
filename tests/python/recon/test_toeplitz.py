@@ -13,6 +13,7 @@ import pytest
 
 from pulserver.recon._toeplitz import (
     CompactToeplitzKernel,
+    PolyphaseToeplitzKernel,
     support_indices,
 )
 from pulserver.recon.execution import CudaStreaming
@@ -851,21 +852,21 @@ def test_resident_cuda_banks_match_compact_cuda(real_transfer):
 
     expected = compact.apply(image)
     actual = resident.apply(image)
-    first_input = resident._resident_workspaces[
-        resident._resident_workspace_key(image)
-    ]["input"]
+
+    def held():
+        return resident._resident_workspaces[resident._resident_workspace_key(image)][
+            "bank"
+        ]
+
+    first_bank = held()
     repeated = resident.apply(image)
 
     torch.testing.assert_close(actual, expected, atol=3e-5, rtol=3e-5)
     torch.testing.assert_close(repeated, expected, atol=3e-5, rtol=3e-5)
     assert compact.last_cuda_mode == "compact"
     assert resident.last_cuda_mode == "resident"
-    assert (
-        resident._resident_workspaces[resident._resident_workspace_key(image)][
-            "input"
-        ].data_ptr()
-        == first_input.data_ptr()
-    )
+    # The lane holds one bank between applications and reuses it.
+    assert held().data_ptr() == first_bank.data_ptr()
 
 
 def test_resident_cuda_uses_cached_bfloat16_transfer():
@@ -2068,3 +2069,81 @@ def test_deep_cg_on_a_compressed_kernel_answers_instead_of_diverging():
         error = float((result[0, 0].abs() - image.abs()).norm() / image.norm())
         against = float((reference[0, 0].abs() - image.abs()).norm() / image.norm())
         assert abs(error - against) < 0.03
+
+
+@pytest.mark.parametrize(
+    "device",
+    [
+        "cpu",
+        pytest.param(
+            "cuda",
+            marks=pytest.mark.skipif(
+                not torch.cuda.is_available(), reason="CUDA is unavailable"
+            ),
+        ),
+    ],
+)
+def test_filing_the_transfer_by_parity_is_the_same_operator(device):
+    """The doubled grid and its parities answer alike, on either device.
+
+    Splitting a transfer by the parity of its coordinates puts the whole
+    convolution on the image grid, where each part is applied between a linear
+    phase and its conjugate. That is an identity, not an approximation, so the
+    two layouts differ only by the arithmetic order they sum in.
+    """
+    pytest.importorskip("mrinufft")
+    pytest.importorskip("finufft")
+    generator = torch.Generator().manual_seed(19)
+    image_shape = (16, 16)
+    maps = torch.randn(3, *image_shape, generator=generator, dtype=torch.complex64)
+    maps /= torch.linalg.vector_norm(maps, dim=0, keepdim=True)
+    image = torch.randn(
+        1, 1, *image_shape, generator=generator, dtype=torch.complex64
+    ).to(device)
+
+    backend = "cufinufft" if device == "cuda" else "finufft"
+    trajectory = torch.as_tensor(_radial(24, 32)).to(device)
+
+    def built(polyphase):
+        return physics.NonCartesian2D(
+            trajectory,
+            image_shape,
+            coil_maps=maps.to(device),
+            n_coils=3,
+            backend=backend,
+            toeplitz={"polyphase": polyphase},
+        )
+
+    parity, doubled = built(True), built(False)
+    apart = parity.A_adjoint_A(image)
+    whole = doubled.A_adjoint_A(image)
+    assert isinstance(parity.operator.toeplitz_kernel, PolyphaseToeplitzKernel)
+    assert isinstance(doubled.operator.toeplitz_kernel, CompactToeplitzKernel)
+    assert len(parity.operator.toeplitz_kernel.components) == 2 ** len(image_shape)
+    error = float((apart - whole).abs().max() / whole.abs().max())
+    assert error < 1e-5
+
+
+def test_the_layout_follows_what_the_device_can_hold():
+    """``polyphase="auto"`` keeps the doubled grid while its banks fit.
+
+    The two banks of a doubled grid are the largest thing an application
+    allocates, and a solve that cannot hold them falls to a slower lane. The
+    parities are reached for at the size where that happens, and not before.
+    """
+    from pulserver.recon.physics._kernel import _polyphase_wanted
+
+    options = {"polyphase": "auto", "cuda_max_device_fraction": 0.85}
+    assert _polyphase_wanted({**options, "polyphase": True}, (8, 8), 1, torch.zeros(1))
+    assert not _polyphase_wanted(
+        {**options, "polyphase": False}, (8192, 8192), 8, torch.zeros(1)
+    )
+    if not torch.cuda.is_available():
+        pytest.skip("the automatic choice reads a CUDA device's budget")
+    budget = 0.85 * torch.cuda.get_device_properties(None).total_memory
+    small = (64, 64, 64)
+    assert not _polyphase_wanted(options, small, 1, torch.zeros(1))
+    side = 2
+    while 2 * 4 * side**3 * 8 <= budget:
+        side *= 2
+    assert _polyphase_wanted(options, (side,) * 3, 4, torch.zeros(1))

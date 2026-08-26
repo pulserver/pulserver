@@ -13,6 +13,7 @@ from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import suppress
 from copy import copy
+from functools import partial
 from importlib import import_module
 from math import prod
 from typing import Any
@@ -540,8 +541,44 @@ class PolyphaseToeplitzKernel:
         assert result is not None
         return result.div_(float(2 ** len(self.image_shape)))
 
+    def _apply_fused(self, image: Any) -> Any:
+        """Fold each component's phases into the resident lane's own factors.
+
+        That lane already multiplies by a factor on the way into its bank and
+        by another on the way out of it, accumulating into a caller's buffer.
+        The two phases a component carries are exactly such a pair, so they
+        cost nothing beyond the transform they ride on -- no staging buffer,
+        no separate pass to take the phase off, no separate pass to sum.
+        """
+        torch = _torch()
+        output = torch.zeros_like(image)
+        for parity, kernel in self.components:
+            phase = self._phase(parity, image)
+            kernel._apply_cuda_resident(
+                image,
+                right_factor=phase,
+                left_factor=None if phase is None else phase.conj(),
+                output=output,
+            )
+            kernel._last_cuda_mode = "resident"
+        return output.div_(float(2 ** len(self.image_shape)))
+
+    def _fusable(self, image: Any) -> bool:
+        return image.device.type == "cuda" and all(
+            kernel._select_cuda_mode(image) == "resident"
+            for _, kernel in self.components
+        )
+
     def apply(self, image: Any) -> Any:
         """Apply the matrix-valued convolution, component by component."""
+        if self._fusable(image):
+            try:
+                return self._apply_fused(image)
+            except RuntimeError as error:
+                if not _device_is_full(error):
+                    raise
+                for _, kernel in self.components:
+                    kernel._resident_refused()
         return self._accumulate(image, lambda kernel, value: kernel.apply(value))
 
     def apply_streamed(self, image: Any, streaming: Any) -> Any:
@@ -563,17 +600,24 @@ def _device_is_full(error: BaseException) -> bool:
 
 def _banked_transform(
     bank: Any, axes: tuple[int, ...], *, inverse: bool = False
-) -> None:
-    """Transform a padded bank in place, in as few passes as the device allows.
+) -> Any:
+    """Transform a bank, answering with where the transform landed.
 
     A transform plans a workspace of about the size of what it is handed. Where
     that does not fit what is left on the device it falls back to an algorithm
     several times slower -- and the bank is what left no room. Coefficients are
     independent here, so handing them over in groups that do fit costs nothing
     and is exact.
+
+    The answer is a bank of its own rather than the one handed in: writing a
+    transform back over its input costs a full pass on its own, and the caller
+    has the input free the moment the transform is taken.
     """
     torch = _torch()
-    transform = torch.fft.ifftn if inverse else torch.fft.fftn
+    # The transfer is stored already divided by the grid, so neither
+    # direction normalizes: "forward" puts the scaling on the transform we
+    # do not take, which is what leaves the inverse untouched.
+    transform = partial(torch.fft.ifftn, norm="forward") if inverse else torch.fft.fftn
     coefficients = bank.shape[1]
     chunk = coefficients
     if bank.device.type == "cuda":
@@ -581,11 +625,12 @@ def _banked_transform(
         free, _ = torch.cuda.mem_get_info(bank.device)
         chunk = min(coefficients, max(1, int(free // (2 * max(slice_bytes, 1)))))
     if chunk >= coefficients:
-        transform(bank, dim=axes, out=bank)
-        return
+        return transform(bank, dim=axes)
+    result = torch.empty_like(bank)
     for start in range(0, coefficients, chunk):
-        view = bank[:, start : start + chunk]
-        transform(view, dim=axes, out=view)
+        stop = start + chunk
+        result[:, start:stop] = transform(bank[:, start:stop], dim=axes)
+    return result
 
 
 class CompactToeplitzKernel:
@@ -600,7 +645,9 @@ class CompactToeplitzKernel:
     ``truncation_bound`` is the largest transfer value that fell outside the
     stored locations. The transfer multiplies the spectrum pointwise, so it
     bounds how far the stored operator sits from the whole one, entry by
-    entry -- and how far below zero a compressed normal operator can dip.
+    entry -- and how far below zero a compressed normal operator can dip. It
+    is given in the same units as the transfer handed in, and is held in the
+    same units the transfer is stored in.
     """
 
     def __init__(
@@ -666,6 +713,13 @@ class CompactToeplitzKernel:
         if truncation_bound < 0.0:
             raise ValueError("truncation_bound must be non-negative")
         rows, columns = torch.triu_indices(rank, rank, device=values.device)
+        # The convolution's inverse transform is taken unnormalized, because
+        # normalizing it is a whole extra pass over the spectrum every time
+        # the kernel is applied. The grid's scaling lives here instead, where
+        # it is paid once.
+        grid_scale = 1.0 / float(prod(spatial_shape))
+        values = values * grid_scale
+        truncation_bound = truncation_bound * grid_scale
         self.values = values.contiguous()
         self.indices = indices.contiguous()
         self.spatial_shape = tuple(int(size) for size in spatial_shape)
@@ -938,7 +992,7 @@ class CompactToeplitzKernel:
 
         for coefficient in range(self.rank):
             view = multiplied[:, coefficient]
-            torch.fft.ifftn(view, dim=axes, out=view)
+            torch.fft.ifftn(view, dim=axes, out=view, norm="forward")
         return multiplied[image_slices].clone()
 
     def _dense_values(self) -> Any:
@@ -1060,7 +1114,7 @@ class CompactToeplitzKernel:
         for coefficient in range(self.rank):
             padded.zero_()
             flattened.index_copy_(1, scatter_index, supported[:, coefficient])
-            torch.fft.ifftn(padded, dim=axes, out=padded)
+            torch.fft.ifftn(padded, dim=axes, out=padded, norm="forward")
             result[:, coefficient] = padded[image_slices]
         return result
 
@@ -1167,12 +1221,7 @@ class CompactToeplitzKernel:
         workspace = self._resident_workspaces.get(key)
         if workspace is None:
             workspace = {
-                "input": torch.empty(
-                    (image.shape[0], self.rank, *self.spatial_shape),
-                    dtype=image.dtype,
-                    device=image.device,
-                ),
-                "output": torch.empty(
+                "bank": torch.empty(
                     (image.shape[0], self.rank, *self.spatial_shape),
                     dtype=image.dtype,
                     device=image.device,
@@ -1186,32 +1235,37 @@ class CompactToeplitzKernel:
             self.cuda_transfer_precision,
         )
         targets = [self.indices.to(image.device, dtype=torch.int32)]
-        input_bank = workspace["input"]
-        output_bank = workspace["output"]
+        # One bank is held: the image is staged in it, and once its transform
+        # has been taken out of it, it is free to receive the multiply.
+        bank = workspace["bank"]
         image_slices = (
             slice(None),
             slice(None),
             *(slice(0, size) for size in self.image_shape),
         )
-        axes = tuple(range(2, input_bank.ndim))
+        axes = tuple(range(2, bank.ndim))
 
-        input_bank.zero_()
-        input_crop = input_bank[image_slices]
+        # A transfer filed by parity is already the image's size, so its bank
+        # is filled edge to edge and there is no margin to clear first.
+        if self.spatial_shape != self.image_shape:
+            bank.zero_()
+        staged = bank[image_slices]
         if right_factor is None:
-            input_crop.copy_(image)
+            staged.copy_(image)
         else:
-            torch.mul(image, right_factor, out=input_crop)
-        _banked_transform(input_bank, axes)
-        output_bank.zero_()
+            torch.mul(image, right_factor, out=staged)
+        spectrum = _banked_transform(bank, axes)
+        bank.zero_()
         for target in targets:
             self._last_cuda_algorithm = _packed_cuda_matvec_direct(
-                output_bank,
-                input_bank,
+                bank,
+                spectrum,
                 transfer_values,
                 target,
             )
-        _banked_transform(output_bank, axes, inverse=True)
-        output_crop = output_bank[image_slices]
+        del spectrum
+        transformed = _banked_transform(bank, axes, inverse=True)
+        output_crop = transformed[image_slices]
         if output is None:
             result = output_crop.clone()
             if left_factor is not None:
@@ -1324,7 +1378,7 @@ class CompactToeplitzKernel:
                     target.to(torch.int64),
                     bank[:, coefficient],
                 )
-            torch.fft.ifftn(padded, dim=axes, out=padded)
+            torch.fft.ifftn(padded, dim=axes, out=padded, norm="forward")
             result[:, coefficient].copy_(padded[image_slices])
         return result
 
@@ -1675,6 +1729,7 @@ class CompactToeplitzKernel:
                 torch.fft.ifftn(
                     spectrum,
                     dim=axes,
+                    norm="forward",
                     out=padded,
                 )
                 if left_factor is not None:
@@ -1701,6 +1756,7 @@ class CompactToeplitzKernel:
             torch.fft.ifftn(
                 padded,
                 dim=axes,
+                norm="forward",
                 out=padded,
             )
             if left_factor is not None:

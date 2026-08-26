@@ -261,7 +261,7 @@ class _CartesianComplexView(deepinv.physics.LinearPhysics):
 def _toeplitz_options(
     *,
     compress: bool = True,
-    polyphase: bool = True,
+    polyphase: bool | str = "auto",
     chunk_size: int = 65536,
     coil_batch_size: int = 1,
     cuda_mode: str = "auto",
@@ -288,7 +288,11 @@ def _toeplitz_options(
 
     ``polyphase`` files the transfer as one component per parity of the
     doubled grid's coordinates, so the convolution runs on the image grid and
-    the doubled one is never materialised. It is the same operator either way.
+    the doubled one is never materialised. It is the same operator either
+    way, and ``"auto"`` picks between them by what the device can hold: the
+    doubled grid is kept while its banks fit, and filed by parity when they
+    would not, which is where the layout decides whether a solve stays
+    resident or falls back to a slower lane.
     """
     if chunk_size <= 0:
         raise ValueError("Toeplitz chunk_size must be positive")
@@ -298,13 +302,15 @@ def _toeplitz_options(
         raise ValueError("Toeplitz cuda_mode must be 'auto', 'resident', or 'compact'")
     if not 0.0 < cuda_max_device_fraction <= 1.0:
         raise ValueError("Toeplitz cuda_max_device_fraction must be in (0, 1]")
+    if polyphase not in (True, False, "auto"):
+        raise ValueError("Toeplitz polyphase must be True, False, or 'auto'")
     if cuda_transfer_precision not in {"auto", "float32", "bfloat16"}:
         raise ValueError(
             "Toeplitz cuda_transfer_precision must be 'auto', 'float32', or 'bfloat16'"
         )
     return {
         "compress": bool(compress),
-        "polyphase": bool(polyphase),
+        "polyphase": polyphase,
         "chunk_size": int(chunk_size),
         "coil_batch_size": int(coil_batch_size),
         "cuda_mode": cuda_mode,
