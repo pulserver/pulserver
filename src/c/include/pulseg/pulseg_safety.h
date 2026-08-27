@@ -3,10 +3,20 @@
  * @brief Vendor-neutral gradient safety: amplitude, slew, continuity,
  *        acoustic resonance and PNS.
  *
- * pulseg_check_safety() is the single gate a vendor integration must pass a
- * collection through before playing it. The PNS model is injected by the
- * caller (pulseg_pns_model), so no vendor-proprietary nerve-stimulation
- * formula lives in this library.
+ * pulseg_check_safety() runs every check in one call, and is what a vendor
+ * integration that gates on all of them uses. Each check is also callable on
+ * its own, because a platform may enforce some of them in hardware and want
+ * only the rest: nothing here assumes the others ran.
+ *
+ * The PNS model is injected by the caller (pulseg_pns_model), so no
+ * vendor-proprietary nerve-stimulation formula lives in this library.
+ *
+ * The PNS and mechanical-resonance checks derive their answers from the same
+ * kind of preprocessing -- gradient waveforms extracted over a window of the
+ * canonical TR. A pulseg_check_plan holds that work so a caller asking
+ * several questions of one sequence does not pay for it repeatedly; passing
+ * NULL instead is always allowed and simply keeps the work private to the
+ * call.
  *
  * RF safety is deliberately absent: SAR limits are vendor-proprietary.
  * Consumers read the per-pulse summary via pulseg_get_rf_stats() and apply
@@ -25,37 +35,162 @@ extern "C"
 #endif
 
     /* ================================================================== */
+    /*  Shared preprocessing                                              */
+    /* ================================================================== */
+
+    /**
+     * @brief Create a plan the gradient checks can reuse work through.
+     *
+     * A plan belongs to one collection and holds two things: the sequence's
+     * repetitions grouped by the set of gradient shapes they play, and the
+     * uniform-raster gradient waveforms extracted over each window a check
+     * asks about.  Both are built on first request, never up front.
+     *
+     * Reuse is what a plan is for, and it pays wherever the same window is
+     * asked for twice -- a check followed by its plotting counterpart, or a
+     * check re-run against a different band table or PNS threshold.  The
+     * windows the PNS and mechanical-resonance checks evaluate are not the
+     * same windows, so running those two back to back does not itself reuse
+     * anything.
+     *
+     * The plan must not outlive @p coll.
+     *
+     * @param[out] out     Receives the plan; free with
+     *                     pulseg_check_plan_destroy().
+     * @param[out] diag    Diagnostic on failure; may be NULL.
+     * @param[in]  coll    Collection the plan is built against.
+     * @param[in]  config  What the plan may keep; NULL selects the defaults.
+     * @return PULSEG_SUCCESS or a negative error code.
+     */
+    int pulseg_check_plan_create(
+        pulseg_check_plan **out,
+        pulseg_diagnostic *diag,
+        const pulseg_collection *coll,
+        const pulseg_check_plan_config *config);
+
+    /** @brief Free a plan and everything it holds.  Safe on NULL. */
+    void pulseg_check_plan_destroy(pulseg_check_plan *plan);
+
+    /* ================================================================== */
     /*  Safety checks (detect violation and return immediately)           */
     /* ================================================================== */
 
     /**
-     * @brief Run all safety checks (gradient limits, acoustic, PNS).
+     * @brief Run every gradient safety check.
      *
-     * Detects the first violation and returns immediately with a
-     * descriptive diagnostic message.  Does NOT track worst-case.
+     * Raster alignment, gradient amplitude, continuity across block
+     * boundaries, slew rate, mechanical resonance and PNS, in that order,
+     * stopping at the first violation with a diagnostic naming it.  Does NOT
+     * track worst-case.
      *
-     * Internally, TR gradient waveforms are extracted once (without
-     * segment labels) and interpolated to a uniform raster.  The
-     * resulting uniform waveforms are shared between acoustic and PNS
-     * checks to avoid redundant computation.
+     * A sequence with no gradient event anywhere is checked for raster
+     * alignment and then accepted: every other check reads gx/gy/gz.
      *
-     * @param[in]  coll                   Collection (non-const: cursor dry-run).
-     * @param[out] diag                   Diagnostic on violation.
-     * @param[in]  opts                   Scanner limits.
-     * @param[in]  num_forbidden_bands    Number of acoustic bands.
-     * @param[in]  forbidden_bands        Array of forbidden bands.
-     * @param[in]  pns_model              PNS evaluator (NULL to skip PNS).
-     * @param[in]  pns_threshold_percent  PNS threshold (100 = 100 %).
+     * @param[in]     coll   Collection (non-const: cursor dry-run).
+     * @param[out]    diag   Diagnostic on violation.
+     * @param[in,out] plan   Shared preprocessing; NULL keeps it private to
+     *                       this call.
+     * @param[in]     opts   Scanner limits.
+     * @param[in]     bands  Forbidden acoustic bands; NULL or an empty list
+     *                       skips the mechanical-resonance check.
+     * @param[in]     pns_model              PNS evaluator; NULL skips PNS.
+     * @param[in]     pns_threshold_percent  PNS threshold (100 = 100 %).
      * @return PULSEG_SUCCESS if safe, negative error code on violation.
      */
     int pulseg_check_safety(
         pulseg_collection *coll,
         pulseg_diagnostic *diag,
+        pulseg_check_plan *plan,
         const pulseg_opts *opts,
-        int num_forbidden_bands,
-        const pulseg_forbidden_band *forbidden_bands,
+        const pulseg_forbidden_band_list *bands,
         const pulseg_pns_model *pns_model,
         float pns_threshold_percent);
+
+    /**
+     * @brief Check that no gradient exceeds the amplitude limit.
+     *
+     * The quantity compared is the vector magnitude of the unrotated
+     * waveform, which is what bounds every axis component the amplifiers see
+     * under an arbitrary rotation.
+     *
+     * @param[in]  coll  Collection to check.
+     * @param[out] diag  Diagnostic naming the subsequence and block on
+     *                   violation.
+     * @param[in]  opts  Scanner limits; max_grad_hz_per_m is the one that
+     *                   decides.
+     * @return PULSEG_SUCCESS or PULSEG_ERR_GRAD_AMPLITUDE_EXCEEDED.
+     */
+    int pulseg_check_max_grad(
+        const pulseg_collection *coll,
+        pulseg_diagnostic *diag,
+        const pulseg_opts *opts);
+
+    /**
+     * @brief Check that no gradient exceeds the slew-rate limit.
+     *
+     * Judged per block instance, from the amplitude that instance plays and
+     * the normalised slew of the shape it names, and compared as a vector
+     * magnitude for the same reason pulseg_check_max_grad() does.
+     *
+     * This bounds the slew a single event demands.  The step *between* two
+     * adjacent events is what pulseg_check_grad_continuity() judges.
+     *
+     * @param[in]  coll  Collection to check.
+     * @param[out] diag  Diagnostic naming the subsequence and block on
+     *                   violation.
+     * @param[in]  opts  Scanner limits; max_slew_hz_per_m_per_s decides.
+     * @return PULSEG_SUCCESS or PULSEG_ERR_SLEW_RATE_EXCEEDED.
+     */
+    int pulseg_check_max_slew(
+        const pulseg_collection *coll,
+        pulseg_diagnostic *diag,
+        const pulseg_opts *opts);
+
+    /**
+     * @brief Check the PNS response against a threshold.
+     *
+     * Evaluates the injected model over the canonical TR, once per distinct
+     * set of gradient shapes the repetitions play, and compares the peak
+     * combined response against @p threshold_percent.
+     *
+     * @param[in]     coll   Collection to check.
+     * @param[out]    diag   Diagnostic on violation.
+     * @param[in,out] plan   Shared preprocessing; NULL keeps it private.
+     * @param[in]     opts   Scanner limits.
+     * @param[in]     model  PNS evaluator; NULL accepts without checking.
+     * @param[in]     threshold_percent  Threshold (100 = 100 %).
+     * @return PULSEG_SUCCESS or PULSEG_ERR_PNS_THRESHOLD_EXCEEDED.
+     */
+    int pulseg_check_pns(
+        const pulseg_collection *coll,
+        pulseg_diagnostic *diag,
+        pulseg_check_plan *plan,
+        const pulseg_opts *opts,
+        const pulseg_pns_model *model,
+        float threshold_percent);
+
+    /**
+     * @brief Check that no gradient harmonic falls in a forbidden band.
+     *
+     * Evaluates the canonical TR's harmonic lines, bounded over every
+     * instance of that TR, and refuses any line inside a band -- widened by a
+     * guard of half the narrowest band's width -- whose per-axis amplitude
+     * exceeds what that band allows.
+     *
+     * @param[in]     coll   Collection to check.
+     * @param[out]    diag   Diagnostic naming frequency, amplitude and axis.
+     * @param[in,out] plan   Shared preprocessing; NULL keeps it private.
+     * @param[in]     opts   Scanner limits and peak-detection parameters.
+     * @param[in]     bands  Forbidden bands; NULL or empty accepts without
+     *                       checking.
+     * @return PULSEG_SUCCESS or PULSEG_ERR_MECH_RESONANCES_VIOLATION.
+     */
+    int pulseg_check_mech_resonances(
+        const pulseg_collection *coll,
+        pulseg_diagnostic *diag,
+        pulseg_check_plan *plan,
+        const pulseg_opts *opts,
+        const pulseg_forbidden_band_list *bands);
 
     /**
      * @brief Check that gradients are continuous across every block boundary.
@@ -127,89 +262,67 @@ extern "C"
         const pulseg_opts *opts);
 
     /* ================================================================== */
-    /*  Acoustic spectra (for wrapper-side plotting)                      */
+    /*  Spectra and waveforms (what a check decides on, for plotting)     */
     /* ================================================================== */
 
     /**
-     * @brief Compute mechanical resonances spectral data for a specific canonical TR of a subsequence.
+     * @brief Compute the mechanical-resonance spectra of one canonical TR.
      *
-     * Independently extracts TR gradient waveforms (without segment
-     * labels), interpolates them to uniform raster, and computes
-     * spectrograms, full-TR spectra, and sequence-level harmonics.
-     * Peak candidate masks are included for forbidden-band detection
-     * in the wrapper.
+     * The data behind pulseg_check_mech_resonances(): spectrograms, full-TR
+     * spectra, sequence-level harmonics and the candidate lines, with the
+     * display products a plot needs and the verdict does not.
      *
-     * @param[out] spectra                  Receives spectral data (caller frees via pulseg_mech_resonances_spectra_free).
-     * @param[out] diag                     Diagnostic on failure.
-     * @param[in]  coll                     Loaded collection.
-     * @param[in]  subseq_idx               Subsequence index.
-     * @param[in]  canonical_tr_idx         TR instance index (0-based, within subsequence);
-     *                                       read only under PULSEG_AMP_ACTUAL.
-     * @param[in]  amplitude_mode           PULSEG_AMP_MAX_POS for the bound over every
-     *                                       instance of the canonical TR, which is what
-     *                                       pulseg_check_safety judges; PULSEG_AMP_ACTUAL
-     *                                       for one instance exactly as it plays.
-     * @param[in]  opts                     Scanner limits.
-     * @param[in]  target_resolution_hz     Spectral resolution (0 = auto).
-     * @param[in]  max_freq_hz              Max frequency to report (0 = auto).
-     * @param[in]  num_forbidden_bands      Number of forbidden bands.
-     * @param[in]  forbidden_bands          Array of forbidden bands.
-     * @param[in]  compress_trains          Nonzero to evaluate equally-spaced
-     *                                       occurrence trains in compressed
-     *                                       form, exactly as pulseg_check_safety
-     *                                       does — pass 1 for plots that must
-     *                                       show the lines the headless gate
-     *                                       actually decides on.  Pass 0 for the
-     *                                       uncompressed reference evaluation of
-     *                                       the same math (a debugging aid, and
-     *                                       the only mode in which a component
-     *                                       term maps to a single materialised
-     *                                       occurrence rather than a train).
+     * Pass the same @p plan the check used and the extraction is not repeated.
+     *
+     * @param[in]     coll     Loaded collection.
+     * @param[out]    spectra  Receives the spectral data; free with
+     *                         pulseg_mech_resonances_spectra_free().
+     * @param[out]    diag     Diagnostic on failure.
+     * @param[in,out] plan     Shared preprocessing; NULL keeps it private.
+     * @param[in]     opts     Scanner limits and peak-detection parameters.
+     * @param[in]     request  What to analyse, and how finely.
      * @return PULSEG_SUCCESS on success, negative error code on failure.
      */
     int pulseg_calc_mech_resonances(
         const pulseg_collection *coll,
         pulseg_mech_resonances_spectra *spectra,
         pulseg_diagnostic *diag,
-        int subseq_idx,
-        int canonical_tr_idx,
-        int amplitude_mode,
+        pulseg_check_plan *plan,
         const pulseg_opts *opts,
-        float target_resolution_hz,
-        float max_freq_hz,
-        int num_forbidden_bands,
-        const pulseg_forbidden_band *forbidden_bands,
-        int compress_trains);
+        const pulseg_mech_resonances_request *request);
 
     /** @brief Free arrays inside a pulseg_mech_resonances_spectra. */
     void pulseg_mech_resonances_spectra_free(pulseg_mech_resonances_spectra *s);
 
-    /* ================================================================== */
-    /*  PNS slew-rate computation (for wrapper-side plotting)             */
-    /* ================================================================== */
-
     /**
-     * @brief Compute PNS slew-rate waveforms for a specific canonical TR of a subsequence.
+     * @brief Compute the PNS slew-rate waveforms of one canonical TR.
      *
-     * Independently extracts TR gradient waveforms (without segment
-     * labels), interpolates them to uniform raster, and convolves with
-     * the PNS model kernel.  Returns per-axis slew rates; the wrapper
-     * can trivially compute combined PNS = sqrt(x^2 + y^2 + z^2) and
-     * threshold percentage.
+     * The data behind pulseg_check_pns(): per-axis slew rates, from which the
+     * combined response is sqrt(x^2 + y^2 + z^2) and the threshold percentage
+     * follows.
      *
-     * @param[out] result       Receives slew-rate waveforms (caller frees via pulseg_pns_result_free).
-     * @param[out] diag         Diagnostic on failure.
-     * @param[in]  coll         Loaded collection.
-     * @param[in]  subseq_idx   Subsequence index.
-     * @param[in]  canonical_tr_idx Canonical TR index (0-based, within subsequence).
-     * @param[in]  opts         Scanner limits.
-     * @param[in]  model        PNS evaluator.
+     * A @p canonical_tr_idx of 0 asks for the worst case, which is the worst
+     * over every set of shapes the repetitions play.  Any other index asks
+     * for that one window, on its own shapes.
+     *
+     * Pass the same @p plan the check used and the extraction is not repeated.
+     *
+     * @param[in]     coll    Loaded collection.
+     * @param[out]    result  Receives the slew-rate waveforms; free with
+     *                        pulseg_pns_result_free().
+     * @param[out]    diag    Diagnostic on failure.
+     * @param[in,out] plan    Shared preprocessing; NULL keeps it private.
+     * @param[in]     subseq_idx        Subsequence index.
+     * @param[in]     canonical_tr_idx  Canonical TR index within it.
+     * @param[in]     opts    Scanner limits.
+     * @param[in]     model   PNS evaluator.
      * @return PULSEG_SUCCESS on success, negative error code on failure.
      */
     int pulseg_calc_pns(
         const pulseg_collection *coll,
         pulseg_pns_result *result,
         pulseg_diagnostic *diag,
+        pulseg_check_plan *plan,
         int subseq_idx,
         int canonical_tr_idx,
         const pulseg_opts *opts,

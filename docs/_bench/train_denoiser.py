@@ -5,18 +5,27 @@ Documentation-only tooling, run by hand. It writes a model bundle under
 ``docs/_models`` that :func:`pulserver.recon.load_model` resolves by name --
 the same deployment path a scanner uses, exercised end to end.
 
-The training set is the two-slice fastMRI demo subset DeepInverse
-distributes, knee and brain, four slices in all. That is a real dataset and a
-real training run, and it is small: the model this produces is a worked
-example of the path, not a reconstruction anyone should scan with.
+The training set is the fastMRI demo subset DeepInverse distributes, knee and
+brain, less the one slice the learned figures reconstruct -- so what those
+figures report is what the network does on data it has not seen. That is a
+real dataset and a real training run, and it is small: three slices make the
+model a worked example of the path, not a reconstruction anyone should scan
+with.
+
+The run is DeepInverse's own: :class:`deepinv.Trainer` over a
+:class:`deepinv.physics.Denoising` forward operator whose noise level is drawn
+per batch by a :class:`deepinv.physics.generator.SigmaGenerator`, supervised
+by :class:`deepinv.loss.SupLoss` and reported through
+:class:`deepinv.metric.PSNR`.
 
 Two details the data forces. The slices are root-sum-of-square
 reconstructions, so their imaginary part is identically zero; training on
 them directly would teach the network that the imaginary channel is always
-zero, which is useless for MRI. Every patch is therefore given a smooth
-random phase. And a plug-and-play prior is called at a schedule of noise
-levels, so the network takes the level as an input channel and is trained
-across the range a reconstruction sweeps -- a blind denoiser would make the
+zero, which is useless for MRI. A smooth random phase is therefore applied as
+a :class:`deepinv.transform.Transform`, composed with flips and quarter
+turns. And a plug-and-play prior is called at a schedule of noise levels, so
+the network takes the level as an input channel and is trained across the
+range a reconstruction sweeps -- a blind denoiser would make the
 regularization parameter inert.
 
 Usage::
@@ -50,8 +59,22 @@ ARCHITECTURE_KWARGS = {
 }
 
 
-def training_slices() -> torch.Tensor:
-    """Return the magnitude slices of the fastMRI demo subset."""
+def training_slices(hold_out_figure: bool = True) -> torch.Tensor:
+    """Return the magnitude slices of the fastMRI demo subset.
+
+    Parameters
+    ----------
+    hold_out_figure : bool, optional
+        Drop the slice the learned figures reconstruct. The demo subset is
+        four slices and one of them is that slice, so a model trained on all
+        four is scored on its own training data and the figure's numbers mean
+        nothing. Holding it out is what makes them generalization numbers.
+
+    Returns
+    -------
+    torch.Tensor
+        ``(slices, rows, columns)``, real, as the subset distributes them.
+    """
     from deepinv.datasets import SimpleFastMRISliceDataset
     from deepinv.utils import get_cache_home
 
@@ -61,59 +84,162 @@ def training_slices() -> torch.Tensor:
             get_cache_home(), anatomy=anatomy, download=True
         )
         slices += [dataset[index] for index in range(len(dataset))]
-    return torch.stack(slices)[:, 0]
+    stacked = torch.stack(slices)[:, 0]
+    if not hold_out_figure:
+        return stacked
+    return stacked[[
+        index
+        for index in range(stacked.shape[0])
+        if not _is_figure_slice(stacked[index])
+    ]]
 
 
-def _smooth_phase(count: int, size: int) -> torch.Tensor:
-    coarse = torch.randn(count, 1, 8, 8)
-    return (
-        torch.nn.functional.interpolate(
-            coarse, size=(size, size), mode="bicubic", align_corners=False
-        )[:, 0]
-        * 2.0
+def _is_figure_slice(candidate: torch.Tensor) -> bool:
+    """True when ``candidate`` is the slice the learned figures reconstruct."""
+    import sys
+
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from _figures import brain
+
+    shown = brain(candidate.shape[-1], coils=1).image[0].abs()
+    return bool(
+        torch.allclose(
+            candidate / candidate.max(), shown / shown.max(), atol=1e-4
+        )
     )
 
 
-def _patches(slices: torch.Tensor, count: int) -> torch.Tensor:
-    span = slices.shape[-1] - PATCH
-    index = torch.randint(0, slices.shape[0], (count,))
-    rows = torch.randint(0, span, (count,))
-    columns = torch.randint(0, span, (count,))
-    cropped = torch.stack(
-        [
-            slices[which, row : row + PATCH, column : column + PATCH]
-            for which, row, column in zip(index, rows, columns, strict=True)
+def smooth_phase_transform():
+    """Give a real slice the phase an MRI acquisition would have put on it.
+
+    Returns
+    -------
+    deepinv.transform.Transform
+        A transform drawing a smooth random phase field and applying it to a
+        two-channel real/imaginary image.
+    """
+    from deepinv.transform import Transform
+
+    class SmoothPhase(Transform):
+        """Multiply by ``exp(i phi)`` for a smooth random ``phi``."""
+
+        def _get_params(self, x: torch.Tensor) -> dict:
+            coarse = torch.randn(
+                x.shape[0], 1, 8, 8, device=x.device, dtype=x.dtype
+            )
+            phase = torch.nn.functional.interpolate(
+                coarse, size=x.shape[-2:], mode="bicubic", align_corners=False
+            )
+            return {"phase": phase[:, 0] * 2.0}
+
+        def _transform(self, x: torch.Tensor, phase=None, **kwargs) -> torch.Tensor:
+            rotation = torch.exp(1j * phase)
+            complex_image = torch.complex(x[:, 0], x[:, 1]) * rotation
+            return torch.stack([complex_image.real, complex_image.imag], 1)
+
+    return SmoothPhase()
+
+
+class PatchDataset(torch.utils.data.Dataset):
+    """Random complex patches of the training slices.
+
+    Parameters
+    ----------
+    slices : torch.Tensor
+        Magnitude slices, stacked on the leading axis.
+    length : int
+        Patches drawn per epoch.
+    patch : int, optional
+        Patch side.
+    """
+
+    def __init__(self, slices: torch.Tensor, length: int, patch: int = PATCH):
+        self.slices = slices
+        self.length = length
+        self.patch = patch
+        self.transform = smooth_phase_transform()
+
+    def __len__(self) -> int:
+        return self.length
+
+    def __getitem__(self, index: int) -> torch.Tensor:
+        span = self.slices.shape[-1] - self.patch
+        which = int(torch.randint(0, self.slices.shape[0], ()))
+        row = int(torch.randint(0, span, ()))
+        column = int(torch.randint(0, span, ()))
+        cropped = self.slices[
+            which, row : row + self.patch, column : column + self.patch
         ]
-    )
-    complex_patch = cropped * torch.exp(1j * _smooth_phase(count, PATCH))
-    return torch.stack([complex_patch.real, complex_patch.imag], 1)
+        real = torch.stack([cropped, torch.zeros_like(cropped)])
+        return self.transform(real[None])[0]
+
+
+class DenoiserUnderTraining(torch.nn.Module):
+    """Present a noise-conditioned denoiser as a DeepInverse reconstructor.
+
+    :class:`deepinv.Trainer` calls a model as ``model(y, physics)``; a
+    conditioned denoiser is called with the noise level. This reads the level
+    off the physics that produced the batch.
+
+    Parameters
+    ----------
+    inner : torch.nn.Module
+        The network to train.
+    """
+
+    def __init__(self, inner: torch.nn.Module):
+        from pulserver.recon import NoiseConditioned
+
+        super().__init__()
+        self.inner = inner
+        self.conditioned = NoiseConditioned(inner)
+
+    def forward(self, y: torch.Tensor, physics, **kwargs) -> torch.Tensor:
+        sigma = getattr(getattr(physics, "noise_model", None), "sigma", None)
+        return self.conditioned(y, sigma)
 
 
 def train(steps: int, seed: int = 0) -> torch.nn.Module:
     """Train the inner network and return it."""
     import deepinv
 
-    from pulserver.recon import NoiseConditioned
-
     torch.manual_seed(seed)
     slices = training_slices()
-    inner = deepinv.models.DnCNN(**ARCHITECTURE_KWARGS)
-    model = NoiseConditioned(inner)
-    optimizer = torch.optim.Adam(model.parameters(), lr=2e-3)
-    schedule = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=steps)
+
+    physics = deepinv.physics.Denoising(deepinv.physics.GaussianNoise())
     low, high = SIGMA_RANGE
+    generator = deepinv.physics.generator.SigmaGenerator(
+        sigma_min=low, sigma_max=high
+    )
+
+    loader = torch.utils.data.DataLoader(
+        PatchDataset(slices, length=steps * BATCH), batch_size=BATCH
+    )
+    inner = deepinv.models.DnCNN(**ARCHITECTURE_KWARGS)
+    model = DenoiserUnderTraining(inner)
+    optimizer = torch.optim.Adam(model.parameters(), lr=2e-3)
+
     started = time.perf_counter()
-    for step in range(steps):
-        clean = _patches(slices, BATCH)
-        sigma = torch.rand(BATCH) * (high - low) + low
-        noisy = clean + sigma.reshape(-1, 1, 1, 1) * torch.randn_like(clean)
-        loss = torch.nn.functional.mse_loss(model(noisy, sigma), clean)
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-        schedule.step()
-        if step % 400 == 0:
-            print(f"  step {step:5d}  loss {float(loss.detach()):.5f}")
+    deepinv.Trainer(
+        model=model,
+        physics=physics,
+        optimizer=optimizer,
+        train_dataloader=loader,
+        physics_generator=generator,
+        online_measurements=True,
+        losses=deepinv.loss.SupLoss(metric=deepinv.metric.MSE()),
+        metrics=deepinv.metric.PSNR(),
+        scheduler=torch.optim.lr_scheduler.CosineAnnealingLR(
+            optimizer, T_max=steps
+        ),
+        epochs=1,
+        device="cpu",
+        non_blocking_transfers=False,
+        save_path=None,
+        plot_images=False,
+        show_progress_bar=False,
+        verbose=True,
+    ).train()
     print(f"{steps} steps in {time.perf_counter() - started:.0f}s")
     return inner
 
@@ -123,9 +249,9 @@ def report(inner: torch.nn.Module) -> None:
     from pulserver.recon import NoiseConditioned
 
     model = NoiseConditioned(inner).eval()
-    slices = training_slices()
+    dataset = PatchDataset(training_slices(), length=32)
     with torch.no_grad():
-        clean = _patches(slices, 32)
+        clean = torch.stack([dataset[index] for index in range(32)])
         for sigma in (0.03, 0.08, 0.15):
             noisy = clean + sigma * torch.randn_like(clean)
             levels = torch.full((clean.shape[0],), sigma)
@@ -138,10 +264,8 @@ def report(inner: torch.nn.Module) -> None:
                 f"  sigma {sigma:.2f}: {peak(noisy):5.2f} dB "
                 f"-> {peak(model(noisy, levels)):5.2f} dB"
             )
-        sample = _patches(slices, 4)
-        quiet, loud = model(sample, low := 0.01), model(sample, 0.2)
-        del low
-        if torch.allclose(quiet, loud):
+        sample = clean[:4]
+        if torch.allclose(model(sample, 0.01), model(sample, 0.2)):
             raise SystemExit(
                 "the noise level does not reach the network: a blind denoiser "
                 "leaves the regularization parameter inert"
@@ -173,11 +297,15 @@ def main() -> None:
         architecture=ARCHITECTURE,
         kwargs=ARCHITECTURE_KWARGS,
         metadata={
-            "trained_on": "fastMRI demo subset, knee and brain, 4 slices",
+            "trained_on": (
+                "fastMRI demo subset, knee and brain, less the slice the "
+                "learned figures reconstruct"
+            ),
             "patch": PATCH,
             "steps": arguments.steps,
             "sigma_range": list(SIGMA_RANGE),
             "conditioning": "noise level as a third input channel",
+            "trainer": "deepinv.Trainer, SupLoss(MSE), PSNR",
         },
         promote=True,
     )

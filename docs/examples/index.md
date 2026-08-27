@@ -9,13 +9,13 @@ and reconstructs them.
 ```{toctree}
 :maxdepth: 1
 
-python/first_sequence
-python/protocol_ui
-python/safety_report
-python/new_readout
-python/bridge_gui
-python/reconstruction
+python/index
 ```
+
+Still to be written, and listed here so the gaps are visible: a first sequence
+end to end, declaring a protocol and the UI it produces, reading a safety
+report, subclassing a readout family, and driving one plugin from both the GUI
+and a console loop.
 
 ## C — writing an interpreter
 

@@ -116,8 +116,27 @@ a sphere (`Projection`).
 
 `NonCartesianReadout` is the base a new family subclasses: design a
 trajectory, hand it over, and the bracket alignment, TE and TR budget,
-spoiler and explicit-rotation path are inherited. See
-{doc}`../../examples/python/new_readout`.
+spoiler and explicit-rotation path are inherited.
+
+## Navigators
+
+A navigator encodes nothing. It is a handful of cheap planes played in dead
+time so that something the image cannot show — where the head is now — can be
+measured while the scan runs. `SpiralNavigator` is the rigid-motion one: a
+low-flip slab-selective excitation and one spiral arm, played once per plane
+under a rotation, with every readout flagged `NAV` so the scanner delivers it
+on an encoding space of its own. The flip is low because the navigator
+excites the water the host sequence is imaging, which is the cost that bounds
+how many of them a recovery period should hold.
+{func}`~pulserver.app.pmc_recon` is what turns them into a correction.
+
+```{eval-rst}
+.. autosummary::
+   :toctree: ../generated/design
+   :template: autosummary/class.rst
+
+   SpiralNavigator
+```
 
 ## Base
 

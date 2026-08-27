@@ -134,7 +134,7 @@ them go out of scope.
 
 The nerve model is still injected, as in C: `Collection::calc_pns` and
 `Collection::check_safety` take a `pulseg_pns_model`, and the two published
-forms are initialised through {doc}`../c/safety`'s `pulseg_pns_*_init`.
+forms are initialised through {doc}`../c/checks`'s `pulseg_pns_*_init`.
 
 ### Sequence description
 
@@ -164,7 +164,7 @@ forms are initialised through {doc}`../c/safety`'s `pulseg_pns_*_init`.
 
 ## See also
 
-{doc}`../c/pulseg` is the library underneath, and the one to read for what a
+{doc}`../c/index` is the library underneath, and the one to read for what a
 call actually does; this page is the ownership and error handling over it.
 {doc}`../../examples/cpp/safety_only` is the smallest integration that
 matters: a `.seq`, an `Opts`, a verdict.

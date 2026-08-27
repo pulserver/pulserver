@@ -67,8 +67,6 @@ const char *pulseg_get_error_message(int code)
         return "MD5 signature verification failed";
     case PULSEG_ERR_SIGNATURE_MISSING:
         return "Sequence file has no [SIGNATURE] section or stored hash";
-    case PULSEG_ERR_ADC_DEFINITION_CONFLICT:
-        return "A non-acquiring block matches more than one ADC definition";
     case PULSEG_ERR_RASTER_ALIGNMENT:
         return "An event time does not land on the system raster it is played against";
     case PULSEG_ERR_BLOCK_DURATION_OVERRUN:
@@ -77,6 +75,8 @@ const char *pulseg_get_error_message(int code)
         return "Index out of range";
     case PULSEG_ERR_TOO_MANY_GRAD_SHOTS:
         return "Number of waveform shots exceeds maximum allowed";
+    case PULSEG_ERR_SEG_TOO_MANY_ADC_VARIANTS:
+        return "A segment is played with too many distinct readout patterns";
     case PULSEG_ERR_TR_NO_BLOCKS:
         return "Sequence contains no blocks";
     case PULSEG_ERR_TR_NO_PERIODIC_PATTERN:
@@ -155,14 +155,14 @@ const char *pulseg_get_error_hint(int code)
     case PULSEG_ERR_SEG_NONZERO_END_GRAD:
         return "Each segment must begin and end with gradient amplitudes that can "
                "ramp to/from zero within one gradient raster.";
-    case PULSEG_ERR_ADC_DEFINITION_CONFLICT:
-        return "A block position holds instances that do not acquire alongside two or "
-               "more different ADC events (different num_samples, dwell time, or "
-               "delay), so which readout the non-acquiring instances stand in for is "
-               "not written anywhere. Give those instances the ADC they belong to, or "
-               "keep one ADC structure per block.";
     case PULSEG_ERR_TOO_MANY_GRAD_SHOTS:
         return "The sequence contains a waveform with more than 16 distinct waveform shapes.";
+    case PULSEG_ERR_SEG_TOO_MANY_ADC_VARIANTS:
+        return "One segment is played with more distinct combinations of ADC events "
+               "than the scanner can hold prepared, because each combination needs a "
+               "segment of its own to bind its receive filters. Reuse one ADC "
+               "structure across repetitions, or split the readouts into separate "
+               "subsequences.";
     case PULSEG_ERR_MAX_GRAD_EXCEEDED:
         return "The gradient sum-of-squares amplitude exceeds the system limit. "
                "See diagnostic message for details.";

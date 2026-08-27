@@ -45,6 +45,9 @@ __all__ = [
     "MODELS",
     "ORDINAL",
     "brain",
+    "context_example",
+    "ixi_stack",
+    "learned_example",
     "SAMPLING",
     "SERIES",
     "excitation_kspace",
@@ -1789,3 +1792,198 @@ def wave_gradients(
         [amplitude * torch.sin(rate * times), amplitude * torch.cos(rate * times)]
     )
     return gradients, raster, times
+
+
+# ----------------------------------------------------------------------
+# Learned reconstruction
+# ----------------------------------------------------------------------
+
+
+def ixi_stack():
+    """Return the contiguous brain slices the context adapter denoises.
+
+    The slices are derived once by ``docs/_bench/make_ixi_stack.py`` from
+    TorchIO's IXITiny through :class:`~pulserver.recon.IXITiny`, and committed
+    beside the model bundles, so drawing the figure reads a file rather than
+    fetching from a third-party host.
+
+    Returns
+    -------
+    torch.Tensor
+        ``(slices, rows, columns)``, real, scaled to a unit peak.
+    """
+    import torch
+
+    return torch.load(MODELS / "ixi-stack" / "slices.pt").float()
+
+
+def _accelerated(size: int, coils: int, acceleration: int, calibration: int):
+    """One slice, and the undersampled Cartesian physics that measures it."""
+    import torch
+
+    from pulserver.recon import Cartesian2D
+
+    truth, coil_maps = brain(size, coils=coils)
+    image = torch.stack([truth.real, truth.imag], 1)
+
+    mask = torch.zeros(1, 1, size, size)
+    mask[..., ::acceleration, :] = 1.0
+    first = (size - calibration) // 2
+    mask[..., first : first + calibration, :] = 1.0
+
+    physics = Cartesian2D(mask, coil_maps, viewed_as_real=True)
+    return truth, image, physics
+
+
+def _unrolled_from_bundle(iterations: int | None = None):
+    """Rebuild the unroll that ``train_unroll.py`` deployed.
+
+    The bundle carries the prior network; the algorithm parameters it was
+    trained beside are in the manifest, so the optimizer reassembles from the
+    two without a second source of truth.
+    """
+    import deepinv
+
+    from pulserver.recon import ModelStore, NormalEquationL2, ScaledAdjoint
+
+    bundle = ModelStore([MODELS]).resolve("fastmri-unroll")
+    network = bundle.load().eval()
+    recorded = bundle.metadata
+    learned = recorded["params_algo"]
+    return deepinv.optim.PGD(
+        data_fidelity=NormalEquationL2(),
+        prior=deepinv.optim.PnP(network),
+        params_algo={
+            "stepsize": learned["stepsize"],
+            "g_param": learned["g_param"],
+            "lambda": learned["lambda"],
+        },
+        max_iter=iterations or recorded["max_iter"],
+        custom_init=ScaledAdjoint(),
+    ).eval()
+
+
+def learned_example(
+    *,
+    size: int = 160,
+    coils: int = 4,
+    acceleration: int = 4,
+    calibration: int = 16,
+    iterations: int = 16,
+):
+    """Reconstruct one accelerated Cartesian scan four ways.
+
+    The scan is a fastMRI brain slice measured through the analytic receive
+    array, undersampled uniformly with a fully sampled centre. What differs
+    between the panels is only what fills in what the scan did not measure:
+    nothing, a total-variation prior, a foundation model applied directly, and
+    an unroll trained against this physics.
+
+    Parameters
+    ----------
+    size : int, optional
+        Matrix size, square.
+    coils : int, optional
+        Elements in the receive array.
+    acceleration : int, optional
+        Uniform phase-encode undersampling factor.
+    calibration : int, optional
+        Fully sampled lines at the centre.
+    iterations : int, optional
+        Iterations for the total-variation solve.
+
+    Returns
+    -------
+    list of tuple
+        ``(label, image)`` panels for :func:`images`, the label carrying the
+        peak signal-to-noise ratio where there is a truth to measure against.
+    """
+    import deepinv
+    import torch
+
+    from pulserver.recon import TV, ScaledAdjoint, pics
+
+    truth, image, physics = _accelerated(size, coils, acceleration, calibration)
+    measured = physics.A(image)
+
+    def decibels(value):
+        error = torch.nn.functional.mse_loss(value, image)
+        return float(10 * torch.log10(image.abs().max() ** 2 / error))
+
+    def magnitude(value):
+        return torch.complex(value[:, 0], value[:, 1])[0].abs()
+
+    with torch.no_grad():
+        adjoint = ScaledAdjoint()(measured, physics)
+        classical = pics(
+            measured, physics, TV(), regularization=0.01, iterations=iterations
+        )
+        foundation = deepinv.models.RAM(pretrained=True).eval()(measured, physics)
+        unrolled = _unrolled_from_bundle()(measured, physics)
+
+    reconstructions = [
+        ("zero filled", adjoint),
+        ("total variation", classical),
+        ("RAM, applied directly", foundation),
+        ("unrolled, trained here", unrolled),
+    ]
+    return [("object", truth[0].abs())] + [
+        (f"{label}, {decibels(value):.1f} dB", magnitude(value))
+        for label, value in reconstructions
+    ]
+
+
+def context_example(*, sigma: float = 0.12, shown: int = 4):
+    """Denoise a stack of brain slices with a two-dimensional network.
+
+    :class:`~pulserver.recon.ContextAgnosticDenoiser` folds whatever axes a
+    volume carries above the spatial ones into the batch a 2D network expects,
+    so one slice-wise denoiser reaches a whole stack in one call. The slices
+    are adjacent, which is what makes the result worth looking at as a volume
+    rather than as independent pictures.
+
+    Parameters
+    ----------
+    sigma : float, optional
+        Noise level added to the stack, and the level the denoiser is called
+        at.
+    shown : int, optional
+        Slices drawn, taken from the middle of the stack.
+
+    Returns
+    -------
+    tuple
+        The noisy and denoised stacks, and the peak signal-to-noise ratio of
+        each, so a caller draws what it likes from them.
+    """
+    import torch
+
+    from pulserver.recon import (
+        ContextAgnosticDenoiser,
+        NoiseConditioned,
+        load_model,
+    )
+
+    torch.manual_seed(0)
+    truth = ixi_stack()
+    volume = torch.stack([truth, torch.zeros_like(truth)], 1)
+    noisy = volume + sigma * torch.randn_like(volume)
+
+    denoiser = ContextAgnosticDenoiser(
+        NoiseConditioned(load_model("fastmri-denoiser", paths=[MODELS])).eval()
+    )
+    with torch.no_grad():
+        cleaned = denoiser(noisy, sigma)
+
+    def decibels(value):
+        error = torch.nn.functional.mse_loss(value, volume)
+        return float(10 * torch.log10(volume.abs().max() ** 2 / error))
+
+    first = max((truth.shape[0] - shown) // 2, 0)
+    window = slice(first, first + shown)
+    return (
+        noisy[window, 0],
+        cleaned[window, 0],
+        decibels(noisy),
+        decibels(cleaned),
+    )

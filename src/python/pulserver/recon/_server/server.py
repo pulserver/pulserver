@@ -57,7 +57,7 @@ class Server:
         save_data: bool = False,
         handler_dirs: list[str] | None = None,
         rtp_port: int | None = None,
-        rtp_handler: str = "pmcrecon",
+        rtp_handler: str = "pmc_recon",
         max_concurrent_recons: int | None = None,
         per_recon_gb: float = 48.0,
         idle_timeout_s: int = 0,
@@ -466,12 +466,21 @@ class Server:
 
     @staticmethod
     def _try_import_processor(name: str):
-        """Import a legacy process module used only by the private RTP server."""
-        try:
-            module = importlib.import_module(name)
-        except ImportError:
-            return None
-        return module if callable(getattr(module, "process", None)) else None
+        """Import the module the private RTP server drives, by handler name.
+
+        Reached the same two ways a reconstruction app is: whatever the name
+        resolves to on its own, and then the shipped zoo, so a handler the
+        console names by its plugin name is found without a path.
+        """
+        candidates = (name, f"pulserver.app.recon.{name}")
+        for candidate in candidates:
+            try:
+                module = importlib.import_module(candidate)
+            except ImportError:
+                continue
+            if callable(getattr(module, "process", None)):
+                return module
+        return None
 
     @staticmethod
     def _load_processor_from_file(name: str, path: str):

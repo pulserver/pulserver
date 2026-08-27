@@ -1,0 +1,33 @@
+{
+  "architecture": "deepinv.models.DnCNN",
+  "checkpoint": "weights.pt",
+  "kwargs": {
+    "depth": 8,
+    "in_channels": 2,
+    "nf": 32,
+    "out_channels": 2,
+    "pretrained": null
+  },
+  "metadata": {
+    "acceleration": 4,
+    "algorithm": "deepinv.optim.PGD",
+    "calibration_lines": 16,
+    "coils": 4,
+    "data_fidelity": "pulserver.recon.NormalEquationL2",
+    "max_iter": 6,
+    "params_algo": {
+      "beta": 1.0018609762191772,
+      "g_param": 0.05000000074505806,
+      "lambda": 1.0,
+      "stepsize": 1.025492548942566
+    },
+    "size": 160,
+    "steps": 1500,
+    "trained_on": "fastMRI demo subset, knee and brain, less the slice the learned figures reconstruct",
+    "trainer": "deepinv.Trainer, SupLoss(MSE), PSNR"
+  },
+  "name": "fastmri-unroll",
+  "schema_version": 1,
+  "sha256": "36d396059f436d394c9d618f786c5110b8b290ee2a8ea59872215d6ae9ad3bb7",
+  "version": "1.0"
+}

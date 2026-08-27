@@ -43,6 +43,25 @@ TIME_BW_PRODUCT = 4.0
 MAX_GRAD = 80.0
 MAX_SLEW = 200.0
 
+#: Whether the plugin plays motion navigators. Three orthogonal spiral
+#: navigators ride in the TR wait after each echo train, where they cost no
+#: scan time, and a reconstruction tracks the head's pose from them -- see
+#: :mod:`pulserver.app.pmc_recon`. They are off by default because they excite
+#: the same water the readout images: every navigator takes a little
+#: longitudinal magnetisation out of the volume.
+NAVIGATOR = False
+
+#: Repetition time of one three-plane navigator (s). The paper this follows
+#: paces them at 100 ms, which leaves room for each to be reconstructed and its
+#: pose estimated before the next arrives.
+NAVIGATOR_TR = 100e-3
+
+#: How many navigators one TR wait carries when the count is left to
+#: ``"auto"``. Not a limit of the dead time but of the physics: a navigator
+#: excites the magnetisation the wait is restoring, so a train that filled it
+#: would defeat it. Five is what the method was validated with.
+NAVIGATOR_COUNT = 5
+
 #: The selectable view orderings; see the module docstring. Each dispatches to
 #: the matching :mod:`pulserver.pypulseq` echo-train ordering builtin.
 ORDERINGS = ("linear", "centric", "radial", "radial_adaptive", "shuffling")
@@ -81,6 +100,8 @@ def main(
     n_gain_calibration_readouts: int = 1,
     crusher_cycles: float = 4.0,
     readout_crusher_cycles: float = 0.0,
+    navigator: bool = False,
+    n_navigators: int | str = "auto",
 ) -> pp.Sequence:
     """Create a 3D Cartesian fast spin-echo sequence.
 
@@ -354,6 +375,8 @@ def main(
         shuffle_seed=shuffle_seed,
         crusher_cycles=crusher_cycles,
         readout_crusher_cycles=readout_crusher_cycles,
+        navigator=navigator,
+        n_navigators=n_navigators,
     )
     fse = kernel.readout
     timing = kernel.timing
@@ -405,6 +428,9 @@ def main(
                 pp.scale_grad(fse.gy_rew, ky),
                 pp.scale_grad(fse.gz_rew, kz),
             )
+        for _ in range(kernel.n_navigators):
+            for block in kernel.navigator.blocks:
+                seq.add_block(*block)
         if timing.wait_tr is not None:
             seq.add_block(timing.wait_tr)
         fse.rf_ref.amplitude = nominal
@@ -606,6 +632,8 @@ def FSE3DKernel(
     shuffle_seed: int = 0,
     crusher_cycles: float = 4.0,
     readout_crusher_cycles: float = 0.0,
+    navigator: bool = False,
+    n_navigators: int | str = "auto",
 ) -> SimpleNamespace:
     """Design the train, its flip schedule, and the view order that fills it.
 
@@ -669,6 +697,20 @@ n_dummy, shuffle_seed, crusher_cycles, readout_crusher_cycles
 
     length = fse.seq.duration()[0]
     wait_tr = None
+
+    navigator_module = None
+    navigator_count = 0
+    navigator_time = 0.0
+    if navigator:
+        navigator_module = design.SpiralNavigator(system, navigator_tr=NAVIGATOR_TR)
+        navigator_count = navigator_module.fit(
+            0.0 if tr is None else max(tr - length, 0.0),
+            n_navigators,
+            limit=NAVIGATOR_COUNT,
+        )
+        navigator_time = navigator_count * navigator_module.duration
+        length += navigator_time
+
     if tr is not None:
         if tr < length - 1e-9:
             raise ValueError(
@@ -737,6 +779,8 @@ n_dummy, shuffle_seed, crusher_cycles, readout_crusher_cycles
         n_center=n_center,
         flip_schedule_deg=flips,
         echo_spacing=esp,
+        navigator=navigator_module,
+        n_navigators=navigator_count,
         echo_time=echo_time,
         repetition_time=timing.length,
         bandwidth_hz=fse.bandwidth_hz,
@@ -981,6 +1025,7 @@ def protocol_kwargs(system: pp.Opts, protocol: dict[str, dict]) -> dict:
         alpha_min_deg=params.user_float(prot, 6, 60.0),
         alpha_center_deg=params.user_float(prot, 7, 100.0),
         elliptical=bool(round(params.user_float(prot, 8, 1.0))),
+        navigator=NAVIGATOR,
     )
 
 

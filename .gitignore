@@ -66,8 +66,12 @@ htmlcov/
 # Rendered output only. Everything under docs/ that is a source is tracked.
 docs/_build/
 docs/_doxygen/
+docs/_doxygen_c/
 docs/generated/
 docs/api/generated/
+# Sphinx-gallery renders docs/_gallery into this directory.
+docs/examples/python/
+docs/sg_execution_times.rst
 docs_build/
 jupyter_execute/
 # Documentation-only benchmark tooling: the binary it builds and the

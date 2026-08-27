@@ -2112,13 +2112,20 @@ int pulseg__try_read_cache(pulseg_collection *coll, const char *seq_path, const 
 /*  Public API: explicit-path cache save / load                       */
 /* ================================================================== */
 
-int pulseg_save_cache(const pulseg_collection *coll, const char *path, int source_size)
+int pulseg_save_cache_to_path(const pulseg_collection *coll, const char *path, int source_size)
 {
     if (!coll || !path)
         return PULSEG_ERR_NULL_POINTER;
     if (source_size <= 0)
         return PULSEG_ERR_INVALID_ARGUMENT;
     return write_cache(path, coll, source_size) ? PULSEG_SUCCESS : PULSEG_ERR_FILE_READ_FAILED;
+}
+
+int pulseg_save_cache(pulseg_collection *coll, const char *seq_path, const pulseg_opts *opts)
+{
+    if (!coll || !seq_path || !opts)
+        return PULSEG_ERR_NULL_POINTER;
+    return pulseg__write_cache(coll, seq_path, opts) ? PULSEG_SUCCESS : PULSEG_ERR_FILE_READ_FAILED;
 }
 
 int pulseg_load_cache(pulseg_collection *coll, const char *path, int source_size)

@@ -29,17 +29,25 @@ VENDORED = (
     "gadgetron_ismrmrd_client.h",
 )
 
+#: The C include tree on its own. ``raw64.hpp`` deliberately re-instantiates
+#: the C Pulseq reader inside ``pulseq::raw64`` at double precision, so in a
+#: run covering both trees every ``pulseq_*`` name exists twice and Breathe
+#: cannot tell which one a C page means. A second run over the C headers alone
+#: gives those pages an unambiguous scope.
+C_HEADERS = ("src/c/include",)
+
 #: Where the XML lands. Generated output, so it is not tracked.
 XML = Path(__file__).resolve().parent / "_doxygen"
 
+#: Where the C-only XML lands.
+XML_C = Path(__file__).resolve().parent / "_doxygen_c"
 
-def run(output: Path = XML) -> bool:
+
+def run() -> bool:
     """Generate the Doxygen XML, or report that Doxygen is not installed.
 
-    Parameters
-    ----------
-    output : Path, optional
-        Directory the XML is written into. Created if it does not exist.
+    Two runs are produced: :data:`XML` over every header, and :data:`XML_C`
+    over the C include tree alone. See :data:`C_HEADERS` for why.
 
     Returns
     -------
@@ -55,8 +63,15 @@ def run(output: Path = XML) -> bool:
     if doxygen is None:
         return False
 
+    _generate(doxygen, XML, HEADERS)
+    _generate(doxygen, XML_C, C_HEADERS)
+    return True
+
+
+def _generate(doxygen: str, output: Path, trees: tuple[str, ...]) -> None:
+    """Run Doxygen over ``trees``, writing XML into ``output``."""
     output.mkdir(parents=True, exist_ok=True)
-    headers = " ".join(str(_REPOSITORY / part) for part in HEADERS)
+    headers = " ".join(str(_REPOSITORY / part) for part in trees)
     # Everything else is Doxygen's default. The comments in the headers are
     # what this build is for; the HTML, the graphs and the LaTeX are not.
     configuration = "\n".join(
@@ -77,6 +92,11 @@ def run(output: Path = XML) -> bool:
             # comment is a defect, so ``WARN_IF_DOC_ERROR`` stays on.
             "WARN_IF_INCOMPLETE_DOC = NO",
             "WARN_IF_UNDOCUMENTED = NO",
+            # A Markdown heading inside a comment is a heading, not a
+            # section of its own: Doxygen's sectioning is what Breathe
+            # renders structurally, and a heading promoted into it arrives
+            # as a section with no title.
+            "TOC_INCLUDE_HEADINGS = 0",
             "EXTRACT_ALL = YES",
             "EXTRACT_STATIC = YES",
             "MACRO_EXPANSION = YES",
@@ -93,7 +113,6 @@ def run(output: Path = XML) -> bool:
         cwd=_REPOSITORY,
     )
     _substitute_dashes(output)
-    return True
 
 
 def _substitute_dashes(output: Path) -> None:

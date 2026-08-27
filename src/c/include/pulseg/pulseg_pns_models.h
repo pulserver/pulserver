@@ -98,6 +98,54 @@ extern "C"
      */
     void pulseg_pns_safe_init(pulseg_pns_model *model, pulseg_pns_safe *ctx);
 
+    /* ================================================================== */
+    /*  Convolution plan, for a caller's own linear model                 */
+    /* ================================================================== */
+
+    /**
+     * @brief A reusable FFT-convolution plan.
+     *
+     * A model that is a convolution has to evaluate three gradient axes
+     * against one kernel.  A plan transforms that kernel once and allocates
+     * the transform's twiddle tables once, rather than repeating both per
+     * axis.
+     *
+     * This is published because a vendor's stimulation model is caller-side
+     * code: it would otherwise have to bring its own FFT to do what the
+     * models here already do.
+     */
+    typedef struct pulseg_conv_fft_plan pulseg_conv_fft_plan;
+
+    /**
+     * @brief Build a plan for convolving @p signal_len samples with @p kernel.
+     *
+     * @param[out] out_plan    Receives the plan; free with
+     *                         pulseg_conv_fft_plan_free().
+     * @param[in]  signal_len  Length of every signal the plan will be applied
+     *                         to.
+     * @param[in]  kernel      Impulse response, borrowed only for this call.
+     * @param[in]  kernel_len  Length of @p kernel.
+     * @return PULSEG_SUCCESS or a negative error code.
+     */
+    int pulseg_conv_fft_plan_create(
+        pulseg_conv_fft_plan **out_plan,
+        int signal_len,
+        const float *kernel,
+        int kernel_len);
+
+    /**
+     * @brief Convolve one signal through a plan.
+     *
+     * @param[in]  plan    Plan from pulseg_conv_fft_plan_create().
+     * @param[out] output  Receives @c signal_len samples.
+     * @param[in]  signal  @c signal_len input samples.
+     * @return PULSEG_SUCCESS or a negative error code.
+     */
+    int pulseg_conv_fft_plan_apply(pulseg_conv_fft_plan *plan, float *output, const float *signal);
+
+    /** @brief Free a plan. Safe on NULL. */
+    void pulseg_conv_fft_plan_free(pulseg_conv_fft_plan *plan);
+
 #ifdef __cplusplus
 }
 #endif

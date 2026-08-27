@@ -533,8 +533,7 @@ static int send_protocol(pulseg_bridge *b, const pulseg_protocol *proto)
 int pulseg_bridge_validate(
     pulseg_bridge *b,
     float *duration,
-    char *info,
-    int infosz,
+    pulseg_text_buffer *info,
     const pulseg_protocol *proto)
 {
     char resp[PULSEG_BRIDGE_LINE_MAX];
@@ -577,10 +576,10 @@ int pulseg_bridge_validate(
             p++;
         if (*p == ' ')
             p++;
-        if (info && infosz > 0)
+        if (info && info->data && info->capacity > 0)
         {
-            strncpy(info, p, infosz - 1);
-            info[infosz - 1] = '\0';
+            strncpy(info->data, p, (size_t)info->capacity - 1);
+            info->data[info->capacity - 1] = '\0';
         }
         return 1;
     }
@@ -589,10 +588,10 @@ int pulseg_bridge_validate(
         const char *p = resp + 7;
         if (*p == ' ')
             p++;
-        if (info && infosz > 0)
+        if (info && info->data && info->capacity > 0)
         {
-            strncpy(info, p, infosz - 1);
-            info[infosz - 1] = '\0';
+            strncpy(info->data, p, (size_t)info->capacity - 1);
+            info->data[info->capacity - 1] = '\0';
         }
         return 0;
     }

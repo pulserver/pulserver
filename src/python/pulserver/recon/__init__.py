@@ -59,6 +59,7 @@ _MEMBERS = {
     "NLINV": "calibration",
     "NLINVPhysics": "calibration",
     "NLINVResult": "calibration",
+    "NavigatorMotionTracker": "motion",
     "NoiseAdjust": "gadgets",
     "NoiseConditioned": "adapters",
     "NonCartesian2D": "physics",
@@ -69,6 +70,7 @@ _MEMBERS = {
     "OptimState": "optim.state",
     "PDHG": "optim.pdhg",
     "PhasePoleCorrection": "calibration",
+    "PmcPayload": "_server.rtp_connection",
     "PolynomialPreconditioner": "optim._algorithms",
     "Positive": "denoisers",
     "RampSampling": "gadgets",
@@ -165,6 +167,8 @@ if TYPE_CHECKING:
     from .adapters import ComplexDenoiser as ComplexDenoiser
     from .adapters import ContextAgnosticDenoiser as ContextAgnosticDenoiser
     from .adapters import NoiseConditioned as NoiseConditioned
+    from .motion import NavigatorMotionTracker as NavigatorMotionTracker
+    from ._server.rtp_connection import PmcPayload as PmcPayload
     from .motion import RigidMotionEKF as RigidMotionEKF
     from .motion import RigidMotionEstimate as RigidMotionEstimate
     from .motion import RigidRegistration as RigidRegistration

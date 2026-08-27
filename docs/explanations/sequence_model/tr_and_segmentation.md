@@ -33,8 +33,10 @@ Two properties make this well-posed:
   its delay and its magnitude, phase and time shapes — a pulse is never
   swapped for another under the same structure; a trapezoid by its delay,
   rise, flat and fall; an arbitrary gradient by its delay and its time shape,
-  or its sample count where the samples sit on the raster; an ADC by its
-  delay, dwell and number of samples. A segment is a timing pattern.
+  or its sample count where the samples sit on the raster. The ADC is left
+  out altogether: which readout a block digitises with is carried by the
+  instance, so a train alternating between two of them still repeats every
+  shot rather than every pair.
 - **Pure delays match any pure delay.** A TI fill or a TR pad whose duration
   varies is one position whose duration is a runtime parameter, not a
   different sequence. This is the same relaxation the Pulseq specification
@@ -87,6 +89,15 @@ the same period as each other.
 The partition satisfies the constraints the PulSeg specification places on a
 virtual segment: every instance has the same block count and the same
 normalized structure.
+
+A segment also carries the readout, not only the timing. Preparing one binds
+a receive filter chain to each of its block positions, so repetitions that
+digitise the same position with different ADC events cannot share it. The
+partition is therefore matched on *whether* a position acquires — which is
+what keeps a dummy shot on the segment it stands in for — and then split by
+the readouts each repetition actually plays. Two echoes of different length
+at one position give two segments; a shot that acquires nothing there joins
+either of them, since neither filter is used for it.
 
 ### Two decompositions
 

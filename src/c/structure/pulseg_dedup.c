@@ -1887,9 +1887,12 @@ int pulseg__get_unique_blocks(
             num_raw_defs,
             BLOCK_GEOMETRY_COLS);
 
-        /* geometry_defs is reused as "the one acquiring definition of this
-         * geometry", -1 while none is known and -2 once a second one makes the
-         * choice ambiguous. */
+        /* geometry_defs is reused as "an acquiring definition of this
+         * geometry", -1 while none is known.  Where the geometry has several,
+         * any of them serves: a non-acquiring instance carries adc_id -1 on
+         * its own table entry, so the readout on the definition it folds into
+         * is never read for it, and the segment it joins is decided later
+         * from the readouts its repetition actually plays. */
         for (g = 0; g < num_geometries; ++g)
             geometry_defs[g] = -1;
         for (k = 0; k < num_raw_defs; ++k)
@@ -1897,7 +1900,8 @@ int pulseg__get_unique_blocks(
             if (int_rows[unique_defs[k]][5] < 0)
                 continue;
             g = geometry_of[k];
-            geometry_defs[g] = (geometry_defs[g] == -1) ? k : -2;
+            if (geometry_defs[g] == -1)
+                geometry_defs[g] = k;
         }
 
         for (k = 0; k < num_raw_defs; ++k)
@@ -1906,15 +1910,6 @@ int pulseg__get_unique_blocks(
             if (int_rows[unique_defs[k]][5] >= 0)
                 continue;
             g = geometry_defs[geometry_of[k]];
-            if (g == -2)
-            {
-                /* Two ADC definitions share this block's timing, so which one
-                 * the non-acquiring instances stand in for is not written
-                 * anywhere.  Guessing would silently misdescribe the readout. */
-                result = PULSEG_ERR_ADC_DEFINITION_CONFLICT;
-                pulseg_sequence_descriptor_free(desc);
-                goto fail;
-            }
             if (g >= 0)
                 def_map[k] = g;
         }

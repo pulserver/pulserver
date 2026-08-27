@@ -227,7 +227,7 @@ class RtpServer:
                     conn._sw.read(size).decode("utf-8", errors="replace").rstrip("\x00")
                 )
             else:
-                config = "pmcrecon"
+                config = "pmc_recon"
 
             # Read ISMRMRD XML header
             mid = conn._read_mid()

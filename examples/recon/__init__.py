@@ -37,6 +37,7 @@ __all__ = [
     "noncartesian2D_recon",
     "noncartesian3D_recon",
     "noncartesian_stack_recon",
+    "pmc_recon",
 ]
 
 

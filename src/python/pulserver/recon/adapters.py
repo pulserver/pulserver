@@ -105,6 +105,36 @@ class ContextAgnosticDenoiser(_Denoiser):
     >>> wrapped = recon.ContextAgnosticDenoiser(recon.TV(), spatial_ndim=2)
     >>> isinstance(wrapped, recon.ContextAgnosticDenoiser)
     True
+
+    The figure denoises sixteen adjacent slices of an IXI brain volume with a
+    network that has only ever seen one slice at a time, and draws four of
+    them. The slice axis is context: it is folded into the batch, denoised,
+    and folded back, so the whole stack is one call rather than a loop, and
+    the score is over the whole stack.
+
+    .. plot::
+
+       import matplotlib.pyplot as plt
+       from _figures import context_example
+
+       noisy, cleaned, before, after = context_example()
+
+       figure, panels = plt.subplots(2, noisy.shape[0], figsize=(9.5, 5.4))
+       for column in range(noisy.shape[0]):
+           for row, (stack, score) in enumerate(
+               ((noisy, before), (cleaned, after))
+           ):
+               panels[row, column].imshow(stack[column], cmap="gray",
+                                          vmin=0, vmax=1)
+               panels[row, column].set_axis_off()
+       panels[0, 0].set_title(f"measured, {before:.1f} dB", loc="left",
+                              fontsize=9)
+       panels[1, 0].set_title(f"denoised, {after:.1f} dB", loc="left",
+                              fontsize=9)
+       figure.suptitle(
+           "one slice-wise denoiser, one call: sixteen slices, four shown"
+       )
+       figure.tight_layout()
     """
 
     def __init__(

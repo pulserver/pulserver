@@ -22,16 +22,20 @@
 /*  Internal helpers                                                  */
 /* ================================================================== */
 
-/* The canonical TR window: the first TR whose instance ACQUIRES, so the
- * description carries ADC rows even when the scan opens with dummy TRs.
- * Falls back to the first window when nothing acquires (RF-only scans). */
+/* The canonical TR window: the repetition that acquires at the most positions,
+ * earliest one on a tie.  A description is read back position by position, so
+ * a window that misses a readout the scan plays elsewhere describes a
+ * sequence that was never run -- which happens whenever the opening
+ * repetitions are dummies, or a repetition drops a readout it takes up again
+ * later.  Falls back to the first window when nothing acquires at all
+ * (RF-only scans). */
 static void seqdesc__select_canonical_window(
     const pulseg_sequence_descriptor *desc,
     int *start_block,
     int *block_count)
 {
     int tr_size = desc->tr_descriptor.tr_size;
-    int start, i, acquires;
+    int start, i, acquires, best;
 
     *start_block = 0;
     *block_count = tr_size;
@@ -43,21 +47,21 @@ static void seqdesc__select_canonical_window(
     if (tr_size <= 0)
         return;
 
+    best = 0;
     for (start = 0; start + tr_size <= desc->num_blocks; start += tr_size)
     {
         acquires = 0;
         for (i = start; i < start + tr_size; ++i)
         {
             if (desc->block_table[i].adc_id >= 0)
-            {
-                acquires = 1;
-                break;
-            }
+                ++acquires;
         }
-        if (acquires)
+        if (acquires > best)
         {
+            best = acquires;
             *start_block = start;
-            return;
+            if (acquires == tr_size)
+                return;
         }
     }
 }

@@ -57,7 +57,32 @@ extern "C"
     int pulseg_clear_cache(const char *seq_path);
 
     /**
-     * @brief Save a loaded collection to a binary cache file.
+     * @brief Write a loaded collection's cache beside its .seq file.
+     *
+     * The cache path is derived from @p seq_path and @c opts->cache_ext, and
+     * the integrity size is read from the .seq file itself -- so this is the
+     * writer that pairs with the per-section loaders above, which locate the
+     * cache the same way.
+     *
+     * Writes every base section, then appends the VENDOR section if
+     * @c opts->vendor_section_write_fn is set (see
+     * pulseg_write_vendor_cache_section).
+     *
+     * @param[in]  coll      Collection to save.
+     * @param[in]  seq_path  Path to the .seq file the collection was read
+     *                        from; it must still be readable, as its size is
+     *                        recorded for staleness detection.
+     * @param[in]  opts      Options carrying @c cache_ext and the vendor
+     *                        section callback.
+     * @return PULSEG_SUCCESS on success, negative on failure.
+     */
+    int pulseg_save_cache(pulseg_collection *coll, const char *seq_path, const pulseg_opts *opts);
+
+    /**
+     * @brief Save a loaded collection to an explicitly named cache file.
+     *
+     * For a caller that keeps its cache somewhere other than beside the .seq
+     * file, and therefore has to supply the integrity size itself.
      *
      * @param[in]  coll          Collection to save.
      * @param[in]  path          Output file path (e.g. "my_sequence.pseg").
@@ -67,7 +92,7 @@ extern "C"
      *                            reload.
      * @return PULSEG_SUCCESS on success, negative on failure.
      */
-    int pulseg_save_cache(const pulseg_collection *coll, const char *path, int source_size);
+    int pulseg_save_cache_to_path(const pulseg_collection *coll, const char *path, int source_size);
 
     /**
      * @brief Load a collection from a binary cache file.
@@ -98,8 +123,8 @@ extern "C"
      * @c vendor_section_write_fn is not an error -- it simply means no
      * VENDOR section is written. GE leaves this callback unset.
      *
-     * @param[in] coll      Loaded collection (must already have a base cache
-     *                       on disk, i.e. called after pulseg__write_cache).
+     * @param[in] coll      Loaded collection whose base cache is already on
+     *                       disk, i.e. called after pulseg_save_cache().
      * @param[in] seq_path  Path to the .seq file.
      * @param[in] opts      Options carrying vendor_section_write_fn/ctx.
      * @return PULSEG_SUCCESS, negative error code, or PULSEG_SUCCESS with no

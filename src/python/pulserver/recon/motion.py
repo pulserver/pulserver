@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 __all__ = [
+    "NavigatorMotionTracker",
     "RigidMotionEKF",
     "RigidMotionEstimate",
     "RigidRegistration",
@@ -14,6 +15,7 @@ from importlib import import_module
 from typing import Any
 
 import numpy as np
+from scipy.spatial.transform import Rotation
 
 
 @dataclass(frozen=True)
@@ -304,7 +306,65 @@ class RigidMotionEKF:
         import pulserver.recon as recon
 
         tracker = recon.RigidMotionEKF(recon.RigidRegistration(), dimension=3)
-        estimate = tracker(volume, reference)
+        estimate = tracker.step(reference, volume)
+
+    A head that turns and settles, watched by a navigator every 100 ms. Each
+    navigator is registered on its own and carries the error of one
+    registration; the filter knows the head has a velocity, so it separates
+    the motion from the measurement rather than following every wobble into
+    the gradients:
+
+    .. plot::
+
+       import numpy as np
+       import matplotlib.pyplot as plt
+       import pulserver.recon as recon
+       from _figures import SERIES
+
+       interval, count = 0.1, 60
+       elapsed = np.arange(count) * interval
+       turn = np.tanh((elapsed - 2.5) * 1.2)
+       truth = np.zeros((count, 6))
+       truth[:, 0], truth[:, 5] = np.deg2rad(4.0) * turn, 3.0 * turn
+
+       # What one registration of one navigator is worth: a third of a degree
+       # and a third of a millimetre, independently each time.
+       angle, shift = np.deg2rad(0.3), 0.3
+       error = np.random.default_rng(4).normal(size=(count, 6))
+       measured = truth + error * np.array([angle] * 3 + [shift] * 3)
+
+       tracker = recon.RigidMotionEKF(
+           recon.RigidRegistration(),
+           measurement_noise=(angle**2,) * 3 + (shift**2,) * 3,
+           process_noise=(1e-2,) * 3 + (1e2,) * 3,
+       )
+       filtered = []
+       for pose in measured:
+           tracker.predict(interval)
+           filtered.append(
+               tracker.update(
+                   recon.RigidMotionEstimate(parameters=pose, center=np.zeros(3))
+               ).parameters
+           )
+       filtered = np.asarray(filtered)
+
+       figure, axes = plt.subplots(2, 1, figsize=(6.4, 4.6), sharex=True)
+       panels = (
+           (0, np.rad2deg, "nod about x [deg]"),
+           (5, lambda value: value, "slide along z [mm]"),
+       )
+       for axis, (column, scale, label) in zip(axes, panels):
+           axis.plot(elapsed, scale(measured[:, column]), ".", color=SERIES[1],
+                     markersize=5, label="registered")
+           axis.plot(elapsed, scale(truth[:, column]), color="0.55",
+                     linewidth=2.5, label="where the head was")
+           axis.plot(elapsed, scale(filtered[:, column]), color=SERIES[0],
+                     linewidth=1.8, label="filtered")
+           axis.set_ylabel(label)
+       axes[1].set_xlabel("time [s]")
+       axes[0].legend(frameon=False, loc="lower right", fontsize=8)
+       figure.suptitle("one navigator every 100 ms, filtered")
+       figure.tight_layout()
     """
 
     def __init__(
@@ -472,6 +532,187 @@ class RigidMotionEKF:
         self.initialized = True
 
 
+class NavigatorMotionTracker:
+    """Rigid pose from a navigator's 2D planes, filtered across the scan.
+
+    A navigator resolves six degrees of freedom out of images that are each
+    only two-dimensional. One plane sees the in-plane part of the motion --
+    rotation about its own normal, translation along its own two axes -- and
+    planes that between them span the volume see all six. So a navigator is
+    registered plane by plane against the first one acquired, the plane
+    measurements are solved together for the pose that explains all of them,
+    and a :class:`RigidMotionEKF` carries that pose across the scan.
+
+    Three orthogonal planes are the usual set and the best conditioned one,
+    but nothing here requires three, or requires them orthogonal: what it
+    requires is that the plane normals span the rotations and the in-plane
+    axes span the translations. Planes are matched to the reference by
+    position, so a navigator must present them in the same order every time.
+
+    What a plane measures is an in-plane rotation, so the pose is solved as a
+    rotation vector and only then turned into Euler angles, which is exact.
+    The approximation is upstream of that, and it is the one 2D registration
+    of a plane rests on anyway: a plane only measures the motion it can see,
+    so the estimate holds while the out-of-plane rotation is small enough
+    that each plane still cuts the anatomy its reference cut.
+
+    Parameters
+    ----------
+    registration
+        The rigid registration each plane is measured with. The default is a
+        :class:`RigidRegistration` on its own defaults.
+    process_noise, measurement_noise, initial_covariance
+        Passed to the :class:`RigidMotionEKF` this builds.
+
+    Attributes
+    ----------
+    filter : RigidMotionEKF
+        The filter carrying the pose. ``filter.velocity`` is the tracked
+        angular and translational velocity.
+    reference : list or None
+        The planes of the first navigator, which every later one is
+        registered against. ``None`` until the first :meth:`track`.
+
+    Examples
+    --------
+    A navigator's planes and the axes each was sampled along, tracked across
+    a scan::
+
+        import pulserver.recon as recon
+
+        tracker = recon.NavigatorMotionTracker()
+        pose = tracker.track(planes, axes, dt=0.1, spacing=10.0)
+
+    The first navigator is the reference and comes back as the zero pose;
+    every later one comes back as the head's pose relative to it.
+
+    >>> import numpy as np
+    >>> import pulserver.recon as recon
+    >>> tracker = recon.NavigatorMotionTracker()
+    >>> planes = [np.zeros((8, 8)) for _ in range(3)]
+    >>> axes = [
+    ...     ((1, 0, 0), (0, 1, 0)),
+    ...     ((0, 1, 0), (0, 0, 1)),
+    ...     ((1, 0, 0), (0, 0, 1)),
+    ... ]
+    >>> pose = tracker.track(planes, axes)
+    >>> pose.dimension, np.allclose(pose.parameters, 0.0)
+    (3, True)
+    """
+
+    def __init__(
+        self,
+        *,
+        registration: RigidRegistration | None = None,
+        process_noise: float | Sequence[float] = 1e-4,
+        measurement_noise: float | Sequence[float] = 1e-2,
+        initial_covariance: float = 1.0,
+    ) -> None:
+        self.filter = RigidMotionEKF(
+            RigidRegistration() if registration is None else registration,
+            dimension=3,
+            process_noise=process_noise,
+            measurement_noise=measurement_noise,
+            initial_covariance=initial_covariance,
+        )
+        self.reference: list[np.ndarray] | None = None
+
+    @property
+    def registration(self) -> RigidRegistration:
+        """Return the registration each plane is measured with."""
+        return self.filter.registration
+
+    @property
+    def pose(self) -> RigidMotionEstimate:
+        """Return the current filtered pose, about the navigator's centre."""
+        return self.filter.pose
+
+    def reset(self) -> None:
+        """Forget the reference navigator and the filtered pose."""
+        self.filter.reset()
+        self.reference = None
+
+    def track(
+        self,
+        planes: Sequence[Any],
+        axes: Sequence[Sequence[Sequence[float]]],
+        *,
+        dt: float = 1.0,
+        spacing: float | Sequence[float] = 1.0,
+    ) -> RigidMotionEstimate:
+        """Measure one navigator against the reference and filter its pose.
+
+        Parameters
+        ----------
+        planes
+            This navigator's images, one 2D array per plane.
+        axes
+            Where each plane lies, as ``(row_axis, column_axis)`` unit vectors
+            in the frame the pose is wanted in -- the directions the image's
+            first and second axis run along. Their cross product is the plane
+            normal, and the three of them are what carries a plane's in-plane
+            measurement out into the volume.
+        dt
+            Seconds since the previous navigator, which is what the filter
+            propagates its velocity over.
+        spacing
+            Pixel size of the planes, one value or one per plane, isotropic in
+            plane. The pose's translation comes back in this unit, and
+            millimetres are the practical choice: the registration steps and
+            stops on physical lengths, and its defaults are lengths a
+            millimetre-scale image is measured in.
+
+        Returns
+        -------
+        RigidMotionEstimate
+            The filtered pose relative to the reference navigator, about the
+            navigator's centre. The first navigator returns the zero pose.
+
+        Raises
+        ------
+        ValueError
+            If the navigator does not present as many planes as the reference,
+            if the axes do not describe every plane as a perpendicular pair of
+            directions, or if the planes leave any degree of freedom
+            unmeasured.
+        """
+        row_axes, column_axes = _plane_axes(axes, len(planes))
+        spacing = np.broadcast_to(
+            np.asarray(spacing, dtype=np.float64).reshape(-1),
+            (len(planes),),
+        )
+        if self.reference is None:
+            self.reference = [np.asarray(plane).copy() for plane in planes]
+            return self.filter.update(
+                RigidMotionEstimate(parameters=np.zeros(6), center=np.zeros(3))
+            )
+        if len(planes) != len(self.reference):
+            raise ValueError(
+                f"this navigator has {len(planes)} planes and the reference "
+                f"has {len(self.reference)}"
+            )
+
+        predicted = self.filter.predict(dt) if self.filter.initialized else None
+        measurements = [
+            self.filter.registration.estimate(
+                reference,
+                plane,
+                initial=(
+                    None
+                    if predicted is None
+                    else _project_onto_plane(predicted, row, column)
+                ),
+                spacing=(float(step), float(step)),
+            )
+            for reference, plane, row, column, step in zip(
+                self.reference, planes, row_axes, column_axes, spacing, strict=True
+            )
+        ]
+        return self.filter.update(
+            _pose_from_planes(measurements, row_axes, column_axes)
+        )
+
+
 # %% private module subroutines
 
 
@@ -568,6 +809,110 @@ def _restore_array(array: np.ndarray, reference: Any) -> Any:
             array, device=reference.device, dtype=reference.real.dtype
         )
     return array
+
+
+def _plane_axes(
+    axes: Sequence[Sequence[Sequence[float]]],
+    count: int,
+) -> tuple[np.ndarray, np.ndarray]:
+    selected = np.asarray(axes, dtype=np.float64)
+    if selected.shape != (count, 2, 3):
+        raise ValueError(
+            "axes must give a row and a column direction, as three-vectors, "
+            "for every plane"
+        )
+    norms = np.linalg.norm(selected, axis=-1, keepdims=True)
+    if not np.all(norms > 0.0):
+        raise ValueError("plane axes must be non-zero directions")
+    selected = selected / norms
+    if not np.allclose(
+        np.sum(selected[:, 0] * selected[:, 1], axis=-1), 0.0, atol=1e-6
+    ):
+        raise ValueError(
+            "a plane's row and column directions must be perpendicular: they "
+            "are the axes of one image"
+        )
+    return selected[:, 0], selected[:, 1]
+
+
+def _pose_from_planes(
+    measurements: Sequence[RigidMotionEstimate],
+    row_axes: np.ndarray,
+    column_axes: np.ndarray,
+) -> RigidMotionEstimate:
+    """The one pose that best explains what every plane measured.
+
+    A plane measures the object's motion in SimpleITK's ``(x, y)``, which is
+    its image's column direction and then its row direction: an in-plane
+    rotation about the plane normal, and the two components of the
+    translation the plane can see. Written out over the plane axes those are
+    linear in the pose, so the whole navigator is two least-squares solves --
+    one for the rotation vector and one for the translation.
+    """
+    parameters = np.asarray(
+        [measurement.parameters for measurement in measurements],
+        dtype=np.float64,
+    )
+    normals = np.cross(row_axes, column_axes)
+    # An in-plane rotation carries the column direction toward the row
+    # direction, which about the plane normal is the negative sense.
+    rotation = _solve(-normals, parameters[:, 0], "rotation")
+    translation = _solve(
+        np.concatenate([column_axes, row_axes]),
+        np.concatenate([parameters[:, 1], parameters[:, 2]]),
+        "translation",
+    )
+    return RigidMotionEstimate(
+        parameters=np.concatenate([_rotvec_to_euler(rotation), translation]),
+        center=np.zeros(3),
+    )
+
+
+def _project_onto_plane(
+    pose: RigidMotionEstimate,
+    row_axis: np.ndarray,
+    column_axis: np.ndarray,
+) -> RigidMotionEstimate:
+    """What one plane would measure if the object were at ``pose``."""
+    rotation = _euler_to_rotvec(pose.angles)
+    translation = pose.translation
+    return RigidMotionEstimate(
+        parameters=(
+            -float(rotation @ np.cross(row_axis, column_axis)),
+            float(translation @ column_axis),
+            float(translation @ row_axis),
+        ),
+        center=np.zeros(2),
+    )
+
+
+def _solve(rows: np.ndarray, values: np.ndarray, unknown: str) -> np.ndarray:
+    solution, _, rank, _ = np.linalg.lstsq(rows, values, rcond=None)
+    if rank < rows.shape[1]:
+        raise ValueError(
+            f"the navigator's planes do not span the {unknown}: they leave at "
+            f"least one of its three components unmeasured"
+        )
+    return solution
+
+
+# SimpleITK's Euler3DTransform composes its angles as Rz @ Rx @ Ry, which is
+# neither of the two orders a reader expects; SciPy spells that "yxz", with
+# the angles in that order rather than in the transform's.
+_EULER_SEQUENCE = "yxz"
+_EULER_ORDER = (1, 0, 2)
+
+
+def _rotvec_to_euler(rotation: np.ndarray) -> np.ndarray:
+    angles = Rotation.from_rotvec(rotation).as_euler(_EULER_SEQUENCE)
+    return angles[list(np.argsort(_EULER_ORDER))]
+
+
+def _euler_to_rotvec(angles: np.ndarray) -> np.ndarray:
+    return Rotation.from_euler(
+        _EULER_SEQUENCE,
+        np.asarray(angles)[list(_EULER_ORDER)],
+    ).as_rotvec()
 
 
 def _noise_vector(value: float | Sequence[float], size: int, name: str) -> np.ndarray:

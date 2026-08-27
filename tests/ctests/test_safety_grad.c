@@ -31,8 +31,8 @@ static void run_safety_check(const char *filename, int expected_code)
     rc = pulseg_check_safety(
         coll,
         &s_diag,
+        NULL,
         &s_opts,
-        0,
         NULL, /* no forbidden bands */
         NULL,
         0.0f /* no PNS */);
@@ -104,7 +104,7 @@ static void run_continuity_check(const char *filename, int should_pass)
 
     /* Load succeeded — run full safety check */
     pulseg_diagnostic_init(&s_diag);
-    rc = pulseg_check_safety(coll, &s_diag, &s_opts, 0, NULL, NULL, 0.0f);
+    rc = pulseg_check_safety(coll, &s_diag, NULL, &s_opts, NULL, NULL, 0.0f);
 
     if (should_pass)
     {
@@ -385,13 +385,16 @@ static void run_mech_resonances_check(
     int expected_code)
 {
     pulseg_collection *coll = NULL;
+    pulseg_forbidden_band_list band_list = PULSEG_FORBIDDEN_BAND_LIST_INIT;
     int rc;
 
     rc = load_corpus_seq(&coll, filename, &s_opts);
     mu_assert(PULSEG_SUCCEEDED(rc), "load_seq failed for acoustic test");
 
     pulseg_diagnostic_init(&s_diag);
-    rc = pulseg_check_safety(coll, &s_diag, &s_opts, num_bands, bands, NULL, 0.0f /* no PNS */);
+    band_list.count = num_bands;
+    band_list.bands = bands;
+    rc = pulseg_check_safety(coll, &s_diag, NULL, &s_opts, &band_list, NULL, 0.0f /* no PNS */);
 
     if (expected_code > 0)
     {
@@ -673,11 +676,11 @@ static void run_pns_memo_equivalence(const char *filename)
     memset(&memo, 0, sizeof(memo));
 
     pulseg_diagnostic_init(&s_diag);
-    rc = pulseg_calc_pns(coll, &exact, &s_diag, 0, 0, &s_opts, &exact_model);
+    rc = pulseg_calc_pns(coll, &exact, &s_diag, NULL, 0, 0, &s_opts, &exact_model);
     mu_assert(PULSEG_SUCCEEDED(rc), "exact PNS evaluation failed");
 
     pulseg_diagnostic_init(&s_diag);
-    rc = pulseg_calc_pns(coll, &memo, &s_diag, 0, 0, &s_opts, &memo_model);
+    rc = pulseg_calc_pns(coll, &memo, &s_diag, NULL, 0, 0, &s_opts, &memo_model);
     mu_assert(PULSEG_SUCCEEDED(rc), "memoized PNS evaluation failed");
 
     mu_assert_int_eq(exact.num_samples, memo.num_samples);
@@ -746,10 +749,10 @@ MU_TEST(test_pns_no_kernel_is_deterministic_exact_path)
     memset(&a, 0, sizeof(a));
     memset(&b, 0, sizeof(b));
     pulseg_diagnostic_init(&s_diag);
-    rc = pulseg_calc_pns(coll, &a, &s_diag, 0, 0, &s_opts, &model);
+    rc = pulseg_calc_pns(coll, &a, &s_diag, NULL, 0, 0, &s_opts, &model);
     mu_assert(PULSEG_SUCCEEDED(rc), "first exact PNS evaluation failed");
     pulseg_diagnostic_init(&s_diag);
-    rc = pulseg_calc_pns(coll, &b, &s_diag, 0, 0, &s_opts, &model);
+    rc = pulseg_calc_pns(coll, &b, &s_diag, NULL, 0, 0, &s_opts, &model);
     mu_assert(PULSEG_SUCCEEDED(rc), "second exact PNS evaluation failed");
 
     mu_assert_int_eq(a.num_samples, b.num_samples);
@@ -790,10 +793,10 @@ MU_TEST(test_shipped_irnich_matches_an_independent_implementation)
     memset(&a, 0, sizeof(a));
     memset(&b, 0, sizeof(b));
     pulseg_diagnostic_init(&s_diag);
-    rc = pulseg_calc_pns(coll, &a, &s_diag, 0, 0, &s_opts, &reference);
+    rc = pulseg_calc_pns(coll, &a, &s_diag, NULL, 0, 0, &s_opts, &reference);
     mu_assert(PULSEG_SUCCEEDED(rc), "reference PNS evaluation failed");
     pulseg_diagnostic_init(&s_diag);
-    rc = pulseg_calc_pns(coll, &b, &s_diag, 0, 0, &s_opts, &shipped);
+    rc = pulseg_calc_pns(coll, &b, &s_diag, NULL, 0, 0, &s_opts, &shipped);
     mu_assert(PULSEG_SUCCEEDED(rc), "shipped Irnich PNS evaluation failed");
 
     mu_assert_int_eq(a.num_samples, b.num_samples);

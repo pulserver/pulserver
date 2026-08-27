@@ -7,12 +7,14 @@ acquires this time round.
 
 The ADC is the awkward one, because a block that acquires and the dummy shot
 that does not are written as different blocks in the file and are the same
-block to the scanner. These name where that line falls.
+block to the scanner. Three separate lines fall out of that, and these name
+them: the repeating unit is recognised from the definition with its ADC left
+out; a segment is split by the readouts its repetitions actually play,
+because a prepared segment binds one receive filter per block position; and
+a shot that acquires nothing joins whichever of those segments it likes.
 """
 
 from __future__ import annotations
-
-import pytest
 
 import pulserver.pypulseq as pp
 
@@ -54,15 +56,18 @@ def test_a_non_acquiring_instance_shares_the_definition_of_the_one_that_acquires
     assert build("-aaa").tr_size == build("aaaa").tr_size == 2
 
 
-def test_two_adc_events_at_one_block_position_are_two_definitions():
-    # Same timing, different readouts: a structural difference, not a
-    # per-instance parameter, so the repeating unit spans both.
-    assert build("abab").tr_size == 4
+def test_a_block_position_that_cycles_readouts_still_repeats_every_shot():
+    assert build("abab").tr_size == build("aaaa").tr_size == 2
+    assert build("abababab").tr_size == 2
 
 
-def test_a_non_acquiring_instance_among_two_readouts_is_refused_by_name():
-    # Which of the two the dummy stands in for is written nowhere, and
-    # guessing would misdescribe the readout to the reconstruction.
-    seq = build("-aba")
-    with pytest.raises(RuntimeError, match="ADC definition"):
-        _ = seq.tr_size
+def test_two_readouts_at_one_block_position_are_two_segments():
+    assert build("abab").num_segments == 2
+    assert build("aaaa").num_segments == 1
+
+
+def test_a_dummy_among_two_readouts_joins_one_of_them():
+    # It acquires nothing, so neither readout's filter is used for it and
+    # both segments play its gradients and RF identically.
+    assert build("-aba").num_segments == build("abab").num_segments == 2
+    assert build("-aba").tr_size == 2

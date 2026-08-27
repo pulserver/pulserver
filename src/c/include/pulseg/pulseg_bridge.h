@@ -87,16 +87,16 @@ extern "C"
      *
      * @param[in,out] b         Open bridge handle.
      * @param[out]    duration  Reported scan duration; NULL to ignore.
-     * @param[out]    info      Buffer for the plugin's message; NULL to ignore.
-     * @param[in]     infosz    Capacity of @p info in bytes.
+     * @param[out]    info      Receives the plugin's message, NUL-terminated
+     *                          and truncated to the buffer's capacity; NULL
+     *                          or a zero capacity to ignore it.
      * @param[in]     proto     Protocol to validate.
      * @return 1 if valid, 0 if invalid, -1 on communication error.
      */
     int pulseg_bridge_validate(
         pulseg_bridge *b,
         float *duration,
-        char *info,
-        int infosz,
+        pulseg_text_buffer *info,
         const pulseg_protocol *proto);
 
     /**

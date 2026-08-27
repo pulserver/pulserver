@@ -44,6 +44,7 @@ set(PULSEG_SOURCES
     structure/pulseg_seqdesc.c
     waveforms/pulseg_waveforms.c
     waveforms/pulseg_chunk.c
+    safety/pulseg_check_plan.c
     safety/pulseg_safety.c
     safety/pulseg_raster.c
     safety/pulseg_pns_memo.c

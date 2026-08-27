@@ -125,7 +125,7 @@ namespace pulseg
         /** Save collection to a binary cache file. */
         void save_cache(const std::string& path, int source_size) const
         {
-            check(pulseg_save_cache(coll_, path.c_str(), source_size));
+            check(pulseg_save_cache_to_path(coll_, path.c_str(), source_size));
         }
 
         /** Load collection from a binary cache file (mutates this). */
@@ -457,19 +457,17 @@ namespace pulseg
             pulseg_mech_resonances_spectra cs = PULSEG_MECH_RESONANCES_SPECTRA_INIT;
             pulseg_diagnostic diag;
             pulseg_diagnostic_init(&diag);
-            int code = pulseg_calc_mech_resonances(
-                coll_,
-                &cs,
-                &diag,
-                ss,
-                canonical_tr_idx,
-                amplitude_mode,
-                &run_opts,
-                target_resolution_hz,
-                max_freq_hz,
-                static_cast<int>(cbands.size()),
-                cbands.empty() ? nullptr : cbands.data(),
-                compress_trains ? 1 : 0);
+            pulseg_mech_resonances_request request = PULSEG_MECH_RESONANCES_REQUEST_INIT;
+            request.subseq_idx = ss;
+            request.canonical_tr_idx = canonical_tr_idx;
+            request.amplitude_mode = amplitude_mode;
+            request.target_resolution_hz = target_resolution_hz;
+            request.max_freq_hz = max_freq_hz;
+            request.bands.count = static_cast<int>(cbands.size());
+            request.bands.bands = cbands.empty() ? nullptr : cbands.data();
+            request.compress_trains = compress_trains ? 1 : 0;
+
+            int code = pulseg_calc_mech_resonances(coll_, &cs, &diag, nullptr, &run_opts, &request);
             check(code, diag);
 
             MechResonancesSpectra a;
@@ -559,7 +557,8 @@ namespace pulseg
             pulseg_pns_result cr = PULSEG_PNS_RESULT_INIT;
             pulseg_diagnostic diag;
             pulseg_diagnostic_init(&diag);
-            int code = pulseg_calc_pns(coll_, &cr, &diag, ss, canonical_tr_idx, &opts_, &model);
+            int code =
+                pulseg_calc_pns(coll_, &cr, &diag, nullptr, ss, canonical_tr_idx, &opts_, &model);
             check(code, diag);
 
             PnsResult r;
@@ -596,12 +595,16 @@ namespace pulseg
             pulseg_diagnostic diag;
             pulseg_diagnostic_init(&diag);
             // Note: check_safety takes non-const coll for cursor dry-run
+            pulseg_forbidden_band_list band_list = PULSEG_FORBIDDEN_BAND_LIST_INIT;
+            band_list.count = static_cast<int>(cbands.size());
+            band_list.bands = cbands.empty() ? nullptr : cbands.data();
+
             int code = pulseg_check_safety(
                 coll_,
                 &diag,
+                nullptr,
                 &opts_,
-                static_cast<int>(cbands.size()),
-                cbands.empty() ? nullptr : cbands.data(),
+                &band_list,
                 pns_model,
                 pns_threshold_percent);
             check(code, diag);

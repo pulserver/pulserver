@@ -254,6 +254,23 @@ carries complex volumes with a contrast, echo, or frame axis above the spatial
 ones. These adapters close that gap, and they compose: a two-dimensional
 network reaches a complex 3D+t reconstruction through three of them.
 
+One accelerated scan below, filled in four ways. The panels differ only in
+what supplies what the scan did not measure: nothing, a total-variation
+prior, a foundation model applied straight to the measurement, and an unroll
+trained against this physics. The last two are learned, and the last one was
+trained here, on three slices this one is held out of --
+{doc}`the gallery page </examples/python/train_the_networks>` is the run that
+produced it, and three slices is what its score reflects.
+
+```{eval-rst}
+.. plot::
+
+   from _figures import images, learned_example
+
+   images(learned_example(), title="one four-fold scan, filled in four ways",
+          figsize=(14.5, 3.2))
+```
+
 ```{eval-rst}
 .. autosummary::
    :toctree: ../generated/recon
@@ -315,6 +332,22 @@ so an accelerated scan pays one apply per step rather than a transform pair.
 
 ## Motion
 
+Registration measures where the head is, the filter carries that measurement
+across the scan, and the payload takes it back to the sequence in time to
+matter. A navigator's planes are two-dimensional and a pose is not, so
+`NavigatorMotionTracker` is what turns one into the other: each plane reports
+the part of the motion it can see — the rotation about its own normal, the
+translation along its own two axes — and the planes are solved together for
+the pose that explains all of them.
+
+`PmcPayload` is what the real-time port carries back: a shift in metres and a
+rotation, which the sequence applies to the gradients and the transmit
+frequency of the readouts it has not played yet. The acquired data is never
+touched, which is what makes the correction prospective. The sequence
+*accumulates* what it receives, so a payload is the change since the last one
+rather than the pose. {func}`~pulserver.app.pmc_recon` is that whole route,
+from navigator readouts to correction.
+
 ```{eval-rst}
 .. autosummary::
    :toctree: ../generated/recon
@@ -323,6 +356,8 @@ so an accelerated scan pays one apply per step rather than a transform pair.
    RigidRegistration
    RigidMotionEKF
    RigidMotionEstimate
+   NavigatorMotionTracker
+   PmcPayload
 ```
 
 ## Postprocessing

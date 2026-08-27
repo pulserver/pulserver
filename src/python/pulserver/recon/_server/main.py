@@ -87,7 +87,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument(
         "--rtp-handler",
         type=str,
-        default="pmcrecon",
+        default="pmc_recon",
         help="Handler module name for the RTP PMC connection",
     )
     parser.add_argument(

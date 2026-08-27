@@ -22,8 +22,8 @@ cpp/index
 | reconstruct, or write a reconstruction plugin | {doc}`python/recon`, {doc}`python/apps` |
 | read a scan's acquisitions, header or stored file | {doc}`python/mrd` |
 | declare what the scanner UI shows | {doc}`python/design`, {doc}`python/apps` |
-| write an interpreter that plays `.seq` on hardware | {doc}`c/pulseg` |
-| add safety checking to an interpreter I already have | {doc}`c/safety`, {doc}`cpp/pulseg` |
+| write an interpreter that plays `.seq` on hardware | {doc}`c/index` |
+| add safety checking to an interpreter I already have | {doc}`c/checks`, {doc}`cpp/pulseg` |
 | show the sequence's parameters on a console | {doc}`c/protocol` |
 | read or write a `.seq` from C or C++ | {doc}`c/pulseq`, {doc}`cpp/pulseq` |
 | feed a reconstruction service from the sequence file | {doc}`cpp/recon` |

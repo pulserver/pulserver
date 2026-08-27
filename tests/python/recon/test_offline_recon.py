@@ -143,13 +143,12 @@ def test_every_recon_plugin_module_is_callable():
     every module that carries a ``PLUGIN`` has it."""
     import pulserver.app as app
 
-    called = 0
-    for name in [n for n in app.__all__ if n.endswith("_recon")]:
+    names = [name for name in app.__all__ if name.endswith("_recon")]
+    assert names
+    for name in names:
         module = getattr(app, name)
-        if hasattr(module, "PLUGIN"):
-            assert callable(module), name
-            called += 1
-    assert called == 7
+        assert hasattr(module, "PLUGIN"), name
+        assert callable(module), name
 
 
 def test_the_entry_point_takes_the_plugin_settings_and_the_stream_arguments():

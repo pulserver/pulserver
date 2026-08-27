@@ -79,7 +79,23 @@ extensions = [
     "sphinx.ext.napoleon",
     "sphinx.ext.mathjax",
     "matplotlib.sphinxext.plot_directive",
+    "sphinx_gallery.gen_gallery",
 ]
+
+#: The long-form Python material: scripts under ``_gallery``, rendered into
+#: the examples section. ``filename_pattern`` decides which of them *run* --
+#: only a name matching it is executed and its output captured, and the rest
+#: are rendered as source. That is what lets a page walk a training run
+#: without training on every documentation build.
+sphinx_gallery_conf = {
+    "examples_dirs": str(Path(__file__).resolve().parent / "_gallery"),
+    "gallery_dirs": str(Path(__file__).resolve().parent / "examples" / "python"),
+    "filename_pattern": r"/plot_",
+    "remove_config_comments": True,
+    "download_all_examples": False,
+    "plot_gallery": "True",
+    "within_subsection_order": "FileNameSortKey",
+}
 
 
 #: Whether the C and C++ reference is in this build. The pages read it, so a
@@ -88,7 +104,13 @@ HAS_DOXYGEN = _doxygen_xml.run()
 
 if HAS_DOXYGEN:
     extensions.append("breathe")
-    breathe_projects = {"pulserver": str(_doxygen_xml.XML)}
+    # Two scopes: ``pulserver`` covers every header, ``pulserver_c`` only the
+    # C include tree. The C pages need the narrow one -- see
+    # ``_doxygen_xml.C_HEADERS``.
+    breathe_projects = {
+        "pulserver": str(_doxygen_xml.XML),
+        "pulserver_c": str(_doxygen_xml.XML_C),
+    }
     breathe_default_project = "pulserver"
     breathe_default_members = ()
     breathe_show_include = False
@@ -115,6 +137,7 @@ def _stub_breathe_directives(app) -> None:
         option_spec = {
             "members": directives.unchanged,
             "sections": directives.unchanged,
+            "project": directives.unchanged,
         }
 
         def run(self):

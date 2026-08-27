@@ -10,6 +10,7 @@
 #include <math.h>
 #include <string.h>
 
+#include "pulseg/pulseg_pns_models.h"
 #include "pulseg_internal.h"
 
 /* ================================================================== */
@@ -358,7 +359,7 @@ size_t pulseg__next_pow2(size_t x)
 #include "external_kiss_fft.h"
 #include "external_kiss_fftr.h"
 
-struct pulseg__conv_fft_plan
+struct pulseg_conv_fft_plan
 {
     int signal_len;
     int nfft;
@@ -371,13 +372,13 @@ struct pulseg__conv_fft_plan
     float *conv;            /* [nfft]  scratch */
 };
 
-int pulseg__conv_fft_plan_create(
-    pulseg__conv_fft_plan **out_plan,
+int pulseg_conv_fft_plan_create(
+    pulseg_conv_fft_plan **out_plan,
     int signal_len,
     const float *kernel,
     int kernel_len)
 {
-    pulseg__conv_fft_plan *p;
+    pulseg_conv_fft_plan *p;
     int i, result;
 
     if (!out_plan)
@@ -386,7 +387,7 @@ int pulseg__conv_fft_plan_create(
     if (!kernel || signal_len <= 0 || kernel_len <= 0)
         return PULSEG_ERR_NULL_POINTER;
 
-    p = (pulseg__conv_fft_plan *)PULSEG_ALLOC(sizeof(*p));
+    p = (pulseg_conv_fft_plan *)PULSEG_ALLOC(sizeof(*p));
     if (!p)
         return PULSEG_ERR_ALLOC_FAILED;
     /* Set every pointer before the first goto: free() walks all of them. */
@@ -431,11 +432,11 @@ int pulseg__conv_fft_plan_create(
     return PULSEG_SUCCESS;
 
 fail:
-    pulseg__conv_fft_plan_free(p);
+    pulseg_conv_fft_plan_free(p);
     return result;
 }
 
-int pulseg__conv_fft_plan_apply(pulseg__conv_fft_plan *plan, float *output, const float *signal)
+int pulseg_conv_fft_plan_apply(pulseg_conv_fft_plan *plan, float *output, const float *signal)
 {
     int i, nfft, nfreq, signal_len;
     kiss_fft_cpx *sig_fft;
@@ -474,7 +475,7 @@ int pulseg__conv_fft_plan_apply(pulseg__conv_fft_plan *plan, float *output, cons
     return PULSEG_SUCCESS;
 }
 
-void pulseg__conv_fft_plan_free(pulseg__conv_fft_plan *plan)
+void pulseg_conv_fft_plan_free(pulseg_conv_fft_plan *plan)
 {
     if (!plan)
         return;
@@ -500,16 +501,16 @@ int pulseg__calc_convolution_fft(
     const float *kernel,
     int kernel_len)
 {
-    pulseg__conv_fft_plan *plan;
+    pulseg_conv_fft_plan *plan;
     int result;
 
     plan = NULL;
-    result = pulseg__conv_fft_plan_create(&plan, signal_len, kernel, kernel_len);
+    result = pulseg_conv_fft_plan_create(&plan, signal_len, kernel, kernel_len);
     if (PULSEG_FAILED(result))
         return result;
 
-    result = pulseg__conv_fft_plan_apply(plan, output, signal);
-    pulseg__conv_fft_plan_free(plan);
+    result = pulseg_conv_fft_plan_apply(plan, output, signal);
+    pulseg_conv_fft_plan_free(plan);
     return result;
 }
 

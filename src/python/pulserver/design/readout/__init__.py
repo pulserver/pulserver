@@ -6,6 +6,7 @@ from .bssfp import BssfpReadout2D, BssfpReadout3D
 from .epi import EpiReadout2D, EpiReadout3D
 from .fse import FseReadout2D, FseReadout3D
 from .line import LineReadout2D, LineReadout3D
+from .navigator import SpiralNavigator
 from .noncartesian import (
     NonCartesianReadout,
     RadialProjectionReadout,
@@ -39,6 +40,7 @@ __all__ = [
     "RosetteProjectionReadout",
     "RosetteReadout2D",
     "RosetteStackReadout",
+    "SpiralNavigator",
     "SpiralProjectionReadout",
     "SpiralReadout2D",
     "SpiralStackReadout",

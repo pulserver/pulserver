@@ -138,8 +138,7 @@ starts from the plugin's default protocol and applies the edits it was given
 — so a dropped connection loses nothing and two callers cannot interfere.
 
 Both paths go through the same declaration and the same plugin, so a sequence
-written once works either way. See {doc}`../../examples/python/bridge_gui`
-for a plugin driven both ways.
+written once works either way.
 
 ## The compiled core: a drop-in `pypulseq`
 

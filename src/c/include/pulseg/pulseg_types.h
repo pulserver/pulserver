@@ -173,7 +173,7 @@ typedef struct pulseg_opts
 
     /** Binary cache file extension, including the dot. Default
      *  ".pseg"; GE overrides to ".pge" (see pulserver_ge_config.h). Only
-     *  the main pulseg_read()/pulseg__write_cache() path honors this;
+     *  the main pulseg_read()/pulseg_save_cache() path honors this;
      *  standalone cache utilities (pulseg_load_cache, pulseg_clear_cache,
      *  etc.) that run before any collection exists always use the public
      *  default. */
@@ -590,6 +590,105 @@ typedef struct pulseg_forbidden_band
     float freq_max_hz;            /**< upper band edge (Hz)          */
     float max_amplitude_hz_per_m; /**< max spectral amplitude (Hz/m) */
 } pulseg_forbidden_band;
+
+/**
+ * @brief A band table, as one argument.
+ *
+ * A count and the array it measures travel together, so neither can be
+ * passed without the other and neither splits an output from an input in a
+ * parameter list.
+ *
+ * The bands are borrowed: this is a view, not an owner, and the array must
+ * outlive every call it is passed to.  A @c count of 0 means no acoustic
+ * gating is requested, and @c bands may then be NULL.
+ */
+typedef struct pulseg_forbidden_band_list
+{
+    int count;                          /**< number of bands (0 = none)   */
+    const pulseg_forbidden_band *bands; /**< [count] borrowed band array  */
+} pulseg_forbidden_band_list;
+
+/* clang-format off */
+#define PULSEG_FORBIDDEN_BAND_LIST_INIT {0, NULL}
+/* clang-format on */
+
+/**
+ * @brief A caller-owned character buffer the library writes into.
+ *
+ * @c capacity counts bytes including the terminating NUL, so the library
+ * writes at most @c capacity-1 characters.  A zero @c capacity (@c data may
+ * then be NULL) means the caller does not want the text.
+ */
+typedef struct pulseg_text_buffer
+{
+    int capacity; /**< bytes available in @c data, NUL included */
+    char *data;   /**< [capacity] destination, or NULL          */
+} pulseg_text_buffer;
+
+/* clang-format off */
+#define PULSEG_TEXT_BUFFER_INIT {0, NULL}
+/* clang-format on */
+
+/* ================================================================== */
+/*  Shared check preprocessing                                        */
+/* ================================================================== */
+
+/**
+ * @brief Preprocessing the gradient checks reuse across calls.
+ *
+ * Opaque; see pulseg_check_plan_create() in pulseg_safety.h.
+ */
+typedef struct pulseg_check_plan pulseg_check_plan;
+
+/**
+ * @brief What a plan is allowed to keep.
+ */
+typedef struct pulseg_check_plan_config
+{
+    /** Retained waveform bytes, in KiB, before the plan drops what it has
+     *  not used recently. 0 selects the library default. */
+    int cache_budget_kb;
+} pulseg_check_plan_config;
+
+/* clang-format off */
+#define PULSEG_CHECK_PLAN_CONFIG_INIT {0}
+/* clang-format on */
+
+/**
+ * @brief What to compute a mechanical-resonance spectrum of.
+ *
+ * The knobs that shape the spectrum travel together so the call itself
+ * carries only what it acts on.
+ */
+typedef struct pulseg_mech_resonances_request
+{
+    int subseq_idx;                   /**< subsequence to analyse                     */
+    int canonical_tr_idx;             /**< TR instance, read only under
+                               PULSEG_AMP_ACTUAL                          */
+    int amplitude_mode;               /**< PULSEG_AMP_MAX_POS for the bound over every
+                               instance of the canonical TR, which is what
+                               pulseg_check_mech_resonances judges;
+                               PULSEG_AMP_ACTUAL for one instance exactly
+                               as it plays                                */
+    float target_resolution_hz;       /**< spectral resolution (0 = auto)       */
+    float max_freq_hz;                /**< highest frequency to report (0 = auto) */
+    pulseg_forbidden_band_list bands; /**< bands to mark; may be empty    */
+    int compress_trains;              /**< nonzero to evaluate equally-spaced
+                                     occurrence trains in compressed form,
+                                     exactly as the headless check does --
+                                     pass 1 for plots that must show the
+                                     lines the gate decides on. Pass 0 for
+                                     the uncompressed reference evaluation
+                                     of the same maths, in which a
+                                     component term maps to a single
+                                     materialised occurrence rather than a
+                                     train                                */
+} pulseg_mech_resonances_request;
+
+/* clang-format off */
+#define PULSEG_MECH_RESONANCES_REQUEST_INIT \
+    {0, 0, 0, 0.0f, 0.0f, PULSEG_FORBIDDEN_BAND_LIST_INIT, 0}
+/* clang-format on */
 
 /* ================================================================== */
 /*  PNS evaluator (vendor-pluggable model)                            */

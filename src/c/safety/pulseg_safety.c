@@ -30,6 +30,14 @@
 /* ================================================================== */
 
 /* Helper: select the block window of one TR instance. */
+/* Defined below, next to the public checks that share it. */
+static int borrow_plan(
+    pulseg_check_plan **out,
+    pulseg_check_plan **owned,
+    pulseg_diagnostic *diag,
+    pulseg_check_plan *given,
+    const pulseg_collection *coll);
+
 static void select_canonical_tr_window_idx(
     const struct pulseg_sequence_descriptor *desc,
     int *start_block,
@@ -4303,30 +4311,25 @@ int pulseg_calc_mech_resonances(
     const pulseg_collection *coll,
     pulseg_mech_resonances_spectra *spectra,
     pulseg_diagnostic *diag,
-    int subseq_idx,
-    int canonical_tr_idx,
-    int amplitude_mode,
+    pulseg_check_plan *plan,
     const pulseg_opts *opts,
-    float target_resolution_hz,
-    float max_freq_hz,
-    int num_forbidden_bands,
-    const pulseg_forbidden_band *forbidden_bands,
-    int compress_trains)
+    const pulseg_mech_resonances_request *request)
 {
     const pulseg_sequence_descriptor *desc;
-    pulseg__uniform_grad_waveforms uw;
+    const pulseg__uniform_grad_waveforms *uw;
+    pulseg_check_plan *owned;
     pulseg_diagnostic local_diag;
     int rc, start_block, block_count, num_instances, bound_over_instances;
     int sa_start_block, sa_block_count;
-    int *block_order;
+    int subseq_idx, canonical_tr_idx, amplitude_mode;
     float tr_duration_us;
     float peak_log10_threshold;
     float peak_norm_scale;
     float peak_eps;
     float peak_prominence;
 
-    memset(&uw, 0, sizeof(uw));
-    block_order = NULL;
+    uw = NULL;
+    owned = NULL;
     if (!diag)
     {
         pulseg_diagnostic_init(&local_diag);
@@ -4336,11 +4339,14 @@ int pulseg_calc_mech_resonances(
     {
         pulseg_diagnostic_init(diag);
     }
-    if (!coll || !spectra)
+    if (!coll || !spectra || !request)
     {
         diag->code = PULSEG_ERR_NULL_POINTER;
         return diag->code;
     }
+    subseq_idx = request->subseq_idx;
+    canonical_tr_idx = request->canonical_tr_idx;
+    amplitude_mode = request->amplitude_mode;
     if (subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
     {
         diag->code = PULSEG_ERR_INVALID_ARGUMENT;
@@ -4378,32 +4384,36 @@ int pulseg_calc_mech_resonances(
     sa_start_block = start_block;
     sa_block_count = block_count;
 
-    rc = pulseg__get_gradient_waveforms_range(
-        desc,
+    rc = borrow_plan(&plan, &owned, diag, plan, coll);
+    if (PULSEG_FAILED(rc))
+        return rc;
+
+    rc = pulseg__plan_waveforms(
+        plan,
         &uw,
         diag,
+        desc,
+        subseq_idx,
         start_block,
         block_count,
         bound_over_instances ? PULSEG_AMP_MAX_POS : PULSEG_AMP_ACTUAL,
         NULL,
-        0,
-        block_order);
+        0);
     if (PULSEG_FAILED(rc))
     {
-        if (block_order)
-            PULSEG_FREE(block_order);
+        pulseg_check_plan_destroy(owned);
         return rc;
     }
     rc = calc_mech_resonances_from_uniform(
         spectra,
         diag,
-        &uw,
-        target_resolution_hz,
-        max_freq_hz,
+        uw,
+        request->target_resolution_hz,
+        request->max_freq_hz,
         num_instances,
         tr_duration_us,
-        num_forbidden_bands,
-        forbidden_bands,
+        request->bands.count,
+        request->bands.bands,
         peak_log10_threshold,
         peak_norm_scale,
         peak_eps,
@@ -4417,15 +4427,13 @@ int pulseg_calc_mech_resonances(
          * shape (amplitude column 0.0), so the plotting API must carry a
          * usable gamma to reproduce the headless verdict. */
         (opts && opts->gamma_hz_per_t > 0.0f) ? opts->gamma_hz_per_t : SA_GAMMA_1H_HZ_PER_T,
-        (target_resolution_hz > 0.0f) ? 1 : 0,
-        /* dense envelope: plotting API only, see
-                                            * calc_mech_resonances_from_uniform doc */
-        1 /* display products: this IS the plotting API */,
-        compress_trains,
+        /* dense envelope and display products: this IS the plotting API, see
+         * calc_mech_resonances_from_uniform's doc comment. */
+        (request->target_resolution_hz > 0.0f) ? 1 : 0,
+        1,
+        request->compress_trains,
         bound_over_instances);
-    pulseg__uniform_grad_waveforms_free(&uw);
-    if (block_order)
-        PULSEG_FREE(block_order);
+    pulseg_check_plan_destroy(owned);
     return rc;
 }
 
@@ -4433,7 +4441,6 @@ int pulseg_calc_mech_resonances(
 /*  PNS                                                               */
 /* ================================================================== */
 
-/* FIX: output before inputs, C89-compliant declarations */
 static void compute_slew_rate(
     float *slew_out,
     const float *waveform,
@@ -4740,16 +4747,18 @@ static float pns_result_peak(const pulseg_pns_result *r)
 static int calc_pns_over_shape_groups(
     pulseg_pns_result *result,
     pulseg_diagnostic *diag,
+    pulseg_check_plan *plan,
+    int subseq_idx,
     float gamma_hz_per_tesla,
     const pulseg_pns_model *model,
     const pulseg_sequence_descriptor *desc,
     int start_block,
     int block_count)
 {
-    pulseg__uniform_grad_waveforms uw;
+    const pulseg__uniform_grad_waveforms *uw;
     pulseg_pns_result candidate;
-    int *labels;
-    int *group_first;
+    const int *labels;
+    const int *group_first;
     int num_groups, tr_size, g, rc, group_start, have_best;
     float peak, best_peak;
 
@@ -4760,43 +4769,27 @@ static int calc_pns_over_shape_groups(
     best_peak = 0.0f;
     tr_size = desc->tr_descriptor.tr_size;
 
-    rc = pulseg__group_tr_instances_by_shape(
-        desc,
-        &labels,
-        &group_first,
-        &num_groups,
-        PULSEG__MAX_SHAPE_GROUPS);
+    rc =
+        pulseg__plan_shape_groups(plan, &labels, &group_first, &num_groups, diag, desc, subseq_idx);
     if (PULSEG_FAILED(rc))
-    {
-        /* More shapes than the sweep will enumerate. The envelope alone does
-         * not bound them, and saying so is the only honest answer. */
-        pulseg__diag_printf(
-            diag,
-            "PNS: the repetitions play more than %d distinct sets of gradient "
-            "waveforms, which is more windows than the check will evaluate, and "
-            "one window over all of them would not bound them. Write the "
-            "repeated waveform once and turn it with a ROTATIONS extension",
-            PULSEG__MAX_SHAPE_GROUPS);
-        diag->code = PULSEG_ERR_PNS_INVALID_PARAMS;
-        return diag->code;
-    }
+        return rc;
 
     memset(result, 0, sizeof(*result));
 
     for (g = 0; g < num_groups; ++g)
     {
         group_start = (labels && group_first) ? group_first[g] * tr_size : start_block;
-        memset(&uw, 0, sizeof(uw));
-        rc = pulseg__get_gradient_waveforms_range(
-            desc,
+        rc = pulseg__plan_waveforms(
+            plan,
             &uw,
             diag,
+            desc,
+            subseq_idx,
             group_start,
             block_count,
             PULSEG_AMP_MAX_POS,
             labels,
-            g,
-            NULL);
+            g);
         if (PULSEG_FAILED(rc))
             goto done;
 
@@ -4805,13 +4798,12 @@ static int calc_pns_over_shape_groups(
             &candidate,
             diag,
             gamma_hz_per_tesla,
-            &uw,
+            uw,
             model,
             desc,
             group_start,
             block_count,
             NULL);
-        pulseg__uniform_grad_waveforms_free(&uw);
         if (PULSEG_FAILED(rc))
             goto done;
 
@@ -4832,14 +4824,7 @@ static int calc_pns_over_shape_groups(
 
 done:
     if (PULSEG_FAILED(rc))
-    {
-        pulseg__uniform_grad_waveforms_free(&uw);
         pulseg_pns_result_free(result);
-    }
-    if (labels)
-        PULSEG_FREE(labels);
-    if (group_first)
-        PULSEG_FREE(group_first);
     return rc;
 }
 
@@ -4851,19 +4836,22 @@ int pulseg_calc_pns(
     const pulseg_collection *coll,
     pulseg_pns_result *result,
     pulseg_diagnostic *diag,
+    pulseg_check_plan *plan,
     int subseq_idx,
     int canonical_tr_idx,
     const pulseg_opts *opts,
     const pulseg_pns_model *model)
 {
     const pulseg_sequence_descriptor *desc;
-    pulseg__uniform_grad_waveforms uw;
+    const pulseg__uniform_grad_waveforms *uw;
+    pulseg_check_plan *owned;
     pulseg_diagnostic local_diag;
     int rc, start_block, block_count, amplitude_mode, num_instances;
     int *block_order;
     float tr_duration_us;
 
-    memset(&uw, 0, sizeof(uw));
+    uw = NULL;
+    owned = NULL;
     block_order = NULL;
     if (!diag)
     {
@@ -4903,48 +4891,60 @@ int pulseg_calc_pns(
     (void)num_instances;
     (void)tr_duration_us;
 
+    rc = borrow_plan(&plan, &owned, diag, plan, coll);
+    if (PULSEG_FAILED(rc))
+        return rc;
+
     /* Index 0 is the request for the worst case rather than for a repetition,
      * and the worst case is worst over every shape the repetitions take. Any
      * other index is that window, on its own shapes. */
     if (canonical_tr_idx == 0)
-        return calc_pns_over_shape_groups(
+    {
+        rc = calc_pns_over_shape_groups(
             result,
             diag,
+            plan,
+            subseq_idx,
             opts->gamma_hz_per_t,
             model,
             desc,
             start_block,
             block_count);
+        pulseg_check_plan_destroy(owned);
+        return rc;
+    }
 
-    rc = pulseg__get_gradient_waveforms_range(
-        desc,
+    rc = pulseg__plan_waveforms(
+        plan,
         &uw,
         diag,
+        desc,
+        subseq_idx,
         start_block,
         block_count,
         amplitude_mode,
         NULL,
-        0,
-        block_order);
+        0);
     if (PULSEG_FAILED(rc))
     {
         if (block_order)
             PULSEG_FREE(block_order);
+        pulseg_check_plan_destroy(owned);
         return rc;
     }
     rc = calc_pns_from_uniform(
         result,
         diag,
         opts->gamma_hz_per_t,
-        &uw,
+        uw,
         model,
         desc,
         start_block,
         block_count,
         block_order);
-    pulseg__uniform_grad_waveforms_free(&uw);
     if (block_order)
         PULSEG_FREE(block_order);
+    pulseg_check_plan_destroy(owned);
     return rc;
 }
 
@@ -4978,7 +4978,7 @@ void pulseg_pns_result_free(pulseg_pns_result *r)
 /*  Collection-level safety check                                     */
 /* ================================================================== */
 
-static int check_max_grad(
+int pulseg_check_max_grad(
     const pulseg_collection *coll,
     pulseg_diagnostic *diag,
     const pulseg_opts *opts)
@@ -5294,7 +5294,7 @@ int pulseg_check_grad_continuity(
 /*  Max slew rate check (per unique block definition)                 */
 /* ================================================================== */
 
-static int check_max_slew(
+int pulseg_check_max_slew(
     const pulseg_collection *coll,
     pulseg_diagnostic *diag,
     const pulseg_opts *opts)
@@ -5310,7 +5310,7 @@ static int check_max_slew(
      * Slew per axis at each block = slew_rate_normalised * amplitude, both
      * read per block instance from grad_table: the amplitude directly, and
      * the normalised slew (1/s) from the shape that instance names.  This
-     * mirrors check_max_grad, which also iterates block_table.
+     * mirrors pulseg_check_max_grad, which also iterates block_table.
      */
     int s, b, n, raw_id, def_idx;
     float slew_sq, slew_sq_max, limit_sq, amp, shape_slew;
@@ -5414,7 +5414,7 @@ static int check_max_slew(
 /* Returns 1 if any block in the collection has a nonzero gx/gy/gz
  * amplitude, 0 if every gradient channel is silent throughout (e.g. an
  * RF-only or pure-delay sequence). Mirrors the block_table walk in
- * check_max_grad() but stops at the first nonzero sample. */
+ * pulseg_check_max_grad() but stops at the first nonzero sample. */
 static int collection_has_gradient(const pulseg_collection *coll)
 {
     int s, b, raw_id;
@@ -5449,35 +5449,413 @@ static int collection_has_gradient(const pulseg_collection *coll)
 
 /* ================================================================== */
 /*  Safety check                                                      */
+/* ================================================================== */ /* ================================================================== */
+/*  Mechanical resonance verdict                                      */
+/* ================================================================== */
+
+/* Resolution and analysis range the headless gate drives the structural
+ * analysis with.
+ *
+ * The analysis window is DECOUPLED from the band range
+ * (SA_MIN_ANALYSIS_FREQ_HZ): candidate selection normalizes against the peak
+ * spectral content over the analyzed range, so it must span the sequence's
+ * true dominant feature -- which for non-EPI sequences (e.g. GRE) sits above
+ * the band -- or weak in-band content is spuriously promoted. The
+ * candidate-to-band comparison itself stays band-restricted, so widening the
+ * analysis window never widens what can be flagged. This matches the
+ * validated grad_spectrum defaults (max_frequency 3000 Hz). */
+static void mech_resonance_analysis_range(
+    float *max_freq_hz,
+    float *target_res_hz,
+    const pulseg_forbidden_band_list *bands)
+{
+    int i;
+    float min_band_width_hz, width;
+
+    *max_freq_hz = 0.0f;
+    *target_res_hz = 0.0f;
+    if (!bands || bands->count <= 0 || !bands->bands)
+        return;
+
+    min_band_width_hz = -1.0f;
+    for (i = 0; i < bands->count; ++i)
+    {
+        if (bands->bands[i].freq_max_hz > *max_freq_hz)
+            *max_freq_hz = bands->bands[i].freq_max_hz;
+
+        width = bands->bands[i].freq_max_hz - bands->bands[i].freq_min_hz;
+        if (min_band_width_hz < 0.0f || width < min_band_width_hz)
+            min_band_width_hz = width;
+    }
+    *max_freq_hz *= 1.2f;
+    if (*max_freq_hz < SA_MIN_ANALYSIS_FREQ_HZ)
+        *max_freq_hz = SA_MIN_ANALYSIS_FREQ_HZ;
+
+    *target_res_hz = min_band_width_hz / 4.0f;
+    if (*target_res_hz < 1.0f)
+        *target_res_hz = 1.0f;
+    else if (*target_res_hz > 5.0f)
+        *target_res_hz = 5.0f;
+}
+
+/* Scan the candidate lines of one canonical TR against the band table.
+ * The guard mirrors sa_check_structural_violations: HWHM of the narrowest
+ * positive-width band. */
+static int mech_resonance_verdict(
+    const pulseg_mech_resonances_spectra *spectra,
+    pulseg_diagnostic *diag,
+    const pulseg_forbidden_band_list *bands,
+    float gamma_hz_per_t,
+    int subseq_idx,
+    int tr_idx)
+{
+    float *cga[3];
+    int ci, b, axi;
+    float guard_hz, mbw, cf_hz, ca_hz_per_m, eps_band;
+
+    if (spectra->num_candidates <= 0 || !spectra->candidate_freqs ||
+        !spectra->candidate_grad_amps_gx || !spectra->candidate_grad_amps_gy ||
+        !spectra->candidate_grad_amps_gz)
+        return PULSEG_SUCCESS;
+
+    mbw = -1.0f;
+    for (b = 0; b < bands->count; ++b)
+    {
+        float w = bands->bands[b].freq_max_hz - bands->bands[b].freq_min_hz;
+        if (w > 0.0f && (mbw < 0.0f || w < mbw))
+            mbw = w;
+    }
+    guard_hz = (mbw > 0.0f) ? (SA_GUARD_HWHM_MULT * mbw * 0.5f) : 0.0f;
+
+    cga[0] = spectra->candidate_grad_amps_gx;
+    cga[1] = spectra->candidate_grad_amps_gy;
+    cga[2] = spectra->candidate_grad_amps_gz;
+
+    for (ci = 0; ci < spectra->num_candidates; ++ci)
+    {
+        cf_hz = spectra->candidate_freqs[ci];
+        for (b = 0; b < bands->count; ++b)
+        {
+            eps_band = sa_eps_for_band(&bands->bands[b], gamma_hz_per_t);
+            if (cf_hz < bands->bands[b].freq_min_hz - guard_hz ||
+                cf_hz > bands->bands[b].freq_max_hz + guard_hz)
+                continue;
+            for (axi = 0; axi < 3; ++axi)
+            {
+                ca_hz_per_m = cga[axi][ci];
+                if (ca_hz_per_m > eps_band)
+                {
+                    if (diag)
+                    {
+                        diag->code = PULSEG_ERR_MECH_RESONANCES_VIOLATION;
+                        pulseg__diag_printf(
+                            diag,
+                            "f=%.2fHz,a=%.2f>%.2fHz/m,ax=%d,ss=%d,tr=%d",
+                            (double)cf_hz,
+                            (double)ca_hz_per_m,
+                            (double)eps_band,
+                            axi,
+                            subseq_idx,
+                            tr_idx);
+                    }
+                    return PULSEG_ERR_MECH_RESONANCES_VIOLATION;
+                }
+            }
+        }
+    }
+    return PULSEG_SUCCESS;
+}
+
+static int check_mech_resonances_planned(
+    const pulseg_collection *coll,
+    pulseg_diagnostic *diag,
+    pulseg_check_plan *plan,
+    const pulseg_opts *opts,
+    const pulseg_forbidden_band_list *bands,
+    pulseg__safety_profile_fn profile_fn,
+    void *profile_ctx)
+{
+    int s, rc;
+    const pulseg_sequence_descriptor *desc;
+    const pulseg__uniform_grad_waveforms *uw;
+    pulseg_mech_resonances_spectra spectra;
+    int start_block, block_count, num_instances;
+    float tr_duration_us;
+    float max_freq_hz, target_res_hz;
+
+    if (!bands || bands->count <= 0 || !bands->bands)
+        return PULSEG_SUCCESS;
+
+    mech_resonance_analysis_range(&max_freq_hz, &target_res_hz, bands);
+
+    for (s = 0; s < coll->num_subsequences; ++s)
+    {
+        desc = &coll->descriptors[s];
+        select_canonical_tr_window(
+            desc,
+            &start_block,
+            &block_count,
+            &num_instances,
+            &tr_duration_us);
+
+        if (profile_fn)
+            profile_fn(profile_ctx, PULSEG__SAFETY_PROFILE_WAVEFORM_EXTRACT, 1);
+        rc = pulseg__plan_waveforms(
+            plan,
+            &uw,
+            diag,
+            desc,
+            s,
+            start_block,
+            block_count,
+            PULSEG_AMP_MAX_POS,
+            NULL,
+            0);
+        if (profile_fn)
+            profile_fn(profile_ctx, PULSEG__SAFETY_PROFILE_WAVEFORM_EXTRACT, 0);
+        if (PULSEG_FAILED(rc))
+            return rc;
+
+        if (profile_fn)
+            profile_fn(profile_ctx, PULSEG__SAFETY_PROFILE_MECH_RESONANCE, 1);
+
+        /* The verdict comes only from the in-guarded-band TR-harmonic lines
+         * (candidate_*). Both display flags are 0: the dense analytic
+         * envelope, the full-TR FFT, the analytical TR-harmonic grid and the
+         * per-event component export are plotting products
+         * (pulseg_calc_mech_resonances supplies those), and nothing here
+         * reads them. This is the real predownload path and must never pay
+         * for arrays it immediately frees. */
+        memset(&spectra, 0, sizeof(spectra));
+        rc = calc_mech_resonances_from_uniform(
+            &spectra,
+            diag,
+            uw,
+            target_res_hz,
+            max_freq_hz,
+            num_instances,
+            tr_duration_us,
+            bands->count,
+            bands->bands,
+            opts->peak_log10_threshold,
+            opts->peak_norm_scale,
+            opts->peak_eps,
+            opts->peak_prominence,
+            desc,
+            start_block,
+            block_count,
+            opts->gamma_hz_per_t,
+            0 /* compute_dense_envelope */,
+            0 /* compute_display_products */,
+            1 /* compress_trains */,
+            1 /* bound over every instance of the canonical TR */);
+
+        if (!PULSEG_FAILED(rc))
+            rc = mech_resonance_verdict(&spectra, diag, bands, opts->gamma_hz_per_t, s, 0);
+
+        pulseg_mech_resonances_spectra_free(&spectra);
+        if (profile_fn)
+            profile_fn(profile_ctx, PULSEG__SAFETY_PROFILE_MECH_RESONANCE, 0);
+        if (PULSEG_FAILED(rc))
+            return rc;
+    }
+
+    return PULSEG_SUCCESS;
+}
+
+/* ================================================================== */
+/*  PNS verdict                                                       */
+/* ================================================================== */
+
+static int check_pns_planned(
+    const pulseg_collection *coll,
+    pulseg_diagnostic *diag,
+    pulseg_check_plan *plan,
+    const pulseg_opts *opts,
+    const pulseg_pns_model *model,
+    float threshold_percent,
+    pulseg__safety_profile_fn profile_fn,
+    void *profile_ctx)
+{
+    int s, i, rc;
+    const pulseg_sequence_descriptor *desc;
+    pulseg_pns_result pns_result;
+    int start_block, block_count, num_instances;
+    float tr_duration_us;
+    float pns_combined, max_pns;
+
+    if (!model)
+        return PULSEG_SUCCESS;
+
+    for (s = 0; s < coll->num_subsequences; ++s)
+    {
+        desc = &coll->descriptors[s];
+        select_canonical_tr_window(
+            desc,
+            &start_block,
+            &block_count,
+            &num_instances,
+            &tr_duration_us);
+
+        if (profile_fn)
+            profile_fn(profile_ctx, PULSEG__SAFETY_PROFILE_PNS, 1);
+        memset(&pns_result, 0, sizeof(pns_result));
+        rc = calc_pns_over_shape_groups(
+            &pns_result,
+            diag,
+            plan,
+            s,
+            opts->gamma_hz_per_t,
+            model,
+            desc,
+            start_block,
+            block_count);
+        if (!PULSEG_FAILED(rc) && pns_result.num_samples > 0)
+        {
+            max_pns = 0.0f;
+            for (i = 0; i < pns_result.num_samples; ++i)
+            {
+                pns_combined = 0.0f;
+                if (pns_result.slew_x_hz_per_m_per_s)
+                    pns_combined +=
+                        pns_result.slew_x_hz_per_m_per_s[i] * pns_result.slew_x_hz_per_m_per_s[i];
+                if (pns_result.slew_y_hz_per_m_per_s)
+                    pns_combined +=
+                        pns_result.slew_y_hz_per_m_per_s[i] * pns_result.slew_y_hz_per_m_per_s[i];
+                if (pns_result.slew_z_hz_per_m_per_s)
+                    pns_combined +=
+                        pns_result.slew_z_hz_per_m_per_s[i] * pns_result.slew_z_hz_per_m_per_s[i];
+                pns_combined = (float)sqrt((double)pns_combined);
+                if (pns_combined > max_pns)
+                    max_pns = pns_combined;
+            }
+            if (max_pns > threshold_percent)
+                rc = PULSEG_ERR_PNS_THRESHOLD_EXCEEDED;
+        }
+        pulseg_pns_result_free(&pns_result);
+        if (profile_fn)
+            profile_fn(profile_ctx, PULSEG__SAFETY_PROFILE_PNS, 0);
+        if (PULSEG_FAILED(rc))
+            return rc;
+    }
+
+    return PULSEG_SUCCESS;
+}
+
+/* ================================================================== */
+/*  Plan borrowing                                                    */
+/* ================================================================== */
+
+/* A check the caller gave no plan runs on one of its own, so the code below
+ * never has to branch on whether a plan exists. */
+static int borrow_plan(
+    pulseg_check_plan **out,
+    pulseg_check_plan **owned,
+    pulseg_diagnostic *diag,
+    pulseg_check_plan *given,
+    const pulseg_collection *coll)
+{
+    *owned = NULL;
+    if (given)
+    {
+        *out = given;
+        return PULSEG_SUCCESS;
+    }
+    if (PULSEG_FAILED(pulseg_check_plan_create(owned, diag, coll, NULL)))
+        return diag ? diag->code : PULSEG_ERR_ALLOC_FAILED;
+    *out = *owned;
+    return PULSEG_SUCCESS;
+}
+
+/* ================================================================== */
+/*  Public per-check entry points                                     */
+/* ================================================================== */
+
+int pulseg_check_mech_resonances(
+    const pulseg_collection *coll,
+    pulseg_diagnostic *diag,
+    pulseg_check_plan *plan,
+    const pulseg_opts *opts,
+    const pulseg_forbidden_band_list *bands)
+{
+    pulseg_check_plan *owned;
+    int rc;
+
+    if (!coll || !opts)
+    {
+        if (diag)
+        {
+            pulseg_diagnostic_init(diag);
+            diag->code = PULSEG_ERR_NULL_POINTER;
+        }
+        return PULSEG_ERR_NULL_POINTER;
+    }
+    if (diag)
+        pulseg_diagnostic_init(diag);
+    if (!collection_has_gradient(coll))
+        return PULSEG_SUCCESS;
+
+    rc = borrow_plan(&plan, &owned, diag, plan, coll);
+    if (PULSEG_FAILED(rc))
+        return rc;
+
+    rc = check_mech_resonances_planned(coll, diag, plan, opts, bands, NULL, NULL);
+
+    pulseg_check_plan_destroy(owned);
+    return rc;
+}
+
+int pulseg_check_pns(
+    const pulseg_collection *coll,
+    pulseg_diagnostic *diag,
+    pulseg_check_plan *plan,
+    const pulseg_opts *opts,
+    const pulseg_pns_model *model,
+    float threshold_percent)
+{
+    pulseg_check_plan *owned;
+    int rc;
+
+    if (!coll || !opts)
+    {
+        if (diag)
+        {
+            pulseg_diagnostic_init(diag);
+            diag->code = PULSEG_ERR_NULL_POINTER;
+        }
+        return PULSEG_ERR_NULL_POINTER;
+    }
+    if (diag)
+        pulseg_diagnostic_init(diag);
+    if (!collection_has_gradient(coll))
+        return PULSEG_SUCCESS;
+
+    rc = borrow_plan(&plan, &owned, diag, plan, coll);
+    if (PULSEG_FAILED(rc))
+        return rc;
+
+    rc = check_pns_planned(coll, diag, plan, opts, model, threshold_percent, NULL, NULL);
+
+    pulseg_check_plan_destroy(owned);
+    return rc;
+}
+
+/* ================================================================== */
+/*  Safety check                                                      */
 /* ================================================================== */
 int pulseg__check_safety_profiled(
     pulseg_collection *coll,
     pulseg_diagnostic *diag,
+    pulseg_check_plan *plan,
     const pulseg_opts *opts,
-    int num_forbidden_bands,
-    const pulseg_forbidden_band *forbidden_bands,
+    const pulseg_forbidden_band_list *bands,
     const pulseg_pns_model *pns_model,
     float pns_threshold_percent,
     pulseg__safety_profile_fn profile_fn,
     void *profile_ctx)
 {
-    int rc, s, u, i;
-    int ci, b;
-    int num_unique_trs;
-    int *unique_tr_indices;
-    int *tr_group_labels;
-    const pulseg_sequence_descriptor *desc;
-    pulseg__uniform_grad_waveforms uw;
-    pulseg_mech_resonances_spectra spectra;
-    pulseg_pns_result pns_result;
-    int start_block, block_count, num_instances;
-    int sa_start_block, sa_block_count;
-    int *block_order;
-    float tr_duration_us;
-    float pns_combined, max_pns;
-    float cf_hz, ca_hz_per_m;
-    int fbi;
-    float mr_max_freq_hz, mr_target_res_hz, mr_min_band_width_hz, mr_width;
+    pulseg_check_plan *owned;
+    int rc;
 
     if (!coll || !opts)
     {
@@ -5491,9 +5869,8 @@ int pulseg__check_safety_profiled(
     if (diag)
         pulseg_diagnostic_init(diag);
 
-    /* ---- 0. raster alignment ----
-     * Ahead of the gradient-presence skip below: it judges RF, ADC and block
-     * durations too, which an RF-only sequence still has. */
+    /* Ahead of the gradient-presence skip below: raster alignment judges RF,
+     * ADC and block durations too, which an RF-only sequence still has. */
     rc = pulseg_check_raster_alignment(coll, diag, opts);
     if (PULSEG_FAILED(rc))
         return rc;
@@ -5512,16 +5889,14 @@ int pulseg__check_safety_profiled(
     if (!rc)
         return PULSEG_SUCCESS;
 
-    /* ---- 1. max gradient amplitude ---- */
     if (profile_fn)
         profile_fn(profile_ctx, PULSEG__SAFETY_PROFILE_MAX_GRAD, 1);
-    rc = check_max_grad(coll, diag, opts);
+    rc = pulseg_check_max_grad(coll, diag, opts);
     if (profile_fn)
         profile_fn(profile_ctx, PULSEG__SAFETY_PROFILE_MAX_GRAD, 0);
     if (PULSEG_FAILED(rc))
         return rc;
 
-    /* ---- 2. gradient continuity ---- */
     if (profile_fn)
         profile_fn(profile_ctx, PULSEG__SAFETY_PROFILE_CONTINUITY, 1);
     rc = pulseg_check_grad_continuity(coll, diag, opts);
@@ -5530,312 +5905,49 @@ int pulseg__check_safety_profiled(
     if (PULSEG_FAILED(rc))
         return rc;
 
-    /* ---- 3. max slew rate ---- */
     if (profile_fn)
         profile_fn(profile_ctx, PULSEG__SAFETY_PROFILE_MAX_SLEW, 1);
-    rc = check_max_slew(coll, diag, opts);
+    rc = pulseg_check_max_slew(coll, diag, opts);
     if (profile_fn)
         profile_fn(profile_ctx, PULSEG__SAFETY_PROFILE_MAX_SLEW, 0);
     if (PULSEG_FAILED(rc))
         return rc;
 
-    /* Safety path = plotting path: when forbidden bands are configured, drive
-     * the structural analysis with a real resolution and max frequency instead
-     * of (0,0) (which leaves num_freq_bins == 0 and makes
-     * sa_check_structural_violations() a silent no-op). The analysis window is
-     * DECOUPLED from the band range (SA_MIN_ANALYSIS_FREQ_HZ): candidate
-     * selection normalizes against the peak spectral content over the analyzed
-     * range, so it must span the sequence's true dominant feature — which for
-     * non-EPI sequences (e.g. GRE) sits above the band — or weak in-band
-     * content is spuriously promoted. The candidate→band comparison itself
-     * stays band-restricted, so widening the analysis window never widens what
-     * can be flagged. This matches the validated grad_spectrum defaults
-     * (max_frequency 3000 Hz). */
-    mr_max_freq_hz = 0.0f;
-    mr_target_res_hz = 0.0f;
-    if (num_forbidden_bands > 0)
-    {
-        mr_min_band_width_hz = -1.0f;
-        for (fbi = 0; fbi < num_forbidden_bands; ++fbi)
-        {
-            if (forbidden_bands[fbi].freq_max_hz > mr_max_freq_hz)
-                mr_max_freq_hz = forbidden_bands[fbi].freq_max_hz;
+    rc = borrow_plan(&plan, &owned, diag, plan, coll);
+    if (PULSEG_FAILED(rc))
+        return rc;
 
-            mr_width = forbidden_bands[fbi].freq_max_hz - forbidden_bands[fbi].freq_min_hz;
-            if (mr_min_band_width_hz < 0.0f || mr_width < mr_min_band_width_hz)
-                mr_min_band_width_hz = mr_width;
-        }
-        mr_max_freq_hz *= 1.2f;
-        /* Decouple normalization range from band range (see
-         * SA_MIN_ANALYSIS_FREQ_HZ): ensure the analyzed spectrum reaches the
-         * validated plotting-path range so the per-axis gate and FFT-promotion
-         * normalizers capture the true dominant peak, not just the near-band
-         * content. */
-        if (mr_max_freq_hz < SA_MIN_ANALYSIS_FREQ_HZ)
-            mr_max_freq_hz = SA_MIN_ANALYSIS_FREQ_HZ;
+    rc = check_mech_resonances_planned(coll, diag, plan, opts, bands, profile_fn, profile_ctx);
+    if (!PULSEG_FAILED(rc))
+        rc = check_pns_planned(
+            coll,
+            diag,
+            plan,
+            opts,
+            pns_model,
+            pns_threshold_percent,
+            profile_fn,
+            profile_ctx);
 
-        mr_target_res_hz = mr_min_band_width_hz / 4.0f;
-        if (mr_target_res_hz < 1.0f)
-            mr_target_res_hz = 1.0f;
-        else if (mr_target_res_hz > 5.0f)
-            mr_target_res_hz = 5.0f;
-    }
-
-    /* ---- 4. per-subsequence canonical-TR acoustic + PNS ---- */
-    for (s = 0; s < coll->num_subsequences; ++s)
-    {
-        desc = &coll->descriptors[s];
-        unique_tr_indices = NULL;
-        tr_group_labels = NULL;
-
-        select_canonical_tr_window(
-            desc,
-            &start_block,
-            &block_count,
-            &num_instances,
-            &tr_duration_us);
-        sa_start_block = start_block;
-        sa_block_count = block_count;
-        block_order = NULL;
-
-        /* Evaluate one canonical TR per shot-ID combination. */
-        unique_tr_indices = NULL;
-        tr_group_labels = NULL;
-        num_unique_trs = 0 /* one canonical TR; representatives carry the worst case */;
-        if (num_unique_trs <= 0)
-            num_unique_trs = 1;
-
-        for (u = 0; u < num_unique_trs; ++u)
-        {
-            memset(&uw, 0, sizeof(uw));
-            if (profile_fn)
-                profile_fn(profile_ctx, PULSEG__SAFETY_PROFILE_WAVEFORM_EXTRACT, 1);
-            rc = pulseg__get_gradient_waveforms_range(
-                desc,
-                &uw,
-                diag,
-                start_block,
-                block_count,
-                PULSEG_AMP_MAX_POS,
-                tr_group_labels,
-                u,
-                block_order);
-            if (profile_fn)
-                profile_fn(profile_ctx, PULSEG__SAFETY_PROFILE_WAVEFORM_EXTRACT, 0);
-            if (PULSEG_FAILED(rc))
-            {
-                if (unique_tr_indices)
-                    PULSEG_FREE(unique_tr_indices);
-                if (tr_group_labels)
-                    PULSEG_FREE(tr_group_labels);
-                if (block_order)
-                    PULSEG_FREE(block_order);
-                return rc;
-            }
-
-            if (num_forbidden_bands > 0)
-            {
-                if (profile_fn)
-                    profile_fn(profile_ctx, PULSEG__SAFETY_PROFILE_MECH_RESONANCE, 1);
-                /* Headless A_eq analysis. The verdict comes only from the
-                 * in-guarded-band TR-harmonic lines (candidate_*), which this
-                 * call still computes in full at the band-derived resolution/
-                 * max frequency (>= SA_MIN_ANALYSIS_FREQ_HZ). Covered by
-                 * test_safety_grad.c Suite D.
-                 * Both display flags are 0: the dense analytic envelope, the
-                 * full-TR FFT, the analytical TR-harmonic grid and the
-                 * per-event component export are plotting products (see
-                 * pulseg_calc_mech_resonances / the python mechres_plots
-                 * tooling), and nothing downstream of this call reads them —
-                 * the loop below touches only spectra.candidate_*. This is
-                 * the real PSD predownload path and must never pay for
-                 * arrays it immediately frees. */
-                memset(&spectra, 0, sizeof(spectra));
-                rc = calc_mech_resonances_from_uniform(
-                    &spectra,
-                    diag,
-                    &uw,
-                    mr_target_res_hz,
-                    mr_max_freq_hz,
-                    num_instances,
-                    tr_duration_us,
-                    num_forbidden_bands,
-                    forbidden_bands,
-                    opts->peak_log10_threshold,
-                    opts->peak_norm_scale,
-                    opts->peak_eps,
-                    opts->peak_prominence,
-                    desc,
-                    sa_start_block,
-                    sa_block_count,
-                    opts->gamma_hz_per_t,
-                    0 /* compute_dense_envelope: never on the PSD path */,
-                    0 /* compute_display_products: never on the PSD path */,
-                    1 /* compress_trains: this is the path being optimised */,
-                    1 /* bound over every instance of the canonical TR */);
-
-                /* Safety path: fail fast on first violating candidate.
-                 * Pattern: for each candidate, scan union of all bands. */
-                if (!PULSEG_FAILED(rc) && spectra.num_candidates > 0 && spectra.candidate_freqs &&
-                    spectra.candidate_grad_amps_gx && spectra.candidate_grad_amps_gy &&
-                    spectra.candidate_grad_amps_gz)
-                {
-                    float *cga[3];
-                    int axi;
-                    float guard_hz, mbw;
-                    /* Guard mirrors sa_check_structural_violations: HWHM of the
-                     * narrowest positive-width band. */
-                    mbw = -1.0f;
-                    for (b = 0; b < num_forbidden_bands; ++b)
-                    {
-                        float w = forbidden_bands[b].freq_max_hz - forbidden_bands[b].freq_min_hz;
-                        if (w > 0.0f && (mbw < 0.0f || w < mbw))
-                            mbw = w;
-                    }
-                    guard_hz = (mbw > 0.0f) ? (SA_GUARD_HWHM_MULT * mbw * 0.5f) : 0.0f;
-                    cga[0] = spectra.candidate_grad_amps_gx;
-                    cga[1] = spectra.candidate_grad_amps_gy;
-                    cga[2] = spectra.candidate_grad_amps_gz;
-                    for (ci = 0; ci < spectra.num_candidates; ++ci)
-                    {
-                        cf_hz = spectra.candidate_freqs[ci];
-
-                        for (b = 0; b < num_forbidden_bands; ++b)
-                        {
-                            float eps_band =
-                                sa_eps_for_band(&forbidden_bands[b], opts->gamma_hz_per_t);
-                            if (cf_hz < forbidden_bands[b].freq_min_hz - guard_hz ||
-                                cf_hz > forbidden_bands[b].freq_max_hz + guard_hz)
-                                continue;
-                            for (axi = 0; axi < 3; ++axi)
-                            {
-                                ca_hz_per_m = cga[axi][ci];
-                                if (ca_hz_per_m > eps_band)
-                                {
-                                    rc = PULSEG_ERR_MECH_RESONANCES_VIOLATION;
-                                    if (diag)
-                                    {
-                                        diag->code = rc;
-                                        pulseg__diag_printf(
-                                            diag,
-                                            "f=%.2fHz,a=%.2f>%.2fHz/m,ax=%d,ss=%d,tr=%d",
-                                            (double)cf_hz,
-                                            (double)ca_hz_per_m,
-                                            (double)eps_band,
-                                            axi,
-                                            s,
-                                            u);
-                                    }
-                                    break;
-                                }
-                            }
-                            if (PULSEG_FAILED(rc))
-                                break;
-                        }
-                        if (PULSEG_FAILED(rc))
-                            break;
-                    }
-                }
-
-                pulseg_mech_resonances_spectra_free(&spectra);
-                if (profile_fn)
-                    profile_fn(profile_ctx, PULSEG__SAFETY_PROFILE_MECH_RESONANCE, 0);
-                if (PULSEG_FAILED(rc))
-                {
-                    pulseg__uniform_grad_waveforms_free(&uw);
-                    if (unique_tr_indices)
-                        PULSEG_FREE(unique_tr_indices);
-                    if (tr_group_labels)
-                        PULSEG_FREE(tr_group_labels);
-                    if (block_order)
-                        PULSEG_FREE(block_order);
-                    return rc;
-                }
-            }
-
-            if (pns_model)
-            {
-                if (profile_fn)
-                    profile_fn(profile_ctx, PULSEG__SAFETY_PROFILE_PNS, 1);
-                memset(&pns_result, 0, sizeof(pns_result));
-                /* Not the `uw` above: that window carries one group's shapes
-                 * at the whole scan's amplitudes, which bounds the
-                 * repetitions that share those shapes and no others. */
-                rc = calc_pns_over_shape_groups(
-                    &pns_result,
-                    diag,
-                    opts->gamma_hz_per_t,
-                    pns_model,
-                    desc,
-                    start_block,
-                    block_count);
-                if (!PULSEG_FAILED(rc) && pns_result.num_samples > 0)
-                {
-                    max_pns = 0.0f;
-                    for (i = 0; i < pns_result.num_samples; ++i)
-                    {
-                        pns_combined = 0.0f;
-                        if (pns_result.slew_x_hz_per_m_per_s)
-                            pns_combined += pns_result.slew_x_hz_per_m_per_s[i] *
-                                pns_result.slew_x_hz_per_m_per_s[i];
-                        if (pns_result.slew_y_hz_per_m_per_s)
-                            pns_combined += pns_result.slew_y_hz_per_m_per_s[i] *
-                                pns_result.slew_y_hz_per_m_per_s[i];
-                        if (pns_result.slew_z_hz_per_m_per_s)
-                            pns_combined += pns_result.slew_z_hz_per_m_per_s[i] *
-                                pns_result.slew_z_hz_per_m_per_s[i];
-                        pns_combined = (float)sqrt((double)pns_combined);
-                        if (pns_combined > max_pns)
-                            max_pns = pns_combined;
-                    }
-                    if (max_pns > pns_threshold_percent)
-                        rc = PULSEG_ERR_PNS_THRESHOLD_EXCEEDED;
-                }
-                pulseg_pns_result_free(&pns_result);
-                if (profile_fn)
-                    profile_fn(profile_ctx, PULSEG__SAFETY_PROFILE_PNS, 0);
-                if (PULSEG_FAILED(rc))
-                {
-                    pulseg__uniform_grad_waveforms_free(&uw);
-                    if (unique_tr_indices)
-                        PULSEG_FREE(unique_tr_indices);
-                    if (tr_group_labels)
-                        PULSEG_FREE(tr_group_labels);
-                    if (block_order)
-                        PULSEG_FREE(block_order);
-                    return rc;
-                }
-            }
-
-            pulseg__uniform_grad_waveforms_free(&uw);
-        }
-
-        if (unique_tr_indices)
-            PULSEG_FREE(unique_tr_indices);
-        if (tr_group_labels)
-            PULSEG_FREE(tr_group_labels);
-        if (block_order)
-            PULSEG_FREE(block_order);
-    }
-
-    return PULSEG_SUCCESS;
+    pulseg_check_plan_destroy(owned);
+    return rc;
 }
 
 int pulseg_check_safety(
     pulseg_collection *coll,
     pulseg_diagnostic *diag,
+    pulseg_check_plan *plan,
     const pulseg_opts *opts,
-    int num_forbidden_bands,
-    const pulseg_forbidden_band *forbidden_bands,
+    const pulseg_forbidden_band_list *bands,
     const pulseg_pns_model *pns_model,
     float pns_threshold_percent)
 {
     return pulseg__check_safety_profiled(
         coll,
         diag,
+        plan,
         opts,
-        num_forbidden_bands,
-        forbidden_bands,
+        bands,
         pns_model,
         pns_threshold_percent,
         NULL,

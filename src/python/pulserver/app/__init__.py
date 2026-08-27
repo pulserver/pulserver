@@ -162,7 +162,7 @@ def _recon_docstring(plugin_class: type, base: type) -> str:
     parts = [lead] if lead else []
     parts.append("Parameters\n----------\n" + "\n".join(parameters))
     parts.append(
-        "Returns\n-------\nlist\n    Every image the reconstruction emitted, in order."
+        "Returns\n-------\nlist\n    Everything the reconstruction emitted, in order."
     )
     parts += [
         f"{name}\n{'-' * len(name)}\n{body}"

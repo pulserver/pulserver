@@ -369,7 +369,7 @@ typedef struct pulseg_virtual_segment
 /* clang-format off */
 #define PULSEG_VIRTUAL_SEGMENT_INIT \
     { \
-    0, 0, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, -1, 0, \
+    0, 0, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, -1, 0, \
     PULSEG_SEGMENT_TIMING_INIT \
     }
 /* clang-format on */
@@ -876,22 +876,10 @@ int pulseg__calc_convolution_fft(
     const float *kernel,
     int kernel_len);
 
-/* Reusable FFT-convolution plan. Holds the transform setup, the scratch
- * buffers and the already-transformed kernel, so a caller convolving
- * several equal-length signals against one kernel -- the three gradient
- * axes of a PNS evaluation -- transforms the kernel once and allocates
- * the kiss_fft twiddle tables once instead of once per signal.
- * pulseg__calc_convolution_fft() is create/apply/free around it and is
- * numerically identical. */
-typedef struct pulseg__conv_fft_plan pulseg__conv_fft_plan;
-
-int pulseg__conv_fft_plan_create(
-    pulseg__conv_fft_plan **out_plan,
-    int signal_len,
-    const float *kernel,
-    int kernel_len);
-int pulseg__conv_fft_plan_apply(pulseg__conv_fft_plan *plan, float *output, const float *signal);
-void pulseg__conv_fft_plan_free(pulseg__conv_fft_plan *plan);
+/* pulseg_conv_fft_plan is public (pulseg_pns_models.h): a vendor-supplied
+ * PNS model is a caller-side implementation and needs the same convolution
+ * the published models use. pulseg__calc_convolution_fft() is
+ * create/apply/free around it and is numerically identical. */
 
 /* pulseg_parse.c's public entry points (pulseq_read family,
  * accessors, pulseq_decompress_shape, etc.) are declared in the
@@ -1040,6 +1028,38 @@ int pulseg__get_gradient_waveforms_range(
     int target_group,
     const int *block_order);
 
+/* --- pulseg_check_plan.c ---
+ * The shared preprocessing behind pulseg_check_plan. Both accessors take a
+ * non-NULL plan; the public checks create a private one when the caller
+ * passes none, so no path below ever sees NULL. */
+
+/* Repetitions grouped by the set of gradient shapes they play. The returned
+ * arrays are the plan's and stay valid for its lifetime. */
+int pulseg__plan_shape_groups(
+    pulseg_check_plan *plan,
+    const int **out_labels,
+    const int **out_group_first,
+    int *out_num_groups,
+    pulseg_diagnostic *diag,
+    const pulseg_sequence_descriptor *desc,
+    int subseq_idx);
+
+/* Uniform-raster gradient waveforms over one window, extracted on first
+ * request and retained. The result is borrowed and must not be freed; it
+ * stays valid until the next pulseg__plan_waveforms() call on the same plan,
+ * which may evict it. */
+int pulseg__plan_waveforms(
+    pulseg_check_plan *plan,
+    const pulseg__uniform_grad_waveforms **out,
+    pulseg_diagnostic *diag,
+    const pulseg_sequence_descriptor *desc,
+    int subseq_idx,
+    int block_start,
+    int block_count,
+    int amplitude_mode,
+    const int *labels,
+    int target_group);
+
 /* --- pulseg_safety.c ---
  * Optional internal observer used by the documentation benchmark.  Keeping
  * the clock outside libpulseg means the production build remains free of OS
@@ -1063,9 +1083,9 @@ typedef void (
 int pulseg__check_safety_profiled(
     pulseg_collection *coll,
     pulseg_diagnostic *diag,
+    pulseg_check_plan *plan,
     const pulseg_opts *opts,
-    int num_forbidden_bands,
-    const pulseg_forbidden_band *forbidden_bands,
+    const pulseg_forbidden_band_list *bands,
     const pulseg_pns_model *pns_model,
     float pns_threshold_percent,
     pulseg__safety_profile_fn profile_fn,

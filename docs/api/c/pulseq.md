@@ -36,39 +36,51 @@ and nothing else pays for.
 
 ````{only} doxygen
 ```{doxygenfunction} pulseq_file_init
+:project: pulserver_c
 ```
 
 ```{doxygenfunction} pulseq_file_free
+:project: pulserver_c
 ```
 
 ```{doxygenfunction} pulseq_read
+:project: pulserver_c
 ```
 
 ```{doxygenfunction} pulseq_read_from_buffer
+:project: pulserver_c
 ```
 
 ```{doxygenfunction} pulseq_read_definitions_only
+:project: pulserver_c
 ```
 
 ```{doxygenfunction} pulseq_file_is_binary
+:project: pulserver_c
 ```
 
 ```{doxygenfunction} pulseq_read_binary
+:project: pulserver_c
 ```
 
 ```{doxygenfunction} pulseq_read_binary_from_buffer
+:project: pulserver_c
 ```
 
 ```{doxygenfunction} pulseq_read_binary_definitions_only
+:project: pulserver_c
 ```
 
 ```{doxygenfunction} pulseq_file_set_read
+:project: pulserver_c
 ```
 
 ```{doxygenfunction} pulseq_file_set_free
+:project: pulserver_c
 ```
 
 ```{doxygenfunction} pulseq_verify_signature
+:project: pulserver_c
 ```
 ````
 
@@ -76,30 +88,37 @@ and nothing else pays for.
 
 ````{only} doxygen
 ```{doxygenstruct} pulseq_file
+:project: pulserver_c
 :members:
 ```
 
 ```{doxygenstruct} pulseq_file_set
+:project: pulserver_c
 :members:
 ```
 
 ```{doxygenstruct} pulseq_raster
+:project: pulserver_c
 :members:
 ```
 
 ```{doxygenstruct} pulseq_definition
+:project: pulserver_c
 :members:
 ```
 
 ```{doxygenstruct} pulseq_reserved_definitions
+:project: pulserver_c
 :members:
 ```
 
 ```{doxygenstruct} pulseq_section_offsets
+:project: pulserver_c
 :members:
 ```
 
 ```{doxygenstruct} pulseq_shape
+:project: pulserver_c
 :members:
 ```
 ````
@@ -108,36 +127,45 @@ and nothing else pays for.
 
 ````{only} doxygen
 ```{doxygenfunction} pulseq_get_raw_block_content_ids
+:project: pulserver_c
 ```
 
 ```{doxygenfunction} pulseq_get_raw_extension
+:project: pulserver_c
 ```
 
 ```{doxygenstruct} pulseq_raw_block
+:project: pulserver_c
 :members:
 ```
 
 ```{doxygenstruct} pulseq_raw_extension
+:project: pulserver_c
 :members:
 ```
 
 ```{doxygenstruct} pulseq_rf_shim_entry
+:project: pulserver_c
 :members:
 ```
 
 ```{doxygenstruct} pulseq_trigger_event
+:project: pulserver_c
 :members:
 ```
 
 ```{doxygenstruct} pulseq_label_event
+:project: pulserver_c
 :members:
 ```
 
 ```{doxygenstruct} pulseq_flag_event
+:project: pulserver_c
 :members:
 ```
 
 ```{doxygenstruct} pulseq_label_limit
+:project: pulserver_c
 :members:
 ```
 ````
@@ -150,6 +178,7 @@ and a linear ramp both cost a handful of numbers.
 
 ````{only} doxygen
 ```{doxygenfunction} pulseq_decompress_shape
+:project: pulserver_c
 ```
 ````
 
@@ -161,18 +190,23 @@ that refused it would be refusing a valid file.
 
 ````{only} doxygen
 ```{doxygenfunction} pulseq_label_id_for_name
+:project: pulserver_c
 ```
 
 ```{doxygenfunction} pulseq_label_register_name
+:project: pulserver_c
 ```
 
 ```{doxygenfunction} pulseq_hint_id_for_name
+:project: pulserver_c
 ```
 
 ```{doxygenfunction} pulseq_label_name_for_id
+:project: pulserver_c
 ```
 
 ```{doxygenfunction} pulseq_hint_name_for_id
+:project: pulserver_c
 ```
 ````
 
@@ -194,27 +228,35 @@ frequencies at which the magnitude first exceeds `cutoff` times its peak.
 
 ````{only} doxygen
 ```{doxygenfunction} pulseq_rf_spectrum_create
+:project: pulserver_c
 ```
 
 ```{doxygenfunction} pulseq_rf_spectrum_run
+:project: pulserver_c
 ```
 
 ```{doxygenfunction} pulseq_rf_spectrum_size
+:project: pulserver_c
 ```
 
 ```{doxygenfunction} pulseq_rf_spectrum_free
+:project: pulserver_c
 ```
 
 ```{doxygenfunction} pulseq_rf_spectrum_freq
+:project: pulserver_c
 ```
 
 ```{doxygenfunction} pulseq_rf_spectrum_re
+:project: pulserver_c
 ```
 
 ```{doxygenfunction} pulseq_rf_spectrum_im
+:project: pulserver_c
 ```
 
 ```{doxygenfunction} pulseq_rf_bandwidth
+:project: pulserver_c
 ```
 ````
 
@@ -225,9 +267,11 @@ against the directory the lead file came from.
 
 ````{only} doxygen
 ```{doxygenfunction} pulseq_path_dirname
+:project: pulserver_c
 ```
 
 ```{doxygenfunction} pulseq_path_join
+:project: pulserver_c
 ```
 ````
 

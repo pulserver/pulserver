@@ -184,6 +184,23 @@ two plugins write a `receive` where the others declare one.
    epi3D_recon
 ```
 
+### Prospective motion correction
+
+The one reconstruction that answers while the scan is still running. It takes
+the navigator readouts the sequence interleaves with its encoding, measures
+where the head has moved to, and sends the correction back over the real-time
+port for the readouts not yet played. It emits no image: what it produces is a
+pose, and the images it makes of the navigator planes exist only to measure
+one.
+
+```{eval-rst}
+.. autosummary::
+   :toctree: ../generated/app_recon
+   :template: autosummary/plugin.rst
+
+   pmc_recon
+```
+
 ## The contract behind them
 
 A sequence plugin declares what the scanner UI shows and builds the sequence

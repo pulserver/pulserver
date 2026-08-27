@@ -32,21 +32,27 @@ compilers reject C enums — the same reason the rest of `src/c/` is C89.
 
 ````{only} doxygen
 ```{doxygenfunction} pulseg_protocol_parse
+:project: pulserver_c
 ```
 
 ```{doxygenfunction} pulseg_protocol_serialize
+:project: pulserver_c
 ```
 
 ```{doxygenfunction} pulseg_protocol_find
+:project: pulserver_c
 ```
 
 ```{doxygenfunction} pulseg_param_find
+:project: pulserver_c
 ```
 
 ```{doxygenfunction} pulseg_param_get_type
+:project: pulserver_c
 ```
 
 ```{doxygenfunction} pulseg_param_wire_name
+:project: pulserver_c
 ```
 ````
 
@@ -59,43 +65,55 @@ nothing for the console side to set.
 
 ````{only} doxygen
 ```{doxygenfunction} pulseg_protocol_get_float
+:project: pulserver_c
 ```
 
 ```{doxygenfunction} pulseg_protocol_get_int
+:project: pulserver_c
 ```
 
 ```{doxygenfunction} pulseg_protocol_get_bool
+:project: pulserver_c
 ```
 
 ```{doxygenfunction} pulseg_protocol_get_stringlist
+:project: pulserver_c
 ```
 
 ```{doxygenfunction} pulseg_protocol_get_config
+:project: pulserver_c
 ```
 
 ```{doxygenfunction} pulseg_protocol_set_float
+:project: pulserver_c
 ```
 
 ```{doxygenfunction} pulseg_protocol_set_int
+:project: pulserver_c
 ```
 
 ```{doxygenfunction} pulseg_protocol_set_bool
+:project: pulserver_c
 ```
 
 ```{doxygenfunction} pulseg_protocol_set_stringlist
+:project: pulserver_c
 ```
 ````
 
 ````{only} doxygen
 ```{doxygenstruct} pulseg_protocol
+:project: pulserver_c
 :members:
 ```
 
 ```{doxygenstruct} pulseg_protocol_value
+:project: pulserver_c
 :members:
 ```
 
 ```{doxygenstruct} pulseg_param_entry
+:project: pulserver_c
 :members:
 ```
 ````
@@ -111,23 +129,37 @@ These entry points return `0` or a non-negative count on success and `-1` with
 `errno` set on failure — **not** the `PULSEG_ERR_*` codes the rest of the
 library uses. What fails here is a process or a pipe, not a sequence model.
 
+The three commands are the three questions a console asks: `LIST_PROTOCOL` for
+the parameters and their defaults, `VALIDATE` for whether the operator's
+current prescription is playable and how long it would take, and `GENERATE`
+for the `.seq` itself. `pulseg_bridge_validate` writes the plugin's message
+into a `pulseg_text_buffer` (see {doc}`types`); once a `.seq` exists,
+`pulseg_peek_scan_time` on {doc}`file` answers the timing half of the same
+question without the host.
+
 ````{only} doxygen
 ```{doxygenfunction} pulseg_bridge_open_with_opts
+:project: pulserver_c
 ```
 
 ```{doxygenfunction} pulseg_bridge_close
+:project: pulserver_c
 ```
 
 ```{doxygenfunction} pulseg_bridge_list_protocol
+:project: pulserver_c
 ```
 
 ```{doxygenfunction} pulseg_bridge_validate
+:project: pulserver_c
 ```
 
 ```{doxygenfunction} pulseg_bridge_generate
+:project: pulserver_c
 ```
 
 ```{doxygenstruct} pulseg_bridge
+:project: pulserver_c
 :members:
 ```
 ````
@@ -136,3 +168,4 @@ library uses. What fails here is a process or a pipe, not a sequence model.
 
 {doc}`../python/apps` is the Python side of the same contract: the typed
 parameters a plugin declares and the `SequencePlugin` the bridge drives.
+{doc}`file` picks up where `GENERATE` leaves off.

@@ -187,6 +187,59 @@ static int segments_structurally_equal(
 /*  TR detection helpers                                              */
 /* ================================================================== */
 
+/* The identity a repetition is recognised by: a block definition with its ADC
+ * left out.  Which readout a block digitises with is a property of the
+ * instance, not of the rhythm the sequence repeats at.  Counting it would
+ * scale the period by the number of readout variants a position holds, and
+ * the window-based safety checks cost at least the square of the period.
+ *
+ * Returns a dense id per block definition, caller frees; NULL on failure. */
+static int *build_geometry_ids(const pulseg_sequence_descriptor *desc)
+{
+    enum
+    {
+        GEOM_COLS = 5
+    };
+    int *rows = NULL;
+    int *reps = NULL;
+    int *ids = NULL;
+    int i, n;
+
+    n = desc->num_unique_blocks;
+    if (n <= 0)
+        return NULL;
+
+    rows = (int *)PULSEG_ALLOC((size_t)n * GEOM_COLS * sizeof(int));
+    reps = (int *)PULSEG_ALLOC((size_t)n * sizeof(int));
+    ids = (int *)PULSEG_ALLOC((size_t)n * sizeof(int));
+    if (!rows || !reps || !ids)
+    {
+        if (rows)
+            PULSEG_FREE(rows);
+        if (reps)
+            PULSEG_FREE(reps);
+        if (ids)
+            PULSEG_FREE(ids);
+        return NULL;
+    }
+
+    for (i = 0; i < n; ++i)
+    {
+        const pulseg_base_block *b = &desc->base_blocks[i];
+        rows[i * GEOM_COLS + 0] = b->duration_us;
+        rows[i * GEOM_COLS + 1] = b->rf_id;
+        rows[i * GEOM_COLS + 2] = b->gx_id;
+        rows[i * GEOM_COLS + 3] = b->gy_id;
+        rows[i * GEOM_COLS + 4] = b->gz_id;
+    }
+
+    (void)pulseg__deduplicate_int_rows(reps, ids, rows, n, GEOM_COLS);
+
+    PULSEG_FREE(rows);
+    PULSEG_FREE(reps);
+    return ids;
+}
+
 static int first_repeating_segment(const int *s, int len)
 {
     int l, i, match;
@@ -251,6 +304,411 @@ static int first_repeating_segment_structural(
     }
 
     return len;
+}
+
+/* Ceiling on the distinct readout patterns one segment definition may carry.
+ * Each one becomes a prepared segment on the scanner, so a sequence that
+ * digitises differently on every repetition is refused rather than turned
+ * into a segment table the size of the scan. */
+#define SEG_MAX_ADC_VARIANTS 64
+
+/* Split each segment definition by the readouts its repetitions play.
+ *
+ * A prepared segment binds one receive filter to each of its block positions,
+ * so repetitions of one definition that digitise with different ADC
+ * definitions would all be acquired through the first one's filter chain.
+ * Segmentation recognises a block by WHETHER it acquires, not by which
+ * readout it acquires with -- that is what keeps a dummy shot on the
+ * definition it stands in for -- and this pass refines that result by the
+ * readouts each repetition actually carries.
+ *
+ * It runs on the tiled exec_stream_seg_id, because which readout a repetition
+ * plays is a property of that repetition and the canonical-TR assignment the
+ * stream is tiled from cannot express it.
+ *
+ * A repetition that leaves a readout out joins any variant agreeing on the
+ * readouts it does play: it acquires nothing there, so none of that variant's
+ * filters is used for it.
+ *
+ * Leaves the descriptor untouched when every definition carries one pattern,
+ * which is every sequence with one ADC structure per block position. */
+static int split_segments_by_adc(pulseg_sequence_descriptor *desc, pulseg_diagnostic *diag)
+{
+    int num_seg, scan_len, maxnb, n, b, nb, s, v, i, w;
+    int nvar, cap, num_final;
+    int *vec = NULL;
+    int *var_vec = NULL;
+    int *var_seg = NULL;
+    int *var_repr = NULL;
+    int *var_final = NULL;
+    int *seg_first = NULL;
+    int *seg_split = NULL;
+    int *any_acq = NULL;
+    pulseg_virtual_segment *grown = NULL;
+    int result = PULSEG_SUCCESS;
+
+    num_seg = desc->num_unique_segments;
+    scan_len = desc->exec_stream_len;
+    if (num_seg <= 0 || scan_len <= 0 || !desc->exec_stream_seg_id ||
+        !desc->exec_stream_block_idx || desc->num_unique_adcs <= 1)
+        return PULSEG_SUCCESS;
+
+    maxnb = 0;
+    for (s = 0; s < num_seg; ++s)
+        if (desc->segment_definitions[s].num_blocks > maxnb)
+            maxnb = desc->segment_definitions[s].num_blocks;
+    if (maxnb <= 0)
+        return PULSEG_SUCCESS;
+
+    cap = 2 * num_seg;
+    vec = (int *)PULSEG_ALLOC((size_t)maxnb * sizeof(int));
+    var_vec = (int *)PULSEG_ALLOC((size_t)cap * (size_t)maxnb * sizeof(int));
+    var_seg = (int *)PULSEG_ALLOC((size_t)cap * sizeof(int));
+    var_repr = (int *)PULSEG_ALLOC((size_t)cap * sizeof(int));
+    var_final = (int *)PULSEG_ALLOC((size_t)cap * sizeof(int));
+    seg_first = (int *)PULSEG_ALLOC((size_t)num_seg * sizeof(int));
+    seg_split = (int *)PULSEG_ALLOC((size_t)num_seg * sizeof(int));
+    any_acq = (int *)PULSEG_ALLOC((size_t)num_seg * (size_t)maxnb * sizeof(int));
+    if (!vec || !var_vec || !var_seg || !var_repr || !var_final || !seg_first || !seg_split ||
+        !any_acq)
+    {
+        result = PULSEG_ERR_ALLOC_FAILED;
+        goto done;
+    }
+    for (i = 0; i < num_seg * maxnb; ++i)
+        any_acq[i] = 0;
+    nvar = 0;
+
+    /* Pass 1: the distinct readout patterns each definition is played with. */
+    for (n = 0; n < scan_len; /* advance inside */)
+    {
+        s = desc->exec_stream_seg_id[n];
+        if (s < 0 || s >= num_seg)
+        {
+            ++n;
+            continue;
+        }
+        nb = desc->segment_definitions[s].num_blocks;
+        if (nb <= 0 || n + nb > scan_len)
+        {
+            ++n;
+            continue;
+        }
+        for (b = 1; b < nb; ++b)
+            if (desc->exec_stream_seg_id[n + b] != s)
+                break;
+        if (b < nb)
+        {
+            ++n;
+            continue;
+        }
+
+        for (b = 0; b < nb; ++b)
+        {
+            const pulseg_block_table_element *bte =
+                &desc->block_table[desc->exec_stream_block_idx[n + b]];
+            vec[b] = (bte->adc_id >= 0) ? desc->base_blocks[bte->id].adc_id : -1;
+            if (vec[b] >= 0)
+                any_acq[s * maxnb + b] = 1;
+        }
+
+        for (v = 0; v < nvar; ++v)
+        {
+            if (var_seg[v] != s)
+                continue;
+            for (b = 0; b < nb; ++b)
+                if (var_vec[v * maxnb + b] != vec[b])
+                    break;
+            if (b == nb)
+                break;
+        }
+        if (v == nvar)
+        {
+            int count = 0;
+            for (i = 0; i < nvar; ++i)
+                if (var_seg[i] == s)
+                    ++count;
+            if (count >= SEG_MAX_ADC_VARIANTS)
+            {
+                pulseg__diag_printf(
+                    diag,
+                    " segment %d is played with more than %d distinct readout patterns",
+                    s,
+                    SEG_MAX_ADC_VARIANTS);
+                result = PULSEG_ERR_SEG_TOO_MANY_ADC_VARIANTS;
+                goto done;
+            }
+            if (nvar == cap)
+            {
+                int newcap = cap * 2;
+                int *g_vec = (int *)PULSEG_ALLOC((size_t)newcap * (size_t)maxnb * sizeof(int));
+                int *g_seg = (int *)PULSEG_ALLOC((size_t)newcap * sizeof(int));
+                int *g_repr = (int *)PULSEG_ALLOC((size_t)newcap * sizeof(int));
+                int *g_final = (int *)PULSEG_ALLOC((size_t)newcap * sizeof(int));
+                if (!g_vec || !g_seg || !g_repr || !g_final)
+                {
+                    if (g_vec)
+                        PULSEG_FREE(g_vec);
+                    if (g_seg)
+                        PULSEG_FREE(g_seg);
+                    if (g_repr)
+                        PULSEG_FREE(g_repr);
+                    if (g_final)
+                        PULSEG_FREE(g_final);
+                    result = PULSEG_ERR_ALLOC_FAILED;
+                    goto done;
+                }
+                memcpy(g_vec, var_vec, (size_t)cap * (size_t)maxnb * sizeof(int));
+                memcpy(g_seg, var_seg, (size_t)cap * sizeof(int));
+                memcpy(g_repr, var_repr, (size_t)cap * sizeof(int));
+                PULSEG_FREE(var_vec);
+                PULSEG_FREE(var_seg);
+                PULSEG_FREE(var_repr);
+                PULSEG_FREE(var_final);
+                var_vec = g_vec;
+                var_seg = g_seg;
+                var_repr = g_repr;
+                var_final = g_final;
+                cap = newcap;
+            }
+            var_seg[nvar] = s;
+            var_repr[nvar] = n;
+            for (b = 0; b < nb; ++b)
+                var_vec[nvar * maxnb + b] = vec[b];
+            ++nvar;
+        }
+        n += nb;
+    }
+
+    /* Assign final ids.  A pattern that acquires wherever its definition ever
+     * acquires stands on its own; one that leaves a readout out joins the
+     * first such pattern it agrees with. */
+    for (s = 0; s < num_seg; ++s)
+        seg_first[s] = -1;
+    num_final = num_seg;
+    for (v = 0; v < nvar; ++v)
+        var_final[v] = -1;
+
+    for (v = 0; v < nvar; ++v)
+    {
+        int complete = 1;
+        s = var_seg[v];
+        nb = desc->segment_definitions[s].num_blocks;
+        for (b = 0; b < nb; ++b)
+        {
+            if (any_acq[s * maxnb + b] && var_vec[v * maxnb + b] < 0)
+            {
+                complete = 0;
+                break;
+            }
+        }
+        if (!complete)
+            continue;
+        if (seg_first[s] < 0)
+        {
+            seg_first[s] = v;
+            var_final[v] = s;
+        }
+        else
+            var_final[v] = num_final++;
+    }
+
+    for (v = 0; v < nvar; ++v)
+    {
+        if (var_final[v] >= 0)
+            continue;
+        s = var_seg[v];
+        nb = desc->segment_definitions[s].num_blocks;
+        for (w = 0; w < nvar; ++w)
+        {
+            if (var_seg[w] != s || var_final[w] < 0)
+                continue;
+            for (b = 0; b < nb; ++b)
+                if (var_vec[v * maxnb + b] >= 0 && var_vec[v * maxnb + b] != var_vec[w * maxnb + b])
+                    break;
+            if (b == nb)
+                break;
+        }
+        if (w < nvar)
+            var_final[v] = var_final[w];
+        else if (seg_first[s] < 0)
+        {
+            seg_first[s] = v;
+            var_final[v] = s;
+        }
+        else
+            var_final[v] = num_final++;
+    }
+
+    if (num_final == num_seg)
+        goto done;
+
+    /* Which definitions gained variants: the rest keep the block indices
+     * segmentation gave them. */
+    for (s = 0; s < num_seg; ++s)
+        seg_split[s] = 0;
+    for (v = 0; v < nvar; ++v)
+        if (var_final[v] != var_seg[v])
+            seg_split[var_seg[v]] = 1;
+
+    /* Materialise the extra definitions, each a copy of the one it refines
+     * with its own readouts at the positions that acquire. */
+    grown =
+        (pulseg_virtual_segment *)PULSEG_ALLOC((size_t)num_final * sizeof(pulseg_virtual_segment));
+    if (!grown)
+    {
+        result = PULSEG_ERR_ALLOC_FAILED;
+        goto done;
+    }
+    for (i = 0; i < num_seg; ++i)
+        grown[i] = desc->segment_definitions[i];
+    for (i = num_seg; i < num_final; ++i)
+    {
+        pulseg_virtual_segment blank = PULSEG_VIRTUAL_SEGMENT_INIT;
+        grown[i] = blank;
+    }
+
+    for (v = 0; v < nvar; ++v)
+    {
+        int f = var_final[v];
+        s = var_seg[v];
+        nb = desc->segment_definitions[s].num_blocks;
+        if (f >= num_seg)
+        {
+            grown[f] = grown[s];
+            /* Owned by the definition this one refines until replaced below;
+             * NULL first so a failed allocation cannot leave an alias to free
+             * twice. */
+            grown[f].unique_block_indices = NULL;
+            grown[f].has_digitalout = NULL;
+            grown[f].has_rotation = NULL;
+            grown[f].norot_flag = NULL;
+            grown[f].nopos_flag = NULL;
+            grown[f].has_adc = NULL;
+            grown[f].is_dynamic_delay = NULL;
+            grown[f].initial_states = NULL;
+            grown[f].unique_block_indices = (int *)PULSEG_ALLOC((size_t)nb * sizeof(int));
+            grown[f].has_digitalout = (int *)PULSEG_ALLOC((size_t)nb * sizeof(int));
+            grown[f].has_rotation = (int *)PULSEG_ALLOC((size_t)nb * sizeof(int));
+            grown[f].norot_flag = (int *)PULSEG_ALLOC((size_t)nb * sizeof(int));
+            grown[f].nopos_flag = (int *)PULSEG_ALLOC((size_t)nb * sizeof(int));
+            grown[f].has_adc = (int *)PULSEG_ALLOC((size_t)nb * sizeof(int));
+            grown[f].is_dynamic_delay = (int *)PULSEG_ALLOC((size_t)nb * sizeof(int));
+            grown[f].initial_states = (pulseg_block_initial_state *)PULSEG_ALLOC(
+                (size_t)nb * sizeof(pulseg_block_initial_state));
+            grown[f].timing.num_rf_anchors = 0;
+            grown[f].timing.rf_anchors = NULL;
+            grown[f].timing.num_adc_anchors = 0;
+            grown[f].timing.adc_anchors = NULL;
+            if (!grown[f].unique_block_indices || !grown[f].has_digitalout ||
+                !grown[f].has_rotation || !grown[f].norot_flag || !grown[f].nopos_flag ||
+                !grown[f].has_adc || !grown[f].is_dynamic_delay || !grown[f].initial_states)
+            {
+                desc->segment_definitions = grown;
+                desc->num_unique_segments = num_final;
+                result = PULSEG_ERR_ALLOC_FAILED;
+                goto done;
+            }
+            for (b = 0; b < nb; ++b)
+            {
+                pulseg_block_initial_state init = PULSEG_BLOCK_INITIAL_STATE_INIT;
+                grown[f].unique_block_indices[b] = grown[s].unique_block_indices[b];
+                grown[f].has_digitalout[b] = 0;
+                grown[f].has_rotation[b] = 0;
+                grown[f].norot_flag[b] = 0;
+                grown[f].nopos_flag[b] = 0;
+                grown[f].has_adc[b] = 0;
+                grown[f].is_dynamic_delay[b] = 0;
+                grown[f].initial_states[b] = init;
+            }
+            grown[f].trigger_id = -1;
+            grown[f].max_energy_start_block = -1;
+        }
+        /* The block definition a position resolves through is what carries the
+         * readout to pulseg_get_block_info, so take it from a repetition that
+         * plays this pattern. */
+        if (!seg_split[s])
+            continue;
+        for (b = 0; b < nb; ++b)
+        {
+            if (var_vec[v * maxnb + b] < 0)
+                continue;
+            grown[f].unique_block_indices[b] =
+                desc->block_table[desc->exec_stream_block_idx[var_repr[v] + b]].id;
+        }
+    }
+
+    PULSEG_FREE(desc->segment_definitions);
+    desc->segment_definitions = grown;
+    grown = NULL;
+    desc->num_unique_segments = num_final;
+
+    /* Pass 2: point every repetition at the definition it actually plays. */
+    for (n = 0; n < scan_len; /* advance inside */)
+    {
+        s = desc->exec_stream_seg_id[n];
+        if (s < 0 || s >= num_seg)
+        {
+            ++n;
+            continue;
+        }
+        nb = desc->segment_definitions[s].num_blocks;
+        if (nb <= 0 || n + nb > scan_len)
+        {
+            ++n;
+            continue;
+        }
+        for (b = 1; b < nb; ++b)
+            if (desc->exec_stream_seg_id[n + b] != s)
+                break;
+        if (b < nb)
+        {
+            ++n;
+            continue;
+        }
+
+        for (b = 0; b < nb; ++b)
+        {
+            const pulseg_block_table_element *bte =
+                &desc->block_table[desc->exec_stream_block_idx[n + b]];
+            vec[b] = (bte->adc_id >= 0) ? desc->base_blocks[bte->id].adc_id : -1;
+        }
+        for (v = 0; v < nvar; ++v)
+        {
+            if (var_seg[v] != s)
+                continue;
+            for (b = 0; b < nb; ++b)
+                if (var_vec[v * maxnb + b] != vec[b])
+                    break;
+            if (b == nb)
+                break;
+        }
+        if (v < nvar && var_final[v] != s)
+            for (b = 0; b < nb; ++b)
+                desc->exec_stream_seg_id[n + b] = var_final[v];
+        n += nb;
+    }
+
+done:
+    if (grown)
+        PULSEG_FREE(grown);
+    if (any_acq)
+        PULSEG_FREE(any_acq);
+    if (seg_split)
+        PULSEG_FREE(seg_split);
+    if (seg_first)
+        PULSEG_FREE(seg_first);
+    if (var_final)
+        PULSEG_FREE(var_final);
+    if (var_repr)
+        PULSEG_FREE(var_repr);
+    if (var_seg)
+        PULSEG_FREE(var_seg);
+    if (var_vec)
+        PULSEG_FREE(var_vec);
+    if (vec)
+        PULSEG_FREE(vec);
+    return result;
 }
 
 /* ================================================================== */
@@ -692,6 +1150,7 @@ int pulseg__get_tr_in_sequence(pulseg_sequence_descriptor *desc, pulseg_diagnost
     int *seq_pat = NULL;
     int *base_pat = NULL;
     int *block_dur = NULL;
+    int *geom_id = NULL;
     double span_dur_us; /* one pass, delays included; can exceed an int */
     int found, l;
     int mismatch_pos;
@@ -743,11 +1202,21 @@ int pulseg__get_tr_in_sequence(pulseg_sequence_descriptor *desc, pulseg_diagnost
         return diag->code;
     }
 
+    geom_id = build_geometry_ids(desc);
+    if (!geom_id)
+    {
+        PULSEG_FREE(seq_pat);
+        PULSEG_FREE(block_dur);
+        diag->code = PULSEG_ERR_ALLOC_FAILED;
+        return diag->code;
+    }
+
     for (n = 0; n < desc->num_blocks; ++n)
     {
         block_dur[n] = desc->base_blocks[desc->block_table[n].id].duration_us;
-        seq_pat[n] =
-            (desc->block_table[n].duration_us >= 0) ? block_dur[n] : -1 * desc->block_table[n].id;
+        seq_pat[n] = (desc->block_table[n].duration_us >= 0)
+            ? block_dur[n]
+            : -1 * geom_id[desc->block_table[n].id];
     }
 
     /* Save a copy of seq_pat before RF augmentation (used for VFA check) */
@@ -756,6 +1225,7 @@ int pulseg__get_tr_in_sequence(pulseg_sequence_descriptor *desc, pulseg_diagnost
     {
         PULSEG_FREE(seq_pat);
         PULSEG_FREE(block_dur);
+        PULSEG_FREE(geom_id);
         diag->code = PULSEG_ERR_ALLOC_FAILED;
         return diag->code;
     }
@@ -864,6 +1334,7 @@ int pulseg__get_tr_in_sequence(pulseg_sequence_descriptor *desc, pulseg_diagnost
             PULSEG_FREE(seq_pat);
             PULSEG_FREE(block_dur);
             PULSEG_FREE(base_pat);
+            PULSEG_FREE(geom_id);
             return diag->code;
         }
     }
@@ -881,6 +1352,7 @@ int pulseg__get_tr_in_sequence(pulseg_sequence_descriptor *desc, pulseg_diagnost
     PULSEG_FREE(seq_pat);
     PULSEG_FREE(block_dur);
     PULSEG_FREE(base_pat);
+    PULSEG_FREE(geom_id);
     return PULSEG_SUCCESS;
 }
 
@@ -2730,6 +3202,27 @@ int pulseg__get_exec_stream_segments(
 
     PULSEG_FREE(pattern_seg_id);
     pattern_seg_id = NULL;
+
+    /* Refine by the readouts each repetition plays. */
+    {
+        int rc = split_segments_by_adc(desc, diag);
+        if (PULSEG_FAILED(rc))
+        {
+            diag->code = rc;
+            goto scan_seg_fail;
+        }
+        if (desc->num_unique_segments != num_unique)
+        {
+            num_unique = desc->num_unique_segments;
+            desc->segment_table.num_unique_segments = num_unique;
+            for (n = 0; n < num_total; ++n)
+            {
+                int sb = exp_segs[n].start_block;
+                if (sb >= 0 && sb < scan_len)
+                    desc->segment_table.main_segment_table[n] = desc->exec_stream_seg_id[sb];
+            }
+        }
+    }
 
     /* seg_id is final here -- run-length encode it for pulseg__exec_seg_id. */
     {

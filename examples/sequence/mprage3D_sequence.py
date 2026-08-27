@@ -48,6 +48,26 @@ TIME_BW_PRODUCT = 4.0
 MAX_GRAD = 80.0
 MAX_SLEW = 200.0
 
+#: Whether the plugin plays motion navigators. Three orthogonal spiral
+#: navigators ride in the longitudinal recovery after each segment's view
+#: train, where they cost no scan time, and a reconstruction tracks the head's
+#: pose from them -- see :mod:`pulserver.app.pmc_recon`. They are off by
+#: default because they excite the same water the readout images: every
+#: navigator takes a little longitudinal magnetisation out of the volume, so
+#: turning them on trades inversion contrast for pose tracking.
+NAVIGATOR = False
+
+#: Repetition time of one three-plane navigator (s). The paper this follows
+#: paces them at 100 ms, which leaves room for each to be reconstructed and its
+#: pose estimated before the next arrives.
+NAVIGATOR_TR = 100e-3
+
+#: How many navigators one recovery carries when the count is left to
+#: ``"auto"``. Not a limit of the dead time but of the physics: a navigator
+#: excites the magnetisation the recovery is restoring, so a train that filled
+#: the recovery would defeat it. Five is what the method was validated with.
+NAVIGATOR_COUNT = 5
+
 
 def main(
     plot: bool = False,
@@ -81,6 +101,8 @@ def main(
     n_gain_calibration_readouts: int = 1,
     rf_spoiling_increment_deg: float = 117.0,
     spoiling_cycles: float = 4.0,
+    navigator: bool = False,
+    n_navigators: int | str = "auto",
 ) -> pp.Sequence:
     """Create a 3D MPRAGE sequence.
 
@@ -319,6 +341,8 @@ def main(
         n_acs_z=n_acs_z,
         shuffle_seed=shuffle_seed,
         spoiling_cycles=spoiling_cycles,
+        navigator=navigator,
+        n_navigators=n_navigators,
     )
     readout = kernel.readout
     inversion = kernel.inversion
@@ -388,6 +412,9 @@ def main(
         seq.add_block(kernel.wait_ti)
         for index, view in enumerate(views):
             repetition(view if acquire else None, index)
+        for _ in range(kernel.n_navigators):
+            for block in kernel.navigator.blocks:
+                seq.add_block(*block)
         seq.add_block(kernel.wait_recovery)
 
     # Steady state first: whole inversion trains without acquiring, so the
@@ -476,6 +503,8 @@ def Mprage3DKernel(
     n_acs_z: int = 16,
     shuffle_seed: int = 0,
     spoiling_cycles: float = 4.0,
+    navigator: bool = False,
+    n_navigators: int | str = "auto",
 ) -> SimpleNamespace:
     """Design one segment, and the plan that repeats it.
 
@@ -599,14 +628,24 @@ acceleration_z, caipi_shift, elliptical, n_acs, n_acs_z, shuffle_seed, spoiling_
             f"TR {tr_outer * 1e3:.0f} ms is shorter than one segment takes "
             f"({segment_body * 1e3:.0f} ms)"
         )
+    navigator_module = None
+    navigator_count = 0
+    navigator_time = 0.0
+    if navigator:
+        navigator_module = design.SpiralNavigator(system, navigator_tr=NAVIGATOR_TR)
+        navigator_count = navigator_module.fit(
+            recovery, n_navigators, limit=NAVIGATOR_COUNT
+        )
+        navigator_time = navigator_count * navigator_module.duration
+
     wait_recovery = pp.make_delay(
         max(
             system.block_duration_raster,
-            pp.round_to_raster(recovery, system.block_duration_raster),
+            pp.round_to_raster(recovery - navigator_time, system.block_duration_raster),
         )
     )
 
-    duration = len(segments) * (segment_body + wait_recovery.delay)
+    duration = len(segments) * (segment_body + navigator_time + wait_recovery.delay)
 
     return SimpleNamespace(
         inversion=inversion,
@@ -616,6 +655,8 @@ acceleration_z, caipi_shift, elliptical, n_acs, n_acs_z, shuffle_seed, spoiling_
         n_center=n_center,
         wait_ti=wait_ti,
         wait_recovery=wait_recovery,
+        navigator=navigator_module,
+        n_navigators=navigator_count,
         fov=(fov_x, fov_y),
         echo_time=readout.echo_time,
         inner_tr=inner_tr,
@@ -831,6 +872,7 @@ def protocol_kwargs(system: pp.Opts, protocol: dict[str, dict]) -> dict:
         ),
         n_acs_z=max(0, round(params.user_float(prot, 5, 16.0))),
         elliptical=bool(round(params.user_float(prot, 6, 1.0))),
+        navigator=NAVIGATOR,
     )
 
 

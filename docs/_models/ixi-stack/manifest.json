@@ -1,0 +1,10 @@
+{
+  "source": "TorchIO IXITiny through pulserver.recon.IXITiny",
+  "subject": "IXI002-Guys",
+  "slices": 16,
+  "shape": [
+    83,
+    55
+  ],
+  "preprocessing": "central slices along the thinnest axis, kept at the resolution IXITiny ships, scaled to a unit peak, stored float16"
+}
