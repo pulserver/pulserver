@@ -198,6 +198,15 @@ def test_the_advertised_namespace_is_vocabulary_not_imports():
     assert set(dir(pp)) >= pp._UPSTREAM_MODULES
 
 
+def test_the_names_the_page_leaves_out_still_resolve():
+    """The other half of the same split: a name can be withheld from the
+    vocabulary without being withheld from a script that reaches for it."""
+    for name in pp._UNADVERTISED_UPSTREAM:
+        assert hasattr(pp, name), name
+        assert name in dir(pp), name
+        assert name not in pp.__all__, name
+
+
 def test_a_wrapped_helper_keeps_its_upstream_signature():
     import inspect
 
@@ -255,7 +264,6 @@ def _factory_calls(system):
         ),
         "make_rf_shim": lambda: pp.make_rf_shim([1 + 0j, 0.5 + 0.5j]),
         "make_rotation": lambda: pp.make_rotation(Rotation.from_euler("z", 0.3)),
-        "make_sigpy_pulse": lambda: pp.make_sigpy_pulse(0.5, system=system),
         "make_sinc_pulse": lambda: pp.make_sinc_pulse(
             flip_angle=0.5, duration=2e-3, system=system
         ),

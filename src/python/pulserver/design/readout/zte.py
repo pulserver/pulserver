@@ -344,9 +344,7 @@ class ZteReadout(SequenceModule):
             self.seq.add_block(rf, *g_hold[view])
             self.seq.add_block(adc, *g_read[view], *adc_labels)
 
-        self.register(
-            g_hold=g_hold, g_read=g_read, directions=directions
-        )
+        self.register(g_hold=g_hold, g_read=g_read, directions=directions)
         if shot_rotations is not None:
             self.register(shot_rotations=shot_rotations)
         self.center = ramp_span + rf_center

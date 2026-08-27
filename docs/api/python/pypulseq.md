@@ -14,8 +14,8 @@ seq.add_block(pp.make_delay(1e-3))
 The complete public upstream PyPulseq namespace is re-exported unchanged, then
 Pulserver's replacements are layered on top, so a plugin needs one import for
 the whole event layer and `import pypulseq` alongside it is never necessary.
-Only the names in `OVERRIDES` differ from upstream; everything else *is*
-upstream.
+Of the names it advertises, only those in `OVERRIDES` differ from upstream;
+the rest *are* upstream.
 
 This namespace is the event layer only. The factories that build whole
 sequence modules — an excitation with its rephaser, one readout TR — live in
@@ -110,7 +110,6 @@ k-space path into the gradient that walks it.
    make_sms_pulse
    make_spsp_pulse
    make_2d_selective_pulse
-   make_sigpy_pulse
    make_crusher
    make_phase_encoding
    make_phase_blip
@@ -273,13 +272,14 @@ Imported here unchanged from PyPulseq. Their documentation is upstream's.
 ## Whose name is whose
 
 The namespace is a drop-in for PyPulseq, so it answers to names from both
-sides. Two sets say which is which: `OVERRIDES` is every name this project
-defines itself, `UPSTREAM` every name it hands through untouched.
+sides. Two frozensets on the module say which is which: `OVERRIDES` is every
+name this project defines itself, `UPSTREAM` every name it hands through
+untouched. Their union is `__all__`, and it is what these pages document.
 
-```{eval-rst}
-.. autosummary::
-   :toctree: ../generated/pypulseq
-
-   OVERRIDES
-   UPSTREAM
-```
+Resolving and being advertised are different promises, so a few names answer
+without appearing above. `pp.np`, `pp.math` and the submodules PyPulseq's own
+`__init__` touches are there because a script that reached for them keeps
+working. So are `pp.eps`, a raster comparison tolerance, and
+`pp.make_sigpy_pulse` with its `SigpyPulseOpts` bundle: `make_slr_pulse`
+designs the same filter from keyword arguments and needs no sigpy
+installed, which is the spelling to write.

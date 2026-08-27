@@ -48,10 +48,11 @@ _IN_PROSE = {
 }
 
 
-def test_every_pulserver_name_in_the_event_layer_is_documented():
-    """``OVERRIDES`` is everything in the namespace that is not upstream's, so
-    it is exactly what this project has to document itself."""
-    missing = set(pp.OVERRIDES) - listed("pypulseq.md", "pypulseq") - _IN_PROSE
+def test_every_advertised_name_in_the_event_layer_is_documented():
+    """``__all__`` is the authoring vocabulary, so it is exactly what the page
+    has to account for -- upstream's half included, whose entries say only
+    that their documentation is upstream's."""
+    missing = set(pp.__all__) - listed("pypulseq.md", "pypulseq") - _IN_PROSE
     assert missing == set(), sorted(missing)
 
 
@@ -61,24 +62,20 @@ def test_the_names_left_to_prose_are_named_there():
         assert f"`{name}`" in page, name
 
 
-#: The two sets the page documents. They are reachable on the namespace but
-#: deliberately not in ``__all__``: they say which half of a drop-in namespace
-#: a name comes from rather than being part of the authoring vocabulary. The
-#: finer sets the contract tests are written against stay off the page.
-_MEMBERSHIP = {
-    "OVERRIDES",
-    "UPSTREAM",
-}
-
-
 def test_the_event_layer_page_names_nothing_that_is_gone():
-    surplus = listed("pypulseq.md", "pypulseq") - set(pp.__all__) - _MEMBERSHIP
+    surplus = listed("pypulseq.md", "pypulseq") - set(pp.__all__)
     assert surplus == set(), sorted(surplus)
 
 
-def test_the_membership_sets_the_page_documents_all_exist():
-    for name in _MEMBERSHIP:
+def test_the_membership_sets_are_named_in_prose():
+    """They say which half of a drop-in namespace a name comes from rather
+    than being part of the authoring vocabulary, so the page explains them
+    where it explains the split and gives them no entry of their own."""
+    page = (PAGES / "pypulseq.md").read_text()
+    for name in ("OVERRIDES", "UPSTREAM"):
+        assert f"`{name}`" in page, name
         assert isinstance(getattr(pp, name), frozenset), name
+        assert name not in pp.__all__, name
 
 
 def plugins(suffix: str) -> set[str]:

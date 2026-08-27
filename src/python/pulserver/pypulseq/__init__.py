@@ -10,9 +10,9 @@ import for the whole event layer::
     seq = pp.Sequence(pp.Opts())
     seq.add_block(delay)
 
-Only the objects listed in :data:`OVERRIDES` differ from upstream; everything
-else *is* upstream, imported here so that ``import pypulseq`` alongside this
-module is never necessary.
+Of the names this module advertises, only those in ``OVERRIDES`` differ from
+upstream; the rest *are* upstream, imported here so that ``import pypulseq``
+alongside this module is never necessary.
 
 This namespace is the **event layer** only. The factories that build whole
 sequence modules and scan loops — RF pulses, readouts, sampling plans, phase
@@ -135,6 +135,18 @@ _EXCLUDED_UPSTREAM = {
 #: Upstream callables that must not be wrapped: they take or return no event,
 #: and wrapping a class would replace its constructor with a plain function.
 _UNWRAPPED_UPSTREAM = {"SigpyPulseOpts"}
+
+#: Names that resolve but are not advertised: ``pp.x`` answers for a script
+#: written against upstream, while ``__all__`` and the API page show the
+#: authoring vocabulary only. ``make_sigpy_pulse`` is upstream's spelling of
+#: :func:`make_slr_pulse`, which designs the same filter from keyword
+#: arguments and pulls in no sigpy, so its ``SigpyPulseOpts`` argument bundle
+#: has nothing here to configure; ``eps`` is a raster comparison tolerance.
+_UNADVERTISED_UPSTREAM = {
+    "SigpyPulseOpts",
+    "eps",
+    "make_sigpy_pulse",
+}
 
 #: Upstream names that are modules rather than authoring vocabulary -- ``np``,
 #: ``math``, ``importlib``, and the submodules upstream's ``__init__`` happens
@@ -331,7 +343,6 @@ BASE_FACTORIES = frozenset(
         "make_phase_blip",
         "make_phase_encoding",
         "make_2d_selective_pulse",
-        "make_sigpy_pulse",
         "make_slr_pulse",
         "make_sms_pulse",
         "make_spsp_pulse",
@@ -431,6 +442,7 @@ UPSTREAM = (
     frozenset({_name for _name in dir(_pypulseq) if not _name.startswith("_")})
     - _EXCLUDED_UPSTREAM
     - _UPSTREAM_MODULES
+    - _UNADVERTISED_UPSTREAM
     - OVERRIDES
 )
 
