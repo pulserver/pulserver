@@ -23,7 +23,7 @@ drive at its own frequency*. The quantity that matters is the amplitude of
 the sinusoid the sequence effectively presents there — in mT/m, the same
 units the vendor's limit is stated in.
 
-## The naive check, and why it is not well posed
+## Why an amplitude threshold is not well posed
 
 Render the whole sequence to a gradient waveform, one sample per raster tick,
 per axis. Take a Fourier transform. Look inside each forbidden band. Compare
@@ -47,7 +47,7 @@ the principled window. This is why the {doc}`structural TR
 <../sequence_model/tr_and_segmentation>` has to be right for the verdict to
 mean anything.
 
-## Seginer et al.: the spectrum of a nested-loop sequence
+## The spectrum of a nested-loop sequence
 
 Seginer et al. ([arXiv 2508.03220](https://arxiv.org/abs/2508.03220)) work
 this out in closed form for the sequence family that matters most
@@ -71,7 +71,7 @@ The model is exact for the structure it describes — but it has to be *told*
 the structure: the echo spacing, the echo count, the slice period, the TR,
 each an explicit factor. A general Pulseq file declares none of them.
 
-## The generalisation: the combs emerge from the content
+## Combs derived from the block content
 
 Pulserver computes the same physics without being told any inner period,
 using two exact properties of the Fourier transform and the fact that a
@@ -99,7 +99,10 @@ whether you write the closed form or accumulate it term by term. The figures
 below reproduce the paper's Fig. 1 — echo spacing 0.52 ms, 54 echoes, 3 TEs,
 6 slices — through the same compiled engine the scanner-side check runs:
 
-![Reproduction of Seginer et al. Fig. 1: on-raster TE and slice spacing keeps one dominant peak; off-raster spacing spreads it into a comb](../assets/mechanical_resonance/epi_seginer_fig1_reproduction.png)
+```{figure} ../assets/mechanical_resonance/epi_seginer_fig1_reproduction.png
+Reproduction of Seginer et al. Fig. 1: on-raster TE and slice spacing keeps
+one dominant peak; off-raster spacing spreads it into a comb.
+```
 
 As in the paper, spacings that stay on the common raster keep the energy in
 one dominant peak no matter how many echoes or slices are added, while a
@@ -108,7 +111,10 @@ And because every instance is a real event rather than a factor in a
 closed form, the engine can export the individual contributions that sum to
 a line:
 
-![Per-event decomposition of one comb peak: 18 event contributions adding in phase](../assets/mechanical_resonance/epi_seginer_component_decomposition.png)
+```{figure} ../assets/mechanical_resonance/epi_seginer_component_decomposition.png
+Per-event decomposition of one comb peak: 18 event contributions adding in
+phase.
+```
 
 At the comb peak, all 18 materialised events (3 TEs × 6 slices) add almost
 perfectly in phase. There is no "TE factor" or "slice factor" anywhere in the
@@ -166,18 +172,3 @@ enough to run at that point, at the size a real protocol reaches — and the
 demonstration that the fast evaluation equals the rendered-waveform one — is
 on the {doc}`performance page <../performance/index>`.
 
-## Looking at it
-
-```python
-freqs, spectrum, *_ , lines = seq.calculate_gradient_spectrum(
-    plot=True, tr="worst_case", resonance_lines=True, bands=bands,
-)
-lines.line_freqs      # the harmonics inside a guarded band
-lines.line_a_eq       # their equivalent sustained amplitudes, per axis
-lines.ok              # the verdict the predownload gate will reach
-```
-
-The overlay draws the bands, the comb, and the floor, so a sequence that
-fails shows *which* line failed it. `lines.ok` is the same verdict the
-scanner's own predownload gate reaches — a plot that disagreed with the gate
-would be worse than no plot.

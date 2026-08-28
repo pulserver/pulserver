@@ -6,6 +6,7 @@ import logging
 import os
 import sys
 
+from .connection import set_log_file
 from .server import Server
 
 _DEFAULTS = {
@@ -141,6 +142,7 @@ def main(argv: list[str] | None = None) -> None:
         handlers=handlers,
         force=True,
     )
+    set_log_file(args.logfile)
 
     # Ensure output directory exists
     os.makedirs(args.output_dir, exist_ok=True)

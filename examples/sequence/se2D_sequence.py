@@ -374,7 +374,9 @@ def main(
             clear_once = None
 
     pp.TransformFOV(
-        translation=tuple(offset * 1e3 for offset in fov_offset), system=system
+        translation=tuple(offset * 1e3 for offset in fov_offset),
+        system=system,
+        compat=False,
     ).apply_to_sequence(seq, in_place=True)
 
     if test_report:

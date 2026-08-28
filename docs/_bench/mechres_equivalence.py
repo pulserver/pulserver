@@ -54,6 +54,20 @@ import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 from matplotlib.lines import Line2D  # noqa: E402
 
+# House style: a figure has to be legible at the width a manual page gives it.
+plt.rcParams.update(
+    {
+        "font.size": 11.0,
+        "axes.titlesize": 12.5,
+        "axes.labelsize": 11.5,
+        "xtick.labelsize": 10.5,
+        "ytick.labelsize": 10.5,
+        "legend.fontsize": 10.5,
+        "figure.titlesize": 13.0,
+    }
+)
+
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import pulserver.pypulseq as pp  # noqa: E402
@@ -244,9 +258,9 @@ def frame(axis, title, xmax, ylabel=True):
     axis.set_yscale("log")
     axis.set_ylim(*FRAME)
     axis.set_xlim(0, xmax)
-    axis.set_xlabel("frequency (Hz)", fontsize=8)
+    axis.set_xlabel("frequency (Hz)", fontsize=10.8)
     if ylabel:
-        axis.set_ylabel("$A_{eq}$ (mT/m)", fontsize=8)
+        axis.set_ylabel("$A_{eq}$ (mT/m)", fontsize=10.8)
     from matplotlib.ticker import FixedLocator, FuncFormatter
 
     ticks = [t for t in (0.1, 0.3, 1.0, 3.0, 10.0, 30.0) if FRAME[0] <= t <= FRAME[1]]
@@ -264,8 +278,14 @@ def draw_bands(axis, bands):
 
 
 def legend(target, handles=None, labels=None, **kwargs):
-    kwargs.setdefault("fontsize", 7.6)
+    """A legend above the axes it belongs to, never on top of the data."""
+    kwargs.setdefault("fontsize", 9.4)
     kwargs.setdefault("frameon", False)
+    kwargs.setdefault("loc", "lower left")
+    kwargs.setdefault("bbox_to_anchor", (0.0, 1.14, 1.0, 0.16))
+    kwargs.setdefault("mode", "expand")
+    kwargs.setdefault("borderaxespad", 0.0)
+    kwargs.setdefault("handlelength", 1.2)
     made = target.legend(handles, labels, **kwargs) if handles else target.legend(**kwargs)
     for text in made.get_texts():
         text.set_color(MUTED)
@@ -403,9 +423,11 @@ MAX_FREQ = 2000.0
 def canonical_tr():
     kernel = stack_kernel()
 
-    figure, axes = plt.subplots(2, 4, figsize=(11.0, 6.0), height_ratios=(1.0, 0.52))
-    figure.subplots_adjust(hspace=0.55, wspace=0.22, top=0.775, bottom=0.09,
-                           left=0.065, right=0.99)
+    figure, axes = plt.subplots(
+        len(CASES), 2, figsize=(8.6, 9.6), width_ratios=(1.0, 0.66)
+    )
+    figure.subplots_adjust(hspace=0.72, wspace=0.28, top=0.855, bottom=0.05,
+                           left=0.105, right=0.985)
 
     for column, (letter, what, arm_varies, encode_varies) in enumerate(CASES):
         sequence = controlled_scan(kernel, arm_varies, encode_varies)
@@ -422,22 +444,22 @@ def canonical_tr():
         dense_f, _ = engine_envelope(sequence, 0.5, MAX_FREQ, mode=BOUND)
         dense_scan = record_spectrum(sequence, dense_f)
 
-        top = axes[0, column]
+        top = axes[column, 0]
         top.axvspan(*TERRITORY, color=FAINT, alpha=0.30, lw=0, zorder=0)
         top.plot(dense_f, np.maximum(dense_scan, 1e-3), color=SERIES[1], lw=0.5,
                  alpha=0.55, zorder=1)
         top.plot(freqs, scan, color=SERIES[1], lw=1.2, zorder=3)
         top.plot(freqs, window, color=INK, lw=1.3, ls=(0, (4, 2)), zorder=4)
-        frame(top, f"{letter}   {what}", MAX_FREQ, column == 0)
+        frame(top, f"{letter}   {what}", MAX_FREQ, True)
         inside = (freqs >= TERRITORY[0]) & (freqs <= TERRITORY[1])
         top.text(0.035, 0.055,
                  f"in band: {window[inside].max():.2f} judged,"
                  f"\n{scan[inside].max():.2f} driven",
-                 transform=top.transAxes, fontsize=7.4, color=MUTED)
+                 transform=top.transAxes, fontsize=9.4, color=MUTED)
 
         ratio = window / np.maximum(scan, 1e-12)
         loud = scan > 0.05 * scan.max()
-        bottom = axes[1, column]
+        bottom = axes[column, 1]
         bottom.axvspan(*TERRITORY, color=FAINT, alpha=0.30, lw=0, zorder=0)
         bottom.plot(freqs[loud], ratio[loud], color=SERIES[0], lw=0, marker="o",
                     ms=2.6, mew=0, zorder=2)
@@ -445,9 +467,9 @@ def canonical_tr():
         _style(bottom, f"never below 1 · median {np.median(ratio[loud]):.3f}×")
         bottom.set_xlim(0, MAX_FREQ)
         bottom.set_ylim(0.97, 1.35)
-        bottom.set_xlabel("frequency (Hz)", fontsize=8)
-        if column == 0:
-            bottom.set_ylabel("judged / driven", fontsize=8)
+        bottom.set_ylabel("judged / driven", fontsize=10.4)
+        if column == len(CASES) - 1:
+            bottom.set_xlabel("frequency (Hz)", fontsize=10.4)
         print(f"    {letter} {what:28} min {ratio.min():.4f} median {np.median(ratio[loud]):.3f} "
               f"| in band judged {window[inside].max():.3f} driven {scan[inside].max():.3f} "
               f"({window[inside].max()/scan[inside].max():.3f}x)")
@@ -458,16 +480,16 @@ def canonical_tr():
          Line2D([], [], color=INK, lw=1.3, ls=(0, (4, 2))),
          Line2D([], [], color=SERIES[1], lw=0.8, alpha=0.55),
          Line2D([], [], color=FAINT, lw=7)],
-        ["what the whole scan drives, at the TR harmonics",
-         "the canonical window, which is what the gate judges",
+        ["the whole scan, at the TR harmonics",
+         "the canonical window — what the gate judges",
          "the whole scan at every frequency",
          "where vendor bands fall"],
-        loc="upper center", bbox_to_anchor=(0.5, 0.905), ncols=4,
+        loc="upper center", bbox_to_anchor=(0.5, 0.925), ncols=2, fontsize=9.8,
     )
     figure.suptitle(
-        "One repetition played sixteen times, each kind of variation switched on alone — "
-        "the window is above the scan at every line, and by a few percent",
-        x=0.02, ha="left", fontsize=10, color=INK,
+        "One repetition played sixteen times, each kind of variation switched on\n"
+        "alone. The window is above the scan at every line, by a few percent.",
+        x=0.02, y=0.995, ha="left", va="top", fontsize=12.0, color=INK,
     )
     return save(figure, "canonical_tr")
 
@@ -481,7 +503,7 @@ def basis_equivalence(arms=8):
     written = spiral(arms, rotated=False)
     turned = spiral(arms, rotated=True)
 
-    figure = plt.figure(figsize=(9.6, 3.4))
+    figure = plt.figure(figsize=(8.6, 4.4))
     grid = figure.add_gridspec(1, 3, width_ratios=(0.9, 0.9, 1.5), wspace=0.34)
 
     # -- the arms themselves ------------------------------------------------
@@ -501,8 +523,8 @@ def basis_equivalence(arms=8):
         stacked.append(wave[:, span])
         axis.plot(times, wave[0, span], color=SERIES[index % len(SERIES)], lw=0.8)
     _style(axis, f"{arms} arms, on the readout axis")
-    axis.set_xlabel("time (ms)", fontsize=8)
-    axis.set_ylabel("$G_x$ (mT/m)", fontsize=8)
+    axis.set_xlabel("time (ms)", fontsize=10.8)
+    axis.set_ylabel("$G_x$ (mT/m)", fontsize=10.8)
     middle = 0.5 * (times[0] + times[-1])
     axis.set_xlim(middle, middle + 2.0)
 
@@ -523,12 +545,12 @@ def basis_equivalence(arms=8):
         )
         print(f"    singular values, G{'xy'[physical]}: {np.round(singular[:4], 12)}")
     axis.axhline(1e-6, color=MUTED, lw=0.8, ls=(0, (4, 3)))
-    axis.text(1.1, 2.2e-6, "kept above here", fontsize=7, color=MUTED)
+    axis.text(1.1, 2.2e-6, "kept above here", fontsize=9.5, color=MUTED)
     _style(axis, "and their singular values")
-    axis.set_xlabel("index", fontsize=8)
-    axis.set_ylabel("$\\sigma_r / \\sigma_1$", fontsize=8)
+    axis.set_xlabel("index", fontsize=10.8)
+    axis.set_ylabel("$\\sigma_r / \\sigma_1$", fontsize=10.8)
     axis.set_ylim(1e-11, 5.0)
-    legend(axis, loc="lower right")
+    legend(axis)
 
     # -- the verdict, arm by arm, both encodings ---------------------------
     axis = figure.add_subplot(grid[0, 2])
@@ -548,16 +570,19 @@ def basis_equivalence(arms=8):
             Line2D([], [], color=MUTED, lw=1.0),
             Line2D([], [], color=INK, lw=0, marker="o", ms=2.2, mfc="none", mew=0.6),
         ],
-        ["one waveform, turned by a rotation", "the arms written out, compressed to a rank basis"],
-        loc="upper left",
+        ["turned by a rotation", "written out, then compressed"],
+        ncol=1,
     )
 
-    figure.subplots_adjust(top=0.80)
+    figure.subplots_adjust(top=0.66, bottom=0.16)
     figure.suptitle(
-        "Distinct is not independent: turned arms span two dimensions, however many of them there are",
+        "Distinct is not independent: turned arms span two dimensions,\n"
+        "however many of them there are",
         x=0.02,
+        y=0.995,
         ha="left",
-        fontsize=10,
+        va="top",
+        fontsize=12.0,
         color=INK,
     )
     return save(figure, "basis_equivalence")
@@ -575,8 +600,8 @@ FAMILIES = (
 
 
 def shape_response():
-    figure, axes = plt.subplots(2, 3, figsize=(9.8, 5.4), height_ratios=(1.0, 0.55))
-    figure.subplots_adjust(hspace=0.52, wspace=0.24, top=0.82, bottom=0.10)
+    figure, axes = plt.subplots(2, 3, figsize=(8.6, 5.76), height_ratios=(1.0, 0.55))
+    figure.subplots_adjust(hspace=0.52, wspace=0.24, top=0.74, bottom=0.10)
 
     for column, (title, subtitle, factory, max_freq) in enumerate(FAMILIES):
         sequence = factory()
@@ -603,11 +628,11 @@ def shape_response():
             0.98, 0.06,
             f"median {np.median(residual[loud]):.0e}\n{fast_ms:.0f} ms against {slow_ms:.0f} ms",
             transform=bottom.transAxes, ha="right", va="bottom",
-            fontsize=7.4, color=MUTED,
+            fontsize=10.0, color=MUTED,
         )
-        bottom.set_xlabel("frequency (Hz)", fontsize=8)
+        bottom.set_xlabel("frequency (Hz)", fontsize=10.8)
         if column == 0:
-            bottom.set_ylabel("|fast − slow| / fast", fontsize=8)
+            bottom.set_ylabel("|fast − slow| / fast", fontsize=10.8)
         print(
             f"    {title:28} median {np.median(residual[loud]):.2e} "
             f"max {residual[loud].max():.2e}  {fast_ms:.1f} ms vs {slow_ms:.0f} ms"
@@ -621,14 +646,16 @@ def shape_response():
             "the closed forms the engine evaluates",
         ],
         loc="upper center",
-        bbox_to_anchor=(0.5, 0.965),
-        ncols=2,
+        bbox_to_anchor=(0.5, 0.90),
+        ncols=1,
     )
     figure.suptitle(
         "Every family's response, against integrating the rendered repetition",
         x=0.02,
+        y=0.995,
         ha="left",
-        fontsize=10,
+        va="top",
+        fontsize=12.0,
         color=INK,
     )
     return save(figure, "shape_response")
@@ -671,7 +698,7 @@ def finite_reps(repetitions=16):
         [np.arange(1, 5) / repetitions, -np.arange(1, 5) / repetitions]
     )
 
-    figure, axes = plt.subplots(1, 2, figsize=(9.8, 4.3), width_ratios=(1.35, 1.0))
+    figure, axes = plt.subplots(1, 2, figsize=(8.6, 4.59), width_ratios=(1.35, 1.0))
     figure.subplots_adjust(wspace=0.26, top=0.68, bottom=0.16)
 
     axis = axes[0]
@@ -684,11 +711,11 @@ def finite_reps(repetitions=16):
     axis.plot(exact_freq, exact, "o", color="#e34948", ms=6.5, mew=0, zorder=5)
     axis.axhline(POLICY_MT_PER_M, color="#e34948", lw=1.0, ls=(0, (4, 2)), zorder=3)
     axis.text(
-        dense[0], POLICY_MT_PER_M * 1.03, "7.5 mT/m", fontsize=7.2, color="#e34948", va="bottom"
+        dense[0], POLICY_MT_PER_M * 1.03, "7.5 mT/m", fontsize=9.7, color="#e34948", va="bottom"
     )
     _style(axis, f"one harmonic of a {repetitions}-repetition scan, at {centre:.0f} Hz")
-    axis.set_xlabel("frequency (Hz)", fontsize=8)
-    axis.set_ylabel("$A_{eq}$ (mT/m)", fontsize=8)
+    axis.set_xlabel("frequency (Hz)", fontsize=10.8)
+    axis.set_ylabel("$A_{eq}$ (mT/m)", fontsize=10.8)
     axis.set_xlim(dense[0], dense[-1])
     axis.set_ylim(0, 1.12 * float(exact[0]))
     legend(
@@ -729,26 +756,26 @@ def finite_reps(repetitions=16):
         mew=1.2,
     )
     _style(axis, "$|D_M|/M$, the kernel those probes sit on")
-    axis.set_xlabel("$f\\,T_{TR}$, from one harmonic towards the next", fontsize=8)
-    axis.set_ylabel("attenuation", fontsize=8)
+    axis.set_xlabel("$f\\,T_{TR}$, from one harmonic towards the next", fontsize=10.8)
+    axis.set_ylabel("attenuation", fontsize=10.8)
     axis.set_xlim(0, 0.55)
     axis.set_ylim(-0.04, 1.08)
     for index in range(4):
         axis.text(
             peaks[index] + 0.006, heights[index] + 0.035,
-            f"{heights[index]:.2f}", fontsize=7.2, color=MUTED,
+            f"{heights[index]:.2f}", fontsize=9.7, color=MUTED,
         )
     axis.text(
         0.42, 0.93,
         "peak heights do not depend on $M$,\nonly their spacing does — so four\n"
         "probes a side cover any scan length",
-        transform=axis.transAxes, fontsize=7.4, color=MUTED, va="top",
+        transform=axis.transAxes, fontsize=10.0, color=MUTED, va="top",
     )
 
     figure.suptitle(
         "Between the harmonics sits drive a resonance would feel, and only a finite\n"
         "scan has it — which is why the check cannot stop at the harmonics",
-        x=0.02, ha="left", fontsize=10, color=INK,
+        x=0.02, ha="left", fontsize=12.0, color=INK,
     )
 
     at_lobes = np.interp(lobe_freqs, dense, record)
@@ -790,8 +817,8 @@ def epi_comb(repetitions=16):
     ).max(0) / GAMMA
     refused = np.asarray(spectra["candidate_violations"], int).astype(bool)
 
-    figure, axis = plt.subplots(figsize=(9.8, 3.8))
-    figure.subplots_adjust(top=0.72, bottom=0.18)
+    figure, axis = plt.subplots(figsize=(8.6, 4.06))
+    figure.subplots_adjust(top=0.66, bottom=0.16)
     axis.plot(freqs, amps, color=SERIES[0], lw=1.1, zorder=3)
 
     # The rest of what the verdict evaluates: the finite-repeat lobes between
@@ -807,22 +834,22 @@ def epi_comb(repetitions=16):
     )
     axis.plot(probes, record_spectrum(sequence, probes), "o", color=SERIES[1],
               ms=2.6, mfc="none", mew=0.8, zorder=4,
-              label="the finite-repeat lobes between them, evaluated too")
+              label="the finite-repeat lobes between them")
     draw_bands(axis, EPI_BANDS)
 
     for mask, colour, label in (
-        (~refused, SERIES[2], "harmonic in band, its interval clears the threshold"),
-        (refused, "#e34948", "harmonic in band, something in its interval does not"),
+        (~refused, SERIES[2], "harmonic in band, its interval clears"),
+        (refused, "#e34948", "harmonic in band, its interval does not"),
     ):
         if mask.any():
             axis.plot(candidates[mask], on_line[mask], "o", color=colour, ms=5,
                       mew=0, label=label, zorder=7)
     frame(axis, "", 2500.0)
-    legend(axis, loc="upper center", bbox_to_anchor=(0.5, 1.20), ncols=3)
+    legend(axis, ncol=1)
     axis.set_ylim(0.1, 40.0)
     figure.suptitle(
         "The verdict: every frequency a band covers, against the level that band allows",
-        x=0.02, ha="left", fontsize=10, color=INK,
+        x=0.02, ha="left", fontsize=12.0, color=INK,
     )
     print(f"    candidates {candidates.size}, refused {int(refused.sum())}")
     for f_hz, a, bad in zip(candidates, on_line, refused):

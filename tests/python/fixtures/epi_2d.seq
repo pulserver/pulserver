@@ -15,6 +15,7 @@ GradientRasterTime 2e-05
 Matrix 32 16 1 
 Name epi_2d_navigator 
 NextSequence epi_2d_main.seq 
+PhaseModulationMode base_trajectory 
 RadiofrequencyRasterTime 2e-06 
 TRSize 25 
 TotalDuration 0.016 
@@ -24,28 +25,28 @@ TotalDuration 0.016
 [BLOCKS]
  1 154   1   0   0   1  0  0
  2  24   0   2   3   4  0  0
- 3  20   0   5   0   0  1  4
- 4  20   0   6   0   0  1  5
- 5  20   0   5   0   0  1  4
+ 3  20   0   5   0   0  2  4
+ 4  20   0   6   0   0  2  5
+ 5  20   0   5   0   0  2  4
  6  32   0   7   3   0  0  0
  7 154   1   0   0   1  0  0
  8  24   0   2   8   4  0  6
- 9  20   0   5   9   0  1 10
-10  20   0   6  10   0  1 12
-11  20   0   5  10   0  1 13
-12  20   0   6  10   0  1 12
-13  20   0   5  10   0  1 13
-14  20   0   6  10   0  1 12
-15  20   0   5  10   0  1 13
-16  20   0   6  10   0  1 12
-17  20   0   5  10   0  1 13
-18  20   0   6  10   0  1 12
-19  20   0   5  10   0  1 13
-20  20   0   6  10   0  1 12
-21  20   0   5  10   0  1 13
-22  20   0   6  10   0  1 12
-23  20   0   5  10   0  1 13
-24  20   0   6  11   0  1 12
+ 9  20   0   5   9   0  2 10
+10  20   0   6  10   0  3 12
+11  20   0   5  10   0  3 13
+12  20   0   6  10   0  3 12
+13  20   0   5  10   0  3 13
+14  20   0   6  10   0  3 12
+15  20   0   5  10   0  3 13
+16  20   0   6  10   0  3 12
+17  20   0   5  10   0  3 13
+18  20   0   6  10   0  3 12
+19  20   0   5  10   0  3 13
+20  20   0   6  10   0  3 12
+21  20   0   5  10   0  3 13
+22  20   0   6  10   0  3 12
+23  20   0   5  10   0  3 13
+24  20   0   6  11   0  3 12
 25  32   0   7  12   0  0  0
 
 # Format of RF events:
@@ -83,6 +84,8 @@ TotalDuration 0.016
 # ..  ..    ns    us     ppm  rad/MHz   Hz   rad       ..
 [ADC]
 1 32 10000 40 0 0 0 0 0
+2 32 10000 40 0 0 0 0 8
+3 32 10000 40 0 0 0 0 9
 
 # Format of extension lists:
 # id type ref next_id
@@ -1671,10 +1674,84 @@ num_samples 2
 1
 0
 
+shape_id 8
+num_samples 96
+0.0197754
+0.0097656
+0.0117188
+0.0136718
+0.015625
+0.0175782
+0.0195312
+0.0214844
+0.0234375
+0.0253906
+0.0273438
+0.0292968
+0.0310059
+0.03125
+0.03125
+5
+0.0310059
+0.0292968
+0.0273438
+0.0253906
+0.0234375
+0.0214844
+0.0195312
+0.0175782
+0.015625
+0.0136718
+0.0117188
+0.0097656
+-0.7302246
+0
+0
+61
+
+shape_id 9
+num_samples 96
+0.0197754
+0.0097656
+0.0117188
+0.0136718
+0.015625
+0.0175782
+0.0195312
+0.0214844
+0.0234375
+0.0253906
+0.0273438
+0.0292968
+0.0310059
+0.03125
+0.03125
+5
+0.0310059
+0.0292968
+0.0273438
+0.0253906
+0.0234375
+0.0214844
+0.0195312
+0.0175782
+0.015625
+0.0136718
+0.0117188
+0.0097656
+-0.6677246
+0
+0
+29
+-0.0625
+0
+0
+29
+
 
 [SIGNATURE]
 # This is the hash of the Pulseq file, calculated right before the [SIGNATURE] section was added
 # It can be reproduced/verified with md5sum if the file trimmed to the position right above [SIGNATURE]
 # The new line character preceding [SIGNATURE] BELONGS to the signature (and needs to be stripped away for recalculating/verification)
 Type md5
-Hash 9a9cf173372b1e1a2cecaceb35574429
+Hash dd43157a7c55f6c83c0a2a19edc7d404

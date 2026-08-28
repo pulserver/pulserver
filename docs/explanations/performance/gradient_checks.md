@@ -10,7 +10,14 @@ Pulserver moves both off the building path and onto `write()`, under
 `check_gradients=True`. What that costs, and why the two have different cost
 models, is the whole page.
 
-## Amplitude and slew walk the library, not the scan
+```{figure} ../assets/gradient_checks/library_vs_scan.png
+The two checks read the same sequence through different structures. Amplitude
+and slew are properties of a waveform, so they are answered once per library
+entry; continuity is a property of a pair of neighbours, so it has no choice
+but to walk the block table.
+```
+
+## Amplitude and slew
 
 `check_hardware_limits` iterates the **gradient library** — the distinct event
 rows the file will store — and asks each one for its peak amplitude and its
@@ -45,7 +52,7 @@ move. The left-hand column is what the same check costs when it is asked to
 look at instances instead — the cost model a per-`add_block` check is stuck
 with.
 
-## Continuity walks the block table, in C
+## Continuity
 
 Continuity cannot be a library question. Whether a waveform ends where its
 neighbour begins is a property of the *pair*, so the pass is over block
@@ -78,7 +85,7 @@ slew do not need the C representation and it does.
 it.
 ```
 
-## Which one runs where
+## Where each check runs
 
 Both are the same C arithmetic wherever they are invoked, so design time and
 predownload cannot disagree — they are one implementation called from two

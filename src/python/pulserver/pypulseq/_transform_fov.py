@@ -89,19 +89,19 @@ class TransformFOV:
         ``True`` is implemented -- see the module docstring for why. The
         parameter is kept so the signature matches MATLAB's, and passing
         ``False`` says so rather than quietly doing something else.
-    server_mode : bool, default False
-        Where the ADC's share of the shift is applied. ``False`` bakes it
-        into the ADC alongside the RF, so the file needs nothing downstream --
-        what to write when sharing a ``.seq`` with another toolbox. ``True``
-        bakes what is exactly expressible as scalars -- a Cartesian,
-        unrotated readout -- and, for the rest (a rotation extension, or a
-        gradient that varies across the window), stores the readout's base
-        k-space trajectory and leaves its ADC side to a consumer of ours;
-        that keeps one shape per distinct trajectory rather than one per
-        readout, and a fully Cartesian sequence comes out identical in both
-        modes. The stored base is also what a reconstruction reads as the
-        readout's k, so it is written whenever this is ``True``, shift or no
-        shift.
+    compat : bool, default True
+        Whether the file has to be readable by any Pulseq toolbox. ``True``
+        bakes the ADC's share of the shift into the ADC alongside the RF, so
+        the file needs nothing downstream. ``False`` bakes only what is
+        exactly expressible as scalars -- a Cartesian, unrotated readout --
+        and for the rest (a rotation extension, or a gradient that varies
+        across the ADC window) stores the readout's base k-space trajectory
+        and leaves its ADC side to a consumer of ours, which keeps one shape
+        per distinct trajectory rather than one per readout. The stored base
+        is also what a reconstruction reads as the readout's k, so it is
+        written whenever this is ``False``, shift or no shift -- and because
+        of that, ``False`` has work to do even where the prescription asks for
+        nothing, while ``True`` returns untouched.
     prior_phase_cycle : float, default 0.0
         Accepted for signature parity with MATLAB, where it lets a caller
         chain two transform objects by hand. It is not used: the phase this
@@ -144,7 +144,7 @@ class TransformFOV:
         use_rotation_extension: bool = True,
         prior_phase_cycle: float = 0.0,
         system: pp.Opts | None = None,
-        server_mode: bool = False,
+        compat: bool = True,
     ) -> None:
         if transform is not None:
             if rotation is not None or translation is not None:
@@ -186,7 +186,7 @@ class TransformFOV:
         )
         self.scale = None if scale is None else tuple(float(v) for v in scale)
         self.use_rotation_extension = use_rotation_extension
-        self.server_mode = server_mode
+        self.compat = compat
         self.prior_phase_cycle = prior_phase_cycle
         self.system = default_system(system)
 
@@ -249,18 +249,13 @@ class TransformFOV:
         )
         rotation = self.rotation
 
-        # Server mode has something to do even when the prescription asks for
-        # nothing: the base trajectory it attaches is what a reconstruction
-        # reads as the readout's k, and a scan prescribed at isocentre needs
-        # that just as much as an offset one.
+        # A non-compat file has something to do even when the prescription
+        # asks for nothing: the base trajectory it attaches is what a
+        # reconstruction reads as the readout's k, and a scan prescribed at
+        # isocentre needs that just as much as an offset one.
         if count == 0:
             return target
-        if (
-            scale is None
-            and translation is None
-            and rotation is None
-            and not self.server_mode
-        ):
+        if scale is None and translation is None and rotation is None and self.compat:
             return target
 
         # Deduplicate first, and not only to save the writer a pass: a scan
@@ -285,11 +280,11 @@ class TransformFOV:
             for run_first, run_last in noscl_runs:
                 target._native.apply_fov_scale(*scale, first=run_first, last=run_last)
 
-        # Rotation before translation: the server-mode shift reads each
-        # block's rotation state to decide whether its ADC side can be baked
-        # as scalars or must be left to the consumer, so a rotation this
+        # Rotation before translation: the deferring shift reads each block's
+        # rotation state to decide whether its ADC side can be baked as
+        # scalars or must be left to the consumer, so a rotation this
         # transform itself carries has to be on the blocks before the shift
-        # looks. Native mode reads no extensions and is order-blind.
+        # looks. The compatible shift reads no extensions and is order-blind.
         if rotation is not None:
             turn = Rotation.from_matrix(rotation)
             for run_first, run_last in norot_runs:
@@ -301,12 +296,12 @@ class TransformFOV:
             for run_first, run_last in nopos_runs:
                 target._native.apply_fov_shift(
                     *shift_m,
-                    scope="server" if self.server_mode else "native",
+                    scope="native" if self.compat else "server",
                     first=run_first,
                     last=run_last,
                 )
 
-        if self.server_mode:
+        if not self.compat:
             # Not conditional on there being a shift. The base trajectory is
             # two things at once: what lets a deferred readout finish its FOV
             # shift downstream, and what the reconstruction reads as the

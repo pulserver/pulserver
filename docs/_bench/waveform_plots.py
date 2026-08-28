@@ -33,6 +33,20 @@ import matplotlib.pyplot as plt  # noqa: E402
 import pulserver.pypulseq as pp  # noqa: E402
 from pypulseq.utils.safe_pns_prediction import safe_example_hw  # noqa: E402
 
+# House style: a figure has to be legible at the width a manual page gives it.
+plt.rcParams.update(
+    {
+        "font.size": 11.0,
+        "axes.titlesize": 12.5,
+        "axes.labelsize": 10.0,
+        "xtick.labelsize": 10.5,
+        "ytick.labelsize": 10.5,
+        "legend.fontsize": 10.5,
+        "figure.titlesize": 13.0,
+    }
+)
+
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 FIXTURES = REPO_ROOT / "tests" / "python" / "fixtures"
 OUT_DIR = Path(__file__).resolve().parents[1] / "explanations" / "assets"
@@ -75,7 +89,7 @@ def plot_tr_waveform(name: str, seq: pp.Sequence) -> Path:
     seq.plot(tr=TR, stacked=True)
     fig = plt.gcf()
     fig.set_size_inches(9.5, 11)
-    fig.suptitle(f"{name}  --  worst-case TR", fontsize=10)
+    fig.suptitle(f"{name}  --  worst-case TR", fontsize=13.5)
     return save(fig, "representative_tr", f"{name}_tr")
 
 
@@ -87,7 +101,7 @@ def plot_pns(name: str, seq: pp.Sequence, hardware, subtitle: str, stem: str) ->
     """
     seq.calculate_pns(hardware, tr=TR)
     fig = plt.gcf()
-    fig.suptitle(f"{name}  --  {subtitle}, worst-case TR", fontsize=10)
+    fig.suptitle(f"{name}  --  {subtitle}, worst-case TR", fontsize=13.5)
     return save(fig, "pns_safety", stem)
 
 

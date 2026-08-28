@@ -92,7 +92,11 @@ server (the reconstruction).
 4. When done, the client sends a **close** message; the server sends its own
    close once it has flushed everything; either side then closes the socket.
 
-![MRD session protocol: startup (connection, configuration, header), data transfer (parallel send and receive loops), shutdown (close messages from both sides)](../assets/background/mrd_session_protocol.png)
+```{figure} ../assets/background/mrd_session_protocol.png
+MRD session protocol: startup (connection, configuration, header), data
+transfer (parallel send and receive loops), shutdown (close messages from
+both sides).
+```
 
 *The MRD session protocol, reproduced from the
 [Session Protocol](https://ismrmrd.readthedocs.io/en/latest/mrd_streaming_protocol.html)

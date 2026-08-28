@@ -28,6 +28,20 @@ import numpy as np
 import pulserver.app as app
 from pulserver._ext import pulseg
 
+# House style: a figure has to be legible at the width a manual page gives it.
+plt.rcParams.update(
+    {
+        "font.size": 11.0,
+        "axes.titlesize": 12.5,
+        "axes.labelsize": 10.0,
+        "xtick.labelsize": 10.5,
+        "ytick.labelsize": 10.5,
+        "legend.fontsize": 10.5,
+        "figure.titlesize": 13.0,
+    }
+)
+
+
 OUT_DIR = Path(__file__).resolve().parents[1] / "explanations" / "assets" / "segments"
 
 #: One hue per segment, held across the figures so a colour means a segment.
@@ -116,7 +130,7 @@ def shade(plot, runs, t_factor, view):
             xycoords=("data", "axes fraction"),
             ha="center",
             va="bottom",
-            fontsize=8.5,
+            fontsize=11.5,
             color=color,
             clip_on=False,
         )
@@ -140,7 +154,7 @@ def draw(seq, runs, instance, stem, title, *, t_range=None, time_disp="ms"):
     shade(plot, runs, getattr(plot.fig1, "_seq_t_factor", 1.0), view)
     fig = plot.fig1
     fig.set_size_inches(9.5, 8.5)
-    fig.suptitle(title, fontsize=10)
+    fig.suptitle(title, fontsize=13.5)
     return save(fig, stem)
 
 

@@ -294,7 +294,7 @@ static int run_structural_tr_mismatch_probe(void)
     desc.num_blocks = 6;
     desc.block_table = table;
 
-    return pulseg__get_tr_in_sequence(&desc, &diag);
+    return pulseg__get_tr_in_sequence(&desc, NULL, &diag);
 }
 
 MU_TEST(test_rf_periodic_ok)

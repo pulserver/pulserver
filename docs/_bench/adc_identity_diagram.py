@@ -21,6 +21,20 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.patches import FancyArrowPatch, FancyBboxPatch
 
+# House style: a figure has to be legible at the width a manual page gives it.
+plt.rcParams.update(
+    {
+        "font.size": 11.0,
+        "axes.titlesize": 12.5,
+        "axes.labelsize": 11.5,
+        "xtick.labelsize": 10.5,
+        "ytick.labelsize": 10.5,
+        "legend.fontsize": 10.5,
+        "figure.titlesize": 13.0,
+    }
+)
+
+
 OUT_DIR = Path(__file__).resolve().parents[1] / "explanations" / "assets" / "segments"
 
 PLAIN = "#9a9a9a"
@@ -36,7 +50,7 @@ PATTERN = ["RF", "PE", "RO", "sp"]
 
 
 def cell(
-    ax, x, y, w, h, color, label=None, *, fontsize=6.4, dashed=False, textcolor="white"
+    ax, x, y, w, h, color, label=None, *, fontsize=9.1, dashed=False, textcolor="white"
 ):
     ax.add_patch(
         FancyBboxPatch(
@@ -85,7 +99,7 @@ def panel(ax, x, y, w, h, color, title):
         title,
         ha="center",
         va="top",
-        fontsize=8.6,
+        fontsize=12.2,
         color=color,
         fontweight="bold",
         zorder=4,
@@ -93,30 +107,30 @@ def panel(ax, x, y, w, h, color, title):
 
 
 def build() -> Path:
-    fig, ax = plt.subplots(figsize=(11.0, 5.3))
+    fig, ax = plt.subplots(figsize=(8.6, 6.54))
     ax.set_xlim(0, 100)
-    ax.set_ylim(4, 54)
+    ax.set_ylim(1, 54)
     ax.axis("off")
 
     # -- the scan, repetition by repetition ------------------------------
     ax.text(
         2,
-        51.6,
+        52.6,
         "as written",
         ha="left",
         va="center",
-        fontsize=9.0,
+        fontsize=11.6,
         color=INK,
         fontweight="bold",
     )
     ax.text(
-        15,
-        51.6,
+        2,
+        50.0,
         "two preparation shots that acquire nothing, then two readouts "
         "of different length, alternating",
         ha="left",
         va="center",
-        fontsize=7.6,
+        fontsize=9.8,
         color=INK,
         style="italic",
     )
@@ -138,7 +152,7 @@ def build() -> Path:
         "\u2014  no ADC        RO A, RO B  the two readouts",
         ha="left",
         va="top",
-        fontsize=7.2,
+        fontsize=10.2,
         color=INK,
     )
 
@@ -155,7 +169,7 @@ def build() -> Path:
             )
         )
 
-    pw, ph, py = 31.0, 23.5, 8.5
+    pw, ph, py = 31.0, 26.5, 5.5
 
     # -- 1. the repeating unit ------------------------------------------
     panel(ax, 2.5, py, pw, ph, PLAIN, "what repeats")
@@ -169,7 +183,7 @@ def build() -> Path:
             PLAIN if c != 2 else "white",
             lbl if c != 2 else "RO",
             dashed=(c == 2),
-            fontsize=7.0,
+            fontsize=9.9,
         )
     ax.text(
         18.0,
@@ -177,19 +191,19 @@ def build() -> Path:
         "the ADC is left out of the identity",
         ha="center",
         va="top",
-        fontsize=7.4,
+        fontsize=9.8,
         color=INK,
         style="italic",
     )
     ax.text(
         18.0,
         19.6,
-        "Which readout a block digitises with is\ncarried by the instance, so all six\n"
-        "repetitions are the same four blocks.\nThe period is one repetition, not two\n"
-        "and not six.",
+        "Which readout a block digitises\nwith is carried by the instance,\n"
+        "so all six repetitions are the\nsame four blocks. The period is\n"
+        "one repetition, not two, and\nnot six.",
         ha="center",
         va="top",
-        fontsize=7.4,
+        fontsize=9.4,
         color=INK,
         linespacing=1.6,
     )
@@ -199,35 +213,35 @@ def build() -> Path:
     for row, (adc, col) in enumerate((("A", ADC_A), ("B", ADC_B))):
         yy = 25.0 - row * 4.6
         for c, lbl in enumerate(PATTERN):
-            x = 37.0 + c * 5.4
+            x = 36.6 + c * 4.9
             cell(
                 ax,
                 x,
                 yy,
-                4.8,
+                4.3,
                 3.4,
                 col if c == 2 else PLAIN,
                 ("RO" + adc) if c == 2 else lbl,
-                fontsize=6.2,
+                fontsize=8.8,
             )
         ax.text(
-            37.0 + 4 * 5.4 + 0.8,
+            36.6 + 4 * 4.9 + 0.4,
             yy + 1.7,
-            f"segment {row}",
+            f"seg {row}",
             ha="left",
             va="center",
-            fontsize=7.0,
+            fontsize=9.4,
             color=col,
         )
     ax.text(
         50.0,
         17.4,
-        "A prepared segment binds one receive\nfilter to each of its block positions,\n"
-        "so the two readouts cannot share one.\nSplit by the readouts a repetition\n"
-        "actually plays: two segments.",
+        "A prepared segment binds one\nreceive filter to each of its\n"
+        "block positions, so the two\nreadouts cannot share one. Split\n"
+        "by the readouts a repetition\nactually plays: two segments.",
         ha="center",
         va="top",
-        fontsize=7.4,
+        fontsize=9.4,
         color=INK,
         linespacing=1.6,
     )
@@ -243,7 +257,7 @@ def build() -> Path:
             3.6,
             PLAIN if c != 2 else NONE,
             lbl if c != 2 else "\u2014",
-            fontsize=7.0,
+            fontsize=9.9,
             textcolor="white" if c != 2 else INK,
         )
     ax.add_patch(
@@ -268,16 +282,17 @@ def build() -> Path:
             zorder=4,
         )
     )
-    ax.text(75.0, 21.0, "segment 0", ha="center", va="top", fontsize=7.0, color=ADC_A)
-    ax.text(93.0, 21.0, "segment 1", ha="center", va="top", fontsize=7.0, color=ADC_B)
+    ax.text(72.5, 21.0, "segment 0", ha="center", va="top", fontsize=9.4, color=ADC_A)
+    ax.text(91.0, 21.0, "segment 1", ha="center", va="top", fontsize=9.4, color=ADC_B)
     ax.text(
         82.0,
         17.4,
-        "Either. It acquires nothing there, so\nneither segment's filter is used for it\n"
-        "and both play its gradients and RF\nidentically. The choice is not\nobservable.",
+        "Either. It acquires nothing\nthere, so neither segment's\n"
+        "filter is used for it and both\nplay its gradients and RF\n"
+        "identically. The choice is not\nobservable.",
         ha="center",
         va="top",
-        fontsize=7.4,
+        fontsize=9.4,
         color=INK,
         linespacing=1.6,
     )

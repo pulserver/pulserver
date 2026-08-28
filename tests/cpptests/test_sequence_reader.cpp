@@ -21,6 +21,7 @@
 #include <cmath>
 #include <filesystem>
 #include <fstream>
+#include <iostream>
 #include <map>
 #include <set>
 #include <string>
@@ -485,7 +486,7 @@ TEST_P(SequenceReaderNonCartesian, TheStoredBaseComposesToWhatTheGradientsIntegr
 INSTANTIATE_TEST_SUITE_P(
     Corpus,
     SequenceReaderNonCartesian,
-    ::testing::Values("gre_spiral_2d", "gre_radial_2d", "gre_stack_of_stars_3d"));
+    ::testing::Values("gre_spiral_2d", "gre_radial_2d", "gre_stack_of_stars_3d", "gre_wave_3d"));
 
 TEST(SequenceReaderChain, TheEpiChainBecomesOneCacheOfSubsequences)
 {
@@ -528,3 +529,200 @@ TEST(SequenceReaderAverages, TheTableIsWhatTheFileSays)
 
     fs::remove(thrice_path);
 }
+
+/*
+ * A wave-encoded Cartesian scan is Cartesian in its counters and not in its
+ * readout: the corkscrew sweeps ky and kz across the ADC window, so the
+ * readout stores a base trajectory the way a spiral's does, and that base is
+ * what a reconstruction reads the corkscrew off. That the base is faithful is
+ * held by SequenceReaderNonCartesian, which this fixture is also a case of.
+ *
+ * What is held here is what a reconstruction sorts by. The fixture carries
+ * both passes -- the wave-free autocalibration rectangle and the wave-encoded
+ * train -- and telling them apart is the first thing the reconstruction does.
+ */
+TEST(SequenceReaderWave, TheCorkscrewReachesTheAcquisition)
+{
+    constexpr uint64_t kParallelCalibration = 1ULL << 19;
+
+    const SequenceCache cache = mrdserver::read_sequence_files(corpus("gre_wave_3d.seq"));
+    const auto trajectories = mrdserver::pre_compute_trajectories(cache);
+
+    std::vector<int> readout_index_in_es(cache.table.size(), -1);
+    std::vector<int> seen(cache.encoding_spaces.size(), 0);
+    for (size_t t = 0; t < cache.table.size(); ++t)
+    {
+        const int es = cache.table[t].encoding_space_ref;
+        if (es >= 0 && es < static_cast<int>(seen.size()))
+            readout_index_in_es[t] = seen[es]++;
+    }
+
+    /* How one axis moved within the readout, against where it started -- which
+     * is where that line's own phase encode put it. */
+    const auto excursion = [](const float *k, int ndim, int samples, int axis)
+    {
+        std::vector<double> out(static_cast<size_t>(samples));
+        const double start = static_cast<double>(k[axis]);
+        for (int s = 0; s < samples; ++s)
+            out[static_cast<size_t>(s)] = static_cast<double>(k[s * ndim + axis]) - start;
+        return out;
+    };
+    const auto peak = [](const std::vector<double> &values)
+    {
+        double out = 0.0;
+        for (double value : values)
+            out = std::max(out, std::fabs(value));
+        return out;
+    };
+
+    std::vector<double> corkscrew[2];
+    size_t waved = 0, flat = 0;
+
+    for (size_t t = 0; t < cache.table.size(); ++t)
+    {
+        const int es = cache.table[t].encoding_space_ref;
+        ASSERT_GE(es, 0);
+        const auto &pt = trajectories[static_cast<size_t>(es)];
+        ASSERT_GT(pt.ndim, 0) << "readout " << t << " belongs to a space with no trajectory";
+
+        ISMRMRD::Acquisition acq;
+        acq.resize(static_cast<uint16_t>(pt.num_samples), 1, 0);
+        mrdserver::enrich_ismrmrd_acquisition(
+            acq,
+            static_cast<int>(t),
+            1u,
+            0.0f,
+            cache,
+            trajectories,
+            readout_index_in_es);
+
+        const int ndim = static_cast<int>(acq.trajectory_dimensions());
+        ASSERT_EQ(ndim, 3) << "readout " << t << " came back with " << ndim
+                           << " dimensions; a wave-encoded slab traverses all three";
+        const float *k = acq.getTrajPtr();
+
+        const std::vector<double> moved[2] = {
+            excursion(k, ndim, pt.num_samples, 1),
+            excursion(k, ndim, pt.num_samples, 2)};
+        const bool sweeps = peak(moved[0]) > 0.0 || peak(moved[1]) > 0.0;
+        const bool calibration = (cache.table[t].flags & kParallelCalibration) != 0;
+
+        /* Which pass a readout belongs to is a flag, and what it played is a
+         * trajectory. A reconstruction reads the first and trusts the second,
+         * so the two have to say the same thing. */
+        EXPECT_EQ(sweeps, !calibration)
+            << "readout " << t << (sweeps ? " swept" : " stood still") << " but is flagged "
+            << (calibration ? "calibration" : "imaging");
+
+        if (!sweeps)
+        {
+            ++flat;
+            continue;
+        }
+        ++waved;
+
+        /* One corkscrew for the whole scan: the reconstruction reads the
+         * point-spread function off a single readout and applies it to every
+         * line, so every line has to have played the same one. */
+        for (int axis = 0; axis < 2; ++axis)
+        {
+            if (corkscrew[axis].empty())
+            {
+                corkscrew[axis] = moved[axis];
+                continue;
+            }
+            const double tolerance = 1e-3 * peak(corkscrew[axis]);
+            for (int s = 0; s < pt.num_samples; ++s)
+                ASSERT_NEAR(
+                    moved[axis][static_cast<size_t>(s)],
+                    corkscrew[axis][static_cast<size_t>(s)],
+                    tolerance)
+                    << "readout " << t << " played a different corkscrew on axis " << (axis + 1)
+                    << " at sample " << s;
+        }
+    }
+
+    ASSERT_GT(waved, 0u) << "no readout carried a corkscrew";
+    ASSERT_GT(flat, 0u) << "the wave-free autocalibration rectangle is not in this fixture";
+    EXPECT_GT(peak(corkscrew[0]), 0.0);
+    EXPECT_GT(peak(corkscrew[1]), 0.0);
+}
+
+/*
+ * A ramp-sampled EPI train advances k at a rate that changes along the
+ * readout, so its samples are not on the grid and a reconstruction has to put
+ * them back on it. Where they fell is what the acquisition's trajectory says,
+ * and a readout that carries none is one a regridder reads as uniform and
+ * passes straight through -- so the failure this pins is a silent one.
+ *
+ * Every sequence of the chain, not only the imaging: the coil calibration and
+ * the phase navigator play the same train, and a reconstruction regrids what
+ * it calibrates from too.
+ */
+class SequenceReaderRampSampled : public ::testing::TestWithParam<const char *>
+{
+};
+
+TEST_P(SequenceReaderRampSampled, EveryReadoutCarriesWhereItsSamplesFell)
+{
+    const std::string name = GetParam();
+    const SequenceCache cache = mrdserver::read_sequence_files(corpus(name + ".seq"));
+    const auto trajectories = mrdserver::pre_compute_trajectories(cache);
+    ASSERT_FALSE(cache.table.empty());
+
+    std::vector<int> readout_index_in_es(cache.table.size(), -1);
+    std::vector<int> seen(cache.encoding_spaces.size(), 0);
+    for (size_t t = 0; t < cache.table.size(); ++t)
+    {
+        const int es = cache.table[t].encoding_space_ref;
+        if (es >= 0 && es < static_cast<int>(seen.size()))
+            readout_index_in_es[t] = seen[es]++;
+    }
+
+    size_t uneven = 0;
+    for (size_t t = 0; t < cache.table.size(); ++t)
+    {
+        const int es = cache.table[t].encoding_space_ref;
+        ASSERT_GE(es, 0);
+        const auto &pt = trajectories[static_cast<size_t>(es)];
+        ASSERT_GT(pt.ndim, 0) << name << ": readout " << t << " is in encoding space " << es
+                              << ", which carries no trajectory at all";
+
+        ISMRMRD::Acquisition acq;
+        acq.resize(static_cast<uint16_t>(pt.num_samples), 1, 0);
+        mrdserver::enrich_ismrmrd_acquisition(
+            acq,
+            static_cast<int>(t),
+            1u,
+            0.0f,
+            cache,
+            trajectories,
+            readout_index_in_es);
+
+        const int ndim = static_cast<int>(acq.trajectory_dimensions());
+        ASSERT_GT(ndim, 0) << name << ": readout " << t << " carries no trajectory, so a "
+                           << "regridder would read it as uniform and pass it through";
+
+        /* The readout axis, sample to sample. Ramp sampling is exactly the
+         * step not being constant, so a train whose steps are all equal is
+         * one that waited for its plateau. */
+        double smallest = 0.0, largest = 0.0;
+        for (int s = 1; s < pt.num_samples; ++s)
+        {
+            const double step = std::fabs(
+                static_cast<double>(acq.getTrajPtr()[s * ndim]) -
+                static_cast<double>(acq.getTrajPtr()[(s - 1) * ndim]));
+            if (s == 1)
+                smallest = largest = step;
+            smallest = std::min(smallest, step);
+            largest = std::max(largest, step);
+        }
+        if (largest > 0.0 && smallest < 0.99 * largest)
+            ++uneven;
+    }
+
+    EXPECT_GT(uneven, 0u) << name << " advances k evenly along every readout, so nothing here "
+                          << "is ramp sampled and this fixture no longer covers the case";
+}
+
+INSTANTIATE_TEST_SUITE_P(Corpus, SequenceReaderRampSampled, ::testing::Values("epi_2d", "epi_3d"));

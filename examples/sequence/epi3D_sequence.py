@@ -383,7 +383,9 @@ def main(
                 clear_once = None
 
     pp.TransformFOV(
-        translation=tuple(offset * 1e3 for offset in fov_offset), system=system
+        translation=tuple(offset * 1e3 for offset in fov_offset),
+        system=system,
+        compat=False,
     ).apply_to_sequence(seq, in_place=True)
 
     if test_report:
@@ -408,6 +410,7 @@ def main(
             seq_filename,
             system=system,
             fov=fov,
+            fov_offset=fov_offset,
             n_x=n_x,
             n_y=n_y,
             n_z=n_z,
@@ -456,11 +459,9 @@ def SlabExcitationKernel(system: pp.Opts, flip_angle_deg: float, thickness_m: fl
             thickness_m=thickness_m,
             spectral_bandwidth_hz=abs(fat_offset_hz),
             freq_offset_hz=0.0,
+            is_slab=True,
         )
-        # Concatenate the rephaser onto the alternating selection gradient, the
-        # way is_slab does, and hand the readout one merged z lobe.
-        gz = pp.concatenate_gradients(excitation.gz, excitation.gz_reph, system=system)
-        return excitation, excitation.rf, gz
+        return excitation, excitation.rf, excitation.gz
     excitation = design.SpatialSelectiveExcitation(
         system,
         flip_angle_deg,
@@ -619,6 +620,7 @@ def NavigatorKernel(
     *,
     system: pp.Opts | None = None,
     fov: float | tuple[float, float] = 220e-3,
+    fov_offset: tuple[float, float, float] = (0.0, 0.0, 0.0),
     n_x: int = 128,
     n_y: int = 128,
     n_z: int = 32,
@@ -699,6 +701,17 @@ def NavigatorKernel(
     seq.set_definition(key="Matrix", value=[n_x, n_y, n_z])
     seq.set_definition(key="Name", value="epi_3d_navigator")
     seq.set_definition(key="EchoSpacing", value=epi.esp)
+    # The prescription moves this sequence with the imaging it calibrates, and
+    # ``compat=False`` because these readouts sample across their read ramps:
+    # the k they traced is what a reconstruction needs to put them back on the
+    # grid. A saturation band placed at design time carries NOPOS/NOROT and is
+    # left where it was put.
+    pp.TransformFOV(
+        translation=tuple(offset * 1e3 for offset in fov_offset),
+        system=system,
+        compat=False,
+    ).apply_to_sequence(seq, in_place=True)
+
     return seq
 
 
@@ -706,6 +719,7 @@ def CalibrationKernel(
     *,
     system: pp.Opts | None = None,
     fov: float | tuple[float, float] = 220e-3,
+    fov_offset: tuple[float, float, float] = (0.0, 0.0, 0.0),
     n_x: int = 128,
     n_y: int = 128,
     n_z: int = 32,
@@ -784,6 +798,17 @@ def CalibrationKernel(
     seq.set_definition(key="FOV", value=[fov_x, fov_y, slab_thickness])
     seq.set_definition(key="Matrix", value=[n_x, n_y, n_z])
     seq.set_definition(key="Name", value="epi_3d_calibration")
+    # The prescription moves this sequence with the imaging it calibrates, and
+    # ``compat=False`` because these readouts sample across their read ramps:
+    # the k they traced is what a reconstruction needs to put them back on the
+    # grid. A saturation band placed at design time carries NOPOS/NOROT and is
+    # left where it was put.
+    pp.TransformFOV(
+        translation=tuple(offset * 1e3 for offset in fov_offset),
+        system=system,
+        compat=False,
+    ).apply_to_sequence(seq, in_place=True)
+
     return seq
 
 
@@ -1074,6 +1099,7 @@ KERNEL_ARGUMENTS = frozenset(
 CALIBRATION_ARGUMENTS = frozenset(
     (
         "fov",
+        "fov_offset",
         "n_x",
         "n_y",
         "n_z",
@@ -1089,6 +1115,7 @@ CALIBRATION_ARGUMENTS = frozenset(
 NAVIGATOR_ARGUMENTS = frozenset(
     (
         "fov",
+        "fov_offset",
         "n_x",
         "n_y",
         "n_z",

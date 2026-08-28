@@ -28,7 +28,7 @@ rebuild to see it.
 
 ## What this layer adds
 
-| | |
+| Aspect | What C++ adds |
 |---|---|
 | Lifetime | `Collection`, `CheckPlan`, `ChunkPlan` and `Bridge` own their C handles and release them in a destructor. All are move-only. |
 | Errors | A negative code and a `pulseg_diagnostic` become a thrown `pulseg::Error` carrying both. Bridge failures throw `pulseg::BridgeError`, which carries `errno`. |

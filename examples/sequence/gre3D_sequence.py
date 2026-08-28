@@ -97,8 +97,8 @@ def main(
     rf_spoiling_increment_deg: float = 117.0,
     spoiling_cycles: float = 4.0,
     wave: str | None = None,
-    wave_cycles: int = WAVE_CYCLES,
-    wave_amplitude: float = WAVE_AMPLITUDE,
+    wave_cycles: int = 8,
+    wave_amplitude: float = 8e-3,
 ) -> pp.Sequence:
     """Create an RF-spoiled 3D Cartesian gradient-echo sequence.
 
@@ -466,7 +466,9 @@ def main(
         pending = []
 
     pp.TransformFOV(
-        translation=tuple(offset * 1e3 for offset in fov_offset), system=system
+        translation=tuple(offset * 1e3 for offset in fov_offset),
+        system=system,
+        compat=False,
     ).apply_to_sequence(seq, in_place=True)
 
     if test_report:
@@ -533,8 +535,8 @@ def GRE3DKernel(
     n_dummy: int = 64,
     spoiling_cycles: float = 4.0,
     wave: str | None = None,
-    wave_cycles: int = WAVE_CYCLES,
-    wave_amplitude: float = WAVE_AMPLITUDE,
+    wave_cycles: int = 8,
+    wave_amplitude: float = 8e-3,
 ) -> SimpleNamespace:
     """Design the repetition, and the plan that repeats it.
 

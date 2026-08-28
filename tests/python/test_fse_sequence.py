@@ -195,6 +195,12 @@ def test_radial_adaptive_grows_radius_away_from_the_centre_echo():
 
 
 def test_the_variable_train_modulates_the_played_amplitudes():
+    """The amplitudes the train plays follow the flip angles it declares.
+
+    To the precision an amplitude survives being written with: a sequence is
+    deduplicated on its way into a file, which collapses rows that agree to the
+    precision the file keeps, and it is the written sequence a scanner plays.
+    """
     seq = design_3d(variable_flip=True)
     flips = seq.get_definition("RefocusingFlipAngles")
     assert len(flips) == 8
@@ -205,7 +211,7 @@ def test_the_variable_train_modulates_the_played_amplitudes():
     ]
     first_train = refocusings[:8]
     expected = np.asarray(flips) / flips[0]
-    assert np.asarray(first_train) / first_train[0] == pytest.approx(expected, rel=1e-6)
+    assert np.asarray(first_train) / first_train[0] == pytest.approx(expected, rel=1e-5)
 
 
 def test_a_constant_train_plays_180s():

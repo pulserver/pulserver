@@ -12,7 +12,7 @@ A nerve integrates: a short, intense slew and a longer, gentler one can be
 equally stimulating. The threshold therefore depends on pulse *duration*, and
 the classical description of that dependence is the strength–duration curve.
 
-## Two nerve models, both first class
+## The two nerve models
 
 Two model families describe that curve in practice, and Pulserver supports
 both on equal footing — which one runs is decided by the hardware description
@@ -99,7 +99,7 @@ is being written* — computed by the same compiled code the interpreter links,
 so the two answers cannot disagree by reimplementation.
 ```
 
-## What the two models look like
+## The two models on the corpus
 
 The corpus figures below pair each sequence's worst-case TR with its Irnich
 stimulation trace; the SAFE figure uses upstream PyPulseq's own example
@@ -119,11 +119,22 @@ ramp at $t = 0$, its rewinder at 3.3 ms, then the prewinder pair and the
 readout ramps clustered around 6–7 ms, and nothing at all across the 22 ms of
 dead time that fills out the TR.
 
-![GRE representative TR](../assets/representative_tr/gre_2d_tr.png)
+```{figure} ../assets/representative_tr/gre_2d_tr.png
+The GRE worst-case TR: one slice-select and rewinder, one prewinder pair, one
+readout, and 22 ms of dead time.
+```
 
-![GRE PNS, Irnich model](../assets/pns_safety/gre_2d_pns.png)
+```{figure} ../assets/pns_safety/gre_2d_pns.png
+The same TR under the Irnich model. Each gradient edge raises a spike that
+decays before the next arrives; the verdict is the 3.3 ms slice-select
+rewinder.
+```
 
-![GRE PNS, SAFE model with example coefficients](../assets/pns_safety/gre_2d_pns_safe.png)
+```{figure} ../assets/pns_safety/gre_2d_pns_safe.png
+The same TR under SAFE, with upstream PyPulseq's example coefficients — not a
+real scanner's. Per-axis coefficients move the verdict onto the 6.8 ms
+prewinder pair.
+```
 
 The shape is the point, not the number. The two models see the same events at
 the same instants, but they do not agree on which one is worst. Irnich reads
@@ -144,9 +155,15 @@ readout gradient reversed dozens of times a few hundred microseconds apart
 asks a question GRE's well-separated events never do: whether the responses
 pile up.
 
-![EPI representative TR](../assets/representative_tr/epi_2d_tr.png)
+```{figure} ../assets/representative_tr/epi_2d_tr.png
+The EPI worst-case TR: a blipped echo train reversing the readout gradient
+every 400 µs.
+```
 
-![EPI PNS, Irnich model](../assets/pns_safety/epi_2d_pns.png)
+```{figure} ../assets/pns_safety/epi_2d_pns.png
+The train under Irnich: one tooth per reversal, none of them stacking,
+and the verdict still set by the slice-select rewinder at 8.7 ms.
+```
 
 The train shows up as a run of near-identical ~59 % teeth, one per reversal,
 400 µs apart. They do not stack: the echo spacing is just longer than the

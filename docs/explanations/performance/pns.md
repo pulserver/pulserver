@@ -57,8 +57,7 @@ definition tuples, where each entry is one of two things:
 | trapezoid | delay, rise, flat, fall | amplitude, rotation |
 | arbitrary | delay, time shape, sample count | waveform shape, amplitude, rotation |
 
-That table is the whole cost model, and it is the same one the
-{doc}`acoustic check <mechanical_resonance>` reads. Position in the TR fixes a
+That table is the whole cost model. Position in the TR fixes a
 start time, so a shift handles *when* a block plays; a definition fixes a
 shape, so one convolution serves every playout of it; and amplitude is a
 per-playout number that scales a response already computed. What is left to
@@ -73,7 +72,7 @@ keys on the shape as well.
 
 ---
 
-## 2. The canonical TR, and the three ways repetitions differ
+## 2. The canonical TR
 
 The analysis runs on a single window and the verdict is taken to hold for the
 scan. That is sound only if no repetition can stimulate harder than the
@@ -92,15 +91,13 @@ grows with each of them.
 
 (pns-shape-groups)=
 **C — the waveform varies.** A multishot readout written out shot by shot:
-different shapes at the same position. **This is where the two checks part
-company.** The acoustic analysis bounds such a position by the loudest
-magnitude over the shapes it plays, because a spectrum at one frequency is a
-single number to be bounded. A stimulation peak is not: there is no amplitude
-at which one spiral arm's shape covers another's, and the instant of the peak
-is a property of the whole window. So instead of bounding, the repetitions are
-**grouped by the definitions they play**, one window is built per group at
-that group's own shapes and its own amplitude maxima, and the worst of the
-groups is the verdict.
+different shapes at the same position. There is no bound to take here. No
+amplitude makes one spiral arm's shape cover another's, and the instant of the
+peak is a property of the whole window rather than of the position, so a
+position-by-position maximum would not be a maximum of anything. The
+repetitions are **grouped by the definitions they play** instead: one window
+is built per group, at that group's own shapes and its own amplitude maxima,
+and the worst of the groups is the verdict.
 
 A sequence whose repetitions differ only in amplitude has one group, and the
 check is the single envelope evaluation it has always been. A four-arm spiral
@@ -118,7 +115,10 @@ systems. Four repetitions rather than sixteen so the scan can be drawn
 straight through, which is how the check sees it — the response of one
 repetition running into the next.
 
-![Four repetitions played straight through, with each kind of variation switched on alone](../assets/pns_performance/canonical_tr.png)
+```{figure} ../assets/pns_performance/canonical_tr.png
+Four repetitions played straight through, with each kind of variation
+switched on alone.
+```
 
 The reference is the **whole scan**: every repetition as it actually plays,
 concatenated, differentiated and convolved in one pass, with no knowledge that
@@ -160,7 +160,9 @@ costs time and changes nothing.
 Which is also why the same scan gives the same answer whichever way its arms
 reach the scanner:
 
-![Spiral gradient echo: four interleaves, and the window built over each](../assets/pns_performance/multishot_envelope.png)
+```{figure} ../assets/pns_performance/multishot_envelope.png
+Spiral gradient echo: four interleaves, and the window built over each.
+```
 
 Four arms at one block position, the window each group is judged by, and every
 repetition's stimulation against the worst window's. The peak is
@@ -182,19 +184,42 @@ is the route taken.
 
 ---
 
-## 3. Making it cheap: one response per distinct shape
+## 3. One response per distinct waveform
 
-Walk the window once and collect, per position and per axis, the distinct
-shapes it plays. Then:
+The window is read once, and what is read is the gradient columns of the block
+table rather than any rendered waveform.
 
-**Multiplicity one.** The shape is its own template. Nothing to share.
+```{figure} ../assets/pns_performance/memoization.png
+The block table's gradient columns, gathered by position across the TR
+instances and deduplicated on the `(gx, gy, gz)` tuple each position plays.
+A position that takes one tuple varies only in amplitude; a position that
+takes several is what forces the instances to be split into groups.
+```
 
-**Multiplicity greater than one.** Occurrences are matched on the identity the
-representation already carries — the gradient definition, which fixes the
-timing skeleton; the waveform shape id, which fixes the samples; and the block
-duration, which fixes the span. Nothing is re-derived to decide that two
-blocks play the same thing, and nothing is compared sample by sample: it is
-the same identity the {doc}`acoustic check <mechanical_resonance>` keys on.
+**The tuple, not the axis, is the unit of the walk.** A position is the same
+position in two instances when all three of its gradient columns match, so
+what is counted per position is the number of distinct `(gx, gy, gz)` tuples,
+and a column is a pair: the gradient definition, which fixes the timing
+skeleton, and the shape id, which fixes the samples. A phase encode changes an
+amplitude and leaves the tuple alone. A written-out spiral arm changes two of
+the three shape ids and gives the position a second tuple.
+
+**Positions with one tuple** are bounded by their largest amplitude — cases A
+and B of the previous section.
+
+**Positions with several** — case C — send the instances themselves to be
+{ref}`classified <pns-shape-groups>`: an instance's signature is the whole
+sequence of its positions' tuples, instances sharing a signature form a group,
+and one window is built per group.
+
+**Inside a window, the convolution is memoized per axis.** Each block's slice
+is keyed on (gradient definition · shape id · block duration) — the identity
+the representation already carries. Nothing is re-derived to decide that two
+blocks play the same thing, and nothing is compared sample by sample. Each
+distinct key is convolved with the model kernel once; every occurrence takes
+the stored response out of the table, scales it by its amplitude ratio, shifts
+it to its start time, and adds into an accumulator. The three axes are
+combined and the peak read off at the end.
 
 That identity does not carry **rotation**, and the slices are cut from the
 materialised, already-rotated waveform. What keeps that sound is a
@@ -206,30 +231,12 @@ declines and the whole window takes the exact convolution instead. Builds
 configured with `PULSEG_DEBUG_MEMO` additionally compare the samples of every
 accepted match against the template it was matched to.
 
-**Then convolve each distinct template once and store the result.** From
-there, the whole window is bookkeeping: each occurrence takes its stored
-response out of the table, scales it by its amplitude ratio, shifts it to its
-start time, and adds into an accumulator — after which the three axes are
-combined and the peak read off.
-
-Everything to this point is the calculation the acoustic check makes as well.
-The two part company over a position whose waveform genuinely varies between
-repetitions:
-
-![Where the stimulation and acoustic checks share a calculation, and where they part](../assets/memoization/shared_memoization.png)
-
-This check answers that by
-{ref}`building one window per shape group <pns-shape-groups>` and taking the
-worst, which costs a full evaluation per group. The acoustic check decomposes
-the set into a low-rank basis instead. Its position-by-position bound is what
-a spectrum admits and a peak does not — but the assembly underneath is the
-same linear algebra, so a set of shapes at one position is compressible here
-too.
-
 Compare that with the alternative — materialise the slew over the whole scan
 and convolve it:
 
-![What the stimulation check's cost actually depends on](../assets/pns_performance/assembly_cost.png)
+```{figure} ../assets/pns_performance/assembly_cost.png
+What the stimulation check's cost actually depends on.
+```
 
 **Scan length: gone.** A convolution of the timeline goes from 5.8 ms to
 182 ms between 3 and 144 repetitions of one EPI shot, as a convolution of the
@@ -257,7 +264,7 @@ is kept.
 
 ---
 
-## 4. How one response is computed
+## 4. Computing one response
 
 A nerve model that publishes a kernel is asserting that it is a linear filter:
 
@@ -309,7 +316,9 @@ assembled traces.
 Held against the direct route — pad, differentiate, convolve the whole window,
 written straight from the published kernel in double precision:
 
-![EPI, one canonical TR: assembled per shape against convolved whole](../assets/pns_performance/assembly_equivalence.png)
+```{figure} ../assets/pns_performance/assembly_equivalence.png
+EPI, one canonical TR: assembled per shape against convolved whole.
+```
 
 One EPI window: 1601 samples, 25 blocks, 45 slices, 11 distinct shapes,
 5 020 323 multiply-adds convolved whole against 658 847 assembled. All three
@@ -331,7 +340,9 @@ direct route always, over the same canonical window and the same groups.
 One number: the peak of the combined response over the window, against the
 model's threshold.
 
-![An echo train's stimulation against the 80 % margin and the 100 % threshold](../assets/pns_performance/epi_verdict.png)
+```{figure} ../assets/pns_performance/epi_verdict.png
+An echo train's stimulation against the 80 % margin and the 100 % threshold.
+```
 
 A single-shot echo train is the instructive case, and not for the reason it
 looks like. The train shows up as a run of near-identical ~50 % teeth, one per
@@ -358,7 +369,7 @@ norm.max()    # the peak, as a fraction of threshold
 
 ---
 
-## The same answer, checked
+## Equivalence tests
 
 Each shortcut is a claim that two calculations agree, and each has a test that
 computes both:
@@ -373,13 +384,12 @@ computes both:
 | a one-repetition sequence | the plain convolution | the same waveform under the same model, evaluated two ways |
 | the wrapped history | the scan played back to back | the window's peak is the steady-state peak, boundaries included |
 
-**End to end.** This is a predownload cost, not a UI one, for the reason
-{doc}`the acoustic page <mechanical_resonance>` gives: `validate_protocol`
+**End to end.** This is a predownload cost, not a UI one: `validate_protocol`
 returns before any gradient exists to differentiate. What the interpreter pays
-when the finished file comes back in — gradient continuity and slew, this
-stimulation check, and the acoustic analysis together — is what the
-{doc}`full benchmark <full_benchmark>` reports as *Safety*.
+once the finished file comes back in — gradient continuity and slew, this
+check, and the acoustic analysis together — is what the {doc}`full benchmark
+<full_benchmark>` reports as *Safety*.
 
-The point is not the tests. It is that none of this machinery is allowed to be
-an approximation of the rule on the {doc}`safety page <../safety/pns>`. It is
-the same rule in a cheaper order.
+None of this machinery is allowed to be an approximation of the rule on the
+{doc}`safety page <../safety/pns>`. It is the same rule in a cheaper order,
+and the tests above are what holds it there.

@@ -3,7 +3,16 @@
 Designing a sequence, describing it to the console, writing it, checking it,
 and reconstructing what comes back.
 
+| Module | What is in it |
+|---|---|
+| {doc}`pypulseq` | The event layer: the `Sequence` object, the block factories, the sampling and scheduling helpers a scan loop indexes, the analysis methods that read a built sequence back, and the file I/O either side of it. |
+| {doc}`design` | The toolbox above it — an excitation, a preparation, one readout TR — plus the scanner protocol: what a plugin is, and the typed parameters a console builds its controls from. |
+| {doc}`recon` | The other end: buffers, physics operators, solvers, priors and the plugin contract. |
+| {doc}`mrd` | The vocabulary the two ends share: what a scanner sends, how a scan is described, the array operations both sides use, and the files a study is stored as. |
+| {doc}`apps` | The complete plugins built on all of them — the sequence zoo, the reconstructions paired with it, and the protocol declarations that put them on a scanner UI. |
+
 ```{toctree}
+:hidden:
 :maxdepth: 1
 
 pypulseq

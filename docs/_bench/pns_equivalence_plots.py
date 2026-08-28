@@ -45,6 +45,20 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pulserver.pypulseq as pp
 
+# House style: a figure has to be legible at the width a manual page gives it.
+plt.rcParams.update(
+    {
+        "font.size": 11.0,
+        "axes.titlesize": 12.5,
+        "axes.labelsize": 11.5,
+        "xtick.labelsize": 10.5,
+        "ytick.labelsize": 10.5,
+        "legend.fontsize": 10.5,
+        "figure.titlesize": 13.0,
+    }
+)
+
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 FIXTURES = REPO_ROOT / "tests" / "python" / "fixtures"
 EXAMPLES = REPO_ROOT / "examples" / "sequence"
@@ -338,8 +352,9 @@ def assembly_figure() -> Path:
     )
 
     fig, (top, middle, bottom) = plt.subplots(
-        3, 1, figsize=(9.5, 9.0), gridspec_kw={"height_ratios": [1.0, 1.1, 0.7]}
+        3, 1, figsize=(8.6, 10.2), gridspec_kw={"height_ratios": [1.0, 1.1, 0.7]}
     )
+    fig.subplots_adjust(hspace=0.62, top=0.87, bottom=0.06, left=0.11, right=0.985)
 
     # A zoom on the blip train, where one template response is scaled and
     # shifted a few dozen times. The decomposition is per axis: the combined
@@ -371,15 +386,17 @@ def assembly_figure() -> Path:
         textcoords="offset points",
         ha="right",
         color=RED,
-        fontsize=8,
+        fontsize=10.8,
     )
     middle.set_ylabel("combined stimulation [% of threshold]")
     middle.set_ylim(-4.0, 160.0)
-    middle.legend(loc="upper left", frameon=False, fontsize=9)
+    middle.legend(loc="lower left", frameon=False, fontsize=10.4,
+        bbox_to_anchor=(0.0, 1.16, 1.0, 0.16), mode="expand",
+        borderaxespad=0.0, handlelength=1.2, ncol=1)
     middle.set_title(
         f"{len(occurrences)} slices, {len(shapes)} distinct shapes"
         f"  \u2014  peak {100 * peak:.2f} % either way",
-        fontsize=10,
+        fontsize=11.6,
         loc="left",
     )
 
@@ -407,7 +424,9 @@ def assembly_figure() -> Path:
     bottom.set_ylim(-2.3 * reach, 1.3 * reach)
     bottom.set_ylabel("difference [% of threshold]")
     bottom.set_xlabel("time within the canonical TR [ms]")
-    bottom.legend(loc="lower left", frameon=False, fontsize=9)
+    bottom.legend(loc="lower left", frameon=False, fontsize=10.4,
+        bbox_to_anchor=(0.0, 1.16, 1.0, 0.16), mode="expand",
+        borderaxespad=0.0, handlelength=1.2, ncol=1)
 
     for axis in (top, middle, bottom):
         _style(axis)
@@ -415,8 +434,13 @@ def assembly_figure() -> Path:
         axis.set_xlim(0.0, times[-1])
 
     fig.suptitle(
-        "EPI, one canonical TR: the response assembled per shape is the response convolved whole",
-        fontsize=11,
+        "EPI, one canonical TR: the response assembled per shape\n"
+        "is the response convolved whole",
+        x=0.02,
+        y=0.995,
+        ha="left",
+        va="top",
+        fontsize=12.0,
     )
     return _save(fig, "assembly_equivalence")
 
@@ -483,11 +507,13 @@ def _plot_contributions(axis, times, shapes, occurrences, direct, width_ms) -> N
     axis.set_ylim(-1.25 * limit, 1.7 * limit)
     axis.set_ylabel(f"${'xyz'[carrier]}$ stimulation [%]")
     axis.set_xlabel("time within the canonical TR [ms]")
-    axis.legend(loc="upper left", frameon=False, fontsize=9)
+    axis.legend(loc="lower left", frameon=False, fontsize=10.4,
+        bbox_to_anchor=(0.0, 1.16, 1.0, 0.16), mode="expand",
+        borderaxespad=0.0, handlelength=1.2, ncol=1)
     axis.set_title(
         f"{width_ms:.1f} ms inside the echo train: {drawn} scaled, shifted copies"
         " of stored responses, and their sum",
-        fontsize=10,
+        fontsize=11.6,
         loc="left",
     )
 
@@ -556,8 +582,9 @@ def envelope_figure() -> Path:
     response_times = np.arange(envelope.size) * dt * 1e3
 
     fig, (top, middle, bottom) = plt.subplots(
-        3, 1, figsize=(9.5, 9.0), gridspec_kw={"height_ratios": [1.0, 1.1, 0.9]}
+        3, 1, figsize=(8.6, 10.2), gridspec_kw={"height_ratios": [1.0, 1.1, 0.9]}
     )
+    fig.subplots_adjust(hspace=0.62, top=0.87, bottom=0.06, left=0.11, right=0.985)
     palette = (BLUE, ORANGE, AQUA, AMBER)
 
     spread = np.max([np.abs(gradients[0]) for _, gradients in arms], axis=0)
@@ -583,10 +610,12 @@ def envelope_figure() -> Path:
     top.set_xlabel("time within the canonical TR [ms]")
     reach = np.abs([gradients[0][readout] for _, gradients in arms]).max() * 1e-3
     top.set_ylim(-1.15 * reach, 1.75 * reach)
-    top.legend(loc="upper center", frameon=False, fontsize=9, ncol=5)
+    top.legend(loc="lower left", frameon=False, fontsize=10.4,
+        bbox_to_anchor=(0.0, 1.16, 1.0, 0.16), mode="expand",
+        borderaxespad=0.0, handlelength=1.2, ncol=5)
     top.set_title(
         f"{len(arms)} interleaves at one block position, and the window built over each",
-        fontsize=10,
+        fontsize=11.6,
         loc="left",
     )
 
@@ -619,7 +648,9 @@ def envelope_figure() -> Path:
     middle.axhline(100.0, color=RED, linewidth=1.0)
     middle.set_ylabel("combined stimulation [% of threshold]")
     middle.set_ylim(-4.0, 100.0 * envelope.max() * 1.45)
-    middle.legend(loc="upper left", frameon=False, fontsize=9, ncol=2)
+    middle.legend(loc="lower left", frameon=False, fontsize=10.4,
+        bbox_to_anchor=(0.0, 1.16, 1.0, 0.16), mode="expand",
+        borderaxespad=0.0, handlelength=1.2, ncol=2)
 
     over = 0.0
     for _, trace in played:
@@ -631,10 +662,9 @@ def envelope_figure() -> Path:
     bottom.set_ylabel("repetition minus canonical TR [%]")
     bottom.set_xlabel("time within the canonical TR [ms]")
     bottom.set_title(
-        "each repetition against the window it is judged by, sample by sample:"
-        " worst excursion above it"
-        f" {over:.1e} % of threshold",
-        fontsize=10,
+        "each repetition against its window, sample by sample:"
+        f" worst excursion {over:.1e} %",
+        fontsize=11.6,
         loc="left",
     )
 
@@ -653,9 +683,13 @@ def envelope_figure() -> Path:
     )
 
     fig.suptitle(
-        "Spiral gradient echo: the repetitions play different waveforms,"
-        " so each gets a window and the worst is judged",
-        fontsize=11,
+        "Spiral gradient echo: the repetitions play different waveforms,\n"
+        "so each gets a window and the worst is judged",
+        x=0.02,
+        y=0.995,
+        ha="left",
+        va="top",
+        fontsize=12.0,
     )
     return _save(fig, "multishot_envelope")
 
@@ -666,15 +700,15 @@ def _mark_period(axis, period_ms: float, label: bool = True) -> None:
     if not label:
         return
     axis.annotate(
-        "one TR ends; what follows is the\nnext repetition, wrapped in",
+        "one TR ends; the rest is\nthe next repetition, wrapped in",
         xy=(period_ms, 1.0),
         xycoords=("data", "axes fraction"),
-        xytext=(5, -12),
+        xytext=(-5, -12),
         textcoords="offset points",
-        ha="left",
+        ha="right",
         va="top",
         color=MUTED,
-        fontsize=8,
+        fontsize=10.8,
     )
 
 

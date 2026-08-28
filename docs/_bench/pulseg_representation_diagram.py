@@ -3,10 +3,11 @@
 
 Documentation-only tooling; not part of the shipped package.
 
-Two pictures of the same move. One takes a single gradient event and shows
+Three pictures of the same move. One takes a single gradient event and shows
 which half of it is fixed for the whole scan and which half the playout sets.
-The other takes a whole scan and shows what that split does to what has to be
-prepared.
+The second takes two arbitrary waveforms that share a definition and shows what
+that means for the memory they occupy. The third takes a whole scan and shows
+what the split does to what has to be prepared.
 
 Usage:
     <venv>/bin/python docs/_bench/pulseg_representation_diagram.py
@@ -22,6 +23,20 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.patches import FancyArrowPatch, FancyBboxPatch
+
+# House style: a figure has to be legible at the width a manual page gives it.
+plt.rcParams.update(
+    {
+        "font.size": 11.0,
+        "axes.titlesize": 12.5,
+        "axes.labelsize": 11.5,
+        "xtick.labelsize": 10.5,
+        "ytick.labelsize": 10.5,
+        "legend.fontsize": 10.5,
+        "figure.titlesize": 13.0,
+    }
+)
+
 
 OUT_DIR = Path(__file__).resolve().parents[1] / "explanations" / "assets" / "pulseg"
 
@@ -60,7 +75,7 @@ def box(ax, x, y, w, h, color, *, title, body, alpha=1.0):
         title,
         ha="center",
         va="top",
-        fontsize=8.6,
+        fontsize=12.2,
         color=color,
         fontweight="bold",
         zorder=3,
@@ -71,7 +86,7 @@ def box(ax, x, y, w, h, color, *, title, body, alpha=1.0):
         body,
         ha="center",
         va="top",
-        fontsize=7.4,
+        fontsize=10.5,
         color=INK,
         zorder=3,
         linespacing=1.5,
@@ -80,7 +95,7 @@ def box(ax, x, y, w, h, color, *, title, body, alpha=1.0):
 
 def build_event_split() -> Path:
     fig, (axw, axb) = plt.subplots(
-        1, 2, figsize=(10.6, 3.9), gridspec_kw={"width_ratios": [1.05, 1.0]}
+        1, 2, figsize=(8.6, 4.72), gridspec_kw={"width_ratios": [1.05, 1.0]}
     )
 
     # -- the waveform, one shape at four amplitudes ----------------------
@@ -109,7 +124,7 @@ def build_event_split() -> Path:
             arrowprops={"arrowstyle": "<->", "color": DEFN, "lw": 1.1},
         )
         axw.text(
-            (x0 + x1) / 2, -0.86, label, ha="center", va="top", fontsize=7.6, color=DEFN
+            (x0 + x1) / 2, -0.86, label, ha="center", va="top", fontsize=10.8, color=DEFN
         )
 
     # the instance parameter: the height
@@ -125,7 +140,7 @@ def build_event_split() -> Path:
         "amplitude",
         ha="left",
         va="center",
-        fontsize=7.8,
+        fontsize=11.1,
         color=INST,
     )
 
@@ -137,12 +152,12 @@ def build_event_split() -> Path:
         "other\nplayouts",
         ha="left",
         va="center",
-        fontsize=7.4,
+        fontsize=10.5,
         color=INST,
         linespacing=1.4,
     )
     axw.set_xlim(-70, RISE + PLATEAU + FALL + 190)
-    axw.set_title("one gradient event, four playouts", fontsize=9.0, color=INK, pad=6)
+    axw.set_title("one gradient event, four playouts", fontsize=12.8, color=INK, pad=6)
 
     # -- what each half holds -------------------------------------------
     axb.set_xlim(0, 100)
@@ -156,10 +171,10 @@ def build_event_split() -> Path:
         15,
         DEFN,
         title="definition  \u2014  prepared once",
-        body="rise, flat and fall times, or the normalised samples of an\n"
-        "arbitrary waveform; an RF envelope; an ADC's dwell and\n"
-        "sample count. Converted to hardware units, resampled to\n"
-        "the sequencer raster, loaded into pulse-generator memory.",
+        body="a trapezoid's rise, flat and fall times; an arbitrary\n"
+        "gradient's delay, sample count and time shape; an ADC's\n"
+        "dwell and sample count. Converted to hardware units,\n"
+        "resampled to the sequencer raster, reserved in memory.",
     )
     box(
         axb,
@@ -170,9 +185,8 @@ def build_event_split() -> Path:
         INST,
         title="instance parameter  \u2014  applied per playout",
         body="the amplitude; RF amplitude, phase and frequency offset;\n"
-        "the shot index that selects a waveform variant; the\n"
-        "rotation; whether the ADC acquires this time round.\n"
-        "One row of the scan loop.",
+        "the waveform shape id and the rotation; whether the ADC\n"
+        "acquires this time round. One row of the scan loop.",
     )
 
     fig.tight_layout(pad=0.6)
@@ -183,7 +197,92 @@ def build_event_split() -> Path:
     return out
 
 
-def cell(ax, x, y, w, h, color, *, alpha=1.0, label=None, fontsize=6.4):
+#: Sample count both arms in ``build_definition_sharing`` are written on.
+ARM_SAMPLES = 96
+
+
+def _arm(turn):
+    """One spiral arm's gradient on a single axis, as a sampled waveform."""
+    tau = np.linspace(0.0, 1.0, ARM_SAMPLES)
+    theta = 7.5 * np.pi * tau + turn
+    return tau, tau * np.cos(theta)
+
+
+def build_definition_sharing() -> Path:
+    """Two waveforms, one definition: the same reservation, different samples."""
+    fig, (axw, axb) = plt.subplots(
+        1, 2, figsize=(8.6, 4.37), gridspec_kw={"width_ratios": [1.0, 1.15]}
+    )
+
+    for turn, colour, label in ((0.0, DEFN, "shape 12"), (1.9, INST, "shape 37")):
+        tau, g = _arm(turn)
+        axw.plot(tau, g, color=colour, linewidth=1.4, zorder=3, label=label)
+    axw.axhline(0.0, color=INK, linewidth=0.8, zorder=1)
+    axw.axvspan(0.0, 1.0, color=FLAT, alpha=0.10, zorder=0)
+    axw.annotate(
+        "",
+        xy=(1.0, -1.28),
+        xytext=(0.0, -1.28),
+        arrowprops={"arrowstyle": "<->", "color": FLAT, "lw": 1.1},
+    )
+    axw.text(
+        0.5,
+        -1.40,
+        f"same delay, same raster, same {ARM_SAMPLES} samples",
+        ha="center",
+        va="top",
+        fontsize=10.8,
+        color=FLAT,
+    )
+    axw.legend(frameon=False, fontsize=10.0, loc="lower left",
+           bbox_to_anchor=(0.0, 1.02, 1.0, 0.16), mode="expand",
+           borderaxespad=0.0, handlelength=1.2)
+    axw.set_ylim(-1.75, 1.25)
+    axw.set_xlim(-0.06, 1.06)
+    axw.axis("off")
+    axw.set_title(
+        "two written-out spiral arms, one axis", fontsize=12.8, color=INK, pad=6
+    )
+
+    axb.set_xlim(0, 100)
+    axb.set_ylim(0, 40)
+    axb.axis("off")
+    box(
+        axb,
+        2,
+        23,
+        96,
+        15,
+        DEFN,
+        title="one definition  \u2014  one prepared object",
+        body="delay \u00b7 sample count \u00b7 time shape. The samples are not part\n"
+        "of it, so both arms map to the same definition id, and the\n"
+        "interpreter reserves one buffer of that length for the block\n"
+        "position rather than one per arm.",
+    )
+    box(
+        axb,
+        2,
+        3.5,
+        96,
+        15,
+        INST,
+        title="two shape ids  \u2014  what is written into it",
+        body="The shape id is an instance parameter, so it is the scan loop\n"
+        "that decides which arm the reserved buffer holds. Two arms\n"
+        "differing only in their samples cost one reservation and two\n"
+        "shapes, not two reservations.",
+    )
+
+    fig.tight_layout(pad=0.6)
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    out = OUT_DIR / "definition_sharing.png"
+    fig.savefig(out, dpi=130)
+    plt.close(fig)
+    return out
+
+
+def cell(ax, x, y, w, h, color, *, alpha=1.0, label=None, fontsize=9.1):
     ax.add_patch(
         FancyBboxPatch(
             (x, y),
@@ -213,7 +312,7 @@ def cell(ax, x, y, w, h, color, *, alpha=1.0, label=None, fontsize=6.4):
 
 def build_scan_split() -> Path:
     """What the split does to a whole scan."""
-    fig, ax = plt.subplots(figsize=(11.0, 4.6))
+    fig, ax = plt.subplots(figsize=(8.6, 5.68))
     ax.set_xlim(0, 100)
     ax.set_ylim(0, 42)
     ax.axis("off")
@@ -229,7 +328,7 @@ def build_scan_split() -> Path:
         "Pulseq",
         ha="center",
         va="center",
-        fontsize=10.0,
+        fontsize=14.2,
         color=FLAT,
         fontweight="bold",
     )
@@ -239,7 +338,7 @@ def build_scan_split() -> Path:
         "one record per block, complete every time",
         ha="center",
         va="center",
-        fontsize=7.6,
+        fontsize=10.8,
         color=INK,
         style="italic",
     )
@@ -253,7 +352,7 @@ def build_scan_split() -> Path:
         f"{len(events)} \u00d7 {nshot} records, and one number in each row differs",
         ha="center",
         va="top",
-        fontsize=7.4,
+        fontsize=10.5,
         color=INK,
     )
 
@@ -274,7 +373,7 @@ def build_scan_split() -> Path:
         "one split",
         ha="center",
         va="bottom",
-        fontsize=8.0,
+        fontsize=11.4,
         color=INK,
         fontweight="bold",
     )
@@ -286,7 +385,7 @@ def build_scan_split() -> Path:
         "PulSeg",
         ha="center",
         va="center",
-        fontsize=10.0,
+        fontsize=14.2,
         color=INK,
         fontweight="bold",
     )
@@ -296,7 +395,7 @@ def build_scan_split() -> Path:
         "the fixed half once, the varying half per shot",
         ha="center",
         va="center",
-        fontsize=7.6,
+        fontsize=10.8,
         color=INK,
         style="italic",
     )
@@ -309,7 +408,7 @@ def build_scan_split() -> Path:
         "base blocks\nprepared once",
         ha="left",
         va="center",
-        fontsize=7.4,
+        fontsize=10.5,
         color=DEFN,
         linespacing=1.4,
     )
@@ -324,7 +423,7 @@ def build_scan_split() -> Path:
         "instance rows\napplied per shot",
         ha="left",
         va="center",
-        fontsize=7.4,
+        fontsize=10.5,
         color=INST,
         linespacing=1.4,
     )
@@ -337,7 +436,7 @@ def build_scan_split() -> Path:
         "writing a number.",
         ha="center",
         va="center",
-        fontsize=7.6,
+        fontsize=10.8,
         color=INK,
         linespacing=1.6,
     )
@@ -351,5 +450,5 @@ def build_scan_split() -> Path:
 
 
 if __name__ == "__main__":
-    for path in (build_event_split(), build_scan_split()):
+    for path in (build_event_split(), build_definition_sharing(), build_scan_split()):
         print(path.relative_to(OUT_DIR.parents[1]))

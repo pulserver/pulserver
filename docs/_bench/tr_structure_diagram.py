@@ -22,6 +22,20 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.patches import FancyArrowPatch, FancyBboxPatch
 
+# House style: a figure has to be legible at the width a manual page gives it.
+plt.rcParams.update(
+    {
+        "font.size": 11.0,
+        "axes.titlesize": 12.5,
+        "axes.labelsize": 11.5,
+        "xtick.labelsize": 10.5,
+        "ytick.labelsize": 10.5,
+        "legend.fontsize": 10.5,
+        "figure.titlesize": 13.0,
+    }
+)
+
+
 OUT_DIR = Path(__file__).resolve().parents[1] / "explanations" / "assets" / "segments"
 
 BLOCK = ["#4c72b0", "#55a868", "#c44e52", "#b0b0b0"]
@@ -35,7 +49,7 @@ PATTERN = ["RF", "PE", "RO", "pad"]
 NREP = 6
 
 
-def cell(ax, x, y, w, h, color, label=None, *, fontsize=6.6, alpha=1.0):
+def cell(ax, x, y, w, h, color, label=None, *, fontsize=9.4, alpha=1.0):
     ax.add_patch(
         FancyBboxPatch(
             (x, y),
@@ -83,7 +97,7 @@ def band(ax, x, y, w, h, color, label):
         label,
         ha="center",
         va="bottom",
-        fontsize=7.6,
+        fontsize=10.8,
         color=color,
         fontweight="bold",
         zorder=4,
@@ -103,12 +117,12 @@ def brace(ax, x0, x1, y, color, label):
         )
     )
     ax.text(
-        x0, y - 1.0, label, ha="left", va="top", fontsize=7.4, color=color, zorder=4
+        x0, y - 1.0, label, ha="left", va="top", fontsize=10.5, color=color, zorder=4
     )
 
 
 def build() -> Path:
-    fig, ax = plt.subplots(figsize=(11.0, 5.2))
+    fig, ax = plt.subplots(figsize=(8.6, 6.42))
     ax.set_xlim(0, 100)
     ax.set_ylim(0, 46)
     ax.axis("off")
@@ -120,7 +134,7 @@ def build() -> Path:
         "the file",
         ha="left",
         va="center",
-        fontsize=9.0,
+        fontsize=12.8,
         color=INK,
         fontweight="bold",
     )
@@ -130,7 +144,7 @@ def build() -> Path:
         "a flat list of blocks",
         ha="left",
         va="center",
-        fontsize=7.6,
+        fontsize=10.8,
         color=INK,
         style="italic",
     )
@@ -164,7 +178,7 @@ def build() -> Path:
         "the TR",
         ha="left",
         va="center",
-        fontsize=9.0,
+        fontsize=12.8,
         color=INK,
         fontweight="bold",
     )
@@ -175,7 +189,7 @@ def build() -> Path:
         "never an annotation",
         ha="left",
         va="center",
-        fontsize=7.6,
+        fontsize=10.8,
         color=INK,
         style="italic",
     )
@@ -185,14 +199,14 @@ def build() -> Path:
     band(ax, bx - 1.6, 17.0, 2 * (bw + bgap) + bw + 2.6, 7.6, SEG_A, "segment 0")
     band(ax, bx + 3 * (bw + bgap) - 1.6, 17.0, bw + 3.2, 7.6, SEG_B, "segment 1")
     for i, lbl in enumerate(PATTERN):
-        cell(ax, bx + i * (bw + bgap), 18.6, bw, 4.4, BLOCK[i], lbl, fontsize=8.2)
+        cell(ax, bx + i * (bw + bgap), 18.6, bw, 4.4, BLOCK[i], lbl, fontsize=11.6)
     ax.text(
         50,
         15.2,
         "cut where the gradients are zero, so each piece is playable on its own",
         ha="center",
         va="top",
-        fontsize=7.4,
+        fontsize=10.5,
         color=INK,
     )
 
@@ -203,17 +217,17 @@ def build() -> Path:
         "the scan",
         ha="left",
         va="center",
-        fontsize=9.0,
+        fontsize=12.8,
         color=INK,
         fontweight="bold",
     )
     ax.text(
-        13.5,
+        15.5,
         9.6,
         "two segments prepared, twelve instances triggered",
         ha="left",
         va="center",
-        fontsize=7.6,
+        fontsize=10.8,
         color=INK,
         style="italic",
     )
@@ -222,8 +236,8 @@ def build() -> Path:
     sx = 2.0
     for r in range(NREP):
         base = sx + r * (sw * 4 / 3 + sw / 3 + sgap * 2)
-        cell(ax, base, 3.4, sw, 3.4, SEG_A, "0", fontsize=7.0)
-        cell(ax, base + sw + sgap, 3.4, sw / 2.2, 3.4, SEG_B, "1", fontsize=7.0)
+        cell(ax, base, 3.4, sw, 3.4, SEG_A, "0", fontsize=9.9)
+        cell(ax, base + sw + sgap, 3.4, sw / 2.2, 3.4, SEG_B, "1", fontsize=9.9)
     ax.text(
         50,
         1.2,
@@ -231,7 +245,7 @@ def build() -> Path:
         "and its own row of parameters",
         ha="center",
         va="center",
-        fontsize=7.4,
+        fontsize=10.5,
         color=INK,
         style="italic",
     )

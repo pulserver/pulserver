@@ -17,23 +17,12 @@ echo train is the case where events genuinely interact — through the nerve's
 memory and through coherent spectral summation — so it is where a shortcut
 would be easiest to get wrong, and where the equivalence tests bite hardest.
 
-```{toctree}
-:maxdepth: 1
-
-sequence_creation
-conversion
-gradient_checks
-pns
-mechanical_resonance
-full_benchmark
-```
-
 ## The five stages
 
 A sequence is built, written, parsed, and then judged three times. Each stage
 has its own cost model, and each page below is one of them.
 
-| | What it is | What sets its cost |
+| Page | What it is | What sets its cost |
 |---|---|---|
 | {doc}`sequence_creation` | the Python design loop, and `write()` | one compiled call per block |
 | {doc}`conversion` | the scanner reading the file into the PulSeg representation | the block table, once, plus one pass per distinct waveform |
@@ -41,11 +30,29 @@ has its own cost model, and each page below is one of them.
 | {doc}`pns` | the peripheral-nerve-stimulation estimate | one window, and the shapes inside it |
 | {doc}`mechanical_resonance` | the acoustic drive spectrum | one window, and the frequencies actually asked about |
 
-{doc}`full_benchmark` then puts the stages back together: every shipped plugin
-at four prescribable sizes, on the two clocks an operator feels — the
-parameter round trip, and one press of *Save Rx*.
+Two further pages sit beside them. One is the cost of a prescription change,
+which is not part of building a sequence but is what an operator waits on
+most often; the other puts the stages back together.
 
-## Two facts do most of the work
+| Page | What it is |
+|---|---|
+| {doc}`transform_fov` | Moving, turning and resizing a written sequence: one pass instead of a block walk, and what a non-Cartesian readout stores. |
+| {doc}`full_benchmark` | Every shipped plugin at four prescribable sizes, on the two clocks an operator feels: the parameter round trip, and one press of *Save Rx*. |
+
+```{toctree}
+:hidden:
+:maxdepth: 1
+
+sequence_creation
+conversion
+gradient_checks
+pns
+mechanical_resonance
+transform_fov
+full_benchmark
+```
+
+## Two properties of the representation
 
 Everything on the five pages follows from two properties of the
 {doc}`representation <../sequence_model/pulseg_representation>`, neither of
@@ -63,7 +70,7 @@ unit, detected from the block content; the scan is that window repeated, so
 the window is where the work is. Detection itself is nearly free, because it
 runs on normalized block identities the conversion computed anyway.
 
-## The canonical TR: one window, built for the task
+## The canonical TR
 
 "The TR" is not one waveform: it is *built*, differently, for what each
 consumer needs, and always so that it bounds the scan.
@@ -81,10 +88,9 @@ consumer needs, and always so that it bounds the scan.
 - **For looking**, `seq.plot(tr=...)` draws the same windows the checks use —
   the envelope, or any actual instance by index.
 
-The bound is not asserted, it is tested:
-`test_the_worst_case_tr_bounds_every_instance_it_stands_for` evaluates actual
-instances against the envelope, and an integer `tr=` exists precisely so
-anyone can re-check the claim on their own sequence:
+The bound is checkable on any sequence, not only asserted here: an integer
+`tr=` selects one real instance, so the same analysis can be run on the window
+the gate uses and on any repetition it is supposed to cover.
 
 ```python
 ok, norm, *_ = seq.calculate_pns(hardware, tr="worst_case")  # the gate's window
@@ -97,14 +103,3 @@ the start of the window is wrapped around from its end, so the boundary
 between repetitions is handled rather than ignored, and the peak found inside
 one window is the peak of the steady-state scan.
 
-## Reproducing it
-
-```bash
-python docs/_bench/bench_pipeline.py                  # every stage
-python docs/_bench/bench_pipeline.py --stage=creation # one stage
-python docs/_bench/bench_pipeline.py --scale=0.25     # a quarter-size sweep
-```
-
-The numbers in this section were measured on the tree this documentation was
-built from, single core. Re-measure rather than quote them when the question
-is whether a change made something slower.

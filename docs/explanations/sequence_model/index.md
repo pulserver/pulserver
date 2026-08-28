@@ -1,20 +1,19 @@
 # The sequence model
 
-What a sequence *is* on each side of the download, and how the three views
-stay one representation.
+A sequence is looked at from three places — the console that designs it, the
+scanner that plays it, and the reconstruction that interprets what comes back
+— and all three are looking at one representation. These pages are that
+representation from each side.
 
-On the scanner side, a sequence is a segmented block table with a detected
-repeating unit — a {doc}`PulSeg reading <pulseg_representation>` whose
-{doc}`TR and segments are found in the content <tr_and_segmentation>` rather
-than annotated by the designer. On the design side, it is a
-{doc}`service the console asks <design_service>`: a Python program on a
-compiled sequence core, answering protocol edits in interactive time. On the
-reconstruction side, it is an {doc}`MRD stream <mrd_architecture>` that
-arrives already carrying its encoding counters, trajectory and sequence
-description, and a server that reconstructs it with the exam, rather than the
-connection, as its unit of context.
+| Page | What it covers |
+|---|---|
+| {doc}`pulseg_representation` | The scanner's reading: a segmented block table of definitions and instance rows, and the one structure Pulserver adds above the segment. |
+| {doc}`tr_and_segmentation` | The repeating unit and the segments inside it, both derived from the block content rather than annotated by the designer. |
+| {doc}`design_service` | The design side: a Python program on a compiled sequence core, answering the console's protocol edits in interactive time. |
+| {doc}`mrd_architecture` | The reconstruction side: an MRD stream that arrives already carrying its counters, trajectory and sequence description, and a server whose unit of context is the exam. |
 
 ```{toctree}
+:hidden:
 :maxdepth: 1
 
 pulseg_representation

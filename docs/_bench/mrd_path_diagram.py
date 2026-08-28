@@ -22,6 +22,20 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.patches import FancyArrowPatch, FancyBboxPatch
 
+# House style: a figure has to be legible at the width a manual page gives it.
+plt.rcParams.update(
+    {
+        "font.size": 11.0,
+        "axes.titlesize": 12.5,
+        "axes.labelsize": 11.5,
+        "xtick.labelsize": 10.5,
+        "ytick.labelsize": 10.5,
+        "legend.fontsize": 10.5,
+        "figure.titlesize": 13.0,
+    }
+)
+
+
 OUT_DIR = Path(__file__).resolve().parents[1] / "explanations" / "assets" / "mrd_path"
 
 SCANNER = "#4a4a4a"
@@ -50,16 +64,16 @@ def box(ax, x, y, w, h, color, *, title=None, body=None, dashed=False, fill=None
     if title is not None and body is not None:
         ax.text(
             cx, y + h - 1.5, title, ha="center", va="top",
-            fontsize=8.6, color=color, fontweight="bold", zorder=3,
+            fontsize=11.0, color=color, fontweight="bold", zorder=3,
         )
         ax.text(
             cx, y + h - 4.2, body, ha="center", va="top",
-            fontsize=7.4, color=INK, zorder=3, linespacing=1.45,
+            fontsize=9.3, color=INK, zorder=3, linespacing=1.45,
         )
     else:
         ax.text(
             cx, cy, title if body is None else body, ha="center", va="center",
-            fontsize=8.0, color=INK, zorder=3, linespacing=1.45,
+            fontsize=10.2, color=INK, zorder=3, linespacing=1.45,
         )
     return cx, cy
 
@@ -81,12 +95,12 @@ def group(ax, x, y, w, h, color, label):
     )
     ax.text(
         x + w / 2, y + h - 1.4, label, ha="center", va="top",
-        fontsize=9.0, color=color, fontweight="bold", zorder=3,
+        fontsize=11.4, color=color, fontweight="bold", zorder=3,
     )
 
 
 def arrow(ax, start, end, color, *, dashed=False, rad=0.0, label=None,
-          label_pos=None, label_va="bottom", fontsize=7.4):
+          label_pos=None, label_va="bottom", fontsize=9.3):
     ax.add_patch(
         FancyArrowPatch(
             start,
@@ -111,73 +125,75 @@ def arrow(ax, start, end, color, *, dashed=False, rad=0.0, label=None,
 
 
 def build() -> Path:
-    fig, ax = plt.subplots(figsize=(11.0, 6.4))
+    fig, ax = plt.subplots(figsize=(8.6, 7.89))
     ax.set_xlim(0, 100)
     ax.set_ylim(0, 58)
     ax.axis("off")
 
     # -- scanner ---------------------------------------------------------
-    group(ax, 1, 24, 18, 32, SCANNER, "scanner")
-    box(ax, 2.5, 43.5, 15, 9, SCANNER,
-        title="acquisition system",
-        body="native raw-data\npackets, as measured")
-    box(ax, 2.5, 26.5, 15, 9, SCANNER,
+    group(ax, 1, 24, 20.5, 32, SCANNER, "scanner")
+    box(ax, 2.5, 43.5, 17.5, 9, SCANNER,
+        title="acquisitions",
+        body="native packets,\nas measured")
+    box(ax, 2.5, 26.5, 17.5, 9, SCANNER,
         title="the sequence",
-        body="the .seq chain\nthe interpreter played")
+        body="the .seq chain\nit played")
 
     # -- client ----------------------------------------------------------
     group(ax, 22, 12, 20, 44, CLIENT, "client  \u00b7  C++")
     box(ax, 23.5, 43.5, 17, 8.5, CLIENT,
-        title="convert", body="native packet \u2192\nMRD acquisition")
+        title="convert", body="native packet\n\u2192 MRD")
     box(ax, 23.5, 27.5, 17, 13, CLIENT,
         title="enrich",
-        body="encoding spaces, counters,\nflags and echo position,\n"
+        body="encoding spaces,\ncounters and flags,\necho position,\n"
              "k-space trajectory,\nsequence description")
     box(ax, 23.5, 14.5, 17, 10, CLIENT,
         title="demodulate",
-        body="undo the design-time\nFOV-shift phase")
+        body="undo the design-\ntime FOV phase")
 
-    arrow(ax, (17.5, 48), (23.5, 47.5), SCANNER)
-    arrow(ax, (17.5, 31), (23.5, 34), SCANNER)
+    arrow(ax, (20.0, 48), (23.5, 47.5), SCANNER)
+    arrow(ax, (20.0, 31), (23.5, 34), SCANNER)
     arrow(ax, (32, 43.5), (32, 40.5), CLIENT)
     arrow(ax, (32, 27.5), (32, 24.5), CLIENT)
 
     # -- the wire --------------------------------------------------------
     arrow(ax, (42, 36), (61.5, 36), CLIENT,
-          label="MRD session protocol \u00b7 TCP\nheader \u00b7 acquisitions \u00b7 waveforms",
-          label_pos=(51.7, 37.3), fontsize=7.2)
+          label="MRD session protocol \u00b7 TCP\nheader, acquisitions, waveforms",
+          label_pos=(51.7, 37.6), fontsize=9.2)
     arrow(ax, (61.5, 29), (42, 29), SERVER,
-          label="images \u00b7 DICOM", label_pos=(51.7, 27.6), label_va="top",
-          fontsize=7.2)
+          label="images \u00b7 DICOM", label_pos=(51.7, 27.8), label_va="top",
+          fontsize=9.2)
 
     # -- server ----------------------------------------------------------
     group(ax, 60, 22, 39, 34, SERVER, "server  \u00b7  Python")
-    box(ax, 61.5, 42.5, 36, 10.5, SERVER,
+    box(ax, 61.5, 41.5, 36, 11.5, SERVER,
         title="exam cache",
-        body="sensitivity maps, bases, plans \u2014 keyed, built once, shared by every\n"
-             "scan of one exam; retired the moment the exam identity changes")
-    box(ax, 61.5, 25.5, 15.5, 13, SERVER,
+        body="sensitivity maps, bases, plans \u2014 keyed and built\n"
+             "once, shared by every scan of one exam, retired\n"
+             "the moment the exam identity changes")
+    box(ax, 60.8, 25.5, 17.2, 13, SERVER,
         title="recon slot 1",
-        body="one plugin instance,\none stream,\nits own thread")
-    box(ax, 82, 25.5, 15.5, 13, SERVER,
+        body="one plugin instance,\none stream, its own\nthread")
+    box(ax, 81.0, 25.5, 17.0, 13, SERVER,
         title="recon slot N",
-        body="N derived from\navailable RAM and\nRAM per recon")
-    ax.text(79.5, 32, "\u00b7 \u00b7 \u00b7", ha="center", va="center",
-            fontsize=11, color=SERVER, zorder=3)
-    arrow(ax, (69.2, 42.5), (69.2, 38.5), SERVER)
-    arrow(ax, (89.7, 42.5), (89.7, 38.5), SERVER)
+        body="N from available\nRAM and RAM per\nrecon")
+    ax.text(79.5, 32.0, "\u00b7\n\u00b7\n\u00b7", ha="center", va="center",
+            fontsize=13.0, color=SERVER, zorder=3, linespacing=0.9)
+    arrow(ax, (69.4, 41.5), (69.4, 38.5), SERVER)
+    arrow(ax, (89.5, 41.5), (89.5, 38.5), SERVER)
 
     # -- overflow --------------------------------------------------------
     group(ax, 60, 1.5, 39, 18, QUEUE, "when every slot is busy")
-    box(ax, 61.5, 4, 15.5, 11, QUEUE,
+    box(ax, 61.5, 4, 18.0, 11, QUEUE,
         title="drain to disk",
-        body="the stream is consumed\nin full to an MRD file\nand a sidecar")
-    box(ax, 82, 4, 15.5, 11, QUEUE,
+        body="the stream is read to\nthe end into an MRD\nfile and a sidecar")
+    box(ax, 80.5, 4, 17.0, 11, QUEUE,
         title="replay worker",
-        body="takes the oldest sidecar,\nwaits for a slot, runs the\nrequested recon on the file")
-    arrow(ax, (69.2, 22), (69.2, 15), QUEUE, dashed=True)
-    arrow(ax, (77, 9.5), (82, 9.5), QUEUE)
-    arrow(ax, (89.7, 15), (89.7, 25.5), QUEUE, dashed=True)
+        body="takes the oldest\nsidecar, waits for a\nslot, runs its recon")
+    arrow(ax, (64.5, 22), (64.5, 15), QUEUE, dashed=True)
+    arrow(ax, (79.5, 9.5), (80.5, 9.5), QUEUE)
+
+    arrow(ax, (94.5, 15), (94.5, 25.5), QUEUE, dashed=True)
 
     fig.tight_layout(pad=0.4)
     OUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -188,7 +204,7 @@ def build() -> Path:
 
 
 def build_feedback() -> Path:
-    fig, ax = plt.subplots(figsize=(9.0, 2.5))
+    fig, ax = plt.subplots(figsize=(8.6, 2.79))
     ax.set_xlim(0, 100)
     ax.set_ylim(0, 26)
     ax.axis("off")
@@ -202,15 +218,15 @@ def build_feedback() -> Path:
 
     arrow(ax, (36, 18.5), (64, 18.5), SCANNER,
           label="one acquisition, as it is measured",
-          label_pos=(50, 19.6), fontsize=7.4)
+          label_pos=(50, 19.6), fontsize=10.5)
     arrow(ax, (64, 11.5), (36, 11.5), SERVER,
           label="one tagged result,\nbefore the blocks it bears on",
-          label_pos=(50, 10.5), label_va="top", fontsize=7.4)
+          label_pos=(50, 10.5), label_va="top", fontsize=10.5)
 
     ax.text(50, 2.6,
             "which tags are recognised, and what each one changes, "
             "is decided on the interpreter side",
-            ha="center", va="center", fontsize=7.6, color=INK, style="italic")
+            ha="center", va="center", fontsize=10.8, color=INK, style="italic")
 
     fig.tight_layout(pad=0.4)
     OUT_DIR.mkdir(parents=True, exist_ok=True)

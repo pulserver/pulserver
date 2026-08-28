@@ -8,11 +8,11 @@ the reconstruction the description it needs to interpret what came back.
 
 Three interfaces, one representation:
 
-| | |
-|---|---|
-| **Python** — design sequences from readout, excitation and preparation modules; write `.seq` files; run the safety checks; reconstruct. | {doc}`api/python/index` · {doc}`examples/index` |
-| **C** — the scanner-side library: parse a `.seq`, derive its structure, gate it against the hardware, replay it block by block. C89, no dependencies. | {doc}`api/c/index` · {doc}`examples/c/index` |
-| **C++** — the same library with RAII types, plus the reconstruction-side reader that turns a `.seq` chain into trajectories, labels and a sequence description. | {doc}`api/cpp/index` · {doc}`examples/cpp/index` |
+| Interface | What it is for | Reference |
+|---|---|---|
+| **Python** | Design sequences from readout, excitation and preparation modules; write `.seq` files; run the safety checks; reconstruct. | {doc}`api/python/index` · {doc}`examples/index` |
+| **C** | The scanner-side library: parse a `.seq`, derive its structure, gate it against the hardware, replay it block by block. C89, no dependencies. | {doc}`api/c/index` · {doc}`examples/c/index` |
+| **C++** | The same library with RAII types, plus the reconstruction-side reader that turns a `.seq` chain into trajectories, labels and a sequence description. | {doc}`api/cpp/index` · {doc}`examples/cpp/index` |
 
 ## Where to start
 
@@ -33,7 +33,7 @@ play it, and a reconstruction needs rather more before it can use the result.
 Pulserver supplies the missing pieces, and each is documented as a concept
 rather than as a function list:
 
-| | |
+| Page | What it adds |
 |---|---|
 | {doc}`explanations/sequence_model/design_service` | The sequence is a service the console asks, not a file someone copies — the motivation everything else follows from. |
 | {doc}`explanations/sequence_model/tr_and_segmentation` | The repeating unit is *detected from content*, not annotated — which is what makes safety checks and hardware playout tractable. |

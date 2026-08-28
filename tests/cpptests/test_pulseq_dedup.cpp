@@ -838,12 +838,14 @@ TEST_P(PulseqDedupFixture, TheScanItselfIsUntouched)
 
 TEST(PulseqDedupCorpus, ABlockPointingAtAChainThatIsNotThereIsRejected)
 {
-    // The corrupted fixture is a copy of the corpus gre_2d whose first block
-    // names a dangling extension chain id.  An id names a row in another
-    // library, and the reader is what knows how many rows each library has,
-    // so that is where a file naming one that is not there is refused -- ahead
-    // of every consumer that would otherwise index with it.
-    const std::string path = std::string(PULSEQ_FIXTURES_DIR) + "/malformed/gre_2d_corrupted.seq";
+    // An id names a row in another library, and the reader is what knows how
+    // many rows each library has, so that is where a file naming one that is
+    // not there is refused -- ahead of every consumer that would otherwise
+    // index with it.  The specimen carries one block whose extension chain id
+    // points past the end of the EXTENSIONS section and is otherwise sound,
+    // so there is nothing else for a reader to refuse it for first.
+    const std::string path =
+        std::string(PULSEQ_FIXTURES_DIR) + "/malformed/27_dangling_extension_link.seq";
     try
     {
         pulseq::read_file(path);

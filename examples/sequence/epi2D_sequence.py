@@ -62,6 +62,14 @@ MAX_SLEW = 200.0
 #: be a whole multiple of the multiband factor.
 SMS_EXCITATION = False
 
+#: Saturate fat before every excitation. A spectrally selective pulse tips fat
+#: past the transverse plane and a spoiler discards what it tipped, so what the
+#: train reads back is water. On by default, because chemical shift along an EPI
+#: phase-encode axis is displacement by many voxels rather than by a fraction of
+#: one: unsaturated fat does not blur, it lands somewhere else. The preparation
+#: costs one pulse and one spoiler per shot, which an EPI repetition absorbs.
+FAT_SATURATION = True
+
 #: Offer the fMRI multiphase mode: a time series of ``UIParam.NUM_FRAMES``
 #: frames, each carrying its ``REP`` counter. A script-level toggle because a
 #: multiphase scan is a different study than a single volume. When ``False`` the
@@ -98,6 +106,7 @@ def main(
     n_dummy: int = 2,
     n_gain_calibration_readouts: int | None = None,
     spoiling_cycles: float = 4.0,
+    fat_saturation: bool = False,
 ) -> pp.Sequence:
     """Create the main 2D EPI sequence.
 
@@ -298,6 +307,8 @@ def main(
             "slice_gap": slice_gap,
             "n_slices": n_slices,
             "n_bands": n_bands,
+            "fov_offset": fov_offset,
+            "fat_saturation": fat_saturation,
             "flip_angle_deg": flip_angle_deg,
             "n_acs": n_acs,
             "te": te,
@@ -310,7 +321,6 @@ def main(
         }
         seq = SmsSequenceKernel(
             system,
-            fov_offset=fov_offset,
             n_repetitions=n_repetitions,
             **sms_kwargs,
         )
@@ -341,6 +351,7 @@ def main(
         acceleration=acceleration,
         readout_bandwidth_hz=readout_bandwidth_hz,
         spoiling_cycles=spoiling_cycles,
+        fat_saturation=fat_saturation,
     )
     epi = kernel.epi
     excitation = kernel.excitation
@@ -382,6 +393,7 @@ def main(
                 rev_label=rev_label,
                 acquire=False,
                 first_extra=(mark,) if mark is not None else (),
+                fatsat=kernel.fatsat,
             )
             mark = None
 
@@ -400,11 +412,14 @@ def main(
                     rev_label=rev_label,
                     extra_line_labels=(slc_label, rep_label),
                     first_extra=(clear_once,) if clear_once is not None else (),
+                    fatsat=kernel.fatsat,
                 )
                 clear_once = None
 
     pp.TransformFOV(
-        translation=tuple(offset * 1e3 for offset in fov_offset), system=system
+        translation=tuple(offset * 1e3 for offset in fov_offset),
+        system=system,
+        compat=False,
     ).apply_to_sequence(seq, in_place=True)
 
     if test_report:
@@ -433,6 +448,7 @@ def main(
             seq_filename,
             system=system,
             fov=fov,
+            fov_offset=fov_offset,
             n_x=n_x,
             n_y=n_y,
             n_slices=n_slices,
@@ -488,6 +504,7 @@ def SmsKernel(
     acceleration: int = 1,
     readout_bandwidth_hz: float = 500e3,
     spoiling_cycles: float = 4.0,
+    fat_saturation: bool = False,
 ) -> SimpleNamespace:
     """The multiband excitation, its blipped-CAIPI train, and the reference.
 
@@ -536,6 +553,13 @@ def SmsKernel(
         n_groups=n_groups,
         band_spacing=band_spacing,
         fov=(fov_x, fov_y),
+        fatsat=(
+            design.FatSaturation(
+                system, voxel_size_m=min(fov_x / n_x, fov_y / n_y, slice_thickness)
+            )
+            if fat_saturation
+            else None
+        ),
     )
 
 
@@ -564,6 +588,7 @@ def SmsShotKernel(
     extra_line_labels=(),
     blip_nulled: bool = False,
     n_lines: int | None = None,
+    fatsat=None,
 ) -> None:
     """One multiband excitation and its blipped-CAIPI train.
 
@@ -577,6 +602,11 @@ def SmsShotKernel(
     count = epi.etl if n_lines is None else n_lines
     epi.rf.freq_offset = gz_amplitude * center_m
     epi.rf.phase_offset = -2 * np.pi * epi.rf.freq_offset * epi.rf.center
+
+    # Fat is saturated once per shot, before the excitation it applies to.
+    if fatsat is not None:
+        for block in fatsat.blocks:
+            seq.add_block(*block)
 
     seq.add_block(epi.rf, epi.gz)
     if getattr(epi, "wait_te", None) is not None:
@@ -612,6 +642,7 @@ def SmsCalibrationKernel(
     system: pp.Opts,
     *,
     fov,
+    fov_offset: tuple[float, float, float] = (0.0, 0.0, 0.0),
     n_x: int,
     n_y: int,
     slice_thickness: float,
@@ -707,6 +738,17 @@ def SmsCalibrationKernel(
     seq.set_definition(key="Matrix", value=[n_x, n_y, n_slices])
     seq.set_definition(key="Name", value="sms_epi_2d_calibration")
     seq.set_definition(key="EchoSpacing", value=epi.esp)
+    # The prescription moves this sequence with the imaging it calibrates, and
+    # ``compat=False`` because these readouts sample across their read ramps:
+    # the k they traced is what a reconstruction needs to put them back on the
+    # grid. A saturation band placed at design time carries NOPOS/NOROT and is
+    # left where it was put.
+    pp.TransformFOV(
+        translation=tuple(offset * 1e3 for offset in fov_offset),
+        system=system,
+        compat=False,
+    ).apply_to_sequence(seq, in_place=True)
+
     return seq
 
 
@@ -731,6 +773,7 @@ def SmsSequenceKernel(
     readout_bandwidth_hz: float = 500e3,
     slice_order: str = "interleaved",
     spoiling_cycles: float = 4.0,
+    fat_saturation: bool = False,
 ) -> pp.Sequence:
     """The multiband imaging file: blipped-CAIPI shots, one per (segment, group).
 
@@ -760,6 +803,7 @@ def SmsSequenceKernel(
         acceleration=acceleration,
         readout_bandwidth_hz=readout_bandwidth_hz,
         spoiling_cycles=spoiling_cycles,
+        fat_saturation=fat_saturation,
     )
     epi = kernel.epi
     gz_amplitude = float(kernel.sms.gz.amplitude)
@@ -790,10 +834,13 @@ def SmsSequenceKernel(
                     origin_line=segment * acceleration,
                     rev_label=rev_label,
                     extra_line_labels=(slc_label, rep_label, sms_on, ref_off, nav_off),
+                    fatsat=kernel.fatsat,
                 )
 
     pp.TransformFOV(
-        translation=tuple(offset * 1e3 for offset in fov_offset), system=system
+        translation=tuple(offset * 1e3 for offset in fov_offset),
+        system=system,
+        compat=False,
     ).apply_to_sequence(seq, in_place=True)
 
     slab_thickness = n_slices * slice_step - slice_gap
@@ -821,9 +868,17 @@ def SharedKernel(
     acceleration: int = 1,
     readout_bandwidth_hz: float = 500e3,
     spoiling_cycles: float = 4.0,
+    fat_saturation: bool = False,
 ) -> SimpleNamespace:
     """The excitation and train both sequences are built from."""
     fov_x, fov_y = (fov, fov) if isinstance(fov, (int, float)) else fov
+    fatsat = (
+        design.FatSaturation(
+            system, voxel_size_m=min(fov_x / n_x, fov_y / n_y, slice_thickness)
+        )
+        if fat_saturation
+        else None
+    )
     excitation = design.SpatialSelectiveExcitation(
         system,
         flip_angle_deg,
@@ -846,7 +901,9 @@ def SharedKernel(
         spoiling_cycles=spoiling_cycles,
         labels=("LIN",),
     )
-    return SimpleNamespace(excitation=excitation, epi=epi, fov=(fov_x, fov_y))
+    return SimpleNamespace(
+        excitation=excitation, epi=epi, fov=(fov_x, fov_y), fatsat=fatsat
+    )
 
 
 def ShotKernel(
@@ -862,6 +919,7 @@ def ShotKernel(
     n_lines: int | None = None,
     acquire: bool = True,
     first_extra=(),
+    fatsat=None,
 ) -> None:
     """One excitation and its train, per the module's loop contract.
 
@@ -879,6 +937,14 @@ def ShotKernel(
     # wait when there is one, in the prewinder block otherwise -- the block
     # the module itself puts it in. Without it the slice never refocuses.
     rephaser = [epi.gz_reph] if getattr(epi, "gz_reph", None) is not None else []
+
+    # Fat is saturated once per shot, before the excitation it applies to, and
+    # every shot gets it -- a dummy that skipped it would drive a different
+    # steady state than the acquired shots it exists to establish.
+    if fatsat is not None:
+        for index, block in enumerate(fatsat.blocks):
+            seq.add_block(*block, *(first_extra if index == 0 else ()))
+        first_extra = ()
 
     seq.add_block(epi.rf, epi.gz, *first_extra)
     if getattr(epi, "wait_te", None) is not None:
@@ -915,6 +981,7 @@ def NavigatorKernel(
     *,
     system: pp.Opts | None = None,
     fov: float | tuple[float, float] = 220e-3,
+    fov_offset: tuple[float, float, float] = (0.0, 0.0, 0.0),
     n_x: int = 128,
     n_y: int = 128,
     n_slices: int = 1,
@@ -1009,6 +1076,17 @@ def NavigatorKernel(
     seq.set_definition(key="Matrix", value=[n_x, n_y, n_slices])
     seq.set_definition(key="Name", value="epi_2d_navigator")
     seq.set_definition(key="EchoSpacing", value=epi.esp)
+    # The prescription moves this sequence with the imaging it calibrates, and
+    # ``compat=False`` because these readouts sample across their read ramps:
+    # the k they traced is what a reconstruction needs to put them back on the
+    # grid. A saturation band placed at design time carries NOPOS/NOROT and is
+    # left where it was put.
+    pp.TransformFOV(
+        translation=tuple(offset * 1e3 for offset in fov_offset),
+        system=system,
+        compat=False,
+    ).apply_to_sequence(seq, in_place=True)
+
     return seq
 
 
@@ -1090,6 +1168,7 @@ def CalibrationKernel(
     *,
     system: pp.Opts | None = None,
     fov: float | tuple[float, float] = 220e-3,
+    fov_offset: tuple[float, float, float] = (0.0, 0.0, 0.0),
     n_x: int = 128,
     n_y: int = 128,
     n_slices: int = 1,
@@ -1144,6 +1223,17 @@ def CalibrationKernel(
     seq.set_definition(key="FOV", value=[fov_x, fov_y, slice_thickness * n_slices])
     seq.set_definition(key="Matrix", value=[n_x, n_y, n_slices])
     seq.set_definition(key="Name", value="epi_2d_calibration")
+    # The prescription moves this sequence with the imaging it calibrates, and
+    # ``compat=False`` because these readouts sample across their read ramps:
+    # the k they traced is what a reconstruction needs to put them back on the
+    # grid. A saturation band placed at design time carries NOPOS/NOROT and is
+    # left where it was put.
+    pp.TransformFOV(
+        translation=tuple(offset * 1e3 for offset in fov_offset),
+        system=system,
+        compat=False,
+    ).apply_to_sequence(seq, in_place=True)
+
     return seq
 
 
@@ -1265,6 +1355,7 @@ def _write_sms_collection(
 SMS_CALIBRATION_ARGUMENTS = frozenset(
     (
         "fov",
+        "fov_offset",
         "n_x",
         "n_y",
         "slice_thickness",
@@ -1432,9 +1523,12 @@ class Epi2D(SequencePlugin):
         except ValueError as error:
             return {"valid": False, "duration": None, "info": str(error)}
 
+        shot = kernel.epi.seq.duration()[0] + (
+            kernel.fatsat.seq.duration()[0] if kernel.fatsat is not None else 0.0
+        )
         if multiband:
             imaging = kwargs.get("segments", 1) * kernel.n_groups
-            per_rep = imaging * kernel.epi.seq.duration()[0]
+            per_rep = imaging * shot
             # The coil calibration is the shared low-res GRE, played once.
             calib = CalibrationKernel(
                 system=system,
@@ -1452,9 +1546,7 @@ class Epi2D(SequencePlugin):
             )
         else:
             shots = kwargs.get("segments", 1) * n_slices
-            duration = (
-                kwargs.get("n_repetitions", 1) * shots * kernel.epi.seq.duration()[0]
-            )
+            duration = kwargs.get("n_repetitions", 1) * shots * shot
             info = (
                 f"TA = {duration:.1f} s, ETL = {kernel.epi.etl}, "
                 f"ESP = {kernel.epi.esp * 1e3:.2f} ms"
@@ -1495,12 +1587,14 @@ KERNEL_ARGUMENTS = frozenset(
         "acceleration",
         "readout_bandwidth_hz",
         "spoiling_cycles",
+        "fat_saturation",
     )
 )
 
 CALIBRATION_ARGUMENTS = frozenset(
     (
         "fov",
+        "fov_offset",
         "n_x",
         "n_y",
         "n_slices",
@@ -1517,6 +1611,7 @@ CALIBRATION_ARGUMENTS = frozenset(
 NAVIGATOR_ARGUMENTS = frozenset(
     (
         "fov",
+        "fov_offset",
         "n_x",
         "n_y",
         "n_slices",
@@ -1551,6 +1646,7 @@ def protocol_kwargs(system: pp.Opts, protocol: dict[str, dict]) -> dict:
         n_repetitions=(
             params.param_int(prot, UIParam.NUM_FRAMES) if ENABLE_MULTIPHASE else 1
         ),
+        fat_saturation=FAT_SATURATION,
     )
 
 

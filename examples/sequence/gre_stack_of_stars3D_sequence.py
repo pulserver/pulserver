@@ -334,7 +334,7 @@ def main(
     pp.TransformFOV(
         translation=tuple(offset * 1e3 for offset in fov_offset),
         system=system,
-        server_mode=True,
+        compat=False,
     ).apply_to_sequence(seq, in_place=True)
 
     if test_report:
@@ -386,11 +386,9 @@ def SlabExcitationKernel(system: pp.Opts, flip_angle_deg: float, thickness_m: fl
             thickness_m=thickness_m,
             spectral_bandwidth_hz=abs(fat_offset_hz),
             freq_offset_hz=0.0,
+            is_slab=True,
         )
-        # Concatenate the rephaser onto the alternating selection gradient, the
-        # way is_slab does, and hand the readout one merged z lobe.
-        gz = pp.concatenate_gradients(excitation.gz, excitation.gz_reph, system=system)
-        return excitation, excitation.rf, gz
+        return excitation, excitation.rf, excitation.gz
     excitation = design.SpatialSelectiveExcitation(
         system,
         flip_angle_deg,

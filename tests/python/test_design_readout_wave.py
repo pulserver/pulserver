@@ -42,8 +42,16 @@ def readout(**kwargs):
 
 
 def moment(event) -> float:
-    """The zeroth moment of a gradient event, in 1/m."""
-    return float(np.sum(np.asarray(event.waveform))) * SYSTEM.grad_raster_time
+    """The zeroth moment of a gradient event, in 1/m.
+
+    The samples sit at raster centres and the waveform reaches zero over half a
+    raster at each end, so the ends are worth a quarter of an interior sample --
+    the same rule :meth:`~pulserver.pypulseq.Sequence.calculate_kspace` applies,
+    which is what makes this the area anything downstream would have to undo.
+    """
+    waveform = np.asarray(event.waveform)
+    area = waveform.sum() - 0.25 * (waveform[0] + waveform[-1])
+    return float(area) * SYSTEM.grad_raster_time
 
 
 def steepest(event) -> float:
@@ -80,6 +88,39 @@ def test_the_wave_returns_k_to_exactly_where_it_found_it(cycles, mode):
         # to be small against the k a line is placed at, not against one.
         step = 1.0 / FOV[1 if channel == "y" else 2]
         assert abs(moment(event)) < 1e-6 * step
+
+
+@pytest.mark.parametrize("mode", ["phase", "partition", "both"])
+def test_the_sequence_leaves_k_where_the_wave_free_readout_would_have(mode):
+    """The same invariant, asked of the sequence rather than of the event.
+
+    How much area a waveform carries depends on how k is integrated under it,
+    and the readout and the integrator have to agree on that or the corkscrew
+    leaves a line somewhere its counters do not say it is. So this asks the
+    question anything downstream asks: where k ended up, against where it would
+    have ended up had the corkscrew never been played.
+    """
+    module = readout(wave=mode)
+    events = [
+        event
+        for event in (
+            getattr(module, "gy_wave", None),
+            getattr(module, "gz_wave", None),
+        )
+        if event is not None
+    ]
+
+    def after(scale):
+        seq = pp.Sequence(SYSTEM)
+        seq.add_block(module.rf, module.gz)
+        seq.add_block(module.gx_pre, module.gy_pre, module.gz_pre)
+        seq.add_block(module.gx, module.adc, *(pp.scale_grad(e, scale) for e in events))
+        seq.add_block(pp.make_adc(num_samples=2, dwell=SYSTEM.grad_raster_time))
+        return np.asarray(seq.calculate_kspace()[0])[:, -1]
+
+    played, silent = after(1.0), after(0.0)
+    for axis, extent in ((1, FOV[1]), (2, FOV[2])):
+        assert abs(float(played[axis] - silent[axis])) < 1e-6 / extent
 
 
 @pytest.mark.parametrize("cycles", [4, 8, 20])

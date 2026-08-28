@@ -191,7 +191,7 @@ class SpspExcitation(RfModule):
     >>> import pulserver.pypulseq as pp
     >>> system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=180, slew_unit="T/m/s")
     >>> water = design.SpspExcitation(
-    ...     system, 30.0, thickness_m=10e-3, spectral_bandwidth_hz=300.0, n_subpulses=12
+    ...     system, 30.0, thickness_m=10e-3, spectral_bandwidth_hz=300.0
     ... )
     >>> len(water.blocks), water.gz.channel
     (2, 'z')
@@ -237,6 +237,7 @@ class SpspExcitation(RfModule):
         thickness_m: float,
         spectral_bandwidth_hz: float,
         freq_offset_hz: float = 0.0,
+        is_slab: bool = False,
         rephase: bool = True,
         spatial_time_bw_product: float = 4.0,
         spectral_time_bw_product: float = 3.0,
@@ -263,12 +264,23 @@ class SpspExcitation(RfModule):
             use=use,
         )
         gz.channel = axis
-        gz_reph.channel = axis
+        if gz_reph is not None:
+            gz_reph.channel = axis
+
+        rephase = rephase and gz_reph is not None
 
         self.seq = pp.Sequence(system)
-        self.seq.add_block(rf, gz)
-        if rephase:
-            self.seq.add_block(gz_reph)
+        if is_slab:
+            if rephase:
+                # Concatenated, not summed over one interval: the rephaser
+                # starts where the subpulse train ends.
+                gz_reph.delay = pp.calc_duration(gz)
+                gz = pp.add_gradients(grads=[gz, gz_reph], system=system)
+            self.seq.add_block(rf, gz)
+        else:
+            self.seq.add_block(rf, gz)
+            if rephase:
+                self.seq.add_block(gz_reph)
 
         self.center = rf_reference(rf)
         self.spectral_bandwidth_hz = spectral_bandwidth_hz

@@ -10,6 +10,7 @@
  * k-zero anchors that freq-mod, SSP placement and the trajectory all key off.
  */
 
+#include <limits.h>
 #include <string.h>
 #include <stdlib.h>
 #include <math.h>
@@ -1141,7 +1142,58 @@ void pulseg__compute_exec_stream_tr_start(pulseg_sequence_descriptor *desc)
 /*  find_tr_in_sequence                                               */
 /* ================================================================== */
 
-int pulseg__get_tr_in_sequence(pulseg_sequence_descriptor *desc, pulseg_diagnostic *diag)
+/*
+ * The blocks-per-TR a file declares in [DEFINITIONS] TRSize, or 0 when it
+ * declares none.  A declaration is a claim about the block table, and the
+ * caller verifies it against the same pattern its own search would have been
+ * checked against; nothing here trusts the number.
+ */
+static int declared_tr_size(const pulseq_file *seq)
+{
+    int i;
+    long value;
+    char *end;
+
+    if (!seq || !seq->definitions_library)
+        return 0;
+
+    for (i = 0; i < seq->num_definitions; ++i)
+    {
+        if (strcmp(seq->definitions_library[i].name, "TRSize") != 0)
+            continue;
+        if (seq->definitions_library[i].value_size < 1 || !seq->definitions_library[i].value ||
+            !seq->definitions_library[i].value[0])
+            return 0;
+        value = strtol(seq->definitions_library[i].value[0], &end, 10);
+        if (end == seq->definitions_library[i].value[0])
+            return 0;
+        if (value <= 0 || value > INT_MAX)
+            return 0;
+        return (int)value;
+    }
+    return 0;
+}
+
+/*
+ * Whether @p pat repeats with period @p period over its whole length.
+ * The same test the period search applies to a candidate it found.
+ */
+static int period_holds(const int *pat, int nblocks, int period)
+{
+    int i;
+
+    if (period <= 0 || period > nblocks || (nblocks % period) != 0)
+        return 0;
+    for (i = period; i < nblocks; ++i)
+        if (pat[i] != pat[i % period])
+            return 0;
+    return 1;
+}
+
+int pulseg__get_tr_in_sequence(
+    pulseg_sequence_descriptor *desc,
+    const pulseq_file *seq,
+    pulseg_diagnostic *diag)
 {
     pulseg_tr_descriptor *tr = &desc->tr_descriptor;
     pulseg_diagnostic local_diag;
@@ -1152,7 +1204,7 @@ int pulseg__get_tr_in_sequence(pulseg_sequence_descriptor *desc, pulseg_diagnost
     int *block_dur = NULL;
     int *geom_id = NULL;
     double span_dur_us; /* one pass, delays included; can exceed an int */
-    int found, l;
+    int found, l, declared;
     int mismatch_pos;
     float tr_dur;
     int tr_start;
@@ -1236,20 +1288,46 @@ int pulseg__get_tr_in_sequence(pulseg_sequence_descriptor *desc, pulseg_diagnost
      * Per-instance RF amplitude or shim patterns are validated by
      * dedicated safety consistency checks, not by TR-period finding. */
 
-    l = first_repeating_segment(seq_pat, nblocks);
-    if (l == nblocks)
+    /* A declared TRSize is taken when it holds, and ignored when it does
+     * not: the file states a period, this verifies it against the same
+     * pattern the search below would have verified, and a claim that fails
+     * costs one pass before detection runs as though it had never been
+     * made. */
+    declared = declared_tr_size(seq);
+    if (declared > 0)
     {
-        int l_struct = first_repeating_segment_structural(desc, 0, nblocks);
-        if (l_struct > 0 && l_struct < l)
-            l = l_struct;
+        pulseg__diag_printf(diag, " declared TR=%d", declared);
+        if (declared < nblocks && period_holds(seq_pat, nblocks, declared))
+        {
+            l = declared;
+            found = 1;
+        }
+        else
+        {
+            pulseg__diag_printf(diag, " declared TR rejected");
+        }
     }
-    pulseg__diag_printf(diag, " candidate TR=%d", l);
+
+    if (!found)
+    {
+        l = first_repeating_segment(seq_pat, nblocks);
+        if (l == nblocks)
+        {
+            int l_struct = first_repeating_segment_structural(desc, 0, nblocks);
+            if (l_struct > 0 && l_struct < l)
+                l = l_struct;
+        }
+        pulseg__diag_printf(diag, " candidate TR=%d", l);
+    }
 
     /* l == nblocks means neither search found a period: the region is its
      * own shortest repeat.  That is not a discovery, so it must not short
      * circuit past the fallback chain below -- the single-TR branch there is
-     * where such a region is length-checked before being accepted. */
-    found = (l > 0 && l < nblocks) ? 1 : 0;
+     * where such a region is length-checked before being accepted.  A
+     * declaration of the whole table is therefore not accepted above: it
+     * takes that branch, so the duration cap still applies to it. */
+    if (!found)
+        found = (l > 0 && l < nblocks) ? 1 : 0;
 
     if (found)
     {

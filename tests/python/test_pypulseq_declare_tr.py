@@ -55,3 +55,24 @@ def test_a_trivial_sequence_declares_its_trivial_structure():
     seq = pp.Sequence()
     seq.add_block(pp.make_delay(1e-3))
     assert seq.declare_tr() == seq.tr_size
+
+
+def test_a_declaration_the_blocks_support_is_taken_as_stated():
+    """The interpreter reads the declaration rather than searching.
+
+    Two TRs of the detected period is also a period the block table
+    repeats at, so a file declaring it gets that window -- which detection,
+    which always returns the shortest, would never have produced.
+    """
+    seq = build()
+    detected = seq.tr_size
+    seq.set_definition("TRSize", 2 * detected)
+    assert seq.tr_size == 2 * detected
+
+
+def test_a_declaration_the_blocks_contradict_is_ignored():
+    """A claim is verified against the block table, never trusted."""
+    seq = build()
+    detected = seq.tr_size
+    seq.set_definition("TRSize", detected + 1)
+    assert seq.tr_size == detected

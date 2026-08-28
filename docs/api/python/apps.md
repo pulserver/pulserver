@@ -148,6 +148,31 @@ maps when phase encodes are missing.
    cartesian3D_recon
 ```
 
+### Wave encoded
+
+The corkscrew a wave-encoded readout plays smears every voxel along it, by an
+amount that grows with how far the voxel sits from the centre of the two
+encoded axes -- and the aliasing a parallel-imaging solve has to separate is
+smeared the same way, which is what lets the same array resolve a higher
+acceleration than it could on the grid.
+
+A plugin of its own rather than an option on `cartesian3D_recon`: the encoding
+operator carries the corkscrew, the sensitivities come from a pass acquired
+without it, and the sampling is a list of acquired lines rather than a mask
+over a grid. Nothing about the gradient is declared. What the wave did is read
+off the trajectory the readouts carry -- ky and kz move *within* a wave-encoded
+readout, and that movement is the phase -- so the waveform's exact shape is
+free, and the reconstruction undoes what was played rather than what was
+prescribed.
+
+```{eval-rst}
+.. autosummary::
+   :toctree: ../generated/app_recon
+   :template: autosummary/plugin.rst
+
+   wave3D_recon
+```
+
 ### Non-Cartesian
 
 Density compensation, NLINV sensitivities calibrated from the samples inside the

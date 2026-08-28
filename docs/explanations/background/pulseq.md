@@ -14,6 +14,12 @@ each with its own delay from the block start; blocks run back to back with no
 gap. There is no nesting, no loop construct and no branch — the file is the
 flattened playout order.
 
+```{figure} ../assets/pulseq/file_structure.png
+A `.seq` file is one table of played blocks over four event libraries and a
+shape library. Every cell of the block table is an id, and every id resolves
+into a library entry that is written once however often it plays.
+```
+
 Events are stored in libraries and referenced by id, so an event used ten
 thousand times is written once:
 
@@ -79,12 +85,17 @@ evaluates each subsequence independently.
 `[SIGNATURE]` closes the file with an MD5 of everything above it, so a
 scanner can refuse a file that changed after it was checked.
 
-## Three things the format leaves open
+## What the format leaves open
 
 Pulseq describes the playout completely. Between that description and a
 sequence that stands in for a product one on a clinical scanner, three gaps
 remain — none of them a flaw in the format, all of them the motivation for
 the rest of this documentation.
+
+```{figure} ../assets/pulseq/structure_levels.png
+The same block list, read at the four levels a scanner-side representation
+needs. The file states the order and nothing above it.
+```
 
 **Structure.** The file carries every event, but not how the events are
 organised. At four levels, the information exists implicitly in the content

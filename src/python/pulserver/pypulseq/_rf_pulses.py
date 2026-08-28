@@ -344,8 +344,9 @@ def make_spsp_pulse(
         The spectral-spatial pulse.
     gz : GradEvent
         The alternating selection gradient.
-    gz_reph : TrapEvent
-        Its rephaser.
+    gz_reph : TrapEvent or None
+        Its rephaser, or ``None`` when the train needs none: the lobes after
+        the pulse's centre cancel whenever there is an even number of them.
 
     Raises
     ------
@@ -438,10 +439,18 @@ def make_spsp_pulse(
         use=use,
     )
     gz = _alternating_extended_trapezoid(positive_lobe, n_subpulses, system)
-    # The alternating full-lobe areas cancel over an even count; what is left to
-    # rephase is the half-lobe up to the centre of the final subpulse.
-    gz_reph = _events.make_trapezoid(
-        channel="z", area=0.5 * positive_lobe.area, system=system
+    # The train and the pulse start together: each subpulse is played under the
+    # lobe it was designed for, and a dead time that moved only one of them
+    # would slide every subpulse off its own lobe.
+    gz.delay = rf.delay
+    # What has to be undone is the moment the train accrues after the pulse's
+    # centre. Half the lobes fall there and they alternate, so an even number
+    # of them cancels outright and an odd number leaves exactly one.
+    lobes_after_centre = n_subpulses // 2
+    gz_reph = (
+        _events.make_trapezoid(channel="z", area=positive_lobe.area, system=system)
+        if lobes_after_centre % 2
+        else None
     )
     return rf, gz, gz_reph
 

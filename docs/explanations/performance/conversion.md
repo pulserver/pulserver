@@ -7,6 +7,11 @@ executes: parse it, resolve every event reference, find the repeating unit,
 cut the segments, and check the result is consistent. It has a few seconds to
 do it in, on a host that is also running everything else on the console.
 
+```{figure} ../assets/conversion/stages.png
+What the scanner does between the file arriving and the first block playing,
+and what sets the cost of each stage.
+```
+
 The three MPRAGE protocols of the {doc}`previous page <sequence_creation>`,
 2 103 300 blocks each:
 
@@ -21,7 +26,7 @@ The three MPRAGE protocols of the {doc}`previous page <sequence_creation>`,
 | cache read | 79 ms | 23 ms | 90 ms |
 | cache size | 137 MB | 133 MB | 137 MB |
 
-## Parsing is the floor, and binary halves it
+## Parsing
 
 Everything after parsing works on structures already in memory, so the parse
 is the one stage whose cost is set by the file rather than by the sequence. In
@@ -37,7 +42,7 @@ argument. That is why the scanner path writes binary and the offline path
 writes text — see `write_sequence` on the
 {doc}`previous page <sequence_creation>`.
 
-## Structure comes almost free
+## Structure detection
 
 Detecting the structural TR of a two-million-block scan takes **tens of
 microseconds**, which is not a typo: the search runs over normalized block
@@ -53,7 +58,7 @@ is free as well, which is a bonus rather than the argument.
 Consistency checking, at about 60 ms, is the largest of the three and still a
 rounding error against the parse.
 
-## The cache: pay once
+## The cache
 
 Writing the converted representation beside the `.seq` costs about as much as
 the conversion itself. Reading it back costs **23–90 ms** — one to two orders
@@ -70,7 +75,7 @@ The version triple must match exactly on read. A cache at any other revision is
 rejected outright and the `.seq` re-parsed — never partially read, never
 heuristically repaired.
 
-## Where the footprint goes
+## Memory footprint
 
 The cache is about 137 MB for these protocols, against roughly 100 MB of `.seq`.
 It is larger than the file it derives from and that is the trade: resolved

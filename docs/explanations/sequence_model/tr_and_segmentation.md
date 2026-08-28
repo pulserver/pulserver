@@ -11,7 +11,7 @@ Pulserver derives both from the block content, and derives them the same way
 on every file. This page explains what is derived, what it is used for, and
 why deriving it beats reading an annotation.
 
-## The repeating unit is a property of the content
+## Detecting the repeating unit
 
 Take the first block, and ask whether the stream is periodic with period
 $P$: whether block $n$ and block $n + P$ have the same normalized structure —
@@ -19,7 +19,10 @@ the same duration, playing on the same channels — for every $n$. The smallest
 $P$ that holds over the whole table is the **structural TR**, and `tr_size`
 blocks is its length.
 
-![The block stream, the repeating unit found in it, and the segments that unit is cut into](../assets/segments/tr_and_segments_schematic.png)
+```{figure} ../assets/segments/tr_and_segments_schematic.png
+The block stream, the repeating unit found in it, and the segments that unit
+is cut into.
+```
 
 Two properties make this well-posed:
 
@@ -52,15 +55,32 @@ then a pulse and an acquisition per view — because the shell opens and closes
 differently from the way it runs, and it is the shell a shot repeats.
 Detection reports what the sequence is, not what its author called it.
 
-```{note}
-`Sequence.declare_tr()` writes the detected block count into
-`[DEFINITIONS] TRSize` when the file is written, so a consumer that wants the
-answer need not re-derive it. It remains a *hint*: the interpreter verifies
-the pattern repeats and falls back to full detection, and a reconstruction
-that does not find it simply skips the description it would have built.
-```
+## Declaring the period instead of deriving it
 
-## What the TR is for
+A file may state its own period. `[DEFINITIONS] TRSize` carries a block
+count, and the interpreter reads it before it searches: it checks that the
+block table really does repeat at that period — the same test it would apply
+to a period of its own finding — and takes it when it holds.
+
+A declaration that the blocks contradict is discarded, not honoured, and
+detection then runs as though it had never been made. Nothing downstream can
+therefore be misled by a stale or wrong number; the worst a bad declaration
+costs is one verification pass.
+
+What a declaration is *for* is the case detection cannot reach. Detection
+always returns the shortest period, which is the right answer for a scan
+whose repeating unit is what it looks like. A designer who wants a longer
+window — a hyper-TR spanning two interleaved subsequences, say, so the RF
+checks see the pair rather than one of them — states it, and gets it, provided
+the blocks repeat at it. Every consumer treats a longer window
+conservatively: fewer TRs, a bigger safety window, less segment reuse.
+
+`Sequence.declare_tr()` writes the detected count, and `write()` and
+`write_binary()` call it, so every written file carries the declaration
+whether or not anyone asked for one. A reconstruction derives its sequence
+description only when the definition is present.
+
+## What the TR is used for
 
 Three consumers, all of which would otherwise have to guess:
 
@@ -80,7 +100,7 @@ definitions, echo positions, the ADC roles — is derived over one TR window
 and applies to every instance of it. Deriving it over the whole scan would
 be the same answer at a million times the cost.
 
-## Segments are the TR, partitioned by structure
+## Segmentation: the TR partitioned by structure
 
 Within the TR, Pulserver partitions blocks into **segments**: maximal runs
 that repeat identically across instances. A gradient echo yields one segment
@@ -95,6 +115,67 @@ normalized structure.
 A segment also carries the readout, not only the timing — see
 {ref}`shots that acquire nothing <acquire-nothing>` below.
 
+### Where a boundary is allowed
+
+A boundary is a place where the sequencer stops one prepared unit and starts
+the next. The gradient cannot be live across such a stop, so the rule is a
+statement about the waveforms and not about the events:
+
+```{figure} ../assets/segments/segmentation_rules.png
+The seams of one TR. Every seam whose two sides both sit at zero gradient is
+a legal boundary; a seam under a live gradient is not one. The cuts are then
+placed at the last legal seam before each excitation.
+```
+
+**A seam is legal when both sides rest at zero**, on all three axes — the
+previous block's last sample and the next block's first, each within
+`SEG_ZERO_GRAD_THRESHOLD_HZ_PER_M` (100 Hz/m) of zero. A readout that carries
+its gradient into the rewinder that follows it has no legal seam between the
+two, and they stay in one segment.
+
+**The whole pattern must start and end at zero.** If the first block of the
+TR begins under a gradient, or the last one ends under one, the sequence is
+refused rather than segmented — the TR is played back to back with copies of
+itself, so its two ends are a seam like any other.
+
+**A change of rotation state forces a boundary.** The rotation matrix is
+programmed once per segment, at its start, so `NOROT` and PMC are part of a
+segment's identity. Where either changes, a boundary is placed; if that
+position is not a legal seam, the sequence is refused, because a rotation
+remaps the axes and cannot take effect under a live waveform. Absorbing it —
+letting the block play in its predecessor's frame — is silently the wrong
+image.
+
+### Where a boundary is placed
+
+Among the legal seams, the cuts go **immediately before the RF**: for each
+excitation, the last legal seam preceding it closes the segment that was
+open. The leading run up to the first acquisition is closed the same way, at
+the last legal seam before the RF that precedes that acquisition.
+
+That rule is what makes a segment a *shot*: it begins with its excitation and
+ends where the next one is about to start, which is the unit the scanner
+prepares and the unit a per-instance amplitude table indexes.
+
+Where an RF pulse arrives with no legal seam since the last cut — a
+continuous-gradient family where the waveform never returns to zero between
+pulses — cutting stops for the rest of the pattern, and what remains becomes
+one segment. Nothing is refused: the sequence simply has less reuse in it
+than a Cartesian one, which is a property of the sequence.
+
+### Two further splits
+
+**Pure delays are split off.** A run of pure-delay blocks at the head or the
+tail of a segment becomes one segment per block. A delay is one position whose
+duration the playout sets, so keeping it inside a segment would bind a
+duration into a prepared unit that could otherwise be reused at any length.
+
+**Readouts split what timing does not.** A prepared segment binds one receive
+filter chain to each of its block positions, so a definition played with two
+different ADCs becomes two segments — see
+{ref}`shots that acquire nothing <acquire-nothing>` below for why that split
+is made here and not in the period.
+
 ### Two decompositions
 
 A spoiled gradient echo has nothing to reuse inside its own TR. Five blocks:
@@ -102,7 +183,9 @@ the four carrying waveforms are one segment, and the pad is the other, split
 off because a pure delay is one position whose duration the playout sets. Two
 segments, one instance each.
 
-![One GRE TR, with the two segments shaded behind the waveforms](../assets/segments/gre_2d_tr_segments.png)
+```{figure} ../assets/segments/gre_2d_tr_segments.png
+One GRE TR, with the two segments shaded behind the waveforms.
+```
 
 MPRAGE repeats at the shot, not at the line, so its TR is the whole
 inversion-recovery experiment — the inversion pulse and its crusher, the TI
@@ -110,7 +193,10 @@ fill, a train of spoiled gradient echoes, and the recovery delay that pads out
 to the outer TR. Here that is 36 blocks over 135 ms, and three segments cover
 them, played eleven times between them.
 
-![One MPRAGE TR: the inversion, the TI fill, eight instances of the readout segment, and the recovery delay](../assets/segments/mprage_3d_tr_segments.png)
+```{figure} ../assets/segments/mprage_3d_tr_segments.png
+One MPRAGE TR: the inversion, the TI fill, eight instances of the readout
+segment, and the recovery delay.
+```
 
 Segment 1 is played twice, as the 24 ms TI fill and as the 15 ms recovery pad.
 Two different durations and one segment, because a pure delay matches any pure
@@ -120,7 +206,10 @@ there is a runtime parameter.
 The eight readouts above are the eight instances of that segment. One of them,
 on its own, is four blocks — excite, prewind, read, rewind and spoil:
 
-![One instance of the MPRAGE readout segment: excitation, prewinder, readout, and the combined rewinder and spoiler](../assets/segments/mprage_3d_train_segments.png)
+```{figure} ../assets/segments/mprage_3d_train_segments.png
+One instance of the MPRAGE readout segment: excitation, prewinder, readout,
+and the combined rewinder and spoiler.
+```
 
 Every instance occupies that same timing, and almost nothing else about them
 matches — look along the train above: the phase encode steps, so each
@@ -140,7 +229,10 @@ ADC events, and play as two prepared programs. Both are ordinary, and neither
 is a special case anywhere — but the ADC is asked about three separate times,
 and the answers are not the same.
 
-![One block position, digitised differently or not at all, and the three questions asked of it](../assets/segments/adc_identities.png)
+```{figure} ../assets/segments/adc_identities.png
+One block position, digitised differently or not at all, and the three
+questions asked of it.
+```
 
 **What repeats leaves the ADC out.** Which readout a block digitises with is a
 property of the instance, not of the rhythm the sequence repeats at. Counting
@@ -167,7 +259,7 @@ $k$ readouts is $k$ prepared segments, and a scan that digitises differently
 on every repetition is refused rather than turned into a segment table the
 size of the scan.
 
-### The declared divergence: content, not annotation
+### Derivation instead of annotation
 
 The PulSeg specification makes `TRID` annotation the segment-boundary
 convention: the designer labels where segments begin. Pulserver does not read
@@ -192,7 +284,7 @@ Concatenated subsequences need no label at all: they are separate `.seq`
 files linked by `NextSequence`, loaded as a collection and evaluated
 independently.
 
-## Two properties of the answer
+## Two properties of the partition
 
 **The period is anchored at the first block.** Periodicity is tested from the
 start of the stream, so a scan whose opening differs from everything after it
@@ -211,31 +303,3 @@ mid-ramp without violating the slew limit, so the cuts fall only where the
 waveforms already permit playout to pause. The result is the most reuse the
 scanner can get out of the file with every unit still physically executable.
 
-## Seeing it
-
-```python
-from pulserver.app import gre2D_sequence
-
-seq = gre2D_sequence.main(n_x=256, n_y=64, n_slices=1, te=None, tr=12e-3)
-
-seq.tr_size                   # 5 -- blocks in one repetition
-seq.plot(tr="worst_case")     # the repetition the safety checks used
-
-seq.num_segments              # 2 -- the readout run, and the TR pad
-seq.plot(segment_idx=0)       # the units the interpreter prepares and replays
-
-seq.sequence_descriptor       # what a reconstruction reads off one TR
-```
-
-Nothing here has to be asked for in order: detection and segmentation run in
-the C core the first time any of them is wanted, and the result is held until
-the blocks change. Writing the file records the block count as
-`[DEFINITIONS] TRSize` so the next reader need not derive it again.
-
-Plotting is usually the fastest way to see whether detection found what you
-meant. `tr="worst_case"` draws the positional-maximum envelope the gradient
-checks run on, and an integer index draws that actual repetition.
-`segment_idx` draws one segment as real blocks on the sequence's own clock —
-the instance of it carrying the most gradient energy, which is the one the
-safety checks were run against — so stepping `0 .. num_segments - 1` shows
-the whole decomposition, unit by unit.

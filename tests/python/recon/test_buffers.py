@@ -500,3 +500,29 @@ def test_a_cartesian_scan_holds_no_trajectory():
     buffers = ReconData.from_header(header(space()))
     buffers.add(acquire(kspace_encode_step_1=0))
     assert buffers[0].trajectory is None
+
+
+def test_an_axis_a_readout_never_traversed_reads_back_as_the_zero_it_was():
+    """MRD leaves a trailing axis off a readout that does not traverse it.
+
+    The centre partition of a Cartesian slab traverses no kz and says so with
+    two dimensions where its neighbours say three, so what a buffer holds is
+    as wide as the widest acquisition placed in it either way, and the axis
+    the narrow one left off reads back as zero.
+    """
+    for order in ([3, 2], [2, 3]):
+        buffers = ReconData.from_header(header(space(x=4, y=3)))
+        for view, dimensions in enumerate(order):
+            acquisition = ismrmrd.Acquisition()
+            acquisition.resize(4, COILS, dimensions)
+            acquisition.traj[:] = np.arange(1, 4 * dimensions + 1).reshape(
+                4, dimensions
+            )
+            acquisition.idx.kspace_encode_step_1 = view
+            buffers.add(acquisition)
+
+        trajectory = buffers[0].trajectory
+        assert trajectory.shape == (3, 3, 4)
+        narrow = order.index(2)
+        assert np.array_equal(trajectory[2, narrow], np.zeros(4))
+        assert np.array_equal(trajectory[1, narrow], [2, 4, 6, 8])

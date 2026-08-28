@@ -163,24 +163,24 @@ def test_a_ranged_shift_gives_the_same_phase_as_shifting_everything(seq):
     )
 
 
-def test_server_mode_on_a_cartesian_sequence_equals_native_mode(seq):
+def test_a_cartesian_readout_is_baked_the_same_way_either_side_of_compat(seq):
     """Unrotated constant-gradient readouts are exact as two scalars, so
-    server mode bakes them like native and has nothing to defer."""
-    server = pp.TransformFOV(
-        translation=(10.0, 0.0, 0.0), server_mode=True
+    there is nothing to defer and nothing to carry a trajectory for."""
+    deferring = pp.TransformFOV(
+        translation=(10.0, 0.0, 0.0), compat=False
     ).apply_to_sequence(seq)
-    native = pp.TransformFOV(translation=(10.0, 0.0, 0.0)).apply_to_sequence(seq)
+    portable = pp.TransformFOV(translation=(10.0, 0.0, 0.0)).apply_to_sequence(seq)
 
-    assert _phases(server) == pytest.approx(_phases(native))
+    assert _phases(deferring) == pytest.approx(_phases(portable))
     assert (
-        server.get_block(1).adc.freq_offset
-        == native.get_block(1).adc.freq_offset
+        deferring.get_block(1).adc.freq_offset
+        == portable.get_block(1).adc.freq_offset
         != 0.0
     )
-    assert not server._native.has_base_trajectory()
+    assert not deferring._native.has_base_trajectory()
 
 
-def test_server_mode_defers_a_rotated_readout_and_attaches_its_trajectory(seq):
+def test_a_rotated_readout_is_deferred_with_its_trajectory(seq):
     """Under a rotation the shift phase is orientation-dependent, so the ADC
     side is left to the consumer, which gets the trajectory to do it with."""
     turn = Rotation.from_euler("z", 45.0, degrees=True)
@@ -188,7 +188,7 @@ def test_server_mode_defers_a_rotated_readout_and_attaches_its_trajectory(seq):
     before = _phases(rotated)
 
     shifted = pp.TransformFOV(
-        translation=(10.0, 0.0, 0.0), server_mode=True
+        translation=(10.0, 0.0, 0.0), compat=False
     ).apply_to_sequence(rotated)
 
     assert _phases(shifted) == before
@@ -196,19 +196,19 @@ def test_server_mode_defers_a_rotated_readout_and_attaches_its_trajectory(seq):
     assert shifted._native.has_base_trajectory()
 
 
-def test_a_rotation_carried_by_the_same_server_transform_still_defers(seq):
+def test_a_rotation_carried_by_the_same_transform_still_defers(seq):
     """The rotation is composed before the shift looks, so a transform that
     both turns and moves does not bake scalars the consumer would repeat."""
     turn = Rotation.from_euler("y", 30.0, degrees=True)
     out = pp.TransformFOV(
-        rotation=turn.as_matrix(), translation=(10.0, 0.0, 0.0), server_mode=True
+        rotation=turn.as_matrix(), translation=(10.0, 0.0, 0.0), compat=False
     ).apply_to_sequence(seq)
 
     assert out.get_block(1).adc.freq_offset == 0.0
     assert out._native.has_base_trajectory()
 
 
-def test_native_mode_bakes_the_adc_and_attaches_nothing(seq):
+def test_a_portable_file_bakes_the_adc_and_attaches_nothing(seq):
     pp.TransformFOV(translation=(10.0, 0.0, 0.0)).apply_to_sequence(seq, in_place=True)
     assert seq.get_block(1).adc.freq_offset != 0.0
     assert not seq._native.has_base_trajectory()
@@ -470,15 +470,15 @@ def test_a_homogeneous_transform_is_its_rotation_and_translation():
     np.testing.assert_allclose(combined.rotation, turn.as_matrix(), atol=1e-12)
 
 
-@pytest.mark.parametrize("server_mode", [False, True])
-def test_applying_in_place_matches_the_copy_it_would_have_returned(seq, server_mode):
+@pytest.mark.parametrize("compat", [False, True])
+def test_applying_in_place_matches_the_copy_it_would_have_returned(seq, compat):
     expected = pp.TransformFOV(
-        translation=(0.0, 0.0, 10.0), server_mode=server_mode
+        translation=(0.0, 0.0, 10.0), compat=compat
     ).apply_to_sequence(seq)
 
-    pp.TransformFOV(
-        translation=(0.0, 0.0, 10.0), server_mode=server_mode
-    ).apply_to_sequence(seq, in_place=True)
+    pp.TransformFOV(translation=(0.0, 0.0, 10.0), compat=compat).apply_to_sequence(
+        seq, in_place=True
+    )
 
     assert _phases(seq) == pytest.approx(_phases(expected))
     assert seq._native.has_base_trajectory() == expected._native.has_base_trajectory()

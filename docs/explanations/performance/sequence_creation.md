@@ -9,7 +9,7 @@ repetition — there is no way around that, and no reason to want one — so wha
 a protocol-scale sequence costs is decided by the calls inside the loop, not
 by the loop.
 
-## Everything on the loop's path is compiled
+## The compiled core
 
 - **Events are compact compiled objects.** `make_trapezoid` and friends hand
   back an object whose fields read at native speed, and `scale_grad` — the
@@ -26,7 +26,7 @@ by the loop.
   dominated by number formatting; the binary form of the same sequence skips
   it, and a reader tells the two apart by content rather than by file name.
 
-## What a protocol-scale build costs
+## Cost of a protocol-scale build
 
 Three MPRAGE protocols at one encoding size — 512 partitions, 1024 views per
 inversion train, **2 103 300 blocks** each — so the only thing that varies is
@@ -55,7 +55,7 @@ These are scale cases, not clinically prescribed protocols: they exist to
 measure what the path costs per block at protocol size.
 ```
 
-## Moving the FOV
+## Off-isocentre prescription
 
 An off-isocentre prescription is applied by `TransformFOV` at the end of the
 plugin, over a scan that is by then millions of blocks — so what it costs is a
@@ -91,7 +91,7 @@ way. It is a *parsing* story, and it is told on the {doc}`conversion` page:
 the scanner reads the binary form about twice as fast, and loses none of the
 precision the text form rounds away.
 
-## What the checks cost
+## Cost of the checks
 
 `write()` runs three checks before it serialises — amplitude and slew,
 continuity, and timing — and what each costs is set by what it is a property

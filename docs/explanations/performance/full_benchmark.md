@@ -56,7 +56,7 @@ state, and a ZTE shell is traversed once. Both are capped here at the size
 above which the interpreter refuses the file with *"no periodic TR pattern
 found"*, which is a separate matter from what it costs to check them.
 
-## How
+## Method
 
 A size is a *protocol*: the plugin's own default with the prescribed quantities
 overridden, exactly as the console would send it. Every case runs in its own
@@ -84,7 +84,10 @@ power law and slope one is a cost proportional to the scan.
 
 ## Protocol validation
 
-![validate_protocol runtime against scan size, all families](../assets/full_benchmark/validate.png)
+```{figure} ../assets/full_benchmark/validate.png
+`validate_protocol` runtime against scan size, every shipped family. This is
+the call the console makes on each protocol edit.
+```
 
 Flat, and in the tens of milliseconds. That is the whole point of the call: it
 designs *one repetition* and reports the feasibility and the scan duration that
@@ -100,7 +103,10 @@ ordering is the answer to "how many shots, therefore how long". At an ordinary
 
 ## Save Rx, end to end
 
-![Design, conversion, safety and cache write against scan size](../assets/full_benchmark/save_rx.png)
+```{figure} ../assets/full_benchmark/save_rx.png
+What one press of *Save Rx* costs, split into design, conversion, safety and
+cache write, against scan size.
+```
 
 The band running up the middle is what a design loop costs: a few microseconds
 per block, so a two-million-block scan is a few seconds and everything smaller
@@ -127,9 +133,48 @@ long. ZTE is the worst of both, because there the number of distinct waveforms
 grows with the scan as well — every shot is its own shell — and the gate costs
 the product of the two.
 
+## Where the time goes inside each half
+
+*Save Rx* is two halves — building the sequence, then reading it back — and
+the table above gives each as one number. Split further, they are not made of
+what a reader tends to expect.
+
+```{figure} ../assets/full_benchmark/time_split.png
+The two halves of one download, by stage. Measured on a Cartesian MPRAGE at
+512 partitions and 1024 views per train — 2.1 million blocks — where every
+stage is large enough to time honestly.
+```
+
+**On the design side, the loop dominates and nothing else comes close.**
+Two thirds is the plugin's own `add_block` calls; a fifth is `TransformFOV`
+applying the prescription; a tenth is deduplication, which pays for itself
+several times over downstream; and the binary write, on a hundred-megabyte
+file, is four percent. There is no serialisation problem to solve here — the
+cost is the *number of blocks*, and it is spent before anything is written.
+
+**On the interpreter side the cache write is the largest single stage**,
+larger than the parse and conversion it derives from. That is the trade
+{doc}`conversion` describes stated as a number: the download pays about a
+second to write tables the next download reads back in under a tenth of one.
+
+**Structure detection is three percent of that half and invisible on the
+scale of the whole.** Finding the period, partitioning it and checking the
+result together cost a few tens of milliseconds on two million blocks —
+because detection runs on normalised block identities the conversion had to
+compute anyway, and the partition then runs over one TR rather than over the
+scan.
+
+Both halves read and write the **binary** form, which is what a plugin writing
+for the scanner produces. The same file in text parses in about twice the
+time, and nothing on the scanner path needs it — the text form is for a bench,
+a foreign toolbox, or a human reading the file.
+
 ## Peak memory
 
-![Peak resident set size against scan size](../assets/full_benchmark/peak_rss.png)
+```{figure} ../assets/full_benchmark/peak_rss.png
+Peak resident set size against scan size — the figure that decides whether a
+protocol fits on the scanner at all.
+```
 
 A floor of about 0.16 GB, which is the Python interpreter and the imports a
 plugin makes rather than anything about the sequence, and above it two things
@@ -142,11 +187,17 @@ Nothing here approaches what a scanner host has, which is why footprint is the
 least interesting of the five charts — but it is the one that would stop being
 uninteresting first if a design loop started holding per-block objects.
 
-## The two files
+## The two files a download produces
 
-![Binary sequence file size against scan size](../assets/full_benchmark/seq_size.png)
+```{figure} ../assets/full_benchmark/seq_size.png
+Binary sequence file size against scan size: a row per block, plus a library
+that does not grow with the scan.
+```
 
-![Interpreter cache size against scan size](../assets/full_benchmark/cache_size.png)
+```{figure} ../assets/full_benchmark/cache_size.png
+Interpreter cache size against scan size, the sidecar the scanner reads in
+place of re-deriving the structure.
+```
 
 One line each, for every family: **37 bytes per block** written and **63 bytes
 per block** cached, whatever the sequence is. That is the representation doing
@@ -162,15 +213,3 @@ is comparable to the scan itself.
 The cache is larger than the file it derives from, which is the trade
 {doc}`conversion` describes: resolved tables cost bytes and save a parse.
 
-## Reproducing it
-
-```bash
-python docs/_bench/bench_full.py                 # the whole sweep
-python docs/_bench/bench_full.py --only=gre2D    # one family
-python docs/_bench/bench_full.py --figures-only  # redraw from the JSON
-python docs/_bench/bench_full.py --table-only    # reprint the table above
-```
-
-Measured on the tree this documentation was built from, single core. Re-measure
-rather than quote them when the question is whether a change made something
-slower.

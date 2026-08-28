@@ -34,7 +34,7 @@ GUI turns that into widgets, hands the edited values back, and asks the
 program for a file. Validation answers a boolean, which is enough for the GUI
 to grey out its Build button.
 
-## The trade
+## Trade-offs
 
 Each sequence is written in Nim and compiled — its own program, built per
 sequence. That buys the speed, and it costs interoperability: a Nim sequence

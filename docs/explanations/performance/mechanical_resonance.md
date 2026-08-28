@@ -34,7 +34,7 @@ a cheaper order, and every shortcut is drawn against the calculation it replaces
 
 ---
 
-## 1. The threshold is calibrated, not derived
+## 1. Calibrating the threshold
 
 A band table states a range and, sometimes, an amplitude. It does not say what
 makes the range dangerous, what the resonance's quality factor is, or how the
@@ -50,7 +50,10 @@ at protocols a console could plausibly prescribe, on two sets of system limits,
 and the $A_\text{eq}$ each one puts inside 515–1650 Hz — the range where every
 inspected band falls — was measured the way the gate measures it:
 
-![Equivalent sustained amplitude of the shipped plugins across realistic protocols, against the threshold](../assets/mechanical_resonance/threshold_ladder.png)
+```{figure} ../assets/mechanical_resonance/threshold_ladder.png
+Equivalent sustained amplitude of the shipped plugins across realistic
+protocols, against the threshold.
+```
 
 The corpus separates, and it separates with a gap:
 
@@ -134,7 +137,7 @@ well. Getting that wrong hands every arm the first arm's spectrum.
 
 ---
 
-## 3. The canonical TR, and the three ways repetitions differ
+## 3. The canonical TR
 
 The analysis runs on a single window and the verdict is taken to hold for the
 scan. That is sound only if nothing the scan does can be louder than the
@@ -155,10 +158,8 @@ an envelope of them, over the real list.
 **C — the waveform varies.** A multishot readout written out shot by shot, a
 trajectory optimised shot by shot: different shapes at the same position. Same
 rule, over the distinct (shape, amplitude, rotation) tuples the position
-actually takes. This is where the two gradient-side checks part company: a
-spectrum at one frequency is a single number, so it can be bounded here,
-whereas the {doc}`stimulation check <pns>` has a peak to find and groups the
-repetitions by the shapes they play instead.
+actually takes. A spectrum at one frequency is a single number, so a position
+can be bounded on its own however its waveform varies.
 
 Neither B nor C changes the period the analysis runs on. Amplitude is an
 instance parameter, so a phase encode stepping through its table never enters
@@ -177,7 +178,10 @@ stack-of-spirals repetition played sixteen times. Same excitation, same
 spiral, same partition encode, same 10 ms period in all four panels; only what
 changes from one repetition to the next is different.
 
-![One repetition played sixteen times, with each kind of variation switched on alone](../assets/mechanical_resonance/canonical_tr.png)
+```{figure} ../assets/mechanical_resonance/canonical_tr.png
+One repetition played sixteen times, with each kind of variation switched on
+alone.
+```
 
 Each panel is drawn against the **whole scan**, not against one repetition:
 what it drives at each TR harmonic, summed from the engine's own
@@ -235,31 +239,50 @@ its peak amplitude or its peak slew would pick by the wrong number.
 
 ---
 
-## 4. Making it cheap: one response per distinct shape
+## 4. One transform per distinct waveform
 
-Walk the TR once and collect, per position and per axis, the distinct waveforms
-it plays and how many there are — the same walk, on the same waveform identity,
-that the {doc}`stimulation check <pns>` makes:
+The TR is read once, and what is read is the gradient columns of the block
+table rather than any rendered waveform.
 
-![Where the acoustic and stimulation checks share a calculation, and where they part](../assets/memoization/shared_memoization.png)
+```{figure} ../assets/mechanical_resonance/memoization.png
+The block table's gradient columns, gathered by position across the TR
+instances and deduplicated on the `(gx, gy, gz)` tuple each position plays.
+A position that takes one tuple contributes to the coherent sum; a position
+that takes several is bounded by the loudest of them, and its waveforms are
+what the rank basis compresses.
+```
 
-Then:
+**The tuple, not the axis, is the unit of the walk.** A position is the same
+position in two instances when all three of its gradient columns match, so
+what is counted per position is the number of distinct
+`(gx, gy, gz, amplitudes, rotation)` combinations, and a gradient column is a
+pair: the definition, which fixes the timing skeleton, and the shape id, which
+fixes the samples. That the tuple is the unit is what makes the bound below
+exact: the loudest combination that *occurs* is not in general the product of
+the per-axis maxima, and a rotation mixes the axes so they cannot be bounded
+separately anyway.
 
-**Multiplicity one.** The waveform is its own basis. Nothing to compress.
+**One tuple.** The position makes a single complex contribution and joins the
+coherent sum: its axes are mixed by its rotation matrix, phased by its start
+time, and added.
 
-**Multiplicity greater than one.** Where the stimulation check stops — it
-reuses one response for every occurrence that shares an identity, and evaluates
-a whole further window for a position that does not — this one goes a step
-further, because a spectrum is linear in the waveform and a truncated tail can
-be bounded and added back. Stack the waveforms into a matrix and take its
-singular value decomposition. If they share a sampling —
-the same raster and the same sample count, resampled onto one grid if a time
-shape says otherwise —
-this is where a multishot readout collapses. Written out shot by shot, a spiral
-gives one waveform per arm, but every arm is the base arm turned, so on each
-physical axis they span exactly two dimensions however many arms there are:
+**Several tuples.** The position has no single contribution, so it is bounded
+by the largest magnitude among the tuples that occur — exact for the position,
+whatever the rotation mixes — and that bound is added to the coherent sum as a
+magnitude.
 
-![The arms, their singular values, and the two encodings judged arm by arm](../assets/mechanical_resonance/basis_equivalence.png)
+**And then, per axis, a rank basis.** A spectrum is linear in the waveform and
+a truncated tail can be bounded and added back, so the distinct waveforms one
+axis takes at a varying position are stacked into a matrix and decomposed. If
+they share a sampling — the same raster and the same sample count, resampled
+onto one grid if a time shape says otherwise — this is where a multishot
+readout collapses. Written out shot by shot, a spiral gives one waveform per
+arm, but every arm is the base arm turned, so on each physical axis they span
+exactly two dimensions however many arms there are:
+
+```{figure} ../assets/mechanical_resonance/basis_equivalence.png
+The arms, their singular values, and the two encodings judged arm by arm.
+```
 
 The third singular value is $2\times10^{-8}$ of the first — the precision the
 waveform is stored in, which is to say zero. With $g_k(t) = \sum_r c_{k,r} v_r(t)$
@@ -306,20 +329,20 @@ shared; only the decomposition is repeated.
 
 **Then collect every distinct waveform across every basis and every channel, and
 transform each one once.** From there, the whole per-axis spectrum at a
-frequency is bookkeeping — the same memoize-once, place-many pattern the
-{doc}`stimulation check <pns>` uses, with a transform where that one has a
-convolution: each occurrence takes its base response out of the table, scales
-it by its amplitude, mixes the three logical axes by its rotation matrix,
-multiplies by $e^{-2\pi i f t_k}$ for its start time, and adds into a complex
-accumulator. Where stimulation combines its axes by root-sum-square at the
-end, this combines them coherently on the way in, because a rotation mixes
-axes and a spectrum is complex.
+frequency is bookkeeping: each occurrence takes its base response out of the
+table, scales it by its amplitude, mixes the three logical axes by its rotation
+matrix, multiplies by $e^{-2\pi i f t_k}$ for its start time, and adds into a
+complex accumulator. The axes are combined coherently on the way in, not at the
+end, because a rotation mixes them and a spectrum is complex.
 
 Compare that with the alternative: walk every block of the scan, render its
 gradients, and transform whatever you find. That is what a timeline analysis
 does, and it pays per block:
 
-![Gate cost against a transform of the timeline, against basis size, and against harmonics in a band](../assets/mechanical_resonance/basis_cost.png)
+```{figure} ../assets/mechanical_resonance/basis_cost.png
+Gate cost against a transform of the timeline, against basis size, and
+against harmonics in a band.
+```
 
 **Scan length: gone.** A transform of the timeline goes from 20 ms to 623 ms
 between 32 and 1024 repetitions, as a transform of the scan must. The gate goes
@@ -370,7 +393,7 @@ Drawing the lines is exempt, so a plotted amplitude is always the measured one.
 
 ---
 
-## 5. How one response is computed
+## 5. Computing one response
 
 "Piecewise linear" is the model the analysis integrates: every gradient is a
 list of (time, amplitude) vertices with the field ramping between them, so a
@@ -431,7 +454,10 @@ Held against a direct numerical Fourier integral of the rendered repetition —
 render the TR, interpolate it, integrate $g(t)e^{-2\pi ift}$ term by term at
 each line, sharing no code with the engine:
 
-![Each family's closed-form response against a direct Fourier integral of the rendered repetition](../assets/mechanical_resonance/shape_response.png)
+```{figure} ../assets/mechanical_resonance/shape_response.png
+Each family's closed-form response against a direct Fourier integral of the
+rendered repetition.
+```
 
 Trapezoids and compressed trains agree to 5 parts in $10^7$, which is the float
 truncation at the engine's own interface and grows with frequency exactly as
@@ -441,7 +467,7 @@ it is not the evaluation: it is the half-cell at each end that the section
 opened with. Stated absolutely rather than relatively, the largest disagreement
 anywhere is 0.006 mT/m against a 7.5 mT/m threshold.
 
-### The lines a finite scan actually has
+### The lines a finite scan has
 
 A resonance does not know where the harmonics of a repetition time are. It
 responds to drive at *its* frequency, wherever that drive happens to sit, so
@@ -453,7 +479,10 @@ multiplies the single-TR transform by the Dirichlet kernel
 $D_M(x) = \sin(M\pi x)/\bigl(M\sin(\pi x)\bigr)$, $x = f\,T_\text{TR}$, and
 that puts real drive between the teeth:
 
-![One harmonic of a finite scan, its Dirichlet lobes, and where the probes have to sit](../assets/mechanical_resonance/finite_reps.png)
+```{figure} ../assets/mechanical_resonance/finite_reps.png
+One harmonic of a finite scan, its Dirichlet lobes, and where the probes
+have to sit.
+```
 
 The kernel peaks at $x = k + (j+\tfrac12)/M$ with heights $2/\pi(2j{+}1)$:
 0.64, 0.21, 0.13, 0.09, and down. Those heights do not depend on $M$ — only
@@ -505,7 +534,9 @@ The per-harmonic markers are a reporting convention laid on top of that. Each
 harmonic's row carries the worst of the frequencies in the interval up to the
 next harmonic, so a row can be flagged by a lobe rather than by its own line.
 
-![An echo train's teeth read against two bands that state no amplitude](../assets/mechanical_resonance/epi_comb.png)
+```{figure} ../assets/mechanical_resonance/epi_comb.png
+An echo train's teeth read against two bands that state no amplitude.
+```
 
 A single-shot echo train is the clearest case — its teeth are the harmonics of
 the echo spacing — and the comb is what the analysis produces without ever
@@ -527,7 +558,7 @@ lines.ok              # the verdict the predownload gate will reach
 
 ---
 
-## The same answer, checked
+## Equivalence tests
 
 Each shortcut is a claim that two calculations agree, and each has a test that
 computes both:

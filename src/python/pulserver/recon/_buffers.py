@@ -86,7 +86,9 @@ class ReconBuffer:
         Where each sample was taken, ``(dimensions, ...)`` over the same axes
         as :attr:`kspace`, or ``None`` for a scan whose acquisitions carry no
         trajectory. Allocated on the first one that does, so a Cartesian scan
-        never holds one.
+        never holds one, and as wide as the widest acquisition placed so far:
+        an axis an acquisition does not traverse is left off what it carries
+        and reads back as the zero it was.
     center_sample : int or None
         Index of the echo along the readout axis, from the acquisitions
         themselves, or ``None`` until the first one arrives.
@@ -244,6 +246,12 @@ class ReconBuffer:
 
         MRD gives a trajectory as ``(samples, dimensions)``; it is transposed
         here so it is indexed like :attr:`kspace`, dimension first.
+
+        An acquisition states its own dimensionality, and a trailing axis it
+        does not traverse is left off what it carries -- the centre partition
+        of a Cartesian slab traverses no kz, and says so with two dimensions
+        where its neighbours say three. So the rows an acquisition carries are
+        placed and the rest stay zero, which is where that axis was.
         """
         traj = getattr(acquisition, "traj", None)
         if traj is None:
@@ -251,11 +259,19 @@ class ReconBuffer:
         traj = np.asarray(traj)
         if traj.size == 0:
             return
+        dimensions = int(traj.shape[-1])
         if self.trajectory is None:
             self.trajectory = np.zeros(
-                (traj.shape[-1], *self.kspace.shape[1:]), dtype=traj.dtype
+                (dimensions, *self.kspace.shape[1:]), dtype=traj.dtype
             )
-        self.trajectory[(slice(None), *where, readout)] = traj.T
+        elif dimensions > self.trajectory.shape[0]:
+            widened = np.zeros(
+                (dimensions, *self.trajectory.shape[1:]),
+                dtype=self.trajectory.dtype,
+            )
+            widened[: self.trajectory.shape[0]] = self.trajectory
+            self.trajectory = widened
+        self.trajectory[(slice(0, dimensions), *where, readout)] = traj.T
 
     def select(self, **where: int) -> tuple[Any, Any]:
         """The ``(kspace, mask)`` at one position along the named axes.

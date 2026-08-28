@@ -1,4 +1,4 @@
-# The design side: a Python service on a compiled core
+# The design side
 
 This is where Pulserver started. A Pulseq file is usually treated as an
 artefact: someone runs a script, gets a `.seq`, copies it to the scanner.
@@ -55,7 +55,7 @@ caught while the sequence is being written rather than reported back from
 the exam room. {doc}`../performance/sequence_creation` shows where each check
 sits in the write path.
 
-## The declaration is part of the sequence
+## The protocol declaration
 
 A sequence program does not just build a sequence; it states what it can be
 asked for. Parameters are declared with their kind, bounds and defaults, and
@@ -101,7 +101,7 @@ carry a table of what a GRE needs; it asks. Adding a parameter is a change in
 one place, and a protocol saved against one version can be validated against
 another rather than silently meaning something else.
 
-## Two ways the console asks
+## The two console entry points
 
 **Headless.** The interpreter calls the sequence program directly and gets a
 structured answer back: valid or not, the acquisition time, a message. This
@@ -140,7 +140,7 @@ starts from the plugin's default protocol and applies the edits it was given
 Both paths go through the same declaration and the same plugin, so a sequence
 written once works either way.
 
-## The compiled core: a drop-in `pypulseq`
+## The compiled core
 
 The reason a Python sequence can answer on the console's clock is that the
 Python is only the *loop*; everything the loop calls is compiled.
@@ -165,7 +165,7 @@ point here is only that *no individual sequence pays for it* — one compiled
 core, shared by every plugin, with the sequences themselves staying plain
 Python.
 
-## Why this shapes the rest
+## Consequences for the rest of the system
 
 Once a sequence is a service, three requirements follow that a
 write-a-file-and-copy-it workflow never imposes:

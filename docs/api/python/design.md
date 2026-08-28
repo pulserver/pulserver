@@ -72,6 +72,20 @@ to get there, which is what a loop needs to place its TI or TE.
 Readouts that sample on a rectilinear grid: one line per repetition, or a
 train of lines per excitation.
 
+`LineReadout3D` and `FseReadout3D` take a `wave` argument, off by default,
+which plays a corkscrew under the readout's flat top: a sinusoid on the phase
+axis, a cosinusoid on the partition axis, either alone or both. `wave_cycles`
+is how many turns it makes across the readout and `wave_amplitude` the peak it
+is allowed, which the system's slew rate lowers when it must. Only a 3D readout
+can carry one -- the corkscrew spreads a voxel along the two encoded axes
+transverse to the readout, and a 2D readout has only one of them.
+
+It is self-balanced: it enters and leaves the readout at zero and encloses no
+net area, so nothing downstream compensates for it and `pp.scale_grad(event,
+0.0)` switches it off line by line without touching the block definition the
+autocalibration lines share with the imaging train.
+{doc}`apps` reconstructs the result with `wave3D_recon`.
+
 ```{eval-rst}
 .. autosummary::
    :toctree: ../generated/design

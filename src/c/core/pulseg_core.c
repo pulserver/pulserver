@@ -1175,7 +1175,7 @@ int pulseg_convert_collection(
             goto fail;
         }
 
-        result = pulseg__get_tr_in_sequence(&desc, diag);
+        result = pulseg__get_tr_in_sequence(&desc, &files[i], diag);
         if (PULSEG_FAILED(diag->code))
             goto fail;
 

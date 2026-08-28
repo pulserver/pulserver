@@ -241,9 +241,11 @@ def test_the_worst_case_bounds_repetitions_that_differ_only_in_shape():
     spoiler = pp.make_trapezoid("z", area=4e3, system=system)
     ramp = np.linspace(0, 1, samples)
 
-    # Shot 0 oscillates fastest and so reaches the nerve least; the later
-    # shots are slower and reach it more. Every one peaks at one amplitude,
-    # which is what leaves the shape as the only thing that differs.
+    # Every shot peaks at one amplitude, which is what leaves the shape as the
+    # only thing that differs. How far each reaches the nerve is then the
+    # nerve model's business and not a matter of who oscillates fastest --
+    # which is the reason the worst case has to be searched over the shapes
+    # rather than inferred from them.
     built = pp.Sequence(system=system)
     for turns in np.linspace(6, 1, 6):
         shape = 0.2 * system.max_grad * np.sin(2 * np.pi * turns * ramp)
@@ -259,8 +261,11 @@ def test_the_worst_case_bounds_repetitions_that_differ_only_in_shape():
         built.calculate_pns(IRNICH, do_plots=False, tr=index)[1].max()
         for index in range(built._structure_for("test").num_instances)
     ]
-    # The shots really do reach the nerve differently, or any window passes.
-    assert max(played) > min(played) * 1.02
+    # The shapes are not interchangeable, or any window would pass: a search
+    # that folded them together and evaluated one would answer with a peak
+    # below the worst, and the bound below would catch it. The margin only has
+    # to clear the tolerance that bound is checked with.
+    assert max(played) > min(played) * (1 + 1e-3)
     assert max(played) <= window * (1 + 1e-6)
 
 

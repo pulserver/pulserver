@@ -898,7 +898,10 @@ int pulseg__get_unique_blocks(
     const pulseg_opts *opts);
 
 /* --- pulseg_structure.c --- */
-int pulseg__get_tr_in_sequence(pulseg_sequence_descriptor *desc, pulseg_diagnostic *diag);
+int pulseg__get_tr_in_sequence(
+    pulseg_sequence_descriptor *desc,
+    const pulseq_file *seq,
+    pulseg_diagnostic *diag);
 int pulseg__build_exec_stream(pulseg_sequence_descriptor *desc, pulseg_diagnostic *diag);
 int pulseg__get_exec_stream_segments(
     pulseg_sequence_descriptor *desc,

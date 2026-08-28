@@ -31,6 +31,20 @@ import pulserver.pypulseq as pp  # noqa: E402
 from _figures import FAINT, INK, MUTED, SERIES, _style  # noqa: E402
 from pulserver._ext.pulseg import _calc_mech_resonances, _check_safety  # noqa: E402
 
+# House style: a figure has to be legible at the width a manual page gives it.
+plt.rcParams.update(
+    {
+        "font.size": 11.0,
+        "axes.titlesize": 12.5,
+        "axes.labelsize": 11.5,
+        "xtick.labelsize": 10.5,
+        "ytick.labelsize": 10.5,
+        "legend.fontsize": 10.5,
+        "figure.titlesize": 13.0,
+    }
+)
+
+
 ASSETS = Path(__file__).resolve().parents[1] / "explanations" / "assets" / "mechanical_resonance"
 GAMMA = 42.576e3
 ACTUAL = 2
@@ -124,8 +138,9 @@ def threshold_ladder():
         rows.append((label, freqs, amps, float(amps[window].max()) if window.any() else 0.0))
     rows.sort(key=lambda r: -r[3])
 
-    figure, axes = plt.subplots(6, 2, figsize=(9.2, 10.6), dpi=170)
-    figure.subplots_adjust(hspace=0.72, wspace=0.16, top=0.93, bottom=0.06, left=0.08, right=0.985)
+    figure, axes = plt.subplots(6, 2, figsize=(8.6, 11.6), dpi=170)
+    figure.subplots_adjust(hspace=0.72, wspace=0.16, top=0.895, bottom=0.055,
+                           left=0.08, right=0.985)
     for index, (label, freqs, amps, in_band) in enumerate(rows):
         axis = axes[index // 2, index % 2]
         drawn = freqs <= 2000.0
@@ -138,17 +153,17 @@ def threshold_ladder():
         axis.set_ylim(0, max(BASE_AMP, 1.05 * float(amps[drawn].max())))
         _style(axis, label)
         axis.text(0.995, 0.94, f"{in_band:.1f} mT/m in band", transform=axis.transAxes,
-                  ha="right", va="top", fontsize=7.4,
+                  ha="right", va="top", fontsize=10.0,
                   color=SERIES[1] if loud else MUTED)
         if index // 2 == 5:
-            axis.set_xlabel("frequency (Hz)", fontsize=8)
+            axis.set_xlabel("frequency (Hz)", fontsize=10.8)
         if index % 2 == 0:
-            axis.set_ylabel("$A_{eq}$ (mT/m)", fontsize=8)
+            axis.set_ylabel("$A_{eq}$ (mT/m)", fontsize=10.8)
     figure.suptitle(
-        "Equivalent sustained amplitude of the shipped plugins, across realistic protocols\n"
-        f"shaded: where vendor bands fall · dashed: the {POLICY} mT/m threshold · "
-        "orange: refused in band",
-        x=0.08, ha="left", fontsize=9.5, color=INK)
+        "Equivalent sustained amplitude of the shipped plugins,\n"
+        "across realistic protocols. Shaded: where vendor bands fall.\n"
+        f"Dashed: the {POLICY} mT/m threshold. Orange: refused in band.",
+        x=0.02, y=0.995, ha="left", va="top", fontsize=12.0, color=INK)
     figure.savefig(ASSETS / "threshold_ladder.png", facecolor="white")
     plt.close(figure)
     return [(label, in_band) for label, _, _, in_band in rows]
@@ -203,8 +218,8 @@ def basis_cost():
                            use_rotation_ext=False)._structure_for("bound")
         harmonics.append((100.0 * structure.tr_duration, _gate_ms(structure.collection, band)))
 
-    figure, axes = plt.subplots(1, 3, figsize=(9.6, 3.0), dpi=170)
-    figure.subplots_adjust(wspace=0.34, top=0.78, bottom=0.20, left=0.08, right=0.985)
+    figure, axes = plt.subplots(1, 3, figsize=(8.6, 4.1), dpi=170)
+    figure.subplots_adjust(wspace=0.36, top=0.64, bottom=0.19, left=0.09, right=0.985)
 
     axis = axes[0]
     x, y = zip(*timeline)
@@ -215,9 +230,11 @@ def basis_cost():
     axis.set_yscale("log")
     axis.set_ylim(1e-2, 1e4)
     _style(axis, "scan length")
-    axis.set_xlabel("repetitions", fontsize=8)
-    axis.set_ylabel("ms", fontsize=8)
-    axis.legend(frameon=False, fontsize=7.4, loc="upper left")
+    axis.set_xlabel("repetitions", fontsize=10.8)
+    axis.set_ylabel("ms", fontsize=10.8)
+    axis.legend(frameon=False, fontsize=9.6, loc="lower left", ncol=1,
+                bbox_to_anchor=(0.0, 1.14, 1.0, 0.16), mode="expand",
+                borderaxespad=0.0, handlelength=1.2)
 
     axis = axes[1]
     for data, color, label in ((arms_free, SERIES[1], "written out"),
@@ -226,20 +243,22 @@ def basis_cost():
         axis.plot(x, y, "o-", color=color, lw=1.4, ms=4, label=label)
     axis.set_ylim(0, max(v for _, v in arms_free) * 1.6)
     _style(axis, "basis size")
-    axis.set_xlabel("spiral arms", fontsize=8)
-    axis.set_ylabel("gate (ms)", fontsize=8)
-    axis.legend(frameon=False, fontsize=7.4, loc="upper left")
+    axis.set_xlabel("spiral arms", fontsize=10.8)
+    axis.set_ylabel("gate (ms)", fontsize=10.8)
+    axis.legend(frameon=False, fontsize=9.6, loc="lower left", ncol=1,
+                bbox_to_anchor=(0.0, 1.14, 1.0, 0.16), mode="expand",
+                borderaxespad=0.0, handlelength=1.2)
 
     axis = axes[2]
     x, y = zip(*harmonics)
     axis.plot(x, y, "o-", color=SERIES[3], lw=1.4, ms=4)
     axis.set_ylim(0, max(y) * 1.4)
     _style(axis, "harmonics inside the band")
-    axis.set_xlabel("band width × $T_{TR}$", fontsize=8)
-    axis.set_ylabel("gate (ms)", fontsize=8)
+    axis.set_xlabel("band width × $T_{TR}$", fontsize=10.8)
+    axis.set_ylabel("gate (ms)", fontsize=10.8)
 
-    figure.suptitle("What the gate's cost actually depends on", x=0.08, ha="left",
-                    fontsize=9.5, color=INK)
+    figure.suptitle("What the gate's cost actually depends on", x=0.02, y=0.995,
+                    ha="left", va="top", fontsize=12.0, color=INK)
     figure.savefig(ASSETS / "basis_cost.png", facecolor="white")
     plt.close(figure)
     return dict(scans=scans, timeline=timeline, written=arms_free, turned=arms_bound,

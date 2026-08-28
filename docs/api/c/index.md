@@ -59,7 +59,7 @@ the order does not.
 
 For the calls that serve more than one stage:
 
-| | |
+| Role | Where it lives |
 |---|---|
 | **Reading a `.seq`** | The raw file model, on its own terms. {doc}`pulseq` |
 | **Types and limits** | `pulseg_opts` and the rasters everything is judged against; the list and buffer types that carry variable-length arguments. {doc}`types` |
@@ -75,7 +75,7 @@ For the calls that serve more than one stage:
 These hold across every header, so a signature can be read without looking
 anything up.
 
-| | |
+| Convention | Rule |
 |---|---|
 | Prefix | every entry point is `pulseq_` or `pulseg_`, and `extern "C"` under C++ |
 | Result | `PULSEQ_SUCCESS` / `PULSEG_SUCCESS`, or a negative `*_ERR_*`, tested with `PULSEG_SUCCEEDED()` / `PULSEG_FAILED()` and their `PULSEQ_` spellings |

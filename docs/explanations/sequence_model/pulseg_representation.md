@@ -11,6 +11,12 @@ Pulserver deliberately takes a different route; the companion page,
 
 ## The mapping
 
+```{figure} ../assets/pulseg/pulserver_mapping.png
+The four structures the specification defines, and the one Pulserver adds
+above them. The addition is derived from the block content, which is what
+keeps it from disagreeing with the sequence it describes.
+```
+
 Conversion happens in one pass: the interpreter parses the `.seq` and builds
 the PulSeg structures directly, with no intermediate file. Every quantity the
 specification's four structures carry is carried here:
@@ -26,7 +32,7 @@ The representation is lossless with respect to what plays: filling the
 definitions back in and applying the instance parameters recovers the playout
 the `.seq` describes, sample for sample.
 
-## The extension: the structural TR
+## The addition: the structural TR
 
 The specification's top level stops at the segment. It says which runs of
 blocks are reusable units; it does not say what the scan is a repetition
@@ -55,7 +61,7 @@ the boundaries the specification asks the designer to mark with `TRID` are
 computed instead — the sequence labels its own repeating units, whether or
 not its author labelled anything.
 
-## Where Pulserver diverges, deliberately
+## Declared divergences from the specification
 
 Pulserver conforms *semantically* — an interpreter reading its structures
 sees exactly the objects the specification defines — but three choices are
@@ -78,7 +84,7 @@ declared rather than hidden:
 - **Times are integer microseconds** — the scanner's own clock — where the
   specification speaks seconds.
 
-## Why a scanner wants this shape
+## What the definition/instance split buys
 
 The split between definitions and instances is not bookkeeping; it is the
 difference between a sequence that fits and one that does not. A definition

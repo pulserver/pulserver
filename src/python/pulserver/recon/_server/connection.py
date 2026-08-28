@@ -5,7 +5,14 @@ This module provides the Connection class for managing connections to ISMRMRD cl
 including reading and writing various message types with logging and filtering capabilities.
 """
 
-__all__ = ["Connection", "DataSaver", "DummySaver", "build_save_path"]
+__all__ = [
+    "Connection",
+    "DataSaver",
+    "DummySaver",
+    "build_save_path",
+    "route_log_to_bucket",
+    "set_log_file",
+]
 
 import contextlib
 import logging
@@ -149,6 +156,96 @@ def build_save_path(metadata: Any, fallback_dir: str) -> str:
 
     os.makedirs(folder, exist_ok=True)
     return os.path.join(folder, filename)
+
+
+# ---------------------------------------------------------------------------
+# Per-scan log routing
+# ---------------------------------------------------------------------------
+
+#: The log file the server was started with, or ``None`` when it logs only to
+#: stdout.  Set once by the entry point; read by :func:`route_log_to_bucket`.
+_log_file: str | None = None
+
+#: The per-scan handler currently attached, and the bucket it belongs to.
+_scan_log_handler: logging.Handler | None = None
+_scan_log_pid: str | None = None
+
+
+def set_log_file(path: str | None) -> None:
+    """Record the log file the server was started with.
+
+    Parameters
+    ----------
+    path : str or None
+        The file the root logger writes to, or ``None``.
+    """
+    global _log_file
+    _log_file = path
+
+
+def _bucket_pid_of(metadata: Any) -> str | None:
+    """The ``bucket_pid`` user parameter of an MRD header, or ``None``."""
+    try:
+        params = getattr(metadata, "userParameters", None)
+        if params is None:
+            return None
+        for p in params.userParameterString:
+            if p.name == "bucket_pid":
+                return p.value
+    except Exception:
+        return None
+    return None
+
+
+def route_log_to_bucket(metadata: Any) -> None:
+    """Send this scan's log lines to ``mrdserver<pid>.log``.
+
+    One server outlives the scan that started it, so the file it was given at
+    startup names only the first scan's PSD process. Every session that names
+    a different bucket gets a file of its own, beside the one the server was
+    started with, so a scan's recon log sits next to that scan's
+    ``pulserver<pid>.log``.
+
+    Parameters
+    ----------
+    metadata : object
+        The parsed ISMRMRD header of the incoming session.
+    """
+    global _scan_log_handler, _scan_log_pid
+
+    if _log_file is None:
+        return
+    pid = _bucket_pid_of(metadata)
+    if pid is None or pid == _scan_log_pid:
+        return
+
+    directory = os.path.dirname(os.path.abspath(_log_file))
+    wanted = os.path.join(directory, f"mrdserver{pid}.log")
+    root = logging.getLogger()
+
+    if _scan_log_handler is not None:
+        root.removeHandler(_scan_log_handler)
+        _scan_log_handler.close()
+        _scan_log_handler = None
+    _scan_log_pid = pid
+
+    if os.path.abspath(wanted) == os.path.abspath(_log_file):
+        return
+
+    try:
+        os.makedirs(directory, exist_ok=True)
+        handler = logging.FileHandler(wanted)
+    except OSError as exc:
+        logging.warning("Could not open %s for this scan: %s", wanted, exc)
+        return
+
+    for existing in root.handlers:
+        if existing.formatter is not None:
+            handler.setFormatter(existing.formatter)
+            break
+    root.addHandler(handler)
+    _scan_log_handler = handler
+    logging.info("Logging this scan to %s", wanted)
 
 
 # ---------------------------------------------------------------------------

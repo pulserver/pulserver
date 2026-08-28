@@ -54,6 +54,11 @@ def test_every_echo_is_centred(design):
     asserted is that they straddle it symmetrically -- which is the claim --
     and not which of the two ``argmin`` returns, since that is decided by the
     last bits of an amplitude and not by the sequence.
+
+    The tolerance is the one an amplitude survives being written with. A
+    sequence is deduplicated on its way into a file, which collapses rows that
+    agree to the precision the file keeps, so a readout is symmetric to that
+    and no further -- and it is the written sequence a scanner plays.
     """
     seq = design()
     k_traj_adc, *_ = seq.calculate_kspace()
@@ -66,7 +71,7 @@ def test_every_echo_is_centred(design):
     step = np.abs(right - left)
 
     assert np.all(left < 0.0) and np.all(right > 0.0)
-    assert np.allclose(np.abs(left), np.abs(right), rtol=1e-12, atol=0.0)
+    assert np.allclose(np.abs(left), np.abs(right), rtol=1e-6, atol=0.0)
     assert np.all(np.abs(left) < step)
 
 

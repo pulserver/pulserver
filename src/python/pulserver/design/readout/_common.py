@@ -332,6 +332,18 @@ def wave_gradients(
     return {**events, "amplitude": peak / system.gamma}
 
 
+def _area(waveform: np.ndarray) -> float:
+    """The area under an arbitrary gradient entered and left at zero, per raster.
+
+    Its samples sit at raster centres and it reaches zero over half a raster at
+    each end, so k follows the straight lines between those points and the
+    first and last samples are worth a quarter of what an interior one is.
+    Summing the samples instead is a different waveform's area, and one the
+    sequence's own k-space would not agree with.
+    """
+    return float(waveform.sum() - 0.25 * (waveform[0] + waveform[-1]))
+
+
 def _balanced(shape: np.ndarray, envelope: np.ndarray) -> np.ndarray:
     """``shape`` under ``envelope``, offset until its net area is exactly zero.
 
@@ -339,6 +351,6 @@ def _balanced(shape: np.ndarray, envelope: np.ndarray) -> np.ndarray:
     waveform's ends anywhere but zero. Everything here is affine in the
     offset, which makes finding it one division rather than a search.
     """
-    at_zero = float((shape * envelope).sum())
-    per_unit = float(envelope.sum())
+    at_zero = _area(shape * envelope)
+    per_unit = _area(envelope)
     return (shape - at_zero / per_unit) * envelope

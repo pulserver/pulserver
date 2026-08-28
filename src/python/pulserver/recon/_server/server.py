@@ -20,7 +20,7 @@ import ismrmrd.xsd
 from ..plugin import ReconPlugin, ReconContext
 from .application import run_application
 from .concurrency import compute_max_concurrent
-from .connection import Connection, DataSaver, build_save_path
+from .connection import Connection, DataSaver, build_save_path, route_log_to_bucket
 from .exam import ExamCacheManager
 from .rtp_connection import RtpServer
 
@@ -220,6 +220,8 @@ class Server:
             except Exception:
                 logging.warning("Metadata is not valid MRD XML — passing as text")
                 metadata = metadata_xml
+
+            route_log_to_bucket(metadata)
 
             # Observing the XML header changes the current exam immediately,
             # even if this connection must be queued. An old generation remains

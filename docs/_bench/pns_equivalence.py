@@ -42,6 +42,20 @@ import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 from matplotlib.lines import Line2D  # noqa: E402
 
+# House style: a figure has to be legible at the width a manual page gives it.
+plt.rcParams.update(
+    {
+        "font.size": 11.0,
+        "axes.titlesize": 12.5,
+        "axes.labelsize": 11.5,
+        "xtick.labelsize": 10.5,
+        "ytick.labelsize": 10.5,
+        "legend.fontsize": 10.5,
+        "figure.titlesize": 13.0,
+    }
+)
+
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import pulserver.pypulseq as pp  # noqa: E402
@@ -210,7 +224,7 @@ def thresholds(axis, label=False):
             transform=axis.get_yaxis_transform(),
             ha="left",
             va="bottom",
-            fontsize=7.2,
+            fontsize=9.7,
             color="#e34948",
         )
         axis.text(
@@ -220,17 +234,21 @@ def thresholds(axis, label=False):
             transform=axis.get_yaxis_transform(),
             ha="left",
             va="bottom",
-            fontsize=7.2,
+            fontsize=9.7,
             color=MUTED,
         )
 
 
 def legend(target, handles=None, labels=None, **kwargs):
-    kwargs.setdefault("fontsize", 7.6)
+    """A legend above the axes it belongs to, never on top of the data."""
+    kwargs.setdefault("fontsize", 9.4)
     kwargs.setdefault("frameon", False)
-    made = (
-        target.legend(handles, labels, **kwargs) if handles else target.legend(**kwargs)
-    )
+    kwargs.setdefault("loc", "lower left")
+    kwargs.setdefault("bbox_to_anchor", (0.0, 1.14, 1.0, 0.16))
+    kwargs.setdefault("mode", "expand")
+    kwargs.setdefault("borderaxespad", 0.0)
+    kwargs.setdefault("handlelength", 1.2)
+    made = target.legend(handles, labels, **kwargs) if handles else target.legend(**kwargs)
     for text in made.get_texts():
         text.set_color(MUTED)
     return made
@@ -254,9 +272,11 @@ def save(figure, stem):
 def canonical_tr():
     kernel_pair = stack_kernel()
 
-    figure, axes = plt.subplots(2, 4, figsize=(11.6, 5.9), height_ratios=(1.0, 0.55))
+    figure, axes = plt.subplots(
+        len(CASES), 2, figsize=(8.6, 9.4), width_ratios=(1.0, 0.66)
+    )
     figure.subplots_adjust(
-        hspace=0.62, wspace=0.24, top=0.80, bottom=0.10, left=0.062, right=0.99
+        hspace=0.70, wspace=0.30, top=0.875, bottom=0.055, left=0.105, right=0.985
     )
 
     for column, (letter, what, arm_varies, encode_varies) in enumerate(CASES):
@@ -269,7 +289,7 @@ def canonical_tr():
         millis = np.arange(scan.size) * dt * 1e3
         period_ms = tr_samples * dt * 1e3
 
-        top = axes[0, column]
+        top = axes[column, 0]
         for edge in range(1, reps):
             top.axvline(edge * period_ms, color=FAINT, lw=0.7, zorder=0)
         top.plot(millis, scan * 100.0, color=SERIES[0], lw=1.4, zorder=3)
@@ -291,19 +311,20 @@ def canonical_tr():
             if spread < 1e-6
             else f"repetitions differ by up to {spread:.0f} mT/m",
             transform=top.transAxes,
-            fontsize=7.4,
+            fontsize=9.4,
             color=MUTED,
             va="top",
             ha="right",
         )
         top.set_xlim(0, millis[-1])
         top.set_ylim(0, 124)
-        if column == 0:
-            top.set_ylabel("stimulation (% of threshold)", fontsize=8)
+        top.set_ylabel("% of threshold", fontsize=10.4)
+        if column == len(CASES) - 1:
+            top.set_xlabel("time across the scan (ms)", fontsize=10.4)
 
         peaks = per_rep.max(axis=1) * 100.0
         judged = window.max() * 100.0
-        bottom = axes[1, column]
+        bottom = axes[column, 1]
         for edge in range(1, reps):
             bottom.axvline(edge * period_ms, color=FAINT, lw=0.7, zorder=0)
         bottom.plot(
@@ -320,9 +341,9 @@ def canonical_tr():
         bottom.set_xlim(0, millis[-1])
         span = max(judged - peaks.min(), 0.06)
         bottom.set_ylim(peaks.min() - 0.45 * span, judged + 0.5 * span)
-        bottom.set_xlabel("time across the scan (ms)", fontsize=8)
-        if column == 0:
-            bottom.set_ylabel("peak of each\nrepetition (%)", fontsize=8)
+        bottom.set_ylabel("peak per\nrepetition (%)", fontsize=10.4)
+        if column == len(CASES) - 1:
+            bottom.set_xlabel("time across the scan (ms)", fontsize=10.4)
         print(
             f"    {letter} {what:28} judged {judged:7.3f} %  worst repetition "
             f"{peaks.max():7.3f} %  ratio {judged / peaks.max():.4f}  "
@@ -342,15 +363,18 @@ def canonical_tr():
             "threshold",
         ],
         loc="upper center",
-        bbox_to_anchor=(0.5, 0.935),
-        ncols=3,
+        bbox_to_anchor=(0.5, 0.945),
+        ncols=2,
+        fontsize=9.8,
     )
     figure.suptitle(
-        "Four repetitions played straight through, each kind of variation switched on "
-        "alone — the window's peak is exactly the worst repetition's, in all four",
+        "Each kind of variation switched on alone. In all four, the window's\n"
+        "peak is exactly the worst repetition's.",
         x=0.02,
+        y=0.995,
         ha="left",
-        fontsize=10,
+        va="top",
+        fontsize=12.0,
         color=INK,
     )
     return save(figure, "canonical_tr")
@@ -453,7 +477,7 @@ def assembly_cost():
             f"{f['direct'] / f['assembled']:6.1f}x"
         )
 
-    figure, panels = plt.subplots(1, 3, figsize=(9.8, 3.1), dpi=170)
+    figure, panels = plt.subplots(1, 3, figsize=(8.6, 4.1), dpi=170)
     figure.subplots_adjust(wspace=0.36, top=0.78, bottom=0.26, left=0.08, right=0.985)
 
     axis = panels[0]
@@ -470,9 +494,9 @@ def assembly_cost():
     axis.set_xscale("log")
     axis.set_yscale("log")
     _style(axis, "scan length")
-    axis.set_xlabel("repetitions", fontsize=8)
-    axis.set_ylabel("ms", fontsize=8)
-    axis.legend(frameon=False, fontsize=7.4, loc="upper left")
+    axis.set_xlabel("repetitions", fontsize=10.8)
+    axis.set_ylabel("ms", fontsize=10.8)
+    legend(axis, ncol=1)
 
     axis = panels[1]
     index = np.arange(len(families))
@@ -493,11 +517,11 @@ def assembly_cost():
     axis.set_yscale("log")
     axis.set_xticks(index)
     axis.set_xticklabels(
-        [f["label"] for f in families], fontsize=7.2, rotation=25, ha="right"
+        [f["label"] for f in families], fontsize=9.7, rotation=25, ha="right"
     )
     _style(axis, "one window, two ways")
-    axis.set_ylabel("multiply-adds (M)", fontsize=8)
-    axis.legend(frameon=False, fontsize=7.4, loc="upper left")
+    axis.set_ylabel("multiply-adds (M)", fontsize=10.8)
+    legend(axis, ncol=1)
 
     axis = panels[2]
     axis.plot(
@@ -514,21 +538,23 @@ def assembly_cost():
             (f["ms"], f["direct"] / f["assembled"]),
             textcoords="offset points",
             xytext=(6, -3),
-            fontsize=7.0,
+            fontsize=9.5,
             color=MUTED,
         )
     axis.set_xscale("log")
     axis.set_yscale("log")
     axis.set_xlim(4, 6000)
     _style(axis, "what the assembly buys")
-    axis.set_xlabel("window duration (ms)", fontsize=8)
-    axis.set_ylabel("speedup", fontsize=8)
+    axis.set_xlabel("window duration (ms)", fontsize=10.8)
+    axis.set_ylabel("speedup", fontsize=10.8)
 
     figure.suptitle(
         "What the stimulation check's cost actually depends on",
-        x=0.08,
+        x=0.02,
+        y=0.995,
         ha="left",
-        fontsize=9.5,
+        va="top",
+        fontsize=12.0,
         color=INK,
     )
     return save(figure, "assembly_cost")
@@ -559,7 +585,7 @@ def epi_verdict():
     window = window_response(sequence, dt, kernel, tr_samples) * 100.0
     millis = np.arange(tr_samples) * dt * 1e3
 
-    figure, axis = plt.subplots(figsize=(9.8, 3.6))
+    figure, axis = plt.subplots(figsize=(8.6, 3.84))
     figure.subplots_adjust(top=0.80, bottom=0.18)
     axis.plot(millis, window, color=SERIES[0], lw=1.0, zorder=3)
     peak = int(np.argmax(window))
@@ -569,20 +595,20 @@ def epi_verdict():
         (millis[peak], window[peak]),
         textcoords="offset points",
         xytext=(10, -2),
-        fontsize=8,
+        fontsize=10.8,
         color="#e34948",
     )
     thresholds(axis, label=True)
     _style(axis, "")
     axis.set_xlim(0, millis[-1])
     axis.set_ylim(0, max(118, 1.12 * window.max()))
-    axis.set_xlabel("time within the repetition (ms)", fontsize=8)
-    axis.set_ylabel("stimulation (% of threshold)", fontsize=8)
+    axis.set_xlabel("time within the repetition (ms)", fontsize=10.8)
+    axis.set_ylabel("stimulation (% of threshold)", fontsize=10.8)
     figure.suptitle(
         "The verdict: one number, the peak of the combined response over the window",
         x=0.02,
         ha="left",
-        fontsize=10,
+        fontsize=12.0,
         color=INK,
     )
     print(f"    peak {window.max():.2f} % at {millis[peak]:.2f} ms")

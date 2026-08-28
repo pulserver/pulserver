@@ -19,7 +19,13 @@ is a statement about the declared system and the scanner's verdict is a
 statement about the real one, which is why the scanner's is the one that
 decides.
 
-## What Pulseq checks, and what it leaves out
+```{figure} ../assets/safety/where_checks_run.png
+The four moments a gradient or RF constraint can be tested at, and what runs
+at each on the two paths a file can take. Pulserver moves *when* a check runs,
+not what it computes.
+```
+
+## What the reference toolboxes check
 
 The reference toolboxes check gradient amplitude and slew as each block is
 added — gradient continuity along with them, since a step across a block
@@ -36,36 +42,41 @@ design time, as views rather than gates: `calc_pns` (the SAFE model, hence
 Siemens hardware) and `calc_gradient_spectrum` draw a picture for you to
 read.
 
-## Where the checks run
+## Where each check runs
 
 Pulserver runs the same checks, and turns those two views into verdicts.
 What it moves is *when*.
 
-Amplitude, slew and continuity are deferred to `write()` rather than paid at
-every `add_block`, and they go together under one flag. The pass runs over
-the gradient library, so it costs one evaluation per distinct waveform however
-many times the scan plays it, which is what makes a protocol-scale sequence
-affordable to check at all.
+Amplitude, slew, continuity and timing are deferred to `write()` rather than
+paid at every `add_block`, and they go together under two flags,
+`check_gradients` and `check_timing`. The pass runs over the gradient
+library, so it costs one evaluation per distinct waveform however many times
+the scan plays it, which is what makes a protocol-scale sequence affordable to
+check at all.
 
-They can also be switched off, and on the scanner path they are. The
-interpreter checks amplitude, slew, continuity and timing at predownload
-using the same C safety core the Python bindings call — so design time and
-parse time are not two implementations to keep in agreement, they are one
-implementation invoked from two places, and the answers cannot differ.
-Running it twice therefore buys nothing, while running it only at the scanner
-buys two things: a pass saved, and an answer computed against the raster
+**A file written for the scanner runs none of them.** That is the recommended
+pipeline for a plugin, and `write_sequence(seq, path, offline=False)` is how
+it is written: the binary writer takes no check flags at all, and the
+interpreter checks amplitude, slew, continuity and timing at predownload using
+the same C safety core the Python bindings call. Design time and parse time are not two
+implementations to keep in agreement — they are one implementation invoked
+from two places, and the answers cannot differ. Running it twice therefore
+buys nothing, while running it only at the scanner buys two things: a pass
+saved on every prescription change, and an answer computed against the raster
 times and limits the scanner actually has rather than the ones the script
 declared.
 
-A file written for anywhere else — a bench, a foreign toolbox, a colleague —
-gets every check at design time instead, because nothing downstream will run
-them.
+**A file written for anywhere else keeps them on.** A bench, a foreign
+toolbox, a colleague's directory — nothing downstream will run the checks, so
+the design-time pass is the only one there will be. `write_sequence(seq, path,
+offline=True)` writes `.seq` text through `write()`, with both flags on and a
+signature appended.
 
-## What is checked
+## The three checks Pulserver owns
 
 | Check | Needs | Refuses |
 |---|---|---|
-| {doc}`gradient_slew` | `max_grad`, `max_slew` | an axis or the vector above the limit; a slew above it, including across block boundaries, where a discontinuity is also caught as itself |
+| {doc}`gradient_slew` | `max_grad`, `max_slew`, the rasters | an axis or the vector above the limit; a slew above it, including across block boundaries, where a discontinuity is also caught as itself; an event time the hardware cannot address |
 | {doc}`pns` | a coil response model | a stimulation estimate above threshold |
 | {doc}`mechanical_resonance` | a forbidden-band table | a sustained drive inside a band the system must not be driven in |
 
@@ -74,7 +85,7 @@ The other two need site data that no sequence file carries — a coil's
 chronaxie and saturation, a magnet's acoustic bands — and are opt-in: supply
 the data and the check runs, omit it and it is skipped rather than guessed.
 
-## SAR and heating stay with the vendor
+## SAR and heating
 
 The vendor's routines own these, which is why this repository has no section
 on them. What Pulserver supplies is their input, and those routines are only
@@ -82,7 +93,7 @@ as right as the repetition they are handed: Pulserver hands them the worst
 one — a worst-case B1rms for the RF chain, a positional-maximum gradient
 envelope and its duty cycle for the amplifiers.
 
-## Everything is checked over the TR
+## Every check is defined over the TR
 
 That is the same requirement the checks here have. SAR and coil heating are
 defined per unit time over a repetition; gradient heating over a duty cycle;
@@ -96,19 +107,19 @@ one, not the first and not the mean: an RF train whose flip angle ramps has a
 worst B1rms somewhere in the middle, and a gradient envelope is evaluated at
 the positional maximum across instances.
 
-## Running them
+## The Python surface
 
 ```python
 ok, message = seq.check_hardware_limits()      # amplitude and slew
 ok, message = seq.check_gradient_continuity()  # joins across block boundaries
+ok, report = seq.check_timing()                # rasters and dead times
 seq.calculate_pns(hardware, tr="worst_case")   # the stimulation estimate
 seq.calculate_gradient_spectrum(               # the acoustic drive
     tr="worst_case", bands=bands, resonance_lines=True,
 )
 ```
 
-`write()` runs the first two itself under `check_gradients=True`, and the
-timing check under `check_timing=True`. A plugin writing for the scanner asks
-for neither: `write_sequence(seq, path, offline=False)` writes the binary form
-unchecked and lets predownload decide. From an interpreter, the two analyses
-come in one call — {doc}`../../examples/c/safety_gate`.
+`write()` runs the first two itself under `check_gradients=True`, and
+`check_timing()` under `check_timing=True`; both default to on. A
+plugin writing for the scanner asks for neither. From an interpreter, the two
+analyses come in one call — {doc}`../../examples/c/safety_gate`.

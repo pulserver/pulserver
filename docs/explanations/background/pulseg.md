@@ -11,32 +11,64 @@ Those distinctions are what an interpreter needs, and they are what the
 **PulSeg intermediate representation** (spec v2.1-alpha, J-F Nielsen and
 M. Cencini) adds. This page is the published model.
 
-## Static and dynamic, separated
+## Definitions and instance parameters
 
 The central move. In Pulseq an event is one record: a phase encode written
 128 times is 128 records that differ in one number. PulSeg splits every event
 into
 
-- a **definition** — the part fixed for the whole scan: the normalized
-  waveform shape, a trapezoid's rise/flat/fall times, an ADC's sample count
-  and dwell, an RF pulse's envelope; and
+- a **definition** — the part fixed for the whole scan: a trapezoid's
+  rise/flat/fall times, an arbitrary gradient's delay, sample count and time
+  shape, an ADC's sample count and dwell, an RF pulse's envelope; and
 - an **instance parameter** — the part that varies per playout: the gradient
-  amplitude, the RF amplitude, phase and frequency offsets, the shot index
-  that selects a waveform variant, the rotation.
+  amplitude, the RF amplitude, phase and frequency offsets, the waveform shape
+  id, the rotation.
 
-![One gradient event, split into the shape that is fixed for the scan and the amplitude the playout sets](../assets/pulseg/event_split.png)
+```{figure} ../assets/pulseg/event_split.png
+A trapezoid, played four times. Its definition is the three corner times; the
+amplitude is what each playout sets.
+```
 
 An interpreter cares about this split because the two halves have different
 costs. A definition is *prepared*: converted to hardware units, resampled to
-the sequencer's raster, loaded into pulse-generator memory — expensive, and
+the sequencer's raster, reserved in pulse-generator memory — expensive, and
 done once. An instance parameter is *applied*: written into a scan-loop row —
 cheap, and done a million times. Without the split every block is prepared
 from scratch, and a 30-minute protocol does not fit in the time or the memory
 a scanner has.
 
-![The same shots as a flat list of complete records, and as definitions prepared once beside the rows applied per shot](../assets/pulseg/scan_split.png)
+```{figure} ../assets/pulseg/scan_split.png
+The same shots as a flat list of complete records, and as definitions prepared
+once beside the rows applied per shot.
+```
 
-## Base blocks: the functional relationship between events
+## Definition sharing between waveforms
+
+A trapezoid is the easy case: its definition is its geometry, and there is
+nothing else to it. An arbitrary waveform is where the split has to be read
+carefully, because its samples are *not* part of its definition.
+
+```{figure} ../assets/pulseg/definition_sharing.png
+Two spiral arms written out shot by shot. Their samples differ, but their
+timing skeleton — delay, raster, sample count — is identical, so they are one
+definition and two shapes.
+```
+
+A gradient definition is the timing skeleton: the delay, the number of
+samples, and the time shape if the waveform carries one. Two arbitrary
+gradients that agree on all three share one definition however different their
+samples are, and the shape id that names the samples travels with the
+instance instead. What follows is the thing that matters at the hardware end:
+**one definition is one reservation**. An interpreter lays out a buffer of that
+length for the block position once, and each playout writes its own shape into
+it, rather than reserving one buffer per arm.
+
+The same statement read the other way is a warning. Two waveforms of
+*different* lengths cannot share a reservation, so a family of shots written
+at a common length costs one buffer and a family written at ragged lengths
+costs one buffer each.
+
+## Base blocks
 
 A **base block** is the definition-level identity of a block: the tuple of
 event definitions it plays and its duration. Two blocks share a base block
@@ -53,7 +85,7 @@ Pulseq has no such object. Its libraries deduplicate *events* independently;
 the block is only the row that names them, and nothing records that the same
 combination recurs.
 
-## Virtual segments: reusable ordered groups
+## Virtual segments
 
 A **virtual segment** is an ordered list of base blocks that is played as a
 unit, repeatedly. It is the granularity a real-time sequencer executes: the
@@ -69,7 +101,7 @@ varies between instances is what the instance table carries.
 
 The specification's top level is small:
 
-| | |
+| Structure | What it holds |
 |---|---|
 | `BaseBlock` | one block's definitions and duration |
 | `VirtualSegment` | an ordered list of base block ids |
@@ -80,7 +112,7 @@ A Pulseq file is recovered from this by filling the definitions back in and
 applying the instance parameters; the representation is lossless with respect
 to what plays.
 
-## The one thing the designer must still supply
+## Segment boundaries: declared, not derived
 
 The specification recovers these structures from a Pulseq file, but not
 automatically: segment boundaries are **declared**, by the sequence designer,

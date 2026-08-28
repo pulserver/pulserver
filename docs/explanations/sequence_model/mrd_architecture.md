@@ -1,4 +1,4 @@
-# The MRD path: client and server
+# The MRD path
 
 {doc}`MRD <../background/ismrmrd>` defines what a reconstruction service
 receives. On a real scanner, both ends of that definition are missing: the
@@ -14,14 +14,20 @@ server: Gadgetron, the Python MRD services, or Pulserver's own. The server
 accepts any MRD client, and reconstructs a file recorded from one just as it
 reconstructs a live scan.
 
-![The path from the spectrometer to the images: the scanner's native packets and the sequence enter the C++ client, which converts, enriches and demodulates them; the MRD session protocol carries the stream to the Python server, whose reconstruction slots share an exam cache and whose overflow is drained to disk and replayed](../assets/mrd_path/mrd_path.png)
+```{figure} ../assets/mrd_path/mrd_path.png
+The path from the spectrometer to the images: the scanner's native packets
+and the sequence enter the C++ client, which converts, enriches and
+demodulates them; the MRD session protocol carries the stream to the Python
+server, whose reconstruction slots share an exam cache and whose overflow is
+drained to disk and replayed.
+```
 
 ## The client: producing the stream
 
 The client runs beside the vendor's own reconstruction pipeline and does
 three jobs, in order.
 
-### Convert on the fly
+### Conversion
 
 As acquisitions arrive from the spectrometer, the client converts each native
 packet to an MRD acquisition and sends it immediately — streaming while the
@@ -35,7 +41,7 @@ behind an interface, so a different vendor's converter — or a different
 GE-side one — slots in without touching the enrichment or the session logic
 below.
 
-### Enrich from the Pulseq file
+### Enrichment from the Pulseq file
 
 A converted packet is samples with a vendor header — correct, but ignorant:
 it does not know its k-space trajectory, where its echo sits, or which
@@ -66,7 +72,7 @@ scanner played, parsed in C++ (`read_sequence_files()` walks the
   message, so a server that does not need it simply ignores it, and
   physiological traces travel the same channel beside it.
 
-### Undo the FOV shift
+### FOV-shift demodulation
 
 An off-isocentre prescription is applied at design time as a phase — the
 sequence is played as if at isocentre, and every sample carries
@@ -111,7 +117,7 @@ images, or converted to DICOM first if it asked for that.
 Three things beyond that are the server's own, and each exists because a
 scanner is not a workstation.
 
-### The exam, not the connection, is the unit of context
+### The exam is the unit of context
 
 Sensitivity maps, a subspace basis, a gridding plan: these are expensive,
 and within one exam they are often the *same* for scan after scan. So each
@@ -139,7 +145,7 @@ Keys should carry what an artifact actually depends on — geometry, coil
 configuration, trajectory or basis identity. Sharing an exam does not by
 itself make two sensitivity maps interchangeable.
 
-### Concurrency is derived from RAM, not guessed
+### Concurrency is derived from available RAM
 
 An iterative or deep-learning reconstruction is measured in tens of
 gigabytes, and two of them on a box that fits one do not run half as fast —
@@ -159,7 +165,7 @@ Both the per-reconstruction estimate and the resulting limit are overridable,
 by command-line flag or environment variable, for a machine or a
 reconstruction that is not typical.
 
-### A scan that arrives with no slot free is queued, not dropped
+### Overflow: queued, never dropped
 
 Refusing the connection is not an option — the scan has already happened, and
 the client has nowhere to put the data. Stalling the client is not one
@@ -192,7 +198,7 @@ opens the file, hands the header to the plugin as its context, and drives the
 ordinary hooks over the acquisitions in acquisition order — in process, with
 no socket and no port.
 
-## Closing the loop in real time
+## The real-time round trip
 
 Reconstruction consumes a scan. A real-time process *changes* it: something
 measured mid-scan comes back in time to alter what is still to be played.
@@ -202,7 +208,10 @@ synchronous exchange: one acquisition out as it is measured, exactly one
 result back for it, before the interpreter reaches the blocks the result
 bears on.
 
-![The real-time round trip: the interpreter sends one acquisition as it is measured and receives one tagged result before the blocks it bears on](../assets/mrd_path/mrd_feedback.png)
+```{figure} ../assets/mrd_path/mrd_feedback.png
+The real-time round trip: the interpreter sends one acquisition as it is
+measured and receives one tagged result before the blocks it bears on.
+```
 
 The channel is deliberately uncommitted about what a result *means*. It
 carries a tagged payload, and the tag is what the interpreter dispatches on:

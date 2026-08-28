@@ -73,6 +73,7 @@ int pulseg__count_grad_samples_for_block(
 {
     int count;
     int num_samples;
+    int holds_after_delay;
     float delay_us, rise_us, flat_us, fall_us, duration_us;
     float grad_raster_us;
     pulseq_shape decomp_time;
@@ -101,6 +102,12 @@ int pulseg__count_grad_samples_for_block(
     }
     else
     {
+        /* A delayed arbitrary gradient holds zero until its waveform starts,
+         * so the end of the delay is a vertex of its own -- the one a delayed
+         * trapezoid gets before its ramp. It is not needed when the first
+         * sample already sits there, which is where an extended trapezoid's
+         * time shape puts it. */
+        holds_after_delay = 0;
         if (gdef->unused_or_time_shape_id > 0 &&
             gdef->unused_or_time_shape_id <= desc->num_shapes &&
             pulseq_decompress_shape(
@@ -109,15 +116,19 @@ int pulseg__count_grad_samples_for_block(
                 grad_raster_us))
         {
             duration_us = delay_us + decomp_time.samples[decomp_time.num_uncompressed_samples - 1];
+            if (delay_us > 0.0f && decomp_time.samples[0] > 0.0f)
+                holds_after_delay = 1;
         }
         else
         {
             duration_us =
                 delay_us + 0.5f * grad_raster_us + grad_raster_us * (float)(num_samples - 1);
+            if (delay_us > 0.0f)
+                holds_after_delay = 1;
         }
         if (decomp_time.samples)
             PULSEG_FREE(decomp_time.samples);
-        count += num_samples;
+        count += num_samples + holds_after_delay;
     }
 
     if (duration_us < block_duration_us)
@@ -732,8 +743,19 @@ int pulseg__fill_grad_waveform_for_block(
                 has_time_shape = 1;
         }
 
+        /* The axis is at zero until the waveform starts, so the end of the
+         * delay is a vertex. Without it the composition runs straight from
+         * the block's start to the first sample, which is a gradient nothing
+         * plays and a slew rate lower than the one that is. Counted by
+         * count_grad_samples_for_block under the same condition. */
         if (has_time_shape)
         {
+            if (delay_us > 0.0f && decomp_time.samples[0] > 0.0f)
+            {
+                time[idx] = t0 + delay_us;
+                waveform[idx] = 0.0f;
+                idx++;
+            }
             for (i = 0; i < num_samples; ++i)
             {
                 t_sample = t0 + delay_us + decomp_time.samples[i];
@@ -745,6 +767,12 @@ int pulseg__fill_grad_waveform_for_block(
         }
         else
         {
+            if (delay_us > 0.0f)
+            {
+                time[idx] = t0 + delay_us;
+                waveform[idx] = 0.0f;
+                idx++;
+            }
             for (i = 0; i < num_samples; ++i)
             {
                 t_sample = t0 + delay_us + 0.5f * grad_raster_us + (float)i * grad_raster_us;

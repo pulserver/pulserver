@@ -398,6 +398,79 @@ MU_TEST(test_max_energy_instance_is_the_hottest)
     check_max_energy_instance("mprage_stack_of_spirals_3d.seq");
 }
 
+/* A gradient event with a delay does not drive its axis until the delay is
+ * over, so the composition holds zero across it. Without a vertex at the end
+ * of the delay it runs straight from the block's start to the first waveform
+ * sample instead -- a gradient nothing plays, at a slew rate lower than the
+ * one that is.
+ *
+ * The wave-encoded fixture is where this bites: every other delayed arbitrary
+ * gradient in the corpus is an extended trapezoid, whose time shape already
+ * puts a sample at the end of the delay. */
+MU_TEST(test_a_delayed_gradient_holds_zero_until_its_waveform_starts)
+{
+    pulseg_collection *coll = NULL;
+    pulseg_sequence_descriptor *desc;
+    pulseg_tr_waveforms w;
+    pulseg_diagnostic diag;
+    float t0;
+    int rc, blk, axis, i, checked;
+
+    memset(&w, 0, sizeof(w));
+    rc = load_corpus_seq(&coll, "gre_wave_3d.seq", &s_opts);
+    mu_assert(PULSEG_SUCCEEDED(rc), "load_corpus_seq failed");
+    desc = &coll->descriptors[0];
+
+    rc = pulseg_get_tr_waveforms(coll, &w, &diag, 0, PULSEG_AMP_ACTUAL, 0, 0);
+    mu_assert(PULSEG_SUCCEEDED(rc), "pulseg_get_tr_waveforms failed");
+
+    checked = 0;
+    t0 = 0.0f;
+    for (blk = 0; blk < desc->tr_descriptor.tr_size; ++blk)
+    {
+        const pulseg_block_table_element *bte = &desc->block_table[blk];
+        const int raw[3] = {bte->gx_id, bte->gy_id, bte->gz_id};
+        const pulseg_channel_waveform *composed[3];
+
+        composed[0] = &w.gx;
+        composed[1] = &w.gy;
+        composed[2] = &w.gz;
+
+        for (axis = 0; axis < 3; ++axis)
+        {
+            const pulseg_grad_definition *gdef;
+
+            if (raw[axis] < 0 || raw[axis] >= desc->grad_table_size)
+                continue;
+            if (desc->grad_table[raw[axis]].id < 0 ||
+                desc->grad_table[raw[axis]].id >= desc->num_unique_grads)
+                continue;
+            gdef = &desc->grad_definitions[desc->grad_table[raw[axis]].id];
+            if (gdef->type != 1 || gdef->delay <= 0)
+                continue;
+
+            for (i = 0; i < composed[axis]->num_samples; ++i)
+            {
+                float t = composed[axis]->time_us[i];
+
+                if (t < t0 || t >= t0 + (float)gdef->delay)
+                    continue;
+                mu_assert_float_near(
+                    "a delayed gradient drove its axis before its waveform began",
+                    0.0f,
+                    composed[axis]->amplitude[i],
+                    1.0f);
+                checked++;
+            }
+        }
+        t0 += blk_dur(desc, blk);
+    }
+
+    mu_assert(checked > 0, "the fixture carries no delayed arbitrary gradient");
+    pulseg_tr_waveforms_free(&w);
+    pulseg_collection_free(coll);
+}
+
 MU_TEST_SUITE(test_corner_points_suite)
 {
     pulseg_opts_init(&s_opts, GAMMA_HZ_PER_T, 3.0f, 1.0e7f, 1.0e11f, 1.0f, 10.0f, 0.1f, 10.0f);
@@ -407,6 +480,7 @@ MU_TEST_SUITE(test_corner_points_suite)
     MU_RUN_TEST(test_corner_stream_matches_uniform_path_rotated);
     MU_RUN_TEST(test_corner_stream_is_not_a_raster);
     MU_RUN_TEST(test_max_energy_instance_is_the_hottest);
+    MU_RUN_TEST(test_a_delayed_gradient_holds_zero_until_its_waveform_starts);
 }
 
 int test_corner_points_main(void)

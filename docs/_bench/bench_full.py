@@ -533,7 +533,7 @@ def figures(results: dict) -> None:
                     textcoords="offset points",
                     ha="right",
                     color="#2e75b6",
-                    fontsize=7,
+                    fontsize=9.5,
                 )
             elif reference[0] == "per_block":
                 # Read off the largest protocol of each family, where the
@@ -556,7 +556,7 @@ def figures(results: dict) -> None:
                     textcoords="offset points",
                     ha="right",
                     color="#666666",
-                    fontsize=7,
+                    fontsize=9.5,
                 )
 
         ax.set_xlabel("sequence size  [blocks]")
@@ -576,6 +576,92 @@ def figures(results: dict) -> None:
         fig.savefig(ASSETS / f"{stem}.png", bbox_inches="tight")
         plt.close(fig)
         print(f"  {ASSETS / (stem + '.png')}", flush=True)
+
+
+#: The stage-by-stage harness beside this one.  Its results carry the split
+#: *inside* the two halves of a download, which this one measures only as two
+#: totals; the pies below are drawn from it.
+PIPELINE_RESULTS = Path(__file__).resolve().parent / "bench_pipeline.json"
+
+#: Which case of that harness the pies show.  One case, named on the page:
+#: a pie of several protocols averaged together would describe none of them.
+PIE_CASE = "cartesian"
+
+#: (label, colour, key) per slice, design side then interpreter side.
+DESIGN_SLICES = [
+    ("the design loop", "#4c72b0", "design_s"),
+    ("TransformFOV", "#dd8452", "transform_fov_s"),
+    ("deduplication", "#55a868", "remove_duplicates_s"),
+    ("binary write", "#8172b3", "to_binary_s"),
+]
+CONVERT_SLICES = [
+    ("parse and convert", "#4c72b0", "parse_convert_binary_s"),
+    ("structure", "#dd8452", None),
+    ("cache write", "#55a868", "cache_write_s"),
+]
+#: The three passes that make up "structure": the period, the partition, and
+#: the consistency pass over the result.
+STRUCTURE_KEYS = ("find_tr_s", "segments_s", "consistency_s")
+
+
+def pies() -> None:
+    """Two pies: what a design costs, and what reading it back costs."""
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    if not PIPELINE_RESULTS.exists():
+        print(f"  (no {PIPELINE_RESULTS.name}; skipping the pies)", flush=True)
+        return
+
+    data = json.loads(PIPELINE_RESULTS.read_text())
+    creation = data["creation"][PIE_CASE]
+    conversion = data["conversion"][PIE_CASE]
+
+    def collect(entry, slices):
+        out = []
+        for label, colour, key in slices:
+            value = (
+                sum(float(entry[k]) for k in STRUCTURE_KEYS)
+                if key is None
+                else float(entry[key])
+            )
+            out.append((label, colour, value))
+        return out
+
+    _style()
+    ASSETS.mkdir(parents=True, exist_ok=True)
+    fig, axes = plt.subplots(1, 2, figsize=(8.6, 4.3))
+    panels = (
+        (axes[0], "(a) design side", collect(creation, DESIGN_SLICES)),
+        (axes[1], "(b) interpreter side", collect(conversion, CONVERT_SLICES)),
+    )
+    for ax, title, parts in panels:
+        total = sum(v for _, _, v in parts)
+        wedges, _ = ax.pie(
+            [v for _, _, v in parts],
+            colors=[c for _, c, _ in parts],
+            startangle=90,
+            counterclock=False,
+            wedgeprops={"linewidth": 0.8, "edgecolor": "white"},
+        )
+        ax.set_title(f"{title} — {total:.1f} s", fontsize=11.0, loc="center")
+        ax.legend(
+            wedges,
+            [f"{label}   {100 * v / total:.0f}%" for label, _, v in parts],
+            frameon=False,
+            fontsize=10.0,
+            loc="upper center",
+            bbox_to_anchor=(0.5, -0.02),
+            handlelength=1.0,
+            borderaxespad=0.0,
+        )
+        ax.set_aspect("equal")
+    fig.tight_layout()
+    fig.savefig(ASSETS / "time_split.png", bbox_inches="tight")
+    plt.close(fig)
+    print(f"  {ASSETS / 'time_split.png'}", flush=True)
 
 
 #: What each plugin's own controls are called, for the summary table. The
@@ -656,6 +742,7 @@ def main() -> int:
 
     if args.figures_only:
         figures(json.loads(RESULTS.read_text()))
+        pies()
         return 0
 
     if args.table_only:
@@ -665,6 +752,7 @@ def main() -> int:
     results = sweep([args.only] if args.only else list(SIZES))
     if not args.no_figures:
         figures(results)
+        pies()
     print(table(results))
     print(f"results -> {RESULTS}")
     return 0

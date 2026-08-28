@@ -258,11 +258,38 @@ def _zte_3d():
     )
 
 
+def _gre_wave_3d():
+    """The wave-encoded slab the reader's corkscrew test reads.
+
+    Two-fold accelerated on both encoded axes, so the wave-free
+    autocalibration rectangle and the wave-encoded imaging train are both in
+    the file and a reader has to tell them apart by what the trajectory did
+    within each readout.
+    """
+    from pulserver.app import gre3D_sequence
+
+    return gre3D_sequence.main(
+        n_x=32,
+        n_y=16,
+        n_z=8,
+        slab_thickness=64e-3,
+        readout_bandwidth_hz=125e3,
+        n_acs=6,
+        n_acs_z=4,
+        acceleration=2,
+        acceleration_z=2,
+        n_dummy=2,
+        wave="both",
+        wave_cycles=4,
+    )
+
+
 #: name -> builder for the single-file fixtures.
 CORPUS = {
     "gre_2d": _gre_2d,
     "gre_2d_3sl": _gre_2d_3sl,
     "gre_3d": _gre_3d,
+    "gre_wave_3d": _gre_wave_3d,
     "se_2d": _se_2d,
     "se_3d": _se_3d,
     "gre_multiecho_2d": _gre_multiecho_2d,

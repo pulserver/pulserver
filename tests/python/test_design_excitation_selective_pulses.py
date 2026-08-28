@@ -94,11 +94,22 @@ def test_a_band_with_no_width_is_refused(system):
 
 def test_a_spectral_spatial_pulse_selects_a_slice_and_a_band(system):
     water = design.SpspExcitation(
-        system, 30.0, thickness_m=10e-3, spectral_bandwidth_hz=300.0, n_subpulses=12
+        system, 30.0, thickness_m=10e-3, spectral_bandwidth_hz=300.0, n_subpulses=10
     )
     assert len(water.blocks) == 2
     assert water.gz.channel == "z"
     assert water.gz_reph.channel == "z"
+
+
+def test_a_train_whose_lobes_already_cancel_gets_no_rephaser(system):
+    """Half the lobes fall after the pulse's centre and they alternate, so an
+    even number of them leaves nothing to undo -- and a rephaser carrying
+    something anyway would be the thing that spoiled the slice."""
+    water = design.SpspExcitation(
+        system, 30.0, thickness_m=10e-3, spectral_bandwidth_hz=300.0, n_subpulses=12
+    )
+    assert len(water.blocks) == 1
+    assert not hasattr(water.events, "gz_reph")
 
 
 def test_its_selection_gradient_alternates(system):
@@ -109,6 +120,42 @@ def test_its_selection_gradient_alternates(system):
     waveform = np.asarray(water.gz.waveform)
     assert waveform.min() < 0 < waveform.max()
     assert np.sum(np.diff(np.sign(waveform[waveform != 0])) != 0) >= 10
+
+
+@pytest.mark.parametrize("thickness_m", [10e-3, 64e-3, 128e-3])
+def test_the_pulse_leaves_k_where_it_found_it(system, thickness_m):
+    """A slice or slab that does not refocus has no signal to give.
+
+    The train's own lobes cancel along it, but the pulse excites at its centre
+    and what the gradient accrues after that is what has to be undone. So the
+    question is asked of k rather than of the waveform: where the excitation
+    ends, k is back at the origin.
+    """
+    water = design.SpspExcitation(
+        system, 30.0, thickness_m=thickness_m, spectral_bandwidth_hz=300.0
+    )
+    seq = pp.Sequence(system)
+    for block in water.blocks:
+        seq.add_block(*block)
+    seq.add_block(pp.make_adc(num_samples=2, dwell=system.grad_raster_time))
+    kz = float(np.asarray(seq.calculate_kspace()[0])[2][-1])
+    assert abs(kz) < 1e-6 / thickness_m
+
+
+def test_a_slab_carries_its_rephasing_in_the_selection_gradient(system):
+    """A 3D readout encodes partitions on the selection axis, so a rephaser of
+    its own would have nowhere to sit. Merged, it is one event and one block,
+    and k still comes back to the origin."""
+    slab = design.SpspExcitation(
+        system, 30.0, thickness_m=128e-3, spectral_bandwidth_hz=300.0, is_slab=True
+    )
+    assert len(slab.blocks) == 1
+    assert not hasattr(slab.events, "gz_reph")
+
+    seq = pp.Sequence(system)
+    seq.add_block(*slab.blocks[0])
+    seq.add_block(pp.make_adc(num_samples=2, dwell=system.grad_raster_time))
+    assert abs(float(np.asarray(seq.calculate_kspace()[0])[2][-1])) < 1e-6 / 128e-3
 
 
 def test_the_rephaser_can_be_left_out(system):

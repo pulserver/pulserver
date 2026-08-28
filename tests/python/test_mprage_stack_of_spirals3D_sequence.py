@@ -61,11 +61,20 @@ def test_the_arms_are_turned_by_extension_unless_written_out():
 
 
 def test_both_ways_of_holding_the_arms_sample_the_same_k_space():
-    turned = design(partition_angle_offset_deg=6.0)
-    written = design(partition_angle_offset_deg=6.0, use_rotation_ext=False)
+    """The arms land on the same points however the angle is carried.
+
+    Written out, an arm passes through the shape codec once per angle, and
+    what that quantises integrates along the readout. So the two routes are
+    compared against the k-space step a sample would have to move by to be a
+    different sample -- which is what "the same k-space" means -- rather than
+    against the largest k the scan reaches, which is no scale at all.
+    """
+    fov = 220e-3
+    turned = design(fov=fov, partition_angle_offset_deg=6.0)
+    written = design(fov=fov, partition_angle_offset_deg=6.0, use_rotation_ext=False)
     k_turned, *_ = turned.calculate_kspace(dense=False)
     k_written, *_ = written.calculate_kspace(dense=False)
-    assert np.abs(k_turned - k_written).max() < 1e-6 * np.abs(k_turned).max()
+    assert np.abs(k_turned - k_written).max() < 1e-3 / fov
 
 
 def test_a_partition_offset_turns_the_arm_along_kz():

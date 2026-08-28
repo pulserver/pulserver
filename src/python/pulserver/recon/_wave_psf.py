@@ -257,6 +257,46 @@ class WavePSF(torch.nn.Module):
         return (2.0 * pi * gyromagnetic_ratio * moment).to(torch.float32)
 
     @staticmethod
+    def phase_from_trajectory(
+        trajectory: Any,
+        *,
+        reference: int = 0,
+    ) -> torch.Tensor:
+        """Read the Wave phase off a readout's own k-space trajectory.
+
+        The counterpart of :meth:`phase_from_gradients` for a scan that was
+        acquired rather than designed: the two encoded axes of a wave-encoded
+        readout move within it, and that movement is the phase. What the
+        readout's phase encode set is the constant underneath it, and a Wave
+        gradient is played self-balanced -- entering and leaving the readout at
+        zero -- so the constant is the trajectory at the reference sample.
+
+        Parameters
+        ----------
+        trajectory
+            k along the phase and partition axes, shape ``(..., 2, samples)``,
+            in cycles per metre.
+        reference
+            Sample the phase is referred to, the one at which the axes sit at
+            their phase encode. The first, where the gradient has yet to
+            accrue anything.
+
+        Returns
+        -------
+        torch.Tensor
+            Phase accrual with shape ``(..., 2, samples)`` in rad/m.
+        """
+        trajectory = torch.as_tensor(trajectory, dtype=torch.float32)
+        if trajectory.ndim < 2 or trajectory.shape[-2] != 2:
+            raise ValueError("trajectory must have shape (..., 2, samples)")
+        if trajectory.shape[-1] < 2:
+            raise ValueError("at least two trajectory samples are required")
+        if not -trajectory.shape[-1] <= reference < trajectory.shape[-1]:
+            raise ValueError("reference must index a trajectory sample")
+        offset = trajectory.select(-1, reference).unsqueeze(-1)
+        return (2.0 * pi * (trajectory - offset)).to(torch.float32)
+
+    @staticmethod
     def sinusoidal_phase(
         readout_size: int,
         readout_duration: float,

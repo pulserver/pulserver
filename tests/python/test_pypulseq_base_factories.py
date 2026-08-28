@@ -126,17 +126,30 @@ def test_an_slr_pulse_has_the_bandwidth_it_was_designed_for(system):
         )
 
 
-def test_a_spsp_pulse_rides_an_alternating_gradient_that_ends_balanced():
+@pytest.mark.parametrize("n_subpulses", [10, 12])
+def test_a_spsp_pulse_rides_an_alternating_gradient_that_ends_balanced(n_subpulses):
+    """The train cancels over its whole length, and what the pulse's centre
+    leaves behind is rephased -- by an event when there is something to undo,
+    and by the train itself when the lobes after the centre already cancel."""
     fast = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=180, slew_unit="T/m/s")
     rf, gz, gz_reph = pp.make_spsp_pulse(
-        np.deg2rad(30), 10e-3, 300.0, n_subpulses=12, system=fast
+        np.deg2rad(30), 10e-3, 300.0, n_subpulses=n_subpulses, system=fast
     )
     assert rf.type == "rf"
     # Alternating lobes over an even count cancel to zero net area.
     assert float(np.trapezoid(gz.waveform, gz.tt)) == pytest.approx(
         0.0, abs=1e-6 * abs(gz.waveform).max()
     )
-    assert gz_reph.channel == "z"
+    assert (gz_reph is None) == (n_subpulses // 2 % 2 == 0)
+
+    seq = pp.Sequence(fast)
+    seq.add_block(rf, gz)
+    if gz_reph is not None:
+        seq.add_block(gz_reph)
+    seq.add_block(pp.make_adc(num_samples=2, dwell=fast.grad_raster_time))
+    assert float(np.asarray(seq.calculate_kspace()[0])[2][-1]) == pytest.approx(
+        0.0, abs=1e-4
+    )
 
 
 def test_a_spsp_pulse_refuses_what_the_hardware_cannot_do(system):

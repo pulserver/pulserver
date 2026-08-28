@@ -548,6 +548,45 @@ class LineReadout3D(_LineReadout):
            label="shot",
            title="LineReadout3D, a 5 x 3 corner of the encoding plane",
        )
+
+    With ``wave`` set, a corkscrew turns under the readout's flat top and every
+    voxel is smeared along it. It encloses no net area and enters and leaves at
+    zero, so the line ends its readout at the ``(ky, kz)`` its own phase encode
+    put it at, whether the corkscrew was played or scaled away:
+
+    .. plot::
+
+       import matplotlib.pyplot as plt
+       import numpy as np
+       import pulserver.design as design
+       import pulserver.pypulseq as pp
+       from _figures import SERIES, _style
+
+       system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+       slab = design.SpatialSelectiveExcitation(system, 8.0, 0.12, is_slab=True)
+       readout = design.LineReadout3D(
+           system, slab.rf, slab.gz, fov=(0.22, 0.22, 0.12), matrix=(128, 128, 64),
+           wave="both", wave_cycles=8,
+       )
+
+       raster = system.grad_raster_time
+       figure, axes = plt.subplots(2, 1, figsize=(7.0, 4.4), sharex=True)
+       for index, (event, name) in enumerate(
+           ((readout.gy_wave, "phase"), (readout.gz_wave, "partition"))
+       ):
+           waveform = np.asarray(event.waveform) / system.gamma * 1e3
+           time = (event.delay + np.arange(waveform.size) * raster) * 1e3
+           axes[0].plot(time, waveform, color=SERIES[index], label=name)
+           axes[1].plot(
+               time,
+               np.cumsum(waveform) * raster * 1e-3 * system.gamma,
+               color=SERIES[index],
+           )
+       _style(axes[0], "gradient, mT/m")
+       _style(axes[1], "k, 1/m")
+       axes[1].set_xlabel("time within the readout block, ms")
+       axes[0].legend(frameon=False, fontsize=8)
+       figure.suptitle("the corkscrew starts and ends where the encode left it")
     """
 
     _ndim = 3
