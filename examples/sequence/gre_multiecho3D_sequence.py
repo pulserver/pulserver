@@ -49,6 +49,22 @@ MAX_GRAD = 80.0
 MAX_SLEW = 200.0
 
 
+#: Whether the plugin wave-encodes the readout. A corkscrew gradient during
+#: the readout spreads every voxel along it, so the aliasing parallel imaging
+#: has to separate is spread with it and a higher acceleration comes back
+#: clean. ``"phase"`` drives the phase axis, ``"partition"`` the partition
+#: axis, ``"both"`` the corkscrew. :mod:`pulserver.app.wave3D_recon` is what
+#: reads it back -- an ordinary Cartesian reconstruction cannot.
+WAVE = None
+
+#: Periods of the corkscrew across the readout, and the peak it reaches on
+#: each axis in T/m. The amplitude is a ceiling: a sinusoid slews at its
+#: amplitude times its frequency, so a fast corkscrew is bounded by the
+#: gradient system rather than by what is asked of it.
+WAVE_CYCLES = 8
+WAVE_AMPLITUDE = 8e-3
+
+
 def main(
     plot: bool = False,
     test_report: bool = False,
@@ -81,6 +97,9 @@ def main(
     n_gain_calibration_readouts: int = 1,
     rf_spoiling_increment_deg: float = 117.0,
     spoiling_cycles: float = 4.0,
+    wave: str | None = None,
+    wave_cycles: int = WAVE_CYCLES,
+    wave_amplitude: float = WAVE_AMPLITUDE,
 ) -> pp.Sequence:
     """Create an RF-spoiled multi-echo 3D Cartesian gradient-echo sequence.
 
@@ -291,14 +310,20 @@ def main(
         n_averages=n_averages,
         n_dummy=n_dummy,
         spoiling_cycles=spoiling_cycles,
+        wave=wave,
+        wave_cycles=wave_cycles,
+        wave_amplitude=wave_amplitude,
     )
     readout = kernel.readout
     fov_x, fov_y = kernel.fov
     pairs = kernel.pairs
     last_calibration_pair = kernel.n_calibration - 1
 
+    # The wave-free calibration pass is repetitions of its own, and the
+    # spoiling schedule has to cover every one of them.
+    n_wave_calibration = kernel.n_calibration if wave is not None else 0
     rf_phases = pp.make_rf_spoiling_schedule(
-        len(pairs) + n_dummy,
+        len(pairs) + n_dummy + n_wave_calibration,
         increment=np.deg2rad(rf_spoiling_increment_deg),
     )
 
@@ -308,13 +333,32 @@ def main(
     wait_te = getattr(readout, "wait_te", None)
     wait_tr = getattr(readout, "wait_tr", None)
 
-    def repetition(ky: float, kz: float, acquire: bool, mark=None) -> None:
+    def corkscrew(scale: float) -> tuple:
+        """The wave events at ``scale``, or nothing when the wave is off.
+
+        Scaling rather than dropping them is what keeps a wave-free readout
+        the same block as a wave-encoded one: the amplitude changes, the shape
+        and the definition do not, so the sequence stays one repeating unit
+        and its segments are what they would have been.
+        """
+        return tuple(
+            pp.scale_grad(event, scale)
+            for event in (
+                getattr(readout, "gy_wave", None),
+                getattr(readout, "gz_wave", None),
+            )
+            if event is not None
+        )
+
+    def repetition(
+        ky: float, kz: float, acquire: bool, marks=(), wave_scale: float = 1.0
+    ) -> None:
         """Play one TR, acquiring or not."""
         rf_phase = next(spoiling_phase)
         readout.rf.phase_offset = rf_phase
         readout.adc.phase_offset = rf_phase
 
-        seq.add_block(readout.rf, readout.gz, *([mark] if mark is not None else []))
+        seq.add_block(readout.rf, readout.gz, *marks)
         if wait_te is not None:
             seq.add_block(wait_te)
         seq.add_block(
@@ -328,9 +372,11 @@ def main(
             lobe = readout.gx if monopolar or i_echo % 2 == 0 else readout.gx_rev
             if acquire:
                 eco_label.value = i_echo
-                seq.add_block(lobe, readout.adc, *readout.adc_labels)
+                seq.add_block(
+                    lobe, readout.adc, *corkscrew(wave_scale), *readout.adc_labels
+                )
             else:
-                seq.add_block(lobe)
+                seq.add_block(lobe, *corkscrew(wave_scale))
         seq.add_block(
             readout.gx_spoil,
             pp.scale_grad(readout.gy_rew, ky),
@@ -344,20 +390,47 @@ def main(
             0.0,
             0.0,
             acquire=False,
-            mark=pp.make_label("ONCE", "SET", 1) if i_dummy == 0 else None,
+            marks=(pp.make_label("ONCE", "SET", 1),) if i_dummy == 0 else (),
         )
 
-    clear_once = pp.make_label("ONCE", "SET", 0) if n_dummy else None
+    # Labels whose value has changed, waiting for the next repetition to carry
+    # them. Sticky state means one carries each change however many follow.
+    pending = [pp.make_label("ONCE", "SET", 0)] if n_dummy else []
+
+    # A wave-encoded line carries no coil information a sensitivity solve can
+    # use: every voxel is smeared along the readout, which is the point of it.
+    # So with the wave on the calibration rectangle is acquired again ahead of
+    # the scan with the corkscrew scaled away, flagged calibration-only --
+    # the wave-free copy is not part of the k-space the imaging train fills.
+    if wave is not None:
+        pending.append(pp.make_label("REF", "SET", 1))
+        ima_label.value = 0
+        seg_label.value = 0
+        for line, partition in pairs[: kernel.n_calibration]:
+            lin_label.value = line
+            par_label.value = partition
+            repetition(
+                (line - n_y / 2) / (n_y / 2),
+                (partition - n_z / 2) / (n_z / 2),
+                acquire=True,
+                marks=tuple(pending),
+                wave_scale=0.0,
+            )
+            pending = []
+        pending = [pp.make_label("REF", "SET", 0)]
+
     for index, (line, partition) in enumerate(pairs):
         ky = (line - n_y / 2) / (n_y / 2)
         kz = (partition - n_z / 2) / (n_z / 2)
         lin_label.value = line
         par_label.value = partition
-        ima_label.value = int(index <= last_calibration_pair)
-        seg_label.value = int(index > last_calibration_pair)
+        # With the wave on the rectangle was already acquired wave-free, so
+        # these lines are imaging data and nothing else.
+        ima_label.value = 0 if wave is not None else int(index <= last_calibration_pair)
+        seg_label.value = 1 if wave is not None else int(index > last_calibration_pair)
 
-        repetition(ky, kz, acquire=True, mark=clear_once)
-        clear_once = None
+        repetition(ky, kz, acquire=True, marks=tuple(pending))
+        pending = []
 
     pp.TransformFOV(
         translation=tuple(offset * 1e3 for offset in fov_offset), system=system
@@ -420,6 +493,9 @@ def Multiecho3DKernel(
     n_averages: int = 1,
     n_dummy: int = 64,
     spoiling_cycles: float = 4.0,
+    wave: str | None = None,
+    wave_cycles: int = WAVE_CYCLES,
+    wave_amplitude: float = WAVE_AMPLITUDE,
 ) -> SimpleNamespace:
     """Design the repetition, and the plan that repeats it.
 
@@ -468,6 +544,9 @@ n_averages, n_dummy, spoiling_cycles
         readout_bandwidth_hz=readout_bandwidth_hz,
         spoiling_cycles=spoiling_cycles,
         labels=("LIN", "PAR", "IMA", "SEG", "ECO"),
+        wave=wave,
+        wave_cycles=wave_cycles,
+        wave_amplitude=wave_amplitude,
     )
 
     echo_spacing = pp.calc_duration(readout.gx)
@@ -487,7 +566,12 @@ n_averages, n_dummy, spoiling_cycles
         order="calibration_first",
     )
 
-    duration = (n_dummy + n_averages * len(pairs)) * readout.duration
+    # With the wave on the calibration rectangle is acquired again, wave-free,
+    # so it is played once more than the traversal already asks for.
+    n_wave_calibration = n_calibration if wave is not None else 0
+    duration = (
+        n_dummy + n_wave_calibration + n_averages * len(pairs)
+    ) * readout.duration
 
     return SimpleNamespace(
         excitation=excitation,
@@ -690,6 +774,31 @@ class GreMultiecho3D(SequencePlugin):
                 UIParam.user_value(8): TypeinFloatParam(
                     value=1.0, min=0.0, max=1.0, incr=1.0, unit=""
                 ),
+                # The corkscrew's two controls, in the first slots this
+                # sequence has left. They describe something that is only
+                # there when ``WAVE`` is set, so that is when they appear.
+                **(
+                    {
+                        UIParam.user_name(9): Description(text="Wave cycles"),
+                        UIParam.user_value(9): TypeinFloatParam(
+                            value=float(WAVE_CYCLES),
+                            min=1.0,
+                            max=64.0,
+                            incr=1.0,
+                            unit="",
+                        ),
+                        UIParam.user_name(10): Description(text="Wave amplitude"),
+                        UIParam.user_value(10): TypeinFloatParam(
+                            value=WAVE_AMPLITUDE * 1e3,
+                            min=0.5,
+                            max=40.0,
+                            incr=0.5,
+                            unit="mT/m",
+                        ),
+                    }
+                    if WAVE is not None
+                    else {}
+                ),
             }
         )
 
@@ -783,6 +892,9 @@ def protocol_kwargs(system: pp.Opts, protocol: dict[str, dict]) -> dict:
         n_acs_z=max(0, round(params.user_float(prot, 6, 16.0))),
         caipi_shift=max(0, round(params.user_float(prot, 7, 0.0))),
         elliptical=bool(round(params.user_float(prot, 8, 1.0))),
+        wave=WAVE,
+        wave_cycles=max(1, round(params.user_float(prot, 9, float(WAVE_CYCLES)))),
+        wave_amplitude=params.user_float(prot, 10, WAVE_AMPLITUDE * 1e3) * 1e-3,
     )
 
 

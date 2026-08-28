@@ -10,6 +10,7 @@ __all__ = [
 ]
 
 from collections.abc import Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass
 from importlib import import_module
 from typing import Any
@@ -124,6 +125,15 @@ class RigidRegistration:
         Coarse-to-fine SimpleITK pyramid configuration.
     learning_rate, min_step
         Regular-step gradient-descent controls.
+    threads
+        How many threads the registration may use. ``None`` leaves ITK's own
+        default, which is one per core. ITK threads the metric through a
+        process-wide setting rather than a per-registration one, so this is
+        applied around the call and restored after it. Threading is a loss on
+        a small image -- dispatching twenty threads over a navigator plane
+        costs several times what evaluating the metric does, and it makes the
+        worst case several times the median, which is what a real-time
+        deadline is actually made of.
 
     Examples
     --------
@@ -163,6 +173,7 @@ class RigidRegistration:
         smoothing_sigmas: Sequence[float] = (2.0, 1.0, 0.0),
         learning_rate: float = 1.0,
         min_step: float = 1e-4,
+        threads: int | None = None,
     ) -> None:
         if metric not in {"correlation", "mutual_information", "mean_squares"}:
             raise ValueError("unsupported registration metric")
@@ -178,6 +189,9 @@ class RigidRegistration:
             raise ValueError("invalid multi-resolution pyramid")
         if learning_rate <= 0.0 or min_step <= 0.0:
             raise ValueError("optimizer steps must be positive")
+        if threads is not None and int(threads) < 1:
+            raise ValueError("threads must be at least one")
+        self.threads = None if threads is None else int(threads)
         self.metric = metric
         self.iterations = int(iterations)
         self.sampling_percentage = float(sampling_percentage)
@@ -234,7 +248,8 @@ class RigidRegistration:
         )
         registration.SetOptimizerScalesFromPhysicalShift()
         registration.SetInitialTransform(transform, inPlace=True)
-        result = registration.Execute(fixed_image, moving_image)
+        with _threads(self.threads):
+            result = registration.Execute(fixed_image, moving_image)
         result = _rigid_component(result)
         return RigidMotionEstimate(
             parameters=np.asarray(result.GetParameters()),
@@ -714,6 +729,21 @@ class NavigatorMotionTracker:
 
 
 # %% private module subroutines
+
+
+@contextmanager
+def _threads(count: int | None) -> Any:
+    """Run the block with ITK's process-wide thread count set to ``count``."""
+    if count is None:
+        yield
+        return
+    process = _simpleitk().ProcessObject
+    restore = process.GetGlobalDefaultNumberOfThreads()
+    process.SetGlobalDefaultNumberOfThreads(count)
+    try:
+        yield
+    finally:
+        process.SetGlobalDefaultNumberOfThreads(restore)
 
 
 def _simpleitk() -> Any:

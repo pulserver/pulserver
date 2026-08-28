@@ -24,6 +24,8 @@ into
   amplitude, the RF amplitude, phase and frequency offsets, the shot index
   that selects a waveform variant, the rotation.
 
+![One gradient event, split into the shape that is fixed for the scan and the amplitude the playout sets](../assets/pulseg/event_split.png)
+
 An interpreter cares about this split because the two halves have different
 costs. A definition is *prepared*: converted to hardware units, resampled to
 the sequencer's raster, loaded into pulse-generator memory — expensive, and
@@ -31,6 +33,8 @@ done once. An instance parameter is *applied*: written into a scan-loop row —
 cheap, and done a million times. Without the split every block is prepared
 from scratch, and a 30-minute protocol does not fit in the time or the memory
 a scanner has.
+
+![The same shots as a flat list of complete records, and as definitions prepared once beside the rows applied per shot](../assets/pulseg/scan_split.png)
 
 ## Base blocks: the functional relationship between events
 

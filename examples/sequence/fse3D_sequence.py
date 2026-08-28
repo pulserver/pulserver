@@ -67,6 +67,22 @@ NAVIGATOR_COUNT = 5
 ORDERINGS = ("linear", "centric", "radial", "radial_adaptive", "shuffling")
 
 
+#: Whether the plugin wave-encodes the readout. A corkscrew gradient during
+#: the readout spreads every voxel along it, so the aliasing parallel imaging
+#: has to separate is spread with it and a higher acceleration comes back
+#: clean. ``"phase"`` drives the phase axis, ``"partition"`` the partition
+#: axis, ``"both"`` the corkscrew. :mod:`pulserver.app.wave3D_recon` is what
+#: reads it back -- an ordinary Cartesian reconstruction cannot.
+WAVE = None
+
+#: Periods of the corkscrew across the readout, and the peak it reaches on
+#: each axis in T/m. The amplitude is a ceiling: a sinusoid slews at its
+#: amplitude times its frequency, so a fast corkscrew is bounded by the
+#: gradient system rather than by what is asked of it.
+WAVE_CYCLES = 8
+WAVE_AMPLITUDE = 8e-3
+
+
 def main(
     plot: bool = False,
     test_report: bool = False,
@@ -102,6 +118,9 @@ def main(
     readout_crusher_cycles: float = 0.0,
     navigator: bool = False,
     n_navigators: int | str = "auto",
+    wave: str | None = None,
+    wave_cycles: int = WAVE_CYCLES,
+    wave_amplitude: float = WAVE_AMPLITUDE,
 ) -> pp.Sequence:
     """Create a 3D Cartesian fast spin-echo sequence.
 
@@ -377,6 +396,9 @@ def main(
         readout_crusher_cycles=readout_crusher_cycles,
         navigator=navigator,
         n_navigators=n_navigators,
+        wave=wave,
+        wave_cycles=wave_cycles,
+        wave_amplitude=wave_amplitude,
     )
     fse = kernel.readout
     timing = kernel.timing
@@ -393,9 +415,26 @@ def main(
     seg_label.value = 0
     nominal = fse.rf_ref.amplitude
 
-    def train(views, acquire: bool, mark=None) -> None:
+    def corkscrew(scale: float) -> tuple:
+        """The wave events at ``scale``, or nothing when the wave is off.
+
+        Scaling rather than dropping them is what keeps a wave-free readout
+        the same block as a wave-encoded one: the amplitude changes, the shape
+        and the definition do not, so the sequence stays one repeating unit
+        and its segments are what they would have been.
+        """
+        return tuple(
+            pp.scale_grad(event, scale)
+            for event in (
+                getattr(fse, "gy_wave", None),
+                getattr(fse, "gz_wave", None),
+            )
+            if event is not None
+        )
+
+    def train(views, acquire: bool, marks=(), wave_scale: float = 1.0) -> None:
         """Play one train, acquiring or not."""
-        seq.add_block(fse.rf, fse.gz, *([mark] if mark is not None else []))
+        seq.add_block(fse.rf, fse.gz, *marks)
         seq.add_block(fse.gx_pre)
         for echo in range(etl):
             view = views[echo]
@@ -418,11 +457,15 @@ def main(
                 line, partition = view
                 lin_label.value = line
                 par_label.value = partition
-                ima_label.value = int(line in acs_y and partition in acs_z)
+                # With the wave on the rectangle is acquired again wave-free,
+                # so these lines are imaging data and nothing else.
+                ima_label.value = (
+                    0 if wave is not None else int(line in acs_y and partition in acs_z)
+                )
                 eco_label.value = echo
-                seq.add_block(fse.gx, fse.adc, *fse.adc_labels)
+                seq.add_block(fse.gx, fse.adc, *corkscrew(wave_scale), *fse.adc_labels)
             else:
-                seq.add_block(fse.gx)
+                seq.add_block(fse.gx, *corkscrew(wave_scale))
             seq.add_block(
                 fse.gx_bridge_post,
                 pp.scale_grad(fse.gy_rew, ky),
@@ -439,13 +482,38 @@ def main(
         train(
             [None] * etl,
             acquire=False,
-            mark=pp.make_label("ONCE", "SET", 1) if i_dummy == 0 else None,
+            marks=(pp.make_label("ONCE", "SET", 1),) if i_dummy == 0 else (),
         )
 
-    clear_once = pp.make_label("ONCE", "SET", 0) if n_dummy else None
+    # Labels whose value has changed, waiting for the next train to carry
+    # them. Sticky state means one carries each change however many follow.
+    pending = [pp.make_label("ONCE", "SET", 0)] if n_dummy else []
+
+    # A wave-encoded line carries no coil information a sensitivity solve can
+    # use: every voxel is smeared along the readout, which is the point of it.
+    # So with the wave on the autocalibration rectangle is acquired again with
+    # the corkscrew scaled away, flagged calibration-only. It is played as
+    # echo trains like every other view, because the contrast a view is read
+    # at is its place in the train, not the line it encodes.
+    if wave is not None:
+        pending.append(pp.make_label("REF", "SET", 1))
+        seg_label.value = 0
+        calibration = list(kernel.calibration_views)
+        for start in range(0, len(calibration), etl):
+            views = calibration[start : start + etl]
+            train(
+                views + [None] * (etl - len(views)),
+                acquire=True,
+                marks=tuple(pending),
+                wave_scale=0.0,
+            )
+            pending = []
+        pending = [pp.make_label("REF", "SET", 0)]
+        seg_label.value = 1
+
     for views in kernel.trains:
-        train(views, acquire=True, mark=clear_once)
-        clear_once = None
+        train(views, acquire=True, marks=tuple(pending))
+        pending = []
 
     pp.TransformFOV(
         translation=tuple(offset * 1e3 for offset in fov_offset), system=system
@@ -634,6 +702,9 @@ def FSE3DKernel(
     readout_crusher_cycles: float = 0.0,
     navigator: bool = False,
     n_navigators: int | str = "auto",
+    wave: str | None = None,
+    wave_cycles: int = WAVE_CYCLES,
+    wave_amplitude: float = WAVE_AMPLITUDE,
 ) -> SimpleNamespace:
     """Design the train, its flip schedule, and the view order that fills it.
 
@@ -686,6 +757,9 @@ n_dummy, shuffle_seed, crusher_cycles, readout_crusher_cycles
         readout_bandwidth_hz=readout_bandwidth_hz,
         spoiling_cycles=readout_crusher_cycles,
         labels=("LIN", "PAR", "IMA", "SEG", "ECO"),
+        wave=wave,
+        wave_cycles=wave_cycles,
+        wave_amplitude=wave_amplitude,
     )
     esp = fse.esp
 
@@ -767,7 +841,38 @@ n_dummy, shuffle_seed, crusher_cycles, readout_crusher_cycles
         )
     trains = order_views(views, etl, n_center, ordering, (n_y, n_z), seed=shuffle_seed)
 
-    duration = (n_dummy + len(trains)) * timing.length
+    # The autocalibration rectangle, as views in their own right. A
+    # wave-encoded scan acquires it a second time without the corkscrew,
+    # because a smeared line calibrates nothing; without the wave it is
+    # already part of the traversal and this is unused.
+    acs_lines = range(
+        max(0, n_y // 2 - n_acs // 2), min(n_y, n_y // 2 + -(-n_acs // 2))
+    )
+    acs_partitions = range(
+        max(0, n_z // 2 - n_acs_z // 2), min(n_z, n_z // 2 + -(-n_acs_z // 2))
+    )
+    calibration_views = [
+        view for view in views if view[0] in acs_lines and view[1] in acs_partitions
+    ]
+
+    # The autocalibration rectangle, as views in their own right. A
+    # wave-encoded scan acquires it a second time without the corkscrew,
+    # because a smeared line calibrates nothing; without the wave it is
+    # already part of the traversal and this is unused.
+    acs_lines = range(
+        max(0, n_y // 2 - n_acs // 2), min(n_y, n_y // 2 + -(-n_acs // 2))
+    )
+    acs_partitions = range(
+        max(0, n_z // 2 - n_acs_z // 2), min(n_z, n_z // 2 + -(-n_acs_z // 2))
+    )
+    calibration_views = [
+        view for view in views if view[0] in acs_lines and view[1] in acs_partitions
+    ]
+
+    # The wave-free calibration rectangle is echo trains of its own, and a
+    # partly filled one still costs a whole TR.
+    n_calibration_trains = -(-len(calibration_views) // etl) if wave is not None else 0
+    duration = (n_dummy + len(trains) + n_calibration_trains) * timing.length
 
     return SimpleNamespace(
         excitation=excitation,
@@ -776,6 +881,7 @@ n_dummy, shuffle_seed, crusher_cycles, readout_crusher_cycles
         timing=timing,
         fov=(fov_x, fov_y),
         trains=trains,
+        calibration_views=calibration_views,
         n_center=n_center,
         flip_schedule_deg=flips,
         echo_spacing=esp,
@@ -929,6 +1035,31 @@ class Fse3D(SequencePlugin):
                 UIParam.user_value(8): TypeinFloatParam(
                     value=1.0, min=0.0, max=1.0, incr=1.0, unit=""
                 ),
+                # The corkscrew's two controls, in the first slots this
+                # sequence has left. They describe something that is only
+                # there when ``WAVE`` is set, so that is when they appear.
+                **(
+                    {
+                        UIParam.user_name(9): Description(text="Wave cycles"),
+                        UIParam.user_value(9): TypeinFloatParam(
+                            value=float(WAVE_CYCLES),
+                            min=1.0,
+                            max=64.0,
+                            incr=1.0,
+                            unit="",
+                        ),
+                        UIParam.user_name(10): Description(text="Wave amplitude"),
+                        UIParam.user_value(10): TypeinFloatParam(
+                            value=WAVE_AMPLITUDE * 1e3,
+                            min=0.5,
+                            max=40.0,
+                            incr=0.5,
+                            unit="mT/m",
+                        ),
+                    }
+                    if WAVE is not None
+                    else {}
+                ),
             }
         )
 
@@ -1026,6 +1157,9 @@ def protocol_kwargs(system: pp.Opts, protocol: dict[str, dict]) -> dict:
         alpha_center_deg=params.user_float(prot, 7, 100.0),
         elliptical=bool(round(params.user_float(prot, 8, 1.0))),
         navigator=NAVIGATOR,
+        wave=WAVE,
+        wave_cycles=max(1, round(params.user_float(prot, 9, float(WAVE_CYCLES)))),
+        wave_amplitude=params.user_float(prot, 10, WAVE_AMPLITUDE * 1e3) * 1e-3,
     )
 
 

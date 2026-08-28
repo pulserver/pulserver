@@ -189,37 +189,42 @@ shapes it plays. Then:
 
 **Multiplicity one.** The shape is its own template. Nothing to share.
 
-**Multiplicity greater than one.** Occurrences are matched on the identity
-the representation already carries — the gradient definition, the waveform
-shape id, the block duration, the axis, and the slice's length. Nothing is
-re-derived to decide that two blocks play the same thing; the shape id is the
-same one the {doc}`acoustic check <mechanical_resonance>` keys on.
+**Multiplicity greater than one.** Occurrences are matched on the identity the
+representation already carries — the gradient definition, which fixes the
+timing skeleton; the waveform shape id, which fixes the samples; and the block
+duration, which fixes the span. Nothing is re-derived to decide that two
+blocks play the same thing, and nothing is compared sample by sample: it is
+the same identity the {doc}`acoustic check <mechanical_resonance>` keys on.
 
 That identity does not carry **rotation**, and the slices are cut from the
-materialised, already-rotated waveform. One shape played at two orientations
-therefore has per-axis slices that are not scalar multiples of each other, and
-would be silently wrong if the id alone were trusted. So the builder confirms
-proportionality against the samples before accepting a match, to a relative
-tolerance of $10^{-5}$; an occurrence that fails simply becomes a template of
-its own. The confirmation costs one pass over the samples, against the
-samples × kernel of the convolution it saves.
-
-Where the two checks part company is what happens next. Deduplication here
-stops at *proportionality*: a set collapses only when each member is a scalar
-multiple of one template, and a shape that is not is convolved on its own. The
-acoustic check goes on to decompose such a set into a low-rank basis. Its
-position-by-position bound is what a spectrum admits and a peak does not — but
-the assembly underneath is the same linear algebra, so a set of shapes at one
-position is compressible here too. What the stimulation path does with a
-position whose waveform genuinely varies is
-{ref}`build one window per shape group <pns-shape-groups>` and take the worst,
-which costs a full evaluation per group.
+materialised, already-rotated waveform. What keeps that sound is a
+precondition rather than a comparison: a slice is only ever matched against
+the logical gradient of the same axis index, and if any physical axis carries
+a slice with no logical gradient of its own — which is exactly what a rotation
+leaking one logical axis onto three physical ones produces — the assembly
+declines and the whole window takes the exact convolution instead. Builds
+configured with `PULSEG_DEBUG_MEMO` additionally compare the samples of every
+accepted match against the template it was matched to.
 
 **Then convolve each distinct template once and store the result.** From
 there, the whole window is bookkeeping: each occurrence takes its stored
 response out of the table, scales it by its amplitude ratio, shifts it to its
 start time, and adds into an accumulator — after which the three axes are
 combined and the peak read off.
+
+Everything to this point is the calculation the acoustic check makes as well.
+The two part company over a position whose waveform genuinely varies between
+repetitions:
+
+![Where the stimulation and acoustic checks share a calculation, and where they part](../assets/memoization/shared_memoization.png)
+
+This check answers that by
+{ref}`building one window per shape group <pns-shape-groups>` and taking the
+worst, which costs a full evaluation per group. The acoustic check decomposes
+the set into a low-rank basis instead. Its position-by-position bound is what
+a spectrum admits and a peak does not — but the assembly underneath is the
+same linear algebra, so a set of shapes at one position is compressible here
+too.
 
 Compare that with the alternative — materialise the slew over the whole scan
 and convolve it:
@@ -287,9 +292,12 @@ zero-extended on both sides: it opens with the step up from zero into the
 block and closes with the step back down out of it, so where two blocks meet,
 the closing step of one and the opening step of the next add to exactly the
 difference a forward difference across the seam would have subtracted — the
-same two floats, the same subtraction. **Around the window**, the leading
-occurrences are placed a second time one window later, which is the same
-warmed-up history that wrapping the waveform round gives the direct route.
+same two floats, the same subtraction. **Around the window**, the
+occurrences are placed again one window later, and again for as many windows
+as the padding spans, which is the same warmed-up history that wrapping the
+waveform round gives the direct route. How far that padding reaches is set by
+the model's memory and not by the sequence, so a repetition shorter than that
+memory is replayed more than once.
 
 **Then the axes combine.** Per-axis responses are percentages of the same
 threshold, and they are combined by root-sum-square at every instant before
@@ -358,7 +366,8 @@ computes both:
 | | held against | |
 |---|---|---|
 | the assembled response | the same window convolved whole, from the published kernel in double precision | the same sum regrouped: $4\times10^{-14}$ % of threshold in double, $2\times10^{-5}$ % as the library computes it |
-| the proportionality shortcut | the materialised waveform itself | every occurrence checked to be a scaled copy before it is accepted; one failure and the exact route runs |
+| the identity two occurrences are matched on | the materialised samples | asserted sample by sample in `PULSEG_DEBUG_MEMO` builds; in a shipped build, a slice with no gradient of its own on that axis sends the whole window to the exact route instead |
+| the assembled response, sample by sample | the same window convolved whole | every sample of all three axes, the wrapped history included, over every fixture the assembly is taken on |
 | the canonical window | every repetition it stands for | the peak of the window is at least the peak of any repetition, over all four kinds of variation — and on the family drawn above, exactly equal to it |
 | one window per shape group | the encoding that needs none | the same spiral as four written-out arms and as one arm turned by a rotation: 122.2063 % either way |
 | a one-repetition sequence | the plain convolution | the same waveform under the same model, evaluated two ways |

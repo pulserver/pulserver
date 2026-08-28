@@ -21,6 +21,59 @@
 namespace pulseg
 {
     /**
+     * Owning wrapper around a pulseg_check_plan*.
+     *
+     * The preprocessing the PNS and mechanical-resonance checks would
+     * otherwise each pay for. Hand the same plan to several questions about
+     * one scan and the work behind them happens once; hand none and each
+     * call keeps its own, which is what the defaulted arguments below do.
+     *
+     * A plan must not outlive the Collection it was made from.
+     */
+    class CheckPlan
+    {
+    public:
+        CheckPlan(const pulseg_collection* coll, int cache_budget_kb = 0)
+        {
+            pulseg_check_plan_config config = PULSEG_CHECK_PLAN_CONFIG_INIT;
+            config.cache_budget_kb = cache_budget_kb;
+            pulseg_diagnostic diag;
+            pulseg_diagnostic_init(&diag);
+            check(pulseg_check_plan_create(&plan_, &diag, coll, &config), diag);
+        }
+
+        ~CheckPlan()
+        {
+            pulseg_check_plan_destroy(plan_);
+        }
+
+        CheckPlan(CheckPlan&& o) noexcept : plan_(o.plan_)
+        {
+            o.plan_ = nullptr;
+        }
+        CheckPlan& operator=(CheckPlan&& o) noexcept
+        {
+            if (this != &o)
+            {
+                pulseg_check_plan_destroy(plan_);
+                plan_ = o.plan_;
+                o.plan_ = nullptr;
+            }
+            return *this;
+        }
+        CheckPlan(const CheckPlan&) = delete;
+        CheckPlan& operator=(const CheckPlan&) = delete;
+
+        pulseg_check_plan* handle() const
+        {
+            return plan_;
+        }
+
+    private:
+        pulseg_check_plan* plan_ = nullptr;
+    };
+
+    /**
      * Owning wrapper around a pulseg_collection* with RAII lifetime.
      *
      * Movable, not copyable.
@@ -76,6 +129,11 @@ namespace pulseg
             opts_ = copts;
         }
 
+        /** Adopt an already-loaded C collection. Takes ownership. */
+        Collection(pulseg_collection* coll, const pulseg_opts& opts) : coll_(coll), opts_(opts)
+        {
+        }
+
         ~Collection()
         {
             if (coll_)
@@ -122,8 +180,47 @@ namespace pulseg
 
         // ── Cache (serialization / deserialization) ──────────────────
 
-        /** Save collection to a binary cache file. */
-        void save_cache(const std::string& path, int source_size) const
+        /**
+         * Load the COMMON and SHAPES sections of the cache beside `seq_path`.
+         *
+         * Neither the per-instance tables nor the execution stream, which are
+         * the sections that scale with the length of the scan.
+         */
+        static Collection from_geninstructions_cache(const std::string& seq_path, const Opts& opts)
+        {
+            pulseg_collection* coll = nullptr;
+            check(pulseg_load_geninstructions_cache(&coll, seq_path.c_str()));
+            return Collection(coll, opts.to_c());
+        }
+
+        /**
+         * Load the COMMON, INSTANCES, ROTATIONS, SHAPES and SCANLOOP sections
+         * of the cache beside `seq_path`.
+         */
+        static Collection from_scanloop_cache(const std::string& seq_path, const Opts& opts)
+        {
+            pulseg_collection* coll = nullptr;
+            check(pulseg_load_scanloop_cache(&coll, seq_path.c_str()));
+            return Collection(coll, opts.to_c());
+        }
+
+        /**
+         * Write the cache beside the .seq the collection was read from.
+         *
+         * The cache path comes from `seq_path` and `opts.cache_ext`, and the
+         * integrity size is read off the .seq itself -- so this pairs with
+         * the loaders, which find the cache the same way.
+         */
+        void save_cache(const std::string& seq_path)
+        {
+            check(pulseg_save_cache(coll_, seq_path.c_str(), &opts_));
+        }
+
+        /**
+         * Save to an explicitly named cache file, for a caller keeping its
+         * cache somewhere other than beside the sequence.
+         */
+        void save_cache_to_path(const std::string& path, int source_size) const
         {
             check(pulseg_save_cache_to_path(coll_, path.c_str(), source_size));
         }
@@ -438,7 +535,8 @@ namespace pulseg
             float peak_norm_scale = std::numeric_limits<float>::quiet_NaN(),
             float peak_eps = std::numeric_limits<float>::quiet_NaN(),
             float peak_prominence = std::numeric_limits<float>::quiet_NaN(),
-            bool compress_trains = true) const
+            bool compress_trains = true,
+            CheckPlan* plan = nullptr) const
         {
             std::vector<pulseg_forbidden_band> cbands(bands.size());
             for (size_t i = 0; i < bands.size(); ++i)
@@ -467,7 +565,13 @@ namespace pulseg
             request.bands.bands = cbands.empty() ? nullptr : cbands.data();
             request.compress_trains = compress_trains ? 1 : 0;
 
-            int code = pulseg_calc_mech_resonances(coll_, &cs, &diag, nullptr, &run_opts, &request);
+            int code = pulseg_calc_mech_resonances(
+                coll_,
+                &cs,
+                &diag,
+                plan ? plan->handle() : nullptr,
+                &run_opts,
+                &request);
             check(code, diag);
 
             MechResonancesSpectra a;
@@ -552,13 +656,24 @@ namespace pulseg
         /* Takes the C model rather than a model type: `pulseg_pns_model` is
          * the interface every model implements -- the published Irnich and
          * SAFE (pulseg_pns_models.h) and a vendor's own alike. */
-        PnsResult calc_pns(int ss, int canonical_tr_idx, const pulseg_pns_model& model) const
+        PnsResult calc_pns(
+            int ss,
+            int canonical_tr_idx,
+            const pulseg_pns_model& model,
+            CheckPlan* plan = nullptr) const
         {
             pulseg_pns_result cr = PULSEG_PNS_RESULT_INIT;
             pulseg_diagnostic diag;
             pulseg_diagnostic_init(&diag);
-            int code =
-                pulseg_calc_pns(coll_, &cr, &diag, nullptr, ss, canonical_tr_idx, &opts_, &model);
+            int code = pulseg_calc_pns(
+                coll_,
+                &cr,
+                &diag,
+                plan ? plan->handle() : nullptr,
+                ss,
+                canonical_tr_idx,
+                &opts_,
+                &model);
             check(code, diag);
 
             PnsResult r;
@@ -586,7 +701,8 @@ namespace pulseg
         void check_safety(
             const std::vector<ForbiddenBand>& bands = {},
             const pulseg_pns_model* pns_model = nullptr,
-            float pns_threshold_percent = 100.0f) const
+            float pns_threshold_percent = 100.0f,
+            CheckPlan* plan = nullptr) const
         {
             std::vector<pulseg_forbidden_band> cbands(bands.size());
             for (size_t i = 0; i < bands.size(); ++i)
@@ -602,12 +718,86 @@ namespace pulseg
             int code = pulseg_check_safety(
                 coll_,
                 &diag,
-                nullptr,
+                plan ? plan->handle() : nullptr,
                 &opts_,
                 &band_list,
                 pns_model,
                 pns_threshold_percent);
             check(code, diag);
+        }
+
+        /**
+         * Gradient amplitude alone.
+         *
+         * Each check is also its own entry point, because a platform that
+         * enforces some of them in hardware wants only the rest. None of them
+         * assumes another has run.
+         */
+        void check_max_grad() const
+        {
+            pulseg_diagnostic diag;
+            pulseg_diagnostic_init(&diag);
+            check(pulseg_check_max_grad(coll_, &diag, &opts_), diag);
+        }
+
+        /** Gradient slew alone: what one event demands, not the step between two. */
+        void check_max_slew() const
+        {
+            pulseg_diagnostic diag;
+            pulseg_diagnostic_init(&diag);
+            check(pulseg_check_max_slew(coll_, &diag, &opts_), diag);
+        }
+
+        /** Every event time on the raster it is played on. */
+        void check_raster_alignment() const
+        {
+            pulseg_diagnostic diag;
+            pulseg_diagnostic_init(&diag);
+            check(pulseg_check_raster_alignment(coll_, &diag, &opts_), diag);
+        }
+
+        /** The PNS response against a threshold, using the injected model. */
+        void check_pns(
+            const pulseg_pns_model& model,
+            float threshold_percent = 100.0f,
+            CheckPlan* plan = nullptr) const
+        {
+            pulseg_diagnostic diag;
+            pulseg_diagnostic_init(&diag);
+            check(
+                pulseg_check_pns(
+                    coll_,
+                    &diag,
+                    plan ? plan->handle() : nullptr,
+                    &opts_,
+                    &model,
+                    threshold_percent),
+                diag);
+        }
+
+        /** No gradient harmonic inside a forbidden acoustic band. */
+        void check_mech_resonances(
+            const std::vector<ForbiddenBand>& bands,
+            CheckPlan* plan = nullptr) const
+        {
+            std::vector<pulseg_forbidden_band> cbands(bands.size());
+            for (size_t i = 0; i < bands.size(); ++i)
+                cbands[i] = bands[i].to_c();
+
+            pulseg_forbidden_band_list band_list = PULSEG_FORBIDDEN_BAND_LIST_INIT;
+            band_list.count = static_cast<int>(cbands.size());
+            band_list.bands = cbands.empty() ? nullptr : cbands.data();
+
+            pulseg_diagnostic diag;
+            pulseg_diagnostic_init(&diag);
+            check(
+                pulseg_check_mech_resonances(
+                    coll_,
+                    &diag,
+                    plan ? plan->handle() : nullptr,
+                    &opts_,
+                    &band_list),
+                diag);
         }
 
         /**
@@ -630,13 +820,42 @@ namespace pulseg
 
         // ── Block cursor ─────────────────────────────────────────────
 
+        /** Advance one block. Returns PULSEG_CURSOR_BLOCK or PULSEG_CURSOR_DONE. */
         int cursor_next()
         {
             return pulseg_cursor_next(coll_);
         }
+
+        /** Advance one block and report where it landed. */
+        int cursor_advance(pulseg_cursor_info& info)
+        {
+            return pulseg_cursor_advance(coll_, &info);
+        }
+
+        /** Where the cursor rests now. */
+        pulseg_cursor_info cursor_info() const
+        {
+            pulseg_cursor_info info = PULSEG_CURSOR_INFO_INIT;
+            check(pulseg_cursor_get_info(coll_, &info));
+            return info;
+        }
+
+        /** Back to before the first block. */
         void cursor_rewind()
         {
             pulseg_cursor_rewind(coll_);
+        }
+
+        /** Remember the current position, for a later cursor_reset(). */
+        void cursor_mark()
+        {
+            pulseg_cursor_mark(coll_);
+        }
+
+        /** Return to the last cursor_mark(). */
+        void cursor_reset()
+        {
+            pulseg_cursor_reset(coll_);
         }
 
         BlockInstance get_block_instance() const

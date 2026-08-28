@@ -69,6 +69,22 @@ NAVIGATOR_TR = 100e-3
 NAVIGATOR_COUNT = 5
 
 
+#: Whether the plugin wave-encodes the readout. A corkscrew gradient during
+#: the readout spreads every voxel along it, so the aliasing parallel imaging
+#: has to separate is spread with it and a higher acceleration comes back
+#: clean. ``"phase"`` drives the phase axis, ``"partition"`` the partition
+#: axis, ``"both"`` the corkscrew. :mod:`pulserver.app.wave3D_recon` is what
+#: reads it back -- an ordinary Cartesian reconstruction cannot.
+WAVE = None
+
+#: Periods of the corkscrew across the readout, and the peak it reaches on
+#: each axis in T/m. The amplitude is a ceiling: a sinusoid slews at its
+#: amplitude times its frequency, so a fast corkscrew is bounded by the
+#: gradient system rather than by what is asked of it.
+WAVE_CYCLES = 8
+WAVE_AMPLITUDE = 8e-3
+
+
 def main(
     plot: bool = False,
     test_report: bool = False,
@@ -103,6 +119,9 @@ def main(
     spoiling_cycles: float = 4.0,
     navigator: bool = False,
     n_navigators: int | str = "auto",
+    wave: str | None = None,
+    wave_cycles: int = WAVE_CYCLES,
+    wave_amplitude: float = WAVE_AMPLITUDE,
 ) -> pp.Sequence:
     """Create a 3D MPRAGE sequence.
 
@@ -343,6 +362,9 @@ def main(
         spoiling_cycles=spoiling_cycles,
         navigator=navigator,
         n_navigators=n_navigators,
+        wave=wave,
+        wave_cycles=wave_cycles,
+        wave_amplitude=wave_amplitude,
     )
     readout = kernel.readout
     inversion = kernel.inversion
@@ -353,8 +375,15 @@ def main(
         max(0, n_z // 2 - n_acs_z // 2), min(n_z, n_z // 2 + -(-n_acs_z // 2))
     )
 
+    # The wave-free calibration trains are repetitions of their own, and the
+    # spoiling schedule has to cover every one of them.
+    n_calibration_trains = (
+        -(-len(kernel.calibration_views) // views_per_segment)
+        if wave is not None
+        else 0
+    )
     rf_phases = pp.make_rf_spoiling_schedule(
-        (len(kernel.segments) + n_dummy) * views_per_segment,
+        (len(kernel.segments) + n_dummy + n_calibration_trains) * views_per_segment,
         increment=np.deg2rad(rf_spoiling_increment_deg),
     )
 
@@ -365,7 +394,24 @@ def main(
     wait_te = getattr(readout, "wait_te", None)
     wait_tr = getattr(readout, "wait_tr", None)
 
-    def repetition(view, index: int) -> None:
+    def corkscrew(scale: float) -> tuple:
+        """The wave events at ``scale``, or nothing when the wave is off.
+
+        Scaling rather than dropping them is what keeps a wave-free readout
+        the same block as a wave-encoded one: the amplitude changes, the shape
+        and the definition do not, so the sequence stays one repeating unit
+        and its segments are what they would have been.
+        """
+        return tuple(
+            pp.scale_grad(event, scale)
+            for event in (
+                getattr(readout, "gy_wave", None),
+                getattr(readout, "gz_wave", None),
+            )
+            if event is not None
+        )
+
+    def repetition(view, index: int, wave_scale: float = 1.0) -> None:
         """One inner spoiled GRE repetition."""
         rf_phase = next(spoiling_phase)
         readout.rf.phase_offset = rf_phase
@@ -394,9 +440,14 @@ def main(
             par_label.value = partition
             ima_label.value = int(line in acs_y and partition in acs_z)
             eco_label.value = index
-            seq.add_block(readout.gx, readout.adc, *readout.adc_labels)
+            seq.add_block(
+                readout.gx,
+                readout.adc,
+                *corkscrew(wave_scale),
+                *readout.adc_labels,
+            )
         else:
-            seq.add_block(readout.gx)
+            seq.add_block(readout.gx, *corkscrew(wave_scale))
         seq.add_block(
             readout.gx_spoil,
             pp.scale_grad(readout.gy_rew, ky),
@@ -405,13 +456,15 @@ def main(
         if wait_tr is not None:
             seq.add_block(wait_tr)
 
-    def inversion_train(views, *, acquire: bool, mark=None) -> None:
+    def inversion_train(
+        views, *, acquire: bool, marks=(), wave_scale: float = 1.0
+    ) -> None:
         """One outer TR: the inversion, the wait, the view train, the recovery."""
-        seq.add_block(inversion.rf_prep, *([mark] if mark is not None else []))
+        seq.add_block(inversion.rf_prep, *marks)
         seq.add_block(inversion.gz_spoil)
         seq.add_block(kernel.wait_ti)
         for index, view in enumerate(views):
-            repetition(view if acquire else None, index)
+            repetition(view if acquire else None, index, wave_scale=wave_scale)
         for _ in range(kernel.n_navigators):
             for block in kernel.navigator.blocks:
                 seq.add_block(*block)
@@ -430,13 +483,34 @@ def main(
         inversion_train(
             kernel.segments[0],
             acquire=False,
-            mark=pp.make_label("ONCE", "SET", 1) if i_dummy == 0 else None,
+            marks=(pp.make_label("ONCE", "SET", 1),) if i_dummy == 0 else (),
         )
 
-    clear_once = pp.make_label("ONCE", "SET", 0) if n_dummy else None
+    # Labels whose value has changed, waiting for the next train to carry
+    # them. Sticky state means one carries each change however many follow.
+    pending = [pp.make_label("ONCE", "SET", 0)] if n_dummy else []
+
+    # A wave-encoded line carries no coil information a sensitivity solve can
+    # use: every voxel is smeared along the readout, which is the point of it.
+    # So with the wave on the autocalibration rectangle is acquired again with
+    # the corkscrew scaled away, flagged calibration-only. It is played as
+    # inversion trains like every other view, because the contrast a view is
+    # read at is the inversion it sits under, not the line it encodes.
+    if wave is not None:
+        pending.append(pp.make_label("REF", "SET", 1))
+        for start in range(0, len(kernel.calibration_views), views_per_segment):
+            inversion_train(
+                kernel.calibration_views[start : start + views_per_segment],
+                acquire=True,
+                marks=tuple(pending),
+                wave_scale=0.0,
+            )
+            pending = []
+        pending = [pp.make_label("REF", "SET", 0)]
+
     for views in kernel.segments:
-        inversion_train(views, acquire=True, mark=clear_once)
-        clear_once = None
+        inversion_train(views, acquire=True, marks=tuple(pending))
+        pending = []
 
     pp.TransformFOV(
         translation=tuple(offset * 1e3 for offset in fov_offset), system=system
@@ -505,6 +579,9 @@ def Mprage3DKernel(
     spoiling_cycles: float = 4.0,
     navigator: bool = False,
     n_navigators: int | str = "auto",
+    wave: str | None = None,
+    wave_cycles: int = WAVE_CYCLES,
+    wave_amplitude: float = WAVE_AMPLITUDE,
 ) -> SimpleNamespace:
     """Design one segment, and the plan that repeats it.
 
@@ -556,6 +633,9 @@ acceleration_z, caipi_shift, elliptical, n_acs, n_acs_z, shuffle_seed, spoiling_
         readout_bandwidth_hz=readout_bandwidth_hz,
         spoiling_cycles=spoiling_cycles,
         labels=("LIN", "PAR", "IMA", "SEG", "ECO"),
+        wave=wave,
+        wave_cycles=wave_cycles,
+        wave_amplitude=wave_amplitude,
     )
     inner_tr = readout.duration
 
@@ -597,6 +677,20 @@ acceleration_z, caipi_shift, elliptical, n_acs, n_acs_z, shuffle_seed, spoiling_
     segments = order_views(
         views, views_per_segment, n_center, ordering, (n_y, n_z), seed=shuffle_seed
     )
+
+    # The autocalibration rectangle, as views in their own right. A
+    # wave-encoded scan acquires it a second time without the corkscrew,
+    # because a smeared line calibrates nothing; without the wave it is
+    # already part of the traversal and this is unused.
+    acs_lines = range(
+        max(0, n_y // 2 - n_acs // 2), min(n_y, n_y // 2 + -(-n_acs // 2))
+    )
+    acs_partitions = range(
+        max(0, n_z // 2 - n_acs_z // 2), min(n_z, n_z // 2 + -(-n_acs_z // 2))
+    )
+    calibration_views = [
+        view for view in views if view[0] in acs_lines and view[1] in acs_partitions
+    ]
 
     # TI from the inversion centre to the centre view's excitation centre:
     # the rest of the inversion module, the solved wait, the repetitions
@@ -645,13 +739,21 @@ acceleration_z, caipi_shift, elliptical, n_acs, n_acs_z, shuffle_seed, spoiling_
         )
     )
 
-    duration = len(segments) * (segment_body + navigator_time + wait_recovery.delay)
+    # The wave-free calibration rectangle is inversion trains of its own, and
+    # a partly filled one still costs a whole outer TR.
+    n_calibration_trains = (
+        -(-len(calibration_views) // views_per_segment) if wave is not None else 0
+    )
+    duration = (len(segments) + n_calibration_trains) * (
+        segment_body + navigator_time + wait_recovery.delay
+    )
 
     return SimpleNamespace(
         inversion=inversion,
         excitation=excitation,
         readout=readout,
         segments=segments,
+        calibration_views=calibration_views,
         n_center=n_center,
         wait_ti=wait_ti,
         wait_recovery=wait_recovery,
@@ -777,6 +879,31 @@ class Mprage3D(SequencePlugin):
                 UIParam.user_value(6): TypeinFloatParam(
                     value=1.0, min=0.0, max=1.0, incr=1.0, unit=""
                 ),
+                # The corkscrew's two controls, in the first slots this
+                # sequence has left. They describe something that is only
+                # there when ``WAVE`` is set, so that is when they appear.
+                **(
+                    {
+                        UIParam.user_name(7): Description(text="Wave cycles"),
+                        UIParam.user_value(7): TypeinFloatParam(
+                            value=float(WAVE_CYCLES),
+                            min=1.0,
+                            max=64.0,
+                            incr=1.0,
+                            unit="",
+                        ),
+                        UIParam.user_name(8): Description(text="Wave amplitude"),
+                        UIParam.user_value(8): TypeinFloatParam(
+                            value=WAVE_AMPLITUDE * 1e3,
+                            min=0.5,
+                            max=40.0,
+                            incr=0.5,
+                            unit="mT/m",
+                        ),
+                    }
+                    if WAVE is not None
+                    else {}
+                ),
             }
         )
 
@@ -873,6 +1000,9 @@ def protocol_kwargs(system: pp.Opts, protocol: dict[str, dict]) -> dict:
         n_acs_z=max(0, round(params.user_float(prot, 5, 16.0))),
         elliptical=bool(round(params.user_float(prot, 6, 1.0))),
         navigator=NAVIGATOR,
+        wave=WAVE,
+        wave_cycles=max(1, round(params.user_float(prot, 7, float(WAVE_CYCLES)))),
+        wave_amplitude=params.user_float(prot, 8, WAVE_AMPLITUDE * 1e3) * 1e-3,
     )
 
 

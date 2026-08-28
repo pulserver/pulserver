@@ -83,6 +83,6 @@ if not ok:
 
 Both sides, from the same code: `check_hardware_limits()` in Python while the
 sequence is being written, and `check_safety()` in the interpreter before
-download — see {doc}`../../examples/cpp/safety_only`. The cost is a walk over
+download — see {doc}`../../examples/c/safety_gate`. The cost is a walk over
 the instance table with the waveform library resident, which is a fraction of
 the parse that preceded it.

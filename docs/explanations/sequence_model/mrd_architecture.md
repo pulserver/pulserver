@@ -84,8 +84,8 @@ identically.
 
 What leaves the client is a stream with no vendor semantics left in it — the
 constraint the {doc}`session protocol <../background/ismrmrd>` imposes, met
-by construction. See {doc}`../../examples/cpp/gadgetron_client` for the
-client in use.
+by construction. See {doc}`../../api/cpp/recon` for the client's
+surface.
 
 ## The server: consuming the stream
 

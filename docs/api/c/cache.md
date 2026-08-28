@@ -2,8 +2,8 @@
 
 A binary sidecar beside the `.seq`, holding what is expensive to recompute —
 the deduplication tables, the segmentation, the execution stream. Its
-extension is vendor-selectable through `pulseg_opts.cache_ext`: `.pseg` by
-default, `.pge` on GE.
+extension is vendor-selectable through `pulseg_opts.cache_ext`, and defaults
+to `.pseg`.
 
 The reconstruction side reads the `.seq` directly and never touches this.
 
@@ -30,10 +30,8 @@ keeping its cache elsewhere supplies the path and the size itself.
 
 ## Reading, by section
 
-The per-section loaders exist so a consumer pays only for what it reads. The
-sections that scale with the length of the scan are the ones worth not
-reading, and the waveform-generation pass does not need them: everything it
-resolves per position is frozen into the segment definitions at parse time.
+A consumer pays only for the sections it reads. The ones that scale with the
+length of the scan are `INSTANCES` and `SCANLOOP`.
 
 | Loader | Sections | Used by |
 |---|---|---|
@@ -57,10 +55,9 @@ resolves per position is frozen into the segment definitions at parse time.
 
 ## A vendor's own section
 
-An extension point: an opaque blob written after the base sections and read
-back verbatim, for whatever a platform needs to carry alongside the structure
-and this library has no opinion about. Leaving the callback unset writes no
-section, which is not an error.
+An opaque blob written after the base sections and read back verbatim, for
+whatever a platform carries alongside the structure. Leaving the callback
+unset writes no section, which is not an error.
 
 ````{only} doxygen
 ```{doxygenfunction} pulseg_write_vendor_cache_section
@@ -74,5 +71,5 @@ section, which is not an error.
 
 ## See also
 
-{doc}`file` produces the collection this stores; {doc}`generation` and
-{doc}`playout` are the two stages that read it back.
+{doc}`file` produces the collection this stores. {doc}`generation` and
+{doc}`playout` read it back. {doc}`../cpp/cache` is the C++ counterpart.

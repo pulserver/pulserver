@@ -111,4 +111,4 @@ seq.calculate_gradient_spectrum(               # the acoustic drive
 timing check under `check_timing=True`. A plugin writing for the scanner asks
 for neither: `write_sequence(seq, path, offline=False)` writes the binary form
 unchecked and lets predownload decide. From an interpreter, the two analyses
-come in one call — {doc}`../../examples/cpp/safety_only`.
+come in one call — {doc}`../../examples/c/safety_gate`.

@@ -693,6 +693,40 @@ static void run_pns_memo_equivalence(const char *filename)
         fabs(peak_exact - peak_memo) <= PNS_MEMO_TEST_RTOL * peak_exact,
         "memoized PNS peak disagrees with the exact peak");
 
+    /* Every sample, not only the peak. The window the verdict is read from is
+     * followed by the model's own memory, filled by wrapping the repetition,
+     * and a route that gets that region wrong still agrees on a peak that
+     * happens to fall inside the window. */
+    {
+        const float *m_axis[3];
+        const float *e_axis[3];
+        double worst = 0.0, scale = 0.0, d;
+        int ax, i;
+
+        m_axis[0] = memo.slew_x_hz_per_m_per_s;
+        m_axis[1] = memo.slew_y_hz_per_m_per_s;
+        m_axis[2] = memo.slew_z_hz_per_m_per_s;
+        e_axis[0] = exact.slew_x_hz_per_m_per_s;
+        e_axis[1] = exact.slew_y_hz_per_m_per_s;
+        e_axis[2] = exact.slew_z_hz_per_m_per_s;
+
+        for (ax = 0; ax < 3; ++ax)
+        {
+            for (i = 0; i < exact.num_samples; ++i)
+            {
+                d = fabs((double)m_axis[ax][i] - (double)e_axis[ax][i]);
+                if (d > worst)
+                    worst = d;
+                if (fabs((double)e_axis[ax][i]) > scale)
+                    scale = fabs((double)e_axis[ax][i]);
+            }
+        }
+        mu_assert(scale > 0.0, "exact PNS response is identically zero");
+        mu_assert(
+            worst <= PNS_MEMO_TEST_RTOL * scale,
+            "memoized PNS response disagrees with the exact response");
+    }
+
     pulseg_pns_result_free(&exact);
     pulseg_pns_result_free(&memo);
     pulseg_collection_free(coll);
@@ -728,6 +762,32 @@ MU_TEST(test_pns_memo_matches_exact_noncart)
 {
     mech_resonances_opts_init(&s_opts);
     run_pns_memo_equivalence("gre_stack_of_stars_3d.seq");
+}
+
+/* A repetition shorter than the nerve model's memory, so the padding that
+ * warms the filter wraps the window more than once. A route that replays the
+ * wrap a fixed number of times agrees on everything up to the point where the
+ * second wrap would start. */
+MU_TEST(test_pns_memo_matches_exact_short_window)
+{
+    mech_resonances_opts_init(&s_opts);
+    run_pns_memo_equivalence("gre_stack_of_spirals_3d.seq");
+}
+
+/* A live rotation on the canonical TR: the same shape reaches two physical
+ * axes turned by different amounts, so slices sharing a waveform identity are
+ * not scalar multiples of one another. This is the fixture that distinguishes
+ * a memo key sufficient in the physical frame from one that is not. */
+MU_TEST(test_pns_memo_matches_exact_rotated)
+{
+    mech_resonances_opts_init(&s_opts);
+    run_pns_memo_equivalence("zte_3d.seq");
+}
+
+MU_TEST(test_pns_memo_matches_exact_radial)
+{
+    mech_resonances_opts_init(&s_opts);
+    run_pns_memo_equivalence("gre_radial_2d.seq");
 }
 
 /* A model that does not publish a kernel must never take the memoized
@@ -820,6 +880,9 @@ MU_TEST_SUITE(suite_pns_memoization)
     MU_RUN_TEST(test_pns_memo_matches_exact_fse);
     MU_RUN_TEST(test_pns_memo_matches_exact_mprage);
     MU_RUN_TEST(test_pns_memo_matches_exact_noncart);
+    MU_RUN_TEST(test_pns_memo_matches_exact_short_window);
+    MU_RUN_TEST(test_pns_memo_matches_exact_rotated);
+    MU_RUN_TEST(test_pns_memo_matches_exact_radial);
     MU_RUN_TEST(test_pns_no_kernel_is_deterministic_exact_path);
 }
 

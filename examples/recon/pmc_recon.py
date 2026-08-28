@@ -122,17 +122,20 @@ class PmcRecon(ReconPlugin):
     def startup(self, context: ReconContext) -> None:
         """Open the tracker and the state one navigator is assembled in."""
         super().startup(context)
-        # One resolution, not a pyramid. A pyramid exists to catch a
-        # displacement larger than the finest level can see, and a navigator
-        # has neither problem: its planes are small enough that the coarse
-        # levels are a handful of pixels, and the filter hands the
-        # registration a prediction of where the head is before it starts. At
-        # a navigator's matrix the levels cost time and accuracy both.
+        # One resolution and one thread, both for the same reason: a
+        # navigator plane is small. A pyramid exists to catch a displacement
+        # larger than the finest level can see, and here the coarse levels are
+        # a handful of pixels while the filter already hands the registration
+        # a prediction of where the head is. Threading a metric over an image
+        # this size costs more in dispatch than it saves in arithmetic, and it
+        # inflates the worst case far more than the median -- and a correction
+        # is only worth anything if it arrives before the next inversion.
         self.tracker = NavigatorMotionTracker(
             registration=RigidRegistration(
                 iterations=self.iterations,
                 shrink_factors=(1,),
                 smoothing_sigmas=(0.0,),
+                threads=1,
             )
         )
         self.navigator: list[Any] = []
@@ -187,12 +190,21 @@ class PmcRecon(ReconPlugin):
                 # the weights and the transform are built once per plane and
                 # not once per navigator. That is most of what keeps a train
                 # inside the recovery period it has to be finished in.
+                #
+                # On the host's own cores, and one of them: a real-time
+                # correction runs beside the reconstruction of the images and
+                # can claim neither the array nor the accelerator, and a plane
+                # this size is transformed faster on one thread than on
+                # twenty, because dispatching them costs more than the
+                # transform does.
                 plane = plane.astype(np.float32)
                 self.gridding[index] = NonCartesian2D(
                     plane,
                     (matrix, matrix),
-                    density=pipe_menon_dcf(plane, (matrix, matrix)),
+                    density=pipe_menon_dcf(plane, (matrix, matrix), nthreads=1),
                     n_coils=int(np.shape(data)[0]),
+                    backend="finufft",
+                    nthreads=1,
                 )
             # The density-compensated adjoint, one image per coil, combined
             # root-sum-of-squares: a landmark, not a picture.

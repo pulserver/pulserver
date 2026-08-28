@@ -238,16 +238,21 @@ its peak amplitude or its peak slew would pick by the wrong number.
 ## 4. Making it cheap: one response per distinct shape
 
 Walk the TR once and collect, per position and per axis, the distinct waveforms
-it plays and how many there are — the same walk, on the same shape identity,
-that the {doc}`stimulation check <pns>` makes. Then:
+it plays and how many there are — the same walk, on the same waveform identity,
+that the {doc}`stimulation check <pns>` makes:
+
+![Where the acoustic and stimulation checks share a calculation, and where they part](../assets/memoization/shared_memoization.png)
+
+Then:
 
 **Multiplicity one.** The waveform is its own basis. Nothing to compress.
 
 **Multiplicity greater than one.** Where the stimulation check stops — it
-accepts a further occurrence only when it is a scalar multiple of a template —
-this one goes a step further, because a spectrum is linear in the waveform and
-a truncated tail can be bounded and added back. Stack the waveforms into a
-matrix and take its singular value decomposition. If they share a sampling —
+reuses one response for every occurrence that shares an identity, and evaluates
+a whole further window for a position that does not — this one goes a step
+further, because a spectrum is linear in the waveform and a truncated tail can
+be bounded and added back. Stack the waveforms into a matrix and take its
+singular value decomposition. If they share a sampling —
 the same raster and the same sample count, resampled onto one grid if a time
 shape says otherwise —
 this is where a multishot readout collapses. Written out shot by shot, a spiral
@@ -292,6 +297,12 @@ were written. The right-hand panel above is the same scan encoded both ways —
 one waveform turned by a rotation, and eight waveforms written out and
 compressed back to a rank-2 basis — and the two agree arm by arm to 4 parts in
 $10^7$, most lines identical bit for bit and the rest at float epsilon.
+
+One thing the basis does not do is travel. It is built per position and per
+axis, so a family of waveforms that shows up at several positions of the TR —
+the arms of a multi-echo readout, say — is decomposed once for each of them.
+The transforms themselves are memoized on the waveform identity and so are
+shared; only the decomposition is repeated.
 
 **Then collect every distinct waveform across every basis and every channel, and
 transform each one once.** From there, the whole per-axis spectrum at a

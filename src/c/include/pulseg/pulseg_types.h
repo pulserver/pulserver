@@ -570,7 +570,7 @@ typedef struct pulseg_mech_resonances_spectra
     component_{freqs,amps,phases,widths,axes,def_ids,contrib_ids,run_ids} */ 0, NULL, \
     NULL, NULL, NULL, NULL, NULL, NULL, NULL, /* num_surviving_freqs, surviving_freqs_hz \
     */ 0, NULL, /* num_envelope_bins, envelope_freqs_hz, amp_gx/gy/gz */ 0, NULL, NULL, \
-    NULL \
+    NULL, NULL \
     }
 /* clang-format on */
 

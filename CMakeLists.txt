@@ -62,3 +62,8 @@ if(PULSERVER_BUILD_CPP_TESTS)
     enable_testing()
     add_subdirectory(${CMAKE_SOURCE_DIR}/tests/cpptests ${CMAKE_BINARY_DIR}/cpptests_build)
 endif()
+
+option(PULSERVER_BUILD_EXAMPLES "Build the C examples" OFF)
+if(PULSERVER_BUILD_EXAMPLES)
+    add_subdirectory(${CMAKE_SOURCE_DIR}/examples/c ${CMAKE_BINARY_DIR}/examples_build)
+endif()

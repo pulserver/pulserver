@@ -1,8 +1,7 @@
 # Types, limits and errors
 
-What every other page takes as an argument: the scanner's limits, the
-diagnostic a failure comes back in, and the two small types that carry a
-variable-length argument as one thing.
+The scanner's limits, the diagnostic a failure comes back in, and the types
+that carry a variable-length argument.
 
 ```c
 #include "pulseg/pulseg.h"
@@ -42,9 +41,8 @@ the acoustic peak-detection parameters instead of their defaults.
 
 ## Variable-length arguments
 
-A count and the array it measures are one logical argument, so they travel as
-one type. That keeps a parameter list from interleaving an output with the
-length of an input, and makes a call site impossible to get half right.
+A count and the array it measures travel as one type, so a parameter list
+never interleaves an output with the length of an input.
 
 Both are borrowed views: neither owns what it points at, and the storage must
 outlive the call.
@@ -130,5 +128,5 @@ part, not the offset within it.
 
 ## See also
 
-{doc}`file` reads a sequence against these limits, {doc}`checks` judges one
-against them.
+{doc}`file` reads a sequence against these limits; {doc}`checks` judges one
+against them. {doc}`../cpp/types` is the C++ counterpart.

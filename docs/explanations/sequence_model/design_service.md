@@ -106,7 +106,7 @@ another rather than silently meaning something else.
 **Headless.** The interpreter calls the sequence program directly and gets a
 structured answer back: valid or not, the acquisition time, a message. This
 is the path a modern console takes, and the one
-{doc}`../../examples/c/interpreter` builds against. Because the answer is
+{doc}`../../examples/c/index` builds against. Because the answer is
 structured, the console can show the operator the acquisition time next to
 the parameter that changed it, and a refusal can name the limit it hit.
 

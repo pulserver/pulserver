@@ -19,26 +19,22 @@ and a console loop.
 
 ## C — writing an interpreter
 
-A `.seq` file arrives; the scanner has to play it. These build up the pieces
-of an interpreter that does, using nothing but the C library.
+The five stages of an interpreter, one page each, written against the C API.
+The scanner half is stubbed, and every page renders a file the build compiles.
 
 ```{toctree}
 :maxdepth: 1
 
-c/interpreter
-c/replay
+c/index
 ```
 
-## C++ — integrating, playing, reconstructing
+## C++ — writing an interpreter
+
+The same five stages against the C++ API. Each file has a C counterpart of the
+same name, and the two produce the same output on the same input.
 
 ```{toctree}
 :maxdepth: 1
 
-cpp/safety_only
-cpp/interpreter
-cpp/gadgetron_client
+cpp/index
 ```
-
-{doc}`cpp/safety_only` is the shortest one and the one most people want: five
-lines that gate a sequence against a system's limits, inside an interpreter
-that already exists.

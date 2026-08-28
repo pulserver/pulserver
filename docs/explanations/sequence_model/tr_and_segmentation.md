@@ -19,6 +19,8 @@ the same duration, playing on the same channels — for every $n$. The smallest
 $P$ that holds over the whole table is the **structural TR**, and `tr_size`
 blocks is its length.
 
+![The block stream, the repeating unit found in it, and the segments that unit is cut into](../assets/segments/tr_and_segments_schematic.png)
+
 Two properties make this well-posed:
 
 - **Everything a playout can vary is excluded.** A phase encode steps from
@@ -90,14 +92,8 @@ The partition satisfies the constraints the PulSeg specification places on a
 virtual segment: every instance has the same block count and the same
 normalized structure.
 
-A segment also carries the readout, not only the timing. Preparing one binds
-a receive filter chain to each of its block positions, so repetitions that
-digitise the same position with different ADC events cannot share it. The
-partition is therefore matched on *whether* a position acquires — which is
-what keeps a dummy shot on the segment it stands in for — and then split by
-the readouts each repetition actually plays. Two echoes of different length
-at one position give two segments; a shot that acquires nothing there joins
-either of them, since neither filter is used for it.
+A segment also carries the readout, not only the timing — see
+{ref}`shots that acquire nothing <acquire-nothing>` below.
 
 ### Two decompositions
 
@@ -133,6 +129,43 @@ spoiling increment; the rewinder undoes whatever the encode did. That
 difference is exactly what the comparison above excludes, which is why these
 are one segment and not eight — and it is the form the scanner wants anyway,
 one prepared unit and a table of per-instance amplitudes.
+
+(acquire-nothing)=
+### Shots that acquire nothing
+
+A preparation shot is written into the file as blocks that carry no ADC, and
+plays on the scanner as the shot it stands in for with the digitiser switched
+off. Two readouts of different length at one block position are written as two
+ADC events, and play as two prepared programs. Both are ordinary, and neither
+is a special case anywhere — but the ADC is asked about three separate times,
+and the answers are not the same.
+
+![One block position, digitised differently or not at all, and the three questions asked of it](../assets/segments/adc_identities.png)
+
+**What repeats leaves the ADC out.** Which readout a block digitises with is a
+property of the instance, not of the rhythm the sequence repeats at. Counting
+it would multiply the detected period by the number of readouts a position
+holds — and every window-based safety check costs at least the square of the
+period, so a two-echo readout would pay four times over for a distinction that
+changes no waveform.
+
+**What is prepared splits on it.** A prepared segment binds one receive filter
+chain to each of its block positions, so two readouts that differ in sample
+count or dwell cannot share one program. The partition is matched on *whether*
+a position acquires, and the result is then split by the readouts each
+repetition actually plays. Two echoes at one position give two segments, and
+the scan alternates between them.
+
+**A shot that acquires nothing joins either.** It digitises nothing there, so
+neither segment's filter is used for it, and both play its gradients and RF
+identically. The choice is unobservable, which is what makes it free — and it
+is why a preparation shot never needs a segment of its own, and never
+lengthens the repetition it precedes.
+
+The cost of the middle answer is the honest one to state: a position holding
+$k$ readouts is $k$ prepared segments, and a scan that digitises differently
+on every repetition is refused rather than turned into a segment table the
+size of the scan.
 
 ### The declared divergence: content, not annotation
 

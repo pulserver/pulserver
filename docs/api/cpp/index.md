@@ -1,38 +1,66 @@
 # C++ API
 
-C++17 over the C library: RAII types, value semantics and exceptions where
-the C API returns codes into out-parameters, plus the sequence library and the
-reconstruction-side reader that have no C counterpart. It **links** `src/c`
-rather than restating it — one static library, one include path.
+C++17 over the C library. Every name here forwards to the C entry point of the
+same name with the prefix dropped, with the arguments in the same order; see
+the {doc}`C API <../c/index>` for what each call does.
 
 ```{toctree}
 :maxdepth: 1
 
-pulseg
+types
+protocol
+file
+checks
+cache
+generation
+playout
 pulseq
 recon
 ```
 
-## The shape of it
+````{only} not doxygen
+```{note}
+The reference on these pages is generated from the headers by Doxygen, which
+is not installed in this build. `apt install doxygen` (or the equivalent) and
+rebuild to see it.
+```
+````
 
-`pulseg` is what an existing interpreter integrates: `Collection` — a parsed,
-structured scan — `Opts`, and the safety entry points, with every C handle
-owned and every error thrown. `pulseq` is the standalone sequence library:
-`Sequence`, its events and files, k-space, moments, labels, deduplication and
-expansion — the model PyPulseq keeps, held the way a million-block scan
-needs it. `recon` is the other end: it reads a `.seq` chain into trajectories,
-encoding spaces, labels and a sequence description, and enriches MRD
-acquisitions with them.
+## What this layer adds
 
-## Which one do I want?
-
-| I want to… | Use |
+| | |
 |---|---|
-| add safety checking to an interpreter I already have | {doc}`pulseg`, and {doc}`../../examples/cpp/safety_only` |
-| walk a scan's blocks and waveforms | {doc}`pulseg` |
-| read, build, analyse or write a `.seq` | {doc}`pulseq` |
-| feed a reconstruction service from the sequence file | {doc}`recon` |
+| Lifetime | `Collection`, `CheckPlan`, `ChunkPlan` and `Bridge` own their C handles and release them in a destructor. All are move-only. |
+| Errors | A negative code and a `pulseg_diagnostic` become a thrown `pulseg::Error` carrying both. Bridge failures throw `pulseg::BridgeError`, which carries `errno`. |
+| Values | What the C API returns through a caller-allocated struct and a matching `_free` is returned by value. |
 
-The design side is on the hot path for million-block sequences, so an
-allocation per block is measured before it is added; the reconstruction side
-uses the standard library freely.
+Nothing else differs. Where a page here is short, the {doc}`C page <../c/index>`
+is where the meaning is.
+
+## Pages
+
+`types` through `playout` mirror the C pages of the same name. `pulseq` and
+`recon` have no C counterpart: the sequence library and the
+reconstruction-side reader are C++ only.
+
+| Page | C counterpart |
+|---|---|
+| {doc}`types` | {doc}`../c/types` |
+| {doc}`protocol` | {doc}`../c/protocol` |
+| {doc}`file` | {doc}`../c/file` |
+| {doc}`checks` | {doc}`../c/checks` |
+| {doc}`cache` | {doc}`../c/cache` |
+| {doc}`generation` | {doc}`../c/generation` |
+| {doc}`playout` | {doc}`../c/playout` |
+| {doc}`pulseq` | none |
+| {doc}`recon` | none |
+
+## Headers
+
+`pulseg.hpp` includes all of the above. The individual headers are
+`types.hpp`, `error.hpp`, `collection.hpp`, `protocol.hpp`, `file.hpp` and
+`chunk.hpp`.
+
+The C headers remain available: they are `extern "C"` and `pulseg.hpp`
+includes them, so any C entry point can be called directly, with
+`Collection::handle()` supplying the raw pointer.

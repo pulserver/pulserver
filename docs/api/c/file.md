@@ -1,7 +1,7 @@
 # Reading a sequence
 
-Three questions, in increasing order of what they cost: what does the file say
-about itself, what is in it, and what does it mean.
+Three entry points, in increasing order of cost: what the file declares, what
+it contains, and what it means.
 
 ```c
 pulseg_collection *coll = NULL;
@@ -18,20 +18,16 @@ if (PULSEG_FAILED(code)) {
 
 A **collection** is one parsed scan: every subsequence in the chain, its
 segments, the unique blocks they are built from, the event libraries behind
-those, and the cursor that walks the whole thing in playout order. The
-structure is *detected* from block content — a `TRID` label is never asked
-for and never trusted — so what comes back is what the file plays.
+those, and the cursor that walks them in playout order. The structure is
+detected from block content; a `TRID` label is never read.
 
 ## Peeking
 
-Before committing to a parse, a console needs two answers off the head of the
-chain: how long the scan will take, and what the sequence declares about
-itself. Both read the `[DEFINITIONS]` section only.
+Both read the `[DEFINITIONS]` section of the head of the chain and stop.
 
 `pulseg_peek_scan_time` is the file-level counterpart of the design host's
-`VALIDATE` (see {doc}`protocol`): the same question asked of a `.seq` that
-already exists rather than of a protocol that has not been built yet. Its
-answer is an approximation — dead time between segments is not accounted for.
+`VALIDATE` (see {doc}`protocol`), asked of a `.seq` that already exists. Its
+answer is an approximation: dead time between segments is not accounted for.
 
 ````{only} doxygen
 ```{doxygenfunction} pulseg_peek_scan_time
@@ -48,11 +44,32 @@ answer is an approximation — dead time between segments is not accounted for.
 ```
 ````
 
-## Reading
+## Parsing, then structuring
 
-`pulseg_read` takes the head of a chain, follows it, and converts the result in
-one call. `pulseg_read_from_buffers` takes the files already in memory, which
-is what a design service that never touched a disk has.
+`pulseq_read` follows a chain from its head and returns the raw Pulseq model:
+blocks, the event libraries they index, shapes, definitions. The full reader —
+buffers, the binary format, definitions-only — is on {doc}`pulseq`.
+
+`pulseg_convert_collection` takes those parsed files and produces the
+collection: deduplication of the unique blocks, TR and segment detection,
+execution-stream expansion, the label table, and the cross-subsequence
+consistency checks. A reader for another sequence-design language arrives
+here.
+
+````{only} doxygen
+```{doxygenfunction} pulseg_convert_collection
+:project: pulserver_c
+```
+
+```{doxygenfunction} pulseg_check_consistency
+:project: pulserver_c
+```
+````
+
+## Both at once
+
+`pulseg_read` is the two composed, for a caller with a path.
+`pulseg_read_from_buffers` is the same for files already in memory.
 
 ````{only} doxygen
 ```{doxygenfunction} pulseg_read
@@ -72,32 +89,10 @@ is what a design service that never touched a disk has.
 ```
 ````
 
-## Converting
-
-The two halves of `pulseg_read` are separable, and a caller that already has
-parsed `pulseq_file` structures — from {doc}`pulseq` directly, or from its own
-reader for another sequence-design language — composes them itself.
-
-`pulseg_convert_collection` is the seam: deduplication of the unique blocks,
-TR and segment detection, execution-stream expansion, the label table, and the
-cross-subsequence consistency checks. It is where a `.seq` stops being a file
-and becomes a structure.
-
-````{only} doxygen
-```{doxygenfunction} pulseg_convert_collection
-:project: pulserver_c
-```
-
-```{doxygenfunction} pulseg_check_consistency
-:project: pulserver_c
-```
-````
-
 ## What the scan says about itself
 
-The description a reconstruction wants when k-space alone is not enough: the
-event table, the RF definitions behind it, and the parameters the design side
-declared.
+The event table, the RF definitions behind it, and the parameters the design
+side declared.
 
 ````{only} doxygen
 ```{doxygenfunction} pulseg_get_sequence_description
@@ -130,6 +125,6 @@ declared.
 
 ## See also
 
-{doc}`pulseq` is the reader underneath this one, usable on its own;
-{doc}`checks` is what a collection passes before it is played; {doc}`cache`
-stores the result so the later stages do not repeat the work.
+{doc}`pulseq` is the reader underneath. {doc}`checks` is what a collection
+passes before it is played. {doc}`cache` stores the result.
+{doc}`../cpp/file` is the C++ counterpart.

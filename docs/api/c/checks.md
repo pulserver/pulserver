@@ -36,16 +36,18 @@ here — both shipped models are initialised from numbers the caller supplies.
 replace a predownload gate or a hardware monitor. What they buy is finding the
 violation at design time rather than at the console.
 
+**Each check is a separate entry point.** An interpreter that already gates
+amplitude and slew can call only the acoustic and nerve-stimulation ones. A
+check judges one canonical TR, bounded over every repetition, rather than
+every block in the scan.
+
 ## All of them, or one
 
 `pulseg_check_safety` runs every check and returns at the first violation with
 a diagnostic naming it.
 
-Each check is also a public entry point, because a platform may enforce some of
-them in hardware and want only the rest — a scanner with an acoustic monitor
-but no nerve model, or the reverse. None of them assumes another has run, and
-each is exactly the check `pulseg_check_safety` runs, not an approximation of
-it.
+Each check is also a public entry point. None assumes another has run, and
+each is the same code `pulseg_check_safety` runs.
 
 ````{only} doxygen
 ```{doxygenfunction} pulseg_check_safety
@@ -78,11 +80,10 @@ it.
 ````
 
 Amplitude and slew are compared as vector magnitudes of the unrotated
-waveform, because that magnitude is what bounds every physical axis under an
-arbitrary rotation. Slew and continuity are neighbours but not the same
-question: slew bounds what one event demands, continuity bounds the step
-*between* two adjacent events — including a subsequence that ends without
-ramping to zero.
+waveform, which bounds every physical axis under an arbitrary rotation.
+
+Slew bounds what one event demands. Continuity bounds the step between two
+adjacent events, including a subsequence ending without ramping to zero.
 
 ## Sharing the preprocessing
 
@@ -95,12 +96,11 @@ Passing `NULL` instead is always allowed: the check then builds a plan for its
 own use and destroys it, which costs one small allocation and needs no
 lifecycle from the caller.
 
-Where a plan pays is asking the same thing twice — a verdict followed by the
+A plan pays when the same window is asked for twice: a verdict followed by the
 spectra behind it, or a check re-run against a different band table or PNS
-threshold, neither of which changes the waveforms. It is worth being precise
-about where it does *not*: the windows the PNS and mechanical-resonance checks
-evaluate are different windows, so running those two back to back reuses the
-shape grouping but not the extraction.
+threshold. The PNS and mechanical-resonance checks evaluate different windows,
+so running those two in sequence reuses the shape grouping but not the
+extraction.
 
 `cache_budget_kb` caps what a plan retains, which matters on an embedded
 target: past the cap it drops what it has not used recently and re-extracts if
@@ -123,10 +123,8 @@ asked again. The verdict never depends on it.
 
 ## The data behind a verdict
 
-A refusal that only says *no* is hard to act on. These two return the spectra
-and the slew-rate waveforms themselves, which is what a plot draws and what
-makes a borderline sequence explainable instead of merely rejected. Pass the
-same plan the check used and the extraction is not repeated.
+The spectra and the slew-rate waveforms a check decides on. Pass the same plan
+the check used and the extraction is not repeated.
 
 ````{only} doxygen
 ```{doxygenfunction} pulseg_calc_mech_resonances
@@ -210,10 +208,8 @@ kernel.
 Both `*_init` functions leave the model borrowing its context struct, which
 has to outlive every call made through it.
 
-A vendor's own model is caller-side code, so what a convolution model needs to
-do its work is published too: `pulseg_conv_fft_plan` transforms a kernel once
-and applies it to each gradient axis, instead of the model bringing its own
-FFT.
+`pulseg_conv_fft_plan` is published for a caller writing its own convolution
+model: it transforms a kernel once and applies it to each gradient axis.
 
 ````{only} doxygen
 ```{doxygenfunction} pulseg_conv_fft_plan_create
@@ -231,7 +227,7 @@ FFT.
 
 ## See also
 
-{doc}`../../explanations/index` holds the physics these checks implement —
-what the canonical TR is, why a compressed train is evaluated the way it is,
-and where each model comes from. {doc}`types` defines the band list and the
-limits every check is judged against.
+{doc}`../../explanations/index` covers the physics: the canonical TR, the
+compressed-train evaluation, and the origin of each model. {doc}`types`
+defines the band list and the limits. {doc}`../cpp/checks` is the C++
+counterpart.

@@ -15,6 +15,7 @@ from scipy.ndimage import affine_transform, gaussian_filter
 from scipy.spatial.transform import Rotation
 
 import pulserver.recon as recon
+from pulserver.recon import ReconContext
 from pulserver.app import pmc_recon
 
 #: Where the three planes of a navigator lie, as the directions their images'
@@ -399,3 +400,63 @@ def test_calling_the_module_tracks_a_recorded_navigator_file(tmp_path):
     offline = Rotation.from_matrix(poses[-1].matrix[:3, :3]).as_rotvec()
     assert np.linalg.norm(poses[-1].matrix[:3, 3] * 1e-3 - shift) < 5e-5
     assert np.rad2deg(np.linalg.norm(offline - turned)) < 0.2
+
+
+# %% what the real-time path is allowed to claim
+
+
+def test_the_real_time_path_claims_one_cpu_thread_and_no_accelerator():
+    """A correction is computed beside the reconstruction of the images.
+
+    It can claim neither the array nor the card, and it has a deadline: the
+    residual recovery before the next inversion. Both halves of the work are
+    asked for explicitly here rather than left to a default -- the gridding
+    would otherwise plan on the GPU wherever there is one, and both the
+    transform and the registration are faster on one thread at a navigator's
+    size than on twenty, dispatching being the larger cost.
+    """
+    asked = {}
+    original = pmc_recon.NonCartesian2D
+    weights = pmc_recon.pipe_menon_dcf
+
+    def record_operator(*args, **kwargs):
+        asked["operator"] = kwargs
+        return original(*args, **kwargs)
+
+    def record_weights(*args, **kwargs):
+        asked["weights"] = kwargs
+        return weights(*args, **kwargs)
+
+    pmc_recon.NonCartesian2D = record_operator
+    pmc_recon.pipe_menon_dcf = record_weights
+    try:
+        connection = Loopback(navigator(volume(MATRIX), 0))
+        pmc_recon.process(connection, "pmc_recon", header())
+    finally:
+        pmc_recon.NonCartesian2D = original
+        pmc_recon.pipe_menon_dcf = weights
+
+    assert asked["operator"]["backend"] == "finufft"
+    assert asked["operator"]["nthreads"] == 1
+    assert asked["weights"]["nthreads"] == 1
+
+
+def test_the_registration_the_plugin_tracks_with_is_single_resolution_and_single_thread():
+    plugin = pmc_recon.PLUGIN.spawn()
+    plugin.startup(ReconContext.offline(header()))
+    registration = plugin.tracker.registration
+    assert registration.threads == 1
+    assert registration.shrink_factors == (1,)
+
+
+def test_a_registration_leaves_the_thread_count_it_found():
+    """The count is ITK's, process-wide, and shared with everything else in
+    the process -- so a registration sets it for its own call and puts it
+    back."""
+    sitk = pytest.importorskip("SimpleITK")
+    before = sitk.ProcessObject.GetGlobalDefaultNumberOfThreads()
+    planes = planes_of(volume(32))
+    recon.RigidRegistration(iterations=2, threads=1).estimate(
+        planes[0], planes[0], spacing=(SPACING, SPACING)
+    )
+    assert sitk.ProcessObject.GetGlobalDefaultNumberOfThreads() == before

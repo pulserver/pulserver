@@ -129,13 +129,13 @@ These entry points return `0` or a non-negative count on success and `-1` with
 `errno` set on failure — **not** the `PULSEG_ERR_*` codes the rest of the
 library uses. What fails here is a process or a pipe, not a sequence model.
 
-The three commands are the three questions a console asks: `LIST_PROTOCOL` for
-the parameters and their defaults, `VALIDATE` for whether the operator's
-current prescription is playable and how long it would take, and `GENERATE`
-for the `.seq` itself. `pulseg_bridge_validate` writes the plugin's message
-into a `pulseg_text_buffer` (see {doc}`types`); once a `.seq` exists,
-`pulseg_peek_scan_time` on {doc}`file` answers the timing half of the same
-question without the host.
+Three commands. `LIST_PROTOCOL` returns the parameters and their defaults.
+`VALIDATE` reports whether a protocol is playable and how long it would take,
+writing the plugin's message into a `pulseg_text_buffer` (see {doc}`types`).
+`GENERATE` writes the `.seq`.
+
+Once a `.seq` exists, `pulseg_peek_scan_time` on {doc}`file` answers the
+timing question without the host.
 
 ````{only} doxygen
 ```{doxygenfunction} pulseg_bridge_open_with_opts
@@ -166,6 +166,6 @@ question without the host.
 
 ## See also
 
-{doc}`../python/apps` is the Python side of the same contract: the typed
-parameters a plugin declares and the `SequencePlugin` the bridge drives.
-{doc}`file` picks up where `GENERATE` leaves off.
+{doc}`../python/apps` is the Python side of the same contract. {doc}`file`
+picks up where `GENERATE` leaves off. {doc}`../cpp/protocol` is the C++
+counterpart.

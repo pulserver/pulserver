@@ -18,6 +18,7 @@ from ._common import (
     present,
     solve_delay,
     solve_rephasing,
+    wave_gradients,
 )
 
 #: Fraction of ``max_grad`` the readout lobe may reach, leaving the rest for
@@ -169,10 +170,19 @@ class _LineReadout(SequenceModule):
         spoiling_position: str = "post",
         n_echoes: int = 1,
         flyback: bool = True,
+        wave: str | None = None,
+        wave_cycles: int = 8,
+        wave_amplitude: float = 8e-3,
         labels: tuple[str, ...] | None = None,
         trigger: Any = None,
     ) -> None:
         ndim = self._ndim
+        if wave is not None and ndim != 3:
+            raise ValueError(
+                "wave encoding spreads a voxel along the two encoded axes "
+                "transverse to the readout, and a 2D readout has only one of "
+                "them: the other is the slice"
+            )
         n_echoes = int(n_echoes)
         if n_echoes < 1:
             raise ValueError("n_echoes must be >= 1")
@@ -269,6 +279,25 @@ class _LineReadout(SequenceModule):
             num_samples=n_samples, dwell=dwell, delay=flat_top_start, system=system
         )
 
+        # The corkscrew rides under the same flat top the samples are taken
+        # on, and both encoded axes are free there: the phase encodes are
+        # spent in the prewinder. Each event is self-balanced, so a scan that
+        # scales one to zero for a calibration line changes nothing else about
+        # the readout.
+        gy_wave = gz_wave = None
+        wave_peak = 0.0
+        if wave is not None:
+            built = wave_gradients(
+                system,
+                flat_time=readout_duration,
+                delay=flat_top_start,
+                cycles=wave_cycles,
+                amplitude=wave_amplitude,
+                mode=wave,
+            )
+            gy_wave, gz_wave = built.get("y"), built.get("z")
+            wave_peak = built["amplitude"]
+
         # Phase encoding, at its largest step: resolution alone fixes it, since
         # field of view and matrix cancel.
         gy_pre = pp.make_phase_encoding("y", fov[1] / n[1], system=system)
@@ -353,7 +382,9 @@ class _LineReadout(SequenceModule):
             if n_echoes > 1 and flyback and i_echo:
                 self.seq.add_block(gx_flyback)
             lobe = gx if (flyback or i_echo % 2 == 0) else gx_rev
-            self.seq.add_block(lobe, adc, *adc_labels)
+            self.seq.add_block(
+                lobe, adc, *present(gy_wave), *present(gz_wave), *adc_labels
+            )
 
         self.seq.add_block(*_rewinder)
 
@@ -370,6 +401,9 @@ class _LineReadout(SequenceModule):
         self.center_sample = n_pre
         self.delta_kx = delta_kx
         self.readout_duration = readout_duration
+        # What the corkscrew reached, which is the requested amplitude only
+        # where the slew rate left room for it.
+        self.wave_amplitude = wave_peak
 
 
 def _area(event) -> float:

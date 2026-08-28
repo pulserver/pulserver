@@ -1,17 +1,14 @@
 # Structure, events and waveform generation
 
-What the scan is made of, the events behind it, and the samples an amplifier
-or a transmit chain is actually handed. This is the surface a
-waveform-generation pass works through, and the same getters answer the
-questions a preparation pass has — echo-filter inputs, RF statistics, the
-corner points a gradient-heating model integrates.
+What the scan is made of, the events behind it, and the samples handed to an
+amplifier or a transmit chain. The same getters answer what a preparation pass
+needs: echo-filter inputs, RF statistics, and the corner points a
+gradient-heating model integrates.
 
 ## Structure
 
-From the whole scan down to one block. A subsequence is one file of the chain;
-a segment is the interpreter's unit of playout; a block is one row of the
-block table, and the same block definition is shared by every instance that
-plays it.
+A subsequence is one file of the chain. A segment is the unit of playout. A
+block is one row of the block table, shared by every instance that plays it.
 
 ````{only} doxygen
 ```{doxygenfunction} pulseg_get_collection_info
@@ -110,13 +107,13 @@ them, which is what an interpreter that loads a segment at a time asks for.
 
 ## Events
 
-The RF pulses, gradients, ADC windows and labels a block carries. The shape
-arrays come back normalised to a peak of about one, with the physical scale
-reported separately — which is what lets one waveform serve every instance
-that plays it at a different amplitude.
+The RF pulses, gradients, ADC windows and labels a block carries. Shape arrays
+come back normalised to a peak of about one, with the physical scale reported
+separately, so one waveform serves every instance that plays it at a different
+amplitude.
 
-`pulseg_get_rf_stats` is also the RF summary a vendor applies its own SAR
-limits to; the checks on {doc}`checks` deliberately do not.
+`pulseg_get_rf_stats` is the RF summary a vendor applies its own SAR limits to.
+The checks on {doc}`checks` do not.
 
 ````{only} doxygen
 ```{doxygenfunction} pulseg_get_rf_stats
@@ -248,13 +245,12 @@ limits to; the checks on {doc}`checks` deliberately do not.
 
 ## Waveforms
 
-One canonical TR, resolved into the samples the amplifiers see. This is what
-the checks run against and what a plot draws; `pulseg_get_tr_waveforms` adds
-the RF, the ADC events and the block boundaries to the gradients.
+One canonical TR, resolved into the samples the amplifiers see.
+`pulseg_get_tr_waveforms` adds the RF, the ADC events and the block boundaries
+to the gradients.
 
-The corner points are the same TR as a piecewise-linear vertex list rather
-than a sampled waveform, which is the form a gradient-heating or slew integral
-wants.
+The corner points are the same TR as a piecewise-linear vertex list, which is
+the form a gradient-heating or slew integral takes.
 
 ````{only} doxygen
 ```{doxygenfunction} pulseg_get_tr_gradient_waveforms
@@ -319,16 +315,16 @@ wants.
 
 ## Materialising and chunking
 
-`pulseg_materialize_wave` renders one distinct waveform on demand — the call a
-generation pass makes once per entry in the wave table rather than once per
-block.
+`pulseg_materialize_wave` renders one distinct waveform: once per entry in the
+wave table, not once per block.
 
-Most scans do not need a chunk plan: a handful of base waveforms replayed at
-different amplitudes and rotations fits in waveform memory at once, and the
-planner says so. Streaming is for what does not fit — individually optimised
-trajectories, where the library is measured in gigabytes — and then the unit
-is a segment, because a segment is what the interpreter points the hardware
-at.
+`pulseg_plan_chunks` returns `PULSEG_WAVE_RESIDENT` when every distinct
+waveform fits in waveform memory at once, which is the common case. It returns
+`PULSEG_WAVE_STREAMED` when they do not, and then the unit is a segment,
+because a segment is what the hardware is pointed at.
+
+The collection must carry the execution stream: the planner needs to know how
+often each waveform is played and in what order.
 
 ````{only} doxygen
 ```{doxygenfunction} pulseg_materialize_wave
@@ -370,5 +366,6 @@ at.
 
 ## See also
 
-{doc}`cache` is where a generation pass gets its collection from without
-re-parsing; {doc}`playout` walks the same structure in the order it plays.
+{doc}`cache` supplies the collection without re-parsing. {doc}`playout` walks
+the same structure in the order it plays. {doc}`../cpp/generation` is the C++
+counterpart.

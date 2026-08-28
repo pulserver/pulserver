@@ -10,7 +10,14 @@ import numpy as np
 
 from ... import pypulseq as pp
 from .._module import SequenceModule
-from ._common import as_tuple, bridge, left_align_rephaser, present, solve_delay
+from ._common import (
+    as_tuple,
+    bridge,
+    left_align_rephaser,
+    present,
+    solve_delay,
+    wave_gradients,
+)
 
 #: Fraction of ``max_grad`` the readout plateau may reach.
 _READOUT_GRAD_MARGIN = 0.8
@@ -188,8 +195,17 @@ class _FseReadout(SequenceModule):
         voxel_size_m: float | None = None,
         labels: tuple[str, ...] | None = None,
         trigger: Any = None,
+        wave: str | None = None,
+        wave_cycles: int = 8,
+        wave_amplitude: float = 8e-3,
     ) -> None:
         ndim = self._ndim
+        if wave is not None and ndim != 3:
+            raise ValueError(
+                "wave encoding spreads a voxel along the two encoded axes "
+                "transverse to the readout, and a 2D readout has only one of "
+                "them: the other is the slice"
+            )
         etl = int(etl)
         if etl < 1:
             raise ValueError("etl must be >= 1")
@@ -250,6 +266,24 @@ class _FseReadout(SequenceModule):
         amplitude = float(shape.amplitude)
         ramp_area = 0.5 * float(shape.rise_time) * amplitude
         adc = pp.make_adc(num_samples=n_samples, dwell=dwell, system=system)
+
+        # The corkscrew rides under the plateau the samples are taken on. Both
+        # encoded axes are free there -- the encodes are spent in the bridges
+        # either side -- and each event is self-balanced, so an echo that
+        # scales one to zero changes nothing else about the readout.
+        gy_wave = gz_wave = None
+        wave_peak = 0.0
+        if wave is not None:
+            built = wave_gradients(
+                system,
+                flat_time=readout_duration,
+                delay=float(adc.delay),
+                cycles=wave_cycles,
+                amplitude=wave_amplitude,
+                mode=wave,
+            )
+            gy_wave, gz_wave = built.get("y"), built.get("z")
+            wave_peak = built["amplitude"]
         echo_offset = float(adc.delay) + n_pre * dwell
         flat_span = pp.ceil_to_raster(float(adc.delay) + readout_duration, raster)
         gx = pp.make_extended_trapezoid(
@@ -382,7 +416,9 @@ class _FseReadout(SequenceModule):
                 wait_esp1 = pp.make_delay(wait_first)
                 self.seq.add_block(wait_esp1)
             self.seq.add_block(gx_bridge_pre, gy_pre, *present(gz_pre))
-            self.seq.add_block(gx, adc, *adc_labels)
+            self.seq.add_block(
+                gx, adc, *present(gy_wave), *present(gz_wave), *adc_labels
+            )
             self.seq.add_block(gx_bridge_post, gy_rew, *present(gz_rew))
 
         tr_min = self.seq.duration()[0]
@@ -404,6 +440,9 @@ class _FseReadout(SequenceModule):
         self.center_sample = n_pre
         self.delta_kx = delta_kx
         self.readout_duration = readout_duration
+        # What the corkscrew reached, which is the requested amplitude only
+        # where the slew rate left room for it.
+        self.wave_amplitude = wave_peak
 
 
 def _span(system: pp.Opts, *events: Any) -> float:

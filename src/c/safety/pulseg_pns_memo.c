@@ -357,7 +357,7 @@ int pulseg__calc_pns_memoized(
     int num_templates, num_occurrences, cap;
     int n_uniform, axis, i, t, block_idx, pivot;
     pulseg__wave_key key;
-    int rc, max_len, len, off;
+    int rc, max_len, len, off, rep;
     double assembly_ops;
     float inv_gamma, dt_s, scale, pivot_v;
     const pulseg_block_table_element *bte;
@@ -485,6 +485,22 @@ int pulseg__calc_pns_memoized(
     assembly_ops = 0.0;
     for (i = 0; i < num_occurrences; ++i)
         assembly_ops += (double)templates[occurrences[i].tmpl].resp_len;
+    /* The wrapped repetitions below place occurrences again, clipped at the
+     * end of the output. Counting the placements is integer work against the
+     * fused adds it is deciding about, so it is counted rather than guessed. */
+    for (rep = n_uniform; rep < n; rep += n_uniform)
+    {
+        for (i = 0; i < num_occurrences; ++i)
+        {
+            off = occurrences[i].offset + rep;
+            if (off >= n)
+                continue;
+            len = templates[occurrences[i].tmpl].resp_len;
+            if (off + len > n)
+                len = n - off;
+            assembly_ops += (double)len;
+        }
+    }
     if (assembly_ops * PNS_MEMO_MIN_SPEEDUP > pns_memo_transform_ops(n, kernel_len))
         goto done;
 
@@ -527,23 +543,28 @@ int pulseg__calc_pns_memoized(
             occurrences[i].scale);
     }
 
-    /* The exact path appends `pad` circularly wrapped samples so the filter
-     * is warmed up where the window ends. Replaying the leading occurrences
-     * one window later reproduces that tail; everything past the output is
-     * clipped, so only the first `pad` samples' worth actually contributes. */
-    for (i = 0; i < num_occurrences; ++i)
+    /* The exact path appends `pad` circularly wrapped samples so the filter is
+     * warmed up where the window ends. Replaying the occurrences one window
+     * later reproduces that tail -- and `pad` is set by the model's memory,
+     * not by the window, so it routinely spans more than one window and the
+     * replay has to repeat until it covers the output. Everything past the
+     * output is clipped. */
+    for (rep = n_uniform; rep < n; rep += n_uniform)
     {
-        const pns_memo_template *tp = &templates[occurrences[i].tmpl];
-        off = occurrences[i].offset + n_uniform;
-        if (off >= n)
-            continue;
-        pns_memo_accumulate(
-            axis_out[tp->axis],
-            n,
-            tp->resp,
-            tp->resp_len,
-            off,
-            occurrences[i].scale);
+        for (i = 0; i < num_occurrences; ++i)
+        {
+            const pns_memo_template *tp = &templates[occurrences[i].tmpl];
+            off = occurrences[i].offset + rep;
+            if (off >= n)
+                continue;
+            pns_memo_accumulate(
+                axis_out[tp->axis],
+                n,
+                tp->resp,
+                tp->resp_len,
+                off,
+                occurrences[i].scale);
+        }
     }
 
     if (out_scale != 1.0f)

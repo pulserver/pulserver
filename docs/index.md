@@ -11,8 +11,8 @@ Three interfaces, one representation:
 | | |
 |---|---|
 | **Python** — design sequences from readout, excitation and preparation modules; write `.seq` files; run the safety checks; reconstruct. | {doc}`api/python/index` · {doc}`examples/index` |
-| **C** — the scanner-side library: parse a `.seq`, derive its structure, gate it against the hardware, replay it block by block. C89, no dependencies. | {doc}`api/c/index` · {doc}`examples/c/interpreter` |
-| **C++** — the same library with RAII types, plus the reconstruction-side reader that turns a `.seq` chain into trajectories, labels and a sequence description. | {doc}`api/cpp/index` · {doc}`examples/cpp/safety_only` |
+| **C** — the scanner-side library: parse a `.seq`, derive its structure, gate it against the hardware, replay it block by block. C89, no dependencies. | {doc}`api/c/index` · {doc}`examples/c/index` |
+| **C++** — the same library with RAII types, plus the reconstruction-side reader that turns a `.seq` chain into trajectories, labels and a sequence description. | {doc}`api/cpp/index` · {doc}`examples/cpp/index` |
 
 ## Where to start
 
@@ -21,9 +21,10 @@ Three interfaces, one representation:
 - **Want to know why it is built this way?** {doc}`explanations/index` covers
   the structural TR, segmentation, the safety model, and the performance
   budget, with a short review of Pulseq and ISMRMRD for context.
-- **Integrating an existing interpreter?** The shortest useful thing
-  Pulserver does for you is
-  {doc}`safety checking in five lines <examples/cpp/safety_only>`.
+- **Integrating an existing interpreter?** The easiest thing to adopt on its
+  own is {doc}`the safety checks <examples/c/safety_gate>` — in particular the
+  acoustic and nerve-stimulation ones, judged over the canonical TR rather
+  than the whole scan.
 
 ## What is here that is not elsewhere
 
