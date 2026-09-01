@@ -1,8 +1,8 @@
 # Explanations
 
 Why Pulserver is built the way it is, and what it does that a Pulseq writer
-alone does not. Each page is a concept, with the shipped plugins as the worked
-evidence.
+alone does not. Each page opens with a TL;DR, then works the concept through
+with the shipped plugins as evidence.
 
 Read the background first if Pulseq or ISMRMRD are new to you; the rest stands
 on its own.

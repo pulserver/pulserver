@@ -184,3 +184,118 @@ def test_the_plugin_reconstructs_a_streamed_measurement(phantom, coil_maps):
     )
     assert len(results) == 1
     assert relative_error(results[0].data.T, phantom) < 0.3
+
+
+# ----------------------------------------------------------------------
+# Off-resonance, measured from the echoes and put in the operator
+# ----------------------------------------------------------------------
+
+#: Long enough for a 60 Hz offset to turn most of a cycle across it.
+DWELL_S = 200e-6
+ECHO_TIMES = (4e-3, 8e-3)
+
+
+@pytest.fixture(scope="module")
+def field():
+    """A linear ramp of off-resonance across the object, in Hz."""
+    axis = np.linspace(-1.0, 1.0, N)
+    _, x = np.meshgrid(axis, axis, indexing="ij")
+    return (60.0 * x).astype(np.float32)
+
+
+def _multiecho(phantom, coil_maps, trajectory, field):
+    """What the scanner measures at each echo, with the field acting.
+
+    Off-resonance does two things and both are in here: between the echoes it
+    turns the object, which is what a field map is read from, and along each
+    readout it turns it again, which is what blurs.
+    """
+    from pulserver.recon import NonCartesian2D, OffResonance
+
+    readout_time = (np.arange(trajectory.shape[1]) - trajectory.shape[1] // 2) * DWELL_S
+    physics = NonCartesian2D(
+        trajectory.reshape(-1, 2),
+        (N, N),
+        coil_maps=coil_maps,
+        n_coils=COILS,
+    )
+    blurring = OffResonance(physics, field, np.tile(readout_time, trajectory.shape[0]))
+    return [
+        np.asarray(
+            blurring.A(
+                (phantom * np.exp(2j * np.pi * field * te)).astype(np.complex64)[None]
+            )
+        ).reshape(COILS, trajectory.shape[0], trajectory.shape[1])
+        for te in ECHO_TIMES
+    ]
+
+
+def _multiecho_header(n_spokes):
+    hdr = header(n_spokes)
+    hdr.encoding[0].encodingLimits.contrast = SimpleNamespace(
+        minimum=0, maximum=len(ECHO_TIMES) - 1, center=0
+    )
+    hdr.sequenceParameters = SimpleNamespace(TE=list(ECHO_TIMES))
+    return hdr
+
+
+def _reconstruct_multiecho(measured, trajectory, **kwargs):
+    from pulserver.recon._server.application import _make_bucket
+
+    import ismrmrd
+
+    acquisitions = []
+    for echo, kspace in enumerate(measured):
+        for view in range(trajectory.shape[0]):
+            acquisition = ismrmrd.Acquisition()
+            acquisition.resize(trajectory.shape[1], COILS, trajectory_dimensions=2)
+            acquisition.data[:] = kspace[:, view]
+            acquisition.traj[:] = trajectory[view]
+            acquisition.idx.slice = 0
+            acquisition.idx.kspace_encode_step_1 = view
+            acquisition.idx.contrast = echo
+            acquisition.center_sample = trajectory.shape[1] // 2
+            acquisition.sample_time_us = DWELL_S * 1e6
+            if echo == len(measured) - 1 and view == trajectory.shape[0] - 1:
+                acquisition.setFlag(ismrmrd.ACQ_LAST_IN_MEASUREMENT)
+            acquisitions.append(acquisition)
+
+    # Fewer iterations than the deployed default: the field pass solves every
+    # echo before the corrected pass does, so a CPU suite pays for each one
+    # twice, and the assertion is against ignoring the field, not convergence.
+    settings = {"iterations": 8, "virtual_coils": 2, "calibration_width": 16}
+    plugin = noncartesian2D_recon.NonCartesian2DRecon(**{**settings, **kwargs})
+    return plugin(
+        _make_bucket(acquisitions, []),
+        ReconContext.offline(_multiecho_header(trajectory.shape[0])),
+    )
+
+
+def test_a_multiecho_scan_measures_its_own_field_and_unblurs_with_it(
+    phantom, coil_maps, field
+):
+    """A long readout in an inhomogeneous field blurs, and what says how far
+    off each voxel is, is how much its phase turned between the echoes."""
+    trajectory = spoke_trajectory(NYQUIST)
+    measured = _multiecho(phantom, coil_maps, trajectory, field)
+
+    ignored = _reconstruct_multiecho(measured, trajectory, correct_off_resonance=False)
+    modelled = _reconstruct_multiecho(measured, trajectory)
+
+    assert len(ignored) == len(modelled) == len(ECHO_TIMES)
+    assert [result.series_index for result in modelled] == [0, 1]
+    for echo in range(len(ECHO_TIMES)):
+        blurred = relative_error(ignored[echo].data.T, phantom)
+        sharp = relative_error(modelled[echo].data.T, phantom)
+        assert sharp < blurred, (echo, sharp, blurred)
+
+
+def test_a_single_echo_scan_has_no_field_to_measure(phantom, coil_maps):
+    """One echo states one phase, which is the object's own: asking for the
+    correction anyway must reconstruct the scan, not refuse it."""
+    trajectory = spoke_trajectory(NYQUIST)
+    kspace = sample(phantom, coil_maps, trajectory)
+
+    image = reconstruct(kspace, trajectory, correct_off_resonance=True)
+
+    assert relative_error(image, phantom) < 0.3

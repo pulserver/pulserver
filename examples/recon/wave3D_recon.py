@@ -18,6 +18,7 @@ from pulserver.recon import (
     NoiseAdjust,
     WaveEncoding,
     WavePSF,
+    WavePSFCalibration,
     image_result,
     pics,
 )
@@ -52,6 +53,12 @@ class Wave3DRecon(ReconPlugin):
     slew-limited to whatever the system allowed on the day -- and the
     reconstruction undoes what was played rather than what was prescribed.
 
+    The trajectory still describes the gradient, not the signal. The delay
+    between the two, and the isocentre the eddy currents shifted, appear only
+    as a phase the reconstruction leaves in the image, so ``calibrate_psf``
+    fits them there with
+    :class:`pulserver.recon.WavePSFCalibration` and solves again.
+
     **Where the sensitivities come from.** The autocalibration rectangle is
     acquired a second time with the wave scaled to zero, flagged calibration
     and nothing else. Those lines are Cartesian, so the maps are NLINV's over
@@ -79,7 +86,12 @@ class Wave3DRecon(ReconPlugin):
         Channels to compress the array onto before the solve. A scan with fewer
         physical channels keeps them all.
     calibration_iterations
-        Newton steps the sensitivity solve takes.
+        Newton steps the sensitivity solve takes, and LBFGS iterations each
+        stage of the point-spread function fit takes.
+    calibrate_psf
+        Fit the corkscrew to the data rather than reading it off the
+        trajectory alone. The first echo is solved twice, so the scan costs
+        one extra solve.
     coil_batch_size
         Channels the hybrid-space normal operator holds at once. The wave
         operator works on a grid the size of the volume times the readout, so
@@ -112,6 +124,7 @@ class Wave3DRecon(ReconPlugin):
         iterations: int = 40,
         virtual_coils: int = 8,
         calibration_iterations: int = 16,
+        calibrate_psf: bool = False,
         coil_batch_size: int = 1,
         device: Any = "auto",
     ) -> None:
@@ -124,6 +137,7 @@ class Wave3DRecon(ReconPlugin):
         self.iterations = int(iterations)
         self.virtual_coils = int(virtual_coils)
         self.calibration_iterations = int(calibration_iterations)
+        self.calibrate_psf = bool(calibrate_psf)
         self.coil_batch_size = int(coil_batch_size)
         self.device = device
 
@@ -220,7 +234,8 @@ class Wave3DRecon(ReconPlugin):
         )[0]
         traversed = points[1:3, first[0], first[1]]
         deviation[: traversed.shape[0]] = traversed
-        psf = WavePSF(*axes)(WavePSF.phase_from_trajectory(deviation))
+        phase = WavePSF.phase_from_trajectory(deviation)
+        psf = WavePSF(*axes)(phase)
 
         # (coils, partition, phase, readout) as the buffer had them, laid out
         # (readout, phase, partition) for the wave operator and put back to be
@@ -229,8 +244,16 @@ class Wave3DRecon(ReconPlugin):
         maps = maps.reshape(-1, n_partition, n_phase, buffer.readout)
         maps = maps.transpose(0, 3, 2, 1)
 
+        # A calibrated scan solves its first echo twice. The trajectory says
+        # where k went, which the corkscrew is read off; what it cannot say is
+        # the delay between the gradient and the acquisition, or where the
+        # eddy currents left the isocentre. Those show as a phase the first
+        # solve leaves in the image, so the image is what measures them.
+        echoes = list(range(buffer.extents.get("contrast", 1)))
+        schedule = [echoes[0], *echoes] if self.calibrate_psf else echoes
+
         results = []
-        for echo in range(buffer.extents.get("contrast", 1)):
+        for step, echo in enumerate(schedule):
             kspace = buffer.select(contrast=echo)[0]
             if self.coil_basis is not None:
                 kspace = np.einsum("vc,c...->v...", self.coil_basis, kspace)
@@ -255,6 +278,11 @@ class Wave3DRecon(ReconPlugin):
                 iterations=self.iterations,
             )
             volume = np.asarray(image).reshape(buffer.readout, n_phase, n_partition)
+            if self.calibrate_psf and step == 0:
+                psf = WavePSFCalibration(*axes, max_iter=self.calibration_iterations)(
+                    volume, phase
+                )
+                continue
             results.append(
                 image_result(volume.transpose(2, 1, 0), buffer, series_index=echo)
             )

@@ -69,7 +69,6 @@ _MEMBERS = {
     "OptimResult": "optim.state",
     "OptimState": "optim.state",
     "PDHG": "optim.pdhg",
-    "PhasePoleCorrection": "calibration",
     "PmcPayload": "_server.rtp_connection",
     "PolynomialPreconditioner": "optim._algorithms",
     "Positive": "denoisers",
@@ -102,6 +101,7 @@ _MEMBERS = {
     "cartesian_recon": "cartesian",
     "coil_maps_from_reference": "calibration",
     "default_model_paths": "weights",
+    "field_map": "calibration",
     "image_result": "postprocessing",
     "load_model": "weights",
     "noncartesian_recon": "noncartesian",
@@ -139,12 +139,12 @@ if TYPE_CHECKING:
     from .calibration import NLINV as NLINV
     from .calibration import NLINVPhysics as NLINVPhysics
     from .calibration import NLINVResult as NLINVResult
-    from .calibration import PhasePoleCorrection as PhasePoleCorrection
     from .calibration import WavePSF as WavePSF
     from .calibration import WavePSFCalibration as WavePSFCalibration
     from .calibration import WavePSFResult as WavePSFResult
     from .calibration import calibration_extent as calibration_extent
     from .calibration import coil_maps_from_reference as coil_maps_from_reference
+    from .calibration import field_map as field_map
     from .gadgets import CoilCompression as CoilCompression
     from .gadgets import EpiPhaseCorrection as EpiPhaseCorrection
     from .gadgets import Gadget as Gadget

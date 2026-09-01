@@ -95,6 +95,7 @@ def main(
     angular_increment_deg: float | None = None,
     partition_angle_offset_deg: float = 0.0,
     use_rotation_ext: bool = True,
+    spsp: bool = False,
 ) -> pp.Sequence:
     """Create a golden-angle stack-of-spirals 3D MPRAGE.
 
@@ -317,6 +318,7 @@ def main(
         angular_increment_deg=angular_increment_deg,
         partition_angle_offset_deg=partition_angle_offset_deg,
         use_rotation_ext=use_rotation_ext,
+        spsp=spsp,
     )
     readout = kernel.readout
     inversion = kernel.inversion
@@ -442,15 +444,20 @@ def main(
 # ======================================================================
 
 
-def SlabExcitationKernel(system: pp.Opts, flip_angle_deg: float, thickness_m: float):
-    """The slab excitation, spectral-spatial when ``SPSP_EXCITATION`` is set.
+def SlabExcitationKernel(
+    system: pp.Opts,
+    flip_angle_deg: float,
+    thickness_m: float,
+    spsp: bool = False,
+):
+    """The slab excitation, spectral-spatial when ``spsp`` is set.
 
     Returns ``(excitation, rf, gz)``. The selection gradient carries its own
     rephaser folded onto the end -- as a slab excitation does -- so the stack's
     partition prewinder block, which already encodes z, never holds a second
     z gradient.
     """
-    if SPSP_EXCITATION:
+    if spsp:
         fat_offset_hz = FAT_SHIFT_PPM * 1e-6 * system.gamma * system.B0
         excitation = design.SpspExcitation(
             system,
@@ -491,6 +498,7 @@ def MprageStackOfSpiralsKernel(
     angular_increment_deg: float | None = None,
     partition_angle_offset_deg: float = 0.0,
     use_rotation_ext: bool = True,
+    spsp: bool = False,
 ) -> SimpleNamespace:
     """Design the arms and the segment timing around them.
 
@@ -518,7 +526,7 @@ etl, angular_increment_deg, partition_angle_offset_deg, use_rotation_ext
         system, voxel_size_m=min(fov / n_x, slab_thickness / n_z)
     )
     excitation, exc_rf, exc_gz = SlabExcitationKernel(
-        system, flip_angle_deg, slab_thickness
+        system, flip_angle_deg, slab_thickness, spsp
     )
     if etl is None:
         etl = n_arms
@@ -728,6 +736,7 @@ class MprageStackOfSpirals3D(SequencePlugin):
 KERNEL_ARGUMENTS = frozenset(
     (
         "fov",
+        "spsp",
         "n_x",
         "n_z",
         "slab_thickness",
@@ -752,6 +761,7 @@ def protocol_kwargs(system: pp.Opts, protocol: dict[str, dict]) -> dict:
         main,
         system,
         protocol,
+        spsp=SPSP_EXCITATION,
         fov=params.param_float(prot, UIParam.FOV) * 1e-3,
         n_z=n_z,
         slab_thickness=n_z * partition_thickness,

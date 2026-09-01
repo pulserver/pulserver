@@ -389,7 +389,7 @@ namespace mrdserver
      * entry is appended.
      *
      * @param hdr    Header to modify in-place.
-     * @param name   Parameter name (e.g. "tensor_dat_path", "grad_coef_path").
+     * @param name   Parameter name (e.g. "tensor_dat_path", "gradient_coefficients").
      * @param value  Parameter string value.
      */
     void set_user_parameter_string(
@@ -427,24 +427,49 @@ namespace mrdserver
     void add_diffusion_parameters(ISMRMRD::IsmrmrdHeader& hdr, const SequenceCache& cache);
 
     /**
-     * @brief Resolve and inject sequence-description path UserParameters.
+     * @brief Inject the diffusion tensor table path as a UserParameter.
      *
-     * Adds:
-     *  - "tensor_dat_path" = "<base>/tensor<tensor_index>.dat"  if tensor_index > 0
-     *  - "grad_coef_path"  = "<base>/<grad_coil_name>.coef"     if mapping known
-     *
-     * Files are NOT opened or validated; the recon side handles I/O. The base
-     * directory defaults to "/usr/g/bin" (the GE scanner research dir) and may
-     * be overridden via the GADGETRON_RESOURCE_DIR environment variable.
+     * Adds "tensor_dat_path" = "<base>/tensor<tensor_index>.dat" when
+     * `tensor_index` is positive. The file is NOT opened or validated; the
+     * recon side handles I/O. The base directory defaults to "/usr/g/bin"
+     * (the GE scanner research dir) and may be overridden via the
+     * GADGETRON_RESOURCE_DIR environment variable.
      *
      * @param hdr            Header to modify in-place.
-     * @param tensor_index   Diffusion tensor file index (rdb_hdr_user6); 0 = skip.
-     * @param grad_coil_id   cfgradcoil value (rdb_hdr_user7); unknown ids are skipped.
+     * @param tensor_index   Diffusion tensor file index (rdb_hdr_user2); 0 = skip.
      */
-    void add_sequence_resource_paths(
+    void add_tensor_resource_path(ISMRMRD::IsmrmrdHeader& hdr, int tensor_index);
+
+    /**
+     * @brief Carry the gradient-coil spherical harmonics in the header.
+     *
+     * Writes the coefficients as UserParameterString "gradient_coefficients",
+     * in the `GRADWARPTYPE` / `SCALE{X,Y,Z}{1..10}` / `DELTA` syntax of the
+     * scanner's gw_coils.dat. The values travel rather than a path to them: a
+     * reconstruction runs off the scanner's filesystem, where no path resolves.
+     *
+     * The key is vendor-neutral and the payload is not:
+     * `pulserver.recon.GradientCoefficients.from_file` tells a GE table from a
+     * Siemens one by its contents, so a site with a different console writes
+     * its own syntax under the same name.
+     *
+     * Nothing is validated here. A gradwarp type this build cannot correct, or
+     * a non-zero delta, is written as it was read and refused on the recon
+     * side, where the correction that would be wrong is the one being asked
+     * for.
+     *
+     * @param hdr             Header to modify in-place.
+     * @param gradwarp_type   GRADWARPTYPE; 1 is spherical-harmonic.
+     * @param scales          30 coefficients, X1..X10 then Y1..Y10 then Z1..Z10.
+     * @param delta           DELTA term of the coil description.
+     *
+     * @throws std::invalid_argument if `scales` does not hold 30 entries.
+     */
+    void add_gradwarp_coefficients(
         ISMRMRD::IsmrmrdHeader& hdr,
-        int tensor_index,
-        int grad_coil_id);
+        int gradwarp_type,
+        const std::vector<float>& scales,
+        float delta);
 
     /**
      * @brief Enrich an ISMRMRD Acquisition with trajectory cache metadata,

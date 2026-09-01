@@ -1718,15 +1718,18 @@ int pulseg_get_tr_gradient_waveforms(
 {
     const pulseg_sequence_descriptor *desc;
     pulseg__uniform_grad_waveforms uw;
-    int num_unique;
-    int rep_idx;
-    int start_block, block_count;
+    int *labels;
+    int *group_first;
+    int num_groups;
+    int start_block, block_count, tr_size;
     int rc, i;
     int *block_order;
     float *time_arr;
 
     memset(&uw, 0, sizeof(uw));
     block_order = NULL;
+    labels = NULL;
+    group_first = NULL;
     if (!coll || canonical_tr_idx < 0 || subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
     {
         if (diag)
@@ -1738,13 +1741,29 @@ int pulseg_get_tr_gradient_waveforms(
     }
 
     desc = &coll->descriptors[subseq_idx];
+    tr_size = desc->tr_descriptor.tr_size;
 
-    /* Exactly one canonical TR.  A definition names its own worst
-     * instance (pulseg_grad_representative), so shot combinations are no
-     * longer enumerated and there is nothing to index past. */
-    num_unique = 1;
-    if (canonical_tr_idx >= num_unique)
+    rc = pulseg__group_tr_instances_by_shape(
+        desc,
+        &labels,
+        &group_first,
+        &num_groups,
+        PULSEG__MAX_SHAPE_GROUPS);
+    if (PULSEG_FAILED(rc))
     {
+        if (diag)
+        {
+            pulseg_diagnostic_init(diag);
+            diag->code = rc;
+        }
+        return rc;
+    }
+    if (canonical_tr_idx >= num_groups)
+    {
+        if (labels)
+            PULSEG_FREE(labels);
+        if (group_first)
+            PULSEG_FREE(group_first);
         if (diag)
         {
             pulseg_diagnostic_init(diag);
@@ -1752,9 +1771,9 @@ int pulseg_get_tr_gradient_waveforms(
         }
         return PULSEG_ERR_INVALID_ARGUMENT;
     }
-    rep_idx = 0;
-    start_block = rep_idx * desc->tr_descriptor.tr_size;
-    block_count = desc->tr_descriptor.tr_size;
+
+    start_block = (labels && group_first) ? group_first[canonical_tr_idx] * tr_size : 0;
+    block_count = tr_size;
 
     rc = pulseg__get_gradient_waveforms_range(
         desc,
@@ -1762,10 +1781,14 @@ int pulseg_get_tr_gradient_waveforms(
         diag,
         start_block,
         block_count,
-        PULSEG_AMP_ACTUAL,
-        NULL,
-        0,
+        PULSEG_AMP_MAX_POS,
+        labels,
+        canonical_tr_idx,
         block_order);
+    if (labels)
+        PULSEG_FREE(labels);
+    if (group_first)
+        PULSEG_FREE(group_first);
     if (PULSEG_FAILED(rc))
     {
         if (block_order)

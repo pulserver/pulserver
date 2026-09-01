@@ -1,5 +1,22 @@
 # PulSeg in one page
 
+```{admonition} TL;DR
+:class: tip
+
+- PulSeg splits every event into a **definition** (fixed for the whole scan)
+  and **instance parameters** (per playout). A definition is *prepared* once;
+  an instance parameter is *applied* a million times.
+- An arbitrary gradient's **samples are not part of its definition** — the
+  timing skeleton is. Two spiral arms of equal length are one definition and
+  two shapes, hence **one hardware reservation**.
+- A **base block** is a block's definition-level identity, which states that
+  its events belong together as a unit. Pulseq has no such object.
+- A **virtual segment** is an ordered run of base blocks played as a unit; every
+  instance must have the same block count and normalised structure.
+- In the specification, segment boundaries are **declared** by a `TRID` label,
+  not derived.
+```
+
 Pulseq describes a sequence as a flat list of blocks whose events carry
 hardware-facing quantities — amplitudes in Hz and Hz/m, times on declared
 rasters. What it does not describe is *structure*: nothing in the file says
@@ -7,13 +24,12 @@ which properties of an event are fixed and which vary shot to shot, which
 blocks are the same block played differently, or which runs of blocks are
 reusable units.
 
-Those distinctions are what an interpreter needs, and they are what the
-**PulSeg intermediate representation** (spec v2.1-alpha, J-F Nielsen and
-M. Cencini) adds. This page is the published model.
+Those distinctions are what the **PulSeg intermediate representation** (spec
+v2.1-alpha, J-F Nielsen and M. Cencini) adds. This page is the published model.
 
 ## Definitions and instance parameters
 
-The central move. In Pulseq an event is one record: a phase encode written
+In Pulseq an event is one record: a phase encode written
 128 times is 128 records that differ in one number. PulSeg splits every event
 into
 
@@ -44,9 +60,9 @@ once beside the rows applied per shot.
 
 ## Definition sharing between waveforms
 
-A trapezoid is the easy case: its definition is its geometry, and there is
-nothing else to it. An arbitrary waveform is where the split has to be read
-carefully, because its samples are *not* part of its definition.
+A trapezoid's definition is its geometry. An arbitrary waveform is where the
+split has to be read carefully, because its samples are *not* part of its
+definition.
 
 ```{figure} ../assets/pulseg/definition_sharing.png
 Two spiral arms written out shot by shot. Their samples differ, but their

@@ -74,12 +74,7 @@ def _configure_off_resonance_toeplitz(
 
 
 def _host_array(value: Any) -> Any:
-    """A field model as NumPy, contiguous, for the interpolation to plan on.
-
-    The decomposition the interpolator runs hands back a reversed view, which
-    is not something a Torch array can wrap. Planning on the host settles it;
-    the factors it produces are moved to the operator afterwards.
-    """
+    """A field map or a readout clock as contiguous NumPy, for the fit to run on."""
     if value is None:
         return None
     numpy = import_module("numpy")
@@ -87,6 +82,18 @@ def _host_array(value: Any) -> Any:
     if callable(detach):
         value = detach().cpu().numpy()
     return numpy.ascontiguousarray(value)
+
+
+def _contiguous_basis(native: Any) -> None:
+    """Lay the fitted temporal basis out so a Torch tensor can wrap it.
+
+    The partial decomposition answers descending singular order as a reversed
+    view, and a tensor cannot be made from an array with a negative stride.
+    """
+    numpy = import_module("numpy")
+    basis = getattr(native, "B", None)
+    if basis is not None:
+        native.B = numpy.ascontiguousarray(basis)
 
 
 @cache
@@ -166,11 +173,13 @@ def _off_resonance(
 ) -> MRIPhysics:
     """Decorate non-Cartesian physics with mri-nufft off-resonance correction.
 
-    The field model is fitted with a dense decomposition. The partial one is
-    an ARPACK routine that answers a reversed view, which is not something a
-    Torch array can wrap, and the matrix it decomposes is small enough -- one
-    row per readout sample, one column per field bin -- that the dense
-    factorization is the simpler thing to depend on.
+    The field model keeps only the handful of components the correction uses,
+    so it is fitted by the partial decomposition: the matrix it factors has one
+    row per readout sample and one column per field bin, and asking for all of
+    its singular vectors when eight are wanted costs thirty times as much. The
+    partial routine answers descending order as a reversed view, which a Torch
+    tensor cannot wrap, so the basis is made contiguous before it is handed
+    over.
     """
     if physics.native_operator is None:
         raise TypeError("OffResonance requires base non-Cartesian physics")
@@ -193,9 +202,9 @@ def _off_resonance(
 
     corrected_interpolator = interpolator
     if isinstance(interpolator, str):
-        corrected_interpolator = {"name": interpolator, "partial_svd": False}
+        corrected_interpolator = {"name": interpolator, "partial_svd": True}
     elif isinstance(interpolator, dict):
-        corrected_interpolator = {"partial_svd": False, **interpolator}
+        corrected_interpolator = {"partial_svd": True, **interpolator}
     corrected_readout_time = readout_time
     trajectory_shape = getattr(physics.trajectory, "shape", ())
     time_shape = getattr(readout_time, "shape", ())
@@ -250,6 +259,7 @@ def _off_resonance(
         mask=_host_array(mask),
         interpolator=corrected_interpolator,
     )
+    _contiguous_basis(native)
     native.to_torch(getattr(physics.native_operator, "device", None))
     toeplitz_enabled = "toeplitz" in physics.modifiers
     options = physics.toeplitz_options or _toeplitz_options()

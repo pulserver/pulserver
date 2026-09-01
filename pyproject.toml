@@ -183,4 +183,8 @@ markers = [
   # a machine without a GPU; the marker exists so a GPU runner can select
   # them with `-m cuda`.
   "cuda: requires a CUDA device and the pulserver[cuda] extra",
+  # The 128K-arm pipeline budget contract. Skips itself unless
+  # PULSERVER_BUDGET=1, because it runs minutes and holds a target the
+  # default suite has no business paying for on every run.
+  "budget: opt-in end-to-end pipeline budget guard (PULSERVER_BUDGET=1)",
 ]

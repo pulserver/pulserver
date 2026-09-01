@@ -1,5 +1,21 @@
 # ISMRMRD in one page
 
+```{admonition} TL;DR
+:class: tip
+
+- MRD is the vendor-neutral raw-data format and streaming protocol. Pulseq says
+  what is played; MRD says what comes back.
+- The XML header carries the **encoded space**, the **recon space** and the
+  **encoding limits** — the limits alone express oversampling, reduced phase
+  resolution and partial Fourier.
+- The readout direction deliberately has no centre in the header; the echo
+  position travels on each acquisition instead.
+- Three message types: **acquisitions** (a header plus `(coils, samples)` and
+  optionally a trajectory), **waveforms**, and **images**.
+- The session protocol is framed and length-prefixed, so a service can
+  reconstruct a scan it never sees the end of.
+```
+
 [ISMRMRD](https://ismrmrd.readthedocs.io) (MRD, for *MR Raw Data*) is the
 vendor-neutral format for raw MR data and the streaming protocol that carries
 it. Pulseq describes what the scanner plays; MRD describes what comes back,

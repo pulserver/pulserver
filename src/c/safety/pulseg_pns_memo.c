@@ -269,7 +269,9 @@ static int pns_memo_proportional(
  * spanning tens of chronaxie times, so a transform of the padded template
  * would be mostly padding -- and a direct linear convolution has no
  * wraparound to guard against in the first place. */
-static void pns_memo_convolve_direct(
+/** @return Multiply-accumulates issued. Zero samples are skipped, so this is
+ *  the count of inner iterations rather than sig_len * kernel_len. */
+static double pns_memo_convolve_direct(
     float *out,
     const float *sig,
     int sig_len,
@@ -277,12 +279,14 @@ static void pns_memo_convolve_direct(
     int kernel_len)
 {
     int i, j, out_len;
+    double macs;
     float s;
 
     out_len = sig_len + kernel_len - 1;
     for (i = 0; i < out_len; ++i)
         out[i] = 0.0f;
 
+    macs = 0.0;
     for (i = 0; i < sig_len; ++i)
     {
         s = sig[i];
@@ -290,14 +294,17 @@ static void pns_memo_convolve_direct(
             continue;
         for (j = 0; j < kernel_len; ++j)
             out[i + j] += s * kernel[j];
+        macs += (double)kernel_len;
     }
+    return macs;
 }
 
 /* Add `scale` times a template response into one axis, clipping to the
  * output window. `offset` may be -1: the very first block's step-up lands
  * one sample before the window, exactly where the exact path has no sample
  * either. */
-static void pns_memo_accumulate(
+/** @return Multiply-accumulates issued, after clipping. */
+static double pns_memo_accumulate(
     float *dst,
     int n,
     const float *src,
@@ -313,6 +320,7 @@ static void pns_memo_accumulate(
         lim = n - offset;
     for (j = j0; j < lim; ++j)
         dst[offset + j] += scale * src[j];
+    return (lim > j0) ? (double)(lim - j0) : 0.0;
 }
 
 static void pns_memo_free_templates(pns_memo_template *t, int count)
@@ -345,7 +353,8 @@ int pulseg__calc_pns_memoized(
     const float *kernel,
     int kernel_len,
     float out_scale,
-    int pad)
+    int pad,
+    double *out_macs)
 {
     const float *axis_wave[3];
     float *axis_out[3];
@@ -358,11 +367,12 @@ int pulseg__calc_pns_memoized(
     int n_uniform, axis, i, t, block_idx, pivot;
     pulseg__wave_key key;
     int rc, max_len, len, off, rep;
-    double assembly_ops;
+    double assembly_ops, template_macs;
     float inv_gamma, dt_s, scale, pivot_v;
     const pulseg_block_table_element *bte;
 
     *applied = 0;
+    template_macs = 0.0;
     offsets = NULL;
     lengths = NULL;
     templates = NULL;
@@ -523,7 +533,8 @@ int pulseg__calc_pns_memoized(
             rc = PULSEG_ERR_ALLOC_FAILED;
             goto done;
         }
-        pns_memo_convolve_direct(templates[t].resp, scratch, len + 1, kernel, kernel_len);
+        template_macs +=
+            pns_memo_convolve_direct(templates[t].resp, scratch, len + 1, kernel, kernel_len);
     }
 
     /* ---- pass 3: accumulate scaled, shifted copies ---- */
@@ -534,7 +545,7 @@ int pulseg__calc_pns_memoized(
     for (i = 0; i < num_occurrences; ++i)
     {
         const pns_memo_template *tp = &templates[occurrences[i].tmpl];
-        pns_memo_accumulate(
+        template_macs += pns_memo_accumulate(
             axis_out[tp->axis],
             n,
             tp->resp,
@@ -557,7 +568,7 @@ int pulseg__calc_pns_memoized(
             off = occurrences[i].offset + rep;
             if (off >= n)
                 continue;
-            pns_memo_accumulate(
+            template_macs += pns_memo_accumulate(
                 axis_out[tp->axis],
                 n,
                 tp->resp,
@@ -573,6 +584,8 @@ int pulseg__calc_pns_memoized(
                 axis_out[axis][i] *= out_scale;
 
     *applied = 1;
+    if (out_macs)
+        *out_macs = template_macs;
 
 done:
     if (offsets)

@@ -4488,7 +4488,12 @@ static void build_padded_dgdt(
 /* `desc` + the block window are optional: pass them and, when the model
  * exposes a kernel, the response is assembled from per-shape convolutions
  * instead of one transform over the whole window (pulseg_pns_memo.c). Pass
- * NULL and the exact full-waveform path always runs. */
+ * NULL and the exact full-waveform path always runs.
+ *
+ * `out_macs` is optional and receives the multiply-accumulates issued, or
+ * stays negative when the path taken cannot count them -- a model that
+ * publishes no kernel is opaque here, and reporting zero for it would read as
+ * free work rather than as unmeasured work. */
 static int calc_pns_from_uniform(
     pulseg_pns_result *result,
     pulseg_diagnostic *diag,
@@ -4498,7 +4503,8 @@ static int calc_pns_from_uniform(
     const pulseg_sequence_descriptor *desc,
     int block_start,
     int block_count,
-    const int *block_order)
+    const int *block_order,
+    double *out_macs)
 {
     pulseg_diagnostic local_diag;
     int max_samples, pad, n;
@@ -4526,6 +4532,8 @@ static int calc_pns_from_uniform(
     memo_applied = 0;
     memo_scale = 1.0f;
     rc = PULSEG_SUCCESS;
+    if (out_macs)
+        *out_macs = -1.0;
 
     if (!diag)
     {
@@ -4603,7 +4611,8 @@ static int calc_pns_from_uniform(
             memo_kernel,
             memo_kernel_len,
             memo_scale,
-            pad);
+            pad,
+            out_macs);
         PULSEG_FREE(memo_kernel);
         memo_kernel = NULL;
         if (PULSEG_FAILED(rc))
@@ -4665,6 +4674,18 @@ static int calc_pns_from_uniform(
     {
         diag->code = rc;
         goto fail;
+    }
+
+    /* The exact path's arithmetic, when the model published a kernel and so
+     * evaluates as a causal convolution against it: the filter is cold for
+     * its first `memo_kernel_len` output samples and saturated after. A model
+     * that publishes no kernel is not this shape and stays uncounted. */
+    if (out_macs && memo_kernel_len > 0)
+    {
+        double k = (double)memo_kernel_len;
+        double nn = (double)n;
+        *out_macs =
+            3.0 * ((nn >= k) ? (k * (k + 1.0) / 2.0 + (nn - k) * k) : (nn * (nn + 1.0) / 2.0));
     }
 
 emit:
@@ -4753,7 +4774,10 @@ static int calc_pns_over_shape_groups(
     const pulseg_pns_model *model,
     const pulseg_sequence_descriptor *desc,
     int start_block,
-    int block_count)
+    int block_count,
+    double *out_macs,
+    pulseg__safety_profile_fn profile_fn,
+    void *profile_ctx)
 {
     const pulseg__uniform_grad_waveforms *uw;
     pulseg_pns_result candidate;
@@ -4761,13 +4785,17 @@ static int calc_pns_over_shape_groups(
     const int *group_first;
     int num_groups, tr_size, g, rc, group_start, have_best;
     float peak, best_peak;
+    double group_macs;
 
     labels = NULL;
     group_first = NULL;
     num_groups = 1;
     have_best = 0;
     best_peak = 0.0f;
+    group_macs = -1.0;
     tr_size = desc->tr_descriptor.tr_size;
+    if (out_macs)
+        *out_macs = 0.0;
 
     rc =
         pulseg__plan_shape_groups(plan, &labels, &group_first, &num_groups, diag, desc, subseq_idx);
@@ -4779,6 +4807,8 @@ static int calc_pns_over_shape_groups(
     for (g = 0; g < num_groups; ++g)
     {
         group_start = (labels && group_first) ? group_first[g] * tr_size : start_block;
+        if (profile_fn)
+            profile_fn(profile_ctx, PULSEG__SAFETY_PROFILE_WAVEFORM_EXTRACT, 1);
         rc = pulseg__plan_waveforms(
             plan,
             &uw,
@@ -4790,6 +4820,8 @@ static int calc_pns_over_shape_groups(
             PULSEG_AMP_MAX_POS,
             labels,
             g);
+        if (profile_fn)
+            profile_fn(profile_ctx, PULSEG__SAFETY_PROFILE_WAVEFORM_EXTRACT, 0);
         if (PULSEG_FAILED(rc))
             goto done;
 
@@ -4803,9 +4835,12 @@ static int calc_pns_over_shape_groups(
             desc,
             group_start,
             block_count,
-            NULL);
+            NULL,
+            &group_macs);
         if (PULSEG_FAILED(rc))
             goto done;
+        if (out_macs && group_macs >= 0.0)
+            *out_macs += group_macs;
 
         peak = pns_result_peak(&candidate);
         if (!have_best || peak > best_peak)
@@ -4909,7 +4944,10 @@ int pulseg_calc_pns(
             model,
             desc,
             start_block,
-            block_count);
+            block_count,
+            NULL,
+            NULL,
+            NULL);
         pulseg_check_plan_destroy(owned);
         return rc;
     }
@@ -4941,7 +4979,8 @@ int pulseg_calc_pns(
         desc,
         start_block,
         block_count,
-        block_order);
+        block_order,
+        NULL);
     if (block_order)
         PULSEG_FREE(block_order);
     pulseg_check_plan_destroy(owned);
@@ -5675,6 +5714,7 @@ static int check_pns_planned(
     const pulseg_pns_model *model,
     float threshold_percent,
     pulseg__safety_profile_fn profile_fn,
+    pulseg__safety_work_fn work_fn,
     void *profile_ctx)
 {
     int s, i, rc;
@@ -5683,6 +5723,7 @@ static int check_pns_planned(
     int start_block, block_count, num_instances;
     float tr_duration_us;
     float pns_combined, max_pns;
+    double macs;
 
     if (!model)
         return PULSEG_SUCCESS;
@@ -5700,16 +5741,86 @@ static int check_pns_planned(
         if (profile_fn)
             profile_fn(profile_ctx, PULSEG__SAFETY_PROFILE_PNS, 1);
         memset(&pns_result, 0, sizeof(pns_result));
-        rc = calc_pns_over_shape_groups(
-            &pns_result,
-            diag,
-            plan,
-            s,
-            opts->gamma_hz_per_t,
-            model,
-            desc,
-            start_block,
-            block_count);
+        macs = -1.0;
+
+        /* The sweep prices a scan by its distinct waveform sets, and it is
+         * the proven path, so whenever the repetitions group it decides.
+         * Only a scan with more groups than the sweep will hold goes to the
+         * occurrence score, which prices multiplicity by a rank basis and
+         * settles anything the bound cannot clear with cold exact assembly.
+         * The grouping probe uses a scratch diagnostic: its refusal only
+         * stands if the score cannot price the scan either. */
+        {
+            pulseg_diagnostic probe;
+            const int *labels_probe;
+            const int *first_probe;
+            int ngroups_probe, rc_probe, score_declined;
+            double build_macs, eval_macs;
+
+            pulseg_diagnostic_init(&probe);
+            rc_probe = pulseg__plan_shape_groups(
+                plan,
+                &labels_probe,
+                &first_probe,
+                &ngroups_probe,
+                &probe,
+                desc,
+                s);
+            if (PULSEG_SUCCEEDED(rc_probe))
+            {
+                rc = calc_pns_over_shape_groups(
+                    &pns_result,
+                    diag,
+                    plan,
+                    s,
+                    opts->gamma_hz_per_t,
+                    model,
+                    desc,
+                    start_block,
+                    block_count,
+                    work_fn ? &macs : NULL,
+                    profile_fn,
+                    profile_ctx);
+            }
+            else
+            {
+                score_declined = 0;
+                rc = pulseg__pns_score_check(
+                    plan,
+                    diag,
+                    desc,
+                    s,
+                    model,
+                    opts->gamma_hz_per_t,
+                    threshold_percent,
+                    &score_declined,
+                    &build_macs,
+                    &eval_macs);
+                if (work_fn)
+                {
+                    work_fn(profile_ctx, PULSEG__SAFETY_PROFILE_PNS_BASIS_BUILD, build_macs);
+                    work_fn(profile_ctx, PULSEG__SAFETY_PROFILE_PNS_SCORE, eval_macs);
+                }
+                if (!PULSEG_FAILED(rc) && score_declined)
+                {
+                    /* Neither path can price this scan: the grouping refusal
+                     * is the verdict, exactly as it stands. */
+                    if (diag)
+                        *diag = probe;
+                    rc = rc_probe;
+                }
+                /* The score path carries its own verdict; nothing below
+                 * applies to it. */
+                pulseg_pns_result_free(&pns_result);
+                if (work_fn && macs >= 0.0)
+                    work_fn(profile_ctx, PULSEG__SAFETY_PROFILE_PNS, macs);
+                if (profile_fn)
+                    profile_fn(profile_ctx, PULSEG__SAFETY_PROFILE_PNS, 0);
+                if (PULSEG_FAILED(rc))
+                    return rc;
+                continue;
+            }
+        }
         if (!PULSEG_FAILED(rc) && pns_result.num_samples > 0)
         {
             max_pns = 0.0f;
@@ -5733,6 +5844,8 @@ static int check_pns_planned(
                 rc = PULSEG_ERR_PNS_THRESHOLD_EXCEEDED;
         }
         pulseg_pns_result_free(&pns_result);
+        if (work_fn && macs >= 0.0)
+            work_fn(profile_ctx, PULSEG__SAFETY_PROFILE_PNS, macs);
         if (profile_fn)
             profile_fn(profile_ctx, PULSEG__SAFETY_PROFILE_PNS, 0);
         if (PULSEG_FAILED(rc))
@@ -5834,7 +5947,7 @@ int pulseg_check_pns(
     if (PULSEG_FAILED(rc))
         return rc;
 
-    rc = check_pns_planned(coll, diag, plan, opts, model, threshold_percent, NULL, NULL);
+    rc = check_pns_planned(coll, diag, plan, opts, model, threshold_percent, NULL, NULL, NULL);
 
     pulseg_check_plan_destroy(owned);
     return rc;
@@ -5852,6 +5965,7 @@ int pulseg__check_safety_profiled(
     const pulseg_pns_model *pns_model,
     float pns_threshold_percent,
     pulseg__safety_profile_fn profile_fn,
+    pulseg__safety_work_fn work_fn,
     void *profile_ctx)
 {
     pulseg_check_plan *owned;
@@ -5927,6 +6041,7 @@ int pulseg__check_safety_profiled(
             pns_model,
             pns_threshold_percent,
             profile_fn,
+            work_fn,
             profile_ctx);
 
     pulseg_check_plan_destroy(owned);
@@ -5950,6 +6065,7 @@ int pulseg_check_safety(
         bands,
         pns_model,
         pns_threshold_percent,
+        NULL,
         NULL,
         NULL);
 }

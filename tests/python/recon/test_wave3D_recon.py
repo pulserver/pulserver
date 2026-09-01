@@ -374,3 +374,70 @@ def test_a_scan_that_sent_no_calibration_says_so(measured, deviation, context):
             if acquisition.isFlagSet(ismrmrd.ACQ_IS_PARALLEL_CALIBRATION):
                 continue
             plugin.receive(acquisition, context)
+
+
+# ----------------------------------------------------------------------
+# The corkscrew the gradients played, not the one they were asked for
+# ----------------------------------------------------------------------
+
+
+#: Samples between the gradient and the acquisition. The trajectory is
+#: computed from the waveform, so it does not carry this.
+GRADIENT_DELAY = 0.4
+
+
+@pytest.fixture(scope="module")
+def played(deviation):
+    """The corkscrew the readout actually traced: the nominal one, late."""
+    times = np.arange(N_X)
+    return np.stack(
+        [
+            np.interp(times - GRADIENT_DELAY, times, row, left=row[0], right=row[-1])
+            for row in deviation
+        ]
+    ).astype(np.float32)
+
+
+@pytest.fixture(scope="module")
+def measured_late(phantom, coil_maps, psf, played):
+    """One object, encoded by the late corkscrew, described by the nominal."""
+    rectangle, train = _pairs()
+    late = WavePSF(AXIS_Y, AXIS_Z)(WavePSF.phase_from_trajectory(played))
+    return {
+        "rectangle": _encode(phantom, coil_maps, rectangle, torch.ones_like(psf)),
+        "train": _encode(phantom, coil_maps, train, late),
+    }
+
+
+def test_calibrating_the_corkscrew_recovers_what_the_trajectory_alone_cannot(
+    measured_late, deviation, phantom, context
+):
+    """A delay between the gradient and the acquisition is invisible to the
+    trajectory and visible in the image, so the image is what measures it."""
+    settings = {"iterations": 25, "calibration_iterations": 24}
+    trusted = wave3D_recon.Wave3DRecon(**settings)
+    fitted = wave3D_recon.Wave3DRecon(**settings, calibrate_psf=True)
+
+    scan = bucket(measured_late, deviation)
+    from_trajectory = trusted(scan, context)[0].data.transpose(1, 2, 0)
+    from_image = fitted(bucket(measured_late, deviation), context)[0].data.transpose(
+        1, 2, 0
+    )
+
+    assert relative_error(from_image, phantom) < relative_error(
+        from_trajectory, phantom
+    )
+
+
+def test_a_corkscrew_the_trajectory_already_describes_survives_being_fitted(
+    measured, deviation, phantom, context
+):
+    """Calibration is a refinement, not a second chance: with nothing to
+    correct it must not walk away from the corkscrew it started from."""
+    fitted = wave3D_recon.Wave3DRecon(
+        iterations=25, calibration_iterations=24, calibrate_psf=True
+    )
+
+    image = fitted(bucket(measured, deviation), context)[0].data.transpose(1, 2, 0)
+
+    assert relative_error(image, phantom) < 0.25

@@ -56,6 +56,10 @@ def main() -> int:
     for name in synthetic.write_all(expected, out):
         print(f"wrote expected/{name}")
 
+    import pns_pin
+
+    print(f"wrote expected/{pns_pin.write(expected, out)}")
+
     return 0
 
 

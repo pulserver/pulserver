@@ -9,6 +9,7 @@
 #include <pybind11/numpy.h>
 #include <pybind11/stl.h>
 
+#include <chrono>
 #include <cstring>
 #include <limits>
 #include <memory>
@@ -19,6 +20,13 @@
 #include "bindings.hpp"
 
 #include "pulseg.hpp"
+// The internal header is plain C89 with no linkage guards of its own; the
+// binding is its one C++ consumer, so the C linkage is declared here at the
+// point of use. Its own includes are header-guarded and already seen above.
+extern "C"
+{
+#include "pulseg_internal.h"
+}
 #include "pulseg_pns_models.h"
 #include "pulseg.h"
 #include "pulseg_types.h"
@@ -511,6 +519,137 @@ static void _check_safety(
     pc.coll().check_safety(bands, pns_ptr, pns_threshold_percent);
 }
 
+// ─── Safety gate, per stage ──────────────────────────────────────────
+//
+// The library keeps no clock, so the stage boundaries it reports are timed
+// here and its own operation counts are collected alongside them. A stage's
+// throughput is then one measured wall clock over one counted number of
+// multiply-accumulates, rather than a rate assumed for the machine.
+
+namespace
+{
+
+    const char* const kSafetyStageNames[PULSEG__SAFETY_PROFILE_STAGE_COUNT] = {
+        "grad_presence",
+        "max_grad",
+        "continuity",
+        "max_slew",
+        "waveform_extract",
+        "mech_resonance",
+        "pns",
+        "pns_basis_build",
+        "pns_score"};
+
+    struct SafetyProfile
+    {
+        double seconds[PULSEG__SAFETY_PROFILE_STAGE_COUNT];
+        double macs[PULSEG__SAFETY_PROFILE_STAGE_COUNT];
+        bool counted[PULSEG__SAFETY_PROFILE_STAGE_COUNT];
+        std::chrono::steady_clock::time_point entered[PULSEG__SAFETY_PROFILE_STAGE_COUNT];
+
+        SafetyProfile()
+        {
+            for (int i = 0; i < PULSEG__SAFETY_PROFILE_STAGE_COUNT; ++i)
+            {
+                seconds[i] = 0.0;
+                macs[i] = 0.0;
+                counted[i] = false;
+            }
+        }
+    };
+
+    void safety_stage(void* ctx, enum pulseg__safety_profile_stage stage, int entering)
+    {
+        SafetyProfile* p = static_cast<SafetyProfile*>(ctx);
+        if (entering)
+        {
+            p->entered[stage] = std::chrono::steady_clock::now();
+            return;
+        }
+        p->seconds[stage] +=
+            std::chrono::duration<double>(std::chrono::steady_clock::now() - p->entered[stage])
+                .count();
+    }
+
+    void safety_work(void* ctx, enum pulseg__safety_profile_stage stage, double macs)
+    {
+        SafetyProfile* p = static_cast<SafetyProfile*>(ctx);
+        p->macs[stage] += macs;
+        p->counted[stage] = true;
+    }
+
+} // namespace
+
+static py::dict _check_safety_profiled(
+    _PulseqCollection& pc,
+    py::list py_bands,
+    float stim_threshold,
+    float decay_constant_us,
+    float pns_threshold_percent,
+    bool skip_pns)
+{
+    std::vector<pulseg_forbidden_band> cbands;
+    for (auto item : py_bands)
+    {
+        py::tuple t = item.cast<py::tuple>();
+        pulseg_forbidden_band b;
+        b.freq_min_hz = t[0].cast<float>();
+        b.freq_max_hz = t[1].cast<float>();
+        b.max_amplitude_hz_per_m = t[2].cast<float>();
+        cbands.push_back(b);
+    }
+    pulseg_forbidden_band_list band_list = PULSEG_FORBIDDEN_BAND_LIST_INIT;
+    band_list.count = static_cast<int>(cbands.size());
+    band_list.bands = cbands.empty() ? nullptr : cbands.data();
+
+    const pulseg_pns_model* pns_ptr = nullptr;
+    pulseg_pns_irnich ctx;
+    pulseg_pns_model model;
+    if (!skip_pns)
+    {
+        pulseg_pns_irnich_init(&model, &ctx, decay_constant_us, stim_threshold, 1.0f);
+        pns_ptr = &model;
+    }
+
+    SafetyProfile prof;
+    pulseg_diagnostic diag;
+    pulseg_diagnostic_init(&diag);
+
+    auto t0 = std::chrono::steady_clock::now();
+    int code = pulseg__check_safety_profiled(
+        pc.coll().handle(),
+        &diag,
+        nullptr,
+        &pc.coll().opts(),
+        &band_list,
+        pns_ptr,
+        pns_threshold_percent,
+        &safety_stage,
+        &safety_work,
+        &prof);
+    double total = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+
+    py::dict out;
+    py::dict stages;
+    for (int i = 0; i < PULSEG__SAFETY_PROFILE_STAGE_COUNT; ++i)
+    {
+        py::dict entry;
+        entry["seconds"] = prof.seconds[i];
+        // A stage that cannot count its own arithmetic reports nothing, which
+        // has to stay distinct from a stage that did no work.
+        if (prof.counted[i])
+            entry["macs"] = prof.macs[i];
+        else
+            entry["macs"] = py::none();
+        stages[kSafetyStageNames[i]] = entry;
+    }
+    out["stages"] = stages;
+    out["total_seconds"] = total;
+    out["code"] = code;
+    out["message"] = std::string(diag.message);
+    return out;
+}
+
 // ─── Segment layout ────────────────────────────────────────────────
 
 /**
@@ -925,6 +1064,16 @@ void pulserver_bind_pulseg(py::module_& m)
     m.def("_get_sequence_parameters", &_get_sequence_parameters, py::arg("collection"));
 
     m.def("_check_consistency", &_check_consistency, py::arg("collection"));
+
+    m.def(
+        "_check_safety_profiled",
+        &_check_safety_profiled,
+        py::arg("collection"),
+        py::arg("forbidden_bands") = py::list(),
+        py::arg("stim_threshold") = 0.0f,
+        py::arg("decay_constant_us") = 0.0f,
+        py::arg("pns_threshold_percent") = 100.0f,
+        py::arg("skip_pns") = true);
 
     m.def(
         "_check_safety",

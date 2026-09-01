@@ -140,7 +140,10 @@ there.
 ```{doxygenfunction} mrdserver::add_diffusion_parameters
 ```
 
-```{doxygenfunction} mrdserver::add_sequence_resource_paths
+```{doxygenfunction} mrdserver::add_tensor_resource_path
+```
+
+```{doxygenfunction} mrdserver::add_gradwarp_coefficients
 ```
 
 ```{doxygenfunction} mrdserver::set_user_parameter_string

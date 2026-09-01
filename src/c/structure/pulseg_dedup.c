@@ -580,6 +580,7 @@ static int compute_grad_stats(
     float *waveform = NULL;
     float *sq_wave = NULL;
     float *time_us = NULL;
+    int *shape_def_seen = NULL;
     pulseg_grad_definition *gd;
 
     if (!seq || !grad_defs || num_unique <= 0)
@@ -589,6 +590,18 @@ static int compute_grad_stats(
         grad_raster_us = seq->reserved_definitions_library.gradient_raster_time;
     else
         grad_raster_us = opts->grad_raster_us;
+
+    /* Which definition last visited each shape: the distinct-shape walk
+     * below must skip repeats without scanning the rows already walked,
+     * or the walk prices the table quadratically. */
+    if (seq->shapes_library_size > 0)
+    {
+        shape_def_seen = (int *)PULSEG_ALLOC((size_t)seq->shapes_library_size * sizeof(int));
+        if (!shape_def_seen)
+            return PULSEG_ERR_ALLOC_FAILED;
+        for (i = 0; i < seq->shapes_library_size; ++i)
+            shape_def_seen[i] = -1;
+    }
 
     /* Per-shape statistics, filled as the shapes are visited below.  Sized by
      * the shape library rather than by anything per definition, which is what
@@ -606,7 +619,11 @@ static int compute_grad_stats(
             (float *)PULSEG_ALLOC((size_t)seq->shapes_library_size * sizeof(float));
         if (!desc->grad_shape_first || !desc->grad_shape_last || !desc->grad_shape_slew ||
             !desc->grad_shape_energy)
+        {
+            if (shape_def_seen)
+                PULSEG_FREE(shape_def_seen);
             return PULSEG_ERR_ALLOC_FAILED;
+        }
         for (i = 0; i < seq->shapes_library_size; ++i)
         {
             desc->grad_shape_first[i] = 0.0f;
@@ -718,22 +735,18 @@ static int compute_grad_stats(
              * cap, and a shape seen twice is skipped by the scan below. */
             for (row = 0; row < grad_table_size; ++row)
             {
-                int seen, prev;
+                int seen;
 
                 if (!grad_table || grad_table[row].id != def_idx)
                     continue;
                 shape_id = grad_table[row].shape_id;
                 if (shape_id <= 0 || shape_id > seq->shapes_library_size)
                     continue;
-                seen = 0;
-                for (prev = 0; prev < row; ++prev)
-                    if (grad_table[prev].id == def_idx && grad_table[prev].shape_id == shape_id)
-                    {
-                        seen = 1;
-                        break;
-                    }
+                seen = (shape_def_seen && shape_def_seen[shape_id - 1] == def_idx);
                 if (seen)
                     continue;
+                if (shape_def_seen)
+                    shape_def_seen[shape_id - 1] = def_idx;
 
                 if (!pulseq_decompress_shape(
                         &decomp_wave,
@@ -742,24 +755,91 @@ static int compute_grad_stats(
                     goto fail;
                 num_samples = decomp_wave.num_uncompressed_samples;
 
-                waveform = (float *)PULSEG_ALLOC(num_samples * sizeof(float));
-                sq_wave = (float *)PULSEG_ALLOC(num_samples * sizeof(float));
-                if (!waveform || !sq_wave)
-                    goto fail;
+                if (!has_time && num_samples >= 2)
+                {
+                    /* The uniform shape's statistics in one pass over the
+                     * decompressed samples, the peak normalisation applied
+                     * analytically afterwards: every stat of w/p is the raw
+                     * stat scaled by 1/p (1/p^2 for the quadratic ones), so
+                     * no normalised copy and no squared copy is ever built. */
+                    double tz_sq, dsq;
+                    float w_prev, w_cur, max_abs, max_dabs, a, d, p;
 
-                for (i = 0; i < num_samples; ++i)
-                    waveform[i] = decomp_wave.samples[i];
-                normalize_waveform(waveform, num_samples);
+                    w_prev = (float)decomp_wave.samples[0];
+                    max_abs = w_prev < 0.0f ? -w_prev : w_prev;
+                    max_dabs = 0.0f;
+                    tz_sq = 0.0;
+                    dsq = 0.0;
+                    for (i = 1; i < num_samples; ++i)
+                    {
+                        w_cur = (float)decomp_wave.samples[i];
+                        a = w_cur < 0.0f ? -w_cur : w_cur;
+                        if (a > max_abs)
+                            max_abs = a;
+                        d = w_cur - w_prev;
+                        if (d < 0.0f)
+                            d = -d;
+                        if (d > max_dabs)
+                            max_dabs = d;
+                        tz_sq += 0.5 * ((double)w_prev * w_prev + (double)w_cur * w_cur);
+                        dsq += (double)(w_cur - w_prev) * (double)(w_cur - w_prev);
+                        w_prev = w_cur;
+                    }
 
-                for (i = 0; i < num_samples; ++i)
-                    sq_wave[i] = waveform[i] * waveform[i];
+                    p = (max_abs > 1e-9f) ? max_abs : 1.0f;
+                    cand.first_value = (float)decomp_wave.samples[0] / p;
+                    cand.last_value = (float)decomp_wave.samples[num_samples - 1] / p;
+                    cand.slew_rate = (max_dabs / p) / grad_raster_us * 1e6f;
+                    cand.energy = (float)(tz_sq / ((double)p * p)) * grad_raster_us * 1e-6f;
+                    slew_energy = (float)(dsq / ((double)p * p) / ((double)grad_raster_us * 1e-6));
+                }
+                else
+                {
+                    waveform = (float *)PULSEG_ALLOC(num_samples * sizeof(float));
+                    sq_wave = (float *)PULSEG_ALLOC(num_samples * sizeof(float));
+                    if (!waveform || !sq_wave)
+                        goto fail;
 
-                cand.first_value = waveform[0];
-                cand.last_value = waveform[num_samples - 1];
+                    for (i = 0; i < num_samples; ++i)
+                        waveform[i] = decomp_wave.samples[i];
+                    normalize_waveform(waveform, num_samples);
+
+                    for (i = 0; i < num_samples; ++i)
+                        sq_wave[i] = waveform[i] * waveform[i];
+
+                    cand.first_value = waveform[0];
+                    cand.last_value = waveform[num_samples - 1];
+                    if (has_time && time_us)
+                    {
+                        cand.slew_rate =
+                            pulseg__max_slew_real_nonuniform(waveform, time_us, num_samples);
+                        cand.energy = pulseg__trapz_real_nonuniform(sq_wave, time_us, num_samples);
+                    }
+                    else
+                    {
+                        cand.slew_rate =
+                            pulseg__max_slew_real_uniform(waveform, num_samples, grad_raster_us);
+                        cand.energy =
+                            pulseg__trapz_real_uniform(sq_wave, num_samples, grad_raster_us);
+                    }
+                    cand.slew_rate *= 1e6f;
+                    cand.energy *= 1e-6f;
+                    slew_energy = grad_slew_energy(
+                        waveform,
+                        has_time ? time_us : NULL,
+                        num_samples,
+                        grad_raster_us);
+
+                    PULSEG_FREE(waveform);
+                    waveform = NULL;
+                    PULSEG_FREE(sq_wave);
+                    sq_wave = NULL;
+                }
+
                 if (desc && desc->grad_shape_first && shape_id <= desc->num_grad_shape_stats)
                 {
-                    desc->grad_shape_first[shape_id - 1] = waveform[0];
-                    desc->grad_shape_last[shape_id - 1] = waveform[num_samples - 1];
+                    desc->grad_shape_first[shape_id - 1] = cand.first_value;
+                    desc->grad_shape_last[shape_id - 1] = cand.last_value;
                 }
                 {
                     float fv = cand.first_value < 0.0f ? -cand.first_value : cand.first_value;
@@ -769,33 +849,12 @@ static int compute_grad_stats(
                     if (lv > gd->any.max_abs_last)
                         gd->any.max_abs_last = lv;
                 }
-
-                if (has_time && time_us)
-                {
-                    cand.slew_rate =
-                        pulseg__max_slew_real_nonuniform(waveform, time_us, num_samples);
-                    cand.energy = pulseg__trapz_real_nonuniform(sq_wave, time_us, num_samples);
-                }
-                else
-                {
-                    cand.slew_rate =
-                        pulseg__max_slew_real_uniform(waveform, num_samples, grad_raster_us);
-                    cand.energy = pulseg__trapz_real_uniform(sq_wave, num_samples, grad_raster_us);
-                }
-                cand.slew_rate *= 1e6f;
-                cand.energy *= 1e-6f;
                 if (cand.slew_rate > gd->any.max_slew_rate)
                     gd->any.max_slew_rate = cand.slew_rate;
                 if (desc && desc->grad_shape_slew && shape_id <= desc->num_grad_shape_stats)
                     desc->grad_shape_slew[shape_id - 1] = cand.slew_rate;
                 if (desc && desc->grad_shape_energy && shape_id <= desc->num_grad_shape_stats)
                     desc->grad_shape_energy[shape_id - 1] = cand.energy;
-
-                slew_energy = grad_slew_energy(
-                    waveform,
-                    has_time ? time_us : NULL,
-                    num_samples,
-                    grad_raster_us);
 
                 cand.shape_id = shape_id;
                 cand.amplitude = gd->any.max_amplitude;
@@ -804,10 +863,6 @@ static int compute_grad_stats(
                 cand.score = amp2 * slew_energy;
                 grad_keep_best(&gd->spectral, &cand);
 
-                PULSEG_FREE(waveform);
-                waveform = NULL;
-                PULSEG_FREE(sq_wave);
-                sq_wave = NULL;
                 PULSEG_FREE(decomp_wave.samples);
                 decomp_wave.samples = NULL;
             }
@@ -819,9 +874,13 @@ static int compute_grad_stats(
             }
         }
     }
+    if (shape_def_seen)
+        PULSEG_FREE(shape_def_seen);
     return PULSEG_SUCCESS;
 
 fail:
+    if (shape_def_seen)
+        PULSEG_FREE(shape_def_seen);
     if (waveform)
         PULSEG_FREE(waveform);
     if (sq_wave)

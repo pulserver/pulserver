@@ -726,3 +726,104 @@ TEST_P(SequenceReaderRampSampled, EveryReadoutCarriesWhereItsSamplesFell)
 }
 
 INSTANTIATE_TEST_SUITE_P(Corpus, SequenceReaderRampSampled, ::testing::Values("epi_2d", "epi_3d"));
+
+/* ------------------------------------------------------------------ *
+ * Gradient-coil coefficients in the header.
+ *
+ * The correction runs where the reconstruction runs, which is not the
+ * scanner, so the coil description travels in the header rather than a path
+ * to the file it came from. The syntax is the scanner's own gw_coils.dat,
+ * because that is what pulserver.recon.GradientCoefficients.from_file reads.
+ * ------------------------------------------------------------------ */
+
+namespace
+{
+std::string user_parameter(const ISMRMRD::IsmrmrdHeader &hdr, const std::string &name)
+{
+    if (!hdr.userParameters)
+        return {};
+    for (const auto &p : hdr.userParameters->userParameterString)
+    {
+        if (p.name == name)
+            return p.value;
+    }
+    return {};
+}
+
+std::map<std::string, double> parse_dat(const std::string &payload)
+{
+    std::map<std::string, double> values;
+    std::istringstream stream(payload);
+    std::string key;
+    double value = 0.0;
+    while (stream >> key >> value)
+        values[key] = value;
+    return values;
+}
+} // namespace
+
+TEST(GradwarpCoefficients, TheCoilDescriptionTravelsAsTheScannerStatesIt)
+{
+    std::vector<float> scales(30, 0.0f);
+    scales[2] = -1.674470e-4f;  /* SCALEX3 */
+    scales[14] = -8.702937e-8f; /* SCALEY5 */
+    scales[22] = -1.136898e-4f; /* SCALEZ3 */
+
+    ISMRMRD::IsmrmrdHeader hdr;
+    mrdserver::add_gradwarp_coefficients(hdr, 1, scales, 0.0f);
+
+    const auto values = parse_dat(user_parameter(hdr, "gradient_coefficients"));
+    ASSERT_EQ(values.size(), 32u) << "the payload must state every coefficient, the "
+                                  << "gradwarp type and the delta";
+    EXPECT_EQ(values.at("GRADWARPTYPE"), 1.0);
+    EXPECT_EQ(values.at("DELTA"), 0.0);
+    for (std::size_t i = 0; i < scales.size(); ++i)
+    {
+        std::ostringstream key;
+        key << "SCALE"
+            << "XYZ"[i / 10] << (i % 10 + 1);
+        EXPECT_FLOAT_EQ(static_cast<float>(values.at(key.str())), scales[i]) << key.str();
+    }
+}
+
+TEST(GradwarpCoefficients, ACoilDescriptionThatIsNotThirtyValuesIsRefused)
+{
+    ISMRMRD::IsmrmrdHeader hdr;
+    EXPECT_THROW(
+        mrdserver::add_gradwarp_coefficients(hdr, 1, std::vector<float>(29, 0.0f), 0.0f),
+        std::invalid_argument);
+}
+
+TEST(GradwarpCoefficients, ATypeThisBuildCannotCorrectIsCarriedRatherThanDropped)
+{
+    /* Refusing here would leave the reconstruction with no way to say why it
+     * did not unwarp. It refuses, on the far side, where the correction is. */
+    ISMRMRD::IsmrmrdHeader hdr;
+    mrdserver::add_gradwarp_coefficients(hdr, 3, std::vector<float>(30, 0.0f), 0.25f);
+
+    const auto values = parse_dat(user_parameter(hdr, "gradient_coefficients"));
+    EXPECT_EQ(values.at("GRADWARPTYPE"), 3.0);
+    EXPECT_FLOAT_EQ(static_cast<float>(values.at("DELTA")), 0.25f);
+}
+
+TEST(SequenceParameters, EveryEchoTimeReachesTheHeader)
+{
+    /* MRD's TE is a vector because a scan reads several echoes, and their
+     * spacing is what a field map is derived from: a header that states only
+     * the shortest cannot be corrected against. */
+    const SequenceCache cache = mrdserver::read_sequence_files(corpus("gre_multiecho_2d.seq"));
+
+    ISMRMRD::IsmrmrdHeader hdr;
+    mrdserver::enrich_ismrmrd_header(hdr, cache);
+
+    ASSERT_TRUE(hdr.sequenceParameters.is_present());
+    const auto &te = hdr.sequenceParameters->TE;
+    ASSERT_TRUE(te.is_present());
+    EXPECT_EQ(te->size(), 3u);
+    for (size_t i = 1; i < te->size(); ++i)
+        EXPECT_LT((*te)[i - 1], (*te)[i]) << i;
+
+    /* TR reduces to one representative, and TE[0] is still the shortest. */
+    ASSERT_TRUE(hdr.sequenceParameters->TR.is_present());
+    EXPECT_EQ(hdr.sequenceParameters->TR->size(), 1u);
+}

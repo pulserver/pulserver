@@ -1,14 +1,28 @@
 # Repositioning a written sequence
 
+```{admonition} TL;DR
+:class: tip
+
+- **Rotation** mixes the gradient channels. Bake it into new waveforms with
+  `mr.rotate3D`, or attach it per block as a `ROTATIONS` quaternion and leave it
+  for the playout. The second costs no waveforms.
+- **Translation is a phase**, $e^{-i 2\pi\,\Delta r \cdot k(t)}$, and never
+  touches a gradient. Where it can be put depends on how $k(t)$ moves during the
+  event.
+- Gradient **flat** across the event ⇒ two scalars, a frequency offset and a
+  phase offset. Gradient **not flat** ⇒ a phase per sample, into `rf.signal` for
+  a pulse and into `adc.phaseModulation` for a readout.
+- The phase **accumulates across blocks**, reset by an excitation and negated by
+  a refocusing pulse, which is what forces `applyToSeq` to be a sequential walk.
+- `NOPOS`, `NOROT`, `NOSCL` exempt the blocks they cover.
+```
+
 A sequence is designed in its own **logical** frame — readout, phase and
 slice — with the imaging volume at the origin. A prescription moves it: an
 operator angles the slab, slides it off isocentre, changes the field of view.
 Pulseq does not ask the designer to rebuild the sequence for that. `mr.TransformFOV`
 takes a scan that already exists and applies a rotation and a translation to
 it.
-
-The two halves are not alike, and the difference is what everything on this
-page follows from.
 
 ## Rotation is a change of axes
 

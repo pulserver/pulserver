@@ -24,6 +24,8 @@ def noncartesian_recon(
     mode: str = "auto",
     n_views: int | None = None,
     density: Any = None,
+    field_map: Any = None,
+    readout_time: Any = None,
     regularization: float = 1e-3,
     iterations: int = 30,
     calibration_width: int = 24,
@@ -58,6 +60,13 @@ def noncartesian_recon(
         against ``ceil(pi / 2 * max(image_shape))``.
     density
         Density-compensation weights. ``None`` computes Pipe--Menon weights.
+    field_map
+        Off-resonance in Hz over ``image_shape``. Given with ``readout_time``,
+        the phase it accrues along the readout is part of the operator, which
+        is what unblurs a long readout in an inhomogeneous field.
+    readout_time
+        When each sample was taken relative to its echo, in seconds, over the
+        same samples as ``trajectory``.
     regularization
         Tikhonov weight of the CG-SENSE solve.
     iterations
@@ -77,8 +86,9 @@ def noncartesian_recon(
     Raises
     ------
     ValueError
-        If ``mode`` is not one of the three, or ``image_shape`` is neither a
-        plane nor a volume.
+        If ``mode`` is not one of the three, ``image_shape`` is neither a
+        plane nor a volume, or only one of ``field_map`` and ``readout_time``
+        is given.
 
     Examples
     --------
@@ -108,7 +118,7 @@ def noncartesian_recon(
     from .calibration import NLINV
     from .execution import _resolve_device
     from .optim import pics
-    from .physics import NonCartesian2D, NonCartesian3D
+    from .physics import NonCartesian2D, NonCartesian3D, OffResonance
     from ..mrd._images import as_numpy
     from ..mrd._arrays import pipe_menon_dcf
 
@@ -117,6 +127,11 @@ def noncartesian_recon(
     if len(image_shape) not in (2, 3):
         raise ValueError(
             f"image_shape must be (h, w) or (d, h, w), got {image_shape!r}"
+        )
+    if (field_map is None) != (readout_time is None):
+        raise ValueError(
+            "off-resonance is a field and the time it acted over: give "
+            "field_map and readout_time together, or neither"
         )
 
     operator = NonCartesian2D if len(image_shape) == 2 else NonCartesian3D
@@ -136,10 +151,18 @@ def noncartesian_recon(
         trajectory = torch.as_tensor(trajectory).to(device)
         density = torch.as_tensor(density).to(device)
 
+    def corrected(physics):
+        """The operator with the field in it, when a field was measured."""
+        if field_map is None:
+            return physics
+        return OffResonance(physics, field_map, readout_time)
+
     if _direct(mode, n_views, image_shape):
         # The density-compensated adjoint is an inverse only at Nyquist, and a
         # coil-wise one at that: combine by root-sum-of-squares.
-        coil_wise = operator(trajectory, image_shape, density=density, n_coils=n_coils)
+        coil_wise = corrected(
+            operator(trajectory, image_shape, density=density, n_coils=n_coils)
+        )
         coils = as_numpy(coil_wise.A_adjoint(data[None])[0])
         return np.sqrt(np.sum(np.abs(coils) ** 2, axis=0))
 
@@ -150,12 +173,17 @@ def noncartesian_recon(
         density=density,
         device=device,
     )
-    unaliasing = operator(
-        trajectory,
-        image_shape,
-        coil_maps=maps,
-        density=density,
-        n_coils=n_coils,
+    # The maps are solved without the field in the operator: a sensitivity is
+    # smooth, and what off-resonance does to a long readout is a blur the
+    # smoothing would remove anyway.
+    unaliasing = corrected(
+        operator(
+            trajectory,
+            image_shape,
+            coil_maps=maps,
+            density=density,
+            n_coils=n_coils,
+        )
     )
     # The SENSE solve keeps a singleton coil axis, so index past both batch and
     # channel to reach the image.

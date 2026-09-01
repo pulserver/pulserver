@@ -187,7 +187,6 @@ def _collection_args():
         float(system.adc_raster_time),
         float(system.block_duration_raster),
         True,
-        1,
         [],
     )
 
@@ -244,10 +243,22 @@ def creation(name: str, n_z: int, views: int) -> tuple[dict, object, bytes, byte
 
 
 def conversion(text: bytes, binary: bytes) -> dict:
-    """The scanner side of a written file, stage by stage."""
+    """The scanner side of a written file, stage by stage.
+
+    Every stage the interpreter pays between the file arriving and the scan
+    being allowed to run, the safety gate included: a split that stopped at the
+    cache write would describe a download that is never checked.
+
+    The gate's band table, nerve constants and thresholds are imported from the
+    full benchmark rather than restated, so the two harnesses cannot drift into
+    timing different amounts of work and calling both of them "safety".
+    """
+    from bench_full import BANDS, IRNICH_ALPHA, IRNICH_CHRONAXIE_US
+    from bench_full import IRNICH_RHEOBASE, PNS_THRESHOLD_PERCENT
     from pulserver._ext.pulseg import (
         _PulseqCollection,
         _check_consistency,
+        _check_safety,
         _find_tr,
         _get_segments,
     )
@@ -258,6 +269,15 @@ def conversion(text: bytes, binary: bytes) -> dict:
     t_find_tr, tr = timed(_find_tr, collection)
     t_segments, segments = timed(_get_segments, collection)
     t_consistency, _ = timed(_check_consistency, collection)
+    t_safety, _ = timed(
+        _check_safety,
+        collection,
+        BANDS,
+        IRNICH_RHEOBASE / IRNICH_ALPHA,
+        IRNICH_CHRONAXIE_US,
+        PNS_THRESHOLD_PERCENT,
+        False,
+    )
 
     with tempfile.TemporaryDirectory() as tmp:
         path = Path(tmp) / "bench.seq"
@@ -273,6 +293,7 @@ def conversion(text: bytes, binary: bytes) -> dict:
         "find_tr_s": t_find_tr,
         "segments_s": t_segments,
         "consistency_s": t_consistency,
+        "safety_s": t_safety,
         "cache_write_s": t_cache_write,
         "cache_read_s": t_cache_read,
         "cache_bytes": cache_bytes,
@@ -445,7 +466,8 @@ def report_conversion(name: str, entry: dict) -> None:
         f"  binary {entry['parse_convert_binary_s'] * 1e3:8.1f} ms"
         f"  find_tr {entry['find_tr_s'] * 1e3:7.2f} ms"
         f"  segments {entry['segments_s'] * 1e3:7.2f} ms"
-        f"  consistency {entry['consistency_s'] * 1e3:7.2f} ms",
+        f"  consistency {entry['consistency_s'] * 1e3:7.2f} ms"
+        f"  safety {entry['safety_s'] * 1e3:8.1f} ms",
         flush=True,
     )
     print(

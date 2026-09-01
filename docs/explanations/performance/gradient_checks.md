@@ -1,14 +1,32 @@
 # Amplitude, slew and continuity
 
-The two cheap checks — {doc}`amplitude and slew <../safety/gradient_slew>`,
-and gradient continuity across block boundaries — are the ones a scanner
-always runs, because they need nothing a scanner does not already know. They
-are also the ones a reference toolbox pays for on every `add_block`, which is
-what makes a million-block sequence expensive to build.
+```{admonition} TL;DR
+:class: tip
 
-Pulserver moves both off the building path and onto `write()`, under
-`check_gradients=True`. What that costs, and why the two have different cost
-models, is the whole page.
+- Both checks move off `add_block` and onto `write()`, under
+  `check_gradients=True`.
+- Slew and continuity are {doc}`one criterion <../safety/gradient_slew>` asked
+  about two different sample pairs, and the pair is what sets the cost.
+- **Interior slew is a shape question**: the normalised shape's slew times an
+  amplitude, so an EPI protocol costs 0.3 ms at any scan length once
+  deduplicated — against 8.5→318 ms when the same check walks instances.
+- **The seam is a pair question** — two endpoints at their own amplitudes and
+  rotations — so it walks the block table and is linear in the scan by
+  construction: 3.7→21.4 ms over the same range, in the C safety core.
+- Continuity is **rotation-aware**: both endpoints are rotated before they are
+  compared.
+- Same C arithmetic at design time and at predownload, so the two cannot
+  disagree.
+```
+
+{doc}`Amplitude and slew <../safety/gradient_slew>` and gradient continuity are
+the checks a scanner always runs, because they need nothing a scanner does not
+already know. They are also the ones a reference toolbox pays for on every
+`add_block`.
+
+Slew and continuity are the same inequality — the seam is just the sample pair
+that straddles a block boundary. They are two passes here because of what each
+pair needs to be evaluated, and that is the whole of this page.
 
 ```{figure} ../assets/gradient_checks/library_vs_scan.png
 The two checks read the same sequence through different structures. Amplitude
@@ -22,8 +40,10 @@ but to walk the block table.
 `check_hardware_limits` iterates the **gradient library** — the distinct event
 rows the file will store — and asks each one for its peak amplitude and its
 steepest ramp. A trapezoid answers from three numbers; an arbitrary waveform
-answers from one pass over its samples. However many times the scan plays a
-waveform, it is examined once.
+answers from one pass over its samples, and what that pass yields is the
+*normalised* slew of the shape, in 1/s: the per-block answer is then that number
+times the amplitude the instance plays it at. However many times the scan plays
+a waveform, its samples are examined once.
 
 That only pays off once the library *is* small, and the library collapses to
 its distinct rows when the sequence is deduplicated. Before that, every shot's
@@ -54,14 +74,16 @@ with.
 
 ## Continuity
 
-Continuity cannot be a library question. Whether a waveform ends where its
-neighbour begins is a property of the *pair*, so the pass is over block
-instances, in scan order, and it is linear in the scan by construction.
+The seam cannot be a library question. Its two samples come from different
+waveforms, and each has to be scaled by *its own* instance amplitude before they
+can be subtracted — so the pass is over block instances, in scan order, and it
+is linear in the scan by construction.
 
-It is also rotation-aware: both endpoints are rotated before they are
-compared, so a block carrying a `ROTATIONS` extension is judged in the
-physical frame the amplifiers actually slew in rather than in its own logical
-one.
+Rotation is the same story: both endpoints are turned by their own block's
+rotation before they are compared, so a block carrying a `ROTATIONS` extension
+is judged in the physical frame the amplifiers actually slew in. Neither the
+amplitude nor the rotation is a property of the shape, which is exactly why this
+half cannot collapse onto the library the way the interior half does.
 
 Linear, but in the C safety core rather than in Python:
 

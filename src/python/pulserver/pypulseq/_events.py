@@ -41,6 +41,8 @@ from typing import Any, Callable
 
 import numpy as _np
 import pypulseq as _pp
+from pypulseq.utils.tracing import trace as _pp_trace
+from pypulseq.utils.tracing import trace_enabled as _pp_trace_enabled
 
 from .._ext import pulseqpp as _cxx
 
@@ -293,9 +295,215 @@ def _converting(factory: Callable[..., Any]) -> Callable[..., Any]:
     return wrapper
 
 
+def _make_arbitrary_grad(
+    channel: str,
+    waveform,
+    first=None,
+    last=None,
+    delay: float = 0.0,
+    max_grad=None,
+    max_slew=None,
+    system=None,
+    oversampling: bool = False,
+) -> _SimpleNamespace:
+    """One gradient event from an arbitrary waveform, upstream's contract.
+
+    Samples sit at raster-interval centres, ``system.grad_raster_time``
+    apart; ``first``/``last`` are the edge values, linearly extrapolated when
+    absent. Field for field and error for error the event upstream's factory
+    builds, with the amplitude and slew checks reduced as vector operations
+    rather than per-sample Python iteration -- which is the entire reason
+    this factory is implemented here rather than delegated.
+
+    Parameters
+    ----------
+    channel : str
+        One of ``x``, ``y``, ``z``.
+    waveform : numpy.ndarray
+        Amplitudes at raster centres, Hz/m.
+    first, last : float, optional
+        Edge values; extrapolated from the end samples when omitted.
+    delay : float
+        Seconds before the waveform starts.
+    max_grad, max_slew : float, optional
+        Limits; ``system``'s when omitted or zero.
+    system : Opts, optional
+        ``Opts.default`` when omitted.
+    oversampling : bool
+        The waveform samples a grid twice as fine; its length must be odd.
+
+    Returns
+    -------
+    SimpleNamespace
+        The gradient event.
+
+    Raises
+    ------
+    ValueError
+        On an invalid channel, an amplitude or slew violation, or an even
+        oversampled length.
+    """
+    if system is None:
+        system = _pp.Opts.default
+    if max_grad is None or max_grad == 0:
+        max_grad = system.max_grad
+    if max_slew is None or max_slew == 0:
+        max_slew = system.max_slew
+    if channel not in ("x", "y", "z"):
+        raise ValueError(
+            f"Invalid channel. Must be one of x, y or z. Passed: {channel}"
+        )
+
+    if first is None or last is None:
+        if oversampling:
+            if first is None:
+                first = 2 * waveform[0] - waveform[1]
+            if last is None:
+                last = 2 * waveform[-1] - waveform[-2]
+        else:
+            if first is None:
+                first = 0.5 * (3 * waveform[0] - waveform[1])
+            if last is None:
+                last = 0.5 * (3 * waveform[-1] - waveform[-2])
+
+    if oversampling:
+        edge_scale = system.grad_raster_time * 2
+        pre = first - waveform[0]
+        post = last - waveform[-1]
+    else:
+        edge_scale = system.grad_raster_time
+        pre = 2 * (first - waveform[0])
+        post = 2 * (waveform[-1] - last)
+
+    slew_rate = _np.concatenate([[pre], _np.diff(waveform), [post]]) / edge_scale
+
+    slew_peak = _np.abs(slew_rate).max()
+    if slew_peak > max_slew * (1 + _pp.eps):
+        raise ValueError(f"Slew rate violation {slew_peak / max_slew * 100}")
+    amplitude_peak = _np.abs(waveform).max()
+    if amplitude_peak > max_grad + _pp.eps:
+        raise ValueError(
+            f"Gradient amplitude violation {amplitude_peak / max_grad * 100}"
+        )
+
+    grad = _SimpleNamespace()
+    grad.type = "grad"
+    grad.channel = channel
+    grad.waveform = waveform
+    grad.delay = delay
+    if oversampling:
+        if len(waveform) % 2 == 0:
+            raise ValueError(
+                "When oversampling is active, waveform must have an odd number of samples"
+            )
+        grad.area = (waveform[::2] * system.grad_raster_time).sum()
+        grad.tt = _np.arange(1, len(waveform) + 1) * 0.5 * system.grad_raster_time
+        grad.shape_dur = (len(waveform) + 1) * 0.5 * system.grad_raster_time
+    else:
+        grad.area = (waveform * system.grad_raster_time).sum()
+        grad.tt = (_np.arange(len(waveform)) + 0.5) * system.grad_raster_time
+        grad.shape_dur = len(waveform) * system.grad_raster_time
+    grad.first = first
+    grad.last = last
+
+    if _pp_trace_enabled():
+        grad.trace = _pp_trace()
+
+    return grad
+
+
 make_adc = _converting(_pp.make_adc)
 make_adiabatic_pulse = _converting(_pp.make_adiabatic_pulse)
-make_arbitrary_grad = _converting(_pp.make_arbitrary_grad)
+
+
+def make_arbitrary_grad(
+    channel: str,
+    waveform,
+    first=None,
+    last=None,
+    delay: float = 0.0,
+    max_grad=None,
+    max_slew=None,
+    system=None,
+    oversampling: bool = False,
+):
+    """One gradient event from an arbitrary waveform, upstream's contract.
+
+    Samples sit at raster-interval centres, ``system.grad_raster_time``
+    apart; ``first``/``last`` are the edge values, linearly extrapolated when
+    absent. Returns the event with its fields in slots, like every factory
+    in this namespace. A contiguous float array takes a single compiled
+    pass -- validation, normalisation and the event in one -- which is what
+    lets a scan of distinct waveforms assemble at memory bandwidth through
+    this per-event signature.
+
+    Parameters
+    ----------
+    channel : str
+        One of ``x``, ``y``, ``z``.
+    waveform : numpy.ndarray
+        Amplitudes at raster centres, Hz/m.
+    first, last : float, optional
+        Edge values; extrapolated from the end samples when omitted.
+    delay : float
+        Seconds before the waveform starts.
+    max_grad, max_slew : float, optional
+        Limits; ``system``'s when omitted or zero.
+    system : Opts, optional
+        ``Opts.default`` when omitted.
+    oversampling : bool
+        The waveform samples a grid twice as fine; its length must be odd.
+
+    Returns
+    -------
+    GradEvent
+        The slotted gradient event.
+
+    Raises
+    ------
+    ValueError
+        On an invalid channel, an amplitude or slew violation, or an even
+        oversampled length.
+    """
+    if (
+        not _pp_trace_enabled()
+        and isinstance(waveform, _np.ndarray)
+        and waveform.ndim == 1
+        and waveform.size >= 2
+    ):
+        if system is None:
+            system = _pp.Opts.default
+        if max_grad is None or max_grad == 0:
+            max_grad = system.max_grad
+        if max_slew is None or max_slew == 0:
+            max_slew = system.max_slew
+        return _cxx._arb_grad_build(
+            channel,
+            waveform,
+            first,
+            last,
+            delay,
+            max_grad,
+            max_slew,
+            system.grad_raster_time,
+            oversampling,
+            float(_pp.eps),
+        )
+    return convert(
+        _make_arbitrary_grad(
+            channel,
+            waveform,
+            first=first,
+            last=last,
+            delay=delay,
+            max_grad=max_grad,
+            max_slew=max_slew,
+            system=system,
+            oversampling=oversampling,
+        )
+    )
+
+
 make_arbitrary_rf = _converting(_pp.make_arbitrary_rf)
 make_block_pulse = _converting(_pp.make_block_pulse)
 make_delay = _converting(_pp.make_delay)

@@ -113,13 +113,31 @@ namespace pulseq
          * shape sample can be smaller still -- and there is no reason for the
          * pass that decides two events are the same to also blunt them.
          */
+        /**
+         * ceil(log10(a)) for a > 0, by binary exponent and at most two table
+         * comparisons: the smallest e with a <= 10^e. The comparisons make
+         * the tier exact at decade boundaries, where a logarithm's final ulp
+         * would otherwise decide it.
+         */
+        inline double decimal_tier(double a, const double* powers)
+        {
+            int be = 0;
+            (void)std::frexp(a, &be);
+            double e = std::floor(static_cast<double>(be) * 0.30102999566398119521);
+            while (a > power_of_ten(e, powers))
+                e += 1.0;
+            while (a <= power_of_ten(e - 1.0, powers))
+                e -= 1.0;
+            return e;
+        }
+
         inline double round_one(double v, Mode mode, double scale, const double* powers)
         {
             if (mode == Mode::Significant)
             {
                 if (v == 0.0)
                     return 0.0;
-                const double s = power_of_ten(scale - std::ceil(std::log10(std::fabs(v))), powers);
+                const double s = power_of_ten(scale - decimal_tier(std::fabs(v), powers), powers);
                 v = std::rint(v * s) / s;
             }
             else if (mode == Mode::Fixed)
@@ -445,42 +463,102 @@ namespace pulseq
         // count too: the same compressed run can decompress to two lengths.
         std::vector<int32_t> shape_map(static_cast<size_t>(shapes_.size()) + 1, 0);
         {
-            std::unordered_map<std::string, int32_t> seen;
-            ShapeLibrary kept;
-            std::vector<double> samples;
+            // Rounded in place -- the pre-pass rows are discarded either way,
+            // so the library's own storage is the scratch. Identity is exact
+            // sample equality: keyed by a 64-bit hash of (length, rounded
+            // samples), every hash hit verified byte for byte. A scan whose
+            // shapes are all distinct -- the written-out-multishot case that
+            // makes this library large -- ends here without copying a row;
+            // only a found duplicate pays for rebuilding the library.
+            const auto mix = [](uint64_t h, const void* bytes, size_t n)
+            {
+                // Word-at-a-time: the hash only routes the lookup -- the
+                // byte-for-byte verification below decides identity -- so all
+                // it owes is spread, at memory speed.
+                const unsigned char* b = static_cast<const unsigned char*>(bytes);
+                uint64_t w = 0;
+                while (n >= 8)
+                {
+                    std::memcpy(&w, b, 8);
+                    h ^= w;
+                    h *= 1099511628211ull;
+                    h ^= h >> 29;
+                    b += 8;
+                    n -= 8;
+                }
+                if (n)
+                {
+                    w = 0;
+                    std::memcpy(&w, b, n);
+                    h ^= w;
+                    h *= 1099511628211ull;
+                    h ^= h >> 29;
+                }
+                return h;
+            };
+            std::unordered_map<uint64_t, std::vector<int32_t>> seen;
+            seen.reserve(static_cast<size_t>(shapes_.size()) * 2);
+            bool any_duplicate = false;
             for (int id = 1; id <= shapes_.size(); ++id)
             {
                 const int count = shapes_.num_compressed(id);
-                samples.assign(shapes_.samples(id), shapes_.samples(id) + count);
-                round_run(samples.data(), count, 9);
-
-                std::string key(sizeof(int32_t) + samples.size() * sizeof(double), '\0');
+                double* row = const_cast<double*>(shapes_.samples(id));
+                round_run(row, count, 9);
                 const int32_t length = shapes_.num_uncompressed(id);
-                std::memcpy(&key[0], &length, sizeof(length));
-                if (!samples.empty())
-                    std::memcpy(
-                        &key[sizeof(int32_t)],
-                        samples.data(),
-                        samples.size() * sizeof(double));
 
-                auto found = seen.find(key);
-                if (found == seen.end())
+                uint64_t h = mix(1469598103934665603ull, &length, sizeof(length));
+                h = mix(h, row, static_cast<size_t>(count) * sizeof(double));
+
+                int32_t found = 0;
+                auto& bucket = seen[h];
+                for (const int32_t candidate : bucket)
                 {
-                    // A shape still held raw stays raw: it is deduplicated
-                    // here and compressed later, which is the whole point of
-                    // registering it uncompressed.
-                    const int32_t issued = shapes_.is_compressed(id)
-                        ? kept.append(length, samples.data(), count)
-                        : kept.append_raw(samples.data(), count);
-                    seen.emplace(std::move(key), issued);
-                    shape_map[static_cast<size_t>(id)] = issued;
+                    if (shapes_.num_uncompressed(candidate) == length &&
+                        shapes_.num_compressed(candidate) == count &&
+                        std::memcmp(
+                            shapes_.samples(candidate),
+                            row,
+                            static_cast<size_t>(count) * sizeof(double)) == 0)
+                    {
+                        found = candidate;
+                        break;
+                    }
                 }
+                if (found == 0)
+                    bucket.push_back(id);
                 else
-                {
-                    shape_map[static_cast<size_t>(id)] = found->second;
-                }
+                    any_duplicate = true;
+                shape_map[static_cast<size_t>(id)] = found == 0 ? id : found;
             }
-            shapes_ = std::move(kept);
+            if (any_duplicate)
+            {
+                // Rebuild with first appearances only, renumbering densely --
+                // the numbering the file carries. shape_map already points
+                // every id at its first appearance; the rebuild maps those
+                // onto the kept library's ids.
+                ShapeLibrary kept;
+                std::vector<int32_t> issued(static_cast<size_t>(shapes_.size()) + 1, 0);
+                for (int id = 1; id <= shapes_.size(); ++id)
+                {
+                    const int32_t first = shape_map[static_cast<size_t>(id)];
+                    if (first == id)
+                    {
+                        // A shape still held raw stays raw: it is
+                        // deduplicated here and compressed later, which is
+                        // the whole point of registering it uncompressed.
+                        issued[static_cast<size_t>(id)] = shapes_.is_compressed(id)
+                            ? kept.append(
+                                  shapes_.num_uncompressed(id),
+                                  shapes_.samples(id),
+                                  shapes_.num_compressed(id))
+                            : kept.append_raw(shapes_.samples(id), shapes_.num_compressed(id));
+                    }
+                }
+                for (int id = 1; id <= shapes_.size(); ++id)
+                    shape_map[static_cast<size_t>(id)] =
+                        issued[static_cast<size_t>(shape_map[static_cast<size_t>(id)])];
+                shapes_ = std::move(kept);
+            }
         }
 
         /* -- gradients ------------------------------------------------- */

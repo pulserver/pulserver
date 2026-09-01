@@ -225,17 +225,24 @@ namespace pulseq
      * Shift the field of view by @p shift_m, expressed in **logical**
      * coordinates (metres).
      *
-     * ### Why logical, and why that makes rotation vanish
+     * ### Why logical, and which rotation that makes vanish
      *
      * The phase a shift imposes is `dr . k`.  Rotate both and the dot product
      * is unchanged, so a shift written in the same frame as the gradients
-     * needs no knowledge of any rotation -- FOV rotation, a rotation
-     * extension, PMC -- at all.  Expressing the shift in the physical frame is
-     * what forces an interpreter to undo rotations before it can compute a
-     * modulation, and that undoing is the entire complexity this replaces.
+     * needs no knowledge of the rotation the SCANNER applies -- the prescribed
+     * FOV rotation, and PMC composed into it.  Expressing the shift in the
+     * physical frame is what forces an interpreter to undo those before it can
+     * compute a modulation, and that undoing is the entire complexity this
+     * replaces.
      *
      * The caller converts a prescribed physical offset once, with
      * `dr_logical = R^T dr_physical`.
+     *
+     * A block's own `ROTATIONS` extension is a different object and does NOT
+     * vanish: it turns the gradients inside the logical frame, so the phase is
+     * `dr_logical . (R_ext k_logical)`.  Everything here works in the
+     * unrotated logical frame, which is why a rotated readout is deferred
+     * rather than baked -- see `block_is_rotated`.
      *
      * ### What it writes
      *

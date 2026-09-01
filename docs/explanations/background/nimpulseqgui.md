@@ -1,5 +1,20 @@
 # Nimpulseq and Nimpulseqgui
 
+```{admonition} TL;DR
+:class: tip
+
+- Nimpulseq is a Pulseq writer in Nim; Nimpulseqgui drives it from a property
+  editor beside the scanner.
+- Together they close two of the {doc}`three gaps <pulseq>`:
+  **prescription-time adjustment** (the sequence is a program regenerated for
+  the prescription, not a file made in advance) and **design throughput**
+  (compiled, so a minutes-long build takes seconds).
+- The contract between sequence and GUI is plain text: a
+  `[NimPulseqGUI Protocol]` preamble of `key: value` lines.
+- The cost is interoperability — a Nim sequence cannot call the Python
+  ecosystem MR is designed in.
+```
+
 [Nimpulseq](https://github.com/nimpulseq/nimpulseq) is a Pulseq writer in
 [Nim](https://nim-lang.org), a compiled language with Python-like syntax.
 [Nimpulseqgui](https://github.com/nimpulseq/nimpulseqgui) sits on top of it:

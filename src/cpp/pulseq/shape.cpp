@@ -9,6 +9,8 @@
  * here and the same shape written there have to come out the same.
  */
 
+#include <atomic>
+#include <thread>
 #include "pulseq/shape.hpp"
 
 #include "pulseq/sequence.hpp"
@@ -167,18 +169,56 @@ namespace pulseq
             return false;
 
         // Rebuilt rather than edited in place: a compressed row is shorter
-        // than the raw one it replaces, so every row after it moves.
-        RaggedTable rebuilt;
-        for (int id = 1; id <= size(); ++id)
+        // than the raw one it replaces, so every row after it moves. The
+        // encodes are independent per shape and run on every core; the
+        // rebuild appends them in id order, so the result is the same table
+        // whatever the thread count.
+        const int total = size();
+        std::vector<std::vector<double>> packed(static_cast<size_t>(total));
         {
-            const int count = data_.length(id);
+            unsigned workers = std::thread::hardware_concurrency();
+            if (workers < 1)
+                workers = 1;
+            if (workers > 8)
+                workers = 8;
+            std::atomic<int> next{1};
+            const auto encode = [&]()
+            {
+                for (;;)
+                {
+                    const int id = next.fetch_add(1);
+                    if (id > total)
+                        return;
+                    if (is_compressed_[static_cast<size_t>(id) - 1])
+                        continue;
+                    packed[static_cast<size_t>(id) - 1] =
+                        compress_shape(data_.row(id), data_.length(id));
+                }
+            };
+            if (workers == 1 || total < 16)
+            {
+                encode();
+            }
+            else
+            {
+                std::vector<std::thread> pool;
+                for (unsigned w = 1; w < workers; ++w)
+                    pool.emplace_back(encode);
+                encode();
+                for (auto& t : pool)
+                    t.join();
+            }
+        }
+        RaggedTable rebuilt;
+        for (int id = 1; id <= total; ++id)
+        {
             if (is_compressed_[static_cast<size_t>(id) - 1])
             {
-                rebuilt.append(data_.row(id), count);
+                rebuilt.append(data_.row(id), data_.length(id));
                 continue;
             }
-            const std::vector<double> packed = compress_shape(data_.row(id), count);
-            rebuilt.append(packed.data(), static_cast<int>(packed.size()));
+            const std::vector<double>& row = packed[static_cast<size_t>(id) - 1];
+            rebuilt.append(row.data(), static_cast<int>(row.size()));
             is_compressed_[static_cast<size_t>(id) - 1] = 1;
         }
         data_ = std::move(rebuilt);

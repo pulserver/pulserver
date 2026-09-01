@@ -35,10 +35,12 @@ class PhasePoleCorrection(torch.nn.Module):
     Examples
     --------
     Finds and unwinds the phase singularities a partial-Fourier or a
-    low-resolution phase estimate leaves behind.
+    low-resolution phase estimate leaves behind. :class:`~pulserver.recon.NLINV`
+    applies it at the Newton step its ``phase_pole_iteration`` names, which is
+    the only way a reconstruction reaches it.
 
-    >>> import pulserver.recon as recon
-    >>> correction = recon.PhasePoleCorrection(segments=12)
+    >>> from pulserver.recon._phase_poles import PhasePoleCorrection
+    >>> correction = PhasePoleCorrection(segments=12)
     >>> correction.segments
     12
     """

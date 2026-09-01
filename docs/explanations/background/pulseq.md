@@ -1,5 +1,22 @@
 # Pulseq in one page
 
+```{admonition} TL;DR
+:class: tip
+
+- A `.seq` file is a flat, ordered list of **blocks**: a duration plus at most
+  one event per channel. No nesting, no loops, no branches.
+- Events live in **libraries** and are referenced by id, so an event played ten
+  thousand times is written once. Shapes are run-length encoded on their
+  derivative.
+- Amplitudes are in Hz and Hz/m — gyromagnetic-ratio free. Times sit on rasters
+  the file declares.
+- **Extensions** carry what the core format has no column for: labels,
+  rotations, triggers, RF shims, soft delays.
+- Three things the format leaves open: **structure** (nothing says what repeats
+  or what is reusable), **prescription-time adjustment**, and **design
+  throughput**. Those three are what the rest of this documentation is about.
+```
+
 [Pulseq](https://pulseq.github.io) is an open file format for MR sequences.
 A `.seq` file says what to play, on which axis, for how long — the complete
 prescription of an experiment, portable across sites and vendors. Everything
@@ -7,12 +24,11 @@ Pulserver does sits on that description, so this is what it contains.
 
 ## Blocks and events
 
-A sequence is an ordered list of **blocks**. A block has a duration and at
-most one event per channel: one RF pulse, one gradient on each of `x`, `y`,
-`z`, one ADC window, plus extensions. Events inside a block run concurrently,
-each with its own delay from the block start; blocks run back to back with no
-gap. There is no nesting, no loop construct and no branch — the file is the
-flattened playout order.
+A sequence is an ordered list of **blocks**. A block has a duration and at most
+one event per channel: one RF pulse, one gradient on each of `x`, `y`, `z`, one
+ADC window, plus extensions. Events inside a block run concurrently, each with
+its own delay from the block start; blocks run back to back with no gap. The
+file is the flattened playout order.
 
 ```{figure} ../assets/pulseq/file_structure.png
 A `.seq` file is one table of played blocks over four event libraries and a
@@ -87,10 +103,9 @@ scanner can refuse a file that changed after it was checked.
 
 ## What the format leaves open
 
-Pulseq describes the playout completely. Between that description and a
-sequence that stands in for a product one on a clinical scanner, three gaps
-remain — none of them a flaw in the format, all of them the motivation for
-the rest of this documentation.
+Pulseq describes the playout completely. Three gaps remain between that
+description and a sequence that stands in for a product one — none of them a
+flaw in the format.
 
 ```{figure} ../assets/pulseq/structure_levels.png
 The same block list, read at the four levels a scanner-side representation
@@ -108,31 +123,24 @@ and no field carries it:
 | the segment | that a reused ordered run of blocks is a unit a sequencer could prepare once |
 | the TR | which periodic pattern of segments the scan is a repetition of |
 
-Two consumers need that structure before they can do their job. A sequencer
-that prepares a segment once and replays it — GE's, for one — has to
-reconstruct the grouping before it can play the file at all. And the safety
-quantities are not defined over a block: SAR, gradient heating and the
-acoustic drive are each a window sliding along the whole scan, so evaluating
-one without knowing the period means sweeping every block of it.
+Two consumers need that structure. A sequencer that prepares a segment once and
+replays it — GE's, for one — has to reconstruct the grouping before it can play
+the file at all. And the safety quantities are not defined over a block: SAR,
+gradient heating and the acoustic drive are each a window sliding along the
+whole scan, so evaluating one without knowing the period means sweeping every
+block of it. Where a repetition does exist that sweep collapses onto a single
+period, and a sequence is almost always periodic at some level.
 
-Where a repetition does exist, that sweep collapses onto a single period —
-which is how the check becomes cheap enough for some vendors to run it that
-way. A sequence is almost always periodic at some level, a hyper-TR if nothing
-smaller, so recovering the pattern is where most of the saving comes from.
+**Prescription-time adjustment.** A product sequence is edited at the console
+minutes before the exam. Pulseq offers some of this — `SOFT_DELAY`, FOV scaling
+and repositioning of a written file — but the adjustable surface is small
+compared to what an operator expects, and most parameter changes mean rewriting
+the file.
 
-**Prescription-time adjustment.** A product sequence is edited at the
-console: the operator changes TE, TR, FOV, matrix, orientation minutes before
-the exam. Pulseq offers some of this — the `SOFT_DELAY` extension, FOV
-scaling and repositioning of a written file — but the adjustable surface is
-small compared to what an operator expects, and most parameter changes mean
-rewriting the file.
+**Design throughput.** The reference writers are MATLAB and Python. At clinical
+matrix sizes a scan is hundreds of thousands to millions of blocks, and an
+interpreted loop over them takes minutes where a console expects seconds.
 
-**Design throughput.** The reference writers are MATLAB and Python. At
-demonstration sizes that is comfortable; at clinical matrix sizes a scan is
-hundreds of thousands to millions of blocks, and an interpreted loop over
-them takes minutes where a console expects seconds.
-
-Taken together, these three are what stands between a `.seq` file and a
-replacement for a product sequence. The {doc}`sequence model
-<../sequence_model/index>` pages describe how Pulserver closes each of them,
-and {doc}`../safety/index` covers the checks that structure makes affordable.
+The {doc}`sequence model <../sequence_model/index>` pages describe how
+Pulserver closes each of these, and {doc}`../safety/index` covers the checks
+that structure makes affordable.

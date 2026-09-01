@@ -363,7 +363,25 @@ namespace pulseqpp_types
 
         PyObject* grad_get_tt(PyObject* self, void*)
         {
-            return guarded([&] { return samples_of(unwrap<GradEvent>(self).tt); });
+            return guarded(
+                [&]
+                {
+                    GradEvent& event = unwrap<GradEvent>(self);
+                    if (event.tt.empty() && event.tt_grid != 0 && !event.waveform.empty())
+                    {
+                        const Py_ssize_t n = static_cast<Py_ssize_t>(event.waveform.size());
+                        py::array_t<double> out(n);
+                        double* dst = out.mutable_data();
+                        if (event.tt_grid == 2)
+                            for (Py_ssize_t i = 0; i < n; ++i)
+                                dst[i] = (i + 1) * 0.5 * event.tt_raster;
+                        else
+                            for (Py_ssize_t i = 0; i < n; ++i)
+                                dst[i] = (i + 0.5) * event.tt_raster;
+                        return py::object(out);
+                    }
+                    return py::object(samples_of(event.tt));
+                });
         }
 
         int grad_set_tt(PyObject* self, PyObject* value, void*)
@@ -375,6 +393,8 @@ namespace pulseqpp_types
                     GradEvent& event = unwrap<GradEvent>(self);
                     event.tt = as_vector(given);
                     event.last_time = event.tt.empty() ? 0.0 : event.tt.back();
+                    event.tt_grid = 0;
+                    event.tt_raster = 0.0;
                     event.registered = Registration{};
                 });
         }
@@ -875,6 +895,118 @@ namespace pulseqpp_types
                 e.fall_time = source.attr("fall_time").cast<double>();
                 e.delay = source.attr("delay").cast<double>();
                 e.axis = axis_from(source.attr("channel").cast<std::string>());
+                return made;
+            });
+
+        /* The whole arbitrary-gradient factory in one pass: validation with
+         * upstream's exact messages, extrapolation, normalisation and the
+         * slotted event, so the Python surface stays the plain per-event
+         * signature while a distinct-waveform scan pays memory bandwidth
+         * rather than interpreter time. Floats in messages are formatted
+         * with CPython's own repr, so the text matches to the digit. */
+        m.def(
+            "_arb_grad_build",
+            [](const std::string& channel,
+               const py::array_t<double, py::array::c_style | py::array::forcecast>& wave,
+               const py::object& first_obj,
+               const py::object& last_obj,
+               double delay,
+               double max_grad,
+               double max_slew,
+               double grad_raster_time,
+               bool oversampling,
+               double eps)
+            {
+                const auto n = static_cast<int>(wave.size());
+                const double* v = wave.data();
+
+                if (channel != "x" && channel != "y" && channel != "z")
+                    throw py::value_error(
+                        "Invalid channel. Must be one of x, y or z. Passed: " + channel);
+                if (n < 2)
+                    throw py::index_error("waveform needs at least two samples");
+
+                const auto repr = [](double x)
+                {
+                    char* buf = PyOS_double_to_string(x, 'r', 0, Py_DTSF_ADD_DOT_0, nullptr);
+                    std::string out = buf ? buf : "";
+                    PyMem_Free(buf);
+                    return out;
+                };
+
+                double first, last;
+                if (oversampling)
+                {
+                    first = first_obj.is_none() ? 2 * v[0] - v[1] : first_obj.cast<double>();
+                    last = last_obj.is_none() ? 2 * v[n - 1] - v[n - 2] : last_obj.cast<double>();
+                }
+                else
+                {
+                    first =
+                        first_obj.is_none() ? 0.5 * (3 * v[0] - v[1]) : first_obj.cast<double>();
+                    last = last_obj.is_none() ? 0.5 * (3 * v[n - 1] - v[n - 2])
+                                              : last_obj.cast<double>();
+                }
+
+                double edge_scale, pre, post;
+                if (oversampling)
+                {
+                    edge_scale = grad_raster_time * 2;
+                    pre = first - v[0];
+                    post = last - v[n - 1];
+                }
+                else
+                {
+                    edge_scale = grad_raster_time;
+                    pre = 2 * (first - v[0]);
+                    post = 2 * (v[n - 1] - last);
+                }
+
+                double amp_peak = 0.0;
+                double slew_raw =
+                    std::fabs(pre) > std::fabs(post) ? std::fabs(pre) : std::fabs(post);
+                for (int i = 0; i < n; ++i)
+                {
+                    const double a = std::fabs(v[i]);
+                    if (a > amp_peak)
+                        amp_peak = a;
+                    if (i > 0)
+                    {
+                        const double d = std::fabs(v[i] - v[i - 1]);
+                        if (d > slew_raw)
+                            slew_raw = d;
+                    }
+                }
+                const double slew_peak = slew_raw / edge_scale;
+                if (slew_peak > max_slew * (1 + eps))
+                    throw py::value_error(
+                        "Slew rate violation " + repr(slew_peak / max_slew * 100));
+                if (amp_peak > max_grad + eps)
+                    throw py::value_error(
+                        "Gradient amplitude violation " + repr(amp_peak / max_grad * 100));
+                if (oversampling && n % 2 == 0)
+                    throw py::value_error(
+                        "When oversampling is active, waveform must have an odd number of "
+                        "samples");
+
+                py::object made = fresh<GradEvent>(GradType);
+                GradEvent& e = unwrap<GradEvent>(made.ptr());
+                normalise_grad(v, n, e);
+                if (oversampling)
+                {
+                    e.tt_grid = 2;
+                    e.last_time = n * 0.5 * grad_raster_time;
+                }
+                else
+                {
+                    e.tt_grid = 1;
+                    e.last_time = (n - 0.5) * grad_raster_time;
+                }
+                e.tt_raster = grad_raster_time;
+                e.first = first;
+                e.last = last;
+                e.delay = delay;
+                e.axis = axis_from(channel);
                 return made;
             });
 

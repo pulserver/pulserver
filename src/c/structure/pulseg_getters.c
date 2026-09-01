@@ -2961,17 +2961,27 @@ int pulseg_get_subseq_info(const pulseg_collection *coll, pulseg_subseq_info *in
             info->num_tr_instances = 1;
     }
 
-    /* Compute num_canonical_trs (unique shot-ID combinations). */
+    /* One canonical window per shape group: repetitions that play the same
+     * set of gradient waveforms share a worst-case envelope, and ones that
+     * play different waveforms cannot be covered by a single window.  This
+     * is the count pulseg_get_tr_gradient_waveforms indexes. */
     {
-        int *can_idx = NULL;
-        int *can_lbl = NULL;
-        int nc;
-        nc = 0 /* one canonical TR; representatives carry the worst case */;
-        info->num_canonical_trs = (nc > 0) ? nc : 1;
-        if (can_idx)
-            PULSEG_FREE(can_idx);
-        if (can_lbl)
-            PULSEG_FREE(can_lbl);
+        int *labels = NULL;
+        int *group_first = NULL;
+        int num_groups = 0;
+        int rc;
+
+        rc = pulseg__group_tr_instances_by_shape(
+            &coll->descriptors[subseq_idx],
+            &labels,
+            &group_first,
+            &num_groups,
+            PULSEG__MAX_SHAPE_GROUPS);
+        info->num_canonical_trs = (PULSEG_SUCCEEDED(rc) && num_groups > 0) ? num_groups : 1;
+        if (labels)
+            PULSEG_FREE(labels);
+        if (group_first)
+            PULSEG_FREE(group_first);
     }
 
     return PULSEG_SUCCESS;

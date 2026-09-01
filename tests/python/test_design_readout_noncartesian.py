@@ -371,6 +371,81 @@ def test_a_rewound_shot_ends_where_it_started(system, excitation):
 
 
 @pytest.mark.parametrize(
+    ("cls", "kwargs"),
+    [
+        (design.RadialReadout2D, {}),
+        (design.SpiralReadout2D, {"design_interleaves": 16}),
+        (design.RosetteReadout2D, {"petals": 5}),
+    ],
+)
+def test_every_echo_of_a_train_traverses_the_same_path(system, excitation, cls, kwargs):
+    """An echo train is one trajectory read at several echo times.
+
+    Replaying an arm re-enters k where the last one left it, so a family whose
+    path does not come back has to be brought back between echoes: what the
+    reconstruction grids is one trajectory, and a second echo that reached
+    twice as far would be a different scan, not a later one.
+    """
+    n_echoes = 3
+    readout = _readout(cls, system, excitation, n_echoes=n_echoes, **kwargs)
+    seq = pp.Sequence(system)
+    for block in readout.blocks:
+        seq.add_block(*block)
+    k_adc, _, _, _, t_adc = seq.calculate_kspace()
+
+    samples = int(readout.adc.num_samples)
+    assert k_adc.shape[1] == n_echoes * samples
+    # The same tolerance a rewound shot is held to: what this catches is a
+    # path that re-enters where the last one ended, which grows by kmax an
+    # echo, not the fraction of a percent a bridge leaves behind.
+    paths = [k_adc[:2, i * samples : (i + 1) * samples] for i in range(n_echoes)]
+    for echo, path in enumerate(paths[1:], start=1):
+        assert np.allclose(path, paths[0], atol=0.02 * KMAX), echo
+
+    starts = [float(t_adc[i * samples]) for i in range(n_echoes)]
+    spacings = np.diff(starts)
+    assert np.allclose(spacings, readout.echo_spacing, atol=1e-9)
+
+
+def test_a_train_counts_its_own_echoes(system, excitation):
+    """A scan loop plays a whole arm, so it never sees the echo boundaries
+    inside one: the counter that indexes them is the readout's to write."""
+    readout = _readout(
+        design.SpiralReadout2D,
+        system,
+        excitation,
+        design_interleaves=16,
+        n_echoes=3,
+        labels=("LIN", "SLC"),
+    )
+    written = [
+        [(e.label, e.value) for e in block if hasattr(e, "label")]
+        for block in readout.blocks
+    ]
+    echoes = [dict(labels)["ECO"] for labels in written if labels]
+    assert echoes == [0, 1, 2]
+
+
+def test_a_counter_the_readout_writes_is_not_the_loops_to_set(system, excitation):
+    with pytest.raises(ValueError, match="ECO counts the echoes"):
+        _readout(
+            design.SpiralReadout2D,
+            system,
+            excitation,
+            design_interleaves=16,
+            n_echoes=2,
+            labels=("LIN", "ECO"),
+        )
+
+
+def test_a_single_echo_readout_states_no_echo_spacing(system, excitation):
+    readout = _readout(
+        design.SpiralReadout2D, system, excitation, design_interleaves=16
+    )
+    assert readout.echo_spacing == 0.0
+
+
+@pytest.mark.parametrize(
     ("kwargs", "message"),
     [
         ({"n_echoes": 0}, "n_echoes must be >= 1"),

@@ -1,13 +1,25 @@
 # The Pulserver PulSeg representation
 
+```{admonition} TL;DR
+:class: tip
+
+- Pulserver's scanner-side representation carries all four
+  {doc}`PulSeg <../background/pulseg>` structures, built in one pass from the
+  `.seq` with no intermediate file, and is lossless with respect to what plays.
+- It adds one structure above the segment: the **structural TR**, derived from
+  the block content and written back as `[DEFINITIONS] TRSize`.
+- That addition buys two things — safety checks collapse onto one period, and
+  segmentation needs no `TRID` annotation.
+- Three declared divergences: segmentation is **derived**, the execution loop is
+  stored as **runs plus a shared rotation library**, and times are **integer
+  microseconds**.
+```
+
 {doc}`PulSeg <../background/pulseg>` describes what a scanner-side sequence
 representation must carry: definitions separated from per-playout parameters,
-blocks grouped into base blocks and reusable segments, and an ordered stream
-of instances. Pulserver's scanner-side representation is a reading of that
-specification, plus one structure the specification does not have. This page
-says how the four structures map, what the addition is for, and where
-Pulserver deliberately takes a different route; the companion page,
-{doc}`tr_and_segmentation`, covers the added structure in full.
+blocks grouped into base blocks and reusable segments, and an ordered stream of
+instances. This page says how the four structures map, what Pulserver adds, and
+where it takes a different route.
 
 ## The mapping
 
@@ -86,12 +98,10 @@ declared rather than hidden:
 
 ## What the definition/instance split buys
 
-The split between definitions and instances is not bookkeeping; it is the
-difference between a sequence that fits and one that does not. A definition
-is *prepared* — converted to hardware units, resampled to the sequencer's
-raster, loaded into pulse-generator memory — which is expensive and happens
-once. An instance parameter is *applied* — written into a scan-loop row —
-which is cheap and happens a million times. The
+A definition is *prepared* — converted to hardware units, resampled to the
+sequencer's raster, loaded into pulse-generator memory — which is expensive and
+happens once. An instance parameter is *applied* — written into a scan-loop row
+— which is cheap and happens a million times. The
 {doc}`performance pages <../performance/index>` measure what this buys; the
 {doc}`safety pages <../safety/index>` lean on the same structure to make
 whole-scan checks affordable.

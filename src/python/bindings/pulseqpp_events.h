@@ -518,7 +518,15 @@ namespace pulseqpp_events
         // 0 is the standard raster, -1 the half-raster variant, and only
         // a grid that is neither becomes a shape of its own.
         int32_t time_shape = 0;
-        if (!e.tt.empty())
+        if (e.tt_grid == 1)
+        {
+            time_shape = 0;
+        }
+        else if (e.tt_grid == 2)
+        {
+            time_shape = -1;
+        }
+        else if (!e.tt.empty())
         {
             const double raster = seq.grad_raster_time();
             bool standard = static_cast<int>(e.tt.size()) == count;

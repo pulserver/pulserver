@@ -2122,6 +2122,40 @@ int pulseq__check_references(const pulseq_file *seq)
     return check_references(seq);
 }
 
+int pulseq_read_from_memory(pulseq_file *seq, const void *data, long size)
+{
+    const unsigned char *bytes = (const unsigned char *)data;
+    FILE *tmp;
+    int rc;
+
+    if (!seq || !data || size < 0)
+        return PULSEQ_ERR_NULL_POINTER;
+    if (size >= 8 && bytes[0] == 0x01 && bytes[7] == 0x02 && memcmp(bytes + 1, "pulseq", 6) == 0)
+    {
+        pulseq__file_reset(seq);
+        if (seq->file_path)
+        {
+            PULSEQ_FREE(seq->file_path);
+            seq->file_path = NULL;
+        }
+        return pulseq_read_binary_from_memory(seq, data, size);
+    }
+
+    /* Text stays on the stream parser; the scale path is binary. */
+    tmp = tmpfile();
+    if (!tmp)
+        return PULSEQ_ERR_FILE_NOT_FOUND;
+    if (size > 0 && (long)fwrite(data, 1, (size_t)size, tmp) != size)
+    {
+        fclose(tmp);
+        return PULSEQ_ERR_FILE_READ_FAILED;
+    }
+    rewind(tmp);
+    rc = pulseq_read_from_buffer(seq, tmp);
+    fclose(tmp);
+    return rc;
+}
+
 int pulseq_read_from_buffer(pulseq_file *seq, FILE *f)
 {
     unsigned char magic[8];

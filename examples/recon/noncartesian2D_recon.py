@@ -10,10 +10,12 @@ __all__ = ["PLUGIN", "NonCartesian2DRecon"]
 
 from typing import Any
 
+import numpy as np
 
 from pulserver.recon import ReconContext, ReconPlugin, ReconResult
 from pulserver.recon import (
     NoiseAdjust,
+    field_map,
     image_result,
     noncartesian_recon,
 )
@@ -57,6 +59,14 @@ class NonCartesian2DRecon(ReconPlugin):
         physical channels keeps them all.
     calibration_width
         Width of the centred square NLINV solves the sensitivities over.
+    correct_off_resonance
+        Measure the field from a multi-echo scan and put it in the operator.
+        It takes the echo times, which the header states in
+        ``sequenceParameters.TE``, and the dwell, which the acquisitions
+        state; a scan with one echo, or missing either of those, is
+        reconstructed as it would have been.
+    field_smoothing
+        Width in voxels of the Gaussian the field map is smoothed by.
     device
         Torch device the reconstruction runs on. ``"auto"`` is the host's
         GPU when it has one, and the CPU when it does not.
@@ -135,6 +145,8 @@ class NonCartesian2DRecon(ReconPlugin):
         iterations: int = 30,
         virtual_coils: int = 8,
         calibration_width: int = 24,
+        correct_off_resonance: bool = True,
+        field_smoothing: float = 2.0,
         device: Any = "auto",
     ) -> None:
         super().__init__(
@@ -149,6 +161,8 @@ class NonCartesian2DRecon(ReconPlugin):
         self.iterations = int(iterations)
         self.virtual_coils = int(virtual_coils)
         self.calibration_width = int(calibration_width)
+        self.correct_off_resonance = bool(correct_off_resonance)
+        self.field_smoothing = float(field_smoothing)
         self.device = device
 
     def startup(self, context: ReconContext) -> None:
@@ -157,33 +171,87 @@ class NonCartesian2DRecon(ReconPlugin):
 
     def recon(self, branch: str, context: ReconContext) -> list[ReconResult]:
         """Reconstruct every slice, once the measurement is complete."""
-        del branch, context
+        del branch
         buffer = self.buffers[0]
         n_views = buffer.extents["phase_encode"]
+        n_echoes = buffer.extents.get("contrast", 1)
+
+        # A long readout blurs wherever the field is off resonance, and what
+        # says how far off a voxel is, is how much its phase turned between
+        # two echoes. So a multi-echo scan is reconstructed twice: once to
+        # measure the field, once with the field in the operator. The first
+        # pass is solved whatever ``mode`` says, because a root-sum-of-squares
+        # image has no phase to measure.
+        echo_times = getattr(
+            getattr(context.header, "sequenceParameters", None), "TE", None
+        )
+        sample_times = buffer.readout_time
+        measuring = (
+            self.correct_off_resonance
+            and n_echoes > 1
+            and sample_times is not None
+            and echo_times is not None
+            and len(echo_times) >= n_echoes
+        )
 
         results = []
         for index in range(buffer.extents.get("slice", 1)):
             # Views laid end to end, and the points they were taken at in the
             # same order: one non-Cartesian measurement of this slice.
-            views, _ = buffer.select(slice=index)
-            data, _ = coil_compress(
-                views.reshape(views.shape[0], -1), self.virtual_coils
-            )
-            trajectory = (
-                buffer.points(slice=index)[:2].transpose(1, 2, 0).reshape(-1, 2)
-            )
-            image = noncartesian_recon(
-                data,
-                trajectory,
-                buffer.image_shape,
-                mode=self.mode,
-                n_views=n_views,
-                regularization=self.regularization,
-                iterations=self.iterations,
-                calibration_width=self.calibration_width,
-                device=self.device,
-            )
-            results.append(image_result(image, buffer, image_index=index))
+            measurements = []
+            for echo in range(n_echoes):
+                views, _ = buffer.select(slice=index, contrast=echo)
+                data, _ = coil_compress(
+                    views.reshape(views.shape[0], -1), self.virtual_coils
+                )
+                points = buffer.points(slice=index, contrast=echo)
+                measurements.append(
+                    (data, points[:2].transpose(1, 2, 0).reshape(-1, 2))
+                )
+
+            field = readout_time = None
+            if measuring:
+                field = field_map(
+                    np.stack(
+                        [
+                            noncartesian_recon(
+                                data,
+                                trajectory,
+                                buffer.image_shape,
+                                mode="pics",
+                                regularization=self.regularization,
+                                iterations=self.iterations,
+                                calibration_width=self.calibration_width,
+                                device=self.device,
+                            )
+                            for data, trajectory in measurements
+                        ]
+                    ),
+                    [float(echo_times[echo]) for echo in range(n_echoes)],
+                    smoothing=self.field_smoothing,
+                )
+                # One readout's clock, once per view: the samples are laid
+                # out view-major, the same order as the trajectory.
+                views_played = len(measurements[0][1]) // len(sample_times)
+                readout_time = np.tile(sample_times, views_played)
+
+            for echo, (data, trajectory) in enumerate(measurements):
+                image = noncartesian_recon(
+                    data,
+                    trajectory,
+                    buffer.image_shape,
+                    mode=self.mode,
+                    n_views=n_views,
+                    field_map=field,
+                    readout_time=readout_time,
+                    regularization=self.regularization,
+                    iterations=self.iterations,
+                    calibration_width=self.calibration_width,
+                    device=self.device,
+                )
+                results.append(
+                    image_result(image, buffer, image_index=index, series_index=echo)
+                )
         return results
 
 

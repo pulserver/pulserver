@@ -15,14 +15,19 @@ Usage:
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import matplotlib
 
 matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-import numpy as np
-from matplotlib.patches import FancyArrowPatch, FancyBboxPatch
+import matplotlib.pyplot as plt  # noqa: E402
+import numpy as np  # noqa: E402
+from matplotlib.patches import FancyArrowPatch, FancyBboxPatch  # noqa: E402
+
+from schematic import data_extent, fit_text  # noqa: E402
 
 # House style: a figure has to be legible at the width a manual page gives it.
 plt.rcParams.update(
@@ -56,6 +61,7 @@ def trapezoid(amplitude):
 
 
 def box(ax, x, y, w, h, color, *, title, body, alpha=1.0):
+    """A titled box whose prose is wrapped to the room the box actually has."""
     ax.add_patch(
         FancyBboxPatch(
             (x, y),
@@ -69,33 +75,42 @@ def box(ax, x, y, w, h, color, *, title, body, alpha=1.0):
             zorder=2,
         )
     )
-    ax.text(
+    pad_x, pad_y = 0.035 * w, 0.09 * h
+    title_art = fit_text(
+        ax,
         x + w / 2,
-        y + h - 1.4,
+        y + h - pad_y,
         title,
-        ha="center",
-        va="top",
+        width=w - 2 * pad_x,
         fontsize=12.2,
+        wrap=False,
         color=color,
         fontweight="bold",
-        zorder=3,
-    )
-    ax.text(
-        x + w / 2,
-        y + h - 4.1,
-        body,
         ha="center",
         va="top",
+        zorder=3,
+    )
+    _, title_h = data_extent(ax, title_art)
+    top = y + h - pad_y - title_h - 0.55 * pad_y
+    fit_text(
+        ax,
+        x + w / 2,
+        top,
+        body,
+        width=w - 2 * pad_x,
+        height=top - y - pad_y,
         fontsize=10.5,
         color=INK,
-        zorder=3,
+        ha="center",
+        va="top",
         linespacing=1.5,
+        zorder=3,
     )
 
 
 def build_event_split() -> Path:
     fig, (axw, axb) = plt.subplots(
-        1, 2, figsize=(8.6, 4.72), gridspec_kw={"width_ratios": [1.05, 1.0]}
+        1, 2, figsize=(9.2, 4.72), gridspec_kw={"width_ratios": [0.92, 1.22]}
     )
 
     # -- the waveform, one shape at four amplitudes ----------------------
@@ -234,14 +249,14 @@ def build_definition_sharing() -> Path:
         fontsize=10.8,
         color=FLAT,
     )
-    axw.legend(frameon=False, fontsize=10.0, loc="lower left",
-           bbox_to_anchor=(0.0, 1.02, 1.0, 0.16), mode="expand",
+    axw.legend(frameon=False, fontsize=10.0, loc="lower left", ncol=2,
+           bbox_to_anchor=(0.0, 1.01, 1.0, 0.14), mode="expand",
            borderaxespad=0.0, handlelength=1.2)
     axw.set_ylim(-1.75, 1.25)
     axw.set_xlim(-0.06, 1.06)
     axw.axis("off")
     axw.set_title(
-        "two written-out spiral arms, one axis", fontsize=12.8, color=INK, pad=6
+        "two written-out spiral arms, one axis", fontsize=12.8, color=INK, pad=26
     )
 
     axb.set_xlim(0, 100)

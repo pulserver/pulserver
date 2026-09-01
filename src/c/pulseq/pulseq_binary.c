@@ -90,7 +90,10 @@ typedef struct
 
 typedef struct
 {
-    FILE *f;
+    FILE *f;                  /**< stream source; NULL when reading from memory */
+    const unsigned char *mem; /**< memory source, consulted when f is NULL */
+    size_t mem_len;
+    size_t mem_pos;
     int file_is_big;  /**< byte order of the file itself */
     int reverse_real; /**< file and host disagree, so IEEE real bytes need flipping */
 
@@ -214,6 +217,14 @@ static int rd_bytes(bin_reader *r, unsigned char *dst, size_t n)
 {
     if (n == 0)
         return PULSEQ_SUCCESS;
+    if (!r->f)
+    {
+        if (n > r->mem_len - r->mem_pos)
+            return PULSEQ_ERR_FILE_READ_FAILED;
+        memcpy(dst, r->mem + r->mem_pos, n);
+        r->mem_pos += n;
+        return PULSEQ_SUCCESS;
+    }
     if (fread(dst, 1, n, r->f) != n)
         return PULSEQ_ERR_FILE_READ_FAILED;
     return PULSEQ_SUCCESS;
@@ -1037,19 +1048,41 @@ static int read_binary_shapes(bin_reader *r, pulseq_file *seq)
 
         if (n_compressed > 0)
         {
-            unsigned char buf[4];
             samples = (PULSEQ_REAL *)PULSEQ_ALLOC((size_t)n_compressed * sizeof(PULSEQ_REAL));
             if (!samples)
                 return PULSEQ_ERR_ALLOC_FAILED;
-            for (j = 0; j < n_compressed; ++j)
+            /* One read for the whole payload. A single-precision build lands
+             * the file's f32 cells straight in the destination; a
+             * double-precision build parks them in its tail and widens
+             * forward, each cell loaded before the value that overwrites it
+             * is stored. Either way the decode is in place. */
+            if (sizeof(PULSEQ_REAL) == 4)
             {
-                rc = rd_bytes(r, buf, 4);
+                unsigned char *raw = (unsigned char *)samples;
+
+                rc = rd_bytes(r, raw, (size_t)n_compressed * 4);
                 if (PULSEQ_FAILED(rc))
                 {
                     PULSEQ_FREE(samples);
                     return rc;
                 }
-                samples[j] = dec_f32(buf, r->reverse_real);
+                if (r->reverse_real)
+                    for (j = 0; j < n_compressed; ++j)
+                        samples[j] = (PULSEQ_REAL)dec_f32(raw + (size_t)j * 4, 1);
+            }
+            else
+            {
+                unsigned char *raw =
+                    (unsigned char *)samples + (size_t)n_compressed * (sizeof(PULSEQ_REAL) - 4);
+
+                rc = rd_bytes(r, raw, (size_t)n_compressed * 4);
+                if (PULSEQ_FAILED(rc))
+                {
+                    PULSEQ_FREE(samples);
+                    return rc;
+                }
+                for (j = 0; j < n_compressed; ++j)
+                    samples[j] = (PULSEQ_REAL)dec_f32(raw + (size_t)j * 4, r->reverse_real);
             }
         }
         slot = &seq->shapes_library[id - 1];
@@ -1216,9 +1249,11 @@ static int read_binary_label_names(bin_reader *r, pulseq_file *seq)
         at = 0;
         for (;;)
         {
-            ch = fgetc(r->f);
-            if (ch == EOF)
+            unsigned char one;
+
+            if (PULSEQ_FAILED(rd_bytes(r, &one, 1)))
                 return PULSEQ_ERR_FILE_READ_FAILED;
+            ch = (int)one;
             if (ch == '\0')
                 break;
             if (at + 1 < sizeof(name))
@@ -1583,14 +1618,27 @@ static int next_section(bin_reader *r, int *code, int *at_eof)
     size_t got;
 
     *at_eof = 0;
-    got = fread(b, 1, 8, r->f);
-    if (got == 0)
+    if (!r->f)
     {
-        *at_eof = 1;
-        return PULSEQ_SUCCESS;
+        if (r->mem_pos == r->mem_len)
+        {
+            *at_eof = 1;
+            return PULSEQ_SUCCESS;
+        }
+        if (PULSEQ_FAILED(rd_bytes(r, b, 8)))
+            return PULSEQ_ERR_FILE_READ_FAILED;
     }
-    if (got != 8)
-        return PULSEQ_ERR_FILE_READ_FAILED;
+    else
+    {
+        got = fread(b, 1, 8, r->f);
+        if (got == 0)
+        {
+            *at_eof = 1;
+            return PULSEQ_SUCCESS;
+        }
+        if (got != 8)
+            return PULSEQ_ERR_FILE_READ_FAILED;
+    }
     dec_i64(b, r->file_is_big, &raw);
     if (raw.hi != PULSEQ_BIN_SECTION_HI || raw.lo == 0UL ||
         raw.lo > (unsigned long)PULSEQ_BIN_LABELNAMES)
@@ -1603,12 +1651,20 @@ static int next_section(bin_reader *r, int *code, int *at_eof)
 /*  Entry points                                                      */
 /* ================================================================== */
 
-static int read_binary_stream(pulseq_file *seq, FILE *f, int definitions_only)
+static int read_binary_stream(
+    pulseq_file *seq,
+    FILE *f,
+    const void *mem,
+    size_t mem_len,
+    int definitions_only)
 {
     bin_reader r;
     int rc, code, at_eof, n;
 
     r.f = f;
+    r.mem = (const unsigned char *)mem;
+    r.mem_len = mem_len;
+    r.mem_pos = 0;
     r.file_is_big = 0;
     r.reverse_real = 0;
     memset(r.label_remap, 0, sizeof(r.label_remap));
@@ -1736,13 +1792,27 @@ static int read_binary_stream(pulseq_file *seq, FILE *f, int definitions_only)
     return PULSEQ_SUCCESS;
 }
 
+int pulseq_read_binary_from_memory(pulseq_file *seq, const void *data, long size)
+{
+    int rc;
+
+    if (!seq || !data || size < 0)
+        return PULSEQ_ERR_NULL_POINTER;
+    rc = read_binary_stream(seq, NULL, data, (size_t)size, 0);
+    if (PULSEQ_SUCCEEDED(rc))
+        rc = pulseq__check_references(seq);
+    if (PULSEQ_FAILED(rc))
+        pulseq__file_reset(seq);
+    return rc;
+}
+
 int pulseq_read_binary_from_buffer(pulseq_file *seq, FILE *f)
 {
     int rc;
 
     if (!seq || !f)
         return PULSEQ_ERR_NULL_POINTER;
-    rc = read_binary_stream(seq, f, 0);
+    rc = read_binary_stream(seq, f, NULL, 0, 0);
     if (PULSEQ_SUCCEEDED(rc))
         rc = pulseq__check_references(seq);
     if (PULSEQ_FAILED(rc))
@@ -1760,7 +1830,7 @@ int pulseq_read_binary(pulseq_file *seq, const char *file_path)
     f = fopen(file_path, "rb");
     if (!f)
         return PULSEQ_ERR_FILE_NOT_FOUND;
-    rc = read_binary_stream(seq, f, 0);
+    rc = read_binary_stream(seq, f, NULL, 0, 0);
     fclose(f);
     if (PULSEQ_SUCCEEDED(rc))
         rc = pulseq__check_references(seq);
@@ -1779,7 +1849,7 @@ int pulseq_read_binary_definitions_only(pulseq_file *seq, const char *file_path)
     f = fopen(file_path, "rb");
     if (!f)
         return PULSEQ_ERR_FILE_NOT_FOUND;
-    rc = read_binary_stream(seq, f, 1);
+    rc = read_binary_stream(seq, f, NULL, 0, 1);
     fclose(f);
     if (PULSEQ_FAILED(rc))
         pulseq__file_reset(seq);

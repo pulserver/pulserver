@@ -1,0 +1,46 @@
+{
+  "irnich": {
+    "alpha": 0.333,
+    "chronaxie_us": 360.0,
+    "rheobase": 425000000.0
+  },
+  "peaks": {
+    "adc_only": 0.0,
+    "bssfp_2d": 6.51639039e-06,
+    "bssfp_3d": 3.04409177e-06,
+    "epi_2d": 5.72862851e-06,
+    "epi_2d_main": 8.85420208e-06,
+    "epi_3d": 5.3983185e-06,
+    "epi_3d_main": 5.45730236e-06,
+    "ext_only": 0.0,
+    "fse_2d": 6.02152099e-06,
+    "fse_3d": 5.22045466e-06,
+    "gre_2d": 5.62701734e-06,
+    "gre_2d_3sl": 5.62701939e-06,
+    "gre_3d": 4.16802258e-06,
+    "gre_multiecho_2d": 5.62701734e-06,
+    "gre_multiecho_3d": 4.70188438e-06,
+    "gre_radial_2d": 5.62701734e-06,
+    "gre_spiral_2d": 5.62701734e-06,
+    "gre_stack_of_spirals_3d": 5.04833723e-06,
+    "gre_stack_of_stars_3d": 4.97313225e-06,
+    "gre_wave_3d": 4.45914432e-06,
+    "mprage_3d": 4.95705308e-06,
+    "mprage_stack_of_spirals_3d": 5.59817879e-06,
+    "se_2d": 5.62701734e-06,
+    "se_3d": 5.15149668e-06,
+    "se_propeller_2d": 5.62701734e-06,
+    "trap_only": 2.62901222e-06,
+    "zte_3d": 1.78644917e-06
+  },
+  "system": {
+    "adc_raster_s": 2e-06,
+    "b0_t": 3.0,
+    "block_raster_s": 2e-05,
+    "gamma_hz_per_t": 42576000.0,
+    "grad_raster_s": 2e-05,
+    "max_grad_hz_per_m": 2128800.0,
+    "max_slew_hz_per_m_per_s": 14901600000.0,
+    "rf_raster_s": 2e-06
+  }
+}

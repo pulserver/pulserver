@@ -96,6 +96,14 @@ extern "C"
      */
     int pulseq_read_from_buffer(pulseq_file *seq, FILE *f);
 
+    /** @brief pulseq_read_from_buffer() for bytes already in memory: binary
+     * content is decoded straight from the buffer, text goes through the
+     * stream parser. */
+    int pulseq_read_from_memory(pulseq_file *seq, const void *data, long size);
+
+    /** @brief Binary counterpart of pulseq_read_from_memory(). */
+    int pulseq_read_binary_from_memory(pulseq_file *seq, const void *data, long size);
+
     /**
      * @brief Parse a (possibly "next sequence"-chained) .seq file into a set.
      * @param[out] set              Receives the parsed chain.

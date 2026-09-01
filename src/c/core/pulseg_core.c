@@ -1445,7 +1445,6 @@ int pulseg_read_from_buffers(
 
     for (i = 0; i < num_buffers; ++i)
     {
-        FILE *tmp;
         if (!buffers[i] || buffer_sizes[i] < 0)
         {
             rc = PULSEG_ERR_INVALID_ARGUMENT;
@@ -1453,29 +1452,8 @@ int pulseg_read_from_buffers(
             goto fail_raw;
         }
 
-        tmp = tmpfile();
-        if (!tmp)
-        {
-            rc = PULSEG_ERR_FILE_NOT_FOUND;
-            diag->code = rc;
-            goto fail_raw;
-        }
-
-        if (buffer_sizes[i] > 0)
-        {
-            if ((int)fwrite(buffers[i], 1, (size_t)buffer_sizes[i], tmp) != buffer_sizes[i])
-            {
-                fclose(tmp);
-                rc = PULSEG_ERR_FILE_NOT_FOUND;
-                diag->code = rc;
-                goto fail_raw;
-            }
-        }
-        rewind(tmp);
-
         pulseq_file_init(&raw_coll.sequences[i], &raster);
-        rc = pulseq_read_from_buffer(&raw_coll.sequences[i], tmp);
-        fclose(tmp);
+        rc = pulseq_read_from_memory(&raw_coll.sequences[i], buffers[i], buffer_sizes[i]);
         if (PULSEG_FAILED(rc))
         {
             diag->code = rc;

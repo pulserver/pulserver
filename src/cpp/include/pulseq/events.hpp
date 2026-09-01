@@ -179,6 +179,14 @@ namespace pulseq
         double last_time = 0.0; /**< tt.back(), kept so duration() is O(1). */
         Axis axis = Axis::X;
 
+        /** What the sample times are: 1 = raster centres ((i+0.5)*raster),
+         * 2 = the half-raster variant ((i+1)*raster/2), 0 = not recorded --
+         * registration and readers then use ``tt`` itself. A recorded grid
+         * carries its raster in ``tt_raster`` and may leave ``tt`` empty,
+         * the times being a formula rather than data. */
+        int tt_grid = 0;
+        double tt_raster = 0.0;
+
         Registration registered;
     };
 

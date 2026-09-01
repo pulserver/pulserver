@@ -1,20 +1,35 @@
 # The design side
 
-This is where Pulserver started. A Pulseq file is usually treated as an
-artefact: someone runs a script, gets a `.seq`, copies it to the scanner.
-That works for a method being developed, and stops working the moment a
-sequence is meant to be *used* — because a clinical protocol is not one
-sequence, it is a sequence with the parameters an operator picks, at the
-console, minutes before the exam.
+```{admonition} TL;DR
+:class: tip
 
-The alternative is to treat the sequence as a **service**: the program that
-builds it stays available, the console asks it for a protocol, and it
-answers. {doc}`Nimpulseq <../background/nimpulseqgui>` reached the same
-conclusion and pays for it by writing every sequence in a compiled language.
-Pulserver keeps the sequence in Python — where the MR community's design,
-optimisation and simulation tools live — and recovers the speed underneath
-it, once, in a compiled sequence core that every sequence shares. No sequence
-is ever individually compiled.
+- A sequence is a **service**, not an artefact: the program that builds it stays
+  available and the console asks it for a protocol.
+- The sequence **declares its own parameter space** — kinds, bounds, defaults,
+  and `UIParam` slots a console already has fields for. A console carries no
+  table of what a GRE needs; it asks.
+- Three clocks: *what parameters?* once, *is this protocol feasible and how
+  long?* on every edit in tens of ms, *give me the file* in seconds.
+  `validate_protocol` answers the middle one from module durations — there is no
+  waveform yet to check.
+- Two console entry points, one plugin: **headless** (the interpreter calls the
+  program directly) and **over the bridge** to Nimpulseqgui, with a warm
+  `--persistent` interpreter for revalidation on every keystroke.
+- The speed comes from **one compiled core shared by every plugin**. No sequence
+  is ever individually compiled, and the Python stays plain Python.
+```
+
+A Pulseq file is usually treated as an artefact: someone runs a script, gets a
+`.seq`, copies it to the scanner. That works for a method being developed, and
+stops working the moment a sequence is meant to be *used* — a clinical protocol
+is a sequence with the parameters an operator picks, at the console, minutes
+before the exam.
+
+{doc}`Nimpulseq <../background/nimpulseqgui>` reached the same conclusion and
+pays for it by writing every sequence in a compiled language. Pulserver keeps
+the sequence in Python — where the MR community's design, optimisation and
+simulation tools live — and recovers the speed underneath it, once, in a
+compiled sequence core that every sequence shares.
 
 ## What the console needs, and when
 
@@ -26,33 +41,22 @@ Three questions, on three different clocks:
 | Is *this* protocol valid, and how long would it take? | on every edit | interactive — tens of ms |
 | Give me the file. | on Download | seconds |
 
-Answering the second one honestly does not mean running the full physics
-gate on every keystroke — that would blow the "tens of ms" the row states.
-`validate_protocol` estimates *feasibility and duration*: whether the
-parameters make a physically realisable timing given the modules' own
-durations, and how long the resulting scan would take. It builds no
-waveform, so there is nothing yet to check the gradients, the PNS model or
-the acoustic response against.
+`validate_protocol` estimates *feasibility and duration*: whether the parameters
+make a physically realisable timing given the modules' own durations, and how
+long the resulting scan would take. It builds no waveform, so there is nothing
+yet to check the gradients, the PNS model or the acoustic response against —
+"valid" in the full sense only means something once a sequence has been built.
 
-"Valid" in the full sense — gradients fit the system, slew fits, the PNS
-model stays under threshold, the acoustic response avoids the forbidden
-bands — only means something once a sequence has actually been built. A
-plugin cannot make that happen earlier: at *validate* time there is no
-sequence yet to check.
+So the full verdict is not on the console's clock either. Writing straight to a
+scanner, `write_sequence(seq, path, offline=False)` leaves the binary unchecked,
+because the interpreter checks timing and gradients at predownload against its
+*real* rasters and limits. Writing anywhere else,
+`write_sequence(..., offline=True)` runs every check inline — see
+{doc}`../safety/index`.
 
-So the full verdict is not on the console's clock either. Writing straight to
-a scanner, `write_sequence(seq, path, offline=False)` leaves the binary
-unchecked, because the interpreter checks timing and gradients at predownload
-against its *real* rasters and limits once the finished file comes back in.
-Writing anywhere else, `write_sequence(..., offline=True)` runs every check
-inline instead — see {doc}`../safety/index`.
-
-What design time buys, then, is not an earlier verdict on the operator's
-clock. It is the *same compiled engine* available before a sequence ever
-reaches a scanner at all — to a plugin author testing it, to a CI run, to
-anyone who wants the answer without a magnet to ask — so a violation is
-caught while the sequence is being written rather than reported back from
-the exam room. {doc}`../performance/sequence_creation` shows where each check
+What design time buys is the *same compiled engine* available before a sequence
+ever reaches a scanner — to a plugin author, to a CI run, to anyone without a
+magnet to ask. {doc}`../performance/sequence_creation` shows where each check
 sits in the write path.
 
 ## The protocol declaration
@@ -96,10 +100,9 @@ interpreter's benefit — the SAR regime it should be costed against, say. It
 has no widget, no range, and the console never sends it back; it goes out
 once with the default protocol and is read while the scan is being set up.
 
-The point is that the *sequence* owns its parameter space. A console does not
-carry a table of what a GRE needs; it asks. Adding a parameter is a change in
-one place, and a protocol saved against one version can be validated against
-another rather than silently meaning something else.
+The *sequence* owns its parameter space. Adding a parameter is a change in one
+place, and a protocol saved against one version can be validated against another
+rather than silently meaning something else.
 
 ## The two console entry points
 
@@ -157,13 +160,10 @@ million-block scan, and writing the file, are compiled passes. A
 protocol-scale MPRAGE — close to a million blocks — designs in about three
 seconds, at a steady couple of microseconds per block, from plain Python.
 
-The wrapper stays interoperable in both directions: any event or sequence can
-be handed back to upstream PyPulseq objects on demand, which is how plotting
-and the rest of the upstream tooling keep working. The
-{doc}`performance pages <../performance/index>` measure all of this; the
-point here is only that *no individual sequence pays for it* — one compiled
-core, shared by every plugin, with the sequences themselves staying plain
-Python.
+The wrapper stays interoperable in both directions: any event or sequence can be
+handed back to upstream PyPulseq objects on demand, which is how plotting and
+the rest of the upstream tooling keep working. The
+{doc}`performance pages <../performance/index>` measure all of this.
 
 ## Consequences for the rest of the system
 

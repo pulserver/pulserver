@@ -240,6 +240,67 @@ class GradientCoefficients:
         raise ValueError("coefficient_format must be 'auto', 'dat', 'grad', or 'coef'.")
 
     @classmethod
+    def from_header(
+        cls,
+        header: Any,
+        *,
+        key: str = "gradient_coefficients",
+        coefficient_format: CoefficientFormat = "auto",
+        reference_radius_mm: float | None = None,
+    ) -> GradientCoefficients:
+        """Read the coil description a scan carries in its MRD header.
+
+        The console states its own gradient coil, and the correction runs where
+        the reconstruction runs, so the description travels in the header rather
+        than a path to the file it came from. The key is vendor-neutral and the
+        payload is not: which syntax it is written in is read off its contents.
+
+        Parameters
+        ----------
+        header
+            An MRD header, or anything carrying one as ``.header``.
+        key
+            The ``userParameterString`` the description is under.
+        coefficient_format
+            As for :meth:`from_file`.
+        reference_radius_mm
+            As for :meth:`from_file`.
+
+        Returns
+        -------
+        GradientCoefficients
+            The coil's spherical harmonics.
+
+        Raises
+        ------
+        KeyError
+            If the scan carries no such parameter, which is what a system that
+            never stated its coil looks like.
+
+        Examples
+        --------
+        >>> from types import SimpleNamespace
+        >>> import pulserver.recon as recon
+        >>> payload = "GRADWARPTYPE 1\\nSCALEX3 -1.674470e-4\\nDELTA 0.0"
+        >>> header = SimpleNamespace(
+        ...     userParameters=SimpleNamespace(
+        ...         userParameterString=[
+        ...             SimpleNamespace(name="gradient_coefficients", value=payload)
+        ...         ]
+        ...     )
+        ... )
+        >>> recon.GradientCoefficients.from_header(header).max_order
+        3
+        """
+        from ._server.gradunwarp import MrdCoefficientAccessor
+
+        return cls.from_file(
+            MrdCoefficientAccessor(header, key),
+            coefficient_format=coefficient_format,
+            reference_radius_mm=reference_radius_mm,
+        )
+
+    @classmethod
     def _from_dat_text(
         cls,
         text: str,

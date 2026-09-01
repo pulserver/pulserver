@@ -94,6 +94,7 @@ def main(
     spoiling_cycles: float = 4.0,
     partition_angle_offset_deg: float = 0.0,
     use_rotation_ext: bool = True,
+    spsp: bool = False,
 ) -> pp.Sequence:
     """Create an RF-spoiled 3D stack-of-spirals gradient-echo sequence.
 
@@ -274,6 +275,7 @@ def main(
         spoiling_cycles=spoiling_cycles,
         partition_angle_offset_deg=partition_angle_offset_deg,
         use_rotation_ext=use_rotation_ext,
+        spsp=spsp,
     )
     readout = kernel.readout
     angles = kernel.angles
@@ -370,15 +372,20 @@ def main(
 # ======================================================================
 
 
-def SlabExcitationKernel(system: pp.Opts, flip_angle_deg: float, thickness_m: float):
-    """The slab excitation, spectral-spatial when ``SPSP_EXCITATION`` is set.
+def SlabExcitationKernel(
+    system: pp.Opts,
+    flip_angle_deg: float,
+    thickness_m: float,
+    spsp: bool = False,
+):
+    """The slab excitation, spectral-spatial when ``spsp`` is set.
 
     Returns ``(excitation, rf, gz)``. The selection gradient carries its own
     rephaser folded onto the end -- as a slab excitation does -- so the stack's
     partition prewinder block, which already encodes z, never holds a second
     z gradient.
     """
-    if SPSP_EXCITATION:
+    if spsp:
         fat_offset_hz = FAT_SHIFT_PPM * 1e-6 * system.gamma * system.B0
         excitation = design.SpspExcitation(
             system,
@@ -417,6 +424,7 @@ def StackOfSpiralsKernel(
     spoiling_cycles: float = 4.0,
     partition_angle_offset_deg: float = 0.0,
     use_rotation_ext: bool = True,
+    spsp: bool = False,
 ) -> SimpleNamespace:
     """Design the interleave and its stack, and the plan that turns them.
 
@@ -437,7 +445,7 @@ partition_angle_offset_deg, use_rotation_ext
         and ``duration``.
     """
     excitation, exc_rf, exc_gz = SlabExcitationKernel(
-        system, flip_angle_deg, slab_thickness
+        system, flip_angle_deg, slab_thickness, spsp
     )
     angles = arm_angles(n_arms, angle_scheme)
     shot_angles, shot_index = stack_angles(angles, n_z, partition_angle_offset_deg)
@@ -604,6 +612,7 @@ class GreStackOfSpirals3D(SequencePlugin):
 KERNEL_ARGUMENTS = frozenset(
     (
         "fov",
+        "spsp",
         "n_x",
         "n_z",
         "slab_thickness",
@@ -628,6 +637,7 @@ def protocol_kwargs(system: pp.Opts, protocol: dict[str, dict]) -> dict:
         main,
         system,
         protocol,
+        spsp=SPSP_EXCITATION,
         fov=params.param_float(prot, UIParam.FOV) * 1e-3,
         n_z=n_z,
         slab_thickness=n_z * partition_thickness,

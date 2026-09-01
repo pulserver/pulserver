@@ -1,15 +1,32 @@
 # Conversion
 
-Between the file arriving and the first block playing, the scanner has to turn
-a text or binary Pulseq file into the
+```{admonition} TL;DR
+:class: tip
+
+- **The parse is the whole cost.** 1.2–1.5 s from text on a two-million-block
+  scan, 0.6–0.8 s from binary. Detection by magic bytes, so either form reads
+  through the same call.
+- **Structure detection is tens of microseconds** — it compares normalised block
+  identities the conversion already computed. Segmentation is a millisecond,
+  consistency about 60 ms.
+- **The cache pays for itself on the second read**: writing it costs about what
+  the conversion did, reading it back costs 23–90 ms.
+- The cache is sectioned, so a consumer loads only what it reads. Its version
+  triple must match exactly — a stale cache is rejected, never repaired.
+```
+
+Between the file arriving and the first block playing, the scanner turns a text
+or binary Pulseq file into the
 {doc}`PulSeg representation <../sequence_model/pulseg_representation>` it
-executes: parse it, resolve every event reference, find the repeating unit,
-cut the segments, and check the result is consistent. It has a few seconds to
-do it in, on a host that is also running everything else on the console.
+executes: parse it, resolve every event reference, find the repeating unit, cut
+the segments, and check the result is consistent — in a few seconds, on a host
+that is also running everything else on the console.
 
 ```{figure} ../assets/conversion/stages.png
 What the scanner does between the file arriving and the first block playing,
-and what sets the cost of each stage.
+and what sets the cost of each stage. The safety check sits in that interval
+too, and on the timings below it is the largest thing in it — the stages this
+page measures all happen in its shadow. See {doc}`full_benchmark`.
 ```
 
 The three MPRAGE protocols of the {doc}`previous page <sequence_creation>`,
@@ -50,10 +67,10 @@ identities the conversion has already computed, so asking "is block $n$ the
 same structure as block $n+P$?" is an integer comparison, not a re-derivation.
 Segmentation is a millisecond on top.
 
-Worth stating plainly, because speed is not why the TR is derived rather than
-annotated: an annotation is a second source of truth that can disagree with
-the sequence — see {doc}`../sequence_model/tr_and_segmentation`. Deriving it
-is free as well, which is a bonus rather than the argument.
+Speed is not why the TR is derived rather than annotated — an annotation is a
+second source of truth that can disagree with the sequence, see
+{doc}`../sequence_model/tr_and_segmentation`. That deriving it is also free is a
+bonus, not the argument.
 
 Consistency checking, at about 60 ms, is the largest of the three and still a
 rounding error against the parse.

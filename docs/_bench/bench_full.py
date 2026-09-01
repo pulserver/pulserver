@@ -272,7 +272,6 @@ def measure(family: str, index: int) -> dict:
         float(system.adc_raster_time),
         float(system.block_duration_raster),
         True,
-        1,
         [],
     )
 
@@ -583,9 +582,24 @@ def figures(results: dict) -> None:
 #: totals; the pies below are drawn from it.
 PIPELINE_RESULTS = Path(__file__).resolve().parent / "bench_pipeline.json"
 
-#: Which case of that harness the pies show.  One case, named on the page:
-#: a pie of several protocols averaged together would describe none of them.
-PIE_CASE = "cartesian"
+#: Which cases of that harness the pies show, and how each is named on the
+#: figure. Two protocols rather than one, because the two halves of a download
+#: are not made of the same thing on a Cartesian scan and on a non-Cartesian
+#: one -- and a pie of several protocols averaged together would describe
+#: none of them. The stack of spirals is drawn in the encoding the manual
+#: recommends, one arm turned per shot.
+PIE_CASES = [
+    ("cartesian", "Cartesian MPRAGE", "{nx} $\\times$ {views} $\\times$ {nz}"),
+    (
+        "spiral_rotated",
+        "stack-of-spirals MPRAGE",
+        "{nx} $\\times$ {views} $\\times$ {nz}, arms turned",
+    ),
+]
+
+#: The in-plane matrix each case is prescribed at, which the pipeline harness
+#: fixes rather than records.
+PIE_NX = {"cartesian": 512, "spiral_rotated": 128, "spiral_explicit": 128}
 
 #: (label, colour, key) per slice, design side then interpreter side.
 DESIGN_SLICES = [
@@ -597,6 +611,7 @@ DESIGN_SLICES = [
 CONVERT_SLICES = [
     ("parse and convert", "#4c72b0", "parse_convert_binary_s"),
     ("structure", "#dd8452", None),
+    ("safety gate", "#c0524a", "safety_s"),
     ("cache write", "#55a868", "cache_write_s"),
 ]
 #: The three passes that make up "structure": the period, the partition, and
@@ -605,7 +620,12 @@ STRUCTURE_KEYS = ("find_tr_s", "segments_s", "consistency_s")
 
 
 def pies() -> None:
-    """Two pies: what a design costs, and what reading it back costs."""
+    """Four pies: what a design costs and what reading it back costs, twice.
+
+    One row per protocol. The interpreter row carries the safety gate beside
+    the parse and the cache write, because that is what a download actually
+    pays before the scan is allowed to run.
+    """
     import matplotlib
 
     matplotlib.use("Agg")
@@ -616,8 +636,6 @@ def pies() -> None:
         return
 
     data = json.loads(PIPELINE_RESULTS.read_text())
-    creation = data["creation"][PIE_CASE]
-    conversion = data["conversion"][PIE_CASE]
 
     def collect(entry, slices):
         out = []
@@ -630,35 +648,73 @@ def pies() -> None:
             out.append((label, colour, value))
         return out
 
+    rows = []
+    for case, name, size_fmt in PIE_CASES:
+        if case not in data.get("creation", {}) or case not in data.get(
+            "conversion", {}
+        ):
+            print(f"  (no {case} in {PIPELINE_RESULTS.name}; skipping it)", flush=True)
+            continue
+        creation = data["creation"][case]
+        conversion = data["conversion"][case]
+        if "safety_s" not in conversion:
+            print(
+                f"  ({PIPELINE_RESULTS.name} predates the safety timing; "
+                f"re-run bench_pipeline.py --stage conversion)",
+                flush=True,
+            )
+            return
+        size = size_fmt.format(
+            nx=PIE_NX[case], views=creation["views"], nz=creation["n_z"]
+        )
+        rows.append(
+            (
+                name,
+                f"{size} — {creation['blocks']:,} blocks".replace(",", "\u2009"),
+                collect(creation, DESIGN_SLICES),
+                collect(conversion, CONVERT_SLICES),
+            )
+        )
+    if not rows:
+        return
+
     _style()
     ASSETS.mkdir(parents=True, exist_ok=True)
-    fig, axes = plt.subplots(1, 2, figsize=(8.6, 4.3))
-    panels = (
-        (axes[0], "(a) design side", collect(creation, DESIGN_SLICES)),
-        (axes[1], "(b) interpreter side", collect(conversion, CONVERT_SLICES)),
-    )
-    for ax, title, parts in panels:
-        total = sum(v for _, _, v in parts)
-        wedges, _ = ax.pie(
-            [v for _, _, v in parts],
-            colors=[c for _, c, _ in parts],
-            startangle=90,
-            counterclock=False,
-            wedgeprops={"linewidth": 0.8, "edgecolor": "white"},
-        )
-        ax.set_title(f"{title} — {total:.1f} s", fontsize=11.0, loc="center")
-        ax.legend(
-            wedges,
-            [f"{label}   {100 * v / total:.0f}%" for label, _, v in parts],
-            frameon=False,
-            fontsize=10.0,
-            loc="upper center",
-            bbox_to_anchor=(0.5, -0.02),
-            handlelength=1.0,
-            borderaxespad=0.0,
-        )
-        ax.set_aspect("equal")
-    fig.tight_layout()
+    fig, axes = plt.subplots(len(rows), 2, figsize=(8.8, 4.9 * len(rows)))
+    axes = axes.reshape(len(rows), 2)
+
+    panel = iter("abcdefgh")
+    for row, (name, size, design, convert) in enumerate(rows):
+        for col, (half, parts) in enumerate(
+            (("design side", design), ("interpreter side", convert))
+        ):
+            ax = axes[row][col]
+            total = sum(v for _, _, v in parts)
+            wedges, _ = ax.pie(
+                [v for _, _, v in parts],
+                colors=[c for _, c, _ in parts],
+                startangle=90,
+                counterclock=False,
+                wedgeprops={"linewidth": 0.8, "edgecolor": "white"},
+            )
+            ax.set_title(
+                f"({next(panel)}) {name} — {half}\n{size}\n{total:.2f} s in total",
+                fontsize=10.6,
+                loc="center",
+            )
+            ax.legend(
+                wedges,
+                [f"{label}   {100 * v / total:.0f}%" for label, _, v in parts],
+                frameon=False,
+                fontsize=9.8,
+                loc="upper center",
+                bbox_to_anchor=(0.5, -0.02),
+                handlelength=1.0,
+                borderaxespad=0.0,
+            )
+            ax.set_aspect("equal")
+
+    fig.tight_layout(h_pad=2.6)
     fig.savefig(ASSETS / "time_split.png", bbox_inches="tight")
     plt.close(fig)
     print(f"  {ASSETS / 'time_split.png'}", flush=True)

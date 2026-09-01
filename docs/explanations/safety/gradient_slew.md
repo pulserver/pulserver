@@ -1,14 +1,38 @@
 # Gradient amplitude, slew, continuity and timing
 
-The four checks that need nothing but the sequence and the system, and
-therefore always run. They are also the four that catch most real mistakes,
-because they are the ones a designer can violate without noticing.
+```{admonition} TL;DR
+:class: tip
+
+- **Amplitude is a vector limit.** 35 mT/m on x and 35 on y is 49 mT/m along
+  the diagonal, and a 40 mT/m system refuses it. Root-sum-square across axes,
+  after rotation.
+- **Slew and continuity are one criterion**, $|\Delta G|/\Delta t \le$ `max_slew`,
+  applied to two different sample pairs: consecutive samples *inside* a waveform,
+  and the last sample of one waveform against the first of the next. A block
+  boundary is not a boundary for the gradient.
+- That is why they cost differently. Interior slew is the normalised shape's
+  slew times an amplitude, so it is a **shape** question; the seam needs both
+  endpoints at their own instance amplitude and rotation, so it is an
+  **instance** question.
+- **Timing** goes against the raster each event is *played* on, not the raster
+  the file declares. A file laid out on a finer raster than the scanner's passes
+  the raster comparison while holding times the hardware cannot address.
+- All four run over the *definitions*, so they cost the number of distinct
+  events rather than the number of blocks.
+```
+
+The four checks that need nothing but the sequence and the system, and therefore
+always run. They are also the four that catch most real mistakes.
 
 ```{figure} ../assets/gradient_slew/vector_and_seam.png
-The two mistakes these checks exist to catch. (a) Every axis inside its own
-limit is not the same statement as the vector inside the limit. (b) Blocks run
-back to back, so the value one ends at and the value the next starts at are
-adjacent samples of one waveform.
+(a) Every axis inside its own limit is not the same statement as the vector
+inside the limit. (b) The same slew criterion broken in both places it can be
+broken, drawn as the waveform and as the quantity actually checked. Block *n*
+was designed against a system allowing 200 T/m/s and is played on one allowing
+170, so its own ramp is already illegal — an **interior** failure, inside a
+single waveform, with no block boundary near it. It then ends at 6 mT/m where
+its neighbour starts at 0: the **seam** failure, the same inequality across one
+raster tick, which puts it far off the scale. One dashed line judges both.
 ```
 
 ## Amplitude: a vector limit
@@ -18,44 +42,54 @@ sequence playing 35 mT/m on x and 35 mT/m on y is not playing 35 mT/m: it is
 playing 49 mT/m in the direction $(1,1)/\sqrt2$, and a 40 mT/m system will
 refuse it.
 
-So the check is on the root-sum-square across axes at every sample, not per
-axis. The per-axis test is the special case where the other axes are idle,
-which is why an oblique or non-Cartesian sequence can fail a limit that every
-individual waveform respects. The same applies after a rotation: a
-`ROTATIONS` extension mixes the axes, so a shot that is legal unrotated can be
-illegal at some angle, and the check evaluates the rotated waveform.
+So the check is the root-sum-square across axes at every sample. The per-axis
+test is the special case where the other axes are idle, which is why an oblique
+or non-Cartesian sequence can fail a limit that every individual waveform
+respects. The same applies after a rotation: a `ROTATIONS` extension mixes the
+axes, so a shot legal unrotated can be illegal at some angle, and the check
+evaluates the rotated waveform.
 
-## Slew, including across block boundaries
+## Slew and continuity: one criterion, two sample pairs
 
-Slew is $dG/dt$, checked the same way — root-sum-square, after rotation. The
-part that catches people is that a block boundary is not a boundary for the
-gradient: blocks run back to back with no gap, so a waveform ending at
-20 mT/m followed by a block starting at 0 is a step, and a step is infinite
-slew.
+Slew is $dG/dt$, checked the same way — root-sum-square, after rotation. A block
+boundary is not a boundary for the gradient: blocks run back to back with no
+gap, so a waveform ending at 20 mT/m followed by a block starting at 0 is a step
+across one raster tick, and the hardware has to slew it like any other.
 
-Pulserver checks across boundaries for this reason, and reports the pair of
-blocks rather than one of them.
+Continuity is not a second physical statement. It is the same inequality asked
+about the pair of samples that straddles the seam, and the tolerance is written
+that way — a step passes exactly when
 
-## Continuity: a separate statement
+$$|\Delta G| \;\le\; \texttt{max\_slew} \times \texttt{grad\_raster},$$
 
-A discontinuity is not always a slew violation — it can be a *design* error
-that happens to be within the limit. An extended-trapezoid gradient that
-starts at an amplitude the previous block did not end at means the waveform
-that plays is not the waveform that was designed: the hardware will connect
-them, and the moment the sequence delivers is not the moment it computed.
+which is $|\Delta G|/\Delta t \le$ `max_slew` with the raster as $\Delta t$.
+A "small" discontinuity is not a legal design error; it is a legal *slew*, and a
+large one is refused by the same number that refuses a steep ramp.
 
-So continuity is checked as itself: every gradient's first sample must meet
-its predecessor's last, per axis, and a mismatch is reported as a
-discontinuity rather than as a slew number. A sequence built from Pulserver's
-own modules cannot produce one; a sequence assembled by hand, or one whose
-rewinders were re-solved per rotation angle rather than materialised from a
-base waveform, can.
+What differs is the arithmetic each pair needs, and that is what makes them two
+passes rather than one:
+
+| | the pair | what it needs |
+|---|---|---|
+| **interior** | consecutive samples inside one waveform | the normalised shape's own slew, computed once per shape, times this instance's amplitude |
+| **seam** | last sample of one waveform, first of the next | both endpoints, each scaled by *its own* instance amplitude and turned by *its own* rotation |
+
+So the interior question is answered per **shape** and reused by every playout of
+it, while the seam question can only be answered where two neighbours meet, at
+the amplitudes they actually run — which is a walk over instances.
+{doc}`../performance/gradient_checks` measures the difference that makes.
+
+A mismatch is reported as a discontinuity, with the step in mT/m and the pair of
+blocks, rather than as a slew number: the same violation, named the way that
+tells the author what to fix.
 
 ```{note}
-Trapezoids and simple arbitrary gradients start and end at zero, so the check
-is trivially satisfied for most Cartesian sequences. It earns its place on
+Trapezoids and simple arbitrary gradients start and end at zero, so the seam is
+trivially satisfied for most Cartesian sequences. It earns its place on
 continuous-gradient families — ZTE, spirals with bridges, anything where the
-readout does not return to zero between blocks.
+readout does not return to zero between blocks — and on a sequence whose
+rewinders were re-solved per rotation angle rather than materialised from a base
+waveform.
 ```
 
 ## The step limit
@@ -69,21 +103,22 @@ amplifier tolerates is refused with the pair of views that did it.
 
 ## Timing: every event on an addressable grid
 
-The three checks above are about amplitude. The fourth is about *when*: a
-sequencer starts and stops events on a raster, and a time that is not an
+A sequencer starts and stops events on a raster, and a time that is not an
 integer multiple of it cannot be played.
 
 ```{figure} ../assets/gradient_slew/raster_alignment.png
-An event may start where the raster does. A 14 µs start on a 4 µs grid is not
-a rounding question — there is no instruction that begins there.
+(a) An event may start where the raster does; a 14 µs start on a 4 µs grid is
+not a rounding question, because no instruction begins there. (b) The case the
+check exists for: a time that is a multiple of the raster the *file* declares
+and not of the one it will be *played* on.
 ```
 
-The rasters a file declares are not the answer. The file's rasters are
-compared with the scanner's when the collection is built, and that comparison
-accepts either direction: a sequence laid out on a raster *finer* than the
-scanner's passes it, while still holding times the hardware cannot address. A
-15 µs event on a declared 5 µs grid is legal by that test and unplayable on a
-10 µs one, which is the case this check exists for.
+The rasters a file declares are not the answer. The file's rasters are compared
+with the scanner's when the collection is built, and that comparison accepts
+either direction — a sequence laid out on a *finer* raster passes it while still
+holding times the hardware cannot address. A 15 µs event on a declared 5 µs grid
+is legal by that test and unplayable on a 10 µs one, which is the case this
+check exists for.
 
 Each time goes against the raster it is played on:
 
@@ -102,12 +137,11 @@ Like the amplitude checks, this one is a pass over the *definitions*: every
 time field lives in a deduplicated definition, so it costs the number of
 distinct events in the scan rather than the number of blocks.
 
-The two sides check slightly different sets, and the difference is deliberate.
-`check_timing()` at design time also judges RF dead time and ringdown, ADC
-dead time and soft-delay agreement, and reports them entry for entry as
-upstream PyPulseq does. The interpreter's pass drops those three: they bound
-what a transmit chain can *do* rather than what the sequencer can *address*,
-so they belong where the sequence is written, not where it is played.
+The two sides check slightly different sets, deliberately. `check_timing()` at
+design time also judges RF dead time and ringdown, ADC dead time and soft-delay
+agreement, reporting them entry for entry as upstream PyPulseq does. The
+interpreter's pass drops those three: they bound what a transmit chain can *do*
+rather than what the sequencer can *address*.
 
 ## Diagnostics
 
@@ -131,9 +165,6 @@ if not ok:
 
 ## Where the checks run
 
-Both sides, from the same code: `check_hardware_limits()` and
-`check_timing()` in Python while the sequence is being written, and
-`check_safety()` in the interpreter before download — see
-{doc}`../../examples/c/safety_gate`. The cost is a walk over the instance
-table with the waveform library resident, which is a fraction of the parse
-that preceded it.
+Both sides, from the same code: `check_hardware_limits()` and `check_timing()`
+in Python while the sequence is being written, `check_safety()` in the
+interpreter before download — see {doc}`../../examples/c/safety_gate`.

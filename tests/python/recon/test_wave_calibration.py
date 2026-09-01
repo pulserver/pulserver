@@ -192,3 +192,27 @@ def test_coefficient_specific_calibration_and_physics_result_composition():
         physics_from_result.A(image),
         physics_from_tensor.A(image),
     )
+
+
+def test_the_fitted_harmonics_are_the_ones_the_corkscrew_turns_at():
+    """A phase that integrates a one-sided gradient has its largest Fourier
+    bin at zero, and a constant readout phase displaces the image rather than
+    blurring it -- so the search that picks what to fit must skip it, or every
+    scan fits a term the objective cannot move."""
+    cycles = 4
+    times = (torch.arange(24) + 0.5) / 24
+    # A one-sided corkscrew: nonzero mean, so its phase carries a ramp.
+    phase = torch.stack(
+        [
+            torch.cumsum(0.5 * (1 - torch.cos(2 * pi * cycles * times)), dim=0),
+            torch.cumsum(torch.sin(2 * pi * cycles * times), dim=0),
+        ]
+    )[None]
+    phase_axis, partition_axis = _axes()
+
+    calibrator = WavePSFCalibration(phase_axis, partition_axis, n_harmonics=3)
+    indices = calibrator._resolved_frequency_indices(phase)
+
+    assert torch.fft.rfft(phase[0], dim=-1).abs().argmax(dim=-1).tolist() == [0, 0]
+    assert (indices > 0).all()
+    assert cycles in indices[0].tolist() and cycles in indices[1].tolist()

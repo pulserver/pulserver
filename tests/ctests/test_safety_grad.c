@@ -561,25 +561,31 @@ typedef struct
     float alpha;
 } pns_test_ctx;
 
+/* Each tap is the bin integral of c/(c+tau)^2 over its own sample interval,
+ * taken here through the antiderivative -c/(c+tau) evaluated at the interval's
+ * ends, in double precision. The shipped model computes the same integral in
+ * closed product form; two routes to one integral is what keeps this reference
+ * independent below the formula. */
 static int pns_test_build_kernel(const pns_test_ctx *c, float dt_us, float **out, int *len)
 {
-    float c_s, dt_s, s_min, *k;
+    double c_s, dt_s, s_min, lo, hi;
+    float *k;
     int i, n;
 
     if (!c || dt_us <= 0.0f || c->chronaxie_us <= 0.0f || c->rheobase <= 0.0f || c->alpha <= 0.0f)
         return PULSEG_ERR_PNS_INVALID_PARAMS;
-    c_s = c->chronaxie_us * 1e-6f;
-    dt_s = dt_us * 1e-6f;
-    s_min = c->rheobase / c->alpha;
-    n = (int)(20.0f * c_s / dt_s) + 1;
+    c_s = (double)c->chronaxie_us * 1e-6;
+    dt_s = (double)dt_us * 1e-6;
+    s_min = (double)c->rheobase / (double)c->alpha;
+    n = (int)(20.0 * c_s / dt_s) + 1;
     k = (float *)PULSEG_ALLOC((size_t)n * sizeof(float));
     if (!k)
         return PULSEG_ERR_ALLOC_FAILED;
     for (i = 0; i < n; ++i)
     {
-        float tau = (float)i * dt_s;
-        float den = (c_s + tau) * (c_s + tau);
-        k[i] = (dt_s / s_min) * (c_s / den);
+        lo = c_s / (c_s + (double)i * dt_s);
+        hi = c_s / (c_s + (double)(i + 1) * dt_s);
+        k[i] = (float)((lo - hi) / s_min);
     }
     *out = k;
     *len = n;
@@ -872,9 +878,385 @@ MU_TEST(test_shipped_irnich_matches_an_independent_implementation)
     pulseg_collection_free(coll);
 }
 
+/* The response is a property of the waveform, not of the raster it is
+ * evaluated on. Both rasters below see the *same* G(t) -- closed-form, so
+ * dG/dt on each grid is the exact bin difference the engine's extraction
+ * produces, with no resampling anywhere -- and the peak they report must
+ * agree. A kernel whose taps are point samples of c/(c+tau)^2 rather than
+ * its bin integrals fails this by ~0.5% at these rasters. */
+
+#define PNS_RS_SINE_HZ 137.0
+#define PNS_RS_SINE_AMP 2.0e6
+#define PNS_RS_TRI_PERIOD_S 2.7e-3
+#define PNS_RS_TRI_AMP 1.5e6
+#define PNS_RS_DURATION_S 40.0e-3
+
+static double pns_rs_g_sine(double t)
+{
+    return PNS_RS_SINE_AMP * sin(2.0 * 3.14159265358979323846 * PNS_RS_SINE_HZ * t);
+}
+
+static double pns_rs_g_triangle(double t)
+{
+    double s = fmod(t, PNS_RS_TRI_PERIOD_S);
+    double half = 0.5 * PNS_RS_TRI_PERIOD_S;
+    if (s <= half)
+        return PNS_RS_TRI_AMP * (s / half);
+    return PNS_RS_TRI_AMP * (2.0 - s / half);
+}
+
+/* Peak RSS of the shipped Irnich response to the two waveforms above, on one
+ * raster. Returns a negative value on any failure. */
+static double pns_rs_peak_at(float dt_us)
+{
+    pulseg_pns_irnich ctx;
+    pulseg_pns_model model;
+    float *gx, *gy, *gz, *ox, *oy, *oz;
+    double dt_s, t0, t1, v, peak;
+    int i, n, rc;
+
+    dt_s = (double)dt_us * 1e-6;
+    n = (int)(PNS_RS_DURATION_S / dt_s);
+    gx = (float *)PULSEG_ALLOC((size_t)n * sizeof(float));
+    gy = (float *)PULSEG_ALLOC((size_t)n * sizeof(float));
+    gz = (float *)PULSEG_ALLOC((size_t)n * sizeof(float));
+    ox = (float *)PULSEG_ALLOC((size_t)n * sizeof(float));
+    oy = (float *)PULSEG_ALLOC((size_t)n * sizeof(float));
+    oz = (float *)PULSEG_ALLOC((size_t)n * sizeof(float));
+    if (!gx || !gy || !gz || !ox || !oy || !oz)
+    {
+        peak = -1.0;
+        goto done;
+    }
+
+    for (i = 0; i < n; ++i)
+    {
+        t0 = (double)i * dt_s;
+        t1 = t0 + dt_s;
+        gx[i] = (float)((pns_rs_g_sine(t1) - pns_rs_g_sine(t0)) / dt_s);
+        gy[i] = (float)((pns_rs_g_triangle(t1) - pns_rs_g_triangle(t0)) / dt_s);
+        gz[i] = 0.0f;
+    }
+
+    pulseg_pns_irnich_init(&model, &ctx, 360.0f, 4.25e8f, 0.333f);
+    rc = model.evaluate(model.ctx, gx, gy, gz, n, dt_us, ox, oy, oz);
+    if (PULSEG_FAILED(rc))
+    {
+        peak = -1.0;
+        goto done;
+    }
+
+    peak = 0.0;
+    for (i = 0; i < n; ++i)
+    {
+        v = sqrt((double)ox[i] * ox[i] + (double)oy[i] * oy[i] + (double)oz[i] * oz[i]);
+        if (v > peak)
+            peak = v;
+    }
+
+done:
+    if (gx)
+        PULSEG_FREE(gx);
+    if (gy)
+        PULSEG_FREE(gy);
+    if (gz)
+        PULSEG_FREE(gz);
+    if (ox)
+        PULSEG_FREE(ox);
+    if (oy)
+        PULSEG_FREE(oy);
+    if (oz)
+        PULSEG_FREE(oz);
+    return peak;
+}
+
+/* The exact response peak of the whole scan, every block at the amplitude
+ * it actually plays, evaluated cold from the scan's first sample -- the
+ * ground truth the occurrence score must bound. Returns a negative value on
+ * failure. */
+static double pns_score_exact_scan_peak(
+    pulseg_collection *coll,
+    const pulseg_pns_model *model,
+    float gamma)
+{
+    pulseg_check_plan *plan = NULL;
+    const pulseg__uniform_grad_waveforms *uw;
+    const pulseg_sequence_descriptor *desc;
+    float *dgdt[3], *out[3];
+    const float *wavep[3];
+    double peak, ss, inv;
+    int n, i, a, rc;
+
+    desc = &coll->descriptors[0];
+    peak = -1.0;
+    for (a = 0; a < 3; ++a)
+    {
+        dgdt[a] = NULL;
+        out[a] = NULL;
+    }
+
+    pulseg_diagnostic_init(&s_diag);
+    rc = pulseg_check_plan_create(&plan, &s_diag, coll, NULL);
+    if (PULSEG_FAILED(rc))
+        return -1.0;
+    rc = pulseg__plan_waveforms(
+        plan,
+        &uw,
+        &s_diag,
+        desc,
+        0,
+        0,
+        desc->num_blocks,
+        PULSEG_AMP_ACTUAL,
+        NULL,
+        0);
+    if (PULSEG_FAILED(rc) || uw->num_samples < 2)
+        goto done;
+
+    n = uw->num_samples;
+    wavep[0] = uw->gx;
+    wavep[1] = uw->gy;
+    wavep[2] = uw->gz;
+    inv = 1.0 / ((double)gamma * ((double)uw->raster_us * 1e-6));
+    for (a = 0; a < 3; ++a)
+    {
+        dgdt[a] = (float *)PULSEG_ALLOC((size_t)(n + 1) * sizeof(float));
+        out[a] = (float *)PULSEG_ALLOC((size_t)(n + 1) * sizeof(float));
+        if (!dgdt[a] || !out[a])
+            goto done;
+        dgdt[a][0] = (float)((double)wavep[a][0] * inv);
+        for (i = 1; i < n; ++i)
+            dgdt[a][i] = (float)(((double)wavep[a][i] - (double)wavep[a][i - 1]) * inv);
+        dgdt[a][n] = (float)(-(double)wavep[a][n - 1] * inv);
+    }
+
+    rc = model->evaluate(
+        model->ctx,
+        dgdt[0],
+        dgdt[1],
+        dgdt[2],
+        n + 1,
+        uw->raster_us,
+        out[0],
+        out[1],
+        out[2]);
+    if (PULSEG_FAILED(rc))
+        goto done;
+
+    peak = 0.0;
+    for (i = 0; i < n + 1; ++i)
+    {
+        ss = sqrt(
+            (double)out[0][i] * out[0][i] + (double)out[1][i] * out[1][i] +
+            (double)out[2][i] * out[2][i]);
+        if (ss > peak)
+            peak = ss;
+    }
+
+done:
+    for (a = 0; a < 3; ++a)
+    {
+        if (dgdt[a])
+            PULSEG_FREE(dgdt[a]);
+        if (out[a])
+            PULSEG_FREE(out[a]);
+    }
+    pulseg_check_plan_destroy(plan);
+    return peak;
+}
+
+/* The occurrence score is an upper bound on the exact peak, fixture by
+ * fixture; the 2e-3 allowance is the raster-invariance bound between the
+ * score's shape-raster templates and the extraction's half-raster stream,
+ * far below the l1 gap the score carries by construction. */
+static void run_pns_score_soundness(const char *filename)
+{
+    pulseg_pns_irnich ctx;
+    pulseg_pns_model model;
+    pulseg_collection *coll = NULL;
+    pulseg__pns_score *score = NULL;
+    float score_max;
+    double exact;
+    int rc, declined;
+
+    mech_resonances_opts_init(&s_opts);
+    rc = load_corpus_seq(&coll, filename, &s_opts);
+    mu_assert(PULSEG_SUCCEEDED(rc), "load_corpus_seq failed");
+
+    pulseg_pns_irnich_init(&model, &ctx, 360.0f, 4.25e8f, 0.333f);
+
+    rc = pulseg__pns_score_build(
+        &score,
+        &coll->descriptors[0],
+        &model,
+        s_opts.gamma_hz_per_t,
+        &declined,
+        NULL);
+    mu_assert(PULSEG_SUCCEEDED(rc), "score build failed");
+    mu_assert(!declined && score != NULL, "score declined a corpus fixture");
+
+    rc = pulseg__pns_score_evaluate(score, &score_max, NULL, NULL);
+    mu_assert(PULSEG_SUCCEEDED(rc), "score evaluation failed");
+
+    exact = pns_score_exact_scan_peak(coll, &model, s_opts.gamma_hz_per_t);
+    mu_assert(exact > 0.0, "exact scan evaluation failed");
+
+    printf(
+        "    score %s: bound %.6g, exact %.6g, gap %.3fx\n",
+        filename,
+        (double)score_max,
+        exact,
+        (double)score_max / exact);
+    mu_assert(
+        (double)score_max >= exact * (1.0 - 2.0e-3),
+        "the occurrence score fell below the exact scan peak");
+
+    pulseg__pns_score_free(score);
+    pulseg_collection_free(coll);
+}
+
+/* The score path's verdict against the ground truth, bracketing the true
+ * scan peak from both sides. Below the peak the exact assembly must find
+ * the violation the bound flagged; above it the bound either clears the
+ * threshold outright or the assembly clears what it flagged. Either way the
+ * verdict is the truth's, at one percent from the peak. */
+static void run_pns_score_verdict_brackets(const char *filename)
+{
+    static const double factors[4] = {0.5, 0.99, 1.01, 2.0};
+    pulseg_pns_irnich ctx;
+    pulseg_pns_model model;
+    pulseg_collection *coll = NULL;
+    pulseg_check_plan *plan = NULL;
+    double exact, thr;
+    int rc, declined, f, expect_refusal;
+
+    mech_resonances_opts_init(&s_opts);
+    rc = load_corpus_seq(&coll, filename, &s_opts);
+    mu_assert(PULSEG_SUCCEEDED(rc), "load_corpus_seq failed");
+    pulseg_pns_irnich_init(&model, &ctx, 360.0f, 4.25e8f, 0.333f);
+
+    exact = pns_score_exact_scan_peak(coll, &model, s_opts.gamma_hz_per_t);
+    mu_assert(exact > 0.0, "exact scan evaluation failed");
+
+    pulseg_diagnostic_init(&s_diag);
+    rc = pulseg_check_plan_create(&plan, &s_diag, coll, NULL);
+    mu_assert(PULSEG_SUCCEEDED(rc), "plan creation failed");
+
+    for (f = 0; f < 4; ++f)
+    {
+        thr = exact * factors[f];
+        expect_refusal = (factors[f] < 1.0);
+        declined = 0;
+        pulseg_diagnostic_init(&s_diag);
+        rc = pulseg__pns_score_check(
+            plan,
+            &s_diag,
+            &coll->descriptors[0],
+            0,
+            &model,
+            s_opts.gamma_hz_per_t,
+            (float)thr,
+            &declined,
+            NULL,
+            NULL);
+        mu_assert(!declined, "score declined a corpus fixture");
+        if (expect_refusal)
+        {
+            mu_assert(
+                rc == PULSEG_ERR_PNS_THRESHOLD_EXCEEDED,
+                "score path passed a scan whose true peak exceeds the threshold");
+            mu_assert(
+                s_diag.code == PULSEG_ERR_PNS_THRESHOLD_EXCEEDED,
+                "refusal left no diagnostic");
+        }
+        else
+        {
+            mu_assert(
+                PULSEG_SUCCEEDED(rc),
+                "score path refused a scan whose true peak is under the threshold");
+        }
+    }
+
+    pulseg_check_plan_destroy(plan);
+    pulseg_collection_free(coll);
+}
+
+MU_TEST(test_the_score_path_verdict_is_the_truths_gre)
+{
+    run_pns_score_verdict_brackets("gre_2d.seq");
+}
+
+MU_TEST(test_the_score_path_verdict_is_the_truths_fse)
+{
+    run_pns_score_verdict_brackets("fse_2d.seq");
+}
+
+MU_TEST(test_the_score_path_verdict_is_the_truths_epi)
+{
+    run_pns_score_verdict_brackets("epi_2d.seq");
+}
+
+MU_TEST(test_the_score_path_verdict_is_the_truths_spiral)
+{
+    run_pns_score_verdict_brackets("gre_spiral_2d.seq");
+}
+
+MU_TEST(test_the_score_bounds_the_exact_scan_peak_gre)
+{
+    run_pns_score_soundness("gre_2d.seq");
+}
+
+MU_TEST(test_the_score_bounds_the_exact_scan_peak_gre_3sl)
+{
+    run_pns_score_soundness("gre_2d_3sl.seq");
+}
+
+MU_TEST(test_the_score_bounds_the_exact_scan_peak_fse)
+{
+    run_pns_score_soundness("fse_2d.seq");
+}
+
+MU_TEST(test_the_score_bounds_the_exact_scan_peak_epi)
+{
+    run_pns_score_soundness("epi_2d.seq");
+}
+
+MU_TEST(test_the_score_bounds_the_exact_scan_peak_spiral)
+{
+    run_pns_score_soundness("gre_spiral_2d.seq");
+}
+
+MU_TEST(test_the_score_bounds_the_exact_scan_peak_radial)
+{
+    run_pns_score_soundness("gre_radial_2d.seq");
+}
+
+MU_TEST(test_the_response_does_not_move_when_the_raster_is_halved)
+{
+    double coarse = pns_rs_peak_at(4.0f);
+    double fine = pns_rs_peak_at(2.0f);
+
+    mu_assert(coarse > 0.0, "coarse-raster evaluation failed");
+    mu_assert(fine > 0.0, "fine-raster evaluation failed");
+    mu_assert(
+        fabs(coarse - fine) <= 1.0e-3 * coarse,
+        "the Irnich peak depends on the evaluation raster");
+}
+
 MU_TEST_SUITE(suite_pns_memoization)
 {
     MU_RUN_TEST(test_shipped_irnich_matches_an_independent_implementation);
+    MU_RUN_TEST(test_the_response_does_not_move_when_the_raster_is_halved);
+    MU_RUN_TEST(test_the_score_path_verdict_is_the_truths_gre);
+    MU_RUN_TEST(test_the_score_path_verdict_is_the_truths_fse);
+    MU_RUN_TEST(test_the_score_path_verdict_is_the_truths_epi);
+    MU_RUN_TEST(test_the_score_path_verdict_is_the_truths_spiral);
+    MU_RUN_TEST(test_the_score_bounds_the_exact_scan_peak_gre);
+    MU_RUN_TEST(test_the_score_bounds_the_exact_scan_peak_gre_3sl);
+    MU_RUN_TEST(test_the_score_bounds_the_exact_scan_peak_fse);
+    MU_RUN_TEST(test_the_score_bounds_the_exact_scan_peak_epi);
+    MU_RUN_TEST(test_the_score_bounds_the_exact_scan_peak_spiral);
+    MU_RUN_TEST(test_the_score_bounds_the_exact_scan_peak_radial);
     MU_RUN_TEST(test_pns_memo_matches_exact_gre);
     MU_RUN_TEST(test_pns_memo_matches_exact_epi);
     MU_RUN_TEST(test_pns_memo_matches_exact_fse);

@@ -360,13 +360,19 @@ namespace pulseq
         /*
          * Whether a readout's share of a shift must be left to the consumer.
          *
-         * A block carrying a ROTATIONS extension plays its gradients at an
-         * arbitrary physical angle, so the shift phase is orientation-
-         * dependent and cannot be pre-baked -- and the consumer needs the
-         * base trajectory for its metadata regardless.  A gradient that
-         * varies across the ADC window cannot be expressed as a frequency at
-         * all.  Everything else -- Cartesian, unrotated -- is two scalars,
-         * and deferring it would store a trajectory nobody needs.
+         * Not a statement that a rotated readout's phase is unknowable here.
+         * With `R` the block's extension, the shift phase is
+         * `dr_logical . (R k_logical)`: the prescribed FOV rotation cancels
+         * against the logical shift, but `R` does not, and `R` is in the file.
+         * What defers it is narrower -- `swept_cycles` and `block_k_origins`
+         * both work in the UNROTATED logical frame, so what this function can
+         * compute for a rotated block is `dr . k_logical`, which is the wrong
+         * number.  The guard keeps that number out of the file; the consumer,
+         * which composes `R` when it builds the trajectory, gets it right.
+         *
+         * A gradient that varies across the ADC window cannot be expressed as
+         * a frequency at all.  Everything else -- Cartesian, unrotated -- is
+         * two scalars, and deferring it would store a trajectory nobody needs.
          *
          * The question is about the readout, not about any one shift: the
          * consumer that has to finish a rotated or swept readout needs its

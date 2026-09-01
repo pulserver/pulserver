@@ -20,6 +20,7 @@
 #include <ctime>
 #include <cstdlib>
 #include <sstream>
+#include <iomanip>
 #include <algorithm>
 
 #include "ismrmrd/ismrmrd.h"
@@ -309,29 +310,6 @@ namespace mrdserver
     namespace
     {
 
-        /* Map cfgradcoil identifier to the GE coef base name.
-         * Reference values from EPIC pulserver.allcv.h:
-         *   1=CRD, 2=Roemer, 101=HGC, 102=Vectra, 103=Permanent.
-         * Add new entries as more gradient subsystems become relevant. */
-        const char* cfgradcoil_to_coef_name(int id)
-        {
-            switch (id)
-            {
-            case 1:
-                return "crd";
-            case 2:
-                return "roemer";
-            case 101:
-                return "hgc";
-            case 102:
-                return "vectra";
-            case 103:
-                return "permanent";
-            default:
-                return nullptr;
-            }
-        }
-
         std::string sequence_resource_base_dir()
         {
             const char* env = std::getenv("GADGETRON_RESOURCE_DIR");
@@ -394,26 +372,37 @@ namespace mrdserver
         }
     }
 
-    void add_sequence_resource_paths(
-        ISMRMRD::IsmrmrdHeader& hdr,
-        int tensor_index,
-        int grad_coil_id)
+    void add_tensor_resource_path(ISMRMRD::IsmrmrdHeader& hdr, int tensor_index)
     {
-        const std::string base = sequence_resource_base_dir();
+        if (tensor_index <= 0)
+            return;
 
-        if (tensor_index > 0)
-        {
-            std::ostringstream oss;
-            oss << base << "/tensor" << tensor_index << ".dat";
-            set_user_parameter_string(hdr, "tensor_dat_path", oss.str());
-        }
+        std::ostringstream oss;
+        oss << sequence_resource_base_dir() << "/tensor" << tensor_index << ".dat";
+        set_user_parameter_string(hdr, "tensor_dat_path", oss.str());
+    }
 
-        if (const char* coef = cfgradcoil_to_coef_name(grad_coil_id))
+    void add_gradwarp_coefficients(
+        ISMRMRD::IsmrmrdHeader& hdr,
+        int gradwarp_type,
+        const std::vector<float>& scales,
+        float delta)
+    {
+        if (scales.size() != 30)
+            throw std::invalid_argument(
+                "add_gradwarp_coefficients: expected 30 coefficients, X1..X10 "
+                "then Y1..Y10 then Z1..Z10");
+
+        std::ostringstream oss;
+        oss << "GRADWARPTYPE " << gradwarp_type << "\n";
+        oss << std::scientific << std::setprecision(9);
+        for (std::size_t i = 0; i < scales.size(); ++i)
         {
-            std::ostringstream oss;
-            oss << base << "/" << coef << ".coef";
-            set_user_parameter_string(hdr, "grad_coef_path", oss.str());
+            oss << "SCALE"
+                << "XYZ"[i / 10] << (i % 10 + 1) << ' ' << scales[i] << "\n";
         }
+        oss << "DELTA " << delta << "\n";
+        set_user_parameter_string(hdr, "gradient_coefficients", oss.str());
     }
 
     void enrich_ismrmrd_header(ISMRMRD::IsmrmrdHeader& hdr, const SequenceCache& cache)
@@ -444,14 +433,25 @@ namespace mrdserver
             };
             // Sequence parameters are NOT divided per encoding space in the ISMRMRD
             // header; for a multi-subsequence (multi-contrast) collection the merged
-            // values are reduced to a single representative — min TR/TE/TI, max
-            // flip angle. (Per-subsequence detail is carried separately by the
-            // SEQDESC waveforms.) Each is emitted as a one-element vector.
+            // values are reduced to a single representative — min TR/TI, max flip
+            // angle. (Per-subsequence detail is carried separately by the SEQDESC
+            // waveforms.) Each is emitted as a one-element vector.
+            //
+            // TE is the exception, and MRD makes it one: the field is a vector
+            // because a scan reads several echoes, and their spacing is what a
+            // field map is derived from. So TE carries every distinct echo time,
+            // ascending — TE[0] is still the shortest.
             auto reduce_min = [](std::vector<float> vals) -> std::vector<float>
             {
                 if (vals.empty())
                     return {};
                 return {*std::min_element(vals.begin(), vals.end())};
+            };
+            auto distinct_ascending = [](std::vector<float> vals) -> std::vector<float>
+            {
+                std::sort(vals.begin(), vals.end());
+                vals.erase(std::unique(vals.begin(), vals.end()), vals.end());
+                return vals;
             };
             auto reduce_max = [](std::vector<float> vals) -> std::vector<float>
             {
@@ -460,7 +460,7 @@ namespace mrdserver
                 return {*std::max_element(vals.begin(), vals.end())};
             };
             auto tr = reduce_min(get_floats("TR"));
-            auto te = reduce_min(get_floats("TE"));
+            auto te = distinct_ascending(get_floats("TE"));
             auto ti = reduce_min(get_floats("TI"));
             auto fa = reduce_max(get_floats("FlipAngle"));
             if (!tr.empty())

@@ -479,7 +479,8 @@ class WavePSFCalibration(torch.nn.Module):
         ----------
         reconstruction
             Preliminary complex images with spatial dimensions
-            ``(readout, phase, partition)`` last. For coefficient-specific
+            ``(readout, phase, partition)`` last, NumPy or Torch -- what
+            :func:`~pulserver.recon.pics` hands back. For coefficient-specific
             calibration, ``coefficient_axis`` identifies the subspace rank.
         initial_phase
             Theoretical phase with shape ``(2, wave_readout)`` or
@@ -494,11 +495,9 @@ class WavePSFCalibration(torch.nn.Module):
         torch.Tensor or WavePSFResult
             Calibrated complex64 PSF, or all calibration outputs.
         """
-        if (
-            not isinstance(reconstruction, torch.Tensor)
-            or not reconstruction.is_complex()
-        ):
-            raise TypeError("reconstruction must be a complex torch.Tensor")
+        reconstruction = torch.as_tensor(reconstruction)
+        if not reconstruction.is_complex():
+            raise TypeError("reconstruction must be complex")
         if reconstruction.ndim < 3:
             raise ValueError("reconstruction must have three spatial dimensions")
         phase = torch.as_tensor(
@@ -678,11 +677,17 @@ class WavePSFCalibration(torch.nn.Module):
             if int(indices.max()) > phase.shape[-1] // 2:
                 raise ValueError("frequency_indices exceed the real-FFT support")
             return indices
-        spectrum = torch.fft.rfft(phase.mean(dim=0), dim=-1).abs()
+        # Bin zero is the phase's mean: a constant across the readout, which
+        # displaces the image rather than blurring it, and is what the two
+        # spatial offsets are for. It is also the largest bin of any phase that
+        # integrates a one-sided gradient, so a search that includes it returns
+        # it and the harmonic fit has nothing left to move.
+        spectrum = torch.fft.rfft(phase.mean(dim=0), dim=-1).abs()[..., 1:]
         if self.n_harmonics > spectrum.shape[-1]:
             raise ValueError("n_harmonics exceeds the real-FFT support")
         return (
             torch.topk(spectrum, self.n_harmonics, dim=-1).indices.sort(dim=-1).values
+            + 1
         )
 
     def _minimize(

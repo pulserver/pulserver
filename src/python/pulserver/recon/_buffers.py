@@ -92,6 +92,8 @@ class ReconBuffer:
     center_sample : int or None
         Index of the echo along the readout axis, from the acquisitions
         themselves, or ``None`` until the first one arrives.
+    sample_time : float or None
+        Dwell time (s), likewise from the acquisitions.
 
     Examples
     --------
@@ -135,6 +137,7 @@ class ReconBuffer:
         self.reference = np.zeros(shape[1:], dtype=bool)
         self.trajectory: Any | None = None
         self.center_sample: int | None = None
+        self.sample_time: float | None = None
         self.headers: list[Any] = []
 
     @property
@@ -239,6 +242,10 @@ class ReconBuffer:
             center = acquisition_label(acquisition, "center_sample", None)
             if center is not None:
                 self.center_sample = int(center) + offset
+        if self.sample_time is None:
+            dwell = acquisition_label(acquisition, "sample_time_us", None)
+            if dwell:
+                self.sample_time = float(dwell) * 1e-6
         self.headers.append(acquisition)
 
     def _place_trajectory(self, acquisition: Any, where: tuple, readout: slice) -> None:
@@ -303,6 +310,24 @@ class ReconBuffer:
         """
         picks = self._picks(where)
         return self.kspace[(slice(None), *picks)], self.mask[picks]
+
+    @property
+    def readout_time(self) -> Any:
+        """When each sample of a readout was taken, relative to the echo (s).
+
+        Off-resonance is a phase that accrues along the readout, so what a
+        correction needs is the clock the samples ran on, not their position
+        in k.
+
+        Returns
+        -------
+        numpy.ndarray or None
+            ``(readout,)`` seconds, negative before the echo, or ``None`` when
+            the acquisitions state no dwell or no echo position.
+        """
+        if self.sample_time is None or self.center_sample is None:
+            return None
+        return (np.arange(self.readout) - self.center_sample) * self.sample_time
 
     def points(self, **where: int) -> Any:
         """Where the samples at one position were taken, or ``None``.

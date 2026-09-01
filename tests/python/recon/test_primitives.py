@@ -50,12 +50,12 @@ def test_nlinv_public_api_is_class_based():
         "NLINV",
         "NLINVPhysics",
         "NLINVResult",
-        "PhasePoleCorrection",
         "WavePSF",
         "WavePSFCalibration",
         "WavePSFResult",
         "calibration_extent",
         "coil_maps_from_reference",
+        "field_map",
     ]
     assert not hasattr(calibration, "nlinv_sensitivities")
     assert not hasattr(calibration, "estimate_sensitivities")

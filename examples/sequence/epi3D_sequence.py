@@ -102,6 +102,7 @@ def main(
     n_dummy: int = 2,
     n_gain_calibration_readouts: int = 1,
     spoiling_cycles: float = 4.0,
+    spsp: bool = False,
 ) -> pp.Sequence:
     """Create the main 3D EPI sequence.
 
@@ -324,6 +325,7 @@ def main(
         partial_fourier_z=partial_fourier_z,
         readout_bandwidth_hz=readout_bandwidth_hz,
         spoiling_cycles=spoiling_cycles,
+        spsp=spsp,
     )
     epi = kernel.epi
     fov_x, fov_y = kernel.fov
@@ -411,6 +413,7 @@ def main(
             system=system,
             fov=fov,
             fov_offset=fov_offset,
+            spsp=spsp,
             n_x=n_x,
             n_y=n_y,
             n_z=n_z,
@@ -439,15 +442,20 @@ def main(
 # ======================================================================
 
 
-def SlabExcitationKernel(system: pp.Opts, flip_angle_deg: float, thickness_m: float):
-    """The slab excitation, spectral-spatial when ``SPSP_EXCITATION`` is set.
+def SlabExcitationKernel(
+    system: pp.Opts,
+    flip_angle_deg: float,
+    thickness_m: float,
+    spsp: bool = False,
+):
+    """The slab excitation, spectral-spatial when ``spsp`` is set.
 
     Returns ``(excitation, rf, gz)``. The selection gradient carries its own
     rephaser folded onto the end -- as a slab excitation does -- so the 3D
     train's z prewinder block, which already encodes the partition, never
     holds a second z gradient.
     """
-    if SPSP_EXCITATION:
+    if spsp:
         # Fat's offset is a frequency, so it is field dependent; ppm times the
         # Larmor frequency is what makes the script B0 independent. A spectral
         # passband about that wide leaves water in the passband and fat in the
@@ -492,6 +500,7 @@ def SharedKernel(
     partial_fourier_z: float = 1.0,
     readout_bandwidth_hz: float = 500e3,
     spoiling_cycles: float = 4.0,
+    spsp: bool = False,
 ) -> SimpleNamespace:
     """The slab excitation and train both sequences are built from.
 
@@ -528,7 +537,7 @@ def SharedKernel(
     first_shell = n_shells - max(1, round(partial_fourier_z * n_shells))
 
     excitation, exc_rf, exc_gz = SlabExcitationKernel(
-        system, flip_angle_deg, slab_thickness
+        system, flip_angle_deg, slab_thickness, spsp
     )
     epi = design.EpiReadout3D(
         system,
@@ -635,6 +644,7 @@ def NavigatorKernel(
     readout_bandwidth_hz: float = 500e3,
     opposite_reference: bool = True,
     spoiling_cycles: float = 4.0,
+    spsp: bool = False,
 ) -> pp.Sequence:
     """Build the navigator sequence for the 3D EPI.
 
@@ -664,6 +674,7 @@ def NavigatorKernel(
         caipi_shift=caipi_shift,
         readout_bandwidth_hz=readout_bandwidth_hz,
         spoiling_cycles=spoiling_cycles,
+        spsp=spsp,
     )
     epi = kernel.epi
 
@@ -729,6 +740,7 @@ def CalibrationKernel(
     n_acs_z: int = 16,
     readout_bandwidth_hz: float = 500e3,
     spoiling_cycles: float = 4.0,
+    spsp: bool = False,
 ) -> pp.Sequence:
     """A low-resolution Cartesian gradient echo over the centre of k-space.
 
@@ -754,7 +766,9 @@ def CalibrationKernel(
     if not acs_lines or not acs_partitions:
         return None
 
-    _, exc_rf, exc_gz = SlabExcitationKernel(system, flip_angle_deg, slab_thickness)
+    _, exc_rf, exc_gz = SlabExcitationKernel(
+        system, flip_angle_deg, slab_thickness, spsp
+    )
     readout = design.LineReadout3D(
         system,
         exc_rf,
@@ -1078,6 +1092,7 @@ class Epi3D(SequencePlugin):
 KERNEL_ARGUMENTS = frozenset(
     (
         "fov",
+        "spsp",
         "n_x",
         "n_y",
         "n_z",
@@ -1099,6 +1114,7 @@ KERNEL_ARGUMENTS = frozenset(
 CALIBRATION_ARGUMENTS = frozenset(
     (
         "fov",
+        "spsp",
         "fov_offset",
         "n_x",
         "n_y",
@@ -1115,6 +1131,7 @@ CALIBRATION_ARGUMENTS = frozenset(
 NAVIGATOR_ARGUMENTS = frozenset(
     (
         "fov",
+        "spsp",
         "fov_offset",
         "n_x",
         "n_y",
@@ -1143,6 +1160,7 @@ def protocol_kwargs(system: pp.Opts, protocol: dict[str, dict]) -> dict:
         main,
         system,
         protocol,
+        spsp=SPSP_EXCITATION,
         n_z=n_z,
         slab_thickness=n_z * partition_thickness,
         segments=max(1, round(params.user_float(prot, 0, 1.0))),

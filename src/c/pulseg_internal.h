@@ -22,6 +22,7 @@
 #include "pulseg_config.h"
 #include "pulseg_types.h"
 #include "pulseg_io.h"
+#include "pulseg/pulseg_pns_models.h"
 
 /* Error codes are public (pulseg_errors.h, included via pulseg_types.h). */
 
@@ -980,6 +981,68 @@ int pulseg__interpolate_to_uniform(
     int *num_samples,
     float target_raster_us);
 
+/* --- pulseg_pns_basis.c --- */
+
+/* Occurrence-score PNS: a sound bound on the scan's response peak built from
+ * per-occurrence response peaks and a sliding sum, with a rank basis per
+ * base block whose occurrences play many distinct waveforms. See the file
+ * header for the construction and its soundness argument. A scan the module
+ * cannot price is *declined* (out_declined = 1, PULSEG_SUCCESS, *out NULL)
+ * and the caller falls back to the group sweep. */
+
+typedef struct pulseg__pns_score pulseg__pns_score;
+
+typedef struct pulseg__pns_basis_info
+{
+    int base_id;        /* base_blocks index                                */
+    int num_elements;   /* distinct (shape, amplitude) tuples at the block  */
+    int d;              /* axes decomposed jointly (0 = rank-1 carried it)  */
+    int rank;           /* directions kept                                  */
+    float max_residual; /* largest per-element reconstruction residual      */
+} pulseg__pns_basis_info;
+
+int pulseg__pns_score_build(
+    pulseg__pns_score **out,
+    const pulseg_sequence_descriptor *desc,
+    const pulseg_pns_model *model,
+    float gamma_hz_per_tesla,
+    int *out_declined,
+    double *out_macs);
+
+int pulseg__pns_score_evaluate(
+    const pulseg__pns_score *sc,
+    float *out_max,
+    int *out_argmax_block,
+    double *out_macs);
+
+int pulseg__pns_score_offenders(
+    const pulseg__pns_score *sc,
+    float threshold,
+    int max_ranges,
+    int *out_ranges,
+    int *out_num_ranges);
+
+int pulseg__pns_score_num_bases(const pulseg__pns_score *sc);
+double pulseg__pns_score_block_start_us(const pulseg__pns_score *sc, int block);
+const pulseg__pns_basis_info *pulseg__pns_score_basis_info(const pulseg__pns_score *sc, int index);
+void pulseg__pns_score_free(pulseg__pns_score *sc);
+
+/* The full score-path check: build, slide, and cold exact assembly of every
+ * region the bound cannot clear. PULSEG_SUCCESS is a pass; a threshold
+ * refusal names the exact peak and the blocks that produced it. A declined
+ * build returns PULSEG_SUCCESS with *out_declined set and no verdict. */
+int pulseg__pns_score_check(
+    pulseg_check_plan *plan,
+    pulseg_diagnostic *diag,
+    const pulseg_sequence_descriptor *desc,
+    int subseq_idx,
+    const pulseg_pns_model *model,
+    float gamma_hz_per_tesla,
+    float threshold_percent,
+    int *out_declined,
+    double *out_build_macs,
+    double *out_eval_macs);
+
 /* --- pulseg_pns_memo.c --- */
 
 /* Assemble a linear PNS model's response from one convolution per distinct
@@ -1003,7 +1066,8 @@ int pulseg__calc_pns_memoized(
     const float *kernel,
     int kernel_len,
     float out_scale,
-    int pad);
+    int pad,
+    double *out_macs);
 
 /* Extract gradient waveforms for an arbitrary block range,
  * interpolated to uniform raster (half gradient raster). */
@@ -1077,11 +1141,21 @@ enum pulseg__safety_profile_stage
     PULSEG__SAFETY_PROFILE_WAVEFORM_EXTRACT,
     PULSEG__SAFETY_PROFILE_MECH_RESONANCE,
     PULSEG__SAFETY_PROFILE_PNS,
+    PULSEG__SAFETY_PROFILE_PNS_BASIS_BUILD,
+    PULSEG__SAFETY_PROFILE_PNS_SCORE,
     PULSEG__SAFETY_PROFILE_STAGE_COUNT
 };
 
 typedef void (
     *pulseg__safety_profile_fn)(void *ctx, enum pulseg__safety_profile_stage stage, int entering);
+
+/* Arithmetic a stage issued, in multiply-accumulates, reported when it leaves.
+ * Counted by the code doing the work rather than derived from the shapes it
+ * ran over, so a throughput figure divides one measured clock by one measured
+ * operation count. A stage that cannot count itself reports nothing, which is
+ * distinguishable from reporting zero. */
+typedef void (
+    *pulseg__safety_work_fn)(void *ctx, enum pulseg__safety_profile_stage stage, double macs);
 
 int pulseg__check_safety_profiled(
     pulseg_collection *coll,
@@ -1092,6 +1166,7 @@ int pulseg__check_safety_profiled(
     const pulseg_pns_model *pns_model,
     float pns_threshold_percent,
     pulseg__safety_profile_fn profile_fn,
+    pulseg__safety_work_fn work_fn,
     void *profile_ctx);
 
 /* --- pulseg_cache.c --- */

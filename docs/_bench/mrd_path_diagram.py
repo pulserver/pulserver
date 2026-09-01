@@ -14,13 +14,18 @@ Usage:
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import matplotlib
 
 matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-from matplotlib.patches import FancyArrowPatch, FancyBboxPatch
+import matplotlib.pyplot as plt  # noqa: E402
+from matplotlib.patches import FancyArrowPatch, FancyBboxPatch  # noqa: E402
+
+from schematic import data_extent, fit_text  # noqa: E402
 
 # House style: a figure has to be legible at the width a manual page gives it.
 plt.rcParams.update(
@@ -61,19 +66,25 @@ def box(ax, x, y, w, h, color, *, title=None, body=None, dashed=False, fill=None
         )
     )
     cx, cy = x + w / 2, y + h / 2
+    pad_x, pad_y = 0.045 * w, 0.10 * h
     if title is not None and body is not None:
-        ax.text(
-            cx, y + h - 1.5, title, ha="center", va="top",
-            fontsize=11.0, color=color, fontweight="bold", zorder=3,
+        title_art = fit_text(
+            ax, cx, y + h - pad_y, title, width=w - 2 * pad_x, fontsize=11.0,
+            wrap=False, color=color, fontweight="bold",
+            ha="center", va="top", zorder=3,
         )
-        ax.text(
-            cx, y + h - 4.2, body, ha="center", va="top",
-            fontsize=9.3, color=INK, zorder=3, linespacing=1.45,
+        _, title_h = data_extent(ax, title_art)
+        top = y + h - pad_y - title_h - 0.6 * pad_y
+        fit_text(
+            ax, cx, top, body, width=w - 2 * pad_x, height=top - y - pad_y,
+            fontsize=9.3, color=INK, ha="center", va="top",
+            linespacing=1.45, zorder=3,
         )
     else:
-        ax.text(
-            cx, cy, title if body is None else body, ha="center", va="center",
-            fontsize=10.2, color=INK, zorder=3, linespacing=1.45,
+        fit_text(
+            ax, cx, cy, title if body is None else body,
+            width=w - 2 * pad_x, height=h - 2 * pad_y, fontsize=10.2,
+            color=INK, ha="center", va="center", linespacing=1.45, zorder=3,
         )
     return cx, cy
 
@@ -149,7 +160,7 @@ def build() -> Path:
              "k-space trajectory,\nsequence description")
     box(ax, 23.5, 14.5, 17, 10, CLIENT,
         title="demodulate",
-        body="undo the design-\ntime FOV phase")
+        body="undo the design-time FOV phase")
 
     arrow(ax, (20.0, 48), (23.5, 47.5), SCANNER)
     arrow(ax, (20.0, 31), (23.5, 34), SCANNER)
@@ -158,10 +169,10 @@ def build() -> Path:
 
     # -- the wire --------------------------------------------------------
     arrow(ax, (42, 36), (61.5, 36), CLIENT,
-          label="MRD session protocol \u00b7 TCP\nheader, acquisitions, waveforms",
-          label_pos=(51.7, 37.6), fontsize=9.2)
+          label="MRD session protocol \u00b7 TCP\nheader, acquisitions,\nwaveforms",
+          label_pos=(51.0, 37.2), fontsize=9.2)
     arrow(ax, (61.5, 29), (42, 29), SERVER,
-          label="images \u00b7 DICOM", label_pos=(51.7, 27.8), label_va="top",
+          label="images \u00b7 DICOM", label_pos=(51.0, 27.9), label_va="top",
           fontsize=9.2)
 
     # -- server ----------------------------------------------------------
@@ -209,19 +220,22 @@ def build_feedback() -> Path:
     ax.set_ylim(0, 26)
     ax.axis("off")
 
-    box(ax, 4, 9, 32, 12, SCANNER,
+    # The two labels ride in the gap between the boxes, so the gap has to be
+    # wider than the longer of them: 30-wide boxes leave 32 units for a label
+    # that measures about 24.
+    box(ax, 3, 9, 30, 12, SCANNER,
         title="interpreter",
         body="the blocks still ahead\nof the playout cursor")
-    box(ax, 64, 9, 32, 12, SERVER,
+    box(ax, 67, 9, 30, 12, SERVER,
         title="real-time process",
         body="its own port,\nthe same MRD framing")
 
-    arrow(ax, (36, 18.5), (64, 18.5), SCANNER,
-          label="one acquisition, as it is measured",
-          label_pos=(50, 19.6), fontsize=10.5)
-    arrow(ax, (64, 11.5), (36, 11.5), SERVER,
+    arrow(ax, (33, 18.5), (67, 18.5), SCANNER,
+          label="one acquisition, as measured",
+          label_pos=(50, 19.4), fontsize=10.2)
+    arrow(ax, (67, 11.5), (33, 11.5), SERVER,
           label="one tagged result,\nbefore the blocks it bears on",
-          label_pos=(50, 10.5), label_va="top", fontsize=10.5)
+          label_pos=(50, 10.6), label_va="top", fontsize=10.2)
 
     ax.text(50, 2.6,
             "which tags are recognised, and what each one changes, "

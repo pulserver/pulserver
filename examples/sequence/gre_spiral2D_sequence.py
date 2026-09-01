@@ -66,6 +66,7 @@ def main(
     n_x: int = 128,
     n_arms: int = 16,
     angle_scheme: str = "uniform",
+    n_echoes: int = 1,
     n_slices: int = 1,
     slice_thickness: float = 5e-3,
     slice_gap: float = 0.0,
@@ -114,6 +115,12 @@ def main(
         for. Default is 16.
     angle_scheme : str, optional
         ``uniform`` or ``golden``. Default is 'uniform'.
+    n_echoes : int, optional
+        Arms read per excitation. Every echo traverses the same interleave, so
+        the train is one trajectory at a series of echo times, and ``ECO``
+        indexes them. Two or more is what
+        :mod:`pulserver.app.noncartesian2D_recon` derives a field map from.
+        Default is 1.
     n_slices : int, optional
         Number of slices. Default is 1.
     slice_thickness : float, optional
@@ -242,6 +249,7 @@ def main(
         n_x=n_x,
         n_arms=n_arms,
         angle_scheme=angle_scheme,
+        n_echoes=n_echoes,
         n_slices=n_slices,
         slice_thickness=slice_thickness,
         slice_order=slice_order,
@@ -323,7 +331,7 @@ def main(
     seq.set_definition(key="FOV", value=[fov, fov, slab_thickness])
     seq.set_definition(key="Matrix", value=[n_x, n_x, n_slices])
     seq.set_definition(key="Name", value="gre_spiral_2d")
-    seq.set_definition(key="TE", value=kernel.echo_time)
+    seq.set_definition(key="TE", value=kernel.echo_times)
     seq.set_definition(key="TR", value=kernel.repetition_time)
     seq.set_definition(key="Trajectory", value="spiral")
     seq.set_definition(key="NumArms", value=len(angles))
@@ -405,6 +413,7 @@ def SpiralKernel(
     n_x: int = 128,
     n_arms: int = 16,
     angle_scheme: str = "uniform",
+    n_echoes: int = 1,
     n_slices: int = 1,
     slice_thickness: float = 5e-3,
     slice_order: str = "interleaved",
@@ -422,15 +431,16 @@ def SpiralKernel(
     ----------
     system : pypulseq.Opts
         System limits.
-    fov, n_x, n_arms, angle_scheme, n_slices, slice_thickness, slice_order, \
-flip_angle_deg, te, tr, readout_bandwidth_hz, n_dummy, spoiling_cycles
+    fov, n_x, n_arms, angle_scheme, n_echoes, n_slices, slice_thickness, \
+slice_order, flip_angle_deg, te, tr, readout_bandwidth_hz, n_dummy, spoiling_cycles
         As for :func:`main`.
 
     Returns
     -------
     types.SimpleNamespace
         ``excitation``, ``readouts`` (keyed by pass size), ``passes``,
-        ``angles``, ``echo_time``, ``repetition_time``, ``bandwidth_hz``
+        ``angles``, ``echo_time``, ``echo_times`` (one per echo),
+        ``repetition_time``, ``bandwidth_hz``
         and ``duration``.
     """
     excitation = design.SpatialSelectiveExcitation(
@@ -456,8 +466,10 @@ flip_angle_deg, te, tr, readout_bandwidth_hz, n_dummy, spoiling_cycles
             tr=module_tr,
             readout_bandwidth_hz=readout_bandwidth_hz,
             spoiling_cycles=spoiling_cycles,
+            n_echoes=n_echoes,
             # LIN carries the shot: a spiral scan has no phase-encode line, so
-            # the counter a reconstruction grids by is the arm index.
+            # the counter a reconstruction grids by is the arm index. ECO is
+            # the readout's own, because the readout plays the echo train.
             labels=("LIN", "SLC"),
             explicit=not use_rotation_ext,
             angles=None if use_rotation_ext else angles,
@@ -488,6 +500,10 @@ flip_angle_deg, te, tr, readout_bandwidth_hz, n_dummy, spoiling_cycles
         passes=passes,
         angles=angles,
         echo_time=shortest.echo_time,
+        echo_times=[
+            shortest.echo_time + i_echo * shortest.echo_spacing
+            for i_echo in range(n_echoes)
+        ],
         repetition_time=max(
             len(group) * readouts[len(group)].duration for group in passes
         ),
@@ -586,6 +602,10 @@ class GreSpiral2D(SequencePlugin):
                 UIParam.user_value(2): TypeinFloatParam(
                     value=16.0, min=0.0, max=128.0, incr=1.0, unit="TR"
                 ),
+                UIParam.user_name(3): Description(text="Echoes"),
+                UIParam.user_value(3): TypeinFloatParam(
+                    value=1.0, min=1.0, max=8.0, incr=1.0, unit=""
+                ),
             }
         )
 
@@ -633,6 +653,7 @@ KERNEL_ARGUMENTS = frozenset(
         "n_x",
         "n_arms",
         "angle_scheme",
+        "n_echoes",
         "n_slices",
         "slice_thickness",
         "slice_order",
@@ -657,6 +678,7 @@ def protocol_kwargs(system: pp.Opts, protocol: dict[str, dict]) -> dict:
         n_arms=max(1, round(params.user_float(prot, 0, 16.0))),
         angle_scheme="golden" if round(params.user_float(prot, 1, 0.0)) else "uniform",
         n_dummy=max(0, round(params.user_float(prot, 2, 16.0))),
+        n_echoes=max(1, round(params.user_float(prot, 3, 1.0))),
     )
 
 
@@ -699,6 +721,7 @@ ARG_MAP = [
     ("--arms", UIParam.user_value(0), float, "Interleaves to play"),
     ("--angles", UIParam.user_value(1), float, "Angle scheme: 0 uniform, 1 golden"),
     ("--dummies", UIParam.user_value(2), float, "Unacquired repetitions per pass"),
+    ("--echoes", UIParam.user_value(3), float, "Arms read per excitation"),
 ]
 
 if __name__ == "__main__":

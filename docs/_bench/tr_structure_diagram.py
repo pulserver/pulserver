@@ -14,13 +14,18 @@ Usage:
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import matplotlib
 
 matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-from matplotlib.patches import FancyArrowPatch, FancyBboxPatch
+import matplotlib.pyplot as plt  # noqa: E402
+from matplotlib.patches import FancyArrowPatch, FancyBboxPatch  # noqa: E402
+
+from schematic import fit_text  # noqa: E402
 
 # House style: a figure has to be legible at the width a manual page gives it.
 plt.rcParams.update(
@@ -38,15 +43,28 @@ plt.rcParams.update(
 
 OUT_DIR = Path(__file__).resolve().parents[1] / "explanations" / "assets" / "segments"
 
-BLOCK = ["#4c72b0", "#55a868", "#c44e52", "#b0b0b0"]
-SEG_A = "#dd8452"
-SEG_B = "#8172b3"
+SEG_COLOR = ["#dd8452", "#8172b3", "#4c72b0"]
 INK = "#22252a"
 
-#: One repetition: excite, phase encode, read, pad. The pad is the pure delay
-#: that splits off into a segment of its own.
-PATTERN = ["RF", "PE", "RO", "pad"]
-NREP = 6
+#: One repetition of an inversion-prepared gradient echo, at a train length of
+#: two so the figure stays readable. A gradient echo would not do: its TR is one
+#: shot, so every segment in it is played once and the partition shows nothing.
+#: This one shows both ways a segment is reused -- the readout replayed inside
+#: the TR, and one delay serving two different waits.
+PATTERN = ["INV", "TI", "RF", "RO", "RW", "RF", "RO", "RW", "pad"]
+BLOCK = {
+    "INV": "#937860",
+    "TI": "#b0b0b0",
+    "RF": "#4c72b0",
+    "RO": "#c44e52",
+    "RW": "#55a868",
+    "pad": "#b0b0b0",
+}
+#: ``(first block, last block, segment id)`` over one repetition.
+SPANS = [(0, 0, 0), (1, 1, 1), (2, 4, 2), (5, 7, 2), (8, 8, 1)]
+NSEG = 3
+NREP = 2
+NSCAN = 3
 
 
 def cell(ax, x, y, w, h, color, label=None, *, fontsize=9.4, alpha=1.0):
@@ -64,40 +82,44 @@ def cell(ax, x, y, w, h, color, label=None, *, fontsize=9.4, alpha=1.0):
         )
     )
     if label:
-        ax.text(
+        fit_text(
+            ax,
             x + w / 2,
             y + h / 2,
             label,
+            width=0.88 * w,
+            height=0.8 * h,
+            fontsize=fontsize,
+            wrap=False,
             ha="center",
             va="center",
-            fontsize=fontsize,
             color="white",
             fontweight="bold",
             zorder=4,
         )
 
 
-def band(ax, x, y, w, h, color, label):
+def band(ax, x, y, w, h, color, label, label_dy=0.7):
     ax.add_patch(
         FancyBboxPatch(
             (x, y),
             w,
             h,
             boxstyle="round,pad=0,rounding_size=0.6",
-            linewidth=1.1,
+            linewidth=1.4,
             edgecolor=color,
             facecolor=color,
-            alpha=0.13,
+            alpha=0.16,
             zorder=1,
         )
     )
     ax.text(
         x + w / 2,
-        y + h + 0.7,
+        y + h + label_dy,
         label,
         ha="center",
         va="bottom",
-        fontsize=10.8,
+        fontsize=10.2,
         color=color,
         fontweight="bold",
         zorder=4,
@@ -122,133 +144,70 @@ def brace(ax, x0, x1, y, color, label):
 
 
 def build() -> Path:
-    fig, ax = plt.subplots(figsize=(8.6, 6.42))
+    fig, ax = plt.subplots(figsize=(9.2, 6.6))
     ax.set_xlim(0, 100)
-    ax.set_ylim(0, 46)
+    ax.set_ylim(0, 48)
     ax.axis("off")
 
-    # -- 1. the block stream --------------------------------------------
-    ax.text(
-        2,
-        43.4,
-        "the file",
-        ha="left",
-        va="center",
-        fontsize=12.8,
-        color=INK,
-        fontweight="bold",
-    )
-    ax.text(
-        13.5,
-        43.4,
-        "a flat list of blocks",
-        ha="left",
-        va="center",
-        fontsize=10.8,
-        color=INK,
-        style="italic",
-    )
+    def heading(y, title, subtitle, gap=13.5):
+        ax.text(2, y, title, ha="left", va="center", fontsize=12.8,
+                color=INK, fontweight="bold")
+        ax.text(gap, y, subtitle, ha="left", va="center", fontsize=10.6,
+                color=INK, style="italic")
 
-    n = len(PATTERN) * NREP
-    w, gap = 3.4, 0.55
-    x0 = 2.0
+    # -- 1. the block stream --------------------------------------------
+    heading(44.6, "the file", "a flat list of blocks")
+
+    per = len(PATTERN)
+    n = per * NREP
+    x0, span = 2.0, 96.0
+    pitch = span / n
+    w = pitch - 0.55
     for i in range(n):
-        cell(
-            ax,
-            x0 + i * (w + gap),
-            36.5,
-            w,
-            3.4,
-            BLOCK[i % len(PATTERN)],
-            PATTERN[i % len(PATTERN)],
-        )
-    brace(
-        ax,
-        x0,
-        x0 + len(PATTERN) * (w + gap) - gap,
-        34.6,
-        INK,
-        "the shortest period that holds over the whole list",
-    )
+        lbl = PATTERN[i % per]
+        cell(ax, x0 + i * pitch, 36.5, w, 3.4, BLOCK[lbl], lbl, fontsize=8.4)
+    brace(ax, x0, x0 + per * pitch - 0.55, 34.6, INK,
+          "the shortest period that holds over the whole list")
 
     # -- 2. the repeating unit ------------------------------------------
-    ax.text(
-        2,
-        27.2,
-        "the TR",
-        ha="left",
-        va="center",
-        fontsize=12.8,
-        color=INK,
-        fontweight="bold",
-    )
-    ax.text(
-        13.5,
-        27.2,
-        "recognised from block content — duration and which channels play, "
-        "never an annotation",
-        ha="left",
-        va="center",
-        fontsize=10.8,
-        color=INK,
-        style="italic",
-    )
+    heading(29.0, "the TR",
+            "recognised from block content — duration and which channels play, "
+            "never an annotation")
 
-    bw, bgap = 17.0, 2.2
-    bx = 6.0
-    band(ax, bx - 1.6, 17.0, 2 * (bw + bgap) + bw + 2.6, 7.6, SEG_A, "segment 0")
-    band(ax, bx + 3 * (bw + bgap) - 1.6, 17.0, bw + 3.2, 7.6, SEG_B, "segment 1")
+    bx, bspan = 4.0, 92.0
+    bpitch = bspan / per
+    bw = bpitch - 1.4
+    for k, (lo, hi, seg) in enumerate(SPANS):
+        band(ax, bx + lo * bpitch - 0.55, 17.0,
+             (hi - lo) * bpitch + bw + 1.1, 7.8,
+             SEG_COLOR[seg], f"segment {seg}",
+             label_dy=0.6 if k % 2 == 0 else 2.9)
     for i, lbl in enumerate(PATTERN):
-        cell(ax, bx + i * (bw + bgap), 18.6, bw, 4.4, BLOCK[i], lbl, fontsize=11.6)
-    ax.text(
-        50,
-        15.2,
-        "cut where the gradients are zero, so each piece is playable on its own",
-        ha="center",
-        va="top",
-        fontsize=10.5,
-        color=INK,
-    )
+        cell(ax, bx + i * bpitch, 18.6, bw, 4.4, BLOCK[lbl], lbl, fontsize=9.6)
+    ax.text(50, 14.6,
+            "cut where every gradient axis rests at zero, and cut before each "
+            "excitation — so a segment is a shot",
+            ha="center", va="top", fontsize=10.2, color=INK)
 
     # -- 3. what the sequencer executes ---------------------------------
-    ax.text(
-        2,
-        9.6,
-        "the scan",
-        ha="left",
-        va="center",
-        fontsize=12.8,
-        color=INK,
-        fontweight="bold",
-    )
-    ax.text(
-        15.5,
-        9.6,
-        "two segments prepared, twelve instances triggered",
-        ha="left",
-        va="center",
-        fontsize=10.8,
-        color=INK,
-        style="italic",
-    )
+    heading(9.6, "the scan",
+            f"{NSEG} segments prepared, {len(SPANS)} instances triggered per "
+            "repetition", gap=15.5)
 
-    sw, sgap = 5.6, 0.5
-    sx = 2.0
-    for r in range(NREP):
-        base = sx + r * (sw * 4 / 3 + sw / 3 + sgap * 2)
-        cell(ax, base, 3.4, sw, 3.4, SEG_A, "0", fontsize=9.9)
-        cell(ax, base + sw + sgap, 3.4, sw / 2.2, 3.4, SEG_B, "1", fontsize=9.9)
-    ax.text(
-        50,
-        1.2,
-        "one prepared program per segment; a repetition is a pair of triggers "
-        "and its own row of parameters",
-        ha="center",
-        va="center",
-        fontsize=10.5,
-        color=INK,
-        style="italic",
-    )
+    sx, sspan = 2.0, 96.0
+    tr_pitch = sspan / NSCAN
+    widths = [(hi - lo + 1) for lo, hi, _ in SPANS]
+    unit = (tr_pitch - 2.2) / sum(widths)
+    for r in range(NSCAN):
+        base = sx + r * tr_pitch
+        for (lo, hi, seg), width in zip(SPANS, widths):
+            cw = width * unit - 0.5
+            cell(ax, base, 3.4, cw, 3.4, SEG_COLOR[seg], str(seg), fontsize=9.4)
+            base += width * unit
+    ax.text(50, 1.1,
+            "segment 2 is the readout, replayed inside the TR; segment 1 is "
+            "one delay serving two different waits",
+            ha="center", va="center", fontsize=10.4, color=INK, style="italic")
 
     fig.tight_layout(pad=0.5)
     OUT_DIR.mkdir(parents=True, exist_ok=True)

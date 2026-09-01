@@ -11,14 +11,19 @@ Usage:
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import matplotlib
 
 matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-import numpy as np
-from matplotlib.patches import FancyArrowPatch, FancyBboxPatch, Rectangle
+import matplotlib.pyplot as plt  # noqa: E402
+import numpy as np  # noqa: E402
+from matplotlib.patches import FancyArrowPatch, FancyBboxPatch, Rectangle  # noqa: E402
+
+from schematic import data_extent, fit_text  # noqa: E402
 
 ASSETS = Path(__file__).resolve().parents[1] / "explanations" / "assets"
 
@@ -71,16 +76,18 @@ def box(ax, x, y, w, h, colour, *, title=None, body=None, fill="white",
             facecolor=fill, edgecolor=colour, lw=lw, alpha=alpha, zorder=2,
         )
     )
-    top = y + h
+    pad_x, pad_y = 0.045 * w, 0.10 * h
+    top = y + h - pad_y
     if title is not None:
-        top -= 1.8
-        ax.text(x + w / 2, top, title, ha="center", va="top",
-                fontsize=title_size, color=colour, fontweight="bold", zorder=3)
-        top -= 2.4
+        title_art = fit_text(ax, x + w / 2, top, title, width=w - 2 * pad_x,
+                             fontsize=title_size, wrap=False, color=colour,
+                             fontweight="bold", ha="center", va="top", zorder=3)
+        top -= data_extent(ax, title_art)[1] + 0.6 * pad_y
     if body is not None:
-        ax.text(x + w / 2, top if title else y + h - 1.8, body,
-                ha="center", va="top", fontsize=body_size, color=INK,
-                linespacing=1.45, zorder=3, **(MONO if mono else {}))
+        fit_text(ax, x + w / 2, top, body, width=w - 2 * pad_x,
+                 height=top - y - pad_y, fontsize=body_size,
+                 ha="center", va="top", color=INK, linespacing=1.45, zorder=3,
+                 **(MONO if mono else {}))
     return x + w / 2, y + h / 2
 
 
@@ -310,81 +317,92 @@ def pulseg_mapping():
 
 def segmentation_rules():
     """Where a boundary is allowed, and where one is placed."""
-    fig, ax = canvas(8.6, 5.6, ymax=56)
+    fig, ax = canvas(9.0, 6.6, ymax=62)
+    ax.set_ylim(-11.0, 70.0)
 
-    x0, w, y = 4.0, 9.2, 30.0
-    t = np.linspace(0.0, 1.0, 60)
-    trap = np.clip(np.minimum(t / 0.25, (1.0 - t) / 0.25), 0.0, 1.0)
+    x0, w = 6.0, 10.4
+    nblk = 8
+    t = np.linspace(0.0, 1.0, 80)
 
-    # amplitude, has_rf, has_adc, ends_at_zero
-    blocks = [
-        (0.0, 1, 0, 1),
-        (0.6, 0, 0, 1),
-        (1.0, 0, 1, 0),
-        (-0.5, 0, 0, 1),
-        (0.0, 1, 0, 1),
-        (0.6, 0, 0, 1),
-        (1.0, 0, 1, 0),
-        (-0.5, 0, 0, 1),
-    ]
-    for k, (amp, has_rf, has_adc, _) in enumerate(blocks):
-        x = x0 + k * w
-        if k in (2, 6):
-            ramp = np.clip(t / 0.15, 0.0, 1.0)
-            ax.plot(x + 0.3 + (w - 0.6) * t, y + 6.0 * ramp, color=GREEN,
-                    lw=2.0)
-        elif k in (3, 7):
-            # The rewinder picks the readout up where it left off, so the
-            # seam before it carries a live gradient and cannot be cut.
-            rew = np.interp(t, [0.0, 0.25, 0.75, 1.0], [1.0, -0.5, -0.5, 0.0])
-            ax.plot(x + 0.3 + (w - 0.6) * t, y + 6.0 * rew, color=GREEN, lw=2.0)
-        elif amp:
-            ax.plot(x + 0.3 + (w - 0.6) * t, y + 6.0 * amp * trap,
-                    color=GREEN, lw=2.0)
-        ax.plot([x, x + w], [y, y], color=MUTED, lw=0.8)
-        if has_rf:
-            ax.plot(x + 0.3 + (w - 0.6) * t, y + 5.0 * np.exp(-30 * (t - 0.35) ** 2),
-                    color=BLUE, lw=2.0)
-            ax.text(x + w / 2, y + 13.0, "RF", ha="center", va="bottom",
+    def trap(rise=0.22, fall=0.22):
+        return np.clip(np.minimum(t / rise, (1.0 - t) / fall), 0.0, 1.0)
+
+    #: One shot: excite under a slice select that runs straight into its
+    #: rephaser, prewind, read, rewind.  Per axis, per block, the samples the
+    #: axis takes across the block -- the seam test reads only the two ends.
+    zero = np.zeros_like(t)
+    slice_sel = np.interp(t, [0.0, 0.18, 1.0], [0.0, 1.0, 1.0])
+    slice_reph = np.interp(t, [0.0, 0.18, 0.34, 0.72, 1.0], [1.0, 0.0, -0.62, -0.62, 0.0])
+    prewind = -0.7 * trap()
+    encode = 0.85 * trap()
+    read_up = np.interp(t, [0.0, 0.30, 1.0], [0.0, 1.0, 1.0])
+    read_down = np.interp(t, [0.0, 0.22, 0.42, 0.80, 1.0], [1.0, 0.0, -0.75, -0.75, 0.0])
+    spoil = 0.9 * trap(0.28, 0.28)
+
+    shot = {
+        "x": [zero, prewind, read_up, read_down],
+        "y": [zero, encode, zero, -encode],
+        "z": [slice_sel, slice_reph, zero, spoil],
+    }
+
+    rows = [("$G_x$", "x", 44.0), ("$G_y$", "y", 32.0), ("$G_z$", "z", 20.0)]
+    amp = 4.6
+    for label, axis, y in rows:
+        ax.plot([x0 - 1.0, x0 + nblk * w + 1.0], [y, y], color=MUTED, lw=0.7)
+        ax.text(x0 - 2.0, y, label, ha="right", va="center", fontsize=FS_LABEL,
+                color=INK)
+        for k in range(nblk):
+            g = shot[axis][k % 4]
+            ax.plot(x0 + k * w + 0.25 + (w - 0.5) * t, y + amp * g, color=GREEN,
+                    lw=1.9)
+
+    # RF and ADC, on their own rows above and below the three axes.
+    for k in range(nblk):
+        xk = x0 + k * w
+        if k % 4 == 0:
+            ax.plot(xk + 0.25 + (w - 0.5) * t,
+                    53.0 + 4.4 * np.exp(-32 * (t - 0.4) ** 2), color=BLUE, lw=1.9)
+            ax.text(xk + w / 2, 58.6, "RF", ha="center", va="bottom",
                     fontsize=FS_SMALL, color=BLUE, fontweight="bold")
-        if has_adc:
-            ax.add_patch(Rectangle((x + 0.3, y - 4.0), w - 0.6, 2.4,
-                                   facecolor=ORANGE, alpha=0.6,
-                                   edgecolor="none"))
-            ax.text(x + w / 2, y - 5.2, "ADC", ha="center", va="top",
+        if k % 4 == 2:
+            ax.add_patch(Rectangle((xk + 0.5, 12.6), w - 1.0, 2.4,
+                                   facecolor=ORANGE, alpha=0.6, edgecolor="none"))
+            ax.text(xk + w / 2, 11.8, "ADC", ha="center", va="top",
                     fontsize=FS_SMALL, color=ORANGE, fontweight="bold")
 
-    ax.text(x0, y + 18.0, "one TR of the block table", fontsize=FS_LABEL,
-            color=INK, fontweight="bold", va="bottom")
+    ax.text(x0 - 2.0, 65.0, "one TR of the block table", fontsize=FS_LABEL,
+            color=INK, fontweight="bold", va="bottom", ha="left")
 
-    # Legal joins: every seam where both sides sit at zero.
-    legal = [0, 1, 2, 4, 5, 6, 8]
-    for k in legal:
+    # The seam test, read across all three axes at once.
+    ys = 7.0
+    for k in range(nblk + 1):
         xs = x0 + k * w
-        ax.plot([xs], [y - 9.5], marker="v", color=GREEN, ms=7)
-    for k in (3, 7):
-        xs = x0 + k * w
-        ax.plot([xs], [y - 9.5], marker="x", color=RED, ms=8, mew=2.0)
-    ax.text(x0, y - 13.0, "▾ a legal join — both sides at zero gradient      "
-            "✕ live gradient, no cut possible", ha="left", va="top",
-            fontsize=FS_BODY, color=INK)
+        live = k % 4 in (1, 3)
+        if live:
+            ax.plot([xs], [ys], marker="x", color=RED, ms=8, mew=2.0)
+            culprit = "$G_z$ live" if k % 4 == 1 else "$G_x$ live"
+            ax.text(xs, ys - 2.2, culprit, ha="center", va="top",
+                    fontsize=FS_SMALL, color=RED)
+        else:
+            ax.plot([xs], [ys], marker="v", color=GREEN, ms=7)
+        ax.plot([xs, xs], [ys + 1.6, 57.0], color="#dfe1e4", lw=0.7, zorder=0)
 
-    # The cuts actually taken: the last legal join before each RF.
-    for k in (0, 4):
+    # The cuts actually taken: the last legal seam before each excitation.
+    for k in (0, 4, 8):
         xs = x0 + k * w
-        ax.annotate("", xy=(xs, y + 16.0), xytext=(xs, y - 7.0),
+        ax.annotate("", xy=(xs, 62.0), xytext=(xs, ys + 1.0),
                     arrowprops={"arrowstyle": "-", "color": PURPLE, "lw": 2.0,
                                 "linestyle": (0, (5, 3))})
-    ax.text(x0 + 8 * w + 1.0, y + 3.0, "cuts fall\nbefore the RF",
-            ha="left", va="center", fontsize=FS_BODY, color=PURPLE,
-            linespacing=1.4)
+    ax.text(x0 + nblk * w + 1.5, 62.0, "the cuts", ha="left", va="center",
+            fontsize=FS_BODY, color=PURPLE)
 
-    ax.text(50.0, 1.0,
-            "A boundary is where the sequencer can stop one prepared unit and "
-            "start the next, so it has to\nsit at zero gradient. Among those, "
-            "the cut is placed at the last one before each excitation.",
-            ha="center", va="bottom", fontsize=FS_BODY, color=INK,
-            style="italic", linespacing=1.5)
+    ax.text(x0 - 2.0, -10.0,
+            "\u25be  all three axes within 100 Hz/m of zero on both sides "
+            "\u2014 a legal seam\n"
+            "\u2715  one axis still live \u2014 no cut possible, whatever the "
+            "other two are doing",
+            ha="left", va="bottom", fontsize=FS_BODY, color=INK,
+            linespacing=1.6)
     return save(fig, "segments/segmentation_rules.png")
 
 
@@ -456,60 +474,106 @@ def where_checks_run():
 
 
 def vector_limit():
-    """Two axes inside their own limit, over it in combination."""
-    fig, (ax_v, ax_c) = plt.subplots(
-        1, 2, figsize=(8.6, 5.33), gridspec_kw={"width_ratios": [1.0, 1.25]}
-    )
+    """The vector amplitude limit, and the two places slew can be broken."""
+    fig = plt.figure(figsize=(9.2, 6.0), layout="constrained")
+    gs = fig.add_gridspec(2, 2, width_ratios=[1.0, 1.35],
+                          height_ratios=[1.25, 1.0])
+    ax_v = fig.add_subplot(gs[:, 0])
+    ax_g = fig.add_subplot(gs[0, 1])
+    ax_d = fig.add_subplot(gs[1, 1], sharex=ax_g)
 
     # -- (a) the vector limit ---------------------------------------------
     gmax = 40.0
     th = np.linspace(0, np.pi / 2, 200)
-    ax_v.plot(gmax * np.cos(th), gmax * np.sin(th), color=RED, lw=2.0,
-              label="the system limit, 40 mT/m")
+    ax_v.plot(gmax * np.cos(th), gmax * np.sin(th), color=RED, lw=2.0)
     ax_v.add_patch(Rectangle((0, 0), 35, 35, facecolor=GREEN, alpha=0.12,
                              edgecolor=GREEN, lw=1.4, ls="--"))
     ax_v.plot([0, 35], [0, 35], color=BLUE, lw=2.2)
     ax_v.plot(35, 35, "o", color=BLUE, ms=9)
     ax_v.annotate("35 on x and 35 on y\nis 49 mT/m", xy=(35, 35),
-                  xytext=(17, 44), fontsize=FS_BODY, color=BLUE,
+                  xytext=(12, 44), fontsize=FS_SMALL, color=BLUE,
                   arrowprops={"arrowstyle": "->", "color": BLUE, "lw": 1.2})
-    ax_v.text(23, 5, "per-axis box\n(35 mT/m each)", fontsize=FS_SMALL,
-              color=GREEN)
-    ax_v.set_xlim(0, 56)
+    ax_v.text(20.0, 3.0, "per-axis box\n(35 mT/m each)", fontsize=FS_SMALL,
+              color=GREEN, ha="center", va="bottom")
+    ax_v.text(38.0, 30.0, "the system limit\n40 mT/m", fontsize=FS_SMALL,
+              color=RED, ha="left", va="center")
+    ax_v.set_xlim(0, 60)
     ax_v.set_ylim(0, 56)
     ax_v.set_aspect("equal")
     ax_v.set_xlabel("$G_x$  [mT/m]")
     ax_v.set_ylabel("$G_y$  [mT/m]")
-    ax_v.set_title("(a) the limit is on the vector", fontsize=FS_TITLE, loc="left")
-    for sp in ("top", "right"):
-        ax_v.spines[sp].set_visible(False)
+    ax_v.set_title("(a) the vector limit", fontsize=FS_TITLE, loc="left")
 
-    # -- (b) the seam between two blocks ----------------------------------
-    t1 = np.array([0.0, 0.2, 1.0, 1.2])
-    g1 = np.array([0.0, 20.0, 20.0, 12.0])
-    t2 = np.array([1.2, 1.4, 2.2, 2.4])
-    ax_c.plot(t1, g1, color=BLUE, lw=2.4)
-    ax_c.plot(t2, np.array([0.0, 18.0, 18.0, 0.0]), color=ORANGE, lw=2.4)
-    ax_c.plot([1.2, 1.2], [12.0, 0.0], color=RED, lw=2.4, ls=":")
-    ax_c.plot(1.2, 12.0, "o", color=BLUE, ms=8)
-    ax_c.plot(1.2, 0.0, "o", color=ORANGE, ms=8)
-    ax_c.axvline(1.2, color=MUTED, lw=1.0, ls="--")
-    ax_c.annotate("block n ends at 12 mT/m,\nblock n+1 starts at 0",
-                  xy=(1.2, 6.0), xytext=(1.42, 9.0), fontsize=FS_BODY,
-                  color=RED, arrowprops={"arrowstyle": "->", "color": RED,
-                                         "lw": 1.2})
-    ax_c.text(0.05, 22.0, "block n", fontsize=FS_BODY, color=BLUE)
-    ax_c.text(1.9, 20.0, "block n+1", fontsize=FS_BODY, color=ORANGE)
-    ax_c.set_xlim(-0.05, 2.9)
-    ax_c.set_ylim(-2.0, 26.0)
-    ax_c.set_xlabel("time  [ms]")
-    ax_c.set_ylabel("$G_x$  [mT/m]")
-    ax_c.set_title("(b) a block boundary is not a boundary for the gradient",
+    # -- (b) and (c) one criterion, two places it breaks -------------------
+    #
+    # Block n was designed against a system that allows 200 T/m/s and is being
+    # played on one that allows 170, so its own ramp is already illegal -- an
+    # interior failure, inside a single waveform. It then ends at 6 mT/m where
+    # its neighbour starts at 0, which is the same criterion broken at the
+    # seam. Both are read against one line on the lower axis.
+    max_slew = 170.0        # T/m/s, the system it is played on
+    design_slew = 200.0     # T/m/s, the system it was designed against
+
+    tn = np.array([0.00, 0.30, 0.80, 0.86, 1.10])
+    gn = np.array([0.00, 18.0, 18.0, 6.00, 6.00])
+    tp = np.array([1.10, 1.35, 1.85, 2.10])
+    gp = np.array([0.00, 16.0, 16.0, 0.00])
+
+    ax_g.plot(tn, gn, color=BLUE, lw=2.4)
+    ax_g.plot(tp, gp, color=ORANGE, lw=2.4)
+    ax_g.plot([1.10, 1.10], [6.0, 0.0], color=RED, lw=2.4, ls=":")
+    ax_g.plot(1.10, 6.0, "o", color=BLUE, ms=7)
+    ax_g.plot(1.10, 0.0, "o", color=ORANGE, ms=7)
+    ax_g.plot([0.80, 0.86], [18.0, 6.0], color=RED, lw=3.0, zorder=5)
+    ax_g.text(0.03, 19.6, "block n", fontsize=FS_SMALL, color=BLUE)
+    ax_g.text(1.52, 17.4, "block n+1", fontsize=FS_SMALL, color=ORANGE)
+    ax_g.set_ylim(-1.5, 24.0)
+    ax_g.set_ylabel("$G_x$  [mT/m]")
+    ax_g.set_title("(b) slew: two places one criterion breaks",
                    fontsize=FS_TITLE, loc="left")
-    for sp in ("top", "right"):
-        ax_c.spines[sp].set_visible(False)
+    plt.setp(ax_g.get_xticklabels(), visible=False)
 
-    fig.tight_layout(pad=0.8)
+    # the same waveform as the quantity actually checked
+    def steps(t, g):
+        out_t, out_s = [], []
+        for i in range(len(t) - 1):
+            dt = t[i + 1] - t[i]
+            s = abs(g[i + 1] - g[i]) * 1e-3 / (dt * 1e-3) if dt > 0 else 0.0
+            out_t += [t[i], t[i + 1]]
+            out_s += [s, s]
+        return np.array(out_t), np.array(out_s)
+
+    st, ss = steps(tn, gn)
+    ax_d.plot(st, ss, color=BLUE, lw=2.0)
+    st, ss = steps(tp, gp)
+    ax_d.plot(st, ss, color=ORANGE, lw=2.0)
+    ax_d.axhline(max_slew, color=RED, lw=1.6, ls="--")
+    ax_d.text(0.02, max_slew + 10, f"max_slew = {max_slew:.0f} T/m/s",
+              fontsize=FS_SMALL, color=RED, ha="left", va="bottom")
+
+    ax_d.annotate(f"interior: the ramp's own slew is {design_slew:.0f} T/m/s —\n"
+                  "legal on the system it was designed against,\nnot on this one",
+                  xy=(0.845, design_slew), xytext=(0.02, 300),
+                  fontsize=FS_SMALL, color=RED,
+                  arrowprops={"arrowstyle": "->", "color": RED, "lw": 1.1})
+    ax_d.annotate("seam: a 6 mT/m step across\none raster tick — off scale",
+                  xy=(1.12, 235), xytext=(1.28, 95),
+                  fontsize=FS_SMALL, color=RED,
+                  arrowprops={"arrowstyle": "->", "color": RED, "lw": 1.1})
+    ax_d.plot([1.10, 1.10], [0, 250], color=RED, lw=2.4, ls=":")
+    ax_d.plot(1.10, 250, "^", color=RED, ms=7)
+
+    ax_d.set_ylim(0, 380)
+    ax_d.set_yticks([0, 100, max_slew, 200])
+    ax_d.set_yticklabels(["0", "100", "170", "200"])
+    ax_d.set_xlim(-0.03, 2.20)
+    ax_d.set_xlabel("time  [ms]")
+    ax_d.set_ylabel("$|dG/dt|$  [T/m/s]")
+
+    for ax in (ax_v, ax_g, ax_d):
+        for sp in ("top", "right"):
+            ax.spines[sp].set_visible(False)
+
     return save(fig, "gradient_slew/vector_and_seam.png")
 
 
@@ -520,7 +584,7 @@ def vector_limit():
 
 def conversion_stages():
     """The stages between a file arriving and the first block playing."""
-    fig, ax = canvas(8.6, 6.4, ymax=64)
+    fig, ax = canvas(8.6, 7.2, ymax=72)
 
     stages = [
         ("parse", "text or binary into raw blocks and shapes",
@@ -531,11 +595,13 @@ def conversion_stages():
          "per block, integer work", GREEN),
         ("segment", "the TR partitioned into reusable runs",
          "per TR block", GREEN),
+        ("check", "amplitude, slew, timing, PNS, resonance",
+         "per TR window", RED),
         ("cache", "write the resolved tables beside the file",
          "paid once per file", ORANGE),
     ]
     h, gap, x0, w = 8.6, 2.0, 2.0, 96.0
-    y = 62.0
+    y = 70.0
     for k, (name, body, cost, colour) in enumerate(stages):
         y -= h
         box(ax, x0, y, w, h, colour, title=None, body=None)
@@ -548,44 +614,77 @@ def conversion_stages():
         if k < len(stages) - 1:
             arrow(ax, (x0 + w / 2, y), (x0 + w / 2, y - gap), MUTED)
         y -= gap
-    ax.text(50, 1.0, "Every stage after the first is linear in the block table "
-            "and pays nothing per waveform;\nthe cache turns the whole column "
-            "into a read on the next download.",
+    ax.text(50, 1.0, "Everything above the check is linear in the block table "
+            "and pays nothing per waveform.\nThe check is paid per waveform and "
+            "per window, and it dominates the column.",
             ha="center", va="bottom", fontsize=FS_BODY, color=INK,
             style="italic", linespacing=1.5)
     return save(fig, "conversion/stages.png")
 
 
 def raster_alignment():
-    """A time the sequencer cannot address, and the one it can."""
-    fig, ax = plt.subplots(figsize=(8.6, 3.3))
+    """A time the sequencer cannot address, and the one the file hides."""
+    fig, (ax_a, ax_b) = plt.subplots(
+        2, 1, figsize=(8.6, 5.4), gridspec_kw={"height_ratios": [1.0, 1.25]}
+    )
 
-    raster = 4.0
-    ticks = np.arange(0, 33, raster)
-    ax.vlines(ticks, 0.0, 1.0, color=MUTED, lw=1.0)
-    ax.hlines(0.0, -1.0, 33.0, color=MUTED, lw=1.2)
-    for t in ticks:
-        ax.text(t, -0.22, f"{int(t)}", ha="center", va="top",
-                fontsize=FS_SMALL, color=MUTED, **MONO)
-    ax.text(16.0, -0.62, "gradient raster — 4 µs on this system",
-            ha="center", va="top", fontsize=FS_BODY, color=MUTED)
+    def grid(ax, raster, stop, y, label, *, color=MUTED, label_every=1):
+        ticks = np.arange(0, stop + raster / 2, raster)
+        ax.vlines(ticks, y, y + 0.62, color=color, lw=1.0)
+        ax.hlines(y, -1.0, stop + 1.0, color=color, lw=1.2)
+        for k, tick in enumerate(ticks):
+            if k % label_every:
+                continue
+            ax.text(tick, y - 0.44, f"{int(tick)}", ha="center", va="top",
+                    fontsize=FS_SMALL, color=color, **MONO)
+        ax.text(stop + 3.0, y + 0.3, label, ha="left", va="center",
+                fontsize=FS_BODY, color=color)
 
-    ax.add_patch(Rectangle((12.0, 1.5), 16.0, 1.0, facecolor=GREEN,
-                           alpha=0.35, edgecolor=GREEN, lw=1.6))
-    ax.plot([12.0], [2.0], "o", color=GREEN, ms=8)
-    ax.text(30.0, 2.0, "starts at 12 µs — a multiple of the raster",
-            ha="left", va="center", fontsize=FS_BODY, color=GREEN)
+    # -- (a) the grid test -------------------------------------------------
+    grid(ax_a, 4.0, 32.0, 0.0, "the gradient raster on this system, 4 µs")
+    ax_a.add_patch(Rectangle((12.0, 1.4), 16.0, 0.9, facecolor=GREEN,
+                             alpha=0.35, edgecolor=GREEN, lw=1.6))
+    ax_a.plot([12.0], [1.85], "o", color=GREEN, ms=8)
+    ax_a.text(29.5, 1.85, "starts at 12 µs — a multiple of the raster",
+              ha="left", va="center", fontsize=FS_BODY, color=GREEN)
+    ax_a.add_patch(Rectangle((14.0, 2.7), 16.0, 0.9, facecolor=RED,
+                             alpha=0.30, edgecolor=RED, lw=1.6))
+    ax_a.plot([14.0], [3.15], "o", color=RED, ms=8)
+    ax_a.text(31.5, 3.15, "starts at 14 µs — no instruction begins there",
+              ha="left", va="center", fontsize=FS_BODY, color=RED)
+    ax_a.set_xlim(-2.0, 92.0)
+    ax_a.set_ylim(-0.9, 4.1)
+    ax_a.axis("off")
+    ax_a.set_title("(a) an event may start where the raster does",
+                   fontsize=FS_TITLE, loc="left")
 
-    ax.add_patch(Rectangle((14.0, 3.0), 16.0, 1.0, facecolor=RED, alpha=0.30,
-                           edgecolor=RED, lw=1.6))
-    ax.plot([14.0], [3.5], "o", color=RED, ms=8)
-    ax.text(30.0, 3.5, "starts at 14 µs — the hardware cannot begin there",
-            ha="left", va="center", fontsize=FS_BODY, color=RED)
+    # -- (b) the raster comparison does not catch it -----------------------
+    grid(ax_b, 5.0, 30.0, 2.4, "the raster the FILE declares, 5 µs",
+         color=GREEN, label_every=2)
+    grid(ax_b, 10.0, 30.0, 0.0, "the raster it is PLAYED on, 10 µs", color=RED)
+    ax_b.plot([15.0], [2.4], "o", color=GREEN, ms=9, zorder=5)
+    ax_b.plot([15.0], [0.0], "o", color=RED, ms=9, zorder=5)
+    ax_b.plot([15.0, 15.0], [0.0, 2.4], color=MUTED, lw=1.1, ls="--", zorder=3)
+    ax_b.annotate("a 15 µs event\nsits on the declared grid",
+                  xy=(15.0, 2.62), xytext=(19.5, 3.6), fontsize=FS_SMALL,
+                  color=GREEN,
+                  arrowprops={"arrowstyle": "->", "color": GREEN, "lw": 1.1})
+    ax_b.annotate("and falls between the real ticks",
+                  xy=(15.0, -0.12), xytext=(15.0, -1.7), fontsize=FS_SMALL,
+                  color=RED, ha="center",
+                  arrowprops={"arrowstyle": "->", "color": RED, "lw": 1.1})
+    ax_b.text(-2.0, -2.7,
+              "the collection check compares the two rasters and accepts a "
+              "file laid out on a finer one —\nso this passes it. Judging every "
+              "time against the raster it is played on is what does not.",
+              ha="left", va="top", fontsize=FS_BODY, color=INK)
+    ax_b.set_xlim(-2.0, 92.0)
+    ax_b.set_ylim(-3.7, 4.5)
+    ax_b.axis("off")
+    ax_b.set_title("(b) a finer declared raster hides an unplayable time",
+                   fontsize=FS_TITLE, loc="left")
 
-    ax.set_xlim(-2.0, 78.0)
-    ax.set_ylim(-1.6, 4.6)
-    ax.axis("off")
-    fig.tight_layout(pad=0.4)
+    fig.tight_layout(pad=0.5)
     return save(fig, "gradient_slew/raster_alignment.png")
 
 
@@ -679,7 +778,7 @@ def library_vs_scan():
     for k in range(1, n):
         xs = x0 + k * (w + gap) - gap / 2
         ax.plot([xs, xs], [y - 3.0, y - 1.4], color=RED, lw=1.0)
-    ax.text(x0, y - 5.0, "continuity — one comparison per seam, so it walks "
+    ax.text(x0, y - 5.0, "the seam — one comparison per boundary, at the "
             "the table", ha="left", va="top", fontsize=FS_BODY, color=RED)
 
     ly = 8.0
@@ -692,10 +791,91 @@ def library_vs_scan():
     ax.text(x0, ly + 7.4, "the gradient library — four entries",
             fontsize=FS_LABEL, color=INK, fontweight="bold", va="bottom")
     ax.text(x0, ly - 2.0,
-            "amplitude and slew — one evaluation per entry, whatever the "
+            "amplitude and interior slew — one evaluation per entry, whatever the "
             "scan does with it",
             ha="left", va="top", fontsize=FS_BODY, color=BLUE)
     return save(fig, "gradient_checks/library_vs_scan.png")
+
+
+
+def shift_phase_split():
+    """Why a readout's share of a shift is the same for every readout."""
+    fig, ax = canvas(9.0, 4.4, ymax=52)
+    ax.set_ylim(0.0, 52.0)
+
+    t = np.linspace(0.0, 1.0, 220)
+    swept = 1.9 * (t - 0.5) + 0.9 * np.sin(2.4 * np.pi * (t - 0.5)) * (t - 0.5)
+
+    x0, w = 8.0, 24.0
+    origins = (16.0, 8.0, 0.0, -8.0)
+
+    # -- left: the whole phase, one curve per encode ---------------------
+    for k, k0 in enumerate(origins):
+        ax.plot(x0 + w * t, 30.0 + 0.42 * (k0 + 6.0 * swept),
+                color=BLUE, lw=1.6, alpha=1.0 if k == 0 else 0.45)
+    ax.text(x0 + w / 2, 47.0,
+            r"$\Delta r \cdot k_0 \;+\; \mathrm{swept}(t)$",
+            ha="center", va="bottom", fontsize=FS_LABEL, color=BLUE)
+    ax.text(x0 + w / 2, 18.0, "four phase encodes,\nfour curves",
+            ha="center", va="top", fontsize=FS_BODY, color=INK,
+            linespacing=1.5)
+
+    # -- right: the same curves once the origin is taken out --------------
+    x1 = 62.0
+    for k in range(len(origins)):
+        ax.plot(x1 + w * t, 30.0 + 0.42 * (6.0 * swept),
+                color=GREEN, lw=1.6, alpha=1.0 if k == 0 else 0.45)
+    ax.text(x1 + w / 2, 47.0, r"$\mathrm{swept}(t)$",
+            ha="center", va="bottom", fontsize=FS_LABEL, color=GREEN)
+    ax.text(x1 + w / 2, 18.0, "the same four,\nexactly on top of each other",
+            ha="center", va="top", fontsize=FS_BODY, color=INK,
+            linespacing=1.5)
+
+    arrow(ax, (x0 + w + 3.0, 30.0), (x1 - 3.0, 30.0), MUTED)
+    ax.text((x0 + w + x1) / 2, 33.0,
+            "the residual and the RF\nshape are differences,\n"
+            r"so $\Delta r \cdot k_0$ cancels",
+            ha="center", va="bottom", fontsize=FS_SMALL, color=MUTED,
+            linespacing=1.5)
+
+    ax.text(50.0, 1.0,
+            "The entry point is where the block sits in k-space; the swept "
+            "part is what its own gradients do.\nOnly the second survives "
+            "into what the event stores, and that depends on the waveform "
+            "rows alone \u2014 so one plan serves the whole table.",
+            ha="center", va="bottom", fontsize=FS_BODY, color=INK,
+            style="italic", linespacing=1.5)
+    return save(fig, "transform_fov/phase_split.png")
+
+
+def base_trajectory_two_jobs():
+    """The one stored row, and the two things read off it."""
+    fig, ax = canvas(9.0, 4.6, ymax=48)
+
+    box(ax, 2.0, 18.0, 26.0, 16.0, GREEN,
+        title="the stored row",
+        body="the readout's k before its "
+             "amplitude and its rotation, "
+             "normalised by the window",
+        title_size=FS_BODY, body_size=FS_SMALL)
+
+    box(ax, 40.0, 27.0, 57.0, 18.0, ORANGE,
+        title="finish the shift",
+        body="scale by the instance amplitude, turn by the block's "
+             "rotation, dot with the prescribed offset — one phase "
+             "per sample, the number a baked shift would have stored",
+        title_size=FS_BODY, body_size=FS_SMALL)
+
+    box(ax, 40.0, 4.0, 57.0, 18.0, BLUE,
+        title="report the k-space",
+        body="the same scaling and the same rotation, plus the block's "
+             "k origin — the trajectory a non-Cartesian reconstruction "
+             "grids on, with no gradients re-integrated",
+        title_size=FS_BODY, body_size=FS_SMALL)
+
+    arrow(ax, (28.5, 27.0), (39.0, 36.0), ORANGE, rad=-0.16)
+    arrow(ax, (28.5, 25.0), (39.0, 13.0), BLUE, rad=0.16)
+    return save(fig, "transform_fov/two_jobs.png")
 
 
 if __name__ == "__main__":
@@ -709,4 +889,6 @@ if __name__ == "__main__":
     raster_alignment()
     conversion_stages()
     base_trajectory_sharing()
+    shift_phase_split()
+    base_trajectory_two_jobs()
     library_vs_scan()

@@ -309,3 +309,64 @@ def test_from_file_accepts_mrd_transport_directly() -> None:
     correct = Gradunwarp.from_file(accessor, geometry)
 
     assert correct.coefficients.max_order == 9
+
+
+#: What `mrdserver::add_gradwarp_coefficients` (src/cpp/recon/sequence_cache.cpp)
+#: puts in the header, for the body coil of `refcode/recon/gradwarp/validation`.
+#: The console states its own coil this way; a reconstruction runs off the
+#: scanner, so the description travels instead of a path to the file.
+EMITTED_COIL_DESCRIPTION = (
+    "GRADWARPTYPE 1\n"
+    "SCALEX1 0.000000000e+00\n"
+    "SCALEX2 0.000000000e+00\n"
+    "SCALEX3 -1.674469968e-04\n"
+    "SCALEX4 0.000000000e+00\n"
+    "SCALEX5 -8.157819309e-08\n"
+    "SCALEX6 0.000000000e+00\n"
+    "SCALEX7 0.000000000e+00\n"
+    "SCALEX8 0.000000000e+00\n"
+    "SCALEX9 0.000000000e+00\n"
+    "SCALEX10 0.000000000e+00\n"
+    "SCALEY1 0.000000000e+00\n"
+    "SCALEY2 0.000000000e+00\n"
+    "SCALEY3 -1.426626986e-04\n"
+    "SCALEY4 0.000000000e+00\n"
+    "SCALEY5 -8.702937038e-08\n"
+    "SCALEY6 0.000000000e+00\n"
+    "SCALEY7 0.000000000e+00\n"
+    "SCALEY8 0.000000000e+00\n"
+    "SCALEY9 0.000000000e+00\n"
+    "SCALEY10 0.000000000e+00\n"
+    "SCALEZ1 0.000000000e+00\n"
+    "SCALEZ2 0.000000000e+00\n"
+    "SCALEZ3 -1.136897990e-04\n"
+    "SCALEZ4 0.000000000e+00\n"
+    "SCALEZ5 -1.055270982e-08\n"
+    "SCALEZ6 0.000000000e+00\n"
+    "SCALEZ7 0.000000000e+00\n"
+    "SCALEZ8 0.000000000e+00\n"
+    "SCALEZ9 0.000000000e+00\n"
+    "SCALEZ10 0.000000000e+00\n"
+    "DELTA 0.000000000e+00\n"
+)
+
+
+def test_the_header_carries_the_coil_description_in_the_syntax_it_is_parsed_in():
+    header = _legacy_mrd_header("gradient_coefficients", EMITTED_COIL_DESCRIPTION)
+
+    coefficients = GradientCoefficients.from_header(header)
+
+    assert coefficients.basis == "unnormalized"
+    assert coefficients.max_order == 9
+    # Third and fifth order on each axis, the only terms this coil states.
+    assert coefficients.alpha[0, 3, 1] == pytest.approx(-1.674470e-4 * 2.0 / 3.0)
+    assert coefficients.beta[1, 3, 1] == pytest.approx(-1.426627e-4 * 2.0 / 3.0)
+    assert coefficients.alpha[2, 3, 0] == pytest.approx(-1.136898e-4 * -2.0)
+    assert coefficients.alpha[0, 5, 1] == pytest.approx(-8.157819e-8 * 8.0 / 15.0)
+    assert coefficients.beta[1, 5, 1] == pytest.approx(-8.702937e-8 * 8.0 / 15.0)
+    assert coefficients.alpha[2, 5, 0] == pytest.approx(-1.055271e-8 * -8.0)
+
+
+def test_a_scan_that_never_stated_its_coil_says_so():
+    with pytest.raises(KeyError, match="gradient_coefficients"):
+        GradientCoefficients.from_header(_legacy_mrd_header("other", "value"))

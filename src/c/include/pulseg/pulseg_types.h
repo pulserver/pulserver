@@ -1016,7 +1016,7 @@ typedef struct pulseg_subseq_info
     int segment_offset;        /**< global segment index offset         */
     int num_adc_occurrences;   /**< ADC entries in label table          */
     int num_label_columns;     /**< label columns (vendor-dependent)    */
-    int num_canonical_trs;     /**< unique shot-ID combinations (>=1)   */
+    int num_canonical_trs;     /**< worst-case windows: one per shape group (>=1) */
     int num_gain_cal_readouts; /**< calibration readouts for APS2 gain cal (pislquant) */
     /** How many TR instances pulseg_get_tr_waveforms() can name for this
      *  subsequence: every TR the scanner plays.  Always >= 1. */

@@ -104,6 +104,15 @@ def box(ax, x, y, w, h, color, *, title, body, title_size=10.0, body_size=8.8):
     return x + w / 2, y + h / 2
 
 
+#: Room a `group` band's label needs inside its own top edge, in axes units.
+#: A box row opened above this runs into the label, which is a silent failure:
+#: the figure still renders. Both builders derive their first row from it.
+GROUP_LABEL_STRIP = 3.0
+
+#: Where the band that encloses the reasoning starts, relative to the head.
+GROUP_TOP = -3.0
+
+
 def group(ax, x, y, w, h, color, label):
     ax.add_patch(
         FancyBboxPatch(
@@ -323,7 +332,7 @@ def build_pns() -> Path:
     fig, ax = new_axes()
     y = draw_head(ax, PNS, "Stimulation: what one canonical TR is convolved from")
 
-    top = y - 6.0
+    top = y + GROUP_TOP - GROUP_LABEL_STRIP
     box(
         ax,
         4.5,
@@ -377,7 +386,7 @@ def build_pns() -> Path:
         "decompose — read the peak, and keep the worst group.",
     )
 
-    group(ax, 3, bot - 9.6, 94, y - 3.0 - (bot - 9.6), PNS,
+    group(ax, 3, bot - 9.6, 94, y + GROUP_TOP - (bot - 9.6), PNS,
           "a peak in time — no position is bounded on its own")
 
     ax.text(
@@ -405,7 +414,7 @@ def build_mech() -> Path:
     fig, ax = new_axes()
     y = draw_head(ax, MECH, "Acoustic: what one canonical TR is transformed from")
 
-    top = y - 4.0
+    top = y + GROUP_TOP - GROUP_LABEL_STRIP
     box(
         ax,
         4.5,
@@ -472,7 +481,7 @@ def build_mech() -> Path:
         "varying position, plus the truncated tail of every basis. Held against the band's threshold.",
     )
 
-    group(ax, 3, bot - 9.6, 94, y - 3.0 - (bot - 9.6), MECH,
+    group(ax, 3, bot - 9.6, 94, y + GROUP_TOP - (bot - 9.6), MECH,
           "a line spectrum — every position bounded on its own")
 
     ax.text(

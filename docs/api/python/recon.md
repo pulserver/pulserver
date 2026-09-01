@@ -101,8 +101,8 @@ a plugin reconstructing sorted k-space overrides no hook at all.
 ## Calibration
 
 Estimating what the reconstruction needs but the scan does not measure
-directly: coil sensitivities, and the point-spread function of a wave
-encoding.
+directly: coil sensitivities, the field the object sits in, and the
+point-spread function of a wave encoding.
 
 `NLINV` solves for the maps and the object together and is the better estimate
 for one image; `coil_maps_from_reference` reads them straight off a prescan and
@@ -115,6 +115,7 @@ maps read off one reference share a scale a per-image solve does not guarantee.
 
    calibration_extent
    coil_maps_from_reference
+   field_map
 ```
 
 ```{eval-rst}
@@ -125,7 +126,6 @@ maps read off one reference share a scale a per-image solve does not guarantee.
    NLINV
    NLINVPhysics
    NLINVResult
-   PhasePoleCorrection
    WavePSF
    WavePSFCalibration
    WavePSFResult

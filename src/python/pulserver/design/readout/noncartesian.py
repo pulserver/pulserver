@@ -120,6 +120,8 @@ class _RadialReadout(_ArmedReadout):
         One per name in ``labels``; a bare event when there is one.
     wait_te, wait_tr : DelayEvent
         Present only when a TE or TR longer than the minimum was asked for.
+    echo_spacing : float
+        Time between consecutive echoes (s), zero for a single-echo readout.
 
     Parameters
     ----------
@@ -158,7 +160,13 @@ class _RadialReadout(_ArmedReadout):
     spoiling_axis : {'z', 'x', 'y'}, optional
         Axis the spoiler is played on.
     n_echoes : int, optional
-        Times the spoke is replayed per repetition.
+        Times the path is replayed per repetition. Every echo traverses the
+        same k, so the train is one trajectory at a series of echo times: a
+        spoke is prephaser-through-rewinder in one waveform and already comes
+        back, and an arm that does not is bracketed between echoes by its own
+        rewinder and prewinder. ``echo_spacing`` is what separates them, and
+        each acquisition carries its own ``ECO``: a scan loop hands over a
+        whole arm, so the echo boundaries inside it are the readout's to count.
     explicit : bool, optional
         Write out one spoke per entry of ``angles`` instead of one base spoke.
     angles : array-like, optional
@@ -207,7 +215,7 @@ class _RadialReadout(_ArmedReadout):
         trigger: Any = None,
     ) -> None:
         n_echoes = _checked_layout(
-            n_echoes, spoiling_cycles, spoiling_axis, explicit, angles
+            n_echoes, spoiling_cycles, spoiling_axis, explicit, angles, labels
         )
         if fov <= 0 or int(matrix) < 2:
             raise ValueError("fov must be positive and matrix must be >= 2")
@@ -284,6 +292,13 @@ class _RadialReadout(_ArmedReadout):
         adc_labels = [
             pp.make_label(type="SET", label=name, value=0) for name in labels or ()
         ]
+        # The readout plays the train, so the readout writes the counter that
+        # indexes it: a scan loop hands over a whole arm and never sees the
+        # echo boundaries inside it.
+        echo_labels = [
+            pp.make_label(type="SET", label="ECO", value=i_echo)
+            for i_echo in range(n_echoes)
+        ]
         n_arms = len(gx) if isinstance(gx, list) else 1
 
         self.seq = pp.Sequence(system)
@@ -333,6 +348,7 @@ class _RadialReadout(_ArmedReadout):
                     _at(gy, i_arm),
                     adc,
                     *adc_labels,
+                    *([echo_labels[i_echo]] if n_echoes > 1 else []),
                     *(present(gz_reph) if not reph_on_wait and i_echo == 0 else ()),
                     *(_armed(trigger) if gz_pre is None else ()),
                 )
@@ -351,6 +367,7 @@ class _RadialReadout(_ArmedReadout):
         self._lay_out_arms(n_arms, wait_tr)
 
         self.echo_time = te_min + te_delay
+        self.echo_spacing = pp.calc_duration(_at(gx, 0)) if n_echoes > 1 else 0.0
         self.center = self.echo_time + rf_center
         self.duration = tr_min + tr_delay
         self.bandwidth_hz = 1.0 / dwell
@@ -525,6 +542,8 @@ class NonCartesianReadout(_ArmedReadout):
         Present only when a TE or TR longer than the minimum was asked for.
     trajectory : NonCartesianGradient
         The designed interleave, for its ``trajectory`` array and timings.
+    echo_spacing : float
+        Time between consecutive echoes (s), zero for a single-echo readout.
 
     Parameters
     ----------
@@ -598,7 +617,7 @@ class NonCartesianReadout(_ArmedReadout):
         trigger: Any = None,
     ) -> None:
         n_echoes = _checked_layout(
-            n_echoes, spoiling_cycles, spoiling_axis, explicit, angles
+            n_echoes, spoiling_cycles, spoiling_axis, explicit, angles, labels
         )
         arms = (
             [trajectory.rotated(float(angle)) for angle in np.atleast_1d(angles)]
@@ -654,6 +673,13 @@ class NonCartesianReadout(_ArmedReadout):
         adc_labels = [
             pp.make_label(type="SET", label=name, value=0) for name in labels or ()
         ]
+        # The readout plays the train, so the readout writes the counter that
+        # indexes it: a scan loop hands over a whole arm and never sees the
+        # echo boundaries inside it.
+        echo_labels = [
+            pp.make_label(type="SET", label="ECO", value=i_echo)
+            for i_echo in range(n_echoes)
+        ]
 
         self.seq = pp.Sequence(system)
 
@@ -679,6 +705,21 @@ class NonCartesianReadout(_ArmedReadout):
         _pre_floor = pp.make_delay(pre_span) if pre_span else None
         _rew_floor = pp.make_delay(rew_span) if rew_span else None
 
+        # Replaying an arm re-enters k where the last one left it, so an echo
+        # train has to come back to the head of the arm between echoes: the
+        # traversal's own rewinder unwinds it and its prewinder enters again.
+        # This bracket carries the in-plane halves only -- the partition
+        # encode, the slice rewinder and the end-of-TR spoiler bracket the
+        # repetition, not the echo, and replaying them would spoil the train.
+        echo_rew_span = _natural_span(arms, "rewinders", raster)
+        echo_pre_span = _natural_span(arms, "prewinders", raster)
+        gx_echo_rew, gy_echo_rew = _bracket(
+            arms, "rewinders", "left", echo_rew_span, system
+        )
+        gx_echo_pre, gy_echo_pre = _bracket(
+            arms, "prewinders", "right", echo_pre_span, system
+        )
+
         for i_arm in range(len(arms)):
             if gz is not None:
                 self.seq.add_block(rf, gz)
@@ -695,8 +736,27 @@ class NonCartesianReadout(_ArmedReadout):
                     *_armed(trigger),
                     _pre_floor,
                 )
-            for _ in range(n_echoes):
-                self.seq.add_block(_at(gx, i_arm), _at(gy, i_arm), adc, *adc_labels)
+            for i_echo in range(n_echoes):
+                if i_echo:
+                    if echo_rew_span:
+                        self.seq.add_block(
+                            *present(_at(gx_echo_rew, i_arm)),
+                            *present(_at(gy_echo_rew, i_arm)),
+                            pp.make_delay(echo_rew_span),
+                        )
+                    if echo_pre_span:
+                        self.seq.add_block(
+                            *present(_at(gx_echo_pre, i_arm)),
+                            *present(_at(gy_echo_pre, i_arm)),
+                            pp.make_delay(echo_pre_span),
+                        )
+                self.seq.add_block(
+                    _at(gx, i_arm),
+                    _at(gy, i_arm),
+                    adc,
+                    *adc_labels,
+                    *([echo_labels[i_echo]] if n_echoes > 1 else []),
+                )
             if _rew_floor is not None:
                 self.seq.add_block(
                     *present(_at(gx_rew, i_arm)),
@@ -717,6 +777,11 @@ class NonCartesianReadout(_ArmedReadout):
 
         self.trajectory = trajectory
         self.echo_time = echo_time
+        self.echo_spacing = (
+            pp.calc_duration(_at(gx, 0)) + echo_rew_span + echo_pre_span
+            if n_echoes > 1
+            else 0.0
+        )
         self.center = echo_time + rf_center
         self.duration = tr_min + tr_delay
         self.bandwidth_hz = 1.0 / float(adc.dwell)
@@ -1022,11 +1087,18 @@ class RosetteProjectionReadout(_RosetteReadout):
 # ======================================================================
 
 
-def _checked_layout(n_echoes, spoiling_cycles, spoiling_axis, explicit, angles) -> int:
+def _checked_layout(
+    n_echoes, spoiling_cycles, spoiling_axis, explicit, angles, labels=None
+) -> int:
     """Validate the arguments every non-Cartesian readout shares."""
     n_echoes = int(n_echoes)
     if n_echoes < 1:
         raise ValueError("n_echoes must be >= 1")
+    if n_echoes > 1 and "ECO" in (labels or ()):
+        raise ValueError(
+            "ECO counts the echoes of the train the readout itself plays, so it "
+            "is the readout that writes it; drop it from labels"
+        )
     if spoiling_cycles < 0:
         raise ValueError("spoiling_cycles must be >= 0")
     if spoiling_axis not in AXES:
@@ -1143,6 +1215,21 @@ def _share_time_grid(system, events):
         rebuilt.delay = base
         shared.append(rebuilt)
     return shared
+
+
+def _natural_span(arms, attribute, raster):
+    """Longest an arm's ``attribute`` bracket runs, on the block raster."""
+    return pp.ceil_to_raster(
+        max(
+            (
+                pp.calc_duration(*getattr(arm, attribute))
+                for arm in arms
+                if getattr(arm, attribute)
+            ),
+            default=0.0,
+        ),
+        raster,
+    )
 
 
 def _bracket(arms, attribute, alignment, span, system):

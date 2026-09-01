@@ -2,9 +2,11 @@
  * @file pulseg_pns_irnich.c
  * @brief The Irnich / den Boer rheobase-chronaxie PNS model.
  *
- * The response is the causal convolution of dG/dt with
+ * The response is the causal convolution of dG/dt with the nerve kernel
+ * c/(c+tau)^2 scaled by s_min = rheobase / alpha, each tap being that kernel
+ * integrated across its own sample interval,
  *
- *     k[i] = (dt / s_min) * c / (c + i*dt)^2,   s_min = rheobase / alpha
+ *     k[i] = c*dt / (s_min * (c + i*dt) * (c + (i+1)*dt))
  *
  * reported as a percentage of the stimulation threshold.  The `1/tau^2` tail
  * never reaches zero, so the kernel is truncated at
@@ -48,14 +50,28 @@ static int irnich_kernel_length(const pulseg_pns_irnich *ctx, float dt_us)
 
 /**
  * @brief Build the impulse response.
+ *
+ * Each tap is the kernel *integrated over its sample interval*, not sampled at
+ * the interval's left edge, because the signal it convolves is itself a bin
+ * integral: dG/dt on a raster is G differenced on that raster. In closed form,
+ *
+ *     int_{tau_i}^{tau_i + dt} c/(c+tau)^2 dtau = c*dt / ((c+tau_i)(c+tau_i+dt))
+ *
+ * written as the product rather than as the difference of two reciprocals,
+ * which cancels catastrophically once tau >> c. This is what makes the
+ * response a property of the waveform rather than of the raster it is
+ * evaluated on; the invariant is held by
+ * test_the_response_does_not_move_when_the_raster_is_halved.
+ *
  * @return Newly allocated kernel of @p len samples, or NULL on failure.
  */
 static float *irnich_build_kernel(const pulseg_pns_irnich *ctx, float dt_us, int len)
 {
     float *kernel;
-    float c_s;
-    float dt_s;
-    float s_min;
+    double c_s;
+    double dt_s;
+    double s_min;
+    double tau0;
     int i;
 
     if (len <= 0 || ctx->rheobase_t_per_m_per_s <= 0.0f || ctx->alpha <= 0.0f)
@@ -65,15 +81,14 @@ static float *irnich_build_kernel(const pulseg_pns_irnich *ctx, float dt_us, int
     if (!kernel)
         return NULL;
 
-    c_s = ctx->chronaxie_us * 1e-6f;
-    dt_s = dt_us * 1e-6f;
-    s_min = ctx->rheobase_t_per_m_per_s / ctx->alpha;
+    c_s = (double)ctx->chronaxie_us * 1e-6;
+    dt_s = (double)dt_us * 1e-6;
+    s_min = (double)ctx->rheobase_t_per_m_per_s / (double)ctx->alpha;
 
     for (i = 0; i < len; i++)
     {
-        float tau = (float)i * dt_s;
-        float denom = (c_s + tau) * (c_s + tau);
-        kernel[i] = (dt_s / s_min) * (c_s / denom);
+        tau0 = (double)i * dt_s;
+        kernel[i] = (float)(c_s * dt_s / (s_min * (c_s + tau0) * (c_s + tau0 + dt_s)));
     }
     return kernel;
 }

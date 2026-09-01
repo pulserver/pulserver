@@ -22,20 +22,21 @@ extern "C"
     /* ================================================================== */
 
     /**
-     * @brief Extract uniform-raster canonical-TR gradient waveforms for a subsequence.
+     * @brief Extract one worst-case canonical-TR gradient window for a subsequence.
      *
-     * Returns canonical TR gradient waveforms (gx, gy, gz) for the requested
-     * canonical TR index within the specified subsequence. The canonical TRs
-     * are defined as unique shot-index patterns across the imaging region (for
-     * degenerate prep/cooldown) or unique pass patterns (for non-degenerate
-     * prep/cooldown).
+     * Repetitions are grouped by the set of gradient waveforms they play, and
+     * each group gets one window: the positional-maximum envelope over the
+     * repetitions in that group, so at every block position the amplitude is
+     * the largest that position takes, with its sign. A caller that wants the
+     * loudest or strongest answer for the subsequence evaluates every index
+     * from 0 to pulseg_subseq_info::num_canonical_trs and takes the worst.
      *
      * The output arrays are allocated by the library and must be freed by the
      * caller via pulseg_tr_gradient_waveforms_free().
      *
      * @param[in]  coll             Loaded collection.
      * @param[in]  subseq_idx       Subsequence index (0-based).
-     * @param[in]  canonical_tr_idx Canonical TR index (0-based, within subsequence).
+     * @param[in]  canonical_tr_idx Shape-group index (0-based, within subsequence).
      * @param[out] waveforms        Output waveforms (caller frees).
      * @param[out] diag             Diagnostic on failure.
      * @return PULSEG_SUCCESS on success, negative error code on failure.

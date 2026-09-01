@@ -107,6 +107,7 @@ def main(
     n_gain_calibration_readouts: int | None = None,
     spoiling_cycles: float = 4.0,
     fat_saturation: bool = False,
+    sms: bool = False,
 ) -> pp.Sequence:
     """Create the main 2D EPI sequence.
 
@@ -298,7 +299,7 @@ def main(
     # (phase navigator plus single-band reference) then the blipped-CAIPI
     # imaging -- written as a linked collection, so it branches off before the
     # plain train is built.
-    if SMS_EXCITATION and n_bands > 1:
+    if sms and n_bands > 1:
         sms_kwargs = {
             "fov": fov,
             "n_x": n_x,
@@ -1647,6 +1648,7 @@ def protocol_kwargs(system: pp.Opts, protocol: dict[str, dict]) -> dict:
             params.param_int(prot, UIParam.NUM_FRAMES) if ENABLE_MULTIPHASE else 1
         ),
         fat_saturation=FAT_SATURATION,
+        sms=SMS_EXCITATION,
     )
 
 

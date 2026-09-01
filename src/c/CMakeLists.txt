@@ -47,6 +47,7 @@ set(PULSEG_SOURCES
     safety/pulseg_check_plan.c
     safety/pulseg_safety.c
     safety/pulseg_raster.c
+    safety/pulseg_pns_basis.c
     safety/pulseg_pns_memo.c
     safety/pulseg_pns_irnich.c
     safety/pulseg_pns_safe.c
