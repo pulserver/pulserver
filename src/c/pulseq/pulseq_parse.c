@@ -322,13 +322,15 @@ void pulseq__file_reset(pulseq_file *seq)
     {
         for (i = 0; i < seq->shapes_library_size; i++)
         {
-            PULSEQ_FREE(seq->shapes_library[i].samples);
+            if (!seq->shapes_borrowed)
+                PULSEQ_FREE(seq->shapes_library[i].samples);
             seq->shapes_library[i].samples = NULL;
             seq->shapes_library[i].num_uncompressed_samples = 0;
             seq->shapes_library[i].num_samples = 0;
         }
         PULSEQ_FREE(seq->shapes_library);
     }
+    seq->shapes_borrowed = 0;
     PULSEQ_FREE(seq->extension_lut);
     seq->extension_lut = NULL;
 
@@ -1933,6 +1935,8 @@ int pulseq_decompress_shape(pulseq_shape *result, const pulseq_shape *encoded, P
 
     if (!encoded || !result)
         return 0;
+    if (!encoded->samples && encoded->num_uncompressed_samples > 0)
+        return 0;
 
     packed = encoded->samples;
     num_packed = encoded->num_samples;
@@ -2122,7 +2126,7 @@ int pulseq__check_references(const pulseq_file *seq)
     return check_references(seq);
 }
 
-int pulseq_read_from_memory(pulseq_file *seq, const void *data, long size)
+static int read_from_memory(pulseq_file *seq, const void *data, long size, int borrow_shapes)
 {
     const unsigned char *bytes = (const unsigned char *)data;
     FILE *tmp;
@@ -2138,7 +2142,8 @@ int pulseq_read_from_memory(pulseq_file *seq, const void *data, long size)
             PULSEQ_FREE(seq->file_path);
             seq->file_path = NULL;
         }
-        return pulseq_read_binary_from_memory(seq, data, size);
+        return borrow_shapes ? pulseq_read_binary_from_memory_borrowing(seq, data, size)
+                             : pulseq_read_binary_from_memory(seq, data, size);
     }
 
     /* Text stays on the stream parser; the scale path is binary. */
@@ -2154,6 +2159,16 @@ int pulseq_read_from_memory(pulseq_file *seq, const void *data, long size)
     rc = pulseq_read_from_buffer(seq, tmp);
     fclose(tmp);
     return rc;
+}
+
+int pulseq_read_from_memory(pulseq_file *seq, const void *data, long size)
+{
+    return read_from_memory(seq, data, size, 0);
+}
+
+int pulseq_read_from_memory_borrowing(pulseq_file *seq, const void *data, long size)
+{
+    return read_from_memory(seq, data, size, 1);
 }
 
 int pulseq_read_from_buffer(pulseq_file *seq, FILE *f)

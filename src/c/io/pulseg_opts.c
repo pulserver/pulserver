@@ -56,6 +56,10 @@ void pulseg_opts_init_full(
     opts->vendor_section_write_fn = NULL;
     opts->vendor_section_ctx = NULL;
     opts->allow_variable_rf_amplitude = 1;
+    opts->parallel_for_fn = NULL;
+    opts->parallel_ctx = NULL;
+    opts->structure_only = 0;
+    opts->borrow_buffer_shapes = 0;
 }
 
 void pulseg_opts_init(

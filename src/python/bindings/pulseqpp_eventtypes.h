@@ -101,14 +101,26 @@ namespace pulseqpp_types
      * Pulseq's convention and what keeps a waveform and its negation one
      * shape rather than two.
      */
-    inline void normalise_grad(const double* values, int count, GradEvent& out)
+    /** Split @p values into a signed amplitude -- the largest magnitude,
+     *  carrying the sign of the first nonzero sample -- and the waveform
+     *  divided by it. Pass @p peak_abs when the largest magnitude is already
+     *  known (a negative value asks for it to be measured). */
+    inline void normalise_grad(
+        const double* values,
+        int count,
+        GradEvent& out,
+        double peak_abs = -1.0)
     {
-        double peak = 0.0;
-        for (int i = 0; i < count; ++i)
+        double peak = peak_abs;
+        if (peak < 0.0)
         {
-            const double m = std::fabs(values[i]);
-            if (m > peak)
-                peak = m;
+            peak = 0.0;
+            for (int i = 0; i < count; ++i)
+            {
+                const double m = std::fabs(values[i]);
+                if (m > peak)
+                    peak = m;
+            }
         }
         if (peak > 0.0)
         {
@@ -123,9 +135,13 @@ namespace pulseqpp_types
             }
         }
         out.amplitude = peak;
-        out.waveform.resize(static_cast<size_t>(count));
-        for (int i = 0; i < count; ++i)
-            out.waveform[static_cast<size_t>(i)] = peak != 0.0 ? values[i] / peak : values[i];
+        out.waveform.assign(values, values + count);
+        if (peak != 0.0)
+        {
+            double* w = out.waveform.data();
+            for (int i = 0; i < count; ++i)
+                w[i] = w[i] / peak;
+        }
         out.registered = Registration{};
     }
 

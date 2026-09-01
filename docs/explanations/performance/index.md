@@ -49,6 +49,7 @@ A last page puts the stages back together.
 | Page | What it is |
 |---|---|
 | {doc}`full_benchmark` | Every shipped plugin at four prescribable sizes, on the two clocks an operator feels: the parameter round trip, and one press of *Save Rx*. |
+| {doc}`pipeline_budget` | The hardest family end to end: 131 072 distinct written-out arms, every stage against its own line. |
 
 ```{toctree}
 :hidden:
@@ -61,6 +62,7 @@ gradient_checks
 pns
 mechanical_resonance
 full_benchmark
+pipeline_budget
 ```
 
 ## Two properties of the representation

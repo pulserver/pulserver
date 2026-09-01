@@ -1,14 +1,16 @@
 {
-  "addblock_s": 0.7685032980007236,
+  "addblock_s": 0.5592591329987044,
   "arms": 8192,
-  "assembly_us_per_arm": 202.80923925763972,
+  "assembly_us_per_arm": 181.76967736804883,
   "at_target": {
-    "assembly_s": 26.582612607977353,
-    "declare_dedup_s": 65.70099364803173,
-    "end_to_end_s": 105.78871700796299,
-    "gate_s": 0.04152800003066659,
-    "parse_s": 6.760581871960312,
-    "write_s": 6.703000879962929
+    "assembly_s": 23.824915151984897,
+    "declare_dedup_s": 4.840041599934921,
+    "end_to_end_s": 46.56895340792835,
+    "gate_s": 11.976884992036503,
+    "mech_s": 5.188737936,
+    "parse_s": 3.0267597920028493,
+    "pns_s": 6.769502944,
+    "write_s": 2.9003518719691783
   },
   "binary_mb": 203.277092,
   "blocks": 24576,
@@ -17,22 +19,24 @@
     "declare_dedup_s_at_target": 3.0,
     "end_to_end_s_at_target": 30.0,
     "gate_s_at_target": 7.0,
+    "mech_s_at_target": 7.0,
     "parse_mb_per_s": 1000.0,
     "write_mb_per_s": 1000.0
   },
-  "declare_s": 2.3699963340040995,
-  "dedup_s": 1.7363157689978834,
-  "factory_s": 0.892909989997861,
-  "gate_code": -450,
-  "gate_s": 0.002595500001916662,
+  "declare_s": 0.0893334779975703,
+  "dedup_s": 0.21316912199836224,
+  "factory_s": 0.9297980640003516,
+  "gate_code": 1,
+  "gate_s": 0.7485553120022814,
   "gate_stages": {
-    "pns": 0.001251811,
+    "mech_resonance": 0.324296121,
+    "pns": 0.423093934,
     "pns_basis_build": 0.0,
     "pns_score": 0.0
   },
   "npts": 4096,
-  "parse_mb_per_s": 481.0878018487657,
-  "parse_s": 0.4225363669975195,
-  "write_mb_per_s": 485.2205050013343,
-  "write_s": 0.41893755499768304
+  "parse_mb_per_s": 1074.5594944776967,
+  "parse_s": 0.18917248700017808,
+  "write_mb_per_s": 1121.392719081281,
+  "write_s": 0.18127199199807364
 }

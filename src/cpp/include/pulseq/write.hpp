@@ -45,7 +45,17 @@ namespace pulseq
      * integer picoseconds rather than as printed decimals.  There is no
      * signature section -- the format has no equivalent of `[SIGNATURE]`.
      */
-    std::string write_binary(Sequence& seq);
+    /** The binary file. With @p structure_only the gradient shapes of blocks
+     *  that carry no RF are written without their samples: enough for a
+     *  reader to recover the scan's structure, not to play or check it. */
+    std::string write_binary(Sequence& seq, bool structure_only = false);
+
+    /** The size the binary file will have, so a caller can fill its own
+     *  buffer with write_binary_into and skip a copy. */
+    size_t write_binary_size(Sequence& seq, bool structure_only = false);
+    /** Write the binary file into @p buffer of exactly write_binary_size
+     *  bytes. Throws if the two disagree. */
+    void write_binary_into(Sequence& seq, bool structure_only, char* buffer, size_t size);
 
 } // namespace pulseq
 

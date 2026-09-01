@@ -149,3 +149,29 @@ the finished `.seq` and the file comes back in, not while an operator is still
 choosing a parameter. Nothing before that point has built the gradient
 waveforms: a console's live feasibility estimate is a duration computed from
 module lengths, with nothing to evaluate a band against.
+
+## Scans with a different waveform in every repetition
+
+The period is the window only while there is a period. A scan that plays
+more distinct waveform sets than the grouping holds — a distinct optimised
+readout in every repetition — has no line spectrum and nothing between lines
+for the Dirichlet kernel to attenuate. For such a scan the check prices what
+a mode sees: the amplitude sustained inside its band over its memory,
+$1/\Delta f$, as a window slid over the whole scan,
+
+$$
+A_W(f) = \frac{2}{\text{span}}\,\Bigl|\sum_{t_m \in W} a_m\, T_m(f)\, e^{-i 2\pi f t_m}\Bigr|,
+$$
+
+the sum running over the gradient events that start inside the window,
+$T_m$ each one's transform, $t_m$ its start, and span the run those events
+cover (never less than the window). This is the same quantity as the
+periodic rule wherever a period exists — repeat one TR and it reduces to
+$\tfrac{2}{T_{TR}}|S_{TR}(f)|$ — and where none does it keeps the cancellation
+between repetitions that a bound over instances would discard. The verdict
+compares $A_W$ against the band's threshold exactly as above, on a grid
+0.25 Hz apart across each band, raised by the guards that make it an upper
+bound; the refusal names the frequency, the amplitude and the axis. The
+spectrum a sequence plot draws for such a scan is this one. How it is
+evaluated and why it is a bound is on the
+{doc}`performance page <../performance/mechanical_resonance>`.

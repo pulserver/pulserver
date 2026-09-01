@@ -94,8 +94,9 @@ typedef struct
     const unsigned char *mem; /**< memory source, consulted when f is NULL */
     size_t mem_len;
     size_t mem_pos;
-    int file_is_big;  /**< byte order of the file itself */
-    int reverse_real; /**< file and host disagree, so IEEE real bytes need flipping */
+    int borrow_shapes; /**< point shape samples into mem instead of copying */
+    int file_is_big;   /**< byte order of the file itself */
+    int reverse_real;  /**< file and host disagree, so IEEE real bytes need flipping */
 
     /* LABELNAMES remap: the file's label ids resolved through the names it
      * declares, so a name outside the builtin table reads back as itself in
@@ -1046,7 +1047,17 @@ static int read_binary_shapes(bin_reader *r, pulseq_file *seq)
         if (PULSEQ_FAILED(rc))
             return rc;
 
-        if (n_compressed > 0)
+        if (n_compressed > 0 && r->borrow_shapes && !r->reverse_real && sizeof(PULSEQ_REAL) == 4)
+        {
+            /* The file's cells are the host's floats: the samples stay in
+             * the caller's buffer, which outlives the file by contract. */
+            if ((size_t)n_compressed * 4 > r->mem_len - r->mem_pos)
+                return PULSEQ_ERR_FILE_READ_FAILED;
+            samples = (PULSEQ_REAL *)(r->mem + r->mem_pos);
+            r->mem_pos += (size_t)n_compressed * 4;
+            seq->shapes_borrowed = 1;
+        }
+        else if (n_compressed > 0)
         {
             samples = (PULSEQ_REAL *)PULSEQ_ALLOC((size_t)n_compressed * sizeof(PULSEQ_REAL));
             if (!samples)
@@ -1086,7 +1097,7 @@ static int read_binary_shapes(bin_reader *r, pulseq_file *seq)
             }
         }
         slot = &seq->shapes_library[id - 1];
-        if (slot->samples)
+        if (slot->samples && !seq->shapes_borrowed)
             PULSEQ_FREE(slot->samples);
         slot->num_uncompressed_samples = (int)n_uncompressed;
         slot->num_samples = (int)n_compressed;
@@ -1656,7 +1667,8 @@ static int read_binary_stream(
     FILE *f,
     const void *mem,
     size_t mem_len,
-    int definitions_only)
+    int definitions_only,
+    int borrow_shapes)
 {
     bin_reader r;
     int rc, code, at_eof, n;
@@ -1665,6 +1677,7 @@ static int read_binary_stream(
     r.mem = (const unsigned char *)mem;
     r.mem_len = mem_len;
     r.mem_pos = 0;
+    r.borrow_shapes = borrow_shapes && mem != NULL;
     r.file_is_big = 0;
     r.reverse_real = 0;
     memset(r.label_remap, 0, sizeof(r.label_remap));
@@ -1798,7 +1811,21 @@ int pulseq_read_binary_from_memory(pulseq_file *seq, const void *data, long size
 
     if (!seq || !data || size < 0)
         return PULSEQ_ERR_NULL_POINTER;
-    rc = read_binary_stream(seq, NULL, data, (size_t)size, 0);
+    rc = read_binary_stream(seq, NULL, data, (size_t)size, 0, 0);
+    if (PULSEQ_SUCCEEDED(rc))
+        rc = pulseq__check_references(seq);
+    if (PULSEQ_FAILED(rc))
+        pulseq__file_reset(seq);
+    return rc;
+}
+
+int pulseq_read_binary_from_memory_borrowing(pulseq_file *seq, const void *data, long size)
+{
+    int rc;
+
+    if (!seq || !data || size < 0)
+        return PULSEQ_ERR_NULL_POINTER;
+    rc = read_binary_stream(seq, NULL, data, (size_t)size, 0, 1);
     if (PULSEQ_SUCCEEDED(rc))
         rc = pulseq__check_references(seq);
     if (PULSEQ_FAILED(rc))
@@ -1812,7 +1839,7 @@ int pulseq_read_binary_from_buffer(pulseq_file *seq, FILE *f)
 
     if (!seq || !f)
         return PULSEQ_ERR_NULL_POINTER;
-    rc = read_binary_stream(seq, f, NULL, 0, 0);
+    rc = read_binary_stream(seq, f, NULL, 0, 0, 0);
     if (PULSEQ_SUCCEEDED(rc))
         rc = pulseq__check_references(seq);
     if (PULSEQ_FAILED(rc))
@@ -1830,7 +1857,7 @@ int pulseq_read_binary(pulseq_file *seq, const char *file_path)
     f = fopen(file_path, "rb");
     if (!f)
         return PULSEQ_ERR_FILE_NOT_FOUND;
-    rc = read_binary_stream(seq, f, NULL, 0, 0);
+    rc = read_binary_stream(seq, f, NULL, 0, 0, 0);
     fclose(f);
     if (PULSEQ_SUCCEEDED(rc))
         rc = pulseq__check_references(seq);
@@ -1849,7 +1876,7 @@ int pulseq_read_binary_definitions_only(pulseq_file *seq, const char *file_path)
     f = fopen(file_path, "rb");
     if (!f)
         return PULSEQ_ERR_FILE_NOT_FOUND;
-    rc = read_binary_stream(seq, f, NULL, 0, 1);
+    rc = read_binary_stream(seq, f, NULL, 0, 1, 0);
     fclose(f);
     if (PULSEQ_FAILED(rc))
         pulseq__file_reset(seq);

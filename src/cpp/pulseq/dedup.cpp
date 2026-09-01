@@ -50,9 +50,11 @@
 
 #include "pulseq/sequence.hpp"
 
+#include <atomic>
 #include <cmath>
 #include <cstring>
 #include <string>
+#include <thread>
 #include <unordered_map>
 
 namespace pulseq
@@ -466,10 +468,11 @@ namespace pulseq
             // Rounded in place -- the pre-pass rows are discarded either way,
             // so the library's own storage is the scratch. Identity is exact
             // sample equality: keyed by a 64-bit hash of (length, rounded
-            // samples), every hash hit verified byte for byte. A scan whose
-            // shapes are all distinct -- the written-out-multishot case that
-            // makes this library large -- ends here without copying a row;
-            // only a found duplicate pays for rebuilding the library.
+            // samples), every hash hit verified byte for byte. Rounding and
+            // hashing touch every sample and run on every core, a row per
+            // task; the walk that decides first appearances is sequential,
+            // because the numbering is the order of first appearance. A
+            // found duplicate compacts the library in place.
             const auto mix = [](uint64_t h, const void* bytes, size_t n)
             {
                 // Word-at-a-time: the hash only routes the lookup -- the
@@ -496,18 +499,60 @@ namespace pulseq
                 }
                 return h;
             };
+            std::vector<uint64_t> hashes(static_cast<size_t>(shapes_.size()) + 1, 0);
+            {
+                const int total = shapes_.size();
+                std::atomic<int> next{1};
+                const int chunk = 64;
+                const auto round_and_hash = [&]()
+                {
+                    for (;;)
+                    {
+                        const int begin = next.fetch_add(chunk);
+                        if (begin > total)
+                            return;
+                        const int end = begin + chunk <= total + 1 ? begin + chunk : total + 1;
+                        for (int id = begin; id < end; ++id)
+                        {
+                            const int count = shapes_.num_compressed(id);
+                            double* row = const_cast<double*>(shapes_.samples(id));
+                            round_run(row, count, 9);
+                            const int32_t length = shapes_.num_uncompressed(id);
+                            uint64_t h = mix(1469598103934665603ull, &length, sizeof(length));
+                            hashes[static_cast<size_t>(id)] =
+                                mix(h, row, static_cast<size_t>(count) * sizeof(double));
+                        }
+                    }
+                };
+                unsigned workers = std::thread::hardware_concurrency();
+                if (workers < 1)
+                    workers = 1;
+                if (workers > 8)
+                    workers = 8;
+                if (workers == 1 || total < 2 * chunk)
+                {
+                    round_and_hash();
+                }
+                else
+                {
+                    std::vector<std::thread> pool;
+                    for (unsigned w = 1; w < workers; ++w)
+                        pool.emplace_back(round_and_hash);
+                    round_and_hash();
+                    for (auto& t : pool)
+                        t.join();
+                }
+            }
+
             std::unordered_map<uint64_t, std::vector<int32_t>> seen;
             seen.reserve(static_cast<size_t>(shapes_.size()) * 2);
             bool any_duplicate = false;
             for (int id = 1; id <= shapes_.size(); ++id)
             {
                 const int count = shapes_.num_compressed(id);
-                double* row = const_cast<double*>(shapes_.samples(id));
-                round_run(row, count, 9);
+                const double* row = shapes_.samples(id);
                 const int32_t length = shapes_.num_uncompressed(id);
-
-                uint64_t h = mix(1469598103934665603ull, &length, sizeof(length));
-                h = mix(h, row, static_cast<size_t>(count) * sizeof(double));
+                const uint64_t h = hashes[static_cast<size_t>(id)];
 
                 int32_t found = 0;
                 auto& bucket = seen[h];
@@ -530,35 +575,11 @@ namespace pulseq
                     any_duplicate = true;
                 shape_map[static_cast<size_t>(id)] = found == 0 ? id : found;
             }
+            // First appearances only, renumbered densely -- the numbering
+            // the file carries. A shape still held raw stays raw: it is
+            // deduplicated here and compressed later.
             if (any_duplicate)
-            {
-                // Rebuild with first appearances only, renumbering densely --
-                // the numbering the file carries. shape_map already points
-                // every id at its first appearance; the rebuild maps those
-                // onto the kept library's ids.
-                ShapeLibrary kept;
-                std::vector<int32_t> issued(static_cast<size_t>(shapes_.size()) + 1, 0);
-                for (int id = 1; id <= shapes_.size(); ++id)
-                {
-                    const int32_t first = shape_map[static_cast<size_t>(id)];
-                    if (first == id)
-                    {
-                        // A shape still held raw stays raw: it is
-                        // deduplicated here and compressed later, which is
-                        // the whole point of registering it uncompressed.
-                        issued[static_cast<size_t>(id)] = shapes_.is_compressed(id)
-                            ? kept.append(
-                                  shapes_.num_uncompressed(id),
-                                  shapes_.samples(id),
-                                  shapes_.num_compressed(id))
-                            : kept.append_raw(shapes_.samples(id), shapes_.num_compressed(id));
-                    }
-                }
-                for (int id = 1; id <= shapes_.size(); ++id)
-                    shape_map[static_cast<size_t>(id)] =
-                        issued[static_cast<size_t>(shape_map[static_cast<size_t>(id)])];
-                shapes_ = std::move(kept);
-            }
+                shape_map = shapes_.keep_first_appearances(shape_map);
         }
 
         /* -- gradients ------------------------------------------------- */

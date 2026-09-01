@@ -36,26 +36,26 @@ check runs on — and it is the column that explains most of the rest.
 
 | Family | Largest protocol | Blocks | TR window | `validate_protocol` | Save Rx | Peak RSS | `.seq` | Cache |
 |---|---|---:|---:|---:|---:|---:|---:|---:|
-| `gre2D` | 512 Nx, 512 Ny, 24 slices | 76 032 | 21 ms | 13 ms | 0.2 s | 0.17 GB | 2.7 MB | 4.7 MB |
-| `gre3D` | 512 Nx, 512 Ny, 512 slices | 823 692 | 14 ms | 37 ms | 2.4 s | 0.50 GB | 30 MB | 52 MB |
-| `se2D` | 512 Nx, 512 Ny, 20 slices, 20 TE ms | 92 160 | 50 ms | 12 ms | 0.2 s | 0.17 GB | 3.2 MB | 5.7 MB |
-| `se3D` | 256 Nx, 256 Ny, 256 slices | 411 448 | 100 ms | 16 ms | 0.7 s | 0.29 GB | 14 MB | 25 MB |
+| `gre2D` | 512 Nx, 512 Ny, 24 slices | 76 032 | 21 ms | 8 ms | 0.2 s | 0.17 GB | 2.7 MB | 4.7 MB |
+| `gre3D` | 512 Nx, 512 Ny, 512 slices | 823 692 | 14 ms | 38 ms | 3.7 s | 0.49 GB | 30 MB | 52 MB |
+| `se2D` | 512 Nx, 512 Ny, 20 slices, 20 TE ms | 92 160 | 50 ms | 12 ms | 0.1 s | 0.17 GB | 3.2 MB | 5.7 MB |
+| `se3D` | 256 Nx, 256 Ny, 256 slices | 411 448 | 100 ms | 16 ms | 0.7 s | 0.27 GB | 14 MB | 25 MB |
 | `fse2D` | 512 Nx, 512 Ny, 16 slices | 35 840 | 250 ms | 10 ms | 0.1 s | 0.16 GB | 1.3 MB | 2.3 MB |
-| `fse3D` | 192 Nx, 192 Ny, 96 slices | 59 664 | 1 000 ms | 25 ms | 0.4 s | 0.18 GB | 2.2 MB | 3.8 MB |
-| `epi2D` | 128 Nx, 128 Ny, 60 slices | 31 800 | 189 ms | 8 ms | 0.1 s | 0.16 GB | 1.1 MB | 2.1 MB |
-| `epi3D` | 128 Nx, 128 Ny, 64 slices | 8 783 | 189 ms | 9 ms | 0.1 s | 0.16 GB | 0.3 MB | 0.7 MB |
-| `bssfp2D` | 256 Nx, 256 Ny, 60 slices | 48 060 | 1 301 ms | 18 ms | 0.3 s | 0.16 GB | 1.8 MB | 3.1 MB |
-| `bssfp3D` | 128 Nx, 128 Ny, 48 slices | 14 454 | 14 067 ms | 18 ms | 2.6 s | 0.20 GB | 0.6 MB | 1.1 MB |
-| `gre_multiecho2D` | 512 Nx, 512 Ny, 40 slices | 232 320 | 50 ms | 7 ms | 0.7 s | 0.24 GB | 8.9 MB | 15 MB |
-| `gre_multiecho3D` | 512 Nx, 512 Ny, 512 slices | 2 059 230 | 35 ms | 37 ms | 6.5 s | 1.02 GB | 79 MB | 133 MB |
-| `mprage3D` | 512 Nx, 1024 Ny, 512 slices | 1 673 100 | 2 000 ms | 334 ms | 6.3 s | 1.12 GB | 60 MB | 105 MB |
-| `mprage_stack_of_spirals3D` | 128 Nx, 192 slices, 384 arms | 297 220 | 8 000 ms | 11 ms | 4.6 s | 1.10 GB | 13 MB | 19 MB |
-| `gre_radial2D` | 512 Nx, 40 slices, 805 spokes | 131 360 | 20 ms | 9 ms | 0.5 s | 0.21 GB | 5.4 MB | 8.3 MB |
-| `gre_stack_of_stars3D` | 256 Nx, 256 slices, 805 spokes | 824 448 | 10 ms | 7 ms | 3.7 s | 0.60 GB | 33 MB | 52 MB |
-| `gre_spiral2D` | 256 Nx, 60 slices, 64 arms | 24 000 | 20 ms | 15 ms | 0.1 s | 0.91 GB | 1.0 MB | 1.5 MB |
-| `gre_stack_of_spirals3D` | 128 Nx, 256 slices, 64 arms | 65 664 | 6 ms | 9 ms | 0.3 s | 0.94 GB | 2.7 MB | 4.2 MB |
-| `se_propeller2D` | 256 Nx, 60 slices, 32 blade width, 32 blades, 120 TE ms | 76 800 | 167 ms | 10 ms | 0.3 s | 0.19 GB | 2.5 MB | 5.4 MB |
-| `zte3D` | 64 Nx | 26 002 | 8 527 ms | 18 ms | 11.1 s | 0.20 GB | 1.3 MB | 4.9 MB |
+| `fse3D` | 192 Nx, 192 Ny, 96 slices | 59 664 | 1 000 ms | 26 ms | 0.3 s | 0.17 GB | 2.2 MB | 3.8 MB |
+| `epi2D` | 128 Nx, 128 Ny, 60 slices | 32 160 | 189 ms | 10 ms | 0.1 s | 0.30 GB | 1.1 MB | 2.2 MB |
+| `epi3D` | 128 Nx, 128 Ny, 64 slices | 8 783 | 189 ms | 8 ms | 0.1 s | 0.16 GB | 0.3 MB | 0.7 MB |
+| `bssfp2D` | 256 Nx, 256 Ny, 60 slices | 48 060 | 1 301 ms | 17 ms | 0.2 s | 0.16 GB | 1.8 MB | 3.1 MB |
+| `bssfp3D` | 128 Nx, 128 Ny, 48 slices | 14 454 | 14 067 ms | 18 ms | 2.4 s | 0.17 GB | 0.6 MB | 1.1 MB |
+| `gre_multiecho2D` | 512 Nx, 512 Ny, 40 slices | 232 320 | 50 ms | 7 ms | 0.6 s | 0.23 GB | 8.9 MB | 15 MB |
+| `gre_multiecho3D` | 512 Nx, 512 Ny, 512 slices | 2 059 230 | 35 ms | 37 ms | 11.8 s | 0.95 GB | 79 MB | 133 MB |
+| `mprage3D` | 512 Nx, 1024 Ny, 512 slices | 1 673 100 | 2 000 ms | 357 ms | 7.7 s | 0.81 GB | 60 MB | 105 MB |
+| `mprage_stack_of_spirals3D` | 128 Nx, 192 slices, 384 arms | 297 220 | 8 000 ms | 11 ms | 1.6 s | 1.13 GB | 13 MB | 19 MB |
+| `gre_radial2D` | 512 Nx, 40 slices, 805 spokes | 131 360 | 20 ms | 9 ms | 0.5 s | 0.20 GB | 5.4 MB | 8.3 MB |
+| `gre_stack_of_stars3D` | 256 Nx, 256 slices, 805 spokes | 824 448 | 10 ms | 7 ms | 3.2 s | 0.49 GB | 33 MB | 52 MB |
+| `gre_spiral2D` | 256 Nx, 60 slices, 64 arms | 24 000 | 20 ms | 14 ms | 0.1 s | 0.98 GB | 1.0 MB | 1.5 MB |
+| `gre_stack_of_spirals3D` | 128 Nx, 256 slices, 64 arms | 65 664 | 6 ms | 9 ms | 0.3 s | 1.00 GB | 2.7 MB | 4.2 MB |
+| `se_propeller2D` | 256 Nx, 60 slices, 32 blade width, 32 blades, 120 TE ms | 76 800 | 167 ms | 10 ms | 0.2 s | 0.18 GB | 2.5 MB | 5.4 MB |
+| `zte3D` | 64 Nx | 26 200 | 43 ms | 18 ms | 0.2 s | 0.15 GB | 1.3 MB | 1.8 MB |
 
 Two families have no repeating unit shorter than the scan, so their window is
 the whole acquisition: a 3D balanced train is one continuous steady state, and a

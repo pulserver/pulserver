@@ -14,6 +14,7 @@
 #include <gtest/gtest.h>
 
 #include "pulseq/shape.hpp"
+#include "pulseq/sequence.hpp"
 
 #include <cmath>
 #include <stdexcept>
@@ -167,4 +168,121 @@ TEST(PulseqShapeCodec, EmptyShapeIsEmpty)
     const std::vector<double> packed{1.0};
     EXPECT_TRUE(pulseq::decompress_shape(packed.data(), 1, 0).empty());
     EXPECT_TRUE(pulseq::decompress_shape(packed.data(), 0, 4).empty());
+}
+
+namespace
+{
+std::vector<double> irregular(int count, double seed)
+{
+    std::vector<double> out(static_cast<size_t>(count));
+    for (int i = 0; i < count; ++i)
+        out[static_cast<size_t>(i)] = std::sin(seed * (i + 1)) + 1e-3 * (i % 7);
+    return out;
+}
+} // namespace
+
+TEST(PulseqShapeLibrary, CompressLeavesAnIncompressibleLibraryAsItStands)
+{
+    pulseq::ShapeLibrary lib;
+    const std::vector<double> a = irregular(300, 0.37);
+    const std::vector<double> b = irregular(200, 1.91);
+    lib.append_raw(a.data(), static_cast<int>(a.size()));
+    lib.append_raw(b.data(), static_cast<int>(b.size()));
+
+    EXPECT_FALSE(lib.compress()) << "no row shrank, so no row changed";
+    EXPECT_TRUE(lib.is_compressed(1));
+    EXPECT_TRUE(lib.is_compressed(2));
+    ASSERT_EQ(lib.num_compressed(1), static_cast<int>(a.size()));
+    ASSERT_EQ(lib.num_compressed(2), static_cast<int>(b.size()));
+    EXPECT_EQ(std::vector<double>(lib.samples(1), lib.samples(1) + a.size()), a);
+    EXPECT_EQ(std::vector<double>(lib.samples(2), lib.samples(2) + b.size()), b);
+    EXPECT_FALSE(lib.compress()) << "idempotent";
+}
+
+TEST(PulseqShapeLibrary, CompressRebuildsAMixedLibraryRowForRowInIdOrder)
+{
+    pulseq::ShapeLibrary lib;
+    const std::vector<double> flat(128, 0.25);
+    const std::vector<double> rough = irregular(96, 0.71);
+    const std::vector<double> ramp = []
+    {
+        std::vector<double> r(64);
+        for (size_t i = 0; i < r.size(); ++i)
+            r[i] = 1e-3 * static_cast<double>(i);
+        return r;
+    }();
+    const std::vector<double> ramp_packed =
+        pulseq::compress_shape(ramp.data(), static_cast<int>(ramp.size()));
+    lib.append_raw(flat.data(), static_cast<int>(flat.size()));
+    lib.append_raw(rough.data(), static_cast<int>(rough.size()));
+    lib.append(
+        static_cast<int>(ramp.size()),
+        ramp_packed.data(),
+        static_cast<int>(ramp_packed.size()));
+
+    EXPECT_TRUE(lib.compress());
+    ASSERT_EQ(lib.size(), 3);
+    const std::vector<double> flat_packed =
+        pulseq::compress_shape(flat.data(), static_cast<int>(flat.size()));
+    ASSERT_EQ(lib.num_compressed(1), static_cast<int>(flat_packed.size()));
+    EXPECT_EQ(
+        std::vector<double>(lib.samples(1), lib.samples(1) + flat_packed.size()),
+        flat_packed);
+    ASSERT_EQ(lib.num_compressed(2), static_cast<int>(rough.size()));
+    EXPECT_EQ(std::vector<double>(lib.samples(2), lib.samples(2) + rough.size()), rough);
+    ASSERT_EQ(lib.num_compressed(3), static_cast<int>(ramp_packed.size()));
+    EXPECT_EQ(
+        std::vector<double>(lib.samples(3), lib.samples(3) + ramp_packed.size()),
+        ramp_packed);
+    for (int id = 1; id <= 3; ++id)
+        EXPECT_TRUE(lib.is_compressed(id));
+    EXPECT_FALSE(lib.compress()) << "idempotent";
+}
+
+TEST(PulseqShapeLibrary, KeepFirstAppearancesDropsRepeatsInPlaceAndRenumbersDensely)
+{
+    pulseq::ShapeLibrary lib;
+    const std::vector<double> a = irregular(50, 0.13);
+    const std::vector<double> b = irregular(70, 0.29);
+    const std::vector<double> c = irregular(30, 0.41);
+    const std::vector<double> b_packed =
+        pulseq::compress_shape(b.data(), static_cast<int>(b.size()));
+    lib.append_raw(a.data(), static_cast<int>(a.size()));                                       // 1
+    lib.append(static_cast<int>(b.size()), b_packed.data(), static_cast<int>(b_packed.size())); // 2
+    lib.append_raw(a.data(), static_cast<int>(a.size())); // 3 = 1
+    lib.append_raw(c.data(), static_cast<int>(c.size())); // 4
+    lib.append(
+        static_cast<int>(b.size()),
+        b_packed.data(),
+        static_cast<int>(b_packed.size())); // 5 = 2
+
+    const std::vector<int32_t> first{0, 1, 2, 1, 4, 2};
+    const std::vector<int32_t> renumbered = lib.keep_first_appearances(first);
+
+    ASSERT_EQ(lib.size(), 3);
+    EXPECT_EQ(renumbered, (std::vector<int32_t>{0, 1, 2, 1, 3, 2}));
+    ASSERT_EQ(lib.num_compressed(1), static_cast<int>(a.size()));
+    EXPECT_EQ(std::vector<double>(lib.samples(1), lib.samples(1) + a.size()), a);
+    EXPECT_FALSE(lib.is_compressed(1));
+    ASSERT_EQ(lib.num_compressed(2), static_cast<int>(b_packed.size()));
+    EXPECT_EQ(std::vector<double>(lib.samples(2), lib.samples(2) + b_packed.size()), b_packed);
+    EXPECT_EQ(lib.num_uncompressed(2), static_cast<int>(b.size()));
+    EXPECT_TRUE(lib.is_compressed(2));
+    ASSERT_EQ(lib.num_compressed(3), static_cast<int>(c.size()));
+    EXPECT_EQ(std::vector<double>(lib.samples(3), lib.samples(3) + c.size()), c);
+    EXPECT_FALSE(lib.is_compressed(3));
+}
+
+TEST(PulseqShapeLibrary, KeepFirstAppearancesOfADistinctLibraryChangesNothing)
+{
+    pulseq::ShapeLibrary lib;
+    const std::vector<double> a = irregular(40, 0.53);
+    const std::vector<double> b = irregular(60, 0.67);
+    lib.append_raw(a.data(), static_cast<int>(a.size()));
+    lib.append_raw(b.data(), static_cast<int>(b.size()));
+    const std::vector<int32_t> renumbered = lib.keep_first_appearances({0, 1, 2});
+    EXPECT_EQ(renumbered, (std::vector<int32_t>{0, 1, 2}));
+    ASSERT_EQ(lib.size(), 2);
+    EXPECT_EQ(std::vector<double>(lib.samples(1), lib.samples(1) + a.size()), a);
+    EXPECT_EQ(std::vector<double>(lib.samples(2), lib.samples(2) + b.size()), b);
 }

@@ -129,6 +129,7 @@ class Sequence(AnalysisMixin, SafetyViewsMixin, SoftDelayMixin):
         # safety analyses run on -- is derived on demand and thrown away
         # whenever the sequence changes underneath it. See _structure().
         self._structure: _Structure | None = None
+        self._light_structure: _Structure | None = None
         self._revision = 0
 
     def _touch(self) -> None:
@@ -220,12 +221,12 @@ class Sequence(AnalysisMixin, SafetyViewsMixin, SoftDelayMixin):
         the structure's instance count, reached through
         ``plot(tr=...)``, not this.
         """
-        return self._structure_for("num_trs").num_trs
+        return self._structure_for("num_trs", light=True).num_trs
 
     @property
     def tr_size(self) -> int:
         """int : How many blocks one TR holds."""
-        return int(self._structure_for("tr_size").tr["tr_size"])
+        return int(self._structure_for("tr_size", light=True).tr["tr_size"])
 
     @property
     def num_segments(self) -> int:
@@ -234,7 +235,7 @@ class Sequence(AnalysisMixin, SafetyViewsMixin, SoftDelayMixin):
         The interpreter's unit of playout. Index one with
         ``plot(segment_idx=...)``.
         """
-        return len(self._structure_for("num_segments").segments)
+        return len(self._structure_for("num_segments", light=True).segments)
 
     @property
     def definitions(self) -> dict[str, object]:
@@ -282,7 +283,7 @@ class Sequence(AnalysisMixin, SafetyViewsMixin, SoftDelayMixin):
             repeating structure (nothing is written then).
         """
         try:
-            tr_size = int(self._structure_for("declare_tr").tr["tr_size"])
+            tr_size = int(self._structure_for("declare_tr", light=True).tr["tr_size"])
         except Exception:
             return None
         if tr_size <= 0:
@@ -909,7 +910,7 @@ class Sequence(AnalysisMixin, SafetyViewsMixin, SoftDelayMixin):
         self._publish_definitions()
         return self._native.write_text(create_signature)
 
-    def _to_binary(self) -> bytes:
+    def _to_binary(self, structure_only: bool = False) -> bytes:
         """The sequence as a binary Pulseq file, in memory.
 
         The form to hand anything that is going to parse it back rather than
@@ -921,7 +922,7 @@ class Sequence(AnalysisMixin, SafetyViewsMixin, SoftDelayMixin):
         """
         self._native.compress_shapes()
         self._publish_definitions()
-        return self._native.write_binary()
+        return self._native.write_binary(structure_only)
 
     def read(
         self,
@@ -1784,7 +1785,7 @@ class Sequence(AnalysisMixin, SafetyViewsMixin, SoftDelayMixin):
         squared = np.abs(np.interp(centres, times, signal, left=0.0, right=0.0)) ** 2
         return float(squared.sum()) * raster, float(squared.max())
 
-    def _structure_for(self, what: str) -> _Structure:
+    def _structure_for(self, what: str, light: bool = False) -> _Structure:
         """The scan structure, derived once and reused until the sequence changes.
 
         Parameters
@@ -1792,11 +1793,33 @@ class Sequence(AnalysisMixin, SafetyViewsMixin, SoftDelayMixin):
         what : str
             The calling method, named in the error when there is nothing to
             analyse.
+        light : bool
+            Ask only for the structure -- the TR, its instances, the
+            segments -- which needs no gradient samples and costs a small
+            fraction of the full derivation. A light structure cannot serve a
+            waveform or safety request; those callers leave this False.
         """
         if self.num_blocks == 0:
             raise ValueError(f"{what}(): the sequence holds no blocks")
-        if self._structure is None or self._structure.revision != self._revision:
-            self._structure = _Structure(self)
+        if (
+            not light
+            and self._structure is not None
+            and self._structure.revision == self._revision
+        ):
+            return self._structure
+        if light:
+            if (
+                self._structure is not None
+                and self._structure.revision == self._revision
+            ):
+                return self._structure
+            if (
+                self._light_structure is None
+                or self._light_structure.revision != self._revision
+            ):
+                self._light_structure = _Structure(self, light=True)
+            return self._light_structure
+        self._structure = _Structure(self)
         return self._structure
 
     def evaluate_labels(
@@ -2271,6 +2294,7 @@ class Sequence(AnalysisMixin, SafetyViewsMixin, SoftDelayMixin):
         # Not inherited: a structure cache belongs to the sequence it was
         # derived from, and the copy is free to diverge from it immediately.
         made._structure = None
+        made._light_structure = None
         made._revision = 0
         return made
 

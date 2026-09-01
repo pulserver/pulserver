@@ -17,6 +17,11 @@
   multishot family, closed forms per shape class, a chirp-z over each band's
   harmonic comb, and an L1 ceiling that settles a whole band without probing it.
   Scan length drops out entirely.
+- **Past the shape-group cap** a scan has no TR to repeat, and the check
+  prices what a mode sees instead: the amplitude sustained inside its band
+  over a window of its memory, slid over the whole scan. One FFT per
+  distinct waveform, exact interpolation onto a fine grid, a rigorous
+  additive guard — {ref}`mechres-scan-window` below.
 - **A band is covered, not searched**: every harmonic it contains plus the
   finite-repeat lobes between them, each an exact evaluation.
 ```
@@ -31,6 +36,62 @@ verdict: how much is too much, and how to compute it in the time predownload
 can spend.
 
 ---
+
+(mechres-scan-window)=
+## Past the shape-group cap: the scan window
+
+A scan whose repetitions play more distinct waveform sets than the grouping
+holds — a SPARKLING-style acquisition, a distinct optimised arm in every
+repetition — has no TR to repeat. Its drive is not a line spectrum and there
+is no Dirichlet kernel to attenuate between lines; what excites a mode is the
+amplitude sustained inside its band over its memory, $1/\Delta f$. The check
+evaluates exactly that. Every gradient event of the whole scan is one term,
+its transform at $f$ times its amplitude and its placement phasor, and a
+window of length $W$ slid over the scan sums the terms of the events that
+start inside it:
+
+$$
+A_W(f) = \frac{2}{\text{span}}\,\Bigl|\sum_{t_m \in W} a_m\, T_m(f)\, e^{-i 2\pi f t_m}\Bigr|,
+$$
+
+with $W = 1/\Delta f$ of the widest band, never shorter than the longest
+event on the axis, and span the run those events actually cover. With every
+repetition the same and $W$ a multiple of the TR this is the periodic line
+amplitude $\tfrac{2}{T_{TR}}|S_{TR}(f)|$ exactly — the C suite holds that on
+`gre_2d` at three harmonics — and on distinct repetitions it carries the
+cancellation between arms that a bound over instances would discard. The
+verdict compares $A_W$ against the same band threshold as the periodic
+check.
+
+**Cost.** The transform of a long arbitrary waveform is one real FFT of its
+samples, zero-padded to at least twice their count. The waveform is
+time-limited to its duration, so bins closer than half the reciprocal of
+that duration determine its transform everywhere; a Kaiser-windowed sinc of
+half-width 8 bins interpolates it onto the band's fine grid (0.25 Hz).
+Trapezoids and short waveforms take the same route from their exact
+transform at the bins. Every window is then a prefix-sum difference, so the
+pass over the scan is linear in its events and runs under the parallel
+hook, waveforms and windows alike. Measured on the budget harness family
+(distinct 4 096-sample arms on two axes, a trapezoid on the third, two
+bands): **0.32 s at 8 192 arms**, 22 µs per further arm, about 3 s at
+131 072 — against the 460 µs per arm the positional-maximum envelope would
+cost to render for a model that does not apply.
+
+**Why it is a bound.** Two constants stand between the interpolated sum and
+the exact one, both added to it before the verdict: the kernel's truncation
+moves a waveform's transform by at most $E_K$ times its gradient $L_1$
+($E_K = 4\times10^{-6}$, pinned above the measured supremum
+$2.6\times10^{-6}$ by `test_the_scan_window_kernel_constant_bounds_its_truncation`),
+and the single-precision FFT by at most $10^{-5}$ of it more. Between grid
+points the window sum is band-limited to its span in time, so it lies within
+$1/(1 - \pi\,\text{span}\,\delta f/2)$ of the grid maximum (Bernstein), and the
+grid maximum is raised by that. On the written-out-arms fixture the
+interpolated sums sit within $7\times10^{-5}$ of the directly summed
+transforms and never below them
+(`test_the_arm_spectrum_by_fft_matches_the_direct_transform`), and within
+$7\times10^{-4}$ of the rendered scan
+(`test_the_scan_window_matches_the_rendered_scan_on_written_out_arms`).
+
 
 ## 1. Calibrating the threshold
 

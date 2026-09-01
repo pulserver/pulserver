@@ -1727,6 +1727,18 @@ int pulseg_get_tr_gradient_waveforms(
     float *time_arr;
 
     memset(&uw, 0, sizeof(uw));
+    if (coll && subseq_idx >= 0 && subseq_idx < coll->num_subsequences &&
+        coll->descriptors[subseq_idx].structure_only)
+    {
+        if (diag)
+        {
+            pulseg__diag_printf(
+                diag,
+                "the collection was converted for structure only and holds no gradient waveforms");
+            diag->code = PULSEG_ERR_INVALID_ARGUMENT;
+        }
+        return PULSEG_ERR_INVALID_ARGUMENT;
+    }
     block_order = NULL;
     labels = NULL;
     group_first = NULL;

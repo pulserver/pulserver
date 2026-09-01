@@ -203,6 +203,40 @@ typedef struct pulseg_opts
      * Set to 0 to restore the strict periodicity gate.
      */
     int allow_variable_rf_amplitude;
+    /**
+     * @brief Optional host-side parallel loop for the safety engine.
+     *
+     * NULL runs every loop sequentially, which is what a scanner-side build
+     * gets. A host that has cores to spare installs a function that calls
+     * @p body over disjoint ranges covering [0, count) -- from any threads
+     * it likes -- and returns once every call has returned. Each body call
+     * is independent and owns its scratch, so no order is assumed.
+     */
+    void (*parallel_for_fn)(
+        void *ctx,
+        int count,
+        void (*body)(void *arg, int begin, int end),
+        void *arg);
+    void *parallel_ctx;
+    /**
+     * @brief Convert only what the scan's structure needs.
+     *
+     * A file written for structure alone carries its gradient shapes without
+     * samples; with this set the conversion computes no gradient statistics
+     * from them, and the collection answers structural questions (the TR,
+     * its instances, the segments) while refusing any waveform or safety
+     * request. Default 0.
+     */
+    int structure_only;
+    /**
+     * @brief Let a collection read from memory keep its gradient shape
+     * samples in the caller's buffers instead of copying them.
+     *
+     * Only pulseg_read_from_buffers() honours it, and only when the file's
+     * sample cells are the host's floats; the caller then keeps every
+     * buffer alive for as long as the collection lives. Default 0.
+     */
+    int borrow_buffer_shapes;
 } pulseg_opts;
 
 /* clang-format off */
@@ -211,7 +245,7 @@ typedef struct pulseg_opts
     0, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, \
     PULSEG_PEAK_LOG10_THRESHOLD_DEFAULT, PULSEG_PEAK_NORM_SCALE_DEFAULT, \
     PULSEG_PEAK_EPS_DEFAULT, PULSEG_PEAK_PROMINENCE_DEFAULT, NULL, NULL, {0, 1, 2}, \
-    PULSEG_CACHE_EXT_DEFAULT, NULL, NULL, 1 \
+    PULSEG_CACHE_EXT_DEFAULT, NULL, NULL, 1, NULL, NULL, 0, 0 \
     }
 /* clang-format on */
 

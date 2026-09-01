@@ -37,9 +37,13 @@
 #ifndef PULSEQ_CXX_SEQUENCE_HPP
 #define PULSEQ_CXX_SEQUENCE_HPP
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
+#include <cstring>
+#include <limits>
 #include <map>
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -162,13 +166,23 @@ namespace pulseq
     class RaggedTable
     {
     public:
-        RaggedTable() : starts_{0}
+        RaggedTable() = default;
+        RaggedTable(const RaggedTable& other)
         {
+            copy_from(other);
         }
+        RaggedTable& operator=(const RaggedTable& other)
+        {
+            if (this != &other)
+                copy_from(other);
+            return *this;
+        }
+        RaggedTable(RaggedTable&&) noexcept = default;
+        RaggedTable& operator=(RaggedTable&&) noexcept = default;
 
         int size() const
         {
-            return static_cast<int>(starts_.size()) - 1;
+            return static_cast<int>(len_.size());
         }
         bool empty() const
         {
@@ -177,57 +191,139 @@ namespace pulseq
 
         int length(int id) const
         {
-            return starts_[id] - starts_[id - 1];
+            return len_[static_cast<size_t>(id) - 1];
         }
         const double* row(int id) const
         {
-            return values_.data() + starts_[id - 1];
+            return at(start_[static_cast<size_t>(id) - 1]);
         }
         double* row(int id)
         {
-            return values_.data() + starts_[id - 1];
+            return at(start_[static_cast<size_t>(id) - 1]);
+        }
+
+        /** Make room for @p rows rows; the values need no reservation, a
+         *  chunk is allocated once and never moved. */
+        void reserve(int rows, size_t /*values*/)
+        {
+            start_.reserve(static_cast<size_t>(rows));
+            len_.reserve(static_cast<size_t>(rows));
         }
 
         /** Append a row of @p count values.  @return its 1-based id. */
         int append(const double* values, int count)
         {
-            values_.insert(values_.end(), values, values + count);
-            starts_.push_back(static_cast<int32_t>(values_.size()));
+            const int64_t where = place(count);
+            if (count > 0)
+                std::memcpy(at(where), values, static_cast<size_t>(count) * sizeof(double));
+            start_.push_back(where);
+            len_.push_back(count);
             return size();
         }
 
         void clear()
         {
-            values_.clear();
-            starts_.assign(1, 0);
+            chunks_.clear();
+            bases_.clear();
+            caps_.clear();
+            start_.clear();
+            len_.clear();
+            cursor_ = 0;
+        }
+
+        /**
+         * Keep the rows flagged in @p keep (indexed by id - 1), in order;
+         * @p new_id (indexed by id) receives every row's new id, 0 for one
+         * dropped. Rows are reached through their offsets, so nothing moves:
+         * a dropped row's bytes stay in their chunk until the table is
+         * cleared, and the survivors keep their places.
+         */
+        void compact(const uint8_t* keep, int32_t* new_id)
+        {
+            const int total = size();
+            int kept = 0;
+            for (int id = 1; id <= total; ++id)
+            {
+                if (!keep[id - 1])
+                {
+                    new_id[id] = 0;
+                    continue;
+                }
+                start_[static_cast<size_t>(kept)] = start_[static_cast<size_t>(id) - 1];
+                len_[static_cast<size_t>(kept)] = len_[static_cast<size_t>(id) - 1];
+                new_id[id] = ++kept;
+            }
+            start_.resize(static_cast<size_t>(kept));
+            len_.resize(static_cast<size_t>(kept));
         }
 
         /**
          * Replace every row at once.
          *
-         * @p starts holds @p count + 1 offsets, so row i spans
-         * `[starts[i], starts[i+1])` -- the layout this class already keeps,
-         * handed over rather than rebuilt row by row.
+         * @p starts holds @p count + 1 offsets into @p values, so row i spans
+         * `[starts[i], starts[i+1])`.
          */
         void assign(const int32_t* starts, int count, const double* values)
         {
-            starts_.assign(starts, starts + count + 1);
-            values_.assign(values, values + starts_[static_cast<size_t>(count)]);
+            clear();
+            reserve(count, 0);
+            for (int i = 0; i < count; ++i)
+                append(values + starts[i], starts[i + 1] - starts[i]);
         }
 
     private:
-        std::vector<double> values_;
-        std::vector<int32_t> starts_;
+        /** Rows live in chunks allocated once: a chunk fills until the next
+         *  row would not fit, and a row longer than a chunk gets one of its
+         *  own. Offsets are into one virtual span the chunks tile. */
+        static constexpr int64_t kChunkValues = int64_t{1} << 22;
+
+        double* at(int64_t offset)
+        {
+            const size_t i = chunk_of(offset);
+            return chunks_[i].get() + (offset - bases_[i]);
+        }
+        const double* at(int64_t offset) const
+        {
+            const size_t i = chunk_of(offset);
+            return chunks_[i].get() + (offset - bases_[i]);
+        }
+        size_t chunk_of(int64_t offset) const
+        {
+            const auto it = std::upper_bound(bases_.begin(), bases_.end(), offset);
+            return static_cast<size_t>(it - bases_.begin()) - 1;
+        }
+        int64_t place(int count)
+        {
+            if (!chunks_.empty() && cursor_ - bases_.back() + count <= caps_.back())
+            {
+                const int64_t where = cursor_;
+                cursor_ += count;
+                return where;
+            }
+            const int64_t cap = count > kChunkValues ? count : kChunkValues;
+            chunks_.emplace_back(new double[static_cast<size_t>(cap)]);
+            bases_.push_back(cursor_);
+            caps_.push_back(cap);
+            const int64_t where = cursor_;
+            cursor_ += count;
+            return where;
+        }
+        void copy_from(const RaggedTable& other)
+        {
+            clear();
+            reserve(other.size(), 0);
+            for (int id = 1; id <= other.size(); ++id)
+                append(other.row(id), other.length(id));
+        }
+
+        std::vector<std::unique_ptr<double[]>> chunks_;
+        std::vector<int64_t> bases_;
+        std::vector<int64_t> caps_;
+        std::vector<int64_t> start_;
+        std::vector<int32_t> len_;
+        int64_t cursor_ = 0;
     };
 
-    /**
-     * The SHAPES library.
-     *
-     * A shape is stored compressed, exactly as the file carries it, together
-     * with the sample count it decompresses to.  Nothing here decompresses:
-     * the codec belongs to whoever wants the samples, and a writer only ever
-     * needs to put back what it was given.
-     */
     class ShapeLibrary
     {
     public:
@@ -271,14 +367,32 @@ namespace pulseq
          */
         int append_raw(const double* samples, int count);
 
-        /** Compress every shape still held raw.  @return whether any was.
-         *  Idempotent. */
+        /** Encode every shape still held raw.  @return whether any row
+         *  changed: a shape the encoding would not shorten is kept as it is,
+         *  so a library of such shapes is untouched.  Idempotent. */
         bool compress();
+
+        /**
+         * Keep only the shapes @p first maps onto themselves (first[id] ==
+         * id), in id order, renumbering densely.  @return for every old id
+         * the id its first appearance now has.
+         */
+        std::vector<int32_t> keep_first_appearances(const std::vector<int32_t>& first);
+
+        /**
+         * The shape's first sample, last sample and peak magnitude, as
+         * decompressed. Recorded when a raw shape is appended; a shape that
+         * arrived encoded is decoded once, the first time it is asked.
+         */
+        void edge_stats(int id, double* first, double* last, double* peak) const;
 
         void clear()
         {
             num_uncompressed_.clear();
             is_compressed_.clear();
+            first_.clear();
+            last_.clear();
+            peak_.clear();
             data_.clear();
         }
 
@@ -290,6 +404,9 @@ namespace pulseq
             const double* samples)
         {
             num_uncompressed_.assign(num_uncompressed, num_uncompressed + count);
+            first_.assign(static_cast<size_t>(count), std::numeric_limits<double>::quiet_NaN());
+            last_.assign(static_cast<size_t>(count), std::numeric_limits<double>::quiet_NaN());
+            peak_.assign(static_cast<size_t>(count), std::numeric_limits<double>::quiet_NaN());
             is_compressed_.assign(static_cast<size_t>(count), 1);
             data_.assign(starts, count, samples);
         }
@@ -297,6 +414,11 @@ namespace pulseq
     private:
         std::vector<int32_t> num_uncompressed_;
         std::vector<uint8_t> is_compressed_;
+        /** Per shape, as decompressed; NaN until known. Filled at append_raw,
+         *  decoded on demand for shapes appended encoded or assigned. */
+        mutable std::vector<double> first_;
+        mutable std::vector<double> last_;
+        mutable std::vector<double> peak_;
         RaggedTable data_;
     };
 

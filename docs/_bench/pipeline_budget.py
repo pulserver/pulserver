@@ -13,6 +13,7 @@ dedup + declare_tr      <= 3 s at 128K
 binary write            >= 1 GB/s
 parse + convert         >= 1 GB/s
 PNS gate                <= 7 s at 128K
+mech-res check          <= 7 s at 128K
 end to end              <= 30 s at 128K
 ======================  =====================================
 
@@ -34,6 +35,11 @@ from pathlib import Path
 RESULTS = Path(__file__).resolve().parent / "pipeline_budget.json"
 
 NPTS = 4096
+# Forbidden bands the mechanical-resonance check is timed against. The
+# amplitude is far above anything the synthetic arms sustain: the harness
+# times the check, whose work does not depend on the threshold, and a verdict
+# on random 50 mT/m waveforms would say nothing about a real design.
+MECH_BANDS = [(550.0, 650.0, 1.0e12), (1100.0, 1250.0, 1.0e12)]
 TARGET_ARMS = 131072
 
 BUDGET = {
@@ -42,6 +48,7 @@ BUDGET = {
     "write_mb_per_s": 1000.0,
     "parse_mb_per_s": 1000.0,
     "gate_s_at_target": 7.0,
+    "mech_s_at_target": 7.0,
     "end_to_end_s_at_target": 30.0,
 }
 
@@ -65,9 +72,7 @@ def build_arms(n_arms: int):
     rng = np.random.default_rng(0)
     t = np.linspace(0.0, 1.0, NPTS)
     taper = 4.0 * t * (1.0 - t)
-    base = np.stack(
-        [np.sin(40 * np.pi * t) * taper, np.cos(40 * np.pi * t) * taper]
-    )
+    base = np.stack([np.sin(40 * np.pi * t) * taper, np.cos(40 * np.pi * t) * taper])
     base *= 0.6 * system.max_grad / np.abs(base).max()
     arms = []
     for k in range(n_arms):
@@ -138,9 +143,11 @@ def run(n_arms: int) -> dict:
 
     t0 = time.perf_counter()
     gate = _check_safety_profiled(
-        collection, [], 4.25e8 / 0.333, 360.0, 100.0, False
+        collection, MECH_BANDS, 4.25e8 / 0.333, 360.0, 100.0, False
     )
     t_gate = time.perf_counter() - t0
+    t_pns = gate["stages"]["pns"]["seconds"]
+    t_mech = gate["stages"]["mech_resonance"]["seconds"]
 
     scale = TARGET_ARMS / n_arms
     mb = len(binary) / 1e6
@@ -162,7 +169,7 @@ def run(n_arms: int) -> dict:
         "gate_code": gate["code"],
         "gate_stages": {
             k: gate["stages"][k]["seconds"]
-            for k in ("pns", "pns_basis_build", "pns_score")
+            for k in ("pns", "pns_basis_build", "pns_score", "mech_resonance")
         },
         "at_target": {
             "assembly_s": (t_factory + t_add) * scale,
@@ -170,6 +177,8 @@ def run(n_arms: int) -> dict:
             "write_s": t_write * scale,
             "parse_s": t_parse * scale,
             "gate_s": t_gate * scale,
+            "pns_s": t_pns * scale,
+            "mech_s": t_mech * scale,
             "end_to_end_s": (
                 t_factory + t_add + t_declare + t_dedup + t_write + t_parse + t_gate
             )
@@ -217,11 +226,19 @@ def report(entry: dict) -> None:
         f"{b['parse_mb_per_s']:.0f} MB/s",
         entry["parse_mb_per_s"] >= b["parse_mb_per_s"],
     )
+    # Verdict codes are negative; any non-negative code is a gate that ran.
+    gated = entry["gate_code"] >= 0
     line(
         "PNS gate",
-        f"{at['gate_s']:.1f} s",
+        f"{at['pns_s']:.1f} s" if gated else f"declined ({entry['gate_code']})",
         f"{b['gate_s_at_target']:.0f} s",
-        at["gate_s"] <= b["gate_s_at_target"],
+        gated and at["pns_s"] <= b["gate_s_at_target"],
+    )
+    line(
+        "mech-res check",
+        f"{at['mech_s']:.1f} s" if gated else f"declined ({entry['gate_code']})",
+        f"{b['mech_s_at_target']:.0f} s",
+        gated and at["mech_s"] <= b["mech_s_at_target"],
     )
     line(
         "end to end",
@@ -232,17 +249,105 @@ def report(entry: dict) -> None:
     print(f"  gate verdict code {entry['gate_code']}")
 
 
+FIGURE = (
+    Path(__file__).resolve().parents[1]
+    / "explanations"
+    / "assets"
+    / "pipeline_budget"
+    / "stages.png"
+)
+
+
+def plot(entry: dict, out: Path = FIGURE) -> Path:
+    """Every stage at the target size against its budget line, as bars.
+
+    Parameters
+    ----------
+    entry : dict
+        A result of :func:`run`, as ``pipeline_budget.json`` holds it.
+    out : Path
+        Where the figure goes; the page that shows it reads it from there.
+    """
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    at, b = entry["at_target"], entry["budget"]
+    stages = [
+        ("assembly", at["assembly_s"], b["assembly_us_per_arm"] * TARGET_ARMS * 1e-6),
+        ("declare + dedup", at["declare_dedup_s"], b["declare_dedup_s_at_target"]),
+        (
+            "binary write",
+            at["write_s"],
+            entry["binary_mb"] * TARGET_ARMS / entry["arms"] / b["write_mb_per_s"],
+        ),
+        (
+            "parse + convert",
+            at["parse_s"],
+            entry["binary_mb"] * TARGET_ARMS / entry["arms"] / b["parse_mb_per_s"],
+        ),
+        ("PNS gate", at["pns_s"], b["gate_s_at_target"]),
+        ("mech-res check", at["mech_s"], b["mech_s_at_target"]),
+    ]
+    fig, ax = plt.subplots(figsize=(8.0, 3.6))
+    names = [n for n, _, _ in stages]
+    measured = [m for _, m, _ in stages]
+    lines = [t for _, _, t in stages]
+    y = range(len(stages))
+    ax.barh(
+        y,
+        measured,
+        color=[
+            "#2a9d8f" if m <= t else "#e76f51"
+            for m, t in zip(measured, lines, strict=True)
+        ],
+        height=0.55,
+    )
+    for i, t in enumerate(lines):
+        ax.plot([t, t], [i - 0.35, i + 0.35], color="black", lw=1.4)
+    ax.set_yticks(list(y), names)
+    ax.invert_yaxis()
+    ax.set_xlabel(
+        f"seconds at {TARGET_ARMS:,} arms of {entry['npts']} points, extrapolated from {entry['arms']:,}"
+    )
+    total = sum(measured)
+    ax.set_title(
+        f"end to end {total:.0f} s against a {b['end_to_end_s_at_target']:.0f} s budget; ticks are each stage's line"
+    )
+    ax.grid(axis="x", alpha=0.3)
+    fig.tight_layout()
+    out.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out, dpi=130, facecolor="white")
+    plt.close(fig)
+    return out
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--arms", type=int, default=16384)
+    parser.add_argument(
+        "--plot", action="store_true", help="also draw the stage figure the docs show"
+    )
+    parser.add_argument(
+        "--from-json",
+        action="store_true",
+        help="draw from the saved result without running",
+    )
     args = parser.parse_args()
 
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        entry = run(args.arms)
-    report(entry)
-    RESULTS.write_text(json.dumps(entry, indent=2, sort_keys=True) + "\n")
-    print(f"wrote {RESULTS.relative_to(RESULTS.parents[2])}")
+    if args.from_json:
+        entry = json.loads(RESULTS.read_text())
+    else:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            entry = run(args.arms)
+        report(entry)
+        RESULTS.write_text(json.dumps(entry, indent=2, sort_keys=True) + "\n")
+        print(f"wrote {RESULTS.relative_to(RESULTS.parents[2])}")
+    if args.plot or args.from_json:
+        out = plot(entry)
+        print(f"wrote {out.relative_to(out.parents[3])}")
     return 0
 
 

@@ -561,6 +561,19 @@ static void grad_keep_best(pulseg_grad_representative *best, const pulseg_grad_r
 /*  Gradient statistics                                               */
 /* ================================================================== */
 
+/* The record a structure-only file writes for a gradient shape it carries
+ * without samples: two equal values opening a run of length -1.5, which no
+ * run-length decoder accepts, then the first sample, the last sample and
+ * the peak magnitude. */
+#define GRAD_SHAPE_STUB_LENGTH 6
+
+static int grad_shape_is_stub(const pulseq_shape *shape)
+{
+    return shape->samples != NULL && shape->num_samples == GRAD_SHAPE_STUB_LENGTH &&
+        shape->num_uncompressed_samples > GRAD_SHAPE_STUB_LENGTH && shape->samples[0] == 0.0f &&
+        shape->samples[1] == 0.0f && shape->samples[2] == -1.5f;
+}
+
 static int compute_grad_stats(
     const pulseq_file *seq,
     pulseg_sequence_descriptor *desc,
@@ -736,6 +749,8 @@ static int compute_grad_stats(
             for (row = 0; row < grad_table_size; ++row)
             {
                 int seen;
+                const pulseq_shape *stored;
+                const PULSEQ_REAL *w;
 
                 if (!grad_table || grad_table[row].id != def_idx)
                     continue;
@@ -748,12 +763,38 @@ static int compute_grad_stats(
                 if (shape_def_seen)
                     shape_def_seen[shape_id - 1] = def_idx;
 
-                if (!pulseq_decompress_shape(
-                        &decomp_wave,
-                        &seq->shapes_library[shape_id - 1],
-                        1.0f))
-                    goto fail;
-                num_samples = decomp_wave.num_uncompressed_samples;
+                /* A shape stored uncompressed is read where it lies; only a
+                 * run-length-coded one is expanded into a buffer of its own. */
+                stored = &seq->shapes_library[shape_id - 1];
+                if (opts->structure_only && grad_shape_is_stub(stored))
+                {
+                    /* A shape carried for structure alone: first sample,
+                     * last sample and peak magnitude, normalised as the
+                     * sweep below normalises them; the statistics that
+                     * need the waveform stay at zero. */
+                    float p;
+
+                    p = (stored->samples[5] > 1e-9f) ? stored->samples[5] : 1.0f;
+                    cand.first_value = stored->samples[3] / p;
+                    cand.last_value = stored->samples[4] / p;
+                    cand.slew_rate = 0.0f;
+                    cand.energy = 0.0f;
+                    slew_energy = 0.0f;
+                    num_samples = stored->num_uncompressed_samples;
+                    goto stats_ready;
+                }
+                if (stored->num_samples == stored->num_uncompressed_samples && stored->samples)
+                {
+                    w = stored->samples;
+                    num_samples = stored->num_samples;
+                }
+                else
+                {
+                    if (!pulseq_decompress_shape(&decomp_wave, stored, 1.0f))
+                        goto fail;
+                    w = decomp_wave.samples;
+                    num_samples = decomp_wave.num_uncompressed_samples;
+                }
 
                 if (!has_time && num_samples >= 2)
                 {
@@ -765,14 +806,14 @@ static int compute_grad_stats(
                     double tz_sq, dsq;
                     float w_prev, w_cur, max_abs, max_dabs, a, d, p;
 
-                    w_prev = (float)decomp_wave.samples[0];
+                    w_prev = (float)w[0];
                     max_abs = w_prev < 0.0f ? -w_prev : w_prev;
                     max_dabs = 0.0f;
                     tz_sq = 0.0;
                     dsq = 0.0;
                     for (i = 1; i < num_samples; ++i)
                     {
-                        w_cur = (float)decomp_wave.samples[i];
+                        w_cur = (float)w[i];
                         a = w_cur < 0.0f ? -w_cur : w_cur;
                         if (a > max_abs)
                             max_abs = a;
@@ -787,8 +828,8 @@ static int compute_grad_stats(
                     }
 
                     p = (max_abs > 1e-9f) ? max_abs : 1.0f;
-                    cand.first_value = (float)decomp_wave.samples[0] / p;
-                    cand.last_value = (float)decomp_wave.samples[num_samples - 1] / p;
+                    cand.first_value = (float)w[0] / p;
+                    cand.last_value = (float)w[num_samples - 1] / p;
                     cand.slew_rate = (max_dabs / p) / grad_raster_us * 1e6f;
                     cand.energy = (float)(tz_sq / ((double)p * p)) * grad_raster_us * 1e-6f;
                     slew_energy = (float)(dsq / ((double)p * p) / ((double)grad_raster_us * 1e-6));
@@ -801,7 +842,7 @@ static int compute_grad_stats(
                         goto fail;
 
                     for (i = 0; i < num_samples; ++i)
-                        waveform[i] = decomp_wave.samples[i];
+                        waveform[i] = w[i];
                     normalize_waveform(waveform, num_samples);
 
                     for (i = 0; i < num_samples; ++i)
@@ -836,6 +877,7 @@ static int compute_grad_stats(
                     sq_wave = NULL;
                 }
 
+            stats_ready:
                 if (desc && desc->grad_shape_first && shape_id <= desc->num_grad_shape_stats)
                 {
                     desc->grad_shape_first[shape_id - 1] = cand.first_value;
@@ -863,7 +905,8 @@ static int compute_grad_stats(
                 cand.score = amp2 * slew_energy;
                 grad_keep_best(&gd->spectral, &cand);
 
-                PULSEG_FREE(decomp_wave.samples);
+                if (decomp_wave.samples)
+                    PULSEG_FREE(decomp_wave.samples);
                 decomp_wave.samples = NULL;
             }
 
@@ -1555,7 +1598,13 @@ static int copy_rf_shim_library(const pulseq_file *seq, pulseg_sequence_descript
     return PULSEG_SUCCESS;
 }
 
-static int copy_shapes_library(const pulseq_file *seq, pulseg_sequence_descriptor *desc)
+/* Give the descriptor the file's shape library. With @p adopt (the file's
+ * own shapes_library) the sample buffers move across and the file's entries
+ * are left empty; without it they are copied. */
+static int copy_shapes_library(
+    const pulseq_file *seq,
+    pulseg_sequence_descriptor *desc,
+    pulseq_shape *adopt)
 {
     int i, j, num = seq->shapes_library_size;
     int ns;
@@ -1580,7 +1629,12 @@ static int copy_shapes_library(const pulseq_file *seq, pulseg_sequence_descripto
         ns = seq->shapes_library[i].num_samples;
         desc->shapes[i].num_samples = ns;
         desc->shapes[i].num_uncompressed_samples = seq->shapes_library[i].num_uncompressed_samples;
-        if (ns > 0 && seq->shapes_library[i].samples)
+        if (ns > 0 && adopt && adopt[i].samples)
+        {
+            desc->shapes[i].samples = adopt[i].samples;
+            adopt[i].samples = NULL;
+        }
+        else if (ns > 0 && seq->shapes_library[i].samples)
         {
             desc->shapes[i].samples = (float *)PULSEG_ALLOC(ns * sizeof(float));
             if (!desc->shapes[i].samples)
@@ -1596,6 +1650,7 @@ static int copy_shapes_library(const pulseq_file *seq, pulseg_sequence_descripto
         }
     }
     desc->num_shapes = num;
+    desc->shapes_borrowed = (adopt && seq->shapes_borrowed) ? 1 : 0;
     return PULSEG_SUCCESS;
 }
 
@@ -1653,7 +1708,8 @@ static int check_raster_times(const pulseq_file *seq, const pulseg_opts *opts)
 int pulseg__get_unique_blocks(
     pulseg_sequence_descriptor *desc,
     const pulseq_file *seq,
-    const pulseg_opts *opts)
+    const pulseg_opts *opts,
+    pulseq_shape *adopt_shapes)
 {
     /* `result` is only ever a failure code: it starts as the reason an
      * allocation-failure jump would give, and the sites that know better
@@ -1782,6 +1838,8 @@ int pulseg__get_unique_blocks(
         (pulseg_block_table_element *)PULSEG_ALLOC(num_blocks * sizeof(pulseg_block_table_element));
     if (!tmp_blk_defs || !tmp_blk_tab)
         goto fail;
+
+    desc->structure_only = opts->structure_only ? 1 : 0;
 
     /* ---- step 1: dedup event libraries ---- */
     if (seq->rf_library_size > 0)
@@ -2120,7 +2178,7 @@ int pulseg__get_unique_blocks(
         pulseg_sequence_descriptor_free(desc);
         return result;
     }
-    result = copy_shapes_library(seq, desc);
+    result = copy_shapes_library(seq, desc, adopt_shapes);
     if (PULSEG_FAILED(result))
     {
         pulseg_sequence_descriptor_free(desc);

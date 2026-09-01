@@ -130,12 +130,14 @@ void pulseg_sequence_descriptor_free(pulseg_sequence_descriptor *d)
 
     if (d->shapes)
     {
-        for (i = 0; i < d->num_shapes; ++i)
-            if (d->shapes[i].samples)
-                PULSEG_FREE(d->shapes[i].samples);
+        if (!d->shapes_borrowed)
+            for (i = 0; i < d->num_shapes; ++i)
+                if (d->shapes[i].samples)
+                    PULSEG_FREE(d->shapes[i].samples);
         PULSEG_FREE(d->shapes);
         d->shapes = NULL;
     }
+    d->shapes_borrowed = 0;
     d->num_shapes = 0;
 
     if (d->segment_definitions)
@@ -1107,6 +1109,15 @@ int pulseg__build_segment_remap(pulseg_collection *coll)
 /*  pulseg_convert_collection (public convert entry point)    */
 /* ================================================================== */
 
+static int convert_collection(
+    pulseg_collection *coll,
+    pulseg_diagnostic *diag,
+    const pulseq_file *files,
+    int n,
+    const pulseg_opts *opts,
+    int parse_labels,
+    int adopt_shapes);
+
 int pulseg_convert_collection(
     pulseg_collection *coll,
     pulseg_diagnostic *diag,
@@ -1114,6 +1125,20 @@ int pulseg_convert_collection(
     int n,
     const pulseg_opts *opts,
     int parse_labels)
+{
+    return convert_collection(coll, diag, files, n, opts, parse_labels, 0);
+}
+
+/* @p adopt_shapes moves the files' sample buffers into the descriptors
+ * instead of copying them, for a caller that frees @p files right after. */
+static int convert_collection(
+    pulseg_collection *coll,
+    pulseg_diagnostic *diag,
+    const pulseq_file *files,
+    int n,
+    const pulseg_opts *opts,
+    int parse_labels,
+    int adopt_shapes)
 {
     int i, j, result, rc;
     int adc_off = 0, seg_off = 0, blk_off = 0;
@@ -1168,7 +1193,11 @@ int pulseg_convert_collection(
         coll->subsequence_info[i].segment_id_offset = seg_off;
         coll->subsequence_info[i].block_index_offset = blk_off;
 
-        result = pulseg__get_unique_blocks(&desc, &files[i], opts);
+        result = pulseg__get_unique_blocks(
+            &desc,
+            &files[i],
+            opts,
+            adopt_shapes ? files[i].shapes_library : NULL);
         if (PULSEG_FAILED(result))
         {
             diag->code = result;
@@ -1377,13 +1406,14 @@ int pulseg_read(
         }
     }
 
-    rc = pulseg_convert_collection(
+    rc = convert_collection(
         collection,
         diag,
         raw_coll.sequences,
         raw_coll.num_sequences,
         opts,
-        parse_labels);
+        parse_labels,
+        1);
     if (PULSEG_FAILED(diag->code))
     {
         rc = diag->code;
@@ -1453,7 +1483,9 @@ int pulseg_read_from_buffers(
         }
 
         pulseq_file_init(&raw_coll.sequences[i], &raster);
-        rc = pulseq_read_from_memory(&raw_coll.sequences[i], buffers[i], buffer_sizes[i]);
+        rc = opts->borrow_buffer_shapes
+            ? pulseq_read_from_memory_borrowing(&raw_coll.sequences[i], buffers[i], buffer_sizes[i])
+            : pulseq_read_from_memory(&raw_coll.sequences[i], buffers[i], buffer_sizes[i]);
         if (PULSEG_FAILED(rc))
         {
             diag->code = rc;
@@ -1470,13 +1502,14 @@ int pulseg_read_from_buffers(
         goto fail_raw;
     }
 
-    rc = pulseg_convert_collection(
+    rc = convert_collection(
         collection,
         diag,
         raw_coll.sequences,
         raw_coll.num_sequences,
         opts,
-        parse_labels);
+        parse_labels,
+        1);
     if (PULSEG_FAILED(diag->code))
     {
         rc = diag->code;

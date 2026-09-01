@@ -52,9 +52,15 @@ play**: an instance's signature is the sequence of $(g_x, g_y, g_z)$ definition
 and shape ids over its positions, instances sharing a signature form a group,
 one envelope is built per group, and the worst group is the verdict. A scan
 whose repetitions differ only in amplitude has one group and one envelope. A
-four-arm spiral written out has four. Past `PULSEG__MAX_SHAPE_GROUPS` (64) the
-sweep **fails closed**, and the diagnostic asks for the repeated waveform to be
-written once and turned with a `ROTATIONS` extension.
+four-arm spiral written out has four. Past `PULSEG__MAX_SHAPE_GROUPS` (64)
+there is no window at all: the stimulation check prices the scan by the
+**occurrence score** — a bound built from every block's own response, with
+no window, no grouping and no cap on how many distinct waveforms the scan
+plays — and settles what the bound cannot clear by evaluating exactly the
+stretches it names. That path is the {doc}`PNS performance page's
+<../performance/pns>` last section. The acoustic check never groups by
+shape: it runs on {doc}`construction 2 <canonical_tr>`, whose bound holds
+whatever the shapes are.
 
 **What it guarantees, and what it does not.** The envelope dominates every
 repetition sample by sample, which is exact and is asserted directly:

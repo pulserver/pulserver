@@ -326,10 +326,20 @@ def _native_pns(structure: _Structure, hardware: object, mode: int, index: int) 
 
     if _safety.is_safe_hardware(hardware):
         gx, gy, gz = _safety.safe_coefficients(hardware)
-        return _calc_pns_safe(structure.collection, 0, index, gx, gy, gz)
+        return _calc_pns_safe(
+            structure.collection, 0, index, gx, gy, gz, amplitude_mode=mode
+        )
 
     chronaxie_us, rheobase, alpha = _safety.irnich_coefficients(hardware)
-    return _calc_pns(structure.collection, 0, index, chronaxie_us, rheobase, alpha)
+    return _calc_pns(
+        structure.collection,
+        0,
+        index,
+        chronaxie_us,
+        rheobase,
+        alpha,
+        amplitude_mode=mode,
+    )
 
 
 def _plot_pns(components: np.ndarray, raster: float) -> None:

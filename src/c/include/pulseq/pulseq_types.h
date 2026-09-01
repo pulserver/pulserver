@@ -403,6 +403,10 @@ typedef struct pulseq_file
     int is_shapes_library_parsed;
     int shapes_library_size;
     pulseq_shape *shapes_library;
+    /** The shape samples point into the caller's buffer rather than into
+     *  storage of their own: freeing the file leaves them alone, and the
+     *  buffer must outlive every use of them. */
+    int shapes_borrowed;
 } pulseq_file;
 
 /**

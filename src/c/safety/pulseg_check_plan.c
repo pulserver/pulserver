@@ -266,11 +266,21 @@ int pulseg__plan_waveforms(
 {
     plan_window *w;
     int i, slot, rc, grouped;
-
     *out = NULL;
     if (!plan)
         return PULSEG_ERR_NULL_POINTER;
 
+    if (desc && desc->structure_only)
+    {
+        if (diag)
+        {
+            pulseg__diag_printf(
+                diag,
+                "the collection was converted for structure only and holds no gradient waveforms");
+            diag->code = PULSEG_ERR_INVALID_ARGUMENT;
+        }
+        return PULSEG_ERR_INVALID_ARGUMENT;
+    }
     grouped = labels ? 1 : 0;
 
     for (i = 0; i < PLAN_MAX_WINDOWS; ++i)

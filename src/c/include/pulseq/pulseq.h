@@ -103,6 +103,12 @@ extern "C"
 
     /** @brief Binary counterpart of pulseq_read_from_memory(). */
     int pulseq_read_binary_from_memory(pulseq_file *seq, const void *data, long size);
+    /** @brief pulseq_read_from_memory / pulseq_read_binary_from_memory
+     *  with the shape samples left in @p data instead of copied (when the
+     *  file's cells are the host's floats): @p data must outlive the file.
+     *  The file's shapes_borrowed flag says whether it happened. */
+    int pulseq_read_from_memory_borrowing(pulseq_file *seq, const void *data, long size);
+    int pulseq_read_binary_from_memory_borrowing(pulseq_file *seq, const void *data, long size);
 
     /**
      * @brief Parse a (possibly "next sequence"-chained) .seq file into a set.

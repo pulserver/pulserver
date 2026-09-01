@@ -85,7 +85,38 @@ structural TR, deduplicates, and then serialises:
 Deduplication is folded in on purpose: it is part of what writing a file *is*,
 not an optimisation a caller should have to remember. The sequence itself is
 left alone — a deduplicated copy is written — and a sequence untouched since its
-last deduplication skips the pass.
+last deduplication skips the pass. `remove_duplicates(in_place=True)` is the
+form for a sequence too large to hold twice.
+
+**Declaring the TR reads no samples.** `declare_tr` — and `tr_size`,
+`num_trs`, `num_segments` — derive from a structure-only conversion: the
+writer emits every readout shape of an RF-free block as a six-value stub
+(first sample, last sample, peak magnitude, behind a marker no decoder
+accepts) and the scanner-side conversion detects the TR and the segments from
+the block table and those edges. On 4 096 written-out arms of 4 096 points
+the light write is 0.2 µs per arm and the light conversion 2.2 µs; the full
+round trip it replaces is 60 µs. The structure a light conversion reports is
+held equal to the full one's over eight shipped fixtures, and a light
+collection refuses any waveform or safety request.
+
+**Where the time goes at scale.** A written-out library is a few gigabytes
+of samples, and every stage below is a pass over them; the discipline is that
+each stage touches each sample about once, at memory speed:
+
+- *Registering a waveform* copies it once into a **chunked** shape store — 32 MB
+  chunks allocated once, a row never spanning two — so the library never
+  re-copies itself as it grows.
+- *Deduplicating* rounds every sample to the file's nine significant digits
+  and hashes each row on every core, then walks the rows once in order to
+  number first appearances; a duplicate drops out of the index and its bytes
+  stay where they are, so nothing moves. 28 µs per arm of two 4 096-point
+  shapes.
+- *Writing* runs the writer twice over a *sink*: once counting, to learn the
+  file's size, then filling a buffer of exactly that size — no zero-fill and
+  no copy on the way to the caller's `bytes`. 19 µs per arm, 1.2 GB/s.
+
+The {doc}`pipeline budget <pipeline_budget>` page puts these stages end to end
+at 131 072 distinct arms.
 
 Text against binary is not a size story at this scale; both files are dominated
 by the block table, which is a row per block either way. It is a *parsing*

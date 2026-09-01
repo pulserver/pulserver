@@ -558,6 +558,13 @@ typedef struct pulseg_sequence_descriptor
      * contents) -- deliberately placed after all cache-serialized fields
      * so it needs no swap4_array count bump. */
     char cache_ext[PULSEG_CACHE_EXT_MAX];
+    /* Converted for structure alone: gradient shapes may hold no samples
+     * and no gradient statistics were computed, so waveform and safety
+     * requests are refused. Not part of the cache payload. */
+    int structure_only;
+    /* The shape samples belong to a buffer the caller keeps alive; freeing
+     * the descriptor leaves them alone. Not part of the cache payload. */
+    int shapes_borrowed;
 } pulseg_sequence_descriptor;
 
 /* Identity of the waveform one block drives one axis with, up to amplitude.
@@ -613,7 +620,7 @@ int pulseg__wave_key_flat(const pulseg_sequence_descriptor *desc, int def_index,
     /* hints */ 0, 0, /* tr_start anchor */ -1, NULL, 0, 0, NULL, \
     {{0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, \
     {0, 0}, {0, 0}, {0, 0}, {0, 0}}, NULL, \
-    PULSEG_CACHE_EXT_DEFAULT \
+    PULSEG_CACHE_EXT_DEFAULT, 0, 0 \
     }
 /* clang-format on */
 
@@ -893,10 +900,14 @@ int pulseg__deduplicate_int_rows(
     const int *int_rows,
     int num_rows,
     int num_cols);
+/* @p adopt_shapes, when it is @p seq's own shapes_library, lets the
+ * descriptor take the sample buffers instead of copying them; the file's
+ * entries are left empty and must not be read afterwards. NULL copies. */
 int pulseg__get_unique_blocks(
     pulseg_sequence_descriptor *desc,
     const pulseq_file *seq,
-    const pulseg_opts *opts);
+    const pulseg_opts *opts,
+    pulseq_shape *adopt_shapes);
 
 /* --- pulseg_structure.c --- */
 int pulseg__get_tr_in_sequence(
@@ -992,13 +1003,23 @@ int pulseg__interpolate_to_uniform(
 
 typedef struct pulseg__pns_score pulseg__pns_score;
 
+/* The shape of pulseg_opts.parallel_for_fn, for the loops that take it. */
+typedef void (*pulseg__parallel_for_fn)(
+    void *ctx,
+    int count,
+    void (*body)(void *arg, int begin, int end),
+    void *arg);
+
+/* Gap zones the slide prices an earlier occurrence's tail at, and the equal
+ * windows of its own span a block is priced over. */
+#define PULSEG__PNS_SCORE_ZONES 4
+#define PULSEG__PNS_SCORE_WINDOWS 8
+
 typedef struct pulseg__pns_basis_info
 {
-    int base_id;        /* base_blocks index                                */
-    int num_elements;   /* distinct (shape, amplitude) tuples at the block  */
-    int d;              /* axes decomposed jointly (0 = rank-1 carried it)  */
-    int rank;           /* directions kept                                  */
-    float max_residual; /* largest per-element reconstruction residual      */
+    int base_id;      /* base_blocks index                               */
+    int num_elements; /* distinct (shape, amplitude) tuples at the block */
+    int d;            /* axes priced jointly (0 = rank-1 carried it)     */
 } pulseg__pns_basis_info;
 
 int pulseg__pns_score_build(
@@ -1008,6 +1029,79 @@ int pulseg__pns_score_build(
     float gamma_hz_per_tesla,
     int *out_declined,
     double *out_macs);
+int pulseg__pns_score_build_ex(
+    pulseg__pns_score **out,
+    const pulseg_sequence_descriptor *desc,
+    const pulseg_pns_model *model,
+    float gamma_hz_per_tesla,
+    pulseg__parallel_for_fn par_fn,
+    void *par_ctx,
+    int *out_declined,
+    double *out_macs);
+
+/* The per-occurrence prices the sweep sums: response-peak bound u (percent),
+ * the peak bound over each of PULSEG__PNS_SCORE_WINDOWS windows of the
+ * block's own span (out_env[]), the tail-peak bound at each of
+ * PULSEG__PNS_SCORE_ZONES gap edges (out_tail[]), and the block's span on
+ * the scan timeline. */
+int pulseg__pns_score_block_bound(
+    const pulseg__pns_score *sc,
+    int block,
+    float *out_u,
+    float *out_env,
+    float *out_tail,
+    double *out_start_us,
+    double *out_end_us);
+
+/* A uniform frequency grid: count points from f0_hz, df_hz apart. */
+typedef struct
+{
+    double f0_hz;
+    double df_hz;
+    int count;
+} pulseg__mech_scan_grid;
+
+/* Probe flag: every event's transform evaluated directly, never from its
+ * FFT record. */
+#define PULSEG__MECH_SCAN_DIRECT 1
+
+/* The sustained amplitude per axis at every point of the grids, over the
+ * whole scan, window_us wide (0 = the axis's longest event), no grid guard:
+ * the quantity the past-the-cap mechanical-resonance check judges, at the frequencies
+ * given. Outputs run grid by grid. Test-facing. */
+int pulseg__mech_scan_window_probe(
+    const pulseg_sequence_descriptor *desc,
+    const pulseg__mech_scan_grid *grids,
+    int num_grids,
+    double window_us,
+    int flags,
+    pulseg__parallel_for_fn par_fn,
+    void *par_ctx,
+    float *out_amp_gx,
+    float *out_amp_gy,
+    float *out_amp_gz,
+    double *out_span_max_us);
+
+/* The scan window's interpolation kernel at x bins from a sample, and the
+ * bound on what truncating it to its half-width costs per unit of a
+ * waveform's gradient L1. Test-facing. */
+double pulseg__mech_scan_kernel(double x);
+double pulseg__mech_scan_kernel_e(void);
+
+/* Exact response peak of blocks [start, start + count), judged from
+ * judge_from_us into the range, rendered and evaluated the extraction's
+ * way; what an offender range is settled with. */
+int pulseg__pns_exact_range_peak(
+    pulseg_check_plan *plan,
+    pulseg_diagnostic *diag,
+    const pulseg_sequence_descriptor *desc,
+    int subseq_idx,
+    int start,
+    int count,
+    double judge_from_us,
+    const pulseg_pns_model *model,
+    float gamma,
+    double *out_peak);
 
 int pulseg__pns_score_evaluate(
     const pulseg__pns_score *sc,
@@ -1037,6 +1131,8 @@ int pulseg__pns_score_check(
     const pulseg_sequence_descriptor *desc,
     int subseq_idx,
     const pulseg_pns_model *model,
+    pulseg__parallel_for_fn par_fn,
+    void *par_ctx,
     float gamma_hz_per_tesla,
     float threshold_percent,
     int *out_declined,

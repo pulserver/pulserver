@@ -73,7 +73,7 @@ def _verdict(collection, threshold: float) -> bool:
         return False
 
 
-@pytest.mark.parametrize("arms", [96, 256])
+@pytest.mark.parametrize("arms", [72, 96, 256])
 def test_written_out_arms_above_the_group_cap_reach_the_rotated_verdict(tmp_path, arms):
     written = _stack(tmp_path, arms, use_rotation_ext=False)
     rotated = _stack(tmp_path, arms, use_rotation_ext=True)
@@ -87,3 +87,78 @@ def test_written_out_arms_above_the_group_cap_reach_the_rotated_verdict(tmp_path
         "the exact assembly missed a violation the rotated encoding reports"
     )
     assert not _verdict(rotated, FAILING_THRESHOLD)
+
+
+def _hardware():
+    from pypulseq.utils.safe_pns_prediction import safe_example_hw
+
+    return safe_example_hw()
+
+
+def test_a_repetition_of_a_written_out_scan_has_its_own_curve():
+    """Past the group cap ``tr=<int>`` is that repetition, played as it stands,
+    and ``tr="worst_case"`` is the repetition the occurrence score prices
+    highest -- a witness, not an envelope."""
+    import numpy as np
+
+    from pulserver.pypulseq import (
+        Sequence,
+        make_adc,
+        make_arbitrary_grad,
+        make_block_pulse,
+    )
+
+    system = Opts(
+        max_grad=50.0,
+        grad_unit="mT/m",
+        max_slew=350.0,
+        slew_unit="T/m/s",
+        B0=3.0,
+        grad_raster_time=4e-6,
+        block_duration_raster=4e-6,
+        rf_raster_time=2e-6,
+    )
+    t = np.linspace(0.0, 1.0, 2048)
+    taper = 4.0 * t * (1.0 - t)
+    rf = make_block_pulse(flip_angle=0.17, duration=200e-6, system=system)
+    adc = make_adc(num_samples=2048, dwell=4e-6, system=system)
+    seq = Sequence(system)
+    arms = 72
+    for k in range(arms):
+        phase = 2.0 * np.pi * k / arms
+        scale = 0.6 * system.max_grad * (0.5 + 0.5 * k / arms)
+        gx = scale * np.sin(20 * np.pi * t + phase) * taper
+        gy = scale * np.cos(20 * np.pi * t + phase) * taper
+        seq.add_block(rf)
+        seq.add_block(
+            make_arbitrary_grad(channel="x", waveform=gx, system=system),
+            make_arbitrary_grad(channel="y", waveform=gy, system=system),
+            adc,
+        )
+    assert seq.num_trs == arms
+    first = seq.calculate_pns(_hardware(), do_plots=False, tr=0, compat=False)
+    last = seq.calculate_pns(_hardware(), do_plots=False, tr=arms - 1, compat=False)
+    assert 0.0 < first.total.max() < last.total.max(), (
+        "a stronger arm plays a stronger curve"
+    )
+    witness = seq.calculate_pns(
+        _hardware(), do_plots=False, tr="worst_case", compat=False
+    )
+    assert witness.total.max() >= last.total.max() * (1.0 - 1e-6), (
+        "the witness is the strongest repetition"
+    )
+
+
+def test_a_repetition_is_bounded_by_the_envelope_within_the_cap():
+    """Under the cap the worst case is an envelope: no repetition exceeds it."""
+    from pathlib import Path
+
+    from pulserver.pypulseq import Sequence
+
+    seq = Sequence(_system())
+    seq.read(str(Path(__file__).parent.parent / "fixtures" / "gre_2d.seq"))
+    envelope = seq.calculate_pns(
+        _hardware(), do_plots=False, tr="worst_case", compat=False
+    )
+    instance = seq.calculate_pns(_hardware(), do_plots=False, tr=3, compat=False)
+    assert instance.total.max() <= envelope.total.max() * (1.0 + 1e-6)

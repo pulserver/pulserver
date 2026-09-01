@@ -35,6 +35,14 @@ namespace pulseg
          *  The GE console injects {8, 0, 6} = [LIN, SLC, ECO]. */
         int label_column_map[3] = {0, 1, 2};
 
+        /** Convert for structure alone; see pulseg_opts.structure_only. */
+        bool structure_only = false;
+
+        /** Keep shape samples in the caller's buffers; see
+         *  pulseg_opts.borrow_buffer_shapes. The buffers must outlive the
+         *  Collection. */
+        bool borrow_buffer_shapes = false;
+
         /** Convert to the C struct, calling pulseg_opts_init. */
         pulseg_opts to_c() const
         {
@@ -55,6 +63,8 @@ namespace pulseg
             o.label_column_map[0] = label_column_map[0];
             o.label_column_map[1] = label_column_map[1];
             o.label_column_map[2] = label_column_map[2];
+            o.structure_only = structure_only ? 1 : 0;
+            o.borrow_buffer_shapes = borrow_buffer_shapes ? 1 : 0;
             return o;
         }
     };

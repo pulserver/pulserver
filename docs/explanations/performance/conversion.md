@@ -59,6 +59,28 @@ argument. That is why the scanner path writes binary and the offline path
 writes text — see `write_sequence` on the
 {doc}`previous page <sequence_creation>`.
 
+**A file already in memory is read where it is.** The design side never
+writes a file to learn its own structure: `pulseg_read_from_buffers` takes the
+bytes the writer produced, reads the binary form straight from them, and —
+when the file's sample cells are the host's floats — leaves the gradient shape
+samples in that buffer rather than copying them (`pulseq_read_from_memory_
+borrowing`, opt-in through `pulseg_opts.borrow_buffer_shapes`; the buffer then
+outlives the collection, which the Python binding guarantees by holding it).
+The conversion adopts those samples into the descriptor instead of copying
+them again, so a gigabyte of readouts is touched once on the way in: the
+statistics sweep.
+
+**Structure alone costs nothing of the samples.** `declare_tr` and the
+structural questions — the TR, its instances, the segments — derive from a
+*structure-only* conversion (`pulseg_opts.structure_only`): the writer emits
+each gradient shape of an RF-free block as a six-value stub carrying its first
+sample, last sample and peak magnitude behind a run-length marker no decoder
+accepts, the conversion reads the edge statistics segmentation needs from the
+stub and sweeps nothing, and the resulting collection refuses any waveform or
+safety request. RF and ADC shapes, gradient time shapes, and the gradients of
+blocks that carry RF travel in full, because segmentation asks whether the
+gradient under a pulse is flat.
+
 ## Structure detection
 
 Detecting the structural TR of a two-million-block scan takes **tens of

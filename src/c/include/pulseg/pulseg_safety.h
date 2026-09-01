@@ -328,6 +328,26 @@ extern "C"
         const pulseg_opts *opts,
         const pulseg_pns_model *model);
 
+    /**
+     * @brief pulseg_calc_pns() with the amplitude mode chosen.
+     *
+     * PULSEG_AMP_MAX_POS with index 0 is the worst case over every waveform
+     * set the repetitions play; past PULSEG__MAX_SHAPE_GROUPS of them the
+     * repetition the occurrence score prices highest stands in, played as
+     * it is, and the diagnostic says so. PULSEG_AMP_ACTUAL with any index is
+     * that repetition, played as it stands.
+     */
+    int pulseg_calc_pns_at(
+        const pulseg_collection *coll,
+        pulseg_pns_result *result,
+        pulseg_diagnostic *diag,
+        pulseg_check_plan *plan,
+        int subseq_idx,
+        int canonical_tr_idx,
+        int amplitude_mode,
+        const pulseg_opts *opts,
+        const pulseg_pns_model *model);
+
     /** @brief Free arrays inside a pulseg_pns_result. */
     void pulseg_pns_result_free(pulseg_pns_result *r);
 

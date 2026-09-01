@@ -14,6 +14,7 @@
 
 #include "pulseg.h"
 #include "pulseg_types.h"
+#include "pulseg/parallel.hpp"
 
 #include "error.hpp"
 #include "types.hpp"
@@ -92,6 +93,7 @@ namespace pulseg
             bool parse_labels = true)
         {
             pulseg_opts copts = opts.to_c();
+            copts.parallel_for_fn = &parallel_for_threads;
             pulseg_diagnostic diag;
             pulseg_diagnostic_init(&diag);
             int code = pulseg_read_from_buffers(
@@ -115,6 +117,7 @@ namespace pulseg
             bool parse_labels = true)
         {
             pulseg_opts copts = opts.to_c();
+            copts.parallel_for_fn = &parallel_for_threads;
             pulseg_diagnostic diag;
             pulseg_diagnostic_init(&diag);
             int code = pulseg_read(
@@ -660,18 +663,20 @@ namespace pulseg
             int ss,
             int canonical_tr_idx,
             const pulseg_pns_model& model,
-            CheckPlan* plan = nullptr) const
+            CheckPlan* plan = nullptr,
+            int amplitude_mode = PULSEG_AMP_MAX_POS) const
         {
             pulseg_pns_result cr = PULSEG_PNS_RESULT_INIT;
             pulseg_diagnostic diag;
             pulseg_diagnostic_init(&diag);
-            int code = pulseg_calc_pns(
+            int code = pulseg_calc_pns_at(
                 coll_,
                 &cr,
                 &diag,
                 plan ? plan->handle() : nullptr,
                 ss,
                 canonical_tr_idx,
+                amplitude_mode,
                 &opts_,
                 &model);
             check(code, diag);

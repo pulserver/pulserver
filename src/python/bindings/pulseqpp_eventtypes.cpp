@@ -1,3 +1,4 @@
+#include <algorithm>
 /**
  * @file _pulseqpp_eventtypes.cpp
  * @brief The nine event types, hand-written.  See pulseqpp_eventtypes.h for why.
@@ -962,21 +963,15 @@ namespace pulseqpp_types
                     post = 2 * (v[n - 1] - last);
                 }
 
+                // Two straight reductions rather than one loop with a branch
+                // in it: each is a form the compiler vectorises.
                 double amp_peak = 0.0;
+                for (int i = 0; i < n; ++i)
+                    amp_peak = std::max(amp_peak, std::fabs(v[i]));
                 double slew_raw =
                     std::fabs(pre) > std::fabs(post) ? std::fabs(pre) : std::fabs(post);
-                for (int i = 0; i < n; ++i)
-                {
-                    const double a = std::fabs(v[i]);
-                    if (a > amp_peak)
-                        amp_peak = a;
-                    if (i > 0)
-                    {
-                        const double d = std::fabs(v[i] - v[i - 1]);
-                        if (d > slew_raw)
-                            slew_raw = d;
-                    }
-                }
+                for (int i = 1; i < n; ++i)
+                    slew_raw = std::max(slew_raw, std::fabs(v[i] - v[i - 1]));
                 const double slew_peak = slew_raw / edge_scale;
                 if (slew_peak > max_slew * (1 + eps))
                     throw py::value_error(
@@ -991,7 +986,7 @@ namespace pulseqpp_types
 
                 py::object made = fresh<GradEvent>(GradType);
                 GradEvent& e = unwrap<GradEvent>(made.ptr());
-                normalise_grad(v, n, e);
+                normalise_grad(v, n, e, amp_peak);
                 if (oversampling)
                 {
                     e.tt_grid = 2;

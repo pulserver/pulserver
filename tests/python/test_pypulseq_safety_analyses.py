@@ -597,7 +597,7 @@ def test_the_structure_is_handed_the_binary_format(seq, monkeypatch):
     seen = []
     original = pp.Sequence._to_binary
 
-    def record_binary(self):
+    def record_binary(self, structure_only=False):
         seen.append("binary")
         return original(self)
 

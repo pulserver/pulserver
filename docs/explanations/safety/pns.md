@@ -90,9 +90,13 @@ evaluation carries that history, so the peak found inside the window is the
 peak of the steady-state scan.
 
 The window itself is {doc}`construction 1 <canonical_tr>` — the
-positional-maximum envelope, one per shape group. How it is made interactive,
-and the tests holding the fast path equal to the plain one, are on the
-{doc}`performance page <../performance/pns>`.
+positional-maximum envelope, one per shape group. A scan that plays more
+distinct waveform sets than the sweep will hold — every readout of a
+SPARKLING-style acquisition its own optimised arm — is priced without a
+window, by a sound bound on the scan's response built from each block's own
+response, and the bound's offending stretches are then evaluated exactly. How
+both are made interactive, and the tests holding every fast path equal to the
+plain one, are on the {doc}`performance page <../performance/pns>`.
 
 ```{note}
 This estimate is not the regulatory verdict. The scanner's predownload check

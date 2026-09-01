@@ -10,31 +10,37 @@
  *     R(t) = sum_i r_i(t - t_i),   r_i = k * dg_i/dt   (per axis),
  *
  * so by the triangle inequality in R^3 the peak of ||R||_2 is bounded, at any
- * instant, by a sum over the occurrences that have already started: each
- * contributes at most its own response peak u_i = sup_tau ||r_i(tau)||_2,
- * and one that ended a gap delta earlier contributes at most
- * L_i * K(delta) -- its slew's l1 mass through the largest kernel tap still
- * reachable, since every tap the convolution touches at that distance is
- * K(delta) or smaller. The slide takes min(u_i, L_i K(delta)) over four
- * kernel-decay zones, so a block several chronaxies back is priced by the
- * tail it actually reaches rather than by its peak. Two numbers per
+ * instant, by a sum over the occurrences that have already started: the
+ * block playing contributes at most its response envelope
+ * E_i(k) = sup over the k-th of K equal windows of its span of ||r_i||_2,
+ * and one that ended a gap delta before that window contributes at most
+ * its tail peak T_i(delta) = sup_{tau >= delta} ||r_i(end_i + tau)||_2 --
+ * what its response can still be that long after it stopped, which for a
+ * waveform that ends at rest is a small fraction of its peak. The slide
+ * keeps T_i at four gap edges and walks the K windows of every block, so a
+ * long readout's peak is met by its neighbours' tails at the gap they
+ * really have then, not at the readout's start. Twelve numbers per
  * occurrence and a monotone sweep -- no window, no grouping, no cap on how
  * many distinct waveforms the scan plays.
  *
- * u_i is bounded from two catalogues, both priced per *distinct* object
- * rather than per occurrence:
+ * u_i and T_i are bounded from two catalogues, both priced per *distinct*
+ * object rather than per occurrence:
  *
  *  - a rank-1 catalogue: sup_tau |k * d(unit waveform)/dt| once per
  *    (definition, shape) identity, scaled by |amplitude| at score time;
- *  - a rank basis per base block whose occurrences play many distinct
- *    waveform tuples: the (d, npts) elements -- one per distinct
+ *  - an element catalogue per base block whose occurrences play many
+ *    distinct waveform tuples: one (d, npts) element per distinct
  *    (shape, amplitude) tuple the block plays, at the amplitudes it really
- *    plays -- are decomposed jointly, and each element's response peak is
- *    bounded by sum_r |c_r| P_r plus its reconstruction residual under a
- *    closed-form kernel gain. The residual is *added*, so a poor basis
- *    loosens the bound and never unsounds it -- which is also why rank
- *    selection needs no criterion: more rank only tightens, so the rank is
- *    simply min(elements, columns, PULSEG__PNS_BASIS_MAX_RANK).
+ *    plays, each element's own response computed exactly by FFT convolution
+ *    with the kernel, streamed one element at a time so no matrix is ever
+ *    held, on every core the caller offers.
+ *
+ * Every element and template is sliced to its interior slew only: the
+ * step a block makes at its start -- from the previous block's last sample
+ * to its own first -- is priced per occurrence, as one kernel tap of that
+ * size, and the scan's closing step on its last block. A gradient that runs
+ * continuously across blocks is charged nothing at the seams it does not
+ * have; one that starts from rest is charged exactly its start.
  *
  * Per-occurrence norms are frame-invariant -- a block's rotation multiplies
  * its logical response vector by an orthogonal matrix before the norm is
@@ -54,35 +60,26 @@
 #include <math.h>
 #include <string.h>
 
-#include "external_svd.h"
+#include "external_kiss_fftr.h"
 #include "pulseg_internal.h"
 #include "pulseg_pns_models.h"
 
-/* Basis rank ceiling. Also the count of template convolutions a basis pays,
- * so it bounds the build cost; past it the residual term carries the rest. */
-#define PULSEG__PNS_BASIS_MAX_RANK 64
-
-/* A base block earns a decomposition once this many distinct element tuples
- * appear at that position; below it the rank-1 catalogue is already tight
- * (per element, the two bounds coincide at rank == elements). */
+/* A base block earns an element catalogue once this many distinct element
+ * tuples appear at that position; below it the rank-1 catalogue is already
+ * tight, one entry per shape. */
 #define PNS_BASIS_MIN_ELEMENTS 4
 
 /* Distinct (shape, amplitude) tuples one base block may play before the
  * module declines the scan to the sweep. */
 #define PNS_BASIS_MAX_ELEMENTS 262144
 
-/* Flop ceiling for one decomposition (m * n * min(m,n); Golub-Reinsch is a
- * small constant above it); past it the module declines. */
-#define PNS_BASIS_MAX_SVD_WORK 4.0e9
-
-/* Bytes the rendered element matrix may occupy; past it the module declines
- * before a single row is rendered. */
-#define PNS_BASIS_MAX_ROWS_BYTES 268435456.0
-
-/* Trailing singular directions below this fraction of the leading one carry
- * no bound worth a template convolution; their mass moves to the residual
- * term instead, which is sound by construction. */
-#define PNS_BASIS_SIGMA_FLOOR 1e-7
+/* Relative allowance added to an element peak priced exactly: the
+ * single-precision transform's round-off against the direct sum it stands
+ * for, and the movement of the response between the gradient raster the
+ * elements are priced at and the half raster the exact evaluation streams
+ * at, which test_the_response_does_not_move_when_the_raster_is_halved holds
+ * below 1e-3. */
+#define PNS_EXACT_FFT_MARGIN 2e-3
 
 /* Rendered duration one offender range may span. A dense offence splits
  * into consecutive self-sufficient pieces instead of merging into one
@@ -96,23 +93,24 @@
 /*  The score object                                                   */
 /* ================================================================== */
 
-/* Kernel-decay zones for the slide: an occurrence whose end sits delta
- * before the anchor is priced min(u, L * K(zone edge)), the edge being the
- * zone's smallest delta. Zone 0 starts at zero gap, where the l1 price
- * L * K(0) is never below u, so u itself is the zone-0 price. */
-#define PNS_SCORE_NUM_ZONES 4
+/* Gap zones for the slide: an earlier occurrence whose end sits delta
+ * before the anchor is priced by its tail peak at the zone's smallest
+ * delta. Zone 0 starts at zero gap. */
+#define PNS_SCORE_NUM_ZONES PULSEG__PNS_SCORE_ZONES
+
+/* Equal windows a block's own span is priced over. */
+#define PNS_SCORE_NUM_WINDOWS PULSEG__PNS_SCORE_WINDOWS
 
 struct pulseg__pns_score
 {
     int num_blocks;
     float *u;           /* [num_blocks] per-occurrence response-peak bound, % */
-    float *l1;          /* [num_blocks] slew l1 mass through the kernel gain  */
+    float *env;         /* [num_blocks * windows] peak over each own window   */
+    float *tail;        /* [num_blocks * zones] tail peak at each zone edge   */
     double *t_start_us; /* [num_blocks] block start on the scan timeline      */
     double *t_end_us;   /* [num_blocks] block end                             */
     double reach_us;    /* kernel memory: supports span [start, end + reach]  */
     double zone_edge_us[PNS_SCORE_NUM_ZONES]; /* smallest gap of each zone    */
-    double zone_gain[PNS_SCORE_NUM_ZONES];    /* K(edge) * scale, percent per
-                                                 unit of l1 mass              */
     int num_bases;
     pulseg__pns_basis_info *bases; /* [num_bases] */
     double build_macs;
@@ -124,8 +122,10 @@ void pulseg__pns_score_free(pulseg__pns_score *sc)
         return;
     if (sc->u)
         PULSEG_FREE(sc->u);
-    if (sc->l1)
-        PULSEG_FREE(sc->l1);
+    if (sc->env)
+        PULSEG_FREE(sc->env);
+    if (sc->tail)
+        PULSEG_FREE(sc->tail);
     if (sc->t_start_us)
         PULSEG_FREE(sc->t_start_us);
     if (sc->t_end_us)
@@ -152,6 +152,34 @@ const pulseg__pns_basis_info *pulseg__pns_score_basis_info(const pulseg__pns_sco
     if (!sc || index < 0 || index >= sc->num_bases)
         return NULL;
     return &sc->bases[index];
+}
+
+int pulseg__pns_score_block_bound(
+    const pulseg__pns_score *sc,
+    int block,
+    float *out_u,
+    float *out_env,
+    float *out_tail,
+    double *out_start_us,
+    double *out_end_us)
+{
+    int z, k;
+
+    if (!sc || block < 0 || block >= sc->num_blocks)
+        return PULSEG_ERR_INVALID_ARGUMENT;
+    if (out_u)
+        *out_u = sc->u[block];
+    if (out_env)
+        for (k = 0; k < PNS_SCORE_NUM_WINDOWS; ++k)
+            out_env[k] = sc->env[(size_t)block * PNS_SCORE_NUM_WINDOWS + k];
+    if (out_tail)
+        for (z = 0; z < PNS_SCORE_NUM_ZONES; ++z)
+            out_tail[z] = sc->tail[(size_t)block * PNS_SCORE_NUM_ZONES + z];
+    if (out_start_us)
+        *out_start_us = sc->t_start_us[block];
+    if (out_end_us)
+        *out_end_us = sc->t_end_us[block];
+    return PULSEG_SUCCESS;
 }
 
 /* ================================================================== */
@@ -218,9 +246,10 @@ static float *pns_basis_render_uniform(
     return wave;
 }
 
-/* Slice forward difference against the model's convention: n+1 taps opening
- * with +w[0] (the step up from zero) and closing with -w[last], each over
- * gamma * dt. Writes into dgdt[n+1]. */
+/* Slice forward difference of the block's interior, on the model's tap
+ * grid: n+1 taps, the first and last zero, the step into the block and the
+ * step out of it being priced per occurrence instead. Each over gamma * dt.
+ * Writes into dgdt[n+1]. */
 static void pns_basis_slice_dgdt(
     float *dgdt,
     const float *wave,
@@ -232,44 +261,94 @@ static void pns_basis_slice_dgdt(
     int i;
 
     inv = 1.0 / ((double)gamma * ((double)raster_us * 1e-6));
-    dgdt[0] = (float)((double)wave[0] * inv);
+    dgdt[0] = 0.0f;
     for (i = 1; i < n; ++i)
         dgdt[i] = (float)(((double)wave[i] - (double)wave[i - 1]) * inv);
-    dgdt[n] = (float)(-(double)wave[n - 1] * inv);
+    dgdt[n] = 0.0f;
 }
 
-/* RSS over axes of each axis's slew l1 mass: the price of the closed-form
- * tail bound |r_a(t)| <= K(gap) * sum |dgdt_a|. */
-static double pns_basis_rows_l1(const float *rows, int d, int len)
+/* Where a block's response samples fall: sample m sits m rasters after the
+ * block start. Window k of the block's own span runs from
+ * floor(k * duration / K / raster); the tail of zone z is every m from
+ * floor((duration + edge_z) / raster) on. A window that rounds to no sample
+ * of its own is folded into the next by the walk below. */
+typedef struct
 {
-    double ss, acc;
-    int a, j;
+    int m_window[PNS_SCORE_NUM_WINDOWS + 1]; /* [k, k+1) bounds, last = end */
+    int m_zone[PNS_SCORE_NUM_ZONES];
+} pns_basis_extent;
 
-    ss = 0.0;
-    for (a = 0; a < d; ++a)
+static void pns_basis_extent_init(
+    pns_basis_extent *ex,
+    float block_duration_us,
+    float raster_us,
+    const double *zone_edge_us)
+{
+    int z, k, m;
+
+    /* Every region opens one sample early: the rendered grid may start up
+     * to one sample after the block does, and a sup over a superset of the
+     * intended samples is the side to err on. */
+    for (k = 0; k <= PNS_SCORE_NUM_WINDOWS; ++k)
     {
-        acc = 0.0;
-        for (j = 0; j < len; ++j)
-            acc += fabs((double)rows[(size_t)a * len + j]);
-        ss += acc * acc;
+        m = (int)((double)k * (double)block_duration_us / (double)PNS_SCORE_NUM_WINDOWS / (double)raster_us) -
+            1;
+        ex->m_window[k] = m > 0 ? m : 0;
     }
-    return sqrt(ss);
+    for (z = 0; z < PNS_SCORE_NUM_ZONES; ++z)
+    {
+        m = (int)(((double)block_duration_us + zone_edge_us[z]) / (double)raster_us) - 1;
+        ex->m_zone[z] = m > 0 ? m : 0;
+    }
 }
 
-/* sup_tau of the d-axis RSS response of dgdt rows of `len` taps each. */
-static double pns_basis_response_sup(
+/* Fold the RSS sample at m into the window and tail sups it belongs to.
+ * Samples past the last window's end are the block's tail and count for no
+ * window; the peak `sup` takes every sample. */
+static void pns_basis_extent_fold(
+    const pns_basis_extent *ex,
+    int m,
+    double ss,
+    double *sup,
+    double *env,
+    double *tail)
+{
+    int k, z;
+
+    if (ss > *sup)
+        *sup = ss;
+    for (k = 0; k < PNS_SCORE_NUM_WINDOWS; ++k)
+        if (m >= ex->m_window[k] && m < ex->m_window[k + 1] && ss > env[k])
+            env[k] = ss;
+    if (m >= ex->m_window[PNS_SCORE_NUM_WINDOWS] && ss > env[PNS_SCORE_NUM_WINDOWS - 1])
+        env[PNS_SCORE_NUM_WINDOWS - 1] = ss;
+    for (z = 0; z < PNS_SCORE_NUM_ZONES; ++z)
+        if (m >= ex->m_zone[z] && ss > tail[z])
+            tail[z] = ss;
+}
+
+/* sup_tau of the d-axis RSS response of dgdt rows of `len` taps each, with
+ * the same sup per own window and per tail zone. All in percent. */
+static double pns_basis_response_sups(
     const float *rows,
     int d,
     int len,
     const float *kernel,
     int kernel_len,
     float out_scale,
+    const pns_basis_extent *ex,
+    double *out_env,
+    double *out_tail,
     double *macs)
 {
-    double sup, acc, ss;
-    int m, j, lo, hi, out_len, a;
+    double sup, acc, ss, env[PNS_SCORE_NUM_WINDOWS], tail[PNS_SCORE_NUM_ZONES];
+    int m, j, lo, hi, out_len, a, z, k;
 
     sup = 0.0;
+    for (k = 0; k < PNS_SCORE_NUM_WINDOWS; ++k)
+        env[k] = 0.0;
+    for (z = 0; z < PNS_SCORE_NUM_ZONES; ++z)
+        tail[z] = 0.0;
     out_len = len + kernel_len - 1;
     for (m = 0; m < out_len; ++m)
     {
@@ -283,37 +362,14 @@ static double pns_basis_response_sup(
                 acc += (double)rows[(size_t)a * len + j] * (double)kernel[m - j];
             ss += acc * acc;
         }
-        if (ss > sup)
-            sup = ss;
+        pns_basis_extent_fold(ex, m, ss, &sup, env, tail);
         *macs += (double)d * (double)(hi - lo + 1);
     }
+    for (k = 0; k < PNS_SCORE_NUM_WINDOWS; ++k)
+        out_env[k] = sqrt(env[k]) * (double)out_scale;
+    for (z = 0; z < PNS_SCORE_NUM_ZONES; ++z)
+        out_tail[z] = sqrt(tail[z]) * (double)out_scale;
     return sqrt(sup) * (double)out_scale;
-}
-
-/* Closed-form ceiling on the response of a waveform known only by its
- * sample-domain l2 norm: by summation by parts the response is the waveform
- * convolved with the kernel's own difference, so Cauchy-Schwarz gives
- * sup |k * dw/dt| <= ||w||_2 * ||delta k||_2 / (gamma dt), the edge taps of
- * delta k standing for the zero extension on both sides. RSS across axes
- * follows with the Frobenius norm of the multi-axis residual. */
-static double pns_basis_residual_gain(
-    const float *kernel,
-    int kernel_len,
-    float out_scale,
-    float raster_us,
-    float gamma)
-{
-    double ss, d;
-    int i;
-
-    ss = (double)kernel[0] * (double)kernel[0];
-    for (i = 1; i < kernel_len; ++i)
-    {
-        d = (double)kernel[i] - (double)kernel[i - 1];
-        ss += d * d;
-    }
-    ss += (double)kernel[kernel_len - 1] * (double)kernel[kernel_len - 1];
-    return sqrt(ss) * (double)out_scale / ((double)gamma * ((double)raster_us * 1e-6));
 }
 
 /* ================================================================== */
@@ -325,7 +381,10 @@ typedef struct
     int def_id;
     int shape_id;
     double sup;
-    double l1; /* slew l1 mass of the unit waveform */
+    double env[PNS_SCORE_NUM_WINDOWS]; /* unit peak over each own window   */
+    double tail[PNS_SCORE_NUM_ZONES];  /* unit tail peak at each zone edge */
+    float first;                       /* unit waveform's first sample     */
+    float last;                        /* unit waveform's last sample      */
 } pns_basis_r1_entry;
 
 typedef struct
@@ -371,14 +430,19 @@ static int pns_basis_r1_get(
     const float *kernel,
     int kernel_len,
     float out_scale,
+    const double *zone_edge_us,
     double *out_sup,
-    double *out_l1,
+    double *out_env,
+    double *out_tail,
+    float *out_first,
+    float *out_last,
     double *macs)
 {
     pns_basis_r1_entry *slot;
+    pns_basis_extent ex;
     float *wave, *dgdt;
     unsigned h;
-    int n;
+    int n, z, k;
 
     h = (unsigned)key->def_id * 2654435761u ^ (unsigned)key->shape_id * 40503u;
     slot = &cat->slots[h & (unsigned)(cat->cap - 1)];
@@ -390,7 +454,12 @@ static int pns_basis_r1_get(
     if (slot->def_id != -1)
     {
         *out_sup = slot->sup;
-        *out_l1 = slot->l1;
+        for (k = 0; k < PNS_SCORE_NUM_WINDOWS; ++k)
+            out_env[k] = slot->env[k];
+        for (z = 0; z < PNS_SCORE_NUM_ZONES; ++z)
+            out_tail[z] = slot->tail[z];
+        *out_first = slot->first;
+        *out_last = slot->last;
         return PULSEG_SUCCESS;
     }
 
@@ -411,15 +480,32 @@ static int pns_basis_r1_get(
         return PULSEG_ERR_ALLOC_FAILED;
     }
     pns_basis_slice_dgdt(dgdt, wave, n, raster_us, gamma);
-    slot->sup = pns_basis_response_sup(dgdt, 1, n + 1, kernel, kernel_len, out_scale, macs);
-    slot->l1 = pns_basis_rows_l1(dgdt, 1, n + 1);
+    pns_basis_extent_init(&ex, block_duration_us, raster_us, zone_edge_us);
+    slot->sup = pns_basis_response_sups(
+        dgdt,
+        1,
+        n + 1,
+        kernel,
+        kernel_len,
+        out_scale,
+        &ex,
+        slot->env,
+        slot->tail,
+        macs);
     slot->def_id = key->def_id;
     slot->shape_id = key->shape_id;
+    slot->first = wave[0];
+    slot->last = wave[n - 1];
     PULSEG_FREE(wave);
     PULSEG_FREE(dgdt);
     *macs += (double)n;
     *out_sup = slot->sup;
-    *out_l1 = slot->l1;
+    for (k = 0; k < PNS_SCORE_NUM_WINDOWS; ++k)
+        out_env[k] = slot->env[k];
+    for (z = 0; z < PNS_SCORE_NUM_ZONES; ++z)
+        out_tail[z] = slot->tail[z];
+    *out_first = slot->first;
+    *out_last = slot->last;
     return PULSEG_SUCCESS;
 }
 
@@ -478,8 +564,11 @@ typedef struct
 {
     int shape_id[3];
     float amplitude[3];
-    float bound; /* sum_r |c_r| P_r + residual * gain, in percent */
-    float l1;    /* slew l1 mass of the element's own dgdt rows   */
+    float bound;                      /* response-peak bound, in percent   */
+    float env[PNS_SCORE_NUM_WINDOWS]; /* peak bound over each own window   */
+    float tail[PNS_SCORE_NUM_ZONES];  /* tail-peak bound at each zone edge */
+    float first[3];                   /* rendered first sample per slot    */
+    float last[3];                    /* rendered last sample per slot     */
 } pns_basis_element;
 
 static int pns_basis_element_matches(
@@ -616,150 +705,235 @@ static void pns_basis_occ_tuple(
 /*  The decomposition of one base block                                */
 /* ================================================================== */
 
-static int pns_basis_decompose(
+/* ================================================================== */
+/*  Exact element peaks by FFT convolution                             */
+/* ================================================================== */
+
+/* Every element's own response peak, streamed: each retained axis is
+ * rendered at the gradient raster -- where a uniform shape is exact as
+ * written -- sliced to dgdt, convolved with the kernel (built at that
+ * raster) through one forward and one inverse real FFT, and squared into a
+ * running RSS; the sup of that RSS is the element's bound, its window and
+ * tail sups the envelope and tails. Elements are independent, so the loop
+ * runs as ranges under the caller's parallel hook, each range on scratch of
+ * its own (a kissfft configuration is not shared between threads). */
+typedef struct
+{
+    const pulseg_sequence_descriptor *desc;
+    const pulseg_base_block *bdef;
+    const pns_basis_block_stat *st;
+    pns_basis_element *elems;
+    float dur_us;
+    float raster_us;
+    float out_scale;
+    float gamma;
+    int npts;
+    int nfft;
+    int nfreq;
+    int out_len;
+    const kiss_fft_cpx *kspec; /* kernel spectrum, shared read-only */
+    double norm;
+    double transform_work;
+    pns_basis_extent extent;
+    int rc;       /* first failure any range met */
+    int declined; /* a range could not render an element */
+    double macs;  /* summed by ranges; a data race only miscounts */
+} pns_exact_job;
+
+static void pns_exact_range(void *arg, int begin, int end)
+{
+    pns_exact_job *job = (pns_exact_job *)arg;
+    kiss_fftr_cfg fwd, inv;
+    kiss_fft_cpx *spec;
+    float *work, *dgdt, *wave;
+    double *ss;
+    double sup, v, macs;
+    double env[PNS_SCORE_NUM_WINDOWS], tail[PNS_SCORE_NUM_ZONES];
+    int e, a, slot, i, n2, def_id, z, k;
+
+    fwd = kiss_fftr_alloc(job->nfft, 0, NULL, NULL);
+    inv = kiss_fftr_alloc(job->nfft, 1, NULL, NULL);
+    spec = (kiss_fft_cpx *)PULSEG_ALLOC((size_t)job->nfreq * sizeof(kiss_fft_cpx));
+    work = (float *)PULSEG_ALLOC((size_t)job->nfft * sizeof(float));
+    dgdt = (float *)PULSEG_ALLOC((size_t)(job->npts + 1) * sizeof(float));
+    ss = (double *)PULSEG_ALLOC((size_t)job->out_len * sizeof(double));
+    macs = 0.0;
+    if (!fwd || !inv || !spec || !work || !dgdt || !ss)
+    {
+        job->rc = PULSEG_ERR_ALLOC_FAILED;
+        goto done;
+    }
+
+    for (e = begin; e < end; ++e)
+    {
+        pns_basis_element *el = &job->elems[e];
+
+        for (i = 0; i < job->out_len; ++i)
+            ss[i] = 0.0;
+        slot = 0;
+        for (a = 0; a < 3; ++a)
+        {
+            if (!job->st->retained[a])
+                continue;
+            if (el->shape_id[slot] == -2)
+            {
+                ++slot;
+                continue;
+            }
+            def_id = (a == 0) ? job->bdef->gx_id : (a == 1) ? job->bdef->gy_id : job->bdef->gz_id;
+            wave = pns_basis_render_uniform(
+                job->desc,
+                def_id,
+                el->shape_id[slot],
+                el->amplitude[slot],
+                job->dur_us,
+                job->raster_us,
+                &n2);
+            if (!wave)
+            {
+                job->declined = 1;
+                goto done;
+            }
+            for (i = 0; i < job->npts; ++i)
+                work[i] = (i < n2) ? wave[i] : 0.0f;
+            el->first[slot] = wave[0];
+            el->last[slot] = (n2 > 0) ? wave[n2 - 1] : 0.0f;
+            PULSEG_FREE(wave);
+            pns_basis_slice_dgdt(dgdt, work, job->npts, job->raster_us, job->gamma);
+
+            memset(work, 0, (size_t)job->nfft * sizeof(float));
+            memcpy(work, dgdt, (size_t)(job->npts + 1) * sizeof(float));
+            kiss_fftr(fwd, work, spec);
+            for (i = 0; i < job->nfreq; ++i)
+            {
+                float re, im;
+                re = spec[i].r * job->kspec[i].r - spec[i].i * job->kspec[i].i;
+                im = spec[i].r * job->kspec[i].i + spec[i].i * job->kspec[i].r;
+                spec[i].r = re;
+                spec[i].i = im;
+            }
+            kiss_fftri(inv, spec, work);
+            for (i = 0; i < job->out_len; ++i)
+            {
+                v = (double)work[i] * job->norm;
+                ss[i] += v * v;
+            }
+            macs += 2.0 * job->transform_work + (double)job->npts;
+            ++slot;
+        }
+        sup = 0.0;
+        for (k = 0; k < PNS_SCORE_NUM_WINDOWS; ++k)
+            env[k] = 0.0;
+        for (z = 0; z < PNS_SCORE_NUM_ZONES; ++z)
+            tail[z] = 0.0;
+        for (i = 0; i < job->out_len; ++i)
+            pns_basis_extent_fold(&job->extent, i, ss[i], &sup, env, tail);
+        el->bound = (float)(sqrt(sup) * (double)job->out_scale * (1.0 + PNS_EXACT_FFT_MARGIN));
+        for (k = 0; k < PNS_SCORE_NUM_WINDOWS; ++k)
+            el->env[k] =
+                (float)(sqrt(env[k]) * (double)job->out_scale * (1.0 + PNS_EXACT_FFT_MARGIN));
+        for (z = 0; z < PNS_SCORE_NUM_ZONES; ++z)
+            el->tail[z] =
+                (float)(sqrt(tail[z]) * (double)job->out_scale * (1.0 + PNS_EXACT_FFT_MARGIN));
+    }
+
+done:
+    job->macs += macs;
+    if (fwd)
+        kiss_fftr_free(fwd);
+    if (inv)
+        kiss_fftr_free(inv);
+    if (spec)
+        PULSEG_FREE(spec);
+    if (work)
+        PULSEG_FREE(work);
+    if (dgdt)
+        PULSEG_FREE(dgdt);
+    if (ss)
+        PULSEG_FREE(ss);
+}
+
+static int pns_basis_exact_elements(
+    const pulseg_sequence_descriptor *desc,
+    const pulseg_base_block *bdef,
     const pns_basis_block_stat *st,
     pns_basis_element *elems,
     int num_elems,
-    float *rows, /* [num_elems * d * npts], consumed and scaled in place */
-    int npts,
+    float dur_us,
+    float raster_us,
     const float *kernel,
     int kernel_len,
     float out_scale,
-    float raster_us,
     float gamma,
-    double residual_gain,
+    const double *zone_edge_us,
+    pulseg__parallel_for_fn par_fn,
+    void *par_ctx,
     pulseg__pns_basis_info *info,
     int *declined,
     double *macs)
 {
-    float *u, *s, *v, *dgdt;
-    double c_abs, resid, resid_sq, sup, scale, inv_scale;
-    size_t total;
-    int m, n, k, rank, e, r, j, a, rc;
+    pns_exact_job job;
+    kiss_fftr_cfg fwd;
+    kiss_fft_cpx *kspec;
+    float *work;
+    int log2n, rc;
 
-    m = num_elems;
-    n = st->d * npts;
-    k = (m < n) ? m : n;
+    memset(&job, 0, sizeof(job));
+    job.desc = desc;
+    job.bdef = bdef;
+    job.st = st;
+    job.elems = elems;
+    job.dur_us = dur_us;
+    job.raster_us = raster_us;
+    job.out_scale = out_scale;
+    job.gamma = gamma;
+    job.npts = (int)((double)dur_us / (double)raster_us) + 1;
+    pns_basis_extent_init(&job.extent, dur_us, raster_us, zone_edge_us);
+    job.out_len = job.npts + 1 + kernel_len - 1;
+    job.nfft = (int)pulseg__next_pow2((size_t)job.out_len);
+    job.nfreq = job.nfft / 2 + 1;
+    log2n = 0;
+    while ((1 << log2n) < job.nfft)
+        ++log2n;
+    job.transform_work = 5.0 * (double)job.nfft * (double)log2n;
+    job.norm = 1.0 / (double)job.nfft;
+    job.rc = PULSEG_SUCCESS;
 
-    if ((double)m * (double)n * (double)k > PNS_BASIS_MAX_SVD_WORK)
-    {
-        *declined = 1;
-        return PULSEG_SUCCESS;
-    }
-
-    u = (float *)PULSEG_ALLOC((size_t)m * (size_t)k * sizeof(float));
-    s = (float *)PULSEG_ALLOC((size_t)k * sizeof(float));
-    v = (float *)PULSEG_ALLOC((size_t)n * (size_t)k * sizeof(float));
-    dgdt = (float *)PULSEG_ALLOC((size_t)st->d * (size_t)(npts + 1) * sizeof(float));
-    if (!u || !s || !v || !dgdt)
+    fwd = kiss_fftr_alloc(job.nfft, 0, NULL, NULL);
+    kspec = (kiss_fft_cpx *)PULSEG_ALLOC((size_t)job.nfreq * sizeof(kiss_fft_cpx));
+    work = (float *)PULSEG_ALLOC((size_t)job.nfft * sizeof(float));
+    if (!fwd || !kspec || !work)
     {
         rc = PULSEG_ERR_ALLOC_FAILED;
         goto done;
     }
+    memset(work, 0, (size_t)job.nfft * sizeof(float));
+    memcpy(work, kernel, (size_t)kernel_len * sizeof(float));
+    kiss_fftr(fwd, work, kspec);
+    job.kspec = kspec;
 
-    /* Condition the factorisation: amplitudes are Hz/m, so raw rows sit at
-     * 1e6 and float singular vectors lose digits. The common scale divides
-     * out of the rows and multiplies back into every bound, so it changes
-     * nothing but the arithmetic's footing. */
-    scale = 0.0;
-    total = (size_t)m * (size_t)n;
-    {
-        size_t i;
-        double av;
-        for (i = 0; i < total; ++i)
-        {
-            av = fabs((double)rows[i]);
-            if (av > scale)
-                scale = av;
-        }
-    }
-    if (scale <= 0.0)
-        scale = 1.0;
-    inv_scale = 1.0 / scale;
-    {
-        size_t i;
-        for (i = 0; i < total; ++i)
-            rows[i] = (float)((double)rows[i] * inv_scale);
-    }
+    if (par_fn)
+        par_fn(par_ctx, num_elems, pns_exact_range, &job);
+    else
+        pns_exact_range(&job, 0, num_elems);
 
-    rc = svd_decompose(rows, (size_t)m, (size_t)n, u, s, v);
-    *macs += (double)m * (double)n * (double)k;
-    if (rc != SVD_OK)
-    {
-        rc = PULSEG_SUCCESS;
+    rc = job.rc;
+    *macs += job.macs;
+    if (PULSEG_SUCCEEDED(rc) && job.declined)
         *declined = 1;
-        goto done;
-    }
-    rc = PULSEG_SUCCESS;
-
-    rank = (k < PULSEG__PNS_BASIS_MAX_RANK) ? k : PULSEG__PNS_BASIS_MAX_RANK;
-    while (rank > 1 && (double)s[rank - 1] < PNS_BASIS_SIGMA_FLOOR * (double)s[0])
-        --rank;
-
-    info->num_elements = m;
-    info->d = st->d;
-    info->rank = rank;
-    info->max_residual = 0.0f;
-
-    /* One template response peak per kept direction. The basis vector is d
-     * axis rows of npts samples; its dgdt rows follow the same slice
-     * convention as every other waveform here. */
-    for (r = 0; r < rank; ++r)
+    if (PULSEG_SUCCEEDED(rc) && !job.declined)
     {
-        for (a = 0; a < st->d; ++a)
-        {
-            float prev, cur;
-            prev = 0.0f;
-            for (j = 0; j < npts; ++j)
-            {
-                cur = v[((size_t)a * npts + j) * (size_t)k + r];
-                dgdt[a * (npts + 1) + j] =
-                    (float)(((double)cur - (double)prev) / ((double)gamma * ((double)raster_us * 1e-6)));
-                prev = cur;
-            }
-            dgdt[a * (npts + 1) + npts] =
-                (float)(-(double)prev / ((double)gamma * ((double)raster_us * 1e-6)));
-        }
-        sup = pns_basis_response_sup(dgdt, st->d, npts + 1, kernel, kernel_len, out_scale, macs);
-
-        for (e = 0; e < m; ++e)
-        {
-            c_abs = (double)s[r] * (double)u[(size_t)e * k + r];
-            if (c_abs < 0.0)
-                c_abs = -c_abs;
-            elems[e].bound = (float)((double)elems[e].bound + c_abs * sup * scale);
-        }
-    }
-
-    /* Each element's reconstruction residual, exact from the factorisation:
-     * the discarded directions are orthonormal, so a row's residual is
-     * sqrt(sum_{r >= rank} (sigma_r u_{e,r})^2). Added under the closed-form
-     * gain, so truncation loosens the bound and never unsounds it. (A
-     * factorisation that is itself approximate must instead measure the
-     * residual by explicit reconstruction; this one is exact to float.) */
-    for (e = 0; e < m; ++e)
-    {
-        resid_sq = 0.0;
-        for (r = rank; r < k; ++r)
-        {
-            c_abs = (double)s[r] * (double)u[(size_t)e * k + r];
-            resid_sq += c_abs * c_abs;
-        }
-        resid = sqrt(resid_sq) * scale;
-        if ((float)resid > info->max_residual)
-            info->max_residual = (float)resid;
-        elems[e].bound = (float)((double)elems[e].bound + resid * residual_gain);
+        info->num_elements = num_elems;
+        info->d = st->d;
     }
 
 done:
-    if (u)
-        PULSEG_FREE(u);
-    if (s)
-        PULSEG_FREE(s);
-    if (v)
-        PULSEG_FREE(v);
-    if (dgdt)
-        PULSEG_FREE(dgdt);
+    if (fwd)
+        kiss_fftr_free(fwd);
+    if (kspec)
+        PULSEG_FREE(kspec);
+    if (work)
+        PULSEG_FREE(work);
     return rc;
 }
 
@@ -775,17 +949,44 @@ int pulseg__pns_score_build(
     int *out_declined,
     double *out_macs)
 {
+    return pulseg__pns_score_build_ex(
+        out,
+        desc,
+        model,
+        gamma_hz_per_tesla,
+        NULL,
+        NULL,
+        out_declined,
+        out_macs);
+}
+
+int pulseg__pns_score_build_ex(
+    pulseg__pns_score **out,
+    const pulseg_sequence_descriptor *desc,
+    const pulseg_pns_model *model,
+    float gamma_hz_per_tesla,
+    pulseg__parallel_for_fn par_fn,
+    void *par_ctx,
+    int *out_declined,
+    double *out_macs)
+{
     pulseg__pns_score *sc;
     pns_basis_block_stat *stats;
     pns_basis_occ occ;
     pns_basis_r1 r1;
     pns_basis_elem_index elem_ix;
     pns_basis_element *elems;
-    float *kernel, *rows, *wave;
-    float out_scale, raster_us;
-    double macs, residual_gain, t, sup, term, u_sq, l1_sq;
-    int b, a, rc, declined, num_basis_blocks, bb, slot, kernel_len;
-    int num_elems, elems_cap, npts, e_idx, found, n2, def_id;
+    float *kernel, *kernel_e;
+    float out_scale, out_scale_e, raster_us, elem_raster_us;
+    int kernel_e_len;
+    double macs, t, sup, term, u_sq;
+    double env_sq[PNS_SCORE_NUM_WINDOWS], unit_env[PNS_SCORE_NUM_WINDOWS];
+    double tail_sq[PNS_SCORE_NUM_ZONES], unit_tail[PNS_SCORE_NUM_ZONES];
+    pns_basis_extent extent;
+    float *edge_first, *edge_last;
+    float unit_first, unit_last;
+    int b, a, z, k, rc, declined, num_basis_blocks, bb, slot, kernel_len;
+    int num_elems, elems_cap, found;
     int shape_ids[3];
     float amps[3];
 
@@ -802,9 +1003,11 @@ int pulseg__pns_score_build(
     macs = 0.0;
     declined = 0;
     kernel = NULL;
+    kernel_e = NULL;
     stats = NULL;
+    edge_first = NULL;
+    edge_last = NULL;
     elems = NULL;
-    rows = NULL;
     r1.slots = NULL;
     elem_ix.slot = NULL;
     elem_ix.cap = 0;
@@ -819,8 +1022,16 @@ int pulseg__pns_score_build(
         *out_declined = 1;
         return PULSEG_SUCCESS;
     }
-    residual_gain =
-        pns_basis_residual_gain(kernel, kernel_len, out_scale, raster_us, gamma_hz_per_tesla);
+    elem_raster_us = desc->grad_raster_us;
+    rc = model->kernel(model->ctx, elem_raster_us, &kernel_e, &kernel_e_len, &out_scale_e);
+    if (PULSEG_FAILED(rc) || kernel_e_len <= 0)
+    {
+        if (kernel_e)
+            PULSEG_FREE(kernel_e);
+        PULSEG_FREE(kernel);
+        *out_declined = 1;
+        return PULSEG_SUCCESS;
+    }
 
     sc = (pulseg__pns_score *)PULSEG_ALLOC(sizeof(*sc));
     stats = (pns_basis_block_stat *)PULSEG_ALLOC((size_t)desc->num_unique_blocks * sizeof(*stats));
@@ -835,33 +1046,31 @@ int pulseg__pns_score_build(
 
     sc->num_blocks = desc->num_blocks;
     sc->u = (float *)PULSEG_ALLOC((size_t)desc->num_blocks * sizeof(float));
-    sc->l1 = (float *)PULSEG_ALLOC((size_t)desc->num_blocks * sizeof(float));
+    sc->env = (float *)PULSEG_ALLOC(
+        (size_t)desc->num_blocks * (size_t)PNS_SCORE_NUM_WINDOWS * sizeof(float));
+    sc->tail = (float *)PULSEG_ALLOC(
+        (size_t)desc->num_blocks * (size_t)PNS_SCORE_NUM_ZONES * sizeof(float));
     sc->t_start_us = (double *)PULSEG_ALLOC((size_t)desc->num_blocks * sizeof(double));
     sc->t_end_us = (double *)PULSEG_ALLOC((size_t)desc->num_blocks * sizeof(double));
-    if (!sc->u || !sc->l1 || !sc->t_start_us || !sc->t_end_us)
+    edge_first = (float *)PULSEG_ALLOC((size_t)desc->num_blocks * 3 * sizeof(float));
+    edge_last = (float *)PULSEG_ALLOC((size_t)desc->num_blocks * 3 * sizeof(float));
+    if (!sc->u || !sc->env || !sc->tail || !sc->t_start_us || !sc->t_end_us || !edge_first ||
+        !edge_last)
     {
         rc = PULSEG_ERR_ALLOC_FAILED;
         goto fail;
     }
+    memset(edge_first, 0, (size_t)desc->num_blocks * 3 * sizeof(float));
+    memset(edge_last, 0, (size_t)desc->num_blocks * 3 * sizeof(float));
     sc->reach_us = ((double)kernel_len + 1.0) * (double)raster_us;
 
-    /* Zone edges chosen where the kernel has fallen to roughly 1, 1/5, 1/20
-     * and 1/100 of its first tap; each zone's gain is the tap at its own
-     * (smallest-gap) edge, the largest any member's convolution can touch. */
+    /* Zone edges where the kernel has fallen to roughly 1, 1/5, 1/20 and
+     * 1/100 of its first tap: the gaps at which a tail is worth its own
+     * number. */
     sc->zone_edge_us[0] = 0.0;
     sc->zone_edge_us[1] = 450.0;
     sc->zone_edge_us[2] = 1250.0;
     sc->zone_edge_us[3] = 2700.0;
-    {
-        int z, idx;
-        for (z = 0; z < PNS_SCORE_NUM_ZONES; ++z)
-        {
-            idx = (int)(sc->zone_edge_us[z] / (double)raster_us);
-            if (idx >= kernel_len)
-                idx = kernel_len - 1;
-            sc->zone_gain[z] = (double)kernel[idx] * (double)out_scale;
-        }
-    }
 
     /* ---- pass 1: the timeline, and what varies where ---- */
     t = 0.0;
@@ -870,17 +1079,20 @@ int pulseg__pns_score_build(
         const pulseg_block_table_element *bte = &desc->block_table[b];
         pns_basis_block_stat *st;
 
-        sc->t_start_us[b] = t;
-        t += (double)bte->duration_us;
-        sc->t_end_us[b] = t;
-        sc->u[b] = 0.0f;
-        sc->l1[b] = 0.0f;
-
         if (bte->id < 0 || bte->id >= desc->num_unique_blocks)
         {
             *out_declined = 1;
             goto decline;
         }
+        sc->t_start_us[b] = t;
+        t += (double)desc->base_blocks[bte->id].duration_us;
+        sc->t_end_us[b] = t;
+        sc->u[b] = 0.0f;
+        for (k = 0; k < PNS_SCORE_NUM_WINDOWS; ++k)
+            sc->env[(size_t)b * PNS_SCORE_NUM_WINDOWS + k] = 0.0f;
+        for (z = 0; z < PNS_SCORE_NUM_ZONES; ++z)
+            sc->tail[(size_t)b * PNS_SCORE_NUM_ZONES + z] = 0.0f;
+
         pns_basis_resolve_occ(desc, bte, &occ);
         st = &stats[bte->id];
         if (occ.rotated)
@@ -949,7 +1161,7 @@ int pulseg__pns_score_build(
             continue;
         bdef = &desc->base_blocks[bb];
         dur_us = (float)bdef->duration_us;
-        npts = (int)((double)dur_us / (double)raster_us) + 1;
+        pns_basis_extent_init(&extent, dur_us, raster_us, sc->zone_edge_us);
         sc->bases[st->basis_index].base_id = bb;
 
         elems_cap = PNS_BASIS_MIN_ELEMENTS;
@@ -1003,6 +1215,15 @@ int pulseg__pns_score_build(
             memcpy(elems[num_elems].shape_id, shape_ids, sizeof(shape_ids));
             memcpy(elems[num_elems].amplitude, amps, sizeof(amps));
             elems[num_elems].bound = 0.0f;
+            for (k = 0; k < PNS_SCORE_NUM_WINDOWS; ++k)
+                elems[num_elems].env[k] = 0.0f;
+            for (z = 0; z < PNS_SCORE_NUM_ZONES; ++z)
+                elems[num_elems].tail[z] = 0.0f;
+            for (a = 0; a < 3; ++a)
+            {
+                elems[num_elems].first[a] = 0.0f;
+                elems[num_elems].last[a] = 0.0f;
+            }
             ++num_elems;
         }
 
@@ -1018,103 +1239,22 @@ int pulseg__pns_score_build(
             continue;
         }
 
-        /* Ceilings before any row is rendered: a scan the decomposition will
-         * refuse anyway must decline in the time it takes to say so. */
-        {
-            double dm = (double)num_elems;
-            double dn = (double)st->d * (double)npts;
-            double dk = (dm < dn) ? dm : dn;
-
-            if (dm * dn * dk > PNS_BASIS_MAX_SVD_WORK || dm * dn * 4.0 > PNS_BASIS_MAX_ROWS_BYTES)
-            {
-                *out_declined = 1;
-                goto decline;
-            }
-        }
-
-        rows =
-            (float *)PULSEG_ALLOC((size_t)num_elems * (size_t)st->d * (size_t)npts * sizeof(float));
-        if (!rows)
-        {
-            rc = PULSEG_ERR_ALLOC_FAILED;
-            goto fail;
-        }
-        for (e_idx = 0; e_idx < num_elems; ++e_idx)
-        {
-            slot = 0;
-            for (a = 0; a < 3; ++a)
-            {
-                float *dst;
-                int i2;
-
-                if (!st->retained[a])
-                    continue;
-                dst = rows + ((size_t)e_idx * st->d + slot) * (size_t)npts;
-                if (elems[e_idx].shape_id[slot] == -2)
-                {
-                    memset(dst, 0, (size_t)npts * sizeof(float));
-                    ++slot;
-                    continue;
-                }
-                def_id = (a == 0) ? bdef->gx_id : (a == 1) ? bdef->gy_id : bdef->gz_id;
-                wave = pns_basis_render_uniform(
-                    desc,
-                    def_id,
-                    elems[e_idx].shape_id[slot],
-                    elems[e_idx].amplitude[slot],
-                    dur_us,
-                    raster_us,
-                    &n2);
-                if (!wave)
-                {
-                    *out_declined = 1;
-                    goto decline;
-                }
-                for (i2 = 0; i2 < npts; ++i2)
-                    dst[i2] = (i2 < n2) ? wave[i2] : 0.0f;
-                PULSEG_FREE(wave);
-                wave = NULL;
-                macs += (double)npts;
-                ++slot;
-            }
-        }
-
-        {
-            float *edgdt;
-            int slot2;
-
-            edgdt = (float *)PULSEG_ALLOC((size_t)st->d * (size_t)(npts + 1) * sizeof(float));
-            if (!edgdt)
-            {
-                rc = PULSEG_ERR_ALLOC_FAILED;
-                goto fail;
-            }
-            for (e_idx = 0; e_idx < num_elems; ++e_idx)
-            {
-                for (slot2 = 0; slot2 < st->d; ++slot2)
-                    pns_basis_slice_dgdt(
-                        edgdt + (size_t)slot2 * (npts + 1),
-                        rows + ((size_t)e_idx * st->d + slot2) * (size_t)npts,
-                        npts,
-                        raster_us,
-                        gamma_hz_per_tesla);
-                elems[e_idx].l1 = (float)pns_basis_rows_l1(edgdt, st->d, npts + 1);
-            }
-            PULSEG_FREE(edgdt);
-        }
-
-        rc = pns_basis_decompose(
+        /* Every element priced exactly, one at a time. */
+        rc = pns_basis_exact_elements(
+            desc,
+            bdef,
             st,
             elems,
             num_elems,
-            rows,
-            npts,
-            kernel,
-            kernel_len,
-            out_scale,
-            raster_us,
+            dur_us,
+            elem_raster_us,
+            kernel_e,
+            kernel_e_len,
+            out_scale_e,
             gamma_hz_per_tesla,
-            residual_gain,
+            sc->zone_edge_us,
+            par_fn,
+            par_ctx,
             &sc->bases[st->basis_index],
             &declined,
             &macs);
@@ -1125,8 +1265,6 @@ int pulseg__pns_score_build(
             *out_declined = 1;
             goto decline;
         }
-        PULSEG_FREE(rows);
-        rows = NULL;
 
         for (b = 0; b < desc->num_blocks; ++b)
         {
@@ -1143,35 +1281,62 @@ int pulseg__pns_score_build(
                 goto decline;
             }
             u_sq = (double)elems[found].bound * (double)elems[found].bound;
-            l1_sq = (double)elems[found].l1 * (double)elems[found].l1;
+            for (k = 0; k < PNS_SCORE_NUM_WINDOWS; ++k)
+                env_sq[k] = (double)elems[found].env[k] * (double)elems[found].env[k];
+            for (z = 0; z < PNS_SCORE_NUM_ZONES; ++z)
+                tail_sq[z] = (double)elems[found].tail[z] * (double)elems[found].tail[z];
+            slot = 0;
             for (a = 0; a < 3; ++a)
             {
-                double unit_l1;
-
+                if (!st->retained[a])
+                    continue;
+                edge_first[3 * b + a] = elems[found].first[slot];
+                edge_last[3 * b + a] = elems[found].last[slot];
+                ++slot;
+            }
+            for (a = 0; a < 3; ++a)
+            {
                 if (st->retained[a] || !occ.has_grad[a])
                     continue;
                 rc = pns_basis_r1_get(
                     &r1,
                     desc,
                     &occ.key[a],
-                    (float)bte->duration_us,
+                    dur_us,
                     raster_us,
                     gamma_hz_per_tesla,
                     kernel,
                     kernel_len,
                     out_scale,
+                    sc->zone_edge_us,
                     &sup,
-                    &unit_l1,
+                    unit_env,
+                    unit_tail,
+                    &unit_first,
+                    &unit_last,
                     &macs);
                 if (PULSEG_FAILED(rc))
                     goto fail;
+                edge_first[3 * b + a] = unit_first * occ.amplitude[a];
+                edge_last[3 * b + a] = unit_last * occ.amplitude[a];
                 term = fabs((double)occ.amplitude[a]) * sup;
                 u_sq += term * term;
-                term = fabs((double)occ.amplitude[a]) * unit_l1;
-                l1_sq += term * term;
+                for (k = 0; k < PNS_SCORE_NUM_WINDOWS; ++k)
+                {
+                    term = fabs((double)occ.amplitude[a]) * unit_env[k];
+                    env_sq[k] += term * term;
+                }
+                for (z = 0; z < PNS_SCORE_NUM_ZONES; ++z)
+                {
+                    term = fabs((double)occ.amplitude[a]) * unit_tail[z];
+                    tail_sq[z] += term * term;
+                }
             }
             sc->u[b] = (float)sqrt(u_sq);
-            sc->l1[b] = (float)sqrt(l1_sq);
+            for (k = 0; k < PNS_SCORE_NUM_WINDOWS; ++k)
+                sc->env[(size_t)b * PNS_SCORE_NUM_WINDOWS + k] = (float)sqrt(env_sq[k]);
+            for (z = 0; z < PNS_SCORE_NUM_ZONES; ++z)
+                sc->tail[(size_t)b * PNS_SCORE_NUM_ZONES + z] = (float)sqrt(tail_sq[z]);
         }
 
         PULSEG_FREE(elems);
@@ -1188,41 +1353,116 @@ int pulseg__pns_score_build(
             continue;
         pns_basis_resolve_occ(desc, bte, &occ);
         u_sq = 0.0;
-        l1_sq = 0.0;
+        for (k = 0; k < PNS_SCORE_NUM_WINDOWS; ++k)
+            env_sq[k] = 0.0;
+        for (z = 0; z < PNS_SCORE_NUM_ZONES; ++z)
+            tail_sq[z] = 0.0;
         for (a = 0; a < 3; ++a)
         {
-            double unit_l1;
-
             if (!occ.has_grad[a])
                 continue;
             rc = pns_basis_r1_get(
                 &r1,
                 desc,
                 &occ.key[a],
-                (float)bte->duration_us,
+                (float)desc->base_blocks[bte->id].duration_us,
                 raster_us,
                 gamma_hz_per_tesla,
                 kernel,
                 kernel_len,
                 out_scale,
+                sc->zone_edge_us,
                 &sup,
-                &unit_l1,
+                unit_env,
+                unit_tail,
+                &unit_first,
+                &unit_last,
                 &macs);
             if (PULSEG_FAILED(rc))
                 goto fail;
+            edge_first[3 * b + a] = unit_first * occ.amplitude[a];
+            edge_last[3 * b + a] = unit_last * occ.amplitude[a];
             term = fabs((double)occ.amplitude[a]) * sup;
             u_sq += term * term;
-            term = fabs((double)occ.amplitude[a]) * unit_l1;
-            l1_sq += term * term;
+            for (k = 0; k < PNS_SCORE_NUM_WINDOWS; ++k)
+            {
+                term = fabs((double)occ.amplitude[a]) * unit_env[k];
+                env_sq[k] += term * term;
+            }
+            for (z = 0; z < PNS_SCORE_NUM_ZONES; ++z)
+            {
+                term = fabs((double)occ.amplitude[a]) * unit_tail[z];
+                tail_sq[z] += term * term;
+            }
         }
         sc->u[b] = (float)sqrt(u_sq);
-        sc->l1[b] = (float)sqrt(l1_sq);
+        for (k = 0; k < PNS_SCORE_NUM_WINDOWS; ++k)
+            sc->env[(size_t)b * PNS_SCORE_NUM_WINDOWS + k] = (float)sqrt(env_sq[k]);
+        for (z = 0; z < PNS_SCORE_NUM_ZONES; ++z)
+            sc->tail[(size_t)b * PNS_SCORE_NUM_ZONES + z] = (float)sqrt(tail_sq[z]);
+    }
+
+    /* ---- pass 4: the steps between blocks, one kernel tap each ---- */
+    {
+        double step, d, tap_scale, dur;
+        int idx;
+
+        tap_scale = (double)out_scale / ((double)gamma_hz_per_tesla * ((double)raster_us * 1e-6));
+        for (b = 0; b < desc->num_blocks; ++b)
+        {
+            step = 0.0;
+            for (a = 0; a < 3; ++a)
+            {
+                d = (double)edge_first[3 * b + a] -
+                    (b > 0 ? (double)edge_last[3 * (b - 1) + a] : 0.0);
+                step += d * d;
+            }
+            if (b == desc->num_blocks - 1)
+            {
+                /* The scan's closing step, on its last block. */
+                d = 0.0;
+                for (a = 0; a < 3; ++a)
+                    d += (double)edge_last[3 * b + a] * (double)edge_last[3 * b + a];
+                step = sqrt(step) + sqrt(d);
+            }
+            else
+                step = sqrt(step);
+            if (step <= 0.0)
+                continue;
+            step *= tap_scale;
+            dur = sc->t_end_us[b] - sc->t_start_us[b];
+            sc->u[b] = (float)((double)sc->u[b] + step * (double)kernel[0]);
+            for (k = 0; k < PNS_SCORE_NUM_WINDOWS; ++k)
+            {
+                idx =
+                    (int)((double)k * dur / (double)PNS_SCORE_NUM_WINDOWS / (double)raster_us) - 1;
+                if (idx < 0)
+                    idx = 0;
+                if (idx >= kernel_len)
+                    continue;
+                sc->env[(size_t)b * PNS_SCORE_NUM_WINDOWS + k] =
+                    (float)((double)sc->env[(size_t)b * PNS_SCORE_NUM_WINDOWS + k] + step * (double)kernel[idx]);
+            }
+            for (z = 0; z < PNS_SCORE_NUM_ZONES; ++z)
+            {
+                idx = (int)((dur + sc->zone_edge_us[z]) / (double)raster_us) - 1;
+                if (idx < 0)
+                    idx = 0;
+                if (idx >= kernel_len)
+                    continue;
+                sc->tail[(size_t)b * PNS_SCORE_NUM_ZONES + z] =
+                    (float)((double)sc->tail[(size_t)b * PNS_SCORE_NUM_ZONES + z] + step * (double)kernel[idx]);
+            }
+        }
     }
 
     sc->build_macs = macs;
     if (out_macs)
         *out_macs = macs;
     PULSEG_FREE(kernel);
+    PULSEG_FREE(kernel_e);
+    PULSEG_FREE(edge_first);
+    PULSEG_FREE(edge_last);
     PULSEG_FREE(stats);
     pns_basis_r1_destroy(&r1);
     *out = sc;
@@ -1233,14 +1473,18 @@ decline:
 fail:
     if (kernel)
         PULSEG_FREE(kernel);
+    if (kernel_e)
+        PULSEG_FREE(kernel_e);
+    if (edge_first)
+        PULSEG_FREE(edge_first);
+    if (edge_last)
+        PULSEG_FREE(edge_last);
     if (stats)
         PULSEG_FREE(stats);
     pns_basis_r1_destroy(&r1);
     pns_basis_elem_index_destroy(&elem_ix);
     if (elems)
         PULSEG_FREE(elems);
-    if (rows)
-        PULSEG_FREE(rows);
     pulseg__pns_score_free(sc);
     if (out_macs)
         *out_macs = macs;
@@ -1251,13 +1495,13 @@ fail:
 /*  The sweep                                                          */
 /* ================================================================== */
 
-/* One anchor at a time, occurrences migrating outward through the decay
- * zones as the anchor advances. For anchor j the covered instants are those
- * whose last-started block is j; contributors are occurrences at or before
- * j whose response still reaches the anchor, each priced by its zone:
- * min(u, l1 * gain(zone)), with zone 0 priced by u itself. Every occurrence
- * enters at its own anchor and crosses each boundary once, so a sweep over
- * the scan is O(zones * blocks). */
+/* One anchor window at a time, occurrences migrating outward through the
+ * gap zones as the anchor advances. Anchor (j, k) covers the k-th window of
+ * block j's span: block j itself is priced by its envelope there, and every
+ * earlier occurrence whose response still reaches the window by its tail
+ * peak at its zone's edge, the gap measured to the window's start. Every
+ * occurrence enters zone 0 after its own last window and crosses each
+ * boundary once, so a sweep over the scan is O(windows * zones * blocks). */
 typedef struct
 {
     double sums[PNS_SCORE_NUM_ZONES];
@@ -1266,12 +1510,7 @@ typedef struct
 
 static double pns_score_zone_price(const pulseg__pns_score *sc, int i, int z)
 {
-    double lp;
-
-    if (z == 0)
-        return (double)sc->u[i];
-    lp = (double)sc->l1[i] * sc->zone_gain[z];
-    return (lp < (double)sc->u[i]) ? lp : (double)sc->u[i];
+    return (double)sc->tail[(size_t)i * PNS_SCORE_NUM_ZONES + z];
 }
 
 static void pns_score_sweep_init(pns_score_sweep *sw)
@@ -1285,34 +1524,41 @@ static void pns_score_sweep_init(pns_score_sweep *sw)
     }
 }
 
-/* Advance to anchor j (callers pass j = 0, 1, ...) and return its covering
- * sum. */
+/* Advance to block j (callers pass j = 0, 1, ...) and return the largest
+ * covering sum over its windows. */
 static double pns_score_sweep_step(const pulseg__pns_score *sc, pns_score_sweep *sw, int j)
 {
-    double start, cut, total;
-    int z, i;
+    double start, cut, total, best, span;
+    int z, i, k;
 
-    /* The anchor itself enters zone 0. */
-    sw->sums[0] += pns_score_zone_price(sc, j, 0);
-
-    start = sc->t_start_us[j];
-    for (z = 0; z < PNS_SCORE_NUM_ZONES; ++z)
+    best = 0.0;
+    span = sc->t_end_us[j] - sc->t_start_us[j];
+    for (k = 0; k < PNS_SCORE_NUM_WINDOWS; ++k)
     {
-        cut =
-            (z + 1 < PNS_SCORE_NUM_ZONES) ? start - sc->zone_edge_us[z + 1] : start - sc->reach_us;
-        for (i = sw->q[z]; i < j && sc->t_end_us[i] <= cut; ++i)
+        start = sc->t_start_us[j] + span * (double)k / (double)PNS_SCORE_NUM_WINDOWS;
+        for (z = 0; z < PNS_SCORE_NUM_ZONES; ++z)
         {
-            sw->sums[z] -= pns_score_zone_price(sc, i, z);
-            if (z + 1 < PNS_SCORE_NUM_ZONES)
-                sw->sums[z + 1] += pns_score_zone_price(sc, i, z + 1);
+            cut = (z + 1 < PNS_SCORE_NUM_ZONES) ? start - sc->zone_edge_us[z + 1]
+                                                : start - sc->reach_us;
+            for (i = sw->q[z]; i < j && sc->t_end_us[i] <= cut; ++i)
+            {
+                sw->sums[z] -= pns_score_zone_price(sc, i, z);
+                if (z + 1 < PNS_SCORE_NUM_ZONES)
+                    sw->sums[z + 1] += pns_score_zone_price(sc, i, z + 1);
+            }
+            sw->q[z] = i;
         }
-        sw->q[z] = i;
+
+        total = (double)sc->env[(size_t)j * PNS_SCORE_NUM_WINDOWS + k];
+        for (z = 0; z < PNS_SCORE_NUM_ZONES; ++z)
+            total += sw->sums[z];
+        if (total > best)
+            best = total;
     }
 
-    total = 0.0;
-    for (z = 0; z < PNS_SCORE_NUM_ZONES; ++z)
-        total += sw->sums[z];
-    return total;
+    /* From the next block on, j is an earlier occurrence in zone 0. */
+    sw->sums[0] += pns_score_zone_price(sc, j, 0);
+    return best;
 }
 
 int pulseg__pns_score_evaluate(
@@ -1345,7 +1591,8 @@ int pulseg__pns_score_evaluate(
     if (out_argmax_block)
         *out_argmax_block = best_j;
     if (out_macs)
-        *out_macs = (double)sc->num_blocks * (double)PNS_SCORE_NUM_ZONES;
+        *out_macs =
+            (double)sc->num_blocks * (double)PNS_SCORE_NUM_ZONES * (double)PNS_SCORE_NUM_WINDOWS;
     return PULSEG_SUCCESS;
 }
 
@@ -1435,7 +1682,7 @@ int pulseg__pns_score_offenders(
  * plays: extract through the shared window machinery, difference, run the
  * model from silence. The range opens a kernel reach before the instants it
  * exists to judge, so the response there equals the whole scan's. */
-static int pns_score_exact_range_peak(
+int pulseg__pns_exact_range_peak(
     pulseg_check_plan *plan,
     pulseg_diagnostic *diag,
     const pulseg_sequence_descriptor *desc,
@@ -1541,6 +1788,8 @@ int pulseg__pns_score_check(
     const pulseg_sequence_descriptor *desc,
     int subseq_idx,
     const pulseg_pns_model *model,
+    pulseg__parallel_for_fn par_fn,
+    void *par_ctx,
     float gamma_hz_per_tesla,
     float threshold_percent,
     int *out_declined,
@@ -1560,11 +1809,13 @@ int pulseg__pns_score_check(
         *out_eval_macs = 0.0;
 
     score = NULL;
-    rc = pulseg__pns_score_build(
+    rc = pulseg__pns_score_build_ex(
         &score,
         desc,
         model,
         gamma_hz_per_tesla,
+        par_fn,
+        par_ctx,
         out_declined,
         out_build_macs);
     if (PULSEG_FAILED(rc) || *out_declined)
@@ -1608,7 +1859,7 @@ int pulseg__pns_score_check(
     {
         judge_us = pulseg__pns_score_block_start_us(score, ranges[3 * r + 2]) -
             pulseg__pns_score_block_start_us(score, ranges[3 * r]);
-        rc = pns_score_exact_range_peak(
+        rc = pulseg__pns_exact_range_peak(
             plan,
             diag,
             desc,

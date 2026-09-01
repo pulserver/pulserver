@@ -32,9 +32,10 @@ class _Structure:
     outlived its sequence would answer about blocks it no longer holds.
     """
 
-    def __init__(self, sequence: Sequence) -> None:
+    def __init__(self, sequence: Sequence, light: bool = False) -> None:
         from .._ext.pulseg import _find_tr, _PulseqCollection
 
+        self.light = light
         self.system = sequence.system
         system = self.system
         # Binary, not text: this is written only to be parsed straight back,
@@ -46,7 +47,7 @@ class _Structure:
         # Serialising compresses shapes and republishes definitions, which
         # touches the C++ sequence -- so read the revision after it, not
         # before, or the cache is stale the moment it is built.
-        written = sequence._to_binary()
+        written = sequence._to_binary(structure_only=light)
         self.revision = sequence._revision
         self.collection = _PulseqCollection(
             [written],
@@ -59,6 +60,8 @@ class _Structure:
             float(system.adc_raster_time),
             float(system.block_duration_raster),
             True,
+            [],
+            light,
         )
         self.tr = _find_tr(self.collection)
         self._segments: list | None = None

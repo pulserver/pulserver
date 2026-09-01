@@ -838,7 +838,21 @@ void pulserver_bind_pulseqpp(py::module_& m)
                 { return py::bytes(pulseq::write_text(self, create_signature)); })
             .def(
                 "write_binary",
-                [](Sequence& self) { return py::bytes(pulseq::write_binary(self)); })
+                [](Sequence& self, bool structure_only)
+                {
+                    // Counted first, then written straight into the bytes
+                    // object: no zero-fill and no copy of a file that can be
+                    // gigabytes.
+                    const size_t size = pulseq::write_binary_size(self, structure_only);
+                    PyObject* raw =
+                        PyBytes_FromStringAndSize(nullptr, static_cast<Py_ssize_t>(size));
+                    if (!raw)
+                        throw py::error_already_set();
+                    py::bytes out = py::reinterpret_steal<py::bytes>(raw);
+                    pulseq::write_binary_into(self, structure_only, PyBytes_AS_STRING(raw), size);
+                    return out;
+                },
+                py::arg("structure_only") = false)
             .def(
                 "required_revision",
                 [](const Sequence& s) { return pulseq::required_revision(s); })

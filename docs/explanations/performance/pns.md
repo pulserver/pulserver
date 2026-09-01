@@ -17,6 +17,11 @@
   GRE, 347× on an FSE train.
 - The regrouping is exact — $4\times10^{-14}$ % of threshold in double
   precision, $2\times10^{-5}$ % as the library computes it in float32.
+- **Past 64 shape groups there is no window.** The scan is priced by a bound
+  built from each block's own response — exact per element, priced by its
+  neighbours' tails at the gap they really have — within 1.1–1.4× of the
+  scan's true peak, and the stretches the bound cannot clear are evaluated
+  exactly. 131 072 distinct arms gate in seconds.
 ```
 
 {doc}`The safety page <../safety/pns>` fixes the quantity: the slew rate of
@@ -273,6 +278,68 @@ norm.max()    # the peak, as a fraction of threshold
 
 ---
 
+## 6. Past the group cap: the occurrence score
+
+A SPARKLING-style acquisition plays a distinct optimised arm in every readout.
+There is no envelope for that — no amplitude makes one arm's shape cover
+another's — and grouping by waveform gives one group per repetition. Past
+`PULSEG__MAX_SHAPE_GROUPS` the check leaves windows behind and prices the
+scan by **linearity**: the response is a sum of per-block responses,
+
+$$R(t) = \sum_i r_i(t - t_i), \qquad r_i = k * \dot G_i ,$$
+
+so at any instant the peak of $\lVert R \rVert_2$ is bounded by a sum over
+the blocks that have started. The block playing contributes its **envelope**
+— its response peak over each of eight equal windows of its own span — and a
+block that ended a gap $\delta$ earlier contributes its **tail peak**
+$T_i(\delta) = \sup_{\tau \ge \delta} \lVert r_i(\mathrm{end}_i + \tau)\rVert_2$,
+kept at four gap edges where the kernel has fallen to about 1, 1/5, 1/20 and
+1/100 of its first tap. A sweep over the scan walks the windows of every
+block with earlier blocks migrating outward through the gap zones, so its
+cost is the block count, not the scan length or the waveform count.
+
+**Each price is exact for the block on its own.** Every block's response is
+sliced to its *interior* slew and priced by its own convolution; the step a
+block makes at its start — its first sample against the previous block's
+last — is priced per occurrence as one kernel tap of that size, so a
+gradient that runs on across blocks is charged its slew and not a fictitious
+step at every seam, and one that starts from rest is charged exactly its
+start. Prices are computed per **distinct** (shape, amplitude) tuple a block
+plays, never per occurrence, and each tuple's own response is computed
+exactly by FFT convolution, one tuple at a time, on every core the host
+offers (`pulseg_opts.parallel_for_fn`; a scanner-side build leaves it unset
+and runs the same loop sequentially). A joint singular-value basis over the
+tuples was measured against this and is not kept: an exact element costs
+about what one basis column costs and carries no residual, so the basis was
+never the cheaper or the tighter of the two once a block played more than a
+handful of distinct waveforms.
+
+**A repetition's own curve.** `calculate_pns(hw, tr=k)` past the cap is
+repetition `k` played as it stands, and `tr="worst_case"` is the repetition
+the score prices highest, evaluated exactly — a witness, not an envelope,
+which the diagnostic says.
+
+**The bound decides, or it names what to evaluate.** Below the threshold the
+scan passes on the bound alone. Above it, the anchors that exceed are merged
+into ranges, each opened a kernel reach of real blocks early so that a cold
+evaluation reproduces the scan's own response from its first offending
+anchor on, and each is evaluated exactly the way the window path would; a
+scan whose bound exceeds in more regions than the check will evaluate is
+refused on the bound, with the count in the diagnostic.
+
+| bound over the scan's true peak | |
+|---|---:|
+| GRE, 2D | 1.14× |
+| FSE | 1.42× |
+| EPI | 1.24× |
+| spiral GRE | 1.44× |
+| radial GRE | 1.14× |
+| ZTE (gradient continuous across blocks) | 1.74× |
+| 64 written-out arms, 4 096 points each | 1.07× |
+
+On the written-out ladder every rung agrees with its `ROTATIONS` twin on
+both sides of the threshold, and 8 192 distinct arms are priced in 0.4 s.
+
 ## Equivalence tests
 
 Each shortcut is a claim that two calculations agree, and each has a test that
@@ -287,6 +354,10 @@ computes both:
 | one window per shape group | the encoding that needs none | the same spiral as four written-out arms and as one arm turned by a rotation: 122.2063 % either way |
 | a one-repetition sequence | the plain convolution | the same waveform under the same model, evaluated two ways |
 | the wrapped history | the scan played back to back | the window's peak is the steady-state peak, boundaries included |
+| the occurrence score | the scan convolved whole | at or above the true peak on every corpus fixture, within the raster-invariance allowance |
+| the score's timeline | the scan's | block spans laid end to end close on the scan's total duration; window and tail prices never exceed the block's own peak |
+| the parallel loop | the sequential one | every per-block price identical however the range is dealt out |
+| the score's verdict | the ground truth | brackets at 0.5×, 0.99×, 1.01× and 2× the true peak on four families; written-out arms agree with their rotated twins |
 
 This is a predownload cost, not a UI one: `validate_protocol` returns before
 any gradient exists to differentiate. What the interpreter pays once the

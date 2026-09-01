@@ -16,6 +16,7 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include <tuple>
 
 #include "bindings.hpp"
 
@@ -59,9 +60,14 @@ public:
         float adc_raster_time,
         float block_duration_raster,
         bool parse_labels,
-        const std::vector<int>& label_column_map)
+        const std::vector<int>& label_column_map,
+        bool structure_only)
     {
         pulseg::Opts opts;
+        opts.structure_only = structure_only;
+        // The bytes objects live as long as this collection (kept below), so
+        // the shape samples can stay where they are.
+        opts.borrow_buffer_shapes = true;
         opts.gamma_hz_per_t = gamma;
         opts.b0_t = B0;
         opts.max_grad_hz_per_m = max_grad;
@@ -73,14 +79,20 @@ public:
         apply_label_column_map(opts, label_column_map);
 
         int n = static_cast<int>(seq_bytes_list.size());
-        std::vector<std::string> buffers(n);
         std::vector<const char*> buf_ptrs(n);
         std::vector<int> buf_sizes(n);
         for (int i = 0; i < n; ++i)
         {
-            buffers[i] = seq_bytes_list[i].cast<py::bytes>();
-            buf_ptrs[i] = buffers[i].data();
-            buf_sizes[i] = static_cast<int>(buffers[i].size());
+            // Read in place: the list keeps every bytes object alive for the
+            // whole constructor, and the parser copies only what it keeps.
+            py::bytes item = seq_bytes_list[i].cast<py::bytes>();
+            char* data = nullptr;
+            Py_ssize_t size = 0;
+            if (PyBytes_AsStringAndSize(item.ptr(), &data, &size) != 0)
+                throw py::error_already_set();
+            buf_ptrs[i] = data;
+            buf_sizes[i] = static_cast<int>(size);
+            keep_alive_.push_back(item);
         }
 
         coll_ = std::unique_ptr<pulseg::Collection>(
@@ -137,6 +149,8 @@ public:
 
 private:
     std::unique_ptr<pulseg::Collection> coll_;
+    /** The bytes the collection's shape samples may point into. */
+    std::vector<py::object> keep_alive_;
     int source_size_ = 0;
 };
 
@@ -266,13 +280,14 @@ static py::dict _calc_pns(
     int canonical_tr_idx,
     float chronaxie_us,
     float rheobase,
-    float alpha)
+    float alpha,
+    int amplitude_mode)
 {
     pulseg_pns_irnich ctx;
     pulseg_pns_model model;
     pulseg_pns_irnich_init(&model, &ctx, chronaxie_us, rheobase, alpha);
 
-    auto r = pc.coll().calc_pns(subsequence_idx, canonical_tr_idx, model);
+    auto r = pc.coll().calc_pns(subsequence_idx, canonical_tr_idx, model, nullptr, amplitude_mode);
 
     py::dict out;
     out["num_samples"] = r.num_samples;
@@ -310,7 +325,8 @@ static py::dict _calc_pns_safe(
     int canonical_tr_idx,
     const py::sequence& gx,
     const py::sequence& gy,
-    const py::sequence& gz)
+    const py::sequence& gz,
+    int amplitude_mode)
 {
     pulseg_pns_safe ctx;
     pulseg_pns_model model;
@@ -319,7 +335,7 @@ static py::dict _calc_pns_safe(
     ctx.z = _safe_axis(gz, "z");
     pulseg_pns_safe_init(&model, &ctx);
 
-    auto r = pc.coll().calc_pns(subsequence_idx, canonical_tr_idx, model);
+    auto r = pc.coll().calc_pns(subsequence_idx, canonical_tr_idx, model, nullptr, amplitude_mode);
 
     py::dict out;
     out["num_samples"] = r.num_samples;
@@ -579,6 +595,169 @@ namespace
     }
 
 } // namespace
+
+/** The occurrence-score prices per block, and the score's sweep result. */
+static py::dict _pns_score_bounds(
+    _PulseqCollection& pc,
+    float stim_threshold,
+    float decay_constant_us,
+    int subseq_idx)
+{
+    pulseg_pns_irnich ctx;
+    pulseg_pns_model model;
+    pulseg_pns_irnich_init(&model, &ctx, decay_constant_us, stim_threshold, 1.0f);
+    pulseg_collection* coll = pc.coll().handle();
+    if (subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
+        throw std::out_of_range("subsequence index out of range");
+    pulseg__pns_score* score = nullptr;
+    int declined = 0;
+    double macs = 0.0;
+    int rc = pulseg__pns_score_build_ex(
+        &score,
+        &coll->descriptors[subseq_idx],
+        &model,
+        pc.coll().opts().gamma_hz_per_t,
+        pc.coll().opts().parallel_for_fn,
+        pc.coll().opts().parallel_ctx,
+        &declined,
+        &macs);
+    if (PULSEG_FAILED(rc))
+        throw std::runtime_error("pns score build failed");
+    py::dict out;
+    out["declined"] = declined != 0;
+    out["build_macs"] = macs;
+    if (declined || !score)
+        return out;
+    const int n = coll->descriptors[subseq_idx].num_blocks;
+    py::array_t<float> u(n), env({n, PULSEG__PNS_SCORE_WINDOWS}),
+        tail({n, PULSEG__PNS_SCORE_ZONES});
+    py::array_t<double> t0(n), t1(n);
+    for (int b = 0; b < n; ++b)
+        pulseg__pns_score_block_bound(
+            score,
+            b,
+            u.mutable_data() + b,
+            env.mutable_data() + static_cast<size_t>(b) * PULSEG__PNS_SCORE_WINDOWS,
+            tail.mutable_data() + static_cast<size_t>(b) * PULSEG__PNS_SCORE_ZONES,
+            t0.mutable_data() + b,
+            t1.mutable_data() + b);
+    float score_max = 0.0f;
+    int argmax = -1;
+    double eval_macs = 0.0;
+    pulseg__pns_score_evaluate(score, &score_max, &argmax, &eval_macs);
+    py::list bases;
+    for (int i = 0; i < pulseg__pns_score_num_bases(score); ++i)
+    {
+        const pulseg__pns_basis_info* info = pulseg__pns_score_basis_info(score, i);
+        py::dict d;
+        d["base_id"] = info->base_id;
+        d["num_elements"] = info->num_elements;
+        d["d"] = info->d;
+        bases.append(d);
+    }
+    pulseg__pns_score_free(score);
+    out["u"] = u;
+    out["env"] = env;
+    out["tail"] = tail;
+    out["t_start_us"] = t0;
+    out["t_end_us"] = t1;
+    out["score_max"] = score_max;
+    out["argmax"] = argmax;
+    out["bases"] = bases;
+    return out;
+}
+
+/** Exact response peak of a block range, the way an offender range is settled. */
+static double _pns_exact_range_peak(
+    _PulseqCollection& pc,
+    float stim_threshold,
+    float decay_constant_us,
+    int start,
+    int count,
+    double judge_from_us,
+    int subseq_idx)
+{
+    pulseg_pns_irnich ctx;
+    pulseg_pns_model model;
+    pulseg_pns_irnich_init(&model, &ctx, decay_constant_us, stim_threshold, 1.0f);
+    pulseg_collection* coll = pc.coll().handle();
+    if (subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
+        throw std::out_of_range("subsequence index out of range");
+    pulseg_diagnostic diag;
+    pulseg_diagnostic_init(&diag);
+    pulseg_check_plan* plan = nullptr;
+    int rc = pulseg_check_plan_create(&plan, &diag, coll, nullptr);
+    if (PULSEG_FAILED(rc))
+        throw std::runtime_error(std::string("check plan: ") + diag.message);
+    double peak = -1.0;
+    rc = pulseg__pns_exact_range_peak(
+        plan,
+        &diag,
+        &coll->descriptors[subseq_idx],
+        subseq_idx,
+        start,
+        count,
+        judge_from_us,
+        &model,
+        pc.coll().opts().gamma_hz_per_t,
+        &peak);
+    pulseg_check_plan_destroy(plan);
+    if (PULSEG_FAILED(rc))
+        throw std::runtime_error(std::string("exact range peak: ") + diag.message);
+    return peak;
+}
+
+static py::dict _mech_scan_window_probe(
+    _PulseqCollection& pc,
+    const std::vector<std::tuple<double, double, int>>& grids,
+    double window_us,
+    int flags,
+    int subseq_idx)
+{
+    pulseg_collection* coll = pc.coll().handle();
+    if (subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
+        throw std::out_of_range("subsequence index out of range");
+    std::vector<pulseg__mech_scan_grid> g;
+    int n_fine = 0;
+    for (const auto& item : grids)
+    {
+        pulseg__mech_scan_grid one;
+        one.f0_hz = std::get<0>(item);
+        one.df_hz = std::get<1>(item);
+        one.count = std::get<2>(item);
+        n_fine += one.count;
+        g.push_back(one);
+    }
+    py::array_t<float> gx(n_fine), gy(n_fine), gz(n_fine);
+    py::array_t<double> freqs(n_fine);
+    double span_max_us = 0.0;
+    int rc = pulseg__mech_scan_window_probe(
+        &coll->descriptors[subseq_idx],
+        g.data(),
+        static_cast<int>(g.size()),
+        window_us,
+        flags,
+        pc.coll().opts().parallel_for_fn,
+        pc.coll().opts().parallel_ctx,
+        gx.mutable_data(),
+        gy.mutable_data(),
+        gz.mutable_data(),
+        &span_max_us);
+    if (PULSEG_FAILED(rc))
+        throw std::runtime_error("scan window probe failed: " + std::to_string(rc));
+    double* f = freqs.mutable_data();
+    int k = 0;
+    for (const auto& one : g)
+        for (int i = 0; i < one.count; ++i)
+            f[k++] = one.f0_hz + one.df_hz * i;
+    py::dict out;
+    out["freqs_hz"] = freqs;
+    out["amp_gx"] = gx;
+    out["amp_gy"] = gy;
+    out["amp_gz"] = gz;
+    out["span_max_us"] = span_max_us;
+    return out;
+}
 
 static py::dict _check_safety_profiled(
     _PulseqCollection& pc,
@@ -965,7 +1144,8 @@ void pulserver_bind_pulseg(py::module_& m)
                 float,
                 float,
                 bool,
-                std::vector<int>>(),
+                std::vector<int>,
+                bool>(),
             py::arg("seq_bytes_list"),
             py::arg("gamma"),
             py::arg("B0"),
@@ -976,7 +1156,8 @@ void pulserver_bind_pulseg(py::module_& m)
             py::arg("adc_raster_time"),
             py::arg("block_duration_raster"),
             py::arg("parse_labels") = true,
-            py::arg("label_column_map") = std::vector<int>())
+            py::arg("label_column_map") = std::vector<int>(),
+            py::arg("structure_only") = false)
         .def(
             py::init<
                 std::string,
@@ -1028,7 +1209,8 @@ void pulserver_bind_pulseg(py::module_& m)
         py::arg("canonical_tr_idx") = 0,
         py::arg("chronaxie_us"),
         py::arg("rheobase"),
-        py::arg("alpha"));
+        py::arg("alpha"),
+        py::arg("amplitude_mode") = PULSEG_AMP_MAX_POS);
 
     m.def(
         "_calc_pns_safe",
@@ -1038,7 +1220,8 @@ void pulserver_bind_pulseg(py::module_& m)
         py::arg("canonical_tr_idx") = 0,
         py::arg("gx"),
         py::arg("gy"),
-        py::arg("gz"));
+        py::arg("gz"),
+        py::arg("amplitude_mode") = PULSEG_AMP_MAX_POS);
 
     m.def(
         "_get_tr_waveforms",
@@ -1074,6 +1257,37 @@ void pulserver_bind_pulseg(py::module_& m)
         py::arg("decay_constant_us") = 0.0f,
         py::arg("pns_threshold_percent") = 100.0f,
         py::arg("skip_pns") = true);
+    m.def(
+        "_pns_score_bounds",
+        &_pns_score_bounds,
+        py::arg("collection"),
+        py::arg("stim_threshold"),
+        py::arg("decay_constant_us"),
+        py::arg("subseq_idx") = 0,
+        "Per-block occurrence-score prices (u, envelope per window, tail per zone, span) and "
+        "the sweep's maximum.");
+    m.def(
+        "_pns_exact_range_peak",
+        &_pns_exact_range_peak,
+        py::arg("collection"),
+        py::arg("stim_threshold"),
+        py::arg("decay_constant_us"),
+        py::arg("start"),
+        py::arg("count"),
+        py::arg("judge_from_us") = 0.0,
+        py::arg("subseq_idx") = 0,
+        "Exact response peak of a block range, judged from judge_from_us into it.");
+    m.def(
+        "_mech_scan_window_probe",
+        &_mech_scan_window_probe,
+        py::arg("collection"),
+        py::arg("grids"),
+        py::arg("window_us") = 0.0,
+        py::arg("flags") = 0,
+        py::arg("subseq_idx") = 0,
+        "Sustained amplitude per axis on the given (f0_hz, df_hz, count) grids: the scan "
+        "window past the group cap, no grid guard. flags=1 evaluates every transform "
+        "directly.");
 
     m.def(
         "_check_safety",

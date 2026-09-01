@@ -1154,6 +1154,8 @@ static void run_pns_score_verdict_brackets(const char *filename)
             &coll->descriptors[0],
             0,
             &model,
+            NULL,
+            NULL,
             s_opts.gamma_hz_per_t,
             (float)thr,
             &declined,
@@ -1231,6 +1233,707 @@ MU_TEST(test_the_score_bounds_the_exact_scan_peak_radial)
     run_pns_score_soundness("gre_radial_2d.seq");
 }
 
+/* The slide prices earlier blocks by how long ago they ended, so its
+ * timeline has to be the scan's: block spans laid end to end, closing on
+ * the descriptor's total duration. */
+static void run_pns_score_timeline(const char *filename)
+{
+    pulseg_pns_irnich ctx;
+    pulseg_pns_model model;
+    pulseg_collection *coll = NULL;
+    pulseg__pns_score *score = NULL;
+    const pulseg_sequence_descriptor *desc;
+    double start, end, prev_end;
+    float u, env[PULSEG__PNS_SCORE_WINDOWS], tail[PULSEG__PNS_SCORE_ZONES];
+    int rc, declined, b, z, k;
+
+    mech_resonances_opts_init(&s_opts);
+    rc = load_corpus_seq(&coll, filename, &s_opts);
+    mu_assert(PULSEG_SUCCEEDED(rc), "load_corpus_seq failed");
+    pulseg_pns_irnich_init(&model, &ctx, 360.0f, 4.25e8f, 0.333f);
+    desc = &coll->descriptors[0];
+    rc = pulseg__pns_score_build(&score, desc, &model, s_opts.gamma_hz_per_t, &declined, NULL);
+    mu_assert(PULSEG_SUCCEEDED(rc) && !declined && score, "score build failed");
+
+    prev_end = 0.0;
+    for (b = 0; b < desc->num_blocks; ++b)
+    {
+        rc = pulseg__pns_score_block_bound(score, b, &u, env, tail, &start, &end);
+        mu_assert(PULSEG_SUCCEEDED(rc), "block bound lookup failed");
+        for (k = 0; k < PULSEG__PNS_SCORE_WINDOWS; ++k)
+            mu_assert(env[k] <= u * (1.0f + 1.0e-6f), "a window peak above the block's own peak");
+        mu_assert(
+            fabs(start - prev_end) < 0.5,
+            "a block does not start where the previous one ended");
+        mu_assert(end - start > 0.5, "a block with no duration on the score timeline");
+        mu_assert(u >= 0.0f, "negative peak price");
+        for (z = 0; z < PULSEG__PNS_SCORE_ZONES; ++z)
+        {
+            mu_assert(tail[z] <= u * (1.0f + 1.0e-6f), "a tail peak above the block's own peak");
+            if (z > 0)
+                mu_assert(
+                    tail[z] <= tail[z - 1] * (1.0f + 1.0e-6f),
+                    "a tail peak that grows with the gap");
+        }
+        prev_end = end;
+    }
+    mu_assert(
+        fabs(prev_end - (double)coll->total_duration_us) <= 1.0,
+        "the score timeline does not close on the scan's total duration");
+
+    pulseg__pns_score_free(score);
+    pulseg_collection_free(coll);
+}
+
+/* A loop runner that deals the range out in three uneven pieces, in
+ * reverse: what a host's thread pool may do, without the threads. */
+static void chunked_in_reverse(
+    void *ctx,
+    int count,
+    void (*body)(void *arg, int begin, int end),
+    void *arg)
+{
+    int a = count / 3, b = (2 * count) / 3;
+    (void)ctx;
+    body(arg, b, count);
+    body(arg, a, b);
+    body(arg, 0, a);
+}
+
+/* The exact-element score does not depend on how its loop is dealt out. */
+MU_TEST(test_the_exact_element_score_is_the_same_however_the_loop_is_dealt)
+{
+    pulseg_pns_irnich ctx;
+    pulseg_pns_model model;
+    pulseg_collection *coll = NULL;
+    pulseg__pns_score *plain = NULL;
+    pulseg__pns_score *dealt = NULL;
+    float plain_max, dealt_max, u1, u2, e1[PULSEG__PNS_SCORE_WINDOWS],
+        e2[PULSEG__PNS_SCORE_WINDOWS];
+    float t1[PULSEG__PNS_SCORE_ZONES], t2[PULSEG__PNS_SCORE_ZONES];
+    int rc, declined, b, k, z;
+
+    mech_resonances_opts_init(&s_opts);
+    rc = load_corpus_seq(&coll, "zte_3d.seq", &s_opts);
+    mu_assert(PULSEG_SUCCEEDED(rc), "load_corpus_seq failed");
+    pulseg_pns_irnich_init(&model, &ctx, 360.0f, 4.25e8f, 0.333f);
+    rc = pulseg__pns_score_build_ex(
+        &plain,
+        &coll->descriptors[0],
+        &model,
+        s_opts.gamma_hz_per_t,
+        NULL,
+        NULL,
+        &declined,
+        NULL);
+    mu_assert(PULSEG_SUCCEEDED(rc) && !declined && plain, "plain build failed");
+    rc = pulseg__pns_score_build_ex(
+        &dealt,
+        &coll->descriptors[0],
+        &model,
+        s_opts.gamma_hz_per_t,
+        chunked_in_reverse,
+        NULL,
+        &declined,
+        NULL);
+    mu_assert(PULSEG_SUCCEEDED(rc) && !declined && dealt, "dealt build failed");
+    for (b = 0; b < coll->descriptors[0].num_blocks; ++b)
+    {
+        pulseg__pns_score_block_bound(plain, b, &u1, e1, t1, NULL, NULL);
+        pulseg__pns_score_block_bound(dealt, b, &u2, e2, t2, NULL, NULL);
+        mu_assert(u1 == u2, "a block's peak price depends on how the loop was dealt");
+        for (k = 0; k < PULSEG__PNS_SCORE_WINDOWS; ++k)
+            mu_assert(e1[k] == e2[k], "a window price depends on how the loop was dealt");
+        for (z = 0; z < PULSEG__PNS_SCORE_ZONES; ++z)
+            mu_assert(t1[z] == t2[z], "a tail price depends on how the loop was dealt");
+    }
+    pulseg__pns_score_evaluate(plain, &plain_max, NULL, NULL);
+    pulseg__pns_score_evaluate(dealt, &dealt_max, NULL, NULL);
+    mu_assert(plain_max == dealt_max, "the score depends on how the loop was dealt");
+    pulseg__pns_score_free(plain);
+    pulseg__pns_score_free(dealt);
+    pulseg_collection_free(coll);
+}
+
+/* A gradient that runs on across blocks is charged its slew, not a step
+ * at every seam: zte_3d's readouts stay near full amplitude from block to
+ * block, and the score prices them within a factor two of the scan. */
+MU_TEST(test_a_gradient_running_across_blocks_is_not_charged_its_seams)
+{
+    pulseg_pns_irnich ctx;
+    pulseg_pns_model model;
+    pulseg_collection *coll = NULL;
+    pulseg__pns_score *score = NULL;
+    float score_max;
+    double exact;
+    int rc, declined;
+
+    mech_resonances_opts_init(&s_opts);
+    rc = load_corpus_seq(&coll, "zte_3d.seq", &s_opts);
+    mu_assert(PULSEG_SUCCEEDED(rc), "load_corpus_seq failed");
+    pulseg_pns_irnich_init(&model, &ctx, 360.0f, 4.25e8f, 0.333f);
+    rc = pulseg__pns_score_build_ex(
+        &score,
+        &coll->descriptors[0],
+        &model,
+        s_opts.gamma_hz_per_t,
+        NULL,
+        NULL,
+        &declined,
+        NULL);
+    mu_assert(PULSEG_SUCCEEDED(rc) && !declined && score, "score build failed");
+    rc = pulseg__pns_score_evaluate(score, &score_max, NULL, NULL);
+    mu_assert(PULSEG_SUCCEEDED(rc), "score evaluation failed");
+    exact = pns_score_exact_scan_peak(coll, &model, s_opts.gamma_hz_per_t);
+    mu_assert(exact > 0.0, "exact scan evaluation failed");
+    printf(
+        "    seams zte_3d: score %.6g, scan peak %.6g, gap %.3fx\n",
+        (double)score_max,
+        exact,
+        (double)score_max / exact);
+    mu_assert((double)score_max >= exact * (1.0 - 2.0e-3), "the score fell below the scan peak");
+    mu_assert(
+        (double)score_max <= 2.0 * exact,
+        "a continuous gradient is still priced at its seams");
+    pulseg__pns_score_free(score);
+    pulseg_collection_free(coll);
+}
+
+/* The acoustic tables are built one distinct waveform per slot, so dealing
+ * the slots out to a pool changes nothing a candidate reads. */
+MU_TEST(test_the_acoustic_candidates_are_the_same_however_the_loop_is_dealt)
+{
+    pulseg_collection *coll = NULL;
+    pulseg_mech_resonances_spectra plain = PULSEG_MECH_RESONANCES_SPECTRA_INIT;
+    pulseg_mech_resonances_spectra dealt = PULSEG_MECH_RESONANCES_SPECTRA_INIT;
+    pulseg_mech_resonances_request request = PULSEG_MECH_RESONANCES_REQUEST_INIT;
+    pulseg_forbidden_band bands[2];
+    pulseg_opts sequential, pooled;
+    int rc, i;
+
+    mech_resonances_opts_init(&s_opts);
+    rc = load_corpus_seq(&coll, "zte_3d.seq", &s_opts);
+    mu_assert(PULSEG_SUCCEEDED(rc), "load_corpus_seq failed");
+    bands[0].freq_min_hz = 550.0f;
+    bands[0].freq_max_hz = 650.0f;
+    bands[0].max_amplitude_hz_per_m = 1.0e12f;
+    bands[1].freq_min_hz = 1100.0f;
+    bands[1].freq_max_hz = 1250.0f;
+    bands[1].max_amplitude_hz_per_m = 1.0e12f;
+    request.bands.count = 2;
+    request.bands.bands = bands;
+
+    sequential = s_opts;
+    sequential.parallel_for_fn = NULL;
+    pooled = s_opts;
+    pooled.parallel_for_fn = chunked_in_reverse;
+    rc = pulseg_calc_mech_resonances(coll, &plain, &s_diag, NULL, &sequential, &request);
+    mu_assert(PULSEG_SUCCEEDED(rc), "sequential acoustic analysis failed");
+    rc = pulseg_calc_mech_resonances(coll, &dealt, &s_diag, NULL, &pooled, &request);
+    mu_assert(PULSEG_SUCCEEDED(rc), "dealt acoustic analysis failed");
+
+    mu_assert(plain.num_candidates == dealt.num_candidates, "candidate count differs");
+    mu_assert(plain.num_candidates > 0, "no candidates on a fixture with forbidden bands");
+    for (i = 0; i < plain.num_candidates; ++i)
+    {
+        mu_assert(
+            plain.candidate_freqs[i] == dealt.candidate_freqs[i],
+            "a candidate frequency moved");
+        mu_assert(
+            plain.candidate_grad_amps[i] == dealt.candidate_grad_amps[i],
+            "a candidate amplitude moved");
+        mu_assert(
+            plain.candidate_violations[i] == dealt.candidate_violations[i],
+            "a candidate verdict moved");
+        if (plain.candidate_amps_gx && dealt.candidate_amps_gx)
+            mu_assert(
+                plain.candidate_amps_gx[i] == dealt.candidate_amps_gx[i],
+                "an x amplitude moved");
+        if (plain.candidate_amps_gy && dealt.candidate_amps_gy)
+            mu_assert(
+                plain.candidate_amps_gy[i] == dealt.candidate_amps_gy[i],
+                "a y amplitude moved");
+        if (plain.candidate_amps_gz && dealt.candidate_amps_gz)
+            mu_assert(
+                plain.candidate_amps_gz[i] == dealt.candidate_amps_gz[i],
+                "a z amplitude moved");
+    }
+    pulseg_mech_resonances_spectra_free(&plain);
+    pulseg_mech_resonances_spectra_free(&dealt);
+    pulseg_collection_free(coll);
+}
+
+/* The scan-window amplitude at f by the criterion's own definition, from
+ * the rendered scan: a window opens at every block start, takes whole the
+ * blocks that start inside it, and the amplitude is sustained over the span
+ * those blocks cover (never less than the window). What the probe computes
+ * from event transforms, taken from the samples instead. */
+static double scan_window_brute_force(
+    pulseg_collection *coll,
+    int axis,
+    double f_hz,
+    double window_us)
+{
+    pulseg_check_plan *plan = NULL;
+    const pulseg__uniform_grad_waveforms *uw;
+    const pulseg_sequence_descriptor *desc = &coll->descriptors[0];
+    const float *g;
+    double *starts, *ends;
+    double best, omega, t, sre, sim, t0, span;
+    int n, b, i, j, k, rc, s0, s1;
+
+    pulseg_diagnostic_init(&s_diag);
+    rc = pulseg_check_plan_create(&plan, &s_diag, coll, NULL);
+    if (PULSEG_FAILED(rc))
+        return -1.0;
+    rc = pulseg__plan_waveforms(
+        plan,
+        &uw,
+        &s_diag,
+        desc,
+        0,
+        0,
+        desc->num_blocks,
+        PULSEG_AMP_ACTUAL,
+        NULL,
+        0);
+    if (PULSEG_FAILED(rc) || uw->num_samples < 2)
+    {
+        pulseg_check_plan_destroy(plan);
+        return -1.0;
+    }
+    g = (axis == 0) ? uw->gx : (axis == 1) ? uw->gy : uw->gz;
+    n = uw->num_samples;
+    starts = (double *)PULSEG_ALLOC((size_t)desc->num_blocks * sizeof(double));
+    ends = (double *)PULSEG_ALLOC((size_t)desc->num_blocks * sizeof(double));
+    t = 0.0;
+    for (b = 0; b < desc->num_blocks; ++b)
+    {
+        starts[b] = t;
+        t += (double)desc->base_blocks[desc->block_table[b].id].duration_us;
+        ends[b] = t;
+    }
+    omega = 2.0 * M_PI * f_hz * 1.0e-6 * (double)uw->raster_us;
+    best = 0.0;
+    for (i = 0; i < desc->num_blocks; ++i)
+    {
+        t0 = starts[i];
+        j = i;
+        while (j + 1 < desc->num_blocks && starts[j + 1] <= t0 + window_us)
+            ++j;
+        span = window_us;
+        if (ends[j] - t0 > span)
+            span = ends[j] - t0;
+        s0 = (int)(t0 / (double)uw->raster_us);
+        s1 = (int)(ends[j] / (double)uw->raster_us);
+        if (s1 > n)
+            s1 = n;
+        sre = 0.0;
+        sim = 0.0;
+        for (k = s0; k < s1; ++k)
+        {
+            t = omega * (double)k;
+            sre += (double)g[k] * cos(t);
+            sim -= (double)g[k] * sin(t);
+        }
+        sre *= (double)uw->raster_us;
+        sim *= (double)uw->raster_us;
+        t = 2.0 / (span * 1.0e-6) * sqrt(sre * sre + sim * sim) * 1.0e-6;
+        if (t > best)
+            best = t;
+    }
+    PULSEG_FREE(starts);
+    PULSEG_FREE(ends);
+    pulseg_check_plan_destroy(plan);
+    return best;
+}
+
+/* With every repetition the same and the window a whole number of TRs, the
+ * scan-window amplitude at a TR harmonic is the periodic line amplitude
+ * (2 / T_TR) |S_TR| -- the brute-force transform of the rendered scan over
+ * that window says the same number. */
+MU_TEST(test_the_scan_window_reduces_to_the_periodic_line_on_a_repeated_tr)
+{
+    pulseg_collection *coll = NULL;
+    const pulseg_sequence_descriptor *desc;
+    pulseg__mech_scan_grid grids[3];
+    double window_us, t_tr_us, brute;
+    float amp_x[3], amp_y[3], amp_z[3];
+    int rc, k, reps;
+
+    mech_resonances_opts_init(&s_opts);
+    rc = load_corpus_seq(&coll, "gre_2d.seq", &s_opts);
+    mu_assert(PULSEG_SUCCEEDED(rc), "load_corpus_seq failed");
+    desc = &coll->descriptors[0];
+    t_tr_us = (double)desc->tr_descriptor.tr_duration_us;
+    reps = 4;
+    window_us = (double)reps * t_tr_us - 0.5;
+    for (k = 0; k < 3; ++k)
+    {
+        grids[k].f0_hz = (double)(k + 3) * 1.0e6 / t_tr_us;
+        grids[k].df_hz = 0.0;
+        grids[k].count = 1;
+    }
+    rc = pulseg__mech_scan_window_probe(
+        desc,
+        grids,
+        3,
+        window_us,
+        0,
+        NULL,
+        NULL,
+        amp_x,
+        amp_y,
+        amp_z,
+        NULL);
+    mu_assert(PULSEG_SUCCEEDED(rc), "scan-window probe failed");
+    for (k = 0; k < 3; ++k)
+    {
+        brute = scan_window_brute_force(coll, 0, grids[k].f0_hz, window_us);
+        mu_assert(brute >= 0.0, "brute-force window evaluation failed");
+        printf(
+            "    scan window gre_2d harmonic %d: probe %.6g, rendered %.6g\n",
+            k + 3,
+            (double)amp_x[k],
+            brute);
+        mu_assert(
+            fabs((double)amp_x[k] - brute) <= 0.02 * brute + 1.0e-9,
+            "the scan window disagrees with the rendered scan at a TR harmonic");
+    }
+    pulseg_collection_free(coll);
+}
+
+/* On a scan whose repetitions differ, the same quantity from the samples. */
+MU_TEST(test_the_scan_window_matches_the_rendered_scan_on_distinct_repetitions)
+{
+    pulseg_collection *coll = NULL;
+    const pulseg_sequence_descriptor *desc;
+    pulseg__mech_scan_grid grids[2];
+    double window_us, t_tr_us, brute;
+    float amp_x[2], amp_y[2], amp_z[2];
+    int rc, k;
+
+    mech_resonances_opts_init(&s_opts);
+    rc = load_corpus_seq(&coll, "zte_3d.seq", &s_opts);
+    mu_assert(PULSEG_SUCCEEDED(rc), "load_corpus_seq failed");
+    desc = &coll->descriptors[0];
+    t_tr_us = (double)desc->tr_descriptor.tr_duration_us;
+    window_us = 3.0 * t_tr_us - 0.5;
+    grids[0].f0_hz = 2.0e6 / t_tr_us;
+    grids[1].f0_hz = 2.37e6 / t_tr_us;
+    for (k = 0; k < 2; ++k)
+    {
+        grids[k].df_hz = 0.0;
+        grids[k].count = 1;
+    }
+    rc = pulseg__mech_scan_window_probe(
+        desc,
+        grids,
+        2,
+        window_us,
+        0,
+        NULL,
+        NULL,
+        amp_x,
+        amp_y,
+        amp_z,
+        NULL);
+    mu_assert(PULSEG_SUCCEEDED(rc), "scan-window probe failed");
+    for (k = 0; k < 2; ++k)
+    {
+        brute = scan_window_brute_force(coll, 2, grids[k].f0_hz, window_us);
+        mu_assert(brute >= 0.0, "brute-force window evaluation failed");
+        printf(
+            "    scan window zte_3d f=%.1f Hz: probe %.6g, rendered %.6g\n",
+            grids[k].f0_hz,
+            (double)amp_z[k],
+            brute);
+        mu_assert(
+            fabs((double)amp_z[k] - brute) <= 0.03 * brute + 1.0e-9,
+            "the scan window disagrees with the rendered scan");
+    }
+    pulseg_collection_free(coll);
+}
+
+/* On the written-out arms, the FFT records against the rendered scan. */
+MU_TEST(test_the_scan_window_matches_the_rendered_scan_on_written_out_arms)
+{
+    pulseg_collection *coll = NULL;
+    pulseg__mech_scan_grid grids[3];
+    float amp_x[3], amp_y[3], amp_z[3];
+    double brute, window_us = 10000.0;
+    int rc, k;
+
+    mech_resonances_opts_init(&s_opts);
+    rc = load_seq(&coll, "arms_scan.seq", &s_opts);
+    mu_assert(PULSEG_SUCCEEDED(rc), "load_seq failed");
+    grids[0].f0_hz = 590.0;
+    grids[1].f0_hz = 1180.0;
+    grids[2].f0_hz = 613.7;
+    for (k = 0; k < 3; ++k)
+    {
+        grids[k].df_hz = 0.0;
+        grids[k].count = 1;
+    }
+    rc = pulseg__mech_scan_window_probe(
+        &coll->descriptors[0],
+        grids,
+        3,
+        window_us,
+        0,
+        NULL,
+        NULL,
+        amp_x,
+        amp_y,
+        amp_z,
+        NULL);
+    mu_assert(PULSEG_SUCCEEDED(rc), "scan-window probe failed");
+    for (k = 0; k < 3; ++k)
+    {
+        brute = scan_window_brute_force(coll, 1, grids[k].f0_hz, window_us);
+        mu_assert(brute >= 0.0, "brute-force window evaluation failed");
+        printf(
+            "    scan window arms_scan f=%.1f Hz: probe %.6g, rendered %.6g\n",
+            grids[k].f0_hz,
+            (double)amp_y[k],
+            brute);
+        mu_assert(
+            fabs((double)amp_y[k] - brute) <= 0.02 * brute + 1.0e-9,
+            "the scan window disagrees with the rendered arms");
+    }
+    pulseg_collection_free(coll);
+}
+
+MU_TEST(test_the_scan_window_is_the_same_however_the_loop_is_dealt)
+{
+    pulseg_collection *coll = NULL;
+    pulseg__mech_scan_grid grid;
+    float a1[5], b1[5], c1[5], a2[5], b2[5], c2[5];
+    int rc, k;
+
+    mech_resonances_opts_init(&s_opts);
+    rc = load_corpus_seq(&coll, "zte_3d.seq", &s_opts);
+    mu_assert(PULSEG_SUCCEEDED(rc), "load_corpus_seq failed");
+    grid.f0_hz = 550.0;
+    grid.df_hz = 25.0;
+    grid.count = 5;
+    rc = pulseg__mech_scan_window_probe(
+        &coll->descriptors[0],
+        &grid,
+        1,
+        10000.0,
+        0,
+        NULL,
+        NULL,
+        a1,
+        b1,
+        c1,
+        NULL);
+    mu_assert(PULSEG_SUCCEEDED(rc), "sequential probe failed");
+    rc = pulseg__mech_scan_window_probe(
+        &coll->descriptors[0],
+        &grid,
+        1,
+        10000.0,
+        0,
+        chunked_in_reverse,
+        NULL,
+        a2,
+        b2,
+        c2,
+        NULL);
+    mu_assert(PULSEG_SUCCEEDED(rc), "dealt probe failed");
+    for (k = 0; k < 5; ++k)
+        mu_assert(
+            a1[k] == a2[k] && b1[k] == b2[k] && c1[k] == c2[k],
+            "a scan-window amplitude depends on how the loop was dealt");
+    pulseg_collection_free(coll);
+}
+
+/* On a scan of long arbitrary waveforms, every waveform's FFT record
+ * interpolated onto the fine grid against every transform summed directly:
+ * never below it, and within the guard of it. */
+MU_TEST(test_the_arm_spectrum_by_fft_matches_the_direct_transform)
+{
+    pulseg_collection *coll = NULL;
+    pulseg__mech_scan_grid grid;
+    float *f[3], *d[3];
+    double worst = 0.0, worst_below = 0.0;
+    int rc, k, ax, n = 401;
+
+    mech_resonances_opts_init(&s_opts);
+    rc = load_seq(&coll, "arms_scan.seq", &s_opts);
+    mu_assert(PULSEG_SUCCEEDED(rc), "load_seq failed");
+    grid.f0_hz = 550.0;
+    grid.df_hz = 0.25;
+    grid.count = n;
+    for (ax = 0; ax < 3; ++ax)
+    {
+        f[ax] = (float *)malloc((size_t)n * sizeof(float));
+        d[ax] = (float *)malloc((size_t)n * sizeof(float));
+    }
+    rc = pulseg__mech_scan_window_probe(
+        &coll->descriptors[0],
+        &grid,
+        1,
+        10000.0,
+        0,
+        NULL,
+        NULL,
+        f[0],
+        f[1],
+        f[2],
+        NULL);
+    mu_assert(PULSEG_SUCCEEDED(rc), "FFT-record probe failed");
+    rc = pulseg__mech_scan_window_probe(
+        &coll->descriptors[0],
+        &grid,
+        1,
+        10000.0,
+        PULSEG__MECH_SCAN_DIRECT,
+        NULL,
+        NULL,
+        d[0],
+        d[1],
+        d[2],
+        NULL);
+    mu_assert(PULSEG_SUCCEEDED(rc), "direct probe failed");
+    for (ax = 0; ax < 3; ++ax)
+        for (k = 0; k < n; ++k)
+        {
+            double a = (double)f[ax][k], b = (double)d[ax][k];
+            double rel = fabs(a - b) / (b + 1.0e-12);
+            double below = (b - a) / (b + 1.0e-12);
+            if (rel > worst)
+                worst = rel;
+            if (below > worst_below)
+                worst_below = below;
+        }
+    printf(
+        "    arm spectrum by FFT vs direct on arms_scan: worst |rel| %.2e, worst below %.2e\n",
+        worst,
+        worst_below);
+    mu_assert(worst > 0.0, "the FFT record path was not exercised");
+    mu_assert(worst <= 2.0e-3, "the interpolated spectrum strays from the direct transform");
+    mu_assert(worst_below <= 1.0e-5, "the interpolated spectrum falls below the direct transform");
+    for (ax = 0; ax < 3; ++ax)
+    {
+        free(f[ax]);
+        free(d[ax]);
+    }
+    pulseg_collection_free(coll);
+}
+
+/* The kernel's truncation constant: the sup over the support a 2x
+ * oversampled record can have (|t| <= 1/4 of a bin period) and every
+ * fractional position of |sum over the taps of phi(x_j) e^{i 2 pi x_j t} - 1|,
+ * the factor by which interpolation from the taps departs from the exact
+ * transform, per unit of the waveform's L1. */
+MU_TEST(test_the_scan_window_kernel_constant_bounds_its_truncation)
+{
+    const int nt = 201, nf = 64, K = 8;
+    double worst = 0.0;
+    int it, ifr, tap;
+
+    for (it = 0; it < nt; ++it)
+    {
+        double t = -0.25 + 0.5 * (double)it / (double)(nt - 1);
+        for (ifr = 0; ifr < nf; ++ifr)
+        {
+            double frac = (double)ifr / (double)nf;
+            double re = 0.0, im = 0.0, err;
+            int jl = -K + 1;
+            for (tap = 0; tap < 2 * K; ++tap)
+            {
+                double x = frac - (double)(jl + tap);
+                double w = pulseg__mech_scan_kernel(x);
+                re += w * cos(2.0 * M_PI * x * t);
+                im += w * sin(2.0 * M_PI * x * t);
+            }
+            err = sqrt((re - 1.0) * (re - 1.0) + im * im);
+            if (err > worst)
+                worst = err;
+        }
+    }
+    printf(
+        "    scan window kernel truncation: sup %.3e, pinned %.3e\n",
+        worst,
+        pulseg__mech_scan_kernel_e());
+    mu_assert(pulseg__mech_scan_kernel(0.0) == 1.0, "the kernel is not 1 at its centre");
+    mu_assert(pulseg__mech_scan_kernel(8.0) == 0.0, "the kernel does not vanish at its half-width");
+    mu_assert(
+        worst <= pulseg__mech_scan_kernel_e(),
+        "the pinned kernel constant is below its truncation error");
+}
+
+/* A raw shape pointed at in the descriptor gives the same amplitudes as the
+ * same shape copied: the probe with records (borrowing) against the direct
+ * probe (copying) on a scan whose long waveforms are stored raw. */
+MU_TEST(test_a_borrowed_waveform_is_the_copied_one)
+{
+    pulseg_collection *coll = NULL;
+    pulseg__mech_scan_grid grid;
+    float f[3][9], d[3][9];
+    int rc, k, ax, raw = 0, s;
+
+    mech_resonances_opts_init(&s_opts);
+    rc = load_seq(&coll, "arms_scan.seq", &s_opts);
+    mu_assert(PULSEG_SUCCEEDED(rc), "load_seq failed");
+    for (s = 0; s < coll->descriptors[0].num_shapes; ++s)
+    {
+        const pulseq_shape *sh = &coll->descriptors[0].shapes[s];
+        if (sh->num_samples == sh->num_uncompressed_samples && sh->num_uncompressed_samples >= 64)
+            ++raw;
+    }
+    printf("    arms_scan raw shapes of 64+ samples: %d\n", raw);
+    mu_assert(raw >= 16, "the arms are not stored raw");
+    grid.f0_hz = 400.0;
+    grid.df_hz = 50.0;
+    grid.count = 9;
+    rc = pulseg__mech_scan_window_probe(
+        &coll->descriptors[0],
+        &grid,
+        1,
+        5000.0,
+        0,
+        NULL,
+        NULL,
+        f[0],
+        f[1],
+        f[2],
+        NULL);
+    mu_assert(PULSEG_SUCCEEDED(rc), "borrowing probe failed");
+    rc = pulseg__mech_scan_window_probe(
+        &coll->descriptors[0],
+        &grid,
+        1,
+        5000.0,
+        PULSEG__MECH_SCAN_DIRECT,
+        NULL,
+        NULL,
+        d[0],
+        d[1],
+        d[2],
+        NULL);
+    mu_assert(PULSEG_SUCCEEDED(rc), "copying probe failed");
+    for (ax = 0; ax < 3; ++ax)
+        for (k = 0; k < 9; ++k)
+            mu_assert(
+                fabs((double)f[ax][k] - (double)d[ax][k]) <= 2.0e-3 * (double)d[ax][k] + 1.0e-9,
+                "a borrowed waveform is priced differently from its copy");
+    pulseg_collection_free(coll);
+}
+
+MU_TEST(test_the_score_timeline_is_the_scans_gre)
+{
+    run_pns_score_timeline("gre_2d.seq");
+}
+
+MU_TEST(test_the_score_timeline_is_the_scans_zte)
+{
+    run_pns_score_timeline("zte_3d.seq");
+}
+
 MU_TEST(test_the_response_does_not_move_when_the_raster_is_halved)
 {
     double coarse = pns_rs_peak_at(4.0f);
@@ -1257,6 +1960,18 @@ MU_TEST_SUITE(suite_pns_memoization)
     MU_RUN_TEST(test_the_score_bounds_the_exact_scan_peak_epi);
     MU_RUN_TEST(test_the_score_bounds_the_exact_scan_peak_spiral);
     MU_RUN_TEST(test_the_score_bounds_the_exact_scan_peak_radial);
+    MU_RUN_TEST(test_the_exact_element_score_is_the_same_however_the_loop_is_dealt);
+    MU_RUN_TEST(test_a_gradient_running_across_blocks_is_not_charged_its_seams);
+    MU_RUN_TEST(test_the_acoustic_candidates_are_the_same_however_the_loop_is_dealt);
+    MU_RUN_TEST(test_the_scan_window_reduces_to_the_periodic_line_on_a_repeated_tr);
+    MU_RUN_TEST(test_the_scan_window_matches_the_rendered_scan_on_distinct_repetitions);
+    MU_RUN_TEST(test_the_scan_window_is_the_same_however_the_loop_is_dealt);
+    MU_RUN_TEST(test_the_scan_window_matches_the_rendered_scan_on_written_out_arms);
+    MU_RUN_TEST(test_the_arm_spectrum_by_fft_matches_the_direct_transform);
+    MU_RUN_TEST(test_the_scan_window_kernel_constant_bounds_its_truncation);
+    MU_RUN_TEST(test_a_borrowed_waveform_is_the_copied_one);
+    MU_RUN_TEST(test_the_score_timeline_is_the_scans_gre);
+    MU_RUN_TEST(test_the_score_timeline_is_the_scans_zte);
     MU_RUN_TEST(test_pns_memo_matches_exact_gre);
     MU_RUN_TEST(test_pns_memo_matches_exact_epi);
     MU_RUN_TEST(test_pns_memo_matches_exact_fse);
