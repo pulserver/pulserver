@@ -1,172 +1,1893 @@
 {
- "ladder": [
-  [
-   "bSSFP, shortest TR",
-   22.4758197106351
+  "bracket": {
+    "accepted_divergences": [
+      {
+        "label": "multi-echo GRE, 4 monopolar echoes, ESP 1.94 ms (locked spacing)",
+        "mt_per_m": 7.105352780909432,
+        "why": "a short packet against the memory"
+      },
+      {
+        "label": "multi-echo GRE, 4 bipolar echoes, ESP 1.40 ms (locked spacing)",
+        "mt_per_m": 3.0195310665046033,
+        "why": "a short packet against the memory"
+      }
+    ],
+    "floor_mt_per_m": 13.0,
+    "loudest_allowed": "EPI 96, 250 kHz, weaker gradients (14 mT/m plateau, f0 481 Hz)",
+    "loudest_allowed_mt_per_m": 9.466667694240886,
+    "quietest_refused": "multi-echo GRE, 8 bipolar echoes, ESP 1.40 ms (locked spacing)",
+    "quietest_refused_mt_per_m": 3.0770528363984404
+  },
+  "derate_example": {
+    "after_mt_per_m": 2.1148921560855882,
+    "band_hz": [
+      532.0,
+      600.0
+    ],
+    "before_mt_per_m": 3.3405366286170612
+  },
+  "floor_mt_per_m": 13.0,
+  "memory": [
+    {
+      "10 ms": 15.404099433953402,
+      "20 ms": 10.1121333027997,
+      "40 ms": 5.109526200206689,
+      "label": "EPI 32, 500 kHz, f0 1250 Hz in the HRMB band (14 mT/m plateau)"
+    },
+    {
+      "10 ms": 15.404099433953402,
+      "20 ms": 10.1121333027997,
+      "40 ms": 5.109526200206689,
+      "label": "EPI 32, 500 kHz, f0 1250 Hz in the HRMBUHP band (14 mT/m plateau)"
+    },
+    {
+      "10 ms": 15.404099433953402,
+      "20 ms": 10.1121333027997,
+      "40 ms": 5.109526200206689,
+      "label": "EPI 32, 500 kHz, f0 1250 Hz in the MAGNUS band (14 mT/m plateau)"
+    },
+    {
+      "10 ms": 11.366523980646374,
+      "20 ms": 10.712128018132281,
+      "40 ms": 10.197934282224727,
+      "label": "bSSFP, TR 3.85 ms (locked on HRMB)"
+    },
+    {
+      "10 ms": 10.212248391112364,
+      "20 ms": 10.193083397923713,
+      "40 ms": 10.283441669015408,
+      "label": "bSSFP, TR 3.36 ms (locked on HRMW)"
+    },
+    {
+      "10 ms": 10.368134336245772,
+      "20 ms": 10.361891822857949,
+      "40 ms": 10.450217698938369,
+      "label": "bSSFP, TR 3.39 ms (locked on HRMW)"
+    },
+    {
+      "10 ms": 10.212248391112364,
+      "20 ms": 10.193083397923713,
+      "40 ms": 10.283441669015408,
+      "label": "bSSFP, TR 3.36 ms (locked on HRMW)"
+    },
+    {
+      "10 ms": 7.876531085588125,
+      "20 ms": 7.6179170776963545,
+      "40 ms": 6.930006781989854,
+      "label": "bSSFP, TR 4.50 ms"
+    },
+    {
+      "10 ms": 7.001719718855694,
+      "20 ms": 7.014273005918827,
+      "40 ms": 7.081909409056745,
+      "label": "bSSFP, TR 5.15 ms"
+    },
+    {
+      "10 ms": 7.5295581724445695,
+      "20 ms": 7.3626595675967685,
+      "40 ms": 5.999699434540586,
+      "label": "bSSFP, TR 6.00 ms"
+    },
+    {
+      "10 ms": 4.466757606985156,
+      "20 ms": 2.2451621438721348,
+      "40 ms": 1.1355138274790961,
+      "label": "EPI 64, 60 kHz (6 mT/m plateau, f0 368 Hz)"
+    },
+    {
+      "10 ms": 4.0144631071495676,
+      "20 ms": 2.0271386021467492,
+      "40 ms": 1.0290399814449456,
+      "label": "EPI 64, 40 kHz (4 mT/m plateau, f0 250 Hz)"
+    },
+    {
+      "10 ms": 27.27703988162345,
+      "20 ms": 23.09729953494927,
+      "40 ms": 11.712204352217212,
+      "label": "spiral, 1 arm (73 ms readout)"
+    },
+    {
+      "10 ms": 9.787603344607291,
+      "20 ms": 6.529028237739571,
+      "40 ms": 4.064696806886509,
+      "label": "SPARKLING-like, 256 distinct arms"
+    }
   ],
-  [
-   "bSSFP, shortest TR, weaker gradients",
-   22.307814261555805
+  "scenarios": [
+    {
+      "coils": null,
+      "companions_mt_per_m": {
+        "x": 16.62448474492672,
+        "y": 0.5910429382897642,
+        "z": 1.2600448132457254
+      },
+      "contributors": [
+        {
+          "def_id": 3,
+          "plays": "x: the readout",
+          "share": 0.6746230721473694
+        },
+        {
+          "def_id": 7,
+          "plays": "x: after the readout",
+          "share": 0.5206425786018372
+        }
+      ],
+      "label": "EPI 64, 250 kHz (13 mT/m plateau, f0 694 Hz)",
+      "loudest_axis": "x",
+      "loudest_band": [
+        578.0346820809249,
+        612.7450980392157
+      ],
+      "loudest_in_band_mt_per_m": 4.456371767545096,
+      "loudest_source": "epiespHRMw.dat",
+      "note": "fundamental clear of every table",
+      "peaks": [
+        {
+          "axis": "x",
+          "f_hz": 694.189453125,
+          "mt_per_m": 16.62448474492672
+        },
+        {
+          "axis": "x",
+          "f_hz": 669.140625,
+          "mt_per_m": 10.665227328776776
+        },
+        {
+          "axis": "x",
+          "f_hz": 719.23828125,
+          "mt_per_m": 9.502891153466742
+        }
+      ],
+      "seconds": 0.38293551999959163,
+      "vendor": "allowed"
+    },
+    {
+      "coils": null,
+      "companions_mt_per_m": {
+        "x": 17.40309387918076,
+        "y": 0.645548273234921,
+        "z": 1.2595170804854847
+      },
+      "contributors": [
+        {
+          "def_id": 3,
+          "plays": "x: the readout",
+          "share": 0.9664848446846008
+        },
+        {
+          "def_id": 1,
+          "plays": "x: before the readout",
+          "share": 0.05313417688012123
+        }
+      ],
+      "label": "EPI 96, 250 kHz (13 mT/m plateau, f0 481 Hz)",
+      "loudest_axis": "x",
+      "loudest_band": [
+        506.07287449392715,
+        525.2100840336135
+      ],
+      "loudest_in_band_mt_per_m": 9.454810221721157,
+      "loudest_source": "epiespHRMb.dat",
+      "note": "fundamental clear of every table",
+      "peaks": [
+        {
+          "axis": "x",
+          "f_hz": 478.30810546875,
+          "mt_per_m": 17.40309387918076
+        },
+        {
+          "axis": "x",
+          "f_hz": 503.35693359375,
+          "mt_per_m": 10.767487111283351
+        },
+        {
+          "axis": "x",
+          "f_hz": 453.25927734375,
+          "mt_per_m": 10.537924094560315
+        }
+      ],
+      "seconds": 0.48458157099958044,
+      "vendor": "allowed"
+    },
+    {
+      "coils": null,
+      "companions_mt_per_m": {
+        "x": 18.791643179255917,
+        "y": 0.7770129995478673,
+        "z": 1.259253397600761
+      },
+      "contributors": [
+        {
+          "def_id": 3,
+          "plays": "x: the readout",
+          "share": 0.6906734704971313
+        },
+        {
+          "def_id": 7,
+          "plays": "x: after the readout",
+          "share": 0.3220185339450836
+        }
+      ],
+      "label": "EPI 128, 250 kHz (13 mT/m plateau, f0 368 Hz)",
+      "loudest_axis": "x",
+      "loudest_band": [
+        980.3921568627451,
+        1219.5121951219512
+      ],
+      "loudest_in_band_mt_per_m": 3.5740176390454717,
+      "loudest_source": "epiesp.dat",
+      "note": "fundamental clear of every table",
+      "peaks": [
+        {
+          "axis": "x",
+          "f_hz": 365.58837890625,
+          "mt_per_m": 18.791643179255917
+        },
+        {
+          "axis": "x",
+          "f_hz": 340.53955078125,
+          "mt_per_m": 11.28056225925404
+        },
+        {
+          "axis": "x",
+          "f_hz": 390.63720703125,
+          "mt_per_m": 10.718452737457723
+        }
+      ],
+      "seconds": 0.5010711979994085,
+      "vendor": "allowed"
+    },
+    {
+      "coils": null,
+      "companions_mt_per_m": {
+        "x": 16.62448474492672,
+        "y": 0.5910429382897642,
+        "z": 1.2600448132457254
+      },
+      "contributors": [
+        {
+          "def_id": 3,
+          "plays": "x: the readout",
+          "share": 0.6746230721473694
+        },
+        {
+          "def_id": 7,
+          "plays": "x: after the readout",
+          "share": 0.5206425786018372
+        }
+      ],
+      "label": "EPI 64, 125 kHz (13 mT/m plateau, f0 694 Hz)",
+      "loudest_axis": "x",
+      "loudest_band": [
+        578.0346820809249,
+        612.7450980392157
+      ],
+      "loudest_in_band_mt_per_m": 4.456371767545096,
+      "loudest_source": "epiespHRMw.dat",
+      "note": "fundamental clear of every table",
+      "peaks": [
+        {
+          "axis": "x",
+          "f_hz": 694.189453125,
+          "mt_per_m": 16.62448474492672
+        },
+        {
+          "axis": "x",
+          "f_hz": 669.140625,
+          "mt_per_m": 10.665227328776776
+        },
+        {
+          "axis": "x",
+          "f_hz": 719.23828125,
+          "mt_per_m": 9.502891153466742
+        }
+      ],
+      "seconds": 0.38484593099565245,
+      "vendor": "allowed"
+    },
+    {
+      "coils": null,
+      "companions_mt_per_m": {
+        "x": 16.561676472660654,
+        "y": 0.6300420406302847,
+        "z": 1.2735612676449173
+      },
+      "contributors": [
+        {
+          "def_id": 3,
+          "plays": "x: the readout",
+          "share": 0.9842929840087891
+        },
+        {
+          "def_id": 1,
+          "plays": "x: before the readout",
+          "share": 0.052295733243227005
+        }
+      ],
+      "label": "EPI 96, 250 kHz, weaker gradients (14 mT/m plateau, f0 481 Hz)",
+      "loudest_axis": "x",
+      "loudest_band": [
+        506.07287449392715,
+        525.2100840336135
+      ],
+      "loudest_in_band_mt_per_m": 9.466667694240886,
+      "loudest_source": "epiespHRMb.dat",
+      "note": "fundamental clear of every table",
+      "peaks": [
+        {
+          "axis": "x",
+          "f_hz": 480.615234375,
+          "mt_per_m": 16.561676472660654
+        },
+        {
+          "axis": "x",
+          "f_hz": 455.56640625,
+          "mt_per_m": 11.729132903513717
+        },
+        {
+          "axis": "x",
+          "f_hz": 505.6640625,
+          "mt_per_m": 9.773459519447576
+        }
+      ],
+      "seconds": 0.520123741000134,
+      "vendor": "allowed"
+    },
+    {
+      "coils": [
+        "HRMB"
+      ],
+      "companions_mt_per_m": {
+        "x": 10.1121333027997,
+        "y": 0.48349124029676344,
+        "z": 1.2587000672327133
+      },
+      "contributors": [
+        {
+          "def_id": 3,
+          "plays": "x: the readout",
+          "share": 0.9009719491004944
+        },
+        {
+          "def_id": 7,
+          "plays": "x: after the readout",
+          "share": 0.09801528602838516
+        },
+        {
+          "def_id": 1,
+          "plays": "x: before the readout",
+          "share": 0.016962800174951553
+        }
+      ],
+      "label": "EPI 32, 500 kHz, f0 1250 Hz in the HRMB band (14 mT/m plateau)",
+      "loudest_axis": "x",
+      "loudest_band": [
+        1123.5955056179776,
+        1272.264631043257
+      ],
+      "loudest_in_band_mt_per_m": 10.1121333027997,
+      "loudest_source": "epiespHRMb.dat",
+      "note": "locked on HRMB",
+      "peaks": [
+        {
+          "axis": "x",
+          "f_hz": 1244.27490234375,
+          "mt_per_m": 10.1121333027997
+        },
+        {
+          "axis": "x",
+          "f_hz": 1269.32373046875,
+          "mt_per_m": 8.321478062758361
+        },
+        {
+          "axis": "x",
+          "f_hz": 1219.22607421875,
+          "mt_per_m": 8.112576627677566
+        }
+      ],
+      "seconds": 0.30247770399728324,
+      "vendor": "refused"
+    },
+    {
+      "coils": [
+        "HRMBUHP"
+      ],
+      "companions_mt_per_m": {
+        "x": 10.1121333027997,
+        "y": 0.48349124029676344,
+        "z": 1.2587000672327133
+      },
+      "contributors": [
+        {
+          "def_id": 3,
+          "plays": "x: the readout",
+          "share": 0.9015913009643555
+        },
+        {
+          "def_id": 7,
+          "plays": "x: after the readout",
+          "share": 0.09799668937921524
+        },
+        {
+          "def_id": 1,
+          "plays": "x: before the readout",
+          "share": 0.016962597146630287
+        }
+      ],
+      "label": "EPI 32, 500 kHz, f0 1250 Hz in the HRMBUHP band (14 mT/m plateau)",
+      "loudest_axis": "x",
+      "loudest_band": [
+        1123.5955056179776,
+        1428.5714285714287
+      ],
+      "loudest_in_band_mt_per_m": 10.1121333027997,
+      "loudest_source": "epiespHRMbUHP.dat",
+      "note": "locked on HRMBUHP",
+      "peaks": [
+        {
+          "axis": "x",
+          "f_hz": 1244.27490234375,
+          "mt_per_m": 10.1121333027997
+        },
+        {
+          "axis": "x",
+          "f_hz": 1269.32373046875,
+          "mt_per_m": 8.321478062758361
+        },
+        {
+          "axis": "x",
+          "f_hz": 1219.22607421875,
+          "mt_per_m": 8.112576627677566
+        }
+      ],
+      "seconds": 0.30418091399769764,
+      "vendor": "refused"
+    },
+    {
+      "coils": [
+        "MAGNUS"
+      ],
+      "companions_mt_per_m": {
+        "x": 10.1121333027997,
+        "y": 0.48349124029676344,
+        "z": 1.2587000672327133
+      },
+      "contributors": [
+        {
+          "def_id": 3,
+          "plays": "x: the readout",
+          "share": 0.9013969302177429
+        },
+        {
+          "def_id": 7,
+          "plays": "x: after the readout",
+          "share": 0.09800204634666443
+        },
+        {
+          "def_id": 1,
+          "plays": "x: before the readout",
+          "share": 0.016962580382823944
+        }
+      ],
+      "label": "EPI 32, 500 kHz, f0 1250 Hz in the MAGNUS band (14 mT/m plateau)",
+      "loudest_axis": "x",
+      "loudest_band": [
+        965.2509652509652,
+        1250.0
+      ],
+      "loudest_in_band_mt_per_m": 10.1121333027997,
+      "loudest_source": "epiespMAGNUS.dat",
+      "note": "locked on MAGNUS",
+      "peaks": [
+        {
+          "axis": "x",
+          "f_hz": 1244.27490234375,
+          "mt_per_m": 10.1121333027997
+        },
+        {
+          "axis": "x",
+          "f_hz": 1269.32373046875,
+          "mt_per_m": 8.321478062758361
+        },
+        {
+          "axis": "x",
+          "f_hz": 1219.22607421875,
+          "mt_per_m": 8.112576627677566
+        }
+      ],
+      "seconds": 0.30094860100507503,
+      "vendor": "refused"
+    },
+    {
+      "coils": [
+        "HRMB"
+      ],
+      "companions_mt_per_m": {
+        "x": 10.712128018132281,
+        "y": 4.184993819875047,
+        "z": 20.669761133032694
+      },
+      "contributors": [
+        {
+          "def_id": 2,
+          "plays": "x: the readout",
+          "share": 0.6949083805084229
+        },
+        {
+          "def_id": 4,
+          "plays": "x: after the readout",
+          "share": 0.31433412432670593
+        }
+      ],
+      "label": "bSSFP, TR 3.85 ms (locked on HRMB)",
+      "loudest_axis": "x",
+      "loudest_band": [
+        506.07287449392715,
+        525.2100840336135
+      ],
+      "loudest_in_band_mt_per_m": 10.712128018132281,
+      "loudest_source": "epiespHRMb.dat",
+      "note": "harmonic 2, 4 of 1/TR in the coil's band",
+      "peaks": [
+        {
+          "axis": "z",
+          "f_hz": 520.8251953125,
+          "mt_per_m": 20.669761133032694
+        },
+        {
+          "axis": "z",
+          "f_hz": 495.7763671875,
+          "mt_per_m": 12.758876773299512
+        },
+        {
+          "axis": "z",
+          "f_hz": 545.8740234375,
+          "mt_per_m": 12.711918099398723
+        }
+      ],
+      "seconds": 1.121506916002545,
+      "vendor": "refused"
+    },
+    {
+      "coils": [
+        "HRMW"
+      ],
+      "companions_mt_per_m": {
+        "x": 10.193083397923713,
+        "y": 7.596606656332206,
+        "z": 23.882316328447953
+      },
+      "contributors": [
+        {
+          "def_id": 2,
+          "plays": "x: the readout",
+          "share": 0.6224196553230286
+        },
+        {
+          "def_id": 4,
+          "plays": "x: after the readout",
+          "share": 0.3926747143268585
+        }
+      ],
+      "label": "bSSFP, TR 3.36 ms (locked on HRMW)",
+      "loudest_axis": "x",
+      "loudest_band": [
+        578.0346820809249,
+        612.7450980392157
+      ],
+      "loudest_in_band_mt_per_m": 10.193083397923713,
+      "loudest_source": "epiespHRMw.dat",
+      "note": "harmonic 2 of 1/TR in the coil's band",
+      "peaks": [
+        {
+          "axis": "z",
+          "f_hz": 595.3125,
+          "mt_per_m": 23.882316328447953
+        },
+        {
+          "axis": "z",
+          "f_hz": 570.263671875,
+          "mt_per_m": 14.201389867531004
+        },
+        {
+          "axis": "z",
+          "f_hz": 620.361328125,
+          "mt_per_m": 14.17162985015032
+        }
+      ],
+      "seconds": 1.1040496659989003,
+      "vendor": "refused"
+    },
+    {
+      "coils": [
+        "HRMW"
+      ],
+      "companions_mt_per_m": {
+        "x": 10.361891822857949,
+        "y": 7.426149708756107,
+        "z": 23.946994785794814
+      },
+      "contributors": [
+        {
+          "def_id": 2,
+          "plays": "x: the readout",
+          "share": 0.6232845187187195
+        },
+        {
+          "def_id": 4,
+          "plays": "x: after the readout",
+          "share": 0.3866671919822693
+        }
+      ],
+      "label": "bSSFP, TR 3.39 ms (locked on HRMW)",
+      "loudest_axis": "x",
+      "loudest_band": [
+        578.0346820809249,
+        612.7450980392157
+      ],
+      "loudest_in_band_mt_per_m": 10.361891822857949,
+      "loudest_source": "epiespHRMw.dat",
+      "note": "harmonic 2, 4 of 1/TR in the coil's band",
+      "peaks": [
+        {
+          "axis": "z",
+          "f_hz": 588.39111328125,
+          "mt_per_m": 23.946994785794814
+        },
+        {
+          "axis": "z",
+          "f_hz": 563.34228515625,
+          "mt_per_m": 14.115302635287486
+        },
+        {
+          "axis": "z",
+          "f_hz": 613.43994140625,
+          "mt_per_m": 13.943639021984216
+        }
+      ],
+      "seconds": 1.0953214160035714,
+      "vendor": "refused"
+    },
+    {
+      "coils": [
+        "HRMW"
+      ],
+      "companions_mt_per_m": {
+        "x": 10.193083397923713,
+        "y": 7.596606656332206,
+        "z": 23.882316328447953
+      },
+      "contributors": [
+        {
+          "def_id": 2,
+          "plays": "x: the readout",
+          "share": 0.6224196553230286
+        },
+        {
+          "def_id": 4,
+          "plays": "x: after the readout",
+          "share": 0.3926747143268585
+        }
+      ],
+      "label": "bSSFP, TR 3.36 ms (locked on HRMW)",
+      "loudest_axis": "x",
+      "loudest_band": [
+        578.0346820809249,
+        612.7450980392157
+      ],
+      "loudest_in_band_mt_per_m": 10.193083397923713,
+      "loudest_source": "epiespHRMw.dat",
+      "note": "harmonic 2 of 1/TR in the coil's band",
+      "peaks": [
+        {
+          "axis": "z",
+          "f_hz": 595.3125,
+          "mt_per_m": 23.882316328447953
+        },
+        {
+          "axis": "z",
+          "f_hz": 570.263671875,
+          "mt_per_m": 14.201389867531004
+        },
+        {
+          "axis": "z",
+          "f_hz": 620.361328125,
+          "mt_per_m": 14.17162985015032
+        }
+      ],
+      "seconds": 1.0994971559994156,
+      "vendor": "refused"
+    },
+    {
+      "coils": null,
+      "companions_mt_per_m": {
+        "x": 9.268533769024803,
+        "y": 2.4930548827391017,
+        "z": 18.501203729800828
+      },
+      "contributors": [
+        {
+          "def_id": 2,
+          "plays": "x: the readout",
+          "share": 0.5986595153808594
+        },
+        {
+          "def_id": 4,
+          "plays": "x: after the readout",
+          "share": 0.4018242657184601
+        }
+      ],
+      "label": "bSSFP, TR 4.50 ms",
+      "loudest_axis": "x",
+      "loudest_band": [
+        980.3921568627451,
+        1219.5121951219512
+      ],
+      "loudest_in_band_mt_per_m": 7.6179170776963545,
+      "loudest_source": "epiesp.dat",
+      "note": "no table locks this TR",
+      "peaks": [
+        {
+          "axis": "z",
+          "f_hz": 442.3828125,
+          "mt_per_m": 18.501203729800828
+        },
+        {
+          "axis": "z",
+          "f_hz": 417.333984375,
+          "mt_per_m": 10.723391699549042
+        },
+        {
+          "axis": "z",
+          "f_hz": 467.431640625,
+          "mt_per_m": 10.312662943912063
+        }
+      ],
+      "seconds": 1.090428110997891,
+      "vendor": "allowed"
+    },
+    {
+      "coils": null,
+      "companions_mt_per_m": {
+        "x": 7.014273005918827,
+        "y": 1.5802702446801014,
+        "z": 16.53697799229613
+      },
+      "contributors": [
+        {
+          "def_id": 2,
+          "plays": "x: the readout",
+          "share": 0.6245644688606262
+        },
+        {
+          "def_id": 4,
+          "plays": "x: after the readout",
+          "share": 0.38163596391677856
+        }
+      ],
+      "label": "bSSFP, TR 5.15 ms",
+      "loudest_axis": "x",
+      "loudest_band": [
+        578.0346820809249,
+        612.7450980392157
+      ],
+      "loudest_in_band_mt_per_m": 7.014273005918827,
+      "loudest_source": "epiespHRMw.dat",
+      "note": "no table locks this TR",
+      "peaks": [
+        {
+          "axis": "z",
+          "f_hz": 387.01171875,
+          "mt_per_m": 16.53697799229613
+        },
+        {
+          "axis": "z",
+          "f_hz": 412.060546875,
+          "mt_per_m": 9.302636755449079
+        },
+        {
+          "axis": "z",
+          "f_hz": 361.962890625,
+          "mt_per_m": 9.057292400648253
+        }
+      ],
+      "seconds": 1.1468332590011414,
+      "vendor": "allowed"
+    },
+    {
+      "coils": null,
+      "companions_mt_per_m": {
+        "x": 7.639788260992108,
+        "y": 0.8785109091683108,
+        "z": 14.005932039177
+      },
+      "contributors": [
+        {
+          "def_id": 2,
+          "plays": "x: the readout",
+          "share": 0.6663272976875305
+        },
+        {
+          "def_id": 4,
+          "plays": "x: after the readout",
+          "share": 0.3540445566177368
+        }
+      ],
+      "label": "bSSFP, TR 6.00 ms",
+      "loudest_axis": "x",
+      "loudest_band": [
+        506.07287449392715,
+        525.2100840336135
+      ],
+      "loudest_in_band_mt_per_m": 7.3626595675967685,
+      "loudest_source": "epiespHRMb.dat",
+      "note": "no table locks this TR",
+      "peaks": [
+        {
+          "axis": "z",
+          "f_hz": 332.62939453125,
+          "mt_per_m": 14.005932039177
+        },
+        {
+          "axis": "z",
+          "f_hz": 497.75390625,
+          "mt_per_m": 8.005297145105224
+        },
+        {
+          "axis": "z",
+          "f_hz": 307.58056640625,
+          "mt_per_m": 7.664091859263435
+        }
+      ],
+      "seconds": 1.2536069810012123,
+      "vendor": "allowed"
+    },
+    {
+      "coils": [
+        "HRMW"
+      ],
+      "companions_mt_per_m": {
+        "x": 7.78718570908493,
+        "y": 0.6854902666701898,
+        "z": 1.2587000672327133
+      },
+      "contributors": [
+        {
+          "def_id": 5,
+          "plays": "x: before the readout",
+          "share": 0.4580458402633667
+        },
+        {
+          "def_id": 6,
+          "plays": "x: after the readout",
+          "share": 0.367389440536499
+        },
+        {
+          "def_id": 4,
+          "plays": "x: the readout",
+          "share": 0.14553678035736084
+        }
+      ],
+      "divergence": "a short packet against the memory",
+      "label": "multi-echo GRE, 4 monopolar echoes, ESP 1.94 ms (locked spacing)",
+      "loudest_axis": "x",
+      "loudest_band": [
+        578.0346820809249,
+        612.7450980392157
+      ],
+      "loudest_in_band_mt_per_m": 7.105352780909432,
+      "loudest_source": "epiespHRMw.dat",
+      "note": "1/ESP in band",
+      "peaks": [
+        {
+          "axis": "x",
+          "f_hz": 553.7841796875,
+          "mt_per_m": 7.78718570908493
+        },
+        {
+          "axis": "x",
+          "f_hz": 578.8330078125,
+          "mt_per_m": 7.069303275319429
+        },
+        {
+          "axis": "x",
+          "f_hz": 528.7353515625,
+          "mt_per_m": 7.04161455397407
+        }
+      ],
+      "seconds": 1.8508492120017763,
+      "vendor": "refused"
+    },
+    {
+      "coils": [
+        "HRMW"
+      ],
+      "companions_mt_per_m": {
+        "x": 14.380820473975948,
+        "y": 0.6846527019330139,
+        "z": 1.2587000672327133
+      },
+      "contributors": [
+        {
+          "def_id": 5,
+          "plays": "x: before the readout",
+          "share": 0.498869389295578
+        },
+        {
+          "def_id": 6,
+          "plays": "x: after the readout",
+          "share": 0.364623486995697
+        },
+        {
+          "def_id": 4,
+          "plays": "x: the readout",
+          "share": 0.13650712370872498
+        }
+      ],
+      "label": "multi-echo GRE, 8 monopolar echoes, ESP 1.94 ms (locked spacing)",
+      "loudest_axis": "x",
+      "loudest_band": [
+        578.0346820809249,
+        612.7450980392157
+      ],
+      "loudest_in_band_mt_per_m": 7.154360731397971,
+      "loudest_source": "epiespHRMw.dat",
+      "note": "1/ESP in band",
+      "peaks": [
+        {
+          "axis": "x",
+          "f_hz": 528.40576171875,
+          "mt_per_m": 14.380820473975948
+        },
+        {
+          "axis": "x",
+          "f_hz": 503.35693359375,
+          "mt_per_m": 11.295171428739195
+        },
+        {
+          "axis": "x",
+          "f_hz": 1032.01904296875,
+          "mt_per_m": 10.824567391253288
+        }
+      ],
+      "seconds": 2.974605382005393,
+      "vendor": "refused"
+    },
+    {
+      "coils": [
+        "HRMW"
+      ],
+      "companions_mt_per_m": {
+        "x": 7.987862146514468,
+        "y": 0.682413461736072,
+        "z": 1.2587000672327133
+      },
+      "contributors": [
+        {
+          "def_id": 5,
+          "plays": "x: after the readout",
+          "share": 0.8641091585159302
+        },
+        {
+          "def_id": 1,
+          "plays": "x: before the readout",
+          "share": 0.22868137061595917
+        },
+        {
+          "def_id": 4,
+          "plays": "x: the readout",
+          "share": 0.1046532616019249
+        }
+      ],
+      "divergence": "a short packet against the memory",
+      "label": "multi-echo GRE, 4 bipolar echoes, ESP 1.40 ms (locked spacing)",
+      "loudest_axis": "x",
+      "loudest_band": [
+        578.0346820809249,
+        612.7450980392157
+      ],
+      "loudest_in_band_mt_per_m": 3.0195310665046033,
+      "loudest_source": "epiespHRMw.dat",
+      "note": "1/ESP in band",
+      "peaks": [
+        {
+          "axis": "x",
+          "f_hz": 365.2587890625,
+          "mt_per_m": 7.987862146514468
+        },
+        {
+          "axis": "x",
+          "f_hz": 340.2099609375,
+          "mt_per_m": 7.578416390689591
+        },
+        {
+          "axis": "x",
+          "f_hz": 390.3076171875,
+          "mt_per_m": 7.492177224257798
+        }
+      ],
+      "seconds": 1.4216958800025168,
+      "vendor": "refused"
+    },
+    {
+      "coils": [
+        "HRMW"
+      ],
+      "companions_mt_per_m": {
+        "x": 11.8181567960823,
+        "y": 0.6862898478602969,
+        "z": 1.2587000672327133
+      },
+      "contributors": [
+        {
+          "def_id": 4,
+          "plays": "x: the readout",
+          "share": 0.755544126033783
+        },
+        {
+          "def_id": 1,
+          "plays": "x: before the readout",
+          "share": 0.200369730591774
+        },
+        {
+          "def_id": 5,
+          "plays": "x: after the readout",
+          "share": 0.05937567353248596
+        }
+      ],
+      "label": "multi-echo GRE, 8 bipolar echoes, ESP 1.40 ms (locked spacing)",
+      "loudest_axis": "x",
+      "loudest_band": [
+        1089.3246187363834,
+        1190.4761904761904
+      ],
+      "loudest_in_band_mt_per_m": 3.0770528363984404,
+      "loudest_source": "epiespHRMw.dat",
+      "note": "1/ESP in band",
+      "peaks": [
+        {
+          "axis": "x",
+          "f_hz": 360.64453125,
+          "mt_per_m": 11.8181567960823
+        },
+        {
+          "axis": "x",
+          "f_hz": 335.595703125,
+          "mt_per_m": 9.948948644776399
+        },
+        {
+          "axis": "x",
+          "f_hz": 385.693359375,
+          "mt_per_m": 9.462871541478767
+        }
+      ],
+      "seconds": 2.5948784469946986,
+      "vendor": "refused"
+    },
+    {
+      "coils": null,
+      "companions_mt_per_m": {
+        "x": 14.861713465332581,
+        "y": 2.6037125155604097,
+        "z": 1.2679985129533071
+      },
+      "contributors": [
+        {
+          "def_id": 5,
+          "plays": "x: after the readout",
+          "share": 1.443329095840454
+        },
+        {
+          "def_id": 4,
+          "plays": "x: the readout",
+          "share": 0.27977868914604187
+        },
+        {
+          "def_id": 1,
+          "plays": "x: before the readout",
+          "share": 0.2664918899536133
+        }
+      ],
+      "label": "3D GRE, TR 6 ms",
+      "loudest_axis": "x",
+      "loudest_band": [
+        506.07287449392715,
+        525.2100840336135
+      ],
+      "loudest_in_band_mt_per_m": 7.222818459930477,
+      "loudest_source": "epiespHRMb.dat",
+      "note": "",
+      "peaks": [
+        {
+          "axis": "x",
+          "f_hz": 329.6630859375,
+          "mt_per_m": 14.861713465332581
+        },
+        {
+          "axis": "x",
+          "f_hz": 657.60498046875,
+          "mt_per_m": 11.004457470170989
+        },
+        {
+          "axis": "x",
+          "f_hz": 491.49169921875,
+          "mt_per_m": 9.158606080890642
+        }
+      ],
+      "seconds": 2.7282136709982296,
+      "vendor": "allowed"
+    },
+    {
+      "coils": null,
+      "companions_mt_per_m": {
+        "x": 11.326910260475385,
+        "y": 2.2279499086926906,
+        "z": 3.3480665457065015
+      },
+      "contributors": [
+        {
+          "def_id": 5,
+          "plays": "x: after the readout",
+          "share": 1.2408101558685303
+        },
+        {
+          "def_id": 2,
+          "plays": "x: before the readout",
+          "share": 0.2066240757703781
+        },
+        {
+          "def_id": 4,
+          "plays": "x: the readout",
+          "share": 0.09274127334356308
+        }
+      ],
+      "label": "2D GRE, TR 9 ms",
+      "loudest_axis": "x",
+      "loudest_band": [
+        531.9148936170212,
+        600.2400960384153
+      ],
+      "loudest_in_band_mt_per_m": 6.519416014891019,
+      "loudest_source": "epiespMAGNUS.dat",
+      "note": "",
+      "peaks": [
+        {
+          "axis": "x",
+          "f_hz": 443.701171875,
+          "mt_per_m": 11.326910260475385
+        },
+        {
+          "axis": "x",
+          "f_hz": 332.2998046875,
+          "mt_per_m": 10.791887595124013
+        },
+        {
+          "axis": "x",
+          "f_hz": 554.77294921875,
+          "mt_per_m": 6.519416014891019
+        }
+      ],
+      "seconds": 0.8504165550039033,
+      "vendor": "allowed"
+    },
+    {
+      "coils": null,
+      "companions_mt_per_m": {
+        "x": 13.26282412626832,
+        "y": 0.7840417907095547,
+        "z": 3.689412756012777
+      },
+      "contributors": [
+        {
+          "def_id": 5,
+          "plays": "x: after the readout",
+          "share": 1.4131137132644653
+        },
+        {
+          "def_id": 4,
+          "plays": "x: the readout",
+          "share": 0.24744495749473572
+        },
+        {
+          "def_id": 2,
+          "plays": "x: before the readout",
+          "share": 0.21219205856323242
+        }
+      ],
+      "label": "MPRAGE",
+      "loudest_axis": "x",
+      "loudest_band": [
+        531.9148936170212,
+        600.2400960384153
+      ],
+      "loudest_in_band_mt_per_m": 7.5401392509864715,
+      "loudest_source": "epiespMAGNUS.dat",
+      "note": "",
+      "peaks": [
+        {
+          "axis": "x",
+          "f_hz": 363.28125,
+          "mt_per_m": 13.26282412626832
+        },
+        {
+          "axis": "x",
+          "f_hz": 388.330078125,
+          "mt_per_m": 8.841081976935362
+        },
+        {
+          "axis": "x",
+          "f_hz": 911.0595703125,
+          "mt_per_m": 7.809169925544908
+        }
+      ],
+      "seconds": 8.565110688999994,
+      "vendor": "allowed"
+    },
+    {
+      "coils": null,
+      "companions_mt_per_m": {
+        "x": 3.1155987968573844,
+        "y": 3.115589989078354,
+        "z": 8.91440380143743
+      },
+      "contributors": [
+        {
+          "def_id": 3,
+          "plays": "z: after the readout",
+          "share": 0.4790610074996948
+        },
+        {
+          "def_id": 2,
+          "plays": "z: the readout",
+          "share": 0.452639639377594
+        },
+        {
+          "def_id": 0,
+          "plays": "z: with the RF pulse",
+          "share": 0.09363722801208496
+        }
+      ],
+      "label": "radial GRE, TR 10 ms",
+      "loudest_axis": "z",
+      "loudest_band": [
+        1086.9565217391305,
+        1515.1515151515152
+      ],
+      "loudest_in_band_mt_per_m": 3.4674974604237128,
+      "loudest_source": "epiespVRMw.dat",
+      "note": "",
+      "peaks": [
+        {
+          "axis": "z",
+          "f_hz": 308.5693359375,
+          "mt_per_m": 8.91440380143743
+        },
+        {
+          "axis": "z",
+          "f_hz": 490.83251953125,
+          "mt_per_m": 7.643163842305524
+        },
+        {
+          "axis": "z",
+          "f_hz": 397.22900390625,
+          "mt_per_m": 6.739029177236001
+        }
+      ],
+      "seconds": 1.4215811070025666,
+      "vendor": "allowed"
+    },
+    {
+      "coils": null,
+      "companions_mt_per_m": {
+        "x": 6.8011555806087935,
+        "y": 6.8011555806087935,
+        "z": 4.560074924840285
+      },
+      "contributors": [
+        {
+          "def_id": 2,
+          "plays": "x: the readout",
+          "share": 0.913931667804718
+        },
+        {
+          "def_id": 3,
+          "plays": "x: after the readout",
+          "share": 0.15286101400852203
+        }
+      ],
+      "label": "spiral, 8 arms",
+      "loudest_axis": "y",
+      "loudest_band": [
+        570.7762557077625,
+        612.7450980392157
+      ],
+      "loudest_in_band_mt_per_m": 3.98965416255637,
+      "loudest_source": "epiespHRMw.dat",
+      "note": "",
+      "peaks": [
+        {
+          "axis": "x",
+          "f_hz": 729.1259765625,
+          "mt_per_m": 6.8011555806087935
+        },
+        {
+          "axis": "x",
+          "f_hz": 772.6318359375,
+          "mt_per_m": 6.597737721956031
+        },
+        {
+          "axis": "x",
+          "f_hz": 704.0771484375,
+          "mt_per_m": 6.496608271091695
+        }
+      ],
+      "seconds": 0.5889763199957088,
+      "vendor": "allowed"
+    },
+    {
+      "coils": null,
+      "companions_mt_per_m": {
+        "x": 2.9994946536781284,
+        "y": 2.9994590555712137,
+        "z": 7.383754198374671
+      },
+      "contributors": [
+        {
+          "def_id": 2,
+          "plays": "x: the readout",
+          "share": 1.0
+        }
+      ],
+      "label": "stack of stars",
+      "loudest_axis": "x",
+      "loudest_band": [
+        578.0346820809249,
+        612.7450980392157
+      ],
+      "loudest_in_band_mt_per_m": 2.9994946536781284,
+      "loudest_source": "epiespHRMw.dat",
+      "note": "",
+      "peaks": [
+        {
+          "axis": "z",
+          "f_hz": 300.6591796875,
+          "mt_per_m": 7.383754198374671
+        },
+        {
+          "axis": "z",
+          "f_hz": 398.876953125,
+          "mt_per_m": 6.773626133267569
+        },
+        {
+          "axis": "z",
+          "f_hz": 497.75390625,
+          "mt_per_m": 5.937188057826005
+        }
+      ],
+      "seconds": 2.1507576209987747,
+      "vendor": "allowed"
+    },
+    {
+      "coils": null,
+      "companions_mt_per_m": {
+        "x": 8.018662949783916,
+        "y": 8.018662949783916,
+        "z": 10.113712831172492
+      },
+      "contributors": [
+        {
+          "def_id": 2,
+          "plays": "x: the readout",
+          "share": 0.8370503783226013
+        },
+        {
+          "def_id": 3,
+          "plays": "x: after the readout",
+          "share": 0.16295702755451202
+        }
+      ],
+      "label": "stack of spirals",
+      "loudest_axis": "x",
+      "loudest_band": [
+        980.3921568627451,
+        1219.5121951219512
+      ],
+      "loudest_in_band_mt_per_m": 8.018662949783916,
+      "loudest_source": "epiesp.dat",
+      "note": "",
+      "peaks": [
+        {
+          "axis": "z",
+          "f_hz": 300.0,
+          "mt_per_m": 10.113712831172492
+        },
+        {
+          "axis": "z",
+          "f_hz": 431.1767578125,
+          "mt_per_m": 9.88380043921458
+        },
+        {
+          "axis": "x",
+          "f_hz": 1008.94775390625,
+          "mt_per_m": 8.018662949783916
+        }
+      ],
+      "seconds": 1.4942050089957775,
+      "vendor": "allowed"
+    },
+    {
+      "coils": null,
+      "companions_mt_per_m": {
+        "x": 4.128728259465427,
+        "y": 1.0076605658117248,
+        "z": 1.2587000672327133
+      },
+      "contributors": [
+        {
+          "def_id": 5,
+          "plays": "x: after the readout",
+          "share": 1.0
+        }
+      ],
+      "label": "2D GRE, TR 100 ms",
+      "loudest_axis": "x",
+      "loudest_band": [
+        506.07287449392715,
+        525.2100840336135
+      ],
+      "loudest_in_band_mt_per_m": 3.002572972449267,
+      "loudest_source": "epiespHRMb.dat",
+      "note": "",
+      "peaks": [
+        {
+          "axis": "x",
+          "f_hz": 300.0,
+          "mt_per_m": 4.128728259465427
+        },
+        {
+          "axis": "x",
+          "f_hz": 413.04931640625,
+          "mt_per_m": 4.115241347825066
+        },
+        {
+          "axis": "x",
+          "f_hz": 388.00048828125,
+          "mt_per_m": 4.0293005449079295
+        }
+      ],
+      "seconds": 0.840021242001967,
+      "vendor": "allowed"
+    },
+    {
+      "coils": null,
+      "companions_mt_per_m": {
+        "x": 4.1484400689355505,
+        "y": 1.0252295160419016,
+        "z": 6.136579660489478
+      },
+      "contributors": [
+        {
+          "def_id": 6,
+          "plays": "x: after the readout",
+          "share": 1.0
+        }
+      ],
+      "label": "spin echo",
+      "loudest_axis": "x",
+      "loudest_band": [
+        506.07287449392715,
+        525.2100840336135
+      ],
+      "loudest_in_band_mt_per_m": 3.047837800345265,
+      "loudest_source": "epiespHRMb.dat",
+      "note": "",
+      "peaks": [
+        {
+          "axis": "z",
+          "f_hz": 363.61083984375,
+          "mt_per_m": 6.136579660489478
+        },
+        {
+          "axis": "z",
+          "f_hz": 388.65966796875,
+          "mt_per_m": 5.496759838289177
+        },
+        {
+          "axis": "z",
+          "f_hz": 338.56201171875,
+          "mt_per_m": 5.389632656895904
+        }
+      ],
+      "seconds": 1.055673871000181,
+      "vendor": "allowed"
+    },
+    {
+      "coils": null,
+      "companions_mt_per_m": {
+        "x": 2.0488982202414507,
+        "y": 1.5103277631470782,
+        "z": 18.19458439026682
+      },
+      "contributors": [
+        {
+          "def_id": 3,
+          "plays": "z: with the RF pulse",
+          "share": 0.8427165746688843
+        },
+        {
+          "def_id": 2,
+          "plays": "z: after the readout",
+          "share": 0.16263075172901154
+        }
+      ],
+      "label": "FSE",
+      "loudest_axis": "z",
+      "loudest_band": [
+        1136.3636363636363,
+        1388.888888888889
+      ],
+      "loudest_in_band_mt_per_m": 4.697574998238444,
+      "loudest_source": "epiesp.dat",
+      "note": "",
+      "peaks": [
+        {
+          "axis": "z",
+          "f_hz": 355.37109375,
+          "mt_per_m": 18.19458439026682
+        },
+        {
+          "axis": "z",
+          "f_hz": 381.0791015625,
+          "mt_per_m": 14.203590344325441
+        },
+        {
+          "axis": "z",
+          "f_hz": 330.322265625,
+          "mt_per_m": 11.884733329810222
+        }
+      ],
+      "seconds": 1.8736204269953305,
+      "vendor": "allowed"
+    },
+    {
+      "coils": null,
+      "companions_mt_per_m": {
+        "x": 0.7221223701439778,
+        "y": 0.7221224618916761,
+        "z": 0.9212252428011086
+      },
+      "contributors": [
+        {
+          "def_id": 2,
+          "plays": "x: the readout",
+          "share": 0.9567313194274902
+        },
+        {
+          "def_id": 1,
+          "plays": "x: with the RF pulse",
+          "share": 0.04409600794315338
+        },
+        {
+          "def_id": 0,
+          "plays": "x: after the readout",
+          "share": 0.0
+        }
+      ],
+      "label": "ZTE",
+      "loudest_axis": "x",
+      "loudest_band": [
+        506.07287449392715,
+        525.2100840336135
+      ],
+      "loudest_in_band_mt_per_m": 0.4197248009441939,
+      "loudest_source": "epiespHRMb.dat",
+      "note": "",
+      "peaks": [
+        {
+          "axis": "z",
+          "f_hz": 321.7529296875,
+          "mt_per_m": 0.9212252428011086
+        },
+        {
+          "axis": "z",
+          "f_hz": 374.15771484375,
+          "mt_per_m": 0.7840773888164694
+        },
+        {
+          "axis": "z",
+          "f_hz": 420.30029296875,
+          "mt_per_m": 0.7113389420536218
+        }
+      ],
+      "seconds": 38.87366288199701,
+      "vendor": "allowed"
+    },
+    {
+      "coils": null,
+      "companions_mt_per_m": {
+        "x": 9.093398422820368,
+        "y": 8.877833168921459,
+        "z": 6.136579660489478
+      },
+      "contributors": [
+        {
+          "def_id": 5,
+          "plays": "x: the readout",
+          "share": 1.0944414138793945
+        },
+        {
+          "def_id": 3,
+          "plays": "x: before the readout",
+          "share": 0.1201162189245224
+        }
+      ],
+      "label": "PROPELLER",
+      "loudest_axis": "x",
+      "loudest_band": [
+        578.0346820809249,
+        612.7450980392157
+      ],
+      "loudest_in_band_mt_per_m": 2.838733786346768,
+      "loudest_source": "epiespHRMw.dat",
+      "note": "",
+      "peaks": [
+        {
+          "axis": "x",
+          "f_hz": 697.4853515625,
+          "mt_per_m": 9.093398422820368
+        },
+        {
+          "axis": "x",
+          "f_hz": 672.4365234375,
+          "mt_per_m": 7.863924951850808
+        },
+        {
+          "axis": "x",
+          "f_hz": 722.5341796875,
+          "mt_per_m": 7.782610067878617
+        }
+      ],
+      "seconds": 2.4163697170006344,
+      "vendor": "allowed"
+    },
+    {
+      "coils": null,
+      "companions_mt_per_m": {
+        "x": 9.669491027809094,
+        "y": 0.46183346214710164,
+        "z": 1.2732946488338501
+      },
+      "contributors": [
+        {
+          "def_id": 7,
+          "plays": "x: after the readout",
+          "share": 0.8934261202812195
+        },
+        {
+          "def_id": 3,
+          "plays": "x: the readout",
+          "share": 0.16907981038093567
+        }
+      ],
+      "label": "EPI 64, 60 kHz (6 mT/m plateau, f0 368 Hz)",
+      "loudest_axis": "x",
+      "loudest_band": [
+        506.07287449392715,
+        525.2100840336135
+      ],
+      "loudest_in_band_mt_per_m": 2.2451621438721348,
+      "loudest_source": "epiespHRMb.dat",
+      "note": "a low plateau; locked on no coil",
+      "peaks": [
+        {
+          "axis": "x",
+          "f_hz": 367.8955078125,
+          "mt_per_m": 9.669491027809094
+        },
+        {
+          "axis": "x",
+          "f_hz": 392.9443359375,
+          "mt_per_m": 5.699042961410184
+        },
+        {
+          "axis": "x",
+          "f_hz": 342.8466796875,
+          "mt_per_m": 5.642926399262495
+        }
+      ],
+      "seconds": 0.5634053970061359,
+      "vendor": "edge"
+    },
+    {
+      "coils": null,
+      "companions_mt_per_m": {
+        "x": 3.6747474369363022,
+        "y": 0.4252005329440295,
+        "z": 1.273028121770481
+      },
+      "contributors": [
+        {
+          "def_id": 7,
+          "plays": "x: after the readout",
+          "share": 0.989625871181488
+        },
+        {
+          "def_id": 3,
+          "plays": "x: the readout",
+          "share": 0.013234982267022133
+        }
+      ],
+      "label": "EPI 64, 40 kHz (4 mT/m plateau, f0 250 Hz)",
+      "loudest_axis": "x",
+      "loudest_band": [
+        506.07287449392715,
+        525.2100840336135
+      ],
+      "loudest_in_band_mt_per_m": 2.0271386021467492,
+      "loudest_source": "epiespHRMb.dat",
+      "note": "a low plateau; locked on no coil",
+      "peaks": [
+        {
+          "axis": "x",
+          "f_hz": 300.0,
+          "mt_per_m": 3.6747474369363022
+        },
+        {
+          "axis": "x",
+          "f_hz": 325.048828125,
+          "mt_per_m": 3.188991450582488
+        },
+        {
+          "axis": "x",
+          "f_hz": 352.734375,
+          "mt_per_m": 2.8625008440788235
+        }
+      ],
+      "seconds": 1.078887120995205,
+      "vendor": "edge"
+    },
+    {
+      "coils": null,
+      "companions_mt_per_m": {
+        "x": 24.233072916666668,
+        "y": 24.07350091600902,
+        "z": 3.4512753664036078
+      },
+      "contributors": [
+        {
+          "def_id": 2,
+          "plays": "x: the readout",
+          "share": 1.0
+        }
+      ],
+      "label": "spiral, 1 arm (73 ms readout)",
+      "loudest_axis": "y",
+      "loudest_band": [
+        570.7762557077625,
+        612.7450980392157
+      ],
+      "loudest_in_band_mt_per_m": 23.09729953494927,
+      "loudest_source": "epiespHRMw.dat",
+      "note": "a sweep longer than the memory",
+      "peaks": [
+        {
+          "axis": "x",
+          "f_hz": 627.28271484375,
+          "mt_per_m": 24.233072916666668
+        },
+        {
+          "axis": "x",
+          "f_hz": 655.2978515625,
+          "mt_per_m": 22.249970640736564
+        },
+        {
+          "axis": "x",
+          "f_hz": 680.3466796875,
+          "mt_per_m": 20.651771244363022
+        }
+      ],
+      "seconds": 0.6563654760029749,
+      "vendor": "edge"
+    },
+    {
+      "coils": null,
+      "companions_mt_per_m": {
+        "x": 6.475797691187523,
+        "y": 6.529028237739571,
+        "z": 4.551370637213454
+      },
+      "contributors": [
+        {
+          "def_id": 0,
+          "plays": "x: the readout",
+          "share": 1.0
+        }
+      ],
+      "label": "SPARKLING-like, 256 distinct arms",
+      "loudest_axis": "y",
+      "loudest_band": [
+        980.3921568627451,
+        1219.5121951219512
+      ],
+      "loudest_in_band_mt_per_m": 6.529028237739571,
+      "loudest_source": "epiesp.dat",
+      "note": "past the group cap",
+      "peaks": [
+        {
+          "axis": "y",
+          "f_hz": 1044.873046875,
+          "mt_per_m": 6.529028237739571
+        },
+        {
+          "axis": "y",
+          "f_hz": 1213.29345703125,
+          "mt_per_m": 6.514631188932732
+        },
+        {
+          "axis": "x",
+          "f_hz": 1181.65283203125,
+          "mt_per_m": 6.475797691187523
+        }
+      ],
+      "seconds": 0.8120371210025041,
+      "vendor": "edge"
+    }
   ],
-  [
-   "EPI, 64 matrix",
-   11.267902544860954
+  "stated_tolerances": [
+    {
+      "axis": "x",
+      "f_hz": [
+        578.0346820809249,
+        612.7450980392157
+      ],
+      "file": "epiespHRMw.dat",
+      "plateau_mt_per_m": 16.0,
+      "sinusoid_mt_per_m": 12.969111506219235
+    },
+    {
+      "axis": "y",
+      "f_hz": [
+        570.7762557077625,
+        612.7450980392157
+      ],
+      "file": "epiespHRMw.dat",
+      "plateau_mt_per_m": 16.0,
+      "sinusoid_mt_per_m": 12.969111506219235
+    },
+    {
+      "axis": "z",
+      "f_hz": [
+        1144.1647597254005,
+        1179.245283018868
+      ],
+      "file": "epiespZRMw.1.5T.dat",
+      "plateau_mt_per_m": 29.5,
+      "sinusoid_mt_per_m": 23.911799339591717
+    }
   ],
-  [
-   "3D GRE, TR 6 ms",
-   8.942665028419768
-  ],
-  [
-   "radial GRE, TR 10 ms",
-   6.0524976659385565
-  ],
-  [
-   "spiral, 8 arms",
-   5.277834416690154
-  ],
-  [
-   "stack of stars, TR 10 ms",
-   5.199285175333522
-  ],
-  [
-   "2D GRE, TR 9 ms",
-   4.879120939613867
-  ],
-  [
-   "EPI, 96 matrix",
-   1.9410688019658964
-  ],
-  [
-   "MPRAGE",
-   1.231143829563604
-  ],
-  [
-   "2D GRE, TR 100 ms",
-   0.5248570662609217
-  ],
-  [
-   "spin echo",
-   0.12704078992566234
+  "territory_hz": [
+    300.0,
+    3000.0
   ]
- ],
- "cost": {
-  "scans": [
-   [
-    32,
-    0.0374549999833107
-   ],
-   [
-    64,
-    0.05503000284079462
-   ],
-   [
-    128,
-    0.1072409977496136
-   ],
-   [
-    256,
-    0.31458599914913066
-   ],
-   [
-    512,
-    0.33942200025194325
-   ],
-   [
-    1024,
-    0.64275999829988
-   ]
-  ],
-  "timeline": [
-   [
-    32,
-    74.03256399993552
-   ],
-   [
-    64,
-    63.2765179980197
-   ],
-   [
-    128,
-    139.91321000139578
-   ],
-   [
-    256,
-    207.59880299738143
-   ],
-   [
-    512,
-    1864.3625069998961
-   ],
-   [
-    1024,
-    1182.3483500011207
-   ]
-  ],
-  "written": [
-   [
-    4,
-    5.129533001309028
-   ],
-   [
-    8,
-    4.936837998684496
-   ],
-   [
-    16,
-    3.4615629992913455
-   ],
-   [
-    32,
-    3.5254750000603963
-   ],
-   [
-    64,
-    4.301657998439623
-   ]
-  ],
-  "turned": [
-   [
-    4,
-    2.854547998140333
-   ],
-   [
-    8,
-    2.460856001562206
-   ],
-   [
-    16,
-    2.4119999980030116
-   ],
-   [
-    32,
-    2.625614000862697
-   ],
-   [
-    64,
-    3.6683819998870604
-   ]
-  ],
-  "harmonics": [
-   [
-    2.0,
-    0.11509300020406954
-   ],
-   [
-    4.0,
-    0.1652189966989681
-   ],
-   [
-    8.0,
-    0.2664719977474306
-   ],
-   [
-    16.0,
-    0.4284940005163662
-   ],
-   [
-    32.0,
-    0.7293550006579608
-   ]
-  ]
- }
 }

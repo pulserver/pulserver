@@ -237,6 +237,29 @@ typedef struct pulseg_opts
      * buffer alive for as long as the collection lives. Default 0.
      */
     int borrow_buffer_shapes;
+    /**
+     * @brief The scanner prescription as the frame of the gradient safety
+     * checks.
+     *
+     * prescription_rotation is row-major with physical = R * logical, the
+     * matrix the scanner programs for the scan (GE: scan_info[0].oprot). With
+     * has_prescription_rotation set the checks judge every per-axis quantity
+     * -- forbidden bands tagged with an axis, SAFE stimulation -- in that
+     * frame: R left of each ROTATIONS matrix, R alone on a block without
+     * one, identity on a block flagged NOROT. Clear (the default) means the
+     * frame the sequence was designed in.
+     */
+    int has_prescription_rotation;
+    float prescription_rotation[9];
+    /**
+     * @brief The resonance memory the mechanical-resonance check reads over (us).
+     *
+     * The window over which drive at a band frequency is summed: the ring-up
+     * time of the mode the band stands for. Default 20000 (a Q of about 30
+     * at a kilohertz). Trains and combs read the same at any memory; it
+     * decides how much of a frequency sweep or a short burst counts.
+     */
+    float mech_memory_us;
 } pulseg_opts;
 
 /* clang-format off */
@@ -245,7 +268,8 @@ typedef struct pulseg_opts
     0, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, \
     PULSEG_PEAK_LOG10_THRESHOLD_DEFAULT, PULSEG_PEAK_NORM_SCALE_DEFAULT, \
     PULSEG_PEAK_EPS_DEFAULT, PULSEG_PEAK_PROMINENCE_DEFAULT, NULL, NULL, {0, 1, 2}, \
-    PULSEG_CACHE_EXT_DEFAULT, NULL, NULL, 1, NULL, NULL, 0, 0 \
+    PULSEG_CACHE_EXT_DEFAULT, NULL, NULL, 1, NULL, NULL, 0, 0, \
+    0, {1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f}, 20000.0f \
     }
 /* clang-format on */
 
@@ -590,6 +614,17 @@ typedef struct pulseg_mech_resonances_spectra
     float *envelope_amp_gx;   /**< [num_envelope_bins] A_eq(f) = (2/T_TR)|S_gx(f)| (Hz/m) */
     float *envelope_amp_gy;
     float *envelope_amp_gz;
+
+    /* -- the verdict's terms --
+     * The tolerance each candidate was judged against, and the gradient
+     * definitions behind the loudest refused reading with their share of it
+     * (the reading is linear in the events, so the shares are exact). */
+    float *candidate_eps;      /**< [num_candidates] (Hz/m) */
+    int num_contributors;      /**< 0 when nothing was refused */
+    int *contributor_def_ids;  /**< [num_contributors] gradient definition ids, loudest first */
+    float *contributor_shares; /**< [num_contributors] |S_def| / |S| at the refused reading */
+    float contributor_freq_hz; /**< the refused reading's frequency */
+    int contributor_axis;      /**< its physical axis, 0 gx / 1 gy / 2 gz; -1 none */
 } pulseg_mech_resonances_spectra;
 
 /* clang-format off */
@@ -604,7 +639,8 @@ typedef struct pulseg_mech_resonances_spectra
     component_{freqs,amps,phases,widths,axes,def_ids,contrib_ids,run_ids} */ 0, NULL, \
     NULL, NULL, NULL, NULL, NULL, NULL, NULL, /* num_surviving_freqs, surviving_freqs_hz \
     */ 0, NULL, /* num_envelope_bins, envelope_freqs_hz, amp_gx/gy/gz */ 0, NULL, NULL, \
-    NULL, NULL \
+    NULL, NULL, /* candidate_eps, num_contributors, contributor_def_ids, \
+    contributor_shares, contributor_freq_hz, contributor_axis */ NULL, 0, NULL, NULL, 0.0f, -1 \
     }
 /* clang-format on */
 
@@ -623,6 +659,7 @@ typedef struct pulseg_forbidden_band
     float freq_min_hz;            /**< lower band edge (Hz)          */
     float freq_max_hz;            /**< upper band edge (Hz)          */
     float max_amplitude_hz_per_m; /**< max spectral amplitude (Hz/m) */
+    int axis_mask; /**< physical axes the band names: bit 0 x, 1 y, 2 z; 0 = every axis */
 } pulseg_forbidden_band;
 
 /**
@@ -1152,6 +1189,8 @@ typedef struct pulseg_block_info
     int grad_delay_us[3];     /**< gradient delay (us), -1 if absent */
     int grad_num_shots[3];    /**< shot count, -1 if absent          */
     int grad_num_samples[3];  /**< sample count, -1 if absent        */
+    int grad_def_id[3];       /**< gradient definition index, -1 if absent: the
+                                   id a mechanical-resonance refusal names */
 
     /* RF */
     int has_rf;            /**< 1 if RF event present             */
@@ -1195,8 +1234,8 @@ typedef struct pulseg_block_info
 /* clang-format off */
 #define PULSEG_BLOCK_INFO_INIT \
     { \
-    0, 0, {0, 0, 0}, {0, 0, 0}, {-1, -1, -1}, {-1, -1, -1}, {-1, -1, -1}, 0, -1, -1, -1, \
-    -1, 0, 0, 0, -1, -1, 0, -1, -1, -1, 0, 0, 0, 0, 0, {0.0f, 0.0f, 0.0f} \
+    0, 0, {0, 0, 0}, {0, 0, 0}, {-1, -1, -1}, {-1, -1, -1}, {-1, -1, -1}, {-1, -1, -1}, 0, \
+    -1, -1, -1, -1, 0, 0, 0, -1, -1, 0, -1, -1, -1, 0, 0, 0, 0, 0, {0.0f, 0.0f, 0.0f} \
     }
 /* clang-format on */
 

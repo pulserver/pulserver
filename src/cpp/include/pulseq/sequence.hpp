@@ -210,6 +210,21 @@ namespace pulseq
             len_.reserve(static_cast<size_t>(rows));
         }
 
+        /** Append a row of @p count values each divided by @p divisor (1 when
+         *  it is 0).  @return its 1-based id. */
+        int append_divided(const double* values, int count, double divisor)
+        {
+            const int64_t where = place(count);
+            double* dst = at(where);
+            if (divisor != 0.0)
+                for (int i = 0; i < count; ++i)
+                    dst[i] = values[i] / divisor;
+            else if (count > 0)
+                std::memcpy(dst, values, static_cast<size_t>(count) * sizeof(double));
+            start_.push_back(where);
+            len_.push_back(count);
+            return size();
+        }
         /** Append a row of @p count values.  @return its 1-based id. */
         int append(const double* values, int count)
         {
@@ -301,7 +316,7 @@ namespace pulseq
                 return where;
             }
             const int64_t cap = count > kChunkValues ? count : kChunkValues;
-            chunks_.emplace_back(new double[static_cast<size_t>(cap)]);
+            chunks_.push_back(make_chunk(cap));
             bases_.push_back(cursor_);
             caps_.push_back(cap);
             const int64_t where = cursor_;
@@ -316,7 +331,19 @@ namespace pulseq
                 append(other.row(id), other.length(id));
         }
 
-        std::vector<std::unique_ptr<double[]>> chunks_;
+        /** A chunk's storage: an anonymous mapping advised onto huge pages
+         *  where the platform has them (a 32 MB chunk is then a handful of
+         *  page faults instead of eight thousand), plain heap otherwise. */
+        struct ChunkDeleter
+        {
+            size_t bytes = 0;
+            bool mapped = false;
+            void operator()(double* p) const;
+        };
+        using Chunk = std::unique_ptr<double[], ChunkDeleter>;
+        static Chunk make_chunk(int64_t cap);
+
+        std::vector<Chunk> chunks_;
         std::vector<int64_t> bases_;
         std::vector<int64_t> caps_;
         std::vector<int64_t> start_;
@@ -366,6 +393,10 @@ namespace pulseq
          * keeps.  See `compress`.
          */
         int append_raw(const double* samples, int count);
+        /** As append_raw for samples that are @p divisor times the row to
+         *  store, @p divisor their signed peak: the row's peak is 1 without
+         *  a scan. A divisor of 1 stores the samples as they are, scanned. */
+        int append_raw_divided(const double* samples, int count, double divisor);
 
         /** Encode every shape still held raw.  @return whether any row
          *  changed: a shape the encoding would not shorten is kept as it is,
@@ -665,6 +696,8 @@ namespace pulseq
          * format says they mean.
          */
         int register_raw_shape(const double* samples, int count);
+        /** See ShapeLibrary::append_raw_divided. */
+        int register_raw_shape_divided(const double* samples, int count, double divisor);
 
         /** Compress every shape still held raw.  Idempotent; writers call it. */
         void compress_shapes();

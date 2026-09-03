@@ -565,6 +565,12 @@ typedef struct pulseg_sequence_descriptor
     /* The shape samples belong to a buffer the caller keeps alive; freeing
      * the descriptor leaves them alone. Not part of the cache payload. */
     int shapes_borrowed;
+    /* Where a running check keeps the logical rotation table and block ids
+     * while the prescription frame is installed (pulseg_prescription.c). */
+    float (*rotation_matrices_logical)[9];
+    int num_rotations_logical;
+    int *rotation_id_logical;
+    int prescription_depth;
 } pulseg_sequence_descriptor;
 
 /* Identity of the waveform one block drives one axis with, up to amplitude.
@@ -620,7 +626,8 @@ int pulseg__wave_key_flat(const pulseg_sequence_descriptor *desc, int def_index,
     /* hints */ 0, 0, /* tr_start anchor */ -1, NULL, 0, 0, NULL, \
     {{0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, \
     {0, 0}, {0, 0}, {0, 0}, {0, 0}}, NULL, \
-    PULSEG_CACHE_EXT_DEFAULT, 0, 0 \
+    PULSEG_CACHE_EXT_DEFAULT, 0, 0, \
+    /* prescription frame */ NULL, 0, NULL, 0 \
     }
 /* clang-format on */
 
@@ -992,16 +999,15 @@ int pulseg__interpolate_to_uniform(
     int *num_samples,
     float target_raster_us);
 
-/* --- pulseg_pns_basis.c --- */
+/* --- pulseg_prescription.c --- */
+/* Install opts->prescription_rotation on every descriptor of coll for the
+ * duration of a check (no-op without one, or for the identity; nested calls
+ * count) and hand the logical tables back. Every public check entry wraps
+ * its body in this pair. */
+int pulseg__prescription_enter(pulseg_collection *coll, const pulseg_opts *opts);
+void pulseg__prescription_leave(pulseg_collection *coll, const pulseg_opts *opts);
 
-/* Occurrence-score PNS: a sound bound on the scan's response peak built from
- * per-occurrence response peaks and a sliding sum, with a rank basis per
- * base block whose occurrences play many distinct waveforms. See the file
- * header for the construction and its soundness argument. A scan the module
- * cannot price is *declined* (out_declined = 1, PULSEG_SUCCESS, *out NULL)
- * and the caller falls back to the group sweep. */
-
-typedef struct pulseg__pns_score pulseg__pns_score;
+/* --- pulseg_pns_exact.c --- */
 
 /* The shape of pulseg_opts.parallel_for_fn, for the loops that take it. */
 typedef void (*pulseg__parallel_for_fn)(
@@ -1010,48 +1016,62 @@ typedef void (*pulseg__parallel_for_fn)(
     void (*body)(void *arg, int begin, int end),
     void *arg);
 
-/* Gap zones the slide prices an earlier occurrence's tail at, and the equal
- * windows of its own span a block is priced over. */
-#define PULSEG__PNS_SCORE_ZONES 4
-#define PULSEG__PNS_SCORE_WINDOWS 8
+/* The hook a check runs under: the caller's, else the library's own when it
+ * was built with PULSEG_HAVE_PTHREADS, else NULL (a sequential loop). */
+pulseg__parallel_for_fn pulseg__parallel_for_default(void);
+pulseg__parallel_for_fn pulseg__opts_par_fn(const pulseg_opts *opts);
+void *pulseg__opts_par_ctx(const pulseg_opts *opts);
 
-typedef struct pulseg__pns_basis_info
-{
-    int base_id;      /* base_blocks index                               */
-    int num_elements; /* distinct (shape, amplitude) tuples at the block */
-    int d;            /* axes priced jointly (0 = rank-1 carried it)     */
-} pulseg__pns_basis_info;
-
-int pulseg__pns_score_build(
-    pulseg__pns_score **out,
+/* The stimulation check of a scan past the shape-group cap: every block's
+ * exact response placed on the scan's timeline, rotated into the physical
+ * frame, root-sum-squared, at its peak. out_peak is in percent of the
+ * model's threshold; out_peak_block the block the peak falls in. A model
+ * with a kernel runs by FFT under the parallel hook; one without runs its
+ * own evaluator over rendered chunks, sequentially. */
+int pulseg__pns_exact_scan_peak(
+    pulseg_check_plan *plan,
+    pulseg_diagnostic *diag,
     const pulseg_sequence_descriptor *desc,
+    int subseq_idx,
     const pulseg_pns_model *model,
-    float gamma_hz_per_tesla,
-    int *out_declined,
-    double *out_macs);
-int pulseg__pns_score_build_ex(
-    pulseg__pns_score **out,
-    const pulseg_sequence_descriptor *desc,
-    const pulseg_pns_model *model,
-    float gamma_hz_per_tesla,
     pulseg__parallel_for_fn par_fn,
     void *par_ctx,
-    int *out_declined,
-    double *out_macs);
+    float gamma,
+    double *out_peak,
+    int *out_peak_block);
 
-/* The per-occurrence prices the sweep sums: response-peak bound u (percent),
- * the peak bound over each of PULSEG__PNS_SCORE_WINDOWS windows of the
- * block's own span (out_env[]), the tail-peak bound at each of
- * PULSEG__PNS_SCORE_ZONES gap edges (out_tail[]), and the block's span on
- * the scan timeline. */
-int pulseg__pns_score_block_bound(
-    const pulseg__pns_score *sc,
-    int block,
-    float *out_u,
-    float *out_env,
-    float *out_tail,
-    double *out_start_us,
-    double *out_end_us);
+/* The same, judged: PULSEG_ERR_PNS_THRESHOLD_EXCEEDED with the block named
+ * in the diagnostic when the peak is over threshold_percent. */
+int pulseg__pns_exact_scan_check(
+    pulseg_check_plan *plan,
+    pulseg_diagnostic *diag,
+    const pulseg_sequence_descriptor *desc,
+    int subseq_idx,
+    const pulseg_pns_model *model,
+    pulseg__parallel_for_fn par_fn,
+    void *par_ctx,
+    float gamma,
+    float threshold_percent,
+    double *out_peak,
+    int *out_peak_block);
+
+/* Exact response peak of blocks [start, start + count), rendered and run
+ * through the model's own evaluator, judged from judge_from_us into the
+ * range up to judge_until_us (0 = to the end). Test-facing, and the route a
+ * model without a kernel takes. */
+int pulseg__pns_exact_range_peak(
+    pulseg_check_plan *plan,
+    pulseg_diagnostic *diag,
+    const pulseg_sequence_descriptor *desc,
+    int subseq_idx,
+    int start,
+    int count,
+    double judge_from_us,
+    double judge_until_us,
+    const pulseg_pns_model *model,
+    float gamma,
+    double *out_peak,
+    double *out_peak_time_us);
 
 /* A uniform frequency grid: count points from f0_hz, df_hz apart. */
 typedef struct
@@ -1066,14 +1086,16 @@ typedef struct
 #define PULSEG__MECH_SCAN_DIRECT 1
 
 /* The sustained amplitude per axis at every point of the grids, over the
- * whole scan, window_us wide (0 = the axis's longest event), no grid guard:
- * the quantity the past-the-cap mechanical-resonance check judges, at the frequencies
- * given. Outputs run grid by grid. Test-facing. */
+ * whole scan, each grid's window window_us[g] wide (NULL or 0 = the axis's
+ * longest event; a reading below one period of the window is zero), no grid
+ * guard; out_span_max_us carries one span per grid:
+ * the quantity the past-the-cap mechanical-resonance check judges, at the
+ * frequencies given. Outputs run grid by grid. Test-facing. */
 int pulseg__mech_scan_window_probe(
     const pulseg_sequence_descriptor *desc,
     const pulseg__mech_scan_grid *grids,
     int num_grids,
-    double window_us,
+    const double *window_us,
     int flags,
     pulseg__parallel_for_fn par_fn,
     void *par_ctx,
@@ -1087,57 +1109,6 @@ int pulseg__mech_scan_window_probe(
  * waveform's gradient L1. Test-facing. */
 double pulseg__mech_scan_kernel(double x);
 double pulseg__mech_scan_kernel_e(void);
-
-/* Exact response peak of blocks [start, start + count), judged from
- * judge_from_us into the range, rendered and evaluated the extraction's
- * way; what an offender range is settled with. */
-int pulseg__pns_exact_range_peak(
-    pulseg_check_plan *plan,
-    pulseg_diagnostic *diag,
-    const pulseg_sequence_descriptor *desc,
-    int subseq_idx,
-    int start,
-    int count,
-    double judge_from_us,
-    const pulseg_pns_model *model,
-    float gamma,
-    double *out_peak);
-
-int pulseg__pns_score_evaluate(
-    const pulseg__pns_score *sc,
-    float *out_max,
-    int *out_argmax_block,
-    double *out_macs);
-
-int pulseg__pns_score_offenders(
-    const pulseg__pns_score *sc,
-    float threshold,
-    int max_ranges,
-    int *out_ranges,
-    int *out_num_ranges);
-
-int pulseg__pns_score_num_bases(const pulseg__pns_score *sc);
-double pulseg__pns_score_block_start_us(const pulseg__pns_score *sc, int block);
-const pulseg__pns_basis_info *pulseg__pns_score_basis_info(const pulseg__pns_score *sc, int index);
-void pulseg__pns_score_free(pulseg__pns_score *sc);
-
-/* The full score-path check: build, slide, and cold exact assembly of every
- * region the bound cannot clear. PULSEG_SUCCESS is a pass; a threshold
- * refusal names the exact peak and the blocks that produced it. A declined
- * build returns PULSEG_SUCCESS with *out_declined set and no verdict. */
-int pulseg__pns_score_check(
-    pulseg_check_plan *plan,
-    pulseg_diagnostic *diag,
-    const pulseg_sequence_descriptor *desc,
-    int subseq_idx,
-    const pulseg_pns_model *model,
-    pulseg__parallel_for_fn par_fn,
-    void *par_ctx,
-    float gamma_hz_per_tesla,
-    float threshold_percent,
-    int *out_declined,
-    double *out_build_macs,
-    double *out_eval_macs);
 
 /* --- pulseg_pns_memo.c --- */
 

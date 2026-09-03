@@ -21,10 +21,13 @@ namespace pulseg
         void (*body)(void* arg, int begin, int end),
         void* arg)
     {
-        constexpr int kChunk = 8;
         unsigned workers = std::thread::hardware_concurrency();
         workers = std::min<unsigned>(std::max<unsigned>(workers, 1), 8);
-        if (workers == 1 || count < 2 * kChunk)
+        // Deals about eight ranges per worker: a body that sets up per range
+        // (an FFT plan, a scratch buffer) amortises it over count / 64 items
+        // instead of eight, and the tail still balances across the pool.
+        const int kChunk = std::max(8, count / (static_cast<int>(workers) * 8));
+        if (workers == 1 || count < 16)
         {
             if (count > 0)
                 body(arg, 0, count);

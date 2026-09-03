@@ -43,7 +43,7 @@ __all__ = [
     "read_esp_bands",
 ]
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -250,7 +250,7 @@ def bands_to_hz_per_m(
     bands: list[tuple[float, float, float] | tuple[float, float, float, str]],
     *,
     gamma: float | None = None,
-    keep_channel: bool = False,
+    keep_channel: bool = True,
 ) -> list[tuple]:
     """Restate forbidden bands from mT/m to Hz/m.
 
@@ -266,8 +266,11 @@ def bands_to_hz_per_m(
     gamma : float, optional
         Gyromagnetic ratio in Hz/T; defaults to
         :attr:`pulserver.pypulseq.Opts.default`'s.
-    keep_channel : bool, default False
-        Keep the trailing channel tag on the bands that carry one.
+    keep_channel : bool, default True
+        Keep the trailing channel tag on the bands that carry one. The C
+        safety core judges a tagged band against that physical axis alone
+        and an untagged band against every axis, so dropping the tag makes
+        the check stricter, never looser.
 
     Returns
     -------
@@ -357,6 +360,18 @@ class MechResonances:
         curve the lines are samples of. It is what a line *would* reach at a
         frequency the TR does not put a harmonic at, so it says how much
         retiming the sequence could move the verdict by.
+    tolerance : numpy.ndarray
+        ``(C,)`` the amplitude each candidate was judged against, in Hz/m: a
+        zero band's floor, or a stated plateau converted to sinusoid
+        amplitude through the shape of the train that drives the band.
+    contributors : list of tuple
+        ``(def_id, share)`` for the gradient definitions behind the loudest
+        refused reading, loudest first; empty when nothing was refused. The
+        reading is linear in the events, so the shares are exact.
+    contributor_freq : float
+        The frequency of that reading, in Hz.
+    contributor_axis : int
+        Its physical axis (0 gx, 1 gy, 2 gz), ``-1`` when nothing was refused.
 
     Notes
     -----
@@ -380,6 +395,10 @@ class MechResonances:
     bands: list
     envelope_freqs: np.ndarray
     envelope_a_eq: np.ndarray
+    tolerance: np.ndarray = field(default_factory=lambda: np.zeros(0))
+    contributors: list = field(default_factory=list)
+    contributor_freq: float = 0.0
+    contributor_axis: int = -1
 
     @property
     def ok(self) -> bool:
@@ -413,6 +432,17 @@ class MechResonances:
             bands=list(bands),
             envelope_freqs=np.asarray(spectra["envelope_freqs_hz"], float),
             envelope_a_eq=stack("envelope_amp", int(spectra["num_envelope_bins"])),
+            tolerance=np.asarray(spectra["candidate_eps"], float),
+            contributors=[
+                (int(d), float(s))
+                for d, s in zip(
+                    spectra["contributor_def_ids"],
+                    spectra["contributor_shares"],
+                    strict=True,
+                )
+            ],
+            contributor_freq=float(spectra["contributor_freq_hz"]),
+            contributor_axis=int(spectra["contributor_axis"]),
         )
 
     @property

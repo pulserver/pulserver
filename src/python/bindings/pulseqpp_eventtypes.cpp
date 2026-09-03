@@ -146,6 +146,7 @@ namespace pulseqpp_types
             // "no such attribute", so this is what makes hasattr False.
             holder->compat_id = nullptr;
             holder->compat_shape_ids = nullptr;
+            holder->view_source = nullptr;
             return self;
         }
 
@@ -154,6 +155,7 @@ namespace pulseqpp_types
             Holder<T>* holder = reinterpret_cast<Holder<T>*>(self);
             Py_CLEAR(holder->compat_id);
             Py_CLEAR(holder->compat_shape_ids);
+            Py_CLEAR(holder->view_source);
             holder->event.~T();
             Py_TYPE(self)->tp_free(self);
         }
@@ -338,7 +340,17 @@ namespace pulseqpp_types
 
         PyObject* grad_get_waveform(PyObject* self, void*)
         {
-            return guarded([&] { return grad_waveform(unwrap<GradEvent>(self)); });
+            return guarded(
+                [&]
+                {
+                    // A view at its own amplitude is the caller's array itself,
+                    // which is what upstream's event holds.
+                    Holder<GradEvent>* holder = reinterpret_cast<Holder<GradEvent>*>(self);
+                    const GradEvent& g = holder->event;
+                    if (g.view && holder->view_source && g.amplitude == g.view_divisor)
+                        return py::reinterpret_borrow<py::object>(holder->view_source);
+                    return py::object(grad_waveform(g));
+                });
         }
 
         int grad_set_waveform(PyObject* self, PyObject* value, void*)
@@ -354,12 +366,24 @@ namespace pulseqpp_types
                         samples.data(),
                         static_cast<int>(samples.size()),
                         unwrap<GradEvent>(self));
+                    Py_CLEAR(reinterpret_cast<Holder<GradEvent>*>(self)->view_source);
                 });
         }
 
         PyObject* grad_get_shape(PyObject* self, void*)
         {
-            return guarded([&] { return samples_of(unwrap<GradEvent>(self).waveform); });
+            return guarded(
+                [&]
+                {
+                    const GradEvent& g = unwrap<GradEvent>(self);
+                    if (!g.view)
+                        return samples_of(g.waveform);
+                    py::array_t<double> out(static_cast<py::ssize_t>(g.view_count));
+                    double* data = out.mutable_data();
+                    for (int i = 0; i < g.view_count; ++i)
+                        data[i] = grad_shape_at(g, i);
+                    return out;
+                });
         }
 
         PyObject* grad_get_tt(PyObject* self, void*)
@@ -368,9 +392,9 @@ namespace pulseqpp_types
                 [&]
                 {
                     GradEvent& event = unwrap<GradEvent>(self);
-                    if (event.tt.empty() && event.tt_grid != 0 && !event.waveform.empty())
+                    if (event.tt.empty() && event.tt_grid != 0 && grad_count(event) > 0)
                     {
-                        const Py_ssize_t n = static_cast<Py_ssize_t>(event.waveform.size());
+                        const Py_ssize_t n = static_cast<Py_ssize_t>(grad_count(event));
                         py::array_t<double> out(n);
                         double* dst = out.mutable_data();
                         if (event.tt_grid == 2)
@@ -402,7 +426,7 @@ namespace pulseqpp_types
 
         Py_ssize_t grad_length(PyObject* self)
         {
-            return static_cast<Py_ssize_t>(unwrap<GradEvent>(self).waveform.size());
+            return static_cast<Py_ssize_t>(grad_count(unwrap<GradEvent>(self)));
         }
 
         PyMemberDef grad_members[] = {
@@ -708,6 +732,14 @@ namespace pulseqpp_types
         /* ============================================================== */
 
         /** Hand a copy the shape ids upstream's registration protocol set. */
+        /** A copy of a gradient that holds a view holds the same view. */
+        inline void carry_view(PyObject* source, PyObject* made)
+        {
+            PyObject* src = reinterpret_cast<Holder<GradEvent>*>(source)->view_source;
+            if (src)
+                reinterpret_cast<Holder<GradEvent>*>(made)->view_source = Py_NewRef(src);
+        }
+
         template <typename T> void carry_shape_ids(PyObject* source, PyObject* made)
         {
             PyObject* ids = reinterpret_cast<Holder<T>*>(source)->compat_shape_ids;
@@ -768,6 +800,7 @@ namespace pulseqpp_types
                 out.first *= scale;
                 out.last *= scale;
                 carry_shape_ids<GradEvent>(source, made);
+                carry_view(source, made);
                 return made;
             }
             PyErr_Format(
@@ -986,7 +1019,9 @@ namespace pulseqpp_types
 
                 py::object made = fresh<GradEvent>(GradType);
                 GradEvent& e = unwrap<GradEvent>(made.ptr());
-                normalise_grad(v, n, e, amp_peak);
+                view_grad(v, n, e, amp_peak);
+                reinterpret_cast<Holder<GradEvent>*>(made.ptr())->view_source =
+                    Py_NewRef(wave.ptr());
                 if (oversampling)
                 {
                     e.tt_grid = 2;
@@ -1014,7 +1049,9 @@ namespace pulseqpp_types
                 auto wave =
                     py::cast<py::array_t<double, py::array::c_style | py::array::forcecast>>(
                         source.attr("waveform"));
-                normalise_grad(wave.data(), static_cast<int>(wave.size()), e);
+                view_grad(wave.data(), static_cast<int>(wave.size()), e);
+                reinterpret_cast<Holder<GradEvent>*>(made.ptr())->view_source =
+                    Py_NewRef(wave.ptr());
                 e.tt = as_vector(source.attr("tt"));
                 e.last_time = e.tt.empty() ? 0.0 : e.tt.back();
                 e.first = source.attr("first").cast<double>();

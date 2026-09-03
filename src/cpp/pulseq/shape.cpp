@@ -20,6 +20,9 @@
 #include <limits>
 #include <stdexcept>
 #include <vector>
+#if defined(__linux__)
+#include <sys/mman.h>
+#endif
 
 namespace pulseq
 {
@@ -168,6 +171,49 @@ namespace pulseq
         last_.push_back(count > 0 ? samples[count - 1] : 0.0);
         peak_.push_back(peak);
         return data_.append(samples, count);
+    }
+
+    int ShapeLibrary::append_raw_divided(const double* samples, int count, double divisor)
+    {
+        if (divisor == 1.0 || divisor == 0.0)
+            return append_raw(samples, count);
+        num_uncompressed_.push_back(count);
+        is_compressed_.push_back(0);
+        const int id = data_.append_divided(samples, count, divisor);
+        const double* row = data_.row(id);
+        first_.push_back(count > 0 ? row[0] : 0.0);
+        last_.push_back(count > 0 ? row[count - 1] : 0.0);
+        peak_.push_back(count > 0 ? 1.0 : 0.0);
+        return id;
+    }
+
+    void RaggedTable::ChunkDeleter::operator()(double* p) const
+    {
+#if defined(__linux__)
+        if (mapped)
+        {
+            munmap(p, bytes);
+            return;
+        }
+#endif
+        delete[] p;
+    }
+
+    RaggedTable::Chunk RaggedTable::make_chunk(int64_t cap)
+    {
+        const size_t bytes = static_cast<size_t>(cap) * sizeof(double);
+#if defined(__linux__)
+        constexpr size_t kHuge = size_t{2} << 20;
+        const size_t rounded = (bytes + kHuge - 1) / kHuge * kHuge;
+        void* p =
+            mmap(nullptr, rounded, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        if (p != MAP_FAILED)
+        {
+            madvise(p, rounded, MADV_HUGEPAGE);
+            return Chunk(static_cast<double*>(p), ChunkDeleter{rounded, true});
+        }
+#endif
+        return Chunk(new double[static_cast<size_t>(cap)], ChunkDeleter{bytes, false});
     }
 
     int ShapeLibrary::append(int num_uncompressed, const double* samples, int count)

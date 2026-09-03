@@ -1853,6 +1853,22 @@ static int block_grad_is_trapezoid(
     return 0;
 }
 
+/* The gradient definition a block plays on one axis: the index into the
+ * descriptor's definitions, which is what a mechanical-resonance refusal
+ * names. -1 when the axis is silent. */
+static int get_grad_def_id(const pulseg_collection *coll, int seg_idx, int blk_idx, int axis)
+{
+    const pulseg_sequence_descriptor *desc;
+    const pulseg_virtual_segment *seg;
+    int local_blk;
+
+    if (axis < PULSEG_GRAD_AXIS_X || axis > PULSEG_GRAD_AXIS_Z)
+        return -1;
+    if (!resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
+        return -1;
+    return resolve_grad_def_via_max_energy_instance(desc, seg, local_blk, axis);
+}
+
 static int get_grad_num_samples(const pulseg_collection *coll, int seg_idx, int blk_idx, int axis)
 {
     const pulseg_sequence_descriptor *desc;
@@ -3056,6 +3072,8 @@ int pulseg_get_block_info(
             info->has_grad[axis] ? get_grad_num_shots(coll, seg_idx, blk_idx, axis) : -1;
         info->grad_num_samples[axis] =
             info->has_grad[axis] ? get_grad_num_samples(coll, seg_idx, blk_idx, axis) : -1;
+        info->grad_def_id[axis] =
+            info->has_grad[axis] ? get_grad_def_id(coll, seg_idx, blk_idx, axis) : -1;
     }
 
     /* RF */

@@ -93,6 +93,16 @@ void pulseg_sequence_descriptor_free(pulseg_sequence_descriptor *d)
     }
     d->num_rf_shims = 0;
 
+    if (d->rotation_matrices_logical)
+    {
+        PULSEG_FREE(d->rotation_matrices_logical);
+        d->rotation_matrices_logical = NULL;
+    }
+    if (d->rotation_id_logical)
+    {
+        PULSEG_FREE(d->rotation_id_logical);
+        d->rotation_id_logical = NULL;
+    }
     if (d->rotation_matrices)
     {
         PULSEG_FREE(d->rotation_matrices);

@@ -511,9 +511,10 @@ namespace pulseqpp_events
         if (e.registered.known_to(seq.serial))
             return;
 
-        const int count = static_cast<int>(e.waveform.size());
-        const int32_t shape =
-            static_cast<int32_t>(seq.register_raw_shape(e.waveform.data(), count));
+        const int count = pulseqpp_types::grad_count(e);
+        const int32_t shape = static_cast<int32_t>(
+            e.view ? seq.register_raw_shape_divided(e.view, count, e.view_divisor)
+                   : seq.register_raw_shape(e.waveform.data(), count));
 
         // 0 is the standard raster, -1 the half-raster variant, and only
         // a grid that is neither becomes a shape of its own.

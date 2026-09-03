@@ -132,6 +132,12 @@ void pulseg_mech_resonances_spectra_free(pulseg_mech_resonances_spectra *s)
         PULSEG_FREE(s->envelope_amp_gy);
     if (s->envelope_amp_gz)
         PULSEG_FREE(s->envelope_amp_gz);
+    if (s->candidate_eps)
+        PULSEG_FREE(s->candidate_eps);
+    if (s->contributor_def_ids)
+        PULSEG_FREE(s->contributor_def_ids);
+    if (s->contributor_shares)
+        PULSEG_FREE(s->contributor_shares);
 
     memset(s, 0, sizeof(*s));
 }
@@ -166,18 +172,15 @@ void pulseg_mech_resonances_spectra_free(pulseg_mech_resonances_spectra *s)
  *  quietest waveform the vendor forbade. */
 #define SA_AEQ_TRAIN_SHAPE 0.8106f
 
-/** Epsilon for a band whose amplitude column is zero, in mT/m of A_eq.
- *
- *  A zero column forbids the train at any amplitude, which no threshold can
- *  express, so this is a policy value rather than a vendor one and is
- *  calibrated empirically: across realistic protocols the in-band A_eq of the
- *  families GE steers (bSSFP at minimum TR, an EPI tooth landing in a band,
- *  fast 3D GRE) starts at 8.9 mT/m, while the families it runs unchecked
- *  (radial, spiral, stack-of-stars, long-TR GRE, FSE, spin echo) top out at
- *  6.1. This sits in that gap. It is below the converted vendor rows
- *  (13-24 mT/m), preserving the ordering that an absolute row is the stricter
- *  statement. */
-#define SA_AEQ_POLICY_MT_PER_M 7.5f
+/** The sustained sinusoid, in mT/m, a band with a zero amplitude column
+ *  refuses above: the harm threshold of these coils, estimated from the
+ *  vendor's own decisions read through its tables with this very check.
+ *  The loudest line in any sequence the vendor runs is 11.3 (MPRAGE on the
+ *  MAGNUS x band), the quietest in any it refuses 15.0 (an EPI whose echo
+ *  spacing lands in a band) and 26.6 (FIESTA at its locked TR); where the
+ *  vendor states an amplitude it is 13-15 (HRMw) and 21-27 (ZRMw) in the
+ *  same units. docs/_bench/mechres_calibration.py prints the bracket. */
+#define SA_ZERO_BAND_SINUSOID_MT_PER_M 13.0f
 
 /** Proton gyromagnetic ratio, for the plotting API when no opts are supplied. */
 #define SA_GAMMA_1H_HZ_PER_T 42.576e6f
@@ -187,6 +190,15 @@ void pulseg_mech_resonances_spectra_free(pulseg_mech_resonances_spectra *s)
  *  vendor identified; wide bands are keep-out ranges).  A TR-harmonic line
  *  counts against a band iff it lies within [f_min - guard, f_max + guard]. */
 #define SA_GUARD_HWHM_MULT 1.0f
+/* Harmonic lines the plotting entry draws per band at most; the verdict does
+ * not read them. */
+#define SA_MAX_DISPLAY_LINES 4096
+/* A band wider than this is a keep-out range, not one mode: it sets no
+ * guard, and its grid is a fixed point count left to the Bernstein
+ * refinement, so a range up to the raster's Nyquist does not cost half a
+ * million points. */
+#define SA_SCAN_WIDE_BAND_HZ 2000.0
+#define SA_SCAN_WIDE_BAND_POINTS 8192.0
 
 /** Minimum upper frequency (Hz) for the display/analytical spectrum grid,
  * decoupled from the forbidden-band range so the plotted A_eq comb reaches the
@@ -303,7 +315,9 @@ typedef struct
     double arb_dt_us;    /**< sample spacing when arb_times_us is NULL (us)           */
     double arb_t0_us;    /**< first sample time from the event start, same case (us)  */
     int arb_borrowed;    /**< arb_samples lives in the descriptor: not freed here      */
+    int times_borrowed;  /**< arb_times_us belongs to another event: not freed here    */
     int key_index;       /**< dense index of w_key within the axis                     */
+    int piece_index;     /**< which cut of its waveform this event plays (0 = the first or whole) */
 } sa_event;
 
 /** Per-axis event list. */
@@ -440,6 +454,8 @@ typedef struct
     float *tuple_amp;         /**< [num_tuples*3] the amplitude that instance plays  */
     int *tuple_rot;           /**< [num_tuples] rotation matrix index, -1 = none     */
     float weight[9];          /**< num_tuples == 0: |R| bounded over its rotations   */
+    double start_time_us;     /**< where the position sits in the TR (us)            */
+    double duration_us;       /**< the block's duration (us)                          */
     float *w_re[3];           /**< [shapes[ax].num_events] scratch, one frequency    */
     float *w_im[3];
     sa_svd_basis svd[3]; /**< rank basis per axis; rank 0 = evaluate directly   */
@@ -453,6 +469,80 @@ typedef struct
     int num_varying;
 } sa_structural_events;
 
+/* --- The window verdict, defined with the scan-window engine below ---
+ * A prober fills, per fine point of each grid, the window reading on the
+ * three physical axes and the widest run a window covered per grid. */
+typedef int (*sa_window_prober)(
+    void *ctx,
+    const pulseg__mech_scan_grid *grids,
+    int num_grids,
+    const double *window_us,
+    float *out_gx,
+    float *out_gy,
+    float *out_gz,
+    double *out_span_us);
+/* The fundamental-to-plateau ratio of the loudest fused train whose
+ * fundamental lies in the band, 0 when there is none: a stated tolerance,
+ * a plateau amplitude, is compared with the reading through it. */
+typedef float (*sa_band_shape_fn)(void *ctx, const pulseg_forbidden_band *band);
+/* The gradient definitions behind the reading at f_hz on axis ax over a
+ * window of window_us: ids and shares of the reading, loudest first, at most
+ * max_out of them; returns how many were written. */
+typedef int (*sa_window_attributor)(
+    void *ctx,
+    double f_hz,
+    int ax,
+    double window_us,
+    int *def_ids,
+    float *shares,
+    int max_out);
+typedef struct
+{
+    const sa_structural_events *se;
+    const struct pulseg_sequence_descriptor *desc;
+    double period_us;
+    int num_instances; /**< repetitions the scan really plays; the tiling never exceeds it */
+    pulseg__parallel_for_fn par_fn;
+    void *par_ctx;
+} sa_periodic_probe_ctx;
+static int sa_window_candidates(
+    pulseg_mech_resonances_spectra *spectra,
+    const pulseg_forbidden_band_list *bands,
+    float gamma_hz_per_t,
+    double memory_us,
+    int coarse_first,
+    sa_window_prober probe,
+    sa_band_shape_fn shape,
+    sa_window_attributor attrib,
+    void *ctx);
+static float sa_periodic_band_shape(void *vctx, const pulseg_forbidden_band *band);
+static int sa_periodic_attribute(
+    void *vctx,
+    double f_hz,
+    int ax,
+    double window_us,
+    int *def_ids,
+    float *shares,
+    int max_out);
+static int sa_scan_window_check(
+    pulseg_mech_resonances_spectra *spectra,
+    const struct pulseg_sequence_descriptor *desc,
+    const pulseg_forbidden_band_list *bands,
+    float gamma_hz_per_t,
+    double memory_us,
+    pulseg__parallel_for_fn par_fn,
+    void *par_ctx,
+    int coarse_first);
+static int sa_periodic_window_probe(
+    void *vctx,
+    const pulseg__mech_scan_grid *grids,
+    int num_grids,
+    const double *window_us,
+    float *out_gx,
+    float *out_gy,
+    float *out_gz,
+    double *out_span_us);
+
 static void sa_free_axis_events(sa_axis_events *ae)
 {
     int k;
@@ -464,7 +554,7 @@ static void sa_free_axis_events(sa_axis_events *ae)
         {
             if (ae->events[k].arb_samples && !ae->events[k].arb_borrowed)
                 PULSEG_FREE(ae->events[k].arb_samples);
-            if (ae->events[k].arb_times_us)
+            if (ae->events[k].arb_times_us && !ae->events[k].times_borrowed)
                 PULSEG_FREE(ae->events[k].arb_times_us);
             if (ae->events[k].train_amps)
                 PULSEG_FREE(ae->events[k].train_amps);
@@ -924,6 +1014,8 @@ static int sa_build_axis_events(
                 ae->events[n_events].train_amps = NULL;
                 ae->events[n_events].key_index = idx;
                 ae->events[n_events].arb_borrowed = 0;
+                ae->events[n_events].times_borrowed = 0;
+                ae->events[n_events].piece_index = 0;
                 ae->events[n_events].arb_dt_us = 0.0;
                 ae->events[n_events].arb_t0_us = 0.0;
                 if (use_arb && borrow_this)
@@ -1792,6 +1884,11 @@ static int sa_build_bounded_events(
         {
             sa_varying_position *vp = &se->varying[se->num_varying];
             int by_tuple = (!v->tuple_overflow && (rotated || multi_waveform));
+            const struct pulseg_block_table_element *pbte = &desc->block_table[start_block + p];
+            const struct pulseg_base_block *pbdef = &desc->base_blocks[pbte->id];
+            vp->start_time_us = pos_time[p];
+            vp->duration_us =
+                (pbte->duration_us >= 0) ? (double)pbte->duration_us : (double)pbdef->duration_us;
 
             /* Counted before it is filled, so a failure part way through
              * leaves it for sa_free_structural_events to release. */
@@ -2777,19 +2874,18 @@ static void sa_event_train_sum(const sa_event *ev, float f_hz, double *out_re, d
     *out_im = sum_im;
 }
 
-static void sa_eval_event_spectrum(
+/* An event's line from its base transform: the train sum, the amplitude and
+ * the start-time phasor applied. */
+static void sa_event_line_from_base(
     const sa_event *ev,
-    float *out_re,
-    float *out_im,
     float f_hz,
-    sa_transform_cache *cache,
-    const sa_w_query *query)
+    float tr_re,
+    float tr_im,
+    float *out_re,
+    float *out_im)
 {
-    float tr_re, tr_im;
     double sum_re, sum_im, base_re, base_im;
     double phase, cos_ph, sin_ph;
-
-    sa_eval_event_transform(ev, &tr_re, &tr_im, f_hz, cache, query);
 
     sa_event_train_sum(ev, f_hz, &sum_re, &sum_im);
 
@@ -2803,6 +2899,54 @@ static void sa_eval_event_spectrum(
 
     *out_re = (float)(base_re * cos_ph - base_im * sin_ph);
     *out_im = (float)(base_re * sin_ph + base_im * cos_ph);
+}
+
+static void sa_eval_event_spectrum(
+    const sa_event *ev,
+    float *out_re,
+    float *out_im,
+    float f_hz,
+    sa_transform_cache *cache,
+    const sa_w_query *query)
+{
+    float tr_re, tr_im;
+    sa_eval_event_transform(ev, &tr_re, &tr_im, f_hz, cache, query);
+    sa_event_line_from_base(ev, f_hz, tr_re, tr_im, out_re, out_im);
+}
+
+/* The base transform of any event, a uniform-raster arbitrary waveform
+ * included: its sample times are implied by t0 and dt, and are written into
+ * @p t_buf (grown to hold them) for the exact transform. Returns 0 when the
+ * buffer cannot be allocated. */
+static int sa_event_base_transform_any(
+    const sa_event *ev,
+    float f_hz,
+    float *out_re,
+    float *out_im,
+    float **t_buf,
+    int *t_cap)
+{
+    *out_re = 0.0f;
+    *out_im = 0.0f;
+    if (ev->arb_num_samples >= 2 && !ev->arb_times_us)
+    {
+        int n = ev->arb_num_samples, k;
+        if (*t_cap < n)
+        {
+            if (*t_buf)
+                PULSEG_FREE(*t_buf);
+            *t_buf = (float *)PULSEG_ALLOC((size_t)n * sizeof(float));
+            *t_cap = *t_buf ? n : 0;
+            if (!*t_buf)
+                return 0;
+        }
+        for (k = 0; k < n; ++k)
+            (*t_buf)[k] = (float)(ev->arb_t0_us + (double)k * ev->arb_dt_us);
+        sa_eval_pwl_transform(out_re, out_im, f_hz, *t_buf, ev->arb_samples, n);
+        return 1;
+    }
+    sa_eval_event_transform(ev, out_re, out_im, f_hz, NULL, NULL);
+    return 1;
 }
 
 /**
@@ -3316,27 +3460,22 @@ static void sa_axis_l1_sup(
     }
 }
 
-static void sa_eval_varying_bound(
-    sa_structural_events *se,
+/* One varying position's magnitude bound per physical axis at f_hz: the
+ * largest |sum over logical axes of R a T(f)| over the tuples it takes, or
+ * the rotation-weighted largest transform when the tuples are not
+ * enumerated. Uses the position's own scratch, so not for concurrent calls
+ * on one position. */
+static void sa_eval_varying_position(
+    sa_varying_position *vp,
     const struct pulseg_sequence_descriptor *desc,
     float f_hz,
-    double *out_bound)
+    double *best)
 {
-    int v, ax, j, t, k;
-
-    out_bound[0] = 0.0;
-    out_bound[1] = 0.0;
-    out_bound[2] = 0.0;
-
-    for (v = 0; v < se->num_varying; ++v)
+    int ax, j, t, k;
+    best[0] = 0.0;
+    best[1] = 0.0;
+    best[2] = 0.0;
     {
-        sa_varying_position *vp = &se->varying[v];
-        double best[3];
-
-        best[0] = 0.0;
-        best[1] = 0.0;
-        best[2] = 0.0;
-
         for (j = 0; j < 3; ++j)
         {
             sa_svd_basis *sb = &vp->svd[j];
@@ -3432,7 +3571,23 @@ static void sa_eval_varying_bound(
                 best[ax] = (double)vp->weight[ax * 3 + 0] * m[0] +
                     (double)vp->weight[ax * 3 + 1] * m[1] + (double)vp->weight[ax * 3 + 2] * m[2];
         }
+    }
+}
 
+static void sa_eval_varying_bound(
+    sa_structural_events *se,
+    const struct pulseg_sequence_descriptor *desc,
+    float f_hz,
+    double *out_bound)
+{
+    int v, ax;
+    double best[3];
+    out_bound[0] = 0.0;
+    out_bound[1] = 0.0;
+    out_bound[2] = 0.0;
+    for (v = 0; v < se->num_varying; ++v)
+    {
+        sa_eval_varying_position(&se->varying[v], desc, f_hz, best);
         for (ax = 0; ax < 3; ++ax)
             out_bound[ax] += best[ax];
     }
@@ -3457,11 +3612,28 @@ static void sa_eval_varying_bound(
  * The outermost TR is treated as an infinite-rep (Dirac) comb: only its
  * harmonics carry sustained drive, hence lines live exactly at k/T_TR.
  */
+/* Whether a band applies to physical axis ax: a mask of 0 names every axis. */
+static int sa_band_has_axis(const pulseg_forbidden_band *band, int ax)
+{
+    return band->axis_mask == 0 || (band->axis_mask & (1 << ax)) != 0;
+}
+
+/* The largest L1 ceiling over the axes a band names. */
+static double sa_l1_sup_for_band(const pulseg_forbidden_band *band, const double *l1_sup)
+{
+    double sup = 0;
+    int ax;
+    for (ax = 0; ax < 3; ++ax)
+        if (sa_band_has_axis(band, ax) && l1_sup[ax] > sup)
+            sup = l1_sup[ax];
+    return sup;
+}
+
 static float sa_eps_for_band(const pulseg_forbidden_band *band, float gamma_hz_per_t)
 {
     if (band->max_amplitude_hz_per_m > 0.0f)
         return SA_AEQ_TRAIN_SHAPE * band->max_amplitude_hz_per_m;
-    return SA_AEQ_POLICY_MT_PER_M * 1.0e-3f * gamma_hz_per_t;
+    return SA_ZERO_BAND_SINUSOID_MT_PER_M * 1.0e-3f * gamma_hz_per_t;
 }
 
 /**
@@ -3517,7 +3689,8 @@ static int sa_check_structural_violations(
     int compute_dense_envelope,
     int compute_display_products,
     int compress_trains,
-    int bound_over_instances)
+    int bound_over_instances,
+    float mech_memory_us)
 {
     sa_structural_events se;
     int result, ax, i, b, k, ci;
@@ -3526,7 +3699,6 @@ static int sa_check_structural_violations(
     int m_max;
     double bound[3];
     double l1_sup[3];
-    double l1_sup_max;
 
     /* analytical display grid (TR harmonics; display-only, not the verdict) */
     int num_ana;
@@ -3673,17 +3845,15 @@ static int sa_check_structural_violations(
      * that band can violate, and the probes that would have looked are
      * skipped rather than evaluated -- a proven no, not a sampled one. */
     sa_axis_l1_sup(&se, desc, l1_sup);
-    l1_sup_max = l1_sup[0] > l1_sup[1] ? l1_sup[0] : l1_sup[1];
-    if (l1_sup[2] > l1_sup_max)
-        l1_sup_max = l1_sup[2];
 
     for (b = 0; b < num_forbidden_bands; ++b)
     {
         float w = forbidden_bands[b].freq_max_hz - forbidden_bands[b].freq_min_hz;
-        if (w > 0.0f && (min_bw < 0.0f || w < min_bw))
+        if (w > 0.0f && w <= (float)SA_SCAN_WIDE_BAND_HZ && (min_bw < 0.0f || w < min_bw))
             min_bw = w;
     }
-    guard = (min_bw > 0.0f) ? (SA_GUARD_HWHM_MULT * min_bw * 0.5f) : 0.0f;
+    (void)min_bw;
+    guard = 0.0f; /* the window's own width supplies the mode's half-width */
 
     /* =====================================================================
      * (A) Analytical display grid — A_eq at each TR harmonic up to freq_max.
@@ -3794,11 +3964,13 @@ static int sa_check_structural_violations(
         int khi = (int)floor(hi);
         if (klo < 1)
             klo = 1;
+        if (khi - klo + 1 > SA_MAX_DISPLAY_LINES)
+            khi = klo + SA_MAX_DISPLAY_LINES - 1;
         if (khi >= klo)
             cand_cap += (khi - klo + 1);
     }
 
-    if (cand_cap > 0)
+    if (compute_display_products && cand_cap > 0)
     {
         cand_freqs = (float *)PULSEG_ALLOC((size_t)cand_cap * sizeof(float));
         cand_grad_amps = (float *)PULSEG_ALLOC((size_t)cand_cap * sizeof(float));
@@ -3855,6 +4027,8 @@ static int sa_check_structural_violations(
             float fwhm;
             if (klo < 1)
                 klo = 1;
+            if (khi - klo + 1 > SA_MAX_DISPLAY_LINES)
+                khi = klo + SA_MAX_DISPLAY_LINES - 1;
             if (num_instances > 1)
                 fwhm = 1.2067091288032284f * ((float)f1_hz / (float)num_instances);
             else
@@ -3964,7 +4138,9 @@ static int sa_check_structural_violations(
                              * evaluating every probe, so the drawn lines keep
                              * their exact amplitudes. */
                             if (!compute_display_products &&
-                                ratio * 2.0 / T_s * l1_sup_max <= (double)eps)
+                                ratio * 2.0 / T_s *
+                                        sa_l1_sup_for_band(&forbidden_bands[b], l1_sup) <=
+                                    (double)eps)
                                 continue;
                             sa_eval_varying_bound(&se, desc, f_sub_hz, bound);
                             for (ax = 0; ax < 3; ++ax)
@@ -4017,6 +4193,121 @@ static int sa_check_structural_violations(
     spectra->analytical_peak_widths_hz = ana_widths;
     ana_widths = NULL;
 
+    /* The verdict: the window reading of this TR repeated without end,
+     * section 4 of the mechanical-resonance page computed from the TR's own
+     * event model. The harmonic lines above, when they were computed, stay
+     * as display products. */
+    spectra->num_surviving_freqs = surviving_freqs_hz ? num_cand : 0;
+    {
+        pulseg_forbidden_band_list blist;
+        sa_periodic_probe_ctx pctx;
+        pulseg_mech_resonances_spectra win;
+        int prc;
+        if (cand_freqs)
+            PULSEG_FREE(cand_freqs);
+        if (cand_grad_amps)
+            PULSEG_FREE(cand_grad_amps);
+        if (cand_violations)
+            PULSEG_FREE(cand_violations);
+        cand_freqs = NULL;
+        cand_grad_amps = NULL;
+        cand_violations = NULL;
+        for (ax = 0; ax < 3; ++ax)
+        {
+            if (cand_amps[ax])
+                PULSEG_FREE(cand_amps[ax]);
+            if (cand_grad_amps_ax[ax])
+                PULSEG_FREE(cand_grad_amps_ax[ax]);
+            cand_amps[ax] = NULL;
+            cand_grad_amps_ax[ax] = NULL;
+        }
+        num_cand = 0;
+        blist.count = num_forbidden_bands;
+        blist.bands = forbidden_bands;
+        memset(&win, 0, sizeof(win));
+        pctx.se = &se;
+        pctx.desc = desc;
+        pctx.period_us = (double)tr_duration_us;
+        pctx.par_fn = par_fn;
+        pctx.par_ctx = par_ctx;
+        pctx.num_instances = num_instances;
+        /* Varying positions enter the tiled reading as magnitude terms over
+         * their whole duration, a bound. One that outlasts the memory cannot
+         * be read in pieces there, so such a TR is read on the scan itself
+         * from the start; otherwise a bound that refuses is settled by that
+         * exact reading, so no refusal rests on the bound alone. */
+        {
+            int v, outlasts = 0;
+            double memory = (mech_memory_us > 0.0f) ? (double)mech_memory_us : 20000.0;
+            for (v = 0; v < se.num_varying; ++v)
+                if (se.varying[v].duration_us > memory)
+                    outlasts = 1;
+            if (outlasts)
+                prc = sa_scan_window_check(
+                    &win,
+                    desc,
+                    &blist,
+                    gamma_hz_per_t,
+                    (double)mech_memory_us,
+                    par_fn,
+                    par_ctx,
+                    !compute_display_products);
+            else
+                prc = sa_window_candidates(
+                    &win,
+                    &blist,
+                    gamma_hz_per_t,
+                    (double)mech_memory_us,
+                    !compute_display_products,
+                    sa_periodic_window_probe,
+                    sa_periodic_band_shape,
+                    sa_periodic_attribute,
+                    &pctx);
+            if (PULSEG_FAILED(prc))
+                goto alloc_fail;
+            if (outlasts)
+                se.num_varying = 0; /* the bound was never taken */
+        }
+        if (se.num_varying > 0 && win.candidate_violations)
+        {
+            int any = 0, q;
+            for (q = 0; q < win.num_candidates; ++q)
+                if (win.candidate_violations[q])
+                    any = 1;
+            if (any)
+            {
+                pulseg_mech_resonances_spectra_free(&win);
+                memset(&win, 0, sizeof(win));
+                prc = sa_scan_window_check(
+                    &win,
+                    desc,
+                    &blist,
+                    gamma_hz_per_t,
+                    (double)mech_memory_us,
+                    par_fn,
+                    par_ctx,
+                    !compute_display_products);
+                if (PULSEG_FAILED(prc))
+                    goto alloc_fail;
+            }
+        }
+        num_cand = win.num_candidates;
+        cand_freqs = win.candidate_freqs;
+        cand_amps[0] = win.candidate_amps_gx;
+        cand_amps[1] = win.candidate_amps_gy;
+        cand_amps[2] = win.candidate_amps_gz;
+        cand_grad_amps = win.candidate_grad_amps;
+        cand_grad_amps_ax[0] = win.candidate_grad_amps_gx;
+        cand_grad_amps_ax[1] = win.candidate_grad_amps_gy;
+        cand_grad_amps_ax[2] = win.candidate_grad_amps_gz;
+        cand_violations = win.candidate_violations;
+        spectra->candidate_eps = win.candidate_eps;
+        spectra->num_contributors = win.num_contributors;
+        spectra->contributor_def_ids = win.contributor_def_ids;
+        spectra->contributor_shares = win.contributor_shares;
+        spectra->contributor_freq_hz = win.contributor_freq_hz;
+        spectra->contributor_axis = win.contributor_axis;
+    }
     spectra->num_candidates = num_cand;
     spectra->candidate_freqs = cand_freqs;
     cand_freqs = NULL;
@@ -4055,7 +4346,6 @@ static int sa_check_structural_violations(
     spectra->component_run_ids = component_run_ids;
     component_run_ids = NULL;
 
-    spectra->num_surviving_freqs = num_cand;
     spectra->surviving_freqs_hz = surviving_freqs_hz;
     surviving_freqs_hz = NULL;
 
@@ -4269,7 +4559,8 @@ static int calc_mech_resonances_from_uniform(
     int compress_trains,
     int bound_over_instances,
     pulseg__parallel_for_fn par_fn,
-    void *par_ctx)
+    void *par_ctx,
+    float mech_memory_us)
 {
     pulseg_diagnostic local_diag;
     int max_samples, result;
@@ -4419,7 +4710,8 @@ static int calc_mech_resonances_from_uniform(
             compute_dense_envelope,
             compute_display_products,
             compress_trains,
-            bound_over_instances);
+            bound_over_instances,
+            mech_memory_us);
         if (PULSEG_FAILED(result))
         {
             pulseg_mech_resonances_spectra_free(spectra);
@@ -4461,10 +4753,36 @@ static int sa_scan_window_check(
     const struct pulseg_sequence_descriptor *desc,
     const pulseg_forbidden_band_list *bands,
     float gamma_hz_per_t,
+    double memory_us,
     pulseg__parallel_for_fn par_fn,
-    void *par_ctx);
+    void *par_ctx,
+    int coarse_first);
+
+static int pulseg_calc_mech_resonances_body(
+    const pulseg_collection *coll,
+    pulseg_mech_resonances_spectra *spectra,
+    pulseg_diagnostic *diag,
+    pulseg_check_plan *plan,
+    const pulseg_opts *opts,
+    const pulseg_mech_resonances_request *request);
 
 int pulseg_calc_mech_resonances(
+    const pulseg_collection *coll,
+    pulseg_mech_resonances_spectra *spectra,
+    pulseg_diagnostic *diag,
+    pulseg_check_plan *plan,
+    const pulseg_opts *opts,
+    const pulseg_mech_resonances_request *request)
+{
+    int rc = pulseg__prescription_enter((pulseg_collection *)coll, opts);
+    if (PULSEG_FAILED(rc))
+        return rc;
+    rc = pulseg_calc_mech_resonances_body(coll, spectra, diag, plan, opts, request);
+    pulseg__prescription_leave((pulseg_collection *)coll, opts);
+    return rc;
+}
+
+static int pulseg_calc_mech_resonances_body(
     const pulseg_collection *coll,
     pulseg_mech_resonances_spectra *spectra,
     pulseg_diagnostic *diag,
@@ -4568,8 +4886,10 @@ int pulseg_calc_mech_resonances(
                 desc,
                 &request->bands,
                 (opts && opts->gamma_hz_per_t > 0.0f) ? opts->gamma_hz_per_t : SA_GAMMA_1H_HZ_PER_T,
-                opts ? opts->parallel_for_fn : NULL,
-                opts ? opts->parallel_ctx : NULL);
+                opts ? (double)opts->mech_memory_us : 20000.0,
+                pulseg__opts_par_fn(opts),
+                pulseg__opts_par_ctx(opts),
+                1);
             pulseg_check_plan_destroy(owned);
             if (PULSEG_FAILED(rc))
                 diag->code = rc;
@@ -4622,8 +4942,9 @@ int pulseg_calc_mech_resonances(
         1,
         request->compress_trains,
         bound_over_instances,
-        opts ? opts->parallel_for_fn : NULL,
-        opts ? opts->parallel_ctx : NULL);
+        pulseg__opts_par_fn(opts),
+        pulseg__opts_par_ctx(opts),
+        opts ? opts->mech_memory_us : 20000.0f);
     pulseg_check_plan_destroy(owned);
     return rc;
 }
@@ -5165,57 +5486,31 @@ int pulseg_calc_pns_at(
         if (rc == PULSEG_ERR_PNS_INVALID_PARAMS)
         {
             /* More waveform sets than the sweep will hold: there is no
-             * envelope to show. The repetition the occurrence score prices
-             * highest stands in, played as it is -- a witness, not a bound,
-             * and the diagnostic says so. */
-            pulseg__pns_score *score = NULL;
-            pulseg_pns_irnich ranking_ctx;
-            pulseg_pns_model ranking_model;
-            const pulseg_pns_model *ranker = model;
-            float score_max = 0.0f;
-            int declined = 0, argmax = 0, witness;
+             * envelope to show. The repetition holding the scan's exact peak
+             * stands in, played as it is -- a witness, not a bound, and the
+             * diagnostic says so. */
+            double exact_peak = 0.0;
+            int peak_block = 0, witness;
 
             pulseg_diagnostic_init(diag);
-            /* The ranking needs a kernel; a model without one (SAFE) borrows
-             * the Irnich kernel to choose the repetition, which is then
-             * evaluated with the model that was asked for. */
-            if (!model->kernel)
-            {
-                pulseg_pns_irnich_init(&ranking_model, &ranking_ctx, 360.0f, 4.25e8f, 0.333f);
-                ranker = &ranking_model;
-            }
-            rc = pulseg__pns_score_build_ex(
-                &score,
+            rc = pulseg__pns_exact_scan_peak(
+                plan,
+                diag,
                 desc,
-                ranker,
+                subseq_idx,
+                model,
+                pulseg__opts_par_fn(opts),
+                pulseg__opts_par_ctx(opts),
                 opts->gamma_hz_per_t,
-                opts->parallel_for_fn,
-                opts->parallel_ctx,
-                &declined,
-                NULL);
-            if (PULSEG_FAILED(rc) || declined || !score)
-            {
-                pulseg__pns_score_free(score);
-                if (diag)
-                {
-                    pulseg__diag_printf(
-                        diag,
-                        "the repetitions play more than %d distinct sets of gradient waveforms "
-                        "and the occurrence score could not price them either",
-                        PULSEG__MAX_SHAPE_GROUPS);
-                    diag->code = PULSEG_ERR_PNS_INVALID_PARAMS;
-                }
-                pulseg_check_plan_destroy(owned);
-                return PULSEG_ERR_PNS_INVALID_PARAMS;
-            }
-            rc = pulseg__pns_score_evaluate(score, &score_max, &argmax, NULL);
-            pulseg__pns_score_free(score);
+                &exact_peak,
+                &peak_block);
             if (PULSEG_FAILED(rc))
             {
                 pulseg_check_plan_destroy(owned);
                 return rc;
             }
-            witness = (desc->tr_descriptor.tr_size > 0) ? argmax / desc->tr_descriptor.tr_size : 0;
+            witness =
+                (desc->tr_descriptor.tr_size > 0) ? peak_block / desc->tr_descriptor.tr_size : 0;
             if (witness < 0)
                 witness = 0;
             if (witness >= desc->tr_descriptor.num_trs)
@@ -5226,6 +5521,14 @@ int pulseg_calc_pns_at(
                 &block_count,
                 &num_instances,
                 &tr_duration_us,
+                witness);
+            amplitude_mode = PULSEG_AMP_ACTUAL;
+            result->worst_group = witness;
+            pulseg__diag_printf(
+                diag,
+                "worst case past %d shape groups: repetition %d, the one holding the scan's "
+                "peak, played as it stands",
+                PULSEG__MAX_SHAPE_GROUPS,
                 witness);
             amplitude_mode = PULSEG_AMP_ACTUAL;
             result->worst_group = witness;
@@ -5828,9 +6131,9 @@ static void mech_resonance_analysis_range(
         *target_res_hz = 5.0f;
 }
 
-/* Scan the candidate lines of one canonical TR against the band table.
- * The guard mirrors sa_check_structural_violations: HWHM of the narrowest
- * positive-width band. */
+/* The verdict on the candidates: the first refused reading, with the
+ * tolerance it was judged against and the gradient definitions behind the
+ * loudest refusal. */
 static int mech_resonance_verdict(
     const pulseg_mech_resonances_spectra *spectra,
     pulseg_diagnostic *diag,
@@ -5839,23 +6142,14 @@ static int mech_resonance_verdict(
     int subseq_idx,
     int tr_idx)
 {
-    float *cga[3];
-    int ci, b, axi;
-    float guard_hz, mbw, cf_hz, ca_hz_per_m, eps_band;
+    const float *cga[3];
+    int ci, b, axi, k;
+    float cf_hz, ca_hz_per_m, eps_band;
 
     if (spectra->num_candidates <= 0 || !spectra->candidate_freqs ||
         !spectra->candidate_grad_amps_gx || !spectra->candidate_grad_amps_gy ||
         !spectra->candidate_grad_amps_gz)
         return PULSEG_SUCCESS;
-
-    mbw = -1.0f;
-    for (b = 0; b < bands->count; ++b)
-    {
-        float w = bands->bands[b].freq_max_hz - bands->bands[b].freq_min_hz;
-        if (w > 0.0f && (mbw < 0.0f || w < mbw))
-            mbw = w;
-    }
-    guard_hz = (mbw > 0.0f) ? (SA_GUARD_HWHM_MULT * mbw * 0.5f) : 0.0f;
 
     cga[0] = spectra->candidate_grad_amps_gx;
     cga[1] = spectra->candidate_grad_amps_gy;
@@ -5863,15 +6157,19 @@ static int mech_resonance_verdict(
 
     for (ci = 0; ci < spectra->num_candidates; ++ci)
     {
+        if (spectra->candidate_violations && !spectra->candidate_violations[ci])
+            continue;
         cf_hz = spectra->candidate_freqs[ci];
         for (b = 0; b < bands->count; ++b)
         {
-            eps_band = sa_eps_for_band(&bands->bands[b], gamma_hz_per_t);
-            if (cf_hz < bands->bands[b].freq_min_hz - guard_hz ||
-                cf_hz > bands->bands[b].freq_max_hz + guard_hz)
+            if (cf_hz < bands->bands[b].freq_min_hz || cf_hz > bands->bands[b].freq_max_hz)
                 continue;
+            eps_band = spectra->candidate_eps ? spectra->candidate_eps[ci]
+                                              : sa_eps_for_band(&bands->bands[b], gamma_hz_per_t);
             for (axi = 0; axi < 3; ++axi)
             {
+                if (!sa_band_has_axis(&bands->bands[b], axi))
+                    continue;
                 ca_hz_per_m = cga[axi][ci];
                 if (ca_hz_per_m > eps_band)
                 {
@@ -5887,6 +6185,12 @@ static int mech_resonance_verdict(
                             axi,
                             subseq_idx,
                             tr_idx);
+                        for (k = 0; k < spectra->num_contributors; ++k)
+                            pulseg__diag_printf(
+                                diag,
+                                ",def=%d,share=%.0f",
+                                spectra->contributor_def_ids[k],
+                                100.0 * (double)spectra->contributor_shares[k]);
                     }
                     return PULSEG_ERR_MECH_RESONANCES_VIOLATION;
                 }
@@ -5906,7 +6210,8 @@ static int mech_resonance_verdict(
  * bandwidth over its memory. The check evaluates exactly that. Every
  * gradient event of the whole scan is one term, its transform at f times
  * its amplitude and its placement phasor, and a window of length W slid
- * over the scan sums the terms of the events that start inside it:
+ * over the scan sums the terms of the events that start inside it,
+ * from its start up to but not including its end:
  *
  *     A_W(f) = (2 / span) | sum_{t_m in window} a_m T_m(f) e^{-i 2 pi f t_m} |
  *
@@ -5940,9 +6245,11 @@ static int mech_resonance_verdict(
 #define SA_SCAN_KERNEL_BETA 12.25
 #define SA_SCAN_KERNEL_E 4.0e-6
 #define SA_SCAN_FFT_E 1.0e-5
-#define SA_SCAN_FINE_DF_HZ 0.25
+/* The grid across a band. At a 10 ms window the Bernstein factor on this
+ * spacing is 1.016; halving it would double the cost for 0.8 % of margin. */
+#define SA_SCAN_FINE_DF_HZ 0.5
 #define SA_SCAN_KEY_GROUP 64
-#define SA_SCAN_CHUNK_EVENTS 256
+#define SA_SCAN_CHUNK_EVENTS 64
 #define SA_SCAN_MAX_KERNEL_TABLES 32
 #define SA_SCAN_TAPS (2 * SA_SCAN_KERNEL_HALF_WIDTH)
 
@@ -5997,26 +6304,20 @@ typedef struct
     void *block; /**< the single allocation behind the pointers above */
 } sa_arm_spectrum;
 
-static void sa_arm_spectrum_free(sa_arm_spectrum *rec, int num)
+/* One record to build: an event carrying the waveform, and where it goes. */
+typedef struct
 {
-    int k;
-    if (!rec)
-        return;
-    for (k = 0; k < num; ++k)
-        if (rec[k].block)
-            PULSEG_FREE(rec[k].block);
-    PULSEG_FREE(rec);
-}
+    const sa_event *ev;
+    sa_arm_spectrum *rec;
+} sa_record_task;
 
 typedef struct
 {
-    const sa_axis_events *ae;
-    const int *key_first; /**< [num_keys] an event carrying each key */
-    double raster_us;     /**< the gradient raster, the bin family every record shares */
+    const sa_record_task *tasks; /**< [num_tasks] */
+    int num_tasks;
+    double raster_us; /**< the gradient raster, the bin family every record shares */
     const pulseg__mech_scan_grid *grids;
     int num_grids;
-    sa_arm_spectrum *rec; /**< [num_keys] */
-    int num_keys;
     int rc;
 } sa_arm_spectrum_job;
 
@@ -6053,8 +6354,8 @@ static int sa_arm_spectrum_fill(
     {
         double f_lo = grids[g].f0_hz;
         double f_hi = grids[g].f0_hz + (double)(grids[g].count - 1) * grids[g].df_hz;
-        int lo = (int)floor(f_lo / delta) - SA_SCAN_KERNEL_HALF_WIDTH + 1;
-        int hi = (int)floor(f_hi / delta) + SA_SCAN_KERNEL_HALF_WIDTH;
+        int lo = (int)floor(f_lo / delta) - SA_SCAN_KERNEL_HALF_WIDTH;
+        int hi = (int)floor(f_hi / delta) + SA_SCAN_KERNEL_HALF_WIDTH + 1;
         if (hi > P)
             return PULSEG_ERR_INVALID_ARGUMENT;
         total += hi - lo + 1;
@@ -6084,8 +6385,8 @@ static int sa_arm_spectrum_fill(
     {
         double f_lo = grids[g].f0_hz;
         double f_hi = grids[g].f0_hz + (double)(grids[g].count - 1) * grids[g].df_hz;
-        int lo = (int)floor(f_lo / delta) - SA_SCAN_KERNEL_HALF_WIDTH + 1;
-        int hi = (int)floor(f_hi / delta) + SA_SCAN_KERNEL_HALF_WIDTH;
+        int lo = (int)floor(f_lo / delta) - SA_SCAN_KERNEL_HALF_WIDTH;
+        int hi = (int)floor(f_hi / delta) + SA_SCAN_KERNEL_HALF_WIDTH + 1;
         rec->bin_lo[g] = lo;
         rec->bin_n[g] = hi - lo + 1;
         rec->bin_off[g] = total;
@@ -6188,8 +6489,8 @@ static int sa_pwl_spectrum_fill(
     {
         double f_lo = grids[g].f0_hz;
         double f_hi = grids[g].f0_hz + (double)(grids[g].count - 1) * grids[g].df_hz;
-        int lo = (int)floor(f_lo / delta) - SA_SCAN_KERNEL_HALF_WIDTH + 1;
-        int hi = (int)floor(f_hi / delta) + SA_SCAN_KERNEL_HALF_WIDTH;
+        int lo = (int)floor(f_lo / delta) - SA_SCAN_KERNEL_HALF_WIDTH;
+        int hi = (int)floor(f_hi / delta) + SA_SCAN_KERNEL_HALF_WIDTH + 1;
         total += hi - lo + 1;
     }
     ints_bytes = (size_t)(3 * num_grids) * sizeof(int);
@@ -6213,8 +6514,8 @@ static int sa_pwl_spectrum_fill(
     {
         double f_lo = grids[g].f0_hz;
         double f_hi = grids[g].f0_hz + (double)(grids[g].count - 1) * grids[g].df_hz;
-        int lo = (int)floor(f_lo / delta) - SA_SCAN_KERNEL_HALF_WIDTH + 1;
-        int hi = (int)floor(f_hi / delta) + SA_SCAN_KERNEL_HALF_WIDTH;
+        int lo = (int)floor(f_lo / delta) - SA_SCAN_KERNEL_HALF_WIDTH;
+        int hi = (int)floor(f_hi / delta) + SA_SCAN_KERNEL_HALF_WIDTH + 1;
         rec->bin_lo[g] = lo;
         rec->bin_n[g] = hi - lo + 1;
         rec->bin_off[g] = total;
@@ -6254,18 +6555,19 @@ static void sa_arm_spectrum_range(void *arg, int begin, int end)
     {
         int k0 = grp * SA_SCAN_KEY_GROUP;
         int k1 = k0 + SA_SCAN_KEY_GROUP;
-        if (k1 > job->num_keys)
-            k1 = job->num_keys;
+        if (k1 > job->num_tasks)
+            k1 = job->num_tasks;
         for (key = k0; key < k1; ++key)
         {
-            const sa_event *ev = &job->ae->events[job->key_first[key]];
+            const sa_event *ev = job->tasks[key].ev;
+            sa_arm_spectrum *rec = job->tasks[key].rec;
             const float *t_us = NULL;
             const float *v;
             int n = 0, P;
             double dt = 0.0, t0;
             int rc;
 
-            job->rec[key].valid = 0;
+            rec->valid = 0;
             v = sa_event_uniform_vertices(ev, &t_us, &n, &dt);
             if (!v || n < SA_SCAN_FFT_MIN_SAMPLES || dt <= 0.0)
             {
@@ -6286,7 +6588,7 @@ static void sa_arm_spectrum_range(void *arg, int begin, int end)
                 if (!pt)
                     continue;
                 rc = sa_pwl_spectrum_fill(
-                    &job->rec[key],
+                    rec,
                     pt,
                     pv,
                     pn,
@@ -6327,16 +6629,7 @@ static void sa_arm_spectrum_range(void *arg, int begin, int end)
             for (k = n - 1; k < P; ++k)
                 work[k] = 0.0f;
             kiss_fftr(cfg, work, X);
-            rc = sa_arm_spectrum_fill(
-                &job->rec[key],
-                X,
-                P,
-                v,
-                n,
-                dt,
-                t0,
-                job->grids,
-                job->num_grids);
+            rc = sa_arm_spectrum_fill(rec, X, P, v, n, dt, t0, job->grids, job->num_grids);
             if (PULSEG_FAILED(rc))
             {
                 job->rc = rc;
@@ -6350,6 +6643,169 @@ static void sa_arm_spectrum_range(void *arg, int begin, int end)
         PULSEG_FREE(work);
     if (X)
         PULSEG_FREE(X);
+}
+
+/* Records of the distinct waveforms on the three axes, one per (waveform,
+ * cut) whichever axes play it: a shape rotated onto several physical axes is
+ * transformed once, and every other entry playing it is a copy sharing the
+ * owner's storage. */
+typedef struct
+{
+    sa_arm_spectrum *rec[3]; /**< [num_keys[ax]] per axis, indexed by key_index */
+    int num_keys[3];
+    sa_record_task *owners; /**< the entries that own their storage */
+    int num_owners;
+} sa_scan_records;
+
+static void sa_scan_records_free(sa_scan_records *r)
+{
+    int i, ax;
+    if (!r)
+        return;
+    for (i = 0; i < r->num_owners; ++i)
+        if (r->owners[i].rec && r->owners[i].rec->block)
+            PULSEG_FREE(r->owners[i].rec->block);
+    if (r->owners)
+        PULSEG_FREE(r->owners);
+    for (ax = 0; ax < 3; ++ax)
+        if (r->rec[ax])
+            PULSEG_FREE(r->rec[ax]);
+    memset(r, 0, sizeof(*r));
+}
+
+typedef struct
+{
+    int w_key;
+    int piece;
+    int ax; /**< -1: empty slot */
+    int key;
+} sa_record_slot;
+
+static unsigned sa_record_slot_find(
+    const sa_record_slot *slots,
+    unsigned mask,
+    int w_key,
+    int piece)
+{
+    unsigned h = ((unsigned)w_key * 2654435761u) ^ ((unsigned)piece * 40503u);
+    h &= mask;
+    while (slots[h].ax >= 0 && !(slots[h].w_key == w_key && slots[h].piece == piece))
+        h = (h + 1u) & mask;
+    return h;
+}
+
+/* Build the records for @p axes (3 of them) at the bins @p grids reach.
+ * PULSEG__MECH_SCAN_DIRECT in @p flags leaves every record invalid. */
+static int sa_scan_records_build(
+    sa_scan_records *r,
+    const sa_axis_events *axes,
+    double raster_us,
+    int flags,
+    const pulseg__mech_scan_grid *grids,
+    int num_grids,
+    pulseg__parallel_for_fn par_fn,
+    void *par_ctx)
+{
+    int ax, k, total = 0, cap, rc = PULSEG_SUCCESS;
+    unsigned mask;
+    sa_record_slot *slots = NULL;
+    int *key_first[3];
+
+    memset(r, 0, sizeof(*r));
+    key_first[0] = key_first[1] = key_first[2] = NULL;
+    for (ax = 0; ax < 3; ++ax)
+    {
+        int nk = axes[ax].num_keys;
+        size_t cnt = (size_t)(nk > 0 ? nk : 1);
+        r->num_keys[ax] = nk;
+        r->rec[ax] = (sa_arm_spectrum *)PULSEG_ALLOC(cnt * sizeof(sa_arm_spectrum));
+        key_first[ax] = (int *)PULSEG_ALLOC(cnt * sizeof(int));
+        if (!r->rec[ax] || !key_first[ax])
+        {
+            rc = PULSEG_ERR_ALLOC_FAILED;
+            goto done;
+        }
+        memset(r->rec[ax], 0, cnt * sizeof(sa_arm_spectrum));
+        for (k = 0; k < nk; ++k)
+            key_first[ax][k] = -1;
+        for (k = 0; k < axes[ax].num_events; ++k)
+            if (key_first[ax][axes[ax].events[k].key_index] < 0)
+                key_first[ax][axes[ax].events[k].key_index] = k;
+        total += nk;
+    }
+    if ((flags & PULSEG__MECH_SCAN_DIRECT) || total == 0)
+        goto done;
+    cap = 1;
+    while (cap < 2 * total)
+        cap *= 2;
+    mask = (unsigned)(cap - 1);
+    slots = (sa_record_slot *)PULSEG_ALLOC((size_t)cap * sizeof(sa_record_slot));
+    r->owners = (sa_record_task *)PULSEG_ALLOC((size_t)total * sizeof(sa_record_task));
+    if (!slots || !r->owners)
+    {
+        rc = PULSEG_ERR_ALLOC_FAILED;
+        goto done;
+    }
+    for (k = 0; k < cap; ++k)
+        slots[k].ax = -1;
+    r->num_owners = 0;
+    for (ax = 0; ax < 3; ++ax)
+        for (k = 0; k < axes[ax].num_keys; ++k)
+        {
+            const sa_event *ev;
+            unsigned h;
+            if (key_first[ax][k] < 0)
+                continue;
+            ev = &axes[ax].events[key_first[ax][k]];
+            h = sa_record_slot_find(slots, mask, ev->w_key, ev->piece_index);
+            if (slots[h].ax >= 0)
+                continue; /* played on an earlier axis too: copied below */
+            slots[h].ax = ax;
+            slots[h].key = k;
+            slots[h].w_key = ev->w_key;
+            slots[h].piece = ev->piece_index;
+            r->owners[r->num_owners].ev = ev;
+            r->owners[r->num_owners].rec = &r->rec[ax][k];
+            ++r->num_owners;
+        }
+    {
+        sa_arm_spectrum_job job;
+        int groups = (r->num_owners + SA_SCAN_KEY_GROUP - 1) / SA_SCAN_KEY_GROUP;
+        job.tasks = r->owners;
+        job.num_tasks = r->num_owners;
+        job.raster_us = raster_us;
+        job.grids = grids;
+        job.num_grids = num_grids;
+        job.rc = PULSEG_SUCCESS;
+        if (par_fn)
+            par_fn(par_ctx, groups, sa_arm_spectrum_range, &job);
+        else
+            sa_arm_spectrum_range(&job, 0, groups);
+        rc = job.rc;
+        if (PULSEG_FAILED(rc))
+            goto done;
+    }
+    for (ax = 0; ax < 3; ++ax)
+        for (k = 0; k < axes[ax].num_keys; ++k)
+        {
+            const sa_event *ev;
+            unsigned h;
+            if (key_first[ax][k] < 0)
+                continue;
+            ev = &axes[ax].events[key_first[ax][k]];
+            h = sa_record_slot_find(slots, mask, ev->w_key, ev->piece_index);
+            if (slots[h].ax != ax || slots[h].key != k)
+                r->rec[ax][k] = r->rec[slots[h].ax][slots[h].key];
+        }
+done:
+    for (ax = 0; ax < 3; ++ax)
+        if (key_first[ax])
+            PULSEG_FREE(key_first[ax]);
+    if (slots)
+        PULSEG_FREE(slots);
+    if (PULSEG_FAILED(rc))
+        sa_scan_records_free(r);
+    return rc;
 }
 
 /* Kernel weights of every fine point against one bin spacing. */
@@ -6392,7 +6848,8 @@ typedef struct
 {
     double t_start_us;
     double t_end_us;
-    int event; /* index into the axis's events */
+    int event;     /* index into the axis's events, -1 for a magnitude term */
+    int mag_index; /* column of the magnitude table when event < 0         */
 } sa_timed_event;
 
 static int sa_timed_event_cmp(const void *a, const void *b)
@@ -6412,12 +6869,19 @@ typedef struct
     const sa_timed_event *order;
     int num;
     const sa_arm_spectrum *rec;
+    const int
+        *rec_grid; /**< [num_grids] grid the records hold each grid's bins under (NULL: itself) */
     const sa_scan_kernel_table *tables;
     int num_tables;
     const pulseg__mech_scan_grid *grids;
     int num_grids;
-    int n_fine;
+    int g0; /**< the grids this pass covers, [g0, g1)            */
+    int g1;
+    int fine_off; /**< first fine point of grid g0 in the kernel tables */
+    int n_fine;   /**< fine points of the grids covered                  */
     double window_us;
+    const double *mag_table; /**< [n_fine][mag_stride] magnitude terms, or NULL   */
+    int mag_stride;
     int num_chunks;
     float *best;  /**< [num_chunks][n_fine] the chunk's sup per fine point */
     double *span; /**< [num_chunks] the widest run a window of the chunk covers */
@@ -6442,17 +6906,25 @@ static int sa_scan_window_event_lines(
     *out_guard = 0.0;
     if (!rec->valid)
     {
-        float re, im;
-        if (ev->arb_borrowed)
-            return PULSEG_ERR_INVALID_ARGUMENT;
-        for (g = 0; g < job->num_grids; ++g)
+        float re, im, tr_re, tr_im;
+        float *t_buf = NULL;
+        int t_cap = 0;
+        for (g = job->g0; g < job->g1; ++g)
             for (k = 0; k < job->grids[g].count; ++k, ++idx)
             {
                 float f = (float)(job->grids[g].f0_hz + (double)k * job->grids[g].df_hz);
-                sa_eval_event_line(ev, &re, &im, f, NULL, NULL);
+                if (!sa_event_base_transform_any(ev, f, &tr_re, &tr_im, &t_buf, &t_cap))
+                {
+                    if (t_buf)
+                        PULSEG_FREE(t_buf);
+                    return PULSEG_ERR_ALLOC_FAILED;
+                }
+                sa_event_line_from_base(ev, f, tr_re, tr_im, &re, &im);
                 tre[(size_t)idx * ext + m] = (double)re;
                 tim[(size_t)idx * ext + m] = (double)im;
             }
+        if (t_buf)
+            PULSEG_FREE(t_buf);
         return PULSEG_SUCCESS;
     }
     for (t = 0; t < job->num_tables; ++t)
@@ -6462,15 +6934,16 @@ static int sa_scan_window_event_lines(
             break;
         }
     *out_guard = rec->e * l1;
-    for (g = 0; g < job->num_grids; ++g)
+    for (g = job->g0; g < job->g1; ++g)
     {
+        int rg = job->rec_grid ? job->rec_grid[g] : g;
         double t_c = ev->start_time_us + rec->t_centre_us;
         double ph0 = -2.0 * M_PI * job->grids[g].f0_hz * t_c * 1.0e-6;
         double rot = -2.0 * M_PI * job->grids[g].df_hz * t_c * 1.0e-6;
         double cr = cos(ph0), ci = sin(ph0);
         double rr = cos(rot), ri = sin(rot);
-        const float *gre = rec->g_re + rec->bin_off[g];
-        const float *gim = rec->g_im + rec->bin_off[g];
+        const float *gre = rec->g_re + rec->bin_off[rg];
+        const float *gim = rec->g_im + rec->bin_off[rg];
         for (k = 0; k < job->grids[g].count; ++k, ++idx)
         {
             double f = job->grids[g].f0_hz + (double)k * job->grids[g].df_hz;
@@ -6478,9 +6951,9 @@ static int sa_scan_window_event_lines(
             int jl, base;
             if (tab)
             {
-                const double *w = tab->w + (size_t)idx * SA_SCAN_TAPS;
-                jl = tab->j_lo[idx];
-                base = jl - rec->bin_lo[g];
+                const double *w = tab->w + (size_t)(job->fine_off + idx) * SA_SCAN_TAPS;
+                jl = tab->j_lo[job->fine_off + idx];
+                base = jl - rec->bin_lo[rg];
                 for (t = 0; t < SA_SCAN_TAPS; ++t)
                 {
                     Gr += w[t] * (double)gre[base + t];
@@ -6491,7 +6964,7 @@ static int sa_scan_window_event_lines(
             {
                 double u = f / rec->delta_hz;
                 jl = (int)floor(u) - SA_SCAN_KERNEL_HALF_WIDTH + 1;
-                base = jl - rec->bin_lo[g];
+                base = jl - rec->bin_lo[rg];
                 for (t = 0; t < SA_SCAN_TAPS; ++t)
                 {
                     double w = pulseg__mech_scan_kernel(u - (double)(jl + t));
@@ -6529,7 +7002,7 @@ static void sa_scan_window_range(void *arg, int begin, int end)
         int core1 = core0 + SA_SCAN_CHUNK_EVENTS;
         int ext1, ext, core, m, i, j, k, rc;
         double t_last, w_us = job->window_us, span_max;
-        double *tre, *tim, *pre_re, *pre_im, *g_pre, *span;
+        double *tre, *tim, *pre_re, *pre_im, *pre_mag, *g_pre, *span;
         int *jw;
 
         if (core1 > job->num)
@@ -6537,17 +7010,18 @@ static void sa_scan_window_range(void *arg, int begin, int end)
         core = core1 - core0;
         t_last = job->order[core1 - 1].t_start_us;
         ext1 = core1;
-        while (ext1 < job->num && job->order[ext1].t_start_us <= t_last + w_us)
+        while (ext1 < job->num && job->order[ext1].t_start_us < t_last + w_us)
             ++ext1;
         ext = ext1 - core0;
         tre = (double *)PULSEG_ALLOC((size_t)job->n_fine * (size_t)ext * sizeof(double));
         tim = (double *)PULSEG_ALLOC((size_t)job->n_fine * (size_t)ext * sizeof(double));
         pre_re = (double *)PULSEG_ALLOC((size_t)(ext + 1) * sizeof(double));
         pre_im = (double *)PULSEG_ALLOC((size_t)(ext + 1) * sizeof(double));
+        pre_mag = (double *)PULSEG_ALLOC((size_t)(ext + 1) * sizeof(double));
         g_pre = (double *)PULSEG_ALLOC((size_t)(ext + 1) * sizeof(double));
         span = (double *)PULSEG_ALLOC((size_t)core * sizeof(double));
         jw = (int *)PULSEG_ALLOC((size_t)core * sizeof(int));
-        if (!tre || !tim || !pre_re || !pre_im || !g_pre || !span || !jw)
+        if (!tre || !tim || !pre_re || !pre_im || !pre_mag || !g_pre || !span || !jw)
         {
             job->rc = PULSEG_ERR_ALLOC_FAILED;
         }
@@ -6556,17 +7030,31 @@ static void sa_scan_window_range(void *arg, int begin, int end)
             g_pre[0] = 0.0;
             for (m = 0; m < ext && !PULSEG_FAILED(job->rc); ++m)
             {
-                double guard;
-                rc = sa_scan_window_event_lines(
-                    job,
-                    &job->ae->events[job->order[core0 + m].event],
-                    m,
-                    ext,
-                    tre,
-                    tim,
-                    &guard);
-                if (PULSEG_FAILED(rc))
-                    job->rc = rc;
+                double guard = 0.0;
+                const sa_timed_event *te = &job->order[core0 + m];
+                if (te->event < 0)
+                {
+                    /* A magnitude term: no line of its own, it enters the
+                     * window through the magnitude prefix below. */
+                    for (k = 0; k < job->n_fine; ++k)
+                    {
+                        tre[(size_t)k * ext + m] = 0.0;
+                        tim[(size_t)k * ext + m] = 0.0;
+                    }
+                }
+                else
+                {
+                    rc = sa_scan_window_event_lines(
+                        job,
+                        &job->ae->events[te->event],
+                        m,
+                        ext,
+                        tre,
+                        tim,
+                        &guard);
+                    if (PULSEG_FAILED(rc))
+                        job->rc = rc;
+                }
                 g_pre[m + 1] = g_pre[m] + guard;
             }
             /* Window geometry does not depend on the frequency. */
@@ -6577,7 +7065,7 @@ static void sa_scan_window_range(void *arg, int begin, int end)
                 double t0 = job->order[core0 + i].t_start_us, s = w_us, e;
                 if (j < i)
                     j = i;
-                while (j + 1 < ext && job->order[core0 + j + 1].t_start_us <= t0 + w_us)
+                while (j + 1 < ext && job->order[core0 + j + 1].t_start_us < t0 + w_us)
                     ++j;
                 for (k = i; k <= j; ++k)
                 {
@@ -6598,17 +7086,28 @@ static void sa_scan_window_range(void *arg, int begin, int end)
                 double best = 0.0;
                 pre_re[0] = 0.0;
                 pre_im[0] = 0.0;
+                pre_mag[0] = 0.0;
                 for (m = 0; m < ext; ++m)
                 {
+                    const sa_timed_event *te = &job->order[core0 + m];
                     pre_re[m + 1] = pre_re[m] + row_re[m];
                     pre_im[m + 1] = pre_im[m] + row_im[m];
+                    pre_mag[m + 1] = pre_mag[m] +
+                        ((te->event < 0 && job->mag_table)
+                             ? job->mag_table[(size_t)k * job->mag_stride + te->mag_index]
+                             : 0.0);
                 }
                 for (i = 0; i < core; ++i)
                 {
                     double sre = pre_re[jw[i] + 1] - pre_re[i];
                     double sim = pre_im[jw[i] + 1] - pre_im[i];
-                    double a = 2.0 / (span[i] * 1.0e-6) *
-                        (sqrt(sre * sre + sim * sim) + (g_pre[jw[i] + 1] - g_pre[i]));
+                    /* The drive sustained over the window's own length: a
+                     * mode integrates for its memory, no longer and no
+                     * shorter, whatever run the events inside happen to
+                     * cover. */
+                    double a = 2.0 / (w_us * 1.0e-6) *
+                        (sqrt(sre * sre + sim * sim) + (pre_mag[jw[i] + 1] - pre_mag[i]) +
+                         (g_pre[jw[i] + 1] - g_pre[i]));
                     if (a > best)
                         best = a;
                 }
@@ -6623,6 +7122,8 @@ static void sa_scan_window_range(void *arg, int begin, int end)
             PULSEG_FREE(pre_re);
         if (pre_im)
             PULSEG_FREE(pre_im);
+        if (pre_mag)
+            PULSEG_FREE(pre_mag);
         if (g_pre)
             PULSEG_FREE(g_pre);
         if (span)
@@ -6630,6 +7131,333 @@ static void sa_scan_window_range(void *arg, int begin, int end)
         if (jw)
             PULSEG_FREE(jw);
     }
+}
+
+/* How long an event plays, from its first vertex to its last (a train to
+ * the end of its last occurrence). */
+static double sa_event_duration_us(const sa_event *ev)
+{
+    const float *t_us = NULL;
+    int n = 0;
+    double dt0 = 0.0, dur = 0.0;
+    if (sa_event_uniform_vertices(ev, &t_us, &n, &dt0) && n >= 2)
+        dur = t_us ? (double)t_us[n - 1] - (double)t_us[0] : (double)(n - 1) * dt0;
+    else if (ev->arb_num_samples >= 2 && ev->arb_times_us)
+        dur = (double)ev->arb_times_us[ev->arb_num_samples - 1] - (double)ev->arb_times_us[0];
+    else if (ev->pwl_num_vertices >= 2)
+        dur = (double)ev->pwl_times_us[ev->pwl_num_vertices - 1] - (double)ev->pwl_times_us[0];
+    if (ev->train_len > 1)
+        dur += (double)(ev->train_len - 1) * ev->train_period_us;
+    return dur;
+}
+
+/* Pieces an event is cut into so that a window shorter than the event reads
+ * its loudest stretch rather than its average: none unless the event outlasts
+ * seg_us. Trains are cut by occurrences, uniform-raster arbitrary waveforms by
+ * samples, piecewise-linear events by vertices; a non-uniform arbitrary
+ * waveform stays whole. */
+static int sa_segment_count(const sa_event *ev, double window_us, double seg_us)
+{
+    double dur = sa_event_duration_us(ev);
+    int n;
+    if (seg_us <= 0.0 || window_us <= 0.0 || dur <= window_us)
+        return 1;
+    if (ev->train_len > 1)
+    {
+        int per = (int)floor(seg_us / ev->train_period_us);
+        if (per < 1)
+            per = 1;
+        return (ev->train_len + per - 1) / per;
+    }
+    if (ev->arb_num_samples >= 2)
+    {
+        const float *t_us = NULL;
+        int nv = 0;
+        double dt = 0.0;
+        if (!sa_event_uniform_vertices(ev, &t_us, &nv, &dt))
+            return 1; /* a non-uniform arbitrary waveform stays whole */
+        n = (int)ceil(dur / seg_us);
+        if (n < 1)
+            n = 1;
+        if ((ev->arb_num_samples + n - 1) / n < 2)
+            return 1;
+        return n;
+    }
+    if (ev->arb_num_samples == 0 && ev->pwl_num_vertices >= 2)
+    {
+        n = (int)ceil(dur / seg_us);
+        return n < 1 ? 1 : n;
+    }
+    return 1;
+}
+
+/* Write the pieces of ev into out (sa_segment_count of them). The head piece
+ * keeps the waveform storage as ev held it; later pieces borrow it. Train
+ * pieces own their amplitude slices. Returns 0 on allocation failure. */
+static int sa_segment_event(
+    const sa_event *ev,
+    double window_us,
+    double seg_us,
+    sa_event *out,
+    int borrow_all)
+{
+    int n = sa_segment_count(ev, window_us, seg_us), i;
+    if (n <= 1)
+    {
+        out[0] = *ev;
+        if (borrow_all)
+        {
+            /* the copy owns nothing of the waveform, but its amplitude slice
+             * is freed with it, so it needs one of its own */
+            out[0].arb_borrowed = 1;
+            out[0].times_borrowed = 1;
+            if (ev->train_amps && ev->train_len > 1)
+            {
+                float *a = (float *)PULSEG_ALLOC((size_t)ev->train_len * sizeof(float));
+                if (!a)
+                    return 0;
+                memcpy(a, ev->train_amps, (size_t)ev->train_len * sizeof(float));
+                out[0].train_amps = a;
+            }
+        }
+        return 1;
+    }
+    if (ev->train_len > 1)
+    {
+        int per = (int)floor(seg_us / ev->train_period_us), done = 0;
+        if (per < 1)
+            per = 1;
+        for (i = 0; i < n; ++i)
+        {
+            int len = ev->train_len - done, j, varying = 0;
+            if (len > per)
+                len = per;
+            out[i] = *ev;
+            out[i].start_time_us = ev->start_time_us + (double)done * ev->train_period_us;
+            out[i].train_len = len;
+            out[i].train_amps = NULL;
+            if (ev->train_amps)
+            {
+                out[i].amplitude = ev->train_amps[done];
+                for (j = 1; j < len; ++j)
+                    if (ev->train_amps[done + j] != ev->train_amps[done])
+                        varying = 1;
+                if (varying)
+                {
+                    float *a = (float *)PULSEG_ALLOC((size_t)len * sizeof(float));
+                    if (!a)
+                        return 0;
+                    memcpy(a, ev->train_amps + done, (size_t)len * sizeof(float));
+                    out[i].train_amps = a;
+                }
+            }
+            if (len == 1)
+            {
+                out[i].train_len = 1;
+                out[i].train_period_us = 0.0;
+            }
+            if (i > 0 || borrow_all)
+            {
+                out[i].arb_borrowed = 1;
+                out[i].times_borrowed = 1;
+            }
+            done += len;
+        }
+        return n;
+    }
+    if (ev->arb_num_samples >= 2)
+    {
+        /* The head piece keeps the waveform's own arrays (its times, when
+         * explicit, are already relative to its start); every later piece
+         * takes the implied-time form, its first sample at the waveform's
+         * first-sample offset from the piece's own start. */
+        const float *t_us = NULL;
+        int nv = 0, m, done = 0;
+        double dt = 0.0;
+        if (!sa_event_uniform_vertices(ev, &t_us, &nv, &dt))
+            return 0;
+        m = (ev->arb_num_samples + n - 1) / n;
+        for (i = 0; i < n; ++i)
+        {
+            int cnt = ev->arb_num_samples - done;
+            if (cnt > m)
+                cnt = m;
+            out[i] = *ev;
+            out[i].arb_samples = ev->arb_samples + done;
+            out[i].arb_num_samples = cnt;
+            out[i].pwl_num_vertices = 0;
+            if (i > 0)
+            {
+                out[i].start_time_us = ev->start_time_us +
+                    (t_us ? (double)t_us[done] - (double)t_us[0] : (double)done * dt);
+                out[i].arb_times_us = NULL;
+                out[i].arb_dt_us = dt;
+                out[i].arb_t0_us = t_us ? (double)t_us[0] : ev->arb_t0_us;
+                out[i].times_borrowed = 1;
+            }
+            if (i > 0 || borrow_all)
+            {
+                out[i].arb_borrowed = 1;
+                out[i].times_borrowed = 1;
+            }
+            done += cnt;
+        }
+        return n;
+    }
+    {
+        /* piecewise linear: cut at equal times, interpolating the cut points */
+        double t0 = (double)ev->pwl_times_us[0];
+        double t1 = (double)ev->pwl_times_us[ev->pwl_num_vertices - 1];
+        double len = (t1 - t0) / (double)n;
+        for (i = 0; i < n; ++i)
+        {
+            double c0 = t0 + (double)i * len;
+            double c1 = (i == n - 1) ? t1 : t0 + (double)(i + 1) * len;
+            int k, v = 0;
+            out[i] = *ev;
+            if (i > 0 || borrow_all)
+            {
+                out[i].arb_borrowed = 1;
+                out[i].times_borrowed = 1;
+            }
+            out[i].start_time_us = ev->start_time_us + (c0 - t0);
+            for (k = 0; k < ev->pwl_num_vertices && v < SA_MAX_PWL_VERTICES; ++k)
+            {
+                double tk = (double)ev->pwl_times_us[k];
+                if (k + 1 < ev->pwl_num_vertices)
+                {
+                    double tn = (double)ev->pwl_times_us[k + 1];
+                    if (tk < c0 && tn > c0)
+                    {
+                        double w = (c0 - tk) / (tn - tk);
+                        out[i].pwl_times_us[v] = 0.0f;
+                        out[i].pwl_values[v] =
+                            (float)((1.0 - w) * ev->pwl_values[k] + w * ev->pwl_values[k + 1]);
+                        ++v;
+                    }
+                }
+                if (tk >= c0 && tk <= c1)
+                {
+                    out[i].pwl_times_us[v] = (float)(tk - c0);
+                    out[i].pwl_values[v] = ev->pwl_values[k];
+                    ++v;
+                }
+                if (k + 1 < ev->pwl_num_vertices && v < SA_MAX_PWL_VERTICES)
+                {
+                    double tn = (double)ev->pwl_times_us[k + 1];
+                    if (tk < c1 && tn > c1)
+                    {
+                        double w = (c1 - tk) / (tn - tk);
+                        out[i].pwl_times_us[v] = (float)(c1 - c0);
+                        out[i].pwl_values[v] =
+                            (float)((1.0 - w) * ev->pwl_values[k] + w * ev->pwl_values[k + 1]);
+                        ++v;
+                    }
+                }
+            }
+            out[i].pwl_num_vertices = v;
+        }
+        return n;
+    }
+}
+
+/* A copy of src with every event longer than seg_us cut into pieces, its
+ * key indices renumbered so each piece of a waveform has a record of its own
+ * (train pieces share their lobe's). With borrow_all the copy owns no
+ * waveform storage and src stays intact; otherwise the storage moves to the
+ * copy's head pieces and src->events is released. */
+static int sa_segment_axis_events(
+    const sa_axis_events *src,
+    double window_us,
+    sa_axis_events *dst,
+    int borrow_all)
+{
+    int total = 0, k, i, w = 0, next = 0, rc = PULSEG_SUCCESS;
+    int *pieces_of_key = NULL, *key_base = NULL;
+    sa_event *out = NULL;
+    memset(dst, 0, sizeof(*dst));
+    if (!src->events || src->num_events <= 0)
+    {
+        *dst = *src;
+        if (borrow_all)
+        {
+            dst->events = NULL;
+            dst->num_events = 0;
+        }
+        return PULSEG_SUCCESS;
+    }
+    pieces_of_key =
+        (int *)PULSEG_ALLOC((size_t)(src->num_keys > 0 ? src->num_keys : 1) * sizeof(int));
+    key_base = (int *)PULSEG_ALLOC((size_t)(src->num_keys > 0 ? src->num_keys : 1) * sizeof(int));
+    if (!pieces_of_key || !key_base)
+    {
+        rc = PULSEG_ERR_ALLOC_FAILED;
+        goto done;
+    }
+    for (k = 0; k < src->num_keys; ++k)
+        pieces_of_key[k] = 1;
+    for (i = 0; i < src->num_events; ++i)
+    {
+        int n = sa_segment_count(&src->events[i], window_us, window_us / 8.0);
+        total += n;
+        if (src->events[i].train_len <= 1 && n > pieces_of_key[src->events[i].key_index])
+            pieces_of_key[src->events[i].key_index] = n;
+    }
+    for (k = 0; k < src->num_keys; ++k)
+    {
+        key_base[k] = next;
+        next += pieces_of_key[k];
+    }
+    out = (sa_event *)PULSEG_ALLOC((size_t)total * sizeof(sa_event));
+    if (!out)
+    {
+        rc = PULSEG_ERR_ALLOC_FAILED;
+        goto done;
+    }
+    for (i = 0; i < src->num_events; ++i)
+    {
+        const sa_event *ev = &src->events[i];
+        int n = sa_segment_event(ev, window_us, window_us / 8.0, out + w, borrow_all), p;
+        if (n <= 0)
+        {
+            rc = PULSEG_ERR_ALLOC_FAILED;
+            goto done;
+        }
+        for (p = 0; p < n; ++p)
+        {
+            out[w + p].key_index = key_base[ev->key_index] + ((ev->train_len > 1) ? 0 : p);
+            out[w + p].piece_index = (ev->train_len > 1) ? 0 : p;
+        }
+        w += n;
+    }
+    dst->events = out;
+    dst->num_events = total;
+    dst->num_keys = next;
+    if (!borrow_all)
+    {
+        /* the storage moved into the head pieces; only the amplitude slices of
+         * cut trains were duplicated, so their originals go */
+        for (i = 0; i < src->num_events; ++i)
+            if (src->events[i].train_amps &&
+                sa_segment_count(&src->events[i], window_us, window_us / 8.0) > 1)
+                PULSEG_FREE(src->events[i].train_amps);
+        PULSEG_FREE(src->events);
+    }
+    out = NULL;
+done:
+    if (out)
+    {
+        for (i = 0; i < w; ++i)
+            if (out[i].train_amps && out[i].train_len > 1 &&
+                sa_segment_count(&src->events[0], window_us, window_us / 8.0) > 1)
+                PULSEG_FREE(out[i].train_amps);
+        PULSEG_FREE(out);
+    }
+    if (pieces_of_key)
+        PULSEG_FREE(pieces_of_key);
+    if (key_base)
+        PULSEG_FREE(key_base);
+    return rc;
 }
 
 static int sa_scan_window_order(
@@ -6647,20 +7475,10 @@ static int sa_scan_window_order(
     for (k = 0; k < ae->num_events; ++k)
     {
         const sa_event *ev = &ae->events[k];
-        const float *t_us = NULL;
-        int n = 0;
-        double dt0 = 0.0, dur;
+        double dur = sa_event_duration_us(ev);
         order[k].event = k;
+        order[k].mag_index = -1;
         order[k].t_start_us = ev->start_time_us;
-        dur = 0.0;
-        if (sa_event_uniform_vertices(ev, &t_us, &n, &dt0) && n >= 2)
-            dur = t_us ? (double)t_us[n - 1] - (double)t_us[0] : (double)(n - 1) * dt0;
-        else if (ev->arb_num_samples >= 2 && ev->arb_times_us)
-            dur = (double)ev->arb_times_us[ev->arb_num_samples - 1] - (double)ev->arb_times_us[0];
-        else if (ev->pwl_num_vertices >= 2)
-            dur = (double)ev->pwl_times_us[ev->pwl_num_vertices - 1] - (double)ev->pwl_times_us[0];
-        if (ev->train_len > 1)
-            dur += (double)(ev->train_len - 1) * ev->train_period_us;
         order[k].t_end_us = ev->start_time_us + dur;
         if (dur > *out_longest_us)
             *out_longest_us = dur;
@@ -6670,103 +7488,90 @@ static int sa_scan_window_order(
     return PULSEG_SUCCESS;
 }
 
-/* One axis: records for its waveforms, kernel tables for their bin
- * spacings, then the windows, chunk by chunk. */
+/* One axis: records for its waveforms (built here, or @p prebuilt, whose
+ * bins are held under the grids @p rec_grid maps to), kernel tables for
+ * their bin spacings, then the windows, chunk by chunk. */
 static int sa_scan_window_axis(
     const sa_axis_events *ae,
     double raster_us,
     const sa_timed_event *order,
-    double window_us,
+    int num_order,
+    const double *mag_table,
+    int mag_stride,
+    const double *window_us,
     int flags,
     const pulseg__mech_scan_grid *grids,
     int num_grids,
     int n_fine,
+    const sa_arm_spectrum *prebuilt,
+    const int *rec_grid,
     pulseg__parallel_for_fn par_fn,
     void *par_ctx,
     float *out_amp,
     double *out_span_max_us)
 {
-    sa_arm_spectrum *rec = NULL;
-    int *key_first = NULL;
+    sa_scan_records own;
+    const sa_arm_spectrum *rec = prebuilt;
     sa_scan_kernel_table tables[SA_SCAN_MAX_KERNEL_TABLES];
     int num_tables = 0;
     sa_scan_window_job job;
     float *best = NULL;
     double *span = NULL;
-    int k, c, rc = PULSEG_SUCCESS;
+    int k, c, g, fine_off, rc = PULSEG_SUCCESS;
 
+    memset(&own, 0, sizeof(own));
     memset(&job, 0, sizeof(job));
     memset(tables, 0, sizeof(tables));
     for (k = 0; k < n_fine; ++k)
         out_amp[k] = 0.0f;
-    *out_span_max_us = window_us;
-    if (ae->num_events <= 0)
+    for (k = 0; k < num_grids; ++k)
+        out_span_max_us[k] = window_us[k];
+    if (num_order <= 0)
         return PULSEG_SUCCESS;
 
-    rec = (sa_arm_spectrum *)PULSEG_ALLOC((size_t)ae->num_keys * sizeof(sa_arm_spectrum));
-    key_first = (int *)PULSEG_ALLOC((size_t)ae->num_keys * sizeof(int));
-    if (!rec || !key_first)
+    if (!rec)
     {
-        rc = PULSEG_ERR_ALLOC_FAILED;
-        goto done;
-    }
-    memset(rec, 0, (size_t)ae->num_keys * sizeof(sa_arm_spectrum));
-    for (k = 0; k < ae->num_keys; ++k)
-        key_first[k] = -1;
-    for (k = 0; k < ae->num_events; ++k)
-        if (key_first[ae->events[k].key_index] < 0)
-            key_first[ae->events[k].key_index] = k;
-    if (!(flags & PULSEG__MECH_SCAN_DIRECT))
-    {
-        sa_arm_spectrum_job ja;
-        int groups = (ae->num_keys + SA_SCAN_KEY_GROUP - 1) / SA_SCAN_KEY_GROUP;
-        ja.ae = ae;
-        ja.key_first = key_first;
-        ja.raster_us = raster_us;
-        ja.grids = grids;
-        ja.num_grids = num_grids;
-        ja.rec = rec;
-        ja.num_keys = ae->num_keys;
-        ja.rc = PULSEG_SUCCESS;
-        if (par_fn)
-            par_fn(par_ctx, groups, sa_arm_spectrum_range, &ja);
-        else
-            sa_arm_spectrum_range(&ja, 0, groups);
-        rc = ja.rc;
+        sa_axis_events lone[3];
+        memset(lone, 0, sizeof(lone));
+        lone[0] = *ae;
+        rc = sa_scan_records_build(&own, lone, raster_us, flags, grids, num_grids, par_fn, par_ctx);
         if (PULSEG_FAILED(rc))
             goto done;
-        for (k = 0; k < ae->num_keys; ++k)
-        {
-            int t, seen = 0;
-            if (!rec[k].valid)
-                continue;
-            for (t = 0; t < num_tables; ++t)
-                if (tables[t].delta_hz == rec[k].delta_hz)
-                    seen = 1;
-            if (seen || num_tables >= SA_SCAN_MAX_KERNEL_TABLES)
-                continue;
-            rc = sa_scan_kernel_table_build(
-                &tables[num_tables],
-                rec[k].delta_hz,
-                grids,
-                num_grids,
-                n_fine);
-            ++num_tables;
-            if (PULSEG_FAILED(rc))
-                goto done;
-        }
+        rec = own.rec[0];
+        rec_grid = NULL;
+    }
+    for (k = 0; k < ae->num_keys; ++k)
+    {
+        int t, seen = 0;
+        if (!rec[k].valid)
+            continue;
+        for (t = 0; t < num_tables; ++t)
+            if (tables[t].delta_hz == rec[k].delta_hz)
+                seen = 1;
+        if (seen || num_tables >= SA_SCAN_MAX_KERNEL_TABLES)
+            continue;
+        rc = sa_scan_kernel_table_build(
+            &tables[num_tables],
+            rec[k].delta_hz,
+            grids,
+            num_grids,
+            n_fine);
+        ++num_tables;
+        if (PULSEG_FAILED(rc))
+            goto done;
     }
     job.ae = ae;
     job.order = order;
-    job.num = ae->num_events;
+    job.num = num_order;
+    job.mag_table = mag_table;
+    job.mag_stride = mag_stride;
     job.rec = rec;
+    job.rec_grid = rec_grid;
     job.tables = tables;
     job.num_tables = num_tables;
     job.grids = grids;
     job.num_grids = num_grids;
-    job.n_fine = n_fine;
-    job.window_us = window_us;
-    job.num_chunks = (ae->num_events + SA_SCAN_CHUNK_EVENTS - 1) / SA_SCAN_CHUNK_EVENTS;
+    job.num_chunks = (num_order + SA_SCAN_CHUNK_EVENTS - 1) / SA_SCAN_CHUNK_EVENTS;
     best = (float *)PULSEG_ALLOC((size_t)job.num_chunks * (size_t)n_fine * sizeof(float));
     span = (double *)PULSEG_ALLOC((size_t)job.num_chunks * sizeof(double));
     if (!best || !span)
@@ -6774,23 +7579,47 @@ static int sa_scan_window_axis(
         rc = PULSEG_ERR_ALLOC_FAILED;
         goto done;
     }
-    job.best = best;
     job.span = span;
-    job.rc = PULSEG_SUCCESS;
-    if (par_fn)
-        par_fn(par_ctx, job.num_chunks, sa_scan_window_range, &job);
-    else
-        sa_scan_window_range(&job, 0, job.num_chunks);
-    rc = job.rc;
-    if (PULSEG_FAILED(rc))
-        goto done;
-    for (c = 0; c < job.num_chunks; ++c)
+    /* Each grid is one band with its own memory: the windows are placed
+     * once per grid, over records and tables the grids share. */
+    fine_off = 0;
+    for (g = 0; g < num_grids; ++g)
     {
-        if (span[c] > *out_span_max_us)
-            *out_span_max_us = span[c];
-        for (k = 0; k < n_fine; ++k)
-            if (best[(size_t)c * n_fine + k] > out_amp[k])
-                out_amp[k] = best[(size_t)c * n_fine + k];
+        job.g0 = g;
+        job.g1 = g + 1;
+        job.fine_off = fine_off;
+        job.n_fine = grids[g].count;
+        job.window_us = window_us[g];
+        job.best = best;
+        job.rc = PULSEG_SUCCESS;
+        if (par_fn)
+            par_fn(par_ctx, job.num_chunks, sa_scan_window_range, &job);
+        else
+            sa_scan_window_range(&job, 0, job.num_chunks);
+        rc = job.rc;
+        if (PULSEG_FAILED(rc))
+            goto done;
+        for (c = 0; c < job.num_chunks; ++c)
+        {
+            if (span[c] > out_span_max_us[g])
+                out_span_max_us[g] = span[c];
+            for (k = 0; k < job.n_fine; ++k)
+                if (best[(size_t)c * job.n_fine + k] > out_amp[fine_off + k])
+                    out_amp[fine_off + k] = best[(size_t)c * job.n_fine + k];
+        }
+        fine_off += grids[g].count;
+    }
+    /* A window resolves no frequency below one period of its own length:
+     * there the sum is the gradient moment over the window, which no mode
+     * answers to, so the reading is zero. */
+    fine_off = 0;
+    for (g = 0; g < num_grids; ++g)
+    {
+        double floor_hz = 1.0e6 / window_us[g];
+        for (k = 0; k < grids[g].count; ++k)
+            if (grids[g].f0_hz + (double)k * grids[g].df_hz < floor_hz)
+                out_amp[fine_off + k] = 0.0f;
+        fine_off += grids[g].count;
     }
 
 done:
@@ -6805,11 +7634,238 @@ done:
         PULSEG_FREE(best);
     if (span)
         PULSEG_FREE(span);
-    if (key_first)
-        PULSEG_FREE(key_first);
-    if (rec)
-        sa_arm_spectrum_free(rec, ae->num_keys);
+    if (!prebuilt)
+        sa_scan_records_free(&own);
     return rc;
+}
+
+/* A scan opened for window readings: its events cut to the memory, ordered
+ * per axis, and the records of its waveforms, kept from one reading to the
+ * next while the grids' extents stay the same, whatever their spacing. */
+typedef struct
+{
+    const struct pulseg_sequence_descriptor *desc;
+    int flags;
+    sa_structural_events se;
+    sa_timed_event *order[3];
+    double longest[3];
+    sa_scan_records recs;
+    double *rec_lo; /**< [num_rec_grids] extents the records hold bins for */
+    double *rec_hi;
+    int num_rec_grids;
+    int open;
+} sa_scan_session;
+
+static void sa_scan_session_close(sa_scan_session *s)
+{
+    int ax;
+    if (!s || !s->open)
+        return;
+    for (ax = 0; ax < 3; ++ax)
+        if (s->order[ax])
+            PULSEG_FREE(s->order[ax]);
+    sa_scan_records_free(&s->recs);
+    sa_free_structural_events(&s->se);
+    if (s->rec_lo)
+        PULSEG_FREE(s->rec_lo);
+    if (s->rec_hi)
+        PULSEG_FREE(s->rec_hi);
+    memset(s, 0, sizeof(*s));
+}
+
+/* Events longer than @p memory_us are read in pieces of an eighth of it
+ * (0: whole). */
+static int sa_scan_session_open(
+    sa_scan_session *s,
+    const struct pulseg_sequence_descriptor *desc,
+    int flags,
+    double memory_us)
+{
+    int ax, rc;
+    memset(s, 0, sizeof(*s));
+    s->desc = desc;
+    s->flags = flags;
+    rc = sa_build_structural_events(
+        &s->se,
+        desc,
+        0,
+        desc->num_blocks,
+        !(flags & PULSEG__MECH_SCAN_DIRECT));
+    if (PULSEG_FAILED(rc))
+        return rc;
+    s->open = 1;
+    if (memory_us > 0.0)
+        for (ax = 0; ax < 3; ++ax)
+        {
+            sa_axis_events cut;
+            rc = sa_segment_axis_events(&s->se.axes[ax], memory_us, &cut, 0);
+            if (PULSEG_FAILED(rc))
+            {
+                sa_scan_session_close(s);
+                return rc;
+            }
+            s->se.axes[ax] = cut;
+        }
+    for (ax = 0; ax < 3; ++ax)
+    {
+        s->longest[ax] = 0.0;
+        rc = sa_scan_window_order(&s->se.axes[ax], &s->order[ax], &s->longest[ax]);
+        if (PULSEG_FAILED(rc))
+        {
+            sa_scan_session_close(s);
+            return rc;
+        }
+    }
+    return PULSEG_SUCCESS;
+}
+
+/* The records for @p grids: the ones held when every grid's extent is one
+ * they were built for, else rebuilt. @p rec_grid receives each grid's index
+ * among the records' extents. */
+static int sa_scan_session_records(
+    sa_scan_session *s,
+    const pulseg__mech_scan_grid *grids,
+    int num_grids,
+    pulseg__parallel_for_fn par_fn,
+    void *par_ctx,
+    int *rec_grid)
+{
+    int g, h;
+    if (s->num_rec_grids > 0)
+    {
+        int all = 1;
+        for (g = 0; g < num_grids; ++g)
+        {
+            double lo = grids[g].f0_hz;
+            double hi = lo + (double)(grids[g].count - 1) * grids[g].df_hz;
+            rec_grid[g] = -1;
+            for (h = 0; h < s->num_rec_grids; ++h)
+                if (fabs(s->rec_lo[h] - lo) <= 1.0e-9 * (1.0 + fabs(lo)) &&
+                    fabs(s->rec_hi[h] - hi) <= 1.0e-9 * (1.0 + fabs(hi)))
+                {
+                    rec_grid[g] = h;
+                    break;
+                }
+            if (rec_grid[g] < 0)
+                all = 0;
+        }
+        if (all)
+            return PULSEG_SUCCESS;
+        sa_scan_records_free(&s->recs);
+        PULSEG_FREE(s->rec_lo);
+        PULSEG_FREE(s->rec_hi);
+        s->rec_lo = s->rec_hi = NULL;
+        s->num_rec_grids = 0;
+    }
+    s->rec_lo = (double *)PULSEG_ALLOC((size_t)num_grids * sizeof(double));
+    s->rec_hi = (double *)PULSEG_ALLOC((size_t)num_grids * sizeof(double));
+    if (!s->rec_lo || !s->rec_hi)
+        return PULSEG_ERR_ALLOC_FAILED;
+    for (g = 0; g < num_grids; ++g)
+    {
+        s->rec_lo[g] = grids[g].f0_hz;
+        s->rec_hi[g] = grids[g].f0_hz + (double)(grids[g].count - 1) * grids[g].df_hz;
+        rec_grid[g] = g;
+    }
+    s->num_rec_grids = num_grids;
+    return sa_scan_records_build(
+        &s->recs,
+        s->se.axes,
+        (double)s->desc->grad_raster_us,
+        s->flags,
+        grids,
+        num_grids,
+        par_fn,
+        par_ctx);
+}
+
+/* The sustained amplitude per axis at every point of @p grids over the
+ * whole scan, each grid's window @p window_us[g] (never shorter than the
+ * axis's longest event). */
+static int sa_scan_session_run(
+    sa_scan_session *s,
+    const pulseg__mech_scan_grid *grids,
+    int num_grids,
+    const double *window_us,
+    pulseg__parallel_for_fn par_fn,
+    void *par_ctx,
+    float *const *out,
+    double *out_span_max_us)
+{
+    int *rec_grid = NULL;
+    double *w_ax = NULL, *span_ax = NULL;
+    int ax, g, n_fine = 0, rc;
+
+    for (g = 0; g < num_grids; ++g)
+        n_fine += grids[g].count;
+    rec_grid = (int *)PULSEG_ALLOC((size_t)num_grids * sizeof(int));
+    w_ax = (double *)PULSEG_ALLOC((size_t)num_grids * sizeof(double));
+    span_ax = (double *)PULSEG_ALLOC((size_t)num_grids * sizeof(double));
+    if (!rec_grid || !w_ax || !span_ax)
+    {
+        rc = PULSEG_ERR_ALLOC_FAILED;
+        goto done;
+    }
+    if (out_span_max_us)
+        for (g = 0; g < num_grids; ++g)
+            out_span_max_us[g] = 0.0;
+    rc = sa_scan_session_records(s, grids, num_grids, par_fn, par_ctx, rec_grid);
+    if (PULSEG_FAILED(rc))
+        goto done;
+    for (ax = 0; ax < 3; ++ax)
+    {
+        for (g = 0; g < num_grids; ++g)
+        {
+            double w = window_us ? window_us[g] : 0.0;
+            w_ax[g] = (w > s->longest[ax]) ? w : s->longest[ax];
+            if (w_ax[g] <= 0.0)
+                w_ax[g] = 1.0;
+        }
+        rc = sa_scan_window_axis(
+            &s->se.axes[ax],
+            (double)s->desc->grad_raster_us,
+            s->order[ax],
+            s->se.axes[ax].num_events,
+            NULL,
+            0,
+            w_ax,
+            s->flags,
+            grids,
+            num_grids,
+            n_fine,
+            s->recs.rec[ax],
+            rec_grid,
+            par_fn,
+            par_ctx,
+            out[ax],
+            span_ax);
+        if (PULSEG_FAILED(rc))
+            goto done;
+        if (out_span_max_us)
+            for (g = 0; g < num_grids; ++g)
+                if (span_ax[g] > out_span_max_us[g])
+                    out_span_max_us[g] = span_ax[g];
+    }
+done:
+    if (rec_grid)
+        PULSEG_FREE(rec_grid);
+    if (w_ax)
+        PULSEG_FREE(w_ax);
+    if (span_ax)
+        PULSEG_FREE(span_ax);
+    return rc;
+}
+
+/* The shortest positive window among @p windows, 0 when there is none. */
+static double sa_min_window_us(const double *windows, int num)
+{
+    double w_min = 0.0;
+    int g;
+    if (windows)
+        for (g = 0; g < num; ++g)
+            if (windows[g] > 0.0 && (w_min == 0.0 || windows[g] < w_min))
+                w_min = windows[g];
+    return w_min;
 }
 
 /* The sustained amplitude per axis at every point of @p grids, over the
@@ -6821,7 +7877,7 @@ int pulseg__mech_scan_window_probe(
     const struct pulseg_sequence_descriptor *desc,
     const pulseg__mech_scan_grid *grids,
     int num_grids,
-    double window_us,
+    const double *window_us,
     int flags,
     pulseg__parallel_for_fn par_fn,
     void *par_ctx,
@@ -6830,192 +7886,576 @@ int pulseg__mech_scan_window_probe(
     float *out_amp_gz,
     double *out_span_max_us)
 {
-    sa_structural_events se;
-    sa_timed_event *order[3];
+    sa_scan_session s;
     float *out[3];
-    double longest, span_ax, span_max = 0.0;
-    int ax, g, n_fine = 0, rc;
+    int g, rc;
 
     if (!desc || !grids || num_grids <= 0 || !out_amp_gx || !out_amp_gy || !out_amp_gz)
         return PULSEG_ERR_NULL_POINTER;
     for (g = 0; g < num_grids; ++g)
-    {
         if (grids[g].count <= 0 || grids[g].f0_hz < 0.0 || grids[g].df_hz < 0.0)
             return PULSEG_ERR_INVALID_ARGUMENT;
-        n_fine += grids[g].count;
-    }
     out[0] = out_amp_gx;
     out[1] = out_amp_gy;
     out[2] = out_amp_gz;
-    for (ax = 0; ax < 3; ++ax)
-        order[ax] = NULL;
-    rc = sa_build_structural_events(
-        &se,
-        desc,
-        0,
-        desc->num_blocks,
-        !(flags & PULSEG__MECH_SCAN_DIRECT));
+    rc = sa_scan_session_open(&s, desc, flags, sa_min_window_us(window_us, num_grids));
     if (PULSEG_FAILED(rc))
         return rc;
-    for (ax = 0; ax < 3; ++ax)
-    {
-        double w_ax;
-        longest = 0.0;
-        rc = sa_scan_window_order(&se.axes[ax], &order[ax], &longest);
-        if (PULSEG_FAILED(rc))
-            goto done;
-        w_ax = (window_us > longest) ? window_us : longest;
-        if (w_ax <= 0.0)
-            w_ax = 1.0;
-        rc = sa_scan_window_axis(
-            &se.axes[ax],
-            (double)desc->grad_raster_us,
-            order[ax],
-            w_ax,
-            flags,
-            grids,
-            num_grids,
-            n_fine,
-            par_fn,
-            par_ctx,
-            out[ax],
-            &span_ax);
-        if (PULSEG_FAILED(rc))
-            goto done;
-        if (span_ax > span_max)
-            span_max = span_ax;
-    }
-    if (out_span_max_us)
-        *out_span_max_us = span_max;
-
-done:
-    for (ax = 0; ax < 3; ++ax)
-        if (order[ax])
-            PULSEG_FREE(order[ax]);
-    sa_free_structural_events(&se);
+    rc =
+        sa_scan_session_run(&s, grids, num_grids, window_us, par_fn, par_ctx, out, out_span_max_us);
+    sa_scan_session_close(&s);
     return rc;
 }
 
-static int sa_scan_window_check(
+/* The largest normalised sample of an event's base waveform. */
+static double sa_event_plateau(const sa_event *ev)
+{
+    double m = 0.0;
+    int k;
+    if (ev->arb_num_samples > 0 && ev->arb_samples)
+    {
+        for (k = 0; k < ev->arb_num_samples; ++k)
+            if (fabs((double)ev->arb_samples[k]) > m)
+                m = fabs((double)ev->arb_samples[k]);
+    }
+    else
+        for (k = 0; k < ev->pwl_num_vertices; ++k)
+            if (fabs((double)ev->pwl_values[k]) > m)
+                m = fabs((double)ev->pwl_values[k]);
+    return m;
+}
+
+/* The amplitude of the fundamental of a train's lobe pattern repeated
+ * without end, per unit of its plateau: (2/T)|L(1/T)| for one lobe L every
+ * T; when the lobes alternate in sign the pattern's period is 2T and its
+ * fundamental at 1/(2T) is (2/T)|L(1/(2T))|. 4/pi for square lobes, 8/pi^2
+ * for triangles, about 0.92 for a ramp-sampled EPI lobe. Zero for anything
+ * that is not a train; @p out_f0_hz receives the fundamental. */
+static float sa_train_fundamental_ratio(const sa_event *ev, double *out_f0_hz)
+{
+    sa_event lone;
+    float re, im;
+    float *t_buf;
+    double plateau, T, f0;
+    int j, alternating = 0, t_cap, ok;
+
+    if (ev->train_len <= 1 || ev->train_period_us <= 0.0)
+        return 0.0f;
+    if (ev->train_amps)
+        for (j = 1; j < ev->train_len; ++j)
+            if (ev->train_amps[j] * ev->train_amps[j - 1] < 0.0f)
+                alternating = 1;
+    T = ev->train_period_us * 1.0e-6;
+    f0 = alternating ? 0.5 / T : 1.0 / T;
+    plateau = sa_event_plateau(ev);
+    if (plateau <= 0.0)
+        return 0.0f;
+    lone = *ev;
+    lone.train_len = 1;
+    lone.train_period_us = 0.0;
+    lone.train_amps = NULL;
+    lone.amplitude = 1.0f;
+    lone.start_time_us = 0.0;
+    t_buf = NULL;
+    t_cap = 0;
+    ok = sa_event_base_transform_any(&lone, (float)f0, &re, &im, &t_buf, &t_cap);
+    if (t_buf)
+        PULSEG_FREE(t_buf);
+    if (!ok)
+        return 0.0f;
+    *out_f0_hz = f0;
+    /* the base transform is in normalised units times microseconds */
+    return (
+        float)(2.0 / T * 1.0e-6 * sqrt((double)re * (double)re + (double)im * (double)im) / plateau);
+}
+
+/* The shape ratio of the loudest fused train, on an axis the band names,
+ * whose fundamental lies inside the band; 0 when there is none. */
+static float sa_axes_train_shape(const sa_axis_events *axes, const pulseg_forbidden_band *band)
+{
+    float best_ratio = 0.0f;
+    double best_amp = -1.0;
+    int ax, k;
+    for (ax = 0; ax < 3; ++ax)
+    {
+        if (!sa_band_has_axis(band, ax))
+            continue;
+        for (k = 0; k < axes[ax].num_events; ++k)
+        {
+            const sa_event *ev = &axes[ax].events[k];
+            double f0 = 0.0, amp;
+            float ratio;
+            if (ev->train_len <= 1)
+                continue;
+            ratio = sa_train_fundamental_ratio(ev, &f0);
+            if (ratio <= 0.0f || f0 < (double)band->freq_min_hz || f0 > (double)band->freq_max_hz)
+                continue;
+            amp = fabs((double)ev->amplitude) * sa_event_plateau(ev);
+            if (ev->train_amps)
+            {
+                int j;
+                amp = 0.0;
+                for (j = 0; j < ev->train_len; ++j)
+                    if (fabs((double)ev->train_amps[j]) > amp)
+                        amp = fabs((double)ev->train_amps[j]);
+                amp *= sa_event_plateau(ev);
+            }
+            if (amp > best_amp)
+            {
+                best_amp = amp;
+                best_ratio = ratio;
+            }
+        }
+    }
+    return best_ratio;
+}
+
+/* One frequency's line for every ordered term, the magnitude terms zero. */
+typedef struct
+{
+    const sa_axis_events *ae;
+    const sa_timed_event *order;
+    double f_hz;
+    double *re;
+    double *im;
+} sa_attrib_job;
+
+static void sa_attrib_range(void *arg, int begin, int end)
+{
+    sa_attrib_job *job = (sa_attrib_job *)arg;
+    float *t_buf = NULL;
+    int t_cap = 0, m;
+    for (m = begin; m < end; ++m)
+    {
+        const sa_timed_event *te = &job->order[m];
+        float re = 0.0f, im = 0.0f;
+        if (te->event >= 0)
+        {
+            const sa_event *ev = &job->ae->events[te->event];
+            float tr_re, tr_im;
+            if (sa_event_base_transform_any(ev, (float)job->f_hz, &tr_re, &tr_im, &t_buf, &t_cap))
+                sa_event_line_from_base(ev, (float)job->f_hz, tr_re, tr_im, &re, &im);
+        }
+        job->re[m] = (double)re;
+        job->im[m] = (double)im;
+    }
+    if (t_buf)
+        PULSEG_FREE(t_buf);
+}
+
+/* The gradient definitions behind the loudest window at f_hz: the window of
+ * window_us over the ordered terms with the largest |sum|, and within it the
+ * share |S_def| / |S| of each definition. */
+static int sa_attribute_window(
+    const sa_axis_events *ae,
+    const sa_timed_event *order,
+    int num,
+    double window_us,
+    double f_hz,
+    pulseg__parallel_for_fn par_fn,
+    void *par_ctx,
+    int *def_ids,
+    float *shares,
+    int max_out)
+{
+    sa_attrib_job job;
+    double *re = NULL, *im = NULL, *pre_re = NULL, *pre_im = NULL, *dre = NULL, *dim = NULL;
+    int *ids = NULL, *used = NULL;
+    double best = 0.0, sre, sim, s_abs;
+    int i, j, m, bi = -1, bj = -1, ndef = 0, n_out = 0, d;
+
+    if (num <= 0 || max_out <= 0)
+        return 0;
+    re = (double *)PULSEG_ALLOC((size_t)num * sizeof(double));
+    im = (double *)PULSEG_ALLOC((size_t)num * sizeof(double));
+    pre_re = (double *)PULSEG_ALLOC((size_t)(num + 1) * sizeof(double));
+    pre_im = (double *)PULSEG_ALLOC((size_t)(num + 1) * sizeof(double));
+    if (!re || !im || !pre_re || !pre_im)
+        goto done;
+    job.ae = ae;
+    job.order = order;
+    job.f_hz = f_hz;
+    job.re = re;
+    job.im = im;
+    if (par_fn)
+        par_fn(par_ctx, num, sa_attrib_range, &job);
+    else
+        sa_attrib_range(&job, 0, num);
+    pre_re[0] = 0.0;
+    pre_im[0] = 0.0;
+    for (m = 0; m < num; ++m)
+    {
+        pre_re[m + 1] = pre_re[m] + re[m];
+        pre_im[m + 1] = pre_im[m] + im[m];
+    }
+    j = 0;
+    for (i = 0; i < num; ++i)
+    {
+        double t0 = order[i].t_start_us;
+        if (j < i)
+            j = i;
+        while (j + 1 < num && order[j + 1].t_start_us < t0 + window_us)
+            ++j;
+        sre = pre_re[j + 1] - pre_re[i];
+        sim = pre_im[j + 1] - pre_im[i];
+        s_abs = sqrt(sre * sre + sim * sim);
+        if (s_abs > best)
+        {
+            best = s_abs;
+            bi = i;
+            bj = j;
+        }
+    }
+    if (bi < 0 || best <= 0.0)
+        goto done;
+    for (m = bi; m <= bj; ++m)
+        if (order[m].event >= 0 && ae->events[order[m].event].def_index + 1 > ndef)
+            ndef = ae->events[order[m].event].def_index + 1;
+    if (ndef <= 0)
+        goto done;
+    dre = (double *)PULSEG_ALLOC((size_t)ndef * sizeof(double));
+    dim = (double *)PULSEG_ALLOC((size_t)ndef * sizeof(double));
+    ids = (int *)PULSEG_ALLOC((size_t)ndef * sizeof(int));
+    used = (int *)PULSEG_ALLOC((size_t)ndef * sizeof(int));
+    if (!dre || !dim || !ids || !used)
+        goto done;
+    for (d = 0; d < ndef; ++d)
+    {
+        dre[d] = 0.0;
+        dim[d] = 0.0;
+        ids[d] = -1;
+        used[d] = 0;
+    }
+    for (m = bi; m <= bj; ++m)
+    {
+        const sa_event *ev;
+        if (order[m].event < 0)
+            continue;
+        ev = &ae->events[order[m].event];
+        d = ev->def_index;
+        if (d < 0)
+            continue;
+        dre[d] += re[m];
+        dim[d] += im[m];
+        ids[d] = ev->def_id;
+    }
+    while (n_out < max_out)
+    {
+        int pick = -1;
+        double pick_share = 0.0;
+        for (d = 0; d < ndef; ++d)
+        {
+            double share;
+            if (used[d] || ids[d] < 0)
+                continue;
+            share = sqrt(dre[d] * dre[d] + dim[d] * dim[d]) / best;
+            if (pick < 0 || share > pick_share)
+            {
+                pick = d;
+                pick_share = share;
+            }
+        }
+        if (pick < 0)
+            break;
+        used[pick] = 1;
+        def_ids[n_out] = ids[pick];
+        shares[n_out] = (float)pick_share;
+        ++n_out;
+    }
+done:
+    if (re)
+        PULSEG_FREE(re);
+    if (im)
+        PULSEG_FREE(im);
+    if (pre_re)
+        PULSEG_FREE(pre_re);
+    if (pre_im)
+        PULSEG_FREE(pre_im);
+    if (dre)
+        PULSEG_FREE(dre);
+    if (dim)
+        PULSEG_FREE(dim);
+    if (ids)
+        PULSEG_FREE(ids);
+    if (used)
+        PULSEG_FREE(used);
+    return n_out;
+}
+
+/* The first spacing of a verdict's grid. The Bernstein factor it carries
+ * settles a band read clear of its tolerance either way; only a band whose
+ * bound crosses its tolerance while its reading does not is probed again,
+ * halving the spacing down to SA_SCAN_FINE_DF_HZ. Records are kept across
+ * those passes; only the windows are placed again. */
+#define SA_SCAN_COARSE_DF_HZ 4.0
+#define SA_SCAN_MAX_ATTEMPTS 16
+/* Gradient definitions named for a refused reading. */
+#define SA_MAX_CONTRIBUTORS 3
+
+/* A band's tolerance for the reading: the stated plateau through the train's
+ * own fundamental-to-plateau ratio when a fused train's fundamental lies in
+ * the band, through 8/pi^2 otherwise; the sustained-sinusoid floor for a
+ * zero column. */
+static float sa_band_tolerance(
+    const pulseg_forbidden_band *band,
+    float gamma_hz_per_t,
+    sa_band_shape_fn shape,
+    void *ctx)
+{
+    if (band->max_amplitude_hz_per_m > 0.0f && shape)
+    {
+        float r = shape(ctx, band);
+        if (r > 0.0f)
+            return r * band->max_amplitude_hz_per_m;
+    }
+    return sa_eps_for_band(band, gamma_hz_per_t);
+}
+
+/* The window verdict for one band list, whichever prober supplies the
+ * readings: a grid per band with the memory as its window, the Bernstein
+ * guard on the grid with refinement, and the candidates the verdict compares
+ * per axis. @p coarse_first starts the grids at SA_SCAN_COARSE_DF_HZ and
+ * refines only what the bound cannot settle; otherwise every grid is fine.
+ * A refused reading is attributed to its gradient definitions through
+ * @p attrib. */
+static int sa_window_candidates(
     pulseg_mech_resonances_spectra *spectra,
-    const struct pulseg_sequence_descriptor *desc,
     const pulseg_forbidden_band_list *bands,
     float gamma_hz_per_t,
-    pulseg__parallel_for_fn par_fn,
-    void *par_ctx)
+    double memory_us,
+    int coarse_first,
+    sa_window_prober probe,
+    sa_band_shape_fn shape,
+    sa_window_attributor attrib,
+    void *ctx)
 {
-    pulseg__mech_scan_grid *grids = NULL;
+    pulseg__mech_scan_grid *grids = NULL, *sub = NULL;
+    double *windows = NULL, *spans = NULL, *gfac = NULL, *sub_span = NULL;
+    float *eps_of = NULL;
+    int *band_of = NULL, *settled = NULL, *sub_of = NULL;
+    float **ga = NULL; /**< [3 * ng] the readings per grid and axis */
+    float *sub_amp[3];
     float *amps[3];
-    float *grad_amps = NULL;
+    float *grad_amps = NULL, *cand_eps = NULL;
     int *violations = NULL;
-    int b, k, ci, ax, n, rc, attempt;
-    double window_us, widest_hz, span_max_us, df_max, x, gfac;
+    int b, g, k, ci, ax, n, ng, rc, attempt, nsub;
+    int worst_ci = -1, worst_ax = -1, worst_g = -1;
+    double x, worst_ratio = 0.0;
 
+    sub_amp[0] = sub_amp[1] = sub_amp[2] = NULL;
     amps[0] = amps[1] = amps[2] = NULL;
+    spectra->num_contributors = 0;
+    spectra->contributor_axis = -1;
     if (!spectra || !bands || bands->count <= 0)
         return PULSEG_SUCCESS;
     grids = (pulseg__mech_scan_grid *)PULSEG_ALLOC(
         (size_t)bands->count * sizeof(pulseg__mech_scan_grid));
-    if (!grids)
-        return PULSEG_ERR_ALLOC_FAILED;
-    widest_hz = 0.0;
-    df_max = SA_SCAN_FINE_DF_HZ;
+    sub = (pulseg__mech_scan_grid *)PULSEG_ALLOC(
+        (size_t)bands->count * sizeof(pulseg__mech_scan_grid));
+    windows = (double *)PULSEG_ALLOC((size_t)bands->count * sizeof(double));
+    spans = (double *)PULSEG_ALLOC((size_t)bands->count * sizeof(double));
+    gfac = (double *)PULSEG_ALLOC((size_t)bands->count * sizeof(double));
+    sub_span = (double *)PULSEG_ALLOC((size_t)bands->count * sizeof(double));
+    eps_of = (float *)PULSEG_ALLOC((size_t)bands->count * sizeof(float));
+    band_of = (int *)PULSEG_ALLOC((size_t)bands->count * sizeof(int));
+    settled = (int *)PULSEG_ALLOC((size_t)bands->count * sizeof(int));
+    sub_of = (int *)PULSEG_ALLOC((size_t)bands->count * sizeof(int));
+    ga = (float **)PULSEG_ALLOC((size_t)(3 * bands->count) * sizeof(float *));
+    if (!grids || !sub || !windows || !spans || !gfac || !sub_span || !eps_of || !band_of ||
+        !settled || !sub_of || !ga)
+    {
+        rc = PULSEG_ERR_ALLOC_FAILED;
+        goto fail;
+    }
+    for (k = 0; k < 3 * bands->count; ++k)
+        ga[k] = NULL;
+    /* The resonance memory is the window for every band; its own width,
+     * 1/W, is the half-width a mode answers over, so no band is widened. */
+    if (memory_us <= 0.0)
+        memory_us = 20000.0;
+    ng = 0;
     for (b = 0; b < bands->count; ++b)
     {
-        double lo = bands->bands[b].freq_min_hz, hi = bands->bands[b].freq_max_hz;
-        double width = hi - lo;
-        if (width <= 0.0)
-            width = 1.0;
-        if (width > widest_hz)
-            widest_hz = width;
-        grids[b].f0_hz = lo;
-        grids[b].count = (int)ceil(width / SA_SCAN_FINE_DF_HZ) + 1;
-        if (grids[b].count < 2)
-            grids[b].count = 2;
-        grids[b].df_hz = width / (double)(grids[b].count - 1);
+        double lo = (double)bands->bands[b].freq_min_hz;
+        double hi = (double)bands->bands[b].freq_max_hz;
+        double width, df0;
+        if (lo < 0.0)
+            lo = 0.0;
+        if (hi <= lo)
+            continue;
+        width = hi - lo;
+        if (width > SA_SCAN_WIDE_BAND_HZ)
+            df0 = width / SA_SCAN_WIDE_BAND_POINTS;
+        else
+            df0 = coarse_first ? SA_SCAN_COARSE_DF_HZ : SA_SCAN_FINE_DF_HZ;
+        grids[ng].f0_hz = lo;
+        grids[ng].count = (int)ceil(width / df0) + 1;
+        if (grids[ng].count < 2)
+            grids[ng].count = 2;
+        grids[ng].df_hz = width / (double)(grids[ng].count - 1);
+        windows[ng] = memory_us;
+        spans[ng] = memory_us;
+        gfac[ng] = 1.0;
+        eps_of[ng] = 0.0f;
+        band_of[ng] = b;
+        settled[ng] = 0;
+        ++ng;
     }
-    window_us = 1.0e6 / widest_hz;
-    /* A grid fine enough for the Bernstein guard to stay tight: the span is
-     * known only once the windows are placed, so a scan whose windows run
-     * longer than the first grid allows is probed again on a finer one. */
+    if (ng == 0)
+    {
+        rc = PULSEG_SUCCESS;
+        goto fail; /* nothing to evaluate: no candidates, no arrays */
+    }
     for (attempt = 0;; ++attempt)
     {
+        /* the grids still open, probed together */
+        nsub = 0;
         n = 0;
-        for (b = 0; b < bands->count; ++b)
-            n += grids[b].count;
+        for (g = 0; g < ng; ++g)
+            if (!settled[g])
+            {
+                sub[nsub] = grids[g];
+                sub_of[nsub] = g;
+                n += grids[g].count;
+                ++nsub;
+            }
+        if (nsub == 0)
+            break;
+        if (attempt >= SA_SCAN_MAX_ATTEMPTS)
+        {
+            rc = PULSEG_ERR_INVALID_ARGUMENT;
+            goto fail;
+        }
         for (ax = 0; ax < 3; ++ax)
         {
-            if (amps[ax])
-                PULSEG_FREE(amps[ax]);
-            amps[ax] = (float *)PULSEG_ALLOC((size_t)n * sizeof(float));
-            if (!amps[ax])
+            if (sub_amp[ax])
+                PULSEG_FREE(sub_amp[ax]);
+            sub_amp[ax] = (float *)PULSEG_ALLOC((size_t)n * sizeof(float));
+            if (!sub_amp[ax])
             {
                 rc = PULSEG_ERR_ALLOC_FAILED;
                 goto fail;
             }
         }
-        rc = pulseg__mech_scan_window_probe(
-            desc,
-            grids,
-            bands->count,
-            window_us,
-            0,
-            par_fn,
-            par_ctx,
-            amps[0],
-            amps[1],
-            amps[2],
-            &span_max_us);
+        rc = probe(ctx, sub, nsub, windows, sub_amp[0], sub_amp[1], sub_amp[2], sub_span);
         if (PULSEG_FAILED(rc))
             goto fail;
-        df_max = 0.0;
-        for (b = 0; b < bands->count; ++b)
-            if (grids[b].df_hz > df_max)
-                df_max = grids[b].df_hz;
-        x = 0.5 * M_PI * span_max_us * 1.0e-6 * df_max;
-        if (x < 0.25 || attempt >= 4)
-            break;
-        for (b = 0; b < bands->count; ++b)
+        if (attempt == 0)
+            for (g = 0; g < ng; ++g)
+                eps_of[g] =
+                    sa_band_tolerance(&bands->bands[band_of[g]], gamma_hz_per_t, shape, ctx);
+        ci = 0;
+        for (k = 0; k < nsub; ++k)
         {
-            double width = (double)(grids[b].count - 1) * grids[b].df_hz;
-            grids[b].count = 2 * (grids[b].count - 1) + 1;
-            grids[b].df_hz = width / (double)(grids[b].count - 1);
+            const pulseg_forbidden_band *band;
+            float eps;
+            int refine = 0, fine, cnt;
+            double width;
+            g = sub_of[k];
+            cnt = grids[g].count;
+            band = &bands->bands[band_of[g]];
+            eps = eps_of[g];
+            spans[g] = sub_span[k];
+            for (ax = 0; ax < 3; ++ax)
+            {
+                if (ga[3 * g + ax])
+                    PULSEG_FREE(ga[3 * g + ax]);
+                ga[3 * g + ax] = (float *)PULSEG_ALLOC((size_t)cnt * sizeof(float));
+                if (!ga[3 * g + ax])
+                {
+                    rc = PULSEG_ERR_ALLOC_FAILED;
+                    goto fail;
+                }
+                memcpy(ga[3 * g + ax], sub_amp[ax] + ci, (size_t)cnt * sizeof(float));
+            }
+            ci += cnt;
+            /* The Bernstein factor: a grid too coarse for its windows' span
+             * is halved regardless of what it read. */
+            x = 0.5 * M_PI * spans[g] * 1.0e-6 * grids[g].df_hz;
+            gfac[g] = (x < 1.0) ? 1.0 / (1.0 - x) : 0.0;
+            fine = grids[g].df_hz <= SA_SCAN_FINE_DF_HZ * (1.0 + 1.0e-9);
+            if (x >= 0.25)
+                refine = 1;
+            else if (coarse_first && !fine)
+            {
+                /* A reading over the tolerance is a violation on any grid; a
+                 * bound under it clears the band. Only a bound that crosses
+                 * while the reading does not calls for a closer look. */
+                int over = 0, sure = 0, i;
+                for (ax = 0; ax < 3; ++ax)
+                {
+                    if (!sa_band_has_axis(band, ax))
+                        continue;
+                    for (i = 0; i < cnt; ++i)
+                    {
+                        double a = (double)ga[3 * g + ax][i];
+                        if (a > (double)eps)
+                            sure = 1;
+                        if (a * gfac[g] > (double)eps)
+                            over = 1;
+                    }
+                }
+                if (over && !sure)
+                    refine = 1;
+            }
+            if (!refine)
+            {
+                settled[g] = 1;
+                continue;
+            }
+            width = (double)(cnt - 1) * grids[g].df_hz;
+            grids[g].count = 2 * (cnt - 1) + 1;
+            grids[g].df_hz = width / (double)(grids[g].count - 1);
         }
     }
-    if (x >= 1.0)
-    {
-        rc = PULSEG_ERR_INVALID_ARGUMENT;
-        goto fail;
-    }
-    gfac = 1.0 / (1.0 - x);
+    n = 0;
+    for (g = 0; g < ng; ++g)
+        n += grids[g].count;
+    for (ax = 0; ax < 3; ++ax)
+        amps[ax] = (float *)PULSEG_ALLOC((size_t)n * sizeof(float));
     grad_amps = (float *)PULSEG_ALLOC((size_t)n * sizeof(float));
+    cand_eps = (float *)PULSEG_ALLOC((size_t)n * sizeof(float));
     violations = (int *)PULSEG_ALLOC((size_t)n * sizeof(int));
     spectra->candidate_freqs = (float *)PULSEG_ALLOC((size_t)n * sizeof(float));
     spectra->candidate_grad_amps_gx = (float *)PULSEG_ALLOC((size_t)n * sizeof(float));
     spectra->candidate_grad_amps_gy = (float *)PULSEG_ALLOC((size_t)n * sizeof(float));
     spectra->candidate_grad_amps_gz = (float *)PULSEG_ALLOC((size_t)n * sizeof(float));
-    if (!grad_amps || !violations || !spectra->candidate_freqs ||
-        !spectra->candidate_grad_amps_gx || !spectra->candidate_grad_amps_gy ||
-        !spectra->candidate_grad_amps_gz)
+    if (!amps[0] || !amps[1] || !amps[2] || !grad_amps || !cand_eps || !violations ||
+        !spectra->candidate_freqs || !spectra->candidate_grad_amps_gx ||
+        !spectra->candidate_grad_amps_gy || !spectra->candidate_grad_amps_gz)
     {
         rc = PULSEG_ERR_ALLOC_FAILED;
         goto fail;
     }
     ci = 0;
-    for (b = 0; b < bands->count; ++b)
+    for (g = 0; g < ng; ++g)
     {
-        float eps = sa_eps_for_band(&bands->bands[b], gamma_hz_per_t);
-        for (k = 0; k < grids[b].count; ++k, ++ci)
+        const pulseg_forbidden_band *band = &bands->bands[band_of[g]];
+        float eps = eps_of[g];
+        for (k = 0; k < grids[g].count; ++k, ++ci)
         {
-            spectra->candidate_freqs[ci] = (float)(grids[b].f0_hz + (double)k * grids[b].df_hz);
+            spectra->candidate_freqs[ci] = (float)(grids[g].f0_hz + (double)k * grids[g].df_hz);
             grad_amps[ci] = 0.0f;
+            cand_eps[ci] = eps;
+            violations[ci] = 0;
             for (ax = 0; ax < 3; ++ax)
             {
-                amps[ax][ci] = (float)((double)amps[ax][ci] * gfac);
+                amps[ax][ci] = (float)((double)ga[3 * g + ax][k] * gfac[g]);
                 if (amps[ax][ci] > grad_amps[ci])
                     grad_amps[ci] = amps[ax][ci];
+                if (sa_band_has_axis(band, ax) && amps[ax][ci] > eps)
+                {
+                    double ratio = (eps > 0.0f) ? (double)amps[ax][ci] / (double)eps : 1.0e30;
+                    violations[ci] = 1;
+                    if (ratio > worst_ratio)
+                    {
+                        worst_ratio = ratio;
+                        worst_ci = ci;
+                        worst_ax = ax;
+                        worst_g = g;
+                    }
+                }
             }
-            violations[ci] = (grad_amps[ci] > eps) ? 1 : 0;
         }
     }
     spectra->num_candidates = n;
@@ -7023,44 +8463,536 @@ static int sa_scan_window_check(
     spectra->candidate_amps_gy = amps[1];
     spectra->candidate_amps_gz = amps[2];
     spectra->candidate_grad_amps = grad_amps;
+    spectra->candidate_eps = cand_eps;
     memcpy(spectra->candidate_grad_amps_gx, amps[0], (size_t)n * sizeof(float));
     memcpy(spectra->candidate_grad_amps_gy, amps[1], (size_t)n * sizeof(float));
     memcpy(spectra->candidate_grad_amps_gz, amps[2], (size_t)n * sizeof(float));
     spectra->candidate_violations = violations;
-    PULSEG_FREE(grids);
-    return PULSEG_SUCCESS;
-
+    amps[0] = amps[1] = amps[2] = NULL;
+    grad_amps = NULL;
+    cand_eps = NULL;
+    violations = NULL;
+    /* The loudest refused reading, attributed to its gradient definitions. */
+    if (worst_ci >= 0 && attrib)
+    {
+        int *ids = (int *)PULSEG_ALLOC((size_t)SA_MAX_CONTRIBUTORS * sizeof(int));
+        float *shares = (float *)PULSEG_ALLOC((size_t)SA_MAX_CONTRIBUTORS * sizeof(float));
+        if (!ids || !shares)
+        {
+            if (ids)
+                PULSEG_FREE(ids);
+            if (shares)
+                PULSEG_FREE(shares);
+            rc = PULSEG_ERR_ALLOC_FAILED;
+            goto fail;
+        }
+        spectra->num_contributors = attrib(
+            ctx,
+            (double)spectra->candidate_freqs[worst_ci],
+            worst_ax,
+            windows[worst_g],
+            ids,
+            shares,
+            SA_MAX_CONTRIBUTORS);
+        spectra->contributor_def_ids = ids;
+        spectra->contributor_shares = shares;
+        spectra->contributor_freq_hz = spectra->candidate_freqs[worst_ci];
+        spectra->contributor_axis = worst_ax;
+    }
+    rc = PULSEG_SUCCESS;
+    goto cleanup;
 fail:
+    if (spectra->candidate_freqs)
+        PULSEG_FREE(spectra->candidate_freqs);
+    if (spectra->candidate_grad_amps_gx)
+        PULSEG_FREE(spectra->candidate_grad_amps_gx);
+    if (spectra->candidate_grad_amps_gy)
+        PULSEG_FREE(spectra->candidate_grad_amps_gy);
+    if (spectra->candidate_grad_amps_gz)
+        PULSEG_FREE(spectra->candidate_grad_amps_gz);
+    spectra->candidate_freqs = NULL;
+    spectra->candidate_grad_amps_gx = NULL;
+    spectra->candidate_grad_amps_gy = NULL;
+    spectra->candidate_grad_amps_gz = NULL;
+cleanup:
     if (grids)
         PULSEG_FREE(grids);
-    if (grad_amps)
-        PULSEG_FREE(grad_amps);
-    if (violations)
-        PULSEG_FREE(violations);
+    if (sub)
+        PULSEG_FREE(sub);
+    if (windows)
+        PULSEG_FREE(windows);
+    if (spans)
+        PULSEG_FREE(spans);
+    if (gfac)
+        PULSEG_FREE(gfac);
+    if (sub_span)
+        PULSEG_FREE(sub_span);
+    if (eps_of)
+        PULSEG_FREE(eps_of);
+    if (band_of)
+        PULSEG_FREE(band_of);
+    if (settled)
+        PULSEG_FREE(settled);
+    if (sub_of)
+        PULSEG_FREE(sub_of);
+    if (ga)
+    {
+        for (k = 0; k < 3 * bands->count; ++k)
+            if (ga[k])
+                PULSEG_FREE(ga[k]);
+        PULSEG_FREE(ga);
+    }
     for (ax = 0; ax < 3; ++ax)
+    {
+        if (sub_amp[ax])
+            PULSEG_FREE(sub_amp[ax]);
         if (amps[ax])
             PULSEG_FREE(amps[ax]);
-    if (spectra->candidate_freqs)
-    {
-        PULSEG_FREE(spectra->candidate_freqs);
-        spectra->candidate_freqs = NULL;
     }
-    if (spectra->candidate_grad_amps_gx)
+    if (grad_amps)
+        PULSEG_FREE(grad_amps);
+    if (cand_eps)
+        PULSEG_FREE(cand_eps);
+    if (violations)
+        PULSEG_FREE(violations);
+    return rc;
+}
+
+typedef struct
+{
+    const struct pulseg_sequence_descriptor *desc;
+    pulseg__parallel_for_fn par_fn;
+    void *par_ctx;
+    double memory_us;
+    sa_scan_session *session; /**< opened on the first call, closed by the check */
+} sa_scan_probe_ctx;
+
+static int sa_scan_probe_open(sa_scan_probe_ctx *c)
+{
+    int rc;
+    if (c->session)
+        return PULSEG_SUCCESS;
+    c->session = (sa_scan_session *)PULSEG_ALLOC(sizeof(sa_scan_session));
+    if (!c->session)
+        return PULSEG_ERR_ALLOC_FAILED;
+    rc = sa_scan_session_open(c->session, c->desc, 0, c->memory_us);
+    if (PULSEG_FAILED(rc))
     {
-        PULSEG_FREE(spectra->candidate_grad_amps_gx);
-        spectra->candidate_grad_amps_gx = NULL;
-    }
-    if (spectra->candidate_grad_amps_gy)
-    {
-        PULSEG_FREE(spectra->candidate_grad_amps_gy);
-        spectra->candidate_grad_amps_gy = NULL;
-    }
-    if (spectra->candidate_grad_amps_gz)
-    {
-        PULSEG_FREE(spectra->candidate_grad_amps_gz);
-        spectra->candidate_grad_amps_gz = NULL;
+        PULSEG_FREE(c->session);
+        c->session = NULL;
     }
     return rc;
+}
+
+static int sa_scan_probe(
+    void *vctx,
+    const pulseg__mech_scan_grid *grids,
+    int num_grids,
+    const double *window_us,
+    float *out_gx,
+    float *out_gy,
+    float *out_gz,
+    double *out_span_us)
+{
+    sa_scan_probe_ctx *c = (sa_scan_probe_ctx *)vctx;
+    float *out[3];
+    int rc = sa_scan_probe_open(c);
+    if (PULSEG_FAILED(rc))
+        return rc;
+    out[0] = out_gx;
+    out[1] = out_gy;
+    out[2] = out_gz;
+    return sa_scan_session_run(
+        c->session,
+        grids,
+        num_grids,
+        window_us,
+        c->par_fn,
+        c->par_ctx,
+        out,
+        out_span_us);
+}
+
+static float sa_scan_band_shape(void *vctx, const pulseg_forbidden_band *band)
+{
+    sa_scan_probe_ctx *c = (sa_scan_probe_ctx *)vctx;
+    if (PULSEG_FAILED(sa_scan_probe_open(c)))
+        return 0.0f;
+    return sa_axes_train_shape(c->session->se.axes, band);
+}
+
+static int sa_scan_attribute(
+    void *vctx,
+    double f_hz,
+    int ax,
+    double window_us,
+    int *def_ids,
+    float *shares,
+    int max_out)
+{
+    sa_scan_probe_ctx *c = (sa_scan_probe_ctx *)vctx;
+    sa_scan_session *s;
+    if (ax < 0 || ax > 2 || PULSEG_FAILED(sa_scan_probe_open(c)))
+        return 0;
+    s = c->session;
+    return sa_attribute_window(
+        &s->se.axes[ax],
+        s->order[ax],
+        s->se.axes[ax].num_events,
+        (window_us > s->longest[ax]) ? window_us : s->longest[ax],
+        f_hz,
+        c->par_fn,
+        c->par_ctx,
+        def_ids,
+        shares,
+        max_out);
+}
+
+/* The verdict on a scan whose repetitions do not repeat: every event of the
+ * whole scan is one term and the windows slide over all of them. */
+static int sa_scan_window_check(
+    pulseg_mech_resonances_spectra *spectra,
+    const struct pulseg_sequence_descriptor *desc,
+    const pulseg_forbidden_band_list *bands,
+    float gamma_hz_per_t,
+    double memory_us,
+    pulseg__parallel_for_fn par_fn,
+    void *par_ctx,
+    int coarse_first)
+{
+    sa_scan_probe_ctx c;
+    int rc;
+    c.desc = desc;
+    c.par_fn = par_fn;
+    c.par_ctx = par_ctx;
+    c.memory_us = (memory_us > 0.0) ? memory_us : 20000.0;
+    c.session = NULL;
+    rc = sa_window_candidates(
+        spectra,
+        bands,
+        gamma_hz_per_t,
+        memory_us,
+        coarse_first,
+        sa_scan_probe,
+        sa_scan_band_shape,
+        sa_scan_attribute,
+        &c);
+    if (c.session)
+    {
+        sa_scan_session_close(c.session);
+        PULSEG_FREE(c.session);
+    }
+    return rc;
+}
+
+/* The window reading of a scan that repeats one TR without end, from the
+ * TR's event model alone. The coherent events are laid out over as many
+ * repetitions as a window starting inside the first can reach, every
+ * varying position is a magnitude term at its time (the bound of section 3
+ * of the mechanical-resonance page, per fine point), and the windows are
+ * then placed exactly as on any scan: with W a multiple of the TR this is
+ * the periodic line amplitude, and with every position constant it is the
+ * reading the whole scan would give. */
+static int sa_periodic_window_probe(
+    void *vctx,
+    const pulseg__mech_scan_grid *grids,
+    int num_grids,
+    const double *window_us,
+    float *out_gx,
+    float *out_gy,
+    float *out_gz,
+    double *out_span_us)
+{
+    sa_periodic_probe_ctx *c = (sa_periodic_probe_ctx *)vctx;
+    const sa_structural_events *se = c->se;
+    const double T = c->period_us;
+    float *out[3];
+    double *mag[3];
+    double *w_ax = NULL, *span_ax = NULL;
+    int n_fine = 0, g, k, ax, v, rc = PULSEG_SUCCESS;
+
+    if (!se || T <= 0.0 || num_grids <= 0)
+        return PULSEG_ERR_INVALID_ARGUMENT;
+    out[0] = out_gx;
+    out[1] = out_gy;
+    out[2] = out_gz;
+    mag[0] = mag[1] = mag[2] = NULL;
+    for (g = 0; g < num_grids; ++g)
+    {
+        n_fine += grids[g].count;
+        out_span_us[g] = 0.0;
+    }
+    for (ax = 0; ax < 3; ++ax)
+        for (k = 0; k < n_fine; ++k)
+            out[ax][k] = 0.0f;
+    w_ax = (double *)PULSEG_ALLOC((size_t)num_grids * sizeof(double));
+    span_ax = (double *)PULSEG_ALLOC((size_t)num_grids * sizeof(double));
+    if (!w_ax || !span_ax)
+    {
+        rc = PULSEG_ERR_ALLOC_FAILED;
+        goto done;
+    }
+    /* The magnitude terms, one column per varying position, at every fine
+     * point: the position's bound on each physical axis. */
+    if (se->num_varying > 0)
+    {
+        int idx = 0;
+        for (ax = 0; ax < 3; ++ax)
+        {
+            mag[ax] =
+                (double *)PULSEG_ALLOC((size_t)n_fine * (size_t)se->num_varying * sizeof(double));
+            if (!mag[ax])
+            {
+                rc = PULSEG_ERR_ALLOC_FAILED;
+                goto done;
+            }
+        }
+        for (g = 0; g < num_grids; ++g)
+            for (k = 0; k < grids[g].count; ++k, ++idx)
+            {
+                float f = (float)(grids[g].f0_hz + (double)k * grids[g].df_hz);
+                for (v = 0; v < se->num_varying; ++v)
+                {
+                    double best[3];
+                    sa_eval_varying_position(
+                        (sa_varying_position *)&se->varying[v],
+                        c->desc,
+                        f,
+                        best);
+                    for (ax = 0; ax < 3; ++ax)
+                        mag[ax][(size_t)idx * (size_t)se->num_varying + v] = best[ax];
+                }
+            }
+    }
+    for (ax = 0; ax < 3; ++ax)
+    {
+        sa_axis_events cut;
+        const sa_axis_events *ae = &cut;
+        sa_axis_events tiled;
+        sa_timed_event *order = NULL;
+        double longest = 0.0, w_max = 0.0, reach, w_hint = 0.0;
+        int copies, n_ev = 0, n_ord = 0, e, n, i, o;
+        for (g = 0; g < num_grids; ++g)
+            if (window_us && window_us[g] > 0.0 && (w_hint == 0.0 || window_us[g] < w_hint))
+                w_hint = window_us[g];
+        rc = sa_segment_axis_events(&se->axes[ax], w_hint, &cut, 1);
+        if (PULSEG_FAILED(rc))
+            goto done;
+        for (e = 0; e < ae->num_events; ++e)
+        {
+            double d = sa_event_duration_us(&ae->events[e]);
+            if (d > longest)
+                longest = d;
+        }
+        for (v = 0; v < se->num_varying; ++v)
+            if (se->varying[v].duration_us > longest)
+                longest = se->varying[v].duration_us;
+        for (g = 0; g < num_grids; ++g)
+        {
+            double w = window_us ? window_us[g] : 0.0;
+            w_ax[g] = (w > longest) ? w : longest;
+            if (w_ax[g] <= 0.0)
+                w_ax[g] = 1.0;
+            if (w_ax[g] > w_max)
+                w_max = w_ax[g];
+        }
+        /* Every window that starts inside the first repetition must see the
+         * whole of what follows it. */
+        reach = T + w_max;
+        copies = (int)ceil(reach / T);
+        if (c->num_instances >= 1 && copies > c->num_instances)
+            copies = c->num_instances;
+        if (copies < 1)
+            copies = 1;
+        for (n = 0; n < copies; ++n)
+        {
+            for (e = 0; e < ae->num_events; ++e)
+                if (ae->events[e].start_time_us + (double)n * T < reach)
+                    ++n_ev;
+            for (v = 0; v < se->num_varying; ++v)
+                if (se->varying[v].start_time_us + (double)n * T < reach)
+                    ++n_ord;
+        }
+        n_ord += n_ev;
+        if (n_ord == 0)
+        {
+            for (g = 0; g < num_grids; ++g)
+                if (w_ax[g] > out_span_us[g])
+                    out_span_us[g] = w_ax[g];
+            sa_free_axis_events(&cut);
+            continue;
+        }
+        tiled = *ae;
+        tiled.events = (sa_event *)PULSEG_ALLOC((size_t)(n_ev > 0 ? n_ev : 1) * sizeof(sa_event));
+        order = (sa_timed_event *)PULSEG_ALLOC((size_t)n_ord * sizeof(sa_timed_event));
+        if (!tiled.events || !order)
+        {
+            if (tiled.events)
+                PULSEG_FREE(tiled.events);
+            if (order)
+                PULSEG_FREE(order);
+            rc = PULSEG_ERR_ALLOC_FAILED;
+            goto done;
+        }
+        i = 0;
+        o = 0;
+        for (n = 0; n < copies; ++n)
+        {
+            for (e = 0; e < ae->num_events; ++e)
+            {
+                double t = ae->events[e].start_time_us + (double)n * T;
+                if (t >= reach)
+                    continue;
+                tiled.events[i] = ae->events[e];
+                tiled.events[i].start_time_us = t;
+                order[o].event = i;
+                order[o].mag_index = -1;
+                order[o].t_start_us = t;
+                order[o].t_end_us = t + sa_event_duration_us(&ae->events[e]);
+                ++i;
+                ++o;
+            }
+            for (v = 0; v < se->num_varying; ++v)
+            {
+                double t = se->varying[v].start_time_us + (double)n * T;
+                if (t >= reach)
+                    continue;
+                order[o].event = -1;
+                order[o].mag_index = v;
+                order[o].t_start_us = t;
+                order[o].t_end_us = t + se->varying[v].duration_us;
+                ++o;
+            }
+        }
+        tiled.num_events = n_ev;
+        qsort(order, (size_t)n_ord, sizeof(sa_timed_event), sa_timed_event_cmp);
+        rc = sa_scan_window_axis(
+            &tiled,
+            (double)c->desc->grad_raster_us,
+            order,
+            n_ord,
+            mag[ax],
+            se->num_varying,
+            w_ax,
+            0,
+            grids,
+            num_grids,
+            n_fine,
+            NULL,
+            NULL,
+            c->par_fn,
+            c->par_ctx,
+            out[ax],
+            span_ax);
+        PULSEG_FREE(tiled.events);
+        PULSEG_FREE(order);
+        sa_free_axis_events(&cut);
+        if (PULSEG_FAILED(rc))
+            goto done;
+        for (g = 0; g < num_grids; ++g)
+            if (span_ax[g] > out_span_us[g])
+                out_span_us[g] = span_ax[g];
+    }
+done:
+    for (ax = 0; ax < 3; ++ax)
+        if (mag[ax])
+            PULSEG_FREE(mag[ax]);
+    if (w_ax)
+        PULSEG_FREE(w_ax);
+    if (span_ax)
+        PULSEG_FREE(span_ax);
+    return rc;
+}
+
+static float sa_periodic_band_shape(void *vctx, const pulseg_forbidden_band *band)
+{
+    const sa_periodic_probe_ctx *c = (const sa_periodic_probe_ctx *)vctx;
+    return sa_axes_train_shape(c->se->axes, band);
+}
+
+/* The TR's coherent events laid out over the repetitions a window can reach,
+ * as the prober lays them, and the loudest window attributed. */
+static int sa_periodic_attribute(
+    void *vctx,
+    double f_hz,
+    int ax,
+    double window_us,
+    int *def_ids,
+    float *shares,
+    int max_out)
+{
+    const sa_periodic_probe_ctx *c = (const sa_periodic_probe_ctx *)vctx;
+    const double T = c->period_us;
+    sa_axis_events cut, tiled;
+    sa_timed_event *order = NULL;
+    double reach, longest = 0.0, w;
+    int copies, n_ev = 0, e, n, i, rc, out = 0;
+
+    if (ax < 0 || ax > 2 || T <= 0.0)
+        return 0;
+    rc = sa_segment_axis_events(&c->se->axes[ax], window_us, &cut, 1);
+    if (PULSEG_FAILED(rc))
+        return 0;
+    for (e = 0; e < cut.num_events; ++e)
+    {
+        double d = sa_event_duration_us(&cut.events[e]);
+        if (d > longest)
+            longest = d;
+    }
+    w = (window_us > longest) ? window_us : longest;
+    reach = T + w;
+    copies = (int)ceil(reach / T);
+    if (c->num_instances >= 1 && copies > c->num_instances)
+        copies = c->num_instances;
+    if (copies < 1)
+        copies = 1;
+    for (n = 0; n < copies; ++n)
+        for (e = 0; e < cut.num_events; ++e)
+            if (cut.events[e].start_time_us + (double)n * T < reach)
+                ++n_ev;
+    if (n_ev > 0)
+    {
+        tiled = cut;
+        tiled.events = (sa_event *)PULSEG_ALLOC((size_t)n_ev * sizeof(sa_event));
+        order = (sa_timed_event *)PULSEG_ALLOC((size_t)n_ev * sizeof(sa_timed_event));
+        if (tiled.events && order)
+        {
+            i = 0;
+            for (n = 0; n < copies; ++n)
+                for (e = 0; e < cut.num_events; ++e)
+                {
+                    double t = cut.events[e].start_time_us + (double)n * T;
+                    if (t >= reach)
+                        continue;
+                    tiled.events[i] = cut.events[e];
+                    tiled.events[i].start_time_us = t;
+                    order[i].event = i;
+                    order[i].mag_index = -1;
+                    order[i].t_start_us = t;
+                    order[i].t_end_us = t + sa_event_duration_us(&cut.events[e]);
+                    ++i;
+                }
+            tiled.num_events = n_ev;
+            qsort(order, (size_t)n_ev, sizeof(sa_timed_event), sa_timed_event_cmp);
+            out = sa_attribute_window(
+                &tiled,
+                order,
+                n_ev,
+                w,
+                f_hz,
+                c->par_fn,
+                c->par_ctx,
+                def_ids,
+                shares,
+                max_out);
+        }
+        if (tiled.events)
+            PULSEG_FREE(tiled.events);
+        if (order)
+            PULSEG_FREE(order);
+    }
+    sa_free_axis_events(&cut);
+    return out;
 }
 
 static int check_mech_resonances_planned(
@@ -7122,8 +9054,10 @@ static int check_mech_resonances_planned(
                     desc,
                     bands,
                     opts->gamma_hz_per_t,
-                    opts->parallel_for_fn,
-                    opts->parallel_ctx);
+                    (double)opts->mech_memory_us,
+                    pulseg__opts_par_fn(opts),
+                    pulseg__opts_par_ctx(opts),
+                    1);
                 if (!PULSEG_FAILED(rc))
                     rc = mech_resonance_verdict(&spectra, diag, bands, opts->gamma_hz_per_t, s, 0);
                 pulseg_mech_resonances_spectra_free(&spectra);
@@ -7186,8 +9120,9 @@ static int check_mech_resonances_planned(
             0 /* compute_display_products */,
             1 /* compress_trains */,
             1 /* bound over every instance of the canonical TR */,
-            opts->parallel_for_fn,
-            opts->parallel_ctx);
+            pulseg__opts_par_fn(opts),
+            pulseg__opts_par_ctx(opts),
+            opts->mech_memory_us);
 
         if (!PULSEG_FAILED(rc))
             rc = mech_resonance_verdict(&spectra, diag, bands, opts->gamma_hz_per_t, s, 0);
@@ -7254,8 +9189,8 @@ static int check_pns_planned(
             pulseg_diagnostic probe;
             const int *labels_probe;
             const int *first_probe;
-            int ngroups_probe, rc_probe, score_declined;
-            double build_macs, eval_macs;
+            int ngroups_probe, rc_probe, peak_block;
+            double exact_peak;
 
             pulseg_diagnostic_init(&probe);
             rc_probe = pulseg__plan_shape_groups(
@@ -7284,34 +9219,20 @@ static int check_pns_planned(
             }
             else
             {
-                score_declined = 0;
-                rc = pulseg__pns_score_check(
+                rc = pulseg__pns_exact_scan_check(
                     plan,
                     diag,
                     desc,
                     s,
                     model,
-                    opts->parallel_for_fn,
-                    opts->parallel_ctx,
+                    pulseg__opts_par_fn(opts),
+                    pulseg__opts_par_ctx(opts),
                     opts->gamma_hz_per_t,
                     threshold_percent,
-                    &score_declined,
-                    &build_macs,
-                    &eval_macs);
-                if (work_fn)
-                {
-                    work_fn(profile_ctx, PULSEG__SAFETY_PROFILE_PNS_BASIS_BUILD, build_macs);
-                    work_fn(profile_ctx, PULSEG__SAFETY_PROFILE_PNS_SCORE, eval_macs);
-                }
-                if (!PULSEG_FAILED(rc) && score_declined)
-                {
-                    /* Neither path can price this scan: the grouping refusal
-                     * is the verdict, exactly as it stands. */
-                    if (diag)
-                        *diag = probe;
-                    rc = rc_probe;
-                }
-                /* The score path carries its own verdict; nothing below
+                    &exact_peak,
+                    &peak_block);
+                (void)rc_probe;
+                /* The exact scan carries its own verdict; nothing below
                  * applies to it. */
                 pulseg_pns_result_free(&pns_result);
                 if (work_fn && macs >= 0.0)
@@ -7386,7 +9307,29 @@ static int borrow_plan(
 /*  Public per-check entry points                                     */
 /* ================================================================== */
 
+static int pulseg_check_mech_resonances_body(
+    const pulseg_collection *coll,
+    pulseg_diagnostic *diag,
+    pulseg_check_plan *plan,
+    const pulseg_opts *opts,
+    const pulseg_forbidden_band_list *bands);
+
 int pulseg_check_mech_resonances(
+    const pulseg_collection *coll,
+    pulseg_diagnostic *diag,
+    pulseg_check_plan *plan,
+    const pulseg_opts *opts,
+    const pulseg_forbidden_band_list *bands)
+{
+    int rc = pulseg__prescription_enter((pulseg_collection *)coll, opts);
+    if (PULSEG_FAILED(rc))
+        return rc;
+    rc = pulseg_check_mech_resonances_body(coll, diag, plan, opts, bands);
+    pulseg__prescription_leave((pulseg_collection *)coll, opts);
+    return rc;
+}
+
+static int pulseg_check_mech_resonances_body(
     const pulseg_collection *coll,
     pulseg_diagnostic *diag,
     pulseg_check_plan *plan,
@@ -7414,7 +9357,15 @@ int pulseg_check_mech_resonances(
     if (PULSEG_FAILED(rc))
         return rc;
 
-    rc = check_mech_resonances_planned(coll, diag, plan, opts, bands, NULL, NULL);
+    rc = pulseg__prescription_enter((pulseg_collection *)coll, opts);
+
+    if (PULSEG_SUCCEEDED(rc))
+
+    {
+        rc = check_mech_resonances_planned(coll, diag, plan, opts, bands, NULL, NULL);
+
+        pulseg__prescription_leave((pulseg_collection *)coll, opts);
+    }
 
     pulseg_check_plan_destroy(owned);
     return rc;
@@ -7550,7 +9501,15 @@ int pulseg__check_safety_profiled(
     if (PULSEG_FAILED(rc))
         return rc;
 
-    rc = check_mech_resonances_planned(coll, diag, plan, opts, bands, profile_fn, profile_ctx);
+    rc = pulseg__prescription_enter((pulseg_collection *)coll, opts);
+
+    if (PULSEG_SUCCEEDED(rc))
+
+    {
+        rc = check_mech_resonances_planned(coll, diag, plan, opts, bands, profile_fn, profile_ctx);
+
+        pulseg__prescription_leave((pulseg_collection *)coll, opts);
+    }
     if (!PULSEG_FAILED(rc))
         rc = check_pns_planned(
             coll,

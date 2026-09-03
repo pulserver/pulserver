@@ -1,0 +1,20 @@
+[
+  {
+    "arms": 2048,
+    "dims": 2,
+    "gate_code": 1,
+    "mech_s": 0.050723063,
+    "mech_s_at_target": 3.246276032,
+    "npts": 4096,
+    "peak_rss_mb": 460.47265625
+  },
+  {
+    "arms": 2048,
+    "dims": 3,
+    "gate_code": 1,
+    "mech_s": 0.05385083,
+    "mech_s_at_target": 3.44645312,
+    "npts": 4096,
+    "peak_rss_mb": 530.41015625
+  }
+]

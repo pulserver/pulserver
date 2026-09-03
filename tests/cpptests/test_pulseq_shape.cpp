@@ -286,3 +286,79 @@ TEST(PulseqShapeLibrary, KeepFirstAppearancesOfADistinctLibraryChangesNothing)
     EXPECT_EQ(std::vector<double>(lib.samples(1), lib.samples(1) + a.size()), a);
     EXPECT_EQ(std::vector<double>(lib.samples(2), lib.samples(2) + b.size()), b);
 }
+
+/* The library row a divided append stores is the row an append of the
+ * already-divided samples stores, bit for bit, with the same statistics. */
+TEST(PulseqShapeLibrary, DividedAppendStoresTheDividedRow)
+{
+    std::vector<double> samples(4096);
+    for (size_t i = 0; i < samples.size(); ++i)
+        samples[i] = -0.37 * std::sin(0.013 * static_cast<double>(i)) *
+            (1.0 + 0.001 * static_cast<double>(i % 7));
+    double peak = 0.0;
+    for (double v : samples)
+        peak = std::max(peak, std::fabs(v));
+    peak = -peak; /* the first nonzero sample is negative */
+    std::vector<double> divided(samples.size());
+    for (size_t i = 0; i < samples.size(); ++i)
+        divided[i] = samples[i] / peak;
+
+    pulseq::ShapeLibrary by_hand, fused;
+    const int a = by_hand.append_raw(divided.data(), static_cast<int>(divided.size()));
+    const int b = fused.append_raw_divided(samples.data(), static_cast<int>(samples.size()), peak);
+    ASSERT_EQ(a, b);
+    ASSERT_EQ(by_hand.num_uncompressed(a), fused.num_uncompressed(b));
+    const double *ra = by_hand.samples(a);
+    const double *rb = fused.samples(b);
+    for (int i = 0; i < by_hand.num_uncompressed(a); ++i)
+        ASSERT_EQ(ra[i], rb[i]) << "sample " << i;
+    double fa, la, pa, fb, lb, pb;
+    by_hand.edge_stats(a, &fa, &la, &pa);
+    fused.edge_stats(b, &fb, &lb, &pb);
+    EXPECT_EQ(fa, fb);
+    EXPECT_EQ(la, lb);
+    EXPECT_EQ(pa, pb);
+    EXPECT_EQ(pb, 1.0);
+}
+
+TEST(PulseqShapeLibrary, DividedAppendWithAUnitOrZeroDivisorIsAPlainAppend)
+{
+    const std::vector<double> samples = {0.0, 0.25, -0.5, 1.0, 0.75, 0.0};
+    pulseq::ShapeLibrary plain, unit, zero;
+    plain.append_raw(samples.data(), 6);
+    unit.append_raw_divided(samples.data(), 6, 1.0);
+    zero.append_raw_divided(samples.data(), 6, 0.0);
+    for (int i = 0; i < 6; ++i)
+    {
+        EXPECT_EQ(plain.samples(1)[i], unit.samples(1)[i]);
+        EXPECT_EQ(plain.samples(1)[i], zero.samples(1)[i]);
+    }
+    double f, l, p;
+    unit.edge_stats(1, &f, &l, &p);
+    EXPECT_EQ(p, 1.0);
+}
+
+/* Rows keep their bytes across chunk boundaries however the chunks are
+ * backed: the table is read back row by row after it has spilled into a
+ * second chunk. */
+TEST(PulseqRaggedTable, RowsSurviveASecondChunk)
+{
+    pulseq::ShapeLibrary lib;
+    std::vector<double> row(1 << 16);
+    const int rows = 80; /* 80 x 512 KB > one 32 MB chunk */
+    for (int r = 0; r < rows; ++r)
+    {
+        for (size_t i = 0; i < row.size(); ++i)
+            row[i] = static_cast<double>(r) + 1e-3 * static_cast<double>(i);
+        lib.append_raw(row.data(), static_cast<int>(row.size()));
+    }
+    for (int r = 0; r < rows; ++r)
+    {
+        const double *p = lib.samples(r + 1);
+        ASSERT_EQ(lib.num_uncompressed(r + 1), static_cast<int>(row.size()));
+        EXPECT_EQ(p[0], static_cast<double>(r));
+        EXPECT_EQ(
+            p[row.size() - 1],
+            static_cast<double>(r) + 1e-3 * static_cast<double>(row.size() - 1));
+    }
+}

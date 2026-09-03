@@ -34,10 +34,10 @@ EXPECTED = Path(__file__).resolve().parent / "fixtures"
 
 GAMMA_HZ_PER_MT_PER_M = 42.576e3
 
-#: ``SA_AEQ_POLICY_MT_PER_M`` in ``pulseg_safety.c``: the A_eq a band whose
+#: ``SA_ZERO_BAND_SINUSOID_MT_PER_M`` in ``pulseg_safety.c``: the sustained sinusoid a band whose
 #: amplitude column is zero is judged against. Restated here so that changing
 #: the engine's threshold without revisiting this file is a test failure.
-POLICY_MT_PER_M = 7.5
+POLICY_MT_PER_M = 13.0
 
 #: An Irnich model in the form ``calculate_pns`` recognises, with GE-shaped
 #: constants. Not a calibrated table -- it exists to exercise the branch.
@@ -374,11 +374,11 @@ def test_the_drawn_lines_and_the_predownload_gate_reach_the_same_verdict(name):
     so agreement is between two independent paths into the C engine rather
     than between a value and a copy of itself.
 
-    The verdict each band is expected to draw is stated against
-    ``POLICY_MT_PER_M`` rather than assumed from the ranking, because a
-    fixture's strongest line is not necessarily a loud one: ``fse_2d``'s sits
-    at 3.3 Hz, the fundamental of its 2 s repetition, an order of magnitude
-    under the threshold and far below any band a vendor declares.
+    The harmonic lines only say where to look: the verdict is the 20 ms
+    window reading inside the band against the band's tolerance. Both bands
+    state the same tolerance, half the strongest line's amplitude, so the
+    strongest line's band is refused and the weakest line's band is passed,
+    and the agreement is what is asserted, in both directions.
     """
     from pulserver._ext.pulseg import _check_safety
 
@@ -397,15 +397,22 @@ def test_the_drawn_lines_and_the_predownload_gate_reach_the_same_verdict(name):
 
     unbanded = lines_for([])
     assert unbanded.line_freqs.size > 1
-    a_eq_mt_per_m = unbanded.line_a_eq.max(axis=-1) / GAMMA_HZ_PER_MT_PER_M
-    ranked = np.argsort(a_eq_mt_per_m)
+    # Nothing slower than the 20 ms memory is a resonance drive: the reading
+    # is zero below 1/W = 50 Hz, so the repetition line of fse_2d (3 Hz) is
+    # drawn but never judged. Rank among the lines the check can read.
+    readable = np.flatnonzero(unbanded.line_freqs >= 50.0)
+    line_a_eq = unbanded.line_a_eq.max(axis=-1)[readable]
+    ranked = readable[np.argsort(line_a_eq)]
+    tolerance_hz_per_m = 0.5 * float(unbanded.line_a_eq.max(axis=-1)[ranked[-1]])
 
+    verdicts = []
     for index in (ranked[-1], ranked[0]):
-        expected_ok = bool(a_eq_mt_per_m[index] <= POLICY_MT_PER_M)
+        # A band as wide as the window's own resolution, 1/(20 ms) = 50 Hz,
+        # centred on the line.
         band = (
-            float(unbanded.line_freqs[index]) - 5.0,
-            float(unbanded.line_freqs[index]) + 5.0,
-            0.0,
+            float(unbanded.line_freqs[index]) - 25.0,
+            float(unbanded.line_freqs[index]) + 25.0,
+            tolerance_hz_per_m,
         )
         overlay = lines_for([band])
 
@@ -425,7 +432,8 @@ def test_the_drawn_lines_and_the_predownload_gate_reach_the_same_verdict(name):
             gate_ok = False
 
         assert overlay.ok is gate_ok
-        assert overlay.ok is expected_ok
+        verdicts.append(overlay.ok)
+    assert verdicts == [False, True], verdicts
 
 
 def test_the_line_spectrum_is_not_returned_unless_it_was_asked_for(seq):

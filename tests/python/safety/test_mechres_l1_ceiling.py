@@ -20,9 +20,11 @@ import pulserver.pypulseq as pp
 
 GAMMA_HZ_PER_MT_PER_M = 42.576e3
 
-#: ``SA_AEQ_TRAIN_SHAPE``: a stated band amplitude is a plateau, and the
-#: criterion runs in equivalent-sinusoid amplitude. Mirrored, not recomputed.
-TRAIN_SHAPE = 0.8106
+#: A stated band amplitude is a plateau, and the criterion runs in sustained
+#: sinusoid amplitude: the engine converts through the fundamental-to-plateau
+#: ratio of the fused train whose fundamental lies in the band, 8/pi^2 when
+#: there is none. Read back from the engine, never mirrored.
+STATED_UNIT_HZ_PER_M = 1.0
 
 SYSTEM = pp.Opts(max_grad=50, grad_unit="mT/m", max_slew=200, slew_unit="T/m/s")
 
@@ -51,21 +53,6 @@ def _build(module, **kwargs):
     return made[0] if isinstance(made, tuple) else made
 
 
-def _peak_a_eq(structure, band):
-    """The loudest in-band line, taken from the path that never skips."""
-    spectra = _calc_mech_resonances(
-        structure.collection,
-        0,
-        0,
-        0,
-        target_resolution_hz=1.0 / structure.tr_duration,
-        max_freq_hz=3000.0,
-        forbidden_bands=[(band[0], band[1], 0.0)],
-    )
-    amps = np.asarray(spectra["candidate_grad_amps"], float)
-    return float(amps.max()) / GAMMA_HZ_PER_MT_PER_M if amps.size else 0.0
-
-
 def _passes(collection, band, plateau_mt_per_m):
     try:
         _check_safety(
@@ -79,15 +66,41 @@ def _passes(collection, band, plateau_mt_per_m):
     return True
 
 
+def _exact_peak_and_factor(structure, band):
+    """The loudest in-band reading of the scan itself, and the sinusoid
+    amplitude allowed per unit of stated plateau.
+
+    A stated tolerance far below anything the scan sustains is refused on the
+    bound and therefore settled on the exact reading, so the candidates that
+    come back are the scan's own; a plateau derived from them sits exactly
+    where the gate's verdict turns."""
+    spectra = _calc_mech_resonances(
+        structure.collection,
+        0,
+        0,
+        0,
+        target_resolution_hz=1.0 / structure.tr_duration,
+        max_freq_hz=3000.0,
+        forbidden_bands=[(band[0], band[1], STATED_UNIT_HZ_PER_M)],
+    )
+    amps = np.asarray(spectra["candidate_grad_amps"], float)
+    if amps.size == 0:
+        return 0.0, 1.0
+    factor = (
+        float(np.asarray(spectra["candidate_eps"], float)[0]) / STATED_UNIT_HZ_PER_M
+    )
+    return float(amps.max()) / GAMMA_HZ_PER_MT_PER_M, factor
+
+
 @pytest.mark.parametrize("module,kwargs", CASES, ids=[c[0] for c in CASES])
 @pytest.mark.parametrize("band", BANDS, ids=lambda b: f"{b[0]:.0f}_{b[1]:.0f}")
 def test_the_ceiling_never_swallows_a_violation(module, kwargs, band):
     sequence = _build(module, **kwargs)
     structure = sequence._structure_for("bound")
-    peak = _peak_a_eq(structure, band)
+    peak, factor = _exact_peak_and_factor(structure, band)
     if peak <= 0.0:
         pytest.skip("no candidate line inside this band")
 
-    plateau = peak / TRAIN_SHAPE
+    plateau = peak / factor
     assert not _passes(structure.collection, band, plateau * 0.98)
     assert _passes(structure.collection, band, plateau * 1.02)

@@ -48,14 +48,18 @@ static void plan_pns_model_init(pulseg_pns_model *model, pulseg_pns_irnich *ctx)
 /*  Band tables                                                       */
 /* ================================================================== */
 
+/* The fixture's readout tooth sustains 10.8 mT/m at 1243 Hz: a band that
+ * states 10 mT/m refuses it (a zero band's floor, 13 mT/m, does not). */
 static void violating_bands(pulseg_forbidden_band *bands, pulseg_forbidden_band_list *list)
 {
     bands[0].freq_min_hz = 800.0f;
     bands[0].freq_max_hz = 2500.0f;
-    bands[0].max_amplitude_hz_per_m = 0.0f;
+    bands[0].max_amplitude_hz_per_m = 0.010f * GAMMA_HZ_PER_T;
+    bands[0].axis_mask = 0;
     bands[1].freq_min_hz = 2500.0f;
     bands[1].freq_max_hz = 4500.0f;
     bands[1].max_amplitude_hz_per_m = 0.0f;
+    bands[1].axis_mask = 0;
     list->count = 2;
     list->bands = bands;
 }
@@ -65,9 +69,11 @@ static void permissive_bands(pulseg_forbidden_band *bands, pulseg_forbidden_band
     bands[0].freq_min_hz = 800.0f;
     bands[0].freq_max_hz = 2500.0f;
     bands[0].max_amplitude_hz_per_m = 1.0e9f;
+    bands[0].axis_mask = 0;
     bands[1].freq_min_hz = 2500.0f;
     bands[1].freq_max_hz = 4500.0f;
     bands[1].max_amplitude_hz_per_m = 1.0e9f;
+    bands[1].axis_mask = 0;
     list->count = 2;
     list->bands = bands;
 }

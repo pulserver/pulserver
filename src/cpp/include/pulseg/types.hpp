@@ -42,6 +42,13 @@ namespace pulseg
          *  pulseg_opts.borrow_buffer_shapes. The buffers must outlive the
          *  Collection. */
         bool borrow_buffer_shapes = false;
+        /** The scanner prescription as the frame of the gradient safety
+         *  checks; see pulseg_opts.prescription_rotation. Row-major,
+         *  physical = R * logical. */
+        bool has_prescription_rotation = false;
+        /** Resonance memory of the mechanical-resonance check (us); see pulseg_opts. */
+        float mech_memory_us = 20000.0f;
+        float prescription_rotation[9] = {1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f};
 
         /** Convert to the C struct, calling pulseg_opts_init. */
         pulseg_opts to_c() const
@@ -65,6 +72,10 @@ namespace pulseg
             o.label_column_map[2] = label_column_map[2];
             o.structure_only = structure_only ? 1 : 0;
             o.borrow_buffer_shapes = borrow_buffer_shapes ? 1 : 0;
+            o.has_prescription_rotation = has_prescription_rotation ? 1 : 0;
+            o.mech_memory_us = mech_memory_us;
+            for (int i = 0; i < 9; ++i)
+                o.prescription_rotation[i] = prescription_rotation[i];
             return o;
         }
     };
@@ -76,10 +87,12 @@ namespace pulseg
         float freq_min_hz = 0.0f;
         float freq_max_hz = 0.0f;
         float max_amplitude_hz_per_m = 0.0f;
+        int axis_mask = 0; // bit 0 x, 1 y, 2 z; 0 = every axis
 
         pulseg_forbidden_band to_c() const
         {
             pulseg_forbidden_band b;
+            b.axis_mask = axis_mask;
             b.freq_min_hz = freq_min_hz;
             b.freq_max_hz = freq_max_hz;
             b.max_amplitude_hz_per_m = max_amplitude_hz_per_m;
@@ -300,6 +313,7 @@ namespace pulseg
         std::vector<float> candidate_grad_amps_gy;
         std::vector<float> candidate_grad_amps_gz;
         std::vector<int> candidate_violations;
+        std::vector<float> candidate_eps;
 
         int num_component_terms = 0;
         std::vector<float> component_freqs_hz;
@@ -324,6 +338,12 @@ namespace pulseg
         std::vector<float> envelope_amp_gx;
         std::vector<float> envelope_amp_gy;
         std::vector<float> envelope_amp_gz;
+
+        int num_contributors = 0;
+        std::vector<int> contributor_def_ids;
+        std::vector<float> contributor_shares;
+        float contributor_freq_hz = 0.0f;
+        int contributor_axis = -1;
     };
 
     // ── PNS result ──────────────────────────────────────────────────────

@@ -1,30 +1,22 @@
-"""The outer repeat is finite, and the spectrum between harmonics is real.
+r"""The verdict is a window reading, and a window does not count repetitions.
 
-A scan is M = ``num_instances`` repetitions of the canonical TR -- the TRs
-the block table holds -- not an infinite Dirac comb. Its spectrum is the single-TR transform multiplied by
-the Dirichlet kernel of M, so drive exists between the exact TR harmonics
-k/T_TR, peaking at (k + (j + 1/2)/M) with levels 2/(pi(2j+1)).
-
-Two properties are load-bearing and are what these tests hold onto:
-
-* the single-TR transform is evaluated FRESH at each probed frequency and
-  only then attenuated. Scaling the coarse harmonic's amplitude by the
-  Dirichlet ratio instead cannot expose anything, because that ratio never
-  exceeds 1;
-* the probes sit on the lobes. Sampling at integer multiples of 1/M lands on
-  the kernel's nulls, where the attenuation is zero and a probe reports
-  nothing however many are spent.
+A mode integrates the drive over its own memory, $1/\Delta f$, so what the
+check reads at a frequency is the amplitude sustained over that window --
+computed from the canonical TR laid out over as many repetitions as one
+window can reach, however many the scan really plays. Between the TR
+harmonics the window's own finite length leaves real drive, which the fine
+grid across the band reads.
 
 These tests exercise the low-level ``_calc_mech_resonances`` binding
-directly, so the actual candidate amplitudes -- not just a verdict -- can be
+directly, so the candidate amplitudes -- not just a verdict -- can be
 inspected.
 """
 
+from itertools import pairwise
 from pathlib import Path
 
 import pypulseq as pp
-import pytest
-from pulserver._ext.pulseg import _calc_mech_resonances
+from pulserver._ext.pulseg import _calc_mech_resonances, _mech_scan_window_probe
 from pulserver.pypulseq import Opts
 
 from .conftest import build_collection
@@ -73,7 +65,7 @@ def _build_two_block_seq(tmp_path: Path, repeats: int = 1) -> Path:
     return path
 
 
-def _candidate_grad_amps(seq_path: Path, expected_m: int):
+def _candidates(seq_path: Path, expected_m: int):
     system = Opts(
         max_grad=50.0,
         grad_unit="mT/m",
@@ -97,52 +89,84 @@ def _candidate_grad_amps(seq_path: Path, expected_m: int):
         peak_prominence=None,
     )
     assert rd["num_instances"] == expected_m
-    return rd["candidate_grad_amps"]
+    return rd
 
 
-def test_finite_outer_rep_m1_regression_identity(tmp_path):
-    """M=1 (e.g. a single-pass hyper-TR) must take the early-out and match
-    the exact-harmonic-only formula exactly -- no sub-sampling should run."""
-    seq_path = _build_two_block_seq(tmp_path, 1)
-    amps = _candidate_grad_amps(seq_path, expected_m=1)
-    assert len(amps) == 9  # sanity: same coarse grid as always
+def _amps(seq_path: Path, expected_m: int):
+    rd = _candidates(seq_path, expected_m)
+    return list(rd["candidate_grad_amps"])
 
 
-def test_finite_outer_rep_not_a_noop_for_m_greater_than_1(tmp_path):
-    """Repeating the TR finds drive that a single repetition does not.
-
-    Scaling the coarse harmonic by the Dirichlet ratio rather than
-    evaluating the transform afresh would leave every M identical to M=1,
-    since a ratio at most 1 can never exceed the value it scales. At least
-    one candidate must move once M > 1."""
-    amps_m1 = _candidate_grad_amps(_build_two_block_seq(tmp_path, 1), expected_m=1)
-    amps_m4 = _candidate_grad_amps(_build_two_block_seq(tmp_path, 4), expected_m=4)
-    assert amps_m1 != amps_m4
-
-
-@pytest.mark.parametrize("m", [2, 4, 16, 64])
-def test_finite_outer_rep_large_m_does_not_collapse_to_m1(tmp_path, m):
-    """Regression for the near-lobe under-sampling bug caught during
-    implementation: uniform sub-point spacing across the coarse interval
-    missed every sidelobe once M exceeded the fixed sample-point count
-    (concretely, M=64 with 16 uniform points silently reproduced the exact
-    M=1 candidate_grad_amps array). Geometric spacing concentrated near
-    each lobe edge fixes this -- assert large M does NOT silently collapse
-    back to the M=1 (no-sidelobe-found) values."""
-    amps_m1 = _candidate_grad_amps(_build_two_block_seq(tmp_path, 1), expected_m=1)
-    amps_m = _candidate_grad_amps(_build_two_block_seq(tmp_path, m), expected_m=m)
-    assert amps_m != amps_m1
+def test_repetitions_add_to_the_reading_until_the_memory_is_full(tmp_path):
+    """A 1.6 ms repetition under a 20 ms memory: one repetition reads its own
+    transform over the memory, four read four times more, and once the window
+    holds every copy it can (sixteen and beyond) the reading stops changing."""
+    amps_m1 = _amps(_build_two_block_seq(tmp_path, 1), expected_m=1)
+    amps_m4 = _amps(_build_two_block_seq(tmp_path, 4), expected_m=4)
+    amps_m16 = _amps(_build_two_block_seq(tmp_path, 16), expected_m=16)
+    amps_m64 = _amps(_build_two_block_seq(tmp_path, 64), expected_m=64)
+    i = max(range(len(amps_m64)), key=lambda k: amps_m64[k])
+    assert amps_m1[i] < amps_m4[i] < amps_m16[i]
+    assert amps_m16 == amps_m64
 
 
-def test_finite_outer_rep_large_m_sidelobe_envelope_stabilizes(tmp_path):
-    """Physical sanity check: as M grows, the discovered sidelobe envelope
-    should stabilize (converge), not diverge or oscillate wildly -- M=16
-    and M=64 candidate amplitudes should be much closer to each other than
-    either is to the M=1 (no-sidelobe) baseline."""
-    amps_m1 = _candidate_grad_amps(_build_two_block_seq(tmp_path, 1), expected_m=1)
-    amps_m16 = _candidate_grad_amps(_build_two_block_seq(tmp_path, 16), expected_m=16)
-    amps_m64 = _candidate_grad_amps(_build_two_block_seq(tmp_path, 64), expected_m=64)
+def test_drive_between_the_harmonics_is_read(tmp_path):
+    """The grid is finer than the TR comb, and the window leaves drive there."""
+    rd = _candidates(_build_two_block_seq(tmp_path, 4), expected_m=4)
+    freqs = list(rd["candidate_freqs"])
+    amps = list(rd["candidate_grad_amps"])
+    t_tr_s = rd["tr_duration_us"] * 1e-6 if "tr_duration_us" in rd else None
+    assert len(freqs) > 100
+    off_harmonic = [
+        a
+        for f, a in zip(freqs, amps, strict=True)
+        if t_tr_s is None or abs(f * t_tr_s - round(f * t_tr_s)) > 0.1
+    ]
+    assert max(off_harmonic) > 0.0
 
-    dist_16_64 = sum(abs(a - b) for a, b in zip(amps_m16, amps_m64, strict=True))
-    dist_1_64 = sum(abs(a - b) for a, b in zip(amps_m1, amps_m64, strict=True))
-    assert dist_16_64 < dist_1_64
+
+def test_the_candidates_cover_the_guarded_band_at_the_fine_spacing(tmp_path):
+    """A 2500 Hz band gets no guard (it is a keep-out range, not a mode) and
+    a fixed point count; the candidates run from its lower to its upper edge."""
+    rd = _candidates(_build_two_block_seq(tmp_path, 1), expected_m=1)
+    freqs = list(rd["candidate_freqs"])
+    assert abs(freqs[0] - BAND[0]) < 1e-3
+    assert abs(freqs[-1] - BAND[1]) < 1e-3
+    spacing = {round(b - a, 6) for a, b in pairwise(freqs)}
+    assert len(spacing) == 1
+
+
+def test_the_periodic_reading_is_the_whole_scans_reading(tmp_path):
+    """With nothing varying, the TR tiled into the memory reads what the
+    windows slid over every event of the real scan read, at the same 20 ms
+    memory: the two regimes are one criterion, and the Bernstein factor on
+    the grid is the whole difference."""
+    seq_path = _build_two_block_seq(tmp_path, 8)
+    rd = _candidates(seq_path, expected_m=8)
+    freqs = list(rd["candidate_freqs"])
+    system = Opts(
+        max_grad=50.0,
+        grad_unit="mT/m",
+        max_slew=150.0,
+        slew_unit="T/m/s",
+        B0=3.0,
+        grad_raster_time=RASTER,
+        block_duration_raster=RASTER,
+    )
+    collection = build_collection(seq_path, system)
+    picks = [
+        min(range(len(freqs)), key=lambda j: abs(freqs[j] - f))
+        for f in range(1500, 2100, 100)
+    ]
+    grids = [(float(freqs[i]), 0.0, 1) for i in picks]
+    probe = _mech_scan_window_probe(collection, grids, 20000.0, 0, 0)
+    for k, i in enumerate(picks):
+        for axis in "xyz":
+            periodic = rd[f"candidate_amps_g{axis}"][i]
+            scan = probe[f"amp_g{axis}"][k]
+            assert abs(periodic - scan) <= 0.01 * max(scan, 1.0) + 1e-3, (
+                axis,
+                freqs[i],
+                periodic,
+                scan,
+            )

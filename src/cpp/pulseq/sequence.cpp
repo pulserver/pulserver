@@ -259,6 +259,12 @@ namespace pulseq
         return shapes_.append_raw(samples, count);
     }
 
+    int Sequence::register_raw_shape_divided(const double* samples, int count, double divisor)
+    {
+        deduplicated_ = false;
+        return shapes_.append_raw_divided(samples, count, divisor);
+    }
+
     void Sequence::compress_shapes()
     {
         /* Compressing can make two shapes that differed only below the codec's

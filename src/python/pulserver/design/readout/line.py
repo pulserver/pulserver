@@ -198,7 +198,6 @@ class _LineReadout(SequenceModule):
             raise ValueError("partial_echo must be in (0.5, 1]")
         if readout_bandwidth_hz <= 0:
             raise ValueError("readout_bandwidth_hz must be positive")
-
         fov = as_tuple(fov, ndim, "fov")
         n = as_tuple(matrix, ndim, "matrix", int)
         if min(n) < 2 or min(fov) <= 0:

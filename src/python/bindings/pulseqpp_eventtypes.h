@@ -135,6 +135,9 @@ namespace pulseqpp_types
             }
         }
         out.amplitude = peak;
+        out.view = nullptr;
+        out.view_count = 0;
+        out.view_divisor = 1.0;
         out.waveform.assign(values, values + count);
         if (peak != 0.0)
         {
@@ -162,13 +165,82 @@ namespace pulseqpp_types
         return out;
     }
 
+    /** The signed peak normalise_grad() divides by: the largest magnitude,
+     *  carrying the sign of the first nonzero sample. */
+    inline double grad_signed_peak(const double* values, int count, double peak_abs = -1.0)
+    {
+        double peak = peak_abs;
+        if (peak < 0.0)
+        {
+            peak = 0.0;
+            for (int i = 0; i < count; ++i)
+            {
+                const double m = std::fabs(values[i]);
+                if (m > peak)
+                    peak = m;
+            }
+        }
+        if (peak > 0.0)
+        {
+            for (int i = 0; i < count; ++i)
+            {
+                if (values[i] != 0.0)
+                {
+                    if (values[i] < 0.0)
+                        peak = -peak;
+                    break;
+                }
+            }
+        }
+        return peak;
+    }
+
+    /** Give @p out a view of @p values in place of a copy: the same amplitude
+     *  normalise_grad() would set, the shape left to be divided out where it
+     *  is read. The caller keeps @p values alive while the view stands. */
+    inline void view_grad(const double* values, int count, GradEvent& out, double peak_abs = -1.0)
+    {
+        const double peak = grad_signed_peak(values, count, peak_abs);
+        out.amplitude = peak;
+        out.waveform.clear();
+        out.view = values;
+        out.view_count = count;
+        out.view_divisor = peak != 0.0 ? peak : 1.0;
+        out.registered = Registration{};
+    }
+
+    inline int grad_count(const GradEvent& g)
+    {
+        return g.view ? g.view_count : static_cast<int>(g.waveform.size());
+    }
+
+    /** The normalised shape sample @p i, from the view or the copy. */
+    inline double grad_shape_at(const GradEvent& g, int i)
+    {
+        return g.view ? g.view[i] / g.view_divisor : g.waveform[static_cast<size_t>(i)];
+    }
+
+    /** Own the samples: a view is copied in and divided out, once. */
+    inline void materialise_grad(GradEvent& g)
+    {
+        if (!g.view)
+            return;
+        std::vector<double> owned(static_cast<size_t>(g.view_count));
+        for (int i = 0; i < g.view_count; ++i)
+            owned[static_cast<size_t>(i)] = g.view[i] / g.view_divisor;
+        g.waveform = std::move(owned);
+        g.view = nullptr;
+        g.view_count = 0;
+        g.view_divisor = 1.0;
+    }
+
     inline py::array_t<double> grad_waveform(const GradEvent& g)
     {
-        const size_t n = g.waveform.size();
+        const int n = grad_count(g);
         py::array_t<double> out(static_cast<py::ssize_t>(n));
         double* data = out.mutable_data();
-        for (size_t i = 0; i < n; ++i)
-            data[i] = g.amplitude * g.waveform[i];
+        for (int i = 0; i < n; ++i)
+            data[i] = g.amplitude * grad_shape_at(g, i);
         return out;
     }
 
@@ -234,6 +306,8 @@ namespace pulseqpp_types
          */
         PyObject* compat_id;
         PyObject* compat_shape_ids;
+        /** What a gradient's `view` points into, kept alive by the holder. */
+        PyObject* view_source;
     };
 
 /* Every event derives from Event, so none of them is standard-layout and

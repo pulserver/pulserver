@@ -40,20 +40,20 @@ tick on each bar is that stage's line.
 
 | Stage | Line | Measured, per arm | At 131 072 arms |
 |---|---|---:|---:|
-| `make_arbitrary_grad` ×2 + `add_block` ×3 | 60 µs | 182 µs | 24 s |
-| `declare_tr` + `remove_duplicates` | 3 s | 10.9 + 26 µs | 4.8 s |
-| binary write | ≥ 1 GB/s | 1.12 GB/s | 3 s |
-| parse + convert | ≥ 1 GB/s | 1.07 GB/s | 3 s |
-| PNS gate | 7 s | 52 µs | 6.8 s |
-| mechanical-resonance check | 7 s | 40 µs | 5.2 s |
-| **end to end** | **30 s** | | **47 s** |
+| `make_arbitrary_grad` ×2 + `add_block` ×3 | 60 µs | 75 µs | 10 s |
+| `declare_tr` + `remove_duplicates` | 3 s | 11.5 + 26 µs | 4.9 s |
+| binary write | ≥ 1 GB/s | 1.23 GB/s | 3 s |
+| parse + convert | ≥ 1 GB/s | 1.04 GB/s | 3 s |
+| PNS gate | 7 s | 64 µs | 8.4 s |
+| mechanical-resonance check | 7 s | 44 µs | 5.8 s |
+| **end to end** | **30 s** | | **35 s** |
 
 The scanner-side stages a *Save Rx* adds on top, measured the same way at
 8 192 arms through the file path: reading the file and writing the `.pseg`
 cache 95 µs per arm (a 4.3 GB file and a 3.3 GB cache at 131 072 arms, disk
 bound), reading the cache back 35 µs, the canonical-TR waveform render and
-the RF definitions under 1 µs, the stimulation check 52 µs, and the
-**mechanical-resonance check 40 µs per arm** — 0.32 s at 8 192 arms, of
+the RF definitions under 1 µs, the stimulation check 64 µs, and the
+**mechanical-resonance check 44 µs per arm** — 0.36 s at 8 192 arms, of
 which about 0.18 s is fixed and the rest 22 µs per arm (16 384 arms measure
 0.54 s), so about 3 s at 131 072; the table above scales it linearly. Past the shape-group cap that check is the scan window of the
 {doc}`mechanical-resonance page <mechanical_resonance>`: one FFT per
@@ -65,14 +65,18 @@ Regenerate the table and the figure with
 `python docs/_bench/pipeline_budget.py --arms 8192 --plot`; the result lands
 in `docs/_bench/pipeline_budget.json`.
 
-**Assembly** is the one line that a per-event Python API cannot meet: two
-factory calls and three block registrations per arm, each a compiled call
-that still has to receive its arguments, validate a 4 096-point waveform in
-two passes, normalise it into an event object of its own, and copy it once
-into the shape store — the copies and the first touch of the memory they
-land in are the floor. **Deduplication** is the other: rounding every sample
-to the file's precision is a division per sample, and the numbering is the
-order of first appearance, which is sequential by definition.
+**Assembly** is two factory calls and three block registrations per arm,
+each a compiled call. The factory validates a 4 096-point waveform in two
+passes and keeps a view of the caller's array — `grad.waveform` *is* that
+array, as upstream's is — and `add_block` copies it once, dividing by the
+signed peak on the way into the shape store's huge-page chunks. What is
+left is the copy and the first touch of the memory it lands in: 30 µs for
+the two factories and 40 µs for the three blocks per arm on this machine,
+where a plain 32 KB copy into fresh memory costs 30 µs on small pages and
+10 µs on huge ones. **Deduplication** is the other line still over:
+rounding every sample to the file's precision is a division per sample,
+and the numbering is the order of first appearance, which is sequential by
+definition.
 
 **The write** runs once to count and once to fill, into a `bytes` of exactly
 the counted size. **The read** leaves the sample cells in the caller's

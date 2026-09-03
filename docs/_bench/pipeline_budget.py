@@ -21,6 +21,10 @@ Run it as::
 
     python docs/_bench/pipeline_budget.py [--arms=16384]
 
+``--mech-only [ARMS ...]`` times the mechanical-resonance check alone on 2D
+and 3D scans of distinct arms (8K, 32K and 128K by default) and records the
+peak resident set size; results land in ``docs/_bench/mechres_scale.json``.
+
 Results land in ``docs/_bench/pipeline_budget.json``.
 """
 
@@ -189,6 +193,90 @@ def run(n_arms: int) -> dict:
     return entry
 
 
+MECH_ONLY_RESULTS = Path(__file__).resolve().parent / "mechres_scale.json"
+
+
+def mech_only(n_arms: int, dims: int, repeats: int = 3) -> dict:
+    """The mechanical-resonance check alone on a scan of distinct arms.
+
+    Every arm is a distinct (dims, NPTS) waveform; a 3D arm plays a third
+    waveform on z. The scan is assembled and parsed once, then the safety
+    check runs ``repeats`` times against ``MECH_BANDS`` and the fastest
+    mechanical-resonance stage is kept, with the peak resident set size of
+    the process after the run.
+    """
+    import resource
+
+    import numpy as np
+    import pulserver.pypulseq as pp
+    from pulserver._ext.pulseg import _check_safety_profiled, _PulseqCollection
+
+    system, arms = build_arms(n_arms)
+    rf = pp.make_block_pulse(
+        flip_angle=0.17453292519943295, duration=200e-6, system=system
+    )
+    adc = pp.make_adc(num_samples=NPTS, dwell=4e-6, system=system)
+    spoil = pp.make_trapezoid(channel="z", area=1000.0, system=system)
+    seq = pp.Sequence(system)
+    for k, (gx, gy) in enumerate(arms):
+        grads = [
+            pp.make_arbitrary_grad(channel="x", waveform=gx, system=system),
+            pp.make_arbitrary_grad(channel="y", waveform=gy, system=system),
+        ]
+        if dims == 3:
+            # a third distinct waveform, still starting and ending at zero
+            gz = (0.8 - 0.1 * (k % 5) / 5.0) * gy[::-1]
+            grads.append(
+                pp.make_arbitrary_grad(channel="z", waveform=gz, system=system)
+            )
+        seq.add_block(rf)
+        seq.add_block(*grads, adc)
+        seq.add_block(spoil)
+    seq.declare_tr()
+    deduped = seq.remove_duplicates(in_place=True)
+    binary = deduped._to_binary()
+    collection = _PulseqCollection(
+        [binary],
+        float(system.gamma),
+        float(system.B0),
+        float(system.max_grad),
+        float(system.max_slew),
+        float(system.rf_raster_time),
+        float(system.grad_raster_time),
+        float(system.adc_raster_time),
+        float(system.block_duration_raster),
+        True,
+    )
+    best = float("inf")
+    code = None
+    for _ in range(repeats):
+        gate = _check_safety_profiled(
+            collection, MECH_BANDS, 4.25e8 / 0.333, 360.0, 100.0, False
+        )
+        best = min(best, gate["stages"]["mech_resonance"]["seconds"])
+        code = gate["code"]
+    rss_mb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024.0
+    return {
+        "arms": n_arms,
+        "dims": dims,
+        "npts": NPTS,
+        "mech_s": best,
+        "mech_s_at_target": best * TARGET_ARMS / n_arms,
+        "gate_code": code,
+        "peak_rss_mb": rss_mb,
+    }
+
+
+def report_mech_only(entries: list) -> None:
+    print("mechanical-resonance check alone (fastest of the repeats):")
+    for e in entries:
+        print(
+            f"  {e['dims']}D {e['arms']:>7d} arms: {e['mech_s'] * 1e3:8.1f} ms"
+            f"  ({e['mech_s_at_target']:.2f} s at {TARGET_ARMS} arms)"
+            f"  peak RSS {e['peak_rss_mb']:.0f} MB  code {e['gate_code']}"
+        )
+
+
 def report(entry: dict) -> None:
     at = entry["at_target"]
 
@@ -334,8 +422,27 @@ def main() -> int:
         action="store_true",
         help="draw from the saved result without running",
     )
+    parser.add_argument(
+        "--mech-only",
+        nargs="*",
+        type=int,
+        metavar="ARMS",
+        help="time the mechanical-resonance check alone, 2D and 3D, at these arm counts "
+        "(default 8192 32768 131072); results land in mechres_scale.json",
+    )
     args = parser.parse_args()
 
+    if args.mech_only is not None:
+        counts = args.mech_only or [8192, 32768, 131072]
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            entries = [mech_only(n, dims) for dims in (2, 3) for n in counts]
+        report_mech_only(entries)
+        MECH_ONLY_RESULTS.write_text(
+            json.dumps(entries, indent=2, sort_keys=True) + "\n"
+        )
+        print(f"wrote {MECH_ONLY_RESULTS.relative_to(MECH_ONLY_RESULTS.parents[2])}")
+        return 0
     if args.from_json:
         entry = json.loads(RESULTS.read_text())
     else:

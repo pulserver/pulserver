@@ -17,7 +17,11 @@ import numpy as np
 import pytest
 
 import pulserver.pypulseq as pp
-from pulserver._ext.pulseg import _PulseqCollection, _check_safety_profiled
+from pulserver._ext.pulseg import (
+    _PulseqCollection,
+    _check_safety_profiled,
+    _mech_scan_window_probe,
+)
 
 BANDS = [(550.0, 650.0, 0.0), (1100.0, 1250.0, 0.0)]  # 0: the policy amplitude
 GAMMA_HZ_PER_T = 42.576e6
@@ -115,7 +119,11 @@ def test_a_scan_past_the_cap_sustaining_a_tone_in_a_band_is_refused(tmp_dir):
 
 
 def test_the_tone_is_refused_only_when_it_lies_inside_a_band(tmp_dir):
-    """The same tone amplitude at 900 Hz, between the bands, passes."""
+    """A tone over the policy floor at 1750 Hz, outside both bands, passes.
+
+    A tone in a 4 ms arm is 500 Hz wide, so "outside" means further from a
+    band's guarded edge than that footprint, not merely between the bands.
+    """
     system = _system()
     seq = pp.Sequence(system=system)
     rng = np.random.default_rng(5)
@@ -124,7 +132,12 @@ def test_the_tone_is_refused_only_when_it_lies_inside_a_band(tmp_dir):
     t = np.arange(N_SAMPLES) * RASTER_S
     envelope = np.sin(np.pi * np.arange(N_SAMPLES) / (N_SAMPLES - 1)) ** 2
     for k in range(N_ARMS):
-        w = 0.8e6 * np.sin(2 * np.pi * 900.0 * t + rng.uniform(0, 2 * np.pi)) * envelope
+        # 0.4e6 Hz/m is 9.4 mT/m, over the policy floor, at a slew the system allows.
+        w = (
+            0.4e6
+            * np.sin(2 * np.pi * 1750.0 * t + rng.uniform(0, 2 * np.pi))
+            * envelope
+        )
         w += (
             0.05e6
             * np.sin(
@@ -152,3 +165,67 @@ def test_the_tone_is_refused_only_when_it_lies_inside_a_band(tmp_dir):
     )
     result = _check(coll)
     assert result["code"] > 0, result  # PULSEG_SUCCESS
+
+
+def _check_bands(coll: _PulseqCollection, bands: list) -> dict:
+    return _check_safety_profiled(coll, bands, 4.25e8 / 0.333, 360.0, 1e6, False)
+
+
+def _scan(tone_hz_per_m: float, tmp_path: pathlib.Path, name: str) -> _PulseqCollection:
+    where = tmp_path / name
+    where.mkdir()
+    return _collection(tone_hz_per_m, where)
+
+
+def test_a_band_on_an_axis_the_arms_never_play_cannot_refuse(tmp_path):
+    coll = _scan(1.2e6, tmp_path, "loud_z")
+    for axes in ("gz", "z", 4):
+        result = _check_bands(coll, [(550.0, 650.0, 0.0, axes)])
+        assert result["code"] > 0, (axes, result)
+
+
+def test_a_band_on_the_driving_axis_refuses_however_it_is_spelled(tmp_path):
+    coll = _scan(1.2e6, tmp_path, "loud_x")
+    for axes in ("gx", "x", 1, "xz", 5):
+        result = _check_bands(coll, [(550.0, 650.0, 0.0, axes)])
+        assert result["code"] == -404, (axes, result)
+
+
+def test_a_band_axis_must_name_x_y_or_z(tmp_path):
+    coll = _scan(3.0e5, tmp_path, "modest_w")
+    with pytest.raises(ValueError):
+        _check_bands(coll, [(550.0, 650.0, 0.0, "w")])
+
+
+def test_two_grids_probed_together_read_as_they_do_alone(tmp_path):
+    coll = _scan(3.0e5, tmp_path, "modest_probe")
+    grids = [(550.0, 5.0, 21), (1100.0, 10.0, 16)]
+    both = _mech_scan_window_probe(coll, grids, [10000.0, 10000.0], 0, 0)
+    first = _mech_scan_window_probe(coll, grids[:1], 10000.0, 0, 0)
+    second = _mech_scan_window_probe(coll, grids[1:], 10000.0, 0, 0)
+    for key in ("amp_gx", "amp_gy", "amp_gz"):
+        assert np.array_equal(both[key][:21], first[key])
+        assert np.array_equal(both[key][21:], second[key])
+    assert list(both["span_us"]) == [first["span_max_us"], second["span_max_us"]]
+
+
+def test_the_prescription_carries_the_drive_onto_the_axis_the_band_watches(tmp_path):
+    coll = _scan(1.2e6, tmp_path, "oblique")
+    z_band = [(550.0, 650.0, 0.0, "gz")]
+    assert coll.prescription_rotation is None
+    assert _check_bands(coll, z_band)["code"] > 0
+    coll.set_prescription_rotation(
+        [0, 0, 1, 0, 1, 0, 1, 0, 0]
+    )  # physical z = logical x
+    assert coll.prescription_rotation == [0, 0, 1, 0, 1, 0, 1, 0, 0]
+    assert _check_bands(coll, z_band)["code"] == -404
+    assert _check_bands(coll, [(550.0, 650.0, 0.0, "gx")])["code"] > 0
+    coll.set_prescription_rotation(None)
+    assert coll.prescription_rotation is None
+    assert _check_bands(coll, z_band)["code"] > 0
+
+
+def test_a_prescription_is_nine_values(tmp_path):
+    coll = _scan(3.0e5, tmp_path, "short_rotation")
+    with pytest.raises(ValueError):
+        coll.set_prescription_rotation([1, 0, 0])

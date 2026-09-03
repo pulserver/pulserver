@@ -30,9 +30,14 @@ void pulseg_opts_init_full(
     float peak_norm_scale,
     float peak_eps)
 {
+    int i;
     if (!opts)
         return;
 
+    opts->has_prescription_rotation = 0;
+    for (i = 0; i < 9; ++i)
+        opts->prescription_rotation[i] = (i % 4 == 0) ? 1.0f : 0.0f;
+    opts->mech_memory_us = 20000.0f;
     opts->vendor = PULSEG_VENDOR;
     opts->gamma_hz_per_t = gamma_hz_per_t;
     opts->b0_t = b0_t;

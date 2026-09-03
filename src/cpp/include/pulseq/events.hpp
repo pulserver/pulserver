@@ -172,6 +172,14 @@ namespace pulseq
         std::vector<double> waveform;
         /** Sample times in seconds; empty means the gradient raster. */
         std::vector<double> tt;
+        /** The caller's samples, unscaled, when the event holds a view of
+         *  them in place of `waveform`: shape[i] = view[i] / view_divisor,
+         *  view_divisor the signed peak the shape was normalised by. The
+         *  owner of the samples keeps them alive for as long as the view
+         *  stands. */
+        const double* view = nullptr;
+        int view_count = 0;
+        double view_divisor = 1.0;
 
         double first = 0.0;
         double last = 0.0;

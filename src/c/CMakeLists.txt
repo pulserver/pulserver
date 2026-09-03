@@ -36,6 +36,7 @@ set(PULSEG_SOURCES
     core/pulseg_error.c
     core/pulseg_math.c
     core/pulseg_core.c
+    core/pulseg_parallel_posix.c
     io/pulseg_opts.c
     io/pulseg_protocol.c
     structure/pulseg_dedup.c
@@ -47,7 +48,8 @@ set(PULSEG_SOURCES
     safety/pulseg_check_plan.c
     safety/pulseg_safety.c
     safety/pulseg_raster.c
-    safety/pulseg_pns_basis.c
+    safety/pulseg_pns_exact.c
+    safety/pulseg_prescription.c
     safety/pulseg_pns_memo.c
     safety/pulseg_pns_irnich.c
     safety/pulseg_pns_safe.c
@@ -57,6 +59,13 @@ set(PULSEG_SOURCES
 
 add_library(pulseg STATIC ${PULSEG_SOURCES})
 target_link_libraries(pulseg PUBLIC pulseq)
+# The library's own parallel hook where POSIX threads exist; the scanner
+# target builds without the define and stays dependency-free.
+if(UNIX)
+    find_package(Threads REQUIRED)
+    target_compile_definitions(pulseg PRIVATE PULSEG_HAVE_PTHREADS)
+    target_link_libraries(pulseg PUBLIC Threads::Threads)
+endif()
 target_include_directories(pulseg PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_CURRENT_SOURCE_DIR}/include/pulseg

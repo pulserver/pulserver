@@ -3,175 +3,226 @@
 ```{admonition} TL;DR
 :class: tip
 
-**Criterion.** At every guarded frequency, the equivalent sustained amplitude
-$A_\text{eq}(f) = \tfrac{2}{T_\text{TR}}|S_\text{ax}(f)|$ — the amplitude of the
-pure sinusoid delivering the same coherent drive — against the vendor's band
-limit, in the same mT/m the limit is stated in.
+**Criterion.** Per physical gradient axis, at every frequency inside a
+forbidden band, the amplitude of the sinusoid the scan sustains over the
+resonance memory $W$ of the gradient coil:
 
-**Window.** The {doc}`per-position spectral bound <canonical_tr>` over the
-structural TR: positions identical in every repetition enter a coherent complex
-sum, positions that vary contribute the largest magnitude over the combinations
-they really take. This is a **proven** ceiling on the scan at every frequency,
-not an estimate of it.
+$$A_W(f) = \max_{t_0}\;\frac{2}{W}\Bigl|\int_{t_0}^{t_0+W} g_\text{ax}(t)\,e^{-2\pi i f t}\,dt\Bigr|,$$
 
-**Cost.** One transform per distinct gradient waveform. Every occurrence is
-then an amplitude times a phase factor, so the whole analysis is a walk over
-the amplitude table — no repetition is evaluated and no waveform is rendered.
+compared with the band's tolerance in the same mT/m. $W$ is a property of
+the coil, not of the band or the sequence: `pulseg_opts.mech_memory_us`,
+20 ms unless the scanner configuration says otherwise.
 
-**Guards.** Bands are widened by half the narrowest band's width; a
-zero-tolerance band is compared against an empirical amplitude floor, because a
-literal zero refuses every sequence ever written.
+**Tolerance.** A band that states an amplitude states the plateau of a
+readout train; it is converted to a sinusoid through the shape of the train
+that drives the band. A band that states none is held to
+`SA_ZERO_BAND_SINUSOID_MT_PER_M`, the sustained sinusoid the vendor's own
+refusals and allowances bracket.
+
+**What is judged.** The composite waveform on each physical axis: every
+gradient the scan plays, `ROTATIONS` applied, the prescription rotation
+composed in at predownload. Nothing is told which event is a readout or an
+echo train; a spiral, an EPI train and a SPARKLING arm are read by the same
+integral.
+
+**Refusal.** Names the band, the axis, the frequency, the amplitude against
+its tolerance, and the gradient definitions that carry the reading with
+their share of it.
 ```
 
 A gradient coil sits in a strong static field, so every gradient waveform is
-also a Lorentz drive on a large, stiff, lightly damped structure — the coil
-former, the cryostat, the bore. Drive one of that structure's resonances and it
-is amplified by the Q factor rather than merely transmitted: acoustic noise,
-image artefacts from bore vibration, fatigue damage of the gradient assembly.
+also a Lorentz force on a large, stiff, lightly damped structure. Drive one
+of its mechanical resonances and the response is amplified by the mode's
+quality factor rather than merely transmitted: acoustic noise, vibration of
+the bore, ghosting where the vibration reaches the field. Vendors therefore
+publish **forbidden bands**, and a sequence has one question to answer inside
+each of them:
 
-Vendors therefore publish **forbidden bands**, and the question a sequence must
-answer is narrow:
+> How much oscillating gradient amplitude does this scan sustain at the
+> frequencies of the band?
 
-> At the frequencies inside a forbidden band, how much oscillating gradient
-> amplitude does this sequence actually deliver?
+Not how much acoustic energy it emits and not a broadband figure: a
+resonance answers to coherent drive at its own frequency, kept up for as long
+as the mode remembers.
 
-Not how much acoustic energy is produced, and not a broadband noise figure. A
-resonance responds to *coherent, sustained drive at its own frequency*, and
-what matters is the amplitude of the sinusoid the sequence effectively presents
-there.
+## What the vendor measures
 
-## Why the period is the window
+The vendor checks three product families, each through the parameter that
+sets the family's drive frequency, and nothing else:
 
-Render the whole scan, transform it, look inside each band. That is what an
-offline analysis would do, and beyond costing minutes of waveform on a
-microsecond raster it has two problems. A single transform of a minutes-long
-record has microhertz resolution and no meaningful notion of "the amplitude at
-1150 Hz" — the answer depends on an analysis window nobody has a principled
-width for. And the record is the scan you happened to prescribe: half as many
-repetitions gives a different spectrum for the same physical drive.
+| family | the parameter it locks out | the frequency it guards |
+|---|---|---|
+| echo-planar imaging (`epiesp*.dat`, one section per physical axis) | the echo spacing, in ranges per axis with a tolerance in G/cm | the train's fundamental, $f = 1/(2\,\mathrm{ESP})$ |
+| FIESTA / bSSFP (`greAcousticLimit.<coil>.dat`) | the repetition time, in ranges | the harmonic of the readout comb, $k/T_R$, that falls in the coil's band |
+| multi-echo gradient echo (`greAcousticLimitEsp.dat`) | the echo spacing | the echo period, $1/\mathrm{ESP}$ |
 
-A scan is **periodic**, which rescues both. A periodic drive has a line
-spectrum — energy at the harmonics $k/T_\text{TR}$ and nothing between — so
-"the amplitude at 1150 Hz" is a question about whether a line lands there, and
-the repetition period is the principled window. This is why the
-{doc}`structural TR <../sequence_model/tr_and_segmentation>` has to be right
-for the verdict to mean anything.
+The three tables of a coil carry the same resonances, each written in its
+family's own parameter: a locked TR range is the range that puts a harmonic
+of the readout comb into the band the EPI table states, and a locked
+multi-echo spacing puts the echo period there. Three checks, one resonance,
+read at the harmonic order each family happens to drive it at. A bSSFP at a
+locked TR sustains that harmonic inside the band at tens of mT/m where it is
+the second; at a TR whose *third* harmonic falls in the band it sustains a
+third of that and is not locked out. What decides is the amplitude at the
+frequency, not the order of the harmonic or the name of the family. The tolerance column of the EPI tables is almost always zero, and a
+zero cannot be read literally: every gradient puts *some* drive into every
+band.
 
-## Combs derived from the block content
+## The criterion
 
-Seginer et al. ([arXiv 2508.03220](https://arxiv.org/abs/2508.03220)) work this
-out in closed form for a multi-echo, multi-slice EPI train: the waveform is one
-echo train convolved with impulse trains at the echo spacing, the slice period
-and the TR, so its spectrum factorises into the single-train envelope times one
-sine-ratio comb per nested periodicity,
+A mode of linewidth $\Delta f$ rings up and decays in about $1/\Delta f$;
+it answers to the drive sustained over that long and forgets what came
+before. That memory belongs to the coil, so the check reads every band over
+one window $W$. Per physical axis and per frequency,
 
-$$|g(\omega)| \approx |A_n(\omega)| \cdot
-\left|\frac{\sin(\omega\,\Delta T_E N_\text{TE}/2)}{\sin(\omega\,\Delta T_E/2)}\right| \cdot
-\left|\frac{\sin(\omega\,\Delta T_\text{sl} N_\text{sl}/2)}{\sin(\omega\,\Delta T_\text{sl}/2)}\right| \cdot (\cdots)$$
+$$A_W(f) = \max_{t_0}\;\frac{2}{W}\Bigl|\int_{t_0}^{t_0+W} g_\text{ax}(t)\,e^{-2\pi i f t}\,dt\Bigr|,$$
 
-Each factor concentrates energy into a comb; where the periods are
-commensurate the combs align on one dominant peak, and where one slips off the
-common raster the energy spreads. The model is exact for the structure it
-describes — but it has to be *told* that structure, and a general Pulseq file
-declares none of it.
+the amplitude of the sinusoid at $f$ that would carry the same Fourier
+content over the window, in mT/m. What this reading does on the waveforms a
+sequence is made of:
 
-Pulserver computes the same physics from two exact properties of the transform.
-Linearity, and the shift theorem: delaying a waveform by $t_k$ multiplies its
-transform by $e^{-j2\pi f t_k}$ and changes nothing else. A sequence is already
-a sum of time-shifted, amplitude-scaled copies of a small shape library, so
-each unique shape is transformed once — analytically for trapezoids and ramps,
-from the raw samples otherwise — and occurrence $k$ contributes
+- **A train longer than the memory** — an EPI readout, a bSSFP readout comb —
+  reads at its own sustained amplitude at its fundamental and its harmonics,
+  whatever the repetition time. A 20 ms memory is shorter than every echo
+  train the vendor locks out, so the reading is the train's.
+- **A burst shorter than the memory** reads in proportion to the memory it
+  fills: a phase-encode blip a few hundred microseconds long, a spoiler, an
+  overtone of a ramp-sampled train, all read at a fraction of a mT/m where a
+  refused train reads at ten or more.
+- **A sweep** — a spiral, a chirp — crosses a band once and reads what it
+  sustained while inside it, scaled by how much of the memory that took.
+- **A periodic drive** read over the memory is the classical line amplitude
+  $\tfrac{2}{T_R}\lvert S(f)\rvert$, up to the events that start inside the
+  window and run past its end.
+- Below one period of the window, $f < 1/W$, the integral is the gradient
+  moment over the window, which no mode answers to, and the reading is zero.
 
-$$a_k(f) = A_k\, W_k(f)\, e^{-j2\pi f t_k}.$$
+Nothing in this asks what kind of event it is looking at. There is no
+echo-train detector, no "equivalent echo spacing" for a spiral, no
+acquisition-based clause: the criterion is the integral, on the composite
+waveform of each physical axis, and a gradient echo whose readouts are made
+bipolar and numerous enough is refused on exactly the arithmetic that
+refuses an EPI.
 
-The per-axis spectrum is the sum over one canonical TR, folded by the actual
-finite number of repetitions. This is not an approximation traded for speed: it
-is algebraically the number a rendered-waveform transform would give.
+### The tolerance
 
-Where Seginer et al. write one comb factor per declared periodicity, here every
-echo and every slice repeat is one more event inside the one period that is
-known — and the combs *emerge*, because a sum of $N$ identical equally spaced
-phasors is the sine-ratio comb whether you write the closed form or accumulate
-it term by term.
+A band that **states an amplitude** states it in G/cm as the plateau of the
+readout train the family plays, so the two sides of the comparison are put in
+the same units first. The reading is a sinusoid; a train of lobes repeated
+without end has a fundamental whose amplitude is a fixed fraction of the
+plateau — $8/\pi^2$ for triangular lobes, $4/\pi$ for square ones, about 0.92
+for a ramp-sampled EPI lobe — and that fraction is read off the lobe's own
+transform: when a fused train's fundamental lies in the band, the stated
+plateau is converted through *that* train's ratio; otherwise through
+$8/\pi^2$, the smallest ratio a train the vendor plays can have, which is the
+conservative side.
 
-```{figure} ../assets/mechanical_resonance/epi_seginer_fig1_reproduction.png
-Reproduction of Seginer et al. Fig. 1 through the compiled engine the
-scanner-side check runs: on-raster TE and slice spacing keeps one dominant
-peak; off-raster spacing spreads it into a comb.
+A band that **states zero** is held to `SA_ZERO_BAND_SINUSOID_MT_PER_M`. The
+number is the one tolerance the vendor states on the same kind of coil,
+converted to sinusoid amplitude, and the {doc}`performance page
+<../performance/mechanical_resonance>` shows how it sits against the vendor's
+own decisions: read inside the vendor's bands, every family the vendor runs
+without a lockout stays below it, and so, by a smaller margin, does what the
+vendor locks out, whose readings cluster at about ten mT/m on the axis they
+drive. It is a policy constant with a provenance, not a physical constant,
+and it is set in one place.
+
+### The frame
+
+Vendor tables are stated **per physical axis**: a band read from an EPI
+table carries its axis tag from `read_esp_bands` through `bands_to_hz_per_m`
+into the safety core, which judges it against that axis alone, and the axes
+differ on every coil in the table. The drive on a physical axis is the
+composite of everything the scan plays there: the sequence's own `ROTATIONS`
+are folded into the amplitudes each axis receives, and the interpreter hands
+the check the prescription rotation at predownload — slice 0's host matrix,
+the one every segment's `setrotate` carries — composed left of every
+`ROTATIONS` matrix. An oblique prescription that carries a readout from x
+onto z is judged against z's bands. A block flagged `NOROT` plays in the
+logical frame and is judged there. From Python the frame is the design frame
+unless `set_prescription_rotation` is given the matrix. Only this check is
+judged in the prescribed frame; stimulation and the gradient limits are
+frame-free and stay in the logical frame.
+
+## Where the criterion and the product part
+
+The vendor locks a family out by its parameter alone, whatever its
+amplitude; the criterion reads amplitude. At the floor the stated tolerance
+sets, the vendor's refusals on the tables available here read below it and
+pass: an echo train whose spacing of a few hundred microseconds makes its
+lobes nearly triangular, so that a typical plateau sustains about ten mT/m at
+the fundamental; a FIESTA at a locked TR, whose readout comb sustains about
+the same at the harmonic in band; a multi-echo train at a locked spacing,
+which fills a fraction of the memory and reads lower. A low-bandwidth train,
+whose plateau is under the floor, cannot reach it either. The
+{doc}`performance page <../performance/mechanical_resonance>` prints the
+bracket and where a lower floor would put the check; an acquisition-based
+clause that refused these trains would refuse a spiral of the same plateau,
+so the reading stands and the floor is the one policy in the check.
+
+## What a refusal says, and what to do with it
+
+The refusal names the band, the physical axis, the frequency and the reading
+against its tolerance, then the gradient definitions behind the loudest
+refused reading with their share of it. The reading is linear in the events,
+so the shares are exact: a share above one means the named lobe is partly
+cancelled by the others.
+
+```text
+mech-res exceeded (f=558.00Hz,a=602543.25>553488.00Hz/m,ax=2,ss=0,tr=0,def=1,share=54,def=0,share=46)
 ```
 
-```{figure} ../assets/mechanical_resonance/epi_seginer_component_decomposition.png
-Per-event decomposition of one comb peak: 18 event contributions (3 TEs × 6
-slices) adding almost perfectly in phase. There is no TE factor or slice factor
-anywhere in the engine — only event contributions and a running complex sum.
+From Python the same terms are on the object `calculate_gradient_spectrum`
+returns under `resonance_lines=True`: `tolerance` per candidate,
+`contributors` as `(definition, share)` pairs, `contributor_freq` and
+`contributor_axis`; `_get_segment_blocks` maps a definition to the block and
+axis that play it. To move a line, change the parameter that sets the lobe
+carrying it. A readout train's line is set by its bandwidth and echo spacing,
+a repetition comb's by the TR, and every other lobe by the gradient limits it
+was built against: build the sequence on a derated system,
+`pp.apply_system_derates(system, grad_derate=...)`, and every trapezoid keeps
+its area and lengthens while the readout, set by bandwidth and field of view,
+stays where it is. On the 3D gradient echo the loudest in-band line belongs
+to the spoiler and the prewinder, not to the readout, and halving the system's
+gradient amplitude moves it.
+
+```python
+derated = pp.apply_system_derates(system, grad_derate=0.5, slew_derate=1.0)
+seq = gre3D_sequence.main(system=derated)
+lines = seq.calculate_gradient_spectrum(
+    plot=False, tr="worst_case", resonance_lines=True, bands=bands
+)[4]
+lines.ok, lines.contributors
 ```
 
-## The verdict
+## When it runs
 
-Per axis, per guarded frequency,
+The interpreter runs the check at **predownload**, once `make_sequence` has
+written the finished `.seq` and the file comes back in. Nothing before that
+point has built the gradient waveforms: a console's live feasibility estimate
+is a duration computed from module lengths, with nothing to evaluate a band
+against. The verdict is an estimate that runs before the scanner's own gate
+and its hardware monitor, which stand behind every verdict here.
 
-$$A_\text{eq}(f) \;=\; \frac{2}{T_\text{TR}}\,\bigl|S_\text{ax}(f)\bigr|,$$
+## One criterion, computed two ways
 
-a real gradient amplitude, directly comparable with the vendor's limit. Two
-guards turn it into a verdict:
+While the repetitions of a scan play the same set of waveforms — at most
+`PULSEG__MAX_SHAPE_GROUPS` (64) distinct sets — the reading is computed from
+the {doc}`structural TR <canonical_tr>` alone: its events laid out over as
+many repetitions as one window reaches, every position whose amplitude or
+rotation varies entering as the largest magnitude it takes, which bounds the
+scan from above. A scan that plays more distinct waveform sets than that — a
+distinct optimised readout in every repetition — is read from every event it
+plays, exactly:
 
-**A frequency guard.** A resonance is not infinitely sharp, and neither is a
-harmonic once the scan is finite, so every band is widened by half the width of
-the narrowest band in the table — the narrowest band being the sharpest
-resonance the vendor identified. Without it, a strong line 40 Hz outside a band
-edge would pass a check it should not.
+$$A_W(f) = \max_{t_0}\;\frac{2}{W}\Bigl|\sum_{t_m \in [t_0,\,t_0+W)} a_m\,T_m(f)\,e^{-2\pi i f t_m}\Bigr|,$$
 
-**An amplitude floor.** Every periodic gradient sprinkles weak harmonics into
-any band wider than its comb spacing, so a literal zero-tolerance band refuses
-every sequence ever written. When a band states zero, the threshold becomes a
-fixed equivalent amplitude — the scale of a drive that is actually sustained
-rather than incidental. Where that number comes from, and why it cannot be
-derived, is on the {doc}`performance page <../performance/mechanical_resonance>`.
-A band that does state an amplitude is stating the plateau of a readout train,
-so it is converted into the same equivalent-sinusoid convention first; the two
-sides of a `>` must be the same quantity.
-
-The criterion separates the two cases a literal per-harmonic test gets wrong in
-opposite directions. A small Cartesian GRE's phase-encode blip produces a
-broadband transient every TR — flagged by a literal test, harmless because
-nothing is sustained, and correctly passed here far below the floor. A bSSFP
-readout comb puts a genuine sustained line near 1.2 kHz at several mT/m, and is
-flagged. Both verdicts are regression-tested over every shipped plugin.
-
-One property comes free: forbidden bands carry no axis tag, and every axis is
-run against every band. A rotation only redistributes a fixed vector of drive
-among the physical axes and cannot move energy to a frequency, so no sequence
-can hide a dangerous line by rotating it onto an axis the check is not
-watching.
-
-The interpreter runs this at **predownload** — once `make_sequence` has written
-the finished `.seq` and the file comes back in, not while an operator is still
-choosing a parameter. Nothing before that point has built the gradient
-waveforms: a console's live feasibility estimate is a duration computed from
-module lengths, with nothing to evaluate a band against.
-
-## Scans with a different waveform in every repetition
-
-The period is the window only while there is a period. A scan that plays
-more distinct waveform sets than the grouping holds — a distinct optimised
-readout in every repetition — has no line spectrum and nothing between lines
-for the Dirichlet kernel to attenuate. For such a scan the check prices what
-a mode sees: the amplitude sustained inside its band over its memory,
-$1/\Delta f$, as a window slid over the whole scan,
-
-$$
-A_W(f) = \frac{2}{\text{span}}\,\Bigl|\sum_{t_m \in W} a_m\, T_m(f)\, e^{-i 2\pi f t_m}\Bigr|,
-$$
-
-the sum running over the gradient events that start inside the window,
-$T_m$ each one's transform, $t_m$ its start, and span the run those events
-cover (never less than the window). This is the same quantity as the
-periodic rule wherever a period exists — repeat one TR and it reduces to
-$\tfrac{2}{T_{TR}}|S_{TR}(f)|$ — and where none does it keeps the cancellation
-between repetitions that a bound over instances would discard. The verdict
-compares $A_W$ against the band's threshold exactly as above, on a grid
-0.25 Hz apart across each band, raised by the guards that make it an upper
-bound; the refusal names the frequency, the amplitude and the axis. The
-spectrum a sequence plot draws for such a scan is this one. How it is
-evaluated and why it is a bound is on the
+the sum over the gradient events that start inside the window, $T_m$ each
+one's transform and $t_m$ its start, events longer than the memory read in
+pieces of an eighth of it. The two forms are one quantity: a bound that
+refuses is settled by the exact reading, a repetition whose varying positions
+outlast the memory is read exactly from the start, and the same events
+written as $N$ repetitions of $K$ blocks or as one repetition of $NK$ blocks
+read the same. How both are evaluated in well under a second, and the
+measurements behind every number on this page, are on the
 {doc}`performance page <../performance/mechanical_resonance>`.

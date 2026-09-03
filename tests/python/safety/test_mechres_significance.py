@@ -62,11 +62,15 @@ def test_representative_fixtures_pass(name):
     _check(name, 20e-6, SYNTHETIC_BANDS)  # must not raise
 
 
+STATED_BANDS = [(b[0], b[1], 0.008 * 42.576e6, *b[3:]) for b in SYNTHETIC_BANDS]
+
+
 @pytest.mark.parametrize("name", ["bssfp_2d.seq", "epi_2d_main.seq"])
-def test_real_readout_combs_still_flagged(name):
-    """A genuine sustained readout comb harmonic landing in a zero-tolerance
-    band MUST still be caught: the corpus true positives are bSSFP
-    (A_eq ~= 7.9 mT/m at ~1176 Hz) and the EPI train (~5.5 mT/m at
-    ~1158 Hz)."""
+def test_real_readout_combs_are_refused_by_a_tolerance_they_exceed(name):
+    """A genuine sustained readout comb: bSSFP sustains 10.1 mT/m at 877 Hz,
+    the EPI train 10.8 mT/m at 1243 Hz. A band that states 8 mT/m refuses
+    both; a zero band's floor (13 mT/m) does not, which is the documented
+    low-plateau divergence from the product."""
     with pytest.raises(RuntimeError, match="mech"):
-        _check(name, 20e-6, SYNTHETIC_BANDS)
+        _check(name, 20e-6, STATED_BANDS)
+    _check(name, 20e-6, SYNTHETIC_BANDS)  # under the floor: not refused

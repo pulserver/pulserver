@@ -53,14 +53,14 @@ and shape ids over its positions, instances sharing a signature form a group,
 one envelope is built per group, and the worst group is the verdict. A scan
 whose repetitions differ only in amplitude has one group and one envelope. A
 four-arm spiral written out has four. Past `PULSEG__MAX_SHAPE_GROUPS` (64)
-there is no window at all: the stimulation check prices the scan by the
-**occurrence score** — a bound built from every block's own response, with
-no window, no grouping and no cap on how many distinct waveforms the scan
-plays — and settles what the bound cannot clear by evaluating exactly the
-stretches it names. That path is the {doc}`PNS performance page's
-<../performance/pns>` last section. The acoustic check never groups by
-shape: it runs on {doc}`construction 2 <canonical_tr>`, whose bound holds
-whatever the shapes are.
+there is no window at all: the stimulation check evaluates the scan itself,
+every block's own response placed on the scan's timeline, with no grouping
+and no cap on how many distinct waveforms the scan plays. That path is the
+{doc}`PNS performance page's <../performance/pns>` last section. The mechanical-resonance check reads
+the amplitude sustained over a mode's memory: below the cap from one
+repetition's {doc}`construction 2 <canonical_tr>` bound laid out over the
+repetitions a window reaches, past it from every event the scan plays, the
+same reading either way.
 
 **What it guarantees, and what it does not.** The envelope dominates every
 repetition sample by sample, which is exact and is asserted directly:
@@ -130,9 +130,9 @@ instance instead, so a variable TI shrinks to the shortest TI.
 | Check | Construction | Criterion it serves |
 |---|---|---|
 | {doc}`amplitude, slew, continuity <gradient_slew>` | 1 — envelope | per-sample limit |
-| {doc}`peripheral nerve stimulation <pns>` | 1 — envelope | peak of the combined response |
+| {doc}`peripheral nerve stimulation <pns>` | 1 — envelope, one per shape group; past 64 groups the scan itself, exactly, no window | peak of the combined response |
 | sound pressure | 1 — envelope | peak and A-weighted average pressure |
-| {doc}`mechanical resonance <mechanical_resonance>` | 2 — spectral bound | equivalent sustained amplitude in a band |
+| {doc}`mechanical resonance <mechanical_resonance>` | 2 — spectral bound, laid out over the repetitions one 20 ms memory reaches; a bound that refuses, or a varying position longer than the memory, is read from every event of the scan instead; past 64 groups every event of the scan from the start | amplitude of the sinusoid sustained over the coil's memory inside a band, per physical axis |
 | SAR, RF amplifier duty | 3 — worst instance | power averaged over a window |
 | `peakB1` | 1 — envelope | instantaneous amplitude |
 | gradient heating | 3 — worst instance, per segment | energy over a duty cycle |
@@ -147,12 +147,19 @@ Both constructed windows are rendered in the sequence's **logical** frame. A
 `ROTATIONS` extension and the prescribed FOV rotation redistribute a fixed
 vector of drive among the three physical axes.
 
-For a forbidden band that costs nothing — a band carries no axis tag, and a
-rotation cannot move energy to a different frequency. It costs nothing for the
-Irnich nerve model either, which applies one kernel to every axis and combines
-by root-sum-square, so it commutes with a rotation. It does cost something for
-a model with per-axis coefficients (SAFE) and for sound pressure, whose coil
-transfer function is tabulated per axis: an oblique prescription can move drive
-from a quieter axis onto a louder one. The prescription matrix is not part of
-the sequence — the PSD programs it at `startseq` — so no evaluation at this
-layer accounts for it, and the hardware monitor is what stands behind that.
+For a forbidden band that costs nothing in frequency — a band carries no
+axis tag, and a rotation cannot move energy to a different frequency — but
+the criterion is per physical axis, and a per-axis magnitude is not
+rotation-invariant: the vector norm across the axes is, and each axis is
+bounded by it, so a rotation can move which axis is loudest and by how much.
+A `ROTATIONS` extension is inside the sequence and is folded into the
+per-axis amplitudes the bound is built from, and so is the prescription
+rotation when the caller supplies it — the interpreter does at predownload,
+with the matrix it will program at `startseq`. It costs nothing for the
+Irnich nerve model, which applies one kernel to every axis and combines by
+root-sum-square, so it commutes with a rotation. It does matter for a model
+with per-axis coefficients (SAFE), for forbidden bands tagged with an axis and
+for sound pressure, whose coil transfer function is tabulated per axis: an
+oblique prescription can move drive from a quieter axis onto a louder one,
+which is why those are judged in the prescribed frame rather than the design
+frame. A design-side call without a matrix runs in the design frame.

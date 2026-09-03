@@ -176,6 +176,20 @@ namespace pulseg
         {
             return coll_;
         }
+        /** Set (9 row-major floats, physical = R * logical) or clear
+         *  (nullptr) the prescription rotation every later check runs in. */
+        /** Resonance memory (us) every later mechanical-resonance reading uses. */
+        void set_mech_memory_us(double memory_us)
+        {
+            opts_.mech_memory_us = static_cast<float>(memory_us);
+        }
+        void set_prescription_rotation(const float* rotation)
+        {
+            opts_.has_prescription_rotation = rotation ? 1 : 0;
+            for (int i = 0; i < 9; ++i)
+                opts_.prescription_rotation[i] =
+                    rotation ? rotation[i] : (i % 4 == 0 ? 1.0f : 0.0f);
+        }
         const pulseg_opts& opts() const
         {
             return opts_;
@@ -630,6 +644,7 @@ namespace pulseg
             assign_f(a.candidate_grad_amps_gy, cs.candidate_grad_amps_gy, cs.num_candidates);
             assign_f(a.candidate_grad_amps_gz, cs.candidate_grad_amps_gz, cs.num_candidates);
             assign_i(a.candidate_violations, cs.candidate_violations, cs.num_candidates);
+            assign_f(a.candidate_eps, cs.candidate_eps, cs.num_candidates);
 
             a.num_component_terms = cs.num_component_terms;
             assign_f(a.component_freqs_hz, cs.component_freqs_hz, cs.num_component_terms);
@@ -649,6 +664,11 @@ namespace pulseg
             assign_f(a.envelope_amp_gx, cs.envelope_amp_gx, cs.num_envelope_bins);
             assign_f(a.envelope_amp_gy, cs.envelope_amp_gy, cs.num_envelope_bins);
             assign_f(a.envelope_amp_gz, cs.envelope_amp_gz, cs.num_envelope_bins);
+            a.num_contributors = cs.num_contributors;
+            assign_i(a.contributor_def_ids, cs.contributor_def_ids, cs.num_contributors);
+            assign_f(a.contributor_shares, cs.contributor_shares, cs.num_contributors);
+            a.contributor_freq_hz = cs.contributor_freq_hz;
+            a.contributor_axis = cs.contributor_axis;
 
             pulseg_mech_resonances_spectra_free(&cs);
             return a;

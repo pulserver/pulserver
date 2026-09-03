@@ -97,8 +97,8 @@ def _hardware():
 
 def test_a_repetition_of_a_written_out_scan_has_its_own_curve():
     """Past the group cap ``tr=<int>`` is that repetition, played as it stands,
-    and ``tr="worst_case"`` is the repetition the occurrence score prices
-    highest -- a witness, not an envelope."""
+    and ``tr="worst_case"`` is the repetition holding the scan's exact peak
+    -- a witness, not an envelope."""
     import numpy as np
 
     from pulserver.pypulseq import (

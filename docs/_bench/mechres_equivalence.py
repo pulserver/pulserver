@@ -27,14 +27,14 @@ are meant to coincide, the residual as well.
 Two conventions hold across every panel, both so a quiet sequence looks
 quiet:
 
-* the vertical axis is equivalent sustained amplitude in mT/m, framed at
-  0.1-30 mT/m on every logarithmic axis. The audit
-  (``mechres_calibration.py``) measured 0.13 mT/m for the quietest sequence
-  in the corpus and 22.5 for the loudest, so a tighter frame would be
+* the vertical axis is sustained sinusoid amplitude in mT/m, framed at
+  0.1-30 mT/m on every logarithmic axis: the corpus spans two decades between
+  its quietest and its loudest sequence, and a tighter frame would be
   magnifying the difference between two kinds of silence;
 * a guarded band is drawn with the threshold the gate actually applies --
-  7.5 mT/m where the band states no amplitude, and 0.81 x the stated plateau
-  where it states one.
+  the zero-column floor ``SA_ZERO_BAND_SINUSOID_MT_PER_M`` where the band
+  states no amplitude, and the stated plateau through the shape factor of the
+  train that drives the band where it states one.
 
 Usage:
     <venv>/bin/python docs/_bench/mechres_equivalence.py [name ...]
@@ -74,12 +74,20 @@ import pulserver.pypulseq as pp  # noqa: E402
 from _figures import FAINT, INK, MUTED, SERIES, _style  # noqa: E402
 from pulserver._ext.pulseg import _calc_mech_resonances  # noqa: E402
 
-ASSETS = Path(__file__).resolve().parents[1] / "explanations" / "assets" / "mechanical_resonance"
+ASSETS = (
+    Path(__file__).resolve().parents[1]
+    / "explanations"
+    / "assets"
+    / "mechanical_resonance"
+)
 
 GAMMA = 42.576e3  #: Hz/m per mT/m
 
-#: ``SA_AEQ_POLICY_MT_PER_M`` and ``SA_AEQ_TRAIN_SHAPE``. Drawn, not recomputed.
-POLICY_MT_PER_M = 7.5
+#: ``SA_ZERO_BAND_SINUSOID_MT_PER_M``, the sustained sinusoid a band that states
+#: no amplitude is held to, and ``SA_AEQ_TRAIN_SHAPE``, the plateau-to-sinusoid
+#: factor a stated amplitude is converted through when no fused train's
+#: fundamental lies in the band. Drawn, not recomputed.
+POLICY_MT_PER_M = 13.0
 TRAIN_SHAPE = 0.8106
 
 #: The frame every logarithmic A_eq axis is drawn in -- see the module note.
@@ -274,7 +282,9 @@ def draw_bands(axis, bands):
     for low, high, plateau in bands:
         level = TRAIN_SHAPE * plateau if plateau > 0 else POLICY_MT_PER_M
         axis.axvspan(low, high, color="#e34948", alpha=0.08, lw=0, zorder=0)
-        axis.plot([low, high], [level] * 2, color="#e34948", lw=1.2, ls=(0, (4, 2)), zorder=6)
+        axis.plot(
+            [low, high], [level] * 2, color="#e34948", lw=1.2, ls=(0, (4, 2)), zorder=6
+        )
 
 
 def legend(target, handles=None, labels=None, **kwargs):
@@ -286,7 +296,9 @@ def legend(target, handles=None, labels=None, **kwargs):
     kwargs.setdefault("mode", "expand")
     kwargs.setdefault("borderaxespad", 0.0)
     kwargs.setdefault("handlelength", 1.2)
-    made = target.legend(handles, labels, **kwargs) if handles else target.legend(**kwargs)
+    made = (
+        target.legend(handles, labels, **kwargs) if handles else target.legend(**kwargs)
+    )
     for text in made.get_texts():
         text.set_color(MUTED)
     return made
@@ -374,8 +386,16 @@ TERRITORY = (515.0, 1650.0)
 #: and off independently. Sixteen distinct golden-angle arms, which is what a
 #: real interleaved scan plays; the structural TR stays at one shot either
 #: way, since a waveform's samples are not part of a gradient definition.
-STACK = dict(n_x=64, n_z=8, n_arms=16, angle_scheme="golden", n_dummy=0,
-             tr=10e-3, readout_bandwidth_hz=250e3, use_rotation_ext=False)
+STACK = dict(
+    n_x=64,
+    n_z=8,
+    n_arms=16,
+    angle_scheme="golden",
+    n_dummy=0,
+    tr=10e-3,
+    readout_bandwidth_hz=250e3,
+    use_rotation_ext=False,
+)
 REPETITIONS = 16
 
 
@@ -426,8 +446,9 @@ def canonical_tr():
     figure, axes = plt.subplots(
         len(CASES), 2, figsize=(8.6, 9.6), width_ratios=(1.0, 0.66)
     )
-    figure.subplots_adjust(hspace=0.72, wspace=0.28, top=0.855, bottom=0.05,
-                           left=0.105, right=0.985)
+    figure.subplots_adjust(
+        hspace=0.72, wspace=0.28, top=0.855, bottom=0.05, left=0.105, right=0.985
+    )
 
     for column, (letter, what, arm_varies, encode_varies) in enumerate(CASES):
         sequence = controlled_scan(kernel, arm_varies, encode_varies)
@@ -446,23 +467,42 @@ def canonical_tr():
 
         top = axes[column, 0]
         top.axvspan(*TERRITORY, color=FAINT, alpha=0.30, lw=0, zorder=0)
-        top.plot(dense_f, np.maximum(dense_scan, 1e-3), color=SERIES[1], lw=0.5,
-                 alpha=0.55, zorder=1)
+        top.plot(
+            dense_f,
+            np.maximum(dense_scan, 1e-3),
+            color=SERIES[1],
+            lw=0.5,
+            alpha=0.55,
+            zorder=1,
+        )
         top.plot(freqs, scan, color=SERIES[1], lw=1.2, zorder=3)
         top.plot(freqs, window, color=INK, lw=1.3, ls=(0, (4, 2)), zorder=4)
         frame(top, f"{letter}   {what}", MAX_FREQ, True)
         inside = (freqs >= TERRITORY[0]) & (freqs <= TERRITORY[1])
-        top.text(0.035, 0.055,
-                 f"in band: {window[inside].max():.2f} judged,"
-                 f"\n{scan[inside].max():.2f} driven",
-                 transform=top.transAxes, fontsize=9.4, color=MUTED)
+        top.text(
+            0.035,
+            0.055,
+            f"in band: {window[inside].max():.2f} judged,"
+            f"\n{scan[inside].max():.2f} driven",
+            transform=top.transAxes,
+            fontsize=9.4,
+            color=MUTED,
+        )
 
         ratio = window / np.maximum(scan, 1e-12)
         loud = scan > 0.05 * scan.max()
         bottom = axes[column, 1]
         bottom.axvspan(*TERRITORY, color=FAINT, alpha=0.30, lw=0, zorder=0)
-        bottom.plot(freqs[loud], ratio[loud], color=SERIES[0], lw=0, marker="o",
-                    ms=2.6, mew=0, zorder=2)
+        bottom.plot(
+            freqs[loud],
+            ratio[loud],
+            color=SERIES[0],
+            lw=0,
+            marker="o",
+            ms=2.6,
+            mew=0,
+            zorder=2,
+        )
         bottom.axhline(1.0, color=MUTED, lw=0.8, ls=(0, (4, 3)))
         _style(bottom, f"never below 1 · median {np.median(ratio[loud]):.3f}×")
         bottom.set_xlim(0, MAX_FREQ)
@@ -470,26 +510,40 @@ def canonical_tr():
         bottom.set_ylabel("judged / driven", fontsize=10.4)
         if column == len(CASES) - 1:
             bottom.set_xlabel("frequency (Hz)", fontsize=10.4)
-        print(f"    {letter} {what:28} min {ratio.min():.4f} median {np.median(ratio[loud]):.3f} "
-              f"| in band judged {window[inside].max():.3f} driven {scan[inside].max():.3f} "
-              f"({window[inside].max()/scan[inside].max():.3f}x)")
+        print(
+            f"    {letter} {what:28} min {ratio.min():.4f} median {np.median(ratio[loud]):.3f} "
+            f"| in band judged {window[inside].max():.3f} driven {scan[inside].max():.3f} "
+            f"({window[inside].max() / scan[inside].max():.3f}x)"
+        )
 
     legend(
         figure,
-        [Line2D([], [], color=SERIES[1], lw=1.2),
-         Line2D([], [], color=INK, lw=1.3, ls=(0, (4, 2))),
-         Line2D([], [], color=SERIES[1], lw=0.8, alpha=0.55),
-         Line2D([], [], color=FAINT, lw=7)],
-        ["the whole scan, at the TR harmonics",
-         "the canonical window — what the gate judges",
-         "the whole scan at every frequency",
-         "where vendor bands fall"],
-        loc="upper center", bbox_to_anchor=(0.5, 0.925), ncols=2, fontsize=9.8,
+        [
+            Line2D([], [], color=SERIES[1], lw=1.2),
+            Line2D([], [], color=INK, lw=1.3, ls=(0, (4, 2))),
+            Line2D([], [], color=SERIES[1], lw=0.8, alpha=0.55),
+            Line2D([], [], color=FAINT, lw=7),
+        ],
+        [
+            "the whole scan, at the TR harmonics",
+            "the canonical window — what the gate judges",
+            "the whole scan at every frequency",
+            "where vendor bands fall",
+        ],
+        loc="upper center",
+        bbox_to_anchor=(0.5, 0.925),
+        ncols=2,
+        fontsize=9.8,
     )
     figure.suptitle(
         "One repetition played sixteen times, each kind of variation switched on\n"
         "alone. The window is above the scan at every line, by a few percent.",
-        x=0.02, y=0.995, ha="left", va="top", fontsize=12.0, color=INK,
+        x=0.02,
+        y=0.995,
+        ha="left",
+        va="top",
+        fontsize=12.0,
+        color=INK,
     )
     return save(figure, "canonical_tr")
 
@@ -558,10 +612,21 @@ def basis_equivalence(arms=8):
         freqs, one = engine_lines(turned, index, ACTUAL)
         _, other = engine_lines(written, index, ACTUAL)
         axis.plot(freqs, one.max(0), color=SERIES[index % len(SERIES)], lw=1.0)
-        axis.plot(freqs, other.max(0), color=INK, lw=0, marker="o", ms=2.2, mfc="none", mew=0.6)
+        axis.plot(
+            freqs,
+            other.max(0),
+            color=INK,
+            lw=0,
+            marker="o",
+            ms=2.2,
+            mfc="none",
+            mew=0.6,
+        )
         gap = np.abs(one.max(0) - other.max(0)) / np.maximum(one.max(0), 1e-12)
         loud = one.max(0) > 0.05 * one.max()
-        print(f"    arm {index}: rotation vs written out, median gap {np.median(gap[loud]):.2e}")
+        print(
+            f"    arm {index}: rotation vs written out, median gap {np.median(gap[loud]):.2e}"
+        )
     draw_bands(axis, [(550.0, 700.0, 0.0), (1150.0, 1300.0, 0.0)])
     frame(axis, "the same scan, both encodings, arm by arm", 2000.0)
     legend(
@@ -595,7 +660,12 @@ def basis_equivalence(arms=8):
 FAMILIES = (
     ("trapezoids only", "gradient echo, 32 phase encodes", cartesian, 2500.0),
     ("a compressed train of them", "single-shot EPI", epi_series, 2500.0),
-    ("one long arbitrary waveform", "spiral, one arm", lambda: spiral(1, matrix=64), 2000.0),
+    (
+        "one long arbitrary waveform",
+        "spiral, one arm",
+        lambda: spiral(1, matrix=64),
+        2000.0,
+    ),
 )
 
 
@@ -620,15 +690,21 @@ def shape_response():
         loud = fast.max(0) > 0.01 * fast.max()
         residual = np.abs(fast.max(0) - slow.max(0)) / np.maximum(fast.max(0), 1e-12)
         bottom = axes[1, column]
-        bottom.semilogy(freqs[loud], np.maximum(residual[loud], 1e-12), ".", color=SERIES[0], ms=3)
+        bottom.semilogy(
+            freqs[loud], np.maximum(residual[loud], 1e-12), ".", color=SERIES[0], ms=3
+        )
         bottom.set_ylim(1e-9, 1e-2)
         bottom.set_xlim(0, max_freq)
         _style(bottom, "relative difference" if column == 0 else "")
         bottom.text(
-            0.98, 0.06,
+            0.98,
+            0.06,
             f"median {np.median(residual[loud]):.0e}\n{fast_ms:.0f} ms against {slow_ms:.0f} ms",
-            transform=bottom.transAxes, ha="right", va="bottom",
-            fontsize=10.0, color=MUTED,
+            transform=bottom.transAxes,
+            ha="right",
+            va="bottom",
+            fontsize=10.0,
+            color=MUTED,
         )
         bottom.set_xlabel("frequency (Hz)", fontsize=10.8)
         if column == 0:
@@ -640,7 +716,10 @@ def shape_response():
 
     legend(
         figure,
-        [Line2D([], [], color=SERIES[1], lw=2.4, alpha=0.5), Line2D([], [], color=INK, lw=0.9)],
+        [
+            Line2D([], [], color=SERIES[1], lw=2.4, alpha=0.5),
+            Line2D([], [], color=INK, lw=0.9),
+        ],
         [
             "a direct Fourier integral of the rendered repetition",
             "the closed forms the engine evaluates",
@@ -687,7 +766,9 @@ def finite_reps(repetitions=16):
         single = numerical_lines(sequence, points).max(0)
         turns = points * period
         kernel = np.abs(np.sin(repetitions * np.pi * turns))
-        kernel = kernel / np.maximum(repetitions * np.abs(np.sin(np.pi * turns)), 1e-300)
+        kernel = kernel / np.maximum(
+            repetitions * np.abs(np.sin(np.pi * turns)), 1e-300
+        )
         kernel[np.abs(np.sin(np.pi * turns)) < 1e-12] = 1.0
         return points, single * kernel
 
@@ -706,12 +787,19 @@ def finite_reps(repetitions=16):
     lobe_freqs, on_lobe = probe(lobe_offsets)
     axis.plot(lobe_freqs, on_lobe, "o", color=INK, ms=5, mew=0, zorder=4)
     null_freqs, on_null = probe(null_offsets)
-    axis.plot(null_freqs, on_null, "o", color=SERIES[0], ms=6, mfc="none", mew=1.2, zorder=4)
+    axis.plot(
+        null_freqs, on_null, "o", color=SERIES[0], ms=6, mfc="none", mew=1.2, zorder=4
+    )
     exact_freq, exact = probe([0.0])
     axis.plot(exact_freq, exact, "o", color="#e34948", ms=6.5, mew=0, zorder=5)
     axis.axhline(POLICY_MT_PER_M, color="#e34948", lw=1.0, ls=(0, (4, 2)), zorder=3)
     axis.text(
-        dense[0], POLICY_MT_PER_M * 1.03, "7.5 mT/m", fontsize=9.7, color="#e34948", va="bottom"
+        dense[0],
+        POLICY_MT_PER_M * 1.03,
+        f"{POLICY_MT_PER_M:g} mT/m",
+        fontsize=9.7,
+        color="#e34948",
+        va="bottom",
     )
     _style(axis, f"one harmonic of a {repetitions}-repetition scan, at {centre:.0f} Hz")
     axis.set_xlabel("frequency (Hz)", fontsize=10.8)
@@ -724,7 +812,9 @@ def finite_reps(repetitions=16):
             Line2D([], [], color=SERIES[1], lw=1.4, alpha=0.65),
             Line2D([], [], color="#e34948", lw=0, marker="o", ms=6.5),
             Line2D([], [], color=INK, lw=0, marker="o", ms=5),
-            Line2D([], [], color=SERIES[0], lw=0, marker="o", ms=6, mfc="none", mew=1.2),
+            Line2D(
+                [], [], color=SERIES[0], lw=0, marker="o", ms=6, mfc="none", mew=1.2
+            ),
         ],
         [
             "the whole record, rendered and transformed",
@@ -762,20 +852,30 @@ def finite_reps(repetitions=16):
     axis.set_ylim(-0.04, 1.08)
     for index in range(4):
         axis.text(
-            peaks[index] + 0.006, heights[index] + 0.035,
-            f"{heights[index]:.2f}", fontsize=9.7, color=MUTED,
+            peaks[index] + 0.006,
+            heights[index] + 0.035,
+            f"{heights[index]:.2f}",
+            fontsize=9.7,
+            color=MUTED,
         )
     axis.text(
-        0.42, 0.93,
+        0.42,
+        0.93,
         "peak heights do not depend on $M$,\nonly their spacing does — so four\n"
         "probes a side cover any scan length",
-        transform=axis.transAxes, fontsize=10.0, color=MUTED, va="top",
+        transform=axis.transAxes,
+        fontsize=10.0,
+        color=MUTED,
+        va="top",
     )
 
     figure.suptitle(
         "Between the harmonics sits drive a resonance would feel, and only a finite\n"
         "scan has it — which is why the check cannot stop at the harmonics",
-        x=0.02, ha="left", fontsize=12.0, color=INK,
+        x=0.02,
+        ha="left",
+        fontsize=12.0,
+        color=INK,
     )
 
     at_lobes = np.interp(lobe_freqs, dense, record)
@@ -808,13 +908,19 @@ def epi_comb(repetitions=16):
         forbidden_bands=[(lo, hi, amp * GAMMA) for lo, hi, amp in EPI_BANDS],
     )
     freqs = np.asarray(spectra["analytical_peak_freqs"], float)
-    amps = np.stack(
-        [np.asarray(spectra[f"analytical_peak_amp_g{ax}"], float) for ax in "xyz"]
-    ).max(0) / GAMMA
+    amps = (
+        np.stack(
+            [np.asarray(spectra[f"analytical_peak_amp_g{ax}"], float) for ax in "xyz"]
+        ).max(0)
+        / GAMMA
+    )
     candidates = np.asarray(spectra["candidate_freqs"], float)
-    on_line = np.stack(
-        [np.asarray(spectra[f"candidate_amps_g{ax}"], float) for ax in "xyz"]
-    ).max(0) / GAMMA
+    on_line = (
+        np.stack(
+            [np.asarray(spectra[f"candidate_amps_g{ax}"], float) for ax in "xyz"]
+        ).max(0)
+        / GAMMA
+    )
     refused = np.asarray(spectra["candidate_violations"], int).astype(bool)
 
     figure, axis = plt.subplots(figsize=(8.6, 4.06))
@@ -832,9 +938,17 @@ def epi_comb(repetitions=16):
     probes = np.unique(
         np.concatenate([(k / spacing + offsets) * spacing for k in candidates])
     )
-    axis.plot(probes, record_spectrum(sequence, probes), "o", color=SERIES[1],
-              ms=2.6, mfc="none", mew=0.8, zorder=4,
-              label="the finite-repeat lobes between them")
+    axis.plot(
+        probes,
+        record_spectrum(sequence, probes),
+        "o",
+        color=SERIES[1],
+        ms=2.6,
+        mfc="none",
+        mew=0.8,
+        zorder=4,
+        label="the finite-repeat lobes between them",
+    )
     draw_bands(axis, EPI_BANDS)
 
     for mask, colour, label in (
@@ -842,19 +956,32 @@ def epi_comb(repetitions=16):
         (refused, "#e34948", "harmonic in band, its interval does not"),
     ):
         if mask.any():
-            axis.plot(candidates[mask], on_line[mask], "o", color=colour, ms=5,
-                      mew=0, label=label, zorder=7)
+            axis.plot(
+                candidates[mask],
+                on_line[mask],
+                "o",
+                color=colour,
+                ms=5,
+                mew=0,
+                label=label,
+                zorder=7,
+            )
     frame(axis, "", 2500.0)
     legend(axis, ncol=1)
     axis.set_ylim(0.1, 40.0)
     figure.suptitle(
         "The verdict: every frequency a band covers, against the level that band allows",
-        x=0.02, ha="left", fontsize=12.0, color=INK,
+        x=0.02,
+        ha="left",
+        fontsize=12.0,
+        color=INK,
     )
     print(f"    candidates {candidates.size}, refused {int(refused.sum())}")
     for f_hz, a, bad in zip(candidates, on_line, refused):
         if bad:
-            print(f"      refused at {f_hz:.1f} Hz (on the harmonic itself: {a:.2f} mT/m)")
+            print(
+                f"      refused at {f_hz:.1f} Hz (on the harmonic itself: {a:.2f} mT/m)"
+            )
     return save(figure, "epi_comb")
 
 

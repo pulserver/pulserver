@@ -15,6 +15,7 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <algorithm>
 #include <vector>
 #include <tuple>
 
@@ -169,6 +170,41 @@ static py::dict _find_tr(_PulseqCollection& pc, int subsequence_idx = 0)
     return out;
 }
 
+/* A band's optional fourth element names the physical axes it applies to:
+ * an int bit mask (1 x, 2 y, 4 z) or a string of axis letters ("x", "gx",
+ * "yz"). */
+static int band_axis_mask(const py::handle& h)
+{
+    if (py::isinstance<py::str>(h))
+    {
+        int mask = 0;
+        for (char c : h.cast<std::string>())
+        {
+            if (c == 'g' || c == 'G')
+                continue; /* the 'gx' spelling of read_esp_bands */
+            switch (c)
+            {
+            case 'x':
+            case 'X':
+                mask |= 1;
+                break;
+            case 'y':
+            case 'Y':
+                mask |= 2;
+                break;
+            case 'z':
+            case 'Z':
+                mask |= 4;
+                break;
+            default:
+                throw std::invalid_argument("a band's axis must name x, y or z");
+            }
+        }
+        return mask;
+    }
+    return h.cast<int>();
+}
+
 static py::dict _calc_mech_resonances(
     _PulseqCollection& pc,
     int subsequence_idx,
@@ -191,6 +227,7 @@ static py::dict _calc_mech_resonances(
         b.freq_min_hz = t[0].cast<float>();
         b.freq_max_hz = t[1].cast<float>();
         b.max_amplitude_hz_per_m = t[2].cast<float>();
+        b.axis_mask = t.size() > 3 ? band_axis_mask(t[3]) : 0;
         bands.push_back(b);
     }
 
@@ -251,6 +288,7 @@ static py::dict _calc_mech_resonances(
     out["candidate_grad_amps_gy"] = sp.candidate_grad_amps_gy;
     out["candidate_grad_amps_gz"] = sp.candidate_grad_amps_gz;
     out["candidate_violations"] = sp.candidate_violations;
+    out["candidate_eps"] = sp.candidate_eps;
 
     out["num_component_terms"] = sp.num_component_terms;
     out["component_freqs_hz"] = sp.component_freqs_hz;
@@ -270,6 +308,12 @@ static py::dict _calc_mech_resonances(
     out["envelope_amp_gx"] = sp.envelope_amp_gx;
     out["envelope_amp_gy"] = sp.envelope_amp_gy;
     out["envelope_amp_gz"] = sp.envelope_amp_gz;
+
+    out["num_contributors"] = sp.num_contributors;
+    out["contributor_def_ids"] = sp.contributor_def_ids;
+    out["contributor_shares"] = sp.contributor_shares;
+    out["contributor_freq_hz"] = sp.contributor_freq_hz;
+    out["contributor_axis"] = sp.contributor_axis;
 
     return out;
 }
@@ -519,6 +563,7 @@ static void _check_safety(
         b.freq_min_hz = t[0].cast<float>();
         b.freq_max_hz = t[1].cast<float>();
         b.max_amplitude_hz_per_m = t[2].cast<float>();
+        b.axis_mask = t.size() > 3 ? band_axis_mask(t[3]) : 0;
         bands.push_back(b);
     }
 
@@ -596,77 +641,6 @@ namespace
 
 } // namespace
 
-/** The occurrence-score prices per block, and the score's sweep result. */
-static py::dict _pns_score_bounds(
-    _PulseqCollection& pc,
-    float stim_threshold,
-    float decay_constant_us,
-    int subseq_idx)
-{
-    pulseg_pns_irnich ctx;
-    pulseg_pns_model model;
-    pulseg_pns_irnich_init(&model, &ctx, decay_constant_us, stim_threshold, 1.0f);
-    pulseg_collection* coll = pc.coll().handle();
-    if (subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
-        throw std::out_of_range("subsequence index out of range");
-    pulseg__pns_score* score = nullptr;
-    int declined = 0;
-    double macs = 0.0;
-    int rc = pulseg__pns_score_build_ex(
-        &score,
-        &coll->descriptors[subseq_idx],
-        &model,
-        pc.coll().opts().gamma_hz_per_t,
-        pc.coll().opts().parallel_for_fn,
-        pc.coll().opts().parallel_ctx,
-        &declined,
-        &macs);
-    if (PULSEG_FAILED(rc))
-        throw std::runtime_error("pns score build failed");
-    py::dict out;
-    out["declined"] = declined != 0;
-    out["build_macs"] = macs;
-    if (declined || !score)
-        return out;
-    const int n = coll->descriptors[subseq_idx].num_blocks;
-    py::array_t<float> u(n), env({n, PULSEG__PNS_SCORE_WINDOWS}),
-        tail({n, PULSEG__PNS_SCORE_ZONES});
-    py::array_t<double> t0(n), t1(n);
-    for (int b = 0; b < n; ++b)
-        pulseg__pns_score_block_bound(
-            score,
-            b,
-            u.mutable_data() + b,
-            env.mutable_data() + static_cast<size_t>(b) * PULSEG__PNS_SCORE_WINDOWS,
-            tail.mutable_data() + static_cast<size_t>(b) * PULSEG__PNS_SCORE_ZONES,
-            t0.mutable_data() + b,
-            t1.mutable_data() + b);
-    float score_max = 0.0f;
-    int argmax = -1;
-    double eval_macs = 0.0;
-    pulseg__pns_score_evaluate(score, &score_max, &argmax, &eval_macs);
-    py::list bases;
-    for (int i = 0; i < pulseg__pns_score_num_bases(score); ++i)
-    {
-        const pulseg__pns_basis_info* info = pulseg__pns_score_basis_info(score, i);
-        py::dict d;
-        d["base_id"] = info->base_id;
-        d["num_elements"] = info->num_elements;
-        d["d"] = info->d;
-        bases.append(d);
-    }
-    pulseg__pns_score_free(score);
-    out["u"] = u;
-    out["env"] = env;
-    out["tail"] = tail;
-    out["t_start_us"] = t0;
-    out["t_end_us"] = t1;
-    out["score_max"] = score_max;
-    out["argmax"] = argmax;
-    out["bases"] = bases;
-    return out;
-}
-
 /** Exact response peak of a block range, the way an offender range is settled. */
 static double _pns_exact_range_peak(
     _PulseqCollection& pc,
@@ -698,9 +672,11 @@ static double _pns_exact_range_peak(
         start,
         count,
         judge_from_us,
+        0.0,
         &model,
         pc.coll().opts().gamma_hz_per_t,
-        &peak);
+        &peak,
+        nullptr);
     pulseg_check_plan_destroy(plan);
     if (PULSEG_FAILED(rc))
         throw std::runtime_error(std::string("exact range peak: ") + diag.message);
@@ -710,7 +686,7 @@ static double _pns_exact_range_peak(
 static py::dict _mech_scan_window_probe(
     _PulseqCollection& pc,
     const std::vector<std::tuple<double, double, int>>& grids,
-    double window_us,
+    const py::object& window_us,
     int flags,
     int subseq_idx)
 {
@@ -728,21 +704,31 @@ static py::dict _mech_scan_window_probe(
         n_fine += one.count;
         g.push_back(one);
     }
+    std::vector<double> windows(g.size(), 0.0);
+    if (py::isinstance<py::sequence>(window_us) && !py::isinstance<py::str>(window_us))
+    {
+        auto seq = window_us.cast<std::vector<double>>();
+        if (seq.size() != g.size())
+            throw std::invalid_argument("one window per grid");
+        windows = seq;
+    }
+    else
+        std::fill(windows.begin(), windows.end(), window_us.cast<double>());
     py::array_t<float> gx(n_fine), gy(n_fine), gz(n_fine);
     py::array_t<double> freqs(n_fine);
-    double span_max_us = 0.0;
+    std::vector<double> spans(g.size(), 0.0);
     int rc = pulseg__mech_scan_window_probe(
         &coll->descriptors[subseq_idx],
         g.data(),
         static_cast<int>(g.size()),
-        window_us,
+        windows.data(),
         flags,
         pc.coll().opts().parallel_for_fn,
         pc.coll().opts().parallel_ctx,
         gx.mutable_data(),
         gy.mutable_data(),
         gz.mutable_data(),
-        &span_max_us);
+        spans.data());
     if (PULSEG_FAILED(rc))
         throw std::runtime_error("scan window probe failed: " + std::to_string(rc));
     double* f = freqs.mutable_data();
@@ -755,7 +741,8 @@ static py::dict _mech_scan_window_probe(
     out["amp_gx"] = gx;
     out["amp_gy"] = gy;
     out["amp_gz"] = gz;
-    out["span_max_us"] = span_max_us;
+    out["span_max_us"] = *std::max_element(spans.begin(), spans.end());
+    out["span_us"] = spans;
     return out;
 }
 
@@ -775,6 +762,7 @@ static py::dict _check_safety_profiled(
         b.freq_min_hz = t[0].cast<float>();
         b.freq_max_hz = t[1].cast<float>();
         b.max_amplitude_hz_per_m = t[2].cast<float>();
+        b.axis_mask = t.size() > 3 ? band_axis_mask(t[3]) : 0;
         cbands.push_back(b);
     }
     pulseg_forbidden_band_list band_list = PULSEG_FORBIDDEN_BAND_LIST_INIT;
@@ -929,6 +917,8 @@ static py::list _get_segment_blocks(_PulseqCollection& pc)
             blk["start_time_us"] = bi.start_time_us;
             blk["has_rf"] = bi.has_rf;
             blk["has_adc"] = bi.has_adc;
+            blk["grad_def_id"] =
+                py::make_tuple(bi.grad_def_id[0], bi.grad_def_id[1], bi.grad_def_id[2]);
             blk["has_rotation"] = bi.has_rotation;
             blk["has_digitalout"] = bi.has_digitalout;
             blk["is_variable_delay"] = bi.is_variable_delay;
@@ -1181,7 +1171,43 @@ void pulserver_bind_pulseg(py::module_& m)
             py::arg("adc_raster_time"),
             py::arg("block_duration_raster"),
             py::arg("parse_labels") = true,
-            py::arg("label_column_map") = std::vector<int>());
+            py::arg("label_column_map") = std::vector<int>())
+        .def(
+            "set_prescription_rotation",
+            [](_PulseqCollection& pc, const py::object& rotation)
+            {
+                if (rotation.is_none())
+                {
+                    pc.coll().set_prescription_rotation(nullptr);
+                    return;
+                }
+                auto r = rotation.cast<std::vector<float>>();
+                if (r.size() != 9)
+                    throw std::invalid_argument("a prescription rotation is 9 row-major values");
+                pc.coll().set_prescription_rotation(r.data());
+            },
+            py::arg("rotation"),
+            "The scanner prescription every later safety check runs in: 9 row-major "
+            "values with physical = R * logical, or None for the design frame.")
+        .def(
+            "set_mech_memory",
+            [](_PulseqCollection& pc, double memory_s)
+            { pc.coll().set_mech_memory_us(memory_s * 1e6); },
+            py::arg("memory_s"),
+            "The resonance memory, in seconds, every later mechanical-resonance reading uses.")
+        .def_property_readonly(
+            "mech_memory",
+            [](const _PulseqCollection& pc) { return pc.coll().opts().mech_memory_us * 1e-6; })
+        .def_property_readonly(
+            "prescription_rotation",
+            [](const _PulseqCollection& pc) -> py::object
+            {
+                const pulseg_opts& o = pc.coll().opts();
+                if (!o.has_prescription_rotation)
+                    return py::none();
+                return py::cast(
+                    std::vector<float>(o.prescription_rotation, o.prescription_rotation + 9));
+            });
 
     m.def("_find_tr", &_find_tr, py::arg("collection"), py::arg("subsequence_idx") = 0);
 
@@ -1257,15 +1283,6 @@ void pulserver_bind_pulseg(py::module_& m)
         py::arg("decay_constant_us") = 0.0f,
         py::arg("pns_threshold_percent") = 100.0f,
         py::arg("skip_pns") = true);
-    m.def(
-        "_pns_score_bounds",
-        &_pns_score_bounds,
-        py::arg("collection"),
-        py::arg("stim_threshold"),
-        py::arg("decay_constant_us"),
-        py::arg("subseq_idx") = 0,
-        "Per-block occurrence-score prices (u, envelope per window, tail per zone, span) and "
-        "the sweep's maximum.");
     m.def(
         "_pns_exact_range_peak",
         &_pns_exact_range_peak,

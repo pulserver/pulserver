@@ -152,6 +152,7 @@ class SafetyViewsMixin:
         tr: str | int | None = None,
         resonance_lines: bool = False,
         bands: list | None = None,
+        memory: float | None = None,
         compat: bool = True,
     ):
         """The gradient spectrum of the sequence, or of one TR.
@@ -192,9 +193,15 @@ class SafetyViewsMixin:
             over the spectrogram, and return it. Needs ``tr``.
         bands : list of tuple, optional
             Forbidden bands as ``(freq_min_hz, freq_max_hz,
-            max_amplitude_hz_per_m)``, which decide which lines count as
-            violations. Read only when ``resonance_lines`` is set; defaults
+            max_amplitude_hz_per_m[, channel])``, which decide which lines
+            count as violations; a band tagged ``'gx'``, ``'gy'`` or ``'gz'``
+            is judged on that axis alone. Read only when ``resonance_lines`` is set; defaults
             to whatever ``acoustic_resonances`` describes, or to nothing.
+        memory : float, optional
+            The resonance memory the window reading integrates over, in
+            seconds: how long a mode sums the gradient drive before it
+            responds. The engine's own value (20 ms) when omitted. Read only
+            when ``resonance_lines`` is set.
 
         Returns
         -------
@@ -303,7 +310,7 @@ class SafetyViewsMixin:
                 )
                 for resonance in acoustic_resonances
             ]
-        resonances = _resonance_lines(structure, tr, max_frequency, bands)
+        resonances = _resonance_lines(structure, tr, max_frequency, bands, memory)
 
         if plot:
             _safety.plot_resonances(resonances, max_frequency=max_frequency)
@@ -366,8 +373,18 @@ def _plot_pns(components: np.ndarray, raster: float) -> None:
     _safety.overlay_pns_thresholds()
 
 
+def _band_tuple(band) -> tuple:
+    """A band as the engine takes it: (f_min_hz, f_max_hz, amplitude_hz_per_m[, axes])."""
+    head = tuple(float(value) for value in band[:3])
+    return (*head, band[3]) if len(band) > 3 else head
+
+
 def _resonance_lines(
-    structure: _Structure, tr, max_frequency: float, bands: list
+    structure: _Structure,
+    tr,
+    max_frequency: float,
+    bands: list,
+    memory: float | None = None,
 ) -> _safety.MechResonances:
     """The C safety core's acoustic line spectrum for one TR.
 
@@ -378,6 +395,8 @@ def _resonance_lines(
     from .._ext.pulseg import _calc_mech_resonances
 
     mode, index = structure.resolve(tr)
+    if memory is not None:
+        structure.collection.set_mech_memory(float(memory))
     spectra = _calc_mech_resonances(
         structure.collection,
         0,
@@ -389,6 +408,6 @@ def _resonance_lines(
         # ``test_the_verdict_does_not_move_with_the_envelope_resolution``.
         target_resolution_hz=max(float(max_frequency) / _ENVELOPE_BINS, 0.5),
         max_freq_hz=float(max_frequency),
-        forbidden_bands=[tuple(float(value) for value in band[:3]) for band in bands],
+        forbidden_bands=[_band_tuple(band) for band in bands],
     )
     return _safety.MechResonances.from_spectra(spectra, structure.tr_duration, bands)
