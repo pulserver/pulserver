@@ -174,13 +174,15 @@ void pulseg_mech_resonances_spectra_free(pulseg_mech_resonances_spectra *s)
 
 /** The sustained sinusoid, in mT/m, a band with a zero amplitude column
  *  refuses above: the harm threshold of these coils, estimated from the
- *  vendor's own decisions read through its tables with this very check.
- *  The loudest line in any sequence the vendor runs is 11.3 (MPRAGE on the
- *  MAGNUS x band), the quietest in any it refuses 15.0 (an EPI whose echo
- *  spacing lands in a band) and 26.6 (FIESTA at its locked TR); where the
- *  vendor states an amplitude it is 13-15 (HRMw) and 21-27 (ZRMw) in the
- *  same units. docs/_bench/mechres_calibration.py prints the bracket. */
-#define SA_ZERO_BAND_SINUSOID_MT_PER_M 13.0f
+ *  vendor's own decisions read through its echo-spacing tables with this
+ *  very check, on the physical axis the drive falls on. What the vendor
+ *  locks out -- an echo train whose fundamental lands in a coil's band, a
+ *  FIESTA at a locked repetition time on either coil that locks one --
+ *  reads a few tenths above this value; what it runs unchecked reads below
+ *  it, the loudest half a mT/m under. The one tolerance a table states
+ *  converts to 13 in these units. docs/_bench/mechres_calibration.py prints
+ *  the bracket. */
+#define SA_ZERO_BAND_SINUSOID_MT_PER_M 10.0f
 
 /** Proton gyromagnetic ratio, for the plotting API when no opts are supplied. */
 #define SA_GAMMA_1H_HZ_PER_T 42.576e6f

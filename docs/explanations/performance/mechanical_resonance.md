@@ -14,9 +14,9 @@
   lockout — are one amplitude rule read at three harmonic orders. Read in
   the vendor's own bands, what the vendor refuses sits in a narrow range of
   sustained amplitude and what it runs unchecked sits below that range; the
-  zero-column floor `SA_ZERO_BAND_SINUSOID_MT_PER_M` is the value the one
-  stated tolerance converts to, above both. `docs/_bench/mechres_calibration.py`
-  reads the tables and prints the bracket.
+  zero-column floor `SA_ZERO_BAND_SINUSOID_MT_PER_M` sits between the two.
+  `docs/_bench/mechres_calibration.py` reads the tables and prints the
+  bracket.
 - **Two paths, one reading.** While the repetitions play the same waveform
   sets, the reading comes from the structural TR laid out over the memory,
   varying positions bounded by their largest magnitude; a bound that refuses,
@@ -98,12 +98,10 @@ train whose fundamental sits just outside a band and leaks into it through
 the window's own resolution, then the stack of spirals, the MPRAGE and the 3D
 gradient echo. The script also prints the tolerances the tables do state,
 converted to sinusoid amplitude through the triangle-train factor $8/\pi^2$:
-the one stated for the HRMw coil converts to exactly the floor, which sits
-above the refusals as well as the allowances. A floor at the vendor's own
-cluster would reproduce every refusal on these tables with half a mT/m of
-margin to the loudest allowed reading; the floor kept is the stated
-tolerance's. It is one constant, set in one place and named where it is
-used.
+the one stated for the HRMw coil converts to a value above the vendor's own
+cluster. The floor sits at that cluster, refusing every refusal on these
+tables with half a mT/m of margin to the loudest allowed reading. It is one
+constant, set in one place and named where it is used.
 
 ```{figure} ../assets/mechanical_resonance/epi_fiesta.png
 The vendor's refusals and a free TR, per physical axis, with every band the
@@ -118,17 +116,15 @@ floor — which is why a zero column can be held to a floor at all.
 ### Where the floor leaves the vendor's decisions
 
 The product locks a family out by its parameter alone; the criterion reads
-amplitude. At the floor the stated tolerance sets, the refusals on these
-tables read below it and pass: the echo train in band, whose spacing of a few
-hundred microseconds makes its lobes nearly triangular so that a fourteen
-mT/m plateau sustains about ten at the fundamental; the FIESTA at a locked
-TR, whose readout comb sustains about ten at the harmonic in band; the
-multi-echo trains at the locked spacing, monopolar or bipolar, which at four
-and eight echoes fill a fraction of the memory and read lower still. The
-calibration script lists the packets as accepted divergences and prints the
-rest with their readings. An acquisition-based clause that refused these
-trains would refuse a spiral of the same plateau, so the reading stands and
-the floor is the one policy in the check.
+amplitude. At the floor, the echo train in band and the FIESTA at a locked
+TR are refused as the vendor refuses them. Two kinds of train the vendor
+refuses read below the floor and pass: a train whose plateau is under the
+floor, which cannot sustain a sinusoid above it; and a multi-echo packet of
+a few echoes at the locked spacing, monopolar or bipolar, which fills a
+fraction of the memory. The calibration script lists them as accepted
+divergences and prints the rest with their readings. An acquisition-based
+clause that refused these trains would refuse a spiral of the same plateau,
+so the reading stands and the floor is the one policy in the check.
 
 ### The memory
 

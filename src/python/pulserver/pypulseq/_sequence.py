@@ -2055,6 +2055,27 @@ class Sequence(AnalysisMixin, SafetyViewsMixin, SoftDelayMixin):
             ext=int(row[5]),
         )
 
+    def _read_description(self) -> dict:
+        """The reconstruction's reading of this sequence: the binary form,
+        handed to the reader the scanner's stream is built with. The
+        structural TR is declared first, as writing declares it, and the
+        reading is kept against the revision so asking again is free."""
+        import tempfile
+        from pathlib import Path
+
+        from .._ext.pulseg import _read_sequence_description
+
+        cached = getattr(self, "_description_cache", None)
+        if cached is not None and cached[0] == self._revision:
+            return cached[1]
+        self.declare_tr()
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "sequence.bin"
+            path.write_bytes(self._to_binary())
+            raw = _read_sequence_description(str(path))
+        self._description_cache = (self._revision, raw)
+        return raw
+
     @property
     def sequence_descriptor(self):
         """The state-machine description of one repetition time.
@@ -2069,21 +2090,12 @@ class Sequence(AnalysisMixin, SafetyViewsMixin, SoftDelayMixin):
         -----
         **This is the same object the reconstruction receives**, not a
         parallel description of it.
-        :func:`~pulserver.mrd.decode_sequence_description` builds one
-        from the SEQDESC waveforms the scanner streams; this builds one from a
-        sequence that has not been written yet, let alone run. Both come out of
-        ``pulseg_get_sequence_description`` in the C core, so a simulation
-        driven from a design script and a simulation driven from a scan see
-        the same numbers -- which is the only reason comparing them means
-        anything.
-
-        **Gradient waveforms are never decompressed here.** A simulation wants
-        flip angles, repetition times, phases and ADC roles; making it pay for
-        the waveform decompression it would immediately discard is the one
-        performance mistake this method could make.
-
-        The scan structure it is built from is cached against the sequence's
-        revision, so asking repeatedly costs one detection.
+        :func:`~pulserver.mrd.decode_sequence_description` builds one from
+        the SEQDESC waveforms the scanner streams; this builds one from a
+        sequence that has not been run yet, through the reconstruction's own
+        reader of the sequence file, so a simulation driven from a design
+        script and a simulation driven from a scan see the same numbers.
+        The RF shapes come as the file stores them, compressed.
         """
         from ..mrd._description import (
             EventType,
@@ -2092,14 +2104,8 @@ class Sequence(AnalysisMixin, SafetyViewsMixin, SoftDelayMixin):
             SequenceDescription,
             SequenceEvent,
         )
-        from .._ext.pulseg import (
-            _get_rf_definitions,
-            _get_sequence_description,
-        )
 
-        structure = self._structure_for("sequence_descriptor")
-        raw = _get_sequence_description(structure.collection, 0)
-
+        raw = self._read_description()["subsequences"][0]
         events = tuple(
             SequenceEvent(
                 type=EventType(int(kind)),
@@ -2107,41 +2113,34 @@ class Sequence(AnalysisMixin, SafetyViewsMixin, SoftDelayMixin):
                 params=tuple(float(value) for value in row),
             )
             for kind, stamp, row in zip(
-                raw["type"], raw["timestamp_us"], raw["params"], strict=False
+                raw["type"], raw["timestamp_us"], raw["params"], strict=True
             )
         )
 
-        definitions = {}
-        for entry in _get_rf_definitions(structure.collection, 0):
-            channels = max(int(entry["num_channels"]), 1)
-            magnitude = np.asarray(entry["magnitude"], dtype=np.float32)
-            # Channel-major; a simulation reads the first transmit channel,
-            # and a shim is a per-channel scaling on top of it.
-            samples = magnitude.size // channels
-            phase = np.asarray(entry["phase_turns"], dtype=np.float32)
-            times = np.asarray(entry["time_us"], dtype=np.float32)
-
-            definitions[int(entry["rf_def_id"])] = RfDefinition(
-                id=int(entry["rf_def_id"]),
-                # Bandwidth is a cache-section field, derived when the
-                # description is written for recon rather than held on the
-                # collection. Nothing a simulation does needs it -- it
-                # classifies slice selectivity -- so it is left at zero rather
-                # than guessed at.
-                bandwidth_hz=0.0,
-                num_bands=1,
-                # Eight slots, all zero -- the width the SEQDESC wire format
-                # carries (PULSEG_MAX_BANDS), so a description built here and
-                # one decoded from a scanner stream compare equal instead of
-                # differing over a field neither of them uses.
-                band_frequency_offsets_hz=(0.0,) * 8,
-                band_bandwidth_hz=0.0,
-                total_b1sq_power=0.0,
-                magnitude=RfShape(samples, magnitude[:samples]),
-                phase=RfShape(samples, phase[:samples]) if phase.size else None,
-                time=RfShape(times.size, times) if times.size else None,
+        def shape(entry):
+            if entry is None:
+                return None
+            return RfShape(
+                int(entry["num_uncompressed"]),
+                np.asarray(entry["samples"], dtype=np.float32),
             )
 
+        definitions = {
+            int(entry["rf_def_id"]): RfDefinition(
+                id=int(entry["rf_def_id"]),
+                bandwidth_hz=float(entry["bandwidth_hz"]),
+                num_bands=int(entry["num_bands"]),
+                band_frequency_offsets_hz=tuple(
+                    float(v) for v in entry["band_freq_offsets_hz"]
+                ),
+                band_bandwidth_hz=float(entry["band_bandwidth_hz"]),
+                total_b1sq_power=float(entry["total_b1sq_power"]),
+                magnitude=shape(entry["magnitude"]),
+                phase=shape(entry["phase"]),
+                time=shape(entry["time"]),
+            )
+            for entry in raw["rf_defs"]
+        }
         return SequenceDescription(
             subsequence_index=int(raw["subseq_idx"]),
             tr_duration_us=float(raw["tr_duration_us"]),
@@ -2151,16 +2150,14 @@ class Sequence(AnalysisMixin, SafetyViewsMixin, SoftDelayMixin):
         )
 
     def sequence_parameters(self) -> dict:
-        """Scan-global timing and flip-angle extremes, from the C core.
+        """Scan-global timing and flip-angle extremes, as the reconstruction
+        reads them.
 
-        ``min_te_us``, ``min_tr_us``, ``max_tr_us``, ``max_flip_angle_deg`` and
-        ``total_scan_time_us``, aggregated over every subsequence.
+        ``num_subsequences``, ``min_te_us``, ``min_tr_us``, ``max_tr_us``,
+        ``max_flip_angle_deg`` and ``total_scan_time_us``, aggregated over
+        every subsequence.
         """
-        from .._ext.pulseg import _get_sequence_parameters
-
-        return _get_sequence_parameters(
-            self._structure_for("sequence_parameters").collection
-        )
+        return dict(self._read_description()["parameters"])
 
     def rf_from_lib_data(self, lib_data: list, use: str = "") -> SimpleNamespace:
         """Decode one raw RF library row into an event, upstream's way.

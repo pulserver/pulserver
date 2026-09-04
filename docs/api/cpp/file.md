@@ -33,9 +33,4 @@ The C counterpart is {doc}`../c/file`.
 ```{doxygenfunction} pulseg::Collection::get_scan_time
 ```
 
-```{doxygenfunction} pulseg::Collection::get_sequence_description
-```
-
-```{doxygenfunction} pulseg::Collection::get_sequence_parameters
-```
 ````

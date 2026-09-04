@@ -27,7 +27,7 @@
 #define PULSEG_GRAD_AXIS_Z 2
 
 /* ================================================================== */
-/*  RF use codes (pulseg_seq_event.params[1] for RF rows).            */
+/*  RF use codes: the use tag an RF event carries.                    */
 /*  Aliases of the raw Pulseq RF library's trailing e/r/i/s/p/o use   */
 /*  tag, which the pulseq module owns.  All seven are aliased because */
 /*  the parser produces all seven and seqdesc copies the field        */
@@ -1299,101 +1299,5 @@ typedef struct pulseg_rf_event
     int rf_shim_id;     /**< local shim index, -1 if none                 */
     int num_channels;   /**< channels in the RF definition waveform (>=1) */
 } pulseg_rf_event;
-
-/* ================================================================== */
-/*  Sequence description (compact canonical-TR table)                 */
-/* ================================================================== */
-
-/** ADC role codes for sequence-description rows. */
-#define PULSEG_ADC_ROLE_NON_ACQUIRED 0 /**< navigator / PMC — skip in recon  */
-#define PULSEG_ADC_ROLE_SINGLE 1       /**< single ADC in its echo group     */
-#define PULSEG_ADC_ROLE_ECHO_CENTER 2  /**< nearest-to-k-zero ADC in group   */
-#define PULSEG_ADC_ROLE_NON_CENTER 3   /**< other ADC in a multi-ADC group   */
-
-/** Event type codes for Section 5 rows. */
-#define PULSEG_SEQ_EVENT_OTHER 0 /**< pure wait / no RF or ADC event */
-#define PULSEG_SEQ_EVENT_RF 1    /**< RF pulse                       */
-#define PULSEG_SEQ_EVENT_ADC 2   /**< readout event                  */
-
-/* Keep legacy alias so existing call-sites outside this repo still compile. */
-#define PULSEG_SEQ_EVENT_WAIT PULSEG_SEQ_EVENT_OTHER
-
-/* Number of float payload fields per row (same for all event types; unused
- * fields are zero-padded).                                                */
-#define PULSEG_SEQ_EVENT_PARAMS 7
-
-/**
- * @brief One row in the compact canonical-TR event table (Section 5).
- *
- * The table has one row per block in the average-expanded canonical TR
- * (the full pass: prep + main + cooldown).  One row per block regardless
- * of event type — blocks with both RF and ADC are represented by their RF
- * row (RF takes priority).
- *
- * Timestamp semantics (pass-relative, us):
- *   RF    — RF isocenter time
- *   ADC   — k-space-zero sample time
- *   OTHER — block start time
- *
- * Payload interpretation (params[] stored as float; integer IDs are cast):
- *   RF:    [0] rf_def_id (int)        index into per-subseq RF definition table
- *          [1] rf_use (int)           PULSEG_RF_USE_* code
- *          [2] act_amplitude_hz (f)   actual |gamma*B1| peak (Hz)
- *          [3] phase_offset_rad (f)   per-instance phase incl. ppm (rad)
- *          [4] freq_offset_hz (f)     per-instance freq incl. ppm (Hz)
- *          [5] rf_shim_id (int)       shim definition index, -1 if none
- *          [6] ss_grad_amp_hz_per_m (f) amplitude of slice-selection gradient
- *                                       (Hz/m); 0.0 if absent, non-trap, or
- *                                       more than one gradient axis is active
- *
- *   ADC:   [0] adc_role (int)         PULSEG_ADC_ROLE_*
- *          [1] phase_offset_rad (f)   per-instance ADC phase incl. ppm (rad)
- *          [2] echo (int/bool)         1 when this ADC position reaches
- *                                      k-space zero for at least one instance
- *          [3..6] = 0
- *
- *   OTHER: [0..6] = 0
- *
- * The C++ reader (src/cpp/recon/sequence_cache.h) dedups the
- * (rf_def_id, rf_shim_id, ss_grad_amp_hz_per_m) triplets over all rows to
- * form a unique-tuple library. For each unique tuple it computes
- * slice_thickness_mm = bandwidth_hz / |ss_grad_amp_hz_per_m| * 1e3 and sets
- * slice_selective = (slice_thickness_mm < 10.0). Both are packed into the
- * per-subsequence RF waveform header streamed as an ISMRMRD Waveform.
- */
-typedef struct pulseg_seq_event
-{
-    int type;           /**< PULSEG_SEQ_EVENT_{OTHER,RF,ADC}    */
-    float timestamp_us; /**< anchor time (us, pass-relative)        */
-    float params[PULSEG_SEQ_EVENT_PARAMS];
-} pulseg_seq_event;
-
-/**
- * @brief Scan-global sequence parameters, aggregated across all subsequences.
- */
-typedef struct pulseg_sequence_parameters
-{
-    float min_te_us;
-    float min_tr_us;
-    float max_tr_us;
-    float max_flip_angle_deg;
-    float total_scan_time_us; /**< estimated total scan duration (us) */
-    int num_subseqs;
-    int reserved[3];
-} pulseg_sequence_parameters;
-
-/**
- * @brief Per-subsequence sequence description — compact canonical-TR table.
- *
- * @c rows is heap-allocated; freed by pulseg_sequence_description_free().
- * @c num_rows == number of blocks in the full pass (prep + main + cooldown).
- */
-typedef struct pulseg_sequence_description
-{
-    int subseq_idx;
-    float tr_duration_us; /**< full pass duration (us) */
-    int num_rows;
-    pulseg_seq_event *rows;
-} pulseg_sequence_description;
 
 #endif /* PULSEG_TYPES_H */

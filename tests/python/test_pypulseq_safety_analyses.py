@@ -37,7 +37,7 @@ GAMMA_HZ_PER_MT_PER_M = 42.576e3
 #: ``SA_ZERO_BAND_SINUSOID_MT_PER_M`` in ``pulseg_safety.c``: the sustained sinusoid a band whose
 #: amplitude column is zero is judged against. Restated here so that changing
 #: the engine's threshold without revisiting this file is a test failure.
-POLICY_MT_PER_M = 13.0
+POLICY_MT_PER_M = 10.0
 
 #: An Irnich model in the form ``calculate_pns`` recognises, with GE-shaped
 #: constants. Not a calibrated table -- it exists to exercise the branch.

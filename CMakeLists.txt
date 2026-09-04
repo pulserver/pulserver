@@ -31,6 +31,9 @@ pybind11_add_module(_ext
     ${CMAKE_SOURCE_DIR}/src/python/bindings/arbgrad.cpp
     ${CMAKE_SOURCE_DIR}/src/python/bindings/sampling.cpp
     ${CMAKE_SOURCE_DIR}/src/python/bindings/recon_cpu.cpp
+    # The reconstruction's own reader of a sequence file: the design side
+    # describes a sequence through it, so both sides read one derivation.
+    ${CMAKE_SOURCE_DIR}/src/cpp/recon/sequence_file_reader.cpp
     # The vendored MRArbGrad core; see src/cpp/arbgrad/vendor/mrarbgrad/NOTICE.md.
     ${CMAKE_SOURCE_DIR}/src/cpp/arbgrad/vendor/mrarbgrad/mag/Mag.cpp
     ${CMAKE_SOURCE_DIR}/src/cpp/arbgrad/vendor/mrarbgrad/utility/global.cpp
@@ -44,6 +47,7 @@ target_include_directories(_ext PRIVATE
     ${CMAKE_SOURCE_DIR}/src/c/vendor
     ${CMAKE_SOURCE_DIR}/src/cpp/include
     ${CMAKE_SOURCE_DIR}/src/cpp/include/pulseg
+    ${CMAKE_SOURCE_DIR}/src/cpp/recon
     ${CMAKE_SOURCE_DIR}/src/cpp/arbgrad/vendor/mrarbgrad
 )
 

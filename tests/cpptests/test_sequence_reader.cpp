@@ -7,6 +7,7 @@
 // that pipeline was deleted; a regression against any of them is a change
 // in what a reconstruction receives.
 
+#include "sequence_cache.h"
 #include "sequence_file_reader.h"
 
 #include "pulseq/expand.hpp"

@@ -89,40 +89,6 @@ here.
 ```
 ````
 
-## What the scan says about itself
-
-The event table, the RF definitions behind it, and the parameters the design
-side declared.
-
-````{only} doxygen
-```{doxygenfunction} pulseg_get_sequence_description
-:project: pulserver_c
-```
-
-```{doxygenfunction} pulseg_sequence_description_free
-:project: pulserver_c
-```
-
-```{doxygenfunction} pulseg_get_sequence_parameters
-:project: pulserver_c
-```
-
-```{doxygenstruct} pulseg_sequence_description
-:project: pulserver_c
-:members:
-```
-
-```{doxygenstruct} pulseg_sequence_parameters
-:project: pulserver_c
-:members:
-```
-
-```{doxygenstruct} pulseg_seq_event
-:project: pulserver_c
-:members:
-```
-````
-
 ## See also
 
 {doc}`pulseq` is the reader underneath. {doc}`checks` is what a collection

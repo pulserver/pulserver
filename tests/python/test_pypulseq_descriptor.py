@@ -4,10 +4,10 @@ The point of these tests is that there is **one** descriptor type and one
 derivation of it. ``pulserver.mrd.decode_sequence_description``
 builds a :class:`~pulserver.mrd.SequenceDescription` from the
 description a reconstruction consumes; ``Sequence.sequence_descriptor`` builds
-one from a sequence that has not been written yet. Both come out of
-``pulseg_get_sequence_description`` in the C core. If they could drift, a
-simulation driven from a design script and a simulation driven from a scan
-would stop being comparable, which is the whole reason to have either.
+one from a sequence that has not been run yet, through the reconstruction's
+own reader of the sequence file. If they could drift, a simulation driven
+from a design script and a simulation driven from a scan would stop being
+comparable, which is the whole reason to have either.
 """
 
 from __future__ import annotations
@@ -193,22 +193,31 @@ def test_it_is_cached_against_the_revision_and_rebuilt_after_a_change(system):
     seq = _gre(system, repetitions=4)
 
     _ = seq.sequence_descriptor
-    cached = seq._structure
+    cached = seq._description_cache
     _ = seq.sequence_descriptor
-    assert seq._structure is cached, "a second call rebuilt the structure"
+    assert seq._description_cache is cached, "a second call read the sequence again"
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         seq.add_block(pp.make_delay(5e-3))
 
     _ = seq.sequence_descriptor
-    assert seq._structure is not cached, (
-        "a mutated sequence answered from the old structure"
+    assert seq._description_cache is not cached, (
+        "a mutated sequence answered from the old reading"
     )
 
 
 def test_the_scan_parameters_come_across(system):
-    parameters = _gre(system).sequence_parameters()
-    assert parameters["num_subseqs"] == 1
-    assert parameters["min_tr_us"] == pytest.approx(parameters["max_tr_us"])
+    """The reader takes TE, TR and the flip angle from the definitions the
+    design declared, never from the waveforms."""
+    seq = _gre(system)
+    seq.set_definition("TE", 5e-3)
+    seq.set_definition("TR", 20e-3)
+    seq.set_definition("FlipAngle", FLIP_DEGREES)
+    parameters = seq.sequence_parameters()
+    assert parameters["num_subsequences"] == 1
+    assert parameters["min_te_us"] == pytest.approx(5000.0)
+    assert parameters["min_tr_us"] == pytest.approx(20000.0)
+    assert parameters["max_tr_us"] == pytest.approx(20000.0)
+    assert parameters["max_flip_angle_deg"] == pytest.approx(FLIP_DEGREES)
     assert parameters["total_scan_time_us"] > parameters["max_tr_us"]

@@ -42,7 +42,6 @@ set(PULSEG_SOURCES
     structure/pulseg_dedup.c
     structure/pulseg_structure.c
     structure/pulseg_getters.c
-    structure/pulseg_seqdesc.c
     waveforms/pulseg_waveforms.c
     waveforms/pulseg_chunk.c
     safety/pulseg_check_plan.c

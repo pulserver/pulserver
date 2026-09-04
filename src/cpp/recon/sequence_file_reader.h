@@ -23,7 +23,7 @@
 #ifndef SEQUENCE_FILE_READER_H
 #define SEQUENCE_FILE_READER_H
 
-#include "sequence_cache.h"
+#include "sequence_model.h"
 
 #include <string>
 

@@ -29,9 +29,6 @@
 /* ================================================================== */
 /*  Constants moved from public header (implementation details)       */
 /* ================================================================== */
-/* PULSEG_RF_USE_* now defined in pulseg_types.h (public; pulseg_seq_event's
- * doc comment already referenced these as public API). */
-
 #define PULSEG_MAX_RF_SHIM_CHANNELS 64
 
 /* pulseq_definition and pulseq_trigger_event (used below by pointer in

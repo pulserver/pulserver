@@ -67,10 +67,28 @@ STATED_BANDS = [(b[0], b[1], 0.008 * 42.576e6, *b[3:]) for b in SYNTHETIC_BANDS]
 
 @pytest.mark.parametrize("name", ["bssfp_2d.seq", "epi_2d_main.seq"])
 def test_real_readout_combs_are_refused_by_a_tolerance_they_exceed(name):
-    """A genuine sustained readout comb: bSSFP sustains 10.1 mT/m at 877 Hz,
-    the EPI train 10.8 mT/m at 1243 Hz. A band that states 8 mT/m refuses
-    both; a zero band's floor (13 mT/m) does not, which is the documented
-    low-plateau divergence from the product."""
+    """A genuine sustained readout comb inside the band: the EPI train's
+    tooth and the bSSFP's harmonic. A band that states an 8 mT/m plateau
+    refuses both. A zero band refuses exactly the one whose reading exceeds
+    the floor, which the drawn verdict reports and the gate must match."""
+    import pulserver.pypulseq as pp
+
     with pytest.raises(RuntimeError, match="mech"):
         _check(name, 20e-6, STATED_BANDS)
-    _check(name, 20e-6, SYNTHETIC_BANDS)  # under the floor: not refused
+    system = pp.Opts(
+        max_grad=50.0, grad_unit="mT/m", max_slew=350.0, slew_unit="T/m/s", B0=3.0
+    )
+    seq = pp.Sequence(system=system)
+    seq.read((EXPECTED if (EXPECTED / name).exists() else CORPUS) / name)
+    drawn = seq.calculate_gradient_spectrum(
+        plot=False,
+        max_frequency=3000.0,
+        tr="worst_case",
+        resonance_lines=True,
+        bands=SYNTHETIC_BANDS,
+    )[4]
+    if drawn.ok:
+        _check(name, 20e-6, SYNTHETIC_BANDS)
+    else:
+        with pytest.raises(RuntimeError, match="mech"):
+            _check(name, 20e-6, SYNTHETIC_BANDS)

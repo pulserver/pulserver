@@ -118,14 +118,15 @@ $8/\pi^2$, the smallest ratio a train the vendor plays can have, which is the
 conservative side.
 
 A band that **states zero** is held to `SA_ZERO_BAND_SINUSOID_MT_PER_M`. The
-number is the one tolerance the vendor states on the same kind of coil,
-converted to sinusoid amplitude, and the {doc}`performance page
-<../performance/mechanical_resonance>` shows how it sits against the vendor's
-own decisions: read inside the vendor's bands, every family the vendor runs
-without a lockout stays below it, and so, by a smaller margin, does what the
-vendor locks out, whose readings cluster at about ten mT/m on the axis they
-drive. It is a policy constant with a provenance, not a physical constant,
-and it is set in one place.
+number is an estimate of the harm threshold read off the vendor's own
+decisions, and the {doc}`performance page <../performance/mechanical_resonance>`
+shows how: read inside the vendor's bands on the axis they drive, what the
+vendor locks out — an echo train whose fundamental lands in a band, a FIESTA
+at a locked TR on either coil that locks one — reads a few tenths above the
+floor, and every family the vendor runs unchecked reads below it. The one
+tolerance a table states converts to a larger number in the same units. It
+is a policy constant with a provenance, not a physical constant, and it is
+set in one place.
 
 ### The frame
 
@@ -147,18 +148,20 @@ frame-free and stay in the logical frame.
 ## Where the criterion and the product part
 
 The vendor locks a family out by its parameter alone, whatever its
-amplitude; the criterion reads amplitude. At the floor the stated tolerance
-sets, the vendor's refusals on the tables available here read below it and
-pass: an echo train whose spacing of a few hundred microseconds makes its
-lobes nearly triangular, so that a typical plateau sustains about ten mT/m at
-the fundamental; a FIESTA at a locked TR, whose readout comb sustains about
-the same at the harmonic in band; a multi-echo train at a locked spacing,
-which fills a fraction of the memory and reads lower. A low-bandwidth train,
-whose plateau is under the floor, cannot reach it either. The
-{doc}`performance page <../performance/mechanical_resonance>` prints the
-bracket and where a lower floor would put the check; an acquisition-based
-clause that refused these trains would refuse a spiral of the same plateau,
-so the reading stands and the floor is the one policy in the check.
+amplitude; the criterion reads amplitude. Two kinds of train the product
+refuses read below the floor and pass:
+
+- **A train whose plateau is under the floor.** A low-bandwidth echo train
+  sustains a sinusoid smaller than its plateau, and a plateau under the floor
+  cannot reach it.
+- **A short packet.** A multi-echo gradient echo of a few echoes at a locked
+  spacing fills a fraction of the memory and reads well under the floor,
+  monopolar or bipolar.
+
+Both are the criterion doing what it says; an acquisition-based clause that
+refused them would refuse a spiral of the same plateau too. The
+{doc}`performance page <../performance/mechanical_resonance>` lists them with
+their readings.
 
 ## What a refusal says, and what to do with it
 

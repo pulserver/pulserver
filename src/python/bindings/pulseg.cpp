@@ -22,6 +22,7 @@
 #include "bindings.hpp"
 
 #include "pulseg.hpp"
+#include "sequence_file_reader.h"
 // The internal header is plain C89 with no linkage guards of its own; the
 // binding is its one C++ consumer, so the C linkage is declared here at the
 // point of use. Its own includes are header-guarded and already seen above.
@@ -457,85 +458,74 @@ static py::dict _get_tr_waveforms(
 }
 
 /*
- * One subsequence's canonical-TR event table, plus the scan-global
- * parameters.
- *
- * The rows cross as flat arrays -- a type column, a timestamp column and an
- * (n, 7) params block -- rather than as a list of dicts: the table is one row
- * per block over a whole pass, and boxing seven floats per row would cost more
- * than everything else here. Their meaning is the C header's
- * (pulseg_types.h); the Python layer names the fields.
+ * The reconstruction's own reading of a sequence file: the event table, the
+ * RF definitions behind it and the scan-global parameters, as the recon
+ * reader derives them. The design side describes a sequence through this
+ * so that a simulation driven from a script and one driven from a scan see
+ * one derivation.
  */
-static py::dict _get_sequence_description(_PulseqCollection& pc, int subsequence_idx)
+static py::dict _read_sequence_description(const std::string& path)
 {
-    const auto desc = pc.coll().get_sequence_description(subsequence_idx);
-    const auto count = static_cast<py::ssize_t>(desc.rows.size());
-
-    py::array_t<int> types(count);
-    py::array_t<float> timestamps(count);
-    py::array_t<float> params({count, static_cast<py::ssize_t>(PULSEG_SEQ_EVENT_PARAMS)});
-
-    auto type_view = types.mutable_unchecked<1>();
-    auto stamp_view = timestamps.mutable_unchecked<1>();
-    auto param_view = params.mutable_unchecked<2>();
-    for (py::ssize_t i = 0; i < count; ++i)
+    const mrdserver::SequenceCache cache = mrdserver::read_sequence_files(path);
+    py::list subsequences;
+    for (const auto& desc : cache.seq_descs)
     {
-        const pulseg_seq_event& row = desc.rows[static_cast<size_t>(i)];
-        type_view(i) = row.type;
-        stamp_view(i) = row.timestamp_us;
-        for (py::ssize_t j = 0; j < static_cast<py::ssize_t>(PULSEG_SEQ_EVENT_PARAMS); ++j)
-            param_view(i, j) = row.params[j];
+        py::list types, stamps, params;
+        for (const auto& ev : desc.events)
+        {
+            types.append(static_cast<int>(ev.type));
+            stamps.append(ev.timestamp_us);
+            py::list row;
+            for (float value : ev.params)
+                row.append(value);
+            params.append(row);
+        }
+        auto shape = [](const mrdserver::RfShapeSamples& samples)
+        {
+            py::dict out;
+            out["num_uncompressed"] = samples.num_uncompressed;
+            out["samples"] = py::cast(samples.samples);
+            return out;
+        };
+        py::list rf_defs;
+        for (const auto& def : desc.rf_defs)
+        {
+            py::dict entry;
+            entry["rf_def_id"] = def.rf_def_id;
+            entry["bandwidth_hz"] = def.bandwidth_hz;
+            entry["num_bands"] = def.num_bands;
+            py::list offsets;
+            for (float value : def.band_freq_offsets_hz)
+                offsets.append(value);
+            entry["band_freq_offsets_hz"] = offsets;
+            entry["band_bandwidth_hz"] = def.band_bandwidth_hz;
+            entry["total_b1sq_power"] = def.total_b1sq_power;
+            entry["magnitude"] = shape(def.mag);
+            entry["phase"] = def.has_phase ? py::object(shape(def.phase)) : py::object(py::none());
+            entry["time"] = def.has_time ? py::object(shape(def.time)) : py::object(py::none());
+            rf_defs.append(entry);
+        }
+        py::dict one;
+        one["subseq_idx"] = desc.subseq_idx;
+        one["tr_duration_us"] = desc.tr_duration_us;
+        one["type"] = types;
+        one["timestamp_us"] = stamps;
+        one["params"] = params;
+        one["rf_defs"] = rf_defs;
+        subsequences.append(one);
     }
-
+    py::dict parameters;
+    parameters["num_subsequences"] = cache.seq_params.num_subseqs;
+    parameters["min_te_us"] = cache.seq_params.min_te_us;
+    parameters["min_tr_us"] = cache.seq_params.min_tr_us;
+    parameters["max_tr_us"] = cache.seq_params.max_tr_us;
+    parameters["max_flip_angle_deg"] = cache.seq_params.max_flip_angle_deg;
+    parameters["total_scan_time_us"] = cache.seq_params.total_scan_time_us;
     py::dict out;
-    out["subseq_idx"] = desc.subseq_idx;
-    out["tr_duration_us"] = desc.tr_duration_us;
-    out["type"] = types;
-    out["timestamp_us"] = timestamps;
-    out["params"] = params;
+    out["subsequences"] = subsequences;
+    out["parameters"] = parameters;
     return out;
 }
-
-/*
- * The RF definitions an event table's rf_def_id column points into, walked
- * until the collection stops recognising an id. Shapes come across in the
- * file's units (normalised magnitude, phase in turns, times in us) -- the
- * Python layer is where they become physics.
- */
-static py::list _get_rf_definitions(_PulseqCollection& pc, int subsequence_idx)
-{
-    py::list out;
-    for (int rf_def_id = 0;; ++rf_def_id)
-    {
-        const auto shapes = pc.coll().get_rf_definition(subsequence_idx, rf_def_id);
-        if (shapes.magnitude.empty())
-            break;
-
-        py::dict entry;
-        entry["rf_def_id"] = rf_def_id;
-        entry["num_channels"] = shapes.num_channels;
-        entry["magnitude"] = shapes.magnitude;
-        entry["phase_turns"] = shapes.phase_turns;
-        entry["time_us"] = shapes.time_us;
-        out.append(entry);
-    }
-    return out;
-}
-
-static py::dict _get_sequence_parameters(_PulseqCollection& pc)
-{
-    const auto p = pc.coll().get_sequence_parameters();
-    py::dict out;
-    out["min_te_us"] = p.min_te_us;
-    out["min_tr_us"] = p.min_tr_us;
-    out["max_tr_us"] = p.max_tr_us;
-    out["max_flip_angle_deg"] = p.max_flip_angle_deg;
-    out["total_scan_time_us"] = p.total_scan_time_us;
-    out["num_subseqs"] = p.num_subseqs;
-    return out;
-}
-
-// ─── Check functions ────────────────────────────────────────────────
 
 static void _check_consistency(_PulseqCollection& pc)
 {
@@ -1258,19 +1248,7 @@ void pulserver_bind_pulseg(py::module_& m)
         py::arg("tr_index") = 0,
         py::arg("collapse_delays") = false);
 
-    m.def(
-        "_get_sequence_description",
-        &_get_sequence_description,
-        py::arg("collection"),
-        py::arg("subsequence_idx") = 0);
-
-    m.def(
-        "_get_rf_definitions",
-        &_get_rf_definitions,
-        py::arg("collection"),
-        py::arg("subsequence_idx") = 0);
-
-    m.def("_get_sequence_parameters", &_get_sequence_parameters, py::arg("collection"));
+    m.def("_read_sequence_description", &_read_sequence_description, py::arg("path"));
 
     m.def("_check_consistency", &_check_consistency, py::arg("collection"));
 

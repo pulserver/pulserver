@@ -87,7 +87,7 @@ GAMMA = 42.576e3  #: Hz/m per mT/m
 #: no amplitude is held to, and ``SA_AEQ_TRAIN_SHAPE``, the plateau-to-sinusoid
 #: factor a stated amplitude is converted through when no fused train's
 #: fundamental lies in the band. Drawn, not recomputed.
-POLICY_MT_PER_M = 13.0
+POLICY_MT_PER_M = 10.0
 TRAIN_SHAPE = 0.8106
 
 #: The frame every logarithmic A_eq axis is drawn in -- see the module note.

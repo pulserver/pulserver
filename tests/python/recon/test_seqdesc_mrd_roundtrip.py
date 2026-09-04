@@ -75,7 +75,7 @@ def _collection(system, *, use="excitation", flip=30.0):
     parameters = seq.sequence_parameters()
     return seq, SequenceDescriptionCollection(
         parameters=SequenceParameters(
-            num_subsequences=parameters["num_subseqs"],
+            num_subsequences=parameters["num_subsequences"],
             min_te_us=parameters["min_te_us"],
             min_tr_us=parameters["min_tr_us"],
             max_tr_us=parameters["max_tr_us"],

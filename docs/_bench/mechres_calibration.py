@@ -61,7 +61,7 @@ LOCKOUT_DIRS = [
 GAMMA_HZ_PER_T = 42.576e6
 GAMMA_HZ_PER_MT_PER_M = GAMMA_HZ_PER_T * 1e-3
 #: ``SA_ZERO_BAND_SINUSOID_MT_PER_M``: drawn, never recomputed here.
-FLOOR_MT_PER_M = 13.0
+FLOOR_MT_PER_M = 10.0
 #: The range every inspected band falls in, read densely on every axis.
 TERRITORY = (300.0, 3000.0)
 #: A tolerance nothing sustains under: every band is refused on the bound,
