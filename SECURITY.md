@@ -25,9 +25,12 @@ release; there are no maintained backport branches.
 
 ## Scope
 
-In scope: anything that reads data from outside the process — file readers,
-array deserialisation, and any path that accepts a filename from a caller.
+In scope: anything that reads data from outside the process -- the host
+daemon's command socket, the reconstruction proxy's TCP port and the MRD
+streams it relays, sequence files and IR caches, and any path that accepts a
+file or plugin name from a caller.
 
-Out of scope: resource exhaustion from inputs a caller chose themselves (an
-array too large for the machine is a sizing question, not a vulnerability),
-and behaviour under a deliberately hostile Python environment.
+Out of scope: code in a plugin directory, which both services import and run
+by design, so write access to it is equivalent to running code as the service;
+resource exhaustion from inputs a caller chose themselves; and behaviour under a
+deliberately hostile Python environment.

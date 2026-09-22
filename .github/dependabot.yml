@@ -4,6 +4,7 @@ updates:
   # repository credentials, so these are the updates worth having weekly.
   - package-ecosystem: github-actions
     directory: "/"
+    target-branch: main
     schedule:
       interval: weekly
       day: monday
@@ -14,10 +15,9 @@ updates:
       actions:
         patterns: ["*"]
 
-  # Grouped so the numerical stack arrives as one pull request that can be
-  # tested together rather than as several that each need a full suite run.
   - package-ecosystem: pip
     directory: "/"
+    target-branch: main
     schedule:
       interval: weekly
       day: monday
@@ -26,14 +26,15 @@ updates:
     commit-message:
       prefix: "deps"
     groups:
-      numerical:
-        patterns: ["numpy", "scipy", "torch*", "triton", "mri-nufft", "finufft", "cufinufft"]
-      mr-stack:
-        patterns: ["mrutils", "mrtoeplitz", "mrllr", "mrmotion", "mrdistortion", "torchsolve", "deepinv", "SimpleITK"]
+      # The sequence engine's signatures are what the scanner plugins bind to,
+      # so its bumps arrive alone and get a full run of their own.
+      engine:
+        patterns: ["pypulseqpp"]
+      mr-data:
+        patterns: ["numpy", "ismrmrd", "pydicom"]
+      build:
+        patterns: ["scikit-build-core", "pybind11", "setuptools_scm"]
       dev-tooling:
-        patterns: ["pytest*", "coverage", "ruff", "pre-commit", "build", "sphinx*"]
-    ignore:
-      # Torch major bumps move the CUDA runtime under the whole family, so they
-      # are a deliberate decision rather than a routine update.
-      - dependency-name: "torch"
-        update-types: ["version-update:semver-major"]
+        patterns: ["pytest*", "coverage", "ruff", "pre-commit", "build"]
+      docs:
+        patterns: ["sphinx*", "myst-parser", "linkify-it-py", "matplotlib"]

@@ -1,6 +1,10 @@
 # pulserver — agent instructions
 
 `CLAUDE.md` and `GEMINI.md` import this file. Edit this file only.
+`SKILLS.md` indexes the skills under `.claude/skills/`: the procedures for
+building and testing the package and for writing documentation. This page
+states the rules; a skill states how a recurring task is carried out under
+them.
 
 ## What this package is
 
@@ -21,7 +25,7 @@ upstream into that engine, not into a copy here.
 pip install -e .[dev,doc]
 bash scripts/format_and_lint.sh   # rewrites in place; --check to verify only
 pytest -q
-bash scripts/build_docs.sh        # figures, then Sphinx; warnings are errors
+bash scripts/build_docs.sh        # Sphinx; warnings are errors
 ```
 
 The install compiles `pulserver._ext` and needs a C and C++ compiler and CMake.
@@ -31,6 +35,26 @@ before it reaches the interpreter.
 
 Build and test steps are mandatory before reporting a change complete. Run them
 and report the exact output; do not assume success.
+
+The default branch is `main`; pull requests target it.
+
+## Layout
+
+| Path | Purpose |
+|---|---|
+| `src/pulserver/design/` | `ScannerSequence`: a pypulseqpp application bound to the scanner protocol |
+| `src/pulserver/protocol/` | Protocol parameters and the text blocks that carry them to the interpreter |
+| `src/pulserver/host/` | Host daemon, design sessions and revisions, and its client |
+| `src/pulserver/ir/` | Conversion of a `NextSequence` chain into the IR cache |
+| `src/pulserver/vre/` | Reconstruction proxy: revision lookup, MRD enrichment, workers, queue |
+| `src/pulserver/recon/` | Reconstruction plugin contract and the runtime that drives it over MRD |
+| `src/pulserver/mrd/` | MRD acquisitions, header entries, images and readout tables |
+| `src/cpp/` | The extension `pulserver._ext`: the IR passes in `ir/`, vendored KISS FFT in `vendor/` |
+| `src/c/` | The C89 library a scanner links: cache reader and writer, accessors, protocol |
+| `tests/` | pytest suite; `plugins/` and `recon_plugins/` are the plugin files the services load in tests |
+| `gallery/` | sphinx-gallery example scripts, one directory per section, executed when the pages are built |
+| `docs/` | Sphinx sources: `user-guide/`, `explanations/`, `examples/` (the gallery's landing pages), `api/`, `developer-guide/`, `misc/`; `api_objects.py` writes the API stubs |
+| `LICENSES/` | Licence texts of vendored components |
 
 ## The scanner IR, and where each half of it lives
 
@@ -195,6 +219,66 @@ pass:
 Then report the areas audited, the kinds of problems corrected, any long
 docstrings kept and why, and the checks run with their results.
 
+## Documentation
+
+Two documents govern documentation, and both are binding:
+
+- `docs/developer-guide/documentation.md` — the generic guide, shared with
+  pypulseqpp. What belongs in each form of documentation and how each is
+  written.
+- `docs/developer-guide/terminology.md` — the pulserver conventions:
+  terminology, register, units, frames, safety language and source-of-truth
+  rules.
+
+Read both before creating or substantially modifying documentation. Where they
+differ, the terminology page governs terminology and conventions and the
+generic guide governs documentation type and register. The docstring rules
+above govern docstrings.
+
+| Location | Type | Answers |
+|---|---|---|
+| `README.md` | Project summary; also the documentation's landing page | What is this, and where is the rest? |
+| `docs/user-guide/` | How-to | How do I install, run and extend pulserver? |
+| `docs/explanations/` | Conceptual explanation | Why does it work this way? |
+| `gallery/` | Executable examples, built into `docs/generated/gallery/` | What does a representative acquisition or reconstruction workflow look like? |
+| `docs/api/` | Reference | What exactly does this object do? |
+| `docs/developer-guide/` | Contributor procedure and conventions | How is this repository developed? |
+| `docs/misc/` | Licensing, related projects, contributors | |
+
+The prose style of one type is not carried into another. An explanation page
+proceeds from the concept to its model, its consequences and the software
+abstraction, and ends with a *See also* list.
+
+Mechanics:
+
+- An API page states its subject in one sentence, gives the context a reader
+  needs in a paragraph, and lists its objects in `| Object | Description |`
+  tables of `{obj}` links under a `currentmodule` directive.
+  `docs/api_objects.py` collects those tables into an orphan page that writes
+  the per-object stubs into `docs/generated/`, so the stubs stay out of the
+  sidebar. `tests/test_docs.py` fails when a name in a subpackage's `__all__`
+  is missing from its page.
+- A gallery script is a `.py` file whose module docstring is the page's title
+  and opening; `# %%` starts a text cell, and figure styling and print
+  formatting go between `# sphinx_gallery_start_ignore` and
+  `# sphinx_gallery_end_ignore`. Every script is executed at build time.
+  `gallery/` is flat, one directory per section listed in `GALLERY_SECTIONS`
+  in `docs/conf.py`, each with a `README.rst` title above an include of its
+  `_gallery_header.md`; the landing page under `docs/examples/` carries a table
+  of its examples and a hidden toctree over them, which `tests/test_docs.py`
+  checks. A gallery example exists because running it shows something
+  scientifically or computationally useful, not to demonstrate an interface.
+- A runnable example on a user-guide page is a `pycon` doctest, executed by
+  `tests/test_docs.py`. One that needs a running service or a data file is a
+  plain `python` block.
+- The README is included as the landing page; `docs/conf.py` rewrites its
+  `raw.githubusercontent.com` image links to `docs/_static/`.
+
+Verify substantive semantics against the implementation, its tests, pypulseqpp,
+the ISMRMRD specification and the primary literature, in that order. Existing
+prose is not evidence. After documentation work, build the documentation, run
+`tests/test_docs.py`, and inspect the rendered pages and the sidebar.
+
 ## Documentation style
 
 The audience is MR scientists. Write in the vocabulary of pulse sequences and
@@ -203,5 +287,4 @@ design it replaced.
 
 Do not print a measured constant that is not guaranteed across releases or
 hardware. Name the symbol and where it comes from, and let the build supply the
-number. Benchmark tables in the README are regenerated by the benchmark script,
-not typed in.
+number.

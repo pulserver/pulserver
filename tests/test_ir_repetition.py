@@ -77,3 +77,24 @@ def test_a_sequence_that_plays_something_between_its_delays_repeats_over_all_thr
     )
     theirs, ours = detected(path)
     assert ours == theirs[:1] == [3]
+
+
+@pytest.mark.parametrize("tr", [10e-3, 40e-3])
+def test_the_repetition_time_counts_each_delay_at_the_duration_it_plays(tmp_path, tr):
+    gradient = pp.make_trapezoid("x", flat_area=1000, flat_time=1e-3)
+    fill = tr - 1e-3 - pp.calc_duration(gradient)
+
+    def build(sequence):
+        for _ in range(6):
+            sequence.add_block(pp.make_delay(1e-3))
+            sequence.add_block(gradient)
+            sequence.add_block(pp.make_delay(fill))
+
+    sequence = pp.Sequence()
+    sequence.read(written(tmp_path, "gradient_in_a_tr.seq", build))
+    summary = _ext.summary_from_libraries(
+        [conversion_payload(sequence)], *SCANNER, [0, 1, 2]
+    )
+    (unit,) = summary["subsequences"]
+    assert unit["tr_size"] == 3
+    assert unit["tr_duration_us"] == pytest.approx(tr * 1e6)

@@ -1,31 +1,36 @@
 name: Feature request
-description: Something this package should be able to do and cannot.
+description: Propose a narrowly scoped addition to pulserver.
 labels: ["enhancement"]
 body:
   - type: textarea
-    id: problem
+    id: use-case
     attributes:
-      label: The problem
-      description: What are you trying to do, and where does it stop?
+      label: Scientific or technical use case
+      description: State the missing capability and the acquisition or reconstruction workflow it serves.
     validations:
       required: true
-
   - type: textarea
     id: proposal
     attributes:
-      label: What you have in mind
-      description: >
-        A sketch of the API, if you have one. If there is a paper or another
-        implementation that does this, name it — that is usually the fastest
-        way to agree on what is wanted.
+      label: Proposed interface or behaviour
+      description: Include primary literature, a vendor or MRD convention, or an existing implementation where relevant.
     validations:
       required: true
-
-  - type: textarea
+  - type: dropdown
     id: layer
     attributes:
-      label: Which layer this belongs to
+      label: Where it belongs
       description: >
-        This package is one of a family with a strict layering (`mrutils` at the
-        base, `deepmr` at the top). If the feature needs something from a
-        sibling package, say which — that usually means it belongs elsewhere.
+        Sequence design belongs to pypulseqpp and reconstruction algorithms to
+        bartorch; pulserver holds the orchestration between them and the scanner.
+      options:
+        - "pulserver"
+        - "pypulseqpp (sequence design)"
+        - "bartorch (reconstruction)"
+        - "Not sure"
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered

@@ -1,0 +1,106 @@
+name: Docs
+
+# Builds the documentation and publishes it to GitHub Pages, which serves the
+# gh-pages branch. The site holds one directory per version: main publishes
+# `latest`, a release tag publishes `vX.Y.Z` and copies it to `stable`, and the
+# root redirects to whichever of the two a reader should see. Pull requests
+# build without publishing, so a documentation warning fails review rather than
+# the site.
+#
+# The branch is the site's archive. GitHub Pages can be deployed from an
+# artifact instead, but a deployment replaces the whole site, so publishing one
+# version would drop the others.
+
+on:
+  push:
+    branches: [main]
+    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Every publish commits to the same branch, so main, the tags and a manual run
+# share one group and wait for each other rather than racing to push. A pull
+# request publishes nothing and gets a group of its own.
+concurrency:
+  group: docs-${{ github.event.pull_request.number || 'publish' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # the publish step pushes the built site to gh-pages
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # setuptools_scm reads the tags
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Name this version
+        id: version
+        # A release is built as `stable`, the URL a reader should land on, and
+        # archived under its tag as well; the canonical link in both copies
+        # points at `stable`.
+        run: |
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            echo "dir=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+            echo "canonical=stable" >> "$GITHUB_OUTPUT"
+          else
+            echo "dir=latest" >> "$GITHUB_OUTPUT"
+            echo "canonical=latest" >> "$GITHUB_OUTPUT"
+          fi
+
+      # autodoc imports the package, so the compiled extension is built too.
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install '.[doc]'
+
+      - name: Build
+        env:
+          PULSERVER_DOCS_VERSION: ${{ steps.version.outputs.canonical }}
+          PULSERVER_DOCS_RELEASE: ${{ steps.version.outputs.dir }}
+        run: bash scripts/build_docs.sh
+
+      - name: Check that the site is only the site
+        # Sphinx caches parsed documents in the output directory unless given
+        # `-d`, and the cache is far larger than the pages. Publishing commits
+        # whatever is there to a branch that is never pruned.
+        run: |
+          if [ -e docs/build/html/.doctrees ]; then
+            echo "::error::The doctree cache is inside the built site and would be published." >&2
+            exit 1
+          fi
+
+      - name: Publish
+        if: github.event_name != 'pull_request'
+        env:
+          DIR: ${{ steps.version.outputs.dir }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          site="$RUNNER_TEMP/pages"
+          remote="https://x-access-token:$GH_TOKEN@github.com/$GITHUB_REPOSITORY"
+          # The branch does not exist before the first publish.
+          if ! git clone --depth 1 --branch gh-pages "$remote" "$site"; then
+            git init -b gh-pages "$site"
+            git -C "$site" remote add origin "$remote"
+          fi
+
+          # Only this version's directory is replaced; a release refreshes
+          # stable only when it is the newest, and the root and the switcher's
+          # list are rewritten from what the site then holds.
+          python scripts/publish_docs.py docs/build/html "$DIR" "$site"
+
+          git -C "$site" add -A
+          git -C "$site" -c user.name='github-actions[bot]' \
+            -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+            commit -m "Documentation for $DIR from $GITHUB_SHA" \
+            || { echo "No documentation change to publish."; exit 0; }
+          git -C "$site" push origin gh-pages

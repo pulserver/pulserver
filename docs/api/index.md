@@ -1,23 +1,30 @@
 # API reference
 
-| Page | Contents |
-| --- | --- |
-| {doc}`protocol` | `pulserver.protocol`: protocol parameters, presets, and the text blocks that carry them to the interpreter |
-| {doc}`design` | `pulserver.design`: a pypulseqpp application bound to the scanner UI |
-| {doc}`ir` | `pulserver.ir`: a sequence segmented into the IR cache the interpreter loads |
-| {doc}`host` | `pulserver.host`: design sessions, generated revisions, the host daemon and its client |
-| {doc}`mrd` | `pulserver.mrd`: acquisitions, header entries and images, and what a sequence says about its readouts |
-| {doc}`recon` | `pulserver.recon`: the contract a reconstruction plugin is written against |
-| {doc}`vre` | `pulserver.vre`: the reconstruction proxy, its revisions and the enrichment it attaches |
+Conceptual background is in {doc}`../explanations/index` and procedures in the
+{doc}`user guide <../user-guide/index>`.
+
+| Page | Module | What it documents |
+| --- | --- | --- |
+| {doc}`protocol` | `pulserver.protocol` | The entries of a scanner protocol, their presets, and the text blocks that carry them between the host daemon and the interpreter. |
+| {doc}`design` | `pulserver.design` | {class}`~pulserver.design.ScannerSequence`, which binds a pypulseqpp sequence application to the scanner protocol, and the UI entries it is declared with. |
+| {doc}`host` | `pulserver.host` | The host daemon, its client, and the design sessions and revisions it stores. |
+| {doc}`ir` | `pulserver.ir` | The segmentation of a sequence chain into the IR cache the interpreter loads. |
+| {doc}`vre` | `pulserver.vre` | The reconstruction proxy, the revisions it resolves a series to, and the enrichment it applies. |
+| {doc}`recon` | `pulserver.recon` | {class}`~pulserver.recon.ReconPlugin`, the context and buffers its hooks receive, and the results they return. |
+| {doc}`mrd` | `pulserver.mrd` | MRD acquisitions, header entries and images, and the definitions and readouts a sequence states. |
+
+The C library a scanner interpreter links is documented in its public headers,
+[`src/c/include/pulseg/`](https://github.com/pulserver/pulserver/tree/main/src/c/include/pulseg),
+starting from `pulseg.h`.
 
 ```{toctree}
 :hidden:
 
 protocol
 design
-ir
 host
-mrd
-recon
+ir
 vre
+recon
+mrd
 ```
