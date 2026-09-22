@@ -1,0 +1,1451 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Documentation &#8212; pulserver documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../_static/styles/theme.css?digest=90905a2f556bf617f1a9" rel="stylesheet" />
+<link href="../_static/styles/pydata-sphinx-theme.css?digest=90905a2f556bf617f1a9" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/sphinx-book-theme.css?v=4418a689" />
+    <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery.css?v=c83e6b79" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../_static/pulserver.css?v=36f0fcfd" />
+  
+  <!-- So that users can add custom icons -->
+  <script defer src="../_static/scripts/fontawesome.js?digest=90905a2f556bf617f1a9"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
+<link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
+
+    <script src="../_static/documentation_options.js?v=b1def801"></script>
+    <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../_static/copybutton.js?v=f281be69"></script>
+    <script src="../_static/sg-tags.js?v=d80f6fa4"></script>
+    <script src="../_static/scripts/sphinx-book-theme.js?v=fab101a9"></script>
+    <script>window.MathJax = {"options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+    <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'developer-guide/documentation';</script>
+    <script>
+        DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
+        DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'latest';
+        DOCUMENTATION_OPTIONS.show_version_warning_banner =
+            true;
+        </script>
+    <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
+    <link rel="canonical" href="https://pulserver.github.io/pulserver/latest/developer-guide/documentation.html" />
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Terminology and conventions" href="terminology.html" />
+    <link rel="prev" title="Coding style" href="style.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="latest" />
+  
+    
+    <script src="../_static/searchtools.js"></script>
+    <script src="../_static/language_data.js"></script>
+    <script src="../searchindex.js"></script>
+  
+  </head>
+  <body data-default-mode="">
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+  
+  
+  
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search..."
+         aria-label="Search..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+        </div>
+      
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+    </div>
+  
+
+  
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+    
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../_static/pulserver-mark.svg" class="logo__image only-light" alt="pulserver documentation - Home"/>
+    <img src="../_static/pulserver-mark.svg" class="logo__image only-dark pst-js-only" alt="pulserver documentation - Home"/>
+  
+  
+</a></div>
+        <div class="sidebar-primary-item">
+<div class="version-switcher__container dropdown pst-js-only">
+  <button id="pst-version-switcher-button-2"
+    type="button"
+    class="version-switcher__button btn btn-sm dropdown-toggle"
+    data-bs-toggle="dropdown"
+    aria-haspopup="listbox"
+    aria-controls="pst-version-switcher-list-2"
+    aria-label="Version switcher list"
+  >
+    Choose version  <!-- this text may get changed later by javascript -->
+    <span class="caret"></span>
+  </button>
+  <div id="pst-version-switcher-list-2"
+    class="version-switcher__menu dropdown-menu list-group-flush py-0"
+    role="listbox" aria-labelledby="pst-version-switcher-button-2">
+    <!-- dropdown will be populated by javascript on page load -->
+  </div>
+</div></div>
+        <div class="sidebar-primary-item">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button></div>
+        <div class="sidebar-primary-item"><nav class="bd-links bd-docs-nav" aria-label="Main">
+    <div class="bd-toc-item navbar-nav active">
+        
+        <ul class="nav bd-sidenav bd-sidenav__home-link">
+            <li class="toctree-l1">
+                <a class="reference internal" href="../index.html">
+                    Homepage
+                </a>
+            </li>
+        </ul>
+        <ul class="current nav bd-sidenav">
+<li class="toctree-l1 has-children"><a class="reference internal" href="../user-guide/index.html">User guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../user-guide/running.html">Running the services</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../user-guide/scanner-sequences.html">Scanner sequences</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../user-guide/reconstruction-plugins.html">Reconstruction plugins</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/architecture.html">Architecture</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/protocol.html">Protocol resolution</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/sessions.html">Design sessions and revisions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/ir-cache.html">The scanner IR</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/reconstruction.html">Raw-data enrichment and routing</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../examples/index.html">Examples</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../examples/protocol.html">Protocol resolution</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-protocol/01_protocol_resolution.html">Protocol resolution for a 2D gradient echo</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../examples/scanner-ir.html">Scanner IR</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/02-scanner-ir/01_segmentation.html">Segmentation of a sequence for the scanner</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../examples/reconstruction.html">Reconstruction</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/03-reconstruction/01_enrichment.html">Raw-data enrichment and reconstruction</a></li>
+</ul>
+</details></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../api/index.html">API reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../api/protocol.html">Protocol</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/design.html">Scanner sequences</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/host.html">Host daemon</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/ir.html">IR conversion</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/vre.html">Reconstruction proxy</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/recon.html">Reconstruction plugins</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/mrd.html">MRD data</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">Developer guide</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="prerequisites.html">Development prerequisites</a></li>
+<li class="toctree-l2"><a class="reference internal" href="installation.html">Editable installation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="workflow.html">Development workflow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="style.html">Coding style</a></li>
+<li class="toctree-l2 current active"><a class="current reference internal" href="#">Documentation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="terminology.html">Terminology and conventions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="pre-commit.html">Pre-commit</a></li>
+<li class="toctree-l2"><a class="reference internal" href="pull-requests.html">Pull requests</a></li>
+<li class="toctree-l2"><a class="reference internal" href="releases.html">Releases</a></li>
+<li class="toctree-l2"><a class="reference internal" href="code-of-conduct.html">Code of conduct</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../misc/index.html">Miscellaneous</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../misc/license.html">License and third-party notices</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../misc/related.html">Related projects</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../misc/contributors.html">Contributors</a></li>
+</ul>
+</details></li>
+</ul>
+
+    </div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
+  </div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+
+<div class="sbt-scroll-pixel-helper"></div>
+
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item"><button class="sidebar-toggle primary-toggle btn btn-sm" title="Toggle primary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <span class="fa-solid fa-bars"></span>
+</button></div>
+      
+    </div>
+  
+  
+    <div class="header-article-items__end">
+      
+        <div class="header-article-item">
+
+<div class="article-header-buttons">
+
+
+
+
+
+<div class="dropdown dropdown-source-buttons">
+  <button class="btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Source repositories">
+    <i class="fab fa-github"></i>
+  </button>
+  <ul class="dropdown-menu">
+      
+      
+      
+      <li><a href="https://github.com/pulserver/pulserver" target="_blank"
+   class="btn btn-sm btn-source-repository-button dropdown-item"
+   title="Source repository"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fab fa-github"></i>
+  </span>
+<span class="btn__text-container">Repository</span>
+</a>
+</li>
+      
+      
+      
+      
+      <li><a href="https://github.com/pulserver/pulserver/edit/main/docs/developer-guide/documentation.md" target="_blank"
+   class="btn btn-sm btn-source-edit-button dropdown-item"
+   title="Suggest edit"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-pencil-alt"></i>
+  </span>
+<span class="btn__text-container">Suggest edit</span>
+</a>
+</li>
+      
+      
+      
+      
+      <li><a href="https://github.com/pulserver/pulserver/issues/new?title=Issue%20on%20page%20%2Fdeveloper-guide/documentation.html&body=Your%20issue%20content%20here." target="_blank"
+   class="btn btn-sm btn-source-issues-button dropdown-item"
+   title="Open an issue"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-lightbulb"></i>
+  </span>
+<span class="btn__text-container">Open issue</span>
+</a>
+</li>
+      
+  </ul>
+</div>
+
+
+
+
+
+
+<div class="dropdown dropdown-download-buttons">
+  <button class="btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Download this page">
+    <i class="fas fa-download"></i>
+  </button>
+  <ul class="dropdown-menu">
+      
+      
+      
+      <li><a href="../_sources/developer-guide/documentation.md" target="_blank"
+   class="btn btn-sm btn-download-source-button dropdown-item"
+   title="Download source file"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-file"></i>
+  </span>
+<span class="btn__text-container">.md</span>
+</a>
+</li>
+      
+      
+      
+      
+      <li>
+<button onclick="window.print()"
+  class="btn btn-sm btn-download-pdf-button dropdown-item"
+  title="Print to PDF"
+  data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-file-pdf"></i>
+  </span>
+<span class="btn__text-container">.pdf</span>
+</button>
+</li>
+      
+  </ul>
+</div>
+
+
+
+
+<button onclick="toggleFullScreen()"
+  class="btn btn-sm btn-fullscreen-button pst-navbar-icon"
+  title="Fullscreen mode"
+  data-bs-placement="bottom" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-expand"></i>
+  </span>
+
+</button>
+
+
+
+<div class="theme-switch-container dropdown pst-js-only" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Color mode">
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button dropdown-toggle" aria-label="Color mode" data-bs-toggle="dropdown">
+    <i class="theme-switch fa-solid fa-sun fa-lg fa-fw" data-mode="light" title="Light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg fa-fw" data-mode="dark" title="Dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg fa-fw" data-mode="auto" title="System Settings"></i>
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end">
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg fa-fw me-1"></i>System Settings</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="light"><i class="fa-solid fa-sun fa-lg fa-fw me-1"></i>Light</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="dark"><i class="fa-solid fa-moon fa-lg fa-fw me-1"></i>Dark</button></li>
+  </ul>
+</div>
+
+
+<button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+</button>
+<button class="sidebar-toggle secondary-toggle btn btn-sm pst-navbar-icon" title="Toggle secondary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="fa-solid fa-list"></span>
+</button>
+</div></div>
+      
+    </div>
+  
+</div>
+</div>
+              
+              
+
+<div id="jb-print-docs-body" class="onlyprint">
+    <h1>Documentation</h1>
+    <!-- Table of contents -->
+    <div id="print-main-content">
+        <div id="jb-print-toc">
+            
+            <div>
+                <h2> Contents </h2>
+            </div>
+            <nav aria-label="Page">
+                <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#documentation-structure">Documentation structure</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#api-reference">API reference</a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#summary-lines">Summary lines</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#mathematical-content">Mathematical content</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#implementation-details">Implementation details</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#background-theory">Background theory</a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#examples-and-gallery">Examples and gallery</a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#what-belongs-in-the-gallery">What belongs in the gallery</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#explain-decisions-not-execution">Explain decisions, not execution</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#theory-in-examples">Theory in examples</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#code-comments">Code comments</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#results">Results</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#tone">Tone</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#api-examples-and-gallery-examples">API examples and gallery examples</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#an-example-is-a-tour-of-an-object-not-a-call-of-it">An example is a tour of an object, not a call of it</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#defaults-of-a-plotting-helper">Defaults of a plotting helper</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#legends-sit-outside-the-panel">Legends sit outside the panel</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#geometry-and-traversal-are-different-figures">Geometry and traversal are different figures</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#diagnostics-come-from-the-implementation-they-illustrate">Diagnostics come from the implementation they illustrate</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#one-subject-one-example">One subject, one example</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#gallery-organization-and-navigation">Gallery organization and navigation</a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#explanation-and-concepts">Explanation and concepts</a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#organization-of-an-explanatory-page">Organization of an explanatory page</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#accessibility-and-terminology">Accessibility and terminology</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#pedagogical-register">Pedagogical register</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#depth">Depth</a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#tutorials-and-how-to-guides">Tutorials and how-to guides</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#separation-of-concerns">Separation of concerns</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#scientific-writing">Scientific writing</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#terminology">Terminology</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#prose">Prose</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#units-shapes-and-conventions">Units, shapes, and conventions</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#mathematical-notation">Mathematical notation</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#scientific-claims-and-references">Scientific claims and references</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#docstrings">Docstrings</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#parameters-and-returns">Parameters and returns</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#notes">Notes</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#docstring-examples">Docstring examples</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#developer-documentation">Developer documentation</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#editing-existing-documentation">Editing existing documentation</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#building-and-reviewing-documentation">Building and reviewing documentation</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#review-checklist">Review checklist</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#id2">API reference</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#id3">Examples and gallery</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#explanation">Explanation</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#id4">Tutorials and how-to guides</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#all-documentation">All documentation</a></li>
+</ul>
+</li>
+</ul>
+            </nav>
+        </div>
+    </div>
+</div>
+
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section class="tex2jax_ignore mathjax_ignore" id="documentation">
+<h1>Documentation<a class="headerlink" href="#documentation" title="Link to this heading">#</a></h1>
+<p>Documentation is part of the public interface of a scientific software project. Technical terminology, mathematical definitions, units, shapes, conventions, and behavioral claims should therefore receive the same care as implementation.</p>
+<p>Good scientific documentation is not uniformly explanatory. API reference, examples, conceptual explanation, and task-oriented guides serve different purposes. A useful explanation in one context may be distracting or inappropriate in another.</p>
+<p>These guidelines define both <strong>what information belongs in each form of documentation</strong> and <strong>how that information should be written</strong>.</p>
+<p>The general objective is precise, conventional scientific writing: accessible where explanation is appropriate, concise where reference is required, and technically accurate throughout.</p>
+<section id="documentation-structure">
+<h2>Documentation structure<a class="headerlink" href="#documentation-structure" title="Link to this heading">#</a></h2>
+<p>Before writing, determine what kind of documentation is needed.</p>
+<p>Four broad forms are useful:</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Documentation</p></th>
+<th class="head"><p>Primary question</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>API reference</p></td>
+<td><p>What exactly does this object do?</p></td>
+</tr>
+<tr class="row-odd"><td><p>Examples and gallery</p></td>
+<td><p>What does its use on a representative problem look like?</p></td>
+</tr>
+<tr class="row-even"><td><p>Explanation and concepts</p></td>
+<td><p>Why does this concept or method work this way?</p></td>
+</tr>
+<tr class="row-odd"><td><p>Tutorials and how-to guides</p></td>
+<td><p>How do I accomplish this task?</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>These forms may link extensively to one another, but they should not be collapsed into a single style of documentation.</p>
+<p>The three principal modes have distinct levels of detail:</p>
+<ul class="simple">
+<li><p><strong>Explanation</strong> is concise scientific prose organised around equations, figures, tables, schematics, or explicit criteria. Each object is introduced and interpreted briefly.</p></li>
+<li><p><strong>Examples</strong> are executable MRI workflows that connect sequence physics, acquisition strategy, and application to observable output.</p></li>
+<li><p><strong>API reference</strong> is terse and exhaustive. Accurate NumPy-style docstrings carry interface semantics, units, types, and defaults.</p></li>
+</ul>
+<p>Cross-link these modes rather than repeating the same account in all three.</p>
+<section id="api-reference">
+<h3>API reference<a class="headerlink" href="#api-reference" title="Link to this heading">#</a></h3>
+<p>API reference defines the public interface and its precise semantics.</p>
+<p>The intended reader is technically competent and reasonably familiar with the relevant scientific domain. Standard domain concepts should be named directly rather than replaced by informal explanations.</p>
+<p>Mature scientific Python projects such as MRpro, PyLops, PyProximal, Pyxu, DeepInv, and SigPy provide useful examples of the desired reference-documentation register. Domain-specific authoritative libraries and specifications should additionally guide terminology and conventions.</p>
+<p>Every parameter with a Python default records it in the Parameters entry as <code class="docutils literal notranslate"><span class="pre">default=&lt;repr&gt;</span></code>; <code class="docutils literal notranslate"><span class="pre">optional</span></code> alone is insufficient. Required parameters do not claim defaults. The documented value must match the callable signature. Individual object pages use compact headings, leaving types and defaults to the Parameters section.</p>
+<p>A public function, class, method, or operator should document, where relevant:</p>
+<ol class="arabic simple">
+<li><p>the mathematical, scientific, or computational object represented;</p></li>
+<li><p>the operation performed;</p></li>
+<li><p>parameters and their precise meanings;</p></li>
+<li><p>return values;</p></li>
+<li><p>shapes, dimensions, axes, batching, and broadcasting;</p></li>
+<li><p>physical units;</p></li>
+<li><p>normalization, coordinate, sign, and ordering conventions;</p></li>
+<li><p>a mathematical definition when it improves precision;</p></li>
+<li><p>important algorithmic semantics;</p></li>
+<li><p>restrictions, assumptions, and special cases;</p></li>
+<li><p>differentiation behavior where relevant;</p></li>
+<li><p>correspondence with upstream libraries, specifications, commands, or literature where useful.</p></li>
+</ol>
+<p>Not every item applies to every object. Documentation should communicate the relevant contract rather than mechanically fill a template.</p>
+<section id="summary-lines">
+<h4>Summary lines<a class="headerlink" href="#summary-lines" title="Link to this heading">#</a></h4>
+<p>A summary line should classify or directly describe an object. It is not a tagline.</p>
+<p>Prefer:</p>
+<blockquote>
+<div><p>Cartesian SENSE encoding operator.</p>
+</div></blockquote>
+<blockquote>
+<div><p>Proximal operator of the L1 norm.</p>
+</div></blockquote>
+<blockquote>
+<div><p>Construct a trapezoidal gradient event.</p>
+</div></blockquote>
+<p>Avoid:</p>
+<blockquote>
+<div><p>Coils, a Fourier transform, and the samples that were taken.</p>
+</div></blockquote>
+<blockquote>
+<div><p>The penalty that makes things sparse.</p>
+</div></blockquote>
+<blockquote>
+<div><p>The workhorse gradient builder.</p>
+</div></blockquote>
+<p>Concise noun phrases are often appropriate for classes and properties. Functions normally use a concise declarative description of their operation.</p>
+<p>Established terminology should not be replaced by a description of what the term means merely to make the summary more approachable.</p>
+</section>
+<section id="mathematical-content">
+<h4>Mathematical content<a class="headerlink" href="#mathematical-content" title="Link to this heading">#</a></h4>
+<p>Use rendered equations when they specify behavior more precisely than prose.</p>
+<p>For example, if an operator implements</p>
+<div class="math notranslate nohighlight">
+\[
+A = PFS,
+\]</div>
+<p>stating the model and defining (P), (F), and (S) may be clearer than describing the sequence of operations indirectly.</p>
+<p>Equations in API reference document semantics. Extended derivations and theoretical motivation generally belong in explanatory documentation.</p>
+<p>Normalization, units, signs, coordinate systems, and other conventions must be established before documenting an equation.</p>
+</section>
+<section id="implementation-details">
+<h4>Implementation details<a class="headerlink" href="#implementation-details" title="Link to this heading">#</a></h4>
+<p>Implementation details belong in API reference when they affect observable behavior, numerical properties, differentiation, interoperability, performance expectations, or correct usage.</p>
+<p>They should not replace the scientific or mathematical definition of the object.</p>
+<p>For example, describe an encoding operator mathematically before discussing how its operations are fused or batched internally.</p>
+</section>
+<section id="background-theory">
+<h4>Background theory<a class="headerlink" href="#background-theory" title="Link to this heading">#</a></h4>
+<p>API reference should not teach standard domain theory from first principles.</p>
+<p>When substantial background is useful, provide a concise statement of the relevant semantics and link to explanatory documentation.</p>
+</section>
+</section>
+<section id="examples-and-gallery">
+<h3>Examples and gallery<a class="headerlink" href="#examples-and-gallery" title="Link to this heading">#</a></h3>
+<p>Gallery examples show complete, representative scientific uses of the library.</p>
+<p>The example galleries of MRpro, MRI-NUFFT, and DeepInv are useful models: executable scientific workflows accompanied by concise methodological explanation.</p>
+<section id="what-belongs-in-the-gallery">
+<h4>What belongs in the gallery<a class="headerlink" href="#what-belongs-in-the-gallery" title="Link to this heading">#</a></h4>
+<p>A gallery example should exist because executing the workflow and examining its output demonstrates something scientifically or computationally useful. If replacing it with a short code snippet in the API reference or an explanatory page would lose essentially nothing, it probably does not belong in the gallery.</p>
+<p>The following do not qualify on their own:</p>
+<ul class="simple">
+<li><p><strong>API demonstrations.</strong> Calling a function to show that it can be called.</p></li>
+<li><p><strong>Constructor catalogues.</strong> Instantiating several classes of a family to show that they exist.</p></li>
+<li><p><strong>Conceptual introductions with incidental code.</strong> Material whose value is the prose; this belongs in explanatory documentation.</p></li>
+<li><p><strong>Interface documentation.</strong> Command-line usage, installation, or configuration; this belongs in how-to guides.</p></li>
+<li><p><strong>Collections of configurations whose only result is that they run.</strong> Producing one figure per configuration is not a result if nothing is compared, measured, or concluded.</p></li>
+</ul>
+<p>Before writing or revising an example, answer one question: what scientific, numerical or design concept does a reader learn by running this example and examining its output? The answer has to be more specific than how to call an interface, how to construct an object, that a feature exists, or that changing a parameter changes the result.</p>
+<p>Each example should have a stated objective and an observable outcome: a quantitative comparison, a measured trade-off, a trajectory or field that can be inspected, a convergence or error curve, a feasibility boundary. Figures must carry the argument rather than decorate it. If the objective cannot be stated without inventing a contrived experiment, the material belongs in a guide, an explanatory page, or the API reference.</p>
+<p>An example should address one question. Where it compares configurations, hold every parameter that is not under study fixed, so the difference in the output is attributable. Titles should name the concept demonstrated rather than the interface exercised.</p>
+<p>Prefer a small number of strong examples to broad coverage. A gallery is not an inventory of the public interface, and no example is warranted merely because a feature would otherwise go unrepresented.</p>
+<p>An example is <strong>not a conversational tutorial</strong>. Code, figures, and scientific results should dominate the page. Prose supplies the context necessary to understand the problem, consequential methodological choices, conventions, and interpretation.</p>
+<p>A substantial example will often include:</p>
+<ol class="arabic simple">
+<li><p>a short statement of the scientific or computational objective;</p></li>
+<li><p>only the background needed for the particular example;</p></li>
+<li><p>data or problem setup;</p></li>
+<li><p>method configuration;</p></li>
+<li><p>execution using the public API;</p></li>
+<li><p>visualization or quantitative evaluation where appropriate;</p></li>
+<li><p>brief interpretation when the result is not self-evident.</p></li>
+</ol>
+<p>These elements need not become separate headings, particularly for short examples.</p>
+</section>
+<section id="explain-decisions-not-execution">
+<h4>Explain decisions, not execution<a class="headerlink" href="#explain-decisions-not-execution" title="Link to this heading">#</a></h4>
+<p>Prose should explain decisions whose significance is scientific, mathematical, numerical, or specific to the library.</p>
+<p>Useful explanations include:</p>
+<ul class="simple">
+<li><p>why a particular model, operator, solver, acquisition, trajectory, or regularizer is appropriate;</p></li>
+<li><p>parameter values that materially affect the result;</p></li>
+<li><p>physical or mathematical conventions needed to interpret the example;</p></li>
+<li><p>non-obvious preprocessing;</p></li>
+<li><p>assumptions and limitations;</p></li>
+<li><p>what a figure or quantitative result demonstrates.</p></li>
+</ul>
+<p>Routine Python execution should not be narrated.</p>
+<p>Avoid:</p>
+<blockquote>
+<div><p>First, we import the required packages.</p>
+</div></blockquote>
+<blockquote>
+<div><p>Now let’s create the operator.</p>
+</div></blockquote>
+<blockquote>
+<div><p>Next, we run the reconstruction.</p>
+</div></blockquote>
+<blockquote>
+<div><p>Finally, let’s visualize the results.</p>
+</div></blockquote>
+<blockquote>
+<div><p>This is where things get interesting.</p>
+</div></blockquote>
+<p>Prefer a concise methodological statement:</p>
+<blockquote>
+<div><p>The spiral acquisition is reconstructed with a non-Cartesian SENSE operator. Coil sensitivities are estimated from the calibration data and kept fixed during reconstruction.</p>
+</div></blockquote>
+<p>Then show the corresponding code.</p>
+<p>Imports, straightforward assignments, constructor calls, and plotting commands normally explain themselves.</p>
+<p>Coherent code should not be artificially divided into many small blocks merely to create opportunities for explanatory prose.</p>
+</section>
+<section id="theory-in-examples">
+<h4>Theory in examples<a class="headerlink" href="#theory-in-examples" title="Link to this heading">#</a></h4>
+<p>Include only the theory required to understand the particular example.</p>
+<p>An example using a proximal algorithm does not need to introduce proximal optimization from first principles. An example specifically investigating or comparing proximal algorithms may require more theoretical context.</p>
+<p>Broader derivations, terminology, and conceptual comparisons belong in explanatory documentation.</p>
+<p>Similarly, examples should not reproduce exhaustive API semantics. Link to the API reference instead.</p>
+</section>
+<section id="code-comments">
+<h4>Code comments<a class="headerlink" href="#code-comments" title="Link to this heading">#</a></h4>
+<p>Comments should explain non-obvious scientific or numerical choices rather than translate code into English.</p>
+<p>Avoid:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Create the trajectory.</span>
+<span class="n">trajectory</span> <span class="o">=</span> <span class="n">make_trajectory</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Prefer, when the information matters:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Use 24 interleaves to obtain the target sampling density.</span>
+<span class="n">trajectory</span> <span class="o">=</span> <span class="n">make_trajectory</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Comments that merely restate the following expression should normally be omitted.</p>
+</section>
+<section id="results">
+<h4>Results<a class="headerlink" href="#results" title="Link to this heading">#</a></h4>
+<p>Figures and quantitative outputs should answer a scientific or computational question rather than merely demonstrate that plotting is possible.</p>
+<p>Provide enough axis labels, units, legends, captions, or surrounding context to make results interpretable.</p>
+<p>Interpret results conservatively. A single example should not be generalized into a broad performance claim.</p>
+<p>Avoid:</p>
+<blockquote>
+<div><p>As we can clearly see, the reconstruction is much better.</p>
+</div></blockquote>
+<p>Prefer a concrete observation or quantitative measure when interpretation is needed.</p>
+</section>
+<section id="tone">
+<h4>Tone<a class="headerlink" href="#tone" title="Link to this heading">#</a></h4>
+<p>Gallery prose can provide more context than API reference, but should remain concise, technical, and restrained.</p>
+<p>Avoid:</p>
+<ul class="simple">
+<li><p>second-person narration unless genuinely useful;</p></li>
+<li><p>“we” merely to narrate execution;</p></li>
+<li><p>rhetorical questions;</p></li>
+<li><p>enthusiasm and promotional language;</p></li>
+<li><p>conversational transitions;</p></li>
+<li><p>motivational filler;</p></li>
+<li><p>metaphors and personification;</p></li>
+<li><p>repeated previews and recaps;</p></li>
+<li><p>prose whose only purpose is to connect adjacent code blocks.</p></li>
+</ul>
+<p>The intended result is <strong>a reproducible scientific example with concise methodological annotation</strong>, not a lesson delivered by a narrator.</p>
+<p>When a sentence merely describes what the next line of code does, it can usually be removed.</p>
+</section>
+<section id="api-examples-and-gallery-examples">
+<h4>API examples and gallery examples<a class="headerlink" href="#api-examples-and-gallery-examples" title="Link to this heading">#</a></h4>
+<p>Two kinds of example are legitimate, and they are not interchangeable.</p>
+<p>An <strong>API example</strong> shows how an object is constructed and used. It belongs in the <code class="docutils literal notranslate"><span class="pre">Examples</span></code> section of a docstring or on the reference page for that object, it is a few lines long, and it needs no experiment, sweep or scientific result. Reference material that illustrates one object belongs here; where an executed configuration and the figures it produces are large enough to be a page of their own, the reference page links the gallery example that carries them rather than repeating it.</p>
+<p>A <strong>gallery example</strong> teaches a scientific, numerical or design concept through an executable workflow and an observable result. It exists because running it produces something worth examining.</p>
+<p>The gallery is therefore not a catalogue of what the library ships. A reference page per object fulfils that role, and an object does not earn a gallery example by being undocumented elsewhere.</p>
+</section>
+<section id="an-example-is-a-tour-of-an-object-not-a-call-of-it">
+<h4>An example is a tour of an object, not a call of it<a class="headerlink" href="#an-example-is-a-tour-of-an-object-not-a-call-of-it" title="Link to this heading">#</a></h4>
+<p>An example that constructs an object in its simplest form, prints a number and draws one figure documents nothing the reference page does not already carry. Where a public interface exposes modes that materially change what it produces — acceleration, segmentation, partial sampling, a train length, a density — at least one example demonstrates one of them, and shows what it changes.</p>
+<p>Show the consequence, not only the call. A second configuration earns its place by the figure or the table that compares it with the first.</p>
+</section>
+<section id="defaults-of-a-plotting-helper">
+<h4>Defaults of a plotting helper<a class="headerlink" href="#defaults-of-a-plotting-helper" title="Link to this heading">#</a></h4>
+<p>Where a plotting helper chooses something automatically — a representative window, a colour scale, a decimation — an example calls it the way a reader would, without overriding that choice.</p>
+<p>If the automatic choice produces a poor figure, that is a defect in the helper or in the object being drawn. Investigate it and fix it there. Hard-coding a selection in the example hides the defect from everyone who is not reading the example’s source.</p>
+</section>
+<section id="legends-sit-outside-the-panel">
+<h4>Legends sit outside the panel<a class="headerlink" href="#legends-sit-outside-the-panel" title="Link to this heading">#</a></h4>
+<p>A legend is placed outside the axes it describes — above them, below them or beside them — in every figure, on an explanation page, in a gallery example and in a docstring plot alike. A legend inside a panel covers data, and which data it covers depends on the values the build happened to produce.</p>
+<p>Where one legend describes series drawn in several panels, it belongs to the figure rather than to one of them, above the row it applies to. Reserve room for it with the <code class="docutils literal notranslate"><span class="pre">rect</span></code> argument of <code class="docutils literal notranslate"><span class="pre">tight_layout</span></code>, or with the <code class="docutils literal notranslate"><span class="pre">top</span></code> and <code class="docutils literal notranslate"><span class="pre">bottom</span></code> of an explicit gridspec, so nothing is clipped.</p>
+</section>
+<section id="geometry-and-traversal-are-different-figures">
+<h4>Geometry and traversal are different figures<a class="headerlink" href="#geometry-and-traversal-are-different-figures" title="Link to this heading">#</a></h4>
+<p>A plot of where the samples are answers a different question from a plot of the order they were acquired in, and both differ from a plot of the path between them. When the traversal matters — when a reader needs to see what happens between one acquisition and the next — draw the connections and the direction, not only coloured points.</p>
+<p>Derive an ordering or traversal figure from what the implementation records: its labels, its loop, the acquisitions themselves. A figure that reconstructs an idealised ordering from the prescription can disagree with the sequence, and is then worse than no figure.</p>
+</section>
+<section id="diagnostics-come-from-the-implementation-they-illustrate">
+<h4>Diagnostics come from the implementation they illustrate<a class="headerlink" href="#diagnostics-come-from-the-implementation-they-illustrate" title="Link to this heading">#</a></h4>
+<p>A figure of what a check computed uses the check’s own computation. Where the public interface does not return enough to draw it, extend that interface — an optional trace, a diagnostic function — rather than recomputing the algorithm in the example. Two implementations of one calculation disagree eventually, and the documentation is where it will not be noticed.</p>
+</section>
+<section id="one-subject-one-example">
+<h4>One subject, one example<a class="headerlink" href="#one-subject-one-example" title="Link to this heading">#</a></h4>
+<p>Where the sampling, the ordering or the mode structure of an object is part of understanding the object, it belongs in that object’s own example. Splitting it into a second example leaves the first too thin to be useful and the second detached from what it explains.</p>
+<p>A separate example is justified when it studies something across objects, or goes substantially beyond what using one of them requires.</p>
+</section>
+<section id="gallery-organization-and-navigation">
+<h4>Gallery organization and navigation<a class="headerlink" href="#gallery-organization-and-navigation" title="Link to this heading">#</a></h4>
+<p>When examples fall into categories, each category gets a landing page the documentation owns, carrying one or two factual sentences and a table of what is below it. A table is preferred to a wall of thumbnails once a category holds more than a handful of examples, because a reader looking for one sequence or one module reads names rather than pictures.</p>
+<p>Global navigation carries the gallery and its categories, to the depth at which a category is still something a reader would look for on its own. Below that depth, an example is reached from the table on its category’s page and from cross-references, not from the navigation tree.</p>
+<p>Give each category a name that states what its examples have in common. Do not add prose to fill the page.</p>
+<p>Prefer the mechanisms the documentation builder supports — landing-page construction, hidden toctrees, navigation depth settings — over hiding generated pages with CSS.</p>
+</section>
+</section>
+<section id="explanation-and-concepts">
+<h3>Explanation and concepts<a class="headerlink" href="#explanation-and-concepts" title="Link to this heading">#</a></h3>
+<p>Explanatory documentation answers questions about concepts, theory, terminology, relationships between methods, architecture, and design rationale.</p>
+<p>Pyxu’s conceptual introductions to inverse problems and proximal optimization, and MRI-NUFFT’s discussion of non-uniform sampling and its operators, are useful models for the desired depth and register.</p>
+<p>This is the appropriate place for material that would be too pedagogical for API reference or too general for an example.</p>
+<section id="organization-of-an-explanatory-page">
+<h4>Organization of an explanatory page<a class="headerlink" href="#organization-of-an-explanatory-page" title="Link to this heading">#</a></h4>
+<p>An explanatory page is usually clearest in this order:</p>
+<ol class="arabic simple">
+<li><p><strong>The concept or problem.</strong> What physical, mathematical, or computational situation is being described, in standard terminology.</p></li>
+<li><p><strong>The formal model or criterion.</strong> The equation, definition, or decision rule that makes the concept precise, with its symbols, units, and assumptions stated.</p></li>
+<li><p><strong>Consequences and trade-offs.</strong> What the model implies for the quantities a user controls, including limiting cases and what is given up to gain something else.</p></li>
+<li><p><strong>The software abstraction.</strong> How the library represents the concept, and which interface corresponds to which part of the model.</p></li>
+</ol>
+<p>The order matters: a page that opens with the class name and works outward teaches the interface rather than the subject. Sections need not carry these four labels, and a short page may cover several in one section, but a page that never reaches the formal model is under-specified, and one that never reaches the software abstraction belongs somewhere other than this project’s documentation.</p>
+<p>Explanatory documentation may:</p>
+<ul class="simple">
+<li><p>introduce terminology to readers outside the immediate specialty;</p></li>
+<li><p>establish mathematical notation;</p></li>
+<li><p>derive or motivate formulations;</p></li>
+<li><p>explain relationships between concepts;</p></li>
+<li><p>compare related approaches;</p></li>
+<li><p>connect library abstractions to underlying theory;</p></li>
+<li><p>explain conventions and their consequences;</p></li>
+<li><p>discuss architectural or API design decisions;</p></li>
+<li><p>explain numerical or scientific trade-offs;</p></li>
+<li><p>connect implementations to literature or upstream software.</p></li>
+</ul>
+<p>Where possible, begin from the scientific, mathematical, or computational concept rather than from the Python class hierarchy.</p>
+<p>For example, an explanation of an inverse-problem library might first introduce</p>
+<div class="math notranslate nohighlight">
+\[
+y = A(x) + \varepsilon
+\]</div>
+<p>and a regularized formulation such as</p>
+<div class="math notranslate nohighlight">
+\[
+\min_x D(Ax, y) + \lambda R(x),
+\]</div>
+<p>before explaining how the library represents (A), (D), and (R).</p>
+</section>
+<section id="accessibility-and-terminology">
+<h4>Accessibility and terminology<a class="headerlink" href="#accessibility-and-terminology" title="Link to this heading">#</a></h4>
+<p>Explanatory documentation may assume scientific and mathematical literacy without assuming expertise in the immediate subfield.</p>
+<p>For example, an MRI researcher may need proximal optimization explained, while a numerical optimization researcher may need SENSE explained.</p>
+<p>Accessibility should come from <strong>introducing and explaining the standard terminology</strong>, not from avoiding it.</p>
+<p>Prefer:</p>
+<blockquote>
+<div><p>The gradient moment is the time integral of the gradient waveform. Its zeroth moment determines the corresponding displacement in k-space.</p>
+</div></blockquote>
+<p>Avoid:</p>
+<blockquote>
+<div><p>The gradient’s moment is essentially how much gradient has accumulated.</p>
+</div></blockquote>
+<p>Once a term has been introduced, use it consistently. Do not repeatedly substitute descriptive phrases for it.</p>
+<p>Explanatory prose may be more discursive than API reference, but it should remain scientific prose. Explanation is not a license for conversational, literary, or promotional writing.</p>
+</section>
+<section id="pedagogical-register">
+<span id="id1"></span><h4>Pedagogical register<a class="headerlink" href="#pedagogical-register" title="Link to this heading">#</a></h4>
+<p>Explanatory documentation is expected to teach. Teaching is done by stating mechanisms, consequences, and trade-offs explicitly, in conventional scientific prose. It is not done by metaphor, analogy in place of definition, or compressed rhetorical sentences that leave the reader to reconstruct the technical relationship.</p>
+<p>Being pedagogical therefore does not license literary writing. The two failure modes to watch for are personification and rhetorical compression.</p>
+<p><strong>Do not personify.</strong> Algorithms, sequences, parameters, constraints, data structures, waveforms, files, and physical quantities do not want, ask for, know, decide, refuse, or agree. They have values, satisfy or violate conditions, and stand in defined relationships to one another.</p>
+<p>Avoid:</p>
+<blockquote>
+<div><p>The solver asks the preconditioner for a better starting point, and the step size refuses anything the line search will not accept.</p>
+</div></blockquote>
+<p>Prefer:</p>
+<blockquote>
+<div><p>The preconditioner supplies the initial iterate. The line search rejects step sizes that do not satisfy the Armijo condition, so the accepted step is the largest tested value that does.</p>
+</div></blockquote>
+<p><strong>State the relationship rather than compressing it.</strong> A sentence that gestures at a mechanism is not shorter than one that states it; it is less useful at the same length.</p>
+<p>Avoid:</p>
+<blockquote>
+<div><p>Finer discretization buys accuracy and pays for it in memory.</p>
+</div></blockquote>
+<p>Prefer:</p>
+<blockquote>
+<div><p>Halving the grid spacing reduces the discretization error by a factor of four for a second-order scheme, and increases the number of stored unknowns by a factor of four in two dimensions.</p>
+</div></blockquote>
+<p>Verbs such as <em>buys</em>, <em>pays</em>, <em>holds</em>, <em>carries</em>, <em>walks</em>, <em>drives</em>, <em>plays</em>, <em>refuses</em>, <em>asks</em>, <em>wants</em>, <em>sits</em>, and <em>spends</em> are the usual vehicles for both failure modes. The rule is semantic, not lexical: use them only with their established technical meaning, and state the relationship directly when the meaning would be figurative. An amplifier drives a load, an iterator walks a tree, a buffer holds samples, a solver takes a step, a field carries energy — these are the conventional terms and are correct. The same words are wrong when they stand in for a relationship that could have been stated.</p>
+<p><strong>Headings name the concept.</strong> A heading is an index entry and a semantic landmark, so it should normally be a concise noun phrase naming the concept, operation, quantity or task the section establishes. It is not a description of the section, a summary of its conclusion, or a phrase that only makes sense after the section has been read.</p>
+<p>Apply this test: would the heading look ordinary in a well-edited textbook, methods paper, or mature scientific-Python documentation? If not, simplify it.</p>
+<p>Rule out, in particular, miniature prose statements, rhetorical questions, and headings varied for stylistic effect. Sibling headings that name comparable things should be phrased comparably; variation for its own sake makes a contents list harder to scan.</p>
+<p>Avoid:</p>
+<blockquote>
+<div><p class="rubric" id="what-a-residual-really-tells-you">What a residual really tells you</p>
+<p class="rubric" id="the-accuracy-a-finer-grid-buys">The accuracy a finer grid buys</p>
+<p class="rubric" id="what-the-solver-sees">What the solver sees</p>
+<p class="rubric" id="why-the-preconditioner-cannot-be-skipped">Why the preconditioner cannot be skipped</p>
+<p class="rubric" id="the-operator-and-what-it-has-to-provide">The operator, and what it has to provide</p>
+</div></blockquote>
+<p>Prefer:</p>
+<blockquote>
+<div><p class="rubric" id="residual-norm-as-a-convergence-criterion">Residual norm as a convergence criterion</p>
+<p class="rubric" id="discretization-error-and-grid-spacing">Discretization error and grid spacing</p>
+<p class="rubric" id="operator-interface-required-by-the-solver">Operator interface required by the solver</p>
+<p class="rubric" id="preconditioning-requirements">Preconditioning requirements</p>
+<p class="rubric" id="operator-interface">Operator interface</p>
+</div></blockquote>
+<p><strong>Check the replacement, not only the original.</strong> Remediating prose of this kind has a characteristic failure: the rewrite avoids the flagged construction and adopts a milder one. Read the replacement as if it were the original. If it draws attention to its wording, it needs another pass, however defensible its grammar.</p>
+</section>
+<section id="depth">
+<h4>Depth<a class="headerlink" href="#depth" title="Link to this heading">#</a></h4>
+<p>Explain enough to make the concept understandable and to establish why it matters to the software.</p>
+<p>Avoid expanding into textbook material unrelated to the project.</p>
+<p>Equations, diagrams, figures, references, and worked reasoning are encouraged when they materially improve understanding.</p>
+</section>
+</section>
+<section id="tutorials-and-how-to-guides">
+<h3>Tutorials and how-to guides<a class="headerlink" href="#tutorials-and-how-to-guides" title="Link to this heading">#</a></h3>
+<p>Tutorials and how-to guides provide procedural guidance.</p>
+<p>A tutorial teaches a workflow, often from a relatively clean starting point. A how-to guide answers a focused practical question.</p>
+<p>Examples include:</p>
+<blockquote>
+<div><p>How do I define a custom operator?</p>
+</div></blockquote>
+<blockquote>
+<div><p>How do I reconstruct non-Cartesian multi-coil data?</p>
+</div></blockquote>
+<blockquote>
+<div><p>How do I export a sequence?</p>
+</div></blockquote>
+<p>State prerequisites, provide a reliable procedure, and explain non-obvious choices.</p>
+<p>Do not reproduce detailed theoretical material or exhaustive API documentation. Link to explanation and reference pages where appropriate.</p>
+<p>As with gallery examples, avoid narrating obvious operations merely to create prose between steps.</p>
+</section>
+</section>
+<section id="separation-of-concerns">
+<h2>Separation of concerns<a class="headerlink" href="#separation-of-concerns" title="Link to this heading">#</a></h2>
+<p>Useful information should live where readers are most likely to need it.</p>
+<p>Documentation types should therefore link to one another rather than duplicate one another.</p>
+<ul class="simple">
+<li><p>API reference links to explanation for theory and terminology.</p></li>
+<li><p>API reference links to examples for complete workflows.</p></li>
+<li><p>Examples link to reference for exhaustive interface semantics.</p></li>
+<li><p>Examples link to explanation for broader theoretical context.</p></li>
+<li><p>Explanation links to reference for concrete software interfaces.</p></li>
+<li><p>Tutorials and how-to guides link to explanation rather than reproducing derivations.</p></li>
+</ul>
+<p>A paragraph that answers the wrong question for its current page should usually be moved or replaced by a link rather than forced into the local prose style.</p>
+<p>In particular, useful explanatory material discovered while simplifying an overloaded docstring need not be discarded. It may form the basis of an explanatory page.</p>
+</section>
+<section id="scientific-writing">
+<h2>Scientific writing<a class="headerlink" href="#scientific-writing" title="Link to this heading">#</a></h2>
+<section id="terminology">
+<h3>Terminology<a class="headerlink" href="#terminology" title="Link to this heading">#</a></h3>
+<p>Use terminology established by the relevant scientific, mathematical, numerical, and software domains.</p>
+<p>Do not invent synonyms merely to improve prose rhythm.</p>
+<p>Prefer established terms such as:</p>
+<blockquote>
+<div><p>auxiliary variable
+adjoint operator
+gradient moment
+sampling trajectory
+proximal operator</p>
+</div></blockquote>
+<p>over paraphrases such as:</p>
+<blockquote>
+<div><p>an extra unknown
+the operator going backwards
+what the gradient accumulates
+where the samples go
+what the solver applies to the penalty</p>
+</div></blockquote>
+<p>A technical noun should not normally be replaced by a relative clause describing what the object does.</p>
+<p>If a term may be unfamiliar to some readers, define it in explanatory documentation. Do not avoid the term in reference documentation.</p>
+<p>Project-specific terminology and conventions should be documented explicitly and used consistently.</p>
+</section>
+<section id="prose">
+<h3>Prose<a class="headerlink" href="#prose" title="Link to this heading">#</a></h3>
+<p>Prefer precise, declarative scientific prose.</p>
+<p>Complete sentences are generally preferable to rhetorical fragments. Concision is desirable when it does not remove relevant information.</p>
+<p>Avoid:</p>
+<ul class="simple">
+<li><p>metaphors and personification for technical objects, as described under
+<a class="reference internal" href="#pedagogical-register"><span class="std std-ref">Pedagogical register</span></a>;</p></li>
+<li><p>rhetorical compression in place of an explicit statement of the relationship;</p></li>
+<li><p>taglines;</p></li>
+<li><p>promotional or journalistic prose;</p></li>
+<li><p>conversational narration;</p></li>
+<li><p>invented informal terminology;</p></li>
+<li><p>stylistic synonyms for established technical terms;</p></li>
+<li><p>vague words such as “thing”, “stuff”, or “piece”;</p></li>
+<li><p>cleft constructions that defer the subject: “X is what Y does”, “which is
+what makes Y possible”, “it is X that determines Y”, “what the format
+rewards is”;</p></li>
+<li><p>“Reach for X…”;</p></li>
+<li><p>“Think of X as…” when a direct definition is available;</p></li>
+<li><p>filler such as “simply”, “just”, “basically”, and “under the hood”;</p></li>
+<li><p>commentary on the document itself: “this is worth knowing”, “the last point
+bears stating”, “note that”, “as we will see”.</p></li>
+</ul>
+<p>These apply to every documentation type. Explanatory pages carry more prose than the others and are where they are most often violated, but a heading, a docstring summary line, or a comment in a gallery example is subject to the same rule.</p>
+<p>For example:</p>
+<blockquote>
+<div><p>A tensor captured by the callback’s closure is not an operator input, so no cotangent is propagated to it.</p>
+</div></blockquote>
+<p>is preferable to:</p>
+<blockquote>
+<div><p>A weight the prior closes over reaches no gradient.</p>
+</div></blockquote>
+<p>Likewise:</p>
+<blockquote>
+<div><p>Gradient waveform continuity across block boundaries.</p>
+</div></blockquote>
+<p>is preferable to:</p>
+<blockquote>
+<div><p>Whether each gradient carries on from the block before it.</p>
+</div></blockquote>
+<p>Technical writing need not be deliberately opaque or terse. The objective is clarity through correct terminology and explicit relationships rather than through conversational paraphrase.</p>
+<p>State relationships with the ordinary causal and comparative constructions of scientific prose: <em>X increases Y because…</em>, <em>the algorithm computes…</em>, <em>the constraint applies to…</em>, <em>increasing A reduces B and increases C</em>. Where a sentence would carry several relationships at once, use several sentences. A compressed sentence is not clearer for being shorter.</p>
+<p>Distinguish a mathematical or algorithmic requirement from a narration of the implementation. Stating that a quantity is an input because it appears in the expression being evaluated is documentation; stating that a function “needs” it, “waits for” it, or “is handed” it is narration, and says less.</p>
+<p>Avoid:</p>
+<blockquote>
+<div><p>The readout module is given the pulse so that it can measure the echo time from the pulse centre, and the rephaser so that it can put it in an interval the repetition already waits out.</p>
+</div></blockquote>
+<p>Prefer:</p>
+<blockquote>
+<div><p>The echo time is defined from the centre of the excitation pulse, so the readout module takes the pulse event as an argument. It also takes the slice rephaser, which it places within the delay that precedes the readout rather than appending a separate block.</p>
+</div></blockquote>
+<p>The register is ordinary scientific and technical prose. A sentence that draws attention to its wording should be reconsidered even when it is grammatically correct and free of the constructions listed above.</p>
+</section>
+<section id="units-shapes-and-conventions">
+<h3>Units, shapes, and conventions<a class="headerlink" href="#units-shapes-and-conventions" title="Link to this heading">#</a></h3>
+<p>Units, shapes, axes, normalization, coordinate systems, sign conventions, ordering, and discretization rules are part of the interface whenever they affect interpretation or behavior.</p>
+<p>Document them explicitly where relevant.</p>
+<p>Do not infer units or conventions from parameter names alone.</p>
+<p>When internal and external representations use different conventions, state the distinction.</p>
+<p>Use one notation consistently for the same physical quantity unless there is a technical reason not to.</p>
+</section>
+<section id="mathematical-notation">
+<h3>Mathematical notation<a class="headerlink" href="#mathematical-notation" title="Link to this heading">#</a></h3>
+<p>Use conventional mathematical notation.</p>
+<p>Rendered mathematics is preferred when it makes a definition or relationship substantially clearer than prose or a monospace pseudo-equation.</p>
+<p>In explanatory material:</p>
+<ul class="simple">
+<li><p>introduce symbols before relying on them;</p></li>
+<li><p>define important quantities;</p></li>
+<li><p>state relevant assumptions;</p></li>
+<li><p>provide enough surrounding explanation to interpret the equations.</p></li>
+</ul>
+<p>In API reference, equations primarily specify semantics and normally should not become extended derivations.</p>
+<p>Mathematics should not be added merely to make documentation appear more rigorous.</p>
+</section>
+<section id="scientific-claims-and-references">
+<h3>Scientific claims and references<a class="headerlink" href="#scientific-claims-and-references" title="Link to this heading">#</a></h3>
+<p>Distinguish among:</p>
+<ul class="simple">
+<li><p>behavior established by the implementation;</p></li>
+<li><p>mathematical properties;</p></li>
+<li><p>empirical observations;</p></li>
+<li><p>literature-derived claims;</p></li>
+<li><p>assumptions;</p></li>
+<li><p>recommendations.</p></li>
+</ul>
+<p>Cite primary literature or authoritative specifications for nontrivial external scientific claims where practical.</p>
+<p>Do not turn results from one example, benchmark, dataset, or configuration into unsupported general claims.</p>
+<p>Do not describe an estimate as a measurement, or a limited check as a general guarantee.</p>
+</section>
+</section>
+<section id="docstrings">
+<h2>Docstrings<a class="headerlink" href="#docstrings" title="Link to this heading">#</a></h2>
+<p>Docstrings are primarily API reference.</p>
+<p>They should make the public contract clear without attempting to contain every useful piece of background information.</p>
+<p>Use the project’s established docstring convention consistently.</p>
+<section id="parameters-and-returns">
+<h3>Parameters and returns<a class="headerlink" href="#parameters-and-returns" title="Link to this heading">#</a></h3>
+<p>Parameter documentation should state semantic meaning rather than merely repeat the type or parameter name.</p>
+<p>Avoid:</p>
+<blockquote>
+<div><p><code class="docutils literal notranslate"><span class="pre">axis</span></code>
+The axis.</p>
+</div></blockquote>
+<p>Prefer:</p>
+<blockquote>
+<div><p><code class="docutils literal notranslate"><span class="pre">axis</span></code>
+Spatial axis along which the finite difference is evaluated.</p>
+</div></blockquote>
+<p>Document units, allowed values, shapes, broadcasting behavior, or conventions when these are not obvious from the type.</p>
+<p>Return documentation should similarly describe what is returned rather than repeat the return type.</p>
+</section>
+<section id="notes">
+<h3>Notes<a class="headerlink" href="#notes" title="Link to this heading">#</a></h3>
+<p>Use Notes for information that materially affects interpretation or use of the API but does not belong naturally in Parameters or Returns.</p>
+<p>Examples include:</p>
+<ul class="simple">
+<li><p>mathematical definitions;</p></li>
+<li><p>normalization conventions;</p></li>
+<li><p>algorithmic restrictions;</p></li>
+<li><p>correspondence with upstream implementations;</p></li>
+<li><p>numerical considerations;</p></li>
+<li><p>differentiation behavior.</p></li>
+</ul>
+<p>Do not use Notes as a place for general background theory that belongs in explanatory documentation.</p>
+</section>
+<section id="docstring-examples">
+<h3>Docstring examples<a class="headerlink" href="#docstring-examples" title="Link to this heading">#</a></h3>
+<p>Docstring examples should be short and API-focused.</p>
+<p>Useful examples demonstrate:</p>
+<ul class="simple">
+<li><p>basic invocation;</p></li>
+<li><p>important shapes;</p></li>
+<li><p>return structure;</p></li>
+<li><p>conventions that are easier to show than describe;</p></li>
+<li><p>a common non-obvious case.</p></li>
+</ul>
+<p>Long scientific workflows belong in the example gallery.</p>
+<p>Conceptual derivations belong in explanatory documentation.</p>
+<p>Prefer executable examples where practical.</p>
+<p>An example should not be added solely to satisfy a template when it provides no useful information beyond the signature.</p>
+</section>
+</section>
+<section id="developer-documentation">
+<h2>Developer documentation<a class="headerlink" href="#developer-documentation" title="Link to this heading">#</a></h2>
+<p>Developer documentation may discuss implementation architecture and internal abstractions more directly than user-facing documentation.</p>
+<p>Use the same precise terminology and restrained prose.</p>
+<p>Explain rationale where it helps maintainers understand why an architecture, representation, or constraint exists.</p>
+<p>Distinguish current design rationale from historical narration.</p>
+<p>Abandoned alternatives, transient development reasoning, and change history generally belong in issue trackers, design records, release notes, or repository history unless they are necessary to understand a current constraint.</p>
+</section>
+<section id="editing-existing-documentation">
+<h2>Editing existing documentation<a class="headerlink" href="#editing-existing-documentation" title="Link to this heading">#</a></h2>
+<p>Documentation maintenance is semantic editing, not indiscriminate rewriting.</p>
+<p>Before making a substantive change:</p>
+<ol class="arabic simple">
+<li><p>identify the type and purpose of the documentation;</p></li>
+<li><p>establish the behavior being documented;</p></li>
+<li><p>consult implementation, tests, specifications, upstream documentation, or literature where necessary;</p></li>
+<li><p>preserve technically useful existing material;</p></li>
+<li><p>correct terminology and conceptual errors;</p></li>
+<li><p>remove inappropriate prose rather than replacing it with stylistic synonyms;</p></li>
+<li><p>avoid unrelated stylistic churn.</p></li>
+</ol>
+<p>Existing prose should not be assumed to be correct merely because it is already published.</p>
+<p>Conversely, documentation that is already precise and appropriate should not be rewritten merely to impose a different wording.</p>
+<p>When documentation and implementation appear to disagree, establish the intended behavior before changing the documentation.</p>
+</section>
+<section id="building-and-reviewing-documentation">
+<h2>Building and reviewing documentation<a class="headerlink" href="#building-and-reviewing-documentation" title="Link to this heading">#</a></h2>
+<p>Substantial documentation changes should be reviewed in rendered form.</p>
+<p>Where supported by the project:</p>
+<ol class="arabic simple">
+<li><p>build the complete documentation;</p></li>
+<li><p>run doctests and executable examples;</p></li>
+<li><p>run documentation-specific tests and checks;</p></li>
+<li><p>inspect rendered pages;</p></li>
+<li><p>check equations, figures, tables, links, and cross-references;</p></li>
+<li><p>review terminology for consistency.</p></li>
+</ol>
+<p>A successful documentation build establishes that the documentation can be rendered; it does not establish that the documentation is scientifically or editorially correct.</p>
+</section>
+<section id="review-checklist">
+<h2>Review checklist<a class="headerlink" href="#review-checklist" title="Link to this heading">#</a></h2>
+<section id="id2">
+<h3>API reference<a class="headerlink" href="#id2" title="Link to this heading">#</a></h3>
+<ul class="simple">
+<li><p>Is the established technical term used?</p></li>
+<li><p>Is the object or operation defined directly?</p></li>
+<li><p>Are units, shapes, conventions, and restrictions unambiguous?</p></li>
+<li><p>Is mathematical notation used where it improves precision?</p></li>
+<li><p>Is background theory limited to what is needed to specify the interface?</p></li>
+<li><p>Have implementation details displaced the scientific abstraction?</p></li>
+</ul>
+</section>
+<section id="id3">
+<h3>Examples and gallery<a class="headerlink" href="#id3" title="Link to this heading">#</a></h3>
+<ul class="simple">
+<li><p>Is this a meaningful and reproducible scientific workflow?</p></li>
+<li><p>Do code and results dominate the page?</p></li>
+<li><p>Does prose explain consequential choices rather than narrate execution?</p></li>
+<li><p>Is theoretical background limited to what the example needs?</p></li>
+<li><p>Are results interpreted concretely and conservatively?</p></li>
+<li><p>Does the example demonstrate recommended public-API usage?</p></li>
+<li><p>Would a short code snippet elsewhere lose essentially nothing?</p></li>
+<li><p>Is there a stated objective and an observable outcome, rather than a set of configurations that merely run?</p></li>
+<li><p>Can the learning objective be stated in one sentence that is more specific than “how to use X”?</p></li>
+<li><p>Does the title name the concept demonstrated rather than the interface exercised?</p></li>
+<li><p>Are parameters not under study held fixed across a comparison?</p></li>
+<li><p>Do the categories and cards appear on the landing page, and is the gallery a single entry in global navigation?</p></li>
+</ul>
+</section>
+<section id="explanation">
+<h3>Explanation<a class="headerlink" href="#explanation" title="Link to this heading">#</a></h3>
+<ul class="simple">
+<li><p>Does the page teach the underlying concept rather than narrate the API?</p></li>
+<li><p>Are standard terms introduced accurately and then used consistently?</p></li>
+<li><p>Are motivation, relationships, assumptions, and design choices clear?</p></li>
+<li><p>Is the material accessible without sacrificing technical terminology?</p></li>
+<li><p>Does the depth remain relevant to the software?</p></li>
+<li><p>Does the page reach a formal model or criterion, and then the software abstraction?</p></li>
+<li><p>Are mechanisms and trade-offs stated explicitly rather than compressed into a rhetorical sentence?</p></li>
+</ul>
+</section>
+<section id="id4">
+<h3>Tutorials and how-to guides<a class="headerlink" href="#id4" title="Link to this heading">#</a></h3>
+<ul class="simple">
+<li><p>Is the task or workflow clear?</p></li>
+<li><p>Are prerequisites stated where necessary?</p></li>
+<li><p>Does the guide explain non-obvious choices without narrating obvious code?</p></li>
+<li><p>Does it link to reference and explanation instead of duplicating them?</p></li>
+</ul>
+</section>
+<section id="all-documentation">
+<h3>All documentation<a class="headerlink" href="#all-documentation" title="Link to this heading">#</a></h3>
+<ul class="simple">
+<li><p>Is the content technically correct?</p></li>
+<li><p>Is terminology conventional and consistent?</p></li>
+<li><p>Are important units and conventions explicit?</p></li>
+<li><p>Is any wording present primarily to sound clever, friendly, vivid, or varied?</p></li>
+<li><p>Is anything personified, and is every figurative verb either removed or used in its established technical sense?</p></li>
+<li><p>Does each heading name the technical concept rather than describe it, and would it look ordinary in a textbook or methods paper?</p></li>
+<li><p>Does any sentence draw attention to its own wording?</p></li>
+<li><p>In revised prose, has one rhetorical construction been replaced by a milder one rather than by a direct statement?</p></li>
+<li><p>Is a stated requirement mathematical or algorithmic, rather than a narration of what the implementation does?</p></li>
+<li><p>Has precision been sacrificed for accessibility?</p></li>
+<li><p>Is the material in the appropriate documentation type?</p></li>
+<li><p>Would removing a sentence lose useful scientific, mathematical, API, or procedural information?</p></li>
+</ul>
+<p>When accessibility and terminology appear to conflict, <strong>retain the standard terminology and explain it better</strong>.</p>
+</section>
+</section>
+</section>
+
+
+                </article>
+              
+
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="style.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Coding style</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="terminology.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Terminology and conventions</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item"><div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> Contents
+  </div>
+  <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#documentation-structure">Documentation structure</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#api-reference">API reference</a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#summary-lines">Summary lines</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#mathematical-content">Mathematical content</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#implementation-details">Implementation details</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#background-theory">Background theory</a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#examples-and-gallery">Examples and gallery</a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#what-belongs-in-the-gallery">What belongs in the gallery</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#explain-decisions-not-execution">Explain decisions, not execution</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#theory-in-examples">Theory in examples</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#code-comments">Code comments</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#results">Results</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#tone">Tone</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#api-examples-and-gallery-examples">API examples and gallery examples</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#an-example-is-a-tour-of-an-object-not-a-call-of-it">An example is a tour of an object, not a call of it</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#defaults-of-a-plotting-helper">Defaults of a plotting helper</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#legends-sit-outside-the-panel">Legends sit outside the panel</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#geometry-and-traversal-are-different-figures">Geometry and traversal are different figures</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#diagnostics-come-from-the-implementation-they-illustrate">Diagnostics come from the implementation they illustrate</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#one-subject-one-example">One subject, one example</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#gallery-organization-and-navigation">Gallery organization and navigation</a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#explanation-and-concepts">Explanation and concepts</a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#organization-of-an-explanatory-page">Organization of an explanatory page</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#accessibility-and-terminology">Accessibility and terminology</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#pedagogical-register">Pedagogical register</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#depth">Depth</a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#tutorials-and-how-to-guides">Tutorials and how-to guides</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#separation-of-concerns">Separation of concerns</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#scientific-writing">Scientific writing</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#terminology">Terminology</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#prose">Prose</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#units-shapes-and-conventions">Units, shapes, and conventions</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#mathematical-notation">Mathematical notation</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#scientific-claims-and-references">Scientific claims and references</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#docstrings">Docstrings</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#parameters-and-returns">Parameters and returns</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#notes">Notes</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#docstring-examples">Docstring examples</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#developer-documentation">Developer documentation</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#editing-existing-documentation">Editing existing documentation</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#building-and-reviewing-documentation">Building and reviewing documentation</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#review-checklist">Review checklist</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#id2">API reference</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#id3">Examples and gallery</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#explanation">Explanation</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#id4">Tutorials and how-to guides</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#all-documentation">All documentation</a></li>
+</ul>
+</li>
+</ul>
+  </nav></div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+<div class="bd-footer-content__inner container">
+  
+  <div class="footer-item">
+    
+<p class="component-author">
+By pulserver contributors
+</p>
+
+  </div>
+  
+  <div class="footer-item">
+    
+
+  <p class="copyright">
+    
+      © Copyright 2024-2026, pulserver contributors.
+      <br/>
+    
+  </p>
+
+  </div>
+  
+  <div class="footer-item">
+    
+  </div>
+  
+  <div class="footer-item">
+    
+  </div>
+  
+</div>
+          </footer>
+        
+
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9"></script>
+<script defer src="../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9"></script>
+
+  <footer class="bd-footer">
+  </footer>
+  </body>
+</html>

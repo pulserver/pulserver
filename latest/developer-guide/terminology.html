@@ -1,0 +1,918 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Terminology and conventions &#8212; pulserver documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../_static/styles/theme.css?digest=90905a2f556bf617f1a9" rel="stylesheet" />
+<link href="../_static/styles/pydata-sphinx-theme.css?digest=90905a2f556bf617f1a9" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/sphinx-book-theme.css?v=4418a689" />
+    <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery.css?v=c83e6b79" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../_static/pulserver.css?v=36f0fcfd" />
+  
+  <!-- So that users can add custom icons -->
+  <script defer src="../_static/scripts/fontawesome.js?digest=90905a2f556bf617f1a9"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
+<link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
+
+    <script src="../_static/documentation_options.js?v=b1def801"></script>
+    <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../_static/copybutton.js?v=f281be69"></script>
+    <script src="../_static/sg-tags.js?v=d80f6fa4"></script>
+    <script src="../_static/scripts/sphinx-book-theme.js?v=fab101a9"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'developer-guide/terminology';</script>
+    <script>
+        DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
+        DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'latest';
+        DOCUMENTATION_OPTIONS.show_version_warning_banner =
+            true;
+        </script>
+    <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
+    <link rel="canonical" href="https://pulserver.github.io/pulserver/latest/developer-guide/terminology.html" />
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Pre-commit" href="pre-commit.html" />
+    <link rel="prev" title="Documentation" href="documentation.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="latest" />
+  
+    
+    <script src="../_static/searchtools.js"></script>
+    <script src="../_static/language_data.js"></script>
+    <script src="../searchindex.js"></script>
+  
+  </head>
+  <body data-default-mode="">
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+  
+  
+  
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search..."
+         aria-label="Search..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+        </div>
+      
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+    </div>
+  
+
+  
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+    
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../_static/pulserver-mark.svg" class="logo__image only-light" alt="pulserver documentation - Home"/>
+    <img src="../_static/pulserver-mark.svg" class="logo__image only-dark pst-js-only" alt="pulserver documentation - Home"/>
+  
+  
+</a></div>
+        <div class="sidebar-primary-item">
+<div class="version-switcher__container dropdown pst-js-only">
+  <button id="pst-version-switcher-button-2"
+    type="button"
+    class="version-switcher__button btn btn-sm dropdown-toggle"
+    data-bs-toggle="dropdown"
+    aria-haspopup="listbox"
+    aria-controls="pst-version-switcher-list-2"
+    aria-label="Version switcher list"
+  >
+    Choose version  <!-- this text may get changed later by javascript -->
+    <span class="caret"></span>
+  </button>
+  <div id="pst-version-switcher-list-2"
+    class="version-switcher__menu dropdown-menu list-group-flush py-0"
+    role="listbox" aria-labelledby="pst-version-switcher-button-2">
+    <!-- dropdown will be populated by javascript on page load -->
+  </div>
+</div></div>
+        <div class="sidebar-primary-item">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button></div>
+        <div class="sidebar-primary-item"><nav class="bd-links bd-docs-nav" aria-label="Main">
+    <div class="bd-toc-item navbar-nav active">
+        
+        <ul class="nav bd-sidenav bd-sidenav__home-link">
+            <li class="toctree-l1">
+                <a class="reference internal" href="../index.html">
+                    Homepage
+                </a>
+            </li>
+        </ul>
+        <ul class="current nav bd-sidenav">
+<li class="toctree-l1 has-children"><a class="reference internal" href="../user-guide/index.html">User guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../user-guide/running.html">Running the services</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../user-guide/scanner-sequences.html">Scanner sequences</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../user-guide/reconstruction-plugins.html">Reconstruction plugins</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/architecture.html">Architecture</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/protocol.html">Protocol resolution</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/sessions.html">Design sessions and revisions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/ir-cache.html">The scanner IR</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/reconstruction.html">Raw-data enrichment and routing</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../examples/index.html">Examples</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../examples/protocol.html">Protocol resolution</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-protocol/01_protocol_resolution.html">Protocol resolution for a 2D gradient echo</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../examples/scanner-ir.html">Scanner IR</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/02-scanner-ir/01_segmentation.html">Segmentation of a sequence for the scanner</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../examples/reconstruction.html">Reconstruction</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/03-reconstruction/01_enrichment.html">Raw-data enrichment and reconstruction</a></li>
+</ul>
+</details></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../api/index.html">API reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../api/protocol.html">Protocol</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/design.html">Scanner sequences</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/host.html">Host daemon</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/ir.html">IR conversion</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/vre.html">Reconstruction proxy</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/recon.html">Reconstruction plugins</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/mrd.html">MRD data</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">Developer guide</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="prerequisites.html">Development prerequisites</a></li>
+<li class="toctree-l2"><a class="reference internal" href="installation.html">Editable installation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="workflow.html">Development workflow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="style.html">Coding style</a></li>
+<li class="toctree-l2"><a class="reference internal" href="documentation.html">Documentation</a></li>
+<li class="toctree-l2 current active"><a class="current reference internal" href="#">Terminology and conventions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="pre-commit.html">Pre-commit</a></li>
+<li class="toctree-l2"><a class="reference internal" href="pull-requests.html">Pull requests</a></li>
+<li class="toctree-l2"><a class="reference internal" href="releases.html">Releases</a></li>
+<li class="toctree-l2"><a class="reference internal" href="code-of-conduct.html">Code of conduct</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../misc/index.html">Miscellaneous</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../misc/license.html">License and third-party notices</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../misc/related.html">Related projects</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../misc/contributors.html">Contributors</a></li>
+</ul>
+</details></li>
+</ul>
+
+    </div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
+  </div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+
+<div class="sbt-scroll-pixel-helper"></div>
+
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item"><button class="sidebar-toggle primary-toggle btn btn-sm" title="Toggle primary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <span class="fa-solid fa-bars"></span>
+</button></div>
+      
+    </div>
+  
+  
+    <div class="header-article-items__end">
+      
+        <div class="header-article-item">
+
+<div class="article-header-buttons">
+
+
+
+
+
+<div class="dropdown dropdown-source-buttons">
+  <button class="btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Source repositories">
+    <i class="fab fa-github"></i>
+  </button>
+  <ul class="dropdown-menu">
+      
+      
+      
+      <li><a href="https://github.com/pulserver/pulserver" target="_blank"
+   class="btn btn-sm btn-source-repository-button dropdown-item"
+   title="Source repository"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fab fa-github"></i>
+  </span>
+<span class="btn__text-container">Repository</span>
+</a>
+</li>
+      
+      
+      
+      
+      <li><a href="https://github.com/pulserver/pulserver/edit/main/docs/developer-guide/terminology.md" target="_blank"
+   class="btn btn-sm btn-source-edit-button dropdown-item"
+   title="Suggest edit"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-pencil-alt"></i>
+  </span>
+<span class="btn__text-container">Suggest edit</span>
+</a>
+</li>
+      
+      
+      
+      
+      <li><a href="https://github.com/pulserver/pulserver/issues/new?title=Issue%20on%20page%20%2Fdeveloper-guide/terminology.html&body=Your%20issue%20content%20here." target="_blank"
+   class="btn btn-sm btn-source-issues-button dropdown-item"
+   title="Open an issue"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-lightbulb"></i>
+  </span>
+<span class="btn__text-container">Open issue</span>
+</a>
+</li>
+      
+  </ul>
+</div>
+
+
+
+
+
+
+<div class="dropdown dropdown-download-buttons">
+  <button class="btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Download this page">
+    <i class="fas fa-download"></i>
+  </button>
+  <ul class="dropdown-menu">
+      
+      
+      
+      <li><a href="../_sources/developer-guide/terminology.md" target="_blank"
+   class="btn btn-sm btn-download-source-button dropdown-item"
+   title="Download source file"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-file"></i>
+  </span>
+<span class="btn__text-container">.md</span>
+</a>
+</li>
+      
+      
+      
+      
+      <li>
+<button onclick="window.print()"
+  class="btn btn-sm btn-download-pdf-button dropdown-item"
+  title="Print to PDF"
+  data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-file-pdf"></i>
+  </span>
+<span class="btn__text-container">.pdf</span>
+</button>
+</li>
+      
+  </ul>
+</div>
+
+
+
+
+<button onclick="toggleFullScreen()"
+  class="btn btn-sm btn-fullscreen-button pst-navbar-icon"
+  title="Fullscreen mode"
+  data-bs-placement="bottom" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-expand"></i>
+  </span>
+
+</button>
+
+
+
+<div class="theme-switch-container dropdown pst-js-only" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Color mode">
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button dropdown-toggle" aria-label="Color mode" data-bs-toggle="dropdown">
+    <i class="theme-switch fa-solid fa-sun fa-lg fa-fw" data-mode="light" title="Light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg fa-fw" data-mode="dark" title="Dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg fa-fw" data-mode="auto" title="System Settings"></i>
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end">
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg fa-fw me-1"></i>System Settings</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="light"><i class="fa-solid fa-sun fa-lg fa-fw me-1"></i>Light</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="dark"><i class="fa-solid fa-moon fa-lg fa-fw me-1"></i>Dark</button></li>
+  </ul>
+</div>
+
+
+<button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+</button>
+<button class="sidebar-toggle secondary-toggle btn btn-sm pst-navbar-icon" title="Toggle secondary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="fa-solid fa-list"></span>
+</button>
+</div></div>
+      
+    </div>
+  
+</div>
+</div>
+              
+              
+
+<div id="jb-print-docs-body" class="onlyprint">
+    <h1>Terminology and conventions</h1>
+    <!-- Table of contents -->
+    <div id="print-main-content">
+        <div id="jb-print-toc">
+            
+            <div>
+                <h2> Contents </h2>
+            </div>
+            <nav aria-label="Page">
+                <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#terminology-is-the-substance">1. Terminology is the substance</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#distinctions-that-must-not-be-blurred">Distinctions that must not be blurred</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#fixed-vocabulary">Fixed vocabulary</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#register">2. Register</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#summary-lines">3. Summary lines</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#units-and-frames">4. Units and frames</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#safety-language">5. Safety language</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#source-of-truth">6. Source of truth</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#what-to-document-and-what-not-to">7. What to document, and what not to</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#format">8. Format</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#do-not-churn">9. Do not churn</a></li>
+</ul>
+            </nav>
+        </div>
+    </div>
+</div>
+
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section class="tex2jax_ignore mathjax_ignore" id="terminology-and-conventions">
+<h1>Terminology and conventions<a class="headerlink" href="#terminology-and-conventions" title="Link to this heading">#</a></h1>
+<p><a class="reference internal" href="documentation.html"><span class="doc">Documentation</span></a> is the generic guide, and states what belongs in each
+form of documentation and how it should be written. This page holds the
+conventions specific to pulserver, and governs every docstring, documentation
+page, code comment and user-facing diagnostic string in this repository,
+including the C and C++ doc comments under <code class="docutils literal notranslate"><span class="pre">src/</span></code>. It is binding on human
+contributors and on automated agents alike; <code class="docutils literal notranslate"><span class="pre">AGENTS.md</span></code> requires compliance
+with both.</p>
+<p>The target register is reference documentation for MRI researchers and
+sequence developers who run acquisitions on clinical scanners. The reader is
+assumed to know MR physics, Pulseq and the MRD raw-data format. The
+documentation’s job is to state what an object <em>is</em>, in the field’s own
+vocabulary, together with the semantics a signature cannot carry: units,
+frames, the layer a statement belongs to, state and invariants.</p>
+<p>The failure mode this guide exists to prevent is the replacement of an
+established MRI, Pulseq or MRD term by a paraphrase of what the thing does. A
+reader then has to reconstruct the standard concept from a description of it.
+Repeating the correct technical term is always preferable to varying the
+wording.</p>
+<section id="terminology-is-the-substance">
+<h2>1. Terminology is the substance<a class="headerlink" href="#terminology-is-the-substance" title="Link to this heading">#</a></h2>
+<p>Use the established term. Do not explain around it.</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Do not write</p></th>
+<th class="head"><p>Write</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>what the operator asks for</p></td>
+<td><p>the requested protocol, the prescription</p></td>
+</tr>
+<tr class="row-odd"><td><p>what the sequence will actually play</p></td>
+<td><p>the resolved protocol</p></td>
+</tr>
+<tr class="row-even"><td><p>the numbers the scanner keeps</p></td>
+<td><p>the scanner control variables (CVs)</p></td>
+</tr>
+<tr class="row-odd"><td><p>a design the daemon remembers</p></td>
+<td><p>a revision</p></td>
+</tr>
+<tr class="row-even"><td><p>the folder both sides look at</p></td>
+<td><p>the bucket</p></td>
+</tr>
+<tr class="row-odd"><td><p>the scanner program</p></td>
+<td><p>the interpreter</p></td>
+</tr>
+<tr class="row-even"><td><p>the host process for one sequence</p></td>
+<td><p>the PSD host process</p></td>
+</tr>
+<tr class="row-odd"><td><p>the compiled form of a sequence</p></td>
+<td><p>the IR, the IR cache</p></td>
+</tr>
+<tr class="row-even"><td><p>the part that repeats</p></td>
+<td><p>the repeating unit, the TR</p></td>
+</tr>
+<tr class="row-odd"><td><p>pieces of a TR</p></td>
+<td><p>segments</p></td>
+</tr>
+<tr class="row-even"><td><p>the order the pieces are played in</p></td>
+<td><p>the execution stream</p></td>
+</tr>
+<tr class="row-odd"><td><p>filling in the raw data</p></td>
+<td><p>MRD enrichment</p></td>
+</tr>
+<tr class="row-even"><td><p>what the reconstruction runs on</p></td>
+<td><p>the reconstruction worker</p></td>
+</tr>
+<tr class="row-odd"><td><p>the reconstruction’s code</p></td>
+<td><p>the reconstruction plugin</p></td>
+</tr>
+<tr class="row-even"><td><p>the sequence’s code</p></td>
+<td><p>the scanner-sequence plugin, the sequence application</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<section id="distinctions-that-must-not-be-blurred">
+<h3>Distinctions that must not be blurred<a class="headerlink" href="#distinctions-that-must-not-be-blurred" title="Link to this heading">#</a></h3>
+<p><strong>Protocol.</strong> A <em>prescription</em> or <em>requested protocol</em> is what the operator
+enters. The <em>resolved protocol</em> is what the design achieves and what the
+interpreter plays. A <em>listing</em> carries entries with their UI schema; a <em>value
+block</em> carries values only. A <em>preset</em> is a negative time value standing for a
+design choice, not a time.</p>
+<p><strong>Design.</strong> A <em>sequence application</em> is the pypulseqpp <code class="docutils literal notranslate"><span class="pre">SequenceApp</span></code> subclass
+that designs the sequence. A <em>scanner sequence</em> is the pulserver
+<code class="docutils literal notranslate"><span class="pre">ScannerSequence</span></code> that binds an application to protocol entries. A <em>plugin</em> is
+the file either kind is loaded from; say which kind.</p>
+<p><strong>Storage.</strong> A <em>session</em> belongs to one PSD host process. A <em>revision</em> is one
+generated or imported design in a session, immutable once written. The
+<em>current</em> revision is the one the interpreter plays. The <em>bucket</em> is the
+directory holding every session.</p>
+<p><strong>IR.</strong> A <em>subsequence</em> is one file of a <code class="docutils literal notranslate"><span class="pre">NextSequence</span></code> chain. A <em>definition</em>
+is a distinct event after deduplication; an <em>instance</em> is its occurrence in a
+block, with its own amplitude. The <em>repeating unit</em> is the TR of a
+subsequence; a <em>segment</em> is part of it bounded by zero gradient amplitude; the
+<em>execution stream</em> is the order of segments over the scan. The <em>IR cache</em> is
+the file; the <em>collection</em> is what a reader loads from it.</p>
+<p><strong>Raw data.</strong> A <em>series</em> is one MRD stream from the reconstruction client. An
+<em>acquisition</em> is one MRD readout record; a <em>readout</em> is the ADC event of the
+sequence it corresponds to. <em>Encoding counters</em> are the MRD <code class="docutils literal notranslate"><span class="pre">idx</span></code> fields;
+<em>flags</em> are the MRD acquisition flags; an <em>encoding space</em> is an entry of the
+header’s <code class="docutils literal notranslate"><span class="pre">encoding</span></code> list. <em>Enrichment</em> replaces these with what the sequence
+states.</p>
+<p><strong>Layers.</strong> The <em>Pulseq representation</em> is the content of a <code class="docutils literal notranslate"><span class="pre">.seq</span></code> file. The
+<em>engines</em> are pypulseqpp (design) and the reconstruction a plugin imports.
+<em>Orchestration</em> is pulserver. <em>Scanner execution</em> is what the interpreter does
+on the hardware. Do not attribute a property of one layer to another: a
+revision is not a <code class="docutils literal notranslate"><span class="pre">.seq</span></code> file, and the IR cache is not the design of record.</p>
+</section>
+<section id="fixed-vocabulary">
+<h3>Fixed vocabulary<a class="headerlink" href="#fixed-vocabulary" title="Link to this heading">#</a></h3>
+<ul class="simple">
+<li><p><strong>host daemon</strong>, <strong>reconstruction proxy</strong>; <code class="docutils literal notranslate"><span class="pre">pulserver.host</span></code> and
+<code class="docutils literal notranslate"><span class="pre">pulserver.vre</span></code> when the module is meant.</p></li>
+<li><p><strong>PSD host process</strong>, not “host PSD” or “PSD process”.</p></li>
+<li><p><strong>interpreter</strong> for the scanner-side program; <strong>reconstruction client</strong> for
+the scanner-side sender of raw data.</p></li>
+<li><p><strong>IR</strong> and <strong>IR cache</strong>; <code class="docutils literal notranslate"><span class="pre">.pseg</span></code> and <code class="docutils literal notranslate"><span class="pre">.pge</span></code> are file extensions, not names
+for the representation.</p></li>
+<li><p><strong>MRD</strong> for the format; <strong>ISMRMRD</strong> for the library and the HDF5 file.</p></li>
+</ul>
+</section>
+</section>
+<section id="register">
+<h2>2. Register<a class="headerlink" href="#register" title="Link to this heading">#</a></h2>
+<p>Write dry, declarative technical prose.</p>
+<p><strong>No personification.</strong> A daemon does not decide, a revision does not know, a
+proxy does not wait for anything it is not blocked on, a plugin does not ask.
+Objects have properties and functions have behaviour.</p>
+<p><strong>No literary compression.</strong> Do not describe an object by a relative clause
+where a noun exists: not “the directory the host daemon writes into” but “the
+bucket”; not “what the design managed” but “the resolved protocol”.</p>
+<p><strong>No taglines.</strong> An API summary classifies its object.</p>
+<p><strong>No conversational or tutorial voice.</strong> No “simply”, “just”, “note that”,
+“under the hood”, “powerful”, “seamless”. No rhetorical questions.</p>
+<p><strong>No history.</strong> Describe the code as it is. No “used to”, “previously”, “this
+replaces”, no named fixed bugs, no comparison with removed designs.</p>
+<p><strong>Variation is not a virtue.</strong> Use the same term for the same concept every
+time it appears.</p>
+</section>
+<section id="summary-lines">
+<h2>3. Summary lines<a class="headerlink" href="#summary-lines" title="Link to this heading">#</a></h2>
+<p>The first line is one sentence, on one line, ending in a period.</p>
+<ul class="simple">
+<li><p><strong>Functions and methods</strong> take an imperative or third-person declarative
+verb that classifies the operation: “Return…”, “Read…”, “Format…”,
+“Segment…”.</p></li>
+<li><p><strong>Classes</strong> take a noun phrase naming what the class represents.</p></li>
+<li><p><strong>Modules and packages</strong> take one line naming the responsibility.</p></li>
+</ul>
+<p>Do not restate the signature, the annotations or the parameter names in prose.</p>
+</section>
+<section id="units-and-frames">
+<h2>4. Units and frames<a class="headerlink" href="#units-and-frames" title="Link to this heading">#</a></h2>
+<p>Every documented quantity carries its unit.</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Quantity</p></th>
+<th class="head"><p>Unit</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Time entry of a protocol, on the wire and in a CV</p></td>
+<td><p>integer µs</p></td>
+</tr>
+<tr class="row-odd"><td><p>Time argument of a sequence application</p></td>
+<td><p>s</p></td>
+</tr>
+<tr class="row-even"><td><p>Float protocol entry</p></td>
+<td><p>the entry’s <code class="docutils literal notranslate"><span class="pre">unit</span></code>; the argument is the value times <code class="docutils literal notranslate"><span class="pre">scale</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>Scan time in a <code class="docutils literal notranslate"><span class="pre">VALIDATE</span></code> reply</p></td>
+<td><p>s</p></td>
+</tr>
+<tr class="row-even"><td><p>Rasters passed to the IR conversion</p></td>
+<td><p>s in <code class="docutils literal notranslate"><span class="pre">pypulseqpp.Opts</span></code>, µs in the cache</p></td>
+</tr>
+<tr class="row-odd"><td><p>Gyromagnetic ratio, field strength</p></td>
+<td><p>Hz/T, T</p></td>
+</tr>
+<tr class="row-even"><td><p>Prescription centre in the MRD header</p></td>
+<td><p>mm</p></td>
+</tr>
+<tr class="row-odd"><td><p>Prescription centre returned by <code class="docutils literal notranslate"><span class="pre">fov_offset_m</span></code></p></td>
+<td><p>m</p></td>
+</tr>
+<tr class="row-even"><td><p>Dwell time in an enriched acquisition (<code class="docutils literal notranslate"><span class="pre">sample_time_us</span></code>)</p></td>
+<td><p>µs</p></td>
+</tr>
+<tr class="row-odd"><td><p>k-space trajectory</p></td>
+<td><p>1/m, as pypulseqpp reports it</p></td>
+</tr>
+<tr class="row-even"><td><p>Session day</p></td>
+<td><p>days since 1970-01-01</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>State the coordinate frame wherever a position or a k-space quantity appears.
+The prescription centre and the trajectory are expressed along the sequence’s
+x, y and z gradient axes, with the sequence’s block rotations applied and no
+prescription rotation.</p>
+<p>State the precision a value is exchanged at when it matters: time entries are
+rounded to the nearest microsecond, ties to even, and float entries to six
+significant digits.</p>
+</section>
+<section id="safety-language">
+<h2>5. Safety language<a class="headerlink" href="#safety-language" title="Link to this heading">#</a></h2>
+<p>Pulserver performs no safety check of its own. The timing, gradient, PNS,
+mechanical-resonance and SAR checks belong to pypulseqpp and compute
+estimates. Passing these checks does not establish scanner or patient safety.</p>
+<ul class="simple">
+<li><p>Never write “safe”, “validated”, “compliant” or “approved” of a sequence, a
+protocol or a revision.</p></li>
+<li><p>A valid <code class="docutils literal notranslate"><span class="pre">VALIDATE</span></code> reply means the sequence application designed the
+prescription under the scanner limits it was given. State that, not more.</p></li>
+</ul>
+</section>
+<section id="source-of-truth">
+<h2>6. Source of truth<a class="headerlink" href="#source-of-truth" title="Link to this heading">#</a></h2>
+<p>Existing documentation is not evidence. Before writing or changing a
+substantive statement, verify it against, in order of authority:</p>
+<ol class="arabic simple">
+<li><p>the implementation being documented, including <code class="docutils literal notranslate"><span class="pre">src/cpp/</span></code> and <code class="docutils literal notranslate"><span class="pre">src/c/</span></code>;</p></li>
+<li><p>the tests that protect it;</p></li>
+<li><p>pypulseqpp, for sequence design and the Pulseq format;</p></li>
+<li><p>the ISMRMRD specification and library, for MRD;</p></li>
+<li><p>the Pulseq specification and the primary literature, cited by DOI.</p></li>
+</ol>
+<p>Do not infer semantics from a name, a type annotation or another docstring.
+If a contract cannot be established from these sources, say what is known and
+leave the rest undocumented rather than guessing.</p>
+<p>Do not print measured constants that are not guaranteed across releases or
+hardware.</p>
+</section>
+<section id="what-to-document-and-what-not-to">
+<h2>7. What to document, and what not to<a class="headerlink" href="#what-to-document-and-what-not-to" title="Link to this heading">#</a></h2>
+<p>The <code class="docutils literal notranslate"><span class="pre">Docstrings</span></code> section of <code class="docutils literal notranslate"><span class="pre">AGENTS.md</span></code> governs docstrings: document what the
+name, signature and annotations do not already state, and write no docstring
+for a private helper whose behaviour is evident. Use local comments for
+implementation detail and for a choice a reader would otherwise undo.</p>
+</section>
+<section id="format">
+<h2>8. Format<a class="headerlink" href="#format" title="Link to this heading">#</a></h2>
+<ul class="simple">
+<li><p>NumPy-style docstrings throughout, rendered by <code class="docutils literal notranslate"><span class="pre">sphinx.ext.napoleon</span></code>.</p></li>
+<li><p>Documentation pages are Markdown with MyST roles and directives.</p></li>
+<li><p>C and C++ documentation comments are Doxygen-style and follow this guide’s
+terminology and register rules in full.</p></li>
+</ul>
+</section>
+<section id="do-not-churn">
+<h2>9. Do not churn<a class="headerlink" href="#do-not-churn" title="Link to this heading">#</a></h2>
+<p>Rewriting correct technical prose for stylistic preference wastes review effort
+and risks introducing errors. Leave alone documentation that already uses the
+conventional term, states its units and frame, and classifies its object. When
+modifying code, clean up nearby documentation that clearly violates this guide;
+do not broaden a focused change into a repository-wide rewrite unless that is
+the task.</p>
+</section>
+</section>
+
+
+                </article>
+              
+
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="documentation.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Documentation</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="pre-commit.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Pre-commit</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item"><div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> Contents
+  </div>
+  <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#terminology-is-the-substance">1. Terminology is the substance</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#distinctions-that-must-not-be-blurred">Distinctions that must not be blurred</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#fixed-vocabulary">Fixed vocabulary</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#register">2. Register</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#summary-lines">3. Summary lines</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#units-and-frames">4. Units and frames</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#safety-language">5. Safety language</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#source-of-truth">6. Source of truth</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#what-to-document-and-what-not-to">7. What to document, and what not to</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#format">8. Format</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#do-not-churn">9. Do not churn</a></li>
+</ul>
+  </nav></div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+<div class="bd-footer-content__inner container">
+  
+  <div class="footer-item">
+    
+<p class="component-author">
+By pulserver contributors
+</p>
+
+  </div>
+  
+  <div class="footer-item">
+    
+
+  <p class="copyright">
+    
+      © Copyright 2024-2026, pulserver contributors.
+      <br/>
+    
+  </p>
+
+  </div>
+  
+  <div class="footer-item">
+    
+  </div>
+  
+  <div class="footer-item">
+    
+  </div>
+  
+</div>
+          </footer>
+        
+
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9"></script>
+<script defer src="../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9"></script>
+
+  <footer class="bd-footer">
+  </footer>
+  </body>
+</html>

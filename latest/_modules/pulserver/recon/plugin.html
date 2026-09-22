@@ -1,0 +1,1239 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>pulserver.recon.plugin &#8212; pulserver documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../_static/styles/theme.css?digest=90905a2f556bf617f1a9" rel="stylesheet" />
+<link href="../../../_static/styles/pydata-sphinx-theme.css?digest=90905a2f556bf617f1a9" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=03e43079" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/styles/sphinx-book-theme.css?v=4418a689" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery.css?v=c83e6b79" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/pulserver.css?v=36f0fcfd" />
+  
+  <!-- So that users can add custom icons -->
+  <script defer src="../../../_static/scripts/fontawesome.js?digest=90905a2f556bf617f1a9"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
+<link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
+
+    <script src="../../../_static/documentation_options.js?v=b1def801"></script>
+    <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../../../_static/copybutton.js?v=f281be69"></script>
+    <script src="../../../_static/sg-tags.js?v=d80f6fa4"></script>
+    <script src="../../../_static/scripts/sphinx-book-theme.js?v=fab101a9"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/pulserver/recon/plugin';</script>
+    <script>
+        DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
+        DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'latest';
+        DOCUMENTATION_OPTIONS.show_version_warning_banner =
+            true;
+        </script>
+    <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
+    <link rel="canonical" href="https://pulserver.github.io/pulserver/latest/_modules/pulserver/recon/plugin.html" />
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="latest" />
+  
+    
+    <script src="../../../_static/searchtools.js"></script>
+    <script src="../../../_static/language_data.js"></script>
+    <script src="../../../searchindex.js"></script>
+  
+  </head>
+  <body data-default-mode="">
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+  
+  
+  
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search..."
+         aria-label="Search..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+        </div>
+      
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+    </div>
+  
+
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+    
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../../_static/pulserver-mark.svg" class="logo__image only-light" alt="pulserver documentation - Home"/>
+    <img src="../../../_static/pulserver-mark.svg" class="logo__image only-dark pst-js-only" alt="pulserver documentation - Home"/>
+  
+  
+</a></div>
+        <div class="sidebar-primary-item">
+<div class="version-switcher__container dropdown pst-js-only">
+  <button id="pst-version-switcher-button-2"
+    type="button"
+    class="version-switcher__button btn btn-sm dropdown-toggle"
+    data-bs-toggle="dropdown"
+    aria-haspopup="listbox"
+    aria-controls="pst-version-switcher-list-2"
+    aria-label="Version switcher list"
+  >
+    Choose version  <!-- this text may get changed later by javascript -->
+    <span class="caret"></span>
+  </button>
+  <div id="pst-version-switcher-list-2"
+    class="version-switcher__menu dropdown-menu list-group-flush py-0"
+    role="listbox" aria-labelledby="pst-version-switcher-button-2">
+    <!-- dropdown will be populated by javascript on page load -->
+  </div>
+</div></div>
+        <div class="sidebar-primary-item">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button></div>
+        <div class="sidebar-primary-item"><nav class="bd-links bd-docs-nav" aria-label="Main">
+    <div class="bd-toc-item navbar-nav active">
+        
+        <ul class="nav bd-sidenav bd-sidenav__home-link">
+            <li class="toctree-l1">
+                <a class="reference internal" href="../../../index.html">
+                    Homepage
+                </a>
+            </li>
+        </ul>
+        <ul class="nav bd-sidenav">
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../user-guide/index.html">User guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/running.html">Running the services</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/scanner-sequences.html">Scanner sequences</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/reconstruction-plugins.html">Reconstruction plugins</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/architecture.html">Architecture</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/protocol.html">Protocol resolution</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/sessions.html">Design sessions and revisions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/ir-cache.html">The scanner IR</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/reconstruction.html">Raw-data enrichment and routing</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../examples/index.html">Examples</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../../examples/protocol.html">Protocol resolution</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-protocol/01_protocol_resolution.html">Protocol resolution for a 2D gradient echo</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../../examples/scanner-ir.html">Scanner IR</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/02-scanner-ir/01_segmentation.html">Segmentation of a sequence for the scanner</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../../examples/reconstruction.html">Reconstruction</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/03-reconstruction/01_enrichment.html">Raw-data enrichment and reconstruction</a></li>
+</ul>
+</details></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../api/index.html">API reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/protocol.html">Protocol</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/design.html">Scanner sequences</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/host.html">Host daemon</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/ir.html">IR conversion</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/vre.html">Reconstruction proxy</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/recon.html">Reconstruction plugins</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/mrd.html">MRD data</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../developer-guide/index.html">Developer guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/prerequisites.html">Development prerequisites</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/installation.html">Editable installation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/workflow.html">Development workflow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/style.html">Coding style</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/documentation.html">Documentation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/terminology.html">Terminology and conventions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/pre-commit.html">Pre-commit</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/pull-requests.html">Pull requests</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/releases.html">Releases</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/code-of-conduct.html">Code of conduct</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../misc/index.html">Miscellaneous</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../misc/license.html">License and third-party notices</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../misc/related.html">Related projects</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../misc/contributors.html">Contributors</a></li>
+</ul>
+</details></li>
+</ul>
+
+    </div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
+  </div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+
+<div class="sbt-scroll-pixel-helper"></div>
+
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item"><button class="sidebar-toggle primary-toggle btn btn-sm" title="Toggle primary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <span class="fa-solid fa-bars"></span>
+</button></div>
+      
+    </div>
+  
+  
+    <div class="header-article-items__end">
+      
+        <div class="header-article-item">
+
+<div class="article-header-buttons">
+
+
+
+
+
+<div class="dropdown dropdown-source-buttons">
+  <button class="btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Source repositories">
+    <i class="fab fa-github"></i>
+  </button>
+  <ul class="dropdown-menu">
+      
+      
+      
+      <li><a href="https://github.com/pulserver/pulserver" target="_blank"
+   class="btn btn-sm btn-source-repository-button dropdown-item"
+   title="Source repository"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fab fa-github"></i>
+  </span>
+<span class="btn__text-container">Repository</span>
+</a>
+</li>
+      
+      
+      
+      
+      <li><a href="https://github.com/pulserver/pulserver/issues/new?title=Issue%20on%20page%20%2F_modules/pulserver/recon/plugin.html&body=Your%20issue%20content%20here." target="_blank"
+   class="btn btn-sm btn-source-issues-button dropdown-item"
+   title="Open an issue"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-lightbulb"></i>
+  </span>
+<span class="btn__text-container">Open issue</span>
+</a>
+</li>
+      
+  </ul>
+</div>
+
+
+
+
+<button onclick="toggleFullScreen()"
+  class="btn btn-sm btn-fullscreen-button pst-navbar-icon"
+  title="Fullscreen mode"
+  data-bs-placement="bottom" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-expand"></i>
+  </span>
+
+</button>
+
+
+
+<div class="theme-switch-container dropdown pst-js-only" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Color mode">
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button dropdown-toggle" aria-label="Color mode" data-bs-toggle="dropdown">
+    <i class="theme-switch fa-solid fa-sun fa-lg fa-fw" data-mode="light" title="Light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg fa-fw" data-mode="dark" title="Dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg fa-fw" data-mode="auto" title="System Settings"></i>
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end">
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg fa-fw me-1"></i>System Settings</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="light"><i class="fa-solid fa-sun fa-lg fa-fw me-1"></i>Light</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="dark"><i class="fa-solid fa-moon fa-lg fa-fw me-1"></i>Dark</button></li>
+  </ul>
+</div>
+
+
+<button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+</button>
+
+</div></div>
+      
+    </div>
+  
+</div>
+</div>
+              
+              
+
+<div id="jb-print-docs-body" class="onlyprint">
+    <h1></h1>
+    <!-- Table of contents -->
+    <div id="print-main-content">
+        <div id="jb-print-toc">
+            
+        </div>
+    </div>
+</div>
+
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <h1>Source code for pulserver.recon.plugin</h1><div class="highlight"><pre>
+<span></span><span class="sd">"""Reconstruction plugin contract.</span>
+
+<span class="sd">A plugin module defines a :class:`ReconPlugin` subclass and a module-level</span>
+<span class="sd">``PLUGIN`` instance. The same hooks run over a live MRD stream, over an MRD</span>
+<span class="sd">file (:meth:`ReconPlugin.run`) and over an assembled bucket (calling the</span>
+<span class="sd">instance).</span>
+
+<span class="sd">Examples</span>
+<span class="sd">--------</span>
+<span class="sd">&gt;&gt;&gt; import numpy as np</span>
+<span class="sd">&gt;&gt;&gt; from types import SimpleNamespace</span>
+<span class="sd">&gt;&gt;&gt; from pulserver.recon import ReconContext, ReconPlugin, ReconResult</span>
+<span class="sd">&gt;&gt;&gt; from pulserver.mrd import AcquisitionBucket</span>
+<span class="sd">&gt;&gt;&gt; class RootSumOfSquares(ReconPlugin):</span>
+<span class="sd">...     def recon(self, branch, context):</span>
+<span class="sd">...         del branch, context</span>
+<span class="sd">...         kspace = self.buffers[0].kspace</span>
+<span class="sd">...         return ReconResult(np.sqrt(np.sum(np.abs(kspace) ** 2, axis=0)))</span>
+<span class="sd">&gt;&gt;&gt; matrix = SimpleNamespace(matrixSize=SimpleNamespace(x=8, y=4, z=1))</span>
+<span class="sd">&gt;&gt;&gt; header = SimpleNamespace(</span>
+<span class="sd">...     encoding=[SimpleNamespace(encodedSpace=matrix, reconSpace=matrix)],</span>
+<span class="sd">...     acquisitionSystemInformation=SimpleNamespace(receiverChannels=2),</span>
+<span class="sd">... )</span>
+<span class="sd">&gt;&gt;&gt; bucket = AcquisitionBucket.from_arrays(</span>
+<span class="sd">...     np.ones((4, 2, 8), dtype=np.complex64),</span>
+<span class="sd">...     labels={"kspace_encode_step_1": np.arange(4)},</span>
+<span class="sd">... )</span>
+<span class="sd">&gt;&gt;&gt; result = RootSumOfSquares()(bucket, ReconContext.offline(header))</span>
+<span class="sd">&gt;&gt;&gt; result.data.shape</span>
+<span class="sd">(4, 8)</span>
+<span class="sd">"""</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s2">"ExamCache"</span><span class="p">,</span>
+    <span class="s2">"Gadget"</span><span class="p">,</span>
+    <span class="s2">"ReconBuffer"</span><span class="p">,</span>
+    <span class="s2">"ReconContext"</span><span class="p">,</span>
+    <span class="s2">"ReconData"</span><span class="p">,</span>
+    <span class="s2">"ReconPlugin"</span><span class="p">,</span>
+    <span class="s2">"ReconResult"</span><span class="p">,</span>
+<span class="p">]</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">copy</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">ABC</span><span class="p">,</span> <span class="n">abstractmethod</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">Callable</span><span class="p">,</span>
+    <span class="n">Hashable</span><span class="p">,</span>
+    <span class="n">Iterator</span><span class="p">,</span>
+    <span class="n">Mapping</span><span class="p">,</span>
+    <span class="n">MutableMapping</span><span class="p">,</span>
+    <span class="n">Sequence</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span><span class="p">,</span> <span class="n">field</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">threading</span><span class="w"> </span><span class="kn">import</span> <span class="n">RLock</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">..mrd._acquisitions</span><span class="w"> </span><span class="kn">import</span> <span class="n">AcquisitionBucket</span><span class="p">,</span> <span class="n">AcquisitionFlag</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">..mrd._metadata</span><span class="w"> </span><span class="kn">import</span> <span class="n">has_acquisition_flag</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">._buffers</span><span class="w"> </span><span class="kn">import</span> <span class="n">ReconBuffer</span><span class="p">,</span> <span class="n">ReconData</span>
+
+
+<div class="viewcode-block" id="ReconResult">
+<a class="viewcode-back" href="../../../generated/pulserver.recon.ReconResult.html#pulserver.recon.ReconResult">[docs]</a>
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">ReconResult</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Image array for the runtime to package as an MRD image.</span>
+
+<span class="sd">    Geometry and timing come from a reference acquisition, so a plugin builds no</span>
+<span class="sd">    image header. Plugins may return ``ismrmrd.Image`` objects instead.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    data</span>
+<span class="sd">        NumPy array or Torch tensor, on any device.</span>
+<span class="sd">    reference</span>
+<span class="sd">        Index into the imaging acquisitions of the unit being emitted; negative</span>
+<span class="sd">        values count from the end, ``-1`` being the acquisition that closed it.</span>
+<span class="sd">    series_index</span>
+<span class="sd">        MRD ``image_series_index``.</span>
+<span class="sd">    image_index</span>
+<span class="sd">        MRD ``image_index``; ``None`` numbers images consecutively.</span>
+<span class="sd">    image_type</span>
+<span class="sd">        ``"magnitude"``, ``"phase"``, ``"real"``, ``"imaginary"`` or</span>
+<span class="sd">        ``"complex"``.</span>
+<span class="sd">    attributes</span>
+<span class="sd">        MRD meta attributes, merged over the runtime's defaults.</span>
+<span class="sd">    dicom</span>
+<span class="sd">        Convert the image to DICOM before sending it.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; import numpy as np</span>
+<span class="sd">    &gt;&gt;&gt; import pulserver.recon as recon</span>
+<span class="sd">    &gt;&gt;&gt; result = recon.ReconResult(np.zeros((4, 4)), series_index=2)</span>
+<span class="sd">    &gt;&gt;&gt; result.data.shape, result.series_index, result.image_type</span>
+<span class="sd">    ((4, 4), 2, 'magnitude')</span>
+<span class="sd">    """</span>
+
+    <span class="n">data</span><span class="p">:</span> <span class="n">Any</span>
+    <span class="n">reference</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">series_index</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">image_index</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">image_type</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"magnitude"</span>
+    <span class="n">attributes</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">dict</span><span class="p">)</span>
+    <span class="n">dicom</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span></div>
+
+
+
+<div class="viewcode-block" id="ExamCache">
+<a class="viewcode-back" href="../../../generated/pulserver.recon.ExamCache.html#pulserver.recon.ExamCache">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">ExamCache</span><span class="p">(</span><span class="n">MutableMapping</span><span class="p">[</span><span class="n">Hashable</span><span class="p">,</span> <span class="n">Any</span><span class="p">]):</span>
+<span class="w">    </span><span class="sd">"""Thread-safe store of artifacts shared by the series of one exam.</span>
+
+<span class="sd">    A value is disposed when replaced by another object, deleted, cleared, or</span>
+<span class="sd">    when the cache closes: through the ``cleanup`` stored with it, else its</span>
+<span class="sd">    ``close()`` method when it has one. Disposal errors are logged, not raised.</span>
+<span class="sd">    Reads and writes after :meth:`close` raise ``RuntimeError``.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    exam_id</span>
+<span class="sd">        Identifier of the owning exam.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; import pulserver.recon as recon</span>
+<span class="sd">    &gt;&gt;&gt; cache = recon.ExamCache("exam-1")</span>
+<span class="sd">    &gt;&gt;&gt; cache["coil_maps"] = "maps"</span>
+<span class="sd">    &gt;&gt;&gt; "coil_maps" in cache, len(cache)</span>
+<span class="sd">    (True, 1)</span>
+<span class="sd">    """</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">exam_id</span><span class="p">:</span> <span class="n">Hashable</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">exam_id</span> <span class="o">=</span> <span class="n">exam_id</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_values</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="n">Hashable</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_cleanups</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="n">Hashable</span><span class="p">,</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Any</span><span class="p">],</span> <span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span> <span class="o">=</span> <span class="n">RLock</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_closed</span> <span class="o">=</span> <span class="kc">False</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">closed</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Whether :meth:`close` has run."""</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_closed</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">:</span> <span class="n">Hashable</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_require_open</span><span class="p">()</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_values</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__setitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">:</span> <span class="n">Hashable</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__delitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">:</span> <span class="n">Hashable</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_require_open</span><span class="p">()</span>
+            <span class="n">value</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_values</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+            <span class="n">cleanup</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cleanups</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+        <span class="n">_dispose</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">cleanup</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Hashable</span><span class="p">]:</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_require_open</span><span class="p">()</span>
+            <span class="k">return</span> <span class="nb">iter</span><span class="p">(</span><span class="nb">tuple</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_values</span><span class="p">))</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_require_open</span><span class="p">()</span>
+            <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_values</span><span class="p">)</span>
+
+<div class="viewcode-block" id="ExamCache.set">
+<a class="viewcode-back" href="../../../generated/pulserver.recon.ExamCache.set.html#pulserver.recon.ExamCache.set">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">set</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">key</span><span class="p">:</span> <span class="n">Hashable</span><span class="p">,</span>
+        <span class="n">value</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">cleanup</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Any</span><span class="p">],</span> <span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Store an artifact and return it, disposing the value it replaces.</span>
+
+<span class="sd">        A key should identify everything the artifact depends on -- geometry, coil</span>
+<span class="sd">        configuration, trajectory, calibration settings: sharing an exam does not</span>
+<span class="sd">        make sensitivity maps interchangeable.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        cleanup</span>
+<span class="sd">            Called with the value when it is disposed, instead of its ``close()``.</span>
+<span class="sd">        """</span>
+        <span class="n">previous</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Any</span><span class="p">],</span> <span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_require_open</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_values</span><span class="p">:</span>
+                <span class="n">previous</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_values</span><span class="p">[</span><span class="n">key</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cleanups</span><span class="p">[</span><span class="n">key</span><span class="p">])</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_values</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_cleanups</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">cleanup</span>
+        <span class="k">if</span> <span class="n">previous</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">previous</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">value</span><span class="p">:</span>
+            <span class="n">_dispose</span><span class="p">(</span><span class="o">*</span><span class="n">previous</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">value</span></div>
+
+
+<div class="viewcode-block" id="ExamCache.get_or_create">
+<a class="viewcode-back" href="../../../generated/pulserver.recon.ExamCache.get_or_create.html#pulserver.recon.ExamCache.get_or_create">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_or_create</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">key</span><span class="p">:</span> <span class="n">Hashable</span><span class="p">,</span>
+        <span class="n">factory</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">Any</span><span class="p">],</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">cleanup</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Any</span><span class="p">],</span> <span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Return the artifact at ``key``, calling ``factory`` to create it when absent.</span>
+
+<span class="sd">        The factory runs under the cache lock: concurrent callers create a key once,</span>
+<span class="sd">        and every other access waits until the factory returns.</span>
+<span class="sd">        """</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_require_open</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_values</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_values</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">factory</span><span class="p">()</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_cleanups</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">cleanup</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_values</span><span class="p">[</span><span class="n">key</span><span class="p">]</span></div>
+
+
+<div class="viewcode-block" id="ExamCache.pop">
+<a class="viewcode-back" href="../../../generated/pulserver.recon.ExamCache.pop.html#pulserver.recon.ExamCache.pop">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">pop</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">:</span> <span class="n">Hashable</span><span class="p">,</span> <span class="n">default</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="o">...</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Remove and return an artifact without disposing it.</span>
+
+<span class="sd">        Ownership transfers to the caller. Use ``del cache[key]`` when the</span>
+<span class="sd">        artifact should be disposed immediately.</span>
+<span class="sd">        """</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_require_open</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_values</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">default</span> <span class="ow">is</span> <span class="o">...</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+                <span class="k">return</span> <span class="n">default</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_cleanups</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_values</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">key</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="ExamCache.clear">
+<a class="viewcode-back" href="../../../generated/pulserver.recon.ExamCache.clear.html#pulserver.recon.ExamCache.clear">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">clear</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Dispose and remove every cached artifact."""</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span><span class="p">:</span>
+            <span class="n">values</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span>
+                <span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cleanups</span><span class="p">[</span><span class="n">key</span><span class="p">])</span> <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_values</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_values</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_cleanups</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">value</span><span class="p">,</span> <span class="n">cleanup</span> <span class="ow">in</span> <span class="n">values</span><span class="p">:</span>
+            <span class="n">_dispose</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">cleanup</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="ExamCache.close">
+<a class="viewcode-back" href="../../../generated/pulserver.recon.ExamCache.close.html#pulserver.recon.ExamCache.close">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">close</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Dispose every artifact and retire the cache; repeated calls do nothing."""</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_closed</span><span class="p">:</span>
+                <span class="k">return</span>
+            <span class="n">values</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span>
+                <span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cleanups</span><span class="p">[</span><span class="n">key</span><span class="p">])</span> <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_values</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_values</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_cleanups</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_closed</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="k">for</span> <span class="n">value</span><span class="p">,</span> <span class="n">cleanup</span> <span class="ow">in</span> <span class="n">values</span><span class="p">:</span>
+            <span class="n">_dispose</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">cleanup</span><span class="p">)</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_require_open</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_closed</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"exam cache </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">exam_id</span><span class="si">!r}</span><span class="s2"> is retired"</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="ReconContext">
+<a class="viewcode-back" href="../../../generated/pulserver.recon.ReconContext.html#pulserver.recon.ReconContext">[docs]</a>
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">ReconContext</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Scan context passed to every hook of a plugin.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    header</span>
+<span class="sd">        Parsed MRD XML header; offline, ``None`` or any header-like object.</span>
+<span class="sd">    exam</span>
+<span class="sd">        Artifact cache shared by the series of the exam.</span>
+<span class="sd">    config</span>
+<span class="sd">        Configuration payload the client sent with the stream.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; from types import SimpleNamespace</span>
+<span class="sd">    &gt;&gt;&gt; import pulserver.recon as recon</span>
+<span class="sd">    &gt;&gt;&gt; matrix = SimpleNamespace(matrixSize=SimpleNamespace(x=8, y=4, z=1))</span>
+<span class="sd">    &gt;&gt;&gt; header = SimpleNamespace(</span>
+<span class="sd">    ...     encoding=[SimpleNamespace(encodedSpace=matrix, reconSpace=matrix)],</span>
+<span class="sd">    ...     acquisitionSystemInformation=SimpleNamespace(receiverChannels=2),</span>
+<span class="sd">    ... )</span>
+<span class="sd">    &gt;&gt;&gt; context = recon.ReconContext.offline(header)</span>
+<span class="sd">    &gt;&gt;&gt; isinstance(context.exam, recon.ExamCache)</span>
+<span class="sd">    True</span>
+<span class="sd">    """</span>
+
+    <span class="n">header</span><span class="p">:</span> <span class="n">Any</span>
+    <span class="n">exam</span><span class="p">:</span> <span class="n">ExamCache</span>
+    <span class="n">config</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span>
+
+<div class="viewcode-block" id="ReconContext.offline">
+<a class="viewcode-back" href="../../../generated/pulserver.recon.ReconContext.offline.html#pulserver.recon.ReconContext.offline">[docs]</a>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">offline</span><span class="p">(</span>
+        <span class="bp">cls</span><span class="p">,</span>
+        <span class="n">header</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">exam_id</span><span class="p">:</span> <span class="n">Hashable</span> <span class="o">=</span> <span class="s2">"offline"</span><span class="p">,</span>
+        <span class="n">config</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ReconContext</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Create a context with a new :class:`ExamCache`."""</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">header</span><span class="o">=</span><span class="n">header</span><span class="p">,</span> <span class="n">exam</span><span class="o">=</span><span class="n">ExamCache</span><span class="p">(</span><span class="n">exam_id</span><span class="p">),</span> <span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="p">)</span></div>
+
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">exam_id</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Hashable</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Identifier of :attr:`exam`."""</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">exam</span><span class="o">.</span><span class="n">exam_id</span></div>
+
+
+
+<div class="viewcode-block" id="Gadget">
+<a class="viewcode-back" href="../../../generated/pulserver.recon.Gadget.html#pulserver.recon.Gadget">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">Gadget</span><span class="p">(</span><span class="n">ABC</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""One per-acquisition step of a plugin's ``chain``.</span>
+
+<span class="sd">    A gadget keeps what it learns from earlier acquisitions of its stream -- a</span>
+<span class="sd">    noise covariance, a coil basis -- on ``self``. :meth:`ReconPlugin.spawn`</span>
+<span class="sd">    copies the chain, so each stream has its own.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    context : ReconContext</span>
+<span class="sd">        Set by :meth:`startup`.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; import pulserver.mrd as mrd</span>
+<span class="sd">    &gt;&gt;&gt; import pulserver.recon as recon</span>
+<span class="sd">    &gt;&gt;&gt; class DropNavigators(recon.Gadget):</span>
+<span class="sd">    ...     def __call__(self, acquisition, data):</span>
+<span class="sd">    ...         if mrd.has_acquisition_flag(acquisition, "ACQ_IS_NAVIGATION_DATA"):</span>
+<span class="sd">    ...             return None</span>
+<span class="sd">    ...         return data</span>
+<span class="sd">    &gt;&gt;&gt; isinstance(DropNavigators(), recon.Gadget)</span>
+<span class="sd">    True</span>
+<span class="sd">    """</span>
+
+<div class="viewcode-block" id="Gadget.startup">
+<a class="viewcode-back" href="../../../generated/pulserver.recon.Gadget.startup.html#pulserver.recon.Gadget.startup">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">startup</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Prepare for one stream; the default stores ``context``, so overrides call it."""</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">context</span> <span class="o">=</span> <span class="n">context</span></div>
+
+
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">acquisition</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Return the readout as the next step should see it.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        acquisition</span>
+<span class="sd">            The acquisition, for its flags and counters.</span>
+<span class="sd">        data</span>
+<span class="sd">            ``(coils, samples)``: the acquisition's data, or the previous step's</span>
+<span class="sd">            output.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        ndarray or None</span>
+<span class="sd">            The readout, or ``None`` to consume the acquisition.</span>
+<span class="sd">        """</span></div>
+
+
+
+<div class="viewcode-block" id="ReconPlugin">
+<a class="viewcode-back" href="../../../generated/pulserver.recon.ReconPlugin.html#pulserver.recon.ReconPlugin">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">ReconPlugin</span><span class="p">(</span><span class="n">ABC</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Base class for reconstruction plugins.</span>
+
+<span class="sd">    The runtime drives three hooks over one MRD stream: :meth:`startup` once,</span>
+<span class="sd">    before any acquisition; :meth:`receive` for each accepted acquisition, as it</span>
+<span class="sd">    arrives; and :meth:`recon` for each branch :meth:`receive` routes. Only</span>
+<span class="sd">    :meth:`recon` is abstract. The default :meth:`receive` runs the ``chain``,</span>
+<span class="sd">    places the readout in :attr:`buffers` and routes by ``branches``, so a</span>
+<span class="sd">    plugin usually declares those two and writes only :meth:`recon`. When a</span>
+<span class="sd">    stream ends on acquisitions that closed no branch, :meth:`recon` runs once</span>
+<span class="sd">    more with ``"imaging"``.</span>
+
+<span class="sd">    Each stream runs on its own :meth:`spawn` of the module-level ``PLUGIN``, so</span>
+<span class="sd">    state set in the hooks belongs to one stream. ``context.exam`` is shared</span>
+<span class="sd">    across the series of an exam; a plugin adds to it and never clears it.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    chain</span>
+<span class="sd">        :class:`Gadget` steps applied to every readout on arrival, in order.</span>
+<span class="sd">    branches</span>
+<span class="sd">        ``{AcquisitionFlag: name}``, tried in order: the first flag the</span>
+<span class="sd">        acquisition carries names the branch. List larger units first, since the</span>
+<span class="sd">        last acquisition of a slice also closes its segment. Flags combined with</span>
+<span class="sd">        ``|`` route either one to the branch. The default routes</span>
+<span class="sd">        ``LAST_IN_MEASUREMENT`` to ``"imaging"``.</span>
+<span class="sd">    require_flags</span>
+<span class="sd">        Flags an acquisition must all carry to be accepted. A combined</span>
+<span class="sd">        :class:`AcquisitionFlag` counts as its members.</span>
+<span class="sd">    reject_flags</span>
+<span class="sd">        Flags any one of which excludes an acquisition. The runtime never passes</span>
+<span class="sd">        excluded acquisitions to :meth:`receive`.</span>
+<span class="sd">    buffered</span>
+<span class="sd">        Place acquisitions into :attr:`buffers`. Disable for streams whose header</span>
+<span class="sd">        does not describe their encoding spaces; the plugin then collects</span>
+<span class="sd">        acquisitions itself.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    buffers : ReconData</span>
+<span class="sd">        Every encoding space of the scan, laid out by :meth:`startup`.</span>
+<span class="sd">    acquisition : object</span>
+<span class="sd">        The last acquisition the chain passed -- the one that closed the branch</span>
+<span class="sd">        :meth:`recon` is running -- or ``None``.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; import numpy as np</span>
+<span class="sd">    &gt;&gt;&gt; import pulserver.mrd as mrd</span>
+<span class="sd">    &gt;&gt;&gt; import pulserver.recon as recon</span>
+<span class="sd">    &gt;&gt;&gt; class DropNoise(recon.Gadget):</span>
+<span class="sd">    ...     def __call__(self, acquisition, data):</span>
+<span class="sd">    ...         noise = mrd.has_acquisition_flag(acquisition, "ACQ_IS_NOISE_MEASUREMENT")</span>
+<span class="sd">    ...         return None if noise else data</span>
+<span class="sd">    &gt;&gt;&gt; class RootSumOfSquares(recon.ReconPlugin):</span>
+<span class="sd">    ...     def __init__(self):</span>
+<span class="sd">    ...         super().__init__(</span>
+<span class="sd">    ...             chain=[DropNoise()],</span>
+<span class="sd">    ...             branches={mrd.AcquisitionFlag.LAST_IN_SLICE: "imaging"},</span>
+<span class="sd">    ...         )</span>
+<span class="sd">    ...     def recon(self, branch, context):</span>
+<span class="sd">    ...         kspace = self.buffers[0].kspace</span>
+<span class="sd">    ...         return recon.ReconResult(np.sqrt(np.sum(np.abs(kspace) ** 2, axis=0)))</span>
+<span class="sd">    &gt;&gt;&gt; RootSumOfSquares().branches[mrd.AcquisitionFlag.LAST_IN_SLICE]</span>
+<span class="sd">    'imaging'</span>
+<span class="sd">    """</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">chain</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">(),</span>
+        <span class="n">branches</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">require_flags</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="p">(),</span>
+        <span class="n">reject_flags</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="p">(),</span>
+        <span class="n">buffered</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">chain</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">chain</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">branches</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span>
+            <span class="p">{</span><span class="n">AcquisitionFlag</span><span class="o">.</span><span class="n">LAST_IN_MEASUREMENT</span><span class="p">:</span> <span class="s2">"imaging"</span><span class="p">}</span>
+            <span class="k">if</span> <span class="n">branches</span> <span class="ow">is</span> <span class="kc">None</span>
+            <span class="k">else</span> <span class="n">branches</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">require_flags</span> <span class="o">=</span> <span class="n">_flag_members</span><span class="p">(</span><span class="n">require_flags</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">reject_flags</span> <span class="o">=</span> <span class="n">_flag_members</span><span class="p">(</span><span class="n">reject_flags</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">buffered</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="n">buffered</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">buffers</span> <span class="o">=</span> <span class="n">ReconData</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">acquisition</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span>
+
+<div class="viewcode-block" id="ReconPlugin.spawn">
+<a class="viewcode-back" href="../../../generated/pulserver.recon.ReconPlugin.spawn.html#pulserver.recon.ReconPlugin.spawn">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">spawn</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ReconPlugin</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Return the instance one stream runs on.</span>
+
+<span class="sd">        A shallow copy holding its own copy of each gadget, so resources the</span>
+<span class="sd">        configured plugin holds -- a loaded network, a compiled operator -- are</span>
+<span class="sd">        shared. Override to isolate anything else a shallow copy would share.</span>
+<span class="sd">        """</span>
+        <span class="n">plugin</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">copy</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
+        <span class="n">plugin</span><span class="o">.</span><span class="n">chain</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">copy</span><span class="o">.</span><span class="n">copy</span><span class="p">(</span><span class="n">gadget</span><span class="p">)</span> <span class="k">for</span> <span class="n">gadget</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">chain</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">plugin</span></div>
+
+
+<div class="viewcode-block" id="ReconPlugin.startup">
+<a class="viewcode-back" href="../../../generated/pulserver.recon.ReconPlugin.startup.html#pulserver.recon.ReconPlugin.startup">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">startup</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="n">ReconContext</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Start every gadget, then lay out :attr:`buffers` from the header.</span>
+
+<span class="sd">        No buffer is allocated until an acquisition names its space. Overrides call</span>
+<span class="sd">        ``super().startup(context)``.</span>
+<span class="sd">        """</span>
+        <span class="k">for</span> <span class="n">gadget</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">chain</span><span class="p">:</span>
+            <span class="n">gadget</span><span class="o">.</span><span class="n">startup</span><span class="p">(</span><span class="n">context</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">buffered</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">buffers</span> <span class="o">=</span> <span class="n">ReconData</span><span class="o">.</span><span class="n">from_header</span><span class="p">(</span><span class="n">context</span><span class="o">.</span><span class="n">header</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="ReconPlugin.process">
+<a class="viewcode-back" href="../../../generated/pulserver.recon.ReconPlugin.process.html#pulserver.recon.ReconPlugin.process">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">process</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">acquisition</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Run the chain over one readout and return what it left.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        acquisition</span>
+<span class="sd">            The acquisition, for its flags and counters.</span>
+<span class="sd">        data</span>
+<span class="sd">            The readout to start from; ``None`` takes ``acquisition.data``.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        ndarray or None</span>
+<span class="sd">            The corrected readout, or ``None`` when a step consumed it.</span>
+<span class="sd">        """</span>
+        <span class="k">if</span> <span class="n">data</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">data</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">acquisition</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">gadget</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">chain</span><span class="p">:</span>
+            <span class="n">data</span> <span class="o">=</span> <span class="n">gadget</span><span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="n">data</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">data</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">return</span> <span class="kc">None</span>
+        <span class="k">return</span> <span class="n">data</span></div>
+
+
+<div class="viewcode-block" id="ReconPlugin.gadget">
+<a class="viewcode-back" href="../../../generated/pulserver.recon.ReconPlugin.gadget.html#pulserver.recon.ReconPlugin.gadget">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">gadget</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">kind</span><span class="p">:</span> <span class="nb">type</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Return this stream's first gadget of type ``kind``.</span>
+
+<span class="sd">        Hooks reach gadgets through this rather than through ``PLUGIN``, whose chain</span>
+<span class="sd">        :meth:`spawn` copied.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        LookupError</span>
+<span class="sd">            If the chain holds no gadget of that type.</span>
+<span class="sd">        """</span>
+        <span class="k">for</span> <span class="n">gadget</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">chain</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">gadget</span><span class="p">,</span> <span class="n">kind</span><span class="p">):</span>
+                <span class="k">return</span> <span class="n">gadget</span>
+        <span class="k">raise</span> <span class="ne">LookupError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"this plugin's chain has no </span><span class="si">{</span><span class="n">kind</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="ReconPlugin.branch_for">
+<a class="viewcode-back" href="../../../generated/pulserver.recon.ReconPlugin.branch_for.html#pulserver.recon.ReconPlugin.branch_for">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">branch_for</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">acquisition</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Return the branch the acquisition closes, or ``None``; see ``branches``."""</span>
+        <span class="k">if</span> <span class="n">acquisition</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        <span class="k">for</span> <span class="n">flag</span><span class="p">,</span> <span class="n">branch</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">branches</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">_closes</span><span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="n">flag</span><span class="p">):</span>
+                <span class="k">return</span> <span class="n">branch</span>
+        <span class="k">return</span> <span class="kc">None</span></div>
+
+
+<div class="viewcode-block" id="ReconPlugin.receive">
+<a class="viewcode-back" href="../../../generated/pulserver.recon.ReconPlugin.receive.html#pulserver.recon.ReconPlugin.receive">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">receive</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">acquisition</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="n">ReconContext</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Run the chain on one acquisition, place it, and run the branch it closes.</span>
+
+<span class="sd">        Placement follows ``encoding_space_ref`` and the acquisition's counters.</span>
+<span class="sd">        Override for placement the default cannot express, calling :meth:`process`</span>
+<span class="sd">        so the chain still runs.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        object or None</span>
+<span class="sd">            What :meth:`recon` returned, or ``None`` when the chain consumed the</span>
+<span class="sd">            acquisition or it closed no branch.</span>
+<span class="sd">        """</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">process</span><span class="p">(</span><span class="n">acquisition</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">data</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">acquisition</span> <span class="o">=</span> <span class="n">acquisition</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">buffered</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">buffers</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="n">data</span><span class="p">)</span>
+        <span class="n">branch</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">branch_for</span><span class="p">(</span><span class="n">acquisition</span><span class="p">)</span>
+        <span class="k">return</span> <span class="kc">None</span> <span class="k">if</span> <span class="n">branch</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">recon</span><span class="p">(</span><span class="n">branch</span><span class="p">,</span> <span class="n">context</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="ReconPlugin.recon">
+<a class="viewcode-back" href="../../../generated/pulserver.recon.ReconPlugin.recon.html#pulserver.recon.ReconPlugin.recon">[docs]</a>
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">recon</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">branch</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="n">ReconContext</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Reconstruct one branch from the filled buffers.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        branch</span>
+<span class="sd">            The branch name :meth:`receive` routed.</span>
+<span class="sd">        context</span>
+<span class="sd">            The scan context.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        object or None</span>
+<span class="sd">            A :class:`ReconResult`, an ``ismrmrd`` output, an array (a magnitude</span>
+<span class="sd">            :class:`ReconResult`), a sequence of these, or ``None``.</span>
+<span class="sd">        """</span>
+        <span class="o">...</span></div>
+
+
+<div class="viewcode-block" id="ReconPlugin.run">
+<a class="viewcode-back" href="../../../generated/pulserver.recon.ReconPlugin.run.html#pulserver.recon.ReconPlugin.run">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">run</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">path</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">group</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"dataset"</span><span class="p">,</span>
+        <span class="n">exam_id</span><span class="p">:</span> <span class="n">Hashable</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">config</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""Reconstruct one ISMRMRD HDF5 file in this process, through the same hooks.</span>
+
+<span class="sd">        The file's waveforms are delivered before its acquisitions.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        path</span>
+<span class="sd">            ISMRMRD HDF5 file.</span>
+<span class="sd">        group</span>
+<span class="sd">            HDF5 group holding the scan.</span>
+<span class="sd">        exam_id</span>
+<span class="sd">            Identifier of the exam cache; ``path`` when not given.</span>
+<span class="sd">        config</span>
+<span class="sd">            Configuration payload, as a stream would carry it.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        list</span>
+<span class="sd">            Everything emitted, in order: MRD images, named DICOM datasets for</span>
+<span class="sd">            results with ``dicom=True``, and any other output the plugin returned.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        FileNotFoundError</span>
+<span class="sd">            If there is no such file.</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If the file has no MRD XML header.</span>
+<span class="sd">        """</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">._runtime.offline</span><span class="w"> </span><span class="kn">import</span> <span class="n">reconstruct_file</span>
+
+        <span class="k">return</span> <span class="n">reconstruct_file</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">,</span> <span class="n">group</span><span class="o">=</span><span class="n">group</span><span class="p">,</span> <span class="n">exam_id</span><span class="o">=</span><span class="n">exam_id</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="p">)</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">bucket</span><span class="p">:</span> <span class="n">AcquisitionBucket</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="n">ReconContext</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Reconstruct an assembled bucket on a new :meth:`spawn`.</span>
+
+<span class="sd">        Runs :meth:`startup`, then :meth:`receive` for every acquisition in arrival</span>
+<span class="sd">        order, and returns the last output that was not ``None``. When there was</span>
+<span class="sd">        none and the last acquisition closes no branch, returns :meth:`recon` with</span>
+<span class="sd">        ``"imaging"``. ``require_flags`` and ``reject_flags`` are not applied.</span>
+<span class="sd">        """</span>
+        <span class="n">plugin</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">spawn</span><span class="p">()</span>
+        <span class="n">plugin</span><span class="o">.</span><span class="n">startup</span><span class="p">(</span><span class="n">context</span><span class="p">)</span>
+        <span class="n">output</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">for</span> <span class="n">acquisition</span> <span class="ow">in</span> <span class="n">bucket</span><span class="o">.</span><span class="n">acquisitions</span><span class="p">:</span>
+            <span class="n">received</span> <span class="o">=</span> <span class="n">plugin</span><span class="o">.</span><span class="n">receive</span><span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="n">context</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">received</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">output</span> <span class="o">=</span> <span class="n">received</span>
+        <span class="k">if</span> <span class="n">output</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">plugin</span><span class="o">.</span><span class="n">branch_for</span><span class="p">(</span><span class="n">_last</span><span class="p">(</span><span class="n">bucket</span><span class="o">.</span><span class="n">acquisitions</span><span class="p">))</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">output</span> <span class="o">=</span> <span class="n">plugin</span><span class="o">.</span><span class="n">recon</span><span class="p">(</span><span class="s2">"imaging"</span><span class="p">,</span> <span class="n">context</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">output</span></div>
+
+
+
+<span class="c1"># %% private module subroutines</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_closes</span><span class="p">(</span><span class="n">acquisition</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">flag</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Whether this acquisition carries the boundary named.</span>
+
+<span class="sd">    A combined :class:`AcquisitionFlag` names several at once, and carrying any</span>
+<span class="sd">    of them closes the branch it was mapped to.</span>
+<span class="sd">    """</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">flag</span><span class="p">,</span> <span class="n">AcquisitionFlag</span><span class="p">):</span>
+        <span class="k">return</span> <span class="nb">any</span><span class="p">(</span>
+            <span class="n">has_acquisition_flag</span><span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="n">member</span><span class="o">.</span><span class="n">flag</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">member</span> <span class="ow">in</span> <span class="n">AcquisitionFlag</span>
+            <span class="k">if</span> <span class="n">member</span> <span class="ow">in</span> <span class="n">flag</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="n">has_acquisition_flag</span><span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="n">flag</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_flag_members</span><span class="p">(</span><span class="n">flags</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="o">...</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Return flags as a tuple, a combined :class:`AcquisitionFlag` split into its members.</span>
+
+<span class="sd">    The members are read from the class because iterating a combined ``Flag``</span>
+<span class="sd">    needs Python 3.11.</span>
+<span class="sd">    """</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">flags</span><span class="p">,</span> <span class="n">AcquisitionFlag</span><span class="p">):</span>
+        <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">member</span> <span class="k">for</span> <span class="n">member</span> <span class="ow">in</span> <span class="n">AcquisitionFlag</span> <span class="k">if</span> <span class="n">member</span> <span class="ow">in</span> <span class="n">flags</span><span class="p">)</span>
+    <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">flags</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_last</span><span class="p">(</span><span class="n">acquisitions</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="o">...</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Any</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the acquisition that ended a bucket, or ``None`` for an empty one."""</span>
+    <span class="k">return</span> <span class="n">acquisitions</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="k">if</span> <span class="n">acquisitions</span> <span class="k">else</span> <span class="kc">None</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_dispose</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">cleanup</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Any</span><span class="p">],</span> <span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">cleanup</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">cleanup</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+            <span class="k">return</span>
+        <span class="n">close</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="s2">"close"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">callable</span><span class="p">(</span><span class="n">close</span><span class="p">):</span>
+            <span class="n">close</span><span class="p">()</span>
+    <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+        <span class="n">logging</span><span class="o">.</span><span class="n">exception</span><span class="p">(</span><span class="s2">"Error disposing exam-cached artifact"</span><span class="p">)</span>
+</pre></div>
+
+                </article>
+              
+
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+<div class="bd-footer-content__inner container">
+  
+  <div class="footer-item">
+    
+<p class="component-author">
+By pulserver contributors
+</p>
+
+  </div>
+  
+  <div class="footer-item">
+    
+
+  <p class="copyright">
+    
+      © Copyright 2024-2026, pulserver contributors.
+      <br/>
+    
+  </p>
+
+  </div>
+  
+  <div class="footer-item">
+    
+  </div>
+  
+  <div class="footer-item">
+    
+  </div>
+  
+</div>
+          </footer>
+        
+
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="../../../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9"></script>
+<script defer src="../../../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9"></script>
+
+  <footer class="bd-footer">
+  </footer>
+  </body>
+</html>

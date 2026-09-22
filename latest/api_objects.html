@@ -1,0 +1,844 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="./" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>API object index &#8212; pulserver documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="_static/styles/theme.css?digest=90905a2f556bf617f1a9" rel="stylesheet" />
+<link href="_static/styles/pydata-sphinx-theme.css?digest=90905a2f556bf617f1a9" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=03e43079" />
+    <link rel="stylesheet" type="text/css" href="_static/styles/sphinx-book-theme.css?v=4418a689" />
+    <link rel="stylesheet" type="text/css" href="_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="_static/sg_gallery.css?v=c83e6b79" />
+    <link rel="stylesheet" type="text/css" href="_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="_static/pulserver.css?v=36f0fcfd" />
+  
+  <!-- So that users can add custom icons -->
+  <script defer src="_static/scripts/fontawesome.js?digest=90905a2f556bf617f1a9"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
+<link rel="preload" as="script" href="_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
+
+    <script src="_static/documentation_options.js?v=b1def801"></script>
+    <script src="_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="_static/copybutton.js?v=f281be69"></script>
+    <script src="_static/sg-tags.js?v=d80f6fa4"></script>
+    <script src="_static/scripts/sphinx-book-theme.js?v=fab101a9"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'api_objects';</script>
+    <script>
+        DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
+        DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'latest';
+        DOCUMENTATION_OPTIONS.show_version_warning_banner =
+            true;
+        </script>
+    <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
+    <link rel="canonical" href="https://pulserver.github.io/pulserver/latest/api_objects.html" />
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="latest" />
+  
+    
+    <script src="_static/searchtools.js"></script>
+    <script src="_static/language_data.js"></script>
+    <script src="searchindex.js"></script>
+  
+  </head>
+  <body data-default-mode="">
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+  
+  
+  
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search..."
+         aria-label="Search..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+        </div>
+      
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+    </div>
+  
+
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+    
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="_static/pulserver-mark.svg" class="logo__image only-light" alt="pulserver documentation - Home"/>
+    <img src="_static/pulserver-mark.svg" class="logo__image only-dark pst-js-only" alt="pulserver documentation - Home"/>
+  
+  
+</a></div>
+        <div class="sidebar-primary-item">
+<div class="version-switcher__container dropdown pst-js-only">
+  <button id="pst-version-switcher-button-2"
+    type="button"
+    class="version-switcher__button btn btn-sm dropdown-toggle"
+    data-bs-toggle="dropdown"
+    aria-haspopup="listbox"
+    aria-controls="pst-version-switcher-list-2"
+    aria-label="Version switcher list"
+  >
+    Choose version  <!-- this text may get changed later by javascript -->
+    <span class="caret"></span>
+  </button>
+  <div id="pst-version-switcher-list-2"
+    class="version-switcher__menu dropdown-menu list-group-flush py-0"
+    role="listbox" aria-labelledby="pst-version-switcher-button-2">
+    <!-- dropdown will be populated by javascript on page load -->
+  </div>
+</div></div>
+        <div class="sidebar-primary-item">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button></div>
+        <div class="sidebar-primary-item"><nav class="bd-links bd-docs-nav" aria-label="Main">
+    <div class="bd-toc-item navbar-nav active">
+        
+        <ul class="nav bd-sidenav bd-sidenav__home-link">
+            <li class="toctree-l1">
+                <a class="reference internal" href="index.html">
+                    Homepage
+                </a>
+            </li>
+        </ul>
+        <ul class="nav bd-sidenav">
+<li class="toctree-l1 has-children"><a class="reference internal" href="user-guide/index.html">User guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="user-guide/running.html">Running the services</a></li>
+<li class="toctree-l2"><a class="reference internal" href="user-guide/scanner-sequences.html">Scanner sequences</a></li>
+<li class="toctree-l2"><a class="reference internal" href="user-guide/reconstruction-plugins.html">Reconstruction plugins</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="explanations/architecture.html">Architecture</a></li>
+<li class="toctree-l2"><a class="reference internal" href="explanations/protocol.html">Protocol resolution</a></li>
+<li class="toctree-l2"><a class="reference internal" href="explanations/sessions.html">Design sessions and revisions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="explanations/ir-cache.html">The scanner IR</a></li>
+<li class="toctree-l2"><a class="reference internal" href="explanations/reconstruction.html">Raw-data enrichment and routing</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="examples/index.html">Examples</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2 has-children"><a class="reference internal" href="examples/protocol.html">Protocol resolution</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="generated/gallery/01-protocol/01_protocol_resolution.html">Protocol resolution for a 2D gradient echo</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="examples/scanner-ir.html">Scanner IR</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="generated/gallery/02-scanner-ir/01_segmentation.html">Segmentation of a sequence for the scanner</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="examples/reconstruction.html">Reconstruction</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="generated/gallery/03-reconstruction/01_enrichment.html">Raw-data enrichment and reconstruction</a></li>
+</ul>
+</details></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="api/index.html">API reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="api/protocol.html">Protocol</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/design.html">Scanner sequences</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/host.html">Host daemon</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/ir.html">IR conversion</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/vre.html">Reconstruction proxy</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/recon.html">Reconstruction plugins</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/mrd.html">MRD data</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="developer-guide/index.html">Developer guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="developer-guide/prerequisites.html">Development prerequisites</a></li>
+<li class="toctree-l2"><a class="reference internal" href="developer-guide/installation.html">Editable installation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="developer-guide/workflow.html">Development workflow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="developer-guide/style.html">Coding style</a></li>
+<li class="toctree-l2"><a class="reference internal" href="developer-guide/documentation.html">Documentation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="developer-guide/terminology.html">Terminology and conventions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="developer-guide/pre-commit.html">Pre-commit</a></li>
+<li class="toctree-l2"><a class="reference internal" href="developer-guide/pull-requests.html">Pull requests</a></li>
+<li class="toctree-l2"><a class="reference internal" href="developer-guide/releases.html">Releases</a></li>
+<li class="toctree-l2"><a class="reference internal" href="developer-guide/code-of-conduct.html">Code of conduct</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="misc/index.html">Miscellaneous</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="misc/license.html">License and third-party notices</a></li>
+<li class="toctree-l2"><a class="reference internal" href="misc/related.html">Related projects</a></li>
+<li class="toctree-l2"><a class="reference internal" href="misc/contributors.html">Contributors</a></li>
+</ul>
+</details></li>
+</ul>
+
+    </div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
+  </div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+
+<div class="sbt-scroll-pixel-helper"></div>
+
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item"><button class="sidebar-toggle primary-toggle btn btn-sm" title="Toggle primary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <span class="fa-solid fa-bars"></span>
+</button></div>
+      
+    </div>
+  
+  
+    <div class="header-article-items__end">
+      
+        <div class="header-article-item">
+
+<div class="article-header-buttons">
+
+
+
+
+
+<div class="dropdown dropdown-source-buttons">
+  <button class="btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Source repositories">
+    <i class="fab fa-github"></i>
+  </button>
+  <ul class="dropdown-menu">
+      
+      
+      
+      <li><a href="https://github.com/pulserver/pulserver" target="_blank"
+   class="btn btn-sm btn-source-repository-button dropdown-item"
+   title="Source repository"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fab fa-github"></i>
+  </span>
+<span class="btn__text-container">Repository</span>
+</a>
+</li>
+      
+      
+      
+      
+      <li><a href="https://github.com/pulserver/pulserver/edit/main/docs/api_objects.rst" target="_blank"
+   class="btn btn-sm btn-source-edit-button dropdown-item"
+   title="Suggest edit"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-pencil-alt"></i>
+  </span>
+<span class="btn__text-container">Suggest edit</span>
+</a>
+</li>
+      
+      
+      
+      
+      <li><a href="https://github.com/pulserver/pulserver/issues/new?title=Issue%20on%20page%20%2Fapi_objects.html&body=Your%20issue%20content%20here." target="_blank"
+   class="btn btn-sm btn-source-issues-button dropdown-item"
+   title="Open an issue"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-lightbulb"></i>
+  </span>
+<span class="btn__text-container">Open issue</span>
+</a>
+</li>
+      
+  </ul>
+</div>
+
+
+
+
+
+
+<div class="dropdown dropdown-download-buttons">
+  <button class="btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Download this page">
+    <i class="fas fa-download"></i>
+  </button>
+  <ul class="dropdown-menu">
+      
+      
+      
+      <li><a href="_sources/api_objects.rst" target="_blank"
+   class="btn btn-sm btn-download-source-button dropdown-item"
+   title="Download source file"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-file"></i>
+  </span>
+<span class="btn__text-container">.rst</span>
+</a>
+</li>
+      
+      
+      
+      
+      <li>
+<button onclick="window.print()"
+  class="btn btn-sm btn-download-pdf-button dropdown-item"
+  title="Print to PDF"
+  data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-file-pdf"></i>
+  </span>
+<span class="btn__text-container">.pdf</span>
+</button>
+</li>
+      
+  </ul>
+</div>
+
+
+
+
+<button onclick="toggleFullScreen()"
+  class="btn btn-sm btn-fullscreen-button pst-navbar-icon"
+  title="Fullscreen mode"
+  data-bs-placement="bottom" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-expand"></i>
+  </span>
+
+</button>
+
+
+
+<div class="theme-switch-container dropdown pst-js-only" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Color mode">
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button dropdown-toggle" aria-label="Color mode" data-bs-toggle="dropdown">
+    <i class="theme-switch fa-solid fa-sun fa-lg fa-fw" data-mode="light" title="Light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg fa-fw" data-mode="dark" title="Dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg fa-fw" data-mode="auto" title="System Settings"></i>
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end">
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg fa-fw me-1"></i>System Settings</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="light"><i class="fa-solid fa-sun fa-lg fa-fw me-1"></i>Light</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="dark"><i class="fa-solid fa-moon fa-lg fa-fw me-1"></i>Dark</button></li>
+  </ul>
+</div>
+
+
+<button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+</button>
+
+</div></div>
+      
+    </div>
+  
+</div>
+</div>
+              
+              
+
+<div id="jb-print-docs-body" class="onlyprint">
+    <h1>API object index</h1>
+    <!-- Table of contents -->
+    <div id="print-main-content">
+        <div id="jb-print-toc">
+            
+        </div>
+    </div>
+</div>
+
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section id="api-object-index">
+<h1>API object index<a class="headerlink" href="#api-object-index" title="Link to this heading">#</a></h1>
+<p>The stub page of every documented object. The API pages carry the same
+object lists as tables, each entry linking the stub this page writes;
+writing them here keeps them out of the toctree the sidebar is built
+from.</p>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.design.ScannerSequence.html#pulserver.design.ScannerSequence" title="pulserver.design.ScannerSequence"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ScannerSequence</span></code></a></p></td>
+<td><p>A pypulseqpp application exposed to the scanner UI.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.design.load_plugin.html#pulserver.design.load_plugin" title="pulserver.design.load_plugin"><code class="xref py py-obj docutils literal notranslate"><span class="pre">load_plugin</span></code></a></p></td>
+<td><p>Import a plugin file and instantiate the one ScannerSequence it defines.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.design.TimeParam.html#pulserver.design.TimeParam" title="pulserver.design.TimeParam"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TimeParam</span></code></a></p></td>
+<td><p>A time UI entry bound to an <code class="docutils literal notranslate"><span class="pre">init_sequence</span></code> argument in seconds.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.design.FloatParam.html#pulserver.design.FloatParam" title="pulserver.design.FloatParam"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FloatParam</span></code></a></p></td>
+<td><p>A float UI entry bound to an <code class="docutils literal notranslate"><span class="pre">init_sequence</span></code> argument.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.design.IntParam.html#pulserver.design.IntParam" title="pulserver.design.IntParam"><code class="xref py py-obj docutils literal notranslate"><span class="pre">IntParam</span></code></a></p></td>
+<td><p>An integer UI entry bound to an <code class="docutils literal notranslate"><span class="pre">init_sequence</span></code> argument; a dropdown when it has options.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.design.BoolParam.html#pulserver.design.BoolParam" title="pulserver.design.BoolParam"><code class="xref py py-obj docutils literal notranslate"><span class="pre">BoolParam</span></code></a></p></td>
+<td><p>A checkbox UI entry bound to an <code class="docutils literal notranslate"><span class="pre">init_sequence</span></code> argument.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.design.StringListParam.html#pulserver.design.StringListParam" title="pulserver.design.StringListParam"><code class="xref py py-obj docutils literal notranslate"><span class="pre">StringListParam</span></code></a></p></td>
+<td><p>A choice among option strings, bound to an <code class="docutils literal notranslate"><span class="pre">init_sequence</span></code> argument.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.design.ConfigParam.html#pulserver.design.ConfigParam" title="pulserver.design.ConfigParam"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ConfigParam</span></code></a></p></td>
+<td><p>A value the sequence declares to the interpreter; never shown or edited.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.design.Description.html#pulserver.design.Description" title="pulserver.design.Description"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Description</span></code></a></p></td>
+<td><p>A read-only text row in the UI.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.host.HostDaemon.html#pulserver.host.HostDaemon" title="pulserver.host.HostDaemon"><code class="xref py py-obj docutils literal notranslate"><span class="pre">HostDaemon</span></code></a></p></td>
+<td><p>Design sessions for every PSD host process on this host.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.host.HostClient.html#pulserver.host.HostClient" title="pulserver.host.HostClient"><code class="xref py py-obj docutils literal notranslate"><span class="pre">HostClient</span></code></a></p></td>
+<td><p>One session's connection to the host daemon.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.host.HostError.html#pulserver.host.HostError" title="pulserver.host.HostError"><code class="xref py py-obj docutils literal notranslate"><span class="pre">HostError</span></code></a></p></td>
+<td><p>The daemon answered a command with <code class="docutils literal notranslate"><span class="pre">ERROR</span></code>.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.host.SessionKey.html#pulserver.host.SessionKey" title="pulserver.host.SessionKey"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SessionKey</span></code></a></p></td>
+<td><p>A host PSD process: its PID and the day it started.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.host.SessionStore.html#pulserver.host.SessionStore" title="pulserver.host.SessionStore"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SessionStore</span></code></a></p></td>
+<td><p>All sessions under <code class="docutils literal notranslate"><span class="pre">&lt;base&gt;/bucket</span></code>, loaded from disk on first use.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.host.Session.html#pulserver.host.Session" title="pulserver.host.Session"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Session</span></code></a></p></td>
+<td><p>One session's state, persisted in <code class="docutils literal notranslate"><span class="pre">bucket/&lt;key&gt;/</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.host.revision_hash.html#pulserver.host.revision_hash" title="pulserver.host.revision_hash"><code class="xref py py-obj docutils literal notranslate"><span class="pre">revision_hash</span></code></a></p></td>
+<td><p>Identify a design by plugin, scanner limits and resolved protocol.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.ir.convert.html#pulserver.ir.convert" title="pulserver.ir.convert"><code class="xref py py-obj docutils literal notranslate"><span class="pre">convert</span></code></a></p></td>
+<td><p>Segment a sequence file and write its IR cache beside it.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.ir.summary.html#pulserver.ir.summary" title="pulserver.ir.summary"><code class="xref py py-obj docutils literal notranslate"><span class="pre">summary</span></code></a></p></td>
+<td><p>Return the segmentation of a sequence: subsequences, segments and readouts.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.ir.chain.html#pulserver.ir.chain" title="pulserver.ir.chain"><code class="xref py py-obj docutils literal notranslate"><span class="pre">chain</span></code></a></p></td>
+<td><p>Return the files of the <code class="docutils literal notranslate"><span class="pre">NextSequence</span></code> chain starting at a sequence file, in play order.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.ir.cache_path.html#pulserver.ir.cache_path" title="pulserver.ir.cache_path"><code class="xref py py-obj docutils literal notranslate"><span class="pre">cache_path</span></code></a></p></td>
+<td><p>Return the cache file of a sequence: its last suffix replaced by <code class="docutils literal notranslate"><span class="pre">cache_ext</span></code>.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.mrd.has_acquisition_flag.html#pulserver.mrd.has_acquisition_flag" title="pulserver.mrd.has_acquisition_flag"><code class="xref py py-obj docutils literal notranslate"><span class="pre">has_acquisition_flag</span></code></a></p></td>
+<td><p>Return whether an acquisition carries one flag.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.mrd.acquisition_label.html#pulserver.mrd.acquisition_label" title="pulserver.mrd.acquisition_label"><code class="xref py py-obj docutils literal notranslate"><span class="pre">acquisition_label</span></code></a></p></td>
+<td><p>Return one acquisition label by MRD field name.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.mrd.acquisition_labels.html#pulserver.mrd.acquisition_labels" title="pulserver.mrd.acquisition_labels"><code class="xref py py-obj docutils literal notranslate"><span class="pre">acquisition_labels</span></code></a></p></td>
+<td><p>Return <code class="docutils literal notranslate"><span class="pre">encoding_space_ref</span></code> and the MRD index counters; absent ones are <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.mrd.AcquisitionBucket.html#pulserver.mrd.AcquisitionBucket" title="pulserver.mrd.AcquisitionBucket"><code class="xref py py-obj docutils literal notranslate"><span class="pre">AcquisitionBucket</span></code></a></p></td>
+<td><p>Acquisitions accumulated up to a boundary, split as Gadgetron splits them.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.mrd.AcquisitionBucketStats.html#pulserver.mrd.AcquisitionBucketStats" title="pulserver.mrd.AcquisitionBucketStats"><code class="xref py py-obj docutils literal notranslate"><span class="pre">AcquisitionBucketStats</span></code></a></p></td>
+<td><p>Distinct values of each encoding counter in one bucket.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.mrd.MrdMetadata.html#pulserver.mrd.MrdMetadata" title="pulserver.mrd.MrdMetadata"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MrdMetadata</span></code></a></p></td>
+<td><p>Accessors over one parsed MRD XML header.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.mrd.EncodingSpace.html#pulserver.mrd.EncodingSpace" title="pulserver.mrd.EncodingSpace"><code class="xref py py-obj docutils literal notranslate"><span class="pre">EncodingSpace</span></code></a></p></td>
+<td><p>Buffer layout of one encoding space of an MRD header.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.mrd.LOOP_COUNTERS.html#pulserver.mrd.LOOP_COUNTERS" title="pulserver.mrd.LOOP_COUNTERS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LOOP_COUNTERS</span></code></a></p></td>
+<td><p>Built-in immutable sequence.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.mrd.user_parameter.html#pulserver.mrd.user_parameter" title="pulserver.mrd.user_parameter"><code class="xref py py-obj docutils literal notranslate"><span class="pre">user_parameter</span></code></a></p></td>
+<td><p>Return an MRD header user parameter by name, or <code class="docutils literal notranslate"><span class="pre">default</span></code> when absent.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.mrd.max_stored_value.html#pulserver.mrd.max_stored_value" title="pulserver.mrd.max_stored_value"><code class="xref py py-obj docutils literal notranslate"><span class="pre">max_stored_value</span></code></a></p></td>
+<td><p>Return the largest pixel value of <code class="docutils literal notranslate"><span class="pre">BitsStored</span></code> bits, 12 bits when unstated.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.mrd.coil_combine.html#pulserver.mrd.coil_combine" title="pulserver.mrd.coil_combine"><code class="xref py py-obj docutils literal notranslate"><span class="pre">coil_combine</span></code></a></p></td>
+<td><p>Combine the coil axis of a stack of coil images.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.mrd.center_crop.html#pulserver.mrd.center_crop" title="pulserver.mrd.center_crop"><code class="xref py py-obj docutils literal notranslate"><span class="pre">center_crop</span></code></a></p></td>
+<td><p>Crop the trailing axes of an image to a centred window.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.mrd.as_numpy.html#pulserver.mrd.as_numpy" title="pulserver.mrd.as_numpy"><code class="xref py py-obj docutils literal notranslate"><span class="pre">as_numpy</span></code></a></p></td>
+<td><p>Return an array as NumPy on the host; Torch tensors are detached first.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.mrd.read_chain.html#pulserver.mrd.read_chain" title="pulserver.mrd.read_chain"><code class="xref py py-obj docutils literal notranslate"><span class="pre">read_chain</span></code></a></p></td>
+<td><p>Read a sequence file and every file its <code class="docutils literal notranslate"><span class="pre">NextSequence</span></code> definitions name, in play order.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.mrd.SequenceDefinitions.html#pulserver.mrd.SequenceDefinitions" title="pulserver.mrd.SequenceDefinitions"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SequenceDefinitions</span></code></a></p></td>
+<td><p>Definitions describing what a sequence acquires, in Pulseq units.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.mrd.ReadoutTable.html#pulserver.mrd.ReadoutTable" title="pulserver.mrd.ReadoutTable"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ReadoutTable</span></code></a></p></td>
+<td><p>Every ADC readout of one sequence, in play order.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.mrd.AcquisitionFlag.html#pulserver.mrd.AcquisitionFlag" title="pulserver.mrd.AcquisitionFlag"><code class="xref py py-obj docutils literal notranslate"><span class="pre">AcquisitionFlag</span></code></a></p></td>
+<td><p>ISMRMRD acquisition flags as bit masks, combinable with <code class="docutils literal notranslate"><span class="pre">|</span></code>.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.protocol.Parameter.html#pulserver.protocol.Parameter" title="pulserver.protocol.Parameter"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Parameter</span></code></a></p></td>
+<td><p>One protocol entry: its kind, current value and UI schema.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.protocol.PROTOCOL_BEGIN.html#pulserver.protocol.PROTOCOL_BEGIN" title="pulserver.protocol.PROTOCOL_BEGIN"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PROTOCOL_BEGIN</span></code></a></p></td>
+<td><p>str(object='') -&gt; str str(bytes_or_buffer[, encoding[, errors]]) -&gt; str</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.protocol.PROTOCOL_END.html#pulserver.protocol.PROTOCOL_END" title="pulserver.protocol.PROTOCOL_END"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PROTOCOL_END</span></code></a></p></td>
+<td><p>str(object='') -&gt; str str(bytes_or_buffer[, encoding[, errors]]) -&gt; str</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.protocol.format_listing.html#pulserver.protocol.format_listing" title="pulserver.protocol.format_listing"><code class="xref py py-obj docutils literal notranslate"><span class="pre">format_listing</span></code></a></p></td>
+<td><p>Format a protocol with its schema, as <code class="docutils literal notranslate"><span class="pre">LIST_PROTOCOL</span></code> sends it.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.protocol.parse_listing.html#pulserver.protocol.parse_listing" title="pulserver.protocol.parse_listing"><code class="xref py py-obj docutils literal notranslate"><span class="pre">parse_listing</span></code></a></p></td>
+<td><p>Read a protocol with its schema from a listing block.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.protocol.format_values.html#pulserver.protocol.format_values" title="pulserver.protocol.format_values"><code class="xref py py-obj docutils literal notranslate"><span class="pre">format_values</span></code></a></p></td>
+<td><p>Format a value block, as requests and replies carry it.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.protocol.parse_values.html#pulserver.protocol.parse_values" title="pulserver.protocol.parse_values"><code class="xref py py-obj docutils literal notranslate"><span class="pre">parse_values</span></code></a></p></td>
+<td><p>Read a value block against the listing it was edited from.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.protocol.Validation.html#pulserver.protocol.Validation" title="pulserver.protocol.Validation"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Validation</span></code></a></p></td>
+<td><p>Reply to <code class="docutils literal notranslate"><span class="pre">VALIDATE</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.protocol.format_validation.html#pulserver.protocol.format_validation" title="pulserver.protocol.format_validation"><code class="xref py py-obj docutils literal notranslate"><span class="pre">format_validation</span></code></a></p></td>
+<td><p>Format a <code class="docutils literal notranslate"><span class="pre">VALIDATE</span></code> reply: status line, info line, value block.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.protocol.parse_validation.html#pulserver.protocol.parse_validation" title="pulserver.protocol.parse_validation"><code class="xref py py-obj docutils literal notranslate"><span class="pre">parse_validation</span></code></a></p></td>
+<td><p>Read a <code class="docutils literal notranslate"><span class="pre">VALIDATE</span></code> reply.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.protocol.Kind.html#pulserver.protocol.Kind" title="pulserver.protocol.Kind"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Kind</span></code></a></p></td>
+<td><p>Type tag of a protocol entry on the wire.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.protocol.InputMode.html#pulserver.protocol.InputMode" title="pulserver.protocol.InputMode"><code class="xref py py-obj docutils literal notranslate"><span class="pre">InputMode</span></code></a></p></td>
+<td><p>How a numeric entry is presented in the scanner UI.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.protocol.TEPreset.html#pulserver.protocol.TEPreset" title="pulserver.protocol.TEPreset"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TEPreset</span></code></a></p></td>
+<td><p>Echo-time dropdown entries the UI shows as words.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.protocol.TRPreset.html#pulserver.protocol.TRPreset" title="pulserver.protocol.TRPreset"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TRPreset</span></code></a></p></td>
+<td><p>Repetition-time dropdown entries the UI shows as words.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.recon.ReconPlugin.html#pulserver.recon.ReconPlugin" title="pulserver.recon.ReconPlugin"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ReconPlugin</span></code></a></p></td>
+<td><p>Base class for reconstruction plugins.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.recon.Gadget.html#pulserver.recon.Gadget" title="pulserver.recon.Gadget"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Gadget</span></code></a></p></td>
+<td><p>One per-acquisition step of a plugin's <code class="docutils literal notranslate"><span class="pre">chain</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.recon.load_plugin.html#pulserver.recon.load_plugin" title="pulserver.recon.load_plugin"><code class="xref py py-obj docutils literal notranslate"><span class="pre">load_plugin</span></code></a></p></td>
+<td><p>Import a plugin file and return the <code class="docutils literal notranslate"><span class="pre">PLUGIN</span></code> instance it defines.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.recon.ReconContext.html#pulserver.recon.ReconContext" title="pulserver.recon.ReconContext"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ReconContext</span></code></a></p></td>
+<td><p>Scan context passed to every hook of a plugin.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.recon.ExamCache.html#pulserver.recon.ExamCache" title="pulserver.recon.ExamCache"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ExamCache</span></code></a></p></td>
+<td><p>Thread-safe store of artifacts shared by the series of one exam.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.recon.ReconData.html#pulserver.recon.ReconData" title="pulserver.recon.ReconData"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ReconData</span></code></a></p></td>
+<td><p>Every encoding space of a scan, mapping space index to <a class="reference internal" href="generated/pulserver.recon.ReconBuffer.html#pulserver.recon.ReconBuffer" title="pulserver.recon.ReconBuffer"><code class="xref py py-class docutils literal notranslate"><span class="pre">ReconBuffer</span></code></a>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.recon.ReconBuffer.html#pulserver.recon.ReconBuffer" title="pulserver.recon.ReconBuffer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ReconBuffer</span></code></a></p></td>
+<td><p>K-space of one encoding space, filled one acquisition at a time.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.recon.ReconResult.html#pulserver.recon.ReconResult" title="pulserver.recon.ReconResult"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ReconResult</span></code></a></p></td>
+<td><p>Image array for the runtime to package as an MRD image.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.vre.ReconProxy.html#pulserver.vre.ReconProxy" title="pulserver.vre.ReconProxy"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ReconProxy</span></code></a></p></td>
+<td><p>Routes each series of an MRD stream to a reconstruction worker.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.vre.RevisionStore.html#pulserver.vre.RevisionStore" title="pulserver.vre.RevisionStore"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RevisionStore</span></code></a></p></td>
+<td><p>The revisions under <code class="docutils literal notranslate"><span class="pre">&lt;base&gt;/bucket</span></code>, each read once and kept.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.vre.Revision.html#pulserver.vre.Revision" title="pulserver.vre.Revision"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Revision</span></code></a></p></td>
+<td><p>A generated design, as the reconstruction side reads it.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.vre.SESSION_PARAMETER.html#pulserver.vre.SESSION_PARAMETER" title="pulserver.vre.SESSION_PARAMETER"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SESSION_PARAMETER</span></code></a></p></td>
+<td><p>str(object='') -&gt; str str(bytes_or_buffer[, encoding[, errors]]) -&gt; str</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.vre.REVISION_PARAMETER.html#pulserver.vre.REVISION_PARAMETER" title="pulserver.vre.REVISION_PARAMETER"><code class="xref py py-obj docutils literal notranslate"><span class="pre">REVISION_PARAMETER</span></code></a></p></td>
+<td><p>str(object='') -&gt; str str(bytes_or_buffer[, encoding[, errors]]) -&gt; str</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.vre.SequenceTable.html#pulserver.vre.SequenceTable" title="pulserver.vre.SequenceTable"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SequenceTable</span></code></a></p></td>
+<td><p>The readouts of a sequence chain as MRD describes them, in play order.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.vre.TableSpace.html#pulserver.vre.TableSpace" title="pulserver.vre.TableSpace"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TableSpace</span></code></a></p></td>
+<td><p>One encoding space of a <a class="reference internal" href="generated/pulserver.vre.SequenceTable.html#pulserver.vre.SequenceTable" title="pulserver.vre.SequenceTable"><code class="xref py py-class docutils literal notranslate"><span class="pre">SequenceTable</span></code></a>.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.vre.enrich_header.html#pulserver.vre.enrich_header" title="pulserver.vre.enrich_header"><code class="xref py py-obj docutils literal notranslate"><span class="pre">enrich_header</span></code></a></p></td>
+<td><p>Describe the table's encoding spaces and sequence parameters in an MRD header.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.vre.enrich_acquisition.html#pulserver.vre.enrich_acquisition" title="pulserver.vre.enrich_acquisition"><code class="xref py py-obj docutils literal notranslate"><span class="pre">enrich_acquisition</span></code></a></p></td>
+<td><p>Stamp row <code class="docutils literal notranslate"><span class="pre">index</span></code> of the table on one acquisition, in place.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.vre.fov_offset_m.html#pulserver.vre.fov_offset_m" title="pulserver.vre.fov_offset_m"><code class="xref py py-obj docutils literal notranslate"><span class="pre">fov_offset_m</span></code></a></p></td>
+<td><p>Return the prescription centre a header asks readouts to be demodulated to.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.vre.FOV_OFFSET_PARAMETER.html#pulserver.vre.FOV_OFFSET_PARAMETER" title="pulserver.vre.FOV_OFFSET_PARAMETER"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FOV_OFFSET_PARAMETER</span></code></a></p></td>
+<td><p>str(object='') -&gt; str str(bytes_or_buffer[, encoding[, errors]]) -&gt; str</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+
+
+                </article>
+              
+
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+<div class="bd-footer-content__inner container">
+  
+  <div class="footer-item">
+    
+<p class="component-author">
+By pulserver contributors
+</p>
+
+  </div>
+  
+  <div class="footer-item">
+    
+
+  <p class="copyright">
+    
+      © Copyright 2024-2026, pulserver contributors.
+      <br/>
+    
+  </p>
+
+  </div>
+  
+  <div class="footer-item">
+    
+  </div>
+  
+  <div class="footer-item">
+    
+  </div>
+  
+</div>
+          </footer>
+        
+
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9"></script>
+<script defer src="_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9"></script>
+
+  <footer class="bd-footer">
+  </footer>
+  </body>
+</html>

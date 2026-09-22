@@ -1,0 +1,694 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>pulserver.mrd._header &#8212; pulserver documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../_static/styles/theme.css?digest=90905a2f556bf617f1a9" rel="stylesheet" />
+<link href="../../../_static/styles/pydata-sphinx-theme.css?digest=90905a2f556bf617f1a9" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=03e43079" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/styles/sphinx-book-theme.css?v=4418a689" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery.css?v=c83e6b79" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/pulserver.css?v=36f0fcfd" />
+  
+  <!-- So that users can add custom icons -->
+  <script defer src="../../../_static/scripts/fontawesome.js?digest=90905a2f556bf617f1a9"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
+<link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
+
+    <script src="../../../_static/documentation_options.js?v=b1def801"></script>
+    <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../../../_static/copybutton.js?v=f281be69"></script>
+    <script src="../../../_static/sg-tags.js?v=d80f6fa4"></script>
+    <script src="../../../_static/scripts/sphinx-book-theme.js?v=fab101a9"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/pulserver/mrd/_header';</script>
+    <script>
+        DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
+        DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'latest';
+        DOCUMENTATION_OPTIONS.show_version_warning_banner =
+            true;
+        </script>
+    <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
+    <link rel="canonical" href="https://pulserver.github.io/pulserver/latest/_modules/pulserver/mrd/_header.html" />
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="latest" />
+  
+    
+    <script src="../../../_static/searchtools.js"></script>
+    <script src="../../../_static/language_data.js"></script>
+    <script src="../../../searchindex.js"></script>
+  
+  </head>
+  <body data-default-mode="">
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+  
+  
+  
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search..."
+         aria-label="Search..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+        </div>
+      
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+    </div>
+  
+
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+    
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../../_static/pulserver-mark.svg" class="logo__image only-light" alt="pulserver documentation - Home"/>
+    <img src="../../../_static/pulserver-mark.svg" class="logo__image only-dark pst-js-only" alt="pulserver documentation - Home"/>
+  
+  
+</a></div>
+        <div class="sidebar-primary-item">
+<div class="version-switcher__container dropdown pst-js-only">
+  <button id="pst-version-switcher-button-2"
+    type="button"
+    class="version-switcher__button btn btn-sm dropdown-toggle"
+    data-bs-toggle="dropdown"
+    aria-haspopup="listbox"
+    aria-controls="pst-version-switcher-list-2"
+    aria-label="Version switcher list"
+  >
+    Choose version  <!-- this text may get changed later by javascript -->
+    <span class="caret"></span>
+  </button>
+  <div id="pst-version-switcher-list-2"
+    class="version-switcher__menu dropdown-menu list-group-flush py-0"
+    role="listbox" aria-labelledby="pst-version-switcher-button-2">
+    <!-- dropdown will be populated by javascript on page load -->
+  </div>
+</div></div>
+        <div class="sidebar-primary-item">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button></div>
+        <div class="sidebar-primary-item"><nav class="bd-links bd-docs-nav" aria-label="Main">
+    <div class="bd-toc-item navbar-nav active">
+        
+        <ul class="nav bd-sidenav bd-sidenav__home-link">
+            <li class="toctree-l1">
+                <a class="reference internal" href="../../../index.html">
+                    Homepage
+                </a>
+            </li>
+        </ul>
+        <ul class="nav bd-sidenav">
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../user-guide/index.html">User guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/running.html">Running the services</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/scanner-sequences.html">Scanner sequences</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/reconstruction-plugins.html">Reconstruction plugins</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/architecture.html">Architecture</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/protocol.html">Protocol resolution</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/sessions.html">Design sessions and revisions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/ir-cache.html">The scanner IR</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/reconstruction.html">Raw-data enrichment and routing</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../examples/index.html">Examples</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../../examples/protocol.html">Protocol resolution</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-protocol/01_protocol_resolution.html">Protocol resolution for a 2D gradient echo</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../../examples/scanner-ir.html">Scanner IR</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/02-scanner-ir/01_segmentation.html">Segmentation of a sequence for the scanner</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../../examples/reconstruction.html">Reconstruction</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/03-reconstruction/01_enrichment.html">Raw-data enrichment and reconstruction</a></li>
+</ul>
+</details></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../api/index.html">API reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/protocol.html">Protocol</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/design.html">Scanner sequences</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/host.html">Host daemon</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/ir.html">IR conversion</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/vre.html">Reconstruction proxy</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/recon.html">Reconstruction plugins</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/mrd.html">MRD data</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../developer-guide/index.html">Developer guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/prerequisites.html">Development prerequisites</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/installation.html">Editable installation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/workflow.html">Development workflow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/style.html">Coding style</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/documentation.html">Documentation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/terminology.html">Terminology and conventions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/pre-commit.html">Pre-commit</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/pull-requests.html">Pull requests</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/releases.html">Releases</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/code-of-conduct.html">Code of conduct</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../misc/index.html">Miscellaneous</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../misc/license.html">License and third-party notices</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../misc/related.html">Related projects</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../misc/contributors.html">Contributors</a></li>
+</ul>
+</details></li>
+</ul>
+
+    </div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
+  </div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+
+<div class="sbt-scroll-pixel-helper"></div>
+
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item"><button class="sidebar-toggle primary-toggle btn btn-sm" title="Toggle primary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <span class="fa-solid fa-bars"></span>
+</button></div>
+      
+    </div>
+  
+  
+    <div class="header-article-items__end">
+      
+        <div class="header-article-item">
+
+<div class="article-header-buttons">
+
+
+
+
+
+<div class="dropdown dropdown-source-buttons">
+  <button class="btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Source repositories">
+    <i class="fab fa-github"></i>
+  </button>
+  <ul class="dropdown-menu">
+      
+      
+      
+      <li><a href="https://github.com/pulserver/pulserver" target="_blank"
+   class="btn btn-sm btn-source-repository-button dropdown-item"
+   title="Source repository"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fab fa-github"></i>
+  </span>
+<span class="btn__text-container">Repository</span>
+</a>
+</li>
+      
+      
+      
+      
+      <li><a href="https://github.com/pulserver/pulserver/issues/new?title=Issue%20on%20page%20%2F_modules/pulserver/mrd/_header.html&body=Your%20issue%20content%20here." target="_blank"
+   class="btn btn-sm btn-source-issues-button dropdown-item"
+   title="Open an issue"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-lightbulb"></i>
+  </span>
+<span class="btn__text-container">Open issue</span>
+</a>
+</li>
+      
+  </ul>
+</div>
+
+
+
+
+<button onclick="toggleFullScreen()"
+  class="btn btn-sm btn-fullscreen-button pst-navbar-icon"
+  title="Fullscreen mode"
+  data-bs-placement="bottom" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-expand"></i>
+  </span>
+
+</button>
+
+
+
+<div class="theme-switch-container dropdown pst-js-only" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Color mode">
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button dropdown-toggle" aria-label="Color mode" data-bs-toggle="dropdown">
+    <i class="theme-switch fa-solid fa-sun fa-lg fa-fw" data-mode="light" title="Light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg fa-fw" data-mode="dark" title="Dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg fa-fw" data-mode="auto" title="System Settings"></i>
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end">
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg fa-fw me-1"></i>System Settings</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="light"><i class="fa-solid fa-sun fa-lg fa-fw me-1"></i>Light</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="dark"><i class="fa-solid fa-moon fa-lg fa-fw me-1"></i>Dark</button></li>
+  </ul>
+</div>
+
+
+<button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+</button>
+
+</div></div>
+      
+    </div>
+  
+</div>
+</div>
+              
+              
+
+<div id="jb-print-docs-body" class="onlyprint">
+    <h1></h1>
+    <!-- Table of contents -->
+    <div id="print-main-content">
+        <div id="jb-print-toc">
+            
+        </div>
+    </div>
+</div>
+
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <h1>Source code for pulserver.mrd._header</h1><div class="highlight"><pre>
+<span></span><span class="sd">"""Encoding spaces as the MRD header describes them."""</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"LOOP_COUNTERS"</span><span class="p">,</span> <span class="s2">"EncodingSpace"</span><span class="p">]</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
+
+<span class="c1">#: Counters that become buffer axes when they vary, outermost first. ``segment``</span>
+<span class="c1">#: is not among them: it indexes part of one readout train, not an image.</span>
+<span class="n">LOOP_COUNTERS</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="s2">"repetition"</span><span class="p">,</span>
+    <span class="s2">"phase"</span><span class="p">,</span>
+    <span class="s2">"slice"</span><span class="p">,</span>
+    <span class="s2">"contrast"</span><span class="p">,</span>
+    <span class="s2">"set"</span><span class="p">,</span>
+    <span class="s2">"average"</span><span class="p">,</span>
+<span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_is_cartesian</span><span class="p">(</span><span class="n">encoding</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Whether an encoding samples a grid; a header stating no trajectory is Cartesian."""</span>
+    <span class="n">trajectory</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">encoding</span><span class="p">,</span> <span class="s2">"trajectory"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">trajectory</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">True</span>
+    <span class="n">name</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">trajectory</span><span class="p">,</span> <span class="s2">"name"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">or</span> <span class="nb">str</span><span class="p">(</span><span class="n">trajectory</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">name</span><span class="o">.</span><span class="n">rsplit</span><span class="p">(</span><span class="s2">"."</span><span class="p">,</span> <span class="mi">1</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span> <span class="o">==</span> <span class="s2">"CARTESIAN"</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_limit</span><span class="p">(</span><span class="n">limits</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Extent of one encoding limit, or 0 when the header does not state it."""</span>
+    <span class="n">entry</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">limits</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="k">if</span> <span class="n">limits</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span>
+    <span class="n">maximum</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">entry</span><span class="p">,</span> <span class="s2">"maximum"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="k">if</span> <span class="n">entry</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span>
+    <span class="k">return</span> <span class="mi">0</span> <span class="k">if</span> <span class="n">maximum</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="nb">int</span><span class="p">(</span><span class="n">maximum</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span>
+
+
+<div class="viewcode-block" id="EncodingSpace">
+<a class="viewcode-back" href="../../../generated/pulserver.mrd.EncodingSpace.html#pulserver.mrd.EncodingSpace">[docs]</a>
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">EncodingSpace</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Buffer layout of one encoding space of an MRD header.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    index</span>
+<span class="sd">        Position in the header's encoding list; what ``encoding_space_ref`` names.</span>
+<span class="sd">    coils</span>
+<span class="sd">        Receive channels.</span>
+<span class="sd">    readout</span>
+<span class="sd">        Samples per readout.</span>
+<span class="sd">    phase_encodes, partitions</span>
+<span class="sd">        Extent along ``kspace_encode_step_1`` and ``kspace_encode_step_2``.</span>
+<span class="sd">    loops</span>
+<span class="sd">        Counters of :data:`LOOP_COUNTERS` that vary in this space, outermost first.</span>
+<span class="sd">    loop_sizes</span>
+<span class="sd">        Extent of each counter in ``loops``.</span>
+<span class="sd">    recon_matrix</span>
+<span class="sd">        Image matrix, ``(n_y, n_x)`` for a plane or ``(n_z, n_y, n_x)`` for a</span>
+<span class="sd">        volume. Independent of the buffer axes: a stack of spokes has no</span>
+<span class="sd">        partition axis and a three-dimensional matrix.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; import pulserver.mrd as mrd</span>
+<span class="sd">    &gt;&gt;&gt; space = mrd.EncodingSpace(</span>
+<span class="sd">    ...     index=0, coils=4, readout=64, phase_encodes=32, partitions=1,</span>
+<span class="sd">    ...     loops=("slice",), loop_sizes=(2,), recon_matrix=(32, 32),</span>
+<span class="sd">    ... )</span>
+<span class="sd">    &gt;&gt;&gt; space.shape</span>
+<span class="sd">    (4, 2, 32, 64)</span>
+<span class="sd">    """</span>
+
+    <span class="n">index</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">coils</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">readout</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">phase_encodes</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">partitions</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">loops</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span>
+    <span class="n">loop_sizes</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span>
+    <span class="n">recon_matrix</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span>
+
+<div class="viewcode-block" id="EncodingSpace.from_header">
+<a class="viewcode-back" href="../../../generated/pulserver.mrd.EncodingSpace.from_header.html#pulserver.mrd.EncodingSpace.from_header">[docs]</a>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">from_header</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">header</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">index</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">EncodingSpace</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Read encoding space ``index`` of a parsed MRD header.</span>
+
+<span class="sd">        For a Cartesian space ``phase_encodes`` is the larger of the encoded matrix</span>
+<span class="sd">        and the ``kspace_encoding_step_1`` limit, since an undersampled grid still</span>
+<span class="sd">        needs every line. For a non-Cartesian space it is the limit, which counts</span>
+<span class="sd">        views, or the encoded matrix when no limit is stated. ``partitions`` is</span>
+<span class="sd">        always the larger of the two. ``recon_matrix`` falls back to the encoded</span>
+<span class="sd">        matrix when the header has no ``reconSpace``.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        IndexError</span>
+<span class="sd">            If the header describes no such encoding space.</span>
+<span class="sd">        """</span>
+        <span class="n">encodings</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">header</span><span class="p">,</span> <span class="s2">"encoding"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">or</span> <span class="p">()</span>
+        <span class="n">encoding</span> <span class="o">=</span> <span class="n">encodings</span><span class="p">[</span><span class="n">index</span><span class="p">]</span>
+        <span class="n">encoded</span> <span class="o">=</span> <span class="n">encoding</span><span class="o">.</span><span class="n">encodedSpace</span><span class="o">.</span><span class="n">matrixSize</span>
+        <span class="n">limits</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">encoding</span><span class="p">,</span> <span class="s2">"encodingLimits"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+
+        <span class="n">loops</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">sizes</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">LOOP_COUNTERS</span><span class="p">:</span>
+            <span class="n">extent</span> <span class="o">=</span> <span class="n">_limit</span><span class="p">(</span><span class="n">limits</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">extent</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="n">loops</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
+                <span class="n">sizes</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">extent</span><span class="p">)</span>
+
+        <span class="n">system</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">header</span><span class="p">,</span> <span class="s2">"acquisitionSystemInformation"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="n">coils</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="n">system</span><span class="p">,</span> <span class="s2">"receiverChannels"</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span> <span class="ow">or</span> <span class="mi">1</span><span class="p">)</span>
+
+        <span class="n">matrix</span> <span class="o">=</span> <span class="n">encoded</span> <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">encoding</span><span class="p">,</span> <span class="s2">"reconSpace"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span>
+        <span class="n">matrix</span> <span class="o">=</span> <span class="n">matrix</span> <span class="ow">or</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">encoding</span><span class="o">.</span><span class="n">reconSpace</span><span class="p">,</span> <span class="s2">"matrixSize"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">or</span> <span class="n">encoded</span>
+        <span class="n">recon_matrix</span> <span class="o">=</span> <span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">matrix</span><span class="o">.</span><span class="n">z</span><span class="p">),</span> <span class="nb">int</span><span class="p">(</span><span class="n">matrix</span><span class="o">.</span><span class="n">y</span><span class="p">),</span> <span class="nb">int</span><span class="p">(</span><span class="n">matrix</span><span class="o">.</span><span class="n">x</span><span class="p">))</span>
+        <span class="k">if</span> <span class="n">recon_matrix</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">recon_matrix</span> <span class="o">=</span> <span class="n">recon_matrix</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span>
+
+        <span class="n">views</span> <span class="o">=</span> <span class="n">_limit</span><span class="p">(</span><span class="n">limits</span><span class="p">,</span> <span class="s2">"kspace_encoding_step_1"</span><span class="p">)</span>
+        <span class="n">partitions</span> <span class="o">=</span> <span class="n">_limit</span><span class="p">(</span><span class="n">limits</span><span class="p">,</span> <span class="s2">"kspace_encoding_step_2"</span><span class="p">)</span>
+        <span class="n">gridded</span> <span class="o">=</span> <span class="n">_is_cartesian</span><span class="p">(</span><span class="n">encoding</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span>
+            <span class="n">index</span><span class="o">=</span><span class="n">index</span><span class="p">,</span>
+            <span class="n">coils</span><span class="o">=</span><span class="n">coils</span><span class="p">,</span>
+            <span class="n">readout</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">encoded</span><span class="o">.</span><span class="n">x</span><span class="p">),</span>
+            <span class="n">phase_encodes</span><span class="o">=</span><span class="nb">max</span><span class="p">(</span><span class="n">views</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="n">encoded</span><span class="o">.</span><span class="n">y</span><span class="p">))</span>
+            <span class="k">if</span> <span class="n">gridded</span>
+            <span class="k">else</span> <span class="n">views</span> <span class="ow">or</span> <span class="nb">int</span><span class="p">(</span><span class="n">encoded</span><span class="o">.</span><span class="n">y</span><span class="p">),</span>
+            <span class="c1"># A stack is Cartesian along z whatever it does in plane.</span>
+            <span class="n">partitions</span><span class="o">=</span><span class="nb">max</span><span class="p">(</span><span class="n">partitions</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="n">encoded</span><span class="o">.</span><span class="n">z</span><span class="p">)),</span>
+            <span class="n">loops</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="n">loops</span><span class="p">),</span>
+            <span class="n">loop_sizes</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="n">sizes</span><span class="p">),</span>
+            <span class="n">recon_matrix</span><span class="o">=</span><span class="n">recon_matrix</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="EncodingSpace.all_from_header">
+<a class="viewcode-back" href="../../../generated/pulserver.mrd.EncodingSpace.all_from_header.html#pulserver.mrd.EncodingSpace.all_from_header">[docs]</a>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">all_from_header</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">header</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">EncodingSpace</span><span class="p">,</span> <span class="o">...</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""Read every encoding space of a parsed MRD header, in index order."""</span>
+        <span class="n">encodings</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">header</span><span class="p">,</span> <span class="s2">"encoding"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">or</span> <span class="p">()</span>
+        <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span><span class="bp">cls</span><span class="o">.</span><span class="n">from_header</span><span class="p">(</span><span class="n">header</span><span class="p">,</span> <span class="n">index</span><span class="p">)</span> <span class="k">for</span> <span class="n">index</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">encodings</span><span class="p">)))</span></div>
+
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">extents</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">],</span> <span class="o">...</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""Placement axes and their extents, outermost first, including extents of 1.</span>
+
+<span class="sd">        Coil and readout are not placement axes.</span>
+<span class="sd">        """</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="o">*</span><span class="nb">zip</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">loops</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">loop_sizes</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>
+            <span class="p">(</span><span class="s2">"partition"</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">partitions</span><span class="p">),</span>
+            <span class="p">(</span><span class="s2">"phase_encode"</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">phase_encodes</span><span class="p">),</span>
+        <span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">axes</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""Axis names of a buffer of this space.</span>
+
+<span class="sd">        ``coil``, the placement axes whose extent exceeds 1, then ``readout``.</span>
+<span class="sd">        """</span>
+        <span class="n">varying</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">name</span> <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">extent</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">extents</span> <span class="k">if</span> <span class="n">extent</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="k">return</span> <span class="p">(</span><span class="s2">"coil"</span><span class="p">,</span> <span class="o">*</span><span class="n">varying</span><span class="p">,</span> <span class="s2">"readout"</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">shape</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""Shape of a buffer of this space, named by :attr:`axes`."""</span>
+        <span class="n">varying</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">extent</span> <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">extent</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">extents</span> <span class="k">if</span> <span class="n">extent</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="k">return</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">coils</span><span class="p">,</span> <span class="o">*</span><span class="n">varying</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">readout</span><span class="p">)</span></div>
+
+</pre></div>
+
+                </article>
+              
+
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+<div class="bd-footer-content__inner container">
+  
+  <div class="footer-item">
+    
+<p class="component-author">
+By pulserver contributors
+</p>
+
+  </div>
+  
+  <div class="footer-item">
+    
+
+  <p class="copyright">
+    
+      © Copyright 2024-2026, pulserver contributors.
+      <br/>
+    
+  </p>
+
+  </div>
+  
+  <div class="footer-item">
+    
+  </div>
+  
+  <div class="footer-item">
+    
+  </div>
+  
+</div>
+          </footer>
+        
+
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="../../../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9"></script>
+<script defer src="../../../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9"></script>
+
+  <footer class="bd-footer">
+  </footer>
+  </body>
+</html>
