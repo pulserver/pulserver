@@ -33,3 +33,4 @@ docs/build/
 docs/generated/
 # Written into the source directory as the pages are built.
 docs/api_objects.rst
+docs/sg_execution_times.rst

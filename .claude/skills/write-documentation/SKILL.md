@@ -22,6 +22,7 @@ comments.
 |---|---|---|
 | `docs/user-guide/` | How-to | How do I install, run and extend pulserver? |
 | `docs/explanations/` | Conceptual explanation | Why does it work this way? |
+| `gallery/` | Executable examples, with landing pages in `docs/examples/` | What does a representative workflow look like? |
 | `docs/api/` | Reference, from the docstrings | What exactly does this object do? |
 | `docs/developer-guide/` | Contributor procedure | How is this repository developed? |
 | `README.md` | Project summary and documentation landing page | What is this, and where is the rest? |
@@ -50,6 +51,11 @@ you cannot resolve rather than guessing.
   the API pages it relates to.
 - A new page is added to the table and the hidden toctree of its section's
   `index.md`.
+- A new gallery script goes into its section's directory under `gallery/`,
+  named with a numeric prefix, and gets a row and a toctree entry on the
+  section's landing page under `docs/examples/`. A new section is a directory
+  with `README.rst` and `_gallery_header.md`, an entry in `GALLERY_SECTIONS`,
+  and a landing page listed in `docs/examples/index.md`.
 
 ## Validate
 

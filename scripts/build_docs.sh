@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Build the HTML documentation into docs/build/html. Any Sphinx warning fails
+# Build the HTML documentation into docs/build/html, executing every gallery
+# script under gallery/ as the pages are built. Any Sphinx warning fails
 # the build; extra arguments go to sphinx-build.
 #
 # autodoc imports the installed pulserver, so install this checkout first:
@@ -10,7 +11,7 @@ cd "$(dirname "$0")/.."
 
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 
-if ! "$PYTHON_BIN" -c "import sphinx, myst_parser, sphinx_book_theme, sphinx_copybutton, linkify_it" 2>/dev/null; then
+if ! "$PYTHON_BIN" -c "import sphinx, myst_parser, sphinx_book_theme, sphinx_copybutton, linkify_it, sphinx_gallery, matplotlib" 2>/dev/null; then
     echo "build_docs.sh: the documentation tools are missing; install them with pip install '.[doc]'" >&2
     exit 1
 fi

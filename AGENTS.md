@@ -52,7 +52,8 @@ The default branch is `main`; pull requests target it.
 | `src/cpp/` | The extension `pulserver._ext`: the IR passes in `ir/`, vendored KISS FFT in `vendor/` |
 | `src/c/` | The C89 library a scanner links: cache reader and writer, accessors, protocol |
 | `tests/` | pytest suite; `plugins/` and `recon_plugins/` are the plugin files the services load in tests |
-| `docs/` | Sphinx sources: `user-guide/`, `explanations/`, `api/`, `developer-guide/`, `misc/`; `api_objects.py` writes the API stubs |
+| `gallery/` | sphinx-gallery example scripts, one directory per section, executed when the pages are built |
+| `docs/` | Sphinx sources: `user-guide/`, `explanations/`, `examples/` (the gallery's landing pages), `api/`, `developer-guide/`, `misc/`; `api_objects.py` writes the API stubs |
 | `LICENSES/` | Licence texts of vendored components |
 
 ## The scanner IR, and where each half of it lives
@@ -239,6 +240,7 @@ above govern docstrings.
 | `README.md` | Project summary; also the documentation's landing page | What is this, and where is the rest? |
 | `docs/user-guide/` | How-to | How do I install, run and extend pulserver? |
 | `docs/explanations/` | Conceptual explanation | Why does it work this way? |
+| `gallery/` | Executable examples, built into `docs/generated/gallery/` | What does a representative acquisition or reconstruction workflow look like? |
 | `docs/api/` | Reference | What exactly does this object do? |
 | `docs/developer-guide/` | Contributor procedure and conventions | How is this repository developed? |
 | `docs/misc/` | Licensing, related projects, contributors | |
@@ -256,6 +258,16 @@ Mechanics:
   the per-object stubs into `docs/generated/`, so the stubs stay out of the
   sidebar. `tests/test_docs.py` fails when a name in a subpackage's `__all__`
   is missing from its page.
+- A gallery script is a `.py` file whose module docstring is the page's title
+  and opening; `# %%` starts a text cell, and figure styling and print
+  formatting go between `# sphinx_gallery_start_ignore` and
+  `# sphinx_gallery_end_ignore`. Every script is executed at build time.
+  `gallery/` is flat, one directory per section listed in `GALLERY_SECTIONS`
+  in `docs/conf.py`, each with a `README.rst` title above an include of its
+  `_gallery_header.md`; the landing page under `docs/examples/` carries a table
+  of its examples and a hidden toctree over them, which `tests/test_docs.py`
+  checks. A gallery example exists because running it shows something
+  scientifically or computationally useful, not to demonstrate an interface.
 - A runnable example on a user-guide page is a `pycon` doctest, executed by
   `tests/test_docs.py`. One that needs a running service or a data file is a
   plain `python` block.

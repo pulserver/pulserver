@@ -13,6 +13,7 @@ exchange are described in {doc}`../explanations/index`.
 | {doc}`scanner-sequences` | Binding a pypulseqpp sequence application to the scanner protocol. |
 | {doc}`reconstruction-plugins` | Writing a reconstruction and running it outside the proxy. |
 | {doc}`../explanations/index` | Architecture, protocol resolution, design sessions, the scanner IR and raw-data enrichment. |
+| {doc}`../examples/index` | Executable examples: protocol resolution, segmentation for the scanner, and enrichment and reconstruction of a simulated series. |
 | {doc}`../api/index` | Exact interfaces, units and defaults. |
 | {doc}`../developer-guide/index` | Development setup and contribution workflow. |
 | {doc}`../misc/index` | Licensing, related projects and contributors. |

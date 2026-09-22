@@ -63,3 +63,4 @@ back a cache written on the host.
 * {doc}`../api/ir` — the conversion interface.
 * [`src/c/include/pulseg/`](https://github.com/pulserver/pulserver/tree/main/src/c/include/pulseg)
   — the public C headers the interpreter includes.
+* {doc}`/generated/gallery/02-scanner-ir/01_segmentation` — the segmentation of shipped sequences, executed.

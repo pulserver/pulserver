@@ -75,3 +75,4 @@ grammar is implemented in {mod}`pulserver.protocol` for the host and in
 * {doc}`../user-guide/scanner-sequences` — writing a scanner sequence.
 * {doc}`../api/design` — the scanner-sequence interface and its UI entries.
 * {doc}`../api/protocol` — protocol entries and wire blocks.
+* {doc}`/generated/gallery/01-protocol/01_protocol_resolution` — bandwidth quantization and minimum echo time, executed.

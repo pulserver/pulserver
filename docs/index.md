@@ -9,6 +9,7 @@
 
 user-guide/index
 explanations/index
+examples/index
 api/index
 developer-guide/index
 misc/index

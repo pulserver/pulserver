@@ -69,3 +69,4 @@ client as they are produced. Closing either connection closes the other.
 * {doc}`../user-guide/reconstruction-plugins` — writing a reconstruction.
 * {doc}`../api/vre` — the proxy and the enrichment interface.
 * {doc}`../api/recon` — the reconstruction plugin interface.
+* {doc}`/generated/gallery/03-reconstruction/01_enrichment` — enrichment and reconstruction of a simulated series.

@@ -56,7 +56,9 @@ covers installation and support, running the two services, and writing
 scanner-sequence and reconstruction plugins. The
 [explanations](https://pulserver.github.io/pulserver/latest/explanations/index.html)
 describe the architecture, protocol resolution, design sessions, the scanner IR
-and raw-data enrichment. Every version of the documentation is published at
+and raw-data enrichment, and the
+[examples](https://pulserver.github.io/pulserver/latest/examples/index.html)
+execute each of them on a shipped pypulseqpp sequence. Every version of the documentation is published at
 <https://pulserver.github.io/pulserver/>.
 
 ## Citation

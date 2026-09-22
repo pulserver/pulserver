@@ -42,6 +42,10 @@ doc = [
   "myst-parser>=4.0",
   "linkify-it-py>=2.0",
   "sphinx-copybutton>=0.5",
+  # The gallery: every script is executed while the pages are built, and
+  # draws its figures with matplotlib.
+  "sphinx-gallery>=0.18",
+  "matplotlib>=3.8",
 ]
 
 [project.urls]
@@ -112,6 +116,11 @@ ignore = [
 "tests/**" = ["D", "S101", "S603", "S607", "ARG", "RUF012"]
 "benchmarks/**" = ["D", "S101", "T201"]
 "__init__.py" = ["D104", "F401"]
+# A gallery script's module docstring is the page's reStructuredText title
+# block, which no docstring convention describes, and its imports are placed
+# where the page introduces them rather than all at the top. A scanner
+# sequence declares its `ui` as a class-level mapping, as a plugin file does.
+"gallery/**" = ["D205", "D400", "D401", "E402", "RUF012"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "numpy"

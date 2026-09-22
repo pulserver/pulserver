@@ -37,4 +37,4 @@ updates:
       dev-tooling:
         patterns: ["pytest*", "coverage", "ruff", "pre-commit", "build"]
       docs:
-        patterns: ["sphinx*", "myst-parser", "linkify-it-py"]
+        patterns: ["sphinx*", "myst-parser", "linkify-it-py", "matplotlib"]
