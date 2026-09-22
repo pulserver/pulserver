@@ -1400,7 +1400,13 @@ int pulseg__get_tr_in_sequence(
     tr_dur = 0.0f;
     tr_start = 0;
     for (i = 0; i < l; ++i)
-        tr_dur += (float)block_dur[tr_start + i];
+    {
+        n = tr_start + i;
+        /* A pure delay plays its own duration, not its shared definition's. */
+        tr_dur += (float)((desc->block_table[n].duration_us >= 0)
+                              ? desc->block_table[n].duration_us
+                              : block_dur[n]);
+    }
     tr->tr_duration_us = tr_dur;
 
     tr->num_trs = nblocks / l;

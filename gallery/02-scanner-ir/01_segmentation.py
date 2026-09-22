@@ -61,10 +61,9 @@ cache = ir.convert(work / "se2d.seq", system)
 report = ir.summary(work / "se2d.seq", system)
 
 unit = report["subsequences"][0]
-tr = sum(seq.block_durations[block] for block in range(1, unit["tr_size"] + 1))
 print(f"{seq.num_blocks} blocks in the file; cache {cache.name}")
 print(
-    f"repeating unit: {unit['tr_size']} blocks, TR {tr * 1e3:.2f} ms, "
+    f"repeating unit: {unit['tr_size']} blocks, TR {unit['tr_duration_us'] / 1e3:.2f} ms, "
     f"played {unit['num_trs']} times"
 )
 for index, segment in enumerate(report["segments"]):
