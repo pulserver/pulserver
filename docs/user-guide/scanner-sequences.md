@@ -107,3 +107,8 @@ neither is right.
 binary Pulseq, prescans first, and the daemon converts it to the IR cache the
 scanner loads. The daemon stores each generated design as a revision, described
 in {doc}`../explanations/sessions`.
+
+## See also
+
+* {doc}`../explanations/protocol` — resolution, presets, units and precision.
+* {doc}`../api/design` — the scanner-sequence interface and its UI entries.

@@ -52,7 +52,7 @@ The default branch is `main`; pull requests target it.
 | `src/cpp/` | The extension `pulserver._ext`: the IR passes in `ir/`, vendored KISS FFT in `vendor/` |
 | `src/c/` | The C89 library a scanner links: cache reader and writer, accessors, protocol |
 | `tests/` | pytest suite; `plugins/` and `recon_plugins/` are the plugin files the services load in tests |
-| `docs/` | Sphinx sources: `user-guide/`, `explanations/`, `api/`, `developer-guide/`, `misc/` |
+| `docs/` | Sphinx sources: `user-guide/`, `explanations/`, `api/`, `developer-guide/`, `misc/`; `api_objects.py` writes the API stubs |
 | `LICENSES/` | Licence texts of vendored components |
 
 ## The scanner IR, and where each half of it lives
@@ -220,22 +220,52 @@ docstrings kept and why, and the checks run with their results.
 
 ## Documentation
 
-`docs/developer-guide/documentation.md` governs the Sphinx documentation: which
-of the documentation types a page is, where it lives, and how it is written.
-Read it before creating or substantially changing a page.
+Two documents govern documentation, and both are binding:
+
+- `docs/developer-guide/documentation.md` — the generic guide, shared with
+  pypulseqpp. What belongs in each form of documentation and how each is
+  written.
+- `docs/developer-guide/terminology.md` — the pulserver conventions:
+  terminology, register, units, frames, safety language and source-of-truth
+  rules.
+
+Read both before creating or substantially modifying documentation. Where they
+differ, the terminology page governs terminology and conventions and the
+generic guide governs documentation type and register. The docstring rules
+above govern docstrings.
 
 | Location | Type | Answers |
 |---|---|---|
+| `README.md` | Project summary; also the documentation's landing page | What is this, and where is the rest? |
 | `docs/user-guide/` | How-to | How do I install, run and extend pulserver? |
 | `docs/explanations/` | Conceptual explanation | Why does it work this way? |
-| `docs/api/` | Reference, from the docstrings | What exactly does this object do? |
-| `docs/developer-guide/` | Contributor procedure | How is this repository developed? |
+| `docs/api/` | Reference | What exactly does this object do? |
+| `docs/developer-guide/` | Contributor procedure and conventions | How is this repository developed? |
+| `docs/misc/` | Licensing, related projects, contributors | |
 
-The prose style of one type is not carried into another. Runnable examples in
-the user guide are `pycon` doctests, executed by `tests/test_docs.py`, which
-also fails when a name in a subpackage's `__all__` is missing from its API
-page. Verify every statement against the implementation and its tests; existing
-prose is not evidence.
+The prose style of one type is not carried into another. An explanation page
+proceeds from the concept to its model, its consequences and the software
+abstraction, and ends with a *See also* list.
+
+Mechanics:
+
+- An API page states its subject in one sentence, gives the context a reader
+  needs in a paragraph, and lists its objects in `| Object | Description |`
+  tables of `{obj}` links under a `currentmodule` directive.
+  `docs/api_objects.py` collects those tables into an orphan page that writes
+  the per-object stubs into `docs/generated/`, so the stubs stay out of the
+  sidebar. `tests/test_docs.py` fails when a name in a subpackage's `__all__`
+  is missing from its page.
+- A runnable example on a user-guide page is a `pycon` doctest, executed by
+  `tests/test_docs.py`. One that needs a running service or a data file is a
+  plain `python` block.
+- The README is included as the landing page; `docs/conf.py` rewrites its
+  `raw.githubusercontent.com` image links to `docs/_static/`.
+
+Verify substantive semantics against the implementation, its tests, pypulseqpp,
+the ISMRMRD specification and the primary literature, in that order. Existing
+prose is not evidence. After documentation work, build the documentation, run
+`tests/test_docs.py`, and inspect the rendered pages and the sidebar.
 
 ## Documentation style
 

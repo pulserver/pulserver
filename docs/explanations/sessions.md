@@ -1,29 +1,32 @@
-# Design sessions
+# Design sessions and revisions
 
-The host daemon keeps one design session per PSD host process, and stores
-everything it generates under `<base>/bucket/`. The reconstruction proxy reads
-the same directory to find the design a series was played from.
+A running scanner sequence is edited, validated and prepared many times, and
+several can be open at once on one scanner. Each generated design has to remain
+available, unchanged, for as long as data acquired with it may still be
+reconstructed. The host daemon therefore keeps one design session per PSD host
+process and stores every design it generates as an immutable revision, in a
+directory, the *bucket*, that the reconstruction proxy also reads.
 
 ## Session keys
 
 A session is identified by the process ID of the PSD host process and the day
-it started, in days since 1970-01-01, written `<pid>-<day>`
-({class}`~pulserver.host.SessionKey`). The interpreter stores both numbers in
-float32 slots of the raw-data header, so each must be below 2{sup}`24`, the
-largest range of integers a float32 represents exactly.
+the process started, in days since 1970-01-01, and written `<pid>-<day>`
+({class}`~pulserver.host.SessionKey`). The interpreter records both numbers in
+float32 fields of the raw-data header. A float32 represents every integer below
+$2^{24}$ exactly, so both are required to be below that bound.
 
-A session is opened with a scanner-sequence plugin and the scanner limits, and
-keeps both for its lifetime: reopening the same key with another plugin or
-other limits is refused. A session opened without a plugin only imports
-existing sequence files.
+A session is opened with a scanner-sequence plugin and the scanner limits and
+retains both: reopening a key with another plugin or other limits is refused.
+A session opened without a plugin only imports existing sequence files.
 
 ## Revisions
 
-Every design a session generates is a revision: a directory
-`rev/<n>/` holding the Pulseq files, the IR cache, the resolved protocol and a
-`meta.json` record. A revision is written into a staging directory and renamed
-into place when complete, and is never modified afterwards. `current` is a
-symbolic link to the revision the interpreter plays.
+A revision is a directory `rev/<n>/` holding the Pulseq files of one design,
+their IR cache, the resolved protocol and a `meta.json` record naming the
+plugin, the reconstruction plugin, the limits and the files. A revision is
+written into a staging directory and renamed into place once complete, and is
+not modified afterwards. `current` is a symbolic link to the revision the
+interpreter plays.
 
 ```text
 bucket/
@@ -35,26 +38,34 @@ bucket/
       1/
       2/
         sequence.seq      first file of the NextSequence chain
-        sequence_main.seq the rest of the chain, when there are prescans
+        sequence_main.seq the remaining files, when there are prescans
         sequence.pseg     IR cache
         resolved.protocol
-        meta.json         plugin, reconstruction plugin, limits, hash, files
+        meta.json
     queue/                series waiting for a reconstruction slot
 ```
 
-A revision is identified by the SHA-256 hash of its plugin, limits and resolved
-protocol ({func}`~pulserver.host.revision_hash`). A generate request that
-resolves to a protocol already generated returns the existing revision and
-makes it current rather than designing the sequence again; an import is
-identified the same way by the names and contents of the imported files.
-Because the hash is taken over the *resolved* protocol, two requests that
-differ only in a value the design rounds or replaces, such as a preset, share
-a revision.
+## Revision identity
 
-## What the reconstruction side reads
+A generated revision is identified by the SHA-256 hash of its plugin, scanner
+limits and resolved protocol ({func}`~pulserver.host.revision_hash`). A
+`GENERATE` request whose protocol resolves to one already generated returns
+the existing revision and makes it current; the sequence is not designed again.
+Because the hash is computed over the resolved protocol, two requests that
+differ only in a value the design replaces, such as a preset and the time it
+resolves to, identify the same revision ({doc}`protocol`). An imported revision
+is identified by the names and contents of the imported files.
 
-The raw-data header of a series carries the session key and revision number in
-the `pulserver_session` and `pulserver_revision` user parameters. Since a
-revision never changes, the proxy reads it once
-({class}`~pulserver.vre.RevisionStore`) and keeps it for every later series
-played from it.
+## Access from the reconstruction side
+
+The raw-data header of a series records the session key and the revision number
+in the `pulserver_session` and `pulserver_revision` user parameters. Since a
+revision is immutable, the reconstruction proxy reads and tabulates it once
+({class}`~pulserver.vre.RevisionStore`) and reuses the result for every later
+series acquired with it. When the two services run on different computers,
+the bucket is a directory both can access.
+
+## See also
+
+* {doc}`../user-guide/running` — starting the host daemon and its client.
+* {doc}`../api/host` — sessions, revisions and the daemon interface.

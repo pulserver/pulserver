@@ -1,13 +1,15 @@
 # Miscellaneous
 
-| Page | Contents |
+| Page | Scope |
 | --- | --- |
-| {doc}`license` | Licence of the package and of the components it bundles |
-| {doc}`related` | The engines pulserver drives and the formats it reads |
+| {doc}`license` | MIT licence and third-party notices. |
+| {doc}`related` | Projects with a direct technical relationship to pulserver. |
+| {doc}`contributors` | Maintainers, contributors and contribution links. |
 
 ```{toctree}
 :hidden:
 
 license
 related
+contributors
 ```

@@ -1,16 +1,16 @@
 # Contributing to pulserver
 
-The [developer guide](https://pulserver.github.io/pulserver/latest/developer-guide/index.html)
-documents the toolchain, the checks, the coding and documentation conventions
-and the release procedure.
+The [Developer Guide](https://pulserver.github.io/pulserver/latest/developer-guide/index.html)
+documents the toolchain, editable installation, coding and documentation
+conventions, pre-commit hooks, pull-request workflow and releases.
 
-A development setup needs a C compiler, a C++17 compiler and CMake:
+A quick development setup is:
 
 ```bash
-git clone https://github.com/pulserver/pulserver.git
+git clone https://github.com/YOUR-USER/pulserver.git
 cd pulserver
 python -m venv .venv && source .venv/bin/activate
-pip install -e '.[dev,doc]'
+python -m pip install -e '.[dev,doc]'
 pre-commit install
 ```
 
@@ -22,5 +22,5 @@ pytest -q
 bash scripts/build_docs.sh
 ```
 
-Open the pull request against [`main`](https://github.com/pulserver/pulserver/compare).
+Open the pull request against [`pulserver/pulserver:main`](https://github.com/pulserver/pulserver/compare).
 Participation is governed by the [Code of Conduct](CODE_OF_CONDUCT.md).

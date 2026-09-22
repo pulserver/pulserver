@@ -85,3 +85,9 @@ the client stays connected meanwhile.
 
 Both services stop on `SIGINT` or `SIGTERM`. The proxy waits for the series it
 is running before it exits.
+
+## See also
+
+* {doc}`../explanations/architecture` — the services and what passes between them.
+* {doc}`../explanations/sessions` — the bucket layout and revision identity.
+* {doc}`../api/host` and {doc}`../api/vre` — the daemon and proxy interfaces.

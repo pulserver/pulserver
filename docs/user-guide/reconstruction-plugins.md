@@ -87,3 +87,9 @@ describe the encoded space and the receiver channels:
 
 `pulserver.recon.handlers.simplefft` is a complete plugin: a two-dimensional
 Cartesian FFT with a root-sum-of-squares coil combination, one image per slice.
+
+## See also
+
+* {doc}`../explanations/reconstruction` — enrichment, workers and slots.
+* {doc}`../api/recon` — the plugin interface.
+* {doc}`../api/mrd` — acquisitions, flags, counters and images.

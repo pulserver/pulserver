@@ -24,5 +24,7 @@ def test_every_user_guide_example_runs(page):
 def test_every_public_name_is_listed_on_its_api_page(name):
     module = importlib.import_module(f"pulserver.{name}")
     page = (DOCS / "api" / f"{name}.md").read_text()
-    listed = set(re.findall(r"^\s{3}(\w+)$", page, flags=re.MULTILINE))
+    listed = set(
+        re.findall(rf"^\| {{obj}}`~pulserver\.{name}\.(\w+)`", page, flags=re.MULTILINE)
+    )
     assert set(module.__all__) - listed == set()

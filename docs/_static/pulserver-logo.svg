@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 176" role="img" aria-labelledby="title desc">
+<title id="title">pulserver</title>
+<desc id="desc">Two bipolar trapezoidal gradient waveforms in blue and amber, followed by the wordmark pulserver</desc>
+<style>
+.ink{fill:none;stroke:#12212b;stroke-width:5;stroke-linejoin:miter;stroke-linecap:butt}
+.blue{fill:#3a77a8}
+.amber{fill:#ffbe2e}
+.word{fill:#2b76ad}
+@media (prefers-color-scheme:dark){
+.ink{stroke:#e8eef3}
+.blue{fill:#5b9bd0}
+.word{fill:#8fc3e8}
+}
+</style>
+<g transform="translate(24 70)">
+<g transform="translate(26 0)">
+<path class="blue" d="M24 0 38-28 81-28 93.1 0Z"/>
+<path class="amber" d="M93.1 0 104 25 118 25 130 0Z"/>
+<path class="ink" d="M0 0H24L38-28H81L104 25H118L130 0H158"/>
+</g>
+<g transform="translate(0 39)">
+<path class="amber" d="M24 0 38-28 81-28 93.1 0Z"/>
+<path class="blue" d="M93.1 0 104 25 118 25 130 0Z"/>
+<path class="ink" d="M0 0H24L38-28H81L104 25H118L130 0H158"/>
+</g>
+</g>
+<text x="238" y="116" font-family="Arial,Helvetica,sans-serif" font-size="112" font-style="italic"><tspan class="word">pul</tspan><tspan class="amber" font-weight="700">server</tspan></text>
+</svg>

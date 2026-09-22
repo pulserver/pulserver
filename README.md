@@ -3,57 +3,98 @@
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![Docs: stable](https://img.shields.io/badge/docs-stable-2b76ad)](https://pulserver.github.io/pulserver/stable/)
 [![Docs: latest](https://img.shields.io/badge/docs-latest-6b7684)](https://pulserver.github.io/pulserver/latest/)
+
 [![PyPI](https://img.shields.io/pypi/v/pulserver.svg)](https://pypi.org/project/pulserver/)
 [![Python](https://img.shields.io/pypi/pyversions/pulserver.svg)](https://pypi.org/project/pulserver/)
+[![Wheels](https://img.shields.io/badge/wheels-Linux%20x86--64%20%7C%20macOS%20arm64-2b76ad)](https://github.com/pulserver/pulserver/actions/workflows/wheels.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-ffbd28.svg)](https://github.com/pulserver/pulserver/blob/main/LICENSE)
+[![Source](https://img.shields.io/badge/source-GitHub-181717?logo=github)](https://github.com/pulserver/pulserver)
 
-# pulserver
+<p align="center"><img src="https://raw.githubusercontent.com/pulserver/pulserver/main/docs/_static/pulserver-logo.svg" alt="pulserver" width="580"></p>
 
-Orchestrator for MR acquisitions: sequence design, scanner preparation,
-reconstruction and real-time feedback.
+pulserver orchestrates MR acquisitions with Pulseq sequences on clinical
+scanners: sequence design, scanner preparation, reconstruction and real-time
+feedback. It resolves the protocol an operator edits in the scanner UI against
+a [pypulseqpp](https://github.com/pulserver/pypulseqpp) sequence application,
+converts the design into the segmented representation a scanner interpreter
+plays, and routes the raw data of each series, enriched from the sequence that
+acquired it, to a reconstruction, normally
+[bartorch](https://github.com/mcencini/bartorch). Vendor-specific playout
+belongs to the scanner interpreters, which call pulserver's services. Passing
+the checks pypulseqpp provides does not establish scanner or patient safety.
 
-Pulserver plays Pulseq sequences on an MR scanner through the scanner's
-interpreter and returns the reconstructed images to the console. Sequence
-design is [pypulseqpp](https://github.com/pulserver/pypulseqpp) and
-reconstruction is [bartorch](https://github.com/mcencini/bartorch), or whatever
-a reconstruction plugin imports; pulserver connects them to the scanner.
+## Features
 
-- **Host daemon** (`python -m pulserver.host`). Resolves each protocol the
-  operator edits into the protocol the sequence will play, writes the design,
-  and converts it into the segmented binary cache the interpreter loads.
-- **Reconstruction proxy** (`python -m pulserver.vre`). Receives the MRD stream
-  of each series, fills in the counters, flags, encoding spaces and trajectory
-  from the sequence that played it, and runs a reconstruction plugin in a
-  worker process.
-- **Plugins.** A scanner sequence binds a pypulseqpp sequence application to
-  the scanner protocol; a reconstruction plugin runs over a live stream, an
-  MRD file or an assembled bucket through the same hooks.
-- **Cache reader** (`src/c/`). The ANSI C library the scanner interpreter links
-  to load the cache.
+- Protocol resolution: the echo time, repetition time and bandwidth a design
+  achieves, the scan time, and the design error for an infeasible prescription.
+- Design sessions and immutable revisions for every PSD host process of a
+  scanner, served over a Unix socket.
+- Segmentation of a `NextSequence` chain into a binary IR cache, read by an
+  ANSI C library linked into the interpreter.
+- MRD enrichment: encoding counters, flags, encoding spaces and trajectories
+  from the sequence, and demodulation to the prescription centre.
+- Reconstruction plugins run in isolated worker processes, over a live MRD
+  stream, an ISMRMRD file or an assembled acquisition bucket.
 
-## Installation
+<p align="center"><img src="https://raw.githubusercontent.com/pulserver/pulserver/main/docs/_static/architecture.svg" alt="pulserver architecture" width="900"></p>
+
+## Quick start
 
 ```bash
 pip install pulserver
 ```
 
-Wheels are published for Linux x86-64 and macOS on Apple silicon, for Python
-3.10 to 3.13.
+```bash
+python -m pulserver.host --base /srv/pulserver --socket /tmp/pulserver.sock --plugins sequences/
+python -m pulserver.vre --base /srv/pulserver --port 9002 --plugins recon/
+```
 
 ## Documentation
 
 The [user guide](https://pulserver.github.io/pulserver/latest/user-guide/index.html)
-covers installation, running the two services and writing plugins; the
+covers installation and support, running the two services, and writing
+scanner-sequence and reconstruction plugins. The
 [explanations](https://pulserver.github.io/pulserver/latest/explanations/index.html)
-describe the components, design sessions, the IR cache and the reconstruction
-side. Every version of the documentation is published at
+describe the architecture, protocol resolution, design sessions, the scanner IR
+and raw-data enrichment. Every version of the documentation is published at
 <https://pulserver.github.io/pulserver/>.
 
-## Contributing
+## Citation
 
-See [CONTRIBUTING.md](CONTRIBUTING.md).
+pulserver has no project publication. Cite the formats it is built on in work
+that uses it:
+
+```bibtex
+@article{layton2017pulseq,
+  title   = {Pulseq: a rapid and hardware-independent pulse sequence prototyping framework},
+  author  = {Layton, Kelvin J and Kroboth, Stefan and Jia, Feng and Littin, Sebastian
+             and Yu, Huijun and Leupold, Jochen and Nielsen, Jon-Fredrik
+             and St{\"o}cker, Tony and Zaitsev, Maxim},
+  journal = {Magnetic Resonance in Medicine},
+  volume  = {77},
+  number  = {4},
+  pages   = {1544--1552},
+  year    = {2017},
+  doi     = {10.1002/mrm.26235}
+}
+
+@article{inati2017ismrmrd,
+  title   = {{ISMRM} Raw data format: A proposed standard for {MRI} raw datasets},
+  author  = {Inati, Souheil J and Naegele, Joseph D and Zwart, Nicholas R
+             and Roopchansingh, Vinai and Lizak, Martin J and Hansen, David C
+             and Liu, Chia-Ying and Atkinson, David and Kellman, Peter
+             and Kozerke, Sebastian and Xue, Hui and Campbell-Washburn, Adrienne E
+             and S{\o}rensen, Thomas S and Hansen, Michael S},
+  journal = {Magnetic Resonance in Medicine},
+  volume  = {77},
+  number  = {1},
+  pages   = {411--421},
+  year    = {2017},
+  doi     = {10.1002/mrm.26089}
+}
+```
 
 ## License
 
-MIT, except vendored third-party components, which keep their own licences; see
-[`LICENSES/`](LICENSES/).
+MIT, except vendored third-party components that retain their own licences. See
+[License and third-party notices](https://pulserver.github.io/pulserver/latest/misc/license.html).

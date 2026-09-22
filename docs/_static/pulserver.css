@@ -1,0 +1,25 @@
+/* In dark mode the theme paints an opaque white card behind every image in the
+   content area and dims it with a brightness filter, which is what a figure
+   drawn on an opaque light canvas needs. Every figure here is drawn on a
+   transparent canvas, in ink that reads against either background, so both
+   rules are removed. The selectors match the theme's own so that load order
+   decides; `.only-dark` and `.dark-light` keep the exemptions the theme
+   defines for an image supplied in two variants. */
+
+html[data-theme="dark"] .bd-content img:not(.only-dark, .dark-light) {
+  background-color: transparent;
+  border-radius: 0;
+}
+
+html[data-theme="dark"] img:not(.only-dark, .dark-light) {
+  filter: none;
+}
+
+/* The landing page is the repository README, and its heading is what the
+   sidebar entry for the page is named. "Homepage" is the name a reader wants
+   there; on the page itself the wordmark below it already says what the
+   project is called, so the heading is hidden rather than printed twice. */
+
+section#homepage > h1 {
+  display: none;
+}

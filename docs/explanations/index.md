@@ -1,19 +1,23 @@
 # Explanations
 
-How pulserver is put together and why its pieces are divided as they are. The
-procedures that use them are in {doc}`../user-guide/index`.
+Conceptual background for the interfaces documented in {doc}`../api/index` and
+used in the {doc}`user guide <../user-guide/index>`. These pages state the
+components, the representations exchanged between them and the conventions the
+rest of the documentation assumes.
 
-| Page | Subject |
+| Explanation | What it covers |
 | --- | --- |
-| {doc}`architecture` | The components, the machines they run on, and what passes between them |
-| {doc}`sessions` | Design sessions, revisions and the bucket both services read |
-| {doc}`ir-cache` | The segmented binary representation a scanner interpreter loads |
-| {doc}`reconstruction` | Enrichment of the raw data, routing and the reconstruction workers |
+| {doc}`architecture` | The four layers of an acquisition through pulserver, the service each machine runs, and the representation exchanged at each boundary. |
+| {doc}`protocol` | How a prescription edited in the scanner UI is resolved into the protocol a sequence plays, and the units and precision it is exchanged in. |
+| {doc}`sessions` | Design sessions, the revisions they generate, and the directory both services share. |
+| {doc}`ir-cache` | The segmented representation of a sequence that a scanner interpreter plays, and the passes that compute it. |
+| {doc}`reconstruction` | Enrichment of the raw data from the sequence that played it, and the routing of each series to a reconstruction. |
 
 ```{toctree}
 :hidden:
 
 architecture
+protocol
 sessions
 ir-cache
 reconstruction
