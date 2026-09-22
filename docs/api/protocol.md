@@ -39,6 +39,8 @@ value block carries values only, as requests and replies do.
    :toctree: ../generated
    :nosignatures:
 
+   PROTOCOL_BEGIN
+   PROTOCOL_END
    format_listing
    parse_listing
    format_values

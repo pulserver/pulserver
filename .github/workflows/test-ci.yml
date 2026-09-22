@@ -11,20 +11,23 @@ concurrency:
 
 jobs:
   test:
-    name: Python ${{ matrix.python-version }}
-    runs-on: ubuntu-latest
+    name: ${{ matrix.os }} / Python ${{ matrix.python-version }}
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
+        # Every platform a wheel ships for. Windows is not one: the host daemon
+        # listens on a Unix socket.
+        os: [ubuntu-latest, macos-14]
         # The floor and the ceiling of the supported band: an intermediate
         # release that fails on neither is not a plausible failure.
         python-version: ["3.10", "3.13"]
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0 # setuptools_scm reads the tags
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
@@ -32,6 +35,7 @@ jobs:
       # The 32-bit compiler the scanner-reader test builds with; without it
       # that test skips.
       - name: Install the 32-bit C toolchain
+        if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y gcc-multilib
 
       - name: Install
@@ -39,34 +43,13 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install .[dev]
 
+      # -ra so a skip is visible rather than reading as a pass.
       - name: Run the tests
-        run: pytest -q --cov --cov-report=xml
+        run: pytest -q -ra --cov --cov-report=xml
 
-      - uses: codecov/codecov-action@v5
+      - uses: codecov/codecov-action@v7
+        if: runner.os == 'Linux'
         with:
           fail_ci_if_error: false
           token: ${{ secrets.CODECOV_TOKEN }}
           slug: pulserver/pulserver
-
-  # Proves the claim the dependency layout rests on: with no CUDA extra and no
-  # device, nothing errors -- the GPU tests skip.
-  gpu-tests-skip-cleanly:
-    name: GPU tests skip without a GPU
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.11"
-          cache: pip
-      - run: |
-          python -m pip install --upgrade pip
-          python -m pip install .[dev]
-      # Exit 5 is "nothing matched", which is also a clean outcome here: the
-      # point is that no CUDA-marked test errors on a machine without a device.
-      - run: |
-          status=0
-          pytest -q -rs -m cuda || status=$?
-          [ "$status" -eq 0 ] || [ "$status" -eq 5 ]

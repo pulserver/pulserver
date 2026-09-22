@@ -9,8 +9,8 @@ readme = "README.md"
 requires-python = ">=3.10"
 dynamic = ["version"]
 license = "MIT"
-license-files = ["LICENSE"]
-keywords = ["mri", "pulseq", "reconstruction", "motion correction"]
+license-files = ["LICENSE", "LICENSES/*"]
+keywords = ["mri", "pulseq", "mrd", "ismrmrd", "reconstruction", "scanner"]
 authors = [{ name = "Matteo Cencini", email = "matteo.cencini@gmail.com" }]
 classifiers = [
   "Development Status :: 3 - Alpha",
@@ -22,7 +22,7 @@ classifiers = [
   "Programming Language :: Python :: 3.13",
 ]
 
-dependencies = ["pypulseqpp>=0.0.3", "numpy>=1.24", "ismrmrd>=1.14", "pydicom>=3.0"]
+dependencies = ["pypulseqpp>=0.0.4", "numpy>=1.24", "ismrmrd>=1.14", "pydicom>=3.0"]
 
 [project.optional-dependencies]
 dev = [
@@ -42,17 +42,17 @@ doc = [
   "myst-parser>=4.0",
   "linkify-it-py>=2.0",
   "sphinx-copybutton>=0.5",
-  "matplotlib>=3.8",
 ]
 
 [project.urls]
 Homepage = "https://github.com/pulserver/pulserver"
+Documentation = "https://pulserver.github.io/pulserver/"
 Issues = "https://github.com/pulserver/pulserver/issues"
 Source = "https://github.com/pulserver/pulserver"
 
 [tool.scikit-build]
 cmake.source-dir = "."
-sdist.include = ["src/**", "tests/**", "README.md", "LICENSE"]
+sdist.include = ["src/**", "tests/**", "README.md", "LICENSE", "LICENSES/**"]
 
 [tool.scikit-build.wheel]
 packages = { "pulserver" = "src/pulserver" }

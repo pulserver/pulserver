@@ -23,9 +23,11 @@ htmlcov/
 .idea/
 .vscode/
 .DS_Store
+.claude/settings.local.json
 
 # Benchmark inputs are fetched, never committed.
 data/
 
+docs/build/
 # autosummary stubs, rebuilt by every docs build
 docs/generated/

@@ -8,7 +8,7 @@ on:
 
 jobs:
   analyze:
-    name: Analyze Python
+    name: Analyze ${{ matrix.language }}
     runs-on: ubuntu-latest
     # Code scanning on a private repository needs GitHub Advanced Security,
     # and uploading results without it is a hard error rather than a warning.
@@ -20,12 +20,17 @@ jobs:
       packages: read
       actions: read
       contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        # c-cpp covers src/c, the library a scanner links, and src/cpp.
+        language: [python, c-cpp]
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: github/codeql-action/init@v4
         with:
-          languages: python
+          languages: ${{ matrix.language }}
           build-mode: none
       - uses: github/codeql-action/analyze@v4
         with:
-          category: "/language:python"
+          category: "/language:${{ matrix.language }}"

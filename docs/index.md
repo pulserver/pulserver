@@ -10,10 +10,21 @@ the design the scanner downloads. On the reconstruction computer, it receives
 the raw data of every running series, attaches the trajectory and the
 prescription, routes the series to a reconstruction and returns the images.
 
-The {doc}`API reference <api/index>` documents the Python interface by topic.
+| Section | Contents |
+| --- | --- |
+| {doc}`user-guide/index` | Installation, running the two services, and writing the two kinds of plugin |
+| {doc}`explanations/index` | The components and the files they exchange, design sessions, the IR cache, and the reconstruction side |
+| {doc}`api/index` | The Python interface, by subpackage |
+| {doc}`developer-guide/index` | Development setup, checks, conventions and releases |
+| {doc}`misc/index` | Licensing and related projects |
 
 ```{toctree}
 :hidden:
+:maxdepth: 2
 
+user-guide/index
+explanations/index
 api/index
+developer-guide/index
+misc/index
 ```

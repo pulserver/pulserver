@@ -20,5 +20,3 @@ comment:
 
 ignore:
   - "tests/**"
-  - "examples/**"
-  - "benchmarks/**"

@@ -24,7 +24,7 @@ jobs:
     permissions:
       id-token: write # trusted publishing (OIDC)
     steps:
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v8
         with:
           pattern: "{wheels-*,sdist}"
           path: dist
@@ -38,12 +38,12 @@ jobs:
       contents: write # create the release
       id-token: write # sigstore
     steps:
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v8
         with:
           pattern: "{wheels-*,sdist}"
           path: dist
           merge-multiple: true
-      - uses: sigstore/gh-action-sigstore-python@v3.0.0
+      - uses: sigstore/gh-action-sigstore-python@v3.5.0
         with:
           inputs: |
             ./dist/*.tar.gz

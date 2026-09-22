@@ -1,7 +1,7 @@
 name: Wheels
 
-# Reusable: the release workflow calls this so what is published was built by
-# the same job pull requests exercise.
+# Reusable: the release workflow calls this to build what it publishes, and a
+# manual run builds the same wheels without publishing them.
 
 on:
   workflow_call:
@@ -26,11 +26,11 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-14]
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0 # setuptools_scm reads the tags
 
-      - uses: pypa/cibuildwheel@v3.2.0
+      - uses: pypa/cibuildwheel@v4.2.1
         env:
           CIBW_BUILD: ${{ inputs.cibw-build }}
           CIBW_SKIP: "*-musllinux_*"
@@ -39,7 +39,7 @@ jobs:
           # Loads the compiled extension, not only the package.
           CIBW_TEST_COMMAND: "python -c \"from pulserver._accelerators import require; print(require().__name__)\""
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: wheels-${{ matrix.os }}
           path: wheelhouse/*.whl
@@ -48,16 +48,16 @@ jobs:
   sdist:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
       - run: |
           python -m pip install --upgrade pip build
           python -m build --sdist
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: sdist
           path: dist/*.tar.gz

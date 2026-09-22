@@ -1,6 +1,10 @@
 # The rules live in scripts/format_and_lint.sh, which the Style workflow also
 # runs (there with --check). One entry point means a commit cannot pass locally
 # and fail in CI on style.
+#
+# Test fixtures are sequence files as pypulseqpp writes them, and src/cpp/vendor
+# is third-party code: neither is rewritten by a whitespace hook.
+exclude: ^(tests/fixtures/|src/cpp/vendor/)
 repos:
   - repo: local
     hooks:

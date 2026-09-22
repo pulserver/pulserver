@@ -1,24 +1,15 @@
-## What this changes
+## What changed
 
-<!-- One or two sentences. What behaviour is different afterwards? -->
+<!-- Concise implementation summary. -->
 
 ## Why
 
-<!-- The problem this solves. Link the issue if there is one. -->
+<!-- Problem and relevant issue or discussion. -->
 
-## How it was verified
+## Validation
 
-<!-- The commands you ran and what they said. Paste the output, don't
-     summarise it. "Tests pass" is not verification. -->
+<!-- Exact commands and results. Include tests added for new behaviour. -->
 
-```
-```
+## Documentation impact
 
-## Checklist
-
-- [ ] `bash scripts/format_and_lint.sh` is clean
-- [ ] `pytest -q` passes, and new behaviour has a test whose name states the
-      invariant it protects
-- [ ] Anything numerical is exercised on CPU and CUDA, or the CUDA leg is
-      marked `@pytest.mark.cuda` and skips cleanly
-- [ ] No comment or docstring describes the code's history
+<!-- User-facing changes, or "None" with a reason. -->

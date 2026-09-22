@@ -12,6 +12,7 @@ from dataclasses import dataclass
 
 from ._schema import InputMode, Kind, Parameter
 
+#: First and last lines of every protocol block, listing or values.
 PROTOCOL_BEGIN = "[NimPulseqGUI Protocol]"
 PROTOCOL_END = "[NimPulseqGUI Protocol End]"
 

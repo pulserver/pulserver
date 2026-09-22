@@ -28,7 +28,10 @@ class Gre2D(ScannerSequence):
             "readout_bandwidth_hz", unit="Hz", range_min=1e3, range_max=1e6
         ),
         "fov": FloatParam(
-            "fov", unit="mm", scale=1e-3, range_min=50.0, range_max=500.0
+            "fov_x", unit="mm", scale=1e-3, range_min=50.0, range_max=500.0
+        ),
+        "phase_fov": FloatParam(
+            "fov_y", unit="mm", scale=1e-3, range_min=50.0, range_max=500.0
         ),
         "nx": IntParam("n_x", range_min=32, range_max=512, range_incr=2),
         "ny": IntParam("n_y", range_min=32, range_max=512, range_incr=2),

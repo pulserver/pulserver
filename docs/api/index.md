@@ -10,6 +10,10 @@
 | {doc}`recon` | `pulserver.recon`: the contract a reconstruction plugin is written against |
 | {doc}`vre` | `pulserver.vre`: the reconstruction proxy, its revisions and the enrichment it attaches |
 
+The C library a scanner interpreter links is documented in its public headers,
+[`src/c/include/pulseg/`](https://github.com/pulserver/pulserver/tree/main/src/c/include/pulseg),
+starting from `pulseg.h`.
+
 ```{toctree}
 :hidden:
 

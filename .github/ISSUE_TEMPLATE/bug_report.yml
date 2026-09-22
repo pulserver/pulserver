@@ -1,42 +1,43 @@
 name: Bug report
-description: Something behaves differently from what it says it does.
+description: Report reproducible incorrect behaviour or a documentation defect.
 labels: ["bug"]
 body:
-  - type: textarea
-    id: what-happened
+  - type: dropdown
+    id: subsystem
     attributes:
-      label: What happened
-      description: What did you expect, and what did you get instead?
+      label: Affected area
+      options:
+        - "Scanner sequences (pulserver.design, pulserver.protocol)"
+        - "Host daemon and sessions (pulserver.host)"
+        - "IR conversion or the C cache library (pulserver.ir, src/c)"
+        - "Reconstruction proxy and enrichment (pulserver.vre)"
+        - "Reconstruction plugins and MRD data (pulserver.recon, pulserver.mrd)"
+        - "Documentation"
+        - "Other"
     validations:
       required: true
-
+  - type: textarea
+    id: observed
+    attributes:
+      label: Observed and expected behaviour
+    validations:
+      required: true
   - type: textarea
     id: reproduce
     attributes:
-      label: Smallest reproduction
+      label: Smallest reproducer
       description: >
-        Code we can run. Prefer synthetic arrays over a data file; if the shape
-        of real data matters, give the shapes and dtypes.
+        Self-contained Python code, a plugin file, a minimal `.seq` file, or the
+        command exchange with the host daemon. Prefer synthetic data to a
+        scanner acquisition.
       render: python
     validations:
       required: true
-
   - type: textarea
     id: environment
     attributes:
       label: Environment
-      description: >
-        Output of `python -c "import pulserver, sys, torch;
-        print(pulserver.__version__, sys.version, torch.__version__,
-        torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'cpu')"`
-      render: shell
-    validations:
-      required: true
-
-  - type: dropdown
-    id: device
-    attributes:
-      label: Where it happens
-      options: ["CPU only", "CUDA only", "Both"]
+      description: pulserver, pypulseqpp and Python versions, plus OS and architecture.
+      placeholder: "pulserver 0.x; pypulseqpp 0.x; Python 3.12; Ubuntu 24.04 x86-64"
     validations:
       required: true
