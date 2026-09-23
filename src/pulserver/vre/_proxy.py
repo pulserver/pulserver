@@ -87,6 +87,7 @@ class ReconProxy:
         self._slots = threading.BoundedSemaphore(compute_max_concurrent(override=slots))
         self._server: socket.socket | None = None
         self._closing = threading.Event()
+        self._stopping = False
         self._threads: list[threading.Thread] = []
         self._queued = itertools.count(1)
 
@@ -101,11 +102,11 @@ class ReconProxy:
         return int(server.getsockname()[1])
 
     def serve(self) -> None:
-        """Accept clients until :meth:`close`, one thread each."""
+        """Accept clients until :meth:`stop` or :meth:`close`, one thread each."""
         if self._server is None:
             self.bind()
         _log.info("serving %s on port %d", self.revisions.bucket, self.port)
-        while not self._closing.is_set():
+        while not (self._stopping or self._closing.is_set()):
             try:
                 stream, _ = self._server.accept()
             except TimeoutError:
@@ -129,6 +130,13 @@ class ReconProxy:
         if self._server is None:
             raise RuntimeError("the proxy is not bound")
         return int(self._server.getsockname()[1])
+
+    def stop(self) -> None:
+        """Make :meth:`serve` return within one accept poll.
+
+        Sets a flag and takes no lock, so a signal handler may call it.
+        """
+        self._stopping = True
 
     def close(self) -> None:
         """Stop accepting clients, release the spares and wait for running series."""

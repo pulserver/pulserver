@@ -28,7 +28,7 @@ dependencies = ["pypulseqpp>=0.0.5", "numpy>=1.24", "ismrmrd>=1.14", "pydicom>=3
 dev = [
   "pytest>=8",
   "pytest-cov>=5",
-  "coverage>=7",
+  "coverage>=7.10",
   # Pinned, not ranged: a formatter that differs between a contributor and
   # CI makes "one entry point" a lie. Dependabot proposes the bumps.
   "ruff==0.16.5",
@@ -81,8 +81,15 @@ markers = [
 ]
 
 [tool.coverage.run]
-source = ["src"]
+# By package, not by directory: CI tests an installed wheel, not src/.
+source_pkgs = ["pulserver"]
 branch = true
+# The host daemon, the reconstruction proxy and their workers run in child
+# processes.
+patch = ["subprocess"]
+
+[tool.coverage.paths]
+pulserver = ["src/pulserver", "*/site-packages/pulserver"]
 
 [tool.coverage.report]
 exclude_also = [

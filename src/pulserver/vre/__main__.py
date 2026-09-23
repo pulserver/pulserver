@@ -10,10 +10,6 @@ from pathlib import Path
 from ._proxy import ReconProxy
 
 
-def _interrupt(_signum: int, _frame: object) -> None:
-    raise KeyboardInterrupt
-
-
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="python -m pulserver.vre")
     parser.add_argument(
@@ -39,11 +35,10 @@ def main(argv: list[str] | None = None) -> None:
     )
     proxy = ReconProxy(args.base, args.plugins, slots=args.slots, spares=args.spares)
     proxy.bind(args.port)
-    signal.signal(signal.SIGTERM, _interrupt)
+    for signum in (signal.SIGTERM, signal.SIGINT):
+        signal.signal(signum, lambda _signum, _frame: proxy.stop())
     try:
         proxy.serve()
-    except KeyboardInterrupt:
-        pass
     finally:
         proxy.close()
 
