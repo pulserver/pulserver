@@ -125,8 +125,15 @@ class HostDaemon:
         return ProcessPoolExecutor(self._workers, mp_context=context)
 
     def shutdown(self) -> None:
-        """Stop the worker pool without waiting for running design calls."""
+        """Stop the worker pool, terminating the workers and any running design call.
+
+        A worker left running would keep the interpreter from exiting, and once
+        the daemon is gone it waits on its call queue indefinitely.
+        """
+        workers = list((self._pool._processes or {}).values())
         self._pool.shutdown(wait=False, cancel_futures=True)
+        for worker in workers:
+            worker.terminate()
 
     async def serve(self, socket_path: Path) -> None:
         """Answer commands on a Unix socket until cancelled."""
