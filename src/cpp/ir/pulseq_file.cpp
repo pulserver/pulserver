@@ -64,6 +64,7 @@ static void seq_file_set_defaults(pulseq_file *seq)
     seq->block_ids = NULL;
     INIT_LIBRARY(seq, rf_library, rf_library_size, is_rf_library_parsed);
     seq->rf_use_tags = NULL;
+    seq->rf_spectra = NULL;
     INIT_LIBRARY(seq, grad_library, grad_library_size, is_grad_library_parsed);
     INIT_LIBRARY(seq, adc_library, adc_library_size, is_adc_library_parsed);
     INIT_LIBRARY(seq, extensions_library, extensions_library_size, is_extensions_library_parsed);
@@ -139,6 +140,9 @@ void pulseq__file_reset(pulseq_file *seq)
         if (seq->rf_use_tags)
             PULSEQ_FREE(seq->rf_use_tags);
         seq->rf_use_tags = NULL;
+        if (seq->rf_spectra)
+            PULSEQ_FREE(seq->rf_spectra);
+        seq->rf_spectra = NULL;
     }
     if (seq->is_grad_library_parsed)
         PULSEQ_FREE(seq->grad_library);

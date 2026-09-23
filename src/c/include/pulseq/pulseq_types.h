@@ -29,6 +29,10 @@
 #define PULSEQ_MAX_LINE_LENGTH 256
 #define PULSEQ_MAX_SCALE_SIZE 16
 #define PULSEQ_MAX_RF_SHIM_CHANNELS 64
+/* Bands an RF spectrum row holds, and the row's width: bandwidth, band count
+ * and widest band's bandwidth, then one offset per band. */
+#define PULSEQ_RF_SPECTRUM_MAX_BANDS 8
+#define PULSEQ_RF_SPECTRUM_WIDTH (3 + PULSEQ_RF_SPECTRUM_MAX_BANDS)
 
 /* ================================================================== */
 /*  RF use codes (the trailing e/r/i/s use tag on an RF library row)   */
@@ -369,6 +373,10 @@ typedef struct pulseq_file
     int rf_library_size;
     PULSEQ_REAL (*rf_library)[10];
     int *rf_use_tags; /* per-RF-event use tag (parsed from .seq) */
+    /* Per-RF-event spectrum, as pypulseqpp.calc_rf_bandwidth measures it:
+     * bandwidth (Hz), band count, widest band's bandwidth (Hz), then each
+     * band's offset from the carrier (Hz). NULL when not supplied. */
+    PULSEQ_REAL (*rf_spectra)[PULSEQ_RF_SPECTRUM_WIDTH];
     int is_grad_library_parsed;
     int grad_library_size;
     PULSEQ_REAL (*grad_library)[7];

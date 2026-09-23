@@ -98,5 +98,4 @@ that uses it:
 
 ## License
 
-MIT, except vendored third-party components that retain their own licences. See
-[License and third-party notices](https://pulserver.github.io/pulserver/latest/misc/license.html).
+MIT. See [License and notices](https://pulserver.github.io/pulserver/latest/misc/license.html).

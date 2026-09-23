@@ -2,9 +2,9 @@
 # runs (there with --check). One entry point means a commit cannot pass locally
 # and fail in CI on style.
 #
-# Test fixtures are sequence files as pypulseqpp writes them, and src/cpp/vendor
-# is third-party code: neither is rewritten by a whitespace hook.
-exclude: ^(tests/fixtures/|src/cpp/vendor/)
+# Test fixtures are sequence files as pypulseqpp writes them: a whitespace hook
+# does not rewrite them.
+exclude: ^tests/fixtures/
 repos:
   - repo: local
     hooks:

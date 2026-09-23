@@ -244,6 +244,13 @@ void build_pulseq_file(pulseq_file &seq, const py::dict &libraries)
     seq.rf_library = rows<10>(libraries["rf"], seq.rf_library_size);
     seq.rf_use_tags = integers(libraries["rf_use"], seq.rf_library_size);
     seq.is_rf_library_parsed = 1;
+    {
+        int spectra = 0;
+        seq.rf_spectra =
+            rows<PULSEQ_RF_SPECTRUM_WIDTH>(libraries["rf_spectra"], spectra);
+        if (spectra != seq.rf_library_size)
+            throw std::invalid_argument("an RF spectrum table of the wrong length");
+    }
 
     seq.grad_library = rows<7>(libraries["grad"], seq.grad_library_size);
     seq.is_grad_library_parsed = 1;

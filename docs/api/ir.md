@@ -16,6 +16,6 @@ described in {doc}`../explanations/ir-cache`.
 | Object | Description |
 | --- | --- |
 | {obj}`~pulserver.ir.convert` | Segment a sequence file and write its IR cache beside it. |
-| {obj}`~pulserver.ir.summary` | Subsequences, segments and readouts of a sequence, from the chain or from its cache. |
+| {obj}`~pulserver.ir.summary` | Subsequences, segments, readouts and RF spectral statistics of a sequence, from the chain or from its cache. |
 | {obj}`~pulserver.ir.chain` | Files of the `NextSequence` chain starting at a sequence file, in play order. |
 | {obj}`~pulserver.ir.cache_path` | Cache file of a sequence file. |

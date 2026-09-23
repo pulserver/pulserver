@@ -21,21 +21,16 @@ pybind11_add_module(_ext
     ${CMAKE_SOURCE_DIR}/src/cpp/module.cpp
     ${CMAKE_SOURCE_DIR}/src/cpp/ir/from_libraries.cpp
     ${CMAKE_SOURCE_DIR}/src/cpp/ir/pulseq_file.cpp
-    ${CMAKE_SOURCE_DIR}/src/cpp/ir/pulseq_rf.c
     ${CMAKE_SOURCE_DIR}/src/cpp/ir/dedup.cpp
     ${CMAKE_SOURCE_DIR}/src/cpp/ir/structure.cpp
     ${CMAKE_SOURCE_DIR}/src/cpp/ir/collection.cpp
-    ${CMAKE_SOURCE_DIR}/src/cpp/vendor/external_kiss_fft.c
-    ${CMAKE_SOURCE_DIR}/src/cpp/vendor/external_kiss_fftr.c
 )
 target_link_libraries(_ext PRIVATE pulseg)
-# The passes are pulseg's own and see its private headers; the RF spectrum and
-# the transform under it are the extension's, and only it compiles them.
+# The passes are pulseg's own and see its private headers.
 target_include_directories(_ext PRIVATE
     ${CMAKE_SOURCE_DIR}/src/c
     ${CMAKE_SOURCE_DIR}/src/c/pulseq
     ${CMAKE_SOURCE_DIR}/src/cpp/ir
-    ${CMAKE_SOURCE_DIR}/src/cpp/vendor
 )
 
 # Built into the build tree, never beside the sources: a binary left in the

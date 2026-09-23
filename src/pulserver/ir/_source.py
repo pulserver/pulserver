@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
+import pypulseqpp as pp
 from numpy.typing import NDArray
 from pypulseqpp import _ext as _core
 
@@ -36,6 +37,9 @@ _RF_USE = {
 
 _TRAPEZOID = 0
 _ARBITRARY = 1
+
+#: Bands an RF spectrum row has room for, as the cache stores them.
+MAX_BANDS = 8
 
 #: Labels that count a position in the scan, in the order Pulseq numbers them.
 COUNTER_LABELS = ("SLC", "SEG", "REP", "AVG", "SET", "ECO", "PHS", "LIN", "PAR", "ACQ")
@@ -157,6 +161,10 @@ class SequenceLibraries:
     rf_use : NDArray[np.int32]
         ``(R,)``: 0 unknown, 1 excitation, 2 refocusing, 3 inversion,
         4 saturation, 5 preparation, 6 other.
+    rf_spectra : NDArray[np.float64]
+        ``(R, 3 + MAX_BANDS)``: bandwidth in Hz, number of bands, widest band's
+        bandwidth in Hz, then each band's offset from the carrier in Hz, as
+        ``pypulseqpp.calc_rf_bandwidth`` measures them; unused offsets are 0.
     grad : NDArray[np.float64]
         ``(G, 7)``, by type in column 0. A trapezoid (0): amplitude in Hz/m,
         rise, flat and fall times in µs, delay in µs. An arbitrary gradient
@@ -173,6 +181,7 @@ class SequenceLibraries:
     blocks: NDArray[np.float64]
     rf: NDArray[np.float64]
     rf_use: NDArray[np.int32]
+    rf_spectra: NDArray[np.float64]
     grad: NDArray[np.float64]
     adc: NDArray[np.float64]
     shapes: tuple[Shape, ...]
@@ -197,10 +206,12 @@ def sequence_libraries(sequence: Any) -> SequenceLibraries:
     blocks[:, 1:] = events
 
     shapes = _ShapeTable()
-    rf, rf_use = _rf_library(core, events, shapes)
+    rf, rf_use, rf_spectra = _rf_library(core, events, shapes)
     grad = _grad_library(core, events, shapes)
     adc = _adc_library(core, events, shapes)
-    return SequenceLibraries(blocks, rf, rf_use, grad, adc, shapes.entries())
+    return SequenceLibraries(
+        blocks, rf, rf_use, rf_spectra, grad, adc, shapes.entries()
+    )
 
 
 # %% private module subroutines
@@ -275,11 +286,13 @@ def _time_shape(times: NDArray[np.float64], raster: float, shapes: _ShapeTable) 
 
 def _rf_library(
     core: Any, events: NDArray[np.int64], shapes: _ShapeTable
-) -> tuple[NDArray[np.float64], NDArray[np.int32]]:
+) -> tuple[NDArray[np.float64], NDArray[np.int32], NDArray[np.float64]]:
     decoded = list(_decoded(core, events, 0))
     rows = _rows(decoded, 10)
     uses = np.zeros(rows.shape[0], dtype=np.int32)
+    spectra = np.zeros((rows.shape[0], 3 + MAX_BANDS), dtype=np.float64)
     raster = core.rf_raster_time()
+    measured: dict[tuple[float, float, float], NDArray[np.float64]] = {}
     for identifier, event in decoded:
         row = rows[identifier - 1]
         row[0] = event.amplitude
@@ -293,7 +306,34 @@ def _rf_library(
         row[8] = event.freq_offset
         row[9] = event.phase_offset
         uses[identifier - 1] = _RF_USE[event.use]
-    return rows, uses
+        # The spectrum's shape depends on the waveform alone: amplitude scales
+        # it and a frequency offset moves it, neither of which the bands see.
+        key = (row[1], row[2], row[3])
+        if key not in measured:
+            measured[key] = _spectrum_row(event, raster)
+        spectra[identifier - 1] = measured[key]
+    return rows, uses, spectra
+
+
+def _spectrum_row(event: Any, raster: float) -> NDArray[np.float64]:
+    """Bandwidth, band count, widest band and band offsets of one RF event, in Hz.
+
+    Measured at the carrier: the event's frequency offsets are zeroed, which
+    is harmless because a decoded event is a snapshot the sequence does not
+    hold, and its offsets are already in the library row.
+    """
+    event.freq_offset = 0.0
+    event.freq_ppm = 0.0
+    result = pp.calc_rf_bandwidth(event, dt=raster, compat=False)
+    row = np.zeros(3 + MAX_BANDS, dtype=np.float64)
+    count = min(result.num_bands, MAX_BANDS)
+    row[0] = result.bandwidth
+    row[1] = max(result.num_bands, 1)
+    row[2] = result.band_bandwidths.max() if result.num_bands else result.bandwidth
+    # Measured on 10 Hz bins; below a millihertz an offset is the float32 of a
+    # binary file's shape samples, not a property of the pulse.
+    row[3 : 3 + count] = np.round(result.band_offsets[:count], 3)
+    return row
 
 
 def _grad_library(
@@ -626,7 +666,7 @@ def conversion_payload(sequence: Any) -> dict[str, Any]:
     chains, heads = _chain_rows(core)
     blocks = libraries.blocks.copy()
     blocks[:, 6] = heads
-    rf, grad, adc, rf_use = _compact(blocks, libraries)
+    rf, grad, adc, rf_use, rf_spectra = _compact(blocks, libraries)
     declared = core.definitions()
 
     return {
@@ -661,6 +701,7 @@ def conversion_payload(sequence: Any) -> dict[str, Any]:
         "blocks": blocks,
         "rf": rf,
         "rf_use": rf_use,
+        "rf_spectra": rf_spectra,
         "grad": grad,
         "adc": adc,
         "shapes": [
@@ -680,7 +721,7 @@ def conversion_payload(sequence: Any) -> dict[str, Any]:
 
 def _compact(
     blocks: NDArray[np.float64], libraries: SequenceLibraries
-) -> tuple[Any, Any, Any, Any]:
+) -> tuple[Any, Any, Any, Any, Any]:
     """Drop the library rows no block plays, renumbering the block table in place.
 
     A row a decoded sequence never named is not recoverable, and a placeholder
@@ -691,16 +732,15 @@ def _compact(
     rf, rf_map = _played(libraries.rf, blocks, (1,))
     grad, grad_map = _played(libraries.grad, blocks, (2, 3, 4))
     adc, adc_map = _played(libraries.adc, blocks, (5,))
-    uses = np.array(
-        [libraries.rf_use[old - 1] for old in sorted(rf_map, key=rf_map.get)],
-        dtype=np.int32,
-    )
+    played_rf = [old - 1 for old in sorted(rf_map, key=rf_map.get)]
+    uses = np.array([libraries.rf_use[row] for row in played_rf], dtype=np.int32)
+    spectra = libraries.rf_spectra[played_rf]
     for columns, mapping in (((1,), rf_map), ((2, 3, 4), grad_map), ((5,), adc_map)):
         for column in columns:
             blocks[:, column] = [
                 mapping.get(int(value), 0) for value in blocks[:, column]
             ]
-    return rf, grad, adc, uses
+    return rf, grad, adc, uses, spectra
 
 
 def _played(

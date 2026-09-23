@@ -113,6 +113,11 @@ def summary(
 ) -> dict[str, Any]:
     """Return the segmentation of a sequence: subsequences, segments and readouts.
 
+    Each subsequence lists its unique RF definitions under ``rf``: the
+    bandwidth at half the spectral peak, the number of bands, each band's
+    offset from the carrier and the widest band's bandwidth, all in Hz, as
+    ``pypulseqpp.calc_rf_bandwidth`` measures them.
+
     With ``cache_ext``, the cache beside the file is loaded instead of the
     chain being read and segmented again; this build loads only vendor-neutral
     caches, and only when the size recorded in the cache matches the file.
