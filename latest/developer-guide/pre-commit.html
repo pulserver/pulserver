@@ -288,7 +288,7 @@
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../misc/index.html">Miscellaneous</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../misc/license.html">License and third-party notices</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../misc/license.html">License and notices</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../misc/related.html">Related projects</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../misc/contributors.html">Contributors</a></li>
 </ul>
@@ -518,8 +518,8 @@ pre-commit<span class="w"> </span>run<span class="w"> </span>--all-files
 </pre></div>
 </div>
 <p>The local hook runs <code class="docutils literal notranslate"><span class="pre">scripts/format_and_lint.sh</span></code>, the script the Style workflow
-runs with <code class="docutils literal notranslate"><span class="pre">--check</span></code>. Test fixtures under <code class="docutils literal notranslate"><span class="pre">tests/fixtures/</span></code> and the vendored
-sources under <code class="docutils literal notranslate"><span class="pre">src/cpp/vendor/</span></code> are excluded from the whitespace hooks.</p>
+runs with <code class="docutils literal notranslate"><span class="pre">--check</span></code>. Test fixtures under <code class="docutils literal notranslate"><span class="pre">tests/fixtures/</span></code> are excluded from
+the whitespace hooks.</p>
 <p>A deliberate one-off bypass uses <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">commit</span> <span class="pre">--no-verify</span></code>; one hook can be
 skipped with <code class="docutils literal notranslate"><span class="pre">SKIP=&lt;hook-id&gt;</span> <span class="pre">git</span> <span class="pre">commit</span></code>. A bypass does not bypass CI and must
 not be used to conceal a failing check.</p>

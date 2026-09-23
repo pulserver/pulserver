@@ -290,7 +290,7 @@
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../misc/index.html">Miscellaneous</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../misc/license.html">License and third-party notices</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../misc/license.html">License and notices</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../misc/related.html">Related projects</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../misc/contributors.html">Contributors</a></li>
 </ul>
@@ -529,6 +529,10 @@
 <dt class="sig sig-object py" id="pulserver.ir.summary">
 <span class="sig-prename descclassname"><span class="pre">pulserver.ir.</span></span><span class="sig-name descname"><span class="pre">summary</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pulserver/ir/_convert.html#summary"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.ir.summary" title="Link to this definition">#</a></dt>
 <dd><p>Return the segmentation of a sequence: subsequences, segments and readouts.</p>
+<p>Each subsequence lists its unique RF definitions under <code class="docutils literal notranslate"><span class="pre">rf</span></code>: the
+bandwidth at half the spectral peak, the number of bands, each band’s
+offset from the carrier and the widest band’s bandwidth, all in Hz, as
+<code class="docutils literal notranslate"><span class="pre">pypulseqpp.calc_rf_bandwidth</span></code> measures them.</p>
 <p>With <code class="docutils literal notranslate"><span class="pre">cache_ext</span></code>, the cache beside the file is loaded instead of the
 chain being read and segmented again; this build loads only vendor-neutral
 caches, and only when the size recorded in the cache matches the file.</p>

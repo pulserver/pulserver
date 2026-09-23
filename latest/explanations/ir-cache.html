@@ -292,7 +292,7 @@
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../misc/index.html">Miscellaneous</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../misc/license.html">License and third-party notices</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../misc/license.html">License and notices</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../misc/related.html">Related projects</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../misc/contributors.html">Contributors</a></li>
 </ul>
@@ -571,11 +571,17 @@ own and the results are chained into one collection.</p>
 <tr class="row-even"><td><p>Label table</p></td>
 <td><p>The Pulseq labels of every readout, three of which fill the ADC label columns</p></td>
 </tr>
+<tr class="row-odd"><td><p>RF statistics</p></td>
+<td><p>For each RF definition: flip angle, duration and power from the envelope, and the bandwidth and bands of a multiband pulse from its spectrum</p></td>
+</tr>
 </tbody>
 </table>
 </div>
 <p>The limits and rasters of the scanner (<code class="docutils literal notranslate"><span class="pre">pypulseqpp.Opts</span></code>) are those under which
-the scan is segmented. <code class="docutils literal notranslate"><span class="pre">label_column_map</span></code> selects the three labels the
+the scan is segmented. The spectral statistics are measured by pypulseqpp’s
+<code class="docutils literal notranslate"><span class="pre">calc_rf_bandwidth</span></code> when the chain is read, with the Pulseq recipe of the width
+at half the spectral peak; a band is a run of the spectrum above 30 % of its
+peak, and its offset is measured from the carrier. <code class="docutils literal notranslate"><span class="pre">label_column_map</span></code> selects the three labels the
 interpreter records per readout, as indices in the order SLC, PHS, REP, AVG,
 SEG, SET, ECO, PAR, LIN, ACQ.</p>
 </section>

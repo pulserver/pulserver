@@ -287,7 +287,7 @@
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../misc/index.html">Miscellaneous</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../../../misc/license.html">License and third-party notices</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../misc/license.html">License and notices</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../misc/related.html">Related projects</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../misc/contributors.html">Contributors</a></li>
 </ul>
@@ -569,6 +569,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_pool</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_new_pool</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_locks</span><span class="p">:</span> <span class="n">defaultdict</span><span class="p">[</span><span class="n">SessionKey</span><span class="p">,</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">Lock</span><span class="p">]</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="n">asyncio</span><span class="o">.</span><span class="n">Lock</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_listings</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="n">Path</span><span class="p">,</span> <span class="nb">int</span><span class="p">],</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Parameter</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_writers</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="n">asyncio</span><span class="o">.</span><span class="n">StreamWriter</span><span class="p">]</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_new_pool</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ProcessPoolExecutor</span><span class="p">:</span>
         <span class="n">context</span> <span class="o">=</span> <span class="n">multiprocessing</span><span class="o">.</span><span class="n">get_context</span><span class="p">(</span><span class="s2">"spawn"</span><span class="p">)</span>
@@ -577,25 +578,41 @@
 <div class="viewcode-block" id="HostDaemon.shutdown">
 <a class="viewcode-back" href="../../../generated/pulserver.host.HostDaemon.shutdown.html#pulserver.host.HostDaemon.shutdown">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">shutdown</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Stop the worker pool without waiting for running design calls."""</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_pool</span><span class="o">.</span><span class="n">shutdown</span><span class="p">(</span><span class="n">wait</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">cancel_futures</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span></div>
+<span class="w">        </span><span class="sd">"""Stop the worker pool, terminating the workers and any running design call.</span>
+
+<span class="sd">        A worker left running would keep the interpreter from exiting, and once</span>
+<span class="sd">        the daemon is gone it waits on its call queue indefinitely.</span>
+<span class="sd">        """</span>
+        <span class="n">workers</span> <span class="o">=</span> <span class="nb">list</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">_pool</span><span class="o">.</span><span class="n">_processes</span> <span class="ow">or</span> <span class="p">{})</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_pool</span><span class="o">.</span><span class="n">shutdown</span><span class="p">(</span><span class="n">wait</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">cancel_futures</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">worker</span> <span class="ow">in</span> <span class="n">workers</span><span class="p">:</span>
+            <span class="n">worker</span><span class="o">.</span><span class="n">terminate</span><span class="p">()</span></div>
 
 
 <div class="viewcode-block" id="HostDaemon.serve">
 <a class="viewcode-back" href="../../../generated/pulserver.host.HostDaemon.serve.html#pulserver.host.HostDaemon.serve">[docs]</a>
     <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">serve</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">socket_path</span><span class="p">:</span> <span class="n">Path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Answer commands on a Unix socket until cancelled."""</span>
+<span class="w">        </span><span class="sd">"""Answer commands on a Unix socket until cancelled.</span>
+
+<span class="sd">        Cancellation closes the socket and every client connection.</span>
+<span class="sd">        """</span>
         <span class="n">server</span> <span class="o">=</span> <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">start_unix_server</span><span class="p">(</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_connection</span><span class="p">,</span> <span class="n">path</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">socket_path</span><span class="p">)</span>
         <span class="p">)</span>
         <span class="n">_log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">"serving </span><span class="si">%s</span><span class="s2"> on </span><span class="si">%s</span><span class="s2">"</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">store</span><span class="o">.</span><span class="n">bucket</span><span class="p">,</span> <span class="n">socket_path</span><span class="p">)</span>
-        <span class="k">async</span> <span class="k">with</span> <span class="n">server</span><span class="p">:</span>
-            <span class="k">await</span> <span class="n">server</span><span class="o">.</span><span class="n">serve_forever</span><span class="p">()</span></div>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="c1"># Not serve_forever: cancelled, it waits for the clients to disconnect.</span>
+            <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">get_running_loop</span><span class="p">()</span><span class="o">.</span><span class="n">create_future</span><span class="p">()</span>
+        <span class="k">finally</span><span class="p">:</span>
+            <span class="n">server</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+            <span class="k">for</span> <span class="n">writer</span> <span class="ow">in</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_writers</span><span class="p">):</span>
+                <span class="n">writer</span><span class="o">.</span><span class="n">close</span><span class="p">()</span></div>
 
 
     <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">_connection</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">reader</span><span class="p">:</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">StreamReader</span><span class="p">,</span> <span class="n">writer</span><span class="p">:</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">StreamWriter</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_writers</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">writer</span><span class="p">)</span>
         <span class="k">try</span><span class="p">:</span>
             <span class="k">while</span> <span class="n">line</span> <span class="o">:=</span> <span class="k">await</span> <span class="n">reader</span><span class="o">.</span><span class="n">readline</span><span class="p">():</span>
                 <span class="n">command</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span> <span class="o">=</span> <span class="n">line</span><span class="o">.</span><span class="n">decode</span><span class="p">()</span><span class="o">.</span><span class="n">split</span><span class="p">()</span>
@@ -613,6 +630,7 @@
         <span class="k">except</span> <span class="p">(</span><span class="ne">ConnectionError</span><span class="p">,</span> <span class="ne">ValueError</span><span class="p">)</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>
             <span class="n">_log</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">"dropping connection: </span><span class="si">%s</span><span class="s2">"</span><span class="p">,</span> <span class="n">error</span><span class="p">)</span>
         <span class="k">finally</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_writers</span><span class="o">.</span><span class="n">discard</span><span class="p">(</span><span class="n">writer</span><span class="p">)</span>
             <span class="n">writer</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
 
     <span class="nd">@staticmethod</span>
