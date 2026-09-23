@@ -2,6 +2,8 @@
 
 import json
 import socket
+import subprocess
+import sys
 import threading
 import time
 from dataclasses import dataclass
@@ -286,3 +288,43 @@ def test_a_point_at_the_prescription_centre_reconstructs_at_the_image_centre(
     centre = (MATRIX["ny"] // 2, MATRIX["nx"] // 2)
     assert peak(images(centred)[0]) == centre
     assert peak(images(uncentred)[0]) == (centre[0] + 3, centre[1] + 2)
+
+
+def test_a_stopped_proxy_stops_accepting_within_one_poll(tmp_path):
+    proxy = ReconProxy(tmp_path, RECON_PLUGINS)
+    proxy.bind(0)
+    thread = threading.Thread(target=proxy.serve, daemon=True)
+    thread.start()
+    try:
+        proxy.stop()
+        thread.join(timeout=5)
+        assert not thread.is_alive()
+    finally:
+        proxy.close()
+
+
+def test_a_terminated_proxy_process_exits_cleanly(tmp_path):
+    process = subprocess.Popen(
+        [
+            sys.executable,
+            "-m",
+            "pulserver.vre",
+            "--base",
+            str(tmp_path),
+            "--port",
+            "0",
+            "--plugins",
+            str(RECON_PLUGINS),
+        ],
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        for line in process.stderr:
+            if "serving" in line:
+                break
+        process.terminate()
+        assert process.wait(timeout=30) == 0
+    finally:
+        process.kill()
+        process.stderr.close()
