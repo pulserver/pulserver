@@ -1,6 +1,7 @@
 """A host daemon in a subprocess, for tests that need a generated revision."""
 
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -45,6 +46,8 @@ class Daemon:
         self._process = subprocess.Popen(
             [
                 sys.executable,
+                "-X",
+                "faulthandler",
                 "-m",
                 "pulserver.host",
                 "--base",
@@ -65,7 +68,13 @@ class Daemon:
 
     def stop(self) -> None:
         self._process.terminate()
-        self._process.wait(timeout=30)
+        try:
+            self._process.wait(timeout=30)
+        except subprocess.TimeoutExpired:
+            # faulthandler writes every thread's stack to stderr on SIGABRT.
+            self._process.send_signal(signal.SIGABRT)
+            self._process.wait(timeout=10)
+            raise
         self.socket.unlink(missing_ok=True)
 
     def client(self, pid: int) -> HostClient:

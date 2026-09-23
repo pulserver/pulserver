@@ -49,12 +49,11 @@ The default branch is `main`; pull requests target it.
 | `src/pulserver/vre/` | Reconstruction proxy: revision lookup, MRD enrichment, workers, queue |
 | `src/pulserver/recon/` | Reconstruction plugin contract and the runtime that drives it over MRD |
 | `src/pulserver/mrd/` | MRD acquisitions, header entries, images and readout tables |
-| `src/cpp/` | The extension `pulserver._ext`: the IR passes in `ir/`, vendored KISS FFT in `vendor/` |
+| `src/cpp/` | The extension `pulserver._ext`: the IR passes in `ir/` |
 | `src/c/` | The C89 library a scanner links: cache reader and writer, accessors, protocol |
 | `tests/` | pytest suite; `plugins/` and `recon_plugins/` are the plugin files the services load in tests |
 | `gallery/` | sphinx-gallery example scripts, one directory per section, executed when the pages are built |
 | `docs/` | Sphinx sources: `user-guide/`, `explanations/`, `examples/` (the gallery's landing pages), `api/`, `developer-guide/`, `misc/`; `api_objects.py` writes the API stubs |
-| `LICENSES/` | Licence texts of vendored components |
 
 ## The scanner IR, and where each half of it lives
 

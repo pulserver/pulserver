@@ -263,7 +263,7 @@ typedef struct pulseg_rf_stats
     float vendor_stat[4];
     float duration_us;       /**< total RF event duration (us)          */
     int isodelay_us;         /**< isodelay from center to echo (us)     */
-    float bandwidth_hz;      /**< estimated bandwidth (Hz, via FFT)     */
+    float bandwidth_hz;      /**< bandwidth at half the spectral peak (Hz) */
     float base_amplitude_hz; /**< base (nominal) peak |gamma*B1| (Hz)   */
     int num_samples;         /**< waveform sample count                 */
     int num_instances;       /**< repetition count for this RF pulse    */
@@ -271,7 +271,7 @@ typedef struct pulseg_rf_stats
     int num_bands; /**< number of simultaneous frequency bands (>=1) */
     float band_freq_offsets_hz
         [PULSEG_MAX_BANDS];  /**< per-band center offsets relative to carrier (Hz) */
-    float band_bandwidth_hz; /**< per-band bandwidth (Hz) */
+    float band_bandwidth_hz; /**< widest band's bandwidth (Hz) */
     float total_b1sq_power;  /**< integral |B1(t)|^2 dt normalised (a.u.) */
     /* --- vendor tag (appended; identifies the meaning of the
      *     vendor-specific interpretation of the fields above; for new

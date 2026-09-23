@@ -21,9 +21,6 @@ extern "C"
 {
 #include "pulseg_internal.h"
 #include "pulseg.h"
-/* The RF spectrum lives at the pulseq level -- pulseg links pulseq, and both
- * this and pulseq's own slice-thickness derivation need the same transform. */
-#include "pulseq_rf.h"
 }
 
 /* ================================================================== */
@@ -947,15 +944,10 @@ fail:
 /* ================================================================== */
 
 /*
- * The bandwidth estimator that used to live here now lives at the pulseq
- * level, in src/c/pulseq/pulseq_rf.c.
- *
- * Two things in this repository need the transform of an RF pulse -- these
- * statistics, and pulseq's own slice-thickness derivation -- and pulseg links
- * pulseq rather than the reverse, so the shared piece has to sit on the pulseq
- * side.  What is left here is the part that is pulseg's: the fallback when the
- * spectrum is unmeasurable, and the multiband split, which reads the same
- * spectrum the bandwidth was taken from.
+ * The spectral statistics -- bandwidth and multiband split -- are measured by
+ * pypulseqpp when the conversion input is built and arrive per RF event in
+ * seq->rf_spectra; a definition takes those of the first event that plays it.
+ * What is computed here is what the time-domain envelope gives.
  */
 
 static int compute_rf_stats(
@@ -983,14 +975,6 @@ static int compute_rf_stats(
     float max_mag, duration, time_center, rf_raster_us;
     pulseg_rf_definition *rd;
 
-    int nn;
-    float dw = (float)PULSEQ_RF_DEFAULT_RESOLUTION_HZ;
-    float cutoff = (float)PULSEQ_RF_DEFAULT_CUTOFF;
-
-    pulseq_rf_spectrum *spectrum = NULL;
-    const float *w = NULL;
-    float *work_re = NULL;
-    int fft_ready = 0;
 
     float rf_abs, sum_signed;
     float sum_sq;
@@ -1005,23 +989,6 @@ static int compute_rf_stats(
         rf_raster_us = seq->reserved_definitions_library.radiofrequency_raster_time;
     else
         rf_raster_us = opts->rf_raster_us;
-
-    /* One plan for every pulse: the grid depends on the raster and the wanted
-     * resolution, not on the pulse, so a variable-flip train of two hundred
-     * distinct pulses shares it. */
-    if (PULSEQ_SUCCEEDED(pulseq_rf_spectrum_create(&spectrum, rf_raster_us, dw)))
-    {
-        nn = pulseq_rf_spectrum_size(spectrum);
-        w = pulseq_rf_spectrum_freq(spectrum);
-        /* Magnitudes for the multiband split, written once per pulse. */
-        work_re = (float *)PULSEG_ALLOC(nn * sizeof(float));
-        if (work_re)
-            fft_ready = 1;
-    }
-    if (!fft_ready)
-    {
-        goto fail;
-    }
 
     decomp_mag.num_samples = 0;
     decomp_mag.num_uncompressed_samples = 0;
@@ -1376,75 +1343,33 @@ static int compute_rf_stats(
         PULSEG_FREE(rf_im_uniform);
         rf_im_uniform = NULL;
 
-        /* bandwidth via FFT */
-        if (fft_ready && time_us)
+        /* bandwidth and bands, as measured for the first event of this
+         * definition; an unmeasurable spectrum reads as zero, for which the
+         * analytic width of a hard pulse of this duration stands in. */
+        if (seq->rf_spectra)
         {
-            if (PULSEQ_SUCCEEDED(pulseq_rf_spectrum_run(
-                    spectrum,
-                    rf_re,
-                    rf_im,
-                    time_us,
-                    num_samples,
-                    time_center)))
+            for (i = 0; i < rf_table_size; ++i)
             {
+                if (rf_table[i].id == def_idx)
                 {
-                    const float *sre = pulseq_rf_spectrum_re(spectrum);
-                    const float *sim = pulseq_rf_spectrum_im(spectrum);
-                    rd->stats.bandwidth_hz = pulseq_rf_bandwidth(spectrum, cutoff, NULL);
-                    /* An unmeasurable spectrum is reported as zero rather than
-                     * guessed at; the analytic stand-in for a pulse of this
-                     * duration is pulseg's choice to make, not pulseq's. */
-                    if (!(rd->stats.bandwidth_hz > 0.0f))
-                        rd->stats.bandwidth_hz =
-                            (duration > 0.0f) ? (3.12f / (duration * 1e-6f)) : 0.0f;
-                    for (i = 0; i < nn; ++i)
-                        work_re[i] = (float)sqrt(sre[i] * sre[i] + sim[i] * sim[i]);
-                }
-                /* work_re now holds the spectrum magnitude, on the plan's own
-                 * frequency axis; the multiband split reads it. */
-                {
-                    int num_b, in_band;
-                    float peak_max_spec, threshold;
-                    float wsum, msum;
-                    peak_max_spec = 0.0f;
-                    for (i = 0; i < nn; ++i)
-                    {
-                        if (work_re[i] > peak_max_spec)
-                            peak_max_spec = work_re[i];
-                    }
-                    rd->stats.band_bandwidth_hz = rd->stats.bandwidth_hz;
-                    if (peak_max_spec > 1e-9f)
-                    {
-                        threshold = 0.3f * peak_max_spec;
-                        num_b = 0;
-                        in_band = 0;
-                        wsum = 0.0f;
-                        msum = 0.0f;
-                        for (i = 0; i <= nn; ++i)
-                        {
-                            float m = (i < nn) ? work_re[i] : 0.0f;
-                            if (m >= threshold)
-                            {
-                                wsum += w[i] * m;
-                                msum += m;
-                                in_band = 1;
-                            }
-                            else if (in_band)
-                            {
-                                if (num_b < PULSEG_MAX_BANDS)
-                                    rd->stats.band_freq_offsets_hz[num_b] =
-                                        (msum > 0.0f) ? (wsum / msum) : 0.0f;
-                                num_b++;
-                                wsum = 0.0f;
-                                msum = 0.0f;
-                                in_band = 0;
-                            }
-                        }
-                        if (num_b >= 1)
-                            rd->stats.num_bands = num_b;
-                    }
+                    const PULSEQ_REAL *spectrum = seq->rf_spectra[i];
+                    int b, count = (int)spectrum[1];
+                    rd->stats.bandwidth_hz = (float)spectrum[0];
+                    rd->stats.band_bandwidth_hz = (float)spectrum[2];
+                    if (count >= 1)
+                        rd->stats.num_bands = count;
+                    if (count > PULSEG_MAX_BANDS)
+                        count = PULSEG_MAX_BANDS;
+                    for (b = 0; b < count; ++b)
+                        rd->stats.band_freq_offsets_hz[b] = (float)spectrum[3 + b];
+                    break;
                 }
             }
+        }
+        if (!(rd->stats.bandwidth_hz > 0.0f))
+        {
+            rd->stats.bandwidth_hz = (duration > 0.0f) ? (3.12f / (duration * 1e-6f)) : 0.0f;
+            rd->stats.band_bandwidth_hz = rd->stats.bandwidth_hz;
         }
         if (rf_re)
         {
@@ -1473,17 +1398,9 @@ static int compute_rf_stats(
         }
     }
 
-    if (work_re)
-        PULSEG_FREE(work_re);
-    if (spectrum)
-        pulseq_rf_spectrum_free(spectrum);
     return PULSEG_SUCCESS;
 
 fail:
-    if (work_re)
-        PULSEG_FREE(work_re);
-    if (spectrum)
-        pulseq_rf_spectrum_free(spectrum);
     if (magnitude)
         PULSEG_FREE(magnitude);
     if (phase)

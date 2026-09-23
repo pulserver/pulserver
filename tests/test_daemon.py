@@ -1,5 +1,8 @@
+import contextlib
 import json
 import struct
+import threading
+import time
 from pathlib import Path
 
 import pypulseqpp as pp
@@ -64,6 +67,33 @@ def test_a_crashing_plugin_fails_only_its_command(daemon):
     with pytest.raises(HostError, match="worker exited"):
         crashing.validate({"TE": 8000})
     assert healthy.validate({"TE": 8000}).valid
+
+
+def test_a_terminated_daemon_exits_without_waiting_for_a_running_design(
+    tmp_path, monkeypatch
+):
+    marker = tmp_path / "started"
+    monkeypatch.setenv("PULSERVER_STALL_MARKER", str(marker))
+    daemon = Daemon(tmp_path / "base")
+    daemon.start()
+    try:
+        client = daemon.client(pid=351)
+        client.open("stall", LIMITS)
+
+        def validate():
+            with contextlib.suppress(OSError, HostError):
+                client.validate({"TE": 8000})
+
+        threading.Thread(target=validate, daemon=True).start()
+        deadline = time.monotonic() + 30
+        while not marker.exists():
+            assert time.monotonic() < deadline, "the design call never started"
+            time.sleep(0.05)
+        started = time.monotonic()
+        daemon.stop()
+        assert time.monotonic() - started < 10
+    finally:
+        daemon.cleanup()
 
 
 def test_a_restarted_daemon_serves_an_open_session(daemon):

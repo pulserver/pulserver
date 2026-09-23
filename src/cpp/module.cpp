@@ -103,6 +103,28 @@ py::list tr_groups(const pulseg_collection *coll, int subseq_idx)
     return out;
 }
 
+/* The spectral statistics of each unique RF definition of one subsequence. */
+py::list rf_spectra(const pulseg_collection *coll, int subseq_idx, int num_unique_rf)
+{
+    py::list out;
+    for (int i = 0; i < num_unique_rf; ++i)
+    {
+        pulseg_rf_stats stats;
+        require(pulseg_get_rf_stats(coll, &stats, subseq_idx, i), "RF statistics");
+        const int bands = stats.num_bands < PULSEG_MAX_BANDS ? stats.num_bands : PULSEG_MAX_BANDS;
+        py::list offsets;
+        for (int b = 0; b < bands; ++b)
+            offsets.append(stats.band_freq_offsets_hz[b]);
+        py::dict entry;
+        entry["bandwidth_hz"] = stats.bandwidth_hz;
+        entry["num_bands"] = stats.num_bands;
+        entry["band_freq_offsets_hz"] = offsets;
+        entry["band_bandwidth_hz"] = stats.band_bandwidth_hz;
+        out.append(entry);
+    }
+    return out;
+}
+
 py::dict summarize(const pulseg_collection *coll)
 {
     pulseg_collection_info info = PULSEG_COLLECTION_INFO_INIT;
@@ -122,6 +144,7 @@ py::dict summarize(const pulseg_collection *coll)
         entry["num_tr_instances"] = s.num_tr_instances;
         entry["rf_amplitude_variable"] = s.rf_amplitude_variable;
         entry["tr_groups"] = tr_groups(coll, i);
+        entry["rf"] = rf_spectra(coll, i, s.num_unique_rf);
         subsequences.append(entry);
     }
 
