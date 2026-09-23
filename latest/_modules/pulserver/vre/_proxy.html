@@ -537,6 +537,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_slots</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">BoundedSemaphore</span><span class="p">(</span><span class="n">compute_max_concurrent</span><span class="p">(</span><span class="n">override</span><span class="o">=</span><span class="n">slots</span><span class="p">))</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_server</span><span class="p">:</span> <span class="n">socket</span><span class="o">.</span><span class="n">socket</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_closing</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Event</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_stopping</span> <span class="o">=</span> <span class="kc">False</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_threads</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">threading</span><span class="o">.</span><span class="n">Thread</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_queued</span> <span class="o">=</span> <span class="n">itertools</span><span class="o">.</span><span class="n">count</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
 
@@ -556,11 +557,11 @@
 <div class="viewcode-block" id="ReconProxy.serve">
 <a class="viewcode-back" href="../../../generated/pulserver.vre.ReconProxy.serve.html#pulserver.vre.ReconProxy.serve">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">serve</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Accept clients until :meth:`close`, one thread each."""</span>
+<span class="w">        </span><span class="sd">"""Accept clients until :meth:`stop` or :meth:`close`, one thread each."""</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_server</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">bind</span><span class="p">()</span>
         <span class="n">_log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">"serving </span><span class="si">%s</span><span class="s2"> on port </span><span class="si">%d</span><span class="s2">"</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">revisions</span><span class="o">.</span><span class="n">bucket</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">port</span><span class="p">)</span>
-        <span class="k">while</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_closing</span><span class="o">.</span><span class="n">is_set</span><span class="p">():</span>
+        <span class="k">while</span> <span class="ow">not</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_stopping</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">_closing</span><span class="o">.</span><span class="n">is_set</span><span class="p">()):</span>
             <span class="k">try</span><span class="p">:</span>
                 <span class="n">stream</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_server</span><span class="o">.</span><span class="n">accept</span><span class="p">()</span>
             <span class="k">except</span> <span class="ne">TimeoutError</span><span class="p">:</span>
@@ -585,6 +586,16 @@
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_server</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">"the proxy is not bound"</span><span class="p">)</span>
         <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_server</span><span class="o">.</span><span class="n">getsockname</span><span class="p">()[</span><span class="mi">1</span><span class="p">])</span>
+
+<div class="viewcode-block" id="ReconProxy.stop">
+<a class="viewcode-back" href="../../../generated/pulserver.vre.ReconProxy.stop.html#pulserver.vre.ReconProxy.stop">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">stop</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Make :meth:`serve` return within one accept poll.</span>
+
+<span class="sd">        Sets a flag and takes no lock, so a signal handler may call it.</span>
+<span class="sd">        """</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_stopping</span> <span class="o">=</span> <span class="kc">True</span></div>
+
 
 <div class="viewcode-block" id="ReconProxy.close">
 <a class="viewcode-back" href="../../../generated/pulserver.vre.ReconProxy.close.html#pulserver.vre.ReconProxy.close">[docs]</a>

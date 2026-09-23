@@ -8,26 +8,28 @@ plugin a PSD host process opens as `gre2d`.
 
 ## Binding the protocol
 
-`app` is the sequence application and `ui` maps each interpreter parameter name
-to an entry. An entry names the `init_sequence` argument it sets and how the
-scanner UI shows it; the application's own defaults are the protocol's initial
-values.
+`app` is the sequence application and `ui` maps parameters of the interpreter's
+table, named by {class}`~pulserver.protocol.UIParam` members, to entries. A name
+outside that table is refused when the class is defined, because the
+interpreter's parser would drop it. An entry names the `init_sequence` argument
+it sets and how the scanner UI shows it; the application's own defaults are the
+protocol's initial values.
 
 ```pycon
 >>> from pypulseqpp.sequences.sequence.gre2D_sequence import Gre2DApp
 >>> from pulserver.design import FloatParam, IntParam, ScannerSequence, TimeParam
->>> from pulserver.protocol import TEPreset, TRPreset
+>>> from pulserver.protocol import TEPreset, TRPreset, UIParam
 >>> class Gre2D(ScannerSequence):
 ...     app = Gre2DApp
 ...     recon = "gre2d"
 ...     ui = {
-...         "TE": TimeParam("te", range_min=1000, range_max=80000, range_incr=10,
+...         UIParam.TE: TimeParam("te", range_min=1000, range_max=80000, range_incr=10,
 ...                         presets={TEPreset.MINIMUM: None}),
-...         "TR": TimeParam("tr", range_min=1000, range_max=5_000_000,
+...         UIParam.TR: TimeParam("tr", range_min=1000, range_max=5_000_000,
 ...                         presets={TRPreset.MINIMUM: None}),
-...         "fov": FloatParam("fov_x", unit="mm", scale=1e-3,
+...         UIParam.FOV: FloatParam("fov_x", unit="mm", scale=1e-3,
 ...                           range_min=50.0, range_max=500.0),
-...         "nx": IntParam("n_x", range_min=32, range_max=512, range_incr=2),
+...         UIParam.NX: IntParam("n_x", range_min=32, range_max=512, range_incr=2),
 ...     }
 ...     def resolved(self, app):
 ...         return {"te": app.ro.echo_time, "tr": app.repetition_time}
@@ -43,6 +45,13 @@ values.
 | {class}`~pulserver.design.StringListParam` | dropdown | the chosen string |
 | {class}`~pulserver.design.ConfigParam` | not shown | none; a value declared to the interpreter |
 | {class}`~pulserver.design.Description` | read-only text | none |
+
+The options of the four string-list parameters are
+{class}`~pulserver.protocol.SequenceType`,
+{class}`~pulserver.protocol.ImagingMode`,
+{class}`~pulserver.protocol.PreparationType` and
+{class}`~pulserver.protocol.TriggerType`, which
+{class}`~pulserver.design.StringListParam` takes as they are.
 
 A preset is a negative value the interpreter sends in place of a time.
 `{TEPreset.MINIMUM: None}` passes `None` to the application, which designs its

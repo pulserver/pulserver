@@ -568,7 +568,10 @@ once a slot frees.</p>
 <td><p>Stop accepting clients, release the spares and wait for running series.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="pulserver.vre.ReconProxy.serve.html#pulserver.vre.ReconProxy.serve" title="pulserver.vre.ReconProxy.serve"><code class="xref py py-obj docutils literal notranslate"><span class="pre">serve</span></code></a></p></td>
-<td><p>Accept clients until <code class="xref py py-meth docutils literal notranslate"><span class="pre">close()</span></code>, one thread each.</p></td>
+<td><p>Accept clients until <code class="xref py py-meth docutils literal notranslate"><span class="pre">stop()</span></code> or <code class="xref py py-meth docutils literal notranslate"><span class="pre">close()</span></code>, one thread each.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.vre.ReconProxy.stop.html#pulserver.vre.ReconProxy.stop" title="pulserver.vre.ReconProxy.stop"><code class="xref py py-obj docutils literal notranslate"><span class="pre">stop</span></code></a></p></td>
+<td><p>Make <code class="xref py py-meth docutils literal notranslate"><span class="pre">serve()</span></code> return within one accept poll.</p></td>
 </tr>
 </tbody>
 </table>

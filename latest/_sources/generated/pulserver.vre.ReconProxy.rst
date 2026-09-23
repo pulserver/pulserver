@@ -17,6 +17,7 @@
    ~ReconProxy.bind
    ~ReconProxy.close
    ~ReconProxy.serve
+   ~ReconProxy.stop
 
 
 

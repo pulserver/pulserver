@@ -86,6 +86,7 @@ from.
    :nosignatures:
 
    Parameter
+   UIParam
    PROTOCOL_BEGIN
    PROTOCOL_END
    format_listing
@@ -105,6 +106,15 @@ from.
    InputMode
    TEPreset
    TRPreset
+   FloatKey
+   IntKey
+   BoolKey
+   EnumKey
+   ConfigKey
+   SequenceType
+   ImagingMode
+   PreparationType
+   TriggerType
 
 .. currentmodule:: pulserver.recon
 

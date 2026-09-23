@@ -73,25 +73,25 @@ rate from the readout module, where the application keeps them.
     from pypulseqpp.sequences.sequence.gre2D_sequence import Gre2DApp
 
     from pulserver.design import FloatParam, IntParam, ScannerSequence, TimeParam
-    from pulserver.protocol import TEPreset, TRPreset, format_listing
+    from pulserver.protocol import TEPreset, TRPreset, UIParam, format_listing
 
 
     class Gre2D(ScannerSequence):
         app = Gre2DApp
         ui = {
-            "TE": TimeParam(
+            UIParam.TE: TimeParam(
                 "te", range_min=1000, range_max=80000, presets={TEPreset.MINIMUM: None}
             ),
-            "TR": TimeParam(
+            UIParam.TR: TimeParam(
                 "tr", range_min=1000, range_max=5_000_000, presets={TRPreset.MINIMUM: None}
             ),
-            "bandwidth": FloatParam(
+            UIParam.BANDWIDTH: FloatParam(
                 "readout_bandwidth_hz", unit="Hz", range_min=1e3, range_max=1e6
             ),
-            "fov": FloatParam(
+            UIParam.FOV: FloatParam(
                 "fov_x", unit="mm", scale=1e-3, range_min=50.0, range_max=500.0
             ),
-            "nx": IntParam("n_x", range_min=32, range_max=512, range_incr=2),
+            UIParam.NX: IntParam("n_x", range_min=32, range_max=512, range_incr=2),
         }
 
         def resolved(self, app):
@@ -334,7 +334,7 @@ protocol (:doc:`/explanations/sessions`).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 2.567 seconds)
+   **Total running time of the script:** (0 minutes 2.399 seconds)
 
 
 .. _sphx_glr_download_generated_gallery_01-protocol_01_protocol_resolution.py:

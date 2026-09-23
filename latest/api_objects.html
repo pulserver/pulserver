@@ -658,31 +658,34 @@ from.</p>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.protocol.Parameter.html#pulserver.protocol.Parameter" title="pulserver.protocol.Parameter"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Parameter</span></code></a></p></td>
 <td><p>One protocol entry: its kind, current value and UI schema.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.protocol.PROTOCOL_BEGIN.html#pulserver.protocol.PROTOCOL_BEGIN" title="pulserver.protocol.PROTOCOL_BEGIN"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PROTOCOL_BEGIN</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.protocol.UIParam.html#pulserver.protocol.UIParam" title="pulserver.protocol.UIParam"><code class="xref py py-obj docutils literal notranslate"><span class="pre">UIParam</span></code></a></p></td>
+<td><p>The keys of the scanner UI's controls, from every typed group.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.protocol.PROTOCOL_BEGIN.html#pulserver.protocol.PROTOCOL_BEGIN" title="pulserver.protocol.PROTOCOL_BEGIN"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PROTOCOL_BEGIN</span></code></a></p></td>
 <td><p>str(object='') -&gt; str str(bytes_or_buffer[, encoding[, errors]]) -&gt; str</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.protocol.PROTOCOL_END.html#pulserver.protocol.PROTOCOL_END" title="pulserver.protocol.PROTOCOL_END"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PROTOCOL_END</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.protocol.PROTOCOL_END.html#pulserver.protocol.PROTOCOL_END" title="pulserver.protocol.PROTOCOL_END"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PROTOCOL_END</span></code></a></p></td>
 <td><p>str(object='') -&gt; str str(bytes_or_buffer[, encoding[, errors]]) -&gt; str</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.protocol.format_listing.html#pulserver.protocol.format_listing" title="pulserver.protocol.format_listing"><code class="xref py py-obj docutils literal notranslate"><span class="pre">format_listing</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.protocol.format_listing.html#pulserver.protocol.format_listing" title="pulserver.protocol.format_listing"><code class="xref py py-obj docutils literal notranslate"><span class="pre">format_listing</span></code></a></p></td>
 <td><p>Format a protocol with its schema, as <code class="docutils literal notranslate"><span class="pre">LIST_PROTOCOL</span></code> sends it.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.protocol.parse_listing.html#pulserver.protocol.parse_listing" title="pulserver.protocol.parse_listing"><code class="xref py py-obj docutils literal notranslate"><span class="pre">parse_listing</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.protocol.parse_listing.html#pulserver.protocol.parse_listing" title="pulserver.protocol.parse_listing"><code class="xref py py-obj docutils literal notranslate"><span class="pre">parse_listing</span></code></a></p></td>
 <td><p>Read a protocol with its schema from a listing block.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.protocol.format_values.html#pulserver.protocol.format_values" title="pulserver.protocol.format_values"><code class="xref py py-obj docutils literal notranslate"><span class="pre">format_values</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.protocol.format_values.html#pulserver.protocol.format_values" title="pulserver.protocol.format_values"><code class="xref py py-obj docutils literal notranslate"><span class="pre">format_values</span></code></a></p></td>
 <td><p>Format a value block, as requests and replies carry it.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.protocol.parse_values.html#pulserver.protocol.parse_values" title="pulserver.protocol.parse_values"><code class="xref py py-obj docutils literal notranslate"><span class="pre">parse_values</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.protocol.parse_values.html#pulserver.protocol.parse_values" title="pulserver.protocol.parse_values"><code class="xref py py-obj docutils literal notranslate"><span class="pre">parse_values</span></code></a></p></td>
 <td><p>Read a value block against the listing it was edited from.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.protocol.Validation.html#pulserver.protocol.Validation" title="pulserver.protocol.Validation"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Validation</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.protocol.Validation.html#pulserver.protocol.Validation" title="pulserver.protocol.Validation"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Validation</span></code></a></p></td>
 <td><p>Reply to <code class="docutils literal notranslate"><span class="pre">VALIDATE</span></code>.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.protocol.format_validation.html#pulserver.protocol.format_validation" title="pulserver.protocol.format_validation"><code class="xref py py-obj docutils literal notranslate"><span class="pre">format_validation</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.protocol.format_validation.html#pulserver.protocol.format_validation" title="pulserver.protocol.format_validation"><code class="xref py py-obj docutils literal notranslate"><span class="pre">format_validation</span></code></a></p></td>
 <td><p>Format a <code class="docutils literal notranslate"><span class="pre">VALIDATE</span></code> reply: status line, info line, value block.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.protocol.parse_validation.html#pulserver.protocol.parse_validation" title="pulserver.protocol.parse_validation"><code class="xref py py-obj docutils literal notranslate"><span class="pre">parse_validation</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.protocol.parse_validation.html#pulserver.protocol.parse_validation" title="pulserver.protocol.parse_validation"><code class="xref py py-obj docutils literal notranslate"><span class="pre">parse_validation</span></code></a></p></td>
 <td><p>Read a <code class="docutils literal notranslate"><span class="pre">VALIDATE</span></code> reply.</p></td>
 </tr>
 </tbody>
@@ -701,6 +704,33 @@ from.</p>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.protocol.TRPreset.html#pulserver.protocol.TRPreset" title="pulserver.protocol.TRPreset"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TRPreset</span></code></a></p></td>
 <td><p>Repetition-time dropdown entries the UI shows as words.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.protocol.FloatKey.html#pulserver.protocol.FloatKey" title="pulserver.protocol.FloatKey"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FloatKey</span></code></a></p></td>
+<td><p>Keys the interpreter declares as float.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.protocol.IntKey.html#pulserver.protocol.IntKey" title="pulserver.protocol.IntKey"><code class="xref py py-obj docutils literal notranslate"><span class="pre">IntKey</span></code></a></p></td>
+<td><p>Keys the interpreter declares as integer.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.protocol.BoolKey.html#pulserver.protocol.BoolKey" title="pulserver.protocol.BoolKey"><code class="xref py py-obj docutils literal notranslate"><span class="pre">BoolKey</span></code></a></p></td>
+<td><p>Keys the interpreter declares as boolean.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.protocol.EnumKey.html#pulserver.protocol.EnumKey" title="pulserver.protocol.EnumKey"><code class="xref py py-obj docutils literal notranslate"><span class="pre">EnumKey</span></code></a></p></td>
+<td><p>Keys the interpreter declares as string lists.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.protocol.ConfigKey.html#pulserver.protocol.ConfigKey" title="pulserver.protocol.ConfigKey"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ConfigKey</span></code></a></p></td>
+<td><p>Keys the sequence declares to the interpreter rather than shows.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.protocol.SequenceType.html#pulserver.protocol.SequenceType" title="pulserver.protocol.SequenceType"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SequenceType</span></code></a></p></td>
+<td><p>Options of <code class="docutils literal notranslate"><span class="pre">sequence_type</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.protocol.ImagingMode.html#pulserver.protocol.ImagingMode" title="pulserver.protocol.ImagingMode"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ImagingMode</span></code></a></p></td>
+<td><p>Options of <code class="docutils literal notranslate"><span class="pre">imaging_mode</span></code>.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.protocol.PreparationType.html#pulserver.protocol.PreparationType" title="pulserver.protocol.PreparationType"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PreparationType</span></code></a></p></td>
+<td><p>Options of <code class="docutils literal notranslate"><span class="pre">preparation_type</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.protocol.TriggerType.html#pulserver.protocol.TriggerType" title="pulserver.protocol.TriggerType"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TriggerType</span></code></a></p></td>
+<td><p>Options of <code class="docutils literal notranslate"><span class="pre">trigger_type</span></code>.</p></td>
 </tr>
 </tbody>
 </table>

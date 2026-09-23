@@ -530,9 +530,11 @@
 <span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pulserver.design.</span></span><span class="sig-name descname"><span class="pre">ScannerSequence</span></span><a class="reference internal" href="../_modules/pulserver/design/_scanner.html#ScannerSequence"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.design.ScannerSequence" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/builtins/functions.html#object" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
 <p>A pypulseqpp application exposed to the scanner UI.</p>
-<p>A subclass sets <a class="reference internal" href="pulserver.design.ScannerSequence.app.html#pulserver.design.ScannerSequence.app" title="pulserver.design.ScannerSequence.app"><code class="xref py py-attr docutils literal notranslate"><span class="pre">app</span></code></a> and <a class="reference internal" href="pulserver.design.ScannerSequence.ui.html#pulserver.design.ScannerSequence.ui" title="pulserver.design.ScannerSequence.ui"><code class="xref py py-attr docutils literal notranslate"><span class="pre">ui</span></code></a>, whose keys are interpreter wire
-names (<code class="docutils literal notranslate"><span class="pre">TE</span></code>, <code class="docutils literal notranslate"><span class="pre">TR</span></code>, <code class="docutils literal notranslate"><span class="pre">bandwidth</span></code>, …). Entries a request omits keep the
-application’s defaults. Times travel as integer microseconds; other float
+<p>A subclass sets <a class="reference internal" href="pulserver.design.ScannerSequence.app.html#pulserver.design.ScannerSequence.app" title="pulserver.design.ScannerSequence.app"><code class="xref py py-attr docutils literal notranslate"><span class="pre">app</span></code></a> and <a class="reference internal" href="pulserver.design.ScannerSequence.ui.html#pulserver.design.ScannerSequence.ui" title="pulserver.design.ScannerSequence.ui"><code class="xref py py-attr docutils literal notranslate"><span class="pre">ui</span></code></a>, whose keys are the
+interpreter’s parameter names: members of
+<a class="reference internal" href="pulserver.protocol.UIParam.html#pulserver.protocol.UIParam" title="pulserver.protocol.UIParam"><code class="xref py py-class docutils literal notranslate"><span class="pre">UIParam</span></code></a> or <a class="reference internal" href="pulserver.protocol.ConfigKey.html#pulserver.protocol.ConfigKey" title="pulserver.protocol.ConfigKey"><code class="xref py py-class docutils literal notranslate"><span class="pre">ConfigKey</span></code></a>,
+or user-entry keys. They are stored as plain strings. Entries a request
+omits keep the application’s defaults. Times travel as integer microseconds; other float
 values are read and reported to six significant digits, the precision of a
 float32 CV. Either way a reply stored in a CV and sent back resolves to
 itself.</p>
@@ -541,6 +543,10 @@ itself.</p>
 <dd class="field-odd"><p><strong>recon</strong> (<em>str</em>) – Reconstruction plugin the data of this sequence is reconstructed with,
 recorded in every revision generated from it. Empty leaves the choice
 to the reconstruction client.</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – When a subclass is defined with a <code class="docutils literal notranslate"><span class="pre">ui</span></code> key the interpreter does not
+    know, which its parser would drop.</p>
 </dd>
 </dl>
 </dd></dl>
