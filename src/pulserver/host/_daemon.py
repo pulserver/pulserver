@@ -119,6 +119,7 @@ class HostDaemon:
         self._pool = self._new_pool()
         self._locks: defaultdict[SessionKey, asyncio.Lock] = defaultdict(asyncio.Lock)
         self._listings: dict[tuple[Path, int], dict[str, Parameter]] = {}
+        self._writers: set[asyncio.StreamWriter] = set()
 
     def _new_pool(self) -> ProcessPoolExecutor:
         context = multiprocessing.get_context("spawn")
@@ -136,17 +137,26 @@ class HostDaemon:
             worker.terminate()
 
     async def serve(self, socket_path: Path) -> None:
-        """Answer commands on a Unix socket until cancelled."""
+        """Answer commands on a Unix socket until cancelled.
+
+        Cancellation closes the socket and every client connection.
+        """
         server = await asyncio.start_unix_server(
             self._connection, path=str(socket_path)
         )
         _log.info("serving %s on %s", self.store.bucket, socket_path)
-        async with server:
-            await server.serve_forever()
+        try:
+            # Not serve_forever: cancelled, it waits for the clients to disconnect.
+            await asyncio.get_running_loop().create_future()
+        finally:
+            server.close()
+            for writer in list(self._writers):
+                writer.close()
 
     async def _connection(
         self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     ) -> None:
+        self._writers.add(writer)
         try:
             while line := await reader.readline():
                 command, *args = line.decode().split()
@@ -164,6 +174,7 @@ class HostDaemon:
         except (ConnectionError, ValueError) as error:
             _log.warning("dropping connection: %s", error)
         finally:
+            self._writers.discard(writer)
             writer.close()
 
     @staticmethod

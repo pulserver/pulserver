@@ -11,8 +11,13 @@ from pathlib import Path
 from ._daemon import HostDaemon
 
 
-def _interrupt(_signum: int, _frame: object) -> None:
-    raise KeyboardInterrupt
+async def _serve(daemon: HostDaemon, socket_path: Path) -> None:
+    """Serve until SIGTERM or SIGINT cancels this task."""
+    loop = asyncio.get_running_loop()
+    task = asyncio.current_task()
+    for signum in (signal.SIGTERM, signal.SIGINT):
+        loop.add_signal_handler(signum, task.cancel)
+    await daemon.serve(socket_path)
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -36,10 +41,9 @@ def main(argv: list[str] | None = None) -> None:
     )
     daemon = HostDaemon(args.base, args.plugins, workers=args.workers)
     args.socket.unlink(missing_ok=True)
-    signal.signal(signal.SIGTERM, _interrupt)
     try:
-        asyncio.run(daemon.serve(args.socket))
-    except KeyboardInterrupt:
+        asyncio.run(_serve(daemon, args.socket))
+    except asyncio.CancelledError:
         pass
     finally:
         daemon.shutdown()
