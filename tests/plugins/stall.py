@@ -7,6 +7,7 @@ from pathlib import Path
 from pypulseqpp import sequences
 
 from pulserver.design import ScannerSequence, TimeParam
+from pulserver.protocol import UIParam
 
 
 class StallApp(sequences.SequenceApp):
@@ -26,4 +27,4 @@ class StallApp(sequences.SequenceApp):
 
 class Stall(ScannerSequence):
     app = StallApp
-    ui = {"TE": TimeParam("te", range_min=1000, range_max=80000)}
+    ui = {UIParam.TE: TimeParam("te", range_min=1000, range_max=80000)}

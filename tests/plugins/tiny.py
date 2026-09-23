@@ -4,7 +4,7 @@ import pypulseqpp as pp
 from pypulseqpp import sequences
 
 from pulserver.design import IntParam, ScannerSequence, TimeParam
-from pulserver.protocol import TEPreset
+from pulserver.protocol import TEPreset, UIParam
 
 
 class TinyApp(sequences.SequenceApp):
@@ -32,12 +32,12 @@ class TinyApp(sequences.SequenceApp):
 class Tiny(ScannerSequence):
     app = TinyApp
     ui = {
-        "TE": TimeParam(
+        UIParam.TE: TimeParam(
             "te",
             range_min=1000,
             range_max=80000,
             range_incr=100,
             presets={TEPreset.MINIMUM: None},
         ),
-        "nx": IntParam("n_repetitions", range_min=1, range_max=64),
+        UIParam.NX: IntParam("n_repetitions", range_min=1, range_max=64),
     }

@@ -25,6 +25,25 @@ interpreter side.
 | {obj}`~pulserver.protocol.TEPreset` | Echo-time presets. |
 | {obj}`~pulserver.protocol.TRPreset` | Repetition-time presets. |
 
+## Parameter names
+
+The names of the interpreter's parameter table, grouped by the value type the
+table declares, and the options of its string-list parameters. A scanner
+sequence names its entries with them.
+
+| Object | Description |
+| --- | --- |
+| {obj}`~pulserver.protocol.UIParam` | The keys of every UI control, and the user-entry keys. |
+| {obj}`~pulserver.protocol.FloatKey` | Keys declared as float. |
+| {obj}`~pulserver.protocol.IntKey` | Keys declared as integer. |
+| {obj}`~pulserver.protocol.BoolKey` | Keys declared as boolean. |
+| {obj}`~pulserver.protocol.EnumKey` | Keys declared as string lists. |
+| {obj}`~pulserver.protocol.ConfigKey` | Keys the sequence declares to the interpreter rather than shows. |
+| {obj}`~pulserver.protocol.SequenceType` | Options of `sequence_type`. |
+| {obj}`~pulserver.protocol.ImagingMode` | Options of `imaging_mode`. |
+| {obj}`~pulserver.protocol.PreparationType` | Options of `preparation_type`. |
+| {obj}`~pulserver.protocol.TriggerType` | Options of `trigger_type`: Pulseq trigger channel names. |
+
 ## Wire blocks
 
 A listing carries every entry with its schema, as `LIST_PROTOCOL` returns it; a

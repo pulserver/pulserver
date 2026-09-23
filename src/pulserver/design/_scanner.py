@@ -16,6 +16,7 @@ import pypulseqpp as pp
 from pypulseqpp import sequences
 
 from ..protocol import InputMode, Kind, Parameter, Validation
+from ..protocol._keys import WIRE_NAMES
 
 Preset = float | Callable[[pp.Opts], float] | None
 
@@ -203,9 +204,11 @@ def _parameter(name: str, entry: Entry, defaults: Mapping[str, Any]) -> Paramete
 class ScannerSequence:
     """A pypulseqpp application exposed to the scanner UI.
 
-    A subclass sets :attr:`app` and :attr:`ui`, whose keys are interpreter wire
-    names (``TE``, ``TR``, ``bandwidth``, ...). Entries a request omits keep the
-    application's defaults. Times travel as integer microseconds; other float
+    A subclass sets :attr:`app` and :attr:`ui`, whose keys are the
+    interpreter's parameter names: members of
+    :class:`~pulserver.protocol.UIParam` or :class:`~pulserver.protocol.ConfigKey`,
+    or user-entry keys. They are stored as plain strings. Entries a request
+    omits keep the application's defaults. Times travel as integer microseconds; other float
     values are read and reported to six significant digits, the precision of a
     float32 CV. Either way a reply stored in a CV and sent back resolves to
     itself.
@@ -216,11 +219,29 @@ class ScannerSequence:
         Reconstruction plugin the data of this sequence is reconstructed with,
         recorded in every revision generated from it. Empty leaves the choice
         to the reconstruction client.
+
+    Raises
+    ------
+    ValueError
+        When a subclass is defined with a ``ui`` key the interpreter does not
+        know, which its parser would drop.
     """
 
     app: ClassVar[type[sequences.SequenceApp]]
     ui: ClassVar[Mapping[str, Entry]]
     recon: ClassVar[str] = ""
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)
+        if "ui" not in cls.__dict__:
+            return
+        unknown = sorted(str(name) for name in cls.ui if name not in WIRE_NAMES)
+        if unknown:
+            raise ValueError(
+                f"{cls.__name__} declares entries the interpreter does not know: "
+                f"{unknown}"
+            )
+        cls.ui = {str(name): entry for name, entry in cls.ui.items()}
 
     def listing(self) -> dict[str, Parameter]:
         """Return the protocol with its schema, valued at the application's defaults.
