@@ -476,6 +476,20 @@
     <span class="k">return</span> <span class="n">name</span><span class="o">.</span><span class="n">rsplit</span><span class="p">(</span><span class="s2">"."</span><span class="p">,</span> <span class="mi">1</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span> <span class="o">==</span> <span class="s2">"CARTESIAN"</span>
 
 
+<span class="k">def</span><span class="w"> </span><span class="nf">_fov</span><span class="p">(</span><span class="n">encoding</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">dimensions</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the reconstructed field of view in metres, ``(z, y, x)`` cut to ``dimensions``.</span>
+
+<span class="sd">    ``None`` unless the space states a positive extent along each of them.</span>
+<span class="sd">    """</span>
+    <span class="n">space</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">encoding</span><span class="p">,</span> <span class="s2">"reconSpace"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">or</span> <span class="n">encoding</span><span class="o">.</span><span class="n">encodedSpace</span>
+    <span class="n">fov</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">space</span><span class="p">,</span> <span class="s2">"fieldOfView_mm"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">fov</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="n">extents</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="mf">1e-3</span> <span class="o">*</span> <span class="nb">float</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="n">fov</span><span class="p">,</span> <span class="n">axis</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="ow">or</span> <span class="mi">0</span><span class="p">)</span> <span class="k">for</span> <span class="n">axis</span> <span class="ow">in</span> <span class="s2">"zyx"</span><span class="p">)</span>
+    <span class="n">extents</span> <span class="o">=</span> <span class="n">extents</span><span class="p">[</span><span class="mi">3</span> <span class="o">-</span> <span class="n">dimensions</span> <span class="p">:]</span>
+    <span class="k">return</span> <span class="n">extents</span> <span class="k">if</span> <span class="nb">all</span><span class="p">(</span><span class="n">extent</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">for</span> <span class="n">extent</span> <span class="ow">in</span> <span class="n">extents</span><span class="p">)</span> <span class="k">else</span> <span class="kc">None</span>
+
+
 <span class="k">def</span><span class="w"> </span><span class="nf">_limit</span><span class="p">(</span><span class="n">limits</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Extent of one encoding limit, or 0 when the header does not state it."""</span>
     <span class="n">entry</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">limits</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="k">if</span> <span class="n">limits</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span>
@@ -507,6 +521,9 @@
 <span class="sd">        Image matrix, ``(n_y, n_x)`` for a plane or ``(n_z, n_y, n_x)`` for a</span>
 <span class="sd">        volume. Independent of the buffer axes: a stack of spokes has no</span>
 <span class="sd">        partition axis and a three-dimensional matrix.</span>
+<span class="sd">    recon_fov</span>
+<span class="sd">        Field of view of the image in metres, ordered as ``recon_matrix``;</span>
+<span class="sd">        ``None`` when the header states none.</span>
 
 <span class="sd">    Examples</span>
 <span class="sd">    --------</span>
@@ -527,6 +544,7 @@
     <span class="n">loops</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span>
     <span class="n">loop_sizes</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span>
     <span class="n">recon_matrix</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span>
+    <span class="n">recon_fov</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
 
 <div class="viewcode-block" id="EncodingSpace.from_header">
 <a class="viewcode-back" href="../../../generated/pulserver.mrd.EncodingSpace.from_header.html#pulserver.mrd.EncodingSpace.from_header">[docs]</a>
@@ -538,8 +556,8 @@
 <span class="sd">        and the ``kspace_encoding_step_1`` limit, since an undersampled grid still</span>
 <span class="sd">        needs every line. For a non-Cartesian space it is the limit, which counts</span>
 <span class="sd">        views, or the encoded matrix when no limit is stated. ``partitions`` is</span>
-<span class="sd">        always the larger of the two. ``recon_matrix`` falls back to the encoded</span>
-<span class="sd">        matrix when the header has no ``reconSpace``.</span>
+<span class="sd">        always the larger of the two. ``recon_matrix`` and ``recon_fov`` fall</span>
+<span class="sd">        back to the encoded space when the header has no ``reconSpace``.</span>
 
 <span class="sd">        Raises</span>
 <span class="sd">        ------</span>
@@ -584,6 +602,7 @@
             <span class="n">loops</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="n">loops</span><span class="p">),</span>
             <span class="n">loop_sizes</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="n">sizes</span><span class="p">),</span>
             <span class="n">recon_matrix</span><span class="o">=</span><span class="n">recon_matrix</span><span class="p">,</span>
+            <span class="n">recon_fov</span><span class="o">=</span><span class="n">_fov</span><span class="p">(</span><span class="n">encoding</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">recon_matrix</span><span class="p">)),</span>
         <span class="p">)</span></div>
 
 

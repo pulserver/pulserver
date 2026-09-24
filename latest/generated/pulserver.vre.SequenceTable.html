@@ -542,7 +542,10 @@ sets, first/last flags of every counter the sequence writes, and
 <code class="docutils literal notranslate"><span class="pre">LAST_IN_MEASUREMENT</span></code> on the final readout of the chain. A boundary
 is read within its encoding space and the other image-selecting
 counters, so a slice closes once per echo.</p></li>
-<li><p><strong>center_sample, trajectory_dimensions, num_samples</strong> (<em>ndarray</em>) – As <a class="reference internal" href="pulserver.mrd.ReadoutTable.html#pulserver.mrd.ReadoutTable" title="pulserver.mrd.ReadoutTable"><code class="xref py py-class docutils literal notranslate"><span class="pre">ReadoutTable</span></code></a> states them, over the chain.</p></li>
+<li><p><strong>center_sample, num_samples</strong> (<em>ndarray</em>) – As <a class="reference internal" href="pulserver.mrd.ReadoutTable.html#pulserver.mrd.ReadoutTable" title="pulserver.mrd.ReadoutTable"><code class="xref py py-class docutils literal notranslate"><span class="pre">ReadoutTable</span></code></a> states them, over the chain.</p></li>
+<li><p><strong>trajectory_dimensions</strong> (<em>ndarray</em>) – <code class="docutils literal notranslate"><span class="pre">int8</span></code> axes of k a readout carries as its trajectory: every axis its
+encoding space varies along, up to the last, including those constant
+across the readout; 0 for a readout whose k does not move.</p></li>
 <li><p><strong>sample_time_us</strong> (<em>ndarray</em>) – <code class="docutils literal notranslate"><span class="pre">float32</span></code> dwell, in µs.</p></li>
 <li><p><strong>encoding_space</strong> (<em>ndarray</em>) – <code class="docutils literal notranslate"><span class="pre">int32</span></code> index into <a class="reference internal" href="pulserver.vre.SequenceTable.spaces.html#pulserver.vre.SequenceTable.spaces" title="pulserver.vre.SequenceTable.spaces"><code class="xref py py-attr docutils literal notranslate"><span class="pre">spaces</span></code></a>.</p></li>
 <li><p><strong>spaces</strong> (<em>tuple of TableSpace</em>) – Numbered in chain order: each subsequence’s primary space, then its

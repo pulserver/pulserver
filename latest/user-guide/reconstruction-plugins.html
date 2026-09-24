@@ -514,6 +514,7 @@
             <nav aria-label="Page">
                 <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#hooks">Hooks</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#non-cartesian-data">Non-Cartesian data</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#running-a-plugin-offline">Running a plugin offline</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See also</a></li>
 </ul>
@@ -590,6 +591,28 @@ image header; <code class="docutils literal notranslate"><span class="pre">dicom
 to one series. <code class="docutils literal notranslate"><span class="pre">context.exam</span></code>, an <a class="reference internal" href="../generated/pulserver.recon.ExamCache.html#pulserver.recon.ExamCache" title="pulserver.recon.ExamCache"><code class="xref py py-class docutils literal notranslate"><span class="pre">ExamCache</span></code></a>, is shared
 by the series of one exam: a coil calibration computed in one series can be
 stored there and read by the next.</p>
+</section>
+<section id="non-cartesian-data">
+<h2>Non-Cartesian data<a class="headerlink" href="#non-cartesian-data" title="Link to this heading">#</a></h2>
+<p>A buffer holds the trajectory of its samples beside the k-space, as the
+acquisitions carry it: k along the sequence’s x, y and z axes, in 1/m.
+<a class="reference internal" href="../generated/pulserver.recon.ReconBuffer.grid_trajectory.html#pulserver.recon.ReconBuffer.grid_trajectory" title="pulserver.recon.ReconBuffer.grid_trajectory"><code class="xref py py-meth docutils literal notranslate"><span class="pre">grid_trajectory()</span></code></a> returns it in the grid
+units and layout <code class="docutils literal notranslate"><span class="pre">bartorch.linop.NUFFT</span></code> takes, with the coils of the buffer’s
+<code class="docutils literal notranslate"><span class="pre">kspace</span></code> as a batch axis of the image:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">bartorch.linop</span><span class="w"> </span><span class="kn">import</span> <span class="n">NUFFT</span>
+
+<span class="n">buffer</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">buffers</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+<span class="n">nufft</span> <span class="o">=</span> <span class="n">NUFFT</span><span class="p">(</span>
+    <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">buffer</span><span class="o">.</span><span class="n">grid_trajectory</span><span class="p">()),</span>
+    <span class="n">image_shape</span><span class="o">=</span><span class="p">(</span><span class="n">buffer</span><span class="o">.</span><span class="n">coils</span><span class="p">,</span> <span class="o">*</span><span class="n">buffer</span><span class="o">.</span><span class="n">image_shape</span><span class="p">),</span>
+<span class="p">)</span>
+<span class="n">coil_images</span> <span class="o">=</span> <span class="n">nufft</span><span class="o">.</span><span class="n">adjoint</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">buffer</span><span class="o">.</span><span class="n">kspace</span><span class="p">))</span>
+</pre></div>
+</div>
+<p>The partitions of a stack of spokes or spirals are placed by their
+<code class="docutils literal notranslate"><span class="pre">kspace_encode_step_2</span></code> counter and carry no kz: the partition axis is
+transformed with an FFT before the in-plane NUFFT.</p>
 </section>
 <section id="running-a-plugin-offline">
 <h2>Running a plugin offline<a class="headerlink" href="#running-a-plugin-offline" title="Link to this heading">#</a></h2>
@@ -679,6 +702,7 @@ Cartesian FFT with a root-sum-of-squares coil combination, one image per slice.<
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#hooks">Hooks</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#non-cartesian-data">Non-Cartesian data</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#running-a-plugin-offline">Running a plugin offline</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See also</a></li>
 </ul>

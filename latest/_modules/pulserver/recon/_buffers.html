@@ -726,6 +726,47 @@
             <span class="k">return</span> <span class="kc">None</span>
         <span class="k">return</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">readout</span><span class="p">)</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">center_sample</span><span class="p">)</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">sample_time</span>
 
+<div class="viewcode-block" id="ReconBuffer.grid_trajectory">
+<a class="viewcode-back" href="../../../generated/pulserver.recon.ReconBuffer.grid_trajectory.html#pulserver.recon.ReconBuffer.grid_trajectory">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">grid_trajectory</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Return the trajectory in grid units, laid out as ``bartorch.linop.NUFFT`` takes it.</span>
+
+<span class="sd">        ``(*placement, readout, 3)``: the placement axes of :attr:`mask`, the</span>
+<span class="sd">        samples, then kx, ky and kz, each k in 1/m, as the proxy's enrichment</span>
+<span class="sd">        writes it, times the reconstructed field of view along its axis, so</span>
+<span class="sd">        that an ``N``-point image matrix spans ``[-N/2, N/2)``. Axes the</span>
+<span class="sd">        acquisitions do not carry are 0. The phase-encoding axis is the last</span>
+<span class="sd">        placement axis, so this is ``(*encoding, shots, samples, 3)`` against</span>
+<span class="sd">        :attr:`kspace` as ``(coils, *encoding, shots, samples)``.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        ndarray or None</span>
+<span class="sd">            ``float32``; ``None`` when no acquisition carried a trajectory.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If the header states no field of view along an axis the trajectory</span>
+<span class="sd">            carries.</span>
+<span class="sd">        """</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">trajectory</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        <span class="n">dimensions</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">trajectory</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">fov</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">space</span><span class="o">.</span><span class="n">recon_fov</span> <span class="ow">or</span> <span class="p">()</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">fov</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">dimensions</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"a trajectory of </span><span class="si">{</span><span class="n">dimensions</span><span class="si">}</span><span class="s2"> axes needs the field of view along "</span>
+                <span class="sa">f</span><span class="s2">"each, and encoding space </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">space</span><span class="o">.</span><span class="n">index</span><span class="si">}</span><span class="s2"> states "</span>
+                <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">fov</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span>
+            <span class="p">)</span>
+        <span class="n">grid</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">trajectory</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">:],</span> <span class="mi">3</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+        <span class="n">grid</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="p">:</span><span class="n">dimensions</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">moveaxis</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">trajectory</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="o">*</span> <span class="n">fov</span><span class="p">[::</span><span class="o">-</span><span class="mi">1</span><span class="p">][:</span><span class="n">dimensions</span><span class="p">]</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">grid</span></div>
+
+
 <div class="viewcode-block" id="ReconBuffer.points">
 <a class="viewcode-back" href="../../../generated/pulserver.recon.ReconBuffer.points.html#pulserver.recon.ReconBuffer.points">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">points</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">where</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>

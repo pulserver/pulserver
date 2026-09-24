@@ -533,8 +533,8 @@
 and the <code class="docutils literal notranslate"><span class="pre">kspace_encoding_step_1</span></code> limit, since an undersampled grid still
 needs every line. For a non-Cartesian space it is the limit, which counts
 views, or the encoded matrix when no limit is stated. <code class="docutils literal notranslate"><span class="pre">partitions</span></code> is
-always the larger of the two. <code class="docutils literal notranslate"><span class="pre">recon_matrix</span></code> falls back to the encoded
-matrix when the header has no <code class="docutils literal notranslate"><span class="pre">reconSpace</span></code>.</p>
+always the larger of the two. <code class="docutils literal notranslate"><span class="pre">recon_matrix</span></code> and <code class="docutils literal notranslate"><span class="pre">recon_fov</span></code> fall
+back to the encoded space when the header has no <code class="docutils literal notranslate"><span class="pre">reconSpace</span></code>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Raises<span class="colon">:</span></dt>
 <dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#IndexError" title="(in Python v3.14)"><strong>IndexError</strong></a> – If the header describes no such encoding space.</p>

@@ -543,6 +543,8 @@
 <li><p><strong>recon_matrix</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.14)"><em>tuple</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>, </em><em>...</em><em>]</em>) – Image matrix, <code class="docutils literal notranslate"><span class="pre">(n_y,</span> <span class="pre">n_x)</span></code> for a plane or <code class="docutils literal notranslate"><span class="pre">(n_z,</span> <span class="pre">n_y,</span> <span class="pre">n_x)</span></code> for a
 volume. Independent of the buffer axes: a stack of spokes has no
 partition axis and a three-dimensional matrix.</p></li>
+<li><p><strong>recon_fov</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.14)"><em>tuple</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.14)"><em>float</em></a><em>, </em><em>...</em><em>] </em><em>| </em><em>None</em>) – Field of view of the image in metres, ordered as <code class="docutils literal notranslate"><span class="pre">recon_matrix</span></code>;
+<code class="docutils literal notranslate"><span class="pre">None</span></code> when the header states none.</p></li>
 </ul>
 </dd>
 </dl>
@@ -579,31 +581,34 @@ partition axis and a three-dimensional matrix.</p></li>
 <tr class="row-even"><td><p><a class="reference internal" href="pulserver.mrd.EncodingSpace.extents.html#pulserver.mrd.EncodingSpace.extents" title="pulserver.mrd.EncodingSpace.extents"><code class="xref py py-obj docutils literal notranslate"><span class="pre">extents</span></code></a></p></td>
 <td><p>Placement axes and their extents, outermost first, including extents of 1.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.mrd.EncodingSpace.shape.html#pulserver.mrd.EncodingSpace.shape" title="pulserver.mrd.EncodingSpace.shape"><code class="xref py py-obj docutils literal notranslate"><span class="pre">shape</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.mrd.EncodingSpace.recon_fov.html#pulserver.mrd.EncodingSpace.recon_fov" title="pulserver.mrd.EncodingSpace.recon_fov"><code class="xref py py-obj docutils literal notranslate"><span class="pre">recon_fov</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.mrd.EncodingSpace.shape.html#pulserver.mrd.EncodingSpace.shape" title="pulserver.mrd.EncodingSpace.shape"><code class="xref py py-obj docutils literal notranslate"><span class="pre">shape</span></code></a></p></td>
 <td><p>Shape of a buffer of this space, named by <code class="xref py py-attr docutils literal notranslate"><span class="pre">axes</span></code>.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pulserver.mrd.EncodingSpace.index.html#pulserver.mrd.EncodingSpace.index" title="pulserver.mrd.EncodingSpace.index"><code class="xref py py-obj docutils literal notranslate"><span class="pre">index</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.mrd.EncodingSpace.index.html#pulserver.mrd.EncodingSpace.index" title="pulserver.mrd.EncodingSpace.index"><code class="xref py py-obj docutils literal notranslate"><span class="pre">index</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.mrd.EncodingSpace.coils.html#pulserver.mrd.EncodingSpace.coils" title="pulserver.mrd.EncodingSpace.coils"><code class="xref py py-obj docutils literal notranslate"><span class="pre">coils</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.mrd.EncodingSpace.coils.html#pulserver.mrd.EncodingSpace.coils" title="pulserver.mrd.EncodingSpace.coils"><code class="xref py py-obj docutils literal notranslate"><span class="pre">coils</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pulserver.mrd.EncodingSpace.readout.html#pulserver.mrd.EncodingSpace.readout" title="pulserver.mrd.EncodingSpace.readout"><code class="xref py py-obj docutils literal notranslate"><span class="pre">readout</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.mrd.EncodingSpace.readout.html#pulserver.mrd.EncodingSpace.readout" title="pulserver.mrd.EncodingSpace.readout"><code class="xref py py-obj docutils literal notranslate"><span class="pre">readout</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.mrd.EncodingSpace.phase_encodes.html#pulserver.mrd.EncodingSpace.phase_encodes" title="pulserver.mrd.EncodingSpace.phase_encodes"><code class="xref py py-obj docutils literal notranslate"><span class="pre">phase_encodes</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.mrd.EncodingSpace.phase_encodes.html#pulserver.mrd.EncodingSpace.phase_encodes" title="pulserver.mrd.EncodingSpace.phase_encodes"><code class="xref py py-obj docutils literal notranslate"><span class="pre">phase_encodes</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pulserver.mrd.EncodingSpace.partitions.html#pulserver.mrd.EncodingSpace.partitions" title="pulserver.mrd.EncodingSpace.partitions"><code class="xref py py-obj docutils literal notranslate"><span class="pre">partitions</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.mrd.EncodingSpace.partitions.html#pulserver.mrd.EncodingSpace.partitions" title="pulserver.mrd.EncodingSpace.partitions"><code class="xref py py-obj docutils literal notranslate"><span class="pre">partitions</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.mrd.EncodingSpace.loops.html#pulserver.mrd.EncodingSpace.loops" title="pulserver.mrd.EncodingSpace.loops"><code class="xref py py-obj docutils literal notranslate"><span class="pre">loops</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.mrd.EncodingSpace.loops.html#pulserver.mrd.EncodingSpace.loops" title="pulserver.mrd.EncodingSpace.loops"><code class="xref py py-obj docutils literal notranslate"><span class="pre">loops</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pulserver.mrd.EncodingSpace.loop_sizes.html#pulserver.mrd.EncodingSpace.loop_sizes" title="pulserver.mrd.EncodingSpace.loop_sizes"><code class="xref py py-obj docutils literal notranslate"><span class="pre">loop_sizes</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.mrd.EncodingSpace.loop_sizes.html#pulserver.mrd.EncodingSpace.loop_sizes" title="pulserver.mrd.EncodingSpace.loop_sizes"><code class="xref py py-obj docutils literal notranslate"><span class="pre">loop_sizes</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.mrd.EncodingSpace.recon_matrix.html#pulserver.mrd.EncodingSpace.recon_matrix" title="pulserver.mrd.EncodingSpace.recon_matrix"><code class="xref py py-obj docutils literal notranslate"><span class="pre">recon_matrix</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.mrd.EncodingSpace.recon_matrix.html#pulserver.mrd.EncodingSpace.recon_matrix" title="pulserver.mrd.EncodingSpace.recon_matrix"><code class="xref py py-obj docutils literal notranslate"><span class="pre">recon_matrix</span></code></a></p></td>
 <td><p></p></td>
 </tr>
 </tbody>

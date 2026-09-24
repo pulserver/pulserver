@@ -15,6 +15,7 @@
    :nosignatures:
 
    ~ReconBuffer.add
+   ~ReconBuffer.grid_trajectory
    ~ReconBuffer.points
    ~ReconBuffer.position
    ~ReconBuffer.select

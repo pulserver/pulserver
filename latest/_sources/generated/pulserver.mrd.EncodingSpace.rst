@@ -27,6 +27,7 @@
 
    ~EncodingSpace.axes
    ~EncodingSpace.extents
+   ~EncodingSpace.recon_fov
    ~EncodingSpace.shape
    ~EncodingSpace.index
    ~EncodingSpace.coils
