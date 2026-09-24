@@ -2205,21 +2205,131 @@ float *pulseg_get_grad_time_us(const pulseg_collection *coll, int seg_idx, int b
     return decompressed.samples;
 }
 
+/* The block table element at the cursor, with its descriptor; NULL when the
+ * cursor is on no block. */
+static const pulseg_block_table_element *cursor_block(
+    const pulseg_collection *coll,
+    const pulseg_sequence_descriptor **out_desc)
+{
+    const pulseg_block_cursor *cursor = &coll->block_cursor;
+    const pulseg_sequence_descriptor *desc;
+    int idx;
+
+    if (cursor->sequence_index < 0 || cursor->sequence_index >= coll->num_subsequences)
+        return NULL;
+    desc = &coll->descriptors[cursor->sequence_index];
+    idx = pulseg__exec_block_idx(desc, cursor->exec_stream_position);
+    if (idx < 0 || idx >= desc->num_blocks)
+        return NULL;
+    *out_desc = desc;
+    return &desc->block_table[idx];
+}
+
+/* The gradient table element a block plays on an axis: 1 when it plays one,
+ * 0 when it plays none, a negative error code when the element names no
+ * definition. */
+static int block_grad(
+    const pulseg_sequence_descriptor *desc,
+    const pulseg_block_table_element *bte,
+    int axis,
+    const pulseg_grad_table_element **out)
+{
+    int id = (axis == PULSEG_GRAD_AXIS_X) ? bte->gx_id
+             : (axis == PULSEG_GRAD_AXIS_Y) ? bte->gy_id
+                                            : bte->gz_id;
+
+    if (id < 0 || id >= desc->grad_table_size)
+        return 0;
+    if (desc->grad_table[id].id < 0 || desc->grad_table[id].id >= desc->num_unique_grads)
+        return PULSEG_ERR_INVALID_ARGUMENT;
+    *out = &desc->grad_table[id];
+    return 1;
+}
+
+/* The 3 or 4 corners of a trapezoid, normalised, timed from its start. */
+static int trapezoid_waveform(
+    const pulseg_grad_definition *gdef,
+    float **amplitude,
+    float **time_us)
+{
+    int n = (gdef->flat_time_or_unused > 0) ? 4 : 3;
+    float *a = (float *)PULSEG_ALLOC((size_t)n * sizeof(float));
+    float *t = (float *)PULSEG_ALLOC((size_t)n * sizeof(float));
+
+    if (!a || !t)
+    {
+        PULSEG_FREE(a);
+        PULSEG_FREE(t);
+        return PULSEG_ERR_ALLOC_FAILED;
+    }
+    a[0] = 0.0f;
+    a[1] = 1.0f;
+    a[n - 1] = 0.0f;
+    t[0] = 0.0f;
+    t[1] = (float)gdef->rise_time_or_unused;
+    if (n == 4)
+    {
+        a[2] = 1.0f;
+        t[2] = t[1] + (float)gdef->flat_time_or_unused;
+    }
+    t[n - 1] = t[n - 2] + (float)gdef->fall_time_or_num_uncompressed_samples;
+    *amplitude = a;
+    *time_us = t;
+    return n;
+}
+
+/* The samples of pulseq shape @p shape_id on the definition's time shape, or
+ * on the gradient raster when it has none. */
+static int shape_waveform(
+    const pulseg_sequence_descriptor *desc,
+    const pulseg_grad_definition *gdef,
+    int shape_id,
+    float **amplitude,
+    float **time_us)
+{
+    pulseq_shape decompressed;
+    int time_shape = gdef->unused_or_time_shape_id;
+    int n;
+
+    if (shape_id < 1 || shape_id > desc->num_shapes)
+        return PULSEG_ERR_INVALID_ARGUMENT;
+    decompressed.num_samples = 0;
+    decompressed.num_uncompressed_samples = 0;
+    decompressed.samples = NULL;
+    if (!pulseq_decompress_shape(&decompressed, &desc->shapes[shape_id - 1], 1.0f))
+        return PULSEG_ERR_ALLOC_FAILED;
+    *amplitude = decompressed.samples;
+    n = decompressed.num_samples;
+    if (time_shape <= 0 || time_shape > desc->num_shapes)
+    {
+        *time_us = alloc_uniform_time_us(n, desc->grad_raster_us);
+        return *time_us ? n : PULSEG_ERR_ALLOC_FAILED;
+    }
+    decompressed.num_samples = 0;
+    decompressed.num_uncompressed_samples = 0;
+    decompressed.samples = NULL;
+    if (!pulseq_decompress_shape(
+            &decompressed, &desc->shapes[time_shape - 1], desc->grad_raster_us) ||
+        decompressed.num_samples != n)
+    {
+        PULSEG_FREE(decompressed.samples);
+        return PULSEG_ERR_INVALID_ARGUMENT;
+    }
+    *time_us = decompressed.samples;
+    return n;
+}
+
 int pulseg_get_cursor_grad_waveform(
     const pulseg_collection *coll,
     int axis,
     float **amplitude,
     float **time_us)
 {
-    const pulseg_block_cursor *cursor;
-    const pulseg_sequence_descriptor *desc;
+    const pulseg_sequence_descriptor *desc = NULL;
     const pulseg_block_table_element *bte;
-    const pulseg_grad_table_element *gte;
+    const pulseg_grad_table_element *gte = NULL;
     const pulseg_grad_definition *gdef;
-    pulseq_shape decompressed;
-    float *a;
-    float *t;
-    int idx, id, n;
+    int n;
 
     if (!coll || !amplitude || !time_us)
         return PULSEG_ERR_NULL_POINTER;
@@ -2227,92 +2337,23 @@ int pulseg_get_cursor_grad_waveform(
     *time_us = NULL;
     if (axis < PULSEG_GRAD_AXIS_X || axis > PULSEG_GRAD_AXIS_Z)
         return PULSEG_ERR_INVALID_ARGUMENT;
-    cursor = &coll->block_cursor;
-    if (cursor->sequence_index < 0 || cursor->sequence_index >= coll->num_subsequences)
+    bte = cursor_block(coll, &desc);
+    if (!bte)
         return PULSEG_ERR_INVALID_ARGUMENT;
-    desc = &coll->descriptors[cursor->sequence_index];
-    idx = pulseg__exec_block_idx(desc, cursor->exec_stream_position);
-    if (idx < 0 || idx >= desc->num_blocks)
-        return PULSEG_ERR_INVALID_ARGUMENT;
-    bte = &desc->block_table[idx];
-    if (axis == PULSEG_GRAD_AXIS_X)
-        id = bte->gx_id;
-    else if (axis == PULSEG_GRAD_AXIS_Y)
-        id = bte->gy_id;
-    else
-        id = bte->gz_id;
-    if (id < 0 || id >= desc->grad_table_size)
-        return 0;
-    gte = &desc->grad_table[id];
-    if (gte->id < 0 || gte->id >= desc->num_unique_grads)
-        return PULSEG_ERR_INVALID_ARGUMENT;
-    gdef = &desc->grad_definitions[gte->id];
-
-    if (gdef->type == 0)
-    {
-        n = (gdef->flat_time_or_unused > 0) ? 4 : 3;
-        a = (float *)PULSEG_ALLOC((size_t)n * sizeof(float));
-        t = (float *)PULSEG_ALLOC((size_t)n * sizeof(float));
-        if (!a || !t)
-        {
-            PULSEG_FREE(a);
-            PULSEG_FREE(t);
-            return PULSEG_ERR_ALLOC_FAILED;
-        }
-        a[0] = 0.0f;
-        a[1] = 1.0f;
-        a[n - 1] = 0.0f;
-        t[0] = 0.0f;
-        t[1] = (float)gdef->rise_time_or_unused;
-        if (n == 4)
-        {
-            a[2] = 1.0f;
-            t[2] = t[1] + (float)gdef->flat_time_or_unused;
-        }
-        t[n - 1] = t[n - 2] + (float)gdef->fall_time_or_num_uncompressed_samples;
-        *amplitude = a;
-        *time_us = t;
+    n = block_grad(desc, bte, axis, &gte);
+    if (n <= 0)
         return n;
-    }
-
-    if (gte->shape_id < 1 || gte->shape_id > desc->num_shapes)
-        return PULSEG_ERR_INVALID_ARGUMENT;
-    decompressed.num_samples = 0;
-    decompressed.num_uncompressed_samples = 0;
-    decompressed.samples = NULL;
-    if (!pulseq_decompress_shape(&decompressed, &desc->shapes[gte->shape_id - 1], 1.0f))
-        return PULSEG_ERR_ALLOC_FAILED;
-    a = decompressed.samples;
-    n = decompressed.num_samples;
-
-    if (gdef->unused_or_time_shape_id > 0 && gdef->unused_or_time_shape_id <= desc->num_shapes)
+    gdef = &desc->grad_definitions[gte->id];
+    if (gdef->type == 0)
+        return trapezoid_waveform(gdef, amplitude, time_us);
+    n = shape_waveform(desc, gdef, gte->shape_id, amplitude, time_us);
+    if (n < 0)
     {
-        decompressed.num_samples = 0;
-        decompressed.num_uncompressed_samples = 0;
-        decompressed.samples = NULL;
-        if (!pulseq_decompress_shape(
-                &decompressed,
-                &desc->shapes[gdef->unused_or_time_shape_id - 1],
-                desc->grad_raster_us) ||
-            decompressed.num_samples != n)
-        {
-            PULSEG_FREE(a);
-            PULSEG_FREE(decompressed.samples);
-            return PULSEG_ERR_INVALID_ARGUMENT;
-        }
-        t = decompressed.samples;
+        PULSEG_FREE(*amplitude);
+        PULSEG_FREE(*time_us);
+        *amplitude = NULL;
+        *time_us = NULL;
     }
-    else
-    {
-        t = alloc_uniform_time_us(n, desc->grad_raster_us);
-        if (!t)
-        {
-            PULSEG_FREE(a);
-            return PULSEG_ERR_ALLOC_FAILED;
-        }
-    }
-    *amplitude = a;
-    *time_us = t;
     return n;
 }
 
