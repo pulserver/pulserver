@@ -92,6 +92,16 @@ reader built for that vendor. {func}`~pulserver.ir.summary` reports the
 subsequences, segments and readouts of a sequence, computed from the chain or
 loaded from a vendor-neutral cache.
 
+## Playback
+
+{func}`~pulserver.ir.play` loads a cache with the C library and walks its
+execution stream with the cursor a playout uses, resolving each block as the
+scanner plays it: its duration, the RF and ADC frequency and phase offsets, the
+gradient amplitudes and the rotation. It stands in for the interpreter, so the
+cache can be compared with the file it was converted from without a scanner;
+the test suite holds every played block of each fixture to the block its file
+designs.
+
 ## Language constraint
 
 The IR is built by C++ passes in `src/cpp/ir/`, which run only on the host. The
