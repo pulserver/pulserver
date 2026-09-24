@@ -254,24 +254,28 @@ class ReconProxy:
             relay.start()
             try:
                 feed(worker)
-            finally:
-                worker.send_close()
-                relay.join(timeout=self.recon_timeout)
-                if relay.is_alive():
-                    _log.warning(
-                        "%s exceeded %s s; terminating it",
-                        plugin.stem,
-                        self.recon_timeout,
+            except BaseException:
+                # A series that cannot be fed whole is not reconstructed.
+                channel.terminate()
+                relay.join()
+                raise
+            worker.send_close()
+            relay.join(timeout=self.recon_timeout)
+            if relay.is_alive():
+                _log.warning(
+                    "%s exceeded %s s; terminating it",
+                    plugin.stem,
+                    self.recon_timeout,
+                )
+                # The relay ends with the worker, so the notice cannot
+                # interleave with an image it is still sending.
+                channel.terminate()
+                relay.join()
+                with contextlib.suppress(Exception):
+                    client.send(
+                        f"pulserver: {plugin.stem} did not finish within "
+                        f"{self.recon_timeout:g} s of the end of the series"
                     )
-                    # The relay ends with the worker, so the notice cannot
-                    # interleave with an image it is still sending.
-                    channel.terminate()
-                    relay.join()
-                    with contextlib.suppress(Exception):
-                        client.send(
-                            f"pulserver: {plugin.stem} did not finish within "
-                            f"{self.recon_timeout:g} s of the end of the series"
-                        )
 
     def _plugin_path(self, plugin: str) -> Path:
         if not plugin:
@@ -364,8 +368,21 @@ def _is_close_marker(item: Any) -> bool:
 
 
 def _enriched(client: Connection, revision: Revision, offset: Any) -> Iterator[Any]:
-    """Yield the client's stream up to its close, acquisitions enriched in play order."""
+    """Yield the client's stream up to its close, acquisitions enriched in play order.
+
+    Acquisitions are matched to readouts by position, so once the client numbers
+    them, every ``scan_counter`` must follow the previous one by one: a gap or a
+    repeat is a dropped or duplicated readout that would shift every later row.
+    A stream whose counters stay 0 is not numbered and not checked.
+
+    Raises
+    ------
+    ValueError
+        If the stream carries more acquisitions than the sequence plays, or its
+        scan counters skip or repeat one.
+    """
     index = 0
+    previous = None
     for item in client:
         if _is_close_marker(item):
             return
@@ -375,6 +392,15 @@ def _enriched(client: Connection, revision: Revision, offset: Any) -> Iterator[A
                     f"the stream carries more than the {len(revision.table)} readouts "
                     f"{revision.directory} plays"
                 )
+            counter = int(item.scan_counter)
+            numbered = previous is not None and (previous, counter) != (0, 0)
+            if numbered and counter != previous + 1:
+                raise ValueError(
+                    f"acquisition {index} carries scan counter {counter} after "
+                    f"{previous}: the stream no longer matches the readouts "
+                    f"{revision.directory} plays"
+                )
+            previous = counter
             enrich_acquisition(item, revision.table, index, offset)
             index += 1
         yield item

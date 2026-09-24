@@ -122,15 +122,21 @@ def point(table, index, position_m):
     return np.broadcast_to(samples, (CHANNELS, samples.size)).astype(np.complex64)
 
 
-def stream(port, series, *, config="", offset_mm=None, data=flat):
-    """Play one series' readouts as the scanner client does; return what came back."""
+def stream(port, series, *, config="", offset_mm=None, data=flat, counters=None):
+    """Play one series' readouts as the scanner client does; return what came back.
+
+    ``counters`` numbers the acquisitions' ``scan_counter``; unnumbered by default.
+    """
     stream = socket.create_connection(("127.0.0.1", port), timeout=DEADLINE)
     connection = Connection(stream)
     stream.settimeout(DEADLINE)
     connection.send_config(config)
     connection.send_header(header_xml(series, offset_mm))
     for index in range(len(series.table)):
-        connection.send(ismrmrd.Acquisition.from_array(data(series.table, index)))
+        acquisition = ismrmrd.Acquisition.from_array(data(series.table, index))
+        if counters is not None:
+            acquisition.scan_counter = counters[index]
+        connection.send(acquisition)
     connection.send_close()
     received = list(connection)
     connection.shutdown_close()
@@ -215,6 +221,26 @@ def test_a_reconstruction_past_the_recon_timeout_is_stopped_and_reported(
     assert time.monotonic() - started < 30
     assert not images(received)
     assert any(isinstance(item, str) and "did not finish" in item for item in received)
+    assert len(images(stream(proxy.port, series["bound"]))) == 1
+
+
+def test_a_stream_numbered_without_gaps_is_reconstructed(start_proxy, bucket):
+    _, series = bucket
+    proxy = start_proxy(slots=1)
+    counters = [index + 1 for index in range(len(series["bound"].table))]
+    assert len(images(stream(proxy.port, series["bound"], counters=counters))) == 1
+
+
+def test_a_gap_in_the_scan_counters_stops_the_series_unreconstructed(
+    start_proxy, bucket
+):
+    _, series = bucket
+    proxy = start_proxy(slots=1)
+    readouts = len(series["bound"].table)
+    counters = [index + 1 + (index >= readouts // 2) for index in range(readouts)]
+    received = stream(proxy.port, series["bound"], counters=counters)
+    assert not images(received)
+    assert any(isinstance(item, str) and "scan counter" in item for item in received)
     assert len(images(stream(proxy.port, series["bound"]))) == 1
 
 

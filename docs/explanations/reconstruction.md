@@ -23,7 +23,10 @@ is applied to the stream as follows.
 - Each acquisition is matched to a table row by its position in the stream and
   receives the encoding counters, the MRD flags, the dwell time and the
   encoding space reference, and the k-space trajectory when the k-space
-  location changes across the readout.
+  location changes across the readout. When the client numbers its
+  acquisitions, each `scan_counter` must follow the previous one by one; a gap
+  or a repeat stops the series before it is reconstructed, since every later
+  row would be shifted.
 
 The flags are those the sequence's labels set, such as `IS_NAVIGATION_DATA`,
 and the first-and-last flags (`FIRST_IN_SLICE`, `LAST_IN_SLICE` and the
