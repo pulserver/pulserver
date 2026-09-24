@@ -5,9 +5,12 @@ from __future__ import annotations
 __all__ = ["ExamCacheManager", "resolve_exam_id"]
 
 import contextlib
+import hashlib
 import itertools
+import shutil
 from collections.abc import Callable, Hashable, Iterator
 from dataclasses import dataclass
+from pathlib import Path
 from threading import RLock
 from typing import Any
 
@@ -31,13 +34,20 @@ class ExamCacheManager:
         Returns a header's exam identifier, or ``None``; :func:`resolve_exam_id`
         by default. A header without one gets a cache of its own that is never
         shared.
+    directory
+        Where each exam's cache gets a directory of its own (see
+        :class:`~pulserver.recon.ExamCache`), removed when the cache closes;
+        ``None`` keeps caches in memory.
     """
 
     def __init__(
         self,
         resolver: Callable[[Any], Hashable | None] | None = None,
+        *,
+        directory: Path | str | None = None,
     ) -> None:
         self._resolver = resolve_exam_id if resolver is None else resolver
+        self._directory = None if directory is None else Path(directory)
         self._lock = RLock()
         self._current: _Generation | None = None
         self._anonymous_ids = itertools.count()
@@ -73,7 +83,9 @@ class ExamCacheManager:
 
             if self._current is None or self._current.cache.exam_id != exam_id:
                 previous = self._current
-                self._current = _Generation(ExamCache(exam_id))
+                self._current = _Generation(
+                    ExamCache(exam_id, self._exam_directory(exam_id))
+                )
                 if previous is not None:
                     previous.retired = True
                     if previous.leases == 0:
@@ -83,7 +95,7 @@ class ExamCacheManager:
             generation.leases += 1
 
         if close_now is not None:
-            close_now.close()
+            _discard(close_now)
 
         try:
             yield generation.cache
@@ -103,7 +115,7 @@ class ExamCacheManager:
                     close_now = self._current.cache
                 self._current = None
         if close_now is not None:
-            close_now.close()
+            _discard(close_now)
 
     def _release(self, generation: _Generation) -> None:
         close_now = False
@@ -113,7 +125,18 @@ class ExamCacheManager:
                 raise RuntimeError("exam cache generation lease underflow")
             close_now = generation.retired and generation.leases == 0
         if close_now:
-            generation.cache.close()
+            _discard(generation.cache)
+
+    def _exam_directory(self, exam_id: Hashable) -> Path | None:
+        if self._directory is None:
+            return None
+        return self._directory / hashlib.sha256(repr(exam_id).encode()).hexdigest()
+
+
+def _discard(cache: ExamCache) -> None:
+    cache.close()
+    if cache.directory is not None:
+        shutil.rmtree(cache.directory, ignore_errors=True)
 
 
 def resolve_exam_id(header: Any) -> Hashable | None:

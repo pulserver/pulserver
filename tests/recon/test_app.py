@@ -148,3 +148,51 @@ def test_exam_id_prefers_vendor_exam_over_standard_study():
         "study-instance",
         "1.2.3",
     )
+
+
+def test_a_value_one_cache_stores_is_read_by_the_next_on_its_directory(tmp_path):
+    first = ExamCache("exam", tmp_path)
+    first["maps"] = np.arange(3)
+    first.close()
+    second = ExamCache("exam", tmp_path)
+    assert "maps" in second
+    assert list(second) == ["maps"]
+    np.testing.assert_array_equal(second["maps"], np.arange(3))
+
+
+def test_a_value_that_cannot_be_pickled_stays_with_its_cache(tmp_path):
+    first = ExamCache("exam", tmp_path)
+    first["handle"] = 1
+    lock = threading.Lock()
+    first["handle"] = lock
+    assert first["handle"] is lock
+    assert "handle" not in ExamCache("exam", tmp_path)
+
+
+def test_a_key_that_cannot_be_pickled_stays_with_its_cache(tmp_path):
+    first = ExamCache("exam", tmp_path)
+    key = (lambda: None,)
+    first[key] = 1
+    assert first[key] == 1
+    assert key in first
+    assert len(ExamCache("exam", tmp_path)) == 0
+
+
+def test_a_deleted_value_is_gone_for_the_next_cache(tmp_path):
+    first = ExamCache("exam", tmp_path)
+    first["maps"] = 1
+    del first["maps"]
+    assert len(ExamCache("exam", tmp_path)) == 0
+
+
+def test_a_retired_exam_directory_is_removed_once_its_last_lease_ends(tmp_path):
+    manager = ExamCacheManager(directory=tmp_path)
+    with manager.lease(_header("100")) as first:
+        first["maps"] = 1
+        with manager.lease(_header("101")) as second:
+            second["maps"] = 2
+        assert first.directory.is_dir()
+    assert not first.directory.exists()
+    assert second.directory.is_dir()
+    manager.close()
+    assert not second.directory.exists()

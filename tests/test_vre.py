@@ -37,7 +37,7 @@ HEADER = """<?xml version="1.0"?>
   </encoding>
   <userParameters>
     <userParameterLong><name>pulserver_revision</name><value>{revision}</value></userParameterLong>
-    <userParameterString><name>pulserver_session</name><value>{session}</value></userParameterString>
+    <userParameterString><name>pulserver_session</name><value>{session}</value></userParameterString>{exam}
   </userParameters>
 </ismrmrdHeader>
 """
@@ -94,9 +94,15 @@ def start_proxy(bucket):
         thread.join(timeout=DEADLINE)
 
 
-def header_xml(series):
+def header_xml(series, exam=None):
     return HEADER.format(
-        channels=CHANNELS, session=series.session, revision=series.revision
+        channels=CHANNELS,
+        session=series.session,
+        revision=series.revision,
+        exam=""
+        if exam is None
+        else f"<userParameterString><name>ExamID</name><value>{exam}</value>"
+        "</userParameterString>",
     )
 
 
@@ -112,16 +118,17 @@ def point(table, index, position_m):
     return np.broadcast_to(samples, (CHANNELS, samples.size)).astype(np.complex64)
 
 
-def stream(port, series, *, config="", data=flat, counters=None):
+def stream(port, series, *, config="", data=flat, counters=None, exam=None):
     """Play one series' readouts as the scanner client does; return what came back.
 
     ``counters`` numbers the acquisitions' ``scan_counter``; unnumbered by default.
+    ``exam`` is the header's ``ExamID``; none by default.
     """
     stream = socket.create_connection(("127.0.0.1", port), timeout=DEADLINE)
     connection = Connection(stream)
     stream.settimeout(DEADLINE)
     connection.send_config(config)
-    connection.send_header(header_xml(series))
+    connection.send_header(header_xml(series, exam))
     for index in range(len(series.table)):
         acquisition = ismrmrd.Acquisition.from_array(data(series.table, index))
         if counters is not None:
@@ -390,3 +397,24 @@ def test_the_proxy_listens_on_the_loopback_interface_unless_told_otherwise(tmp_p
         assert proxy._server.getsockname() == ("127.0.0.1", port)
     finally:
         proxy.close()
+
+
+def test_the_series_of_one_exam_share_its_exam_cache(start_proxy, bucket):
+    _, series = bucket
+    port = start_proxy(slots=1).port
+    counts = [
+        [
+            int(np.abs(image.data).max())
+            for image in images(stream(port, series["raw"], config="exam", exam=exam))
+        ]
+        for exam in ("E1", "E1", "E2", "E1")
+    ]
+    assert counts == [[1], [2], [1], [1]]
+
+
+def test_a_closed_proxy_leaves_no_exam_directory(tmp_path):
+    proxy = ReconProxy(tmp_path, tmp_path, slots=1, spares=1)
+    root = proxy._exam_root
+    assert root.is_dir()
+    proxy.close()
+    assert not root.exists()
