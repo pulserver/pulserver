@@ -12,6 +12,7 @@ exchange are described in {doc}`../explanations/index`.
 | {doc}`running` | Starting the host daemon and the reconstruction proxy, and their options. |
 | {doc}`scanner-sequences` | Binding a pypulseqpp sequence application to the scanner protocol. |
 | {doc}`reconstruction-plugins` | Writing a reconstruction and running it outside the proxy. |
+| {doc}`reconstruction-client` | The MRD stream a scanner's reconstruction client sends the proxy. |
 | {doc}`../explanations/index` | Architecture, protocol resolution, design sessions, the scanner IR and raw-data enrichment. |
 | {doc}`../examples/index` | Executable examples: protocol resolution, segmentation for the scanner, and enrichment and reconstruction of a simulated series. |
 | {doc}`../api/index` | Exact interfaces, units and defaults. |
@@ -25,6 +26,7 @@ exchange are described in {doc}`../explanations/index`.
 running
 scanner-sequences
 reconstruction-plugins
+reconstruction-client
 ```
 
 ## Prerequisites and supported platforms

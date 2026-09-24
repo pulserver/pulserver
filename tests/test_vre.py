@@ -119,21 +119,40 @@ def point(table, index, position_m):
     return np.broadcast_to(samples, (CHANNELS, samples.size)).astype(np.complex64)
 
 
-def stream(port, series, *, config="", data=flat, counters=None, exam=None):
+def stream(
+    port,
+    series,
+    *,
+    config="",
+    data=flat,
+    counters=None,
+    exam=None,
+    headers=1,
+    readouts=None,
+    last=None,
+):
     """Play one series' readouts as the scanner client does; return what came back.
 
-    ``counters`` numbers the acquisitions' ``scan_counter``; unnumbered by default.
-    ``exam`` is the header's ``ExamID``; none by default.
+    ``config`` ``None`` sends no config message. ``counters`` numbers the
+    acquisitions' ``scan_counter``; unnumbered by default. ``exam`` is the
+    header's ``ExamID``; none by default. ``headers`` is how many times the
+    header is sent, ``readouts`` how many readouts are, all of them by default,
+    and ``last`` the acquisition flagged ``LAST_IN_MEASUREMENT``, none by
+    default.
     """
     stream = socket.create_connection(("127.0.0.1", port), timeout=DEADLINE)
     connection = Connection(stream)
     stream.settimeout(DEADLINE)
-    connection.send_config(config)
-    connection.send_header(header_xml(series, exam))
-    for index in range(len(series.table)):
+    if config is not None:
+        connection.send_config(config)
+    for _ in range(headers):
+        connection.send_header(header_xml(series, exam))
+    for index in range(len(series.table) if readouts is None else readouts):
         acquisition = ismrmrd.Acquisition.from_array(data(series.table, index))
         if counters is not None:
             acquisition.scan_counter = counters[index]
+        if index == last:
+            acquisition.setFlag(ismrmrd.ACQ_LAST_IN_MEASUREMENT)
         connection.send(acquisition)
     connection.send_close()
     received = list(connection)
@@ -240,6 +259,66 @@ def test_a_gap_in_the_scan_counters_stops_the_series_unreconstructed(
     assert not images(received)
     assert any(isinstance(item, str) and "scan counter" in item for item in received)
     assert len(images(stream(proxy.port, series["bound"]))) == 1
+
+
+def _refused(received, reason):
+    return not images(received) and any(
+        isinstance(item, str) and reason in item for item in received
+    )
+
+
+def test_a_series_opening_with_its_header_is_reconstructed_as_its_design_names(
+    start_proxy, bucket
+):
+    _, series = bucket
+    proxy = start_proxy(slots=1)
+    assert len(images(stream(proxy.port, series["bound"], config=None))) == 1
+
+
+def test_a_series_that_ends_before_its_last_readout_is_refused(start_proxy, bucket):
+    _, series = bucket
+    proxy = start_proxy(slots=1)
+    readouts = len(series["bound"].table)
+    received = stream(proxy.port, series["bound"], readouts=readouts - 1)
+    assert _refused(received, f"ended after {readouts - 1} of the {readouts} readouts")
+    assert len(images(stream(proxy.port, series["bound"]))) == 1
+
+
+@pytest.mark.parametrize("position", ["middle", "end"])
+def test_only_the_last_readout_may_be_flagged_last_in_measurement(
+    start_proxy, bucket, position
+):
+    _, series = bucket
+    proxy = start_proxy(slots=1)
+    readouts = len(series["bound"].table)
+    last = readouts // 2 if position == "middle" else readouts - 1
+    received = stream(proxy.port, series["bound"], last=last)
+    if position == "middle":
+        assert _refused(received, f"acquisition {last} is flagged LAST_IN_MEASUREMENT")
+    else:
+        assert len(images(received)) == 1
+
+
+@pytest.mark.parametrize(
+    ("headers", "reason"),
+    [
+        (0, "a message of type Acquisition where its MRD header belongs"),
+        (2, "a second MRD header"),
+    ],
+)
+def test_a_series_carrying_no_header_or_two_is_refused(
+    start_proxy, bucket, headers, reason
+):
+    _, series = bucket
+    proxy = start_proxy(slots=1)
+    assert _refused(stream(proxy.port, series["bound"], headers=headers), reason)
+
+
+def test_a_stream_closed_before_its_header_is_refused(start_proxy, bucket):
+    _, series = bucket
+    proxy = start_proxy(slots=1)
+    received = stream(proxy.port, series["bound"], config=None, headers=0, readouts=0)
+    assert _refused(received, "where its MRD header belongs")
 
 
 def test_a_crashing_plugin_closes_its_series_and_frees_the_slot(start_proxy, bucket):

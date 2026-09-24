@@ -107,11 +107,19 @@ class MrdDicomBuilder:
 
     Patient, study, series, system and imaging-frequency fields are read from the
     MRD header once. Header sections that fail to convert are logged and skipped.
+    ``relativeTablePosition`` is not converted: the MR image has no attribute
+    for it.
 
     Parameters
     ----------
     mrdHead
         Parsed MRD XML header of the series.
+
+    Raises
+    ------
+    ValueError
+        If the header names a GE system and its ``measurementID``, the series
+        number there, is not a non-negative integer.
 
     Attributes
     ----------
@@ -231,10 +239,6 @@ class MrdDicomBuilder:
                     dicomDset.PatientPosition = (
                         mrdHead.measurementInformation.patientPosition.name
                     )
-                if mrdHead.measurementInformation.relativeTablePosition is not None:
-                    dicomDset.TablePosition = (
-                        mrdHead.measurementInformation.relativeTablePosition
-                    )
                 if mrdHead.measurementInformation.protocolName is not None:
                     dicomDset.ProtocolName = mrdHead.measurementInformation.protocolName
                 if mrdHead.measurementInformation.sequenceName is not None:
@@ -319,6 +323,17 @@ class MrdDicomBuilder:
         # malformed values from the MRD header).
         if not pydicom.uid.UID(dicomDset.get("FrameOfReferenceUID", "")).is_valid:
             dicomDset.FrameOfReferenceUID = pydicom.uid.generate_uid()
+
+        measurement_id = getattr(mrdHead.measurementInformation, "measurementID", None)
+        if (
+            "GE" in str(dicomDset.get("Manufacturer", "")).upper()
+            and measurement_id is not None
+            and not str(measurement_id).strip().isdigit()
+        ):
+            raise ValueError(
+                "the header's measurementID is the DICOM series number on a GE "
+                f"system, and {measurement_id!r} is not a non-negative integer"
+            )
 
         self.dicomDset = dicomDset
         self.mrdHead = mrdHead

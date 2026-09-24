@@ -74,6 +74,9 @@ class RevisionStore:
     def locate(self, header: Any) -> Path:
         """Return the revision directory a header names.
 
+        The session is a ``userParameterString``, ``<pid>-<day>``, and the
+        revision a ``userParameterLong``, or a string holding an integer.
+
         Raises
         ------
         ValueError
@@ -90,7 +93,7 @@ class RevisionStore:
             )
         try:
             key = SessionKey.parse(str(session))
-            number = int(revision)
+            number = int(str(revision))
         except ValueError as error:
             raise ValueError(
                 f"{SESSION_PARAMETER}={session!r} {REVISION_PARAMETER}={revision!r} "

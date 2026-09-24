@@ -110,7 +110,8 @@ The MRD header of each series names the design it was played from in the
 refuses a series whose header names no generated revision. The reconstruction
 plugin is the one the scanner sequence names in its `recon` attribute; when it
 names none, the client's config text names it, either as a bare plugin name or
-under `parameters.config`.
+under `parameters.config`. The messages and fields the client sends are listed
+in {doc}`reconstruction-client`.
 
 A series that finds every slot busy is written to
 `bucket/<session>/queue/` as it arrives and reconstructed once a slot frees;
@@ -128,4 +129,5 @@ is running before it exits.
 
 * {doc}`../explanations/architecture` — the services and what passes between them.
 * {doc}`../explanations/sessions` — the bucket layout and revision identity.
+* {doc}`reconstruction-client` — the MRD stream of a series.
 * {doc}`../api/host` and {doc}`../api/vre` — the daemon and proxy interfaces.
