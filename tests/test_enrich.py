@@ -5,7 +5,7 @@ import ismrmrd.xsd
 import numpy as np
 import pypulseqpp as pp
 import pytest
-from _synthetic import add_readout
+from _synthetic import DELTA_K, add_readout
 
 from pulserver.mrd import AcquisitionFlag, EncodingSpace
 from pulserver.vre._enrich import (
@@ -183,6 +183,26 @@ def test_a_non_cartesian_readout_carries_its_absolute_k(name):
     enriched = header()
     enrich_header(enriched, table)
     assert enriched.encoding[0].trajectory == ismrmrd.xsd.trajectoryType.OTHER
+
+
+def test_a_readout_carries_every_axis_its_encoding_space_varies_along(tmp_path):
+    seq = pp.Sequence(pp.Opts())
+    seq.add_block(pp.make_trapezoid("y", area=3 * DELTA_K, duration=1e-3))
+    add_readout(seq)
+    add_readout(seq, rotation=pp.make_rotation(np.pi / 2))
+    path = tmp_path / "blade.seq"
+    seq.write(path)
+    table = SequenceTable.read(path)
+    reference = pp.Sequence()
+    reference.read(path)
+    k_adc = reference.calculate_kspace()[0]
+    assert table.trajectory_dimensions.tolist() == [2, 2]
+    first = acquisitions(table)[0]
+    enrich_acquisition(first, table, 0)
+    np.testing.assert_allclose(first.traj[:, 1], 3 * DELTA_K, rtol=1e-5)
+    np.testing.assert_allclose(
+        first.traj, readout_k(k_adc, table, 0)[:2].T, rtol=1e-5, atol=1e-3
+    )
 
 
 def test_a_rotated_flat_readout_makes_its_space_non_cartesian(tmp_path):

@@ -40,11 +40,21 @@ def limits(**counters):
     )
 
 
-def space(x=N_X, y=N_X, z=1, recon=None, trajectory="cartesian", **counters):
+def space(
+    x=N_X, y=N_X, z=1, recon=None, trajectory="cartesian", fov_mm=None, **counters
+):
+    fov = (
+        None
+        if fov_mm is None
+        else SimpleNamespace(**dict(zip("xyz", fov_mm, strict=True)))
+    )
     return SimpleNamespace(
-        encodedSpace=SimpleNamespace(matrixSize=SimpleNamespace(x=x, y=y, z=z)),
+        encodedSpace=SimpleNamespace(
+            matrixSize=SimpleNamespace(x=x, y=y, z=z), fieldOfView_mm=fov
+        ),
         reconSpace=SimpleNamespace(
-            matrixSize=SimpleNamespace(**(recon or {"x": x, "y": y, "z": z}))
+            matrixSize=SimpleNamespace(**(recon or {"x": x, "y": y, "z": z})),
+            fieldOfView_mm=fov,
         ),
         encodingLimits=limits(**counters),
         trajectory=trajectory,
@@ -526,3 +536,75 @@ def test_an_axis_a_readout_never_traversed_reads_back_as_the_zero_it_was():
         narrow = order.index(2)
         assert np.array_equal(trajectory[2, narrow], np.zeros(4))
         assert np.array_equal(trajectory[1, narrow], [2, 4, 6, 8])
+
+
+def test_the_field_of_view_is_read_in_metres_in_the_order_of_the_matrix():
+    volume = EncodingSpace.from_header(header(space(z=4, fov_mm=(220, 200, 40))))
+    plane = EncodingSpace.from_header(header(space(fov_mm=(220, 200, 5))))
+    assert volume.recon_fov == pytest.approx((0.04, 0.2, 0.22))
+    assert plane.recon_fov == pytest.approx((0.2, 0.22))
+    assert EncodingSpace.from_header(header(space())).recon_fov is None
+
+
+def radial(position, n=32, spokes=24, fov=0.2):
+    """A radial buffer of a point at ``position`` (m), with k in 1/m as enrichment writes it."""
+    data = ReconData.from_header(
+        header(
+            space(
+                x=n,
+                y=n,
+                trajectory="radial",
+                fov_mm=(1e3 * fov, 1e3 * fov, 5.0),
+                kspace_encoding_step_1=spokes,
+            )
+        )
+    )
+    radius = (np.arange(n) - n // 2) / fov
+    for view in range(spokes):
+        angle = np.pi * view / spokes
+        k = np.stack([np.cos(angle) * radius, np.sin(angle) * radius], axis=-1)
+        acquisition = ismrmrd.Acquisition()
+        acquisition.resize(n, 1, 2)
+        acquisition.traj[:] = k
+        acquisition.data[:] = np.exp(-2j * np.pi * (k @ np.asarray(position)))
+        acquisition.idx.kspace_encode_step_1 = view
+        data.add(acquisition)
+    return data[0]
+
+
+#: A point 5 pixels along x and -3 along y from the centre of a 32-point, 0.2 m grid.
+POINT_M, POINT_PIXEL = (5 * 0.2 / 32, -3 * 0.2 / 32), (16 - 3, 16 + 5)
+
+
+def test_a_point_is_found_where_it_was_placed_on_the_grid_trajectory():
+    buffer = radial(POINT_M)
+    grid = buffer.grid_trajectory()
+    assert grid.shape == (24, 32, 3)
+    assert not grid[..., 2].any()
+    pixels = np.arange(32) - 16
+    phase = (
+        pixels[:, None, None] * grid[..., 1].ravel()
+        + pixels[None, :, None] * grid[..., 0].ravel()
+    )
+    image = np.exp(2j * np.pi * phase / 32) @ buffer.kspace[0].ravel()
+    assert np.unravel_index(np.abs(image).argmax(), image.shape) == POINT_PIXEL
+
+
+def test_the_grid_trajectory_is_what_bartorch_nufft_takes():
+    torch = pytest.importorskip("torch")
+    linop = pytest.importorskip("bartorch.linop")
+    buffer = radial(POINT_M)
+    operator = linop.NUFFT(
+        torch.from_numpy(buffer.grid_trajectory()), image_shape=buffer.image_shape
+    )
+    image = operator.adjoint(torch.from_numpy(buffer.kspace[0])).numpy()
+    assert np.unravel_index(np.abs(image).argmax(), image.shape) == POINT_PIXEL
+
+
+def test_a_trajectory_without_its_field_of_view_is_refused():
+    data = ReconData.from_header(header(space(x=4, y=3)))
+    acquisition = ismrmrd.Acquisition()
+    acquisition.resize(4, COILS, 2)
+    data.add(acquisition)
+    with pytest.raises(ValueError, match="field of view"):
+        data[0].grid_trajectory()
