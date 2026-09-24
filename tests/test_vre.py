@@ -398,10 +398,10 @@ def test_the_proxy_process_does_not_import_the_reconstruction_engine(tmp_path):
     assert found.stdout.strip() == "False"
 
 
-def test_the_proxy_listens_on_the_address_it_is_given(tmp_path):
+def test_the_proxy_listens_on_the_loopback_interface_unless_told_otherwise(tmp_path):
     proxy = ReconProxy(tmp_path, tmp_path, slots=1, spares=1)
     try:
-        port = proxy.bind(0, "127.0.0.1")
+        port = proxy.bind(0)
         assert proxy._server.getsockname() == ("127.0.0.1", port)
     finally:
         proxy.close()

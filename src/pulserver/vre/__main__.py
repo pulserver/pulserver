@@ -18,8 +18,8 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--port", type=int, required=True, help="TCP port to listen on")
     parser.add_argument(
         "--host",
-        default="",
-        help="address to listen on; every interface when unset",
+        default="127.0.0.1",
+        help="address to listen on; the loopback interface when unset",
     )
     parser.add_argument(
         "--plugins", type=Path, required=True, help="directory of <plugin>.py"
