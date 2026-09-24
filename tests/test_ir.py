@@ -5,12 +5,14 @@ import struct
 import subprocess
 from pathlib import Path
 
+import numpy as np
 import pypulseqpp as pp
 import pytest
 from pypulseqpp import sequences
 
 from pulserver import ir
 from pulserver.ir import cache_path, chain, convert, summary
+from pulserver.mrd import read_chain
 
 ROOT = Path(__file__).parents[1]
 FIXTURES = ROOT / "tests" / "fixtures" / "sequences"
@@ -50,6 +52,77 @@ def test_a_converted_cache_reads_back_as_the_sequence_it_came_from(name, tmp_pat
     seq = _copy(name, tmp_path)
     assert convert(seq, SYSTEM) == cache_path(seq)
     assert summary(seq, SYSTEM, cache_ext=".pseg") == summary(seq, SYSTEM)
+
+
+def _designed(seq_path):
+    """Each block of a chain as its files state it, in the units the scanner plays."""
+    hz_per_ppm = SYSTEM.gamma * SYSTEM.B0 * 1e-6
+    rows = []
+    for subsequence, (_, sequence) in enumerate(read_chain(seq_path)):
+        for index in range(1, len(sequence) + 1):
+            block = sequence.get_block(index)
+            rf, adc = block.rf, block.adc
+            gradients = [getattr(block, f"g{axis}") for axis in "xyz"]
+            rows.append(
+                {
+                    "subsequence": subsequence,
+                    "duration_us": round(sequence.block_durations[index] * 1e6),
+                    "rf_amp_hz": 0.0 if rf is None else np.abs(rf.signal).max(),
+                    "rf_freq_hz": 0.0
+                    if rf is None
+                    else rf.freq_offset + rf.freq_ppm * hz_per_ppm,
+                    "rf_phase_rad": 0.0
+                    if rf is None
+                    else rf.phase_offset + rf.phase_ppm * hz_per_ppm,
+                    "gradient_hz_per_m": [
+                        0.0 if g is None else g.amplitude for g in gradients
+                    ],
+                    "rotation": _matrix(block.rotation),
+                    "adc": adc is not None,
+                    "adc_freq_hz": 0.0
+                    if adc is None
+                    else adc.freq_offset + adc.freq_ppm * hz_per_ppm,
+                    "adc_phase_rad": 0.0
+                    if adc is None
+                    else adc.phase_offset + adc.phase_ppm * hz_per_ppm,
+                }
+            )
+    return {key: np.array([row[key] for row in rows]) for key in rows[0]}
+
+
+def _matrix(rotation):
+    if rotation is None:
+        return np.eye(3)
+    w, x, y, z = np.asarray(rotation.quaternion) / np.linalg.norm(rotation.quaternion)
+    return np.array(
+        [
+            [1 - 2 * (y * y + z * z), 2 * (x * y - w * z), 2 * (x * z + w * y)],
+            [2 * (x * y + w * z), 1 - 2 * (x * x + z * z), 2 * (y * z - w * x)],
+            [2 * (x * z - w * y), 2 * (y * z + w * x), 1 - 2 * (x * x + y * y)],
+        ]
+    )
+
+
+def _played_as_designed(seq):
+    played, designed = ir.play(seq), _designed(seq)
+    assert played["subsequence"].tolist() == designed["subsequence"].tolist()
+    assert played["duration_us"].tolist() == designed["duration_us"].tolist()
+    assert played["adc"].astype(bool).tolist() == designed["adc"].tolist()
+    for key in ("rf_amp_hz", "rf_freq_hz", "gradient_hz_per_m", "adc_freq_hz"):
+        np.testing.assert_allclose(
+            played[key], designed[key], rtol=1e-6, atol=1e-6, err_msg=key
+        )
+    for key in ("rf_phase_rad", "adc_phase_rad"):
+        wrapped = np.angle(np.exp(1j * (played[key] - designed[key])))
+        np.testing.assert_allclose(wrapped, 0.0, atol=1e-6, err_msg=key)
+    np.testing.assert_allclose(played["rotation"], designed["rotation"], atol=1e-6)
+
+
+@pytest.mark.parametrize("name", SEQUENCES)
+def test_the_scanner_plays_every_block_as_its_file_designs_it(name, tmp_path):
+    seq = _copy(name, tmp_path)
+    convert(seq, SYSTEM)
+    _played_as_designed(seq)
 
 
 def test_a_binary_file_segments_into_the_scan_its_text_does(tmp_path):
@@ -155,6 +228,12 @@ def test_a_prescan_chain_converts_as_subsequences(tmp_path):
     first = Path(_ChainApp(SYSTEM).write(tmp_path / "sequence.seq", offline=True)[0])
     convert(first, SYSTEM)
     assert summary(first, SYSTEM)["num_subsequences"] == 2
+
+
+def test_a_chain_plays_its_prescan_file_then_its_scan(tmp_path):
+    first = Path(_ChainApp(SYSTEM).write(tmp_path / "sequence.seq", offline=True)[0])
+    convert(first, SYSTEM)
+    _played_as_designed(first)
 
 
 def _reader_lines(s):

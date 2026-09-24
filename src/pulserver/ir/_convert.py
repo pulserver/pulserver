@@ -182,6 +182,47 @@ def prescribe(sequence: pp.Sequence, fov_offset: Sequence[float]) -> pp.Sequence
     return sequence
 
 
+def play(seq_path: Path | str, cache_ext: str = ".pseg") -> dict[str, Any]:
+    """Walk the cache beside a sequence file as the scanner's playout does.
+
+    The cache is loaded by the C library a scanner links, and its execution
+    stream is walked with that library's cursor: one entry per played block,
+    in play order, across the subsequences of the chain. This build loads only
+    vendor-neutral caches, and only when the size recorded in the cache
+    matches the file.
+
+    Returns
+    -------
+    dict of str to ndarray
+        One entry per played block in each:
+
+        - ``subsequence``, ``segment``: chain file and cache segment indices;
+        - ``duration_us``: block duration, in µs;
+        - ``rf_amp_hz``, ``rf_freq_hz``, ``rf_phase_rad``: RF amplitude
+          (gamma B1) and frequency and phase offsets, with ppm offsets
+          resolved at the field strength the cache was converted under; 0
+          without RF;
+        - ``gradient_hz_per_m``: ``(blocks, 3)``, the amplitude of each
+          gradient event along x, y and z; an arbitrary gradient's shape
+          carries its own sign;
+        - ``rotation``: ``(blocks, 3, 3)``, the block's rotation, identity
+          without one;
+        - ``norot``, ``nopos``: the block's NOROT and NOPOS flags;
+        - ``adc``, ``adc_freq_hz``, ``adc_phase_rad``: whether the block
+          acquires, and its frequency and phase offsets;
+        - ``trid``: the TRID group in force, 0 when ungrouped.
+
+    Raises
+    ------
+    ValueError
+        If the cache cannot be loaded.
+    """
+    seq_path = Path(seq_path)
+    return require("play_cache")(
+        str(cache_path(seq_path, cache_ext)), seq_path.stat().st_size
+    )
+
+
 def _payload(
     seq_path: Path, verify_signature: bool, fov_offset: Sequence[float] | None = None
 ) -> list[dict[str, Any]]:
