@@ -1,3 +1,4 @@
+import copy
 import re
 import shutil
 import struct
@@ -284,3 +285,33 @@ def test_a_zero_offset_writes_the_cache_as_designed_and_another_does_not(tmp_pat
 def test_an_offset_is_three_values():
     with pytest.raises(ValueError, match="three values"):
         ir.prescribe(pp.Sequence(), (0.01, 0.0))
+
+
+def test_a_file_within_the_scanner_limits_has_no_problem():
+    """The fixture's 20 us gradient raster times its waveforms, not the scanner's 10 us."""
+    assert ir.check(FIXTURES / "gre_2d_3sl.seq", SYSTEM) == []
+
+
+def test_a_gradient_beyond_the_scanner_limits_is_a_problem():
+    weak = pp.Opts(max_grad=5.0, grad_unit="mT/m", max_slew=20.0, slew_unit="T/m/s")
+    assert ir.check(FIXTURES / "gre_2d_3sl.seq", weak) == [
+        "gradient amplitude of 39.7 mT/m on z in block 2 exceeds 5.0 mT/m",
+        "slew rate of 165.3 T/m/s on z in block 2 exceeds 20.0 T/m/s",
+    ]
+
+
+def test_a_dead_time_the_file_does_not_leave_is_a_timing_problem():
+    slow = copy.copy(SYSTEM)
+    slow.adc_dead_time = 1e-3
+    (problem,) = ir.check(FIXTURES / "gre_2d_3sl.seq", slow)
+    assert problem.startswith("timing: Block ")
+    assert "more errors" in problem
+
+
+def test_each_problem_of_a_chain_names_its_file():
+    weak = pp.Opts(max_grad=5.0, grad_unit="mT/m", max_slew=170.0, slew_unit="T/m/s")
+    problems = ir.check(FIXTURES / "dedup_gre_pair.seq", weak)
+    assert [problem.split(":")[0] for problem in problems] == [
+        "dedup_gre_pair.seq",
+        "dedup_gre_pair_b.seq",
+    ]

@@ -64,7 +64,10 @@ class HostDaemon:
     protocol block for ``GENERATE``, the ``fov_offset_*`` lines of the import
     block for ``IMPORT``.
 
-    Any command can instead reply with a single ``ERROR <message>`` line.
+    A generated or imported chain that fails a check of
+    :func:`pulserver.ir.check` under the session's limits writes no revision,
+    and ``GENERATE`` or ``IMPORT`` replies with its problems. Any command can
+    instead reply with a single ``ERROR <message>`` line.
     Commands of one session run one at a time; sessions run concurrently, with
     plugin code in a pool of spawned worker processes.
 
@@ -311,6 +314,9 @@ class HostDaemon:
                 entry = staged / _ENTRY
                 if files[0].name != _ENTRY:
                     entry.symlink_to(files[0].name)
+                problems = await self._run(_worker.check, session.limits, str(entry))
+                if problems:
+                    raise CommandError("; ".join(problems))
                 offset = tuple(value * 1e-3 for value in offset_mm)
                 await self._run(_worker.convert, session.limits, str(entry), offset)
                 meta = {

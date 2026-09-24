@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import inspect
 from collections.abc import Mapping
+from dataclasses import replace
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -87,17 +88,24 @@ def validate(
 def generate(
     path: str, limits: Mapping[str, Any], request: Mapping[str, Any], directory: str
 ) -> tuple[Validation, list[str], str | None, str]:
-    """Design into ``directory``, convert the result, and name its reconstruction.
+    """Design into ``directory``, check and convert the result, and name its reconstruction.
 
-    The design is written in the logical frame; the conversion shifts it to
-    the field-of-view offset the resolved protocol carries. The cache file
-    name is ``None`` for an invalid request, which writes nothing.
+    The design is written in the logical frame, and the conversion shifts it
+    to the field-of-view offset the resolved protocol carries. A design that
+    fails a check of :func:`pulserver.ir.check` is returned as an invalid
+    request carrying the problems. The file list is empty and the cache file
+    name ``None`` for an invalid request; what was written is left for the
+    caller to discard.
     """
     system, options = split_limits(limits)
     plugin = _plugin(path)
     validation, paths = plugin.generate(system, request, Path(directory))
     if not paths:
         return validation, paths, None, plugin.recon
+    problems = ir.check(paths[0], system)
+    if problems:
+        refused = replace(validation, valid=False, info="; ".join(problems))
+        return refused, [], None, plugin.recon
     offset = prescribed_offset(validation.values)
     cache = ir.convert(paths[0], system, fov_offset=offset, **options)
     return validation, paths, cache.name, plugin.recon
@@ -105,6 +113,10 @@ def generate(
 
 def chain(first: str) -> list[str]:
     return [str(path) for path in ir.chain(first)]
+
+
+def check(limits: Mapping[str, Any], seq_path: str) -> list[str]:
+    return ir.check(seq_path, split_limits(limits)[0])
 
 
 def convert(

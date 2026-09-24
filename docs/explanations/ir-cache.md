@@ -43,6 +43,19 @@ on the host: the scanner plays the cache through its rotation matrix, composed
 after each block's own rotation. Two offsets make two caches of one design, and
 two revisions ({doc}`sessions`).
 
+## Checks
+
+Before a chain is converted, {func}`~pulserver.ir.check` runs pypulseqpp's
+timing check, gradient continuity included, and its gradient amplitude and
+slew-rate checks on every file, against the gradient limits, dead times and
+ringdown time of the scanner. The waveforms are timed by the rasters the file
+declares, and taken in the logical frame with each block's own rotation; the
+prescription's rotation is applied by the scanner after these checks. The host
+daemon writes no revision for a generated design or an imported chain that
+fails one: `GENERATE` and `IMPORT` reply with the problems, as they do with a
+design error. The checks compute estimates; passing them does not establish
+scanner or patient safety.
+
 ## Passes
 
 | Pass | Result |
