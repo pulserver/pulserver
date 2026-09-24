@@ -382,6 +382,11 @@ def _adc_library(
         row[5] = event.freq_offset
         row[6] = event.phase_offset
         modulation = np.asarray(event.phase_modulation, dtype=np.float64)
+        if modulation.size and modulation.size != event.num_samples:
+            raise ValueError(
+                f"ADC {identifier} acquires {event.num_samples:g} samples but its "
+                f"phase modulation has {modulation.size}"
+            )
         row[7] = shapes.intern(modulation) if modulation.size else 0
     return rows
 

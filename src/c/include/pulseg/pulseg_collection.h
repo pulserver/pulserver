@@ -467,6 +467,25 @@ extern "C"
         float **amplitude,
         float **time_us);
 
+    /**
+     * @brief Return the phase modulation of the ADC the block at the cursor plays.
+     *
+     * The receiver phase of sample i is the ADC phase offset, plus its
+     * frequency offset times the time since the ADC's start, plus
+     * @p phase_rad[i].  A readout under a gradient that varies carries one
+     * when it is moved off the isocentre, so that it is demodulated to the
+     * prescribed field-of-view centre; a playout whose receiver cannot vary
+     * its phase within a readout applies it to the samples before they are
+     * sent.
+     *
+     * @param[in]  coll       Loaded collection, cursor on a block.
+     * @param[out] phase_rad  One phase per ADC sample, in radians; the caller
+     *                        frees it with PULSEG_FREE.
+     * @return The sample count, 0 when the block acquires nothing or its ADC
+     *         carries no modulation, or a negative error code.
+     */
+    int pulseg_get_cursor_adc_phase_modulation(const pulseg_collection *coll, float **phase_rad);
+
     /* ================================================================== */
     /*  Label getters                                                     */
     /* ================================================================== */

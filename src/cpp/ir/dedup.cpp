@@ -425,6 +425,7 @@ static int deduplicate_adc_library(
         adc_table[i].id = event_table[i];
         adc_table[i].freq_offset = params[i][0];
         adc_table[i].phase_offset = params[i][1];
+        adc_table[i].phase_shape_id = (int)seq->adc_library[i][7];
     }
 
     PULSEG_FREE(int_rows);

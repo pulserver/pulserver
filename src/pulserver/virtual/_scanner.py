@@ -44,8 +44,8 @@ def acquire(
 
     One ``(coils, samples)`` complex64 array per readout, in play order,
     multiplied by ``exp(i theta)``, where the receiver phase ``theta`` is the
-    ADC phase offset at the ADC's start and advances at its frequency offset,
-    as the playout demodulates. Only excitation and refocusing pulses act on
+    ADC phase offset at the ADC's start, advancing at its frequency offset,
+    plus its phase modulation, as the playout demodulates. Only excitation and refocusing pulses act on
     the magnetization, and ideally; a readout before the first excitation of
     its file acquires zeros. The signal model is that of
     :doc:`/explanations/virtual-scanner`.
@@ -67,6 +67,8 @@ def _play(seq_path: Path, cache_ext: str) -> Iterator[_Readout]:
     span = played["gradient_span"]
     corners = played["gradient_time_us"].astype(float)
     values = played["gradient_waveform_hz_per_m"].astype(float)
+    modulation = played["adc_phase_modulation_rad"].astype(float)
+    modulated = played["adc_modulation_span"]
     subsequence = -1
     for block in range(played["duration_us"].size):
         if played["subsequence"][block] != subsequence:
@@ -102,6 +104,8 @@ def _play(seq_path: Path, cache_ext: str) -> Iterator[_Readout]:
                 float(played["adc_phase_rad"][block])
                 + 2.0 * math.pi * float(played["adc_freq_hz"][block]) * 1e-6 * since
             )
+            if modulated[block, 1] > modulated[block, 0]:
+                receiver = receiver + modulation[slice(*modulated[block])]
             yield _Readout(
                 kspace=k - (origin[:, None] if origin is not None else 0.0),
                 phase=reference + receiver,

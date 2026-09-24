@@ -148,9 +148,20 @@ def test_an_object_off_the_prescription_is_not_acquired_centred(tmp_path):
     assert residual > 0.5
 
 
-@pytest.mark.xfail(strict=True, reason="the cache carries no ADC phase modulation")
 @pytest.mark.parametrize(
-    "name", ["epi_2d_main.seq", "mprage_stack_of_spirals_3d.seq", "zte_3d.seq"]
+    "name",
+    [
+        "epi_2d_main.seq",
+        "mprage_stack_of_spirals_3d.seq",
+        pytest.param(
+            "zte_3d.seq",
+            marks=pytest.mark.xfail(
+                strict=True,
+                reason="pypulseqpp's field-of-view translation moves a block that "
+                "carries a rotation by its unrotated gradients",
+            ),
+        ),
+    ],
 )
 def test_a_readout_under_a_varying_gradient_is_acquired_centred_off_the_isocentre(
     name, tmp_path
@@ -163,6 +174,42 @@ def test_a_readout_under_a_varying_gradient_is_acquired_centred_off_the_isocentr
     excited = [i for i, samples in enumerate(acquired) if np.abs(samples).any()]
     residual, _ = _residual([acquired[i] for i in excited], [ideal[i] for i in excited])
     assert residual < 1e-4
+
+
+def test_the_cache_carries_the_phase_modulation_of_every_prescribed_readout(tmp_path):
+    seq = _copy("epi_2d_main.seq", tmp_path)
+    ir.convert(seq, SYSTEM, fov_offset=OFFSET)
+    played = ir.play(seq, waveforms=True)
+    readouts = np.flatnonzero(played["adc"])
+    designed = []
+    for _, sequence in read_chain(seq):
+        ir.prescribe(sequence, OFFSET)
+        designed += [
+            np.asarray(block.adc.phase_modulation, dtype=float)
+            for block in (sequence.get_block(i) for i in range(1, len(sequence) + 1))
+            if block.adc is not None
+        ]
+    assert len(designed) == readouts.size
+    assert any(modulation.size for modulation in designed)
+    for block, modulation in zip(readouts, designed, strict=True):
+        start, stop = played["adc_modulation_span"][block]
+        np.testing.assert_allclose(
+            played["adc_phase_modulation_rad"][start:stop], modulation, atol=1e-6
+        )
+
+
+def test_a_phase_modulation_without_one_phase_per_sample_is_refused(tmp_path):
+    seq = _copy("zte_3d.seq", tmp_path)
+    text = seq.read_text()
+    head, adc = text.split("[ADC]\n", 1)
+    rows, rest = adc.split("\n\n", 1)
+    rows = [
+        row if row.startswith("#") else " ".join([*row.split()[:8], "51"])
+        for row in rows.splitlines()
+    ]
+    seq.write_text(head + "[ADC]\n" + "\n".join(rows) + "\n\n" + rest)
+    with pytest.raises(ValueError, match="phase modulation has 90"):
+        ir.convert(seq, SYSTEM, verify_signature=False)
 
 
 def _image(readouts, matrix):

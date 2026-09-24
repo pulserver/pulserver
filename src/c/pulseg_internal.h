@@ -201,6 +201,7 @@ typedef struct pulseg_adc_table_element
     int id;
     float freq_offset;
     float phase_offset;
+    int phase_shape_id; /* pulseq shape id of this instance's phase modulation (rad); 0 for none */
 } pulseg_adc_table_element;
 
 /* ================================================================== */
