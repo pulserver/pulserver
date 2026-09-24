@@ -24,12 +24,8 @@ from ..protocol import (
     parse_values,
 )
 from . import _worker
+from ._blocks import IMPORT_END, LIMITS_END, parse_import, parse_limits
 from ._sessions import Session, SessionKey, SessionStore, revision_hash
-
-LIMITS_BEGIN = "[Limits]"
-LIMITS_END = "[Limits End]"
-IMPORT_BEGIN = "[Import]"
-IMPORT_END = "[Import End]"
 
 # The file name the target loads in a revision.
 _ENTRY = "sequence.seq"
@@ -40,42 +36,6 @@ _log = logging.getLogger("pulserver.host")
 
 class CommandError(Exception):
     """A command that fails with an ``ERROR`` reply."""
-
-
-def _limit(text: str) -> Any:
-    for cast in (int, float):
-        try:
-            return cast(text)
-        except ValueError:
-            continue
-    return text
-
-
-def parse_limits(block: str) -> dict[str, Any]:
-    """Read a limits block: ``pypulseqpp.Opts`` keyword arguments, one per line."""
-    limits = {}
-    for line in block.splitlines():
-        if ": " in line and LIMITS_BEGIN not in line:
-            name, value = line.split(": ", 1)
-            limits[name.strip()] = _limit(value.strip())
-    return limits
-
-
-def format_limits(limits: dict[str, Any]) -> str:
-    lines = [f"{name}: {value}" for name, value in limits.items()]
-    return "\n".join([LIMITS_BEGIN, *lines, LIMITS_END]) + "\n"
-
-
-def parse_import(block: str) -> Path:
-    """Read an import block: the ``file`` line naming the first file of a chain."""
-    for line in block.splitlines():
-        if line.startswith("file: "):
-            return Path(line.removeprefix("file: ").strip())
-    raise CommandError("IMPORT needs a file line")
-
-
-def format_import(path: Path | str) -> str:
-    return f"{IMPORT_BEGIN}\nfile: {path}\n{IMPORT_END}\n"
 
 
 class HostDaemon:
@@ -324,7 +284,10 @@ class HostDaemon:
 
     async def _import(self, key: SessionKey, _args: list[str], block: str) -> str:
         session = self.store.get(key)
-        source = parse_import(block)
+        try:
+            source = parse_import(block)
+        except ValueError as error:
+            raise CommandError(str(error)) from None
         async with self._locks[key]:
             files = [Path(p) for p in await self._run(_worker.chain, str(source))]
             contents = [

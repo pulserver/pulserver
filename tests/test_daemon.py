@@ -3,6 +3,8 @@ import json
 import os
 import shutil
 import struct
+import subprocess
+import sys
 import threading
 import time
 from pathlib import Path
@@ -219,3 +221,17 @@ def test_a_generated_revision_names_the_reconstruction_its_sequence_binds(daemon
 def _meta(daemon, client, revision):
     directory = daemon.base / "bucket" / str(client.session) / "rev" / str(revision)
     return json.loads((directory / "meta.json").read_text())
+
+
+def test_a_client_process_does_not_import_the_design_engine():
+    """A command sent from a shell is not charged the design engine's import."""
+    probe = (
+        "import sys\n"
+        "from pulserver.host import HostClient, SessionKey\n"
+        "print(sorted(m for m in ('pypulseq', 'pypulseqpp') if m in sys.modules))\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", probe], capture_output=True, text=True, check=True
+    )
+
+    assert result.stdout.strip() == "[]"
