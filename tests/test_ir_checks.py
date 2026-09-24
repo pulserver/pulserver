@@ -1,5 +1,7 @@
 """The checks a chain passes before its IR is built, in the physical frame."""
 
+import re
+
 import numpy as np
 import pypulseqpp as pp
 import pytest
@@ -65,10 +67,14 @@ def test_a_block_labelled_norot_is_checked_as_it_plays_unrotated(tmp_path):
 
 
 def test_a_gradient_train_in_a_forbidden_band_is_refused_on_the_axis_it_plays(train):
-    assert ir.check(train, SYSTEM, limits=ir.CheckLimits(bands=(BAND_X,))) == [
-        "17.9 mT/m at 1000 Hz on x in the window at 0.000 s exceeds the 5.0 mT/m "
-        "of the forbidden band 900-1100 Hz on x"
-    ]
+    # Every window of the train reads alike, so which one is worst is the FFT's
+    # rounding; the window it names is not part of the claim.
+    (problem,) = ir.check(train, SYSTEM, limits=ir.CheckLimits(bands=(BAND_X,)))
+    assert re.fullmatch(
+        r"17\.9 mT/m at 1000 Hz on x in the window at \d+\.\d{3} s exceeds the "
+        r"5\.0 mT/m of the forbidden band 900-1100 Hz on x",
+        problem,
+    )
     assert ir.check(train, SYSTEM, limits=ir.CheckLimits(bands=(BAND_Y,))) == []
 
 
