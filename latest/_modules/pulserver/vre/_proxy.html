@@ -553,11 +553,16 @@
 
 <div class="viewcode-block" id="ReconProxy.bind">
 <a class="viewcode-back" href="../../../generated/pulserver.vre.ReconProxy.bind.html#pulserver.vre.ReconProxy.bind">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">bind</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">port</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Listen on ``port`` and return the port bound; 0 takes a free one."""</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">bind</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">port</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span> <span class="n">host</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"127.0.0.1"</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Listen on ``port`` and return the port bound; 0 takes a free one.</span>
+
+<span class="sd">        ``host`` is the address to listen on, the loopback interface by</span>
+<span class="sd">        default; ``"0.0.0.0"`` is every interface. The stream is neither</span>
+<span class="sd">        authenticated nor encrypted.</span>
+<span class="sd">        """</span>
         <span class="n">server</span> <span class="o">=</span> <span class="n">socket</span><span class="o">.</span><span class="n">socket</span><span class="p">(</span><span class="n">socket</span><span class="o">.</span><span class="n">AF_INET</span><span class="p">,</span> <span class="n">socket</span><span class="o">.</span><span class="n">SOCK_STREAM</span><span class="p">)</span>
         <span class="n">server</span><span class="o">.</span><span class="n">setsockopt</span><span class="p">(</span><span class="n">socket</span><span class="o">.</span><span class="n">SOL_SOCKET</span><span class="p">,</span> <span class="n">socket</span><span class="o">.</span><span class="n">SO_REUSEADDR</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
-        <span class="n">server</span><span class="o">.</span><span class="n">bind</span><span class="p">((</span><span class="s2">""</span><span class="p">,</span> <span class="n">port</span><span class="p">))</span>
+        <span class="n">server</span><span class="o">.</span><span class="n">bind</span><span class="p">((</span><span class="n">host</span><span class="p">,</span> <span class="n">port</span><span class="p">))</span>
         <span class="n">server</span><span class="o">.</span><span class="n">listen</span><span class="p">(</span><span class="mi">16</span><span class="p">)</span>
         <span class="n">server</span><span class="o">.</span><span class="n">settimeout</span><span class="p">(</span><span class="n">_ACCEPT_POLL</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_server</span> <span class="o">=</span> <span class="n">server</span>
