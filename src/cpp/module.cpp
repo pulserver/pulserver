@@ -177,6 +177,65 @@ py::dict summarize(const pulseg_collection *coll)
     return result;
 }
 
+template <typename T>
+py::array_t<T> as_array(const std::vector<T> &values, std::vector<py::ssize_t> shape)
+{
+    py::array_t<T> out(shape);
+    if (!values.empty())
+        std::memcpy(out.mutable_data(), values.data(), values.size() * sizeof(T));
+    return out;
+}
+
+/* Every block the cursor plays, in play order, one entry per block in each array. */
+py::dict play(pulseg_collection *coll)
+{
+    std::vector<int> subsequence, segment, duration_us, adc, trid, norot, nopos;
+    std::vector<float> rf_amp, rf_freq, rf_phase, adc_freq, adc_phase, gradient, rotation;
+    pulseg_cursor_reset(coll);
+    pulseg_cursor_info info = PULSEG_CURSOR_INFO_INIT;
+    int status;
+    while ((status = pulseg_cursor_advance(coll, &info)) == PULSEG_CURSOR_BLOCK)
+    {
+        pulseg_block_instance block = PULSEG_BLOCK_INSTANCE_INIT;
+        require(pulseg_get_block_instance(coll, &block), "block instance");
+        subsequence.push_back(info.subseq_idx);
+        segment.push_back(info.segment_id);
+        duration_us.push_back(block.duration_us);
+        rf_amp.push_back(block.rf_amp_hz);
+        rf_freq.push_back(block.rf_freq_hz);
+        rf_phase.push_back(block.rf_phase_rad);
+        gradient.insert(
+            gradient.end(),
+            {block.gx_amp_hz_per_m, block.gy_amp_hz_per_m, block.gz_amp_hz_per_m});
+        rotation.insert(rotation.end(), block.rotmat, block.rotmat + 9);
+        norot.push_back(block.norot_flag);
+        nopos.push_back(block.nopos_flag);
+        adc.push_back(block.adc_flag);
+        adc_freq.push_back(block.adc_freq_hz);
+        adc_phase.push_back(block.adc_phase_rad);
+        trid.push_back(block.trid);
+    }
+    require(status, "cursor");
+
+    const auto count = static_cast<py::ssize_t>(duration_us.size());
+    py::dict out;
+    out["subsequence"] = as_array(subsequence, {count});
+    out["segment"] = as_array(segment, {count});
+    out["duration_us"] = as_array(duration_us, {count});
+    out["rf_amp_hz"] = as_array(rf_amp, {count});
+    out["rf_freq_hz"] = as_array(rf_freq, {count});
+    out["rf_phase_rad"] = as_array(rf_phase, {count});
+    out["gradient_hz_per_m"] = as_array(gradient, {count, 3});
+    out["rotation"] = as_array(rotation, {count, 3, 3});
+    out["norot"] = as_array(norot, {count});
+    out["nopos"] = as_array(nopos, {count});
+    out["adc"] = as_array(adc, {count});
+    out["adc_freq_hz"] = as_array(adc_freq, {count});
+    out["adc_phase_rad"] = as_array(adc_phase, {count});
+    out["trid"] = as_array(trid, {count});
+    return out;
+}
+
 /* Convert a chain of sequences, each given as the libraries it was read into. */
 Collection convert(const py::list &chain, const pulseg_opts &opts)
 {
@@ -291,4 +350,17 @@ PYBIND11_MODULE(_ext, module)
             return summarize(coll.get());
         },
         "The summary a written cache carries.");
+
+    module.def(
+        "play_cache",
+        [](const std::string &cache_path, int source_size)
+        {
+            Collection coll(pulseg_collection_alloc());
+            if (!coll)
+                throw std::bad_alloc();
+            if (PULSEG_FAILED(pulseg_load_cache(coll.get(), cache_path.c_str(), source_size)))
+                throw std::invalid_argument("cannot load the cache " + cache_path);
+            return play(coll.get());
+        },
+        "Walk a written cache with the scanner's cursor, one entry per played block.");
 }

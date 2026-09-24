@@ -18,5 +18,6 @@ described in {doc}`../explanations/ir-cache`.
 | {obj}`~pulserver.ir.convert` | Segment a sequence file and write its IR cache beside it. |
 | {obj}`~pulserver.ir.check` | Timing and gradient problems of a chain under a scanner's limits. |
 | {obj}`~pulserver.ir.summary` | Subsequences, segments, readouts and RF spectral statistics of a sequence, from the chain or from its cache. |
+| {obj}`~pulserver.ir.play` | Every block a cache plays, resolved as the scanner's playout resolves it. |
 | {obj}`~pulserver.ir.chain` | Files of the `NextSequence` chain starting at a sequence file, in play order. |
 | {obj}`~pulserver.ir.cache_path` | Cache file of a sequence file. |
