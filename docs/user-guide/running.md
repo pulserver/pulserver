@@ -123,6 +123,26 @@ until the store holds at most `--max-bytes`. Nothing is removed otherwise.
 `list` depends on the plugin file and the installed packages only, so its reply
 can be written when they are installed and read without a call.
 
+### Warm server
+
+```bash
+pulserver design serve --plugins DIR --socket PATH
+```
+
+A call answered in its own process imports the design engine first, which
+takes most of its time. A warm server imports it once, designs, checks and
+converts a sequence of its own, and imports every plugin in `--plugins`. It then
+answers each call forwarded to its socket in a child process forked from it, so
+nothing a call does outlives the call, and a plugin that ends its process fails
+its own call only, with `ERROR the design call ended with exit status N`.
+Calls run concurrently, one child each. A call is forwarded when `--socket`, or
+the `PULSERVER_DESIGN_SOCKET` environment variable, names the socket of a
+running server, and is answered in its own process otherwise; the reply is the
+same either way. The command imports neither NumPy nor pypulseqpp to forward a
+call. The server stops on `SIGINT` or `SIGTERM` and ends the calls it is
+running. The socket is neither authenticated nor encrypted: its file
+permissions decide who may call.
+
 ## Reconstruction proxy
 
 ```bash
