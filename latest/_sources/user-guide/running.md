@@ -67,7 +67,7 @@ imported again when its modification time changes.
 ## Reconstruction proxy
 
 ```bash
-python -m pulserver.vre --base DIR --port N --plugins DIR [--host ADDR] [--slots N] [--spares 1] [--recon-timeout S]
+python -m pulserver.vre --base DIR --port N --plugins DIR [--host ADDR] [--slots N] [--gpu-slots 1] [--spares 1] [--recon-timeout S]
 ```
 
 | Option | Meaning |
@@ -76,7 +76,8 @@ python -m pulserver.vre --base DIR --port N --plugins DIR [--host ADDR] [--slots
 | `--port` | TCP port the scanner's reconstruction client connects to |
 | `--host` | Address to listen on; the loopback interface when unset, `0.0.0.0` for every interface |
 | `--plugins` | Directory of reconstruction plugin files, `<plugin>.py` |
-| `--slots` | Series reconstructed at once; derived from available memory when unset |
+| `--slots` | Series reconstructed at once; derived from available memory and the GPUs when unset |
+| `--gpu-slots` | Series reconstructed at once on each GPU when `--slots` is unset, default 1 |
 | `--spares` | Worker processes started ahead of a series, default 1 |
 | `--recon-timeout` | Seconds a reconstruction may run after its series ends; the worker is then terminated and the client told. Unlimited when unset |
 

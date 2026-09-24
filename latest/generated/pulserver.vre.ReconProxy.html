@@ -537,9 +537,12 @@ arrive demodulated to the prescribed field-of-view centre by the playout
 (<a class="reference internal" href="pulserver.ir.prescribe.html#pulserver.ir.prescribe" title="pulserver.ir.prescribe"><code class="xref py py-func docutils literal notranslate"><span class="pre">pulserver.ir.prescribe()</span></code></a>), and their samples are passed on as
 received. The reconstruction plugin is the revision’s, falling back to
 the name in the client’s config text.</p>
-<p>A series holds a slot for as long as it runs. Its worker’s images, DICOM
-and text go back to the client as they arrive, the client’s close closes
-the worker, and the worker’s close closes the client.</p>
+<p>A series holds a slot for as long as it runs. On a host with GPUs, found
+through <code class="docutils literal notranslate"><span class="pre">CUDA_VISIBLE_DEVICES</span></code> or <code class="docutils literal notranslate"><span class="pre">nvidia-smi</span></code>, each slot holds one,
+<code class="docutils literal notranslate"><span class="pre">gpu_slots</span></code> slots per GPU, and the reconstruction reads it as
+<code class="docutils literal notranslate"><span class="pre">context.device</span></code>. Its worker’s images, DICOM and text go back to the
+client as they arrive, the client’s close closes the worker, and the
+worker’s close closes the client.</p>
 <p>A series that finds every slot busy is queued instead: its enriched stream
 is written to <code class="docutils literal notranslate"><span class="pre">bucket/&lt;session&gt;/queue/&lt;id&gt;.h5</span></code> while it arrives, its
 client stays connected, and the file is replayed to a worker and deleted
@@ -555,7 +558,9 @@ once a header names another exam and no series of the exam still runs.</p>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>base</strong> – Directory holding <code class="docutils literal notranslate"><span class="pre">bucket/</span></code>, as the host daemon writes it.</p></li>
 <li><p><strong>plugins</strong> – Directory of reconstruction plugin files, <code class="docutils literal notranslate"><span class="pre">&lt;plugin&gt;.py</span></code>.</p></li>
-<li><p><strong>slots</strong> – Series reconstructed at once; the memory-derived limit when <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
+<li><p><strong>slots</strong> – Series reconstructed at once; derived from memory and the GPUs when
+<code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
+<li><p><strong>gpu_slots</strong> – Series reconstructed at once on each GPU, when <code class="docutils literal notranslate"><span class="pre">slots</span></code> is <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
 <li><p><strong>spares</strong> – Warm worker processes waiting for a series.</p></li>
 <li><p><strong>recon_timeout</strong> – Seconds a worker may take after the stream ends before it is
 terminated and the client told so; <code class="docutils literal notranslate"><span class="pre">None</span></code> waits for its close.</p></li>

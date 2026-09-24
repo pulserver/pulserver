@@ -25,6 +25,7 @@
    :nosignatures:
 
    ~ReconContext.config
+   ~ReconContext.device
    ~ReconContext.exam_id
    ~ReconContext.header
    ~ReconContext.exam

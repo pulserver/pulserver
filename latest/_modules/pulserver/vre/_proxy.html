@@ -468,7 +468,7 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">ismrmrd</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">..recon._runtime</span><span class="w"> </span><span class="kn">import</span> <span class="n">constants</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">..recon._runtime.concurrency</span><span class="w"> </span><span class="kn">import</span> <span class="n">compute_max_concurrent</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">..recon._runtime.concurrency</span><span class="w"> </span><span class="kn">import</span> <span class="n">Slot</span><span class="p">,</span> <span class="n">Slots</span><span class="p">,</span> <span class="n">slot_devices</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..recon._runtime.connection</span><span class="w"> </span><span class="kn">import</span> <span class="n">Connection</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..recon._runtime.exam</span><span class="w"> </span><span class="kn">import</span> <span class="n">ExamCacheManager</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..recon._runtime.readers</span><span class="w"> </span><span class="kn">import</span> <span class="n">deserialize_config</span><span class="p">,</span> <span class="n">read_text</span>
@@ -501,9 +501,12 @@
 <span class="sd">    received. The reconstruction plugin is the revision's, falling back to</span>
 <span class="sd">    the name in the client's config text.</span>
 
-<span class="sd">    A series holds a slot for as long as it runs. Its worker's images, DICOM</span>
-<span class="sd">    and text go back to the client as they arrive, the client's close closes</span>
-<span class="sd">    the worker, and the worker's close closes the client.</span>
+<span class="sd">    A series holds a slot for as long as it runs. On a host with GPUs, found</span>
+<span class="sd">    through ``CUDA_VISIBLE_DEVICES`` or ``nvidia-smi``, each slot holds one,</span>
+<span class="sd">    ``gpu_slots`` slots per GPU, and the reconstruction reads it as</span>
+<span class="sd">    ``context.device``. Its worker's images, DICOM and text go back to the</span>
+<span class="sd">    client as they arrive, the client's close closes the worker, and the</span>
+<span class="sd">    worker's close closes the client.</span>
 
 <span class="sd">    A series that finds every slot busy is queued instead: its enriched stream</span>
 <span class="sd">    is written to ``bucket/&lt;session&gt;/queue/&lt;id&gt;.h5`` while it arrives, its</span>
@@ -525,7 +528,10 @@
 <span class="sd">    plugins</span>
 <span class="sd">        Directory of reconstruction plugin files, ``&lt;plugin&gt;.py``.</span>
 <span class="sd">    slots</span>
-<span class="sd">        Series reconstructed at once; the memory-derived limit when ``None``.</span>
+<span class="sd">        Series reconstructed at once; derived from memory and the GPUs when</span>
+<span class="sd">        ``None``.</span>
+<span class="sd">    gpu_slots</span>
+<span class="sd">        Series reconstructed at once on each GPU, when ``slots`` is ``None``.</span>
 <span class="sd">    spares</span>
 <span class="sd">        Warm worker processes waiting for a series.</span>
 <span class="sd">    recon_timeout</span>
@@ -546,6 +552,7 @@
         <span class="n">plugins</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
         <span class="n">slots</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">gpu_slots</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
         <span class="n">spares</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
         <span class="n">recon_timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
@@ -555,7 +562,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">recon_timeout</span> <span class="o">=</span> <span class="n">recon_timeout</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_exam_root</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">tempfile</span><span class="o">.</span><span class="n">mkdtemp</span><span class="p">(</span><span class="n">prefix</span><span class="o">=</span><span class="s2">"pulserver-exams-"</span><span class="p">))</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">exams</span> <span class="o">=</span> <span class="n">ExamCacheManager</span><span class="p">(</span><span class="n">directory</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_exam_root</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_slots</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">BoundedSemaphore</span><span class="p">(</span><span class="n">compute_max_concurrent</span><span class="p">(</span><span class="n">override</span><span class="o">=</span><span class="n">slots</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_slots</span> <span class="o">=</span> <span class="n">Slots</span><span class="p">(</span><span class="n">slot_devices</span><span class="p">(</span><span class="n">slots</span><span class="p">,</span> <span class="n">gpu_slots</span><span class="p">))</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_server</span><span class="p">:</span> <span class="n">socket</span><span class="o">.</span><span class="n">socket</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_closing</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Event</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_stopping</span> <span class="o">=</span> <span class="kc">False</span>
@@ -668,17 +675,19 @@
             <span class="n">plugin</span><span class="o">.</span><span class="n">stem</span><span class="p">,</span>
             <span class="nb">len</span><span class="p">(</span><span class="n">revision</span><span class="o">.</span><span class="n">table</span><span class="p">),</span>
         <span class="p">)</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_slots</span><span class="o">.</span><span class="n">acquire</span><span class="p">(</span><span class="n">blocking</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+        <span class="n">slot</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_slots</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">wait</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">slot</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">try</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_run</span><span class="p">(</span>
                     <span class="n">client</span><span class="p">,</span>
                     <span class="n">config</span><span class="p">,</span>
                     <span class="n">header</span><span class="p">,</span>
                     <span class="n">plugin</span><span class="p">,</span>
+                    <span class="n">slot</span><span class="p">,</span>
                     <span class="k">lambda</span> <span class="n">worker</span><span class="p">:</span> <span class="n">_forward</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="n">worker</span><span class="p">,</span> <span class="n">revision</span><span class="p">),</span>
                 <span class="p">)</span>
             <span class="k">finally</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_slots</span><span class="o">.</span><span class="n">release</span><span class="p">()</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_slots</span><span class="o">.</span><span class="n">release</span><span class="p">(</span><span class="n">slot</span><span class="p">)</span>
             <span class="k">return</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_queue</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="n">config</span><span class="p">,</span> <span class="n">header</span><span class="p">,</span> <span class="n">revision</span><span class="p">,</span> <span class="n">plugin</span><span class="p">)</span>
 
@@ -699,17 +708,18 @@
         <span class="n">_log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">"queued </span><span class="si">%s</span><span class="s2"> on </span><span class="si">%s</span><span class="s2">"</span><span class="p">,</span> <span class="n">queued</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">revision</span><span class="o">.</span><span class="n">directory</span><span class="p">)</span>
         <span class="k">try</span><span class="p">:</span>
             <span class="n">others</span> <span class="o">=</span> <span class="n">_record</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="n">header</span><span class="p">,</span> <span class="n">revision</span><span class="p">,</span> <span class="n">queued</span><span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_slots</span><span class="o">.</span><span class="n">acquire</span><span class="p">()</span>
+            <span class="n">slot</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_slots</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">wait</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
             <span class="k">try</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_run</span><span class="p">(</span>
                     <span class="n">client</span><span class="p">,</span>
                     <span class="n">config</span><span class="p">,</span>
                     <span class="n">header</span><span class="p">,</span>
                     <span class="n">plugin</span><span class="p">,</span>
+                    <span class="n">slot</span><span class="p">,</span>
                     <span class="k">lambda</span> <span class="n">worker</span><span class="p">:</span> <span class="n">_replay</span><span class="p">(</span><span class="n">queued</span><span class="p">,</span> <span class="n">others</span><span class="p">,</span> <span class="n">worker</span><span class="p">),</span>
                 <span class="p">)</span>
             <span class="k">finally</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_slots</span><span class="o">.</span><span class="n">release</span><span class="p">()</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_slots</span><span class="o">.</span><span class="n">release</span><span class="p">(</span><span class="n">slot</span><span class="p">)</span>
         <span class="k">finally</span><span class="p">:</span>
             <span class="n">queued</span><span class="o">.</span><span class="n">unlink</span><span class="p">()</span>
 
@@ -719,11 +729,12 @@
         <span class="n">config</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
         <span class="n">header</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
         <span class="n">plugin</span><span class="p">:</span> <span class="n">Path</span><span class="p">,</span>
+        <span class="n">slot</span><span class="p">:</span> <span class="n">Slot</span><span class="p">,</span>
         <span class="n">feed</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Connection</span><span class="p">],</span> <span class="kc">None</span><span class="p">],</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""Give a worker the config, the header and whatever ``feed`` sends it."""</span>
         <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">exams</span><span class="o">.</span><span class="n">lease</span><span class="p">(</span><span class="n">header</span><span class="p">)</span> <span class="k">as</span> <span class="n">exam</span><span class="p">:</span>
-            <span class="n">channel</span> <span class="o">=</span> <span class="n">_WorkerChannel</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">workers</span><span class="p">,</span> <span class="n">plugin</span><span class="p">,</span> <span class="n">exam</span><span class="o">.</span><span class="n">directory</span><span class="p">)</span>
+            <span class="n">channel</span> <span class="o">=</span> <span class="n">_WorkerChannel</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">workers</span><span class="p">,</span> <span class="n">plugin</span><span class="p">,</span> <span class="n">exam</span><span class="o">.</span><span class="n">directory</span><span class="p">,</span> <span class="n">slot</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
             <span class="k">with</span> <span class="n">channel</span> <span class="k">as</span> <span class="n">worker</span><span class="p">:</span>
                 <span class="n">worker</span><span class="o">.</span><span class="n">send_config</span><span class="p">(</span><span class="n">config</span><span class="p">)</span>
                 <span class="n">worker</span><span class="o">.</span><span class="n">send_header</span><span class="p">(</span><span class="n">header</span><span class="p">)</span>
@@ -774,12 +785,17 @@
 <span class="w">    </span><span class="sd">"""A worker's end of one series: its Unix socket, its process, its stream."""</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">pool</span><span class="p">:</span> <span class="n">WorkerPool</span><span class="p">,</span> <span class="n">plugin</span><span class="p">:</span> <span class="n">Path</span><span class="p">,</span> <span class="n">exam_directory</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">pool</span><span class="p">:</span> <span class="n">WorkerPool</span><span class="p">,</span>
+        <span class="n">plugin</span><span class="p">:</span> <span class="n">Path</span><span class="p">,</span>
+        <span class="n">exam_directory</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">device</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_directory</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">tempfile</span><span class="o">.</span><span class="n">mkdtemp</span><span class="p">(</span><span class="n">prefix</span><span class="o">=</span><span class="s2">"pulserver-series-"</span><span class="p">))</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_pool</span> <span class="o">=</span> <span class="n">pool</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_plugin</span> <span class="o">=</span> <span class="n">plugin</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_exam_directory</span> <span class="o">=</span> <span class="n">exam_directory</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_device</span> <span class="o">=</span> <span class="n">device</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_process</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">connection</span><span class="p">:</span> <span class="n">Connection</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
 
@@ -791,7 +807,7 @@
             <span class="n">listener</span><span class="o">.</span><span class="n">listen</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
             <span class="n">listener</span><span class="o">.</span><span class="n">settimeout</span><span class="p">(</span><span class="n">_CONNECT_TIMEOUT</span><span class="p">)</span>
             <span class="n">process</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_process</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pool</span><span class="o">.</span><span class="n">assign</span><span class="p">(</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_plugin</span><span class="p">,</span> <span class="n">path</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_exam_directory</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_plugin</span><span class="p">,</span> <span class="n">path</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_exam_directory</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_device</span>
             <span class="p">)</span>
             <span class="k">try</span><span class="p">:</span>
                 <span class="n">stream</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">listener</span><span class="o">.</span><span class="n">accept</span><span class="p">()</span>

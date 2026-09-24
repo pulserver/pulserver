@@ -594,6 +594,12 @@ stored there and read by the next. Under the proxy each series runs in a process
 of its own, so a stored value reaches the next series pickled, through the
 exam’s directory: it comes back as a copy, without its <code class="docutils literal notranslate"><span class="pre">cleanup</span></code>, and a value
 that cannot be pickled stays with its series.</p>
+<p><code class="docutils literal notranslate"><span class="pre">context.device</span></code> is the GPU the proxy gave the series, such as <code class="docutils literal notranslate"><span class="pre">&quot;cuda:0&quot;</span></code>, and
+<code class="docutils literal notranslate"><span class="pre">None</span></code> on a host without one and offline; a reconstruction puts its tensors
+there. A reconstruction may start processes of its own. A child started with
+the <code class="docutils literal notranslate"><span class="pre">spawn</span></code> method imports what it runs by module name, which a plugin file
+loaded from a path does not have, so the functions it runs come from importable
+modules.</p>
 </section>
 <section id="non-cartesian-data">
 <h2>Non-Cartesian data<a class="headerlink" href="#non-cartesian-data" title="Link to this heading">#</a></h2>

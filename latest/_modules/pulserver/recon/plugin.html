@@ -852,6 +852,9 @@
 <span class="sd">        Artifact cache shared by the series of the exam.</span>
 <span class="sd">    config</span>
 <span class="sd">        Configuration payload the client sent with the stream.</span>
+<span class="sd">    device</span>
+<span class="sd">        The GPU the proxy gave this series, as a torch device such as</span>
+<span class="sd">        ``"cuda:0"``; ``None`` on the host, and offline.</span>
 
 <span class="sd">    Examples</span>
 <span class="sd">    --------</span>
@@ -870,6 +873,7 @@
     <span class="n">header</span><span class="p">:</span> <span class="n">Any</span>
     <span class="n">exam</span><span class="p">:</span> <span class="n">ExamCache</span>
     <span class="n">config</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">device</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
 
 <div class="viewcode-block" id="ReconContext.offline">
 <a class="viewcode-back" href="../../../generated/pulserver.recon.ReconContext.offline.html#pulserver.recon.ReconContext.offline">[docs]</a>

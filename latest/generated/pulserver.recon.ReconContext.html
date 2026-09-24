@@ -536,6 +536,8 @@
 <li><p><strong>header</strong> (<em>Any</em>) – Parsed MRD XML header; offline, <code class="docutils literal notranslate"><span class="pre">None</span></code> or any header-like object.</p></li>
 <li><p><strong>exam</strong> (<a class="reference internal" href="pulserver.recon.ExamCache.html#pulserver.recon.ExamCache" title="pulserver.recon.plugin.ExamCache"><em>pulserver.recon.plugin.ExamCache</em></a>) – Artifact cache shared by the series of the exam.</p></li>
 <li><p><strong>config</strong> (<em>Any</em>) – Configuration payload the client sent with the stream.</p></li>
+<li><p><strong>device</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em> | </em><em>None</em>) – The GPU the proxy gave this series, as a torch device such as
+<code class="docutils literal notranslate"><span class="pre">&quot;cuda:0&quot;</span></code>; <code class="docutils literal notranslate"><span class="pre">None</span></code> on the host, and offline.</p></li>
 </ul>
 </dd>
 </dl>
@@ -569,13 +571,16 @@
 <tr class="row-odd"><td><p><a class="reference internal" href="pulserver.recon.ReconContext.config.html#pulserver.recon.ReconContext.config" title="pulserver.recon.ReconContext.config"><code class="xref py py-obj docutils literal notranslate"><span class="pre">config</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pulserver.recon.ReconContext.exam_id.html#pulserver.recon.ReconContext.exam_id" title="pulserver.recon.ReconContext.exam_id"><code class="xref py py-obj docutils literal notranslate"><span class="pre">exam_id</span></code></a></p></td>
-<td><p>Identifier of <code class="xref py py-attr docutils literal notranslate"><span class="pre">exam</span></code>.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.recon.ReconContext.header.html#pulserver.recon.ReconContext.header" title="pulserver.recon.ReconContext.header"><code class="xref py py-obj docutils literal notranslate"><span class="pre">header</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.recon.ReconContext.device.html#pulserver.recon.ReconContext.device" title="pulserver.recon.ReconContext.device"><code class="xref py py-obj docutils literal notranslate"><span class="pre">device</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pulserver.recon.ReconContext.exam.html#pulserver.recon.ReconContext.exam" title="pulserver.recon.ReconContext.exam"><code class="xref py py-obj docutils literal notranslate"><span class="pre">exam</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.recon.ReconContext.exam_id.html#pulserver.recon.ReconContext.exam_id" title="pulserver.recon.ReconContext.exam_id"><code class="xref py py-obj docutils literal notranslate"><span class="pre">exam_id</span></code></a></p></td>
+<td><p>Identifier of <code class="xref py py-attr docutils literal notranslate"><span class="pre">exam</span></code>.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.recon.ReconContext.header.html#pulserver.recon.ReconContext.header" title="pulserver.recon.ReconContext.header"><code class="xref py py-obj docutils literal notranslate"><span class="pre">header</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.recon.ReconContext.exam.html#pulserver.recon.ReconContext.exam" title="pulserver.recon.ReconContext.exam"><code class="xref py py-obj docutils literal notranslate"><span class="pre">exam</span></code></a></p></td>
 <td><p></p></td>
 </tr>
 </tbody>

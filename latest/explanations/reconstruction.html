@@ -606,7 +606,12 @@ exam reads it back, such as a coil calibration it need not compute again. The
 exam is the one the header names; the directory is deleted once a header names
 another exam and no series of the first is still reconstructed.</p>
 <p>The number of series reconstructed concurrently is bounded by a number of
-slots, derived from the available memory unless it is specified. A series that
+slots, derived from the available memory unless it is specified. On a host with
+GPUs, which the proxy finds from <code class="docutils literal notranslate"><span class="pre">CUDA_VISIBLE_DEVICES</span></code> or <code class="docutils literal notranslate"><span class="pre">nvidia-smi</span></code> without
+importing a GPU library, each slot holds one of them, one series per GPU unless
+more are allowed, and the reconstruction finds its GPU in <code class="docutils literal notranslate"><span class="pre">context.device</span></code>. A
+worker is an ordinary process, so a reconstruction may start processes of its
+own. A series that
 arrives when every slot is occupied is written to disk, enriched, as it
 arrives, and replayed to a worker once a slot is released. The client remains
 connected meanwhile, and the images are returned through its connection.</p>
