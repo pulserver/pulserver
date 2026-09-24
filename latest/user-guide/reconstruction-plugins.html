@@ -590,7 +590,10 @@ image header; <code class="docutils literal notranslate"><span class="pre">dicom
 (<a class="reference internal" href="../generated/pulserver.recon.ReconPlugin.spawn.html#pulserver.recon.ReconPlugin.spawn" title="pulserver.recon.ReconPlugin.spawn"><code class="xref py py-meth docutils literal notranslate"><span class="pre">spawn()</span></code></a>), so state set in the hooks belongs
 to one series. <code class="docutils literal notranslate"><span class="pre">context.exam</span></code>, an <a class="reference internal" href="../generated/pulserver.recon.ExamCache.html#pulserver.recon.ExamCache" title="pulserver.recon.ExamCache"><code class="xref py py-class docutils literal notranslate"><span class="pre">ExamCache</span></code></a>, is shared
 by the series of one exam: a coil calibration computed in one series can be
-stored there and read by the next.</p>
+stored there and read by the next. Under the proxy each series runs in a process
+of its own, so a stored value reaches the next series pickled, through the
+exam’s directory: it comes back as a copy, without its <code class="docutils literal notranslate"><span class="pre">cleanup</span></code>, and a value
+that cannot be pickled stays with its series.</p>
 </section>
 <section id="non-cartesian-data">
 <h2>Non-Cartesian data<a class="headerlink" href="#non-cartesian-data" title="Link to this heading">#</a></h2>

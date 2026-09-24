@@ -546,6 +546,10 @@ client stays connected, and the file is replayed to a worker and deleted
 once a slot frees.</p>
 <p>Once the client’s stream ends, the proxy waits for the worker to close,
 however long the reconstruction takes, unless <code class="docutils literal notranslate"><span class="pre">recon_timeout</span></code> caps it.</p>
+<p>The series of one exam share a directory under the system’s temporary
+directory, through which a reconstruction reads what an earlier series of
+the exam stored in its <a class="reference internal" href="pulserver.recon.ExamCache.html#pulserver.recon.ExamCache" title="pulserver.recon.ExamCache"><code class="xref py py-class docutils literal notranslate"><span class="pre">ExamCache</span></code></a>. It is deleted
+once a header names another exam and no series of the exam still runs.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -558,7 +562,10 @@ terminated and the client told so; <code class="docutils literal notranslate"><s
 </ul>
 </dd>
 <dt class="field-even">Attributes<span class="colon">:</span></dt>
-<dd class="field-even"><p><strong>workers</strong> (<em>WorkerPool</em>) – The spares assignments are taken from.</p>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>workers</strong> (<em>WorkerPool</em>) – The spares assignments are taken from.</p></li>
+<li><p><strong>exams</strong> (<em>ExamCacheManager</em>) – The current exam and its directory.</p></li>
+</ul>
 </dd>
 </dl>
 </dd></dl>

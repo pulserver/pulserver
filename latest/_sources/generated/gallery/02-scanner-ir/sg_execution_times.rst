@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:00.447** total execution time for 1 file **from generated/gallery/02-scanner-ir**:
+**00:00.590** total execution time for 1 file **from generated/gallery/02-scanner-ir**:
 
 .. container::
 
@@ -33,5 +33,5 @@ Computation times
      - Time
      - Mem (MB)
    * - :ref:`sphx_glr_generated_gallery_02-scanner-ir_01_segmentation.py` (``01_segmentation.py``)
-     - 00:00.447
+     - 00:00.590
      - 0.0

@@ -534,9 +534,21 @@
 when the cache closes: through the <code class="docutils literal notranslate"><span class="pre">cleanup</span></code> stored with it, else its
 <code class="docutils literal notranslate"><span class="pre">close()</span></code> method when it has one. Disposal errors are logged, not raised.
 Reads and writes after <a class="reference internal" href="pulserver.recon.ExamCache.close.html#pulserver.recon.ExamCache.close" title="pulserver.recon.ExamCache.close"><code class="xref py py-meth docutils literal notranslate"><span class="pre">close()</span></code></a> raise <code class="docutils literal notranslate"><span class="pre">RuntimeError</span></code>.</p>
+<p>With a <code class="docutils literal notranslate"><span class="pre">directory</span></code>, every value stored is also written there with
+pickle, and a key this cache does not hold is read from there, so the
+caches of one exam in different processes share their values. A value
+read back is a copy, without the <code class="docutils literal notranslate"><span class="pre">cleanup</span></code> stored with it; a key or value
+that cannot be pickled is held by this cache alone. Closing leaves the
+directory as it is.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>exam_id</strong> – Identifier of the owning exam.</p>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>exam_id</strong> – Identifier of the owning exam.</p></li>
+<li><p><strong>directory</strong> – Directory the exam’s caches share; <code class="docutils literal notranslate"><span class="pre">None</span></code> holds values in memory
+only. Its files are unpickled, so only the processes sharing the exam
+may write to it: the proxy creates it under a directory only its own
+user can open.</p></li>
+</ul>
 </dd>
 </dl>
 <p class="rubric">Examples</p>
@@ -553,7 +565,7 @@ Reads and writes after <a class="reference internal" href="pulserver.recon.ExamC
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table">
 <tbody>
 <tr class="row-odd"><td><p><a class="reference internal" href="pulserver.recon.ExamCache.clear.html#pulserver.recon.ExamCache.clear" title="pulserver.recon.ExamCache.clear"><code class="xref py py-obj docutils literal notranslate"><span class="pre">clear</span></code></a></p></td>
-<td><p>Dispose and remove every cached artifact.</p></td>
+<td><p>Dispose and remove every cached artifact, the directory's included.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="pulserver.recon.ExamCache.close.html#pulserver.recon.ExamCache.close" title="pulserver.recon.ExamCache.close"><code class="xref py py-obj docutils literal notranslate"><span class="pre">close</span></code></a></p></td>
 <td><p>Dispose every artifact and retire the cache; repeated calls do nothing.</p></td>

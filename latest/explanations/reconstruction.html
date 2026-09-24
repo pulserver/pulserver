@@ -600,6 +600,11 @@ configuration when the sequence names none. A worker reconstructs one series
 and exits, which releases the host and GPU memory the reconstruction allocated.
 Importing a reconstruction engine takes seconds, so the proxy keeps spare
 worker processes that have already imported it.</p>
+<p>The series of one exam share a directory on the reconstruction computer. What
+a series stores in its exam cache is written there, and a later series of the
+exam reads it back, such as a coil calibration it need not compute again. The
+exam is the one the header names; the directory is deleted once a header names
+another exam and no series of the first is still reconstructed.</p>
 <p>The number of series reconstructed concurrently is bounded by a number of
 slots, derived from the available memory unless it is specified. A series that
 arrives when every slot is occupied is written to disk, enriched, as it
