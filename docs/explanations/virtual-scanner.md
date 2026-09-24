@@ -70,19 +70,23 @@ excitation of its file acquires zeros.
 ## What a run establishes
 
 - The trajectory the cache plays is the one each file designs, for the
-  Cartesian, EPI, spiral and radial fixtures.
+  fixtures and for every sequence pypulseqpp ships, at small sizes.
 - The enrichment states that trajectory for every readout.
-- An object at the prescribed offset is acquired centred by a Cartesian
-  gradient echo and spin echo, and by EPI and spiral readouts, which the
-  translation gives a phase modulation; an object away from it is not.
+- An object at the prescribed offset is acquired centred by every shipped
+  sequence whose readouts carry no rotation extension, EPI and spiral readouts,
+  which the translation gives a phase modulation, included; an object away
+  from it is not.
 - A series streamed through the proxy is reconstructed into the phantom's
   image, at the prescribed position, and a series short of a readout is
   refused.
 
-pypulseqpp's field-of-view translation moves a block that carries a rotation
-extension by its unrotated gradients, so an off-centre design whose spokes are
-rotations of one readout, as the ZTE fixture's are, is acquired off its ideal;
-the test suite records it as an expected failure.
+Two differences are recorded as expected failures. The cache places an RF
+pulse at its magnitude peak, so a refocusing pulse whose peak lies a sample
+from the centre its design records, as in the shipped 2D spin echoes and the
+3D fast spin echo, negates k a sample late. And pypulseqpp's field-of-view
+translation moves a block that carries a rotation extension by its unrotated
+gradients, so an off-centre design whose readouts are rotations of one, the
+shipped radial, spiral, PROPELLER and ZTE sequences, is acquired off its ideal.
 
 ## See also
 
