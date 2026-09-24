@@ -143,6 +143,7 @@ Every documented quantity carries its unit.
 | Field-of-view offset passed to `ir.convert` and `ir.prescribe` | m |
 | Dwell time in an enriched acquisition (`sample_time_us`) | µs |
 | k-space trajectory | 1/m, as pypulseqpp reports it |
+| Grid trajectory (`ReconBuffer.grid_trajectory`) | k times the reconstructed field of view; an N-point matrix spans [-N/2, N/2) |
 | Session day | days since 1970-01-01 |
 
 State the coordinate frame wherever a position or a k-space quantity appears.
