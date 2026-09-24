@@ -314,6 +314,13 @@ def test_a_series_carrying_no_header_or_two_is_refused(
     assert _refused(stream(proxy.port, series["bound"], headers=headers), reason)
 
 
+def test_a_stream_closed_before_its_header_is_refused(start_proxy, bucket):
+    _, series = bucket
+    proxy = start_proxy(slots=1)
+    received = stream(proxy.port, series["bound"], config=None, headers=0, readouts=0)
+    assert _refused(received, "where its MRD header belongs")
+
+
 def test_a_crashing_plugin_closes_its_series_and_frees_the_slot(start_proxy, bucket):
     _, series = bucket
     proxy = start_proxy(slots=1)
