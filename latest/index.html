@@ -250,7 +250,7 @@
 <li class="toctree-l1 has-children"><a class="reference internal" href="explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="explanations/architecture.html">Architecture</a></li>
 <li class="toctree-l2"><a class="reference internal" href="explanations/protocol.html">Protocol resolution</a></li>
-<li class="toctree-l2"><a class="reference internal" href="explanations/sessions.html">Design sessions and revisions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="explanations/designs.html">Designs and the design store</a></li>
 <li class="toctree-l2"><a class="reference internal" href="explanations/ir-cache.html">The scanner IR</a></li>
 <li class="toctree-l2"><a class="reference internal" href="explanations/reconstruction.html">Raw-data enrichment and routing</a></li>
 </ul>
@@ -273,7 +273,7 @@
 <li class="toctree-l1 has-children"><a class="reference internal" href="api/index.html">API reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="api/protocol.html">Protocol</a></li>
 <li class="toctree-l2"><a class="reference internal" href="api/design.html">Scanner sequences</a></li>
-<li class="toctree-l2"><a class="reference internal" href="api/host.html">Host daemon</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/host.html">Design calls</a></li>
 <li class="toctree-l2"><a class="reference internal" href="api/ir.html">IR conversion</a></li>
 <li class="toctree-l2"><a class="reference internal" href="api/vre.html">Reconstruction proxy</a></li>
 <li class="toctree-l2"><a class="reference internal" href="api/recon.html">Reconstruction plugins</a></li>
@@ -559,8 +559,9 @@ the checks pypulseqpp provides does not establish scanner or patient safety.</p>
 <ul class="simple">
 <li><p>Protocol resolution: the echo time, repetition time and bandwidth a design
 achieves, the scan time, and the design error for an infeasible prescription.</p></li>
-<li><p>Design sessions and immutable revisions for every PSD host process of a
-scanner, served over a Unix socket.</p></li>
+<li><p>Stateless design calls for every PSD host process of a scanner, one command
+per call or through a warm server, and a store of immutable designs named by
+their content.</p></li>
 <li><p>Segmentation of a <code class="docutils literal notranslate"><span class="pre">NextSequence</span></code> chain into a binary IR cache, read by an
 ANSI C library linked into the interpreter, with the prescribed field-of-view
 offset applied to the logical-frame design as RF and ADC frequency and phase.</p></li>
@@ -576,8 +577,8 @@ stream, an ISMRMRD file or an assembled acquisition bucket.</p></li>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span>pulserver
 </pre></div>
 </div>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>-m<span class="w"> </span>pulserver.host<span class="w"> </span>--base<span class="w"> </span>/srv/pulserver<span class="w"> </span>--socket<span class="w"> </span>/tmp/pulserver.sock<span class="w"> </span>--plugins<span class="w"> </span>sequences/
-python<span class="w"> </span>-m<span class="w"> </span>pulserver.vre<span class="w"> </span>--base<span class="w"> </span>/srv/pulserver<span class="w"> </span>--port<span class="w"> </span><span class="m">9002</span><span class="w"> </span>--plugins<span class="w"> </span>recon/
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pulserver<span class="w"> </span>design<span class="w"> </span>serve<span class="w"> </span>--plugins<span class="w"> </span>sequences/<span class="w"> </span>--socket<span class="w"> </span>/tmp/pulserver.sock
+python<span class="w"> </span>-m<span class="w"> </span>pulserver.vre<span class="w"> </span>--store<span class="w"> </span>/srv/pulserver/designs<span class="w"> </span>--port<span class="w"> </span><span class="m">9002</span><span class="w"> </span>--plugins<span class="w"> </span>recon/
 </pre></div>
 </div>
 </section>
@@ -587,7 +588,7 @@ python<span class="w"> </span>-m<span class="w"> </span>pulserver.vre<span class
 covers installation and support, running the two services, and writing
 scanner-sequence and reconstruction plugins. The
 <a class="reference external" href="https://pulserver.github.io/pulserver/latest/explanations/index.html">explanations</a>
-describe the architecture, protocol resolution, design sessions, the scanner IR
+describe the architecture, protocol resolution, the design store, the scanner IR
 and raw-data enrichment, and the
 <a class="reference external" href="https://pulserver.github.io/pulserver/latest/examples/index.html">examples</a>
 execute each of them on a shipped pypulseqpp sequence. Every version of the documentation is published at

@@ -30,8 +30,8 @@ Use the established term. Do not explain around it.
 | what the operator asks for | the requested protocol, the prescription |
 | what the sequence will actually play | the resolved protocol |
 | the numbers the scanner keeps | the scanner control variables (CVs) |
-| a design the daemon remembers | a revision |
-| the folder both sides look at | the bucket |
+| a design written earlier | a stored design, by its identifier |
+| the folder both sides look at | the design store |
 | the scanner program | the interpreter |
 | the host process for one sequence | the PSD host process |
 | the compiled form of a sequence | the IR, the IR cache |
@@ -56,10 +56,12 @@ that designs the sequence. A *scanner sequence* is the pulserver
 `ScannerSequence` that binds an application to protocol entries. A *plugin* is
 the file either kind is loaded from; say which kind.
 
-**Storage.** A *session* belongs to one PSD host process. A *revision* is one
-generated or imported design in a session, immutable once written. The
-*current* revision is the one the interpreter plays. The *bucket* is the
-directory holding every session.
+**Storage.** A *design* is one generated or imported chain with its IR cache,
+immutable once written. Its *identity* is the hash of what it depends on; its
+*identifier* is the first 18 hexadecimal digits of the identity. The *design
+store* is the directory holding every design. A *design call* is one `list`,
+`validate`, `generate` or `import` of a PSD host process; no call keeps state
+beyond the designs it stores.
 
 **IR.** A *subsequence* is one file of a `NextSequence` chain. A *definition*
 is a distinct event after deduplication; an *instance* is its occurrence in a
@@ -79,12 +81,12 @@ states.
 *engines* are pypulseqpp (design) and the reconstruction a plugin imports.
 *Orchestration* is pulserver. *Scanner execution* is what the interpreter does
 on the hardware. Do not attribute a property of one layer to another: a
-revision is not a `.seq` file, and the IR cache is not the design of record.
+design is not a `.seq` file, and the IR cache is not the design of record.
 
 ### Fixed vocabulary
 
-- **host daemon**, **reconstruction proxy**; `pulserver.host` and
-  `pulserver.vre` when the module is meant.
+- **design calls**, **warm server**, **reconstruction proxy**;
+  `pulserver.host` and `pulserver.vre` when the module is meant.
 - **PSD host process**, not "host PSD" or "PSD process".
 - **interpreter** for the scanner-side program; **reconstruction client** for
   the scanner-side sender of raw data.
@@ -96,13 +98,13 @@ revision is not a `.seq` file, and the IR cache is not the design of record.
 
 Write dry, declarative technical prose.
 
-**No personification.** A daemon does not decide, a revision does not know, a
+**No personification.** A server does not decide, a design does not know, a
 proxy does not wait for anything it is not blocked on, a plugin does not ask.
 Objects have properties and functions have behaviour.
 
 **No literary compression.** Do not describe an object by a relative clause
-where a noun exists: not "the directory the host daemon writes into" but "the
-bucket"; not "what the design managed" but "the resolved protocol".
+where a noun exists: not "the directory the design calls write into" but "the
+design store"; not "what the design managed" but "the resolved protocol".
 
 **No taglines.** An API summary classifies its object.
 
@@ -149,7 +151,7 @@ Every documented quantity carries its unit.
 | Dwell time in an enriched acquisition (`sample_time_us`) | µs |
 | k-space trajectory | 1/m, as pypulseqpp reports it |
 | Grid trajectory (`ReconBuffer.grid_trajectory`) | k times the reconstructed field of view; an N-point matrix spans [-N/2, N/2) |
-| Session day | days since 1970-01-01 |
+| Design identifier | 18 hexadecimal digits: three 24-bit integers, each exact in a float32 |
 
 State the coordinate frame wherever a position or a k-space quantity appears.
 The field-of-view offset is expressed along the logical readout, phase and
@@ -175,7 +177,7 @@ computes the SAR and the gradient heating. Passing these checks does not
 establish scanner or patient safety.
 
 - Never write "safe", "validated", "compliant" or "approved" of a sequence, a
-  protocol or a revision.
+  protocol or a design.
 - A valid `VALIDATE` reply means the sequence application designed the
   prescription under the scanner limits it was given. State that, not more.
 

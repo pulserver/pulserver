@@ -249,7 +249,7 @@
 <li class="toctree-l1 has-children"><a class="reference internal" href="../explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/architecture.html">Architecture</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/protocol.html">Protocol resolution</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../explanations/sessions.html">Design sessions and revisions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/designs.html">Designs and the design store</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/ir-cache.html">The scanner IR</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/reconstruction.html">Raw-data enrichment and routing</a></li>
 </ul>
@@ -272,7 +272,7 @@
 <li class="toctree-l1 has-children"><a class="reference internal" href="../api/index.html">API reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../api/protocol.html">Protocol</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/design.html">Scanner sequences</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../api/host.html">Host daemon</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/host.html">Design calls</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/ir.html">IR conversion</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/vre.html">Reconstruction proxy</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/recon.html">Reconstruction plugins</a></li>
@@ -577,11 +577,11 @@ wording.</p>
 <tr class="row-even"><td><p>the numbers the scanner keeps</p></td>
 <td><p>the scanner control variables (CVs)</p></td>
 </tr>
-<tr class="row-odd"><td><p>a design the daemon remembers</p></td>
-<td><p>a revision</p></td>
+<tr class="row-odd"><td><p>a design written earlier</p></td>
+<td><p>a stored design, by its identifier</p></td>
 </tr>
 <tr class="row-even"><td><p>the folder both sides look at</p></td>
-<td><p>the bucket</p></td>
+<td><p>the design store</p></td>
 </tr>
 <tr class="row-odd"><td><p>the scanner program</p></td>
 <td><p>the interpreter</p></td>
@@ -627,10 +627,12 @@ design choice, not a time.</p>
 that designs the sequence. A <em>scanner sequence</em> is the pulserver
 <code class="docutils literal notranslate"><span class="pre">ScannerSequence</span></code> that binds an application to protocol entries. A <em>plugin</em> is
 the file either kind is loaded from; say which kind.</p>
-<p><strong>Storage.</strong> A <em>session</em> belongs to one PSD host process. A <em>revision</em> is one
-generated or imported design in a session, immutable once written. The
-<em>current</em> revision is the one the interpreter plays. The <em>bucket</em> is the
-directory holding every session.</p>
+<p><strong>Storage.</strong> A <em>design</em> is one generated or imported chain with its IR cache,
+immutable once written. Its <em>identity</em> is the hash of what it depends on; its
+<em>identifier</em> is the first 18 hexadecimal digits of the identity. The <em>design
+store</em> is the directory holding every design. A <em>design call</em> is one <code class="docutils literal notranslate"><span class="pre">list</span></code>,
+<code class="docutils literal notranslate"><span class="pre">validate</span></code>, <code class="docutils literal notranslate"><span class="pre">generate</span></code> or <code class="docutils literal notranslate"><span class="pre">import</span></code> of a PSD host process; no call keeps state
+beyond the designs it stores.</p>
 <p><strong>IR.</strong> A <em>subsequence</em> is one file of a <code class="docutils literal notranslate"><span class="pre">NextSequence</span></code> chain. A <em>definition</em>
 is a distinct event after deduplication; an <em>instance</em> is its occurrence in a
 block, with its own amplitude. The <em>repeating unit</em> is the TR of a
@@ -647,13 +649,13 @@ states.</p>
 <em>engines</em> are pypulseqpp (design) and the reconstruction a plugin imports.
 <em>Orchestration</em> is pulserver. <em>Scanner execution</em> is what the interpreter does
 on the hardware. Do not attribute a property of one layer to another: a
-revision is not a <code class="docutils literal notranslate"><span class="pre">.seq</span></code> file, and the IR cache is not the design of record.</p>
+design is not a <code class="docutils literal notranslate"><span class="pre">.seq</span></code> file, and the IR cache is not the design of record.</p>
 </section>
 <section id="fixed-vocabulary">
 <h3>Fixed vocabulary<a class="headerlink" href="#fixed-vocabulary" title="Link to this heading">#</a></h3>
 <ul class="simple">
-<li><p><strong>host daemon</strong>, <strong>reconstruction proxy</strong>; <code class="docutils literal notranslate"><span class="pre">pulserver.host</span></code> and
-<code class="docutils literal notranslate"><span class="pre">pulserver.vre</span></code> when the module is meant.</p></li>
+<li><p><strong>design calls</strong>, <strong>warm server</strong>, <strong>reconstruction proxy</strong>;
+<code class="docutils literal notranslate"><span class="pre">pulserver.host</span></code> and <code class="docutils literal notranslate"><span class="pre">pulserver.vre</span></code> when the module is meant.</p></li>
 <li><p><strong>PSD host process</strong>, not “host PSD” or “PSD process”.</p></li>
 <li><p><strong>interpreter</strong> for the scanner-side program; <strong>reconstruction client</strong> for
 the scanner-side sender of raw data.</p></li>
@@ -666,12 +668,12 @@ for the representation.</p></li>
 <section id="register">
 <h2>2. Register<a class="headerlink" href="#register" title="Link to this heading">#</a></h2>
 <p>Write dry, declarative technical prose.</p>
-<p><strong>No personification.</strong> A daemon does not decide, a revision does not know, a
+<p><strong>No personification.</strong> A server does not decide, a design does not know, a
 proxy does not wait for anything it is not blocked on, a plugin does not ask.
 Objects have properties and functions have behaviour.</p>
 <p><strong>No literary compression.</strong> Do not describe an object by a relative clause
-where a noun exists: not “the directory the host daemon writes into” but “the
-bucket”; not “what the design managed” but “the resolved protocol”.</p>
+where a noun exists: not “the directory the design calls write into” but “the
+design store”; not “what the design managed” but “the resolved protocol”.</p>
 <p><strong>No taglines.</strong> An API summary classifies its object.</p>
 <p><strong>No conversational or tutorial voice.</strong> No “simply”, “just”, “note that”,
 “under the hood”, “powerful”, “seamless”. No rhetorical questions.</p>
@@ -750,8 +752,8 @@ verb that classifies the operation: “Return…”, “Read…”, “Format…
 <tr class="row-odd"><td><p>Grid trajectory (<code class="docutils literal notranslate"><span class="pre">ReconBuffer.grid_trajectory</span></code>)</p></td>
 <td><p>k times the reconstructed field of view; an N-point matrix spans [-N/2, N/2)</p></td>
 </tr>
-<tr class="row-even"><td><p>Session day</p></td>
-<td><p>days since 1970-01-01</p></td>
+<tr class="row-even"><td><p>Design identifier</p></td>
+<td><p>18 hexadecimal digits: three 24-bit integers, each exact in a float32</p></td>
 </tr>
 </tbody>
 </table>
@@ -779,7 +781,7 @@ computes the SAR and the gradient heating. Passing these checks does not
 establish scanner or patient safety.</p>
 <ul class="simple">
 <li><p>Never write “safe”, “validated”, “compliant” or “approved” of a sequence, a
-protocol or a revision.</p></li>
+protocol or a design.</p></li>
 <li><p>A valid <code class="docutils literal notranslate"><span class="pre">VALIDATE</span></code> reply means the sequence application designed the
 prescription under the scanner limits it was given. State that, not more.</p></li>
 </ul>

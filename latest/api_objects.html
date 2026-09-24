@@ -245,7 +245,7 @@
 <li class="toctree-l1 has-children"><a class="reference internal" href="explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="explanations/architecture.html">Architecture</a></li>
 <li class="toctree-l2"><a class="reference internal" href="explanations/protocol.html">Protocol resolution</a></li>
-<li class="toctree-l2"><a class="reference internal" href="explanations/sessions.html">Design sessions and revisions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="explanations/designs.html">Designs and the design store</a></li>
 <li class="toctree-l2"><a class="reference internal" href="explanations/ir-cache.html">The scanner IR</a></li>
 <li class="toctree-l2"><a class="reference internal" href="explanations/reconstruction.html">Raw-data enrichment and routing</a></li>
 </ul>
@@ -268,7 +268,7 @@
 <li class="toctree-l1 has-children"><a class="reference internal" href="api/index.html">API reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="api/protocol.html">Protocol</a></li>
 <li class="toctree-l2"><a class="reference internal" href="api/design.html">Scanner sequences</a></li>
-<li class="toctree-l2"><a class="reference internal" href="api/host.html">Host daemon</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/host.html">Design calls</a></li>
 <li class="toctree-l2"><a class="reference internal" href="api/ir.html">IR conversion</a></li>
 <li class="toctree-l2"><a class="reference internal" href="api/vre.html">Reconstruction proxy</a></li>
 <li class="toctree-l2"><a class="reference internal" href="api/recon.html">Reconstruction plugins</a></li>
@@ -552,26 +552,8 @@ from.</p>
 </div>
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.host.HostDaemon.html#pulserver.host.HostDaemon" title="pulserver.host.HostDaemon"><code class="xref py py-obj docutils literal notranslate"><span class="pre">HostDaemon</span></code></a></p></td>
-<td><p>Design sessions for every PSD host process on this host.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.host.HostClient.html#pulserver.host.HostClient" title="pulserver.host.HostClient"><code class="xref py py-obj docutils literal notranslate"><span class="pre">HostClient</span></code></a></p></td>
-<td><p>One session's connection to the host daemon.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.host.HostError.html#pulserver.host.HostError" title="pulserver.host.HostError"><code class="xref py py-obj docutils literal notranslate"><span class="pre">HostError</span></code></a></p></td>
-<td><p>The daemon answered a command with <code class="docutils literal notranslate"><span class="pre">ERROR</span></code>.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.host.SessionKey.html#pulserver.host.SessionKey" title="pulserver.host.SessionKey"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SessionKey</span></code></a></p></td>
-<td><p>A host PSD process: its PID and the day it started.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.host.SessionStore.html#pulserver.host.SessionStore" title="pulserver.host.SessionStore"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SessionStore</span></code></a></p></td>
-<td><p>All sessions under <code class="docutils literal notranslate"><span class="pre">&lt;base&gt;/bucket</span></code>, loaded from disk on first use.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.host.Session.html#pulserver.host.Session" title="pulserver.host.Session"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Session</span></code></a></p></td>
-<td><p>One session's state, persisted in <code class="docutils literal notranslate"><span class="pre">bucket/&lt;key&gt;/</span></code>.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.host.revision_hash.html#pulserver.host.revision_hash" title="pulserver.host.revision_hash"><code class="xref py py-obj docutils literal notranslate"><span class="pre">revision_hash</span></code></a></p></td>
-<td><p>Identify a design by plugin, scanner limits, resolved protocol and source.</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.host.call.html#pulserver.host.call" title="pulserver.host.call"><code class="xref py py-obj docutils literal notranslate"><span class="pre">call</span></code></a></p></td>
+<td><p>Answer one design call: exit status 0 and its reply, or 1 and an <code class="docutils literal notranslate"><span class="pre">ERROR</span></code> line.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.host.DesignStore.html#pulserver.host.DesignStore" title="pulserver.host.DesignStore"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DesignStore</span></code></a></p></td>
 <td><p>The designs under one directory, each in <code class="docutils literal notranslate"><span class="pre">&lt;id&gt;/</span></code> and immutable once written.</p></td>
@@ -812,28 +794,25 @@ from.</p>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.vre.ReconProxy.html#pulserver.vre.ReconProxy" title="pulserver.vre.ReconProxy"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ReconProxy</span></code></a></p></td>
 <td><p>Routes each series of an MRD stream to a reconstruction worker.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.vre.RevisionStore.html#pulserver.vre.RevisionStore" title="pulserver.vre.RevisionStore"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RevisionStore</span></code></a></p></td>
-<td><p>The revisions under <code class="docutils literal notranslate"><span class="pre">&lt;base&gt;/bucket</span></code>, the most recently read kept.</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.vre.DesignCache.html#pulserver.vre.DesignCache" title="pulserver.vre.DesignCache"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DesignCache</span></code></a></p></td>
+<td><p>The designs of a store, the most recently read kept tabulated.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.vre.Revision.html#pulserver.vre.Revision" title="pulserver.vre.Revision"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Revision</span></code></a></p></td>
-<td><p>A generated design, as the reconstruction side reads it.</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.vre.Design.html#pulserver.vre.Design" title="pulserver.vre.Design"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Design</span></code></a></p></td>
+<td><p>A stored design, as the reconstruction side reads it.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.vre.SESSION_PARAMETER.html#pulserver.vre.SESSION_PARAMETER" title="pulserver.vre.SESSION_PARAMETER"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SESSION_PARAMETER</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.vre.DESIGN_PARAMETER.html#pulserver.vre.DESIGN_PARAMETER" title="pulserver.vre.DESIGN_PARAMETER"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DESIGN_PARAMETER</span></code></a></p></td>
 <td><p>str(object='') -&gt; str str(bytes_or_buffer[, encoding[, errors]]) -&gt; str</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.vre.REVISION_PARAMETER.html#pulserver.vre.REVISION_PARAMETER" title="pulserver.vre.REVISION_PARAMETER"><code class="xref py py-obj docutils literal notranslate"><span class="pre">REVISION_PARAMETER</span></code></a></p></td>
-<td><p>str(object='') -&gt; str str(bytes_or_buffer[, encoding[, errors]]) -&gt; str</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.vre.SequenceTable.html#pulserver.vre.SequenceTable" title="pulserver.vre.SequenceTable"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SequenceTable</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.vre.SequenceTable.html#pulserver.vre.SequenceTable" title="pulserver.vre.SequenceTable"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SequenceTable</span></code></a></p></td>
 <td><p>The readouts of a sequence chain as MRD describes them, in play order.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.vre.TableSpace.html#pulserver.vre.TableSpace" title="pulserver.vre.TableSpace"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TableSpace</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.vre.TableSpace.html#pulserver.vre.TableSpace" title="pulserver.vre.TableSpace"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TableSpace</span></code></a></p></td>
 <td><p>One encoding space of a <a class="reference internal" href="generated/pulserver.vre.SequenceTable.html#pulserver.vre.SequenceTable" title="pulserver.vre.SequenceTable"><code class="xref py py-class docutils literal notranslate"><span class="pre">SequenceTable</span></code></a>.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.vre.enrich_header.html#pulserver.vre.enrich_header" title="pulserver.vre.enrich_header"><code class="xref py py-obj docutils literal notranslate"><span class="pre">enrich_header</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.vre.enrich_header.html#pulserver.vre.enrich_header" title="pulserver.vre.enrich_header"><code class="xref py py-obj docutils literal notranslate"><span class="pre">enrich_header</span></code></a></p></td>
 <td><p>Describe the table's encoding spaces and sequence parameters in an MRD header.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.vre.enrich_acquisition.html#pulserver.vre.enrich_acquisition" title="pulserver.vre.enrich_acquisition"><code class="xref py py-obj docutils literal notranslate"><span class="pre">enrich_acquisition</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.vre.enrich_acquisition.html#pulserver.vre.enrich_acquisition" title="pulserver.vre.enrich_acquisition"><code class="xref py py-obj docutils literal notranslate"><span class="pre">enrich_acquisition</span></code></a></p></td>
 <td><p>Stamp row <code class="docutils literal notranslate"><span class="pre">index</span></code> of the table on one acquisition, in place.</p></td>
 </tr>
 </tbody>

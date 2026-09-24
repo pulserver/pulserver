@@ -249,7 +249,7 @@
 <li class="toctree-l1 has-children"><a class="reference internal" href="../explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/architecture.html">Architecture</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/protocol.html">Protocol resolution</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../explanations/sessions.html">Design sessions and revisions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/designs.html">Designs and the design store</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/ir-cache.html">The scanner IR</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/reconstruction.html">Raw-data enrichment and routing</a></li>
 </ul>
@@ -272,7 +272,7 @@
 <li class="toctree-l1 has-children"><a class="reference internal" href="../api/index.html">API reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../api/protocol.html">Protocol</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/design.html">Scanner sequences</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../api/host.html">Host daemon</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/host.html">Design calls</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/ir.html">IR conversion</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/vre.html">Reconstruction proxy</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/recon.html">Reconstruction plugins</a></li>
@@ -550,7 +550,7 @@ exchange are described in <a class="reference internal" href="../explanations/in
 <td><p>Installation, supported platforms, issues and security.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="running.html"><span class="doc">Running the services</span></a></p></td>
-<td><p>Starting the host daemon and the reconstruction proxy, and their options.</p></td>
+<td><p>The design calls, the warm server and the reconstruction proxy, and their options.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="scanner-sequences.html"><span class="doc">Scanner sequences</span></a></p></td>
 <td><p>Binding a pypulseqpp sequence application to the scanner protocol.</p></td>
@@ -562,7 +562,7 @@ exchange are described in <a class="reference internal" href="../explanations/in
 <td><p>The MRD stream a scanner’s reconstruction client sends the proxy.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="../explanations/index.html"><span class="doc">Explanations</span></a></p></td>
-<td><p>Architecture, protocol resolution, design sessions, the scanner IR and raw-data enrichment.</p></td>
+<td><p>Architecture, protocol resolution, the design store, the scanner IR and raw-data enrichment.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="../examples/index.html"><span class="doc">Examples</span></a></p></td>
 <td><p>Executable examples: protocol resolution, segmentation for the scanner, and enrichment and reconstruction of a simulated series.</p></td>
@@ -588,8 +588,8 @@ exchange are described in <a class="reference internal" href="../explanations/in
 <section id="prerequisites-and-supported-platforms">
 <h2>Prerequisites and supported platforms<a class="headerlink" href="#prerequisites-and-supported-platforms" title="Link to this heading">#</a></h2>
 <p>pulserver supports Python 3.10 through 3.13. CI tests the lower and upper
-bounds on Linux and macOS. Windows is not supported, because the host daemon
-listens on a Unix socket.</p>
+bounds on Linux and macOS. Windows is not supported: the warm design server
+forks one process per call and listens on a Unix socket.</p>
 <p>Published wheels cover:</p>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
@@ -630,7 +630,7 @@ installed.</p>
 for a reproducible defect, a documentation error, or a narrowly scoped feature
 request. A useful report includes the pulserver, pypulseqpp and Python versions,
 the operating system, the affected subpackage and the smallest reproducer: a
-plugin file, a short <code class="docutils literal notranslate"><span class="pre">.seq</span></code> file, or the command exchange with the host daemon.</p>
+plugin file, a short <code class="docutils literal notranslate"><span class="pre">.seq</span></code> file, or the design call and its reply.</p>
 <p>A defect in sequence design belongs to the
 <a class="reference external" href="https://github.com/pulserver/pypulseqpp/issues">pypulseqpp tracker</a>, and one
 in a reconstruction algorithm to the

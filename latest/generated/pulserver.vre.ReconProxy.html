@@ -247,7 +247,7 @@
 <li class="toctree-l1 has-children"><a class="reference internal" href="../explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/architecture.html">Architecture</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/protocol.html">Protocol resolution</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../explanations/sessions.html">Design sessions and revisions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/designs.html">Designs and the design store</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/ir-cache.html">The scanner IR</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/reconstruction.html">Raw-data enrichment and routing</a></li>
 </ul>
@@ -270,7 +270,7 @@
 <li class="toctree-l1 has-children"><a class="reference internal" href="../api/index.html">API reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../api/protocol.html">Protocol</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/design.html">Scanner sequences</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../api/host.html">Host daemon</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/host.html">Design calls</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/ir.html">IR conversion</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/vre.html">Reconstruction proxy</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/recon.html">Reconstruction plugins</a></li>
@@ -533,12 +533,12 @@
 <p>Routes each series of an MRD stream to a reconstruction worker.</p>
 <p>One thread per client connection, which carries one series: an optional
 config text, the header, one acquisition per readout of the chain and a
-<code class="docutils literal notranslate"><span class="pre">CLOSE</span></code>. The header’s <code class="docutils literal notranslate"><span class="pre">pulserver_session</span></code> and <code class="docutils literal notranslate"><span class="pre">pulserver_revision</span></code>
-name the design the series was played from; its readout table enriches the
-header and every acquisition. The readouts arrive demodulated to the
+<code class="docutils literal notranslate"><span class="pre">CLOSE</span></code>. The header’s <code class="docutils literal notranslate"><span class="pre">pulserver_design</span></code> names the design of the store
+the series was played from; its readout table enriches the header and
+every acquisition. The readouts arrive demodulated to the
 prescribed field-of-view centre by the playout
 (<a class="reference internal" href="pulserver.ir.prescribe.html#pulserver.ir.prescribe" title="pulserver.ir.prescribe"><code class="xref py py-func docutils literal notranslate"><span class="pre">pulserver.ir.prescribe()</span></code></a>), and their samples are passed on as
-received. The reconstruction plugin is the revision’s, falling back to
+received. The reconstruction plugin is the design’s, falling back to
 the name in the client’s config text. A series that breaks this is refused
 with a text naming the reason and a <code class="docutils literal notranslate"><span class="pre">CLOSE</span></code>, and what the client still
 sends is discarded until it closes the connection.</p>
@@ -549,9 +549,9 @@ through <code class="docutils literal notranslate"><span class="pre">CUDA_VISIBL
 client as they arrive, the client’s close closes the worker, and the
 worker’s close closes the client.</p>
 <p>A series that finds every slot busy is queued instead: its enriched stream
-is written to <code class="docutils literal notranslate"><span class="pre">bucket/&lt;session&gt;/queue/&lt;id&gt;.h5</span></code> while it arrives, its
-client stays connected, and the file is replayed to a worker and deleted
-once a slot frees.</p>
+is written to a file of <code class="docutils literal notranslate"><span class="pre">queue</span></code> while it arrives, its client stays
+connected, and the file is replayed to a worker and deleted once a slot
+frees.</p>
 <p>Once the client’s stream ends, the proxy waits for the worker to close,
 however long the reconstruction takes, unless <code class="docutils literal notranslate"><span class="pre">recon_timeout</span></code> caps it.</p>
 <p>The series of one exam share a directory under the system’s temporary
@@ -561,7 +561,7 @@ once a header names another exam and no series of the exam still runs.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>base</strong> – Directory holding <code class="docutils literal notranslate"><span class="pre">bucket/</span></code>, as the host daemon writes it.</p></li>
+<li><p><strong>store</strong> – Directory of designs, as the design calls write it; read only.</p></li>
 <li><p><strong>plugins</strong> – Directory of reconstruction plugin files, <code class="docutils literal notranslate"><span class="pre">&lt;plugin&gt;.py</span></code>.</p></li>
 <li><p><strong>slots</strong> – Series reconstructed at once; derived from memory and the GPUs when
 <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
@@ -569,6 +569,8 @@ once a header names another exam and no series of the exam still runs.</p>
 <li><p><strong>spares</strong> – Warm worker processes waiting for a series.</p></li>
 <li><p><strong>recon_timeout</strong> – Seconds a worker may take after the stream ends before it is
 terminated and the client told so; <code class="docutils literal notranslate"><span class="pre">None</span></code> waits for its close.</p></li>
+<li><p><strong>queue</strong> – Directory the queued series are written to; a temporary directory,
+removed on <a class="reference internal" href="pulserver.vre.ReconProxy.close.html#pulserver.vre.ReconProxy.close" title="pulserver.vre.ReconProxy.close"><code class="xref py py-meth docutils literal notranslate"><span class="pre">close()</span></code></a>, when <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Attributes<span class="colon">:</span></dt>

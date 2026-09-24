@@ -1,7 +1,7 @@
 # Protocol
 
 The entries of a scanner protocol, and the text blocks that carry them between
-the host daemon and the scanner interpreter.
+the design calls and the scanner interpreter.
 
 ```{eval-rst}
 .. currentmodule:: pulserver.protocol

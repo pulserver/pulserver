@@ -23,7 +23,7 @@ Protocol resolution for a 2D gradient echo
 ==========================================
 
 The scope of this notebook is to resolve prescriptions of a two-dimensional
-gradient echo the way the host daemon does for the scanner UI, and to show
+gradient echo the way a design call does for the scanner UI, and to show
 what the resolved protocol depends on: the receiver bandwidth a readout can
 realize on the sampling rasters, and the shortest echo time the readout
 admits.
@@ -131,7 +131,7 @@ bandwidth its design achieves, and the reply carries those values.
 
 .. GENERATED FROM PYTHON SOURCE LINES 78-81
 
-The scanner limits are those a PSD host process opens its session with. The
+The scanner limits are those a PSD host process sends with each call. The
 rasters are stated explicitly because the achieved bandwidth depends on
 them.
 
@@ -310,8 +310,8 @@ interpreter shows to the operator.
 
 A valid reply carries the resolved protocol at the precision a scanner
 control variable stores. Sending it back resolves to the same protocol,
-which is what lets the host daemon identify a revision by its resolved
-protocol (:doc:`/explanations/sessions`).
+which is what lets a design be identified by its resolved protocol
+(:doc:`/explanations/designs`).
 
 .. GENERATED FROM PYTHON SOURCE LINES 202-207
 
@@ -339,7 +339,7 @@ protocol (:doc:`/explanations/sessions`).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 2.636 seconds)
+   **Total running time of the script:** (0 minutes 2.064 seconds)
 
 
 .. _sphx_glr_download_generated_gallery_01-protocol_01_protocol_resolution.py:

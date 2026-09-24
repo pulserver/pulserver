@@ -249,7 +249,7 @@
 <li class="toctree-l1 has-children"><a class="reference internal" href="../explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/architecture.html">Architecture</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/protocol.html">Protocol resolution</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../explanations/sessions.html">Design sessions and revisions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/designs.html">Designs and the design store</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/ir-cache.html">The scanner IR</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/reconstruction.html">Raw-data enrichment and routing</a></li>
 </ul>
@@ -272,7 +272,7 @@
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">API reference</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Protocol</a></li>
 <li class="toctree-l2"><a class="reference internal" href="design.html">Scanner sequences</a></li>
-<li class="toctree-l2"><a class="reference internal" href="host.html">Host daemon</a></li>
+<li class="toctree-l2"><a class="reference internal" href="host.html">Design calls</a></li>
 <li class="toctree-l2"><a class="reference internal" href="ir.html">IR conversion</a></li>
 <li class="toctree-l2"><a class="reference internal" href="vre.html">Reconstruction proxy</a></li>
 <li class="toctree-l2"><a class="reference internal" href="recon.html">Reconstruction plugins</a></li>
@@ -532,7 +532,7 @@
   <section class="tex2jax_ignore mathjax_ignore" id="protocol">
 <h1>Protocol<a class="headerlink" href="#protocol" title="Link to this heading">#</a></h1>
 <p>The entries of a scanner protocol, and the text blocks that carry them between
-the host daemon and the scanner interpreter.</p>
+the design calls and the scanner interpreter.</p>
 <p>A protocol entry has a kind, a current value and the schema the scanner UI
 presents it with: a range and increment for a numeric entry, and options for a
 dropdown. Times are integer microseconds, the unit of the scanner’s time

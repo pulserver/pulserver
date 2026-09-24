@@ -67,7 +67,7 @@
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
     <link rel="next" title="Raw-data enrichment and routing" href="reconstruction.html" />
-    <link rel="prev" title="Design sessions and revisions" href="sessions.html" />
+    <link rel="prev" title="Designs and the design store" href="designs.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   <meta name="docsearch:version" content="latest" />
@@ -251,7 +251,7 @@
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">Explanations</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
 <li class="toctree-l2"><a class="reference internal" href="architecture.html">Architecture</a></li>
 <li class="toctree-l2"><a class="reference internal" href="protocol.html">Protocol resolution</a></li>
-<li class="toctree-l2"><a class="reference internal" href="sessions.html">Design sessions and revisions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="designs.html">Designs and the design store</a></li>
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">The scanner IR</a></li>
 <li class="toctree-l2"><a class="reference internal" href="reconstruction.html">Raw-data enrichment and routing</a></li>
 </ul>
@@ -274,7 +274,7 @@
 <li class="toctree-l1 has-children"><a class="reference internal" href="../api/index.html">API reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../api/protocol.html">Protocol</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/design.html">Scanner sequences</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../api/host.html">Host daemon</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/host.html">Design calls</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/ir.html">IR conversion</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/vre.html">Reconstruction proxy</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/recon.html">Reconstruction plugins</a></li>
@@ -578,7 +578,7 @@ acquired, and the reconstruction receives an object at <span class="math notrans
 centre of its field of view. The rotation of the prescription is not applied
 to the cache: the scanner plays it through its rotation matrix, composed after
 each block’s own rotation. Two offsets make two caches of one design, and two
-revisions (<a class="reference internal" href="sessions.html"><span class="doc">Design sessions and revisions</span></a>).</p>
+designs (<a class="reference internal" href="designs.html"><span class="doc">Designs and the design store</span></a>).</p>
 </section>
 <section id="checks">
 <h2>Checks<a class="headerlink" href="#checks" title="Link to this heading">#</a></h2>
@@ -595,15 +595,15 @@ sign of the gradient on it and no check reads a sign.</p>
 <p>Before a chain is converted, <a class="reference internal" href="../generated/pulserver.ir.check.html#pulserver.ir.check" title="pulserver.ir.check"><code class="xref py py-func docutils literal notranslate"><span class="pre">check()</span></code></a> runs pypulseqpp’s
 timing check, gradient continuity included, and its gradient amplitude and
 slew-rate checks on every file, against the gradient limits, dead times and
-ringdown time of the scanner. Where the session’s limits carry them
+ringdown time of the scanner. Where the call’s limits carry them
 (<a class="reference internal" href="../generated/pulserver.ir.CheckLimits.html#pulserver.ir.CheckLimits" title="pulserver.ir.CheckLimits"><code class="xref py py-class docutils literal notranslate"><span class="pre">CheckLimits</span></code></a>), it also runs pypulseqpp’s PNS check
 under the scanner’s nerve model and its mechanical-resonance check against the
 scanner’s forbidden gradient bands. The waveforms are timed by the rasters the
-file declares. The PSD passes these limits when it opens a session
+file declares. The PSD passes these limits with every design call
 (<a class="reference internal" href="../user-guide/running.html"><span class="doc">Running the services</span></a>); it computes the SAR and the gradient heating.</p>
-<p>The host daemon writes no revision for a generated design or an imported chain
-that fails a check: <code class="docutils literal notranslate"><span class="pre">GENERATE</span></code> and <code class="docutils literal notranslate"><span class="pre">IMPORT</span></code> reply with the problems, as they do
-with a design error. The checks compute estimates; passing them does not
+<p>No design is stored for a generated design or an imported chain that fails a
+check: <code class="docutils literal notranslate"><span class="pre">generate</span></code> and <code class="docutils literal notranslate"><span class="pre">import</span></code> reply with the problems, as they do with a
+design error. The checks compute estimates; passing them does not
 establish scanner or patient safety.</p>
 </section>
 <section id="sar-against-a-reference-pulse">
@@ -731,12 +731,12 @@ back a cache written on the host.</p>
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="sessions.html"
+       href="designs.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">Design sessions and revisions</p>
+        <p class="prev-next-title">Designs and the design store</p>
       </div>
     </a>
     <a class="right-next"

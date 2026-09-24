@@ -36,27 +36,27 @@ Scanner execution
 
 ```{figure} ../_static/architecture.svg
 The two pulserver services between the scanner and the engines, and the
-directory they share.
+design store they share.
 ```
 
-The host daemon, {mod}`pulserver.host`, runs on the scanner host and answers
-the PSD host process of each running sequence. The reconstruction proxy,
-{mod}`pulserver.vre`, runs on the reconstruction computer and answers the
-scanner's reconstruction client. One acquisition proceeds as follows.
+The design calls, {mod}`pulserver.host`, run on the scanner host and answer
+the PSD host process of each running sequence, one command per call or through
+a warm server. The reconstruction proxy, {mod}`pulserver.vre`, runs on the
+reconstruction computer and answers the scanner's reconstruction client. One
+acquisition proceeds as follows.
 
-1. The PSD host process opens a design session, naming the scanner-sequence
-   plugin and the scanner limits.
-2. On each protocol edit, the process requests validation. The host daemon
-   designs the sequence with pypulseqpp and replies with the protocol the
-   design achieves and the scan time, or with the error the design raised
-   ({doc}`protocol`).
-3. When the scan is prepared, the daemon generates the design: the Pulseq
-   files and the IR cache beside them, stored as a revision of the session
-   ({doc}`sessions`, {doc}`ir-cache`). The interpreter loads the IR cache and
-   plays the sequence.
-4. The reconstruction client streams the raw data of the series as MRD. The
-   header names the session and revision the series was played from.
-5. The proxy reads the revision's sequence files, completes the MRD header and
+1. On each protocol edit, the PSD host process requests validation, naming the
+   scanner-sequence plugin, the scanner limits and the requested protocol. The
+   call constructs the application with pypulseqpp and replies with the
+   protocol the design achieves and the scan time, or with the error the design
+   raised ({doc}`protocol`).
+2. When the scan is prepared, the process requests the design. The call designs
+   the sequence, checks it, and stores the Pulseq files and the IR cache as a
+   design of the design store, whose identifier it replies ({doc}`designs`,
+   {doc}`ir-cache`). The interpreter loads the IR cache and plays the sequence.
+3. The reconstruction client streams the raw data of the series as MRD. The
+   header names the design the series was played from.
+4. The proxy reads the design's sequence files, completes the MRD header and
    every acquisition from them, and runs the reconstruction plugin the sequence
    names in a worker process ({doc}`reconstruction`). The images return to the
    console through the client's connection.
@@ -65,12 +65,12 @@ scanner's reconstruction client. One acquisition proceeds as follows.
 
 | Representation | Written by | Read by |
 | --- | --- | --- |
-| Protocol block (`[NimPulseqGUI Protocol]`) | Host daemon and interpreter | Both; the grammar is in {mod}`pulserver.protocol` and `pulseg_protocol.h` |
-| Pulseq files, binary form | pypulseqpp, in the host daemon | The IR conversion and the reconstruction proxy |
+| Protocol block (`[NimPulseqGUI Protocol]`) | Design calls and interpreter | Both; the grammar is in {mod}`pulserver.protocol` and `pulseg_protocol.h` |
+| Pulseq files, binary form | pypulseqpp, in a design call | The IR conversion and the reconstruction proxy |
 | IR cache (`.pseg`; `.pge` on GE) | {func}`pulserver.ir.convert` | The interpreter, through the C library in `src/c/` |
 | MRD stream | Reconstruction client | Reconstruction proxy and its workers |
 
-The reconstruction side reads the Pulseq files of a revision, not its IR cache:
+The reconstruction side reads the Pulseq files of a design, not its IR cache:
 the cache is a derived representation for playout, and the Pulseq files remain
 the design of record.
 

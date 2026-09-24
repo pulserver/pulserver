@@ -251,7 +251,7 @@
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../../../explanations/architecture.html">Architecture</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../explanations/protocol.html">Protocol resolution</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../explanations/sessions.html">Design sessions and revisions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/designs.html">Designs and the design store</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../explanations/ir-cache.html">The scanner IR</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../explanations/reconstruction.html">Raw-data enrichment and routing</a></li>
 </ul>
@@ -274,7 +274,7 @@
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../api/index.html">API reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../../../api/protocol.html">Protocol</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../api/design.html">Scanner sequences</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../api/host.html">Host daemon</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/host.html">Design calls</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../api/ir.html">IR conversion</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../api/vre.html">Reconstruction proxy</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../api/recon.html">Reconstruction plugins</a></li>
@@ -552,7 +552,7 @@ in <a class="reference internal" href="../../../explanations/reconstruction.html
 <p>Outline:</p>
 <ol class="arabic simple">
 <li><p><strong>Sequence and readout table.</strong> The readouts of the sequence, as the proxy
-tabulates them from a revision.</p></li>
+tabulates them from a stored design.</p></li>
 <li><p><strong>Prescription.</strong> The RF and ADC frequency and phase offsets that move the
 field of view of the logical-frame design to the prescribed centre.</p></li>
 <li><p><strong>Simulated series.</strong> A phantom away from the isocentre, received through
@@ -564,7 +564,7 @@ as written and played at the prescribed offset.</p></li>
 </ol>
 <section id="sequence-and-readout-table">
 <h2>Sequence and readout table<a class="headerlink" href="#sequence-and-readout-table" title="Link to this heading">#</a></h2>
-<p>The sequence is written as a generated revision holds it, in the binary
+<p>The sequence is written as a stored design holds it, in the binary
 Pulseq form and in the logical frame, and tabulated with
 <a class="reference internal" href="../../pulserver.vre.SequenceTable.html#pulserver.vre.SequenceTable" title="pulserver.vre.SequenceTable"><code class="xref py py-class docutils literal notranslate"><span class="pre">SequenceTable</span></code></a>: one row per readout in play order,
 with its encoding counters, flags and dwell time.
@@ -608,7 +608,7 @@ encoding spaces: (TableSpace(subsequence=0, navigator=False, matrix=(64, 64, 1),
 <p>The phantom is displaced by <span class="math notranslate nohighlight">\(\mathbf{d} = (30, -90, 0)\)</span> mm from the
 isocentre, along the logical readout, phase-encoding and slice axes; 90 mm
 exceeds half the 220 mm field of view along the phase-encoding axis. The host
-moves each file of a revision to the prescribed offset with
+moves each file of a design to the prescribed offset with
 <a class="reference internal" href="../../pulserver.ir.prescribe.html#pulserver.ir.prescribe" title="pulserver.ir.prescribe"><code class="xref py py-func docutils literal notranslate"><span class="pre">prescribe()</span></code></a> before it segments it. Every readout of the
 played sequence carries the frequency offset <span class="math notranslate nohighlight">\(G_x d_x\)</span> of the readout
 gradient, and a phase offset.</p>
@@ -806,7 +806,7 @@ view. Played at the prescribed offset, the receive phase
 <span class="math notranslate nohighlight">\(2\pi\,\mathbf{d}\cdot\mathbf{k}\)</span> removes the phase the displacement
 adds, and the phantom is at the centre of the field of view, with no change
 to the gradients or the trajectory.</p>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 1.203 seconds)</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 0.838 seconds)</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-generated-gallery-03-reconstruction-01-enrichment-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
 <p><a class="reference download internal" download="" href="../../../_downloads/43d0c7051a29734a50416b649270249f/01_enrichment.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">01_enrichment.ipynb</span></code></a></p>

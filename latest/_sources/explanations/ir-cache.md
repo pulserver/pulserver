@@ -41,7 +41,7 @@ acquired, and the reconstruction receives an object at $\mathbf{d}$ at the
 centre of its field of view. The rotation of the prescription is not applied
 to the cache: the scanner plays it through its rotation matrix, composed after
 each block's own rotation. Two offsets make two caches of one design, and two
-revisions ({doc}`sessions`).
+designs ({doc}`designs`).
 
 ## Checks
 
@@ -59,16 +59,16 @@ sign of the gradient on it and no check reads a sign.
 Before a chain is converted, {func}`~pulserver.ir.check` runs pypulseqpp's
 timing check, gradient continuity included, and its gradient amplitude and
 slew-rate checks on every file, against the gradient limits, dead times and
-ringdown time of the scanner. Where the session's limits carry them
+ringdown time of the scanner. Where the call's limits carry them
 ({class}`~pulserver.ir.CheckLimits`), it also runs pypulseqpp's PNS check
 under the scanner's nerve model and its mechanical-resonance check against the
 scanner's forbidden gradient bands. The waveforms are timed by the rasters the
-file declares. The PSD passes these limits when it opens a session
+file declares. The PSD passes these limits with every design call
 ({doc}`../user-guide/running`); it computes the SAR and the gradient heating.
 
-The host daemon writes no revision for a generated design or an imported chain
-that fails a check: `GENERATE` and `IMPORT` reply with the problems, as they do
-with a design error. The checks compute estimates; passing them does not
+No design is stored for a generated design or an imported chain that fails a
+check: `generate` and `import` reply with the problems, as they do with a
+design error. The checks compute estimates; passing them does not
 establish scanner or patient safety.
 
 ## SAR against a reference pulse

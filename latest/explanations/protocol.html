@@ -64,7 +64,7 @@
     <link rel="canonical" href="https://pulserver.github.io/pulserver/latest/explanations/protocol.html" />
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Design sessions and revisions" href="sessions.html" />
+    <link rel="next" title="Designs and the design store" href="designs.html" />
     <link rel="prev" title="Architecture" href="architecture.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
@@ -249,7 +249,7 @@
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">Explanations</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
 <li class="toctree-l2"><a class="reference internal" href="architecture.html">Architecture</a></li>
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Protocol resolution</a></li>
-<li class="toctree-l2"><a class="reference internal" href="sessions.html">Design sessions and revisions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="designs.html">Designs and the design store</a></li>
 <li class="toctree-l2"><a class="reference internal" href="ir-cache.html">The scanner IR</a></li>
 <li class="toctree-l2"><a class="reference internal" href="reconstruction.html">Raw-data enrichment and routing</a></li>
 </ul>
@@ -272,7 +272,7 @@
 <li class="toctree-l1 has-children"><a class="reference internal" href="../api/index.html">API reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../api/protocol.html">Protocol</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/design.html">Scanner sequences</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../api/host.html">Host daemon</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/host.html">Design calls</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/ir.html">IR conversion</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/vre.html">Reconstruction proxy</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/recon.html">Reconstruction plugins</a></li>
@@ -593,8 +593,8 @@ shown in mm and designed in m.</p>
 <p>Resolved values are reported at the precision in which they are stored.
 Consequently, sending a resolved protocol back unchanged resolves to the same
 protocol. This property is what allows a design to be identified by its
-resolved protocol (<a class="reference internal" href="sessions.html"><span class="doc">Design sessions and revisions</span></a>): an operator who reopens a protocol and
-generates it again obtains the same revision.</p>
+resolved protocol (<a class="reference internal" href="designs.html"><span class="doc">Designs and the design store</span></a>): an operator who reopens a protocol and
+generates it again obtains the same design.</p>
 </section>
 <section id="wire-format">
 <h2>Wire format<a class="headerlink" href="#wire-format" title="Link to this heading">#</a></h2>
@@ -641,11 +641,11 @@ grammar is implemented in <code class="xref py py-mod docutils literal notransla
       </div>
     </a>
     <a class="right-next"
-       href="sessions.html"
+       href="designs.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Design sessions and revisions</p>
+        <p class="prev-next-title">Designs and the design store</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>

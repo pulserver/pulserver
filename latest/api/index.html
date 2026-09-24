@@ -245,7 +245,7 @@
 <li class="toctree-l1 has-children"><a class="reference internal" href="../explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/architecture.html">Architecture</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/protocol.html">Protocol resolution</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../explanations/sessions.html">Design sessions and revisions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/designs.html">Designs and the design store</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/ir-cache.html">The scanner IR</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/reconstruction.html">Raw-data enrichment and routing</a></li>
 </ul>
@@ -268,7 +268,7 @@
 <li class="toctree-l1 current active has-children"><a class="current reference internal" href="#">API reference</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="protocol.html">Protocol</a></li>
 <li class="toctree-l2"><a class="reference internal" href="design.html">Scanner sequences</a></li>
-<li class="toctree-l2"><a class="reference internal" href="host.html">Host daemon</a></li>
+<li class="toctree-l2"><a class="reference internal" href="host.html">Design calls</a></li>
 <li class="toctree-l2"><a class="reference internal" href="ir.html">IR conversion</a></li>
 <li class="toctree-l2"><a class="reference internal" href="vre.html">Reconstruction proxy</a></li>
 <li class="toctree-l2"><a class="reference internal" href="recon.html">Reconstruction plugins</a></li>
@@ -526,15 +526,15 @@
 <tbody>
 <tr class="row-even"><td><p><a class="reference internal" href="protocol.html"><span class="doc">Protocol</span></a></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">pulserver.protocol</span></code></p></td>
-<td><p>The entries of a scanner protocol, their presets, and the text blocks that carry them between the host daemon and the interpreter.</p></td>
+<td><p>The entries of a scanner protocol, their presets, and the text blocks that carry them between the design calls and the interpreter.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="design.html"><span class="doc">Scanner sequences</span></a></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">pulserver.design</span></code></p></td>
 <td><p><a class="reference internal" href="../generated/pulserver.design.ScannerSequence.html#pulserver.design.ScannerSequence" title="pulserver.design.ScannerSequence"><code class="xref py py-class docutils literal notranslate"><span class="pre">ScannerSequence</span></code></a>, which binds a pypulseqpp sequence application to the scanner protocol, and the UI entries it is declared with.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="host.html"><span class="doc">Host daemon</span></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="host.html"><span class="doc">Design calls</span></a></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">pulserver.host</span></code></p></td>
-<td><p>The host daemon, its client, and the design sessions and revisions it stores.</p></td>
+<td><p>The design calls of the PSD host processes and the store of the designs they generate.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="ir.html"><span class="doc">IR conversion</span></a></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">pulserver.ir</span></code></p></td>
@@ -542,7 +542,7 @@
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="vre.html"><span class="doc">Reconstruction proxy</span></a></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">pulserver.vre</span></code></p></td>
-<td><p>The reconstruction proxy, the revisions it resolves a series to, and the enrichment it applies.</p></td>
+<td><p>The reconstruction proxy, the designs it resolves a series to, and the enrichment it applies.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="recon.html"><span class="doc">Reconstruction plugins</span></a></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">pulserver.recon</span></code></p></td>

@@ -244,7 +244,7 @@
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../../../explanations/architecture.html">Architecture</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../explanations/protocol.html">Protocol resolution</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../explanations/sessions.html">Design sessions and revisions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/designs.html">Designs and the design store</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../explanations/ir-cache.html">The scanner IR</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../explanations/reconstruction.html">Raw-data enrichment and routing</a></li>
 </ul>
@@ -267,7 +267,7 @@
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../api/index.html">API reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../../../api/protocol.html">Protocol</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../api/design.html">Scanner sequences</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../api/host.html">Host daemon</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/host.html">Design calls</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../api/ir.html">IR conversion</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../api/vre.html">Reconstruction proxy</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../api/recon.html">Reconstruction plugins</a></li>
@@ -474,9 +474,9 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">..recon._runtime.connection</span><span class="w"> </span><span class="kn">import</span> <span class="n">Connection</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..recon._runtime.exam</span><span class="w"> </span><span class="kn">import</span> <span class="n">ExamCacheManager</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..recon._runtime.readers</span><span class="w"> </span><span class="kn">import</span> <span class="n">deserialize_config</span><span class="p">,</span> <span class="n">read_text</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">._designs</span><span class="w"> </span><span class="kn">import</span> <span class="n">Design</span><span class="p">,</span> <span class="n">DesignCache</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._enrich</span><span class="w"> </span><span class="kn">import</span> <span class="n">enrich_acquisition</span><span class="p">,</span> <span class="n">enrich_header</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._queue</span><span class="w"> </span><span class="kn">import</span> <span class="n">QueueFile</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">._revisions</span><span class="w"> </span><span class="kn">import</span> <span class="n">Revision</span><span class="p">,</span> <span class="n">RevisionStore</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._workers</span><span class="w"> </span><span class="kn">import</span> <span class="n">WorkerPool</span>
 
 <span class="n">_PLUGIN_NAME</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="sa">r</span><span class="s2">"[A-Za-z0-9_\-]+"</span><span class="p">)</span>
@@ -499,12 +499,12 @@
 
 <span class="sd">    One thread per client connection, which carries one series: an optional</span>
 <span class="sd">    config text, the header, one acquisition per readout of the chain and a</span>
-<span class="sd">    ``CLOSE``. The header's ``pulserver_session`` and ``pulserver_revision``</span>
-<span class="sd">    name the design the series was played from; its readout table enriches the</span>
-<span class="sd">    header and every acquisition. The readouts arrive demodulated to the</span>
+<span class="sd">    ``CLOSE``. The header's ``pulserver_design`` names the design of the store</span>
+<span class="sd">    the series was played from; its readout table enriches the header and</span>
+<span class="sd">    every acquisition. The readouts arrive demodulated to the</span>
 <span class="sd">    prescribed field-of-view centre by the playout</span>
 <span class="sd">    (:func:`pulserver.ir.prescribe`), and their samples are passed on as</span>
-<span class="sd">    received. The reconstruction plugin is the revision's, falling back to</span>
+<span class="sd">    received. The reconstruction plugin is the design's, falling back to</span>
 <span class="sd">    the name in the client's config text. A series that breaks this is refused</span>
 <span class="sd">    with a text naming the reason and a ``CLOSE``, and what the client still</span>
 <span class="sd">    sends is discarded until it closes the connection.</span>
@@ -517,9 +517,9 @@
 <span class="sd">    worker's close closes the client.</span>
 
 <span class="sd">    A series that finds every slot busy is queued instead: its enriched stream</span>
-<span class="sd">    is written to ``bucket/&lt;session&gt;/queue/&lt;id&gt;.h5`` while it arrives, its</span>
-<span class="sd">    client stays connected, and the file is replayed to a worker and deleted</span>
-<span class="sd">    once a slot frees.</span>
+<span class="sd">    is written to a file of ``queue`` while it arrives, its client stays</span>
+<span class="sd">    connected, and the file is replayed to a worker and deleted once a slot</span>
+<span class="sd">    frees.</span>
 
 <span class="sd">    Once the client's stream ends, the proxy waits for the worker to close,</span>
 <span class="sd">    however long the reconstruction takes, unless ``recon_timeout`` caps it.</span>
@@ -531,8 +531,8 @@
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
-<span class="sd">    base</span>
-<span class="sd">        Directory holding ``bucket/``, as the host daemon writes it.</span>
+<span class="sd">    store</span>
+<span class="sd">        Directory of designs, as the design calls write it; read only.</span>
 <span class="sd">    plugins</span>
 <span class="sd">        Directory of reconstruction plugin files, ``&lt;plugin&gt;.py``.</span>
 <span class="sd">    slots</span>
@@ -545,6 +545,9 @@
 <span class="sd">    recon_timeout</span>
 <span class="sd">        Seconds a worker may take after the stream ends before it is</span>
 <span class="sd">        terminated and the client told so; ``None`` waits for its close.</span>
+<span class="sd">    queue</span>
+<span class="sd">        Directory the queued series are written to; a temporary directory,</span>
+<span class="sd">        removed on :meth:`close`, when ``None``.</span>
 
 <span class="sd">    Attributes</span>
 <span class="sd">    ----------</span>
@@ -556,15 +559,23 @@
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
-        <span class="n">base</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">store</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span>
         <span class="n">plugins</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
         <span class="n">slots</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">gpu_slots</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
         <span class="n">spares</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
         <span class="n">recon_timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">queue</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">revisions</span> <span class="o">=</span> <span class="n">RevisionStore</span><span class="p">(</span><span class="n">base</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">designs</span> <span class="o">=</span> <span class="n">DesignCache</span><span class="p">(</span><span class="n">store</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_owns_queue</span> <span class="o">=</span> <span class="n">queue</span> <span class="ow">is</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">queue</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">Path</span><span class="p">(</span><span class="n">tempfile</span><span class="o">.</span><span class="n">mkdtemp</span><span class="p">(</span><span class="n">prefix</span><span class="o">=</span><span class="s2">"pulserver-queue-"</span><span class="p">))</span>
+            <span class="k">if</span> <span class="n">queue</span> <span class="ow">is</span> <span class="kc">None</span>
+            <span class="k">else</span> <span class="n">Path</span><span class="p">(</span><span class="n">queue</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">queue</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">parents</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">plugins</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">plugins</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">workers</span> <span class="o">=</span> <span class="n">WorkerPool</span><span class="p">(</span><span class="n">spares</span><span class="o">=</span><span class="n">spares</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">recon_timeout</span> <span class="o">=</span> <span class="n">recon_timeout</span>
@@ -601,7 +612,7 @@
 <span class="w">        </span><span class="sd">"""Accept clients until :meth:`stop` or :meth:`close`, one thread each."""</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_server</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">bind</span><span class="p">()</span>
-        <span class="n">_log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">"serving </span><span class="si">%s</span><span class="s2"> on port </span><span class="si">%d</span><span class="s2">"</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">revisions</span><span class="o">.</span><span class="n">bucket</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">port</span><span class="p">)</span>
+        <span class="n">_log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">"serving </span><span class="si">%s</span><span class="s2"> on port </span><span class="si">%d</span><span class="s2">"</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">designs</span><span class="o">.</span><span class="n">store</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">port</span><span class="p">)</span>
         <span class="k">while</span> <span class="ow">not</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_stopping</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">_closing</span><span class="o">.</span><span class="n">is_set</span><span class="p">()):</span>
             <span class="k">try</span><span class="p">:</span>
                 <span class="n">stream</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_server</span><span class="o">.</span><span class="n">accept</span><span class="p">()</span>
@@ -650,7 +661,9 @@
             <span class="n">thread</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="n">_WORKER_TIMEOUT</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">workers</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">exams</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
-        <span class="n">shutil</span><span class="o">.</span><span class="n">rmtree</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_exam_root</span><span class="p">,</span> <span class="n">ignore_errors</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span></div>
+        <span class="n">shutil</span><span class="o">.</span><span class="n">rmtree</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_exam_root</span><span class="p">,</span> <span class="n">ignore_errors</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_owns_queue</span><span class="p">:</span>
+            <span class="n">shutil</span><span class="o">.</span><span class="n">rmtree</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">queue</span><span class="p">,</span> <span class="n">ignore_errors</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span></div>
 
 
     <span class="c1"># %% one client connection</span>
@@ -670,14 +683,14 @@
             <span class="n">connection</span><span class="o">.</span><span class="n">shutdown_close</span><span class="p">()</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_series</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">client</span><span class="p">:</span> <span class="n">Connection</span><span class="p">,</span> <span class="n">config</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">header</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">revision</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">revisions</span><span class="o">.</span><span class="n">resolve</span><span class="p">(</span><span class="n">header</span><span class="p">)</span>
-        <span class="n">plugin</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_plugin_path</span><span class="p">(</span><span class="n">revision</span><span class="o">.</span><span class="n">recon</span> <span class="ow">or</span> <span class="n">_config_plugin</span><span class="p">(</span><span class="n">config</span><span class="p">))</span>
-        <span class="n">enrich_header</span><span class="p">(</span><span class="n">header</span><span class="p">,</span> <span class="n">revision</span><span class="o">.</span><span class="n">table</span><span class="p">)</span>
+        <span class="n">design</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">designs</span><span class="o">.</span><span class="n">resolve</span><span class="p">(</span><span class="n">header</span><span class="p">)</span>
+        <span class="n">plugin</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_plugin_path</span><span class="p">(</span><span class="n">design</span><span class="o">.</span><span class="n">recon</span> <span class="ow">or</span> <span class="n">_config_plugin</span><span class="p">(</span><span class="n">config</span><span class="p">))</span>
+        <span class="n">enrich_header</span><span class="p">(</span><span class="n">header</span><span class="p">,</span> <span class="n">design</span><span class="o">.</span><span class="n">table</span><span class="p">)</span>
         <span class="n">_log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
             <span class="s2">"series on </span><span class="si">%s</span><span class="s2">: </span><span class="si">%s</span><span class="s2">, </span><span class="si">%d</span><span class="s2"> readouts"</span><span class="p">,</span>
-            <span class="n">revision</span><span class="o">.</span><span class="n">directory</span><span class="p">,</span>
+            <span class="n">design</span><span class="o">.</span><span class="n">directory</span><span class="p">,</span>
             <span class="n">plugin</span><span class="o">.</span><span class="n">stem</span><span class="p">,</span>
-            <span class="nb">len</span><span class="p">(</span><span class="n">revision</span><span class="o">.</span><span class="n">table</span><span class="p">),</span>
+            <span class="nb">len</span><span class="p">(</span><span class="n">design</span><span class="o">.</span><span class="n">table</span><span class="p">),</span>
         <span class="p">)</span>
         <span class="n">slot</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_slots</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">wait</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">slot</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
@@ -688,30 +701,26 @@
                     <span class="n">header</span><span class="p">,</span>
                     <span class="n">plugin</span><span class="p">,</span>
                     <span class="n">slot</span><span class="p">,</span>
-                    <span class="k">lambda</span> <span class="n">worker</span><span class="p">:</span> <span class="n">_forward</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="n">worker</span><span class="p">,</span> <span class="n">revision</span><span class="p">),</span>
+                    <span class="k">lambda</span> <span class="n">worker</span><span class="p">:</span> <span class="n">_forward</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="n">worker</span><span class="p">,</span> <span class="n">design</span><span class="p">),</span>
                 <span class="p">)</span>
             <span class="k">finally</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_slots</span><span class="o">.</span><span class="n">release</span><span class="p">(</span><span class="n">slot</span><span class="p">)</span>
             <span class="k">return</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_queue</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="n">config</span><span class="p">,</span> <span class="n">header</span><span class="p">,</span> <span class="n">revision</span><span class="p">,</span> <span class="n">plugin</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_queue</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="n">config</span><span class="p">,</span> <span class="n">header</span><span class="p">,</span> <span class="n">design</span><span class="p">,</span> <span class="n">plugin</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_queue</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">client</span><span class="p">:</span> <span class="n">Connection</span><span class="p">,</span>
         <span class="n">config</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
         <span class="n">header</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
-        <span class="n">revision</span><span class="p">:</span> <span class="n">Revision</span><span class="p">,</span>
+        <span class="n">design</span><span class="p">:</span> <span class="n">Design</span><span class="p">,</span>
         <span class="n">plugin</span><span class="p">:</span> <span class="n">Path</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""Hold the series on disk until a slot frees, then replay it to a worker."""</span>
-        <span class="n">queued</span> <span class="o">=</span> <span class="n">QueueFile</span><span class="p">(</span>
-            <span class="n">revision</span><span class="o">.</span><span class="n">session_directory</span>
-            <span class="o">/</span> <span class="s2">"queue"</span>
-            <span class="o">/</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">os</span><span class="o">.</span><span class="n">getpid</span><span class="p">()</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="nb">next</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_queued</span><span class="p">)</span><span class="si">}</span><span class="s2">.h5"</span>
-        <span class="p">)</span>
-        <span class="n">_log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">"queued </span><span class="si">%s</span><span class="s2"> on </span><span class="si">%s</span><span class="s2">"</span><span class="p">,</span> <span class="n">queued</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">revision</span><span class="o">.</span><span class="n">directory</span><span class="p">)</span>
+        <span class="n">queued</span> <span class="o">=</span> <span class="n">QueueFile</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">queue</span> <span class="o">/</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">os</span><span class="o">.</span><span class="n">getpid</span><span class="p">()</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="nb">next</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_queued</span><span class="p">)</span><span class="si">}</span><span class="s2">.h5"</span><span class="p">)</span>
+        <span class="n">_log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">"queued </span><span class="si">%s</span><span class="s2"> on </span><span class="si">%s</span><span class="s2">"</span><span class="p">,</span> <span class="n">queued</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">design</span><span class="o">.</span><span class="n">directory</span><span class="p">)</span>
         <span class="k">try</span><span class="p">:</span>
-            <span class="n">others</span> <span class="o">=</span> <span class="n">_record</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="n">header</span><span class="p">,</span> <span class="n">revision</span><span class="p">,</span> <span class="n">queued</span><span class="p">)</span>
+            <span class="n">others</span> <span class="o">=</span> <span class="n">_record</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="n">header</span><span class="p">,</span> <span class="n">design</span><span class="p">,</span> <span class="n">queued</span><span class="p">)</span>
             <span class="n">slot</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_slots</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">wait</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
             <span class="k">try</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_run</span><span class="p">(</span>
@@ -773,9 +782,7 @@
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_plugin_path</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">plugin</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Path</span><span class="p">:</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">plugin</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="s2">"neither the revision nor the config names a reconstruction"</span>
-            <span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"neither the design nor the config names a reconstruction"</span><span class="p">)</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">_PLUGIN_NAME</span><span class="o">.</span><span class="n">fullmatch</span><span class="p">(</span><span class="n">plugin</span><span class="p">):</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"invalid plugin name </span><span class="si">{</span><span class="n">plugin</span><span class="si">!r}</span><span class="s2">"</span><span class="p">)</span>
         <span class="n">path</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">plugins</span> <span class="o">/</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">plugin</span><span class="si">}</span><span class="s2">.py"</span>
@@ -868,7 +875,7 @@
 <span class="w">    </span><span class="sd">"""Return the config text and the header a stream opens with.</span>
 
 <span class="sd">    The config is optional: a stream may open with its header, which leaves</span>
-<span class="sd">    the reconstruction to the one the revision names.</span>
+<span class="sd">    the reconstruction to the one the design names.</span>
 
 <span class="sd">    Raises</span>
 <span class="sd">    ------</span>
@@ -914,7 +921,7 @@
     <span class="p">)</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_enriched</span><span class="p">(</span><span class="n">client</span><span class="p">:</span> <span class="n">Connection</span><span class="p">,</span> <span class="n">revision</span><span class="p">:</span> <span class="n">Revision</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Any</span><span class="p">]:</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_enriched</span><span class="p">(</span><span class="n">client</span><span class="p">:</span> <span class="n">Connection</span><span class="p">,</span> <span class="n">design</span><span class="p">:</span> <span class="n">Design</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Any</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">"""Yield the client's stream up to its close, acquisitions enriched in play order.</span>
 
 <span class="sd">    Acquisitions are matched to readouts by position, so the stream carries</span>
@@ -935,7 +942,7 @@
 <span class="sd">    """</span>
     <span class="n">index</span> <span class="o">=</span> <span class="mi">0</span>
     <span class="n">previous</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="n">readouts</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">revision</span><span class="o">.</span><span class="n">table</span><span class="p">)</span>
+    <span class="n">readouts</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">design</span><span class="o">.</span><span class="n">table</span><span class="p">)</span>
     <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">client</span><span class="p">:</span>
         <span class="k">if</span> <span class="n">_is_close_marker</span><span class="p">(</span><span class="n">item</span><span class="p">):</span>
             <span class="k">break</span>
@@ -945,12 +952,12 @@
             <span class="k">if</span> <span class="n">index</span> <span class="o">&gt;=</span> <span class="n">readouts</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                     <span class="sa">f</span><span class="s2">"the stream carries more than the </span><span class="si">{</span><span class="n">readouts</span><span class="si">}</span><span class="s2"> readouts "</span>
-                    <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">revision</span><span class="o">.</span><span class="n">directory</span><span class="si">}</span><span class="s2"> plays"</span>
+                    <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">design</span><span class="o">.</span><span class="n">directory</span><span class="si">}</span><span class="s2"> plays"</span>
                 <span class="p">)</span>
             <span class="k">if</span> <span class="n">item</span><span class="o">.</span><span class="n">isFlagSet</span><span class="p">(</span><span class="n">ismrmrd</span><span class="o">.</span><span class="n">ACQ_LAST_IN_MEASUREMENT</span><span class="p">)</span> <span class="ow">and</span> <span class="n">index</span> <span class="o">+</span> <span class="mi">1</span> <span class="o">&lt;</span> <span class="n">readouts</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                     <span class="sa">f</span><span class="s2">"acquisition </span><span class="si">{</span><span class="n">index</span><span class="si">}</span><span class="s2"> is flagged LAST_IN_MEASUREMENT, which ends "</span>
-                    <span class="sa">f</span><span class="s2">"the stream, and </span><span class="si">{</span><span class="n">revision</span><span class="o">.</span><span class="n">directory</span><span class="si">}</span><span class="s2"> plays </span><span class="si">{</span><span class="n">readouts</span><span class="si">}</span><span class="s2"> readouts"</span>
+                    <span class="sa">f</span><span class="s2">"the stream, and </span><span class="si">{</span><span class="n">design</span><span class="o">.</span><span class="n">directory</span><span class="si">}</span><span class="s2"> plays </span><span class="si">{</span><span class="n">readouts</span><span class="si">}</span><span class="s2"> readouts"</span>
                 <span class="p">)</span>
             <span class="n">counter</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">item</span><span class="o">.</span><span class="n">scan_counter</span><span class="p">)</span>
             <span class="n">numbered</span> <span class="o">=</span> <span class="n">previous</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="p">(</span><span class="n">previous</span><span class="p">,</span> <span class="n">counter</span><span class="p">)</span> <span class="o">!=</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
@@ -958,36 +965,36 @@
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                     <span class="sa">f</span><span class="s2">"acquisition </span><span class="si">{</span><span class="n">index</span><span class="si">}</span><span class="s2"> carries scan counter </span><span class="si">{</span><span class="n">counter</span><span class="si">}</span><span class="s2"> after "</span>
                     <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">previous</span><span class="si">}</span><span class="s2">: the stream no longer matches the readouts "</span>
-                    <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">revision</span><span class="o">.</span><span class="n">directory</span><span class="si">}</span><span class="s2"> plays"</span>
+                    <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">design</span><span class="o">.</span><span class="n">directory</span><span class="si">}</span><span class="s2"> plays"</span>
                 <span class="p">)</span>
             <span class="n">previous</span> <span class="o">=</span> <span class="n">counter</span>
-            <span class="n">enrich_acquisition</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="n">revision</span><span class="o">.</span><span class="n">table</span><span class="p">,</span> <span class="n">index</span><span class="p">)</span>
+            <span class="n">enrich_acquisition</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="n">design</span><span class="o">.</span><span class="n">table</span><span class="p">,</span> <span class="n">index</span><span class="p">)</span>
             <span class="n">index</span> <span class="o">+=</span> <span class="mi">1</span>
         <span class="k">yield</span> <span class="n">item</span>
     <span class="k">if</span> <span class="n">index</span> <span class="o">&lt;</span> <span class="n">readouts</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
             <span class="sa">f</span><span class="s2">"the stream ended after </span><span class="si">{</span><span class="n">index</span><span class="si">}</span><span class="s2"> of the </span><span class="si">{</span><span class="n">readouts</span><span class="si">}</span><span class="s2"> readouts "</span>
-            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">revision</span><span class="o">.</span><span class="n">directory</span><span class="si">}</span><span class="s2"> plays"</span>
+            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">design</span><span class="o">.</span><span class="n">directory</span><span class="si">}</span><span class="s2"> plays"</span>
         <span class="p">)</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_forward</span><span class="p">(</span><span class="n">client</span><span class="p">:</span> <span class="n">Connection</span><span class="p">,</span> <span class="n">worker</span><span class="p">:</span> <span class="n">Connection</span><span class="p">,</span> <span class="n">revision</span><span class="p">:</span> <span class="n">Revision</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_forward</span><span class="p">(</span><span class="n">client</span><span class="p">:</span> <span class="n">Connection</span><span class="p">,</span> <span class="n">worker</span><span class="p">:</span> <span class="n">Connection</span><span class="p">,</span> <span class="n">design</span><span class="p">:</span> <span class="n">Design</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Send the client's stream to the worker as it arrives."""</span>
-    <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">_enriched</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="n">revision</span><span class="p">):</span>
+    <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">_enriched</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="n">design</span><span class="p">):</span>
         <span class="n">worker</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">item</span><span class="p">)</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_record</span><span class="p">(</span>
     <span class="n">client</span><span class="p">:</span> <span class="n">Connection</span><span class="p">,</span>
     <span class="n">header</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
-    <span class="n">revision</span><span class="p">:</span> <span class="n">Revision</span><span class="p">,</span>
+    <span class="n">design</span><span class="p">:</span> <span class="n">Design</span><span class="p">,</span>
     <span class="n">queued</span><span class="p">:</span> <span class="n">QueueFile</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">Any</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">"""Store the client's stream until it closes; return what the file cannot hold."""</span>
     <span class="n">queued</span><span class="o">.</span><span class="n">write_header</span><span class="p">(</span><span class="n">header</span><span class="p">)</span>
     <span class="n">others</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
     <span class="k">try</span><span class="p">:</span>
-        <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">_enriched</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="n">revision</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">_enriched</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="n">design</span><span class="p">):</span>
             <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="p">(</span><span class="n">ismrmrd</span><span class="o">.</span><span class="n">Acquisition</span><span class="p">,</span> <span class="n">ismrmrd</span><span class="o">.</span><span class="n">Waveform</span><span class="p">)):</span>
                 <span class="n">queued</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">item</span><span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>

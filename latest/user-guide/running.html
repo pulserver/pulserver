@@ -249,7 +249,7 @@
 <li class="toctree-l1 has-children"><a class="reference internal" href="../explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/architecture.html">Architecture</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/protocol.html">Protocol resolution</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../explanations/sessions.html">Design sessions and revisions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/designs.html">Designs and the design store</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/ir-cache.html">The scanner IR</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/reconstruction.html">Raw-data enrichment and routing</a></li>
 </ul>
@@ -272,7 +272,7 @@
 <li class="toctree-l1 has-children"><a class="reference internal" href="../api/index.html">API reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../api/protocol.html">Protocol</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/design.html">Scanner sequences</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../api/host.html">Host daemon</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/host.html">Design calls</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/ir.html">IR conversion</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/vre.html">Reconstruction proxy</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/recon.html">Reconstruction plugins</a></li>
@@ -514,8 +514,9 @@
             </div>
             <nav aria-label="Page">
                 <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#host-daemon">Host daemon</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#design-command">Design command</a><ul class="nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#design-calls">Design calls</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#limits">Limits</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#design-store">Design store</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#warm-server">Warm server</a></li>
 </ul>
 </li>
@@ -534,44 +535,75 @@
                   
   <section class="tex2jax_ignore mathjax_ignore" id="running-the-services">
 <h1>Running the services<a class="headerlink" href="#running-the-services" title="Link to this heading">#</a></h1>
-<p>Pulserver runs as two services. The host daemon answers the scanner’s PSD host
-processes: it resolves protocols and writes the designs the scanner plays. The
+<p>Pulserver runs two services. The design calls answer the scanner’s PSD host
+processes: they resolve protocols and write the designs the scanner plays into a
+design store, one command per call or through a warm server. The
 reconstruction proxy receives the raw data of each series from the scanner’s
-reconstruction client and returns the images. Both read and write one
-directory, the <em>base</em>, which holds <code class="docutils literal notranslate"><span class="pre">bucket/</span></code>; when the two run on different
-computers, the base is a directory both can reach. The layout of the bucket is
-described in <a class="reference internal" href="../explanations/sessions.html"><span class="doc">Design sessions and revisions</span></a>.</p>
-<section id="host-daemon">
-<h2>Host daemon<a class="headerlink" href="#host-daemon" title="Link to this heading">#</a></h2>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>-m<span class="w"> </span>pulserver.host<span class="w"> </span>--base<span class="w"> </span>DIR<span class="w"> </span>--socket<span class="w"> </span>PATH<span class="w"> </span>--plugins<span class="w"> </span>DIR<span class="w"> </span><span class="o">[</span>--workers<span class="w"> </span>N<span class="o">]</span>
+reconstruction client, reads the design it was played from in the same store,
+and returns the images. When the two run on different computers, the store is
+a directory both can reach. The store and the identity of a design are
+described in <a class="reference internal" href="../explanations/designs.html"><span class="doc">Designs and the design store</span></a>.</p>
+<section id="design-calls">
+<h2>Design calls<a class="headerlink" href="#design-calls" title="Link to this heading">#</a></h2>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pulserver<span class="w"> </span>design<span class="w"> </span>list<span class="w">     </span>--plugins<span class="w"> </span>DIR<span class="w"> </span>--plugin<span class="w"> </span>NAME
+pulserver<span class="w"> </span>design<span class="w"> </span>validate<span class="w"> </span>--plugins<span class="w"> </span>DIR<span class="w"> </span>--plugin<span class="w"> </span>NAME<span class="w"> </span>--limits<span class="w"> </span>FILE<span class="w"> </span>&lt;<span class="w"> </span>VALUES
+pulserver<span class="w"> </span>design<span class="w"> </span>generate<span class="w"> </span>--plugins<span class="w"> </span>DIR<span class="w"> </span>--plugin<span class="w"> </span>NAME<span class="w"> </span>--limits<span class="w"> </span>FILE<span class="w"> </span>--store<span class="w"> </span>DIR<span class="w"> </span>&lt;<span class="w"> </span>VALUES
+pulserver<span class="w"> </span>design<span class="w"> </span>import<span class="w">   </span>--limits<span class="w"> </span>FILE<span class="w"> </span>--store<span class="w"> </span>DIR<span class="w"> </span>&lt;<span class="w"> </span>IMPORT
+pulserver<span class="w"> </span>design<span class="w"> </span>prune<span class="w">    </span>--store<span class="w"> </span>DIR<span class="w"> </span><span class="o">[</span>--max-age-days<span class="w"> </span>D<span class="o">]</span><span class="w"> </span><span class="o">[</span>--max-bytes<span class="w"> </span>B<span class="o">]</span>
 </pre></div>
 </div>
+<p>Each call is answered from its arguments and standard input alone and writes
+its reply to standard output; <code class="docutils literal notranslate"><span class="pre">python</span> <span class="pre">-m</span> <span class="pre">pulserver.host</span></code> takes the same
+arguments. <code class="docutils literal notranslate"><span class="pre">--plugins</span></code> is the directory of scanner-sequence plugin files,
+<code class="docutils literal notranslate"><span class="pre">&lt;plugin&gt;.py</span></code>, and <code class="docutils literal notranslate"><span class="pre">--store</span></code> the design store, created when missing.</p>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
-<tr class="row-odd"><th class="head"><p>Option</p></th>
-<th class="head"><p>Meaning</p></th>
+<tr class="row-odd"><th class="head"><p>Call</p></th>
+<th class="head"><p>Reply</p></th>
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--base</span></code></p></td>
-<td><p>Directory holding <code class="docutils literal notranslate"><span class="pre">bucket/</span></code>; created when missing</p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">list</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">PROTOCOL</span></code> and the plugin’s listing block</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--socket</span></code></p></td>
-<td><p>Unix socket to listen on; an existing file at this path is replaced</p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">validate</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">VALID</span> <span class="pre">&lt;seconds&gt;</span></code> or <code class="docutils literal notranslate"><span class="pre">INVALID</span></code>, an <code class="docutils literal notranslate"><span class="pre">INFO</span></code> line and the value block of the resolved protocol</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--plugins</span></code></p></td>
-<td><p>Directory of scanner-sequence plugin files, <code class="docutils literal notranslate"><span class="pre">&lt;plugin&gt;.py</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">generate</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">GENERATED</span> <span class="pre">&lt;id&gt;</span></code>: the identifier of the design in the store</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--workers</span></code></p></td>
-<td><p>Design worker processes, default 2</p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">import</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">IMPORTED</span> <span class="pre">&lt;id&gt;</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">prune</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">PRUNED</span> <span class="pre">&lt;count&gt;</span></code></p></td>
 </tr>
 </tbody>
 </table>
 </div>
-<p>A PSD host process opens a session with the plugin it plays and the scanner
-limits, then validates and generates protocols through it. The limits are
-keyword arguments of <code class="docutils literal notranslate"><span class="pre">pypulseqpp.Opts</span></code>, one <code class="docutils literal notranslate"><span class="pre">name:</span> <span class="pre">value</span></code> per line, plus three
-optional options for the IR conversion:</p>
+<p>A call that fails replies <code class="docutils literal notranslate"><span class="pre">ERROR</span> <span class="pre">&lt;message&gt;</span></code> and exits with status 1; a plugin
+that ends its process ends the call without a reply and with a nonzero exit
+status. The value blocks are those of <code class="xref py py-mod docutils literal notranslate"><span class="pre">pulserver.protocol</span></code>, and the import
+block names the first file of a chain and, optionally, its prescription:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>[Import]
+file: /data/sequence.seq
+fov_offset_x: 0.0
+fov_offset_y: 20.0
+fov_offset_z: 0.0
+[Import End]
+</pre></div>
+</div>
+<p>with the offset in mm along the logical axes and the rotation in the
+<code class="docutils literal notranslate"><span class="pre">fov_rotation_ij</span></code> lines of <a class="reference internal" href="../explanations/protocol.html"><span class="doc">Protocol resolution</span></a>. <code class="docutils literal notranslate"><span class="pre">generate</span></code> designs a
+request once, writes it in the logical frame, checks it and converts it to the
+IR cache at the prescribed field-of-view offset; <code class="docutils literal notranslate"><span class="pre">import</span></code> copies the chain, then
+checks and converts it the same way. A request that resolves to a stored
+design returns its identifier without designing again.</p>
+<section id="limits">
+<h3>Limits<a class="headerlink" href="#limits" title="Link to this heading">#</a></h3>
+<p>The limits file holds a <code class="docutils literal notranslate"><span class="pre">[Limits]</span></code> block, one <code class="docutils literal notranslate"><span class="pre">name:</span> <span class="pre">value</span></code> per line between
+<code class="docutils literal notranslate"><span class="pre">[Limits]</span></code> and <code class="docutils literal notranslate"><span class="pre">[Limits</span> <span class="pre">End]</span></code>: keyword arguments of <code class="docutils literal notranslate"><span class="pre">pypulseqpp.Opts</span></code>, plus
+three optional options for the IR conversion:</p>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
 <tr class="row-odd"><th class="head"><p>Option</p></th>
@@ -623,7 +655,7 @@ gradient heating.</p>
 <td><p>One forbidden band: its physical axis (<code class="docutils literal notranslate"><span class="pre">x</span></code>, <code class="docutils literal notranslate"><span class="pre">y</span></code>, <code class="docutils literal notranslate"><span class="pre">z</span></code> or <code class="docutils literal notranslate"><span class="pre">all</span></code>), its lowest and highest frequency in Hz and, optionally, the largest amplitude allowed in it in mT/m, separated by spaces</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">vop_file</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">.mat</span></code> or <code class="docutils literal notranslate"><span class="pre">.npz</span></code> file of VOPs and, optionally, a global SAR matrix, at a path the host daemon can read</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">.mat</span></code> or <code class="docutils literal notranslate"><span class="pre">.npz</span></code> file of VOPs and, optionally, a global SAR matrix, at a path the design calls can read</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">vop_drive_per_hz</span></code></p></td>
 <td><p>Channel drive per Hz of RF amplitude, one per channel separated by spaces; a scale common to every channel cancels, and equal drives when left out</p></td>
@@ -637,62 +669,35 @@ gradient heating.</p>
 <p>A band given no amplitude is held to the <code class="docutils literal notranslate"><span class="pre">min_threshold</span></code> of
 <code class="docutils literal notranslate"><span class="pre">pypulseqpp.safety.check_mech_resonance</span></code>. The gradient, PNS and resonance
 checks are made in the physical frame of the prescription rotation each
-request carries. <code class="docutils literal notranslate"><span class="pre">OPEN</span></code> refuses limits it cannot read, and a revision is
+request carries. A call refuses limits it cannot read, and a design is
 identified with the contents of the VOP file as well as its path.</p>
-<p>The commands and their replies are listed in
-<a class="reference internal" href="../generated/pulserver.host.HostDaemon.html#pulserver.host.HostDaemon" title="pulserver.host.HostDaemon"><code class="xref py py-class docutils literal notranslate"><span class="pre">HostDaemon</span></code></a>. <a class="reference internal" href="../generated/pulserver.host.HostClient.html#pulserver.host.HostClient" title="pulserver.host.HostClient"><code class="xref py py-class docutils literal notranslate"><span class="pre">HostClient</span></code></a> sends
-them as a PSD host process does, which exercises a plugin through the daemon
-without a scanner:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pulserver.host</span><span class="w"> </span><span class="kn">import</span> <span class="n">HostClient</span><span class="p">,</span> <span class="n">SessionKey</span>
+<p>A plugin can be exercised without a scanner through
+<a class="reference internal" href="../generated/pulserver.host.call.html#pulserver.host.call" title="pulserver.host.call"><code class="xref py py-func docutils literal notranslate"><span class="pre">call()</span></code></a>, which answers a call in the calling process:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pulserver.host</span><span class="w"> </span><span class="kn">import</span> <span class="n">DesignStore</span><span class="p">,</span> <span class="n">call</span>
 
-<span class="n">client</span> <span class="o">=</span> <span class="n">HostClient</span><span class="p">(</span><span class="s2">"/tmp/pulserver.sock"</span><span class="p">,</span> <span class="n">SessionKey</span><span class="p">(</span><span class="n">pid</span><span class="o">=</span><span class="mi">4242</span><span class="p">,</span> <span class="n">day</span><span class="o">=</span><span class="mi">20711</span><span class="p">))</span>
-<span class="n">client</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="s2">"gre2d"</span><span class="p">,</span> <span class="p">{</span><span class="s2">"max_grad"</span><span class="p">:</span> <span class="mf">40.0</span><span class="p">,</span> <span class="s2">"grad_unit"</span><span class="p">:</span> <span class="s2">"mT/m"</span><span class="p">,</span>
-                      <span class="s2">"max_slew"</span><span class="p">:</span> <span class="mf">150.0</span><span class="p">,</span> <span class="s2">"slew_unit"</span><span class="p">:</span> <span class="s2">"T/m/s"</span><span class="p">})</span>
-<span class="n">listing</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">list_protocol</span><span class="p">()</span>
-<span class="n">validation</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">validate</span><span class="p">({</span><span class="s2">"TE"</span><span class="p">:</span> <span class="mi">5000</span><span class="p">,</span> <span class="s2">"nx"</span><span class="p">:</span> <span class="mi">96</span><span class="p">})</span>
-<span class="n">revision</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">generate</span><span class="p">(</span><span class="n">validation</span><span class="o">.</span><span class="n">values</span><span class="p">)</span>
-<span class="n">client</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+<span class="n">limits</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"max_grad"</span><span class="p">:</span> <span class="mf">40.0</span><span class="p">,</span> <span class="s2">"grad_unit"</span><span class="p">:</span> <span class="s2">"mT/m"</span><span class="p">,</span> <span class="s2">"max_slew"</span><span class="p">:</span> <span class="mf">150.0</span><span class="p">,</span> <span class="s2">"slew_unit"</span><span class="p">:</span> <span class="s2">"T/m/s"</span><span class="p">}</span>
+<span class="n">block</span> <span class="o">=</span> <span class="s2">"[NimPulseqGUI Protocol]</span><span class="se">\n</span><span class="s2">TE: 5000</span><span class="se">\n</span><span class="s2">nx: 96</span><span class="se">\n</span><span class="s2">[NimPulseqGUI Protocol End]</span><span class="se">\n</span><span class="s2">"</span>
+<span class="n">status</span><span class="p">,</span> <span class="n">reply</span> <span class="o">=</span> <span class="n">call</span><span class="p">(</span><span class="s2">"validate"</span><span class="p">,</span> <span class="n">plugins</span><span class="o">=</span><span class="s2">"sequences"</span><span class="p">,</span> <span class="n">plugin</span><span class="o">=</span><span class="s2">"gre2d"</span><span class="p">,</span>
+                     <span class="n">limits</span><span class="o">=</span><span class="n">limits</span><span class="p">,</span> <span class="n">block</span><span class="o">=</span><span class="n">block</span><span class="p">)</span>
+<span class="n">status</span><span class="p">,</span> <span class="n">reply</span> <span class="o">=</span> <span class="n">call</span><span class="p">(</span><span class="s2">"generate"</span><span class="p">,</span> <span class="n">plugins</span><span class="o">=</span><span class="s2">"sequences"</span><span class="p">,</span> <span class="n">plugin</span><span class="o">=</span><span class="s2">"gre2d"</span><span class="p">,</span>
+                     <span class="n">limits</span><span class="o">=</span><span class="n">limits</span><span class="p">,</span> <span class="n">block</span><span class="o">=</span><span class="n">block</span><span class="p">,</span> <span class="n">store</span><span class="o">=</span><span class="n">DesignStore</span><span class="p">(</span><span class="s2">"designs"</span><span class="p">))</span>
 </pre></div>
 </div>
-<p>A session opened without a plugin only imports sequence files
-(<a class="reference internal" href="../generated/pulserver.host.HostClient.import_sequence.html#pulserver.host.HostClient.import_sequence" title="pulserver.host.HostClient.import_sequence"><code class="xref py py-meth docutils literal notranslate"><span class="pre">import_sequence()</span></code></a>): the file and its
-<code class="docutils literal notranslate"><span class="pre">NextSequence</span></code> chain are copied into a revision, checked in the physical frame
-of the rotation the import names and converted to the IR cache there.</p>
-<p>Plugin code runs in spawned worker processes, so a plugin that crashes fails
-the command it was running and the daemon replaces the pool. A plugin file is
-imported again when its modification time changes.</p>
+<p>A plugin file is imported again when its modification time changes.</p>
 </section>
-<section id="design-command">
-<h2>Design command<a class="headerlink" href="#design-command" title="Link to this heading">#</a></h2>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pulserver<span class="w"> </span>design<span class="w"> </span>list<span class="w">     </span>--plugins<span class="w"> </span>DIR<span class="w"> </span>--plugin<span class="w"> </span>NAME
-pulserver<span class="w"> </span>design<span class="w"> </span>validate<span class="w"> </span>--plugins<span class="w"> </span>DIR<span class="w"> </span>--plugin<span class="w"> </span>NAME<span class="w"> </span>--limits<span class="w"> </span>FILE<span class="w"> </span>&lt;<span class="w"> </span>VALUES
-pulserver<span class="w"> </span>design<span class="w"> </span>generate<span class="w"> </span>--plugins<span class="w"> </span>DIR<span class="w"> </span>--plugin<span class="w"> </span>NAME<span class="w"> </span>--limits<span class="w"> </span>FILE<span class="w"> </span>--store<span class="w"> </span>DIR<span class="w"> </span>&lt;<span class="w"> </span>VALUES
-pulserver<span class="w"> </span>design<span class="w"> </span>import<span class="w">   </span>--limits<span class="w"> </span>FILE<span class="w"> </span>--store<span class="w"> </span>DIR<span class="w"> </span>&lt;<span class="w"> </span>IMPORT
-pulserver<span class="w"> </span>design<span class="w"> </span>prune<span class="w">    </span>--store<span class="w"> </span>DIR<span class="w"> </span><span class="o">[</span>--max-age-days<span class="w"> </span>D<span class="o">]</span><span class="w"> </span><span class="o">[</span>--max-bytes<span class="w"> </span>B<span class="o">]</span>
-</pre></div>
-</div>
-<p>Each call is answered from its arguments and standard input alone, and writes
-the reply of the daemon command of the same purpose to standard output: <code class="docutils literal notranslate"><span class="pre">list</span></code>
-replies as <code class="docutils literal notranslate"><span class="pre">LIST_PROTOCOL</span></code>, <code class="docutils literal notranslate"><span class="pre">validate</span></code> as <code class="docutils literal notranslate"><span class="pre">VALIDATE</span></code>, and <code class="docutils literal notranslate"><span class="pre">generate</span></code> and
-<code class="docutils literal notranslate"><span class="pre">import</span></code> reply <code class="docutils literal notranslate"><span class="pre">GENERATED</span> <span class="pre">&lt;id&gt;</span></code> and <code class="docutils literal notranslate"><span class="pre">IMPORTED</span> <span class="pre">&lt;id&gt;</span></code>, where <code class="docutils literal notranslate"><span class="pre">&lt;id&gt;</span></code> names the
-design in the store. A call that fails replies <code class="docutils literal notranslate"><span class="pre">ERROR</span> <span class="pre">&lt;message&gt;</span></code> and exits with
-status 1. The limits file holds the <code class="docutils literal notranslate"><span class="pre">[Limits]</span></code> block <code class="docutils literal notranslate"><span class="pre">OPEN</span></code> takes: the scanner
-limits, the conversion options and the check limits above. A plugin that ends
-its process ends the call without a reply and with a nonzero exit status.</p>
+<section id="design-store">
+<h3>Design store<a class="headerlink" href="#design-store" title="Link to this heading">#</a></h3>
 <p>The store holds one directory per design, <code class="docutils literal notranslate"><span class="pre">&lt;store&gt;/&lt;id&gt;/</span></code>: the Pulseq files of
 the chain, the IR cache, the resolved protocol and <code class="docutils literal notranslate"><span class="pre">manifest.json</span></code>, which
 records the plugin, the reconstruction plugin, the limits, the package versions
-and the SHA-256 of every file. The identifier is the first 18 hexadecimal
-digits of the SHA-256 of what the design depends on: the plugin and its source,
-the package versions, the limits and the resolved protocol, prescription
-included. A request that resolves to a stored design returns its identifier
-without designing again, and the identifier is three 24-bit integers, each held
-exactly by a float32 CV. A design is written into a stage and renamed into
-place, so it is read whole or not at all. <code class="docutils literal notranslate"><span class="pre">prune</span></code> removes designs least
-recently used first: those unused for longer than <code class="docutils literal notranslate"><span class="pre">--max-age-days</span></code>, then others
-until the store holds at most <code class="docutils literal notranslate"><span class="pre">--max-bytes</span></code>. Nothing is removed otherwise.</p>
+and the SHA-256 of every file. The identifier is three 24-bit integers, each
+held exactly by a float32 CV. <code class="docutils literal notranslate"><span class="pre">prune</span></code> removes designs least recently used
+first: those unused for longer than <code class="docutils literal notranslate"><span class="pre">--max-age-days</span></code>, then others until the
+store holds at most <code class="docutils literal notranslate"><span class="pre">--max-bytes</span></code>. Nothing is removed otherwise, and a design a
+series still needs must not be: the proxy reads it by identifier.</p>
 <p><code class="docutils literal notranslate"><span class="pre">list</span></code> depends on the plugin file and the installed packages only, so its reply
 can be written when they are installed and read without a call.</p>
+</section>
 <section id="warm-server">
 <h3>Warm server<a class="headerlink" href="#warm-server" title="Link to this heading">#</a></h3>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pulserver<span class="w"> </span>design<span class="w"> </span>serve<span class="w"> </span>--plugins<span class="w"> </span>DIR<span class="w"> </span>--socket<span class="w"> </span>PATH
@@ -715,7 +720,7 @@ permissions decide who may call.</p>
 </section>
 <section id="reconstruction-proxy">
 <h2>Reconstruction proxy<a class="headerlink" href="#reconstruction-proxy" title="Link to this heading">#</a></h2>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>-m<span class="w"> </span>pulserver.vre<span class="w"> </span>--base<span class="w"> </span>DIR<span class="w"> </span>--port<span class="w"> </span>N<span class="w"> </span>--plugins<span class="w"> </span>DIR<span class="w"> </span><span class="o">[</span>--host<span class="w"> </span>ADDR<span class="o">]</span><span class="w"> </span><span class="o">[</span>--slots<span class="w"> </span>N<span class="o">]</span><span class="w"> </span><span class="o">[</span>--gpu-slots<span class="w"> </span><span class="m">1</span><span class="o">]</span><span class="w"> </span><span class="o">[</span>--spares<span class="w"> </span><span class="m">1</span><span class="o">]</span><span class="w"> </span><span class="o">[</span>--recon-timeout<span class="w"> </span>S<span class="o">]</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>-m<span class="w"> </span>pulserver.vre<span class="w"> </span>--store<span class="w"> </span>DIR<span class="w"> </span>--port<span class="w"> </span>N<span class="w"> </span>--plugins<span class="w"> </span>DIR<span class="w"> </span><span class="o">[</span>--host<span class="w"> </span>ADDR<span class="o">]</span><span class="w"> </span><span class="o">[</span>--queue<span class="w"> </span>DIR<span class="o">]</span><span class="w"> </span><span class="o">[</span>--slots<span class="w"> </span>N<span class="o">]</span><span class="w"> </span><span class="o">[</span>--gpu-slots<span class="w"> </span><span class="m">1</span><span class="o">]</span><span class="w"> </span><span class="o">[</span>--spares<span class="w"> </span><span class="m">1</span><span class="o">]</span><span class="w"> </span><span class="o">[</span>--recon-timeout<span class="w"> </span>S<span class="o">]</span>
 </pre></div>
 </div>
 <div class="pst-scrollable-table-container"><table class="table">
@@ -725,8 +730,8 @@ permissions decide who may call.</p>
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--base</span></code></p></td>
-<td><p>The host daemon’s base directory</p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--store</span></code></p></td>
+<td><p>The design store the design calls write; read only</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--port</span></code></p></td>
 <td><p>TCP port the scanner’s reconstruction client connects to</p></td>
@@ -737,45 +742,48 @@ permissions decide who may call.</p>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--plugins</span></code></p></td>
 <td><p>Directory of reconstruction plugin files, <code class="docutils literal notranslate"><span class="pre">&lt;plugin&gt;.py</span></code></p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--slots</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--queue</span></code></p></td>
+<td><p>Directory the series waiting for a slot are written to; a temporary directory, removed when the proxy stops, when unset</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--slots</span></code></p></td>
 <td><p>Series reconstructed at once; derived from available memory and the GPUs when unset</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--gpu-slots</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--gpu-slots</span></code></p></td>
 <td><p>Series reconstructed at once on each GPU when <code class="docutils literal notranslate"><span class="pre">--slots</span></code> is unset, default 1</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--spares</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--spares</span></code></p></td>
 <td><p>Worker processes started ahead of a series, default 1</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--recon-timeout</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--recon-timeout</span></code></p></td>
 <td><p>Seconds a reconstruction may run after its series ends; the worker is then terminated and the client told. Unlimited when unset</p></td>
 </tr>
 </tbody>
 </table>
 </div>
 <p>The MRD header of each series names the design it was played from in the
-<code class="docutils literal notranslate"><span class="pre">pulserver_session</span></code> and <code class="docutils literal notranslate"><span class="pre">pulserver_revision</span></code> user parameters, and the proxy
-refuses a series whose header names no generated revision. The reconstruction
+<code class="docutils literal notranslate"><span class="pre">pulserver_design</span></code> user parameter, and the proxy refuses a series whose header
+names no stored design. The reconstruction
 plugin is the one the scanner sequence names in its <code class="docutils literal notranslate"><span class="pre">recon</span></code> attribute; when it
 names none, the client’s config text names it, either as a bare plugin name or
 under <code class="docutils literal notranslate"><span class="pre">parameters.config</span></code>. The messages and fields the client sends are listed
 in <a class="reference internal" href="reconstruction-client.html"><span class="doc">Reconstruction clients</span></a>.</p>
-<p>A series that finds every slot busy is written to
-<code class="docutils literal notranslate"><span class="pre">bucket/&lt;session&gt;/queue/</span></code> as it arrives and reconstructed once a slot frees;
-the client stays connected meanwhile.</p>
+<p>A series that finds every slot busy is written to the queue directory as it
+arrives and reconstructed once a slot frees; the client stays connected
+meanwhile.</p>
 <p>The MRD stream is neither authenticated nor encrypted, and its header carries
 patient data. The proxy belongs on the network between the scanner and the
 reconstruction computer, with <code class="docutils literal notranslate"><span class="pre">--host</span></code> naming the address of the interface on
 it; a scanner’s reconstruction client cannot reach the loopback default.</p>
-<p>Both services stop on <code class="docutils literal notranslate"><span class="pre">SIGINT</span></code> or <code class="docutils literal notranslate"><span class="pre">SIGTERM</span></code>. The proxy waits for the series it
-is running before it exits.</p>
+<p>The proxy and the warm design server stop on <code class="docutils literal notranslate"><span class="pre">SIGINT</span></code> or <code class="docutils literal notranslate"><span class="pre">SIGTERM</span></code>. The proxy
+waits for the series it is running before it exits.</p>
 </section>
 <section id="see-also">
 <h2>See also<a class="headerlink" href="#see-also" title="Link to this heading">#</a></h2>
 <ul class="simple">
 <li><p><a class="reference internal" href="../explanations/architecture.html"><span class="doc">Architecture</span></a> — the services and what passes between them.</p></li>
-<li><p><a class="reference internal" href="../explanations/sessions.html"><span class="doc">Design sessions and revisions</span></a> — the bucket layout and revision identity.</p></li>
+<li><p><a class="reference internal" href="../explanations/designs.html"><span class="doc">Designs and the design store</span></a> — the design store and the identity of a design.</p></li>
 <li><p><a class="reference internal" href="reconstruction-client.html"><span class="doc">Reconstruction clients</span></a> — the MRD stream of a series.</p></li>
-<li><p><a class="reference internal" href="../api/host.html"><span class="doc">Host daemon</span></a> and <a class="reference internal" href="../api/vre.html"><span class="doc">Reconstruction proxy</span></a> — the daemon and proxy interfaces.</p></li>
+<li><p><a class="reference internal" href="../api/host.html"><span class="doc">Design calls</span></a> and <a class="reference internal" href="../api/vre.html"><span class="doc">Reconstruction proxy</span></a> — the design calls and the proxy.</p></li>
 </ul>
 </section>
 </section>
@@ -827,8 +835,9 @@ is running before it exits.</p>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#host-daemon">Host daemon</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#design-command">Design command</a><ul class="nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#design-calls">Design calls</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#limits">Limits</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#design-store">Design store</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#warm-server">Warm server</a></li>
 </ul>
 </li>

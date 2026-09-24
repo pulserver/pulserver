@@ -23,7 +23,7 @@ Protocol resolution
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The scope of this notebook is to resolve prescriptions of a two-dimensional gradient echo the way the host daemon does for the scanner UI, and to show what the resolved protocol depends on: the receiver bandwidth a readout can realize on the sampling rasters, and the shortest echo time the readout admits.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The scope of this notebook is to resolve prescriptions of a two-dimensional gradient echo the way a design call does for the scanner UI, and to show what the resolved protocol depends on: the receiver bandwidth a readout can realize on the sampling rasters, and the shortest echo time the readout admits.">
 
 .. only:: html
 

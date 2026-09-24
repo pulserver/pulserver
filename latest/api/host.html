@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>Host daemon &#8212; pulserver documentation</title>
+    <title>Design calls &#8212; pulserver documentation</title>
   
   
   
@@ -249,7 +249,7 @@
 <li class="toctree-l1 has-children"><a class="reference internal" href="../explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/architecture.html">Architecture</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/protocol.html">Protocol resolution</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../explanations/sessions.html">Design sessions and revisions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/designs.html">Designs and the design store</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/ir-cache.html">The scanner IR</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/reconstruction.html">Raw-data enrichment and routing</a></li>
 </ul>
@@ -272,7 +272,7 @@
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">API reference</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
 <li class="toctree-l2"><a class="reference internal" href="protocol.html">Protocol</a></li>
 <li class="toctree-l2"><a class="reference internal" href="design.html">Scanner sequences</a></li>
-<li class="toctree-l2 current active"><a class="current reference internal" href="#">Host daemon</a></li>
+<li class="toctree-l2 current active"><a class="current reference internal" href="#">Design calls</a></li>
 <li class="toctree-l2"><a class="reference internal" href="ir.html">IR conversion</a></li>
 <li class="toctree-l2"><a class="reference internal" href="vre.html">Reconstruction proxy</a></li>
 <li class="toctree-l2"><a class="reference internal" href="recon.html">Reconstruction plugins</a></li>
@@ -504,7 +504,7 @@
               
 
 <div id="jb-print-docs-body" class="onlyprint">
-    <h1>Host daemon</h1>
+    <h1>Design calls</h1>
     <!-- Table of contents -->
     <div id="print-main-content">
         <div id="jb-print-toc">
@@ -514,8 +514,7 @@
             </div>
             <nav aria-label="Page">
                 <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#daemon-and-client">Daemon and client</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#sessions">Sessions</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#calls">Calls</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#designs">Designs</a></li>
 </ul>
             </nav>
@@ -528,22 +527,17 @@
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section class="tex2jax_ignore mathjax_ignore" id="host-daemon">
-<h1>Host daemon<a class="headerlink" href="#host-daemon" title="Link to this heading">#</a></h1>
-<p>Design sessions for the PSD host processes of one scanner, the revisions they
-generate, and the daemon and client that exchange them.</p>
-<p>The daemon listens on a Unix socket and runs plugin code in a pool of spawned
-worker processes; it is started with</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>-m<span class="w"> </span>pulserver.host<span class="w"> </span>--base<span class="w"> </span>DIR<span class="w"> </span>--socket<span class="w"> </span>PATH<span class="w"> </span>--plugins<span class="w"> </span>DIR<span class="w"> </span><span class="o">[</span>--workers<span class="w"> </span>N<span class="o">]</span>
-</pre></div>
-</div>
-<p>Sessions and revisions are stored under <code class="docutils literal notranslate"><span class="pre">&lt;base&gt;/bucket/</span></code>, in the layout
-described in <a class="reference internal" href="../explanations/sessions.html"><span class="doc">Design sessions and revisions</span></a>. The <code class="docutils literal notranslate"><span class="pre">pulserver</span> <span class="pre">design</span></code> command
-answers the same calls without a session, in its own process or in a warm
-server’s, and stores each design in a <a class="reference internal" href="../generated/pulserver.host.DesignStore.html#pulserver.host.DesignStore" title="pulserver.host.DesignStore"><code class="xref py py-class docutils literal notranslate"><span class="pre">DesignStore</span></code></a>
-(<a class="reference internal" href="../user-guide/running.html"><span class="doc">Running the services</span></a>).</p>
-<section id="daemon-and-client">
-<h2>Daemon and client<a class="headerlink" href="#daemon-and-client" title="Link to this heading">#</a></h2>
+  <section class="tex2jax_ignore mathjax_ignore" id="design-calls">
+<h1>Design calls<a class="headerlink" href="#design-calls" title="Link to this heading">#</a></h1>
+<p>The design calls of the PSD host processes of one scanner, and the store of the
+designs they generate.</p>
+<p>A PSD host process lists, validates, generates and imports through the
+<code class="docutils literal notranslate"><span class="pre">pulserver</span> <span class="pre">design</span></code> command, or <code class="docutils literal notranslate"><span class="pre">python</span> <span class="pre">-m</span> <span class="pre">pulserver.host</span></code>, answered in its own
+process or in a warm server’s; the calls, their replies and the store are
+described in <a class="reference internal" href="../user-guide/running.html"><span class="doc">Running the services</span></a>, and the identity of a design in
+<a class="reference internal" href="../explanations/designs.html"><span class="doc">Designs and the design store</span></a>.</p>
+<section id="calls">
+<h2>Calls<a class="headerlink" href="#calls" title="Link to this heading">#</a></h2>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
 <tr class="row-odd"><th class="head"><p>Object</p></th>
@@ -551,39 +545,8 @@ server’s, and stores each design in a <a class="reference internal" href="../g
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.host.HostDaemon.html#pulserver.host.HostDaemon" title="pulserver.host.HostDaemon"><code class="xref py py-obj docutils literal notranslate"><span class="pre">HostDaemon</span></code></a></p></td>
-<td><p>Unix-socket server answering the commands of every PSD host process on the host.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.host.HostClient.html#pulserver.host.HostClient" title="pulserver.host.HostClient"><code class="xref py py-obj docutils literal notranslate"><span class="pre">HostClient</span></code></a></p></td>
-<td><p>One session’s connection to the daemon, sending commands as a PSD host process does.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.host.HostError.html#pulserver.host.HostError" title="pulserver.host.HostError"><code class="xref py py-obj docutils literal notranslate"><span class="pre">HostError</span></code></a></p></td>
-<td><p>Raised when the daemon answers a command with <code class="docutils literal notranslate"><span class="pre">ERROR</span></code>.</p></td>
-</tr>
-</tbody>
-</table>
-</div>
-</section>
-<section id="sessions">
-<h2>Sessions<a class="headerlink" href="#sessions" title="Link to this heading">#</a></h2>
-<div class="pst-scrollable-table-container"><table class="table">
-<thead>
-<tr class="row-odd"><th class="head"><p>Object</p></th>
-<th class="head"><p>Description</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.host.SessionKey.html#pulserver.host.SessionKey" title="pulserver.host.SessionKey"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SessionKey</span></code></a></p></td>
-<td><p>Process ID and start day identifying a PSD host process.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.host.SessionStore.html#pulserver.host.SessionStore" title="pulserver.host.SessionStore"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SessionStore</span></code></a></p></td>
-<td><p>Every session under <code class="docutils literal notranslate"><span class="pre">&lt;base&gt;/bucket/</span></code>.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.host.Session.html#pulserver.host.Session" title="pulserver.host.Session"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Session</span></code></a></p></td>
-<td><p>State of one session: plugin, limits, revisions and the current revision.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.host.revision_hash.html#pulserver.host.revision_hash" title="pulserver.host.revision_hash"><code class="xref py py-obj docutils literal notranslate"><span class="pre">revision_hash</span></code></a></p></td>
-<td><p>Identity of a design: plugin, scanner limits, resolved protocol and the source that designs it.</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.host.call.html#pulserver.host.call" title="pulserver.host.call"><code class="xref py py-obj docutils literal notranslate"><span class="pre">call</span></code></a></p></td>
+<td><p>Answer one design call in the calling process: its exit status and reply.</p></td>
 </tr>
 </tbody>
 </table>
@@ -660,8 +623,7 @@ server’s, and stores each design in a <a class="reference internal" href="../g
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#daemon-and-client">Daemon and client</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#sessions">Sessions</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#calls">Calls</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#designs">Designs</a></li>
 </ul>
   </nav></div>

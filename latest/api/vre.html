@@ -249,7 +249,7 @@
 <li class="toctree-l1 has-children"><a class="reference internal" href="../explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/architecture.html">Architecture</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/protocol.html">Protocol resolution</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../explanations/sessions.html">Design sessions and revisions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/designs.html">Designs and the design store</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/ir-cache.html">The scanner IR</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/reconstruction.html">Raw-data enrichment and routing</a></li>
 </ul>
@@ -272,7 +272,7 @@
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">API reference</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
 <li class="toctree-l2"><a class="reference internal" href="protocol.html">Protocol</a></li>
 <li class="toctree-l2"><a class="reference internal" href="design.html">Scanner sequences</a></li>
-<li class="toctree-l2"><a class="reference internal" href="host.html">Host daemon</a></li>
+<li class="toctree-l2"><a class="reference internal" href="host.html">Design calls</a></li>
 <li class="toctree-l2"><a class="reference internal" href="ir.html">IR conversion</a></li>
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Reconstruction proxy</a></li>
 <li class="toctree-l2"><a class="reference internal" href="recon.html">Reconstruction plugins</a></li>
@@ -515,7 +515,7 @@
             <nav aria-label="Page">
                 <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#proxy">Proxy</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#revisions">Revisions</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#designs">Designs</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#enrichment">Enrichment</a></li>
 </ul>
             </nav>
@@ -534,11 +534,11 @@
 scanner’s reconstruction client, enriches it from the sequence that played it,
 and runs it on a reconstruction worker.</p>
 <p>The proxy listens on a TCP port and is started with</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>-m<span class="w"> </span>pulserver.vre<span class="w"> </span>--base<span class="w"> </span>DIR<span class="w"> </span>--port<span class="w"> </span>N<span class="w"> </span>--plugins<span class="w"> </span>DIR<span class="w"> </span><span class="o">[</span>--slots<span class="w"> </span>N<span class="o">]</span><span class="w"> </span><span class="o">[</span>--spares<span class="w"> </span><span class="m">1</span><span class="o">]</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>-m<span class="w"> </span>pulserver.vre<span class="w"> </span>--store<span class="w"> </span>DIR<span class="w"> </span>--port<span class="w"> </span>N<span class="w"> </span>--plugins<span class="w"> </span>DIR<span class="w"> </span><span class="o">[</span>--slots<span class="w"> </span>N<span class="o">]</span><span class="w"> </span><span class="o">[</span>--spares<span class="w"> </span><span class="m">1</span><span class="o">]</span>
 </pre></div>
 </div>
-<p>The MRD header of a series names the revision it was played from; the proxy
-reads that revision’s sequence chain and fills in the header and every
+<p>The MRD header of a series names the design it was played from; the proxy
+reads that design’s sequence chain and fills in the header and every
 acquisition. The readouts arrive demodulated to the prescribed field-of-view
 centre by the playout, and are passed on as received. Routing, slots and the
 queue are described in <a class="reference internal" href="../explanations/reconstruction.html"><span class="doc">Raw-data enrichment and routing</span></a>, and the messages
@@ -559,8 +559,8 @@ and fields of a series in <a class="reference internal" href="../user-guide/reco
 </table>
 </div>
 </section>
-<section id="revisions">
-<h2>Revisions<a class="headerlink" href="#revisions" title="Link to this heading">#</a></h2>
+<section id="designs">
+<h2>Designs<a class="headerlink" href="#designs" title="Link to this heading">#</a></h2>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
 <tr class="row-odd"><th class="head"><p>Object</p></th>
@@ -568,17 +568,14 @@ and fields of a series in <a class="reference internal" href="../user-guide/reco
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.vre.RevisionStore.html#pulserver.vre.RevisionStore" title="pulserver.vre.RevisionStore"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RevisionStore</span></code></a></p></td>
-<td><p>The revisions under <code class="docutils literal notranslate"><span class="pre">&lt;base&gt;/bucket/</span></code>, the most recently read kept.</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.vre.DesignCache.html#pulserver.vre.DesignCache" title="pulserver.vre.DesignCache"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DesignCache</span></code></a></p></td>
+<td><p>The designs of a store, the most recently read kept tabulated.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.vre.Revision.html#pulserver.vre.Revision" title="pulserver.vre.Revision"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Revision</span></code></a></p></td>
-<td><p>A generated design as the reconstruction side reads it.</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.vre.Design.html#pulserver.vre.Design" title="pulserver.vre.Design"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Design</span></code></a></p></td>
+<td><p>A stored design as the reconstruction side reads it.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.vre.SESSION_PARAMETER.html#pulserver.vre.SESSION_PARAMETER" title="pulserver.vre.SESSION_PARAMETER"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SESSION_PARAMETER</span></code></a></p></td>
-<td><p>Header user parameter naming the session a series was played from.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.vre.REVISION_PARAMETER.html#pulserver.vre.REVISION_PARAMETER" title="pulserver.vre.REVISION_PARAMETER"><code class="xref py py-obj docutils literal notranslate"><span class="pre">REVISION_PARAMETER</span></code></a></p></td>
-<td><p>Header user parameter naming the revision a series was played from.</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.vre.DESIGN_PARAMETER.html#pulserver.vre.DESIGN_PARAMETER" title="pulserver.vre.DESIGN_PARAMETER"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DESIGN_PARAMETER</span></code></a></p></td>
+<td><p>Header user parameter naming the design a series was played from.</p></td>
 </tr>
 </tbody>
 </table>
@@ -659,7 +656,7 @@ and fields of a series in <a class="reference internal" href="../user-guide/reco
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#proxy">Proxy</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#revisions">Revisions</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#designs">Designs</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#enrichment">Enrichment</a></li>
 </ul>
   </nav></div>

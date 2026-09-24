@@ -64,7 +64,7 @@
     <link rel="canonical" href="https://pulserver.github.io/pulserver/latest/api/design.html" />
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Host daemon" href="host.html" />
+    <link rel="next" title="Design calls" href="host.html" />
     <link rel="prev" title="Protocol" href="protocol.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
@@ -249,7 +249,7 @@
 <li class="toctree-l1 has-children"><a class="reference internal" href="../explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/architecture.html">Architecture</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/protocol.html">Protocol resolution</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../explanations/sessions.html">Design sessions and revisions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/designs.html">Designs and the design store</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/ir-cache.html">The scanner IR</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/reconstruction.html">Raw-data enrichment and routing</a></li>
 </ul>
@@ -272,7 +272,7 @@
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">API reference</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
 <li class="toctree-l2"><a class="reference internal" href="protocol.html">Protocol</a></li>
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Scanner sequences</a></li>
-<li class="toctree-l2"><a class="reference internal" href="host.html">Host daemon</a></li>
+<li class="toctree-l2"><a class="reference internal" href="host.html">Design calls</a></li>
 <li class="toctree-l2"><a class="reference internal" href="ir.html">IR conversion</a></li>
 <li class="toctree-l2"><a class="reference internal" href="vre.html">Reconstruction proxy</a></li>
 <li class="toctree-l2"><a class="reference internal" href="recon.html">Reconstruction plugins</a></li>
@@ -530,7 +530,7 @@
   <section class="tex2jax_ignore mathjax_ignore" id="scanner-sequences">
 <h1>Scanner sequences<a class="headerlink" href="#scanner-sequences" title="Link to this heading">#</a></h1>
 <p>A pypulseqpp sequence application bound to the entries of the scanner protocol.</p>
-<p>A plugin file in the host daemon’s plugin directory defines one
+<p>A plugin file in the design calls’ plugin directory defines one
 <a class="reference internal" href="../generated/pulserver.design.ScannerSequence.html#pulserver.design.ScannerSequence" title="pulserver.design.ScannerSequence"><code class="xref py py-class docutils literal notranslate"><span class="pre">ScannerSequence</span></code></a> subclass. Its <code class="docutils literal notranslate"><span class="pre">ui</span></code> maps each interpreter parameter
 name to an entry naming the <code class="docutils literal notranslate"><span class="pre">init_sequence</span></code> argument it sets, and its methods
 resolve a request into the protocol the application will play and write the
@@ -617,7 +617,7 @@ variable, are described in <a class="reference internal" href="../explanations/p
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Host daemon</p>
+        <p class="prev-next-title">Design calls</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>

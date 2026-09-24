@@ -249,7 +249,7 @@
 <li class="toctree-l1 has-children"><a class="reference internal" href="../explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/architecture.html">Architecture</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/protocol.html">Protocol resolution</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../explanations/sessions.html">Design sessions and revisions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/designs.html">Designs and the design store</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/ir-cache.html">The scanner IR</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/reconstruction.html">Raw-data enrichment and routing</a></li>
 </ul>
@@ -272,7 +272,7 @@
 <li class="toctree-l1 has-children"><a class="reference internal" href="../api/index.html">API reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../api/protocol.html">Protocol</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/design.html">Scanner sequences</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../api/host.html">Host daemon</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/host.html">Design calls</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/ir.html">IR conversion</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/vre.html">Reconstruction proxy</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/recon.html">Reconstruction plugins</a></li>
@@ -530,7 +530,7 @@
                   
   <section class="tex2jax_ignore mathjax_ignore" id="scanner-sequences">
 <h1>Scanner sequences<a class="headerlink" href="#scanner-sequences" title="Link to this heading">#</a></h1>
-<p>A scanner sequence is a plugin file in the host daemon’s <code class="docutils literal notranslate"><span class="pre">--plugins</span></code> directory.
+<p>A scanner sequence is a plugin file in the <code class="docutils literal notranslate"><span class="pre">--plugins</span></code> directory of the design calls.
 It defines one <a class="reference internal" href="../generated/pulserver.design.ScannerSequence.html#pulserver.design.ScannerSequence" title="pulserver.design.ScannerSequence"><code class="xref py py-class docutils literal notranslate"><span class="pre">ScannerSequence</span></code></a> subclass, which binds
 a pypulseqpp <a class="reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.sequences.SequenceApp.html#pypulseqpp.sequences.SequenceApp" title="(in pypulseqpp latest)"><code class="xref py py-class docutils literal notranslate"><span class="pre">SequenceApp</span></code></a> to the entries of the
 scanner protocol. The daemon loads the file by its stem: <code class="docutils literal notranslate"><span class="pre">gre2d.py</span></code> is the
@@ -679,9 +679,9 @@ scan, and otherwise the summed duration of the designed prescans and main
 sequence. An error the design raises while its scan time is computed makes the
 reply invalid, as an error raised by construction does.</p>
 <p><a class="reference internal" href="../generated/pulserver.design.ScannerSequence.generate.html#pulserver.design.ScannerSequence.generate" title="pulserver.design.ScannerSequence.generate"><code class="xref py py-meth docutils literal notranslate"><span class="pre">generate()</span></code></a> writes the design as signed
-binary Pulseq, prescans first, and the daemon converts it to the IR cache the
-scanner loads. The daemon stores each generated design as a revision, described
-in <a class="reference internal" href="../explanations/sessions.html"><span class="doc">Design sessions and revisions</span></a>.</p>
+binary Pulseq, prescans first, and the <code class="docutils literal notranslate"><span class="pre">generate</span></code> call converts it to the IR
+cache the scanner loads and stores it as a design, described in
+<a class="reference internal" href="../explanations/designs.html"><span class="doc">Designs and the design store</span></a>.</p>
 </section>
 <section id="see-also">
 <h2>See also<a class="headerlink" href="#see-also" title="Link to this heading">#</a></h2>

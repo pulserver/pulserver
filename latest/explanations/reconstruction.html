@@ -249,7 +249,7 @@
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">Explanations</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
 <li class="toctree-l2"><a class="reference internal" href="architecture.html">Architecture</a></li>
 <li class="toctree-l2"><a class="reference internal" href="protocol.html">Protocol resolution</a></li>
-<li class="toctree-l2"><a class="reference internal" href="sessions.html">Design sessions and revisions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="designs.html">Designs and the design store</a></li>
 <li class="toctree-l2"><a class="reference internal" href="ir-cache.html">The scanner IR</a></li>
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Raw-data enrichment and routing</a></li>
 </ul>
@@ -272,7 +272,7 @@
 <li class="toctree-l1 has-children"><a class="reference internal" href="../api/index.html">API reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../api/protocol.html">Protocol</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/design.html">Scanner sequences</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../api/host.html">Host daemon</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/host.html">Design calls</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/ir.html">IR conversion</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/vre.html">Reconstruction proxy</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/recon.html">Reconstruction plugins</a></li>
@@ -545,8 +545,8 @@ leaves the samples as received, and the trajectory it attaches is that of the
 sequence as designed, in the logical frame.</p>
 <section id="enrichment">
 <h2>Enrichment<a class="headerlink" href="#enrichment" title="Link to this heading">#</a></h2>
-<p>The header names the revision the series was acquired with
-(<a class="reference internal" href="sessions.html"><span class="doc">Design sessions and revisions</span></a>). The proxy reads that revision’s sequence chain and tabulates
+<p>The header names the design the series was acquired with
+(<a class="reference internal" href="designs.html"><span class="doc">Designs and the design store</span></a>). The proxy reads that design’s sequence chain and tabulates
 its readouts in play order (<a class="reference internal" href="../generated/pulserver.vre.SequenceTable.html#pulserver.vre.SequenceTable" title="pulserver.vre.SequenceTable"><code class="xref py py-class docutils literal notranslate"><span class="pre">SequenceTable</span></code></a>). The table
 is applied to the stream as follows.</p>
 <ul class="simple">
@@ -586,7 +586,7 @@ their <code class="docutils literal notranslate"><span class="pre">kspace_encode
 trajectory. A reconstruction takes the trajectory in grid units, k times the
 reconstructed field of view, through
 <a class="reference internal" href="../generated/pulserver.recon.ReconBuffer.grid_trajectory.html#pulserver.recon.ReconBuffer.grid_trajectory" title="pulserver.recon.ReconBuffer.grid_trajectory"><code class="xref py py-meth docutils literal notranslate"><span class="pre">grid_trajectory()</span></code></a>.</p>
-<p>Tabulating a revision integrates every range once, for the echo sample of each
+<p>Tabulating a design integrates every range once, for the echo sample of each
 readout and the k-space axes its trajectory spans, which decide the header’s
 trajectory type. An acquisition’s trajectory is integrated again when it is
 enriched, from the range holding it, and the table keeps the ranges it

@@ -249,7 +249,7 @@
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">Explanations</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Architecture</a></li>
 <li class="toctree-l2"><a class="reference internal" href="protocol.html">Protocol resolution</a></li>
-<li class="toctree-l2"><a class="reference internal" href="sessions.html">Design sessions and revisions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="designs.html">Designs and the design store</a></li>
 <li class="toctree-l2"><a class="reference internal" href="ir-cache.html">The scanner IR</a></li>
 <li class="toctree-l2"><a class="reference internal" href="reconstruction.html">Raw-data enrichment and routing</a></li>
 </ul>
@@ -272,7 +272,7 @@
 <li class="toctree-l1 has-children"><a class="reference internal" href="../api/index.html">API reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../api/protocol.html">Protocol</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/design.html">Scanner sequences</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../api/host.html">Host daemon</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/host.html">Design calls</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/ir.html">IR conversion</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/vre.html">Reconstruction proxy</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/recon.html">Reconstruction plugins</a></li>
@@ -567,27 +567,27 @@ contains no sequence or reconstruction logic.</p>
 <img alt="../_images/architecture.svg" src="../_images/architecture.svg" />
 <figcaption>
 <p><span class="caption-text">The two pulserver services between the scanner and the engines, and the
-directory they share.</span><a class="headerlink" href="#id1" title="Link to this image">#</a></p>
+design store they share.</span><a class="headerlink" href="#id1" title="Link to this image">#</a></p>
 </figcaption>
 </figure>
-<p>The host daemon, <code class="xref py py-mod docutils literal notranslate"><span class="pre">pulserver.host</span></code>, runs on the scanner host and answers
-the PSD host process of each running sequence. The reconstruction proxy,
-<code class="xref py py-mod docutils literal notranslate"><span class="pre">pulserver.vre</span></code>, runs on the reconstruction computer and answers the
-scanner’s reconstruction client. One acquisition proceeds as follows.</p>
+<p>The design calls, <code class="xref py py-mod docutils literal notranslate"><span class="pre">pulserver.host</span></code>, run on the scanner host and answer
+the PSD host process of each running sequence, one command per call or through
+a warm server. The reconstruction proxy, <code class="xref py py-mod docutils literal notranslate"><span class="pre">pulserver.vre</span></code>, runs on the
+reconstruction computer and answers the scanner’s reconstruction client. One
+acquisition proceeds as follows.</p>
 <ol class="arabic simple">
-<li><p>The PSD host process opens a design session, naming the scanner-sequence
-plugin and the scanner limits.</p></li>
-<li><p>On each protocol edit, the process requests validation. The host daemon
-designs the sequence with pypulseqpp and replies with the protocol the
-design achieves and the scan time, or with the error the design raised
-(<a class="reference internal" href="protocol.html"><span class="doc">Protocol resolution</span></a>).</p></li>
-<li><p>When the scan is prepared, the daemon generates the design: the Pulseq
-files and the IR cache beside them, stored as a revision of the session
-(<a class="reference internal" href="sessions.html"><span class="doc">Design sessions and revisions</span></a>, <a class="reference internal" href="ir-cache.html"><span class="doc">The scanner IR</span></a>). The interpreter loads the IR cache and
-plays the sequence.</p></li>
+<li><p>On each protocol edit, the PSD host process requests validation, naming the
+scanner-sequence plugin, the scanner limits and the requested protocol. The
+call constructs the application with pypulseqpp and replies with the
+protocol the design achieves and the scan time, or with the error the design
+raised (<a class="reference internal" href="protocol.html"><span class="doc">Protocol resolution</span></a>).</p></li>
+<li><p>When the scan is prepared, the process requests the design. The call designs
+the sequence, checks it, and stores the Pulseq files and the IR cache as a
+design of the design store, whose identifier it replies (<a class="reference internal" href="designs.html"><span class="doc">Designs and the design store</span></a>,
+<a class="reference internal" href="ir-cache.html"><span class="doc">The scanner IR</span></a>). The interpreter loads the IR cache and plays the sequence.</p></li>
 <li><p>The reconstruction client streams the raw data of the series as MRD. The
-header names the session and revision the series was played from.</p></li>
-<li><p>The proxy reads the revision’s sequence files, completes the MRD header and
+header names the design the series was played from.</p></li>
+<li><p>The proxy reads the design’s sequence files, completes the MRD header and
 every acquisition from them, and runs the reconstruction plugin the sequence
 names in a worker process (<a class="reference internal" href="reconstruction.html"><span class="doc">Raw-data enrichment and routing</span></a>). The images return to the
 console through the client’s connection.</p></li>
@@ -604,11 +604,11 @@ console through the client’s connection.</p></li>
 </thead>
 <tbody>
 <tr class="row-even"><td><p>Protocol block (<code class="docutils literal notranslate"><span class="pre">[NimPulseqGUI</span> <span class="pre">Protocol]</span></code>)</p></td>
-<td><p>Host daemon and interpreter</p></td>
+<td><p>Design calls and interpreter</p></td>
 <td><p>Both; the grammar is in <code class="xref py py-mod docutils literal notranslate"><span class="pre">pulserver.protocol</span></code> and <code class="docutils literal notranslate"><span class="pre">pulseg_protocol.h</span></code></p></td>
 </tr>
 <tr class="row-odd"><td><p>Pulseq files, binary form</p></td>
-<td><p>pypulseqpp, in the host daemon</p></td>
+<td><p>pypulseqpp, in a design call</p></td>
 <td><p>The IR conversion and the reconstruction proxy</p></td>
 </tr>
 <tr class="row-even"><td><p>IR cache (<code class="docutils literal notranslate"><span class="pre">.pseg</span></code>; <code class="docutils literal notranslate"><span class="pre">.pge</span></code> on GE)</p></td>
@@ -622,7 +622,7 @@ console through the client’s connection.</p></li>
 </tbody>
 </table>
 </div>
-<p>The reconstruction side reads the Pulseq files of a revision, not its IR cache:
+<p>The reconstruction side reads the Pulseq files of a design, not its IR cache:
 the cache is a derived representation for playout, and the Pulseq files remain
 the design of record.</p>
 </section>

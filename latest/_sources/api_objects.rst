@@ -30,13 +30,7 @@ from.
    :toctree: generated
    :nosignatures:
 
-   HostDaemon
-   HostClient
-   HostError
-   SessionKey
-   SessionStore
-   Session
-   revision_hash
+   call
    DesignStore
    design_identity
    design_id
@@ -152,10 +146,9 @@ from.
    :nosignatures:
 
    ReconProxy
-   RevisionStore
-   Revision
-   SESSION_PARAMETER
-   REVISION_PARAMETER
+   DesignCache
+   Design
+   DESIGN_PARAMETER
    SequenceTable
    TableSpace
    enrich_header
