@@ -64,8 +64,8 @@ shown in mm and designed in m.
 Resolved values are reported at the precision in which they are stored.
 Consequently, sending a resolved protocol back unchanged resolves to the same
 protocol. This property is what allows a design to be identified by its
-resolved protocol ({doc}`sessions`): an operator who reopens a protocol and
-generates it again obtains the same revision.
+resolved protocol ({doc}`designs`): an operator who reopens a protocol and
+generates it again obtains the same design.
 
 ## Wire format
 

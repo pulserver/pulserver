@@ -1,4 +1,4 @@
-"""Run the reconstruction proxy: ``python -m pulserver.vre --base DIR --port N --plugins DIR``."""
+"""Run the reconstruction proxy: ``python -m pulserver.vre --store DIR --port N --plugins DIR``."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from ._proxy import ReconProxy
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="python -m pulserver.vre")
     parser.add_argument(
-        "--base", type=Path, required=True, help="directory holding bucket/"
+        "--store", type=Path, required=True, help="directory of designs, read only"
     )
     parser.add_argument("--port", type=int, required=True, help="TCP port to listen on")
     parser.add_argument(
@@ -40,6 +40,13 @@ def main(argv: list[str] | None = None) -> None:
         "--spares", type=int, default=1, help="warm worker processes kept waiting"
     )
     parser.add_argument(
+        "--queue",
+        type=Path,
+        default=None,
+        help="directory the series waiting for a slot are written to; a "
+        "temporary directory when unset",
+    )
+    parser.add_argument(
         "--recon-timeout",
         type=float,
         default=None,
@@ -51,12 +58,13 @@ def main(argv: list[str] | None = None) -> None:
         level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s"
     )
     proxy = ReconProxy(
-        args.base,
+        args.store,
         args.plugins,
         slots=args.slots,
         gpu_slots=args.gpu_slots,
         spares=args.spares,
         recon_timeout=args.recon_timeout,
+        queue=args.queue,
     )
     proxy.bind(args.port, args.host)
     for signum in (signal.SIGTERM, signal.SIGINT):

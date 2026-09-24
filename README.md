@@ -27,8 +27,9 @@ the checks pypulseqpp provides does not establish scanner or patient safety.
 
 - Protocol resolution: the echo time, repetition time and bandwidth a design
   achieves, the scan time, and the design error for an infeasible prescription.
-- Design sessions and immutable revisions for every PSD host process of a
-  scanner, served over a Unix socket.
+- Stateless design calls for every PSD host process of a scanner, one command
+  per call or through a warm server, and a store of immutable designs named by
+  their content.
 - Segmentation of a `NextSequence` chain into a binary IR cache, read by an
   ANSI C library linked into the interpreter, with the prescribed field-of-view
   offset applied to the logical-frame design as RF and ADC frequency and phase.
@@ -46,8 +47,8 @@ pip install pulserver
 ```
 
 ```bash
-python -m pulserver.host --base /srv/pulserver --socket /tmp/pulserver.sock --plugins sequences/
-python -m pulserver.vre --base /srv/pulserver --port 9002 --plugins recon/
+pulserver design serve --plugins sequences/ --socket /tmp/pulserver.sock
+python -m pulserver.vre --store /srv/pulserver/designs --port 9002 --plugins recon/
 ```
 
 ## Documentation
@@ -56,7 +57,7 @@ The [user guide](https://pulserver.github.io/pulserver/latest/user-guide/index.h
 covers installation and support, running the two services, and writing
 scanner-sequence and reconstruction plugins. The
 [explanations](https://pulserver.github.io/pulserver/latest/explanations/index.html)
-describe the architecture, protocol resolution, design sessions, the scanner IR
+describe the architecture, protocol resolution, the design store, the scanner IR
 and raw-data enrichment, and the
 [examples](https://pulserver.github.io/pulserver/latest/examples/index.html)
 execute each of them on a shipped pypulseqpp sequence. Every version of the documentation is published at

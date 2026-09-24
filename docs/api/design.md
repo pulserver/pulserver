@@ -6,7 +6,7 @@ A pypulseqpp sequence application bound to the entries of the scanner protocol.
 .. currentmodule:: pulserver.design
 ```
 
-A plugin file in the host daemon's plugin directory defines one
+A plugin file in the design calls' plugin directory defines one
 {class}`ScannerSequence` subclass. Its `ui` maps each interpreter parameter
 name to an entry naming the `init_sequence` argument it sets, and its methods
 resolve a request into the protocol the application will play and write the

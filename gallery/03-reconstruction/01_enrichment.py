@@ -18,7 +18,7 @@ in :doc:`/explanations/reconstruction`.
 Outline:
 
 #. **Sequence and readout table.** The readouts of the sequence, as the proxy
-   tabulates them from a revision.
+   tabulates them from a stored design.
 #. **Prescription.** The RF and ADC frequency and phase offsets that move the
    field of view of the logical-frame design to the prescribed centre.
 #. **Simulated series.** A phantom away from the isocentre, received through
@@ -42,7 +42,7 @@ PAGE_WIDTH = 8.6  # inches, the width of the documentation column
 # Sequence and readout table
 # --------------------------
 #
-# The sequence is written as a generated revision holds it, in the binary
+# The sequence is written as a stored design holds it, in the binary
 # Pulseq form and in the logical frame, and tabulated with
 # :class:`~pulserver.vre.SequenceTable`: one row per readout in play order,
 # with its encoding counters, flags and dwell time.
@@ -83,7 +83,7 @@ print("encoding spaces:", table.spaces)
 # The phantom is displaced by :math:`\mathbf{d} = (30, -90, 0)` mm from the
 # isocentre, along the logical readout, phase-encoding and slice axes; 90 mm
 # exceeds half the 220 mm field of view along the phase-encoding axis. The host
-# moves each file of a revision to the prescribed offset with
+# moves each file of a design to the prescribed offset with
 # :func:`~pulserver.ir.prescribe` before it segments it. Every readout of the
 # played sequence carries the frequency offset :math:`G_x d_x` of the readout
 # gradient, and a phase offset.

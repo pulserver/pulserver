@@ -1,6 +1,6 @@
 # Scanner sequences
 
-A scanner sequence is a plugin file in the host daemon's `--plugins` directory.
+A scanner sequence is a plugin file in the `--plugins` directory of the design calls.
 It defines one {class}`~pulserver.design.ScannerSequence` subclass, which binds
 a pypulseqpp {class}`~pypulseqpp.sequences.SequenceApp` to the entries of the
 scanner protocol. The daemon loads the file by its stem: `gre2d.py` is the
@@ -135,9 +135,9 @@ sequence. An error the design raises while its scan time is computed makes the
 reply invalid, as an error raised by construction does.
 
 {meth}`~pulserver.design.ScannerSequence.generate` writes the design as signed
-binary Pulseq, prescans first, and the daemon converts it to the IR cache the
-scanner loads. The daemon stores each generated design as a revision, described
-in {doc}`../explanations/sessions`.
+binary Pulseq, prescans first, and the `generate` call converts it to the IR
+cache the scanner loads and stores it as a design, described in
+{doc}`../explanations/designs`.
 
 ## See also
 

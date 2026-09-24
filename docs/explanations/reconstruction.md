@@ -16,8 +16,8 @@ sequence as designed, in the logical frame.
 
 ## Enrichment
 
-The header names the revision the series was acquired with
-({doc}`sessions`). The proxy reads that revision's sequence chain and tabulates
+The header names the design the series was acquired with
+({doc}`designs`). The proxy reads that design's sequence chain and tabulates
 its readouts in play order ({class}`~pulserver.vre.SequenceTable`). The table
 is applied to the stream as follows.
 
@@ -59,7 +59,7 @@ trajectory. A reconstruction takes the trajectory in grid units, k times the
 reconstructed field of view, through
 {meth}`~pulserver.recon.ReconBuffer.grid_trajectory`.
 
-Tabulating a revision integrates every range once, for the echo sample of each
+Tabulating a design integrates every range once, for the echo sample of each
 readout and the k-space axes its trajectory spans, which decide the header's
 trajectory type. An acquisition's trajectory is integrated again when it is
 enriched, from the range holding it, and the table keeps the ranges it

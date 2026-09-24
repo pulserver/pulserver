@@ -87,7 +87,7 @@ markers = [
 # By package, not by directory: CI tests an installed wheel, not src/.
 source_pkgs = ["pulserver"]
 branch = true
-# The host daemon, the reconstruction proxy and their workers run in child
+# The design command, the reconstruction proxy and their workers run in child
 # processes.
 patch = ["subprocess"]
 

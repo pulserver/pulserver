@@ -71,7 +71,7 @@ def store(tmp_path):
 
 
 def generate(store, plugin, values, limits=LIMITS, plugins=PLUGINS):
-    return service.reply(
+    return service.call(
         "generate",
         plugins=plugins,
         plugin=plugin,
@@ -82,7 +82,7 @@ def generate(store, plugin, values, limits=LIMITS, plugins=PLUGINS):
 
 
 def imported(store, path, offset_mm=None, rotation=None, limits=FIXTURE_LIMITS):
-    return service.reply(
+    return service.call(
         "import",
         limits=limits,
         block=format_import(path, offset_mm, rotation),
@@ -224,7 +224,7 @@ def test_a_prescribed_offset_is_a_design_of_its_own(store):
 
 
 def test_a_design_beyond_the_scanner_limits_is_refused_and_stores_nothing(store):
-    assert service.reply(
+    assert service.call(
         "validate", plugins=PLUGINS, plugin="strong", limits=LIMITS, block=block({})
     )[1].startswith("VALID")
     status, text = generate(store, "strong", {})
@@ -247,7 +247,7 @@ def test_limits_that_cannot_be_read_are_refused(store):
         inputs["block"] = block({"TE": 8000})
         if call == "generate":
             inputs["store"] = store
-        status, text = service.reply(call, **inputs)
+        status, text = service.call(call, **inputs)
         assert (status, text.split()[0]) == (1, "ERROR")
         assert "forbidden band" in text
 

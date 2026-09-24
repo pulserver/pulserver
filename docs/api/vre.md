@@ -11,11 +11,11 @@ and runs it on a reconstruction worker.
 The proxy listens on a TCP port and is started with
 
 ```bash
-python -m pulserver.vre --base DIR --port N --plugins DIR [--slots N] [--spares 1]
+python -m pulserver.vre --store DIR --port N --plugins DIR [--slots N] [--spares 1]
 ```
 
-The MRD header of a series names the revision it was played from; the proxy
-reads that revision's sequence chain and fills in the header and every
+The MRD header of a series names the design it was played from; the proxy
+reads that design's sequence chain and fills in the header and every
 acquisition. The readouts arrive demodulated to the prescribed field-of-view
 centre by the playout, and are passed on as received. Routing, slots and the
 queue are described in {doc}`../explanations/reconstruction`, and the messages
@@ -27,14 +27,13 @@ and fields of a series in {doc}`../user-guide/reconstruction-client`.
 | --- | --- |
 | {obj}`~pulserver.vre.ReconProxy` | TCP MRD server routing each series to a reconstruction worker. |
 
-## Revisions
+## Designs
 
 | Object | Description |
 | --- | --- |
-| {obj}`~pulserver.vre.RevisionStore` | The revisions under `<base>/bucket/`, the most recently read kept. |
-| {obj}`~pulserver.vre.Revision` | A generated design as the reconstruction side reads it. |
-| {obj}`~pulserver.vre.SESSION_PARAMETER` | Header user parameter naming the session a series was played from. |
-| {obj}`~pulserver.vre.REVISION_PARAMETER` | Header user parameter naming the revision a series was played from. |
+| {obj}`~pulserver.vre.DesignCache` | The designs of a store, the most recently read kept tabulated. |
+| {obj}`~pulserver.vre.Design` | A stored design as the reconstruction side reads it. |
+| {obj}`~pulserver.vre.DESIGN_PARAMETER` | Header user parameter naming the design a series was played from. |
 
 ## Enrichment
 

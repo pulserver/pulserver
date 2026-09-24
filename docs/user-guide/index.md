@@ -9,11 +9,11 @@ exchange are described in {doc}`../explanations/index`.
 | Section | Purpose |
 | --- | --- |
 | This page | Installation, supported platforms, issues and security. |
-| {doc}`running` | Starting the host daemon and the reconstruction proxy, and their options. |
+| {doc}`running` | The design calls, the warm server and the reconstruction proxy, and their options. |
 | {doc}`scanner-sequences` | Binding a pypulseqpp sequence application to the scanner protocol. |
 | {doc}`reconstruction-plugins` | Writing a reconstruction and running it outside the proxy. |
 | {doc}`reconstruction-client` | The MRD stream a scanner's reconstruction client sends the proxy. |
-| {doc}`../explanations/index` | Architecture, protocol resolution, design sessions, the scanner IR and raw-data enrichment. |
+| {doc}`../explanations/index` | Architecture, protocol resolution, the design store, the scanner IR and raw-data enrichment. |
 | {doc}`../examples/index` | Executable examples: protocol resolution, segmentation for the scanner, and enrichment and reconstruction of a simulated series. |
 | {doc}`../api/index` | Exact interfaces, units and defaults. |
 | {doc}`../developer-guide/index` | Development setup and contribution workflow. |
@@ -32,8 +32,8 @@ reconstruction-client
 ## Prerequisites and supported platforms
 
 pulserver supports Python 3.10 through 3.13. CI tests the lower and upper
-bounds on Linux and macOS. Windows is not supported, because the host daemon
-listens on a Unix socket.
+bounds on Linux and macOS. Windows is not supported: the warm design server
+forks one process per call and listens on a Unix socket.
 
 Published wheels cover:
 
@@ -68,7 +68,7 @@ Use the [GitHub issue tracker](https://github.com/pulserver/pulserver/issues)
 for a reproducible defect, a documentation error, or a narrowly scoped feature
 request. A useful report includes the pulserver, pypulseqpp and Python versions,
 the operating system, the affected subpackage and the smallest reproducer: a
-plugin file, a short `.seq` file, or the command exchange with the host daemon.
+plugin file, a short `.seq` file, or the design call and its reply.
 
 A defect in sequence design belongs to the
 [pypulseqpp tracker](https://github.com/pulserver/pypulseqpp/issues), and one

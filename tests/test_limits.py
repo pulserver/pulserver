@@ -1,4 +1,4 @@
-"""The limits a session opens with: scanner limits, conversion options and check limits."""
+"""The limits a design call carries: scanner limits, conversion options and check limits."""
 
 import cmath
 from pathlib import Path
@@ -9,7 +9,9 @@ import pytest
 from pypulseqpp import safety
 
 from pulserver import ir
-from pulserver.host._worker import check_limits, convert, split_limits
+from pulserver.host import DesignStore, call
+from pulserver.host._blocks import format_import
+from pulserver.host._limits import check_limits, split_limits
 from pulserver.protocol import FOV_ROTATION, prescribed_rotation
 
 SCANNER = {
@@ -75,9 +77,7 @@ def test_a_vop_file_alone_is_read_with_a_unit_drive_and_equal_weights():
     )
 
 
-def test_a_conversion_under_a_vop_file_writes_the_sar_ratios_into_the_cache(
-    tmp_path,
-):
+def test_a_design_under_a_vop_file_carries_its_sar_ratios_in_the_cache(tmp_path):
     vops = tmp_path / "vops.npz"
     np.savez(vops, vops=np.ones((1, 1, 1)))
     system = pp.Opts(**SCANNER)
@@ -88,14 +88,22 @@ def test_a_conversion_under_a_vop_file_writes_the_sar_ratios_into_the_cache(
         seq.add_block(pp.make_delay(9e-3))
     path = tmp_path / "sequence.seq"
     seq.write(path)
-    convert({**SCANNER, "vop_file": str(vops)}, str(path))
-    (loaded,) = ir.summary(path, system, cache_ext=".pseg")["subsequences"]
+    store = DesignStore(tmp_path / "designs")
+    status, reply = call(
+        "import",
+        limits={**SCANNER, "vop_file": str(vops)},
+        block=format_import(path),
+        store=store,
+    )
+    assert status == 0, reply
+    stored = store.directory(reply.split()[1]) / "sequence.seq"
+    (loaded,) = ir.summary(stored, system, cache_ext=".pseg")["subsequences"]
     # A 90 degree, 1 ms hard pulse deposits a quarter of the reference's energy.
     assert loaded["vop_sar_ratio"] == pytest.approx(0.25)
     assert loaded["vop_global_sar_ratio"] == 0.0
 
 
-def test_a_session_without_check_limits_checks_timing_and_gradients_only():
+def test_limits_without_check_limits_check_timing_and_gradients_only():
     assert split_limits(SCANNER)[2] == ir.CheckLimits()
 
 

@@ -44,7 +44,7 @@ def answer(request: Mapping[str, Any]) -> tuple[int, str]:
         inputs["store"] = DesignStore(request["store"])
     if request.get("call") in ("validate", "generate", "import"):
         inputs["block"] = str(request.get("input", ""))
-    return _service.reply(str(request.get("call")), **inputs)
+    return _service.call(str(request.get("call")), **inputs)
 
 
 class DesignServer:
@@ -76,12 +76,12 @@ class DesignServer:
         A plugin that cannot be imported is left cold; its calls are answered
         all the same.
         """
-        from . import _worker
+        from . import _service
 
         _warm_design()
         for path in sorted(self.plugins.glob("*.py")):
             try:
-                _worker.listing(str(path))
+                _service.list_protocol(self.plugins, path.stem)
             except Exception as error:  # a plugin that fails to list stays cold
                 _log.info("warming %s stopped: %s", path.stem, error)
 
