@@ -36,6 +36,13 @@ def test_the_same_resolved_protocol_reuses_its_revision(tmp_path):
     assert sorted(p.name for p in (session.directory / "rev").iterdir()) == ["1"]
 
 
+def test_the_same_protocol_from_other_source_is_another_revision():
+    values = {"TE": 2.74}
+    assert revision_hash("gre2d", LIMITS, values, "a") != revision_hash(
+        "gre2d", LIMITS, values, "b"
+    )
+
+
 def test_current_points_at_the_last_generated_revision(tmp_path):
     session = SessionStore(tmp_path).open(KEY, "gre2d", LIMITS)
     _generate(session, {"TE": 8.0})

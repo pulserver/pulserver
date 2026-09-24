@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import inspect
 from collections.abc import Mapping
 from functools import lru_cache
 from pathlib import Path
@@ -9,7 +11,7 @@ from typing import Any
 
 import pypulseqpp as pp
 
-from .. import ir
+from .. import __version__, ir
 from ..design import ScannerSequence, load_plugin
 from ..protocol import Parameter, Validation
 
@@ -55,6 +57,25 @@ def split_limits(limits: Mapping[str, Any]) -> tuple[pp.Opts, dict[str, Any]]:
 
 def listing(path: str) -> dict[str, Parameter]:
     return _plugin(path).listing()
+
+
+def source(path: str) -> str:
+    """Return a digest of the code that designs with the plugin at ``path``.
+
+    Covers the plugin file, the source file of the application it binds, and
+    the installed versions of pypulseqpp and pulserver. Modules the
+    application imports from elsewhere are covered only through those
+    versions.
+    """
+    digest = hashlib.sha256(Path(path).read_bytes())
+    try:
+        module = inspect.getsourcefile(_plugin(path).app)
+    except TypeError:
+        module = None
+    if module:
+        digest.update(Path(module).read_bytes())
+    digest.update(f"pypulseqpp {pp.__version__} pulserver {__version__}".encode())
+    return digest.hexdigest()
 
 
 def validate(

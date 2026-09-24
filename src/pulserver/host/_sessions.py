@@ -48,14 +48,25 @@ class SessionKey:
 
 
 def revision_hash(
-    plugin: str, limits: Mapping[str, Any], values: Mapping[str, Any]
+    plugin: str,
+    limits: Mapping[str, Any],
+    values: Mapping[str, Any],
+    source: str = "",
 ) -> str:
-    """Identify a design by plugin, scanner limits and resolved protocol.
+    """Identify a design by plugin, scanner limits, resolved protocol and source.
 
+    ``source`` is a digest of the code that designs, so that a plugin or
+    package change yields a new revision for an unchanged protocol; empty for
+    an imported revision, which ``values`` identifies by file contents.
     Independent of mapping order.
     """
     canonical = json.dumps(
-        {"plugin": plugin, "limits": dict(limits), "values": dict(values)},
+        {
+            "plugin": plugin,
+            "limits": dict(limits),
+            "values": dict(values),
+            "source": source,
+        },
         sort_keys=True,
         separators=(",", ":"),
     )
