@@ -16,8 +16,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Every platform a wheel ships for. Windows is not one: the host daemon
-        # listens on a Unix socket.
+        # Every platform a wheel ships for. Windows is not one: the warm design
+        # server forks per call and listens on a Unix socket.
         os: [ubuntu-latest, macos-14]
         # The floor and the ceiling of the supported band: an intermediate
         # release that fails on neither is not a plausible failure.

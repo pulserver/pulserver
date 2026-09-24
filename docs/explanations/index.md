@@ -9,7 +9,7 @@ rest of the documentation assumes.
 | --- | --- |
 | {doc}`architecture` | The four layers of an acquisition through pulserver, the service each machine runs, and the representation exchanged at each boundary. |
 | {doc}`protocol` | How a prescription edited in the scanner UI is resolved into the protocol a sequence plays, and the units and precision it is exchanged in. |
-| {doc}`sessions` | Design sessions, the revisions they generate, and the directory both services share. |
+| {doc}`designs` | The identity of a design, the design store, and how the reconstruction side finds a design. |
 | {doc}`ir-cache` | The segmented representation of a sequence that a scanner interpreter plays, and the passes that compute it. |
 | {doc}`reconstruction` | Enrichment of the raw data from the sequence that played it, and the routing of each series to a reconstruction. |
 
@@ -18,7 +18,7 @@ rest of the documentation assumes.
 
 architecture
 protocol
-sessions
+designs
 ir-cache
 reconstruction
 ```

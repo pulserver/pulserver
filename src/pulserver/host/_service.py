@@ -9,17 +9,21 @@ from __future__ import annotations
 
 import datetime
 import hashlib
+import inspect
 import re
 import shutil
 from collections.abc import Mapping
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 import pypulseqpp as pp
 
 from .. import __version__, ir
+from ..design import ScannerSequence, load_plugin
 from ..protocol import (
     Parameter,
+    Validation,
     format_listing,
     format_validation,
     format_values,
@@ -27,8 +31,8 @@ from ..protocol import (
     prescribed_offset,
     prescribed_rotation,
 )
-from . import _worker
 from ._blocks import parse_import
+from ._limits import split_limits
 from ._store import DesignStore, design_identity
 
 _PLUGIN_NAME = re.compile(r"[A-Za-z0-9_\-]+")
@@ -61,7 +65,7 @@ def list_protocol(plugins: Path | str, plugin: str) -> str:
 
     The listing depends on the plugin file and the installed packages only.
     """
-    listing = _worker.listing(str(plugin_path(plugins, plugin)))
+    listing = _listing(str(plugin_path(plugins, plugin)))
     return "PROTOCOL\n" + format_listing(listing)
 
 
@@ -74,9 +78,9 @@ def validate(
     is not designed.
     """
     path = str(plugin_path(plugins, plugin))
-    listing = _worker.listing(path)
+    listing = _listing(path)
     request = _request(block, listing)
-    return format_validation(_worker.validate(path, _read(limits), request), listing)
+    return format_validation(_validated(path, _read(limits), request), listing)
 
 
 def generate(
@@ -104,11 +108,11 @@ def generate(
         stored.
     """
     path = str(plugin_path(plugins, plugin))
-    listing = _worker.listing(path)
+    listing = _listing(path)
     request = _request(block, listing)
     limits = _read(limits)
-    system, options, checked = _worker.split_limits(limits)
-    scanner = _worker.plugin(path)
+    system, options, checked = split_limits(limits)
+    scanner = _plugin(path)
     requested = {name: p.value for name, p in listing.items() if p.editable}
     requested.update(request)
     app, validation = scanner.resolve(system, requested)
@@ -116,7 +120,7 @@ def generate(
         app, validation = scanner.resolve(system, validation.values)
     if app is None:
         raise CallError(validation.info)
-    source = _worker.source(path)
+    source = _source(path)
     identity = design_identity(
         plugin, identified_limits(limits), validation.values, source
     )
@@ -131,7 +135,7 @@ def generate(
         if problems:
             raise CallError("; ".join(problems))
         offset = prescribed_offset(validation.values)
-        _worker.converted(paths[0], system, checked, offset, options)
+        _converted(paths[0], system, checked, offset, options)
         (staged / "resolved.protocol").write_text(
             format_values(validation.values, listing)
         )
@@ -167,7 +171,7 @@ def import_chain(limits: Mapping[str, Any], block: str, store: DesignStore) -> s
     except ValueError as error:
         raise CallError(str(error)) from None
     limits = _read(limits)
-    files = [Path(p) for p in _worker.chain(str(first))]
+    files = [Path(p) for p in _chain(str(first))]
     contents = [[f.name, hashlib.sha256(f.read_bytes()).hexdigest()] for f in files]
     values = {
         "import": contents,
@@ -185,11 +189,11 @@ def import_chain(limits: Mapping[str, Any], block: str, store: DesignStore) -> s
         entry = staged / _ENTRY
         if files[0].name != _ENTRY:
             entry.symlink_to(files[0].name)
-        problems = _worker.check(limits, str(entry), rotation)
+        problems = _check(limits, str(entry), rotation)
         if problems:
             raise CallError("; ".join(problems))
         offset = tuple(value * 1e-3 for value in offset_mm)
-        _worker.convert(limits, str(entry), offset)
+        _convert(limits, str(entry), offset)
         manifest = {
             **_record(limits),
             "plugin": "",
@@ -224,12 +228,13 @@ def identified_limits(limits: Mapping[str, Any]) -> dict[str, Any]:
     return {**limits, "vop_file_sha256": digest}
 
 
-def reply(call: str, **inputs: Any) -> tuple[int, str]:
-    """Answer one call: exit status 0 and its reply, or 1 and an ``ERROR`` line.
+def call(name: str, **inputs: Any) -> tuple[int, str]:
+    """Answer one design call: exit status 0 and its reply, or 1 and an ``ERROR`` line.
 
-    ``call`` is ``list``, ``validate``, ``generate`` or ``import``, and
-    ``inputs`` the keyword arguments of the function of that name. An
-    exception a plugin raises is an ``ERROR`` reply like any other.
+    ``name`` is ``list``, ``validate``, ``generate`` or ``import``, and
+    ``inputs`` the keyword arguments of :func:`list_protocol`,
+    :func:`validate`, :func:`generate` or :func:`import_chain`. An exception a
+    plugin raises is an ``ERROR`` reply like any other.
     """
     calls = {
         "list": list_protocol,
@@ -238,7 +243,7 @@ def reply(call: str, **inputs: Any) -> tuple[int, str]:
         "import": import_chain,
     }
     try:
-        return 0, calls[call](**inputs)
+        return 0, calls[name](**inputs)
     except Exception as error:
         text = " ".join(str(error).split()) or type(error).__name__
         return 1, f"ERROR {text}\n"
@@ -254,7 +259,7 @@ def _request(block: str, listing: Mapping[str, Parameter]) -> dict[str, Any]:
 def _read(limits: Mapping[str, Any]) -> dict[str, Any]:
     """Return limits after checking that they are scanner limits, options and check limits."""
     try:
-        _worker.split_limits(limits)
+        split_limits(limits)
     except (TypeError, ValueError) as error:
         raise CallError(str(error)) from None
     return dict(limits)
@@ -268,3 +273,73 @@ def _record(limits: Mapping[str, Any]) -> dict[str, Any]:
             timespec="seconds"
         ),
     }
+
+
+@lru_cache(maxsize=32)
+def _cached(path: str, mtime_ns: int) -> ScannerSequence:  # noqa: ARG001 -- part of the key
+    return load_plugin(Path(path))
+
+
+def _plugin(path: str) -> ScannerSequence:
+    """Return the plugin at ``path``, imported again when the file changed."""
+    return _cached(path, Path(path).stat().st_mtime_ns)
+
+
+def _listing(path: str) -> dict[str, Parameter]:
+    return _plugin(path).listing()
+
+
+def _source(path: str) -> str:
+    """Return a digest of the code that designs with the plugin at ``path``.
+
+    Covers the plugin file, the source file of the application it binds, and
+    the installed versions of pypulseqpp and pulserver. Modules the
+    application imports from elsewhere are covered only through those
+    versions.
+    """
+    digest = hashlib.sha256(Path(path).read_bytes())
+    try:
+        module = inspect.getsourcefile(_plugin(path).app)
+    except TypeError:
+        module = None
+    if module:
+        digest.update(Path(module).read_bytes())
+    digest.update(f"pypulseqpp {pp.__version__} pulserver {__version__}".encode())
+    return digest.hexdigest()
+
+
+def _validated(
+    path: str, limits: Mapping[str, Any], request: Mapping[str, Any]
+) -> Validation:
+    return _plugin(path).validate(split_limits(limits)[0], request)
+
+
+def _chain(first: str) -> list[str]:
+    return [str(path) for path in ir.chain(first)]
+
+
+def _check(limits: Mapping[str, Any], seq_path: str, rotation: Any = None) -> list[str]:
+    system, _, checked = split_limits(limits)
+    return ir.check(seq_path, system, rotation=rotation, limits=checked)
+
+
+def _convert(
+    limits: Mapping[str, Any],
+    seq_path: str,
+    fov_offset: tuple[float, float, float] = (0.0, 0.0, 0.0),
+) -> str:
+    system, options, checked = split_limits(limits)
+    return _converted(seq_path, system, checked, fov_offset, options).name
+
+
+def _converted(
+    seq_path: str,
+    system: pp.Opts,
+    checked: ir.CheckLimits,
+    fov_offset: tuple[float, float, float],
+    options: dict[str, Any],
+) -> Path:
+    ratios = None if checked.vops is None else ir.sar_ratios(seq_path, system, checked)
+    return ir.convert(
+        seq_path, system, fov_offset=fov_offset, sar_ratios=ratios, **options
+    )

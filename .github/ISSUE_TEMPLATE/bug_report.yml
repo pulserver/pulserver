@@ -8,7 +8,7 @@ body:
       label: Affected area
       options:
         - "Scanner sequences (pulserver.design, pulserver.protocol)"
-        - "Host daemon and sessions (pulserver.host)"
+        - "Design calls and the design store (pulserver.host)"
         - "IR conversion or the C cache library (pulserver.ir, src/c)"
         - "Reconstruction proxy and enrichment (pulserver.vre)"
         - "Reconstruction plugins and MRD data (pulserver.recon, pulserver.mrd)"
@@ -28,8 +28,8 @@ body:
       label: Smallest reproducer
       description: >
         Self-contained Python code, a plugin file, a minimal `.seq` file, or the
-        command exchange with the host daemon. Prefer synthetic data to a
-        scanner acquisition.
+        design call and its reply. Prefer synthetic data to a scanner
+        acquisition.
       render: python
     validations:
       required: true

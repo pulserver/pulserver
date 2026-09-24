@@ -18,7 +18,7 @@ A series is sent in this order:
 
 | Message | Identifier | Content |
 | --- | --- | --- |
-| `CONFIG` | 2 | Optional. The reconstruction plugin, as a bare name or under `parameters.config` of a JSON, YAML or XML text, used when the revision names none |
+| `CONFIG` | 2 | Optional. The reconstruction plugin, as a bare name or under `parameters.config` of a JSON, YAML or XML text, used when the design names none |
 | `HEADER` | 3 | The MRD XML header, once |
 | `ACQUISITION` | 1008 | One per readout of the sequence chain, in play order |
 | `WAVEFORM` | 1026 | Optional, anywhere after the header: physiological waveforms, passed to the reconstruction unchanged |
@@ -35,8 +35,7 @@ connection, so the client can finish sending and read the reason.
 
 | Element | Requirement | Use |
 | --- | --- | --- |
-| `pulserver_session`, a `userParameterString` | Required | The session key, `<pid>-<day>`, of the PSD host process that generated the design |
-| `pulserver_revision`, a `userParameterLong` | Required | The revision the interpreter plays, from the `GENERATED` or `IMPORTED` reply |
+| `pulserver_design`, a `userParameterString` | Required | The identifier of the design the interpreter plays, from the `GENERATED` or `IMPORTED` reply: 18 hexadecimal digits, which are three 24-bit integers of six digits each |
 | `experimentalConditions.H1resonanceFrequency_Hz` | Required by the MRD schema | DICOM `ImagingFrequency` |
 | `acquisitionSystemInformation.receiverChannels` | Optional | The coil count of a reconstruction buffer laid out before its first acquisition |
 | `ExamID`, a `userParameterString`, or else `studyInformation.studyInstanceUID`, or else `studyInformation.studyID` | Optional | The exam; the series of one exam share its exam cache, and a series without one is an exam of its own |
@@ -45,8 +44,8 @@ connection, so the client can finish sending and read the reason.
 | `encoding` | Optional | Replaced by one encoding space per subsequence, and one more for the navigator readouts of a subsequence that has them; a matrix size or field of view the sequence does not define is kept from the client's encoding at the same index |
 | `sequenceParameters` | Optional | TR, TE, TI and flip angle replaced by those the sequence defines |
 
-A header that the ISMRMRD schema does not accept, or that names no revision of
-the bucket, is refused before any acquisition is read.
+A header that the ISMRMRD schema does not accept, or that names no design of
+the store, is refused before any acquisition is read.
 
 ## Acquisitions
 
@@ -74,5 +73,5 @@ when the stream carries more or fewer acquisitions than the chain plays.
 
 * {doc}`running` — starting the proxy.
 * {doc}`../explanations/reconstruction` — enrichment and routing.
-* {doc}`../explanations/sessions` — sessions, revisions and the bucket.
+* {doc}`../explanations/designs` — the design store and the identifier of a design.
 * {class}`~pulserver.vre.ReconProxy` — the proxy.

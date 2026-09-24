@@ -1,15 +1,9 @@
-"""A host daemon in a subprocess, for tests that need a generated revision."""
+"""Limits and plugins the design tests share, and a design generated in-process."""
 
-import shutil
-import signal
-import subprocess
-import sys
-import tempfile
-import time
 from pathlib import Path
 
-from pulserver.host import SessionKey
-from pulserver.host.client import HostClient
+from pulserver.host import DesignStore, call
+from pulserver.protocol import PROTOCOL_BEGIN, PROTOCOL_END
 
 PLUGINS = Path(__file__).parent / "plugins"
 FIXTURES = Path(__file__).parent / "fixtures" / "sequences"
@@ -32,56 +26,28 @@ LIMITS = {
     "max_slew": 150.0,
     "slew_unit": "T/m/s",
 }
-DAY = 20711
 
 
-class Daemon:
-    def __init__(self, base: Path, plugins: Path = PLUGINS) -> None:
-        self.base = base
-        self.plugins = plugins
-        self._socket_dir = Path(tempfile.mkdtemp(prefix="ps"))
-        self.socket = self._socket_dir / "s"
-        self._process = None
+def value_block(values):
+    lines = [f"{name}: {value}" for name, value in values.items()]
+    return "\n".join([PROTOCOL_BEGIN, *lines, PROTOCOL_END]) + "\n"
 
-    def start(self) -> None:
-        self._process = subprocess.Popen(
-            [
-                sys.executable,
-                "-X",
-                "faulthandler",
-                "-m",
-                "pulserver.host",
-                "--base",
-                str(self.base),
-                "--socket",
-                str(self.socket),
-                "--plugins",
-                str(self.plugins),
-                "--workers",
-                "1",
-            ]
-        )
-        deadline = time.monotonic() + 30
-        while not self.socket.exists():
-            if self._process.poll() is not None or time.monotonic() > deadline:
-                raise RuntimeError("the host daemon did not start")
-            time.sleep(0.05)
 
-    def stop(self) -> None:
-        self._process.terminate()
-        try:
-            self._process.wait(timeout=30)
-        except subprocess.TimeoutExpired:
-            # faulthandler writes every thread's stack to stderr on SIGABRT.
-            self._process.send_signal(signal.SIGABRT)
-            self._process.wait(timeout=10)
-            raise
-        self.socket.unlink(missing_ok=True)
+def generate(store: DesignStore, plugin: str, values, limits=LIMITS, plugins=PLUGINS):
+    """Return the identifier of the design a request generates.
 
-    def client(self, pid: int) -> HostClient:
-        return HostClient(self.socket, SessionKey(pid=pid, day=DAY))
-
-    def cleanup(self) -> None:
-        if self._process.poll() is None:
-            self.stop()
-        shutil.rmtree(self._socket_dir, ignore_errors=True)
+    Raises
+    ------
+    AssertionError
+        If the call replies ``ERROR``.
+    """
+    status, reply = call(
+        "generate",
+        plugins=plugins,
+        plugin=plugin,
+        limits=limits,
+        block=value_block(values),
+        store=store,
+    )
+    assert status == 0, reply
+    return reply.split()[1]

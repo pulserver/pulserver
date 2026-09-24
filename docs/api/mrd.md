@@ -10,7 +10,7 @@ and the definitions and readouts a Pulseq sequence states.
 The acquisition and header objects are those of the `ismrmrd` package; the
 functions here read flags, counters and user parameters from them by their MRD
 names. {class}`ReadoutTable` and {class}`SequenceDefinitions` are read from the
-sequence files of a revision and are what the reconstruction proxy enriches a
+sequence files of a design and are what the reconstruction proxy enriches a
 stream from (see {doc}`../explanations/reconstruction`).
 
 ## Acquisitions

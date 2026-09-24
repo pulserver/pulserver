@@ -231,7 +231,7 @@ class ScannerSequence:
     ----------
     recon : str
         Reconstruction plugin the data of this sequence is reconstructed with,
-        recorded in every revision generated from it. Empty leaves the choice
+        recorded in every design generated from it. Empty leaves the choice
         to the reconstruction client.
 
     Raises

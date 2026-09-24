@@ -1,14 +1,10 @@
-"""Design and conversion calls, run in worker processes."""
+"""The limits a design call carries: scanner limits, IR conversion options and check limits."""
 
 from __future__ import annotations
 
 import cmath
-import hashlib
-import inspect
 import re
 from collections.abc import Mapping
-from dataclasses import replace
-from functools import lru_cache
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -16,9 +12,7 @@ from typing import Any
 import pypulseqpp as pp
 from pypulseqpp import safety
 
-from .. import __version__, ir
-from ..design import ScannerSequence, load_plugin
-from ..protocol import Parameter, Validation, prescribed_offset, prescribed_rotation
+from .. import ir
 
 _IR_OPTIONS = ("ir_vendor", "ir_label_column_map", "ir_cache_ext")
 _CHECK_PREFIXES = ("pns_", "forbidden_band_", "vop_")
@@ -32,20 +26,10 @@ _BAND = re.compile(r"forbidden_band_\d+")
 _VOP = ("vop_file", "vop_drive_per_hz", "vop_default_shim")
 
 
-@lru_cache(maxsize=32)
-def _cached(path: str, mtime_ns: int) -> ScannerSequence:  # noqa: ARG001 -- part of the key
-    return load_plugin(Path(path))
-
-
-def plugin(path: str) -> ScannerSequence:
-    """Return the plugin at ``path``, imported again when the file changed."""
-    return _cached(path, Path(path).stat().st_mtime_ns)
-
-
 def split_limits(
     limits: Mapping[str, Any],
 ) -> tuple[pp.Opts, dict[str, Any], ir.CheckLimits]:
-    """Separate a session's limits into scanner limits, IR conversion options and check limits.
+    """Separate a call's limits into scanner limits, IR conversion options and check limits.
 
     Keys starting with ``ir_`` are conversion options: ``ir_vendor``,
     ``ir_label_column_map`` (three integers separated by spaces) and
@@ -81,7 +65,7 @@ def split_limits(
 
 
 def check_limits(limits: Mapping[str, Any]) -> ir.CheckLimits:
-    """Read the nerve and resonance limits and the VOP entries among a session's limits.
+    """Read the nerve and resonance limits and the VOP entries among a call's limits.
 
     - ``pns_chronaxie`` (s), ``pns_rheobase`` (T/m/s) and optionally
       ``pns_alpha`` give a chronaxie nerve model; ``pns_<axis>_<field>``, for
@@ -192,92 +176,3 @@ def _band(text: str) -> safety.ForbiddenBand:
         ) from None
     axis = None if words[0] == "all" else words[0]
     return safety.ForbiddenBand(axis, low, high, tolerance[0] if tolerance else 0.0)
-
-
-def listing(path: str) -> dict[str, Parameter]:
-    return plugin(path).listing()
-
-
-def source(path: str) -> str:
-    """Return a digest of the code that designs with the plugin at ``path``.
-
-    Covers the plugin file, the source file of the application it binds, and
-    the installed versions of pypulseqpp and pulserver. Modules the
-    application imports from elsewhere are covered only through those
-    versions.
-    """
-    digest = hashlib.sha256(Path(path).read_bytes())
-    try:
-        module = inspect.getsourcefile(plugin(path).app)
-    except TypeError:
-        module = None
-    if module:
-        digest.update(Path(module).read_bytes())
-    digest.update(f"pypulseqpp {pp.__version__} pulserver {__version__}".encode())
-    return digest.hexdigest()
-
-
-def validate(
-    path: str, limits: Mapping[str, Any], request: Mapping[str, Any]
-) -> Validation:
-    return plugin(path).validate(split_limits(limits)[0], request)
-
-
-def generate(
-    path: str, limits: Mapping[str, Any], request: Mapping[str, Any], directory: str
-) -> tuple[Validation, list[str], str | None, str]:
-    """Design into ``directory``, check and convert the result, and name its reconstruction.
-
-    The design is written in the logical frame and checked in the physical
-    frame of the rotation the resolved protocol carries; the conversion shifts
-    it to the protocol's field-of-view offset and, when the limits name VOPs,
-    writes each subsequence's :func:`pulserver.ir.sar_ratios` into the cache. A
-    design that fails a check of :func:`pulserver.ir.check` is returned as an
-    invalid request carrying the problems. The file list is empty and the cache
-    file name ``None`` for an invalid request; what was written is left for the
-    caller to discard.
-    """
-    system, options, checked = split_limits(limits)
-    scanner = plugin(path)
-    validation, paths = scanner.generate(system, request, Path(directory))
-    if not paths:
-        return validation, paths, None, scanner.recon
-    rotation = prescribed_rotation(validation.values)
-    problems = ir.check(paths[0], system, rotation=rotation, limits=checked)
-    if problems:
-        refused = replace(validation, valid=False, info="; ".join(problems))
-        return refused, [], None, scanner.recon
-    offset = prescribed_offset(validation.values)
-    cache = converted(paths[0], system, checked, offset, options)
-    return validation, paths, cache.name, scanner.recon
-
-
-def chain(first: str) -> list[str]:
-    return [str(path) for path in ir.chain(first)]
-
-
-def check(limits: Mapping[str, Any], seq_path: str, rotation: Any = None) -> list[str]:
-    system, _, checked = split_limits(limits)
-    return ir.check(seq_path, system, rotation=rotation, limits=checked)
-
-
-def convert(
-    limits: Mapping[str, Any],
-    seq_path: str,
-    fov_offset: tuple[float, float, float] = (0.0, 0.0, 0.0),
-) -> str:
-    system, options, checked = split_limits(limits)
-    return converted(seq_path, system, checked, fov_offset, options).name
-
-
-def converted(
-    seq_path: str,
-    system: pp.Opts,
-    checked: ir.CheckLimits,
-    fov_offset: tuple[float, float, float],
-    options: dict[str, Any],
-) -> Path:
-    ratios = None if checked.vops is None else ir.sar_ratios(seq_path, system, checked)
-    return ir.convert(
-        seq_path, system, fov_offset=fov_offset, sar_ratios=ratios, **options
-    )

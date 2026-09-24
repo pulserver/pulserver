@@ -15,11 +15,12 @@ import ismrmrd
 import ismrmrd.xsd
 import numpy as np
 import pytest
-from _host import DAY, LIMITS, Daemon
+from _host import generate
 
+from pulserver.host import DesignStore
 from pulserver.recon._runtime import concurrency
 from pulserver.recon._runtime.connection import Connection
-from pulserver.vre import ReconProxy, RevisionStore, SequenceTable, _revisions
+from pulserver.vre import DesignCache, ReconProxy, SequenceTable, _designs
 
 RECON_PLUGINS = Path(__file__).parent / "recon_plugins"
 FIXTURES = Path(__file__).parent / "fixtures" / "sequences"
@@ -39,8 +40,7 @@ HEADER = """<?xml version="1.0"?>
     <trajectory>cartesian</trajectory>
   </encoding>
   <userParameters>
-    <userParameterLong><name>pulserver_revision</name><value>{revision}</value></userParameterLong>
-    <userParameterString><name>pulserver_session</name><value>{session}</value></userParameterString>{exam}
+    <userParameterString><name>pulserver_design</name><value>{design}</value></userParameterString>{exam}
   </userParameters>
 </ismrmrdHeader>
 """
@@ -48,43 +48,32 @@ HEADER = """<?xml version="1.0"?>
 
 @dataclass(frozen=True)
 class Series:
-    """A generated revision and the readouts a client of it plays."""
+    """A stored design and the readouts a client of it plays."""
 
-    session: str
-    revision: int
+    design: str
     table: SequenceTable
 
 
 @pytest.fixture(scope="module")
 def bucket(tmp_path_factory):
-    """A bucket holding one revision bound to a reconstruction and one unbound."""
-    base = tmp_path_factory.mktemp("vre") / "base"
-    daemon = Daemon(base)
-    daemon.start()
-    try:
-        series = {}
-        for pid, plugin, name in ((901, "gre2d", "bound"), (902, "gre2d_raw", "raw")):
-            client = daemon.client(pid=pid)
-            client.open(plugin, LIMITS)
-            revision = client.generate(MATRIX)
-            session = f"{pid}-{DAY}"
-            table = SequenceTable.read(
-                base / "bucket" / session / "rev" / str(revision) / "sequence.seq"
-            )
-            series[name] = Series(session, revision, table)
-    finally:
-        daemon.cleanup()
-    return base, series
+    """A store holding one design bound to a reconstruction and one unbound."""
+    store = DesignStore(tmp_path_factory.mktemp("vre") / "designs")
+    series = {}
+    for plugin, name in (("gre2d", "bound"), ("gre2d_raw", "raw")):
+        design = generate(store, plugin, MATRIX)
+        table = SequenceTable.read(store.directory(design) / "sequence.seq")
+        series[name] = Series(design, table)
+    return store.root, series
 
 
 @pytest.fixture
 def start_proxy(bucket):
-    """Start proxies serving the bucket; every one is closed when the test ends."""
-    base, _ = bucket
+    """Start proxies serving the store; every one is closed when the test ends."""
+    root, _ = bucket
     running = []
 
     def start(**options):
-        proxy = ReconProxy(base, RECON_PLUGINS, **options)
+        proxy = ReconProxy(root, RECON_PLUGINS, **options)
         proxy.bind(0)
         thread = threading.Thread(target=proxy.serve, daemon=True)
         thread.start()
@@ -97,11 +86,10 @@ def start_proxy(bucket):
         thread.join(timeout=DEADLINE)
 
 
-def header_xml(series, exam=None):
+def header_xml(series, exam=None, design=None):
     return HEADER.format(
         channels=CHANNELS,
-        session=series.session,
-        revision=series.revision,
+        design=series.design if design is None else design,
         exam=""
         if exam is None
         else f"<userParameterString><name>ExamID</name><value>{exam}</value>"
@@ -130,6 +118,7 @@ def stream(
     headers=1,
     readouts=None,
     last=None,
+    design=None,
 ):
     """Play one series' readouts as the scanner client does; return what came back.
 
@@ -137,8 +126,8 @@ def stream(
     acquisitions' ``scan_counter``; unnumbered by default. ``exam`` is the
     header's ``ExamID``; none by default. ``headers`` is how many times the
     header is sent, ``readouts`` how many readouts are, all of them by default,
-    and ``last`` the acquisition flagged ``LAST_IN_MEASUREMENT``, none by
-    default.
+    ``last`` the acquisition flagged ``LAST_IN_MEASUREMENT``, none by default,
+    and ``design`` the header's ``pulserver_design``, the series' by default.
     """
     stream = socket.create_connection(("127.0.0.1", port), timeout=DEADLINE)
     connection = Connection(stream)
@@ -146,7 +135,7 @@ def stream(
     if config is not None:
         connection.send_config(config)
     for _ in range(headers):
-        connection.send_header(header_xml(series, exam))
+        connection.send_header(header_xml(series, exam, design))
     for index in range(len(series.table) if readouts is None else readouts):
         acquisition = ismrmrd.Acquisition.from_array(data(series.table, index))
         if counters is not None:
@@ -344,14 +333,10 @@ def test_the_spare_worker_is_replaced_after_each_series(start_proxy, bucket):
     assert proxy.workers.spare_pids() not in (warm, replaced)
 
 
-def queue_directory(bucket_base, series):
-    return bucket_base / "bucket" / series.session / "queue"
-
-
 def test_a_series_with_every_slot_busy_is_held_on_disk_until_one_frees(
     start_proxy, bucket, tmp_path
 ):
-    base, series = bucket
+    _, series = bucket
     proxy = start_proxy(slots=1)
     gate = tmp_path / "go"
     trace = tmp_path / "trace"
@@ -366,7 +351,7 @@ def test_a_series_with_every_slot_busy_is_held_on_disk_until_one_frees(
 
     first = threading.Thread(target=play, args=("held", held))
     first.start()
-    queue = queue_directory(base, series["bound"])
+    queue = proxy.queue
     _wait_until(gate.with_name("go.waiting").exists, "the held series never started")
 
     second = threading.Thread(
@@ -434,7 +419,7 @@ def test_a_terminated_proxy_process_exits_cleanly(tmp_path):
             sys.executable,
             "-m",
             "pulserver.vre",
-            "--base",
+            "--store",
             str(tmp_path),
             "--port",
             "0",
@@ -522,19 +507,37 @@ def test_a_series_reads_the_gpu_its_slot_holds(
     assert values == read
 
 
-def test_the_least_recently_read_revision_is_read_again_when_next_named(
+def test_the_least_recently_read_design_is_read_again_when_next_named(
     tmp_path, monkeypatch
 ):
-    monkeypatch.setattr(_revisions, "_KEPT", 2)
-    store = RevisionStore(tmp_path)
+    monkeypatch.setattr(_designs, "_KEPT", 2)
+    cache = DesignCache(tmp_path)
     directories = []
     for number in range(3):
-        directory = tmp_path / "bucket" / "session" / "rev" / str(number)
+        directory = tmp_path / f"{number:018x}"
         directory.mkdir(parents=True)
         shutil.copy(FIXTURES / "gre_2d_3sl.seq", directory / "sequence.seq")
+        (directory / "manifest.json").write_text("{}")
         directories.append(directory)
-    first, second = store.read(directories[0]), store.read(directories[1])
-    assert store.read(directories[0]) is first
-    store.read(directories[2])
-    assert store.read(directories[0]) is first
-    assert store.read(directories[1]) is not second
+    first, second = cache.read(directories[0]), cache.read(directories[1])
+    assert cache.read(directories[0]) is first
+    cache.read(directories[2])
+    assert cache.read(directories[0]) is first
+    assert cache.read(directories[1]) is not second
+
+
+@pytest.mark.parametrize(
+    ("design", "reason"),
+    [
+        ("", "carries no pulserver_design"),
+        ("rev-1", "is not a design identifier"),
+        ("0" * 18, "no design 000000000000000000"),
+    ],
+)
+def test_a_series_naming_no_stored_design_is_refused(
+    start_proxy, bucket, design, reason
+):
+    _, series = bucket
+    proxy = start_proxy(slots=1)
+    received = stream(proxy.port, series["bound"], design=design)
+    assert _refused(received, reason)

@@ -25,9 +25,9 @@ from ..recon._runtime.concurrency import Slot, Slots, slot_devices
 from ..recon._runtime.connection import Connection
 from ..recon._runtime.exam import ExamCacheManager
 from ..recon._runtime.readers import deserialize_config, read_text
+from ._designs import Design, DesignCache
 from ._enrich import enrich_acquisition, enrich_header
 from ._queue import QueueFile
-from ._revisions import Revision, RevisionStore
 from ._workers import WorkerPool
 
 _PLUGIN_NAME = re.compile(r"[A-Za-z0-9_\-]+")
@@ -48,12 +48,12 @@ class ReconProxy:
 
     One thread per client connection, which carries one series: an optional
     config text, the header, one acquisition per readout of the chain and a
-    ``CLOSE``. The header's ``pulserver_session`` and ``pulserver_revision``
-    name the design the series was played from; its readout table enriches the
-    header and every acquisition. The readouts arrive demodulated to the
+    ``CLOSE``. The header's ``pulserver_design`` names the design of the store
+    the series was played from; its readout table enriches the header and
+    every acquisition. The readouts arrive demodulated to the
     prescribed field-of-view centre by the playout
     (:func:`pulserver.ir.prescribe`), and their samples are passed on as
-    received. The reconstruction plugin is the revision's, falling back to
+    received. The reconstruction plugin is the design's, falling back to
     the name in the client's config text. A series that breaks this is refused
     with a text naming the reason and a ``CLOSE``, and what the client still
     sends is discarded until it closes the connection.
@@ -66,9 +66,9 @@ class ReconProxy:
     worker's close closes the client.
 
     A series that finds every slot busy is queued instead: its enriched stream
-    is written to ``bucket/<session>/queue/<id>.h5`` while it arrives, its
-    client stays connected, and the file is replayed to a worker and deleted
-    once a slot frees.
+    is written to a file of ``queue`` while it arrives, its client stays
+    connected, and the file is replayed to a worker and deleted once a slot
+    frees.
 
     Once the client's stream ends, the proxy waits for the worker to close,
     however long the reconstruction takes, unless ``recon_timeout`` caps it.
@@ -80,8 +80,8 @@ class ReconProxy:
 
     Parameters
     ----------
-    base
-        Directory holding ``bucket/``, as the host daemon writes it.
+    store
+        Directory of designs, as the design calls write it; read only.
     plugins
         Directory of reconstruction plugin files, ``<plugin>.py``.
     slots
@@ -94,6 +94,9 @@ class ReconProxy:
     recon_timeout
         Seconds a worker may take after the stream ends before it is
         terminated and the client told so; ``None`` waits for its close.
+    queue
+        Directory the queued series are written to; a temporary directory,
+        removed on :meth:`close`, when ``None``.
 
     Attributes
     ----------
@@ -105,15 +108,23 @@ class ReconProxy:
 
     def __init__(
         self,
-        base: Path | str,
+        store: Path | str,
         plugins: Path | str,
         *,
         slots: int | None = None,
         gpu_slots: int = 1,
         spares: int = 1,
         recon_timeout: float | None = None,
+        queue: Path | str | None = None,
     ) -> None:
-        self.revisions = RevisionStore(base)
+        self.designs = DesignCache(store)
+        self._owns_queue = queue is None
+        self.queue = (
+            Path(tempfile.mkdtemp(prefix="pulserver-queue-"))
+            if queue is None
+            else Path(queue)
+        )
+        self.queue.mkdir(parents=True, exist_ok=True)
         self.plugins = Path(plugins)
         self.workers = WorkerPool(spares=spares)
         self.recon_timeout = recon_timeout
@@ -145,7 +156,7 @@ class ReconProxy:
         """Accept clients until :meth:`stop` or :meth:`close`, one thread each."""
         if self._server is None:
             self.bind()
-        _log.info("serving %s on port %d", self.revisions.bucket, self.port)
+        _log.info("serving %s on port %d", self.designs.store, self.port)
         while not (self._stopping or self._closing.is_set()):
             try:
                 stream, _ = self._server.accept()
@@ -189,6 +200,8 @@ class ReconProxy:
         self.workers.close()
         self.exams.close()
         shutil.rmtree(self._exam_root, ignore_errors=True)
+        if self._owns_queue:
+            shutil.rmtree(self.queue, ignore_errors=True)
 
     # %% one client connection
 
@@ -207,14 +220,14 @@ class ReconProxy:
             connection.shutdown_close()
 
     def _series(self, client: Connection, config: str, header: Any) -> None:
-        revision = self.revisions.resolve(header)
-        plugin = self._plugin_path(revision.recon or _config_plugin(config))
-        enrich_header(header, revision.table)
+        design = self.designs.resolve(header)
+        plugin = self._plugin_path(design.recon or _config_plugin(config))
+        enrich_header(header, design.table)
         _log.info(
             "series on %s: %s, %d readouts",
-            revision.directory,
+            design.directory,
             plugin.stem,
-            len(revision.table),
+            len(design.table),
         )
         slot = self._slots.take(wait=False)
         if slot is not None:
@@ -225,30 +238,26 @@ class ReconProxy:
                     header,
                     plugin,
                     slot,
-                    lambda worker: _forward(client, worker, revision),
+                    lambda worker: _forward(client, worker, design),
                 )
             finally:
                 self._slots.release(slot)
             return
-        self._queue(client, config, header, revision, plugin)
+        self._queue(client, config, header, design, plugin)
 
     def _queue(
         self,
         client: Connection,
         config: str,
         header: Any,
-        revision: Revision,
+        design: Design,
         plugin: Path,
     ) -> None:
         """Hold the series on disk until a slot frees, then replay it to a worker."""
-        queued = QueueFile(
-            revision.session_directory
-            / "queue"
-            / f"{os.getpid()}-{next(self._queued)}.h5"
-        )
-        _log.info("queued %s on %s", queued.path.name, revision.directory)
+        queued = QueueFile(self.queue / f"{os.getpid()}-{next(self._queued)}.h5")
+        _log.info("queued %s on %s", queued.path.name, design.directory)
         try:
-            others = _record(client, header, revision, queued)
+            others = _record(client, header, design, queued)
             slot = self._slots.take(wait=True)
             try:
                 self._run(
@@ -310,9 +319,7 @@ class ReconProxy:
 
     def _plugin_path(self, plugin: str) -> Path:
         if not plugin:
-            raise ValueError(
-                "neither the revision nor the config names a reconstruction"
-            )
+            raise ValueError("neither the design nor the config names a reconstruction")
         if not _PLUGIN_NAME.fullmatch(plugin):
             raise ValueError(f"invalid plugin name {plugin!r}")
         path = self.plugins / f"{plugin}.py"
@@ -404,7 +411,7 @@ def _opening(connection: Connection) -> tuple[str, Any]:
     """Return the config text and the header a stream opens with.
 
     The config is optional: a stream may open with its header, which leaves
-    the reconstruction to the one the revision names.
+    the reconstruction to the one the design names.
 
     Raises
     ------
@@ -450,7 +457,7 @@ def _is_close_marker(item: Any) -> bool:
     )
 
 
-def _enriched(client: Connection, revision: Revision) -> Iterator[Any]:
+def _enriched(client: Connection, design: Design) -> Iterator[Any]:
     """Yield the client's stream up to its close, acquisitions enriched in play order.
 
     Acquisitions are matched to readouts by position, so the stream carries
@@ -471,7 +478,7 @@ def _enriched(client: Connection, revision: Revision) -> Iterator[Any]:
     """
     index = 0
     previous = None
-    readouts = len(revision.table)
+    readouts = len(design.table)
     for item in client:
         if _is_close_marker(item):
             break
@@ -481,12 +488,12 @@ def _enriched(client: Connection, revision: Revision) -> Iterator[Any]:
             if index >= readouts:
                 raise ValueError(
                     f"the stream carries more than the {readouts} readouts "
-                    f"{revision.directory} plays"
+                    f"{design.directory} plays"
                 )
             if item.isFlagSet(ismrmrd.ACQ_LAST_IN_MEASUREMENT) and index + 1 < readouts:
                 raise ValueError(
                     f"acquisition {index} is flagged LAST_IN_MEASUREMENT, which ends "
-                    f"the stream, and {revision.directory} plays {readouts} readouts"
+                    f"the stream, and {design.directory} plays {readouts} readouts"
                 )
             counter = int(item.scan_counter)
             numbered = previous is not None and (previous, counter) != (0, 0)
@@ -494,36 +501,36 @@ def _enriched(client: Connection, revision: Revision) -> Iterator[Any]:
                 raise ValueError(
                     f"acquisition {index} carries scan counter {counter} after "
                     f"{previous}: the stream no longer matches the readouts "
-                    f"{revision.directory} plays"
+                    f"{design.directory} plays"
                 )
             previous = counter
-            enrich_acquisition(item, revision.table, index)
+            enrich_acquisition(item, design.table, index)
             index += 1
         yield item
     if index < readouts:
         raise ValueError(
             f"the stream ended after {index} of the {readouts} readouts "
-            f"{revision.directory} plays"
+            f"{design.directory} plays"
         )
 
 
-def _forward(client: Connection, worker: Connection, revision: Revision) -> None:
+def _forward(client: Connection, worker: Connection, design: Design) -> None:
     """Send the client's stream to the worker as it arrives."""
-    for item in _enriched(client, revision):
+    for item in _enriched(client, design):
         worker.send(item)
 
 
 def _record(
     client: Connection,
     header: Any,
-    revision: Revision,
+    design: Design,
     queued: QueueFile,
 ) -> list[Any]:
     """Store the client's stream until it closes; return what the file cannot hold."""
     queued.write_header(header)
     others: list[Any] = []
     try:
-        for item in _enriched(client, revision):
+        for item in _enriched(client, design):
             if isinstance(item, (ismrmrd.Acquisition, ismrmrd.Waveform)):
                 queued.append(item)
             else:
