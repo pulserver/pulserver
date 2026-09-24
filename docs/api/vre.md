@@ -30,7 +30,7 @@ queue are described in {doc}`../explanations/reconstruction`.
 
 | Object | Description |
 | --- | --- |
-| {obj}`~pulserver.vre.RevisionStore` | The revisions under `<base>/bucket/`, each read once and kept. |
+| {obj}`~pulserver.vre.RevisionStore` | The revisions under `<base>/bucket/`, the most recently read kept. |
 | {obj}`~pulserver.vre.Revision` | A generated design as the reconstruction side reads it. |
 | {obj}`~pulserver.vre.SESSION_PARAMETER` | Header user parameter naming the session a series was played from. |
 | {obj}`~pulserver.vre.REVISION_PARAMETER` | Header user parameter naming the revision a series was played from. |

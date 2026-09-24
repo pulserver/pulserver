@@ -11,6 +11,7 @@ __all__ = [
 
 import json
 import threading
+from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -25,6 +26,9 @@ REVISION_PARAMETER = "pulserver_revision"
 
 _ENTRY = "sequence.seq"
 _RECORD = "meta.json"
+
+#: Revisions a store keeps read.
+_KEPT = 8
 
 
 @dataclass(frozen=True)
@@ -53,18 +57,19 @@ class Revision:
 
 
 class RevisionStore:
-    """The revisions under ``<base>/bucket``, each read once and kept.
+    """The revisions under ``<base>/bucket``, the most recently read kept.
 
-    Reading a revision tabulates its whole sequence chain, which is the
-    expensive part of accepting a series; concurrent streams of one revision
-    wait for the first to finish rather than tabulating it again.
+    Reading a revision tabulates its sequence chain, which is the expensive
+    part of accepting a series; concurrent streams of one revision wait for
+    the first to finish rather than tabulating it again. A revision that is
+    no longer among the most recently read is read again when next named.
     """
 
     def __init__(self, base: Path | str) -> None:
         self.bucket = Path(base) / "bucket"
         self._lock = threading.Lock()
         self._building: dict[Path, threading.Lock] = {}
-        self._revisions: dict[Path, Revision] = {}
+        self._revisions: OrderedDict[Path, Revision] = OrderedDict()
 
     def locate(self, header: Any) -> Path:
         """Return the revision directory a header names.
@@ -97,18 +102,26 @@ class RevisionStore:
         return directory
 
     def read(self, directory: Path) -> Revision:
-        """Return a revision directory read, tabulating its chain on first use."""
+        """Return a revision directory read, tabulating its chain unless kept."""
         directory = Path(directory)
         with self._lock:
             building = self._building.setdefault(directory, threading.Lock())
         with building:
-            if directory not in self._revisions:
-                self._revisions[directory] = Revision(
-                    directory=directory,
-                    recon=str(_meta(directory).get("recon", "")),
-                    table=SequenceTable.read(directory / _ENTRY),
-                )
-            return self._revisions[directory]
+            with self._lock:
+                if directory in self._revisions:
+                    self._revisions.move_to_end(directory)
+                    return self._revisions[directory]
+            revision = Revision(
+                directory=directory,
+                recon=str(_meta(directory).get("recon", "")),
+                table=SequenceTable.read(directory / _ENTRY),
+            )
+            with self._lock:
+                self._revisions[directory] = revision
+                while len(self._revisions) > _KEPT:
+                    forgotten, _ = self._revisions.popitem(last=False)
+                    self._building.pop(forgotten, None)
+            return revision
 
     def resolve(self, header: Any) -> Revision:
         """Return the revision a header names; see :meth:`locate` and :meth:`read`."""
