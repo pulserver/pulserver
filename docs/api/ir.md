@@ -18,8 +18,10 @@ passes and the cache layout are described in {doc}`../explanations/ir-cache`.
 | --- | --- |
 | {obj}`~pulserver.ir.convert` | Segment a sequence file and write its IR cache beside it. |
 | {obj}`~pulserver.ir.prescribe` | Move a logical-frame sequence to a prescribed field-of-view centre, in place. |
-| {obj}`~pulserver.ir.check` | Timing, gradient, PNS, forbidden-band and VOP SAR problems of a chain under a scanner's limits, in the physical frame. |
-| {obj}`~pulserver.ir.CheckLimits` | The nerve model, forbidden bands and VOPs a chain is checked against, besides the gradient limits. |
+| {obj}`~pulserver.ir.check` | Timing, gradient, PNS and forbidden-band problems of a chain under a scanner's limits, in the physical frame. |
+| {obj}`~pulserver.ir.CheckLimits` | The nerve model and forbidden bands a chain is checked against, and the VOPs of its SAR ratios, besides the gradient limits. |
+| {obj}`~pulserver.ir.sar_ratios` | The RF energy of each subsequence of a chain at the VOPs, against the same repetitions of a hard, 180°, 1 ms reference pulse. |
+| {obj}`~pulserver.ir.SarRatio` | The local and global SAR ratios of one subsequence, as the cache carries them. |
 | {obj}`~pulserver.ir.summary` | Subsequences, segments, readouts and RF spectral statistics of a sequence, from the chain or from its cache. |
 | {obj}`~pulserver.ir.play` | Every block a cache plays, resolved as the scanner's playout resolves it. |
 | {obj}`~pulserver.ir.chain` | Files of the `NextSequence` chain starting at a sequence file, in play order. |

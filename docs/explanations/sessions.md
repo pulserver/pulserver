@@ -63,8 +63,8 @@ is identified by the names and contents of the imported files and the
 prescription of the import, offset and rotation. The prescription of a
 generated revision is part of its resolved protocol. Where the limits name a
 VOP file, the file's contents are part of the identity as well as its path, so
-a design checked against one set of VOPs is not returned for another written to
-the same file.
+a cache carrying the SAR ratios of one set of VOPs is not returned for another
+written to the same file.
 
 ## Access from the reconstruction side
 

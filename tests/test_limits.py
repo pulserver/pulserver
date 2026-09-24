@@ -1,5 +1,6 @@
 """The limits a session opens with: scanner limits, conversion options and check limits."""
 
+import cmath
 from pathlib import Path
 
 import numpy as np
@@ -51,7 +52,7 @@ def test_the_check_limits_are_read_apart_from_the_scanner_limits():
         "forbidden_band_2": "x 1100 1200 5.5",
         "vop_file": "/data/vops.mat",
         "vop_drive_per_hz": "0.01 0.02",
-        "vop_local_limit": 20,
+        "vop_default_shim": "1 0 0.5 1.5",
     }
     system, _, checked = split_limits(limits)
     assert system.max_grad == pytest.approx(40e-3 * system.gamma)
@@ -64,7 +65,13 @@ def test_the_check_limits_are_read_apart_from_the_scanner_limits():
         ),
         vops=Path("/data/vops.mat"),
         drive_per_hz=(0.01, 0.02),
-        local_sar_limit=20.0,
+        default_shim=(1 + 0j, cmath.rect(0.5, 1.5)),
+    )
+
+
+def test_a_vop_file_alone_is_read_with_a_unit_drive_and_equal_weights():
+    assert check_limits({"vop_file": "/data/vops.mat"}) == ir.CheckLimits(
+        vops=Path("/data/vops.mat")
     )
 
 
@@ -92,7 +99,9 @@ def test_a_safe_model_is_read_for_every_axis_as_pypulseqpp_takes_it():
         ({"forbidden_band_1": "x 590"}, "forbidden band"),
         ({"forbidden_band_1": "x 590 high"}, "forbidden band"),
         ({"vop_drive_per_hz": 0.01}, "vop_file"),
-        ({"vop_file": "/data/vops.mat"}, "drive per Hz"),
+        ({"vop_file": "/data/vops.mat", "vop_local_limit": 20}, "not check limits"),
+        ({"vop_file": "/data/vops.mat", "vop_default_shim": "1 0 1"}, "a phase"),
+        ({"vop_file": "/data/vops.mat", "vop_default_shim": "1 zero"}, "a phase"),
     ],
 )
 def test_check_limits_that_cannot_be_read_are_refused(limits, message):

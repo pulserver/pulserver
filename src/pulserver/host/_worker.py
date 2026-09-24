@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import cmath
 import hashlib
 import inspect
 import re
@@ -28,7 +29,7 @@ _CHRONAXIE = {
 }
 _SAFE = re.compile(r"pns_([xyz])_(a[123]|tau[123]|stim_limit|g_scale)")
 _BAND = re.compile(r"forbidden_band_\d+")
-_VOP = ("vop_file", "vop_drive_per_hz", "vop_local_limit", "vop_global_limit")
+_VOP = ("vop_file", "vop_drive_per_hz", "vop_default_shim")
 
 
 @lru_cache(maxsize=32)
@@ -80,7 +81,7 @@ def split_limits(
 
 
 def check_limits(limits: Mapping[str, Any]) -> ir.CheckLimits:
-    """Read the nerve, resonance and SAR limits among a session's limits.
+    """Read the nerve and resonance limits and the VOP entries among a session's limits.
 
     - ``pns_chronaxie`` (s), ``pns_rheobase`` (T/m/s) and optionally
       ``pns_alpha`` give a chronaxie nerve model; ``pns_<axis>_<field>``, for
@@ -93,17 +94,19 @@ def check_limits(limits: Mapping[str, Any]) -> ir.CheckLimits:
       optionally, the largest amplitude allowed in it in mT/m, separated by
       spaces.
     - ``vop_file`` is a ``.mat`` or ``.npz`` file of VOPs the host can read,
-      ``vop_drive_per_hz`` the channel drive per Hz of RF amplitude in the
-      VOPs' drive unit (one value, or one per channel separated by spaces),
-      and ``vop_local_limit`` and ``vop_global_limit`` the SAR allowed in
-      W/kg, 10 and 3.2 by default.
+      whose SAR ratios :func:`pulserver.ir.sar_ratios` writes into the cache;
+      ``vop_drive_per_hz`` the relative channel drive per Hz of RF amplitude,
+      one value or one per channel, 1 by default; and ``vop_default_shim`` the
+      magnitude and phase in radians of each channel's weight for a pulse
+      played without an RF shim, equal weights by default. Values are
+      separated by spaces.
 
     Raises
     ------
     ValueError
         If a key of those families is not one of them, a model mixes the two
-        kinds or misses a field, a band is malformed, or a VOP file is given
-        without a drive.
+        kinds or misses a field, a band or a shim is malformed, or VOP limits
+        are given without a file.
     """
     keys = [k for k in limits if k.startswith(_CHECK_PREFIXES)]
     unknown = [
@@ -123,17 +126,11 @@ def check_limits(limits: Mapping[str, Any]) -> ir.CheckLimits:
     )
     arguments["bands"] = tuple(_band(str(limits[k])) for k in numbered)
     if "vop_file" in limits:
-        drive = [float(v) for v in str(limits.get("vop_drive_per_hz", "")).split()]
         arguments["vops"] = Path(str(limits["vop_file"]))
-        arguments["drive_per_hz"] = (
-            None if not drive else drive[0] if len(drive) == 1 else tuple(drive)
-        )
-        for key, name in (
-            ("vop_local_limit", "local_sar_limit"),
-            ("vop_global_limit", "global_sar_limit"),
-        ):
-            if key in limits:
-                arguments[name] = float(limits[key])
+        drive = [float(v) for v in str(limits.get("vop_drive_per_hz", 1.0)).split()]
+        arguments["drive_per_hz"] = drive[0] if len(drive) == 1 else tuple(drive)
+        if "vop_default_shim" in limits:
+            arguments["default_shim"] = _shim(str(limits["vop_default_shim"]))
     elif any(k.startswith("vop_") for k in keys):
         raise ValueError("the vop_ limits need a vop_file")
     return ir.CheckLimits(**arguments)
@@ -166,6 +163,21 @@ def _nerve_model(limits: Mapping[str, Any]) -> Any:
             }
         )
     return None
+
+
+def _shim(text: str) -> tuple[complex, ...]:
+    try:
+        values = [float(v) for v in text.split()]
+    except ValueError:
+        values = []
+    if not values or len(values) % 2:
+        raise ValueError(
+            f"a default shim is a magnitude and a phase per channel: {text!r}"
+        )
+    return tuple(
+        cmath.rect(magnitude, phase)
+        for magnitude, phase in zip(values[::2], values[1::2], strict=True)
+    )
 
 
 def _band(text: str) -> safety.ForbiddenBand:
@@ -218,10 +230,12 @@ def generate(
 
     The design is written in the logical frame and checked in the physical
     frame of the rotation the resolved protocol carries; the conversion shifts
-    it to the protocol's field-of-view offset. A design that fails a check of
-    :func:`pulserver.ir.check` is returned as an invalid request carrying the
-    problems. The file list is empty and the cache file name ``None`` for an
-    invalid request; what was written is left for the caller to discard.
+    it to the protocol's field-of-view offset and, when the limits name VOPs,
+    writes each subsequence's :func:`pulserver.ir.sar_ratios` into the cache. A
+    design that fails a check of :func:`pulserver.ir.check` is returned as an
+    invalid request carrying the problems. The file list is empty and the cache
+    file name ``None`` for an invalid request; what was written is left for the
+    caller to discard.
     """
     system, options, checked = split_limits(limits)
     plugin = _plugin(path)
@@ -234,7 +248,7 @@ def generate(
         refused = replace(validation, valid=False, info="; ".join(problems))
         return refused, [], None, plugin.recon
     offset = prescribed_offset(validation.values)
-    cache = ir.convert(paths[0], system, fov_offset=offset, **options)
+    cache = _converted(paths[0], system, checked, offset, options)
     return validation, paths, cache.name, plugin.recon
 
 
@@ -252,5 +266,18 @@ def convert(
     seq_path: str,
     fov_offset: tuple[float, float, float] = (0.0, 0.0, 0.0),
 ) -> str:
-    system, options, _ = split_limits(limits)
-    return ir.convert(seq_path, system, fov_offset=fov_offset, **options).name
+    system, options, checked = split_limits(limits)
+    return _converted(seq_path, system, checked, fov_offset, options).name
+
+
+def _converted(
+    seq_path: str,
+    system: pp.Opts,
+    checked: ir.CheckLimits,
+    fov_offset: tuple[float, float, float],
+    options: dict[str, Any],
+) -> Path:
+    ratios = None if checked.vops is None else ir.sar_ratios(seq_path, system, checked)
+    return ir.convert(
+        seq_path, system, fov_offset=fov_offset, sar_ratios=ratios, **options
+    )

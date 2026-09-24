@@ -1,11 +1,11 @@
-"""The checks a sequence chain passes before its IR is built."""
+"""The checks a sequence chain passes before its IR is built, and its SAR against a reference."""
 
 from __future__ import annotations
 
 import contextlib
 import copy
 import io
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -24,10 +24,15 @@ _RASTERS = (
     "block_duration_raster",
 )
 
+#: The reference pulse every pulse of a repetition is replaced by: hard,
+#: 180 degrees, 1 ms, in the default channel shim.
+REFERENCE_FLIP = np.pi
+REFERENCE_DURATION = 1e-3
+
 
 @dataclass(frozen=True)
 class CheckLimits:
-    """The nerve, resonance and SAR limits a chain is checked against, besides ``pypulseqpp.Opts``.
+    """The nerve and resonance limits of a chain, and the VOPs of its SAR ratios, besides ``pypulseqpp.Opts``.
 
     Attributes
     ----------
@@ -40,34 +45,49 @@ class CheckLimits:
         Forbidden gradient bands of ``check_mech_resonance``, on the physical
         axes. Without any, the resonance check is left out.
     vops
-        VOPs of ``check_sar``, or the ``.mat`` or ``.npz`` file holding them,
-        which is read when a chain is checked. ``None`` leaves out the SAR
-        check.
+        VOPs, or the ``.mat`` or ``.npz`` file holding them, which
+        :func:`sar_ratios` reads; nothing is refused on SAR.
     drive_per_hz
         Channel drive per Hz of RF amplitude, in the VOPs' drive unit: one
-        value, or one per channel.
-    local_sar_limit, global_sar_limit
-        SAR allowed over each window ``check_sar`` averages, in W/kg.
+        value, or one per channel. A scale common to every channel cancels in
+        the ratios.
+    default_shim
+        Complex channel weights of a pulse played without an RF shim, and of
+        the reference pulse; equal weights when None.
 
     Raises
     ------
     ValueError
-        If VOPs are given without a drive, or the PNS limit is not positive.
+        If the PNS limit is not positive.
     """
 
     pns: Any = None
     pns_limit: float = 1.0
     bands: tuple[safety.ForbiddenBand, ...] = ()
     vops: safety.VopModel | Path | str | None = None
-    drive_per_hz: float | tuple[float, ...] | None = None
-    local_sar_limit: float = 10.0
-    global_sar_limit: float = 3.2
+    drive_per_hz: float | tuple[float, ...] = 1.0
+    default_shim: tuple[complex, ...] | None = None
 
     def __post_init__(self) -> None:
-        if self.vops is not None and self.drive_per_hz is None:
-            raise ValueError("a VOP check needs the channel drive per Hz")
         if self.pns_limit <= 0.0:
             raise ValueError("the PNS limit must be positive")
+
+
+@dataclass(frozen=True)
+class SarRatio:
+    """A subsequence's RF energy at the VOPs, against the reference pulse.
+
+    ``local_sar`` is the largest, over the subsequence's repetitions and the
+    VOPs, of the energy a repetition deposits at a VOP over the energy there
+    of the same repetition with each of its pulses replaced by the reference
+    pulse; ``global_sar`` is that ratio through the global SAR matrix. A
+    scanner's SAR for the subsequence is the ratio times its SAR for that
+    reference repetition. Both are 0 without RF, and ``global_sar`` is 0
+    without a global matrix.
+    """
+
+    local_sar: float
+    global_sar: float
 
 
 def check(
@@ -85,9 +105,9 @@ def check(
     ``pypulseqpp.check_timing``, gradient continuity included, and with
     ``pypulseqpp.safety.check_max_grad`` and ``check_max_slew``, against the
     gradient limits, dead times and ringdown time of ``system``; and with
-    ``check_pns``, ``check_mech_resonance`` and ``check_sar`` where ``limits``
-    carries a nerve model, forbidden bands or VOPs. The waveforms are timed by
-    the file's own rasters.
+    ``check_pns`` and ``check_mech_resonance`` where ``limits`` carries a
+    nerve model or forbidden bands. The waveforms are timed by the file's own
+    rasters. VOPs are not checked here: see :func:`sar_ratios`.
 
     Parameters
     ----------
@@ -99,7 +119,7 @@ def check(
         ``(3, 3)`` prescription rotation from logical to physical axes, a
         reflection included; the identity by default.
     limits
-        The nerve, resonance and SAR limits; none by default.
+        The nerve and resonance limits; none by default.
 
     Returns
     -------
@@ -114,8 +134,6 @@ def check(
         orthonormal.
     """
     limits = CheckLimits() if limits is None else limits
-    if isinstance(limits.vops, (str, Path)):
-        limits = replace(limits, vops=safety.read_vops(limits.vops))
     try:
         chain_read = read_chain(seq_path, verify=False)
     except RuntimeError as failure:
@@ -176,8 +194,6 @@ def _problems(
         problems += _pns(sequence, opts, limits)
     if limits.bands:
         problems += _resonance(sequence, opts, limits)
-    if limits.vops is not None:
-        problems += _sar(sequence, limits)
     return problems
 
 
@@ -208,27 +224,78 @@ def _resonance(
     ]
 
 
-def _sar(sequence: pp.Sequence, limits: CheckLimits) -> list[str]:
-    _, found = safety.check_sar(
-        sequence,
-        limits.vops,
-        drive_per_hz=limits.drive_per_hz,
-        local_limit=limits.local_sar_limit,
-        global_limit=limits.global_sar_limit,
+def sar_ratios(
+    seq_path: Path | str, system: pp.Opts, limits: CheckLimits
+) -> list[SarRatio]:
+    """Return the SAR ratios of each file of a chain against the reference pulse.
+
+    The reference pulse is hard, 180 degrees and 1 ms, played in the default
+    shim of ``limits``; a pulse played in an RF shim is weighed through it. A
+    repetition is a window ``pypulseqpp.safety.check_sar`` averages over: each
+    repetition the block definitions repeat with, and the blocks before the
+    first and after the last.
+
+    Parameters
+    ----------
+    seq_path
+        The first file of the chain.
+    system
+        The rasters and RF dead times the reference pulse is made with.
+    limits
+        The VOPs, channel drive and default shim.
+
+    Returns
+    -------
+    list of SarRatio
+        One per file, in play order.
+
+    Raises
+    ------
+    ValueError
+        If ``limits`` carries no VOPs, a file of the chain cannot be read, or a
+        pulse or shim weighs another number of channels than the VOPs.
+    """
+    if limits.vops is None:
+        raise ValueError("SAR ratios need VOPs")
+    vops = limits.vops
+    if not isinstance(vops, safety.VopModel):
+        vops = safety.read_vops(vops)
+    drive = {"drive_per_hz": limits.drive_per_hz, "default_shim": limits.default_shim}
+    reference = pp.Sequence(system)
+    reference.add_block(
+        pp.make_block_pulse(
+            flip_angle=REFERENCE_FLIP, duration=REFERENCE_DURATION, system=system
+        )
     )
-    problems = []
-    local, whole = found.worst_local, found.worst_global
-    if local is not None and local.sar > limits.local_sar_limit:
-        problems.append(
-            f"local SAR of {local.sar:.2f} W/kg at VOP {local.vop} over blocks "
-            f"{local.first}-{local.last} exceeds {limits.local_sar_limit:.2f} W/kg"
-        )
-    if whole is not None and whole.sar > limits.global_sar_limit:
-        problems.append(
-            f"global SAR of {whole.sar:.2f} W/kg over blocks {whole.first}-"
-            f"{whole.last} exceeds {limits.global_sar_limit:.2f} W/kg"
-        )
-    return problems
+    _, pulse = safety.check_sar(reference, vops, **drive)
+    try:
+        chain_read = read_chain(seq_path, verify=False)
+    except RuntimeError as failure:
+        raise ValueError(f"cannot read {seq_path}: {failure}") from failure
+    ratios = []
+    for _, sequence in chain_read:
+        _, found = safety.check_sar(sequence, vops, reference=pulse, **drive)
+        ratios.append(_ratio(sequence, found, pulse))
+    return ratios
+
+
+def _ratio(sequence: pp.Sequence, found: Any, pulse: Any) -> SarRatio:
+    """Divide each window's energy against one reference pulse by the pulses it plays."""
+    windows = found.windows
+    rf = np.array([row[1] for row in sequence.block_events.values()], dtype=int)
+    counted = np.concatenate([[0], np.cumsum(rf > 0)])
+    pulses = counted[windows.last] - counted[windows.first - 1]
+    if not windows.first.size or not pulses.any():
+        return SarRatio(0.0, 0.0)
+    with_rf = pulses > 0
+    unit = float(pulse.windows.duration[0])
+    per_pulse = windows.duration / (unit * np.maximum(pulses, 1))
+    local = float((windows.reference_ratio * per_pulse)[with_rf].max())
+    whole = 0.0
+    if windows.global_sar is not None and pulse.windows.global_sar[0] > 0.0:
+        against = float(pulse.windows.global_sar[0])
+        whole = float((windows.global_sar / against * per_pulse)[with_rf].max())
+    return SarRatio(local, whole)
 
 
 def _timing(sequence: pp.Sequence, report: list) -> str:

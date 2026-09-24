@@ -1,4 +1,4 @@
-"""The checks a chain passes before its IR is built, in the physical frame."""
+"""The checks a chain passes before its IR is built, and its SAR against a reference."""
 
 import re
 
@@ -113,27 +113,77 @@ def test_pns_is_refused_from_the_fraction_of_threshold_the_limits_allow(
     )
 
 
-@pytest.mark.parametrize(("local_limit", "refused"), [(2.0, True), (3.0, False)])
-def test_local_sar_over_the_vops_is_refused_above_its_limit(
-    tmp_path, local_limit, refused
-):
-    # One channel at 0.01 drive per Hz: (0.01 * 500)^2 for 1 ms in 10 is 2.5 W/kg.
-    rf = pp.make_block_pulse(flip_angle=np.pi, duration=1e-3, system=SYSTEM)
-    repetition = [(rf,), (pp.make_delay(9e-3),)]
-    path = _written(tmp_path, repetition * 20)
-    vops = tmp_path / "vops.npz"
-    np.savez(vops, vops=np.ones((1, 1, 1), dtype=complex))
-    limits = ir.CheckLimits(vops=vops, drive_per_hz=0.01, local_sar_limit=local_limit)
-    assert ir.check(path, SYSTEM, limits=limits) == (
-        ["local SAR of 2.50 W/kg at VOP 0 over blocks 1-2 exceeds 2.00 W/kg"]
-        if refused
-        else []
+def _pulse(degrees, duration=1e-3):
+    return pp.make_block_pulse(
+        flip_angle=np.deg2rad(degrees), duration=duration, system=SYSTEM
     )
 
 
-def test_vops_without_a_channel_drive_are_refused():
-    with pytest.raises(ValueError, match="drive per Hz"):
-        ir.CheckLimits(vops="vops.npz")
+@pytest.fixture
+def one_channel(tmp_path):
+    """One channel's VOP and global matrix: every ratio is a ratio of RF energy."""
+    path = tmp_path / "vops.npz"
+    np.savez(path, vops=np.ones((1, 1, 1)), global_matrix=np.full((1, 1), 0.5))
+    return ir.CheckLimits(vops=path)
+
+
+@pytest.mark.parametrize(
+    ("pulses", "ratio"),
+    [
+        ((180,), 1.0),
+        ((90,), 0.25),
+        ((180, 90), 0.625),
+    ],
+)
+def test_a_repetitions_sar_is_measured_against_the_same_repetition_of_reference_pulses(
+    tmp_path, one_channel, pulses, ratio
+):
+    # A 1 ms hard pulse's energy goes as its flip angle squared, so each pulse
+    # counts (flip / 180)^2 of the reference's.
+    repetition = [(_pulse(flip),) for flip in pulses] + [(pp.make_delay(9e-3),)]
+    path = _written(tmp_path, repetition * 20)
+    (found,) = ir.sar_ratios(path, SYSTEM, one_channel)
+    assert (found.local_sar, found.global_sar) == pytest.approx((ratio, ratio))
+
+
+def test_a_longer_pulse_of_the_same_flip_angle_deposits_less_than_the_reference(
+    tmp_path, one_channel
+):
+    # Half the amplitude for twice as long: half the energy.
+    path = _written(tmp_path, [(_pulse(180, 2e-3),), (pp.make_delay(9e-3),)] * 20)
+    (found,) = ir.sar_ratios(path, SYSTEM, one_channel)
+    assert (found.local_sar, found.global_sar) == pytest.approx((0.5, 0.5))
+
+
+def test_a_sequence_without_rf_has_no_sar_ratio(tmp_path, one_channel):
+    path = _written(tmp_path, [(pp.make_delay(1e-3),)] * 5)
+    assert ir.sar_ratios(path, SYSTEM, one_channel) == [ir.SarRatio(0.0, 0.0)]
+
+
+@pytest.mark.parametrize(("default_shim", "ratio"), [(None, 0.5), ((1, 0), 1.0)])
+def test_the_reference_pulse_is_played_in_the_default_shim(
+    tmp_path, default_shim, ratio
+):
+    # Two uncoupled channels: a pulse on the first alone deposits half of one
+    # on both.
+    vops = tmp_path / "vops.npz"
+    np.savez(vops, vops=np.eye(2)[None])
+    on_first = pp.make_rf_shim([1.0, 0.0])
+    path = _written(tmp_path, [(_pulse(180), on_first), (pp.make_delay(9e-3),)] * 20)
+    limits = ir.CheckLimits(vops=vops, default_shim=default_shim)
+    (found,) = ir.sar_ratios(path, SYSTEM, limits)
+    assert (found.local_sar, found.global_sar) == pytest.approx((ratio, 0.0))
+
+
+def test_sar_ratios_need_vops(train):
+    with pytest.raises(ValueError, match="need VOPs"):
+        ir.sar_ratios(train, SYSTEM, ir.CheckLimits())
+
+
+def test_the_checks_apply_no_sar_limit(tmp_path, one_channel):
+    # Thousands of W/kg by the VOP at a drive of 1 per Hz: no SAR limit applies.
+    path = _written(tmp_path, [(_pulse(180),), (pp.make_delay(49e-3),)] * 20)
+    assert ir.check(path, SYSTEM, limits=one_channel) == []
 
 
 def test_a_rotation_that_is_not_orthonormal_is_refused(diagonal):

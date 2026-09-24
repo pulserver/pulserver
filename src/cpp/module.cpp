@@ -144,6 +144,8 @@ py::dict summarize(const pulseg_collection *coll)
         entry["num_unique_rf"] = s.num_unique_rf;
         entry["num_tr_instances"] = s.num_tr_instances;
         entry["rf_amplitude_variable"] = s.rf_amplitude_variable;
+        entry["vop_sar_ratio"] = s.vop_sar_ratio;
+        entry["vop_global_sar_ratio"] = s.vop_global_sar_ratio;
         entry["tr_groups"] = tr_groups(coll, i);
         entry["rf"] = rf_spectra(coll, i, s.num_unique_rf);
         subsequences.append(entry);

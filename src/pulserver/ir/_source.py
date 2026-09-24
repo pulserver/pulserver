@@ -694,6 +694,8 @@ def conversion_payload(sequence: Any) -> dict[str, Any]:
             "enable_sar_burst_mode": int(
                 _numbers(declared, "EnableSarBurstMode", 1)[0]
             ),
+            "vop_sar_ratio": 0.0,
+            "vop_global_sar_ratio": 0.0,
             "name": str(declared.get("Name", "")),
             "next_sequence": str(declared.get("NextSequence", "")),
         },
