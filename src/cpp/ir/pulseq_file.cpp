@@ -16,6 +16,7 @@
 extern "C"
 {
 #include "pulseq_internal.h"
+#include "pulseq_file.h"
 }
 
 /* Every library starts absent: no rows, no count, and not read. */

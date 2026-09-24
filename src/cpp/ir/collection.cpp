@@ -13,12 +13,13 @@
 #include <stdlib.h>
 #include <math.h>
 
-/* Conversion keeps C linkage: it is the entry point the library declares in
- * pulseg_collection.h and pulseg_convert.h. */
+/* Conversion keeps C linkage: it is the entry point pulseg_convert.h
+ * declares. */
 extern "C"
 {
 #include "pulseg_internal.h"
 #include "pulseg.h"
+#include "pulseg_convert.h"
 }
 
 static int convert_collection(

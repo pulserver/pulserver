@@ -21,6 +21,7 @@
 #include "pulseg_cache.h"
 #include "pulseg_convert.h"
 #include "pulseq.h"
+#include "pulseq_file.h"
 
 namespace py = pybind11;
 
