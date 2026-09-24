@@ -52,7 +52,10 @@ Each series runs on its own copy of `PLUGIN`
 ({meth}`~pulserver.recon.ReconPlugin.spawn`), so state set in the hooks belongs
 to one series. `context.exam`, an {class}`~pulserver.recon.ExamCache`, is shared
 by the series of one exam: a coil calibration computed in one series can be
-stored there and read by the next.
+stored there and read by the next. Under the proxy each series runs in a process
+of its own, so a stored value reaches the next series pickled, through the
+exam's directory: it comes back as a copy, without its `cleanup`, and a value
+that cannot be pickled stays with its series.
 
 ## Non-Cartesian data
 

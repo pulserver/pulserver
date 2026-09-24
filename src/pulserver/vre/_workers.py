@@ -52,11 +52,18 @@ class WorkerPool:
         for _ in range(max(1, spares)):
             self._start()
 
-    def assign(self, plugin: Path | str, socket_path: Path | str) -> SpawnProcess:
-        """Hand a spare the plugin to run and the socket to reach the proxy on.
+    def assign(
+        self,
+        plugin: Path | str,
+        socket_path: Path | str,
+        exam_directory: Path | str | None = None,
+    ) -> SpawnProcess:
+        """Hand a spare the plugin to run, the socket to reach the proxy on and its exam directory.
 
         Starts a replacement spare before returning, so the next series does not
-        wait for an import.
+        wait for an import. The series' :class:`~pulserver.recon.ExamCache`
+        shares ``exam_directory`` with the exam's other series; ``None`` keeps
+        it to this series.
 
         Raises
         ------
@@ -69,7 +76,8 @@ class WorkerPool:
             if self._closed:
                 raise RuntimeError("the worker pool is closed")
             spare = self._spares.pop(0)
-        spare.pipe.send((str(socket_path), str(plugin)))
+        exam = None if exam_directory is None else str(exam_directory)
+        spare.pipe.send((str(socket_path), str(plugin), exam))
         spare.pipe.close()
         self._start()
         return spare.process
@@ -129,16 +137,19 @@ def _warm(pipe: Pipe) -> None:
         pipe.close()
     if assignment is None:
         return
-    socket_path, plugin = assignment
-    sys.exit(_reconstruct(socket_path, plugin))
+    sys.exit(_reconstruct(*assignment))
 
 
-def _reconstruct(socket_path: str, plugin_path: str) -> int:
+def _reconstruct(
+    socket_path: str, plugin_path: str, exam_directory: str | None = None
+) -> int:
     """Drive one series over the proxy's socket; the exit status of the worker."""
     stream = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     stream.connect(socket_path)
     connection = Connection(stream, auto_read_config_header=True)
-    exam = ExamCache(resolve_exam_id(connection.header) or ("series", socket_path))
+    exam = ExamCache(
+        resolve_exam_id(connection.header) or ("series", socket_path), exam_directory
+    )
     status = 0
     try:
         run_application(
