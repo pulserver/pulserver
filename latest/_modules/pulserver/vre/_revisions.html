@@ -238,6 +238,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../../../user-guide/running.html">Running the services</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../user-guide/scanner-sequences.html">Scanner sequences</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../user-guide/reconstruction-plugins.html">Reconstruction plugins</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/reconstruction-client.html">Reconstruction clients</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -529,6 +530,9 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">locate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">header</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Path</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""Return the revision directory a header names.</span>
 
+<span class="sd">        The session is a ``userParameterString``, ``&lt;pid&gt;-&lt;day&gt;``, and the</span>
+<span class="sd">        revision a ``userParameterLong``, or a string holding an integer.</span>
+
 <span class="sd">        Raises</span>
 <span class="sd">        ------</span>
 <span class="sd">        ValueError</span>
@@ -545,7 +549,7 @@
             <span class="p">)</span>
         <span class="k">try</span><span class="p">:</span>
             <span class="n">key</span> <span class="o">=</span> <span class="n">SessionKey</span><span class="o">.</span><span class="n">parse</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">session</span><span class="p">))</span>
-            <span class="n">number</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">revision</span><span class="p">)</span>
+            <span class="n">number</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">revision</span><span class="p">))</span>
         <span class="k">except</span> <span class="ne">ValueError</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                 <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">SESSION_PARAMETER</span><span class="si">}</span><span class="s2">=</span><span class="si">{</span><span class="n">session</span><span class="si">!r}</span><span class="s2"> </span><span class="si">{</span><span class="n">REVISION_PARAMETER</span><span class="si">}</span><span class="s2">=</span><span class="si">{</span><span class="n">revision</span><span class="si">!r}</span><span class="s2"> "</span>

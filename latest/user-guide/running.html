@@ -243,6 +243,7 @@
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Running the services</a></li>
 <li class="toctree-l2"><a class="reference internal" href="scanner-sequences.html">Scanner sequences</a></li>
 <li class="toctree-l2"><a class="reference internal" href="reconstruction-plugins.html">Reconstruction plugins</a></li>
+<li class="toctree-l2"><a class="reference internal" href="reconstruction-client.html">Reconstruction clients</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -701,7 +702,8 @@ imported again when its modification time changes.</p>
 refuses a series whose header names no generated revision. The reconstruction
 plugin is the one the scanner sequence names in its <code class="docutils literal notranslate"><span class="pre">recon</span></code> attribute; when it
 names none, the client’s config text names it, either as a bare plugin name or
-under <code class="docutils literal notranslate"><span class="pre">parameters.config</span></code>.</p>
+under <code class="docutils literal notranslate"><span class="pre">parameters.config</span></code>. The messages and fields the client sends are listed
+in <a class="reference internal" href="reconstruction-client.html"><span class="doc">Reconstruction clients</span></a>.</p>
 <p>A series that finds every slot busy is written to
 <code class="docutils literal notranslate"><span class="pre">bucket/&lt;session&gt;/queue/</span></code> as it arrives and reconstructed once a slot frees;
 the client stays connected meanwhile.</p>
@@ -717,6 +719,7 @@ is running before it exits.</p>
 <ul class="simple">
 <li><p><a class="reference internal" href="../explanations/architecture.html"><span class="doc">Architecture</span></a> — the services and what passes between them.</p></li>
 <li><p><a class="reference internal" href="../explanations/sessions.html"><span class="doc">Design sessions and revisions</span></a> — the bucket layout and revision identity.</p></li>
+<li><p><a class="reference internal" href="reconstruction-client.html"><span class="doc">Reconstruction clients</span></a> — the MRD stream of a series.</p></li>
 <li><p><a class="reference internal" href="../api/host.html"><span class="doc">Host daemon</span></a> and <a class="reference internal" href="../api/vre.html"><span class="doc">Reconstruction proxy</span></a> — the daemon and proxy interfaces.</p></li>
 </ul>
 </section>

@@ -101,6 +101,7 @@ past which the worker is terminated and the client told so.
 ## See also
 
 * {doc}`../user-guide/reconstruction-plugins` — writing a reconstruction.
+* {doc}`../user-guide/reconstruction-client` — the MRD stream a reconstruction client sends.
 * {doc}`../api/vre` — the proxy and the enrichment interface.
 * {doc}`../api/recon` — the reconstruction plugin interface.
 * {doc}`/generated/gallery/03-reconstruction/01_enrichment` — enrichment and reconstruction of a simulated series.

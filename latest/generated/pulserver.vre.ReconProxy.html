@@ -241,6 +241,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../user-guide/running.html">Running the services</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../user-guide/scanner-sequences.html">Scanner sequences</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../user-guide/reconstruction-plugins.html">Reconstruction plugins</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../user-guide/reconstruction-client.html">Reconstruction clients</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -530,13 +531,17 @@
 <span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pulserver.vre.</span></span><span class="sig-name descname"><span class="pre">ReconProxy</span></span><a class="reference internal" href="../_modules/pulserver/vre/_proxy.html#ReconProxy"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.vre.ReconProxy" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/builtins/functions.html#object" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
 <p>Routes each series of an MRD stream to a reconstruction worker.</p>
-<p>One thread per client connection. The header’s <code class="docutils literal notranslate"><span class="pre">pulserver_session</span></code> and
-<code class="docutils literal notranslate"><span class="pre">pulserver_revision</span></code> name the design the series was played from; its
-readout table enriches the header and every acquisition. The readouts
-arrive demodulated to the prescribed field-of-view centre by the playout
+<p>One thread per client connection, which carries one series: an optional
+config text, the header, one acquisition per readout of the chain and a
+<code class="docutils literal notranslate"><span class="pre">CLOSE</span></code>. The header’s <code class="docutils literal notranslate"><span class="pre">pulserver_session</span></code> and <code class="docutils literal notranslate"><span class="pre">pulserver_revision</span></code>
+name the design the series was played from; its readout table enriches the
+header and every acquisition. The readouts arrive demodulated to the
+prescribed field-of-view centre by the playout
 (<a class="reference internal" href="pulserver.ir.prescribe.html#pulserver.ir.prescribe" title="pulserver.ir.prescribe"><code class="xref py py-func docutils literal notranslate"><span class="pre">pulserver.ir.prescribe()</span></code></a>), and their samples are passed on as
 received. The reconstruction plugin is the revision’s, falling back to
-the name in the client’s config text.</p>
+the name in the client’s config text. A series that breaks this is refused
+with a text naming the reason and a <code class="docutils literal notranslate"><span class="pre">CLOSE</span></code>, and what the client still
+sends is discarded until it closes the connection.</p>
 <p>A series holds a slot for as long as it runs. On a host with GPUs, found
 through <code class="docutils literal notranslate"><span class="pre">CUDA_VISIBLE_DEVICES</span></code> or <code class="docutils literal notranslate"><span class="pre">nvidia-smi</span></code>, each slot holds one,
 <code class="docutils literal notranslate"><span class="pre">gpu_slots</span></code> slots per GPU, and the reconstruction reads it as

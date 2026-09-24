@@ -238,6 +238,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../../../user-guide/running.html">Running the services</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../user-guide/scanner-sequences.html">Scanner sequences</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../user-guide/reconstruction-plugins.html">Reconstruction plugins</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/reconstruction-client.html">Reconstruction clients</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -466,6 +467,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">ismrmrd</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">ismrmrd.xsd</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">xsd</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">..recon._runtime</span><span class="w"> </span><span class="kn">import</span> <span class="n">constants</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..recon._runtime.concurrency</span><span class="w"> </span><span class="kn">import</span> <span class="n">Slot</span><span class="p">,</span> <span class="n">Slots</span><span class="p">,</span> <span class="n">slot_devices</span>
@@ -486,6 +488,8 @@
 <span class="n">_WORKER_TIMEOUT</span> <span class="o">=</span> <span class="mf">120.0</span>
 <span class="c1"># How often the accept loop looks at whether the proxy is closing.</span>
 <span class="n">_ACCEPT_POLL</span> <span class="o">=</span> <span class="mf">0.5</span>
+<span class="c1"># How long a refused client may send nothing before the proxy stops reading it.</span>
+<span class="n">_DRAIN_IDLE</span> <span class="o">=</span> <span class="mf">30.0</span>
 
 
 <div class="viewcode-block" id="ReconProxy">
@@ -493,13 +497,17 @@
 <span class="k">class</span><span class="w"> </span><span class="nc">ReconProxy</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Routes each series of an MRD stream to a reconstruction worker.</span>
 
-<span class="sd">    One thread per client connection. The header's ``pulserver_session`` and</span>
-<span class="sd">    ``pulserver_revision`` name the design the series was played from; its</span>
-<span class="sd">    readout table enriches the header and every acquisition. The readouts</span>
-<span class="sd">    arrive demodulated to the prescribed field-of-view centre by the playout</span>
+<span class="sd">    One thread per client connection, which carries one series: an optional</span>
+<span class="sd">    config text, the header, one acquisition per readout of the chain and a</span>
+<span class="sd">    ``CLOSE``. The header's ``pulserver_session`` and ``pulserver_revision``</span>
+<span class="sd">    name the design the series was played from; its readout table enriches the</span>
+<span class="sd">    header and every acquisition. The readouts arrive demodulated to the</span>
+<span class="sd">    prescribed field-of-view centre by the playout</span>
 <span class="sd">    (:func:`pulserver.ir.prescribe`), and their samples are passed on as</span>
 <span class="sd">    received. The reconstruction plugin is the revision's, falling back to</span>
-<span class="sd">    the name in the client's config text.</span>
+<span class="sd">    the name in the client's config text. A series that breaks this is refused</span>
+<span class="sd">    with a text naming the reason and a ``CLOSE``, and what the client still</span>
+<span class="sd">    sends is discarded until it closes the connection.</span>
 
 <span class="sd">    A series holds a slot for as long as it runs. On a host with GPUs, found</span>
 <span class="sd">    through ``CUDA_VISIBLE_DEVICES`` or ``nvidia-smi``, each slot holds one,</span>
@@ -653,15 +661,11 @@
         <span class="c1"># wrote rather than the mapping a parser makes of it.</span>
         <span class="n">connection</span><span class="o">.</span><span class="n">add_reader</span><span class="p">(</span><span class="n">constants</span><span class="o">.</span><span class="n">GADGET_MESSAGE_CONFIG</span><span class="p">,</span> <span class="n">read_text</span><span class="p">)</span>
         <span class="k">try</span><span class="p">:</span>
-            <span class="n">config</span> <span class="o">=</span> <span class="n">_first</span><span class="p">(</span><span class="n">connection</span><span class="p">)</span>
-            <span class="n">header</span> <span class="o">=</span> <span class="n">_first</span><span class="p">(</span><span class="n">connection</span><span class="p">)</span>
-            <span class="k">if</span> <span class="n">header</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"the stream carried no header"</span><span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_series</span><span class="p">(</span><span class="n">connection</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">config</span> <span class="ow">or</span> <span class="s2">""</span><span class="p">),</span> <span class="n">header</span><span class="p">)</span>
+            <span class="n">config</span><span class="p">,</span> <span class="n">header</span> <span class="o">=</span> <span class="n">_opening</span><span class="p">(</span><span class="n">connection</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_series</span><span class="p">(</span><span class="n">connection</span><span class="p">,</span> <span class="n">config</span><span class="p">,</span> <span class="n">header</span><span class="p">)</span>
         <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>
             <span class="n">_log</span><span class="o">.</span><span class="n">exception</span><span class="p">(</span><span class="s2">"series failed"</span><span class="p">)</span>
-            <span class="k">with</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">suppress</span><span class="p">(</span><span class="ne">Exception</span><span class="p">):</span>
-                <span class="n">connection</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="sa">f</span><span class="s2">"pulserver: </span><span class="si">{</span><span class="n">error</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+            <span class="n">_refuse</span><span class="p">(</span><span class="n">connection</span><span class="p">,</span> <span class="n">error</span><span class="p">)</span>
         <span class="k">finally</span><span class="p">:</span>
             <span class="n">connection</span><span class="o">.</span><span class="n">shutdown_close</span><span class="p">()</span>
 
@@ -843,6 +847,48 @@
         <span class="k">return</span> <span class="kc">None</span>
 
 
+<span class="k">def</span><span class="w"> </span><span class="nf">_refuse</span><span class="p">(</span><span class="n">connection</span><span class="p">:</span> <span class="n">Connection</span><span class="p">,</span> <span class="n">error</span><span class="p">:</span> <span class="ne">Exception</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Send why a series failed and a CLOSE, then discard what the client still sends.</span>
+
+<span class="sd">    The client reads the reason once it has sent its stream; closing the</span>
+<span class="sd">    socket while it sends would end its stream with a reset instead.</span>
+<span class="sd">    """</span>
+    <span class="k">with</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">suppress</span><span class="p">(</span><span class="ne">Exception</span><span class="p">):</span>
+        <span class="n">connection</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="sa">f</span><span class="s2">"pulserver: </span><span class="si">{</span><span class="n">error</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+    <span class="n">connection</span><span class="o">.</span><span class="n">send_close</span><span class="p">()</span>
+    <span class="n">raw</span> <span class="o">=</span> <span class="n">connection</span><span class="o">.</span><span class="n">socket</span><span class="o">.</span><span class="n">socket</span>
+    <span class="k">with</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">suppress</span><span class="p">(</span><span class="ne">OSError</span><span class="p">):</span>
+        <span class="n">raw</span><span class="o">.</span><span class="n">shutdown</span><span class="p">(</span><span class="n">socket</span><span class="o">.</span><span class="n">SHUT_WR</span><span class="p">)</span>
+        <span class="n">raw</span><span class="o">.</span><span class="n">settimeout</span><span class="p">(</span><span class="n">_DRAIN_IDLE</span><span class="p">)</span>
+        <span class="k">while</span> <span class="n">raw</span><span class="o">.</span><span class="n">recv</span><span class="p">(</span><span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="mi">16</span><span class="p">):</span>
+            <span class="k">pass</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_opening</span><span class="p">(</span><span class="n">connection</span><span class="p">:</span> <span class="n">Connection</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Return the config text and the header a stream opens with.</span>
+
+<span class="sd">    The config is optional: a stream may open with its header, which leaves</span>
+<span class="sd">    the reconstruction to the one the revision names.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If the stream carries no header after at most a config.</span>
+<span class="sd">    """</span>
+    <span class="n">config</span> <span class="o">=</span> <span class="n">_first</span><span class="p">(</span><span class="n">connection</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="n">xsd</span><span class="o">.</span><span class="n">ismrmrdHeader</span><span class="p">):</span>
+        <span class="k">return</span> <span class="s2">""</span><span class="p">,</span> <span class="n">config</span>
+    <span class="n">header</span> <span class="o">=</span> <span class="n">_first</span><span class="p">(</span><span class="n">connection</span><span class="p">)</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="k">else</span> <span class="n">config</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">header</span><span class="p">,</span> <span class="n">xsd</span><span class="o">.</span><span class="n">ismrmrdHeader</span><span class="p">):</span>
+        <span class="n">found</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="s2">"nothing"</span>
+            <span class="k">if</span> <span class="n">header</span> <span class="ow">is</span> <span class="kc">None</span>
+            <span class="k">else</span> <span class="sa">f</span><span class="s2">"a message of type </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">header</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">"</span>
+        <span class="p">)</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"the stream carries </span><span class="si">{</span><span class="n">found</span><span class="si">}</span><span class="s2"> where its MRD header belongs"</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">config</span><span class="p">,</span> <span class="n">header</span>
+
+
 <span class="k">def</span><span class="w"> </span><span class="nf">_config_plugin</span><span class="p">(</span><span class="n">config</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Return the plugin a config text names.</span>
 
@@ -871,27 +917,40 @@
 <span class="k">def</span><span class="w"> </span><span class="nf">_enriched</span><span class="p">(</span><span class="n">client</span><span class="p">:</span> <span class="n">Connection</span><span class="p">,</span> <span class="n">revision</span><span class="p">:</span> <span class="n">Revision</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Any</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">"""Yield the client's stream up to its close, acquisitions enriched in play order.</span>
 
-<span class="sd">    Acquisitions are matched to readouts by position, so once the client numbers</span>
-<span class="sd">    them, every ``scan_counter`` must follow the previous one by one: a gap or a</span>
-<span class="sd">    repeat is a dropped or duplicated readout that would shift every later row.</span>
-<span class="sd">    A stream whose counters stay 0 is not numbered and not checked.</span>
+<span class="sd">    Acquisitions are matched to readouts by position, so the stream carries</span>
+<span class="sd">    one per readout of the chain, and once the client numbers them, every</span>
+<span class="sd">    ``scan_counter`` must follow the previous one by one: a gap or a repeat is</span>
+<span class="sd">    a dropped or duplicated readout that would shift every later row. A stream</span>
+<span class="sd">    whose counters stay 0 is not numbered and not checked. An acquisition</span>
+<span class="sd">    flagged ``LAST_IN_MEASUREMENT`` ends the stream, so only the last may</span>
+<span class="sd">    carry the flag.</span>
 
 <span class="sd">    Raises</span>
 <span class="sd">    ------</span>
 <span class="sd">    ValueError</span>
-<span class="sd">        If the stream carries more acquisitions than the sequence plays, or its</span>
-<span class="sd">        scan counters skip or repeat one.</span>
+<span class="sd">        If the stream carries more or fewer acquisitions than the sequence</span>
+<span class="sd">        plays, a second header, an acquisition flagged</span>
+<span class="sd">        ``LAST_IN_MEASUREMENT`` before the last, or scan counters that skip or</span>
+<span class="sd">        repeat one.</span>
 <span class="sd">    """</span>
     <span class="n">index</span> <span class="o">=</span> <span class="mi">0</span>
     <span class="n">previous</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">readouts</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">revision</span><span class="o">.</span><span class="n">table</span><span class="p">)</span>
     <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">client</span><span class="p">:</span>
         <span class="k">if</span> <span class="n">_is_close_marker</span><span class="p">(</span><span class="n">item</span><span class="p">):</span>
-            <span class="k">return</span>
+            <span class="k">break</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="n">xsd</span><span class="o">.</span><span class="n">ismrmrdHeader</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"the stream carries a second MRD header"</span><span class="p">)</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="n">ismrmrd</span><span class="o">.</span><span class="n">Acquisition</span><span class="p">):</span>
-            <span class="k">if</span> <span class="n">index</span> <span class="o">&gt;=</span> <span class="nb">len</span><span class="p">(</span><span class="n">revision</span><span class="o">.</span><span class="n">table</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">index</span> <span class="o">&gt;=</span> <span class="n">readouts</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                    <span class="sa">f</span><span class="s2">"the stream carries more than the </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">revision</span><span class="o">.</span><span class="n">table</span><span class="p">)</span><span class="si">}</span><span class="s2"> readouts "</span>
+                    <span class="sa">f</span><span class="s2">"the stream carries more than the </span><span class="si">{</span><span class="n">readouts</span><span class="si">}</span><span class="s2"> readouts "</span>
                     <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">revision</span><span class="o">.</span><span class="n">directory</span><span class="si">}</span><span class="s2"> plays"</span>
+                <span class="p">)</span>
+            <span class="k">if</span> <span class="n">item</span><span class="o">.</span><span class="n">isFlagSet</span><span class="p">(</span><span class="n">ismrmrd</span><span class="o">.</span><span class="n">ACQ_LAST_IN_MEASUREMENT</span><span class="p">)</span> <span class="ow">and</span> <span class="n">index</span> <span class="o">+</span> <span class="mi">1</span> <span class="o">&lt;</span> <span class="n">readouts</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">"acquisition </span><span class="si">{</span><span class="n">index</span><span class="si">}</span><span class="s2"> is flagged LAST_IN_MEASUREMENT, which ends "</span>
+                    <span class="sa">f</span><span class="s2">"the stream, and </span><span class="si">{</span><span class="n">revision</span><span class="o">.</span><span class="n">directory</span><span class="si">}</span><span class="s2"> plays </span><span class="si">{</span><span class="n">readouts</span><span class="si">}</span><span class="s2"> readouts"</span>
                 <span class="p">)</span>
             <span class="n">counter</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">item</span><span class="o">.</span><span class="n">scan_counter</span><span class="p">)</span>
             <span class="n">numbered</span> <span class="o">=</span> <span class="n">previous</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="p">(</span><span class="n">previous</span><span class="p">,</span> <span class="n">counter</span><span class="p">)</span> <span class="o">!=</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
@@ -905,6 +964,11 @@
             <span class="n">enrich_acquisition</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="n">revision</span><span class="o">.</span><span class="n">table</span><span class="p">,</span> <span class="n">index</span><span class="p">)</span>
             <span class="n">index</span> <span class="o">+=</span> <span class="mi">1</span>
         <span class="k">yield</span> <span class="n">item</span>
+    <span class="k">if</span> <span class="n">index</span> <span class="o">&lt;</span> <span class="n">readouts</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"the stream ended after </span><span class="si">{</span><span class="n">index</span><span class="si">}</span><span class="s2"> of the </span><span class="si">{</span><span class="n">readouts</span><span class="si">}</span><span class="s2"> readouts "</span>
+            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">revision</span><span class="o">.</span><span class="n">directory</span><span class="si">}</span><span class="s2"> plays"</span>
+        <span class="p">)</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_forward</span><span class="p">(</span><span class="n">client</span><span class="p">:</span> <span class="n">Connection</span><span class="p">,</span> <span class="n">worker</span><span class="p">:</span> <span class="n">Connection</span><span class="p">,</span> <span class="n">revision</span><span class="p">:</span> <span class="n">Revision</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
