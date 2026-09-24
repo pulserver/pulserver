@@ -551,6 +551,8 @@ designed.</p></li>
 <li><p><strong>cache_ext</strong> – Extension of the cache file, dot included.</p></li>
 <li><p><strong>verify_signature</strong> – Refuse a file whose contents do not match the signature it carries. A
 file carrying none is read either way.</p></li>
+<li><p><strong>sar_ratios</strong> – One per file of the chain, as <a class="reference internal" href="pulserver.ir.sar_ratios.html#pulserver.ir.sar_ratios" title="pulserver.ir.sar_ratios"><code class="xref py py-func docutils literal notranslate"><span class="pre">sar_ratios()</span></code></a> returns them, written
+into each subsequence of the cache; zero when None.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
@@ -561,7 +563,8 @@ file carrying none is read either way.</p></li>
 </dd>
 <dt class="field-even">Raises<span class="colon">:</span></dt>
 <dd class="field-even"><ul class="simple">
-<li><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If a file of the chain cannot be read, verified or segmented.</p></li>
+<li><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If a file of the chain cannot be read, verified or segmented, or
+    <code class="docutils literal notranslate"><span class="pre">sar_ratios</span></code> does not give one per file.</p></li>
 <li><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#OSError" title="(in Python v3.14)"><strong>OSError</strong></a> – If no cache was written.</p></li>
 </ul>
 </dd>

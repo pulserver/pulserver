@@ -532,7 +532,9 @@
 <p>Each subsequence lists its unique RF definitions under <code class="docutils literal notranslate"><span class="pre">rf</span></code>: the
 bandwidth at half the spectral peak, the number of bands, each band’s
 offset from the carrier and the widest band’s bandwidth, all in Hz, as
-<code class="docutils literal notranslate"><span class="pre">pypulseqpp.calc_rf_bandwidth</span></code> measures them.</p>
+<code class="docutils literal notranslate"><span class="pre">pypulseqpp.calc_rf_bandwidth</span></code> measures them. <code class="docutils literal notranslate"><span class="pre">vop_sar_ratio</span></code> and
+<code class="docutils literal notranslate"><span class="pre">vop_global_sar_ratio</span></code> are those the cache was written with, zero when
+the chain is read and segmented again.</p>
 <p>With <code class="docutils literal notranslate"><span class="pre">cache_ext</span></code>, the cache beside the file is loaded instead of the
 chain being read and segmented again; this build loads only vendor-neutral
 caches, and only when the size recorded in the cache matches the file.</p>

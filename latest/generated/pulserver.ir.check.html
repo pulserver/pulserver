@@ -535,9 +535,9 @@ exempt, as the scanner plays it. It is then checked with
 <code class="docutils literal notranslate"><span class="pre">pypulseqpp.check_timing</span></code>, gradient continuity included, and with
 <code class="docutils literal notranslate"><span class="pre">pypulseqpp.safety.check_max_grad</span></code> and <code class="docutils literal notranslate"><span class="pre">check_max_slew</span></code>, against the
 gradient limits, dead times and ringdown time of <code class="docutils literal notranslate"><span class="pre">system</span></code>; and with
-<code class="docutils literal notranslate"><span class="pre">check_pns</span></code>, <code class="docutils literal notranslate"><span class="pre">check_mech_resonance</span></code> and <code class="docutils literal notranslate"><span class="pre">check_sar</span></code> where <code class="docutils literal notranslate"><span class="pre">limits</span></code>
-carries a nerve model, forbidden bands or VOPs. The waveforms are timed by
-the file’s own rasters.</p>
+<code class="docutils literal notranslate"><span class="pre">check_pns</span></code> and <code class="docutils literal notranslate"><span class="pre">check_mech_resonance</span></code> where <code class="docutils literal notranslate"><span class="pre">limits</span></code> carries a
+nerve model or forbidden bands. The waveforms are timed by the file’s own
+rasters. VOPs are not checked here: see <a class="reference internal" href="pulserver.ir.sar_ratios.html#pulserver.ir.sar_ratios" title="pulserver.ir.sar_ratios"><code class="xref py py-func docutils literal notranslate"><span class="pre">sar_ratios()</span></code></a>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -545,7 +545,7 @@ the file’s own rasters.</p>
 <li><p><strong>system</strong> – The scanner’s gradient limits, dead times and ringdown time.</p></li>
 <li><p><strong>rotation</strong> – <code class="docutils literal notranslate"><span class="pre">(3,</span> <span class="pre">3)</span></code> prescription rotation from logical to physical axes, a
 reflection included; the identity by default.</p></li>
-<li><p><strong>limits</strong> – The nerve, resonance and SAR limits; none by default.</p></li>
+<li><p><strong>limits</strong> – The nerve and resonance limits; none by default.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>

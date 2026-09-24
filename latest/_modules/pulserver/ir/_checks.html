@@ -446,14 +446,14 @@
                 <article class="bd-article">
                   
   <h1>Source code for pulserver.ir._checks</h1><div class="highlight"><pre>
-<span></span><span class="sd">"""The checks a sequence chain passes before its IR is built."""</span>
+<span></span><span class="sd">"""The checks a sequence chain passes before its IR is built, and its SAR against a reference."""</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">contextlib</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">copy</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">io</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span><span class="p">,</span> <span class="n">replace</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
 
@@ -472,12 +472,17 @@
     <span class="s2">"block_duration_raster"</span><span class="p">,</span>
 <span class="p">)</span>
 
+<span class="c1">#: The reference pulse every pulse of a repetition is replaced by: hard,</span>
+<span class="c1">#: 180 degrees, 1 ms, in the default channel shim.</span>
+<span class="n">REFERENCE_FLIP</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span>
+<span class="n">REFERENCE_DURATION</span> <span class="o">=</span> <span class="mf">1e-3</span>
+
 
 <div class="viewcode-block" id="CheckLimits">
 <a class="viewcode-back" href="../../../generated/pulserver.ir.CheckLimits.html#pulserver.ir.CheckLimits">[docs]</a>
 <span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">CheckLimits</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""The nerve, resonance and SAR limits a chain is checked against, besides ``pypulseqpp.Opts``.</span>
+<span class="w">    </span><span class="sd">"""The nerve and resonance limits of a chain, and the VOPs of its SAR ratios, besides ``pypulseqpp.Opts``.</span>
 
 <span class="sd">    Attributes</span>
 <span class="sd">    ----------</span>
@@ -490,34 +495,52 @@
 <span class="sd">        Forbidden gradient bands of ``check_mech_resonance``, on the physical</span>
 <span class="sd">        axes. Without any, the resonance check is left out.</span>
 <span class="sd">    vops</span>
-<span class="sd">        VOPs of ``check_sar``, or the ``.mat`` or ``.npz`` file holding them,</span>
-<span class="sd">        which is read when a chain is checked. ``None`` leaves out the SAR</span>
-<span class="sd">        check.</span>
+<span class="sd">        VOPs, or the ``.mat`` or ``.npz`` file holding them, which</span>
+<span class="sd">        :func:`sar_ratios` reads; nothing is refused on SAR.</span>
 <span class="sd">    drive_per_hz</span>
 <span class="sd">        Channel drive per Hz of RF amplitude, in the VOPs' drive unit: one</span>
-<span class="sd">        value, or one per channel.</span>
-<span class="sd">    local_sar_limit, global_sar_limit</span>
-<span class="sd">        SAR allowed over each window ``check_sar`` averages, in W/kg.</span>
+<span class="sd">        value, or one per channel. A scale common to every channel cancels in</span>
+<span class="sd">        the ratios.</span>
+<span class="sd">    default_shim</span>
+<span class="sd">        Complex channel weights of a pulse played without an RF shim, and of</span>
+<span class="sd">        the reference pulse; equal weights when None.</span>
 
 <span class="sd">    Raises</span>
 <span class="sd">    ------</span>
 <span class="sd">    ValueError</span>
-<span class="sd">        If VOPs are given without a drive, or the PNS limit is not positive.</span>
+<span class="sd">        If the PNS limit is not positive.</span>
 <span class="sd">    """</span>
 
     <span class="n">pns</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">pns_limit</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span>
     <span class="n">bands</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">safety</span><span class="o">.</span><span class="n">ForbiddenBand</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="p">()</span>
     <span class="n">vops</span><span class="p">:</span> <span class="n">safety</span><span class="o">.</span><span class="n">VopModel</span> <span class="o">|</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="n">drive_per_hz</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="n">local_sar_limit</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">10.0</span>
-    <span class="n">global_sar_limit</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">3.2</span>
+    <span class="n">drive_per_hz</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1.0</span>
+    <span class="n">default_shim</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">complex</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">__post_init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">vops</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">drive_per_hz</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"a VOP check needs the channel drive per Hz"</span><span class="p">)</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">pns_limit</span> <span class="o">&lt;=</span> <span class="mf">0.0</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"the PNS limit must be positive"</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="SarRatio">
+<a class="viewcode-back" href="../../../generated/pulserver.ir.SarRatio.html#pulserver.ir.SarRatio">[docs]</a>
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">SarRatio</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""A subsequence's RF energy at the VOPs, against the reference pulse.</span>
+
+<span class="sd">    ``local_sar`` is the largest, over the subsequence's repetitions and the</span>
+<span class="sd">    VOPs, of the energy a repetition deposits at a VOP over the energy there</span>
+<span class="sd">    of the same repetition with each of its pulses replaced by the reference</span>
+<span class="sd">    pulse; ``global_sar`` is that ratio through the global SAR matrix. A</span>
+<span class="sd">    scanner's SAR for the subsequence is the ratio times its SAR for that</span>
+<span class="sd">    reference repetition. Both are 0 without RF, and ``global_sar`` is 0</span>
+<span class="sd">    without a global matrix.</span>
+<span class="sd">    """</span>
+
+    <span class="n">local_sar</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="n">global_sar</span><span class="p">:</span> <span class="nb">float</span></div>
 
 
 
@@ -538,9 +561,9 @@
 <span class="sd">    ``pypulseqpp.check_timing``, gradient continuity included, and with</span>
 <span class="sd">    ``pypulseqpp.safety.check_max_grad`` and ``check_max_slew``, against the</span>
 <span class="sd">    gradient limits, dead times and ringdown time of ``system``; and with</span>
-<span class="sd">    ``check_pns``, ``check_mech_resonance`` and ``check_sar`` where ``limits``</span>
-<span class="sd">    carries a nerve model, forbidden bands or VOPs. The waveforms are timed by</span>
-<span class="sd">    the file's own rasters.</span>
+<span class="sd">    ``check_pns`` and ``check_mech_resonance`` where ``limits`` carries a</span>
+<span class="sd">    nerve model or forbidden bands. The waveforms are timed by the file's own</span>
+<span class="sd">    rasters. VOPs are not checked here: see :func:`sar_ratios`.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
@@ -552,7 +575,7 @@
 <span class="sd">        ``(3, 3)`` prescription rotation from logical to physical axes, a</span>
 <span class="sd">        reflection included; the identity by default.</span>
 <span class="sd">    limits</span>
-<span class="sd">        The nerve, resonance and SAR limits; none by default.</span>
+<span class="sd">        The nerve and resonance limits; none by default.</span>
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
@@ -567,8 +590,6 @@
 <span class="sd">        orthonormal.</span>
 <span class="sd">    """</span>
     <span class="n">limits</span> <span class="o">=</span> <span class="n">CheckLimits</span><span class="p">()</span> <span class="k">if</span> <span class="n">limits</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">limits</span>
-    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">limits</span><span class="o">.</span><span class="n">vops</span><span class="p">,</span> <span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="n">Path</span><span class="p">)):</span>
-        <span class="n">limits</span> <span class="o">=</span> <span class="n">replace</span><span class="p">(</span><span class="n">limits</span><span class="p">,</span> <span class="n">vops</span><span class="o">=</span><span class="n">safety</span><span class="o">.</span><span class="n">read_vops</span><span class="p">(</span><span class="n">limits</span><span class="o">.</span><span class="n">vops</span><span class="p">))</span>
     <span class="k">try</span><span class="p">:</span>
         <span class="n">chain_read</span> <span class="o">=</span> <span class="n">read_chain</span><span class="p">(</span><span class="n">seq_path</span><span class="p">,</span> <span class="n">verify</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
     <span class="k">except</span> <span class="ne">RuntimeError</span> <span class="k">as</span> <span class="n">failure</span><span class="p">:</span>
@@ -630,8 +651,6 @@
         <span class="n">problems</span> <span class="o">+=</span> <span class="n">_pns</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">opts</span><span class="p">,</span> <span class="n">limits</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">limits</span><span class="o">.</span><span class="n">bands</span><span class="p">:</span>
         <span class="n">problems</span> <span class="o">+=</span> <span class="n">_resonance</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">opts</span><span class="p">,</span> <span class="n">limits</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">limits</span><span class="o">.</span><span class="n">vops</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">problems</span> <span class="o">+=</span> <span class="n">_sar</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">limits</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">problems</span>
 
 
@@ -662,27 +681,81 @@
     <span class="p">]</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_sar</span><span class="p">(</span><span class="n">sequence</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Sequence</span><span class="p">,</span> <span class="n">limits</span><span class="p">:</span> <span class="n">CheckLimits</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
-    <span class="n">_</span><span class="p">,</span> <span class="n">found</span> <span class="o">=</span> <span class="n">safety</span><span class="o">.</span><span class="n">check_sar</span><span class="p">(</span>
-        <span class="n">sequence</span><span class="p">,</span>
-        <span class="n">limits</span><span class="o">.</span><span class="n">vops</span><span class="p">,</span>
-        <span class="n">drive_per_hz</span><span class="o">=</span><span class="n">limits</span><span class="o">.</span><span class="n">drive_per_hz</span><span class="p">,</span>
-        <span class="n">local_limit</span><span class="o">=</span><span class="n">limits</span><span class="o">.</span><span class="n">local_sar_limit</span><span class="p">,</span>
-        <span class="n">global_limit</span><span class="o">=</span><span class="n">limits</span><span class="o">.</span><span class="n">global_sar_limit</span><span class="p">,</span>
+<div class="viewcode-block" id="sar_ratios">
+<a class="viewcode-back" href="../../../generated/pulserver.ir.sar_ratios.html#pulserver.ir.sar_ratios">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">sar_ratios</span><span class="p">(</span>
+    <span class="n">seq_path</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span> <span class="n">system</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Opts</span><span class="p">,</span> <span class="n">limits</span><span class="p">:</span> <span class="n">CheckLimits</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">SarRatio</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Return the SAR ratios of each file of a chain against the reference pulse.</span>
+
+<span class="sd">    The reference pulse is hard, 180 degrees and 1 ms, played in the default</span>
+<span class="sd">    shim of ``limits``; a pulse played in an RF shim is weighed through it. A</span>
+<span class="sd">    repetition is a window ``pypulseqpp.safety.check_sar`` averages over: each</span>
+<span class="sd">    repetition the block definitions repeat with, and the blocks before the</span>
+<span class="sd">    first and after the last.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    seq_path</span>
+<span class="sd">        The first file of the chain.</span>
+<span class="sd">    system</span>
+<span class="sd">        The rasters and RF dead times the reference pulse is made with.</span>
+<span class="sd">    limits</span>
+<span class="sd">        The VOPs, channel drive and default shim.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    list of SarRatio</span>
+<span class="sd">        One per file, in play order.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If ``limits`` carries no VOPs, a file of the chain cannot be read, or a</span>
+<span class="sd">        pulse or shim weighs another number of channels than the VOPs.</span>
+<span class="sd">    """</span>
+    <span class="k">if</span> <span class="n">limits</span><span class="o">.</span><span class="n">vops</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"SAR ratios need VOPs"</span><span class="p">)</span>
+    <span class="n">vops</span> <span class="o">=</span> <span class="n">limits</span><span class="o">.</span><span class="n">vops</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">vops</span><span class="p">,</span> <span class="n">safety</span><span class="o">.</span><span class="n">VopModel</span><span class="p">):</span>
+        <span class="n">vops</span> <span class="o">=</span> <span class="n">safety</span><span class="o">.</span><span class="n">read_vops</span><span class="p">(</span><span class="n">vops</span><span class="p">)</span>
+    <span class="n">drive</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"drive_per_hz"</span><span class="p">:</span> <span class="n">limits</span><span class="o">.</span><span class="n">drive_per_hz</span><span class="p">,</span> <span class="s2">"default_shim"</span><span class="p">:</span> <span class="n">limits</span><span class="o">.</span><span class="n">default_shim</span><span class="p">}</span>
+    <span class="n">reference</span> <span class="o">=</span> <span class="n">pp</span><span class="o">.</span><span class="n">Sequence</span><span class="p">(</span><span class="n">system</span><span class="p">)</span>
+    <span class="n">reference</span><span class="o">.</span><span class="n">add_block</span><span class="p">(</span>
+        <span class="n">pp</span><span class="o">.</span><span class="n">make_block_pulse</span><span class="p">(</span>
+            <span class="n">flip_angle</span><span class="o">=</span><span class="n">REFERENCE_FLIP</span><span class="p">,</span> <span class="n">duration</span><span class="o">=</span><span class="n">REFERENCE_DURATION</span><span class="p">,</span> <span class="n">system</span><span class="o">=</span><span class="n">system</span>
+        <span class="p">)</span>
     <span class="p">)</span>
-    <span class="n">problems</span> <span class="o">=</span> <span class="p">[]</span>
-    <span class="n">local</span><span class="p">,</span> <span class="n">whole</span> <span class="o">=</span> <span class="n">found</span><span class="o">.</span><span class="n">worst_local</span><span class="p">,</span> <span class="n">found</span><span class="o">.</span><span class="n">worst_global</span>
-    <span class="k">if</span> <span class="n">local</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">local</span><span class="o">.</span><span class="n">sar</span> <span class="o">&gt;</span> <span class="n">limits</span><span class="o">.</span><span class="n">local_sar_limit</span><span class="p">:</span>
-        <span class="n">problems</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-            <span class="sa">f</span><span class="s2">"local SAR of </span><span class="si">{</span><span class="n">local</span><span class="o">.</span><span class="n">sar</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2"> W/kg at VOP </span><span class="si">{</span><span class="n">local</span><span class="o">.</span><span class="n">vop</span><span class="si">}</span><span class="s2"> over blocks "</span>
-            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">local</span><span class="o">.</span><span class="n">first</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="n">local</span><span class="o">.</span><span class="n">last</span><span class="si">}</span><span class="s2"> exceeds </span><span class="si">{</span><span class="n">limits</span><span class="o">.</span><span class="n">local_sar_limit</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2"> W/kg"</span>
-        <span class="p">)</span>
-    <span class="k">if</span> <span class="n">whole</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">whole</span><span class="o">.</span><span class="n">sar</span> <span class="o">&gt;</span> <span class="n">limits</span><span class="o">.</span><span class="n">global_sar_limit</span><span class="p">:</span>
-        <span class="n">problems</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-            <span class="sa">f</span><span class="s2">"global SAR of </span><span class="si">{</span><span class="n">whole</span><span class="o">.</span><span class="n">sar</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2"> W/kg over blocks </span><span class="si">{</span><span class="n">whole</span><span class="o">.</span><span class="n">first</span><span class="si">}</span><span class="s2">-"</span>
-            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">whole</span><span class="o">.</span><span class="n">last</span><span class="si">}</span><span class="s2"> exceeds </span><span class="si">{</span><span class="n">limits</span><span class="o">.</span><span class="n">global_sar_limit</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2"> W/kg"</span>
-        <span class="p">)</span>
-    <span class="k">return</span> <span class="n">problems</span>
+    <span class="n">_</span><span class="p">,</span> <span class="n">pulse</span> <span class="o">=</span> <span class="n">safety</span><span class="o">.</span><span class="n">check_sar</span><span class="p">(</span><span class="n">reference</span><span class="p">,</span> <span class="n">vops</span><span class="p">,</span> <span class="o">**</span><span class="n">drive</span><span class="p">)</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">chain_read</span> <span class="o">=</span> <span class="n">read_chain</span><span class="p">(</span><span class="n">seq_path</span><span class="p">,</span> <span class="n">verify</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">RuntimeError</span> <span class="k">as</span> <span class="n">failure</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"cannot read </span><span class="si">{</span><span class="n">seq_path</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">failure</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">failure</span>
+    <span class="n">ratios</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">sequence</span> <span class="ow">in</span> <span class="n">chain_read</span><span class="p">:</span>
+        <span class="n">_</span><span class="p">,</span> <span class="n">found</span> <span class="o">=</span> <span class="n">safety</span><span class="o">.</span><span class="n">check_sar</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">vops</span><span class="p">,</span> <span class="n">reference</span><span class="o">=</span><span class="n">pulse</span><span class="p">,</span> <span class="o">**</span><span class="n">drive</span><span class="p">)</span>
+        <span class="n">ratios</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">_ratio</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">found</span><span class="p">,</span> <span class="n">pulse</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">ratios</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_ratio</span><span class="p">(</span><span class="n">sequence</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Sequence</span><span class="p">,</span> <span class="n">found</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">pulse</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SarRatio</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Divide each window's energy against one reference pulse by the pulses it plays."""</span>
+    <span class="n">windows</span> <span class="o">=</span> <span class="n">found</span><span class="o">.</span><span class="n">windows</span>
+    <span class="n">rf</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">row</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">sequence</span><span class="o">.</span><span class="n">block_events</span><span class="o">.</span><span class="n">values</span><span class="p">()],</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">int</span><span class="p">)</span>
+    <span class="n">counted</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([[</span><span class="mi">0</span><span class="p">],</span> <span class="n">np</span><span class="o">.</span><span class="n">cumsum</span><span class="p">(</span><span class="n">rf</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)])</span>
+    <span class="n">pulses</span> <span class="o">=</span> <span class="n">counted</span><span class="p">[</span><span class="n">windows</span><span class="o">.</span><span class="n">last</span><span class="p">]</span> <span class="o">-</span> <span class="n">counted</span><span class="p">[</span><span class="n">windows</span><span class="o">.</span><span class="n">first</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">windows</span><span class="o">.</span><span class="n">first</span><span class="o">.</span><span class="n">size</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">pulses</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+        <span class="k">return</span> <span class="n">SarRatio</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>
+    <span class="n">with_rf</span> <span class="o">=</span> <span class="n">pulses</span> <span class="o">&gt;</span> <span class="mi">0</span>
+    <span class="n">unit</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">pulse</span><span class="o">.</span><span class="n">windows</span><span class="o">.</span><span class="n">duration</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+    <span class="n">per_pulse</span> <span class="o">=</span> <span class="n">windows</span><span class="o">.</span><span class="n">duration</span> <span class="o">/</span> <span class="p">(</span><span class="n">unit</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">maximum</span><span class="p">(</span><span class="n">pulses</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+    <span class="n">local</span> <span class="o">=</span> <span class="nb">float</span><span class="p">((</span><span class="n">windows</span><span class="o">.</span><span class="n">reference_ratio</span> <span class="o">*</span> <span class="n">per_pulse</span><span class="p">)[</span><span class="n">with_rf</span><span class="p">]</span><span class="o">.</span><span class="n">max</span><span class="p">())</span>
+    <span class="n">whole</span> <span class="o">=</span> <span class="mf">0.0</span>
+    <span class="k">if</span> <span class="n">windows</span><span class="o">.</span><span class="n">global_sar</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">pulse</span><span class="o">.</span><span class="n">windows</span><span class="o">.</span><span class="n">global_sar</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mf">0.0</span><span class="p">:</span>
+        <span class="n">against</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">pulse</span><span class="o">.</span><span class="n">windows</span><span class="o">.</span><span class="n">global_sar</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+        <span class="n">whole</span> <span class="o">=</span> <span class="nb">float</span><span class="p">((</span><span class="n">windows</span><span class="o">.</span><span class="n">global_sar</span> <span class="o">/</span> <span class="n">against</span> <span class="o">*</span> <span class="n">per_pulse</span><span class="p">)[</span><span class="n">with_rf</span><span class="p">]</span><span class="o">.</span><span class="n">max</span><span class="p">())</span>
+    <span class="k">return</span> <span class="n">SarRatio</span><span class="p">(</span><span class="n">local</span><span class="p">,</span> <span class="n">whole</span><span class="p">)</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_timing</span><span class="p">(</span><span class="n">sequence</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Sequence</span><span class="p">,</span> <span class="n">report</span><span class="p">:</span> <span class="nb">list</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>

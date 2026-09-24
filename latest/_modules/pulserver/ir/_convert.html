@@ -458,6 +458,7 @@
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">.._accelerators</span><span class="w"> </span><span class="kn">import</span> <span class="n">require</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..mrd._sequence</span><span class="w"> </span><span class="kn">import</span> <span class="n">read_chain</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">._checks</span><span class="w"> </span><span class="kn">import</span> <span class="n">SarRatio</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._source</span><span class="w"> </span><span class="kn">import</span> <span class="n">conversion_payload</span>
 
 
@@ -508,6 +509,7 @@
     <span class="n">label_column_map</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span>
     <span class="n">cache_ext</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">".pseg"</span><span class="p">,</span>
     <span class="n">verify_signature</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="n">sar_ratios</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">SarRatio</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Path</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Segment a sequence file and write its IR cache beside it.</span>
 
@@ -541,6 +543,9 @@
 <span class="sd">    verify_signature</span>
 <span class="sd">        Refuse a file whose contents do not match the signature it carries. A</span>
 <span class="sd">        file carrying none is read either way.</span>
+<span class="sd">    sar_ratios</span>
+<span class="sd">        One per file of the chain, as :func:`sar_ratios` returns them, written</span>
+<span class="sd">        into each subsequence of the cache; zero when None.</span>
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
@@ -550,15 +555,26 @@
 <span class="sd">    Raises</span>
 <span class="sd">    ------</span>
 <span class="sd">    ValueError</span>
-<span class="sd">        If a file of the chain cannot be read, verified or segmented.</span>
+<span class="sd">        If a file of the chain cannot be read, verified or segmented, or</span>
+<span class="sd">        ``sar_ratios`` does not give one per file.</span>
 <span class="sd">    OSError</span>
 <span class="sd">        If no cache was written.</span>
 <span class="sd">    """</span>
     <span class="n">seq_path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">seq_path</span><span class="p">)</span>
     <span class="n">target</span> <span class="o">=</span> <span class="n">cache_path</span><span class="p">(</span><span class="n">seq_path</span><span class="p">,</span> <span class="n">cache_ext</span><span class="p">)</span>
     <span class="n">target</span><span class="o">.</span><span class="n">unlink</span><span class="p">(</span><span class="n">missing_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">payload</span> <span class="o">=</span> <span class="n">_payload</span><span class="p">(</span><span class="n">seq_path</span><span class="p">,</span> <span class="n">verify_signature</span><span class="p">,</span> <span class="n">fov_offset</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">sar_ratios</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">sar_ratios</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">payload</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"expected one SAR ratio per file of the chain, </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">payload</span><span class="p">)</span><span class="si">}</span><span class="s2">; "</span>
+                <span class="sa">f</span><span class="s2">"got </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">sar_ratios</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span>
+            <span class="p">)</span>
+        <span class="k">for</span> <span class="n">libraries</span><span class="p">,</span> <span class="n">ratio</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">payload</span><span class="p">,</span> <span class="n">sar_ratios</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+            <span class="n">libraries</span><span class="p">[</span><span class="s2">"reserved"</span><span class="p">][</span><span class="s2">"vop_sar_ratio"</span><span class="p">]</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">ratio</span><span class="o">.</span><span class="n">local_sar</span><span class="p">)</span>
+            <span class="n">libraries</span><span class="p">[</span><span class="s2">"reserved"</span><span class="p">][</span><span class="s2">"vop_global_sar_ratio"</span><span class="p">]</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">ratio</span><span class="o">.</span><span class="n">global_sar</span><span class="p">)</span>
     <span class="n">require</span><span class="p">(</span><span class="s2">"convert_libraries"</span><span class="p">)(</span>
-        <span class="n">_payload</span><span class="p">(</span><span class="n">seq_path</span><span class="p">,</span> <span class="n">verify_signature</span><span class="p">,</span> <span class="n">fov_offset</span><span class="p">),</span>
+        <span class="n">payload</span><span class="p">,</span>
         <span class="nb">str</span><span class="p">(</span><span class="n">seq_path</span><span class="p">),</span>
         <span class="o">*</span><span class="n">_scanner</span><span class="p">(</span><span class="n">system</span><span class="p">),</span>
         <span class="nb">int</span><span class="p">(</span><span class="n">vendor</span><span class="p">),</span>
@@ -585,7 +601,9 @@
 <span class="sd">    Each subsequence lists its unique RF definitions under ``rf``: the</span>
 <span class="sd">    bandwidth at half the spectral peak, the number of bands, each band's</span>
 <span class="sd">    offset from the carrier and the widest band's bandwidth, all in Hz, as</span>
-<span class="sd">    ``pypulseqpp.calc_rf_bandwidth`` measures them.</span>
+<span class="sd">    ``pypulseqpp.calc_rf_bandwidth`` measures them. ``vop_sar_ratio`` and</span>
+<span class="sd">    ``vop_global_sar_ratio`` are those the cache was written with, zero when</span>
+<span class="sd">    the chain is read and segmented again.</span>
 
 <span class="sd">    With ``cache_ext``, the cache beside the file is loaded instead of the</span>
 <span class="sd">    chain being read and segmented again; this build loads only vendor-neutral</span>

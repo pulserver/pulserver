@@ -48,6 +48,8 @@ from.
    prescribe
    check
    CheckLimits
+   sar_ratios
+   SarRatio
    summary
    play
    chain

@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>CheckLimits &#8212; pulserver documentation</title>
+    <title>sar_ratios &#8212; pulserver documentation</title>
   
   
   
@@ -52,7 +52,7 @@
     <script src="../_static/copybutton.js?v=f281be69"></script>
     <script src="../_static/sg-tags.js?v=d80f6fa4"></script>
     <script src="../_static/scripts/sphinx-book-theme.js?v=fab101a9"></script>
-    <script>DOCUMENTATION_OPTIONS.pagename = 'generated/pulserver.ir.CheckLimits';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'generated/pulserver.ir.sar_ratios';</script>
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
@@ -61,7 +61,7 @@
             true;
         </script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
-    <link rel="canonical" href="https://pulserver.github.io/pulserver/latest/generated/pulserver.ir.CheckLimits.html" />
+    <link rel="canonical" href="https://pulserver.github.io/pulserver/latest/generated/pulserver.ir.sar_ratios.html" />
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -371,7 +371,7 @@
       
       
       
-      <li><a href="https://github.com/pulserver/pulserver/edit/main/docs/generated/pulserver.ir.CheckLimits.rst" target="_blank"
+      <li><a href="https://github.com/pulserver/pulserver/edit/main/docs/generated/pulserver.ir.sar_ratios.rst" target="_blank"
    class="btn btn-sm btn-source-edit-button dropdown-item"
    title="Suggest edit"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -388,7 +388,7 @@
       
       
       
-      <li><a href="https://github.com/pulserver/pulserver/issues/new?title=Issue%20on%20page%20%2Fgenerated/pulserver.ir.CheckLimits.html&body=Your%20issue%20content%20here." target="_blank"
+      <li><a href="https://github.com/pulserver/pulserver/issues/new?title=Issue%20on%20page%20%2Fgenerated/pulserver.ir.sar_ratios.html&body=Your%20issue%20content%20here." target="_blank"
    class="btn btn-sm btn-source-issues-button dropdown-item"
    title="Open an issue"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -418,7 +418,7 @@
       
       
       
-      <li><a href="../_sources/generated/pulserver.ir.CheckLimits.rst" target="_blank"
+      <li><a href="../_sources/generated/pulserver.ir.sar_ratios.rst" target="_blank"
    class="btn btn-sm btn-download-source-button dropdown-item"
    title="Download source file"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -501,7 +501,7 @@
               
 
 <div id="jb-print-docs-body" class="onlyprint">
-    <h1>CheckLimits</h1>
+    <h1>sar_ratios</h1>
     <!-- Table of contents -->
     <div id="print-main-content">
         <div id="jb-print-toc">
@@ -511,7 +511,7 @@
             </div>
             <nav aria-label="Page">
                 <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.ir.CheckLimits"><code class="docutils literal notranslate"><span class="pre">CheckLimits</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.ir.sar_ratios"><code class="docutils literal notranslate"><span class="pre">sar_ratios()</span></code></a></li>
 </ul>
             </nav>
         </div>
@@ -523,60 +523,38 @@
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section id="checklimits">
-<h1>CheckLimits<a class="headerlink" href="#checklimits" title="Link to this heading">#</a></h1>
-<dl class="py class">
-<dt class="sig sig-object py" id="pulserver.ir.CheckLimits">
-<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pulserver.ir.</span></span><span class="sig-name descname"><span class="pre">CheckLimits</span></span><a class="reference internal" href="../_modules/pulserver/ir/_checks.html#CheckLimits"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.ir.CheckLimits" title="Link to this definition">#</a></dt>
-<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/builtins/functions.html#object" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
-<p>The nerve and resonance limits of a chain, and the VOPs of its SAR ratios, besides <code class="docutils literal notranslate"><span class="pre">pypulseqpp.Opts</span></code>.</p>
+  <section id="sar-ratios">
+<h1>sar_ratios<a class="headerlink" href="#sar-ratios" title="Link to this heading">#</a></h1>
+<dl class="py function">
+<dt class="sig sig-object py" id="pulserver.ir.sar_ratios">
+<span class="sig-prename descclassname"><span class="pre">pulserver.ir.</span></span><span class="sig-name descname"><span class="pre">sar_ratios</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pulserver/ir/_checks.html#sar_ratios"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.ir.sar_ratios" title="Link to this definition">#</a></dt>
+<dd><p>Return the SAR ratios of each file of a chain against the reference pulse.</p>
+<p>The reference pulse is hard, 180 degrees and 1 ms, played in the default
+shim of <code class="docutils literal notranslate"><span class="pre">limits</span></code>; a pulse played in an RF shim is weighed through it. A
+repetition is a window <code class="docutils literal notranslate"><span class="pre">pypulseqpp.safety.check_sar</span></code> averages over: each
+repetition the block definitions repeat with, and the blocks before the
+first and after the last.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Attributes<span class="colon">:</span></dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>pns</strong> (<em>Any</em>) – Nerve model of <code class="docutils literal notranslate"><span class="pre">pypulseqpp.safety.check_pns</span></code>: a <code class="docutils literal notranslate"><span class="pre">ChronaxieModel</span></code>
-or a SAFE description. <code class="docutils literal notranslate"><span class="pre">None</span></code> leaves out the PNS check.</p></li>
-<li><p><strong>pns_limit</strong> (<em>float</em>) – Largest PNS response allowed, as a fraction of the model’s threshold.</p></li>
-<li><p><strong>bands</strong> (<em>tuple[pypulseqpp.safety._resonance.ForbiddenBand, …]</em>) – Forbidden gradient bands of <code class="docutils literal notranslate"><span class="pre">check_mech_resonance</span></code>, on the physical
-axes. Without any, the resonance check is left out.</p></li>
-<li><p><strong>vops</strong> (<em>pypulseqpp.safety._sar.VopModel | pathlib.Path | str | None</em>) – VOPs, or the <code class="docutils literal notranslate"><span class="pre">.mat</span></code> or <code class="docutils literal notranslate"><span class="pre">.npz</span></code> file holding them, which
-<a class="reference internal" href="pulserver.ir.sar_ratios.html#pulserver.ir.sar_ratios" title="pulserver.ir.sar_ratios"><code class="xref py py-func docutils literal notranslate"><span class="pre">sar_ratios()</span></code></a> reads; nothing is refused on SAR.</p></li>
-<li><p><strong>drive_per_hz</strong> (<em>float | tuple[float, …]</em>) – Channel drive per Hz of RF amplitude, in the VOPs’ drive unit: one
-value, or one per channel. A scale common to every channel cancels in
-the ratios.</p></li>
-<li><p><strong>default_shim</strong> (<em>tuple[complex, …] | None</em>) – Complex channel weights of a pulse played without an RF shim, and of
-the reference pulse; equal weights when None.</p></li>
+<li><p><strong>seq_path</strong> – The first file of the chain.</p></li>
+<li><p><strong>system</strong> – The rasters and RF dead times the reference pulse is made with.</p></li>
+<li><p><strong>limits</strong> – The VOPs, channel drive and default shim.</p></li>
 </ul>
 </dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>One per file, in play order.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#list" title="(in Python v3.14)">list</a> of <a class="reference internal" href="pulserver.ir.SarRatio.html#pulserver.ir.SarRatio" title="pulserver.ir.SarRatio">SarRatio</a></p>
+</dd>
 <dt class="field-even">Raises<span class="colon">:</span></dt>
-<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If the PNS limit is not positive.</p>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If <code class="docutils literal notranslate"><span class="pre">limits</span></code> carries no VOPs, a file of the chain cannot be read, or a
+    pulse or shim weighs another number of channels than the VOPs.</p>
 </dd>
 </dl>
 </dd></dl>
 
-<p class="rubric">Attributes</p>
-<div class="pst-scrollable-table-container"><table class="autosummary longtable table">
-<tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.ir.CheckLimits.bands.html#pulserver.ir.CheckLimits.bands" title="pulserver.ir.CheckLimits.bands"><code class="xref py py-obj docutils literal notranslate"><span class="pre">bands</span></code></a></p></td>
-<td><p></p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pulserver.ir.CheckLimits.default_shim.html#pulserver.ir.CheckLimits.default_shim" title="pulserver.ir.CheckLimits.default_shim"><code class="xref py py-obj docutils literal notranslate"><span class="pre">default_shim</span></code></a></p></td>
-<td><p></p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.ir.CheckLimits.drive_per_hz.html#pulserver.ir.CheckLimits.drive_per_hz" title="pulserver.ir.CheckLimits.drive_per_hz"><code class="xref py py-obj docutils literal notranslate"><span class="pre">drive_per_hz</span></code></a></p></td>
-<td><p></p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pulserver.ir.CheckLimits.pns.html#pulserver.ir.CheckLimits.pns" title="pulserver.ir.CheckLimits.pns"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pns</span></code></a></p></td>
-<td><p></p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.ir.CheckLimits.pns_limit.html#pulserver.ir.CheckLimits.pns_limit" title="pulserver.ir.CheckLimits.pns_limit"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pns_limit</span></code></a></p></td>
-<td><p></p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pulserver.ir.CheckLimits.vops.html#pulserver.ir.CheckLimits.vops" title="pulserver.ir.CheckLimits.vops"><code class="xref py py-obj docutils literal notranslate"><span class="pre">vops</span></code></a></p></td>
-<td><p></p></td>
-</tr>
-</tbody>
-</table>
-</div>
 </section>
 
 
@@ -608,7 +586,7 @@ the reference pulse; equal weights when None.</p></li>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.ir.CheckLimits"><code class="docutils literal notranslate"><span class="pre">CheckLimits</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.ir.sar_ratios"><code class="docutils literal notranslate"><span class="pre">sar_ratios()</span></code></a></li>
 </ul>
   </nav></div>
 

@@ -17,9 +17,8 @@
    :nosignatures:
 
    ~CheckLimits.bands
+   ~CheckLimits.default_shim
    ~CheckLimits.drive_per_hz
-   ~CheckLimits.global_sar_limit
-   ~CheckLimits.local_sar_limit
    ~CheckLimits.pns
    ~CheckLimits.pns_limit
    ~CheckLimits.vops

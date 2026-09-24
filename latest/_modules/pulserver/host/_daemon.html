@@ -813,8 +813,8 @@
 <span class="k">def</span><span class="w"> </span><span class="nf">_identified</span><span class="p">(</span><span class="n">limits</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">"""Return a session's limits with the digest of the VOP file they name.</span>
 
-<span class="sd">    A revision checked against one VOP file is not the revision of another</span>
-<span class="sd">    file written to the same path.</span>
+<span class="sd">    A revision whose SAR ratios came from one VOP file is not the revision of</span>
+<span class="sd">    another file written to the same path.</span>
 <span class="sd">    """</span>
     <span class="k">if</span> <span class="s2">"vop_file"</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">limits</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">limits</span>

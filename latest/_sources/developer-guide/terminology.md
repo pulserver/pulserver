@@ -144,7 +144,8 @@ Every documented quantity carries its unit.
 | Prescription rotation (`fov_rotation_ij`) | unitless, element (i, j) of an orthonormal matrix |
 | PNS limit (`pns_limit`) | fraction of the nerve model's threshold |
 | Forbidden band | Hz; amplitude allowed in it in mT/m |
-| SAR limits (`vop_local_limit`, `vop_global_limit`) | W/kg |
+| SAR ratio (`vop_sar_ratio`, `vop_global_sar_ratio`) | unitless: energy over that of the reference repetition |
+| Default channel weights (`vop_default_shim`) | unitless magnitude, phase in rad |
 | Dwell time in an enriched acquisition (`sample_time_us`) | µs |
 | k-space trajectory | 1/m, as pypulseqpp reports it |
 | Grid trajectory (`ReconBuffer.grid_trajectory`) | k times the reconstructed field of view; an N-point matrix spans [-N/2, N/2) |
@@ -167,10 +168,11 @@ significant digits.
 
 Pulserver performs no safety check of its own. The timing, gradient, PNS,
 mechanical-resonance and SAR checks belong to pypulseqpp and compute
-estimates; the host runs them, under the limits the PSD passes, before it
-writes an IR cache, and the PSD computes every other SAR and the gradient
-heating itself. Passing these checks does not establish scanner or patient
-safety.
+estimates. The host runs all but the SAR check, under the limits the PSD
+passes, before it writes an IR cache; from the SAR check it writes each
+subsequence's SAR relative to a reference pulse into the cache, and the PSD
+computes the SAR and the gradient heating. Passing these checks does not
+establish scanner or patient safety.
 
 - Never write "safe", "validated", "compliant" or "approved" of a sequence, a
   protocol or a revision.

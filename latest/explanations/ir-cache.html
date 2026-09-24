@@ -518,6 +518,7 @@
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#subsequences">Subsequences</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#prescription">Prescription</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#checks">Checks</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#sar-against-a-reference-pulse">SAR against a reference pulse</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#passes">Passes</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#cache-file">Cache file</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#playback">Playback</a></li>
@@ -595,16 +596,42 @@ timing check, gradient continuity included, and its gradient amplitude and
 slew-rate checks on every file, against the gradient limits, dead times and
 ringdown time of the scanner. Where the session’s limits carry them
 (<a class="reference internal" href="../generated/pulserver.ir.CheckLimits.html#pulserver.ir.CheckLimits" title="pulserver.ir.CheckLimits"><code class="xref py py-class docutils literal notranslate"><span class="pre">CheckLimits</span></code></a>), it also runs pypulseqpp’s PNS check
-under the scanner’s nerve model, its mechanical-resonance check against the
-scanner’s forbidden gradient bands, and its SAR check over the virtual
-observation points of the transmit coil. The waveforms are timed by the
-rasters the file declares. The PSD passes these limits when it opens a session
-(<a class="reference internal" href="../user-guide/running.html"><span class="doc">Running the services</span></a>); it computes every other SAR and the gradient
-heating itself.</p>
+under the scanner’s nerve model and its mechanical-resonance check against the
+scanner’s forbidden gradient bands. The waveforms are timed by the rasters the
+file declares. The PSD passes these limits when it opens a session
+(<a class="reference internal" href="../user-guide/running.html"><span class="doc">Running the services</span></a>); it computes the SAR and the gradient heating.</p>
 <p>The host daemon writes no revision for a generated design or an imported chain
 that fails a check: <code class="docutils literal notranslate"><span class="pre">GENERATE</span></code> and <code class="docutils literal notranslate"><span class="pre">IMPORT</span></code> reply with the problems, as they do
 with a design error. The checks compute estimates; passing them does not
 establish scanner or patient safety.</p>
+</section>
+<section id="sar-against-a-reference-pulse">
+<h2>SAR against a reference pulse<a class="headerlink" href="#sar-against-a-reference-pulse" title="Link to this heading">#</a></h2>
+<p>The PSD computes SAR under its own calibration of the transmit chain. Where
+local SAR is computed from virtual observation points (VOPs), the energy a
+pulse deposits at VOP <span class="math notranslate nohighlight">\(v\)</span> is <span class="math notranslate nohighlight">\(\int \mathbf{b}(t)^H Q_v\, \mathbf{b}(t)\,dt\)</span>,
+with <span class="math notranslate nohighlight">\(\mathbf{b}\)</span> the drive of each transmit channel and <span class="math notranslate nohighlight">\(Q_v\)</span> the VOP’s
+matrix, and it depends on the shape of the pulse and its channel weights. The
+host evaluates it against a reference: the hard pulse of 180° and 1 ms, played
+in the default channel weights. For each repetition <span class="math notranslate nohighlight">\(w\)</span> of a subsequence, the
+blocks before the first repetition and after the last included, as
+pypulseqpp’s SAR check averages over them, <a class="reference internal" href="../generated/pulserver.ir.sar_ratios.html#pulserver.ir.sar_ratios" title="pulserver.ir.sar_ratios"><code class="xref py py-func docutils literal notranslate"><span class="pre">sar_ratios()</span></code></a>
+computes</p>
+<div class="math notranslate nohighlight">
+\[
+r = \max_w \max_v \frac{E_{v,w}}{N_w\, E_v^{\mathrm{ref}}},
+\]</div>
+<p>with <span class="math notranslate nohighlight">\(E_{v,w}\)</span> the energy of the repetition at VOP <span class="math notranslate nohighlight">\(v\)</span>, <span class="math notranslate nohighlight">\(N_w\)</span> the number of
+pulses it plays and <span class="math notranslate nohighlight">\(E_v^{\mathrm{ref}}\)</span> the energy of the reference pulse
+there: the energy of the repetition over that of the same repetition with each
+of its pulses replaced by the reference. A 1 ms hard pulse of 90° counts a
+quarter of the reference, and the ratio is 1 for a repetition of reference
+pulses. The global SAR matrix of the VOP file gives the same ratio for global
+SAR. A scale common to every channel’s drive and to the VOPs cancels in both.</p>
+<p>The cache carries the two ratios of each subsequence in its
+<code class="docutils literal notranslate"><span class="pre">pulseg_subseq_info</span></code>, zero without VOPs or without RF, and the PSD computes
+the SAR of the subsequence as the ratio times its SAR for the reference
+repetition.</p>
 </section>
 <section id="passes">
 <h2>Passes<a class="headerlink" href="#passes" title="Link to this heading">#</a></h2>
@@ -741,6 +768,7 @@ back a cache written on the host.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#subsequences">Subsequences</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#prescription">Prescription</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#checks">Checks</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#sar-against-a-reference-pulse">SAR against a reference pulse</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#passes">Passes</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#cache-file">Cache file</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#playback">Playback</a></li>
