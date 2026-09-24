@@ -5,9 +5,10 @@ import pypulseqpp as pp
 import pytest
 from _synthetic import SAMPLES, add_readout
 
-from pulserver.mrd import ReadoutTable, SequenceDefinitions, read_chain
+from pulserver.mrd import ReadoutTable, SequenceDefinitions, _sequence, read_chain
 
 FIXTURES = Path(__file__).parent / "fixtures" / "sequences"
+SEQUENCES = sorted(path.name for path in FIXTURES.glob("*.seq"))
 
 
 def fixture(name):
@@ -23,14 +24,92 @@ def synthetic(*readouts):
     return ReadoutTable.from_sequence(seq)
 
 
+def whole_scan_k(seq, table, index):
+    start = int(table.num_samples[:index].sum())
+    return seq.calculate_kspace()[0][:, start : start + int(table.num_samples[index])]
+
+
 def test_readouts_follow_the_adc_windows_in_play_order():
     seq, table = fixture("gre_2d_3sl.seq")
     adc = seq.waveforms_and_times(compat=False).adc
     np.testing.assert_array_equal(table.block, adc.block)
     assert table.num_samples.tolist() == [64] * 24
-    assert table.sample_offset.tolist() == list(range(0, 64 * 24, 64))
-    assert table.k.shape == (3, 64 * 24)
+    assert table.readout_k(23).shape == (3, 64)
     np.testing.assert_allclose(table.dwell, 1e-5)
+
+
+@pytest.mark.parametrize("range_samples", [_sequence._RANGE_SAMPLES, 1])
+@pytest.mark.parametrize("name", SEQUENCES)
+def test_k_integrated_from_an_excitation_is_k_integrated_from_the_first_block(
+    monkeypatch, name, range_samples
+):
+    monkeypatch.setattr(_sequence, "_RANGE_SAMPLES", range_samples)
+    seq, table = fixture(name)
+    whole = seq.calculate_kspace()[0]
+    # The float32 resolution of the largest k, which an MRD trajectory carries.
+    tolerance = 1e-6 * np.abs(whole).max()
+    start = 0
+    for index in range(len(table)):
+        stop = start + int(table.num_samples[index])
+        np.testing.assert_allclose(
+            table.readout_k(index), whole[:, start:stop], rtol=0, atol=tolerance
+        )
+        start = stop
+
+
+def test_a_spin_echo_train_keeps_the_k_its_refocusing_pulses_reverse(monkeypatch):
+    monkeypatch.setattr(_sequence, "_RANGE_SAMPLES", 1)
+    system = pp.Opts()
+    excitation = pp.make_block_pulse(np.pi / 2, duration=1e-3, system=system)
+    refocusing = pp.make_block_pulse(
+        np.pi, duration=1e-3, use="refocusing", system=system
+    )
+    readout = pp.make_trapezoid("x", flat_area=SAMPLES * 5.0, flat_time=3.2e-3)
+    adc = pp.make_adc(num_samples=SAMPLES, duration=3.2e-3, delay=readout.rise_time)
+    prephaser = pp.make_trapezoid("x", area=readout.area / 2, duration=1e-3)
+    seq = pp.Sequence(system)
+    for _ in range(2):
+        seq.add_block(excitation)
+        seq.add_block(prephaser)
+        for _ in range(3):
+            seq.add_block(refocusing)
+            seq.add_block(readout, adc)
+    table = ReadoutTable.from_sequence(seq)
+    assert len(table._ranges._first) == 2
+    for index in range(len(table)):
+        np.testing.assert_allclose(
+            table.readout_k(index), whole_scan_k(seq, table, index), atol=1e-9
+        )
+    assert table.center_sample.tolist() == [SAMPLES // 2] * 6
+
+
+def test_an_excitation_holding_a_readout_starts_no_range(monkeypatch):
+    monkeypatch.setattr(_sequence, "_RANGE_SAMPLES", 1)
+    system = pp.Opts()
+    readout = pp.make_trapezoid("x", flat_area=SAMPLES * 5.0, flat_time=3.2e-3)
+    adc = pp.make_adc(num_samples=SAMPLES, duration=3.2e-3, delay=readout.rise_time)
+    late = pp.make_block_pulse(
+        np.pi / 2, duration=1e-3, delay=readout.rise_time + 3.2e-3, system=system
+    )
+    seq = pp.Sequence(system)
+    seq.add_block(pp.make_block_pulse(np.pi / 2, duration=1e-3, system=system))
+    seq.add_block(readout, adc)
+    seq.add_block(readout, adc, late)
+    table = ReadoutTable.from_sequence(seq)
+    assert table._ranges._first.tolist() == [1]
+    np.testing.assert_allclose(
+        table.readout_k(1), whole_scan_k(seq, table, 1), atol=1e-9
+    )
+    assert np.abs(table.readout_k(1)[0]).min() > np.abs(table.readout_k(0)[0]).max()
+
+
+def test_a_table_keeps_the_k_of_two_ranges_at_most(monkeypatch):
+    monkeypatch.setattr(_sequence, "_RANGE_SAMPLES", 1)
+    _, table = fixture("gre_2d_3sl.seq")
+    for index in range(len(table)):
+        table.readout_k(index)
+    assert len(table._ranges._first) == len(table)
+    assert len(table._ranges._kept) == _sequence._KEPT_RANGES == 2
 
 
 def test_labels_are_the_values_in_force_at_each_readout():

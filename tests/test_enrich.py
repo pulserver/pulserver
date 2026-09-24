@@ -61,7 +61,7 @@ def acquisitions(table, data=None):
 
 
 def readout_k(k, table, index):
-    start = int(table.sample_offset[index])
+    start = int(table.num_samples[:index].sum())
     return k[:, start : start + int(table.num_samples[index])]
 
 
@@ -109,6 +109,23 @@ def test_only_the_last_readout_of_a_chain_ends_the_measurement():
     ends = np.flatnonzero(has(table, AcquisitionFlag.LAST_IN_MEASUREMENT))
     assert ends.tolist() == [len(table) - 1]
     assert [space.subsequence for space in table.spaces] == [0, 1]
+
+
+def test_a_chain_readout_carries_the_k_of_its_own_file():
+    table = fixture("dedup_gre_pair.seq")
+    files = [reference(name) for name in ("dedup_gre_pair.seq", "dedup_gre_pair_b.seq")]
+    first_of_second = int(np.flatnonzero(table.encoding_space == 1)[0])
+    for index in range(len(table)):
+        file = int(index >= first_of_second)
+        local = index - file * first_of_second
+        k = files[file].calculate_kspace()[0]
+        start = int(table.num_samples[file * first_of_second : index].sum())
+        np.testing.assert_allclose(
+            table.readout_k(index),
+            k[:, start : start + int(table.num_samples[index])],
+            atol=1e-6 * np.abs(k).max(),
+            err_msg=f"row {index}, readout {local} of file {file}",
+        )
 
 
 def test_navigator_readouts_form_their_own_encoding_space(tmp_path):
