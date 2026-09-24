@@ -13,9 +13,9 @@
 <p align="center"><img src="https://raw.githubusercontent.com/pulserver/pulserver/main/docs/_static/pulserver-logo.svg" alt="pulserver" width="580"></p>
 
 pulserver orchestrates MR acquisitions with Pulseq sequences on clinical
-scanners: sequence design, scanner preparation, reconstruction and real-time
-feedback. It resolves the protocol an operator edits in the scanner UI against
-a [pypulseqpp](https://github.com/pulserver/pypulseqpp) sequence application,
+scanners: sequence design, scanner preparation and reconstruction. It
+resolves the protocol an operator edits in the scanner UI against a
+[pypulseqpp](https://github.com/pulserver/pypulseqpp) sequence application,
 converts the design into the segmented representation a scanner interpreter
 plays, and routes the raw data of each series, enriched from the sequence that
 acquired it, to a reconstruction, normally

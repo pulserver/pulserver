@@ -8,8 +8,8 @@ them.
 
 ## What this package is
 
-Orchestrator for MR acquisitions: sequence design, scanner preparation,
-reconstruction and real-time feedback.
+Orchestrator for MR acquisitions: sequence design, scanner preparation and
+reconstruction.
 
 Pulserver sits on top of two engines it does not reimplement: sequence design
 is [`pypulseqpp`](https://github.com/pulserver/pypulseqpp) and the
@@ -69,10 +69,10 @@ libraries a `pypulseqpp.Sequence` holds. It is C++ because only the host runs
 it.
 
 `src/c/` is what a scanner links: the cache writer and reader, the accessors
-a playout walks the loaded collection with, the protocol transfer and the
-shell caller. It stays C89 for that reason alone, and it has to stay complete
-on its own — `tests/test_ir.py` compiles every `.c` under it as the scanner
-does, 32-bit and vendor-tagged, and reads back a cache written here.
+a playout walks the loaded collection with, and the protocol transfer. It
+stays C89 for that reason alone, and it has to stay complete on its own —
+`tests/test_ir.py` compiles every `.c` under it as the scanner does, 32-bit
+and vendor-tagged, and reads back a cache written here.
 
 So a pass that runs on the host belongs in `src/cpp/ir/`, and nothing in
 `src/c/` may call one. Safety checks are `pypulseqpp.safety`'s, and sequence
