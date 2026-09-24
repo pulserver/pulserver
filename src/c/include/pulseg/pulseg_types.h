@@ -421,13 +421,19 @@ typedef struct pulseg_block_instance
 
     /* Safety group (sticky pulseq TRID, 0 = ungrouped) */
     int trid;
+
+    /* RF use (appended; do not reorder above): PULSEG_RF_USE_* of the RF
+     * event; an untagged event is a refocusing pulse at a flip angle of 162
+     * to 198 degrees and an excitation otherwise.  PULSEG_RF_USE_UNKNOWN
+     * without RF. */
+    int rf_use;
 } pulseg_block_instance;
 
 /* clang-format off */
 #define PULSEG_BLOCK_INSTANCE_INIT \
     { \
     0, 0.0f, 0.0f, 0.0f, -1, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0, 0, 0, {1, 0, 0, 0, 1, 0, 0, \
-    0, 1}, 0, 0, 0, -1, 0, 0.0f, 0.0f, 0 \
+    0, 1}, 0, 0, 0, -1, 0, 0.0f, 0.0f, 0, 0 \
     }
 /* clang-format on */
 

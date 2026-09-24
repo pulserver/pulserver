@@ -1,0 +1,103 @@
+"""The virtual reconstruction client: one series sent to a reconstruction proxy as the scanner's client sends it."""
+
+from __future__ import annotations
+
+__all__ = ["send"]
+
+import socket
+from collections.abc import Sequence
+from typing import Any
+
+import ismrmrd
+import ismrmrd.xsd
+import numpy as np
+
+from ..recon._runtime.connection import Connection
+from ..vre._designs import DESIGN_PARAMETER
+
+# Placeholders for the schema's required encoding space, which the proxy
+# replaces with the sequence's.
+_PLACEHOLDER = 1
+
+
+def send(
+    address: tuple[str, int],
+    design: str,
+    readouts: Sequence[np.ndarray],
+    *,
+    frequency_hz: float = 123_200_000.0,
+    position_mm: Sequence[float] = (0.0, 0.0, 0.0),
+    config: str | None = None,
+    exam: str | None = None,
+    timeout: float = 600.0,
+) -> list[Any]:
+    """Send one series to the proxy at ``address``; return what it sends back.
+
+    The header carries the design identifier, the resonance frequency, the
+    coil count and, with ``exam``, the ``ExamID``; the acquisitions carry the
+    samples, scan counters from one, ``LAST_IN_MEASUREMENT`` on the last,
+    and the field-of-view centre ``position_mm`` along axes that are the
+    logical ones. Nothing else of the sequence is sent, as
+    :doc:`/user-guide/reconstruction-client` specifies. The reply is the
+    images, DICOM datasets and texts in the order they arrive.
+    """
+    coils = int(readouts[0].shape[0]) if len(readouts) else 1
+    stream = socket.create_connection(address, timeout=timeout)
+    connection = Connection(stream)
+    try:
+        if config is not None:
+            connection.send_config(config)
+        connection.send_header(_header(design, coils, frequency_hz, exam))
+        last = len(readouts) - 1
+        for index, samples in enumerate(readouts):
+            acquisition = ismrmrd.Acquisition.from_array(
+                np.asarray(samples, np.complex64)
+            )
+            acquisition.scan_counter = index + 1
+            acquisition.position[:] = position_mm
+            acquisition.read_dir[:] = (1.0, 0.0, 0.0)
+            acquisition.phase_dir[:] = (0.0, 1.0, 0.0)
+            acquisition.slice_dir[:] = (0.0, 0.0, 1.0)
+            if index == last:
+                acquisition.setFlag(ismrmrd.ACQ_LAST_IN_MEASUREMENT)
+            connection.send(acquisition)
+        connection.send_close()
+        return list(connection)
+    finally:
+        connection.shutdown_close()
+
+
+def _header(design: str, coils: int, frequency_hz: float, exam: str | None) -> str:
+    space = ismrmrd.xsd.encodingSpaceType(
+        matrixSize=ismrmrd.xsd.matrixSizeType(
+            x=_PLACEHOLDER, y=_PLACEHOLDER, z=_PLACEHOLDER
+        ),
+        fieldOfView_mm=ismrmrd.xsd.fieldOfViewMm(
+            x=_PLACEHOLDER, y=_PLACEHOLDER, z=_PLACEHOLDER
+        ),
+    )
+    parameters = [
+        ismrmrd.xsd.userParameterStringType(name=DESIGN_PARAMETER, value=design)
+    ]
+    if exam is not None:
+        parameters.append(
+            ismrmrd.xsd.userParameterStringType(name="ExamID", value=exam)
+        )
+    header = ismrmrd.xsd.ismrmrdHeader(
+        experimentalConditions=ismrmrd.xsd.experimentalConditionsType(
+            H1resonanceFrequency_Hz=round(frequency_hz)
+        ),
+        acquisitionSystemInformation=ismrmrd.xsd.acquisitionSystemInformationType(
+            receiverChannels=coils
+        ),
+        encoding=[
+            ismrmrd.xsd.encodingType(
+                encodedSpace=space,
+                reconSpace=space,
+                encodingLimits=ismrmrd.xsd.encodingLimitsType(),
+                trajectory=ismrmrd.xsd.trajectoryType.CARTESIAN,
+            )
+        ],
+        userParameters=ismrmrd.xsd.userParametersType(userParameterString=parameters),
+    )
+    return header.toXML("utf-8")

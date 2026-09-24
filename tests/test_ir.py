@@ -39,6 +39,15 @@ SYSTEM = pp.Opts(
 )
 GEHC = 2
 GE_LABELS = (8, 0, 6)
+# The PULSEG_RF_USE_* code of each RF use pypulseqpp tags.
+RF_USES = {
+    "excitation": 1,
+    "refocusing": 2,
+    "inversion": 3,
+    "saturation": 4,
+    "preparation": 5,
+    "other": 6,
+}
 
 
 def _copy(name, directory):
@@ -74,6 +83,8 @@ def _designed(seq_path):
                     "rf_phase_rad": 0.0
                     if rf is None
                     else rf.phase_offset + rf.phase_ppm * hz_per_ppm,
+                    "rf_use": 0 if rf is None else RF_USES[rf.use],
+                    "rf_delay_us": 0 if rf is None else round(rf.delay * 1e6),
                     "gradient_hz_per_m": [
                         0.0 if g is None else g.amplitude for g in gradients
                     ],
@@ -85,6 +96,9 @@ def _designed(seq_path):
                     "adc_phase_rad": 0.0
                     if adc is None
                     else adc.phase_offset + adc.phase_ppm * hz_per_ppm,
+                    "adc_delay_us": 0 if adc is None else round(adc.delay * 1e6),
+                    "adc_dwell_ns": 0 if adc is None else round(adc.dwell * 1e9),
+                    "adc_samples": 0 if adc is None else int(adc.num_samples),
                 }
             )
     return {key: np.array([row[key] for row in rows]) for key in rows[0]}
@@ -108,6 +122,8 @@ def _played_as_designed(seq):
     assert played["subsequence"].tolist() == designed["subsequence"].tolist()
     assert played["duration_us"].tolist() == designed["duration_us"].tolist()
     assert played["adc"].astype(bool).tolist() == designed["adc"].tolist()
+    for key in ("rf_use", "rf_delay_us", "adc_delay_us", "adc_dwell_ns", "adc_samples"):
+        assert played[key].tolist() == designed[key].tolist(), key
     for key in ("rf_amp_hz", "rf_freq_hz", "gradient_hz_per_m", "adc_freq_hz"):
         np.testing.assert_allclose(
             played[key], designed[key], rtol=1e-6, atol=1e-6, err_msg=key

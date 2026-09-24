@@ -441,6 +441,32 @@ extern "C"
         int blk_idx,
         int axis);
 
+    /**
+     * @brief Return the gradient waveform the block at the cursor plays on one axis.
+     *
+     * pulseg_get_grad_amplitude() and pulseg_get_grad_time_us() answer for a
+     * segment position through its representative (max-energy) instance.
+     * This answers for the instance at the cursor, whose shape may differ
+     * from the representative's: the interleaves of a spiral drawn as
+     * distinct shapes occupy one segment position.
+     *
+     * @param[in]  coll       Loaded collection, cursor on a block.
+     * @param[in]  axis       PULSEG_GRAD_AXIS_X, _Y or _Z.
+     * @param[out] amplitude  Normalised waveform, to be multiplied by the
+     *                        instance's amplitude; a trapezoid is its 3 or 4
+     *                        corners.
+     * @param[out] time_us    Time of each sample from the gradient's start, as
+     *                        pulseg_get_grad_time_us() gives it.
+     * @return The sample count, 0 when the block plays no gradient on the
+     *         axis, or a negative error code.  The caller frees both arrays
+     *         with PULSEG_FREE.
+     */
+    int pulseg_get_cursor_grad_waveform(
+        const pulseg_collection *coll,
+        int axis,
+        float **amplitude,
+        float **time_us);
+
     /* ================================================================== */
     /*  Label getters                                                     */
     /* ================================================================== */

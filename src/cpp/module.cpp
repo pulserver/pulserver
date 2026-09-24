@@ -7,9 +7,12 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
+#include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstddef>
 #include <cstring>
+#include <limits>
 #include <memory>
 #include <new>
 #include <stdexcept>
@@ -188,27 +191,125 @@ py::array_t<T> as_array(const std::vector<T> &values, std::vector<py::ssize_t> s
     return out;
 }
 
-/* Every block the cursor plays, in play order, one entry per block in each array. */
-py::dict play(pulseg_collection *coll)
+/* A waveform the library allocated: freed with it, however the caller leaves. */
+struct Waveform
 {
-    std::vector<int> subsequence, segment, duration_us, adc, trid, norot, nopos;
+    float *samples = nullptr;
+    ~Waveform() { PULSEG_FREE(samples); }
+};
+
+struct Waveforms
+{
+    float **shots = nullptr;
+    int count = 0;
+    ~Waveforms()
+    {
+        if (shots == nullptr)
+            return;
+        for (int i = 0; i < count; ++i)
+            PULSEG_FREE(shots[i]);
+        PULSEG_FREE(shots);
+    }
+};
+
+/* The time, from the block's start, of the RF waveform's magnitude peak: the
+ * middle of the samples within a part in 1e5 of the largest. NaN when the
+ * waveform cannot be read. */
+float rf_peak_us(const pulseg_collection *coll, int seg, int blk, const pulseg_block_info &b)
+{
+    Waveforms magnitude;
+    int samples = 0;
+    magnitude.shots = pulseg_get_rf_magnitude(coll, &magnitude.count, &samples, seg, blk);
+    Waveform time;
+    time.samples = pulseg_get_rf_time_us(coll, seg, blk);
+    if (magnitude.shots == nullptr || magnitude.count < 1 || samples < 1 ||
+        magnitude.shots[0] == nullptr || time.samples == nullptr)
+        return std::numeric_limits<float>::quiet_NaN();
+    const float *m = magnitude.shots[0];
+    float peak = 0.0f;
+    for (int i = 0; i < samples; ++i)
+        peak = std::max(peak, std::fabs(m[i]));
+    int first = -1, last = -1;
+    for (int i = 0; i < samples; ++i)
+        if (std::fabs(m[i]) >= 0.99999f * peak)
+        {
+            if (first < 0)
+                first = i;
+            last = i;
+        }
+    return static_cast<float>(b.rf_delay_us) + 0.5f * (time.samples[first] + time.samples[last]);
+}
+
+/* Append one axis of the block at the cursor: its corners, timed from the
+ * block's start, and the instance's amplitude times its normalised waveform.
+ * A waveform on the gradient raster is sampled at the middle of each raster
+ * interval; over the half intervals at its ends it holds its end values, as
+ * the cache's boundary checks take them, which keeps its area. */
+void played_gradient(
+    const pulseg_collection *coll,
+    int axis,
+    float amplitude,
+    const pulseg_block_info &b,
+    std::vector<float> &times,
+    std::vector<float> &values)
+{
+    Waveform shape, time;
+    const int samples =
+        pulseg_get_cursor_grad_waveform(coll, axis, &shape.samples, &time.samples);
+    if (samples < 0)
+        throw std::runtime_error("cannot read the gradient a block plays");
+    if (samples == 0)
+        return;
+    const float *t = time.samples;
+    const float *w = shape.samples;
+    const float delay = static_cast<float>(std::max(b.grad_delay_us[axis], 0));
+    const bool centred =
+        samples > 1 && t[0] > 0.0f && std::fabs(t[0] - 0.5f * (t[1] - t[0])) < 1e-3f;
+    if (centred)
+    {
+        times.push_back(delay);
+        values.push_back(amplitude * w[0]);
+    }
+    for (int i = 0; i < samples; ++i)
+    {
+        times.push_back(delay + t[i]);
+        values.push_back(amplitude * w[i]);
+    }
+    if (centred)
+    {
+        times.push_back(delay + t[samples - 1] + 0.5f * (t[1] - t[0]));
+        values.push_back(amplitude * w[samples - 1]);
+    }
+}
+
+/* Every block the cursor plays, in play order, one entry per block in each
+ * array; with waveforms, also the gradients, RF timing and ADC windows. */
+py::dict play(pulseg_collection *coll, bool waveforms)
+{
+    std::vector<int> subsequence, segment, duration_us, adc, trid, norot, nopos, rf_use;
     std::vector<float> rf_amp, rf_freq, rf_phase, adc_freq, adc_phase, gradient, rotation;
+    std::vector<int> rf_delay_us, adc_delay_us, adc_dwell_ns, adc_samples;
+    std::vector<float> rf_centre_us, grad_time, grad_value;
+    std::vector<py::ssize_t> grad_span;
     pulseg_cursor_reset(coll);
     pulseg_cursor_info info = PULSEG_CURSOR_INFO_INIT;
     int status;
+    int position = 0;
     while ((status = pulseg_cursor_advance(coll, &info)) == PULSEG_CURSOR_BLOCK)
     {
         pulseg_block_instance block = PULSEG_BLOCK_INSTANCE_INIT;
         require(pulseg_get_block_instance(coll, &block), "block instance");
+        position = info.segment_start ? 0 : position + 1;
         subsequence.push_back(info.subseq_idx);
         segment.push_back(info.segment_id);
         duration_us.push_back(block.duration_us);
         rf_amp.push_back(block.rf_amp_hz);
         rf_freq.push_back(block.rf_freq_hz);
         rf_phase.push_back(block.rf_phase_rad);
-        gradient.insert(
-            gradient.end(),
-            {block.gx_amp_hz_per_m, block.gy_amp_hz_per_m, block.gz_amp_hz_per_m});
+        rf_use.push_back(block.rf_use);
+        const float amplitude[3] = {
+            block.gx_amp_hz_per_m, block.gy_amp_hz_per_m, block.gz_amp_hz_per_m};
+        gradient.insert(gradient.end(), amplitude, amplitude + 3);
         rotation.insert(rotation.end(), block.rotmat, block.rotmat + 9);
         norot.push_back(block.norot_flag);
         nopos.push_back(block.nopos_flag);
@@ -216,6 +317,27 @@ py::dict play(pulseg_collection *coll)
         adc_freq.push_back(block.adc_freq_hz);
         adc_phase.push_back(block.adc_phase_rad);
         trid.push_back(block.trid);
+
+        pulseg_block_info b = PULSEG_BLOCK_INFO_INIT;
+        require(pulseg_get_block_info(coll, &b, info.segment_id, position), "block info");
+        pulseg_adc_def window = PULSEG_ADC_DEF_INIT;
+        if (block.adc_flag)
+            require(pulseg_get_adc_def(coll, &window, b.adc_def_id), "ADC definition");
+        rf_delay_us.push_back(b.has_rf ? b.rf_delay_us : 0);
+        adc_delay_us.push_back(block.adc_flag ? b.adc_delay_us : 0);
+        adc_dwell_ns.push_back(window.dwell_ns);
+        adc_samples.push_back(window.num_samples);
+        if (!waveforms)
+            continue;
+        rf_centre_us.push_back(
+            b.has_rf ? rf_peak_us(coll, info.segment_id, position, b)
+                     : std::numeric_limits<float>::quiet_NaN());
+        for (int axis = 0; axis < 3; ++axis)
+        {
+            grad_span.push_back(static_cast<py::ssize_t>(grad_time.size()));
+            played_gradient(coll, axis, amplitude[axis], b, grad_time, grad_value);
+            grad_span.push_back(static_cast<py::ssize_t>(grad_time.size()));
+        }
     }
     require(status, "cursor");
 
@@ -227,6 +349,8 @@ py::dict play(pulseg_collection *coll)
     out["rf_amp_hz"] = as_array(rf_amp, {count});
     out["rf_freq_hz"] = as_array(rf_freq, {count});
     out["rf_phase_rad"] = as_array(rf_phase, {count});
+    out["rf_use"] = as_array(rf_use, {count});
+    out["rf_delay_us"] = as_array(rf_delay_us, {count});
     out["gradient_hz_per_m"] = as_array(gradient, {count, 3});
     out["rotation"] = as_array(rotation, {count, 3, 3});
     out["norot"] = as_array(norot, {count});
@@ -234,7 +358,18 @@ py::dict play(pulseg_collection *coll)
     out["adc"] = as_array(adc, {count});
     out["adc_freq_hz"] = as_array(adc_freq, {count});
     out["adc_phase_rad"] = as_array(adc_phase, {count});
+    out["adc_delay_us"] = as_array(adc_delay_us, {count});
+    out["adc_dwell_ns"] = as_array(adc_dwell_ns, {count});
+    out["adc_samples"] = as_array(adc_samples, {count});
     out["trid"] = as_array(trid, {count});
+    if (waveforms)
+    {
+        const auto corners = static_cast<py::ssize_t>(grad_time.size());
+        out["rf_center_us"] = as_array(rf_centre_us, {count});
+        out["gradient_time_us"] = as_array(grad_time, {corners});
+        out["gradient_waveform_hz_per_m"] = as_array(grad_value, {corners});
+        out["gradient_span"] = as_array(grad_span, {count, 3, 2});
+    }
     return out;
 }
 
@@ -355,14 +490,17 @@ PYBIND11_MODULE(_ext, module)
 
     module.def(
         "play_cache",
-        [](const std::string &cache_path, int source_size)
+        [](const std::string &cache_path, int source_size, bool waveforms)
         {
             Collection coll(pulseg_collection_alloc());
             if (!coll)
                 throw std::bad_alloc();
             if (PULSEG_FAILED(pulseg_load_cache(coll.get(), cache_path.c_str(), source_size)))
                 throw std::invalid_argument("cannot load the cache " + cache_path);
-            return play(coll.get());
+            return play(coll.get(), waveforms);
         },
+        py::arg("cache_path"),
+        py::arg("source_size"),
+        py::arg("waveforms") = false,
         "Walk a written cache with the scanner's cursor, one entry per played block.");
 }

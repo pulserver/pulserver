@@ -38,7 +38,10 @@ the passes run. No gradient is changed:
 
 The readouts are therefore demodulated to the prescribed centre as they are
 acquired, and the reconstruction receives an object at $\mathbf{d}$ at the
-centre of its field of view. The rotation of the prescription is not applied
+centre of its field of view. The cache carries each readout's frequency and
+phase offsets but not its phase modulation: a readout under a constant
+gradient is demodulated exactly, and a readout under a varying one, radial,
+spiral or ramp-sampled, is not ({doc}`virtual-scanner`). The rotation of the prescription is not applied
 to the cache: the scanner plays it through its rotation matrix, composed after
 each block's own rotation. Two offsets make two caches of one design, and two
 designs ({doc}`designs`).
@@ -141,11 +144,13 @@ loaded from a vendor-neutral cache.
 
 {func}`~pulserver.ir.play` loads a cache with the C library and walks its
 execution stream with the cursor a playout uses, resolving each block as the
-scanner plays it: its duration, the RF and ADC frequency and phase offsets, the
-gradient amplitudes and the rotation. It stands in for the interpreter, so the
-cache can be compared with the file it was converted from without a scanner;
-the test suite holds every played block of each fixture to the block its file
-designs.
+scanner plays it: its duration, the RF and ADC frequency and phase offsets,
+the RF use, the ADC window, the gradient amplitudes and the rotation, and, on
+request, the gradient waveforms each instance plays. It stands in for the
+interpreter, so the cache can be compared with the file it was converted from
+without a scanner; the test suite holds every played block of each fixture to
+the block its file designs, and the trajectory the waveforms trace to the one
+the file designs ({doc}`virtual-scanner`).
 
 ## Language constraint
 

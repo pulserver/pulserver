@@ -72,6 +72,12 @@ subsequence; a *segment* is part of it bounded by zero gradient amplitude; the
 *execution stream* is the order of segments over the scan. The *IR cache* is
 the file; the *collection* is what a reader loads from it.
 
+**Virtual scanner.** The stand-ins for the scanner in tests: the *virtual
+interpreter*, which plays a cache with the C library's cursor, the *phantom*
+acquired along the trajectory it plays, and the *virtual reconstruction
+client*, which sends the samples as the scanner's reconstruction client does.
+The design calls, the IR, the proxy and the plugins are not stand-ins.
+
 **Raw data.** A *series* is one MRD stream from the reconstruction client. An
 *acquisition* is one MRD readout record; a *readout* is the ADC event of the
 sequence it corresponds to. *Encoding counters* are the MRD `idx` fields;
