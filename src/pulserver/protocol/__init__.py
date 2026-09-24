@@ -12,7 +12,13 @@ from ._keys import (
     TriggerType,
     UIParam,
 )
-from ._prescription import PRESCRIPTION, prescribed_offset
+from ._prescription import (
+    FOV_OFFSET,
+    FOV_ROTATION,
+    PRESCRIPTION,
+    prescribed_offset,
+    prescribed_rotation,
+)
 from ._schema import InputMode, Kind, Parameter, TEPreset, TRPreset
 from ._wire import (
     PROTOCOL_BEGIN,
@@ -27,6 +33,8 @@ from ._wire import (
 )
 
 __all__ = [
+    "FOV_OFFSET",
+    "FOV_ROTATION",
     "PRESCRIPTION",
     "PROTOCOL_BEGIN",
     "PROTOCOL_END",
@@ -53,4 +61,5 @@ __all__ = [
     "parse_validation",
     "parse_values",
     "prescribed_offset",
+    "prescribed_rotation",
 ]

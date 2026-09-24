@@ -38,6 +38,28 @@ include the RF and ADC dead times, the RF ringdown time and the ADC sample
 divisor of the scanner; `pypulseqpp.Opts` sets the dead times to zero and the
 divisor to four when they are left out.
 
+The limits also carry what the host checks besides the gradient limits and
+rasters: the scanner's nerve model, its forbidden gradient bands and, where
+local SAR is computed from virtual observation points, the VOPs. The PSD
+computes every other SAR and the gradient heating itself. A check whose limits
+are left out is not run.
+
+| Limit | Meaning |
+| --- | --- |
+| `pns_chronaxie`, `pns_rheobase`, `pns_alpha` | Chronaxie nerve model: chronaxie in s, rheobase in T/m/s, `alpha` 1 when left out |
+| `pns_<axis>_<field>` | SAFE nerve model, for the axes `x`, `y` and `z` and the fields `a1` to `a3`, `tau1` to `tau3` in ms, `stim_limit` in T/m/s and `g_scale` |
+| `pns_limit` | Largest PNS response allowed, as a fraction of the model's threshold; 1 when left out |
+| `forbidden_band_<n>` | One forbidden band: its physical axis (`x`, `y`, `z` or `all`), its lowest and highest frequency in Hz and, optionally, the largest amplitude allowed in it in mT/m, separated by spaces |
+| `vop_file` | `.mat` or `.npz` file of VOPs, at a path the host daemon can read |
+| `vop_drive_per_hz` | Channel drive per Hz of RF amplitude, in the VOPs' drive unit: one value, or one per channel separated by spaces |
+| `vop_local_limit`, `vop_global_limit` | Local and global SAR allowed, in W/kg; 10 and 3.2 when left out |
+
+A band given no amplitude is held to the `min_threshold` of
+`pypulseqpp.safety.check_mech_resonance`. The gradient, PNS and resonance
+checks are made in the physical frame of the prescription rotation each
+request carries. `OPEN` refuses limits it cannot read, and a revision is
+identified with the contents of the VOP file as well as its path.
+
 The commands and their replies are listed in
 {class}`~pulserver.host.HostDaemon`. {class}`~pulserver.host.HostClient` sends
 them as a PSD host process does, which exercises a plugin through the daemon
@@ -57,8 +79,8 @@ client.close()
 
 A session opened without a plugin only imports sequence files
 ({meth}`~pulserver.host.HostClient.import_sequence`): the file and its
-`NextSequence` chain are copied into a revision, checked and converted to the
-IR cache there.
+`NextSequence` chain are copied into a revision, checked in the physical frame
+of the rotation the import names and converted to the IR cache there.
 
 Plugin code runs in spawned worker processes, so a plugin that crashes fails
 the command it was running and the daemon replaces the pool. A plugin file is

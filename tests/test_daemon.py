@@ -9,6 +9,7 @@ import threading
 import time
 from pathlib import Path
 
+import numpy as np
 import pypulseqpp as pp
 import pytest
 from _host import FIXTURE_LIMITS, GE_IR, LIMITS, PLUGINS, Daemon
@@ -234,10 +235,16 @@ def test_a_prescribed_offset_is_a_revision_of_its_own(daemon):
     ).read_bytes()
 
 
-def test_an_import_block_carries_the_offset_it_was_given():
-    moved = format_import("a.seq", (1.5, -2.0, 0.25))
-    assert parse_import(moved) == (Path("a.seq"), (1.5, -2.0, 0.25))
-    assert parse_import(format_import("a.seq")) == (Path("a.seq"), (0.0, 0.0, 0.0))
+def test_an_import_block_carries_the_prescription_it_was_given():
+    quarter = [[0.0, -1.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]]
+    path, offset, rotation = parse_import(
+        format_import("a.seq", (1.5, -2.0, 0.25), quarter)
+    )
+    assert (path, offset) == (Path("a.seq"), (1.5, -2.0, 0.25))
+    np.testing.assert_allclose(rotation, quarter, atol=1e-12)
+    path, offset, rotation = parse_import(format_import("a.seq"))
+    assert (path, offset) == (Path("a.seq"), (0.0, 0.0, 0.0))
+    np.testing.assert_allclose(rotation, np.eye(3), atol=1e-12)
 
 
 def test_an_import_at_another_offset_is_a_revision_of_its_own(daemon):
@@ -276,6 +283,50 @@ def _committed(directory):
 def _meta(daemon, client, revision):
     directory = daemon.base / "bucket" / str(client.session) / "rev" / str(revision)
     return json.loads((directory / "meta.json").read_text())
+
+
+def test_a_session_opened_with_check_limits_it_cannot_read_is_refused(daemon):
+    client = daemon.client(pid=1101)
+    with pytest.raises(HostError, match="forbidden band"):
+        client.open("tiny", {**LIMITS, "forbidden_band_1": "w 590 650"})
+
+
+def test_a_design_in_a_forbidden_band_generates_nothing(daemon):
+    client = daemon.client(pid=1102)
+    client.open("gre2d", {**LIMITS, "forbidden_band_1": "all 1 5000 0.001"})
+    values = {"nx": 32, "ny": 32, "TE": 5000}
+    assert client.validate(values).valid
+    with pytest.raises(HostError, match="of the forbidden band 1-5000 Hz"):
+        client.generate(values)
+    assert not _committed(_session_dir(daemon, client))
+
+
+def test_a_revision_is_one_of_the_vop_file_contents_it_was_checked_against(
+    daemon, tmp_path
+):
+    vops = tmp_path / "vops.npz"
+    np.savez(vops, vops=np.ones((1, 1, 1), dtype=complex))
+    checked = vops.read_bytes()
+    client = daemon.client(pid=1103)
+    client.open("tiny", {**LIMITS, "vop_file": str(vops), "vop_drive_per_hz": 0.01})
+    assert client.generate({}) == 1
+    np.savez(vops, vops=2 * np.ones((1, 1, 1), dtype=complex))
+    assert client.generate({}) == 2
+    vops.write_bytes(checked)
+    assert client.generate({}) == 1
+
+
+def test_an_import_at_another_rotation_is_a_revision_of_its_own(daemon):
+    quarter = [[0.0, -1.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]]
+    client = daemon.client(pid=1104)
+    client.open(None, FIXTURE_LIMITS)
+    assert client.import_sequence(FIXTURES / "dedup_gre_pair.seq") == 1
+    turned = client.import_sequence(
+        FIXTURES / "dedup_gre_pair.seq", fov_rotation=quarter
+    )
+    assert turned == 2
+    recorded = _meta(daemon, client, turned)["fov_rotation"]
+    np.testing.assert_allclose(np.reshape(recorded, (3, 3)), quarter, atol=1e-12)
 
 
 def test_a_client_process_does_not_import_the_design_engine():

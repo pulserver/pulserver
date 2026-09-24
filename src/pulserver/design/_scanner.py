@@ -12,10 +12,20 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any, ClassVar
 
+import numpy as np
 import pypulseqpp as pp
 from pypulseqpp import sequences
 
-from ..protocol import PRESCRIPTION, InputMode, Kind, Parameter, Validation
+from ..protocol import (
+    FOV_OFFSET,
+    FOV_ROTATION,
+    PRESCRIPTION,
+    InputMode,
+    Kind,
+    Parameter,
+    Validation,
+    prescribed_rotation,
+)
 from ..protocol._keys import WIRE_NAMES
 
 Preset = float | Callable[[pp.Opts], float] | None
@@ -259,13 +269,14 @@ class ScannerSequence:
 
         An argument defaulting to ``None`` shows the preset that requests ``None``.
         The ``PRESCRIPTION`` entries of :mod:`pulserver.protocol` follow the
-        declared ones, at zero and not editable in the UI.
+        declared ones, not editable in the UI: the offset at zero, the rotation
+        at the identity.
         """
         defaults = self.app.protocol()
         listing = {
             name: _parameter(name, entry, defaults) for name, entry in self.ui.items()
         }
-        for name in PRESCRIPTION:
+        for name in FOV_OFFSET:
             listing[name] = Parameter(
                 Kind.FLOAT,
                 0.0,
@@ -274,6 +285,10 @@ class ScannerSequence:
                 OFFSET_LIMIT_MM,
                 0.1,
                 "mm",
+            )
+        for name, value in zip(FOV_ROTATION, np.eye(3).ravel(), strict=True):
+            listing[name] = Parameter(
+                Kind.FLOAT, float(value), InputMode.OFF, -1.0, 1.0, 1e-6, ""
             )
         return listing
 
@@ -323,6 +338,7 @@ class ScannerSequence:
         values = {name: p.value for name, p in listing.items() if p.editable}
         values.update(request)
         try:
+            prescribed_rotation(values)
             app = self.app(system, **self._arguments(system, values))
             scan_time = app.scan_time()
         except Exception as error:  # a design refuses a protocol by raising

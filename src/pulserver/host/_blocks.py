@@ -5,7 +5,9 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from ..protocol import PRESCRIPTION
+import numpy as np
+
+from ..protocol import FOV_OFFSET, FOV_ROTATION, prescribed_rotation
 
 LIMITS_BEGIN = "[Limits]"
 LIMITS_END = "[Limits End]"
@@ -37,37 +39,52 @@ def format_limits(limits: dict[str, Any]) -> str:
     return "\n".join([LIMITS_BEGIN, *lines, LIMITS_END]) + "\n"
 
 
-def parse_import(block: str) -> tuple[Path, tuple[float, float, float]]:
-    """Read an import block: the first file of a chain and the prescribed offset.
+def parse_import(
+    block: str,
+) -> tuple[Path, tuple[float, float, float], np.ndarray]:
+    """Read an import block: the first file of a chain and its prescription.
 
     The offset is in mm along the logical readout, phase and slice axes, and
-    zero along an axis the block leaves out.
+    zero along an axis the block leaves out. The rotation is that of
+    :func:`~pulserver.protocol.prescribed_rotation`, from the block's
+    ``fov_rotation_ij`` lines.
 
     Raises
     ------
     ValueError
-        If the block has no ``file`` line, or an offset line is not a number.
+        If the block has no ``file`` line, a prescription line is not a
+        number, or the rotation is not orthonormal.
     """
-    path, offset = None, dict.fromkeys(PRESCRIPTION, 0.0)
+    path, offset, rotation = None, dict.fromkeys(FOV_OFFSET, 0.0), {}
     for line in block.splitlines():
         name, _, value = line.partition(": ")
         if name == "file":
             path = Path(value.strip())
         elif name in offset:
             offset[name] = float(value)
+        elif name in FOV_ROTATION:
+            rotation[name] = float(value)
     if path is None:
         raise ValueError("IMPORT needs a file line")
     x, y, z = offset.values()
-    return path, (x, y, z)
+    return path, (x, y, z), prescribed_rotation(rotation)
 
 
 def format_import(
-    path: Path | str, fov_offset_mm: tuple[float, float, float] | None = None
+    path: Path | str,
+    fov_offset_mm: tuple[float, float, float] | None = None,
+    fov_rotation: np.ndarray | None = None,
 ) -> str:
     lines = [IMPORT_BEGIN, f"file: {path}"]
     if fov_offset_mm is not None:
         lines += [
             f"{name}: {value!r}"
-            for name, value in zip(PRESCRIPTION, fov_offset_mm, strict=True)
+            for name, value in zip(FOV_OFFSET, fov_offset_mm, strict=True)
+        ]
+    if fov_rotation is not None:
+        matrix = np.asarray(fov_rotation, dtype=float).ravel()
+        lines += [
+            f"{name}: {float(value)!r}"
+            for name, value in zip(FOV_ROTATION, matrix, strict=True)
         ]
     return "\n".join([*lines, IMPORT_END]) + "\n"
