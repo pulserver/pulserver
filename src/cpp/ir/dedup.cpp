@@ -21,6 +21,7 @@ extern "C"
 {
 #include "pulseg_internal.h"
 #include "pulseg.h"
+#include "pulseq_file.h"
 }
 
 /* ================================================================== */

@@ -32,6 +32,8 @@ _PLUGIN_NAME = re.compile(r"[A-Za-z0-9_\-]+")
 _log = logging.getLogger("pulserver.vre")
 
 # A worker spawns, imports its plugin and connects; past this it is not coming.
+_CONNECT_TIMEOUT = 120.0
+# How long closing the proxy waits for each running series.
 _WORKER_TIMEOUT = 120.0
 # How often the accept loop looks at whether the proxy is closing.
 _ACCEPT_POLL = 0.5
@@ -56,6 +58,9 @@ class ReconProxy:
     client stays connected, and the file is replayed to a worker and deleted
     once a slot frees.
 
+    Once the client's stream ends, the proxy waits for the worker to close,
+    however long the reconstruction takes, unless ``recon_timeout`` caps it.
+
     Parameters
     ----------
     base
@@ -66,6 +71,9 @@ class ReconProxy:
         Series reconstructed at once; the memory-derived limit when ``None``.
     spares
         Warm worker processes waiting for a series.
+    recon_timeout
+        Seconds a worker may take after the stream ends before it is
+        terminated and the client told so; ``None`` waits for its close.
 
     Attributes
     ----------
@@ -80,10 +88,12 @@ class ReconProxy:
         *,
         slots: int | None = None,
         spares: int = 1,
+        recon_timeout: float | None = None,
     ) -> None:
         self.revisions = RevisionStore(base)
         self.plugins = Path(plugins)
         self.workers = WorkerPool(spares=spares)
+        self.recon_timeout = recon_timeout
         self._slots = threading.BoundedSemaphore(compute_max_concurrent(override=slots))
         self._server: socket.socket | None = None
         self._closing = threading.Event()
@@ -234,7 +244,8 @@ class ReconProxy:
         feed: Callable[[Connection], None],
     ) -> None:
         """Give a worker the config, the header and whatever ``feed`` sends it."""
-        with _WorkerChannel(self.workers, plugin) as worker:
+        channel = _WorkerChannel(self.workers, plugin)
+        with channel as worker:
             worker.send_config(config)
             worker.send_header(header)
             relay = threading.Thread(
@@ -243,9 +254,28 @@ class ReconProxy:
             relay.start()
             try:
                 feed(worker)
-            finally:
-                worker.send_close()
-                relay.join(timeout=_WORKER_TIMEOUT)
+            except BaseException:
+                # A series that cannot be fed whole is not reconstructed.
+                channel.terminate()
+                relay.join()
+                raise
+            worker.send_close()
+            relay.join(timeout=self.recon_timeout)
+            if relay.is_alive():
+                _log.warning(
+                    "%s exceeded %s s; terminating it",
+                    plugin.stem,
+                    self.recon_timeout,
+                )
+                # The relay ends with the worker, so the notice cannot
+                # interleave with an image it is still sending.
+                channel.terminate()
+                relay.join()
+                with contextlib.suppress(Exception):
+                    client.send(
+                        f"pulserver: {plugin.stem} did not finish within "
+                        f"{self.recon_timeout:g} s of the end of the series"
+                    )
 
     def _plugin_path(self, plugin: str) -> Path:
         if not plugin:
@@ -267,6 +297,7 @@ class _WorkerChannel:
         self._directory = Path(tempfile.mkdtemp(prefix="pulserver-series-"))
         self._pool = pool
         self._plugin = plugin
+        self._process = None
         self.connection: Connection | None = None
 
     def __enter__(self) -> Connection:
@@ -275,8 +306,8 @@ class _WorkerChannel:
         try:
             listener.bind(str(path))
             listener.listen(1)
-            listener.settimeout(_WORKER_TIMEOUT)
-            process = self._pool.assign(self._plugin, path)
+            listener.settimeout(_CONNECT_TIMEOUT)
+            process = self._process = self._pool.assign(self._plugin, path)
             try:
                 stream, _ = listener.accept()
             except TimeoutError:
@@ -293,6 +324,11 @@ class _WorkerChannel:
         if self.connection is not None:
             self.connection.shutdown_close()
         shutil.rmtree(self._directory, ignore_errors=True)
+
+    def terminate(self) -> None:
+        """Stop the worker process, whatever it is doing."""
+        if self._process is not None and self._process.is_alive():
+            self._process.terminate()
 
 
 # %% private module subroutines
@@ -332,8 +368,21 @@ def _is_close_marker(item: Any) -> bool:
 
 
 def _enriched(client: Connection, revision: Revision, offset: Any) -> Iterator[Any]:
-    """Yield the client's stream up to its close, acquisitions enriched in play order."""
+    """Yield the client's stream up to its close, acquisitions enriched in play order.
+
+    Acquisitions are matched to readouts by position, so once the client numbers
+    them, every ``scan_counter`` must follow the previous one by one: a gap or a
+    repeat is a dropped or duplicated readout that would shift every later row.
+    A stream whose counters stay 0 is not numbered and not checked.
+
+    Raises
+    ------
+    ValueError
+        If the stream carries more acquisitions than the sequence plays, or its
+        scan counters skip or repeat one.
+    """
     index = 0
+    previous = None
     for item in client:
         if _is_close_marker(item):
             return
@@ -343,6 +392,15 @@ def _enriched(client: Connection, revision: Revision, offset: Any) -> Iterator[A
                     f"the stream carries more than the {len(revision.table)} readouts "
                     f"{revision.directory} plays"
                 )
+            counter = int(item.scan_counter)
+            numbered = previous is not None and (previous, counter) != (0, 0)
+            if numbered and counter != previous + 1:
+                raise ValueError(
+                    f"acquisition {index} carries scan counter {counter} after "
+                    f"{previous}: the stream no longer matches the readouts "
+                    f"{revision.directory} plays"
+                )
+            previous = counter
             enrich_acquisition(item, revision.table, index, offset)
             index += 1
         yield item

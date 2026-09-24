@@ -1,4 +1,8 @@
-"""MRD streaming message identifiers and wire struct formats."""
+"""MRD streaming message identifiers and wire struct formats.
+
+Adapted from the constants of
+python-ismrmrd-server (Copyright (c) 2024 Kelvin Chow; MIT, see ``LICENSES/python-ismrmrd-server-MIT.txt``).
+"""
 
 import struct
 

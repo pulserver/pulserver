@@ -1,4 +1,8 @@
-"""ISMRMRD images to DICOM datasets, with series fields from the MRD XML header."""
+"""ISMRMRD images to DICOM datasets, with series fields from the MRD XML header.
+
+Adapted from the converter of
+python-ismrmrd-server (Copyright (c) 2024 Kelvin Chow; MIT, see ``LICENSES/python-ismrmrd-server-MIT.txt``).
+"""
 
 __all__ = ["DicomWithName", "MrdDicomBuilder"]
 
@@ -333,6 +337,10 @@ class MrdDicomBuilder:
         orientation, rescale, window, TE and TI. When the manufacturer names GE, the
         series number is the header's ``measurementID`` and the image type is
         written to a private tag.
+
+        ``PixelSpacing`` is the row spacing, along ``phase_dir``, then the column
+        spacing, along ``read_dir``. MRD's ``position`` is the image centre;
+        ``ImagePositionPatient`` is the centre of the first pixel.
         """
         dicomDset = copy.deepcopy(self.dicomDset)
         mrdHead = self.mrdHead
@@ -485,16 +493,17 @@ class MrdDicomBuilder:
         else:
             dicomDset.SeriesNumber = mrdImg.image_series_index
         dicomDset.InstanceNumber = self.instanceNumber
-        dicomDset.PixelSpacing = [
-            round(float(mrdImg.field_of_view[0]) / mrdImg.data.shape[2], 6),
-            round(float(mrdImg.field_of_view[1]) / mrdImg.data.shape[3], 6),
-        ]
+        rows, columns = mrdImg.data.shape[2], mrdImg.data.shape[3]
+        row_spacing = float(mrdImg.field_of_view[1]) / rows
+        column_spacing = float(mrdImg.field_of_view[0]) / columns
+        dicomDset.PixelSpacing = [round(row_spacing, 6), round(column_spacing, 6)]
         dicomDset.SliceThickness = round(mrdImg.field_of_view[2], 6)
-        dicomDset.ImagePositionPatient = [
-            round(mrdImg.position[0], 6),
-            round(mrdImg.position[1], 6),
-            round(mrdImg.position[2], 6),
-        ]
+        first_pixel = (
+            np.asarray(mrdImg.position, dtype=float)
+            - (columns - 1) / 2 * column_spacing * np.asarray(mrdImg.read_dir, float)
+            - (rows - 1) / 2 * row_spacing * np.asarray(mrdImg.phase_dir, float)
+        )
+        dicomDset.ImagePositionPatient = [round(float(v), 6) for v in first_pixel]
         dicomDset.ImageOrientationPatient = [
             round(mrdImg.read_dir[0], 6),
             round(mrdImg.read_dir[1], 6),
@@ -509,8 +518,11 @@ class MrdDicomBuilder:
             hour = int(np.floor(time_sec / 3600))
             minutes = int(np.floor((time_sec - hour * 3600) / 60))
             sec = time_sec - hour * 3600 - minutes * 60
-            logging.info(mrdImg.acquisition_time_stamp)
-            logging.info(time_sec, hour, minutes, sec)
+            logging.debug(
+                "acquisition time stamp %s: %.3f s",
+                mrdImg.acquisition_time_stamp,
+                time_sec,
+            )
             dicomDset.AcquisitionTime = f"{hour:02.0f}{minutes:02.0f}{sec:09.6f}"
         dicomDset.TriggerTime = mrdImg.physiology_time_stamp[0] / 2.5
 

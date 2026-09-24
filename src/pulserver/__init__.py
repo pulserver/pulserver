@@ -1,4 +1,4 @@
-"""Orchestrator for MR acquisitions: sequence design, scanner preparation, reconstruction and real-time feedback."""
+"""Orchestrator for MR acquisitions: sequence design, scanner preparation and reconstruction."""
 
 from __future__ import annotations
 

@@ -1,10 +1,11 @@
 /**
  * @file pulseg_convert.h
- * @brief Raw pulseq files -> pulseg collection.
+ * @brief Raw pulseq files -> pulseg collection, on the host.
  *
  * pulseg_convert_collection() is the seam between the two modules: it takes
  * pulseq_file structures the caller filled and produces the deduplicated,
- * segmented pulseg intermediate representation.
+ * segmented pulseg intermediate representation. It is implemented by the C++
+ * passes beside this header and is not part of the library a scanner links.
  */
 
 #ifndef PULSEG_CONVERT_H

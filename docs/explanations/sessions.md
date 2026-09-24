@@ -23,7 +23,8 @@ A session opened without a plugin only imports existing sequence files.
 
 A revision is a directory `rev/<n>/` holding the Pulseq files of one design,
 their IR cache, the resolved protocol and a `meta.json` record naming the
-plugin, the reconstruction plugin, the limits and the files. A revision is
+plugin and its source digest, the reconstruction plugin, the limits and the
+files. A revision is
 written into a staging directory and renamed into place once complete, and is
 not modified afterwards. `current` is a symbolic link to the revision the
 interpreter plays.
@@ -48,9 +49,13 @@ bucket/
 ## Revision identity
 
 A generated revision is identified by the SHA-256 hash of its plugin, scanner
-limits and resolved protocol ({func}`~pulserver.host.revision_hash`). A
-`GENERATE` request whose protocol resolves to one already generated returns
-the existing revision and makes it current; the sequence is not designed again.
+limits, resolved protocol and source ({func}`~pulserver.host.revision_hash`).
+The source is a digest of the plugin file, the source file of the application
+it binds, and the installed versions of pypulseqpp and pulserver. A `GENERATE`
+request whose protocol resolves to one already generated from the same source
+returns the existing revision and makes it current; the sequence is not
+designed again. A changed plugin, application or package designs a new
+revision, even for an unchanged protocol.
 Because the hash is computed over the resolved protocol, two requests that
 differ only in a value the design replaces, such as a preset and the time it
 resolves to, identify the same revision ({doc}`protocol`). An imported revision

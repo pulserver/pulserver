@@ -98,3 +98,17 @@ def test_the_repetition_time_counts_each_delay_at_the_duration_it_plays(tmp_path
     (unit,) = summary["subsequences"]
     assert unit["tr_size"] == 3
     assert unit["tr_duration_us"] == pytest.approx(tr * 1e6)
+
+
+def test_a_hyper_tr_declared_as_pypulseqpp_writes_it_is_the_repeating_unit(tmp_path):
+    def build(sequence):
+        alternating_delays_around_a_gradient(sequence)
+        sequence.set_definition("TRsize", 6)
+
+    sequence = pp.Sequence()
+    sequence.read(written(tmp_path, "declared_hyper_tr.seq", build))
+    summary = _ext.summary_from_libraries(
+        [conversion_payload(sequence)], *SCANNER, [0, 1, 2]
+    )
+    (unit,) = summary["subsequences"]
+    assert unit["tr_size"] == 6

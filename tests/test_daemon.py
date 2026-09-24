@@ -1,13 +1,17 @@
 import contextlib
 import json
+import os
+import shutil
 import struct
+import subprocess
+import sys
 import threading
 import time
 from pathlib import Path
 
 import pypulseqpp as pp
 import pytest
-from _host import FIXTURE_LIMITS, GE_IR, LIMITS, Daemon
+from _host import FIXTURE_LIMITS, GE_IR, LIMITS, PLUGINS, Daemon
 
 from pulserver.host.client import HostError
 from pulserver.protocol import TEPreset
@@ -44,6 +48,37 @@ def test_repeated_predownloads_generate_one_revision(daemon):
         "sequence.seq",
     ]
     assert "TE: 2500" in (directory / "rev" / "1" / "resolved.protocol").read_text()
+
+
+def test_an_edited_plugin_generates_a_new_revision_for_the_same_protocol(tmp_path):
+    plugins = tmp_path / "plugins"
+    plugins.mkdir()
+    plugin = plugins / "tiny.py"
+    shutil.copyfile(PLUGINS / "tiny.py", plugin)
+    daemon = Daemon(tmp_path / "base", plugins)
+    daemon.start()
+    try:
+        client = daemon.client(pid=151)
+        client.open("tiny", LIMITS)
+        assert client.generate({"TE": 8000}) == 1
+        # Two delays per repetition: the resolved protocol stays the same.
+        edited = plugin.read_text().replace(
+            "self.seq.add_block(pp.make_delay(self.te))",
+            "self.seq.add_block(pp.make_delay(self.te))\n"
+            "        self.seq.add_block(pp.make_delay(self.te))",
+        )
+        plugin.write_text(edited)
+        stat = plugin.stat()
+        os.utime(plugin, ns=(stat.st_atime_ns, stat.st_mtime_ns + 10**9))
+        assert client.generate({"TE": 8000}) == 2
+        revisions = _session_dir(daemon, client) / "rev"
+        first = pp.Sequence()
+        first.read(revisions / "1" / "sequence.seq")
+        second = pp.Sequence()
+        second.read(revisions / "2" / "sequence.seq")
+        assert second.num_blocks == 2 * first.num_blocks
+    finally:
+        daemon.cleanup()
 
 
 def test_two_sessions_interleave_without_sharing_state(daemon):
@@ -186,3 +221,17 @@ def test_a_generated_revision_names_the_reconstruction_its_sequence_binds(daemon
 def _meta(daemon, client, revision):
     directory = daemon.base / "bucket" / str(client.session) / "rev" / str(revision)
     return json.loads((directory / "meta.json").read_text())
+
+
+def test_a_client_process_does_not_import_the_design_engine():
+    """A command sent from a shell is not charged the design engine's import."""
+    probe = (
+        "import sys\n"
+        "from pulserver.host import HostClient, SessionKey\n"
+        "print(sorted(m for m in ('pypulseq', 'pypulseqpp') if m in sys.modules))\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", probe], capture_output=True, text=True, check=True
+    )
+
+    assert result.stdout.strip() == "[]"

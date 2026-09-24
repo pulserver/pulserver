@@ -32,4 +32,4 @@ described in {doc}`../explanations/sessions`.
 | {obj}`~pulserver.host.SessionKey` | Process ID and start day identifying a PSD host process. |
 | {obj}`~pulserver.host.SessionStore` | Every session under `<base>/bucket/`. |
 | {obj}`~pulserver.host.Session` | State of one session: plugin, limits, revisions and the current revision. |
-| {obj}`~pulserver.host.revision_hash` | Identity of a design: plugin, scanner limits and resolved protocol. |
+| {obj}`~pulserver.host.revision_hash` | Identity of a design: plugin, scanner limits, resolved protocol and the source that designs it. |

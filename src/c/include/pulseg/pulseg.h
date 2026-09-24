@@ -25,11 +25,9 @@
 #include "pulseg_types.h"
 
 #include "pulseg_io.h"
-#include "pulseg_convert.h"
 #include "pulseg_collection.h"
 #include "pulseg_cache.h"
 
 #include "pulseg_protocol.h"
-#include "pulseg_bridge.h"
 
 #endif /* PULSEG_H */

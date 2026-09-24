@@ -321,6 +321,42 @@ def test_a_reconstructed_image_round_trips_through_the_builder(parsed_mrd_header
     np.testing.assert_allclose(recovered, values, atol=1e-4)
 
 
+def _placed_image(position, read_dir, phase_dir, fov):
+    """A 6-row, 8-column image with the given geometry."""
+    image = ismrmrd.Image.from_array(np.ones((6, 8), dtype=np.float32), transpose=False)
+    image.position = position
+    image.read_dir = read_dir
+    image.phase_dir = phase_dir
+    image.slice_dir = (0.0, 0.0, 1.0)
+    image.field_of_view = fov
+    return image
+
+
+def test_pixel_spacing_is_the_row_spacing_then_the_column_spacing(parsed_mrd_header):
+    """A rectangular field of view over a rectangular matrix: rows run along the
+    phase direction, so their spacing is the phase field of view over the rows."""
+    image = _placed_image(
+        (0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (240.0, 120.0, 5.0)
+    )
+    dicom = MrdDicomBuilder(parsed_mrd_header)(image).dset
+    assert [float(v) for v in dicom.PixelSpacing] == [120.0 / 6, 240.0 / 8]
+
+
+def test_the_image_position_is_the_centre_of_the_first_pixel(parsed_mrd_header):
+    """MRD places the image centre; DICOM places the first transmitted pixel."""
+    image = _placed_image(
+        (10.0, 20.0, 30.0), (0.0, 1.0, 0.0), (-1.0, 0.0, 0.0), (240.0, 120.0, 5.0)
+    )
+    dicom = MrdDicomBuilder(parsed_mrd_header)(image).dset
+    column, row = 240.0 / 8, 120.0 / 6
+    expected = (
+        np.array([10.0, 20.0, 30.0])
+        - 3.5 * column * np.array([0.0, 1.0, 0.0])
+        - 2.5 * row * np.array([-1.0, 0.0, 0.0])
+    )
+    np.testing.assert_allclose([float(v) for v in dicom.ImagePositionPatient], expected)
+
+
 def test_the_default_window_is_centred_on_the_data_not_on_half_its_width(
     parsed_mrd_header,
 ):

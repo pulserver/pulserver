@@ -1,4 +1,10 @@
-"""MRD streaming connection over a TCP socket, with optional HDF5 capture."""
+"""MRD streaming connection over a TCP socket, with optional HDF5 capture.
+
+Adapted from the ``Connection`` of
+gadgetron-python (Copyright (c) 2019 Gadgetron; MIT, see ``LICENSES/gadgetron-python-MIT.txt``),
+and the capture from
+python-ismrmrd-server (Copyright (c) 2024 Kelvin Chow; MIT, see ``LICENSES/python-ismrmrd-server-MIT.txt``).
+"""
 
 __all__ = ["Connection", "DataSaver", "DummySaver"]
 

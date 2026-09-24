@@ -36,8 +36,9 @@ DAY = 20711
 
 
 class Daemon:
-    def __init__(self, base: Path) -> None:
+    def __init__(self, base: Path, plugins: Path = PLUGINS) -> None:
         self.base = base
+        self.plugins = plugins
         self._socket_dir = Path(tempfile.mkdtemp(prefix="ps"))
         self.socket = self._socket_dir / "s"
         self._process = None
@@ -55,7 +56,7 @@ class Daemon:
                 "--socket",
                 str(self.socket),
                 "--plugins",
-                str(PLUGINS),
+                str(self.plugins),
                 "--workers",
                 "1",
             ]
