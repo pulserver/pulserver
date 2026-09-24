@@ -15,10 +15,12 @@ from typing import Any, ClassVar
 import pypulseqpp as pp
 from pypulseqpp import sequences
 
-from ..protocol import InputMode, Kind, Parameter, Validation
+from ..protocol import PRESCRIPTION, InputMode, Kind, Parameter, Validation
 from ..protocol._keys import WIRE_NAMES
 
 Preset = float | Callable[[pp.Opts], float] | None
+#: Range of each prescription entry, in mm either side of the isocentre.
+OFFSET_LIMIT_MM = 1000.0
 
 # FLT_DIG: the significant decimal digits a float32 CV holds through a round trip.
 _SIGNIFICANT_DIGITS = 6
@@ -224,7 +226,8 @@ class ScannerSequence:
     ------
     ValueError
         When a subclass is defined with a ``ui`` key the interpreter does not
-        know, which its parser would drop.
+        know, which its parser would drop, or with one of the prescription
+        entries, which pulserver applies itself.
     """
 
     app: ClassVar[type[sequences.SequenceApp]]
@@ -241,17 +244,36 @@ class ScannerSequence:
                 f"{cls.__name__} declares entries the interpreter does not know: "
                 f"{unknown}"
             )
+        reserved = sorted(str(name) for name in cls.ui if str(name) in PRESCRIPTION)
+        if reserved:
+            raise ValueError(
+                f"{cls.__name__} binds the prescription entries {reserved}, which "
+                "pulserver applies when it builds the IR"
+            )
         cls.ui = {str(name): entry for name, entry in cls.ui.items()}
 
     def listing(self) -> dict[str, Parameter]:
         """Return the protocol with its schema, valued at the application's defaults.
 
         An argument defaulting to ``None`` shows the preset that requests ``None``.
+        The ``PRESCRIPTION`` entries of :mod:`pulserver.protocol` follow the
+        declared ones, at zero and not editable in the UI.
         """
         defaults = self.app.protocol()
-        return {
+        listing = {
             name: _parameter(name, entry, defaults) for name, entry in self.ui.items()
         }
+        for name in PRESCRIPTION:
+            listing[name] = Parameter(
+                Kind.FLOAT,
+                0.0,
+                InputMode.OFF,
+                -OFFSET_LIMIT_MM,
+                OFFSET_LIMIT_MM,
+                0.1,
+                "mm",
+            )
+        return listing
 
     def resolved(self, app: sequences.SequenceApp) -> Mapping[str, Any]:
         """Return the value each bound argument took in a constructed application, in SI units.

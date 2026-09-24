@@ -13,6 +13,7 @@ import pypulseqpp as pp
 import pytest
 from _host import FIXTURE_LIMITS, GE_IR, LIMITS, PLUGINS, Daemon
 
+from pulserver.host._blocks import format_import, parse_import
 from pulserver.host.client import HostError
 from pulserver.protocol import TEPreset
 
@@ -216,6 +217,36 @@ def test_a_generated_revision_names_the_reconstruction_its_sequence_binds(daemon
     values = {"nx": 32, "ny": 16, "TE": 5000}
     assert _meta(daemon, bound, bound.generate(values))["recon"] == "gre2d"
     assert _meta(daemon, unbound, unbound.generate(values))["recon"] == ""
+
+
+def test_a_prescribed_offset_is_a_revision_of_its_own(daemon):
+    client = daemon.client(pid=903)
+    client.open("gre2d", LIMITS)
+    values = {"nx": 32, "ny": 32, "TE": 5000}
+    assert client.generate(values) == 1
+    assert client.generate({**values, "fov_offset_y": 20.0}) == 2
+    assert client.generate({**values, "fov_offset_y": 0.0}) == 1
+    revisions = _session_dir(daemon, client) / "rev"
+    designed, moved = ((revisions / r / "sequence.pseg").read_bytes() for r in "12")
+    assert designed != moved
+    assert (revisions / "1" / "sequence.seq").read_bytes() == (
+        revisions / "2" / "sequence.seq"
+    ).read_bytes()
+
+
+def test_an_import_block_carries_the_offset_it_was_given():
+    moved = format_import("a.seq", (1.5, -2.0, 0.25))
+    assert parse_import(moved) == (Path("a.seq"), (1.5, -2.0, 0.25))
+    assert parse_import(format_import("a.seq")) == (Path("a.seq"), (0.0, 0.0, 0.0))
+
+
+def test_an_import_at_another_offset_is_a_revision_of_its_own(daemon):
+    client = daemon.client(pid=804)
+    client.open(None, FIXTURE_LIMITS)
+    assert client.import_sequence(FIXTURES / "dedup_gre_pair.seq") == 1
+    moved = client.import_sequence(FIXTURES / "dedup_gre_pair.seq", (0.0, 0.0, 5.0))
+    assert moved == 2
+    assert _meta(daemon, client, moved)["fov_offset_mm"] == [0.0, 0.0, 5.0]
 
 
 def test_a_design_beyond_the_scanner_limits_generates_nothing(daemon):

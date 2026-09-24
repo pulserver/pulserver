@@ -44,6 +44,17 @@ sequence names its entries with them.
 | {obj}`~pulserver.protocol.PreparationType` | Options of `preparation_type`. |
 | {obj}`~pulserver.protocol.TriggerType` | Options of `trigger_type`: Pulseq trigger channel names. |
 
+## Prescription
+
+The field-of-view offset the interpreter fills from the scanner's prescription.
+The entries close every listing and are not bound to a design argument; the
+host applies the offset when it builds the IR.
+
+| Object | Description |
+| --- | --- |
+| {obj}`~pulserver.protocol.PRESCRIPTION` | Names of the field-of-view offset entries, in mm along the logical readout, phase and slice axes. |
+| {obj}`~pulserver.protocol.prescribed_offset` | Field-of-view offset that protocol values carry, in metres. |
+
 ## Wire blocks
 
 A listing carries every entry with its schema, as `LIST_PROTOCOL` returns it; a

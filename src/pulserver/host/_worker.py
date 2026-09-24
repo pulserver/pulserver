@@ -14,7 +14,7 @@ import pypulseqpp as pp
 
 from .. import __version__, ir
 from ..design import ScannerSequence, load_plugin
-from ..protocol import Parameter, Validation
+from ..protocol import Parameter, Validation, prescribed_offset
 
 _IR_OPTIONS = ("ir_vendor", "ir_label_column_map", "ir_cache_ext")
 
@@ -90,10 +90,12 @@ def generate(
 ) -> tuple[Validation, list[str], str | None, str]:
     """Design into ``directory``, check and convert the result, and name its reconstruction.
 
-    A design that fails a check of :func:`pulserver.ir.check` is returned as
-    an invalid request carrying the problems. The file list is empty and the
-    cache file name ``None`` for an invalid request; what was written is left
-    for the caller to discard.
+    The design is written in the logical frame, and the conversion shifts it
+    to the field-of-view offset the resolved protocol carries. A design that
+    fails a check of :func:`pulserver.ir.check` is returned as an invalid
+    request carrying the problems. The file list is empty and the cache file
+    name ``None`` for an invalid request; what was written is left for the
+    caller to discard.
     """
     system, options = split_limits(limits)
     plugin = _plugin(path)
@@ -104,7 +106,9 @@ def generate(
     if problems:
         refused = replace(validation, valid=False, info="; ".join(problems))
         return refused, [], None, plugin.recon
-    return validation, paths, ir.convert(paths[0], system, **options).name, plugin.recon
+    offset = prescribed_offset(validation.values)
+    cache = ir.convert(paths[0], system, fov_offset=offset, **options)
+    return validation, paths, cache.name, plugin.recon
 
 
 def chain(first: str) -> list[str]:
@@ -115,6 +119,10 @@ def check(limits: Mapping[str, Any], seq_path: str) -> list[str]:
     return ir.check(seq_path, split_limits(limits)[0])
 
 
-def convert(limits: Mapping[str, Any], seq_path: str) -> str:
+def convert(
+    limits: Mapping[str, Any],
+    seq_path: str,
+    fov_offset: tuple[float, float, float] = (0.0, 0.0, 0.0),
+) -> str:
     system, options = split_limits(limits)
-    return ir.convert(seq_path, system, **options).name
+    return ir.convert(seq_path, system, fov_offset=fov_offset, **options).name

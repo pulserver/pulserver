@@ -321,6 +321,51 @@ def test_a_ge_cache_written_here_loads_in_the_scanner_reader(
     assert printed.splitlines() == _reader_lines(expected)
 
 
+def _readouts(sequence):
+    for index in range(1, len(sequence) + 1):
+        block = sequence.get_block(index)
+        if block.adc is not None:
+            yield block
+
+
+def test_a_prescribed_offset_moves_every_readout_of_a_file_by_one_frequency():
+    """A file names one ADC row from many blocks; each readout is moved once."""
+    sequence = pp.Sequence()
+    sequence.read(FIXTURES / "gre_2d_3sl.seq")
+
+    ir.prescribe(sequence, (0.01, 0.0, 0.0))
+
+    for block in _readouts(sequence):
+        assert block.adc.freq_offset == pytest.approx(0.01 * block.gx.amplitude)
+
+
+def test_a_prescribed_slice_offset_moves_every_excitation_by_one_frequency():
+    designed, moved = pp.Sequence(), pp.Sequence()
+    designed.read(FIXTURES / "gre_2d_3sl.seq")
+    moved.read(FIXTURES / "gre_2d_3sl.seq")
+
+    ir.prescribe(moved, (0.0, 0.0, 0.004))
+
+    for index in range(1, len(moved) + 1):
+        pulse = moved.get_block(index).rf
+        if pulse is not None:
+            added = pulse.freq_offset - designed.get_block(index).rf.freq_offset
+            assert added == pytest.approx(0.004 * moved.get_block(index).gz.amplitude)
+
+
+def test_a_zero_offset_writes_the_cache_as_designed_and_another_does_not(tmp_path):
+    source = _copy("gre_2d_3sl.seq", tmp_path)
+    caches = []
+    for offset in (None, (0.0, 0.0, 0.0), (0.0, 0.02, 0.0)):
+        caches.append(ir.convert(source, SYSTEM, fov_offset=offset).read_bytes())
+    assert caches[0] == caches[1] != caches[2]
+
+
+def test_an_offset_is_three_values():
+    with pytest.raises(ValueError, match="three values"):
+        ir.prescribe(pp.Sequence(), (0.01, 0.0))
+
+
 def test_a_file_within_the_scanner_limits_has_no_problem():
     """The fixture's 20 us gradient raster times its waveforms, not the scanner's 10 us."""
     assert ir.check(FIXTURES / "gre_2d_3sl.seq", SYSTEM) == []

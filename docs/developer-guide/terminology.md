@@ -139,16 +139,17 @@ Every documented quantity carries its unit.
 | Scan time in a `VALIDATE` reply | s |
 | Rasters passed to the IR conversion | s in `pypulseqpp.Opts`, µs in the cache |
 | Gyromagnetic ratio, field strength | Hz/T, T |
-| Prescription centre in the MRD header | mm |
-| Prescription centre returned by `fov_offset_m` | m |
+| Field-of-view offset in a protocol or an import block | mm |
+| Field-of-view offset passed to `ir.convert` and `ir.prescribe` | m |
 | Dwell time in an enriched acquisition (`sample_time_us`) | µs |
 | k-space trajectory | 1/m, as pypulseqpp reports it |
 | Session day | days since 1970-01-01 |
 
 State the coordinate frame wherever a position or a k-space quantity appears.
-The prescription centre and the trajectory are expressed along the sequence's
-x, y and z gradient axes, with the sequence's block rotations applied and no
-prescription rotation.
+The field-of-view offset is expressed along the logical readout, phase and
+slice axes. The trajectory is expressed along the sequence's x, y and z
+gradient axes, with the sequence's block rotations applied and no prescription
+rotation.
 
 State the precision a value is exchanged at when it matters: time entries are
 rounded to the nearest microsecond, ties to even, and float entries to six

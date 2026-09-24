@@ -76,9 +76,17 @@ class HostClient:
         )
         return int(header.split()[1])
 
-    def import_sequence(self, path: Path | str) -> int:
-        """Return the revision holding a sequence file, its chain and their cache."""
-        header, _ = self._command(f"IMPORT {self.session}", format_import(path))
+    def import_sequence(
+        self, path: Path | str, fov_offset_mm: tuple[float, float, float] | None = None
+    ) -> int:
+        """Return the revision holding a sequence file, its chain and their cache.
+
+        ``fov_offset_mm`` is the prescribed field-of-view offset along the
+        logical readout, phase and slice axes, in mm, which the cache is
+        shifted to; none leaves the files as they are.
+        """
+        block = format_import(path, fov_offset_mm)
+        header, _ = self._command(f"IMPORT {self.session}", block)
         return int(header.split()[1])
 
     def close(self) -> None:

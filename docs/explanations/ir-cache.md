@@ -17,6 +17,32 @@ chain is a subsequence of one scan, played in order; a prescan and the imaging
 sequence are typically two subsequences. Each subsequence is analysed on its
 own and the results are chained into one collection.
 
+## Prescription
+
+A sequence application writes its files in the logical frame, about the
+isocentre. The prescribed field-of-view offset $\mathbf{d}$ reaches the host in
+the `fov_offset_x`, `fov_offset_y` and `fov_offset_z` entries of the protocol,
+in mm along the logical readout, phase-encoding and slice axes, and
+{func}`~pulserver.ir.prescribe` applies it to every file of the chain before
+the passes run. No gradient is changed:
+
+- an RF pulse played under a gradient $G$ along an axis of the offset receives
+  the frequency offset $G d$, with $G$ in Hz/m, and a phase offset; where the
+  gradient varies during the pulse, the remaining phase is added as a phase
+  shape;
+- a readout receives the frequency and phase offsets, and where the gradient
+  varies during it a phase modulation, so that the phase of each sample
+  relative to its excitation is $2\pi\,\mathbf{d}\cdot\mathbf{k}(t)$, with
+  $\mathbf{k}$ the k-space location of the sample in 1/m;
+- blocks labelled `NOPOS` keep the phases they were designed with.
+
+The readouts are therefore demodulated to the prescribed centre as they are
+acquired, and the reconstruction receives an object at $\mathbf{d}$ at the
+centre of its field of view. The rotation of the prescription is not applied
+on the host: the scanner plays the cache through its rotation matrix, composed
+after each block's own rotation. Two offsets make two caches of one design, and
+two revisions ({doc}`sessions`).
+
 ## Checks
 
 Before a chain is converted, {func}`~pulserver.ir.check` runs pypulseqpp's
@@ -88,6 +114,7 @@ back a cache written on the host.
 ## See also
 
 * {doc}`../api/ir` — the conversion interface.
+* {doc}`protocol` — the protocol entries the offset arrives in.
 * [`src/c/include/pulseg/`](https://github.com/pulserver/pulserver/tree/main/src/c/include/pulseg)
   — the public C headers the interpreter includes.
 * {doc}`/generated/gallery/02-scanner-ir/01_segmentation` — the segmentation of shipped sequences, executed.

@@ -23,6 +23,13 @@ application's `init_sequence`. Resolving a request proceeds in three steps.
 3. The value each argument took in the constructed application is read back
    and converted to UI units ({meth}`~pulserver.design.ScannerSequence.resolved`).
 
+The field-of-view offset is not a design argument. Every listing ends with the
+entries `fov_offset_x`, `fov_offset_y` and `fov_offset_z`, in mm and not
+editable in the UI, which the interpreter fills from the scanner's
+prescription; resolution returns them unchanged, and the host applies the
+offset to the designed sequence when it builds the IR ({doc}`ir-cache`). A
+scanner sequence cannot bind them to an argument.
+
 A request the design refuses is invalid. The reply carries the request
 unchanged and the error message the application raised, which the interpreter
 shows to the operator. A valid reply carries the resolved values and the scan

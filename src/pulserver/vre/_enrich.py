@@ -8,12 +8,10 @@ stream order.
 from __future__ import annotations
 
 __all__ = [
-    "FOV_OFFSET_PARAMETER",
     "SequenceTable",
     "TableSpace",
     "enrich_acquisition",
     "enrich_header",
-    "fov_offset_m",
 ]
 
 from dataclasses import dataclass
@@ -25,12 +23,7 @@ import numpy as np
 
 from .._labels import MRD_COUNTERS, MRD_FLAGS
 from ..mrd._acquisitions import AcquisitionFlag
-from ..mrd._metadata import user_parameter
 from ..mrd._sequence import ReadoutTable, SequenceDefinitions, read_chain
-
-#: Header user parameter holding the prescription centre: a string of three
-#: numbers in mm, along the sequence's x, y and z gradient axes.
-FOV_OFFSET_PARAMETER = "pulserver_fov_offset_mm"
 
 _F = AcquisitionFlag
 
@@ -214,33 +207,6 @@ class SequenceTable:
         )
 
 
-def fov_offset_m(header: Any) -> np.ndarray:
-    """Return the prescription centre a header asks readouts to be demodulated to.
-
-    Read from the :data:`FOV_OFFSET_PARAMETER` user parameter.
-
-    Returns
-    -------
-    ndarray
-        ``(3,)`` in metres along the sequence's x, y and z gradient axes;
-        zeros when the header carries no offset.
-
-    Raises
-    ------
-    ValueError
-        If the parameter is not three numbers.
-    """
-    value = user_parameter(header, FOV_OFFSET_PARAMETER)
-    if value in (None, ""):
-        return np.zeros(3)
-    parts = str(value).split()
-    if len(parts) != 3:
-        raise ValueError(
-            f"{FOV_OFFSET_PARAMETER} must be three numbers in mm, got {value!r}"
-        )
-    return 1e-3 * np.array([float(part) for part in parts])
-
-
 def enrich_header(header: Any, table: SequenceTable) -> None:
     """Describe the table's encoding spaces and sequence parameters in an MRD header.
 
@@ -302,27 +268,14 @@ def enrich_header(header: Any, table: SequenceTable) -> None:
     header.encoding = encodings
 
 
-def enrich_acquisition(
-    acquisition: Any,
-    table: SequenceTable,
-    index: int,
-    fov_offset: np.ndarray | None = None,
-) -> None:
+def enrich_acquisition(acquisition: Any, table: SequenceTable, index: int) -> None:
     """Stamp row ``index`` of the table on one acquisition, in place.
 
     Sets the encoding counters, flags, ``sample_time_us`` and
     ``encoding_space_ref``, and ``center_sample`` unless k does not move
     across the readout, in which case the received value stays. A readout
-    whose k moves gets it as ``traj``, trailing constant axes dropped. With
-    ``fov_offset``, every channel is multiplied by ``exp(+i 2 pi d . k)``,
-    which moves an object at ``d`` to the centre of the field of view; the
-    trajectory is not changed.
-
-    Parameters
-    ----------
-    fov_offset
-        ``(3,)`` in metres along the sequence's gradient axes; see
-        :func:`fov_offset_m`.
+    whose k moves gets it as ``traj``, trailing constant axes dropped. The
+    samples are left as received.
 
     Raises
     ------
@@ -352,16 +305,12 @@ def enrich_acquisition(
     start = int(table.sample_offset[index])
     k = table.k[:, start : start + count]
 
-    data = np.array(acquisition.data)
-    if fov_offset is not None and np.any(fov_offset):
-        cycles = np.asarray(fov_offset, dtype=np.float64) @ k.astype(np.float64)
-        data = data * np.exp(2j * np.pi * cycles).astype(np.complex64)
-
     dimensions = int(table.trajectory_dimensions[index])
     if dimensions:
+        data = np.array(acquisition.data)
         acquisition.resize(count, int(acquisition.active_channels), dimensions)
         acquisition.traj[:] = k[:dimensions].T
-    acquisition.data[:] = data
+        acquisition.data[:] = data
 
 
 # %% private module subroutines
