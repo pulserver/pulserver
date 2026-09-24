@@ -515,7 +515,10 @@
             <nav aria-label="Page">
                 <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#host-daemon">Host daemon</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#design-command">Design command</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#design-command">Design command</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#warm-server">Warm server</a></li>
+</ul>
+</li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reconstruction-proxy">Reconstruction proxy</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See also</a></li>
 </ul>
@@ -690,6 +693,25 @@ recently used first: those unused for longer than <code class="docutils literal 
 until the store holds at most <code class="docutils literal notranslate"><span class="pre">--max-bytes</span></code>. Nothing is removed otherwise.</p>
 <p><code class="docutils literal notranslate"><span class="pre">list</span></code> depends on the plugin file and the installed packages only, so its reply
 can be written when they are installed and read without a call.</p>
+<section id="warm-server">
+<h3>Warm server<a class="headerlink" href="#warm-server" title="Link to this heading">#</a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pulserver<span class="w"> </span>design<span class="w"> </span>serve<span class="w"> </span>--plugins<span class="w"> </span>DIR<span class="w"> </span>--socket<span class="w"> </span>PATH
+</pre></div>
+</div>
+<p>A call answered in its own process imports the design engine first, which
+takes most of its time. A warm server imports it once, designs, checks and
+converts a sequence of its own, and imports every plugin in <code class="docutils literal notranslate"><span class="pre">--plugins</span></code>. It then
+answers each call forwarded to its socket in a child process forked from it, so
+nothing a call does outlives the call, and a plugin that ends its process fails
+its own call only, with <code class="docutils literal notranslate"><span class="pre">ERROR</span> <span class="pre">the</span> <span class="pre">design</span> <span class="pre">call</span> <span class="pre">ended</span> <span class="pre">with</span> <span class="pre">exit</span> <span class="pre">status</span> <span class="pre">N</span></code>.
+Calls run concurrently, one child each. A call is forwarded when <code class="docutils literal notranslate"><span class="pre">--socket</span></code>, or
+the <code class="docutils literal notranslate"><span class="pre">PULSERVER_DESIGN_SOCKET</span></code> environment variable, names the socket of a
+running server, and is answered in its own process otherwise; the reply is the
+same either way. The command imports neither NumPy nor pypulseqpp to forward a
+call. The server stops on <code class="docutils literal notranslate"><span class="pre">SIGINT</span></code> or <code class="docutils literal notranslate"><span class="pre">SIGTERM</span></code> and ends the calls it is
+running. The socket is neither authenticated nor encrypted: its file
+permissions decide who may call.</p>
+</section>
 </section>
 <section id="reconstruction-proxy">
 <h2>Reconstruction proxy<a class="headerlink" href="#reconstruction-proxy" title="Link to this heading">#</a></h2>
@@ -806,7 +828,10 @@ is running before it exits.</p>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#host-daemon">Host daemon</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#design-command">Design command</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#design-command">Design command</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#warm-server">Warm server</a></li>
+</ul>
+</li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reconstruction-proxy">Reconstruction proxy</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See also</a></li>
 </ul>

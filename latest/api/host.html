@@ -539,8 +539,9 @@ worker processes; it is started with</p>
 </div>
 <p>Sessions and revisions are stored under <code class="docutils literal notranslate"><span class="pre">&lt;base&gt;/bucket/</span></code>, in the layout
 described in <a class="reference internal" href="../explanations/sessions.html"><span class="doc">Design sessions and revisions</span></a>. The <code class="docutils literal notranslate"><span class="pre">pulserver</span> <span class="pre">design</span></code> command
-answers the same calls without a session, and stores each design in a
-<a class="reference internal" href="../generated/pulserver.host.DesignStore.html#pulserver.host.DesignStore" title="pulserver.host.DesignStore"><code class="xref py py-class docutils literal notranslate"><span class="pre">DesignStore</span></code></a> (<a class="reference internal" href="../user-guide/running.html"><span class="doc">Running the services</span></a>).</p>
+answers the same calls without a session, in its own process or in a warm
+server’s, and stores each design in a <a class="reference internal" href="../generated/pulserver.host.DesignStore.html#pulserver.host.DesignStore" title="pulserver.host.DesignStore"><code class="xref py py-class docutils literal notranslate"><span class="pre">DesignStore</span></code></a>
+(<a class="reference internal" href="../user-guide/running.html"><span class="doc">Running the services</span></a>).</p>
 <section id="daemon-and-client">
 <h2>Daemon and client<a class="headerlink" href="#daemon-and-client" title="Link to this heading">#</a></h2>
 <div class="pst-scrollable-table-container"><table class="table">
