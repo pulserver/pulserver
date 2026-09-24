@@ -106,8 +106,12 @@ class SequenceTable:
         ``LAST_IN_MEASUREMENT`` on the final readout of the chain. A boundary
         is read within its encoding space and the other image-selecting
         counters, so a slice closes once per echo.
-    center_sample, trajectory_dimensions, num_samples : ndarray
+    center_sample, num_samples : ndarray
         As :class:`~pulserver.mrd.ReadoutTable` states them, over the chain.
+    trajectory_dimensions : ndarray
+        ``int8`` axes of k a readout carries as its trajectory: every axis its
+        encoding space varies along, up to the last, including those constant
+        across the readout; 0 for a readout whose k does not move.
     sample_time_us : ndarray
         ``float32`` dwell, in µs.
     encoding_space : ndarray
@@ -182,6 +186,10 @@ class SequenceTable:
         flags = joined("flags", np.uint64)
         if flags.size:
             flags[-1] |= np.uint64(_F.LAST_IN_MEASUREMENT.value)
+        encoding_space = joined("encoding_space", np.int32)
+        moving = joined("trajectory_dimensions", np.int8)
+        widest = np.zeros(len(spaces), dtype=np.int8)
+        np.maximum.at(widest, encoding_space, moving)
 
         parameters: dict[str, list[float]] = {}
         if tr:
@@ -202,9 +210,9 @@ class SequenceTable:
             },
             flags=flags,
             center_sample=joined("center_sample", np.int32),
-            trajectory_dimensions=joined("trajectory_dimensions", np.int8),
+            trajectory_dimensions=np.where(moving > 0, widest[encoding_space], 0),
             sample_time_us=joined("sample_time_us", np.float32),
-            encoding_space=joined("encoding_space", np.int32),
+            encoding_space=encoding_space,
             num_samples=joined("num_samples", np.int32),
             spaces=tuple(spaces),
             sequence_parameters=parameters,

@@ -50,6 +50,15 @@ its first block. A refocusing pulse reverses k rather than resetting it and
 does not begin a range, nor does an excitation in a block that also holds a
 readout.
 
+An acquisition carries as its trajectory every axis its encoding space varies
+along, up to the last, whether or not its own k moves along it: the line of a
+PROPELLER blade that is played unrotated keeps its phase encoding in ky. The
+partitions of a stack of spokes or spirals are Cartesian along z and placed by
+their `kspace_encode_step_2` counter, so their kz is not part of the
+trajectory. A reconstruction takes the trajectory in grid units, k times the
+reconstructed field of view, through
+{meth}`~pulserver.recon.ReconBuffer.grid_trajectory`.
+
 Tabulating a revision integrates every range once, for the echo sample of each
 readout and the k-space axes its trajectory spans, which decide the header's
 trajectory type. An acquisition's trajectory is integrated again when it is
