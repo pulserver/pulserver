@@ -14,10 +14,8 @@
    :toctree:
    :nosignatures:
 
-   ~ScannerSequence.duration
    ~ScannerSequence.generate
    ~ScannerSequence.listing
-   ~ScannerSequence.resolved
    ~ScannerSequence.validate
 
 

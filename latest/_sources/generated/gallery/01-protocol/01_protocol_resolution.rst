@@ -60,10 +60,10 @@ Scanner sequence
 The binding maps interpreter parameter names to ``init_sequence`` arguments.
 Times are exchanged in integer microseconds, the field of view in mm, and the
 *Minimum* preset of TE and TR requests the shortest time the design admits.
-``resolved`` reads the achieved echo time, repetition time and ADC sampling
-rate from the readout module, where the application keeps them.
+The application records the echo time, repetition time and receiver
+bandwidth its design achieves, and the reply carries those values.
 
-.. GENERATED FROM PYTHON SOURCE LINES 46-84
+.. GENERATED FROM PYTHON SOURCE LINES 46-77
 
 .. code-block:: Python
 
@@ -94,13 +94,6 @@ rate from the readout module, where the application keeps them.
             UIParam.NX: IntParam("n_x", range_min=32, range_max=512, range_incr=2),
         }
 
-        def resolved(self, app):
-            return {
-                "te": app.ro.echo_time,
-                "tr": app.repetition_time,
-                "readout_bandwidth_hz": app.ro.bandwidth_hz,
-            }
-
 
     gre = Gre2D()
     print(format_listing(gre.listing()), end="")
@@ -127,13 +120,13 @@ rate from the readout module, where the application keeps them.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 85-88
+.. GENERATED FROM PYTHON SOURCE LINES 78-81
 
 The scanner limits are those a PSD host process opens its session with. The
 rasters are stated explicitly because the achieved bandwidth depends on
 them.
 
-.. GENERATED FROM PYTHON SOURCE LINES 88-98
+.. GENERATED FROM PYTHON SOURCE LINES 81-91
 
 .. code-block:: Python
 
@@ -154,7 +147,7 @@ them.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 99-115
+.. GENERATED FROM PYTHON SOURCE LINES 92-108
 
 Receiver bandwidth
 ------------------
@@ -173,7 +166,7 @@ time that is a multiple of 2.5 µs, so only 400, 200, 133, 100, 80 kHz and so
 on are achievable. For 200 samples, every multiple of the 100 ns ADC raster
 is achievable.
 
-.. GENERATED FROM PYTHON SOURCE LINES 115-141
+.. GENERATED FROM PYTHON SOURCE LINES 108-134
 
 .. code-block:: Python
 
@@ -200,12 +193,12 @@ is achievable.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 142-144
+.. GENERATED FROM PYTHON SOURCE LINES 135-137
 
 The reply always carries the achieved value, so the scanner UI shows the
 bandwidth that will be played rather than the one typed in.
 
-.. GENERATED FROM PYTHON SOURCE LINES 144-151
+.. GENERATED FROM PYTHON SOURCE LINES 137-144
 
 .. code-block:: Python
 
@@ -230,7 +223,7 @@ bandwidth that will be played rather than the one typed in.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 152-161
+.. GENERATED FROM PYTHON SOURCE LINES 145-154
 
 Shortest echo time
 ------------------
@@ -242,7 +235,7 @@ readout acquires half of its samples. The shortest echo time therefore grows
 with the number of samples and with the dwell time, that is, with matrix size
 and inversely with bandwidth.
 
-.. GENERATED FROM PYTHON SOURCE LINES 161-192
+.. GENERATED FROM PYTHON SOURCE LINES 154-185
 
 .. code-block:: Python
 
@@ -272,7 +265,7 @@ and inversely with bandwidth.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 193-199
+.. GENERATED FROM PYTHON SOURCE LINES 186-192
 
 Infeasible requests and repeated resolution
 -------------------------------------------
@@ -281,7 +274,7 @@ A prescription the design cannot realize is invalid. The reply carries the
 request unchanged and the error the application raised, which the
 interpreter shows to the operator.
 
-.. GENERATED FROM PYTHON SOURCE LINES 199-204
+.. GENERATED FROM PYTHON SOURCE LINES 192-197
 
 .. code-block:: Python
 
@@ -304,14 +297,14 @@ interpreter shows to the operator.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 205-209
+.. GENERATED FROM PYTHON SOURCE LINES 198-202
 
 A valid reply carries the resolved protocol at the precision a scanner
 control variable stores. Sending it back resolves to the same protocol,
 which is what lets the host daemon identify a revision by its resolved
 protocol (:doc:`/explanations/sessions`).
 
-.. GENERATED FROM PYTHON SOURCE LINES 209-214
+.. GENERATED FROM PYTHON SOURCE LINES 202-207
 
 .. code-block:: Python
 
@@ -337,7 +330,7 @@ protocol (:doc:`/explanations/sessions`).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 2.312 seconds)
+   **Total running time of the script:** (0 minutes 2.426 seconds)
 
 
 .. _sphx_glr_download_generated_gallery_01-protocol_01_protocol_resolution.py:

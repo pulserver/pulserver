@@ -548,10 +548,12 @@ application’s <code class="docutils literal notranslate"><span class="pre">ini
 is always a complete prescription.</p></li>
 <li><p>The UI values are converted to the application’s arguments, and the
 application is constructed under the scanner limits. Construction designs
-the sequence: it solves the gradient waveforms and timing against the
-system limits and raises an error for a prescription it cannot realize.</p></li>
-<li><p>The value each argument took in the constructed application is read back
-and converted to UI units (<a class="reference internal" href="../generated/pulserver.design.ScannerSequence.resolved.html#pulserver.design.ScannerSequence.resolved" title="pulserver.design.ScannerSequence.resolved"><code class="xref py py-meth docutils literal notranslate"><span class="pre">resolved()</span></code></a>).</p></li>
+the events and their timing against the system limits, without playing the
+scan, and raises an error for a prescription it cannot realize.</p></li>
+<li><p>The value each argument took in the design, as the application records it
+(<a class="reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.sequences.SequenceApp.resolved.html#pypulseqpp.sequences.SequenceApp.resolved" title="(in pypulseqpp latest)"><code class="xref py py-attr docutils literal notranslate"><span class="pre">resolved</span></code></a>), is converted to UI
+units. An argument the application does not record keeps its requested
+value.</p></li>
 </ol>
 <p>The field-of-view offset is not a design argument. Every listing ends with the
 entries <code class="docutils literal notranslate"><span class="pre">fov_offset_x</span></code>, <code class="docutils literal notranslate"><span class="pre">fov_offset_y</span></code> and <code class="docutils literal notranslate"><span class="pre">fov_offset_z</span></code>, in mm and not
@@ -562,7 +564,7 @@ scanner sequence cannot bind them to an argument.</p>
 <p>A request the design refuses is invalid. The reply carries the request
 unchanged and the error message the application raised, which the interpreter
 shows to the operator. A valid reply carries the resolved values and the scan
-time in seconds.</p>
+time in seconds (<a class="reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.sequences.SequenceApp.scan_time.html#pypulseqpp.sequences.SequenceApp.scan_time" title="(in pypulseqpp latest)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">scan_time()</span></code></a>).</p>
 </section>
 <section id="presets">
 <h2>Presets<a class="headerlink" href="#presets" title="Link to this heading">#</a></h2>

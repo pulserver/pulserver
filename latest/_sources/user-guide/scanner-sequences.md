@@ -31,8 +31,6 @@ protocol's initial values.
 ...                           range_min=50.0, range_max=500.0),
 ...         UIParam.NX: IntParam("n_x", range_min=32, range_max=512, range_incr=2),
 ...     }
-...     def resolved(self, app):
-...         return {"te": app.ro.echo_time, "tr": app.repetition_time}
 
 ```
 
@@ -85,9 +83,9 @@ The last three entries are the field-of-view offset, which the interpreter
 fills from the scanner's prescription and which the host applies when it
 builds the IR ({doc}`../explanations/ir-cache`).
 
-{meth}`~pulserver.design.ScannerSequence.validate` designs the sequence under
-the scanner limits and returns the protocol it will play. Entries the request
-omits keep the application's defaults:
+{meth}`~pulserver.design.ScannerSequence.validate` constructs the application
+under the scanner limits and returns the protocol it will play. Entries the
+request omits keep the application's defaults:
 
 ```pycon
 >>> import pypulseqpp as pp
@@ -97,12 +95,12 @@ Validation(valid=True, duration=36.0, info='', values={'TE': 3080, 'TR': 250000,
 
 ```
 
-The resolved `TE` is the echo time the design achieved, read back by
-{meth}`~pulserver.design.ScannerSequence.resolved`. By default the read-back is
-the application attribute named after each argument; `Gre2D` overrides it
-because the application keeps its echo and repetition times elsewhere. Resolved
-values are reported at the precision a scanner control variable stores, so a
-resolved protocol sent back resolves to itself.
+The resolved `TE` is the echo time the design achieved: the value the
+application records with {meth}`~pypulseqpp.sequences.SequenceApp.resolve` in
+`init_sequence`, as {attr}`~pypulseqpp.sequences.SequenceApp.resolved` reports
+it. An entry whose argument the application does not record keeps the
+requested value. Resolved values are reported at the precision a scanner
+control variable stores, so a resolved protocol sent back resolves to itself.
 
 A protocol the design refuses is invalid, and the error the application raised
 is the reply's `info`:
@@ -114,10 +112,12 @@ is the reply's `info`:
 
 ```
 
-`duration` is the scan time in seconds: the application's `duration`
-attribute when it has one, otherwise the length of the designed scan.
-{meth}`~pulserver.design.ScannerSequence.duration` can be overridden when
-neither is right.
+`duration` is the scan time in seconds,
+{meth}`~pypulseqpp.sequences.SequenceApp.scan_time`: the `duration` the
+application states in `init_sequence`, which is reported without playing the
+scan, and otherwise the summed duration of the designed prescans and main
+sequence. An error the design raises while its scan time is computed makes the
+reply invalid, as an error raised by construction does.
 
 {meth}`~pulserver.design.ScannerSequence.generate` writes the design as signed
 binary Pulseq, prescans first, and the daemon converts it to the IR cache the

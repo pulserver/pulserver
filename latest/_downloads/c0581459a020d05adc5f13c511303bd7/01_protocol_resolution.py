@@ -41,8 +41,8 @@ PAGE_WIDTH = 8.6  # inches, the width of the documentation column
 # The binding maps interpreter parameter names to ``init_sequence`` arguments.
 # Times are exchanged in integer microseconds, the field of view in mm, and the
 # *Minimum* preset of TE and TR requests the shortest time the design admits.
-# ``resolved`` reads the achieved echo time, repetition time and ADC sampling
-# rate from the readout module, where the application keeps them.
+# The application records the echo time, repetition time and receiver
+# bandwidth its design achieves, and the reply carries those values.
 
 import numpy as np
 import pypulseqpp as pp
@@ -69,13 +69,6 @@ class Gre2D(ScannerSequence):
         ),
         UIParam.NX: IntParam("n_x", range_min=32, range_max=512, range_incr=2),
     }
-
-    def resolved(self, app):
-        return {
-            "te": app.ro.echo_time,
-            "tr": app.repetition_time,
-            "readout_bandwidth_hz": app.ro.bandwidth_hz,
-        }
 
 
 gre = Gre2D()

@@ -529,8 +529,10 @@
 <dt class="sig sig-object py" id="pulserver.design.ScannerSequence.validate">
 <span class="sig-prename descclassname"><span class="pre">ScannerSequence.</span></span><span class="sig-name descname"><span class="pre">validate</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pulserver/design/_scanner.html#ScannerSequence.validate"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.design.ScannerSequence.validate" title="Link to this definition">#</a></dt>
 <dd><p>Resolve a request into the protocol the application will play.</p>
-<p>A valid reply carries the resolved values; an invalid one carries the
-request and the error the design raised.</p>
+<p>A valid reply carries the resolved values, as the application’s
+<code class="docutils literal notranslate"><span class="pre">resolved</span></code> reports them, and its <code class="docutils literal notranslate"><span class="pre">scan_time()</span></code>, which plays the
+chain only when the application states no <code class="docutils literal notranslate"><span class="pre">duration</span></code>. An invalid
+one carries the request and the error the design raised.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Raises<span class="colon">:</span></dt>
 <dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If the request names an entry the UI does not declare.</p>

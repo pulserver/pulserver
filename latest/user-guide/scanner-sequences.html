@@ -557,8 +557,6 @@ protocol’s initial values.</p>
 <span class="gp">... </span>                          <span class="n">range_min</span><span class="o">=</span><span class="mf">50.0</span><span class="p">,</span> <span class="n">range_max</span><span class="o">=</span><span class="mf">500.0</span><span class="p">),</span>
 <span class="gp">... </span>        <span class="n">UIParam</span><span class="o">.</span><span class="n">NX</span><span class="p">:</span> <span class="n">IntParam</span><span class="p">(</span><span class="s2">"n_x"</span><span class="p">,</span> <span class="n">range_min</span><span class="o">=</span><span class="mi">32</span><span class="p">,</span> <span class="n">range_max</span><span class="o">=</span><span class="mi">512</span><span class="p">,</span> <span class="n">range_incr</span><span class="o">=</span><span class="mi">2</span><span class="p">),</span>
 <span class="gp">... </span>    <span class="p">}</span>
-<span class="gp">... </span>    <span class="k">def</span><span class="w"> </span><span class="nf">resolved</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">app</span><span class="p">):</span>
-<span class="gp">... </span>        <span class="k">return</span> <span class="p">{</span><span class="s2">"te"</span><span class="p">:</span> <span class="n">app</span><span class="o">.</span><span class="n">ro</span><span class="o">.</span><span class="n">echo_time</span><span class="p">,</span> <span class="s2">"tr"</span><span class="p">:</span> <span class="n">app</span><span class="o">.</span><span class="n">repetition_time</span><span class="p">}</span>
 
 </pre></div>
 </div>
@@ -635,9 +633,9 @@ schema, as the daemon returns it to <code class="docutils literal notranslate"><
 <p>The last three entries are the field-of-view offset, which the interpreter
 fills from the scanner’s prescription and which the host applies when it
 builds the IR (<a class="reference internal" href="../explanations/ir-cache.html"><span class="doc">The scanner IR</span></a>).</p>
-<p><a class="reference internal" href="../generated/pulserver.design.ScannerSequence.validate.html#pulserver.design.ScannerSequence.validate" title="pulserver.design.ScannerSequence.validate"><code class="xref py py-meth docutils literal notranslate"><span class="pre">validate()</span></code></a> designs the sequence under
-the scanner limits and returns the protocol it will play. Entries the request
-omits keep the application’s defaults:</p>
+<p><a class="reference internal" href="../generated/pulserver.design.ScannerSequence.validate.html#pulserver.design.ScannerSequence.validate" title="pulserver.design.ScannerSequence.validate"><code class="xref py py-meth docutils literal notranslate"><span class="pre">validate()</span></code></a> constructs the application
+under the scanner limits and returns the protocol it will play. Entries the
+request omits keep the application’s defaults:</p>
 <div class="highlight-pycon notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">pypulseqpp</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pp</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">system</span> <span class="o">=</span> <span class="n">pp</span><span class="o">.</span><span class="n">Opts</span><span class="p">(</span><span class="n">max_grad</span><span class="o">=</span><span class="mi">40</span><span class="p">,</span> <span class="n">grad_unit</span><span class="o">=</span><span class="s2">"mT/m"</span><span class="p">,</span> <span class="n">max_slew</span><span class="o">=</span><span class="mi">150</span><span class="p">,</span> <span class="n">slew_unit</span><span class="o">=</span><span class="s2">"T/m/s"</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">Gre2D</span><span class="p">()</span><span class="o">.</span><span class="n">validate</span><span class="p">(</span><span class="n">system</span><span class="p">,</span> <span class="p">{</span><span class="s2">"TE"</span><span class="p">:</span> <span class="n">TEPreset</span><span class="o">.</span><span class="n">MINIMUM</span><span class="p">,</span> <span class="s2">"nx"</span><span class="p">:</span> <span class="mi">96</span><span class="p">})</span>
@@ -645,12 +643,12 @@ omits keep the application’s defaults:</p>
 
 </pre></div>
 </div>
-<p>The resolved <code class="docutils literal notranslate"><span class="pre">TE</span></code> is the echo time the design achieved, read back by
-<a class="reference internal" href="../generated/pulserver.design.ScannerSequence.resolved.html#pulserver.design.ScannerSequence.resolved" title="pulserver.design.ScannerSequence.resolved"><code class="xref py py-meth docutils literal notranslate"><span class="pre">resolved()</span></code></a>. By default the read-back is
-the application attribute named after each argument; <code class="docutils literal notranslate"><span class="pre">Gre2D</span></code> overrides it
-because the application keeps its echo and repetition times elsewhere. Resolved
-values are reported at the precision a scanner control variable stores, so a
-resolved protocol sent back resolves to itself.</p>
+<p>The resolved <code class="docutils literal notranslate"><span class="pre">TE</span></code> is the echo time the design achieved: the value the
+application records with <a class="reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.sequences.SequenceApp.resolve.html#pypulseqpp.sequences.SequenceApp.resolve" title="(in pypulseqpp latest)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">resolve()</span></code></a> in
+<code class="docutils literal notranslate"><span class="pre">init_sequence</span></code>, as <a class="reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.sequences.SequenceApp.resolved.html#pypulseqpp.sequences.SequenceApp.resolved" title="(in pypulseqpp latest)"><code class="xref py py-attr docutils literal notranslate"><span class="pre">resolved</span></code></a> reports
+it. An entry whose argument the application does not record keeps the
+requested value. Resolved values are reported at the precision a scanner
+control variable stores, so a resolved protocol sent back resolves to itself.</p>
 <p>A protocol the design refuses is invalid, and the error the application raised
 is the reply’s <code class="docutils literal notranslate"><span class="pre">info</span></code>:</p>
 <div class="highlight-pycon notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">reply</span> <span class="o">=</span> <span class="n">Gre2D</span><span class="p">()</span><span class="o">.</span><span class="n">validate</span><span class="p">(</span><span class="n">system</span><span class="p">,</span> <span class="p">{</span><span class="s2">"TE"</span><span class="p">:</span> <span class="mi">1000</span><span class="p">})</span>
@@ -659,10 +657,12 @@ is the reply’s <code class="docutils literal notranslate"><span class="pre">in
 
 </pre></div>
 </div>
-<p><code class="docutils literal notranslate"><span class="pre">duration</span></code> is the scan time in seconds: the application’s <code class="docutils literal notranslate"><span class="pre">duration</span></code>
-attribute when it has one, otherwise the length of the designed scan.
-<a class="reference internal" href="../generated/pulserver.design.ScannerSequence.duration.html#pulserver.design.ScannerSequence.duration" title="pulserver.design.ScannerSequence.duration"><code class="xref py py-meth docutils literal notranslate"><span class="pre">duration()</span></code></a> can be overridden when
-neither is right.</p>
+<p><code class="docutils literal notranslate"><span class="pre">duration</span></code> is the scan time in seconds,
+<a class="reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.sequences.SequenceApp.scan_time.html#pypulseqpp.sequences.SequenceApp.scan_time" title="(in pypulseqpp latest)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">scan_time()</span></code></a>: the <code class="docutils literal notranslate"><span class="pre">duration</span></code> the
+application states in <code class="docutils literal notranslate"><span class="pre">init_sequence</span></code>, which is reported without playing the
+scan, and otherwise the summed duration of the designed prescans and main
+sequence. An error the design raises while its scan time is computed makes the
+reply invalid, as an error raised by construction does.</p>
 <p><a class="reference internal" href="../generated/pulserver.design.ScannerSequence.generate.html#pulserver.design.ScannerSequence.generate" title="pulserver.design.ScannerSequence.generate"><code class="xref py py-meth docutils literal notranslate"><span class="pre">generate()</span></code></a> writes the design as signed
 binary Pulseq, prescans first, and the daemon converts it to the IR cache the
 scanner loads. The daemon stores each generated design as a revision, described
