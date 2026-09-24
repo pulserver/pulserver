@@ -20,7 +20,7 @@ from typing import Any
 import ismrmrd
 
 from ..recon._runtime import constants
-from ..recon._runtime.concurrency import compute_max_concurrent
+from ..recon._runtime.concurrency import Slot, Slots, slot_devices
 from ..recon._runtime.connection import Connection
 from ..recon._runtime.exam import ExamCacheManager
 from ..recon._runtime.readers import deserialize_config, read_text
@@ -51,9 +51,12 @@ class ReconProxy:
     received. The reconstruction plugin is the revision's, falling back to
     the name in the client's config text.
 
-    A series holds a slot for as long as it runs. Its worker's images, DICOM
-    and text go back to the client as they arrive, the client's close closes
-    the worker, and the worker's close closes the client.
+    A series holds a slot for as long as it runs. On a host with GPUs, found
+    through ``CUDA_VISIBLE_DEVICES`` or ``nvidia-smi``, each slot holds one,
+    ``gpu_slots`` slots per GPU, and the reconstruction reads it as
+    ``context.device``. Its worker's images, DICOM and text go back to the
+    client as they arrive, the client's close closes the worker, and the
+    worker's close closes the client.
 
     A series that finds every slot busy is queued instead: its enriched stream
     is written to ``bucket/<session>/queue/<id>.h5`` while it arrives, its
@@ -75,7 +78,10 @@ class ReconProxy:
     plugins
         Directory of reconstruction plugin files, ``<plugin>.py``.
     slots
-        Series reconstructed at once; the memory-derived limit when ``None``.
+        Series reconstructed at once; derived from memory and the GPUs when
+        ``None``.
+    gpu_slots
+        Series reconstructed at once on each GPU, when ``slots`` is ``None``.
     spares
         Warm worker processes waiting for a series.
     recon_timeout
@@ -96,6 +102,7 @@ class ReconProxy:
         plugins: Path | str,
         *,
         slots: int | None = None,
+        gpu_slots: int = 1,
         spares: int = 1,
         recon_timeout: float | None = None,
     ) -> None:
@@ -105,7 +112,7 @@ class ReconProxy:
         self.recon_timeout = recon_timeout
         self._exam_root = Path(tempfile.mkdtemp(prefix="pulserver-exams-"))
         self.exams = ExamCacheManager(directory=self._exam_root)
-        self._slots = threading.BoundedSemaphore(compute_max_concurrent(override=slots))
+        self._slots = Slots(slot_devices(slots, gpu_slots))
         self._server: socket.socket | None = None
         self._closing = threading.Event()
         self._stopping = False
@@ -206,17 +213,19 @@ class ReconProxy:
             plugin.stem,
             len(revision.table),
         )
-        if self._slots.acquire(blocking=False):
+        slot = self._slots.take(wait=False)
+        if slot is not None:
             try:
                 self._run(
                     client,
                     config,
                     header,
                     plugin,
+                    slot,
                     lambda worker: _forward(client, worker, revision),
                 )
             finally:
-                self._slots.release()
+                self._slots.release(slot)
             return
         self._queue(client, config, header, revision, plugin)
 
@@ -237,17 +246,18 @@ class ReconProxy:
         _log.info("queued %s on %s", queued.path.name, revision.directory)
         try:
             others = _record(client, header, revision, queued)
-            self._slots.acquire()
+            slot = self._slots.take(wait=True)
             try:
                 self._run(
                     client,
                     config,
                     header,
                     plugin,
+                    slot,
                     lambda worker: _replay(queued, others, worker),
                 )
             finally:
-                self._slots.release()
+                self._slots.release(slot)
         finally:
             queued.unlink()
 
@@ -257,11 +267,12 @@ class ReconProxy:
         config: str,
         header: Any,
         plugin: Path,
+        slot: Slot,
         feed: Callable[[Connection], None],
     ) -> None:
         """Give a worker the config, the header and whatever ``feed`` sends it."""
         with self.exams.lease(header) as exam:
-            channel = _WorkerChannel(self.workers, plugin, exam.directory)
+            channel = _WorkerChannel(self.workers, plugin, exam.directory, slot.device)
             with channel as worker:
                 worker.send_config(config)
                 worker.send_header(header)
@@ -311,12 +322,17 @@ class _WorkerChannel:
     """A worker's end of one series: its Unix socket, its process, its stream."""
 
     def __init__(
-        self, pool: WorkerPool, plugin: Path, exam_directory: Path | None
+        self,
+        pool: WorkerPool,
+        plugin: Path,
+        exam_directory: Path | None,
+        device: str | None,
     ) -> None:
         self._directory = Path(tempfile.mkdtemp(prefix="pulserver-series-"))
         self._pool = pool
         self._plugin = plugin
         self._exam_directory = exam_directory
+        self._device = device
         self._process = None
         self.connection: Connection | None = None
 
@@ -328,7 +344,7 @@ class _WorkerChannel:
             listener.listen(1)
             listener.settimeout(_CONNECT_TIMEOUT)
             process = self._process = self._pool.assign(
-                self._plugin, path, self._exam_directory
+                self._plugin, path, self._exam_directory, self._device
             )
             try:
                 stream, _ = listener.accept()

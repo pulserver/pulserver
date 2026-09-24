@@ -37,6 +37,9 @@ class _Spare:
 class WorkerPool:
     """Spawned reconstruction workers, kept warm until a series needs one.
 
+    Workers are not daemonic, so a reconstruction may start processes of its
+    own; :meth:`close` terminates the workers still running.
+
     Parameters
     ----------
     spares
@@ -48,6 +51,7 @@ class WorkerPool:
         self._context = multiprocessing.get_context("spawn")
         self._condition = threading.Condition()
         self._spares: list[_Spare] = []
+        self._assigned: list[SpawnProcess] = []
         self._closed = False
         for _ in range(max(1, spares)):
             self._start()
@@ -57,13 +61,14 @@ class WorkerPool:
         plugin: Path | str,
         socket_path: Path | str,
         exam_directory: Path | str | None = None,
+        device: str | None = None,
     ) -> SpawnProcess:
-        """Hand a spare the plugin to run, the socket to reach the proxy on and its exam directory.
+        """Hand a spare the plugin to run, the socket to reach the proxy on, its exam directory and device.
 
         Starts a replacement spare before returning, so the next series does not
         wait for an import. The series' :class:`~pulserver.recon.ExamCache`
         shares ``exam_directory`` with the exam's other series; ``None`` keeps
-        it to this series.
+        it to this series. ``device`` is the series' ``context.device``.
 
         Raises
         ------
@@ -76,8 +81,9 @@ class WorkerPool:
             if self._closed:
                 raise RuntimeError("the worker pool is closed")
             spare = self._spares.pop(0)
+            self._assigned.append(spare.process)
         exam = None if exam_directory is None else str(exam_directory)
-        spare.pipe.send((str(socket_path), str(plugin), exam))
+        spare.pipe.send((str(socket_path), str(plugin), exam, device))
         spare.pipe.close()
         self._start()
         return spare.process
@@ -88,12 +94,13 @@ class WorkerPool:
             return tuple(spare.process.pid for spare in self._spares)
 
     def close(self) -> None:
-        """Release every spare and refuse further assignments."""
+        """Release every spare, terminate the workers still running, and refuse further assignments."""
         with self._condition:
             if self._closed:
                 return
             self._closed = True
             spares, self._spares = self._spares, []
+            assigned, self._assigned = self._assigned, []
             self._condition.notify_all()
         for spare in spares:
             with contextlib.suppress(OSError, ValueError):
@@ -102,12 +109,20 @@ class WorkerPool:
             spare.process.join(timeout=10)
             if spare.process.is_alive():
                 spare.process.terminate()
+        for process in assigned:
+            if process.is_alive():
+                process.terminate()
+                process.join(timeout=10)
 
     def _start(self) -> None:
         # Reaps the workers that have finished their series.
         multiprocessing.active_children()
+        with self._condition:
+            self._assigned = [
+                process for process in self._assigned if process.is_alive()
+            ]
         parent, child = self._context.Pipe()
-        process = self._context.Process(target=_warm, args=(child,), daemon=True)
+        process = self._context.Process(target=_warm, args=(child,), daemon=False)
         process.start()
         child.close()
         with self._condition:
@@ -141,7 +156,10 @@ def _warm(pipe: Pipe) -> None:
 
 
 def _reconstruct(
-    socket_path: str, plugin_path: str, exam_directory: str | None = None
+    socket_path: str,
+    plugin_path: str,
+    exam_directory: str | None = None,
+    device: str | None = None,
 ) -> int:
     """Drive one series over the proxy's socket; the exit status of the worker."""
     stream = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -155,7 +173,12 @@ def _reconstruct(
         run_application(
             load_plugin(plugin_path),
             connection,
-            ReconContext(header=connection.header, exam=exam, config=connection.config),
+            ReconContext(
+                header=connection.header,
+                exam=exam,
+                config=connection.config,
+                device=device,
+            ),
         )
     except Exception as error:
         _log.exception("reconstruction failed")

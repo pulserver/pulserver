@@ -57,6 +57,13 @@ of its own, so a stored value reaches the next series pickled, through the
 exam's directory: it comes back as a copy, without its `cleanup`, and a value
 that cannot be pickled stays with its series.
 
+`context.device` is the GPU the proxy gave the series, such as `"cuda:0"`, and
+`None` on a host without one and offline; a reconstruction puts its tensors
+there. A reconstruction may start processes of its own. A child started with
+the `spawn` method imports what it runs by module name, which a plugin file
+loaded from a path does not have, so the functions it runs come from importable
+modules.
+
 ## Running a plugin offline
 
 The same hooks run outside the proxy.
