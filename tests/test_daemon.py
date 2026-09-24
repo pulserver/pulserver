@@ -218,6 +218,30 @@ def test_a_generated_revision_names_the_reconstruction_its_sequence_binds(daemon
     assert _meta(daemon, unbound, unbound.generate(values))["recon"] == ""
 
 
+def test_a_design_beyond_the_scanner_limits_generates_nothing(daemon):
+    client = daemon.client(pid=904)
+    client.open("strong", LIMITS)
+    assert client.validate({}).valid
+    with pytest.raises(HostError, match=r"gradient amplitude of 60\.0 mT/m on x"):
+        client.generate({})
+    assert not _committed(_session_dir(daemon, client))
+
+
+def test_an_import_beyond_the_scanner_limits_is_refused(daemon):
+    client = daemon.client(pid=805)
+    client.open(None, {**FIXTURE_LIMITS, "max_grad": 5.0})
+    with pytest.raises(HostError, match="gradient amplitude"):
+        client.import_sequence(FIXTURES / "dedup_gre_pair.seq")
+    assert not _committed(_session_dir(daemon, client))
+
+
+def _committed(directory):
+    staged = directory / "rev"
+    return (directory / "current").exists() or (
+        staged.exists() and any(staged.iterdir())
+    )
+
+
 def _meta(daemon, client, revision):
     directory = daemon.base / "bucket" / str(client.session) / "rev" / str(revision)
     return json.loads((directory / "meta.json").read_text())

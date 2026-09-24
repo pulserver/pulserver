@@ -1,3 +1,4 @@
+import copy
 import re
 import shutil
 import struct
@@ -8,6 +9,7 @@ import pypulseqpp as pp
 import pytest
 from pypulseqpp import sequences
 
+from pulserver import ir
 from pulserver.ir import cache_path, chain, convert, summary
 
 ROOT = Path(__file__).parents[1]
@@ -238,3 +240,33 @@ def test_a_ge_cache_written_here_loads_in_the_scanner_reader(
     ).stdout
     expected = summary(seq, SYSTEM, label_column_map=GE_LABELS)
     assert printed.splitlines() == _reader_lines(expected)
+
+
+def test_a_file_within_the_scanner_limits_has_no_problem():
+    """The fixture's 20 us gradient raster times its waveforms, not the scanner's 10 us."""
+    assert ir.check(FIXTURES / "gre_2d_3sl.seq", SYSTEM) == []
+
+
+def test_a_gradient_beyond_the_scanner_limits_is_a_problem():
+    weak = pp.Opts(max_grad=5.0, grad_unit="mT/m", max_slew=20.0, slew_unit="T/m/s")
+    assert ir.check(FIXTURES / "gre_2d_3sl.seq", weak) == [
+        "gradient amplitude of 39.7 mT/m on z in block 2 exceeds 5.0 mT/m",
+        "slew rate of 165.3 T/m/s on z in block 2 exceeds 20.0 T/m/s",
+    ]
+
+
+def test_a_dead_time_the_file_does_not_leave_is_a_timing_problem():
+    slow = copy.copy(SYSTEM)
+    slow.adc_dead_time = 1e-3
+    (problem,) = ir.check(FIXTURES / "gre_2d_3sl.seq", slow)
+    assert problem.startswith("timing: Block ")
+    assert "more errors" in problem
+
+
+def test_each_problem_of_a_chain_names_its_file():
+    weak = pp.Opts(max_grad=5.0, grad_unit="mT/m", max_slew=170.0, slew_unit="T/m/s")
+    problems = ir.check(FIXTURES / "dedup_gre_pair.seq", weak)
+    assert [problem.split(":")[0] for problem in problems] == [
+        "dedup_gre_pair.seq",
+        "dedup_gre_pair_b.seq",
+    ]

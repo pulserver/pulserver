@@ -32,6 +32,12 @@ optional options for the IR conversion:
 | `ir_label_column_map` | Three Pulseq label state indices, separated by spaces, filling the ADC label columns |
 | `ir_cache_ext` | Extension of the cache file, `.pseg` by default |
 
+A generated design and an imported chain are checked against the limits before
+their IR cache is written ({doc}`../explanations/ir-cache`), so the limits
+include the RF and ADC dead times, the RF ringdown time and the ADC sample
+divisor of the scanner; `pypulseqpp.Opts` sets the dead times to zero and the
+divisor to four when they are left out.
+
 The commands and their replies are listed in
 {class}`~pulserver.host.HostDaemon`. {class}`~pulserver.host.HostClient` sends
 them as a PSD host process does, which exercises a plugin through the daemon
@@ -51,8 +57,8 @@ client.close()
 
 A session opened without a plugin only imports sequence files
 ({meth}`~pulserver.host.HostClient.import_sequence`): the file and its
-`NextSequence` chain are copied into a revision and converted to the IR cache
-there.
+`NextSequence` chain are copied into a revision, checked and converted to the
+IR cache there.
 
 Plugin code runs in spawned worker processes, so a plugin that crashes fails
 the command it was running and the daemon replaces the pool. A plugin file is
