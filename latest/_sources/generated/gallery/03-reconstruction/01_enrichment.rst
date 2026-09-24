@@ -56,7 +56,7 @@ Outline:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 42-50
+.. GENERATED FROM PYTHON SOURCE LINES 42-52
 
 Sequence and readout table
 --------------------------
@@ -64,10 +64,12 @@ Sequence and readout table
 The sequence is written as a generated revision holds it, in the binary
 Pulseq form and in the logical frame, and tabulated with
 :class:`~pulserver.vre.SequenceTable`: one row per readout in play order,
-with its encoding counters, flags, dwell time and the k-space location of
-every sample in 1/m.
+with its encoding counters, flags and dwell time.
+:meth:`~pulserver.vre.SequenceTable.readout_k` returns the k-space location
+of each sample of a readout, in 1/m, integrated when it is asked for. The
+simulation below joins them over the scan.
 
-.. GENERATED FROM PYTHON SOURCE LINES 50-74
+.. GENERATED FROM PYTHON SOURCE LINES 52-79
 
 .. code-block:: Python
 
@@ -91,6 +93,9 @@ every sample in 1/m.
     files = app.write(work / "sequence.seq", offline=False)
     table = SequenceTable.read(files[0])
 
+    k = np.hstack([table.readout_k(row) for row in range(len(table))])
+    first_sample = np.cumsum(np.r_[0, table.num_samples[:-1]])
+
     print(f"{len(table)} readouts of {table.num_samples[0]} samples")
     print("LIN of the first readouts:", table.counters["LIN"][:6])
     print("encoding spaces:", table.spaces)
@@ -110,7 +115,7 @@ every sample in 1/m.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 75-85
+.. GENERATED FROM PYTHON SOURCE LINES 80-90
 
 Prescription
 ------------
@@ -123,7 +128,7 @@ moves each file of a revision to the prescribed offset with
 played sequence carries the frequency offset :math:`G_x d_x` of the readout
 gradient, and a phase offset.
 
-.. GENERATED FROM PYTHON SOURCE LINES 85-105
+.. GENERATED FROM PYTHON SOURCE LINES 90-110
 
 .. code-block:: Python
 
@@ -161,7 +166,7 @@ gradient, and a phase offset.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 106-112
+.. GENERATED FROM PYTHON SOURCE LINES 111-117
 
 The receive phase of a sample is the phase of the receiver's reference at
 that sample relative to the excitation the readout follows: the ADC phase
@@ -170,7 +175,7 @@ window, and any phase modulation, minus the RF phase at the centre of the
 pulse. The prescription makes it :math:`2\pi\,\mathbf{d}\cdot\mathbf{k}(t)`,
 the phase an object at :math:`\mathbf{d}` accumulates.
 
-.. GENERATED FROM PYTHON SOURCE LINES 112-162
+.. GENERATED FROM PYTHON SOURCE LINES 117-167
 
 .. code-block:: Python
 
@@ -196,7 +201,7 @@ the phase an object at :math:`\mathbf{d}` accumulates.
         return np.angle(np.exp(1j * phase))
 
 
-    shift_phase = 2 * np.pi * (offset @ table.k)
+    shift_phase = 2 * np.pi * (offset @ k)
     deviation = np.abs(wrapped(receive_phase(moved) - shift_phase)).max()
     print(f"largest |receive phase - 2 pi d.k| over the scan: {deviation:.1e} rad")
 
@@ -214,12 +219,12 @@ the phase an object at :math:`\mathbf{d}` accumulates.
 
  .. code-block:: none
 
-    largest |receive phase - 2 pi d.k| over the scan: 3.3e-06 rad
+    largest |receive phase - 2 pi d.k| over the scan: 5.0e-11 rad
 
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 163-180
+.. GENERATED FROM PYTHON SOURCE LINES 168-185
 
 Simulated series
 ----------------
@@ -239,7 +244,7 @@ reference, :math:`e^{+i\phi(t)}` with :math:`\phi` the receive phase, which
 for the design played as written is zero: the ADC phase follows the RF
 spoiling phase of the excitation.
 
-.. GENERATED FROM PYTHON SOURCE LINES 180-206
+.. GENERATED FROM PYTHON SOURCE LINES 185-211
 
 .. code-block:: Python
 
@@ -265,7 +270,7 @@ spoiling phase of the excitation.
 
 
     def received(sequence):
-        samples = phantom_signal(table.k, offset) * np.exp(1j * receive_phase(sequence))
+        samples = phantom_signal(k, offset) * np.exp(1j * receive_phase(sequence))
         return samples.astype(np.complex64)
 
 
@@ -276,12 +281,12 @@ spoiling phase of the excitation.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 207-209
+.. GENERATED FROM PYTHON SOURCE LINES 212-214
 
 The stream carries what a vendor reconstruction client supplies: one
 receiver channel, the readout samples, and a header with no encoding space.
 
-.. GENERATED FROM PYTHON SOURCE LINES 209-234
+.. GENERATED FROM PYTHON SOURCE LINES 214-239
 
 .. code-block:: Python
 
@@ -299,7 +304,7 @@ receiver channel, the readout samples, and a header with no encoding space.
         )
         acquisitions = []
         for row in range(len(table)):
-            start, count = int(table.sample_offset[row]), int(table.num_samples[row])
+            start, count = int(first_sample[row]), int(table.num_samples[row])
             data = samples[start : start + count][np.newaxis]
             acquisitions.append(ismrmrd.Acquisition.from_array(data))
         return header, acquisitions
@@ -325,7 +330,7 @@ receiver channel, the readout samples, and a header with no encoding space.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 235-241
+.. GENERATED FROM PYTHON SOURCE LINES 240-246
 
 Enrichment
 ----------
@@ -334,7 +339,7 @@ Enrichment
 the header. :func:`~pulserver.vre.enrich_acquisition` applies one table row
 to each acquisition, in stream order, and leaves the samples as received.
 
-.. GENERATED FROM PYTHON SOURCE LINES 241-259
+.. GENERATED FROM PYTHON SOURCE LINES 246-264
 
 .. code-block:: Python
 
@@ -372,7 +377,7 @@ to each acquisition, in stream order, and leaves the samples as received.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 260-272
+.. GENERATED FROM PYTHON SOURCE LINES 265-277
 
 Reconstruction
 --------------
@@ -387,7 +392,7 @@ oversampled readout to the reconstruction matrix of the header.
 The phantom is acquired twice: with the design played as written, and played
 at the prescribed offset.
 
-.. GENERATED FROM PYTHON SOURCE LINES 272-309
+.. GENERATED FROM PYTHON SOURCE LINES 277-314
 
 .. code-block:: Python
 
@@ -428,7 +433,7 @@ at the prescribed offset.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 310-317
+.. GENERATED FROM PYTHON SOURCE LINES 315-322
 
 Played as written, the sequence acquires the phantom at its displacement from
 the isocentre: shifted along the readout axis, and folded along the
@@ -441,7 +446,7 @@ to the gradients or the trajectory.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 1.198 seconds)
+   **Total running time of the script:** (0 minutes 0.591 seconds)
 
 
 .. _sphx_glr_download_generated_gallery_03-reconstruction_01_enrichment.py:

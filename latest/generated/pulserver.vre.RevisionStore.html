@@ -529,10 +529,11 @@
 <dt class="sig sig-object py" id="pulserver.vre.RevisionStore">
 <span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pulserver.vre.</span></span><span class="sig-name descname"><span class="pre">RevisionStore</span></span><a class="reference internal" href="../_modules/pulserver/vre/_revisions.html#RevisionStore"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.vre.RevisionStore" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/builtins/functions.html#object" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
-<p>The revisions under <code class="docutils literal notranslate"><span class="pre">&lt;base&gt;/bucket</span></code>, each read once and kept.</p>
-<p>Reading a revision tabulates its whole sequence chain, which is the
-expensive part of accepting a series; concurrent streams of one revision
-wait for the first to finish rather than tabulating it again.</p>
+<p>The revisions under <code class="docutils literal notranslate"><span class="pre">&lt;base&gt;/bucket</span></code>, the most recently read kept.</p>
+<p>Reading a revision tabulates its sequence chain, which is the expensive
+part of accepting a series; concurrent streams of one revision wait for
+the first to finish rather than tabulating it again. A revision that is
+no longer among the most recently read is read again when next named.</p>
 </dd></dl>
 
 <p class="rubric">Methods</p>
@@ -542,7 +543,7 @@ wait for the first to finish rather than tabulating it again.</p>
 <td><p>Return the revision directory a header names.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="pulserver.vre.RevisionStore.read.html#pulserver.vre.RevisionStore.read" title="pulserver.vre.RevisionStore.read"><code class="xref py py-obj docutils literal notranslate"><span class="pre">read</span></code></a></p></td>
-<td><p>Return a revision directory read, tabulating its chain on first use.</p></td>
+<td><p>Return a revision directory read, tabulating its chain unless kept.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="pulserver.vre.RevisionStore.resolve.html#pulserver.vre.RevisionStore.resolve" title="pulserver.vre.RevisionStore.resolve"><code class="xref py py-obj docutils literal notranslate"><span class="pre">resolve</span></code></a></p></td>
 <td><p>Return the revision a header names; see <code class="xref py py-meth docutils literal notranslate"><span class="pre">locate()</span></code> and <code class="xref py py-meth docutils literal notranslate"><span class="pre">read()</span></code>.</p></td>

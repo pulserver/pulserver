@@ -528,7 +528,9 @@
 <dl class="py method">
 <dt class="sig sig-object py" id="pulserver.mrd.ReadoutTable.readout_k">
 <span class="sig-prename descclassname"><span class="pre">ReadoutTable.</span></span><span class="sig-name descname"><span class="pre">readout_k</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pulserver/mrd/_sequence.html#ReadoutTable.readout_k"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.mrd.ReadoutTable.readout_k" title="Link to this definition">#</a></dt>
-<dd><p>Return the <code class="docutils literal notranslate"><span class="pre">(3,</span> <span class="pre">num_samples)</span></code> view of <a class="reference internal" href="pulserver.mrd.ReadoutTable.k.html#pulserver.mrd.ReadoutTable.k" title="pulserver.mrd.ReadoutTable.k"><code class="xref py py-attr docutils literal notranslate"><span class="pre">k</span></code></a> for one readout.</p>
+<dd><p>Return the k-space position of each sample of one readout, in 1/m.</p>
+<p><code class="docutils literal notranslate"><span class="pre">(3,</span> <span class="pre">num_samples)</span></code>, absolute, with block rotations applied, as
+<code class="docutils literal notranslate"><span class="pre">Sequence.calculate_kspace</span></code> returns it.</p>
 </dd></dl>
 
 </section>

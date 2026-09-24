@@ -597,10 +597,11 @@ of its resolved protocol.</p>
 <h2>Access from the reconstruction side<a class="headerlink" href="#access-from-the-reconstruction-side" title="Link to this heading">#</a></h2>
 <p>The raw-data header of a series records the session key and the revision number
 in the <code class="docutils literal notranslate"><span class="pre">pulserver_session</span></code> and <code class="docutils literal notranslate"><span class="pre">pulserver_revision</span></code> user parameters. Since a
-revision is immutable, the reconstruction proxy reads and tabulates it once
-(<a class="reference internal" href="../generated/pulserver.vre.RevisionStore.html#pulserver.vre.RevisionStore" title="pulserver.vre.RevisionStore"><code class="xref py py-class docutils literal notranslate"><span class="pre">RevisionStore</span></code></a>) and reuses the result for every later
-series acquired with it. When the two services run on different computers,
-the bucket is a directory both can access.</p>
+revision is immutable, the reconstruction proxy reads and tabulates it once and
+reuses the result for later series acquired with it, keeping the revisions it
+read most recently (<a class="reference internal" href="../generated/pulserver.vre.RevisionStore.html#pulserver.vre.RevisionStore" title="pulserver.vre.RevisionStore"><code class="xref py py-class docutils literal notranslate"><span class="pre">RevisionStore</span></code></a>). When the two
+services run on different computers, the bucket is a directory both can
+access.</p>
 </section>
 <section id="see-also">
 <h2>See also<a class="headerlink" href="#see-also" title="Link to this heading">#</a></h2>

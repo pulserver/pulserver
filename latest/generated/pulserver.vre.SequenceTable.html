@@ -530,6 +530,8 @@
 <span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pulserver.vre.</span></span><span class="sig-name descname"><span class="pre">SequenceTable</span></span><a class="reference internal" href="../_modules/pulserver/vre/_enrich.html#SequenceTable"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.vre.SequenceTable" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/builtins/functions.html#object" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
 <p>The readouts of a sequence chain as MRD describes them, in play order.</p>
+<p>k-space is not tabulated: <a class="reference internal" href="pulserver.vre.SequenceTable.readout_k.html#pulserver.vre.SequenceTable.readout_k" title="pulserver.vre.SequenceTable.readout_k"><code class="xref py py-meth docutils literal notranslate"><span class="pre">readout_k()</span></code></a> integrates a readout’s when
+asked, through the <a class="reference internal" href="pulserver.mrd.ReadoutTable.html#pulserver.mrd.ReadoutTable" title="pulserver.mrd.ReadoutTable"><code class="xref py py-class docutils literal notranslate"><span class="pre">ReadoutTable</span></code></a> of its chain file.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Attributes<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -543,9 +545,6 @@ counters, so a slice closes once per echo.</p></li>
 <li><p><strong>center_sample, trajectory_dimensions, num_samples</strong> (<em>ndarray</em>) – As <a class="reference internal" href="pulserver.mrd.ReadoutTable.html#pulserver.mrd.ReadoutTable" title="pulserver.mrd.ReadoutTable"><code class="xref py py-class docutils literal notranslate"><span class="pre">ReadoutTable</span></code></a> states them, over the chain.</p></li>
 <li><p><strong>sample_time_us</strong> (<em>ndarray</em>) – <code class="docutils literal notranslate"><span class="pre">float32</span></code> dwell, in µs.</p></li>
 <li><p><strong>encoding_space</strong> (<em>ndarray</em>) – <code class="docutils literal notranslate"><span class="pre">int32</span></code> index into <a class="reference internal" href="pulserver.vre.SequenceTable.spaces.html#pulserver.vre.SequenceTable.spaces" title="pulserver.vre.SequenceTable.spaces"><code class="xref py py-attr docutils literal notranslate"><span class="pre">spaces</span></code></a>.</p></li>
-<li><p><strong>sample_offset</strong> (<em>ndarray</em>) – <code class="docutils literal notranslate"><span class="pre">int64</span></code> column of each readout’s first sample in <a class="reference internal" href="pulserver.vre.SequenceTable.k.html#pulserver.vre.SequenceTable.k" title="pulserver.vre.SequenceTable.k"><code class="xref py py-attr docutils literal notranslate"><span class="pre">k</span></code></a>.</p></li>
-<li><p><strong>k</strong> (<em>ndarray</em>) – <code class="docutils literal notranslate"><span class="pre">float32</span></code>, <code class="docutils literal notranslate"><span class="pre">(3,</span> <span class="pre">samples)</span></code>: absolute k of every sample, in 1/m,
-with block rotations applied.</p></li>
 <li><p><strong>spaces</strong> (<em>tuple of TableSpace</em>) – Numbered in chain order: each subsequence’s primary space, then its
 navigator space when it has <code class="docutils literal notranslate"><span class="pre">NAV</span></code> readouts.</p></li>
 <li><p><strong>sequence_parameters</strong> (<em>dict of str to list of float</em>) – Over the chain’s definitions: the <code class="docutils literal notranslate"><span class="pre">TR</span></code> and <code class="docutils literal notranslate"><span class="pre">TI</span></code> minima and every
@@ -561,6 +560,9 @@ maximum, in degrees. Keys no file defines are absent.</p></li>
 <tbody>
 <tr class="row-odd"><td><p><a class="reference internal" href="pulserver.vre.SequenceTable.read.html#pulserver.vre.SequenceTable.read" title="pulserver.vre.SequenceTable.read"><code class="xref py py-obj docutils literal notranslate"><span class="pre">read</span></code></a></p></td>
 <td><p>Tabulate the <code class="docutils literal notranslate"><span class="pre">NextSequence</span></code> chain starting at a sequence file.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.vre.SequenceTable.readout_k.html#pulserver.vre.SequenceTable.readout_k" title="pulserver.vre.SequenceTable.readout_k"><code class="xref py py-obj docutils literal notranslate"><span class="pre">readout_k</span></code></a></p></td>
+<td><p>Return the k-space position of each sample of one readout, in 1/m.</p></td>
 </tr>
 </tbody>
 </table>
@@ -587,12 +589,6 @@ maximum, in degrees. Keys no file defines are absent.</p></li>
 <td><p></p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="pulserver.vre.SequenceTable.num_samples.html#pulserver.vre.SequenceTable.num_samples" title="pulserver.vre.SequenceTable.num_samples"><code class="xref py py-obj docutils literal notranslate"><span class="pre">num_samples</span></code></a></p></td>
-<td><p></p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pulserver.vre.SequenceTable.sample_offset.html#pulserver.vre.SequenceTable.sample_offset" title="pulserver.vre.SequenceTable.sample_offset"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sample_offset</span></code></a></p></td>
-<td><p></p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.vre.SequenceTable.k.html#pulserver.vre.SequenceTable.k" title="pulserver.vre.SequenceTable.k"><code class="xref py py-obj docutils literal notranslate"><span class="pre">k</span></code></a></p></td>
 <td><p></p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="pulserver.vre.SequenceTable.spaces.html#pulserver.vre.SequenceTable.spaces" title="pulserver.vre.SequenceTable.spaces"><code class="xref py py-obj docutils literal notranslate"><span class="pre">spaces</span></code></a></p></td>

@@ -15,6 +15,7 @@
    :nosignatures:
 
    ~SequenceTable.read
+   ~SequenceTable.readout_k
 
 
 
@@ -31,7 +32,5 @@
    ~SequenceTable.sample_time_us
    ~SequenceTable.encoding_space
    ~SequenceTable.num_samples
-   ~SequenceTable.sample_offset
-   ~SequenceTable.k
    ~SequenceTable.spaces
    ~SequenceTable.sequence_parameters

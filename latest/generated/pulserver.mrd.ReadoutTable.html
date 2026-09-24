@@ -530,25 +530,27 @@
 <span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pulserver.mrd.</span></span><span class="sig-name descname"><span class="pre">ReadoutTable</span></span><a class="reference internal" href="../_modules/pulserver/mrd/_sequence.html#ReadoutTable"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.mrd.ReadoutTable" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/builtins/functions.html#object" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
 <p>Every ADC readout of one sequence, in play order.</p>
+<p>k-space is integrated over ranges of blocks, each starting at the first
+block or at an excitation without a readout, whose pulse centre resets k:
+a range needs nothing from the blocks before it. Tabulating integrates
+every range once; <a class="reference internal" href="pulserver.mrd.ReadoutTable.readout_k.html#pulserver.mrd.ReadoutTable.readout_k" title="pulserver.mrd.ReadoutTable.readout_k"><code class="xref py py-meth docutils literal notranslate"><span class="pre">readout_k()</span></code></a> integrates a readout’s range again
+when it is not among the last few kept. The table holds the sequence for
+this, which must not change once tabulated.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Attributes<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>block</strong> (<em>ndarray</em>) – <code class="docutils literal notranslate"><span class="pre">int64</span></code>, 1-based index of the block holding each readout.</p></li>
 <li><p><strong>num_samples</strong> (<em>ndarray</em>) – <code class="docutils literal notranslate"><span class="pre">int32</span></code> samples per readout.</p></li>
-<li><p><strong>sample_offset</strong> (<em>ndarray</em>) – <code class="docutils literal notranslate"><span class="pre">int64</span></code> column of each readout’s first sample in <a class="reference internal" href="pulserver.mrd.ReadoutTable.k.html#pulserver.mrd.ReadoutTable.k" title="pulserver.mrd.ReadoutTable.k"><code class="xref py py-attr docutils literal notranslate"><span class="pre">k</span></code></a>.</p></li>
 <li><p><strong>dwell</strong> (<em>ndarray</em>) – <code class="docutils literal notranslate"><span class="pre">float64</span></code> dwell time, in seconds.</p></li>
 <li><p><strong>labels</strong> (<em>dict of str to ndarray</em>) – Every label the sequence writes, with the <code class="docutils literal notranslate"><span class="pre">int64</span></code> value in force at
 each readout. Labels the sequence never writes are absent.</p></li>
-<li><p><strong>k</strong> (<em>ndarray</em>) – <code class="docutils literal notranslate"><span class="pre">(3,</span> <span class="pre">samples)</span></code>: absolute k-space position of every ADC sample, in
-1/m, with block rotations applied, as <code class="docutils literal notranslate"><span class="pre">Sequence.calculate_kspace</span></code>
-returns it.</p></li>
 <li><p><strong>center_sample</strong> (<em>ndarray</em>) – <code class="docutils literal notranslate"><span class="pre">int32</span></code> echo index: the sample of smallest <code class="docutils literal notranslate"><span class="pre">|k|</span></code> over the axes
 that vary across the readout. Samples within 1% of the k step at that
 sample tie, and a tie goes to the later sample, or to the earlier one
 on a readout labelled <code class="docutils literal notranslate"><span class="pre">REV</span></code>, so reversed lines mirror onto forward
 ones. -1 when no axis varies.</p></li>
-<li><p><strong>trajectory_dimensions</strong> (<em>ndarray</em>) – <code class="docutils literal notranslate"><span class="pre">int8</span></code> axes of <a class="reference internal" href="pulserver.mrd.ReadoutTable.k.html#pulserver.mrd.ReadoutTable.k" title="pulserver.mrd.ReadoutTable.k"><code class="xref py py-attr docutils literal notranslate"><span class="pre">k</span></code></a> a readout keeps once the trailing axes
-constant across it are dropped; 0 when no axis varies.</p></li>
+<li><p><strong>trajectory_dimensions</strong> (<em>ndarray</em>) – <code class="docutils literal notranslate"><span class="pre">int8</span></code> axes of <a class="reference internal" href="pulserver.mrd.ReadoutTable.readout_k.html#pulserver.mrd.ReadoutTable.readout_k" title="pulserver.mrd.ReadoutTable.readout_k"><code class="xref py py-meth docutils literal notranslate"><span class="pre">readout_k()</span></code></a> a readout keeps once the trailing
+axes constant across it are dropped; 0 when no axis varies.</p></li>
 </ul>
 </dd>
 </dl>
@@ -575,7 +577,7 @@ constant across it are dropped; 0 when no axis varies.</p></li>
 <td><p>Tabulate the readouts of a <code class="docutils literal notranslate"><span class="pre">pypulseqpp.Sequence</span></code>.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="pulserver.mrd.ReadoutTable.readout_k.html#pulserver.mrd.ReadoutTable.readout_k" title="pulserver.mrd.ReadoutTable.readout_k"><code class="xref py py-obj docutils literal notranslate"><span class="pre">readout_k</span></code></a></p></td>
-<td><p>Return the <code class="docutils literal notranslate"><span class="pre">(3,</span> <span class="pre">num_samples)</span></code> view of <code class="xref py py-attr docutils literal notranslate"><span class="pre">k</span></code> for one readout.</p></td>
+<td><p>Return the k-space position of each sample of one readout, in 1/m.</p></td>
 </tr>
 </tbody>
 </table>
@@ -589,16 +591,10 @@ constant across it are dropped; 0 when no axis varies.</p></li>
 <tr class="row-even"><td><p><a class="reference internal" href="pulserver.mrd.ReadoutTable.num_samples.html#pulserver.mrd.ReadoutTable.num_samples" title="pulserver.mrd.ReadoutTable.num_samples"><code class="xref py py-obj docutils literal notranslate"><span class="pre">num_samples</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.mrd.ReadoutTable.sample_offset.html#pulserver.mrd.ReadoutTable.sample_offset" title="pulserver.mrd.ReadoutTable.sample_offset"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sample_offset</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.mrd.ReadoutTable.dwell.html#pulserver.mrd.ReadoutTable.dwell" title="pulserver.mrd.ReadoutTable.dwell"><code class="xref py py-obj docutils literal notranslate"><span class="pre">dwell</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pulserver.mrd.ReadoutTable.dwell.html#pulserver.mrd.ReadoutTable.dwell" title="pulserver.mrd.ReadoutTable.dwell"><code class="xref py py-obj docutils literal notranslate"><span class="pre">dwell</span></code></a></p></td>
-<td><p></p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.mrd.ReadoutTable.labels.html#pulserver.mrd.ReadoutTable.labels" title="pulserver.mrd.ReadoutTable.labels"><code class="xref py py-obj docutils literal notranslate"><span class="pre">labels</span></code></a></p></td>
-<td><p></p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pulserver.mrd.ReadoutTable.k.html#pulserver.mrd.ReadoutTable.k" title="pulserver.mrd.ReadoutTable.k"><code class="xref py py-obj docutils literal notranslate"><span class="pre">k</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.mrd.ReadoutTable.labels.html#pulserver.mrd.ReadoutTable.labels" title="pulserver.mrd.ReadoutTable.labels"><code class="xref py py-obj docutils literal notranslate"><span class="pre">labels</span></code></a></p></td>
 <td><p></p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="pulserver.mrd.ReadoutTable.center_sample.html#pulserver.mrd.ReadoutTable.center_sample" title="pulserver.mrd.ReadoutTable.center_sample"><code class="xref py py-obj docutils literal notranslate"><span class="pre">center_sample</span></code></a></p></td>

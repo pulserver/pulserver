@@ -459,6 +459,7 @@
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">threading</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections</span><span class="w"> </span><span class="kn">import</span> <span class="n">OrderedDict</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
@@ -473,6 +474,9 @@
 
 <span class="n">_ENTRY</span> <span class="o">=</span> <span class="s2">"sequence.seq"</span>
 <span class="n">_RECORD</span> <span class="o">=</span> <span class="s2">"meta.json"</span>
+
+<span class="c1">#: Revisions a store keeps read.</span>
+<span class="n">_KEPT</span> <span class="o">=</span> <span class="mi">8</span>
 
 
 <div class="viewcode-block" id="Revision">
@@ -506,18 +510,19 @@
 <div class="viewcode-block" id="RevisionStore">
 <a class="viewcode-back" href="../../../generated/pulserver.vre.RevisionStore.html#pulserver.vre.RevisionStore">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">RevisionStore</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""The revisions under ``&lt;base&gt;/bucket``, each read once and kept.</span>
+<span class="w">    </span><span class="sd">"""The revisions under ``&lt;base&gt;/bucket``, the most recently read kept.</span>
 
-<span class="sd">    Reading a revision tabulates its whole sequence chain, which is the</span>
-<span class="sd">    expensive part of accepting a series; concurrent streams of one revision</span>
-<span class="sd">    wait for the first to finish rather than tabulating it again.</span>
+<span class="sd">    Reading a revision tabulates its sequence chain, which is the expensive</span>
+<span class="sd">    part of accepting a series; concurrent streams of one revision wait for</span>
+<span class="sd">    the first to finish rather than tabulating it again. A revision that is</span>
+<span class="sd">    no longer among the most recently read is read again when next named.</span>
 <span class="sd">    """</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">base</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">bucket</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">base</span><span class="p">)</span> <span class="o">/</span> <span class="s2">"bucket"</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Lock</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_building</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="n">Path</span><span class="p">,</span> <span class="n">threading</span><span class="o">.</span><span class="n">Lock</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_revisions</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="n">Path</span><span class="p">,</span> <span class="n">Revision</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_revisions</span><span class="p">:</span> <span class="n">OrderedDict</span><span class="p">[</span><span class="n">Path</span><span class="p">,</span> <span class="n">Revision</span><span class="p">]</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">()</span>
 
 <div class="viewcode-block" id="RevisionStore.locate">
 <a class="viewcode-back" href="../../../generated/pulserver.vre.RevisionStore.locate.html#pulserver.vre.RevisionStore.locate">[docs]</a>
@@ -555,18 +560,26 @@
 <div class="viewcode-block" id="RevisionStore.read">
 <a class="viewcode-back" href="../../../generated/pulserver.vre.RevisionStore.read.html#pulserver.vre.RevisionStore.read">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">read</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">directory</span><span class="p">:</span> <span class="n">Path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Revision</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Return a revision directory read, tabulating its chain on first use."""</span>
+<span class="w">        </span><span class="sd">"""Return a revision directory read, tabulating its chain unless kept."""</span>
         <span class="n">directory</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">directory</span><span class="p">)</span>
         <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span><span class="p">:</span>
             <span class="n">building</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_building</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="n">directory</span><span class="p">,</span> <span class="n">threading</span><span class="o">.</span><span class="n">Lock</span><span class="p">())</span>
         <span class="k">with</span> <span class="n">building</span><span class="p">:</span>
-            <span class="k">if</span> <span class="n">directory</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_revisions</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_revisions</span><span class="p">[</span><span class="n">directory</span><span class="p">]</span> <span class="o">=</span> <span class="n">Revision</span><span class="p">(</span>
-                    <span class="n">directory</span><span class="o">=</span><span class="n">directory</span><span class="p">,</span>
-                    <span class="n">recon</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">_meta</span><span class="p">(</span><span class="n">directory</span><span class="p">)</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"recon"</span><span class="p">,</span> <span class="s2">""</span><span class="p">)),</span>
-                    <span class="n">table</span><span class="o">=</span><span class="n">SequenceTable</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">directory</span> <span class="o">/</span> <span class="n">_ENTRY</span><span class="p">),</span>
-                <span class="p">)</span>
-            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_revisions</span><span class="p">[</span><span class="n">directory</span><span class="p">]</span></div>
+            <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">directory</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_revisions</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_revisions</span><span class="o">.</span><span class="n">move_to_end</span><span class="p">(</span><span class="n">directory</span><span class="p">)</span>
+                    <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_revisions</span><span class="p">[</span><span class="n">directory</span><span class="p">]</span>
+            <span class="n">revision</span> <span class="o">=</span> <span class="n">Revision</span><span class="p">(</span>
+                <span class="n">directory</span><span class="o">=</span><span class="n">directory</span><span class="p">,</span>
+                <span class="n">recon</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">_meta</span><span class="p">(</span><span class="n">directory</span><span class="p">)</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"recon"</span><span class="p">,</span> <span class="s2">""</span><span class="p">)),</span>
+                <span class="n">table</span><span class="o">=</span><span class="n">SequenceTable</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">directory</span> <span class="o">/</span> <span class="n">_ENTRY</span><span class="p">),</span>
+            <span class="p">)</span>
+            <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_revisions</span><span class="p">[</span><span class="n">directory</span><span class="p">]</span> <span class="o">=</span> <span class="n">revision</span>
+                <span class="k">while</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_revisions</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">_KEPT</span><span class="p">:</span>
+                    <span class="n">forgotten</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_revisions</span><span class="o">.</span><span class="n">popitem</span><span class="p">(</span><span class="n">last</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_building</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">forgotten</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">revision</span></div>
 
 
 <div class="viewcode-block" id="RevisionStore.resolve">

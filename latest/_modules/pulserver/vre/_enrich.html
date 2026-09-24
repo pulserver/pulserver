@@ -462,6 +462,7 @@
     <span class="s2">"enrich_header"</span><span class="p">,</span>
 <span class="p">]</span>
 
+<span class="kn">import</span><span class="w"> </span><span class="nn">dataclasses</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
@@ -540,9 +541,12 @@
 
 <div class="viewcode-block" id="SequenceTable">
 <a class="viewcode-back" href="../../../generated/pulserver.vre.SequenceTable.html#pulserver.vre.SequenceTable">[docs]</a>
-<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">eq</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">SequenceTable</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""The readouts of a sequence chain as MRD describes them, in play order.</span>
+
+<span class="sd">    k-space is not tabulated: :meth:`readout_k` integrates a readout's when</span>
+<span class="sd">    asked, through the :class:`~pulserver.mrd.ReadoutTable` of its chain file.</span>
 
 <span class="sd">    Attributes</span>
 <span class="sd">    ----------</span>
@@ -561,11 +565,6 @@
 <span class="sd">        ``float32`` dwell, in µs.</span>
 <span class="sd">    encoding_space : ndarray</span>
 <span class="sd">        ``int32`` index into :attr:`spaces`.</span>
-<span class="sd">    sample_offset : ndarray</span>
-<span class="sd">        ``int64`` column of each readout's first sample in :attr:`k`.</span>
-<span class="sd">    k : ndarray</span>
-<span class="sd">        ``float32``, ``(3, samples)``: absolute k of every sample, in 1/m,</span>
-<span class="sd">        with block rotations applied.</span>
 <span class="sd">    spaces : tuple of TableSpace</span>
 <span class="sd">        Numbered in chain order: each subsequence's primary space, then its</span>
 <span class="sd">        navigator space when it has ``NAV`` readouts.</span>
@@ -582,13 +581,24 @@
     <span class="n">sample_time_us</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
     <span class="n">encoding_space</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
     <span class="n">num_samples</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
-    <span class="n">sample_offset</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
-    <span class="n">k</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
     <span class="n">spaces</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">TableSpace</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span>
     <span class="n">sequence_parameters</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]]</span>
+    <span class="n">_files</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">ReadoutTable</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="n">dataclasses</span><span class="o">.</span><span class="n">field</span><span class="p">(</span><span class="nb">repr</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">_first_rows</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">=</span> <span class="n">dataclasses</span><span class="o">.</span><span class="n">field</span><span class="p">(</span><span class="nb">repr</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
         <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_samples</span><span class="o">.</span><span class="n">size</span><span class="p">)</span>
+
+<div class="viewcode-block" id="SequenceTable.readout_k">
+<a class="viewcode-back" href="../../../generated/pulserver.vre.SequenceTable.readout_k.html#pulserver.vre.SequenceTable.readout_k">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">readout_k</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Return the k-space position of each sample of one readout, in 1/m.</span>
+
+<span class="sd">        ``(3, num_samples)``, absolute, with block rotations applied.</span>
+<span class="sd">        """</span>
+        <span class="n">file</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">searchsorted</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_first_rows</span><span class="p">,</span> <span class="n">index</span><span class="p">,</span> <span class="n">side</span><span class="o">=</span><span class="s2">"right"</span><span class="p">))</span> <span class="o">-</span> <span class="mi">1</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_files</span><span class="p">[</span><span class="n">file</span><span class="p">]</span><span class="o">.</span><span class="n">readout_k</span><span class="p">(</span><span class="n">index</span> <span class="o">-</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_first_rows</span><span class="p">[</span><span class="n">file</span><span class="p">]))</span></div>
+
 
 <div class="viewcode-block" id="SequenceTable.read">
 <a class="viewcode-back" href="../../../generated/pulserver.vre.SequenceTable.read.html#pulserver.vre.SequenceTable.read">[docs]</a>
@@ -604,20 +614,19 @@
 <span class="sd">            If the chain names a file it has already played.</span>
 <span class="sd">        """</span>
         <span class="n">parts</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">files</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">ReadoutTable</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="n">spaces</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">TableSpace</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="n">tr</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="n">te</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="n">ti</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="n">flip</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
-        <span class="n">offset</span> <span class="o">=</span> <span class="mi">0</span>
         <span class="k">for</span> <span class="n">subsequence</span><span class="p">,</span> <span class="p">(</span><span class="n">_</span><span class="p">,</span> <span class="n">seq</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">read_chain</span><span class="p">(</span><span class="n">path</span><span class="p">)):</span>
             <span class="n">readouts</span> <span class="o">=</span> <span class="n">ReadoutTable</span><span class="o">.</span><span class="n">from_sequence</span><span class="p">(</span><span class="n">seq</span><span class="p">)</span>
             <span class="n">definitions</span> <span class="o">=</span> <span class="n">SequenceDefinitions</span><span class="o">.</span><span class="n">from_sequence</span><span class="p">(</span><span class="n">seq</span><span class="p">)</span>
             <span class="n">part</span><span class="p">,</span> <span class="n">part_spaces</span> <span class="o">=</span> <span class="n">_map_readouts</span><span class="p">(</span>
                 <span class="n">readouts</span><span class="p">,</span> <span class="n">definitions</span><span class="p">,</span> <span class="n">subsequence</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">spaces</span><span class="p">)</span>
             <span class="p">)</span>
-            <span class="n">part</span><span class="p">[</span><span class="s2">"sample_offset"</span><span class="p">]</span> <span class="o">=</span> <span class="n">part</span><span class="p">[</span><span class="s2">"sample_offset"</span><span class="p">]</span> <span class="o">+</span> <span class="n">offset</span>
-            <span class="n">offset</span> <span class="o">+=</span> <span class="nb">int</span><span class="p">(</span><span class="n">readouts</span><span class="o">.</span><span class="n">num_samples</span><span class="o">.</span><span class="n">sum</span><span class="p">())</span>
+            <span class="n">files</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">readouts</span><span class="p">)</span>
             <span class="n">parts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">part</span><span class="p">)</span>
             <span class="n">spaces</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">part_spaces</span><span class="p">)</span>
             <span class="n">tr</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">definitions</span><span class="o">.</span><span class="n">tr</span><span class="p">)</span>
@@ -655,10 +664,10 @@
             <span class="n">sample_time_us</span><span class="o">=</span><span class="n">joined</span><span class="p">(</span><span class="s2">"sample_time_us"</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">),</span>
             <span class="n">encoding_space</span><span class="o">=</span><span class="n">joined</span><span class="p">(</span><span class="s2">"encoding_space"</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">int32</span><span class="p">),</span>
             <span class="n">num_samples</span><span class="o">=</span><span class="n">joined</span><span class="p">(</span><span class="s2">"num_samples"</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">int32</span><span class="p">),</span>
-            <span class="n">sample_offset</span><span class="o">=</span><span class="n">joined</span><span class="p">(</span><span class="s2">"sample_offset"</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">),</span>
-            <span class="n">k</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="n">part</span><span class="p">[</span><span class="s2">"k"</span><span class="p">]</span> <span class="k">for</span> <span class="n">part</span> <span class="ow">in</span> <span class="n">parts</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">),</span>
             <span class="n">spaces</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="n">spaces</span><span class="p">),</span>
             <span class="n">sequence_parameters</span><span class="o">=</span><span class="n">parameters</span><span class="p">,</span>
+            <span class="n">_files</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="n">files</span><span class="p">),</span>
+            <span class="n">_first_rows</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">cumsum</span><span class="p">([</span><span class="mi">0</span><span class="p">]</span> <span class="o">+</span> <span class="p">[</span><span class="nb">len</span><span class="p">(</span><span class="n">file</span><span class="p">)</span> <span class="k">for</span> <span class="n">file</span> <span class="ow">in</span> <span class="n">files</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]]),</span>
         <span class="p">)</span></div>
 </div>
 
@@ -764,11 +773,9 @@
     <span class="n">acquisition</span><span class="o">.</span><span class="n">sample_time_us</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">table</span><span class="o">.</span><span class="n">sample_time_us</span><span class="p">[</span><span class="n">index</span><span class="p">])</span>
     <span class="n">acquisition</span><span class="o">.</span><span class="n">encoding_space_ref</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">table</span><span class="o">.</span><span class="n">encoding_space</span><span class="p">[</span><span class="n">index</span><span class="p">])</span>
 
-    <span class="n">start</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">table</span><span class="o">.</span><span class="n">sample_offset</span><span class="p">[</span><span class="n">index</span><span class="p">])</span>
-    <span class="n">k</span> <span class="o">=</span> <span class="n">table</span><span class="o">.</span><span class="n">k</span><span class="p">[:,</span> <span class="n">start</span> <span class="p">:</span> <span class="n">start</span> <span class="o">+</span> <span class="n">count</span><span class="p">]</span>
-
     <span class="n">dimensions</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">table</span><span class="o">.</span><span class="n">trajectory_dimensions</span><span class="p">[</span><span class="n">index</span><span class="p">])</span>
     <span class="k">if</span> <span class="n">dimensions</span><span class="p">:</span>
+        <span class="n">k</span> <span class="o">=</span> <span class="n">table</span><span class="o">.</span><span class="n">readout_k</span><span class="p">(</span><span class="n">index</span><span class="p">)</span>
         <span class="n">data</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">acquisition</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
         <span class="n">acquisition</span><span class="o">.</span><span class="n">resize</span><span class="p">(</span><span class="n">count</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="n">acquisition</span><span class="o">.</span><span class="n">active_channels</span><span class="p">),</span> <span class="n">dimensions</span><span class="p">)</span>
         <span class="n">acquisition</span><span class="o">.</span><span class="n">traj</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">k</span><span class="p">[:</span><span class="n">dimensions</span><span class="p">]</span><span class="o">.</span><span class="n">T</span>
@@ -827,8 +834,6 @@
         <span class="s2">"sample_time_us"</span><span class="p">:</span> <span class="mf">1e6</span> <span class="o">*</span> <span class="n">readouts</span><span class="o">.</span><span class="n">dwell</span><span class="p">,</span>
         <span class="s2">"encoding_space"</span><span class="p">:</span> <span class="n">first_space</span> <span class="o">+</span> <span class="n">local_space</span><span class="p">,</span>
         <span class="s2">"num_samples"</span><span class="p">:</span> <span class="n">readouts</span><span class="o">.</span><span class="n">num_samples</span><span class="p">,</span>
-        <span class="s2">"sample_offset"</span><span class="p">:</span> <span class="n">readouts</span><span class="o">.</span><span class="n">sample_offset</span><span class="p">,</span>
-        <span class="s2">"k"</span><span class="p">:</span> <span class="n">readouts</span><span class="o">.</span><span class="n">k</span><span class="p">,</span>
     <span class="p">}</span>
     <span class="k">return</span> <span class="n">part</span><span class="p">,</span> <span class="n">spaces</span>
 

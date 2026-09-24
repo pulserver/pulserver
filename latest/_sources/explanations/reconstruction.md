@@ -38,6 +38,25 @@ and the first-and-last flags (`FIRST_IN_SLICE`, `LAST_IN_SLICE` and the
 others), derived from the counters. A reconstruction plugin selects the data a
 reconstruction runs on by these flags.
 
+## Trajectory
+
+The k-space location of each sample is the integral of the sequence's
+gradients, with block rotations applied, in 1/m. The table does not hold it for
+the whole scan: it is integrated over ranges of blocks, each beginning at an
+excitation. An excitation resets k to zero at the pulse centre, so the samples
+that follow it do not depend on the gradients played before it, and a range
+integrated on its own gives the k-space locations of the scan integrated from
+its first block. A refocusing pulse reverses k rather than resetting it and
+does not begin a range, nor does an excitation in a block that also holds a
+readout.
+
+Tabulating a revision integrates every range once, for the echo sample of each
+readout and the k-space axes its trajectory spans, which decide the header's
+trajectory type. An acquisition's trajectory is integrated again when it is
+enriched, from the range holding it, and the table keeps the ranges it
+integrated last. The k-space locations the proxy holds therefore do not grow
+with the length of the scan.
+
 ## Workers
 
 Each series is reconstructed in its own worker process, with the reconstruction

@@ -27,9 +27,7 @@
 
    ~ReadoutTable.block
    ~ReadoutTable.num_samples
-   ~ReadoutTable.sample_offset
    ~ReadoutTable.dwell
    ~ReadoutTable.labels
-   ~ReadoutTable.k
    ~ReadoutTable.center_sample
    ~ReadoutTable.trajectory_dimensions
