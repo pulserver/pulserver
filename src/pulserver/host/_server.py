@@ -27,8 +27,8 @@ def answer(request: Mapping[str, Any]) -> tuple[int, str]:
     """Answer a forwarded call as the command does in its own process.
 
     ``request`` carries ``call`` and, as the call takes them, ``plugins``,
-    ``plugin``, ``limits`` (the text of a ``[Limits]`` block), ``store`` and
-    ``input`` (the block the command reads from standard input).
+    ``plugin``, ``limits`` (the text of a ``[Limits]`` block), ``store``,
+    ``push`` and ``input`` (the block the command reads from standard input).
     """
     from . import _service
     from ._blocks import parse_limits
@@ -44,6 +44,8 @@ def answer(request: Mapping[str, Any]) -> tuple[int, str]:
         inputs["store"] = DesignStore(request["store"])
     if request.get("call") in ("validate", "generate", "import"):
         inputs["block"] = str(request.get("input", ""))
+    if request.get("push"):
+        inputs["push"] = str(request["push"])
     return _service.call(str(request.get("call")), **inputs)
 
 

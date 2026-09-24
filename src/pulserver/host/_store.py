@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import os
 import shutil
+import tarfile
 import tempfile
 import time
 from collections.abc import Iterator, Mapping
@@ -17,6 +19,8 @@ from typing import Any
 ID_DIGITS = 18
 #: The file of a design directory that records what the design depends on.
 MANIFEST = "manifest.json"
+#: Largest bundle a store receives, in bytes, compressed or not.
+BUNDLE_LIMIT = 1 << 31
 # A stage older than this is left by a process that ended mid-design.
 _STALE_STAGE = 3600.0
 
@@ -123,6 +127,73 @@ class DesignStore:
         }
         record = {**manifest, "id": design, "identity": identity, "files": files}
         (staged / MANIFEST).write_text(json.dumps(record, indent=2))
+        return self._publish(identity, staged)
+
+    def pack(self, design: str) -> bytes:
+        """Return a stored design as a bundle: a gzip-compressed tar of its files.
+
+        The bundle holds each file of the design directory under its name, the
+        manifest among them, and each symbolic link as a link.
+
+        Raises
+        ------
+        FileNotFoundError
+            If the store holds no design with this identifier.
+        """
+        self.manifest(design)
+        buffer = io.BytesIO()
+        with tarfile.open(fileobj=buffer, mode="w:gz", compresslevel=1) as bundle:
+            for path in sorted((self.root / design).iterdir()):
+                bundle.add(path, arcname=path.name, recursive=False)
+        return buffer.getvalue()
+
+    def receive(self, bundle: bytes) -> str:
+        """Store a bundle :meth:`pack` made, after checking it; return its identifier.
+
+        The bundle's manifest must name the identifier of its identity, every
+        file must be one the manifest records, with the SHA-256 it records, and
+        a symbolic link must name a file of the bundle. A design already stored
+        is kept.
+
+        Raises
+        ------
+        ValueError
+            If the bundle is not a design :meth:`pack` makes, or a file
+            differs from its manifest.
+        """
+        files, links = _read_bundle(bundle)
+        try:
+            manifest = json.loads(files[MANIFEST])
+        except (KeyError, ValueError):
+            raise ValueError("the bundle holds no manifest") from None
+        identity = manifest.get("identity")
+        if not isinstance(identity, str) or manifest.get("id") != design_id(identity):
+            raise ValueError("the bundle's manifest names no design")
+        recorded = manifest.get("files")
+        if not isinstance(recorded, dict) or set(recorded) != set(files) - {MANIFEST}:
+            raise ValueError("the bundle's files are not those its manifest records")
+        for name, content in files.items():
+            if (
+                name != MANIFEST
+                and hashlib.sha256(content).hexdigest() != recorded[name]
+            ):
+                raise ValueError(f"{name} differs from the manifest of its bundle")
+        for name, target in links.items():
+            if target not in files:
+                raise ValueError(f"{name} links to {target!r}, which the bundle lacks")
+        staged = self.stage()
+        try:
+            for name, content in files.items():
+                (staged / name).write_bytes(content)
+            for name, target in links.items():
+                (staged / name).symlink_to(target)
+            return self._publish(identity, staged)
+        except BaseException:
+            self.discard(staged)
+            raise
+
+    def _publish(self, identity: str, staged: Path) -> str:
+        design = design_id(identity)
         try:
             staged.replace(self.root / design)
         except OSError:
@@ -174,6 +245,41 @@ class DesignStore:
             total -= sizes[design]
             removed.append(design)
         return removed
+
+
+def _read_bundle(bundle: bytes) -> tuple[dict[str, bytes], dict[str, str]]:
+    """Return a bundle's files and links, by name; refuse anything else a tar can hold."""
+    if len(bundle) > BUNDLE_LIMIT:
+        raise ValueError(f"the bundle exceeds {BUNDLE_LIMIT} bytes")
+    files: dict[str, bytes] = {}
+    links: dict[str, str] = {}
+    total = 0
+    try:
+        with tarfile.open(fileobj=io.BytesIO(bundle), mode="r:*") as archive:
+            for member in archive:
+                name = member.name
+                if not _flat(name) or name in files or name in links:
+                    raise ValueError(f"the bundle holds an entry named {name!r}")
+                if member.issym():
+                    if not _flat(member.linkname):
+                        raise ValueError(f"{name} links outside its bundle")
+                    links[name] = member.linkname
+                    continue
+                if not member.isfile():
+                    raise ValueError(f"{name} is neither a file nor a link")
+                total += member.size
+                if total > BUNDLE_LIMIT:
+                    raise ValueError(f"the bundle exceeds {BUNDLE_LIMIT} bytes")
+                files[name] = archive.extractfile(member).read()
+    except (tarfile.TarError, EOFError, OSError) as error:
+        raise ValueError(f"the bundle cannot be read: {error}") from None
+    return files, links
+
+
+def _flat(name: str) -> bool:
+    return (
+        bool(name) and "/" not in name and "\\" not in name and not name.startswith(".")
+    )
 
 
 def _size(directory: Path) -> int:

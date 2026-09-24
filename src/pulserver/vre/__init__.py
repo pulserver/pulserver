@@ -7,12 +7,14 @@ from ._enrich import (
     enrich_acquisition,
     enrich_header,
 )
+from ._intake import DesignIntake
 from ._proxy import ReconProxy
 
 __all__ = [
     "DESIGN_PARAMETER",
     "Design",
     "DesignCache",
+    "DesignIntake",
     "ReconProxy",
     "SequenceTable",
     "TableSpace",

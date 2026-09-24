@@ -18,9 +18,16 @@ import pytest
 from _host import generate
 
 from pulserver.host import DesignStore
+from pulserver.host._push import push
 from pulserver.recon._runtime import concurrency
 from pulserver.recon._runtime.connection import Connection
-from pulserver.vre import DesignCache, ReconProxy, SequenceTable, _designs
+from pulserver.vre import (
+    DesignCache,
+    DesignIntake,
+    ReconProxy,
+    SequenceTable,
+    _designs,
+)
 
 RECON_PLUGINS = Path(__file__).parent / "recon_plugins"
 FIXTURES = Path(__file__).parent / "fixtures" / "sequences"
@@ -505,6 +512,26 @@ def test_a_series_reads_the_gpu_its_slot_holds(
         for image in images(stream(port, series["raw"], config="device"))
     ]
     assert values == read
+
+
+def test_a_design_pushed_to_the_intake_is_reconstructed_from_its_store(tmp_path):
+    host = DesignStore(tmp_path / "host")
+    design = generate(host, "gre2d", MATRIX)
+    intake = DesignIntake(tmp_path / "recon")
+    intake.start()
+    proxy = ReconProxy(tmp_path / "recon", RECON_PLUGINS, slots=1)
+    proxy.bind(0)
+    thread = threading.Thread(target=proxy.serve, daemon=True)
+    thread.start()
+    try:
+        assert push(host, design, f"http://127.0.0.1:{intake.port}")
+        table = SequenceTable.read(host.directory(design) / "sequence.seq")
+        received = stream(proxy.port, Series(design, table))
+        assert len(images(received)) == 1
+    finally:
+        proxy.close()
+        thread.join(timeout=DEADLINE)
+        intake.close()
 
 
 def test_the_least_recently_read_design_is_read_again_when_next_named(

@@ -33,8 +33,10 @@ def value_block(values):
     return "\n".join([PROTOCOL_BEGIN, *lines, PROTOCOL_END]) + "\n"
 
 
-def generate(store: DesignStore, plugin: str, values, limits=LIMITS, plugins=PLUGINS):
-    """Return the identifier of the design a request generates.
+def generate(
+    store: DesignStore, plugin: str, values, limits=LIMITS, plugins=PLUGINS, push=None
+):
+    """Return the identifier of the design a request generates, pushed to ``push``.
 
     Raises
     ------
@@ -48,6 +50,7 @@ def generate(store: DesignStore, plugin: str, values, limits=LIMITS, plugins=PLU
         limits=limits,
         block=value_block(values),
         store=store,
+        push=push,
     )
     assert status == 0, reply
     return reply.split()[1]

@@ -7,13 +7,17 @@ import logging
 import signal
 from pathlib import Path
 
+from ._intake import DesignIntake
 from ._proxy import ReconProxy
 
 
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="python -m pulserver.vre")
     parser.add_argument(
-        "--store", type=Path, required=True, help="directory of designs, read only"
+        "--store",
+        type=Path,
+        required=True,
+        help="directory of designs; the intake writes it, the proxy reads it",
     )
     parser.add_argument("--port", type=int, required=True, help="TCP port to listen on")
     parser.add_argument(
@@ -38,6 +42,12 @@ def main(argv: list[str] | None = None) -> None:
     )
     parser.add_argument(
         "--spares", type=int, default=1, help="warm worker processes kept waiting"
+    )
+    parser.add_argument(
+        "--intake-port",
+        type=int,
+        default=None,
+        help="TCP port the design calls push designs to, on --host; none when unset",
     )
     parser.add_argument(
         "--queue",
@@ -67,11 +77,17 @@ def main(argv: list[str] | None = None) -> None:
         queue=args.queue,
     )
     proxy.bind(args.port, args.host)
+    intake = None
+    if args.intake_port is not None:
+        intake = DesignIntake(args.store, args.host, args.intake_port)
+        intake.start()
     for signum in (signal.SIGTERM, signal.SIGINT):
         signal.signal(signum, lambda _signum, _frame: proxy.stop())
     try:
         proxy.serve()
     finally:
+        if intake is not None:
+            intake.close()
         proxy.close()
 
 

@@ -4,18 +4,21 @@ Pulserver runs two services. The design calls answer the scanner's PSD host
 processes: they resolve protocols and write the designs the scanner plays into a
 design store, one command per call or through a warm server. The
 reconstruction proxy receives the raw data of each series from the scanner's
-reconstruction client, reads the design it was played from in the same store,
-and returns the images. When the two run on different computers, the store is
-a directory both can reach. The store and the identity of a design are
-described in {doc}`../explanations/designs`.
+reconstruction client, reads the design it was played from in a design store,
+and returns the images. When the two run on different computers, either the
+store is a directory both can reach, or the proxy keeps a store of its own and
+its design intake receives each design the design calls push to it. The store
+and the identity of a design are described in
+{doc}`../explanations/designs`.
 
 ## Design calls
 
 ```bash
 pulserver design list     --plugins DIR --plugin NAME
 pulserver design validate --plugins DIR --plugin NAME --limits FILE < VALUES
-pulserver design generate --plugins DIR --plugin NAME --limits FILE --store DIR < VALUES
-pulserver design import   --limits FILE --store DIR < IMPORT
+pulserver design generate --plugins DIR --plugin NAME --limits FILE --store DIR [--push URL] < VALUES
+pulserver design import   --limits FILE --store DIR [--push URL] < IMPORT
+pulserver design push     --store DIR --to URL ID...
 pulserver design prune    --store DIR [--max-age-days D] [--max-bytes B]
 ```
 
@@ -30,6 +33,7 @@ arguments. `--plugins` is the directory of scanner-sequence plugin files,
 | `validate` | `VALID <seconds>` or `INVALID`, an `INFO` line and the value block of the resolved protocol |
 | `generate` | `GENERATED <id>`: the identifier of the design in the store |
 | `import` | `IMPORTED <id>` |
+| `push` | `PUSHED <count>`: the designs sent, not counting those the intake holds already |
 | `prune` | `PRUNED <count>` |
 
 A call that fails replies `ERROR <message>` and exits with status 1; a plugin
@@ -120,7 +124,25 @@ and the SHA-256 of every file. The identifier is three 24-bit integers, each
 held exactly by a float32 CV. `prune` removes designs least recently used
 first: those unused for longer than `--max-age-days`, then others until the
 store holds at most `--max-bytes`. Nothing is removed otherwise, and a design a
-series still needs must not be: the proxy reads it by identifier.
+series still needs must not be: the proxy reads it by identifier. A store that
+receives pushed designs is pruned the same way, on the reconstruction computer.
+
+### Pushing designs
+
+With `--push`, or the `PULSERVER_DESIGN_PUSH` environment variable, naming the
+URL of a proxy's design intake, `http://<host>:<intake-port>`, `generate` and
+`import` send the design they reply to that intake before replying; `push`
+sends the stored designs it names to the intake `--to` names. A design travels
+as a bundle, a gzip-compressed tar of the files of its directory, and the
+intake stores it only when every file has the SHA-256 its manifest records. A
+design the intake holds already is not sent again.
+
+A `generate` or `import` whose design cannot be pushed replies
+`ERROR design <id> is stored but not pushed: <reason>` and exits with status 1,
+so the interpreter receives no identifier of a design the intake lacks. The
+design stays stored, and the same call made again pushes it without designing
+again. `push` replies `ERROR design <id> is not pushed: <reason>` for the first
+design it cannot send.
 
 `list` depends on the plugin file and the installed packages only, so its reply
 can be written when they are installed and read without a call.
@@ -148,14 +170,15 @@ permissions decide who may call.
 ## Reconstruction proxy
 
 ```bash
-python -m pulserver.vre --store DIR --port N --plugins DIR [--host ADDR] [--queue DIR] [--slots N] [--gpu-slots 1] [--spares 1] [--recon-timeout S]
+python -m pulserver.vre --store DIR --port N --plugins DIR [--host ADDR] [--intake-port N] [--queue DIR] [--slots N] [--gpu-slots 1] [--spares 1] [--recon-timeout S]
 ```
 
 | Option | Meaning |
 | --- | --- |
-| `--store` | The design store the design calls write; read only |
+| `--store` | The design store the proxy reads: the one the design calls write, or the one the intake writes |
 | `--port` | TCP port the scanner's reconstruction client connects to |
 | `--host` | Address to listen on; the loopback interface when unset, `0.0.0.0` for every interface |
+| `--intake-port` | TCP port of the design intake, on the `--host` address; no intake when unset |
 | `--plugins` | Directory of reconstruction plugin files, `<plugin>.py` |
 | `--queue` | Directory the series waiting for a slot are written to; a temporary directory, removed when the proxy stops, when unset |
 | `--slots` | Series reconstructed at once; derived from available memory and the GPUs when unset |
@@ -175,10 +198,20 @@ A series that finds every slot busy is written to the queue directory as it
 arrives and reconstructed once a slot frees; the client stays connected
 meanwhile.
 
+With `--intake-port`, the proxy runs a design intake beside it
+({class}`~pulserver.vre.DesignIntake`), an HTTP endpoint that writes the
+designs pushed to it into `--store`: `HEAD /designs/<id>` answers 200 when the
+store holds the design and 404 otherwise, and `PUT /designs/<id>` stores a
+bundle, answering 201, 200 for a design already stored, or 400 with the reason
+for a bundle that is not the design its path names. Asking for a design the
+store holds marks it as used for `prune`.
+
 The MRD stream is neither authenticated nor encrypted, and its header carries
-patient data. The proxy belongs on the network between the scanner and the
-reconstruction computer, with `--host` naming the address of the interface on
-it; a scanner's reconstruction client cannot reach the loopback default.
+patient data. The design intake is neither authenticated nor encrypted either,
+and writes the designs it accepts into the store the proxy reconstructs from.
+Both belong on the network between the scanner and the reconstruction
+computer, with `--host` naming the address of the interface on it; a scanner's
+reconstruction client cannot reach the loopback default.
 
 The proxy and the warm design server stop on `SIGINT` or `SIGTERM`. The proxy
 waits for the series it is running before it exits.
