@@ -175,6 +175,27 @@ def test_the_reference_pulse_is_played_in_the_default_shim(
     assert (found.local_sar, found.global_sar) == pytest.approx((ratio, 0.0))
 
 
+def test_vops_given_as_a_model_or_as_their_file_give_the_same_ratios(
+    tmp_path, one_channel
+):
+    path = _written(tmp_path, [(_pulse(90),), (pp.make_delay(9e-3),)] * 20)
+    model = ir.CheckLimits(vops=safety.read_vops(one_channel.vops))
+    assert ir.sar_ratios(path, SYSTEM, model) == ir.sar_ratios(
+        path, SYSTEM, one_channel
+    )
+
+
+def test_a_file_that_cannot_be_parsed_is_refused_by_the_checks_and_the_ratios(
+    tmp_path, one_channel
+):
+    path = tmp_path / "sequence.seq"
+    path.write_text("[VERSION]\nmajor 1\nminor 5\nrevision 1\n\n[BLOCKS]\n1 a b\n")
+    with pytest.raises(ValueError, match="cannot read"):
+        ir.check(path, SYSTEM)
+    with pytest.raises(ValueError, match="cannot read"):
+        ir.sar_ratios(path, SYSTEM, one_channel)
+
+
 def test_sar_ratios_need_vops(train):
     with pytest.raises(ValueError, match="need VOPs"):
         ir.sar_ratios(train, SYSTEM, ir.CheckLimits())
