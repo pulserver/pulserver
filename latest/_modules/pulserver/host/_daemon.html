@@ -509,7 +509,10 @@
 <span class="sd">      copied into the revision; identical files return the revision holding</span>
 <span class="sd">      them.</span>
 
-<span class="sd">    Any command can instead reply with a single ``ERROR &lt;message&gt;`` line.</span>
+<span class="sd">    A generated or imported chain that fails a check of</span>
+<span class="sd">    :func:`pulserver.ir.check` under the session's limits writes no revision,</span>
+<span class="sd">    and ``GENERATE`` or ``IMPORT`` replies with its problems. Any command can</span>
+<span class="sd">    instead reply with a single ``ERROR &lt;message&gt;`` line.</span>
 <span class="sd">    Commands of one session run one at a time; sessions run concurrently, with</span>
 <span class="sd">    plugin code in a pool of spawned worker processes.</span>
 
@@ -761,6 +764,9 @@
                 <span class="n">entry</span> <span class="o">=</span> <span class="n">staged</span> <span class="o">/</span> <span class="n">_ENTRY</span>
                 <span class="k">if</span> <span class="n">files</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">name</span> <span class="o">!=</span> <span class="n">_ENTRY</span><span class="p">:</span>
                     <span class="n">entry</span><span class="o">.</span><span class="n">symlink_to</span><span class="p">(</span><span class="n">files</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+                <span class="n">problems</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_run</span><span class="p">(</span><span class="n">_worker</span><span class="o">.</span><span class="n">check</span><span class="p">,</span> <span class="n">session</span><span class="o">.</span><span class="n">limits</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">entry</span><span class="p">))</span>
+                <span class="k">if</span> <span class="n">problems</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="n">CommandError</span><span class="p">(</span><span class="s2">"; "</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">problems</span><span class="p">))</span>
                 <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_run</span><span class="p">(</span><span class="n">_worker</span><span class="o">.</span><span class="n">convert</span><span class="p">,</span> <span class="n">session</span><span class="o">.</span><span class="n">limits</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">entry</span><span class="p">))</span>
                 <span class="n">meta</span> <span class="o">=</span> <span class="p">{</span>
                     <span class="s2">"plugin"</span><span class="p">:</span> <span class="n">session</span><span class="o">.</span><span class="n">plugin</span><span class="p">,</span>

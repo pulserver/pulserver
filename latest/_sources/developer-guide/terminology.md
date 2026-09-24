@@ -158,7 +158,8 @@ significant digits.
 
 Pulserver performs no safety check of its own. The timing, gradient, PNS,
 mechanical-resonance and SAR checks belong to pypulseqpp and compute
-estimates. Passing these checks does not establish scanner or patient safety.
+estimates; the host runs some of them before it writes an IR cache. Passing
+these checks does not establish scanner or patient safety.
 
 - Never write "safe", "validated", "compliant" or "approved" of a sequence, a
   protocol or a revision.

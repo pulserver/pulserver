@@ -514,6 +514,7 @@
             <nav aria-label="Page">
                 <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#subsequences">Subsequences</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#checks">Checks</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#passes">Passes</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#cache-file">Cache file</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#language-constraint">Language constraint</a></li>
@@ -546,6 +547,19 @@ sequence file, text or binary, with <code class="docutils literal notranslate"><
 chain is a subsequence of one scan, played in order; a prescan and the imaging
 sequence are typically two subsequences. Each subsequence is analysed on its
 own and the results are chained into one collection.</p>
+</section>
+<section id="checks">
+<h2>Checks<a class="headerlink" href="#checks" title="Link to this heading">#</a></h2>
+<p>Before a chain is converted, <a class="reference internal" href="../generated/pulserver.ir.check.html#pulserver.ir.check" title="pulserver.ir.check"><code class="xref py py-func docutils literal notranslate"><span class="pre">check()</span></code></a> runs pypulseqpp’s
+timing check, gradient continuity included, and its gradient amplitude and
+slew-rate checks on every file, against the gradient limits, dead times and
+ringdown time of the scanner. The waveforms are timed by the rasters the file
+declares, and taken in the logical frame with each block’s own rotation; the
+prescription’s rotation is applied by the scanner after these checks. The host
+daemon writes no revision for a generated design or an imported chain that
+fails one: <code class="docutils literal notranslate"><span class="pre">GENERATE</span></code> and <code class="docutils literal notranslate"><span class="pre">IMPORT</span></code> reply with the problems, as they do with a
+design error. The checks compute estimates; passing them does not establish
+scanner or patient safety.</p>
 </section>
 <section id="passes">
 <h2>Passes<a class="headerlink" href="#passes" title="Link to this heading">#</a></h2>
@@ -669,6 +683,7 @@ back a cache written on the host.</p>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#subsequences">Subsequences</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#checks">Checks</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#passes">Passes</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#cache-file">Cache file</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#language-constraint">Language constraint</a></li>

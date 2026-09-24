@@ -45,6 +45,7 @@ from.
    :nosignatures:
 
    convert
+   check
    summary
    chain
    cache_path

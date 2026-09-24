@@ -586,6 +586,11 @@ optional options for the IR conversion:</p>
 </tbody>
 </table>
 </div>
+<p>A generated design and an imported chain are checked against the limits before
+their IR cache is written (<a class="reference internal" href="../explanations/ir-cache.html"><span class="doc">The scanner IR</span></a>), so the limits
+include the RF and ADC dead times, the RF ringdown time and the ADC sample
+divisor of the scanner; <code class="docutils literal notranslate"><span class="pre">pypulseqpp.Opts</span></code> sets the dead times to zero and the
+divisor to four when they are left out.</p>
 <p>The commands and their replies are listed in
 <a class="reference internal" href="../generated/pulserver.host.HostDaemon.html#pulserver.host.HostDaemon" title="pulserver.host.HostDaemon"><code class="xref py py-class docutils literal notranslate"><span class="pre">HostDaemon</span></code></a>. <a class="reference internal" href="../generated/pulserver.host.HostClient.html#pulserver.host.HostClient" title="pulserver.host.HostClient"><code class="xref py py-class docutils literal notranslate"><span class="pre">HostClient</span></code></a> sends
 them as a PSD host process does, which exercises a plugin through the daemon
@@ -603,8 +608,8 @@ without a scanner:</p>
 </div>
 <p>A session opened without a plugin only imports sequence files
 (<a class="reference internal" href="../generated/pulserver.host.HostClient.import_sequence.html#pulserver.host.HostClient.import_sequence" title="pulserver.host.HostClient.import_sequence"><code class="xref py py-meth docutils literal notranslate"><span class="pre">import_sequence()</span></code></a>): the file and its
-<code class="docutils literal notranslate"><span class="pre">NextSequence</span></code> chain are copied into a revision and converted to the IR cache
-there.</p>
+<code class="docutils literal notranslate"><span class="pre">NextSequence</span></code> chain are copied into a revision, checked and converted to the
+IR cache there.</p>
 <p>Plugin code runs in spawned worker processes, so a plugin that crashes fails
 the command it was running and the daemon replaces the pool. A plugin file is
 imported again when its modification time changes.</p>

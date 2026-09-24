@@ -749,7 +749,8 @@ significant digits.</p>
 <h2>5. Safety language<a class="headerlink" href="#safety-language" title="Link to this heading">#</a></h2>
 <p>Pulserver performs no safety check of its own. The timing, gradient, PNS,
 mechanical-resonance and SAR checks belong to pypulseqpp and compute
-estimates. Passing these checks does not establish scanner or patient safety.</p>
+estimates; the host runs some of them before it writes an IR cache. Passing
+these checks does not establish scanner or patient safety.</p>
 <ul class="simple">
 <li><p>Never write “safe”, “validated”, “compliant” or “approved” of a sequence, a
 protocol or a revision.</p></li>
