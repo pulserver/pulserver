@@ -192,6 +192,32 @@ def test_a_second_series_waits_for_a_slot_and_still_returns_images(
     assert first["end"] <= second["start"]
 
 
+def test_a_reconstruction_outlasting_the_worker_timeout_still_returns_its_image(
+    start_proxy, bucket, monkeypatch
+):
+    _, series = bucket
+    monkeypatch.setattr("pulserver.vre._proxy._WORKER_TIMEOUT", 1.0)
+    proxy = start_proxy(slots=1)
+    config = json.dumps({"parameters": {"config": "gre2d", "delay": 3.0}})
+    received = stream(proxy.port, series["bound"], config=config)
+    assert closed(received)
+    assert len(images(received)) == 1
+
+
+def test_a_reconstruction_past_the_recon_timeout_is_stopped_and_reported(
+    start_proxy, bucket
+):
+    _, series = bucket
+    proxy = start_proxy(slots=1, recon_timeout=1.0)
+    config = json.dumps({"parameters": {"config": "gre2d", "delay": 60.0}})
+    started = time.monotonic()
+    received = stream(proxy.port, series["bound"], config=config)
+    assert time.monotonic() - started < 30
+    assert not images(received)
+    assert any(isinstance(item, str) and "did not finish" in item for item in received)
+    assert len(images(stream(proxy.port, series["bound"]))) == 1
+
+
 def test_a_crashing_plugin_closes_its_series_and_frees_the_slot(start_proxy, bucket):
     _, series = bucket
     proxy = start_proxy(slots=1)

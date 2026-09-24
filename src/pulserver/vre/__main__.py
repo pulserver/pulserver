@@ -28,12 +28,24 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument(
         "--spares", type=int, default=1, help="warm worker processes kept waiting"
     )
+    parser.add_argument(
+        "--recon-timeout",
+        type=float,
+        default=None,
+        help="seconds a reconstruction may run after its series ends; unlimited when unset",
+    )
     args = parser.parse_args(argv)
 
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s"
     )
-    proxy = ReconProxy(args.base, args.plugins, slots=args.slots, spares=args.spares)
+    proxy = ReconProxy(
+        args.base,
+        args.plugins,
+        slots=args.slots,
+        spares=args.spares,
+        recon_timeout=args.recon_timeout,
+    )
     proxy.bind(args.port)
     for signum in (signal.SIGTERM, signal.SIGINT):
         signal.signal(signum, lambda _signum, _frame: proxy.stop())

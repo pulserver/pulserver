@@ -62,7 +62,10 @@ arrives, and replayed to a worker once a slot is released. The client remains
 connected meanwhile, and the images are returned through its connection.
 
 Images, DICOM datasets and text produced by the worker are relayed to the
-client as they are produced. Closing either connection closes the other.
+client as they are produced. Closing either connection closes the other. Once
+the client's stream ends, the proxy waits for the worker to close however long
+the reconstruction takes, unless it was started with a reconstruction timeout,
+past which the worker is terminated and the client told so.
 
 ## See also
 
