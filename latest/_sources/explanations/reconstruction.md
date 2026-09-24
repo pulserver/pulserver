@@ -23,7 +23,10 @@ is applied to the stream as follows.
 - Each acquisition is matched to a table row by its position in the stream and
   receives the encoding counters, the MRD flags, the dwell time and the
   encoding space reference, and the k-space trajectory when the k-space
-  location changes across the readout.
+  location changes across the readout. When the client numbers its
+  acquisitions, each `scan_counter` must follow the previous one by one; a gap
+  or a repeat stops the series before it is reconstructed, since every later
+  row would be shifted.
 
 The flags are those the sequence's labels set, such as `IS_NAVIGATION_DATA`,
 and the first-and-last flags (`FIRST_IN_SLICE`, `LAST_IN_SLICE` and the
@@ -62,7 +65,10 @@ arrives, and replayed to a worker once a slot is released. The client remains
 connected meanwhile, and the images are returned through its connection.
 
 Images, DICOM datasets and text produced by the worker are relayed to the
-client as they are produced. Closing either connection closes the other.
+client as they are produced. Closing either connection closes the other. Once
+the client's stream ends, the proxy waits for the worker to close however long
+the reconstruction takes, unless it was started with a reconstruction timeout,
+past which the worker is terminated and the client told so.
 
 ## See also
 

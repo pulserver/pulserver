@@ -61,7 +61,7 @@ imported again when its modification time changes.
 ## Reconstruction proxy
 
 ```bash
-python -m pulserver.vre --base DIR --port N --plugins DIR [--slots N] [--spares 1]
+python -m pulserver.vre --base DIR --port N --plugins DIR [--slots N] [--spares 1] [--recon-timeout S]
 ```
 
 | Option | Meaning |
@@ -71,6 +71,7 @@ python -m pulserver.vre --base DIR --port N --plugins DIR [--slots N] [--spares 
 | `--plugins` | Directory of reconstruction plugin files, `<plugin>.py` |
 | `--slots` | Series reconstructed at once; derived from available memory when unset |
 | `--spares` | Worker processes started ahead of a series, default 1 |
+| `--recon-timeout` | Seconds a reconstruction may run after its series ends; the worker is then terminated and the client told. Unlimited when unset |
 
 The MRD header of each series names the design it was played from in the
 `pulserver_session` and `pulserver_revision` user parameters, and the proxy

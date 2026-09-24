@@ -480,6 +480,8 @@
 <span class="n">_log</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="s2">"pulserver.vre"</span><span class="p">)</span>
 
 <span class="c1"># A worker spawns, imports its plugin and connects; past this it is not coming.</span>
+<span class="n">_CONNECT_TIMEOUT</span> <span class="o">=</span> <span class="mf">120.0</span>
+<span class="c1"># How long closing the proxy waits for each running series.</span>
 <span class="n">_WORKER_TIMEOUT</span> <span class="o">=</span> <span class="mf">120.0</span>
 <span class="c1"># How often the accept loop looks at whether the proxy is closing.</span>
 <span class="n">_ACCEPT_POLL</span> <span class="o">=</span> <span class="mf">0.5</span>
@@ -506,6 +508,9 @@
 <span class="sd">    client stays connected, and the file is replayed to a worker and deleted</span>
 <span class="sd">    once a slot frees.</span>
 
+<span class="sd">    Once the client's stream ends, the proxy waits for the worker to close,</span>
+<span class="sd">    however long the reconstruction takes, unless ``recon_timeout`` caps it.</span>
+
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
 <span class="sd">    base</span>
@@ -516,6 +521,9 @@
 <span class="sd">        Series reconstructed at once; the memory-derived limit when ``None``.</span>
 <span class="sd">    spares</span>
 <span class="sd">        Warm worker processes waiting for a series.</span>
+<span class="sd">    recon_timeout</span>
+<span class="sd">        Seconds a worker may take after the stream ends before it is</span>
+<span class="sd">        terminated and the client told so; ``None`` waits for its close.</span>
 
 <span class="sd">    Attributes</span>
 <span class="sd">    ----------</span>
@@ -530,10 +538,12 @@
         <span class="o">*</span><span class="p">,</span>
         <span class="n">slots</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">spares</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="n">recon_timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">revisions</span> <span class="o">=</span> <span class="n">RevisionStore</span><span class="p">(</span><span class="n">base</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">plugins</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">plugins</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">workers</span> <span class="o">=</span> <span class="n">WorkerPool</span><span class="p">(</span><span class="n">spares</span><span class="o">=</span><span class="n">spares</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">recon_timeout</span> <span class="o">=</span> <span class="n">recon_timeout</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_slots</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">BoundedSemaphore</span><span class="p">(</span><span class="n">compute_max_concurrent</span><span class="p">(</span><span class="n">override</span><span class="o">=</span><span class="n">slots</span><span class="p">))</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_server</span><span class="p">:</span> <span class="n">socket</span><span class="o">.</span><span class="n">socket</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_closing</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Event</span><span class="p">()</span>
@@ -696,7 +706,8 @@
         <span class="n">feed</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Connection</span><span class="p">],</span> <span class="kc">None</span><span class="p">],</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""Give a worker the config, the header and whatever ``feed`` sends it."""</span>
-        <span class="k">with</span> <span class="n">_WorkerChannel</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">workers</span><span class="p">,</span> <span class="n">plugin</span><span class="p">)</span> <span class="k">as</span> <span class="n">worker</span><span class="p">:</span>
+        <span class="n">channel</span> <span class="o">=</span> <span class="n">_WorkerChannel</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">workers</span><span class="p">,</span> <span class="n">plugin</span><span class="p">)</span>
+        <span class="k">with</span> <span class="n">channel</span> <span class="k">as</span> <span class="n">worker</span><span class="p">:</span>
             <span class="n">worker</span><span class="o">.</span><span class="n">send_config</span><span class="p">(</span><span class="n">config</span><span class="p">)</span>
             <span class="n">worker</span><span class="o">.</span><span class="n">send_header</span><span class="p">(</span><span class="n">header</span><span class="p">)</span>
             <span class="n">relay</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Thread</span><span class="p">(</span>
@@ -705,9 +716,28 @@
             <span class="n">relay</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
             <span class="k">try</span><span class="p">:</span>
                 <span class="n">feed</span><span class="p">(</span><span class="n">worker</span><span class="p">)</span>
-            <span class="k">finally</span><span class="p">:</span>
-                <span class="n">worker</span><span class="o">.</span><span class="n">send_close</span><span class="p">()</span>
-                <span class="n">relay</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="n">_WORKER_TIMEOUT</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">BaseException</span><span class="p">:</span>
+                <span class="c1"># A series that cannot be fed whole is not reconstructed.</span>
+                <span class="n">channel</span><span class="o">.</span><span class="n">terminate</span><span class="p">()</span>
+                <span class="n">relay</span><span class="o">.</span><span class="n">join</span><span class="p">()</span>
+                <span class="k">raise</span>
+            <span class="n">worker</span><span class="o">.</span><span class="n">send_close</span><span class="p">()</span>
+            <span class="n">relay</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">recon_timeout</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">relay</span><span class="o">.</span><span class="n">is_alive</span><span class="p">():</span>
+                <span class="n">_log</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                    <span class="s2">"</span><span class="si">%s</span><span class="s2"> exceeded </span><span class="si">%s</span><span class="s2"> s; terminating it"</span><span class="p">,</span>
+                    <span class="n">plugin</span><span class="o">.</span><span class="n">stem</span><span class="p">,</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">recon_timeout</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="c1"># The relay ends with the worker, so the notice cannot</span>
+                <span class="c1"># interleave with an image it is still sending.</span>
+                <span class="n">channel</span><span class="o">.</span><span class="n">terminate</span><span class="p">()</span>
+                <span class="n">relay</span><span class="o">.</span><span class="n">join</span><span class="p">()</span>
+                <span class="k">with</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">suppress</span><span class="p">(</span><span class="ne">Exception</span><span class="p">):</span>
+                    <span class="n">client</span><span class="o">.</span><span class="n">send</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">"pulserver: </span><span class="si">{</span><span class="n">plugin</span><span class="o">.</span><span class="n">stem</span><span class="si">}</span><span class="s2"> did not finish within "</span>
+                        <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">recon_timeout</span><span class="si">:</span><span class="s2">g</span><span class="si">}</span><span class="s2"> s of the end of the series"</span>
+                    <span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_plugin_path</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">plugin</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Path</span><span class="p">:</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">plugin</span><span class="p">:</span>
@@ -730,6 +760,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_directory</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">tempfile</span><span class="o">.</span><span class="n">mkdtemp</span><span class="p">(</span><span class="n">prefix</span><span class="o">=</span><span class="s2">"pulserver-series-"</span><span class="p">))</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_pool</span> <span class="o">=</span> <span class="n">pool</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_plugin</span> <span class="o">=</span> <span class="n">plugin</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_process</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">connection</span><span class="p">:</span> <span class="n">Connection</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__enter__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Connection</span><span class="p">:</span>
@@ -738,8 +769,8 @@
         <span class="k">try</span><span class="p">:</span>
             <span class="n">listener</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">path</span><span class="p">))</span>
             <span class="n">listener</span><span class="o">.</span><span class="n">listen</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
-            <span class="n">listener</span><span class="o">.</span><span class="n">settimeout</span><span class="p">(</span><span class="n">_WORKER_TIMEOUT</span><span class="p">)</span>
-            <span class="n">process</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pool</span><span class="o">.</span><span class="n">assign</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_plugin</span><span class="p">,</span> <span class="n">path</span><span class="p">)</span>
+            <span class="n">listener</span><span class="o">.</span><span class="n">settimeout</span><span class="p">(</span><span class="n">_CONNECT_TIMEOUT</span><span class="p">)</span>
+            <span class="n">process</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_process</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pool</span><span class="o">.</span><span class="n">assign</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_plugin</span><span class="p">,</span> <span class="n">path</span><span class="p">)</span>
             <span class="k">try</span><span class="p">:</span>
                 <span class="n">stream</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">listener</span><span class="o">.</span><span class="n">accept</span><span class="p">()</span>
             <span class="k">except</span> <span class="ne">TimeoutError</span><span class="p">:</span>
@@ -756,6 +787,11 @@
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">connection</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">connection</span><span class="o">.</span><span class="n">shutdown_close</span><span class="p">()</span>
         <span class="n">shutil</span><span class="o">.</span><span class="n">rmtree</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_directory</span><span class="p">,</span> <span class="n">ignore_errors</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">terminate</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Stop the worker process, whatever it is doing."""</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_process</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_process</span><span class="o">.</span><span class="n">is_alive</span><span class="p">():</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_process</span><span class="o">.</span><span class="n">terminate</span><span class="p">()</span>
 
 
 <span class="c1"># %% private module subroutines</span>
@@ -795,8 +831,21 @@
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_enriched</span><span class="p">(</span><span class="n">client</span><span class="p">:</span> <span class="n">Connection</span><span class="p">,</span> <span class="n">revision</span><span class="p">:</span> <span class="n">Revision</span><span class="p">,</span> <span class="n">offset</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Any</span><span class="p">]:</span>
-<span class="w">    </span><span class="sd">"""Yield the client's stream up to its close, acquisitions enriched in play order."""</span>
+<span class="w">    </span><span class="sd">"""Yield the client's stream up to its close, acquisitions enriched in play order.</span>
+
+<span class="sd">    Acquisitions are matched to readouts by position, so once the client numbers</span>
+<span class="sd">    them, every ``scan_counter`` must follow the previous one by one: a gap or a</span>
+<span class="sd">    repeat is a dropped or duplicated readout that would shift every later row.</span>
+<span class="sd">    A stream whose counters stay 0 is not numbered and not checked.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If the stream carries more acquisitions than the sequence plays, or its</span>
+<span class="sd">        scan counters skip or repeat one.</span>
+<span class="sd">    """</span>
     <span class="n">index</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">previous</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">client</span><span class="p">:</span>
         <span class="k">if</span> <span class="n">_is_close_marker</span><span class="p">(</span><span class="n">item</span><span class="p">):</span>
             <span class="k">return</span>
@@ -806,6 +855,15 @@
                     <span class="sa">f</span><span class="s2">"the stream carries more than the </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">revision</span><span class="o">.</span><span class="n">table</span><span class="p">)</span><span class="si">}</span><span class="s2"> readouts "</span>
                     <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">revision</span><span class="o">.</span><span class="n">directory</span><span class="si">}</span><span class="s2"> plays"</span>
                 <span class="p">)</span>
+            <span class="n">counter</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">item</span><span class="o">.</span><span class="n">scan_counter</span><span class="p">)</span>
+            <span class="n">numbered</span> <span class="o">=</span> <span class="n">previous</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="p">(</span><span class="n">previous</span><span class="p">,</span> <span class="n">counter</span><span class="p">)</span> <span class="o">!=</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">numbered</span> <span class="ow">and</span> <span class="n">counter</span> <span class="o">!=</span> <span class="n">previous</span> <span class="o">+</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">"acquisition </span><span class="si">{</span><span class="n">index</span><span class="si">}</span><span class="s2"> carries scan counter </span><span class="si">{</span><span class="n">counter</span><span class="si">}</span><span class="s2"> after "</span>
+                    <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">previous</span><span class="si">}</span><span class="s2">: the stream no longer matches the readouts "</span>
+                    <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">revision</span><span class="o">.</span><span class="n">directory</span><span class="si">}</span><span class="s2"> plays"</span>
+                <span class="p">)</span>
+            <span class="n">previous</span> <span class="o">=</span> <span class="n">counter</span>
             <span class="n">enrich_acquisition</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="n">revision</span><span class="o">.</span><span class="n">table</span><span class="p">,</span> <span class="n">index</span><span class="p">,</span> <span class="n">offset</span><span class="p">)</span>
             <span class="n">index</span> <span class="o">+=</span> <span class="mi">1</span>
         <span class="k">yield</span> <span class="n">item</span>

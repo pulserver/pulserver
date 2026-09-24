@@ -554,7 +554,8 @@ A session opened without a plugin only imports existing sequence files.</p>
 <h2>Revisions<a class="headerlink" href="#revisions" title="Link to this heading">#</a></h2>
 <p>A revision is a directory <code class="docutils literal notranslate"><span class="pre">rev/&lt;n&gt;/</span></code> holding the Pulseq files of one design,
 their IR cache, the resolved protocol and a <code class="docutils literal notranslate"><span class="pre">meta.json</span></code> record naming the
-plugin, the reconstruction plugin, the limits and the files. A revision is
+plugin and its source digest, the reconstruction plugin, the limits and the
+files. A revision is
 written into a staging directory and renamed into place once complete, and is
 not modified afterwards. <code class="docutils literal notranslate"><span class="pre">current</span></code> is a symbolic link to the revision the
 interpreter plays.</p>
@@ -578,9 +579,13 @@ interpreter plays.</p>
 <section id="revision-identity">
 <h2>Revision identity<a class="headerlink" href="#revision-identity" title="Link to this heading">#</a></h2>
 <p>A generated revision is identified by the SHA-256 hash of its plugin, scanner
-limits and resolved protocol (<a class="reference internal" href="../generated/pulserver.host.revision_hash.html#pulserver.host.revision_hash" title="pulserver.host.revision_hash"><code class="xref py py-func docutils literal notranslate"><span class="pre">revision_hash()</span></code></a>). A
-<code class="docutils literal notranslate"><span class="pre">GENERATE</span></code> request whose protocol resolves to one already generated returns
-the existing revision and makes it current; the sequence is not designed again.
+limits, resolved protocol and source (<a class="reference internal" href="../generated/pulserver.host.revision_hash.html#pulserver.host.revision_hash" title="pulserver.host.revision_hash"><code class="xref py py-func docutils literal notranslate"><span class="pre">revision_hash()</span></code></a>).
+The source is a digest of the plugin file, the source file of the application
+it binds, and the installed versions of pypulseqpp and pulserver. A <code class="docutils literal notranslate"><span class="pre">GENERATE</span></code>
+request whose protocol resolves to one already generated from the same source
+returns the existing revision and makes it current; the sequence is not
+designed again. A changed plugin, application or package designs a new
+revision, even for an unchanged protocol.
 Because the hash is computed over the resolved protocol, two requests that
 differ only in a value the design replaces, such as a preset and the time it
 resolves to, identify the same revision (<a class="reference internal" href="protocol.html"><span class="doc">Protocol resolution</span></a>). An imported revision

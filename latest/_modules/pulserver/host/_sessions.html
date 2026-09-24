@@ -504,14 +504,25 @@
 <div class="viewcode-block" id="revision_hash">
 <a class="viewcode-back" href="../../../generated/pulserver.host.revision_hash.html#pulserver.host.revision_hash">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">revision_hash</span><span class="p">(</span>
-    <span class="n">plugin</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">limits</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="n">values</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span>
+    <span class="n">plugin</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">limits</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
+    <span class="n">values</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
+    <span class="n">source</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">""</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Identify a design by plugin, scanner limits and resolved protocol.</span>
+<span class="w">    </span><span class="sd">"""Identify a design by plugin, scanner limits, resolved protocol and source.</span>
 
+<span class="sd">    ``source`` is a digest of the code that designs, so that a plugin or</span>
+<span class="sd">    package change yields a new revision for an unchanged protocol; empty for</span>
+<span class="sd">    an imported revision, which ``values`` identifies by file contents.</span>
 <span class="sd">    Independent of mapping order.</span>
 <span class="sd">    """</span>
     <span class="n">canonical</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span>
-        <span class="p">{</span><span class="s2">"plugin"</span><span class="p">:</span> <span class="n">plugin</span><span class="p">,</span> <span class="s2">"limits"</span><span class="p">:</span> <span class="nb">dict</span><span class="p">(</span><span class="n">limits</span><span class="p">),</span> <span class="s2">"values"</span><span class="p">:</span> <span class="nb">dict</span><span class="p">(</span><span class="n">values</span><span class="p">)},</span>
+        <span class="p">{</span>
+            <span class="s2">"plugin"</span><span class="p">:</span> <span class="n">plugin</span><span class="p">,</span>
+            <span class="s2">"limits"</span><span class="p">:</span> <span class="nb">dict</span><span class="p">(</span><span class="n">limits</span><span class="p">),</span>
+            <span class="s2">"values"</span><span class="p">:</span> <span class="nb">dict</span><span class="p">(</span><span class="n">values</span><span class="p">),</span>
+            <span class="s2">"source"</span><span class="p">:</span> <span class="n">source</span><span class="p">,</span>
+        <span class="p">},</span>
         <span class="n">sort_keys</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
         <span class="n">separators</span><span class="o">=</span><span class="p">(</span><span class="s2">","</span><span class="p">,</span> <span class="s2">":"</span><span class="p">),</span>
     <span class="p">)</span>

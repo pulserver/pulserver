@@ -472,12 +472,8 @@
     <span class="n">parse_values</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.</span><span class="w"> </span><span class="kn">import</span> <span class="n">_worker</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">._blocks</span><span class="w"> </span><span class="kn">import</span> <span class="n">IMPORT_END</span><span class="p">,</span> <span class="n">LIMITS_END</span><span class="p">,</span> <span class="n">parse_import</span><span class="p">,</span> <span class="n">parse_limits</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._sessions</span><span class="w"> </span><span class="kn">import</span> <span class="n">Session</span><span class="p">,</span> <span class="n">SessionKey</span><span class="p">,</span> <span class="n">SessionStore</span><span class="p">,</span> <span class="n">revision_hash</span>
-
-<span class="n">LIMITS_BEGIN</span> <span class="o">=</span> <span class="s2">"[Limits]"</span>
-<span class="n">LIMITS_END</span> <span class="o">=</span> <span class="s2">"[Limits End]"</span>
-<span class="n">IMPORT_BEGIN</span> <span class="o">=</span> <span class="s2">"[Import]"</span>
-<span class="n">IMPORT_END</span> <span class="o">=</span> <span class="s2">"[Import End]"</span>
 
 <span class="c1"># The file name the target loads in a revision.</span>
 <span class="n">_ENTRY</span> <span class="o">=</span> <span class="s2">"sequence.seq"</span>
@@ -488,42 +484,6 @@
 
 <span class="k">class</span><span class="w"> </span><span class="nc">CommandError</span><span class="p">(</span><span class="ne">Exception</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""A command that fails with an ``ERROR`` reply."""</span>
-
-
-<span class="k">def</span><span class="w"> </span><span class="nf">_limit</span><span class="p">(</span><span class="n">text</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
-    <span class="k">for</span> <span class="n">cast</span> <span class="ow">in</span> <span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">):</span>
-        <span class="k">try</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">cast</span><span class="p">(</span><span class="n">text</span><span class="p">)</span>
-        <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
-            <span class="k">continue</span>
-    <span class="k">return</span> <span class="n">text</span>
-
-
-<span class="k">def</span><span class="w"> </span><span class="nf">parse_limits</span><span class="p">(</span><span class="n">block</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
-<span class="w">    </span><span class="sd">"""Read a limits block: ``pypulseqpp.Opts`` keyword arguments, one per line."""</span>
-    <span class="n">limits</span> <span class="o">=</span> <span class="p">{}</span>
-    <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">block</span><span class="o">.</span><span class="n">splitlines</span><span class="p">():</span>
-        <span class="k">if</span> <span class="s2">": "</span> <span class="ow">in</span> <span class="n">line</span> <span class="ow">and</span> <span class="n">LIMITS_BEGIN</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">line</span><span class="p">:</span>
-            <span class="n">name</span><span class="p">,</span> <span class="n">value</span> <span class="o">=</span> <span class="n">line</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">": "</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
-            <span class="n">limits</span><span class="p">[</span><span class="n">name</span><span class="o">.</span><span class="n">strip</span><span class="p">()]</span> <span class="o">=</span> <span class="n">_limit</span><span class="p">(</span><span class="n">value</span><span class="o">.</span><span class="n">strip</span><span class="p">())</span>
-    <span class="k">return</span> <span class="n">limits</span>
-
-
-<span class="k">def</span><span class="w"> </span><span class="nf">format_limits</span><span class="p">(</span><span class="n">limits</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-    <span class="n">lines</span> <span class="o">=</span> <span class="p">[</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">value</span><span class="si">}</span><span class="s2">"</span> <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">limits</span><span class="o">.</span><span class="n">items</span><span class="p">()]</span>
-    <span class="k">return</span> <span class="s2">"</span><span class="se">\n</span><span class="s2">"</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="n">LIMITS_BEGIN</span><span class="p">,</span> <span class="o">*</span><span class="n">lines</span><span class="p">,</span> <span class="n">LIMITS_END</span><span class="p">])</span> <span class="o">+</span> <span class="s2">"</span><span class="se">\n</span><span class="s2">"</span>
-
-
-<span class="k">def</span><span class="w"> </span><span class="nf">parse_import</span><span class="p">(</span><span class="n">block</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Path</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Read an import block: the ``file`` line naming the first file of a chain."""</span>
-    <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">block</span><span class="o">.</span><span class="n">splitlines</span><span class="p">():</span>
-        <span class="k">if</span> <span class="n">line</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">"file: "</span><span class="p">):</span>
-            <span class="k">return</span> <span class="n">Path</span><span class="p">(</span><span class="n">line</span><span class="o">.</span><span class="n">removeprefix</span><span class="p">(</span><span class="s2">"file: "</span><span class="p">)</span><span class="o">.</span><span class="n">strip</span><span class="p">())</span>
-    <span class="k">raise</span> <span class="n">CommandError</span><span class="p">(</span><span class="s2">"IMPORT needs a file line"</span><span class="p">)</span>
-
-
-<span class="k">def</span><span class="w"> </span><span class="nf">format_import</span><span class="p">(</span><span class="n">path</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-    <span class="k">return</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">IMPORT_BEGIN</span><span class="si">}</span><span class="se">\n</span><span class="s2">file: </span><span class="si">{</span><span class="n">path</span><span class="si">}</span><span class="se">\n</span><span class="si">{</span><span class="n">IMPORT_END</span><span class="si">}</span><span class="se">\n</span><span class="s2">"</span>
 
 
 <div class="viewcode-block" id="HostDaemon">
@@ -542,8 +502,9 @@
 <span class="sd">    - ``LIST_PROTOCOL``: ``PROTOCOL`` and a listing block.</span>
 <span class="sd">    - ``VALIDATE``: ``VALID &lt;seconds&gt;`` or ``INVALID``, an ``INFO`` line and a</span>
 <span class="sd">      value block.</span>
-<span class="sd">    - ``GENERATE``: ``GENERATED &lt;revision&gt;``. A request that resolves to an</span>
-<span class="sd">      already generated protocol returns that revision and makes it current.</span>
+<span class="sd">    - ``GENERATE``: ``GENERATED &lt;revision&gt;``. A request that resolves to a</span>
+<span class="sd">      protocol already generated by the same plugin source and package</span>
+<span class="sd">      versions returns that revision and makes it current.</span>
 <span class="sd">    - ``IMPORT``: ``IMPORTED &lt;revision&gt;``. The file's ``NextSequence`` chain is</span>
 <span class="sd">      copied into the revision; identical files return the revision holding</span>
 <span class="sd">      them.</span>
@@ -741,7 +702,10 @@
             <span class="p">)</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="n">validation</span><span class="o">.</span><span class="n">valid</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="n">CommandError</span><span class="p">(</span><span class="n">validation</span><span class="o">.</span><span class="n">info</span><span class="p">)</span>
-            <span class="n">digest</span> <span class="o">=</span> <span class="n">revision_hash</span><span class="p">(</span><span class="n">session</span><span class="o">.</span><span class="n">plugin</span><span class="p">,</span> <span class="n">session</span><span class="o">.</span><span class="n">limits</span><span class="p">,</span> <span class="n">validation</span><span class="o">.</span><span class="n">values</span><span class="p">)</span>
+            <span class="n">source</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_run</span><span class="p">(</span><span class="n">_worker</span><span class="o">.</span><span class="n">source</span><span class="p">,</span> <span class="n">path</span><span class="p">)</span>
+            <span class="n">digest</span> <span class="o">=</span> <span class="n">revision_hash</span><span class="p">(</span>
+                <span class="n">session</span><span class="o">.</span><span class="n">plugin</span><span class="p">,</span> <span class="n">session</span><span class="o">.</span><span class="n">limits</span><span class="p">,</span> <span class="n">validation</span><span class="o">.</span><span class="n">values</span><span class="p">,</span> <span class="n">source</span>
+            <span class="p">)</span>
             <span class="n">revision</span> <span class="o">=</span> <span class="n">session</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="n">digest</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">revision</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="n">session</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="n">revision</span><span class="p">)</span>
@@ -764,6 +728,7 @@
                     <span class="s2">"plugin"</span><span class="p">:</span> <span class="n">session</span><span class="o">.</span><span class="n">plugin</span><span class="p">,</span>
                     <span class="s2">"recon"</span><span class="p">:</span> <span class="n">recon</span><span class="p">,</span>
                     <span class="s2">"limits"</span><span class="p">:</span> <span class="n">session</span><span class="o">.</span><span class="n">limits</span><span class="p">,</span>
+                    <span class="s2">"source"</span><span class="p">:</span> <span class="n">source</span><span class="p">,</span>
                     <span class="s2">"hash"</span><span class="p">:</span> <span class="n">digest</span><span class="p">,</span>
                     <span class="s2">"files"</span><span class="p">:</span> <span class="p">[</span><span class="o">*</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="n">p</span><span class="p">)</span><span class="o">.</span><span class="n">name</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">paths</span><span class="p">),</span> <span class="n">cache</span><span class="p">],</span>
                 <span class="p">}</span>
@@ -775,7 +740,10 @@
 
     <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">_import</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">:</span> <span class="n">SessionKey</span><span class="p">,</span> <span class="n">_args</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="n">block</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
         <span class="n">session</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">store</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
-        <span class="n">source</span> <span class="o">=</span> <span class="n">parse_import</span><span class="p">(</span><span class="n">block</span><span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">source</span> <span class="o">=</span> <span class="n">parse_import</span><span class="p">(</span><span class="n">block</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">ValueError</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">CommandError</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">error</span><span class="p">))</span> <span class="kn">from</span><span class="w"> </span><span class="kc">None</span>
         <span class="k">async</span> <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_locks</span><span class="p">[</span><span class="n">key</span><span class="p">]:</span>
             <span class="n">files</span> <span class="o">=</span> <span class="p">[</span><span class="n">Path</span><span class="p">(</span><span class="n">p</span><span class="p">)</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_run</span><span class="p">(</span><span class="n">_worker</span><span class="o">.</span><span class="n">chain</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">source</span><span class="p">))]</span>
             <span class="n">contents</span> <span class="o">=</span> <span class="p">[</span>

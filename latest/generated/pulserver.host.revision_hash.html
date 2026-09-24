@@ -528,8 +528,11 @@
 <dl class="py function">
 <dt class="sig sig-object py" id="pulserver.host.revision_hash">
 <span class="sig-prename descclassname"><span class="pre">pulserver.host.</span></span><span class="sig-name descname"><span class="pre">revision_hash</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pulserver/host/_sessions.html#revision_hash"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.host.revision_hash" title="Link to this definition">#</a></dt>
-<dd><p>Identify a design by plugin, scanner limits and resolved protocol.</p>
-<p>Independent of mapping order.</p>
+<dd><p>Identify a design by plugin, scanner limits, resolved protocol and source.</p>
+<p><code class="docutils literal notranslate"><span class="pre">source</span></code> is a digest of the code that designs, so that a plugin or
+package change yields a new revision for an unchanged protocol; empty for
+an imported revision, which <code class="docutils literal notranslate"><span class="pre">values</span></code> identifies by file contents.
+Independent of mapping order.</p>
 </dd></dl>
 
 </section>

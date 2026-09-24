@@ -240,7 +240,7 @@ definition, and both subsequences are played from the same two definitions.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.594 seconds)
+   **Total running time of the script:** (0 minutes 0.552 seconds)
 
 
 .. _sphx_glr_download_generated_gallery_02-scanner-ir_01_segmentation.py:
