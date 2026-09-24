@@ -47,6 +47,7 @@ from.
    convert
    check
    summary
+   play
    chain
    cache_path
 

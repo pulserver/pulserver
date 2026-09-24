@@ -517,6 +517,7 @@
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#checks">Checks</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#passes">Passes</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#cache-file">Cache file</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#playback">Playback</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#language-constraint">Language constraint</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See also</a></li>
 </ul>
@@ -615,6 +616,16 @@ reader built for that vendor. <a class="reference internal" href="../generated/p
 subsequences, segments and readouts of a sequence, computed from the chain or
 loaded from a vendor-neutral cache.</p>
 </section>
+<section id="playback">
+<h2>Playback<a class="headerlink" href="#playback" title="Link to this heading">#</a></h2>
+<p><a class="reference internal" href="../generated/pulserver.ir.play.html#pulserver.ir.play" title="pulserver.ir.play"><code class="xref py py-func docutils literal notranslate"><span class="pre">play()</span></code></a> loads a cache with the C library and walks its
+execution stream with the cursor a playout uses, resolving each block as the
+scanner plays it: its duration, the RF and ADC frequency and phase offsets, the
+gradient amplitudes and the rotation. It stands in for the interpreter, so the
+cache can be compared with the file it was converted from without a scanner;
+the test suite holds every played block of each fixture to the block its file
+designs.</p>
+</section>
 <section id="language-constraint">
 <h2>Language constraint<a class="headerlink" href="#language-constraint" title="Link to this heading">#</a></h2>
 <p>The IR is built by C++ passes in <code class="docutils literal notranslate"><span class="pre">src/cpp/ir/</span></code>, which run only on the host. The
@@ -686,6 +697,7 @@ back a cache written on the host.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#checks">Checks</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#passes">Passes</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#cache-file">Cache file</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#playback">Playback</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#language-constraint">Language constraint</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See also</a></li>
 </ul>
