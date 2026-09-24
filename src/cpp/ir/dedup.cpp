@@ -1689,6 +1689,8 @@ int pulseg__get_unique_blocks(
     /* per-subsequence flags */
     desc->enable_pmc = seq->reserved_definitions_library.enable_pmc;
     desc->num_gain_cal_readouts = seq->reserved_definitions_library.num_gain_cal_readouts;
+    desc->vop_sar_ratio = seq->reserved_definitions_library.vop_sar_ratio;
+    desc->vop_global_sar_ratio = seq->reserved_definitions_library.vop_global_sar_ratio;
     desc->vendor = opts->vendor;
     desc->label_column_map[0] = opts->label_column_map[0];
     desc->label_column_map[1] = opts->label_column_map[1];

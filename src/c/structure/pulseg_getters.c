@@ -2972,6 +2972,8 @@ int pulseg_get_subseq_info(const pulseg_collection *coll, pulseg_subseq_info *in
             info->num_tr_instances = 1;
     }
     info->rf_amplitude_variable = coll->descriptors[subseq_idx].rf_amplitude_variable;
+    info->vop_sar_ratio = coll->descriptors[subseq_idx].vop_sar_ratio;
+    info->vop_global_sar_ratio = coll->descriptors[subseq_idx].vop_global_sar_ratio;
 
     return PULSEG_SUCCESS;
 }

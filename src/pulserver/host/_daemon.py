@@ -356,8 +356,8 @@ class HostDaemon:
 def _identified(limits: dict[str, Any]) -> dict[str, Any]:
     """Return a session's limits with the digest of the VOP file they name.
 
-    A revision checked against one VOP file is not the revision of another
-    file written to the same path.
+    A revision whose SAR ratios came from one VOP file is not the revision of
+    another file written to the same path.
     """
     if "vop_file" not in limits:
         return limits

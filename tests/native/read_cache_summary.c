@@ -44,8 +44,10 @@ int main(int argc, char **argv)
         pulseg_tr_group *groups = NULL;
         int n, num_groups;
         pulseg_get_subseq_info(coll, &s, i);
-        printf("subsequence %d num_trs %d tr_size %d num_unique_adcs %d num_unique_rf %d\n",
-               i, s.num_trs, s.tr_size, s.num_unique_adcs, s.num_unique_rf);
+        printf("subsequence %d num_trs %d tr_size %d num_unique_adcs %d num_unique_rf %d "
+               "vop_sar_ratio %g vop_global_sar_ratio %g\n",
+               i, s.num_trs, s.tr_size, s.num_unique_adcs, s.num_unique_rf,
+               (double)s.vop_sar_ratio, (double)s.vop_global_sar_ratio);
         num_groups = pulseg_get_tr_groups(coll, &groups, i);
         for (n = 0; n < num_groups; ++n)
             printf("group %d %d trid %d num_instances %d one_instance_duration_us %d\n",

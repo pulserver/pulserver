@@ -32,7 +32,7 @@
 /* The full (major, minor, revision) triple must match exactly on read: a
  * cache at any other revision is rejected outright and the .seq is
  * re-parsed, never partially or heuristically read. */
-#define PULSEG_CACHE_VERSION_REVISION 16
+#define PULSEG_CACHE_VERSION_REVISION 17
 
 /* Per-consumer sections. Each carries its own distinct payload.
  * COMMON establishes the collection + descriptor framing; the others
@@ -180,6 +180,10 @@ static int write_common(FILE *f, const pulseg_sequence_descriptor *d)
     if (!pulseg__write4(f, &d->vendor, 1))
         return 0;
     if (!pulseg__write4(f, d->label_column_map, 3))
+        return 0;
+    if (!pulseg__write4(f, &d->vop_sar_ratio, 1))
+        return 0;
+    if (!pulseg__write4(f, &d->vop_global_sar_ratio, 1))
         return 0;
     if (!pulseg__write4(f, d->fov, 3))
         return 0;
@@ -678,6 +682,15 @@ static int read_common(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
         return 0;
     if (do_swap)
         pulseg__swap4_array(&d->rf_raster_us, 12);
+    if (!pulseg__read4(f, &d->vop_sar_ratio, 1))
+        return 0;
+    if (!pulseg__read4(f, &d->vop_global_sar_ratio, 1))
+        return 0;
+    if (do_swap)
+    {
+        pulseg__swap4(&d->vop_sar_ratio);
+        pulseg__swap4(&d->vop_global_sar_ratio);
+    }
     if (!pulseg__read4(f, d->fov, 3))
         return 0;
     if (!pulseg__read4(f, d->matrix, 3))

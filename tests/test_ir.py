@@ -236,6 +236,22 @@ def test_a_chain_plays_its_prescan_file_then_its_scan(tmp_path):
     _played_as_designed(first)
 
 
+def test_each_file_of_a_chain_carries_its_sar_ratios_into_the_cache(tmp_path):
+    first = Path(_ChainApp(SYSTEM).write(tmp_path / "sequence.seq", offline=True)[0])
+    ratios = [ir.SarRatio(0.25, 0.125), ir.SarRatio(0.75, 0.5)]
+    convert(first, SYSTEM, sar_ratios=ratios)
+    loaded = summary(first, SYSTEM, cache_ext=".pseg")["subsequences"]
+    assert [
+        ir.SarRatio(x["vop_sar_ratio"], x["vop_global_sar_ratio"]) for x in loaded
+    ] == ratios
+
+
+def test_a_chain_takes_one_sar_ratio_per_file(tmp_path):
+    first = Path(_ChainApp(SYSTEM).write(tmp_path / "sequence.seq", offline=True)[0])
+    with pytest.raises(ValueError, match="one SAR ratio per file"):
+        convert(first, SYSTEM, sar_ratios=[ir.SarRatio(1.0, 1.0)])
+
+
 def _reader_lines(s):
     lines = [
         f"num_subsequences {s['num_subsequences']}",
@@ -246,7 +262,9 @@ def _reader_lines(s):
     for i, x in enumerate(s["subsequences"]):
         lines.append(
             f"subsequence {i} num_trs {x['num_trs']} tr_size {x['tr_size']} "
-            f"num_unique_adcs {x['num_unique_adcs']} num_unique_rf {x['num_unique_rf']}"
+            f"num_unique_adcs {x['num_unique_adcs']} num_unique_rf {x['num_unique_rf']} "
+            f"vop_sar_ratio {x['vop_sar_ratio']:g} "
+            f"vop_global_sar_ratio {x['vop_global_sar_ratio']:g}"
         )
         lines += [
             f"group {i} {n} trid {g['trid']} num_instances {g['num_instances']} "
@@ -319,6 +337,28 @@ def test_a_ge_cache_written_here_loads_in_the_scanner_reader(
     ).stdout
     expected = summary(seq, SYSTEM, label_column_map=GE_LABELS)
     assert printed.splitlines() == _reader_lines(expected)
+
+
+def test_the_scanner_reader_reads_the_sar_ratios_a_cache_carries(
+    tmp_path, scanner_reader
+):
+    seq = _copy("gre_2d_3sl.seq", tmp_path)
+    cache = convert(
+        seq,
+        SYSTEM,
+        vendor=GEHC,
+        label_column_map=GE_LABELS,
+        cache_ext=".pge",
+        sar_ratios=[ir.SarRatio(0.75, 0.5)],
+    )
+    printed = subprocess.run(
+        [str(scanner_reader), str(cache), str(seq.stat().st_size)],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    (line,) = (x for x in printed.splitlines() if x.startswith("subsequence 0 "))
+    assert line.endswith("vop_sar_ratio 0.75 vop_global_sar_ratio 0.5")
 
 
 def _readouts(sequence):

@@ -1,5 +1,6 @@
 """The limits a session opens with: scanner limits, conversion options and check limits."""
 
+import cmath
 from pathlib import Path
 
 import numpy as np
@@ -8,7 +9,7 @@ import pytest
 from pypulseqpp import safety
 
 from pulserver import ir
-from pulserver.host._worker import check_limits, split_limits
+from pulserver.host._worker import check_limits, convert, split_limits
 from pulserver.protocol import FOV_ROTATION, prescribed_rotation
 
 SCANNER = {
@@ -51,7 +52,7 @@ def test_the_check_limits_are_read_apart_from_the_scanner_limits():
         "forbidden_band_2": "x 1100 1200 5.5",
         "vop_file": "/data/vops.mat",
         "vop_drive_per_hz": "0.01 0.02",
-        "vop_local_limit": 20,
+        "vop_default_shim": "1 0 0.5 1.5",
     }
     system, _, checked = split_limits(limits)
     assert system.max_grad == pytest.approx(40e-3 * system.gamma)
@@ -64,8 +65,34 @@ def test_the_check_limits_are_read_apart_from_the_scanner_limits():
         ),
         vops=Path("/data/vops.mat"),
         drive_per_hz=(0.01, 0.02),
-        local_sar_limit=20.0,
+        default_shim=(1 + 0j, cmath.rect(0.5, 1.5)),
     )
+
+
+def test_a_vop_file_alone_is_read_with_a_unit_drive_and_equal_weights():
+    assert check_limits({"vop_file": "/data/vops.mat"}) == ir.CheckLimits(
+        vops=Path("/data/vops.mat")
+    )
+
+
+def test_a_conversion_under_a_vop_file_writes_the_sar_ratios_into_the_cache(
+    tmp_path,
+):
+    vops = tmp_path / "vops.npz"
+    np.savez(vops, vops=np.ones((1, 1, 1)))
+    system = pp.Opts(**SCANNER)
+    seq = pp.Sequence(system)
+    rf = pp.make_block_pulse(flip_angle=np.pi / 2, duration=1e-3, system=system)
+    for _ in range(10):
+        seq.add_block(rf)
+        seq.add_block(pp.make_delay(9e-3))
+    path = tmp_path / "sequence.seq"
+    seq.write(path)
+    convert({**SCANNER, "vop_file": str(vops)}, str(path))
+    (loaded,) = ir.summary(path, system, cache_ext=".pseg")["subsequences"]
+    # A 90 degree, 1 ms hard pulse deposits a quarter of the reference's energy.
+    assert loaded["vop_sar_ratio"] == pytest.approx(0.25)
+    assert loaded["vop_global_sar_ratio"] == 0.0
 
 
 def test_a_session_without_check_limits_checks_timing_and_gradients_only():
@@ -92,7 +119,9 @@ def test_a_safe_model_is_read_for_every_axis_as_pypulseqpp_takes_it():
         ({"forbidden_band_1": "x 590"}, "forbidden band"),
         ({"forbidden_band_1": "x 590 high"}, "forbidden band"),
         ({"vop_drive_per_hz": 0.01}, "vop_file"),
-        ({"vop_file": "/data/vops.mat"}, "drive per Hz"),
+        ({"vop_file": "/data/vops.mat", "vop_local_limit": 20}, "not check limits"),
+        ({"vop_file": "/data/vops.mat", "vop_default_shim": "1 0 1"}, "a phase"),
+        ({"vop_file": "/data/vops.mat", "vop_default_shim": "1 zero"}, "a phase"),
     ],
 )
 def test_check_limits_that_cannot_be_read_are_refused(limits, message):

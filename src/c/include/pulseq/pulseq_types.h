@@ -307,6 +307,12 @@ typedef struct pulseq_reserved_definitions
     int enable_pmc;
     int num_gain_cal_readouts; /**< calibration readouts for receive gain */
     int enable_sar_burst_mode; /**< sequence asks to be costed under SAR burst limits */
+    /** Computed by the host, not declared by the file: the worst VOP ratio of
+     *  a repetition's RF energy to the same repetition's with each pulse
+     *  replaced by the reference pulse, and the same for the global SAR
+     *  matrix; 0 when no VOPs were given. */
+    PULSEQ_REAL vop_sar_ratio;
+    PULSEQ_REAL vop_global_sar_ratio;
 } pulseq_reserved_definitions;
 
 /** @brief One RF_SHIMS library entry (parallel-transmit channel weights). */

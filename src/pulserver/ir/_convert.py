@@ -10,6 +10,7 @@ import pypulseqpp as pp
 
 from .._accelerators import require
 from ..mrd._sequence import read_chain
+from ._checks import SarRatio
 from ._source import conversion_payload
 
 
@@ -52,6 +53,7 @@ def convert(
     label_column_map: Sequence[int] = (0, 1, 2),
     cache_ext: str = ".pseg",
     verify_signature: bool = True,
+    sar_ratios: Sequence[SarRatio] | None = None,
 ) -> Path:
     """Segment a sequence file and write its IR cache beside it.
 
@@ -85,6 +87,9 @@ def convert(
     verify_signature
         Refuse a file whose contents do not match the signature it carries. A
         file carrying none is read either way.
+    sar_ratios
+        One per file of the chain, as :func:`sar_ratios` returns them, written
+        into each subsequence of the cache; zero when None.
 
     Returns
     -------
@@ -94,15 +99,26 @@ def convert(
     Raises
     ------
     ValueError
-        If a file of the chain cannot be read, verified or segmented.
+        If a file of the chain cannot be read, verified or segmented, or
+        ``sar_ratios`` does not give one per file.
     OSError
         If no cache was written.
     """
     seq_path = Path(seq_path)
     target = cache_path(seq_path, cache_ext)
     target.unlink(missing_ok=True)
+    payload = _payload(seq_path, verify_signature, fov_offset)
+    if sar_ratios is not None:
+        if len(sar_ratios) != len(payload):
+            raise ValueError(
+                f"expected one SAR ratio per file of the chain, {len(payload)}; "
+                f"got {len(sar_ratios)}"
+            )
+        for libraries, ratio in zip(payload, sar_ratios, strict=True):
+            libraries["reserved"]["vop_sar_ratio"] = float(ratio.local_sar)
+            libraries["reserved"]["vop_global_sar_ratio"] = float(ratio.global_sar)
     require("convert_libraries")(
-        _payload(seq_path, verify_signature, fov_offset),
+        payload,
         str(seq_path),
         *_scanner(system),
         int(vendor),
@@ -126,7 +142,9 @@ def summary(
     Each subsequence lists its unique RF definitions under ``rf``: the
     bandwidth at half the spectral peak, the number of bands, each band's
     offset from the carrier and the widest band's bandwidth, all in Hz, as
-    ``pypulseqpp.calc_rf_bandwidth`` measures them.
+    ``pypulseqpp.calc_rf_bandwidth`` measures them. ``vop_sar_ratio`` and
+    ``vop_global_sar_ratio`` are those the cache was written with, zero when
+    the chain is read and segmented again.
 
     With ``cache_ext``, the cache beside the file is loaded instead of the
     chain being read and segmented again; this build loads only vendor-neutral

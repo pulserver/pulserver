@@ -414,6 +414,8 @@ typedef struct pulseg_sequence_descriptor
     float block_raster_us;
     int enable_pmc;
     int num_gain_cal_readouts; /**< calibration readouts for APS2 receive gain (pislquant) */
+    float vop_sar_ratio;        /**< see pulseg_subseq_info.vop_sar_ratio */
+    float vop_global_sar_ratio; /**< see pulseg_subseq_info.vop_global_sar_ratio */
     int vendor;                /**< PULSEG_VENDOR_* runtime constant */
     int label_column_map[3];   /**< copy of pulseg_opts.label_column_map at dedup time */
 
@@ -614,7 +616,7 @@ int pulseg__wave_key_flat(const pulseg_sequence_descriptor *desc, int def_index,
 /* clang-format off */
 #define PULSEG_SEQUENCE_DESCRIPTOR_INIT \
     { \
-    0.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, {0, 1, 2}, {0, 0, 0}, {0, 0, \
+    0.0f, 0.0f, 0.0f, 0.0f, 0, 0, /* vop ratios */ 0.0f, 0.0f, 0, {0, 1, 2}, {0, 0, 0}, {0, 0, \
     0}, {0, 0, 0}, {0, 0, 0}, 0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, /* rf_amplitude_variable */ \
     0, NULL, 0, NULL, /* grad shape stats */ 0, NULL, NULL, NULL, NULL, \
     0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, NULL, \

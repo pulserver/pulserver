@@ -301,7 +301,7 @@ def test_a_design_in_a_forbidden_band_generates_nothing(daemon):
     assert not _committed(_session_dir(daemon, client))
 
 
-def test_a_revision_is_one_of_the_vop_file_contents_it_was_checked_against(
+def test_a_revision_is_one_of_the_vop_file_contents_its_sar_ratios_came_from(
     daemon, tmp_path
 ):
     vops = tmp_path / "vops.npz"
