@@ -9,11 +9,9 @@ from _synthetic import add_readout
 
 from pulserver.mrd import AcquisitionFlag, EncodingSpace
 from pulserver.vre._enrich import (
-    FOV_OFFSET_PARAMETER,
     SequenceTable,
     enrich_acquisition,
     enrich_header,
-    fov_offset_m,
 )
 
 FIXTURES = Path(__file__).parent / "fixtures" / "sequences"
@@ -186,34 +184,6 @@ def test_a_readout_whose_k_does_not_move_keeps_the_received_centre_sample(tmp_pa
     enrich_acquisition(acquisition, table, 0)
     assert acquisition.center_sample == 7
     assert acquisition.trajectory_dimensions == 0
-
-
-@pytest.mark.parametrize("name", ["gre_2d_3sl.seq", "zte_3d.seq"])
-def test_fov_demodulation_recentres_an_offset_point(name):
-    table = fixture(name)
-    k_adc = reference(name).calculate_kspace()[0]
-    offset = np.array([0.012, -0.034, 0.005])
-
-    def point(index):
-        phase = np.exp(-2j * np.pi * (offset @ readout_k(k_adc, table, index)))
-        return np.tile(phase, (2, 1)).astype(np.complex64)
-
-    for index, acquisition in enumerate(acquisitions(table, point)):
-        enrich_acquisition(acquisition, table, index, offset)
-        np.testing.assert_allclose(acquisition.data, 1.0, atol=1e-4)
-
-
-def test_the_fov_offset_is_read_in_millimetres():
-    enriched = header()
-    enriched.userParameters = ismrmrd.xsd.userParametersType(
-        userParameterString=[
-            ismrmrd.xsd.userParameterStringType(
-                name=FOV_OFFSET_PARAMETER, value="12 -34 5"
-            )
-        ]
-    )
-    np.testing.assert_allclose(fov_offset_m(enriched), [0.012, -0.034, 0.005])
-    assert not fov_offset_m(header()).any()
 
 
 def test_the_header_describes_each_encoding_space():

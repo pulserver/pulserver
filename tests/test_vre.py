@@ -37,7 +37,6 @@ HEADER = """<?xml version="1.0"?>
   <userParameters>
     <userParameterLong><name>pulserver_revision</name><value>{revision}</value></userParameterLong>
     <userParameterString><name>pulserver_session</name><value>{session}</value></userParameterString>
-    {offset}
   </userParameters>
 </ismrmrdHeader>
 """
@@ -94,19 +93,9 @@ def start_proxy(bucket):
         thread.join(timeout=DEADLINE)
 
 
-def header_xml(series, offset_mm=None):
-    offset = ""
-    if offset_mm is not None:
-        value = " ".join(f"{component:g}" for component in offset_mm)
-        offset = (
-            "<userParameterString><name>pulserver_fov_offset_mm</name>"
-            f"<value>{value}</value></userParameterString>"
-        )
+def header_xml(series):
     return HEADER.format(
-        channels=CHANNELS,
-        session=series.session,
-        revision=series.revision,
-        offset=offset,
+        channels=CHANNELS, session=series.session, revision=series.revision
     )
 
 
@@ -122,7 +111,7 @@ def point(table, index, position_m):
     return np.broadcast_to(samples, (CHANNELS, samples.size)).astype(np.complex64)
 
 
-def stream(port, series, *, config="", offset_mm=None, data=flat, counters=None):
+def stream(port, series, *, config="", data=flat, counters=None):
     """Play one series' readouts as the scanner client does; return what came back.
 
     ``counters`` numbers the acquisitions' ``scan_counter``; unnumbered by default.
@@ -131,7 +120,7 @@ def stream(port, series, *, config="", offset_mm=None, data=flat, counters=None)
     connection = Connection(stream)
     stream.settimeout(DEADLINE)
     connection.send_config(config)
-    connection.send_header(header_xml(series, offset_mm))
+    connection.send_header(header_xml(series))
     for index in range(len(series.table)):
         acquisition = ismrmrd.Acquisition.from_array(data(series.table, index))
         if counters is not None:
@@ -320,26 +309,22 @@ def _wait_until(condition, message, timeout=DEADLINE):
     raise AssertionError(message)
 
 
-def test_a_point_at_the_prescription_centre_reconstructs_at_the_image_centre(
-    start_proxy, bucket
-):
+def test_a_point_off_the_centre_reconstructs_where_it_was_acquired(start_proxy, bucket):
+    """The readouts arrive demodulated by the playout, and the proxy leaves them so."""
     _, series = bucket
     proxy = start_proxy(slots=1)
     table = series["bound"].table
     fov_mm = table.spaces[0].fov_mm
     pixel_mm = (fov_mm[0] / MATRIX["nx"], fov_mm[1] / MATRIX["ny"])
-    offset_mm = (2 * pixel_mm[0], 3 * pixel_mm[1], 0.0)
-    position = 1e-3 * np.array(offset_mm)
+    position = 1e-3 * np.array((2 * pixel_mm[0], 3 * pixel_mm[1], 0.0))
 
     def kspace(table, index):
         return point(table, index, position)
 
-    centred = stream(proxy.port, series["bound"], offset_mm=offset_mm, data=kspace)
-    uncentred = stream(proxy.port, series["bound"], data=kspace)
+    received = stream(proxy.port, series["bound"], data=kspace)
 
     centre = (MATRIX["ny"] // 2, MATRIX["nx"] // 2)
-    assert peak(images(centred)[0]) == centre
-    assert peak(images(uncentred)[0]) == (centre[0] + 3, centre[1] + 2)
+    assert peak(images(received)[0]) == (centre[0] + 3, centre[1] + 2)
 
 
 def test_a_stopped_proxy_stops_accepting_within_one_poll(tmp_path):

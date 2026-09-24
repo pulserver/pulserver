@@ -5,6 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from ..protocol import PRESCRIPTION
+
 LIMITS_BEGIN = "[Limits]"
 LIMITS_END = "[Limits End]"
 IMPORT_BEGIN = "[Import]"
@@ -35,19 +37,37 @@ def format_limits(limits: dict[str, Any]) -> str:
     return "\n".join([LIMITS_BEGIN, *lines, LIMITS_END]) + "\n"
 
 
-def parse_import(block: str) -> Path:
-    """Read an import block: the ``file`` line naming the first file of a chain.
+def parse_import(block: str) -> tuple[Path, tuple[float, float, float]]:
+    """Read an import block: the first file of a chain and the prescribed offset.
+
+    The offset is in mm along the logical readout, phase and slice axes, and
+    zero along an axis the block leaves out.
 
     Raises
     ------
     ValueError
-        If the block has no ``file`` line.
+        If the block has no ``file`` line, or an offset line is not a number.
     """
+    path, offset = None, dict.fromkeys(PRESCRIPTION, 0.0)
     for line in block.splitlines():
-        if line.startswith("file: "):
-            return Path(line.removeprefix("file: ").strip())
-    raise ValueError("IMPORT needs a file line")
+        name, _, value = line.partition(": ")
+        if name == "file":
+            path = Path(value.strip())
+        elif name in offset:
+            offset[name] = float(value)
+    if path is None:
+        raise ValueError("IMPORT needs a file line")
+    x, y, z = offset.values()
+    return path, (x, y, z)
 
 
-def format_import(path: Path | str) -> str:
-    return f"{IMPORT_BEGIN}\nfile: {path}\n{IMPORT_END}\n"
+def format_import(
+    path: Path | str, fov_offset_mm: tuple[float, float, float] | None = None
+) -> str:
+    lines = [IMPORT_BEGIN, f"file: {path}"]
+    if fov_offset_mm is not None:
+        lines += [
+            f"{name}: {value!r}"
+            for name, value in zip(PRESCRIPTION, fov_offset_mm, strict=True)
+        ]
+    return "\n".join([*lines, IMPORT_END]) + "\n"

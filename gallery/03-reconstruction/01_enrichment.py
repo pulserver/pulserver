@@ -6,23 +6,27 @@ Raw-data enrichment and reconstruction
 The scope of this notebook is to enrich a simulated series the way the
 reconstruction proxy does, and to reconstruct it with a reconstruction plugin:
 what the sequence supplies to an MRD stream that carries no encoding
-information, and the displacement that demodulation to the prescription centre
-removes.
+information, and how a field-of-view offset applied to the sequence when its IR
+is built places an object away from the isocentre at the centre of the image.
 
 The series is simulated rather than acquired: a phantom of three disks, whose
 k-space is known analytically, sampled at the k-space locations of a
-pypulseqpp 2D gradient echo and placed away from the isocentre. The enrichment
-is described in :doc:`/explanations/reconstruction`.
+pypulseqpp 2D gradient echo and placed away from the isocentre. The
+prescription is described in :doc:`/explanations/ir-cache` and the enrichment
+in :doc:`/explanations/reconstruction`.
 
 Outline:
 
 #. **Sequence and readout table.** The readouts of the sequence, as the proxy
    tabulates them from a revision.
-#. **Simulated series.** A phantom away from the isocentre, streamed without
-   encoding counters, flags or encoding spaces.
+#. **Prescription.** The RF and ADC frequency and phase offsets that move the
+   field of view of the logical-frame design to the prescribed centre.
+#. **Simulated series.** A phantom away from the isocentre, received through
+   the phase of each readout and streamed without encoding counters, flags or
+   encoding spaces.
 #. **Enrichment.** The header and acquisition fields the table supplies.
-#. **Reconstruction.** The shipped Cartesian FFT plugin, with and without
-   demodulation to the prescription centre.
+#. **Reconstruction.** The shipped Cartesian FFT plugin, for the design played
+   as written and played at the prescribed offset.
 """
 
 # sphinx_gallery_start_ignore
@@ -39,9 +43,10 @@ PAGE_WIDTH = 8.6  # inches, the width of the documentation column
 # --------------------------
 #
 # The sequence is written as a generated revision holds it, in the binary
-# Pulseq form, and tabulated with :class:`~pulserver.vre.SequenceTable`: one
-# row per readout in play order, with its encoding counters, flags, dwell time
-# and the k-space location of every sample in 1/m.
+# Pulseq form and in the logical frame, and tabulated with
+# :class:`~pulserver.vre.SequenceTable`: one row per readout in play order,
+# with its encoding counters, flags, dwell time and the k-space location of
+# every sample in 1/m.
 
 import tempfile
 from pathlib import Path
@@ -52,13 +57,8 @@ import numpy as np
 import pypulseqpp as pp
 from pypulseqpp.sequences.sequence.gre2D_sequence import Gre2DApp
 
-from pulserver.vre import (
-    FOV_OFFSET_PARAMETER,
-    SequenceTable,
-    enrich_acquisition,
-    enrich_header,
-    fov_offset_m,
-)
+from pulserver.ir import prescribe
+from pulserver.vre import SequenceTable, enrich_acquisition, enrich_header
 
 system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
 work = Path(tempfile.mkdtemp())
@@ -70,6 +70,94 @@ table = SequenceTable.read(files[0])
 print(f"{len(table)} readouts of {table.num_samples[0]} samples")
 print("LIN of the first readouts:", table.counters["LIN"][:6])
 print("encoding spaces:", table.spaces)
+
+# %%
+# Prescription
+# ------------
+#
+# The phantom is displaced by :math:`\mathbf{d} = (30, -90, 0)` mm from the
+# isocentre, along the logical readout, phase-encoding and slice axes; 90 mm
+# exceeds half the 220 mm field of view along the phase-encoding axis. The host
+# moves each file of a revision to the prescribed offset with
+# :func:`~pulserver.ir.prescribe` before it segments it. Every readout of the
+# played sequence carries the frequency offset :math:`G_x d_x` of the readout
+# gradient, and a phase offset.
+
+offset = np.array([0.03, -0.09, 0.0])
+
+
+def played(prescription):
+    sequence = pp.Sequence()
+    sequence.read(files[0])
+    if prescription is not None:
+        prescribe(sequence, prescription)
+    return sequence
+
+
+designed, moved = played(None), played(offset)
+readout = next(
+    moved.get_block(i) for i in range(1, len(moved) + 1) if moved.get_block(i).adc
+)
+frequencies = np.unique(moved.waveforms_and_times(compat=False).adc.freq_offset)
+print(f"ADC frequency offsets: {frequencies} Hz")
+print(f"G_x d_x = {readout.gx.amplitude * offset[0]:.2f} Hz")
+
+# %%
+# The receive phase of a sample is the phase of the receiver's reference at
+# that sample relative to the excitation the readout follows: the ADC phase
+# offset, the phase the frequency offset accumulates from the start of the
+# window, and any phase modulation, minus the RF phase at the centre of the
+# pulse. The prescription makes it :math:`2\pi\,\mathbf{d}\cdot\mathbf{k}(t)`,
+# the phase an object at :math:`\mathbf{d}` accumulates.
+
+
+def receive_phase(sequence):
+    timing = sequence.waveforms_and_times(compat=False)
+    rf, adc = timing.rf.of("excitation", "undefined"), timing.adc
+    first = np.cumsum(np.r_[0, adc.num_samples[:-1]])
+    window = np.repeat(np.arange(adc.num_samples.size), adc.num_samples)
+    dwell = (adc.t[first + 1] - adc.t[first])[window]
+    within = adc.t - adc.t[first][window] + 0.5 * dwell
+    reference = (
+        adc.phase_offset[window]
+        + 2 * np.pi * adc.freq_offset[window] * within
+        + adc.phase_modulation
+    )
+    excitation = np.searchsorted(rf.t, adc.t[first][window]) - 1
+    return reference - rf.phase_offset[excitation]
+
+
+def wrapped(phase):
+    return np.angle(np.exp(1j * phase))
+
+
+shift_phase = 2 * np.pi * (offset @ table.k)
+deviation = np.abs(wrapped(receive_phase(moved) - shift_phase)).max()
+print(f"largest |receive phase - 2 pi d.k| over the scan: {deviation:.1e} rad")
+
+# sphinx_gallery_start_ignore
+fig, ax = plt.subplots(figsize=(PAGE_WIDTH * 0.7, 3.0), layout="constrained")
+n_x = int(table.num_samples[0])
+for row in (0, 16, 32):
+    span = slice(int(table.sample_offset[row]), int(table.sample_offset[row]) + n_x)
+    lines = ax.plot(np.unwrap(receive_phase(moved)[span]) / (2 * np.pi), lw=1.5)
+    ax.plot(
+        np.unwrap(shift_phase[span]) / (2 * np.pi)
+        + np.round(
+            (receive_phase(moved)[span][0] - shift_phase[span][0]) / (2 * np.pi)
+        ),
+        "o",
+        ms=4,
+        markevery=8,
+        color=lines[0].get_color(),
+        label=f"LIN {table.counters['LIN'][row]}",
+    )
+ax.set_xlabel("sample")
+ax.set_ylabel("receive phase (cycles)")
+ax.set_title(r"receive phase (lines) and $\mathbf{d}\cdot\mathbf{k}$ (markers)")
+ax.legend(frameon=False)
+plt.show()
+# sphinx_gallery_end_ignore
 
 # %%
 # Simulated series
@@ -85,14 +173,14 @@ print("encoding spaces:", table.spaces)
 #    e^{-i 2\pi \mathbf{k}\cdot\mathbf{c}},
 #
 # so the signal of every sample follows from its k-space location without a
-# discretized object. The phantom is displaced by
-# :math:`\mathbf{d} = (30, -90)` mm from the isocentre, which exceeds half the
-# 220 mm field of view along the phase-encoding axis.
+# discretized object. Each sample is received through the receiver's
+# reference, :math:`e^{+i\phi(t)}` with :math:`\phi` the receive phase, which
+# for the design played as written is zero: the ADC phase follows the RF
+# spoiling phase of the excitation.
 
 from scipy.special import j1
 
 DISKS = ((0.0, 0.0, 0.05, 1.0), (0.02, 0.01, 0.015, -0.5), (-0.02, -0.015, 0.01, 0.5))
-offset = np.array([0.03, -0.09, 0.0])
 
 
 def phantom_signal(k, shift):
@@ -107,18 +195,20 @@ def phantom_signal(k, shift):
             )
         phase = np.exp(-2j * np.pi * (k[0] * (cx + shift[0]) + k[1] * (cy + shift[1])))
         signal += intensity * disk * phase
-    return signal.astype(np.complex64)
+    return signal
 
 
-samples = phantom_signal(table.k, offset)
+def received(sequence):
+    samples = phantom_signal(table.k, offset) * np.exp(1j * receive_phase(sequence))
+    return samples.astype(np.complex64)
+
 
 # %%
 # The stream carries what a vendor reconstruction client supplies: one
-# receiver channel, the readout samples, and a header whose only
-# pulserver-specific entry is the prescription centre in mm.
+# receiver channel, the readout samples, and a header with no encoding space.
 
 
-def vendor_stream(centre_mm):
+def vendor_stream(samples):
     header = xsd.ismrmrdHeader(
         experimentalConditions=xsd.experimentalConditionsType(
             H1resonanceFrequency_Hz=127_000_000
@@ -128,15 +218,6 @@ def vendor_stream(centre_mm):
     header.acquisitionSystemInformation = xsd.acquisitionSystemInformationType(
         receiverChannels=1
     )
-    if centre_mm is not None:
-        header.userParameters = xsd.userParametersType(
-            userParameterString=[
-                xsd.userParameterStringType(
-                    name=FOV_OFFSET_PARAMETER,
-                    value=" ".join(f"{v:g}" for v in centre_mm),
-                )
-            ]
-        )
     acquisitions = []
     for row in range(len(table)):
         start, count = int(table.sample_offset[row]), int(table.num_samples[row])
@@ -145,7 +226,7 @@ def vendor_stream(centre_mm):
     return header, acquisitions
 
 
-header, acquisitions = vendor_stream(offset * 1e3)
+header, acquisitions = vendor_stream(received(moved))
 print("encodings in the header:", len(header.encoding))
 print("LIN of acquisition 10:", acquisitions[10].idx.kspace_encode_step_1)
 print("flags of acquisition 63:", acquisitions[63].flags)
@@ -156,13 +237,11 @@ print("flags of acquisition 63:", acquisitions[63].flags)
 #
 # :func:`~pulserver.vre.enrich_header` describes the table's encoding space in
 # the header. :func:`~pulserver.vre.enrich_acquisition` applies one table row
-# to each acquisition, in stream order, and demodulates it to the prescription
-# centre the header records.
+# to each acquisition, in stream order, and leaves the samples as received.
 
 enrich_header(header, table)
-centre = fov_offset_m(header)
 for row, acquisition in enumerate(acquisitions):
-    enrich_acquisition(acquisition, table, row, centre)
+    enrich_acquisition(acquisition, table, row)
 
 encoding = header.encoding[0]
 matrix = encoding.encodedSpace.matrixSize
@@ -188,18 +267,17 @@ print(
 # carries ``LAST_IN_SLICE``, a flag enrichment supplies, and crops the
 # oversampled readout to the reconstruction matrix of the header.
 #
-# The same series is reconstructed twice: with the prescription centre in the
-# header, and without it, in which case no demodulation is applied.
+# The phantom is acquired twice: with the design played as written, and played
+# at the prescribed offset.
 
 from pulserver.recon.handlers.simplefft import SimpleFftRecon
 
 
-def reconstruct(centre_mm, name):
-    header, acquisitions = vendor_stream(centre_mm)
+def reconstruct(sequence, name):
+    header, acquisitions = vendor_stream(received(sequence))
     enrich_header(header, table)
-    centre = fov_offset_m(header)
     for row, acquisition in enumerate(acquisitions):
-        enrich_acquisition(acquisition, table, row, centre)
+        enrich_acquisition(acquisition, table, row)
     path = work / name
     dataset = ismrmrd.Dataset(str(path), "dataset", create_if_needed=True)
     dataset.write_xml_header(xsd.ToXML(header))
@@ -212,14 +290,14 @@ def reconstruct(centre_mm, name):
     return np.squeeze(images[0].data)
 
 
-uncorrected = reconstruct(None, "uncorrected.h5")
-centred = reconstruct(offset * 1e3, "centred.h5")
+as_written = reconstruct(designed, "as_written.h5")
+centred = reconstruct(moved, "centred.h5")
 
 # sphinx_gallery_start_ignore
 fig, axes = plt.subplots(1, 2, figsize=(PAGE_WIDTH * 0.8, 3.8), layout="constrained")
 for ax, image, title in (
-    (axes[0], uncorrected, "no prescription centre"),
-    (axes[1], centred, "demodulated to d = (30, -90) mm"),
+    (axes[0], as_written, "played as written"),
+    (axes[1], centred, "played at d = (30, -90) mm"),
 ):
     ax.imshow(image, cmap="gray", origin="lower")
     ax.set_title(title)
@@ -229,9 +307,10 @@ plt.show()
 # sphinx_gallery_end_ignore
 
 # %%
-# Without demodulation the phantom appears at its displacement from the
-# isocentre: shifted along the readout axis, and folded along the
+# Played as written, the sequence acquires the phantom at its displacement from
+# the isocentre: shifted along the readout axis, and folded along the
 # phase-encoding axis, where the 90 mm displacement exceeds half the field of
-# view. Multiplying each readout by :math:`e^{+i 2\pi \mathbf{d}\cdot\mathbf{k}}`
-# places it at the centre of the field of view, with no change to the
-# trajectory.
+# view. Played at the prescribed offset, the receive phase
+# :math:`2\pi\,\mathbf{d}\cdot\mathbf{k}` removes the phase the displacement
+# adds, and the phantom is at the centre of the field of view, with no change
+# to the gradients or the trajectory.

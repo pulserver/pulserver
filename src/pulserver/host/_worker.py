@@ -13,7 +13,7 @@ import pypulseqpp as pp
 
 from .. import __version__, ir
 from ..design import ScannerSequence, load_plugin
-from ..protocol import Parameter, Validation
+from ..protocol import Parameter, Validation, prescribed_offset
 
 _IR_OPTIONS = ("ir_vendor", "ir_label_column_map", "ir_cache_ext")
 
@@ -89,20 +89,28 @@ def generate(
 ) -> tuple[Validation, list[str], str | None, str]:
     """Design into ``directory``, convert the result, and name its reconstruction.
 
-    The cache file name is ``None`` for an invalid request, which writes nothing.
+    The design is written in the logical frame; the conversion shifts it to
+    the field-of-view offset the resolved protocol carries. The cache file
+    name is ``None`` for an invalid request, which writes nothing.
     """
     system, options = split_limits(limits)
     plugin = _plugin(path)
     validation, paths = plugin.generate(system, request, Path(directory))
     if not paths:
         return validation, paths, None, plugin.recon
-    return validation, paths, ir.convert(paths[0], system, **options).name, plugin.recon
+    offset = prescribed_offset(validation.values)
+    cache = ir.convert(paths[0], system, fov_offset=offset, **options)
+    return validation, paths, cache.name, plugin.recon
 
 
 def chain(first: str) -> list[str]:
     return [str(path) for path in ir.chain(first)]
 
 
-def convert(limits: Mapping[str, Any], seq_path: str) -> str:
+def convert(
+    limits: Mapping[str, Any],
+    seq_path: str,
+    fov_offset: tuple[float, float, float] = (0.0, 0.0, 0.0),
+) -> str:
     system, options = split_limits(limits)
-    return ir.convert(seq_path, system, **options).name
+    return ir.convert(seq_path, system, fov_offset=fov_offset, **options).name

@@ -47,6 +47,7 @@ def convert(
     seq_path: Path | str,
     system: pp.Opts,
     *,
+    fov_offset: Sequence[float] | None = None,
     vendor: int = 0,
     label_column_map: Sequence[int] = (0, 1, 2),
     cache_ext: str = ".pseg",
@@ -59,12 +60,21 @@ def convert(
     replaced. RF vendor statistics are left at zero: ``vendor`` only tags the
     cache for the reader that loads it, which must be built for that vendor.
 
+    The files are expected in the logical frame, and each is moved to
+    ``fov_offset`` with :func:`prescribe` before it is segmented. The
+    prescription's rotation is not applied here: the scanner plays the cache
+    through its rotation matrix, composed after each block's own rotation.
+
     Parameters
     ----------
     seq_path
         Text or binary Pulseq file.
     system
         Limits and rasters the scan is segmented under.
+    fov_offset
+        Translation of the field-of-view centre along the logical readout,
+        phase and slice axes, in metres. None or zero leaves the files as
+        designed.
     vendor
         ``PULSEG_VENDOR_*`` code; 0 is vendor-neutral.
     label_column_map
@@ -92,7 +102,7 @@ def convert(
     target = cache_path(seq_path, cache_ext)
     target.unlink(missing_ok=True)
     require("convert_libraries")(
-        _payload(seq_path, verify_signature),
+        _payload(seq_path, verify_signature, fov_offset),
         str(seq_path),
         *_scanner(system),
         int(vendor),
@@ -139,8 +149,43 @@ def summary(
     )
 
 
-def _payload(seq_path: Path, verify_signature: bool) -> list[dict[str, Any]]:
-    """Read the chain and return each file's libraries, in play order.
+def prescribe(sequence: pp.Sequence, fov_offset: Sequence[float]) -> pp.Sequence:
+    """Move a logical-frame sequence to a prescribed field-of-view centre, in place.
+
+    An offset along the slice axis becomes an RF frequency, an in-plane offset
+    an RF and ADC phase, each referenced to the excitation it follows; blocks
+    labelled ``NOPOS`` are exempt. The gradient area is counted from the
+    sequence's first block.
+
+    Parameters
+    ----------
+    sequence
+        One file of a chain, as designed.
+    fov_offset
+        Translation along the logical readout, phase and slice axes, in metres.
+
+    Returns
+    -------
+    pypulseqpp.Sequence
+        ``sequence`` itself.
+
+    Raises
+    ------
+    ValueError
+        If ``fov_offset`` is not three values.
+    """
+    shift = tuple(float(v) for v in fov_offset)
+    if len(shift) != 3:
+        raise ValueError(f"fov_offset takes three values, got {len(shift)}")
+    if any(shift):
+        pp.TransformFOV(translation=shift).apply_to_sequence(sequence, in_place=True)
+    return sequence
+
+
+def _payload(
+    seq_path: Path, verify_signature: bool, fov_offset: Sequence[float] | None = None
+) -> list[dict[str, Any]]:
+    """Read the chain and return each file's libraries, in play order, prescribed to ``fov_offset``.
 
     A file the reader refuses raises ``ValueError``, whatever the reader
     itself raised.
@@ -149,4 +194,9 @@ def _payload(seq_path: Path, verify_signature: bool) -> list[dict[str, Any]]:
         chain_read = read_chain(seq_path, verify=verify_signature)
     except RuntimeError as failure:
         raise ValueError(f"cannot read {seq_path}: {failure}") from failure
-    return [conversion_payload(sequence) for _, sequence in chain_read]
+    payload = []
+    for _, sequence in chain_read:
+        if fov_offset is not None:
+            prescribe(sequence, fov_offset)
+        payload.append(conversion_payload(sequence))
+    return payload

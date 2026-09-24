@@ -143,16 +143,12 @@ extern "C"
 #define PULSEG_PARAM_USER18_NAME 89
 #define PULSEG_PARAM_USER19_NAME 90
 /* --- FOV offset ---
- * The prescribed off-isocentre translation, in MILLIMETRES, in the LOGICAL
- * (design) frame -- which is the frame GE's xloc/yloc/zloc are already in, so
- * no rotation is undone anywhere along the way.
- *
- * It reaches the design side because that is where the shift is applied now:
- * a shift is a phase on RF and ADC, `dr . k`, and expressing it in the same
- * frame as the gradients makes it invariant under every rotation the sequence
- * or the prescription can apply.  The interpreter used to reconstruct this at
- * scan time from physical-frame gradients, which is what forced it to undo
- * rotation extensions and NOROT before it could compute anything. */
+ * The prescribed field-of-view offset, in millimetres along the logical
+ * readout, phase-encoding and slice axes (the frame of GE's xloc/yloc/zloc).
+ * The interpreter fills these from its prescription and sends them with the
+ * protocol; the host applies the offset to the logical-frame design as RF and
+ * ADC frequency and phase when it builds the IR, so the cache is played
+ * through the prescription's rotation matrix alone. */
 #define PULSEG_PARAM_FOV_OFFSET_X 91
 #define PULSEG_PARAM_FOV_OFFSET_Y 92
 #define PULSEG_PARAM_FOV_OFFSET_Z 93

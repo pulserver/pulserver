@@ -4,8 +4,16 @@ import numpy as np
 import pypulseqpp as pp
 import pytest
 
-from pulserver.design import load_plugin
-from pulserver.protocol import InputMode, Kind, TEPreset, TRPreset
+from pulserver.design import FloatParam, ScannerSequence, load_plugin
+from pulserver.protocol import (
+    PRESCRIPTION,
+    FloatKey,
+    InputMode,
+    Kind,
+    TEPreset,
+    TRPreset,
+    prescribed_offset,
+)
 
 PLUGINS = Path(__file__).parent / "plugins"
 SYSTEM = pp.Opts(max_grad=40.0, grad_unit="mT/m", max_slew=150.0, slew_unit="T/m/s")
@@ -113,3 +121,31 @@ def test_a_plugin_file_must_define_exactly_one_scanner_sequence(tmp_path):
     empty.write_text("VALUE = 1\n")
     with pytest.raises(ValueError, match="defines 0"):
         load_plugin(empty)
+
+
+def test_the_listing_ends_with_the_prescription_at_zero_and_not_editable(tiny):
+    listing = tiny.listing()
+    assert list(listing)[-3:] == list(PRESCRIPTION)
+    for name in PRESCRIPTION:
+        entry = listing[name]
+        assert (entry.kind, entry.value, entry.mode, entry.unit) == (
+            Kind.FLOAT,
+            0.0,
+            InputMode.OFF,
+            "mm",
+        )
+
+
+def test_the_prescription_travels_through_resolution_unchanged(gre2d):
+    request = {"nx": 32, "ny": 32, "fov_offset_x": 12.5, "fov_offset_z": -4.0}
+    values = gre2d.validate(SYSTEM, request).values
+    assert prescribed_offset(values) == pytest.approx((0.0125, 0.0, -0.004))
+
+
+def test_a_scanner_sequence_may_not_bind_a_prescription_entry(tiny):
+    with pytest.raises(ValueError, match="prescription entries"):
+        type(
+            "Moved",
+            (ScannerSequence,),
+            {"app": type(tiny).app, "ui": {FloatKey.FOV_OFFSET_X: FloatParam("te")}},
+        )

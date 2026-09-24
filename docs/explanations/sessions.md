@@ -59,7 +59,9 @@ revision, even for an unchanged protocol.
 Because the hash is computed over the resolved protocol, two requests that
 differ only in a value the design replaces, such as a preset and the time it
 resolves to, identify the same revision ({doc}`protocol`). An imported revision
-is identified by the names and contents of the imported files.
+is identified by the names and contents of the imported files and the
+field-of-view offset of the import. The offset of a generated revision is part
+of its resolved protocol.
 
 ## Access from the reconstruction side
 

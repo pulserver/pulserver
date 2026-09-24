@@ -9,6 +9,11 @@ location of each sample are defined by the sequence. The reconstruction proxy
 therefore replaces them with the values the sequence states, before any
 reconstruction code reads the stream.
 
+The readouts arrive demodulated to the prescribed field-of-view centre, which
+is applied to the sequence when its IR is built ({doc}`ir-cache`). The proxy
+leaves the samples as received, and the trajectory it attaches is that of the
+sequence as designed, in the logical frame.
+
 ## Enrichment
 
 The header names the revision the series was acquired with
@@ -32,22 +37,6 @@ The flags are those the sequence's labels set, such as `IS_NAVIGATION_DATA`,
 and the first-and-last flags (`FIRST_IN_SLICE`, `LAST_IN_SLICE` and the
 others), derived from the counters. A reconstruction plugin selects the data a
 reconstruction runs on by these flags.
-
-## Demodulation to the prescription centre
-
-A Pulseq sequence is designed in logical coordinates about the isocentre. When
-the header records a prescription centre $\mathbf{d}$, in mm along the
-sequence's gradient axes, in the `pulserver_fov_offset_mm` user parameter,
-every channel of each readout is multiplied by
-
-$$
-e^{+i 2\pi \mathbf{d} \cdot \mathbf{k}},
-$$
-
-where $\mathbf{k}$ is the k-space location of each sample in 1/m, along the
-same axes with the sequence's block rotations applied. This moves an
-object at $\mathbf{d}$ to the centre of the reconstructed field of view. The
-trajectory is not changed.
 
 ## Workers
 

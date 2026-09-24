@@ -30,9 +30,10 @@ the checks pypulseqpp provides does not establish scanner or patient safety.
 - Design sessions and immutable revisions for every PSD host process of a
   scanner, served over a Unix socket.
 - Segmentation of a `NextSequence` chain into a binary IR cache, read by an
-  ANSI C library linked into the interpreter.
+  ANSI C library linked into the interpreter, with the prescribed field-of-view
+  offset applied to the logical-frame design as RF and ADC frequency and phase.
 - MRD enrichment: encoding counters, flags, encoding spaces and trajectories
-  from the sequence, and demodulation to the prescription centre.
+  from the sequence.
 - Reconstruction plugins run in isolated worker processes, over a live MRD
   stream, an ISMRMRD file or an assembled acquisition bucket.
 
