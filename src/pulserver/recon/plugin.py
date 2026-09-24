@@ -135,7 +135,9 @@ class ExamCache(MutableMapping[Hashable, Any]):
         Identifier of the owning exam.
     directory
         Directory the exam's caches share; ``None`` holds values in memory
-        only.
+        only. Its files are unpickled, so only the processes sharing the exam
+        may write to it: the proxy creates it under a directory only its own
+        user can open.
 
     Examples
     --------
@@ -323,8 +325,8 @@ class ExamCache(MutableMapping[Hashable, Any]):
         keys = []
         for path in sorted(self.directory.glob("*.key")):
             with contextlib.suppress(OSError, EOFError, pickle.UnpicklingError):
-                # Written by this exam's own caches.
-                keys.append(pickle.loads(path.read_bytes()))  # noqa: S301
+                # Only the processes sharing the exam write here; see ``directory``.
+                keys.append(pickle.loads(path.read_bytes()))  # noqa: S301  # nosec B301
         return keys
 
     def _read(self, key: Hashable) -> Any:
@@ -335,7 +337,7 @@ class ExamCache(MutableMapping[Hashable, Any]):
             payload = entry.with_suffix(".value").read_bytes()
         except FileNotFoundError:
             raise KeyError(key) from None
-        return pickle.loads(payload)  # noqa: S301
+        return pickle.loads(payload)  # noqa: S301  # nosec B301
 
     def _write(self, key: Hashable, value: Any) -> None:
         if self.directory is None:
