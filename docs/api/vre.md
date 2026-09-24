@@ -18,7 +18,8 @@ The MRD header of a series names the revision it was played from; the proxy
 reads that revision's sequence chain and fills in the header and every
 acquisition. The readouts arrive demodulated to the prescribed field-of-view
 centre by the playout, and are passed on as received. Routing, slots and the
-queue are described in {doc}`../explanations/reconstruction`.
+queue are described in {doc}`../explanations/reconstruction`, and the messages
+and fields of a series in {doc}`../user-guide/reconstruction-client`.
 
 ## Proxy
 

@@ -1,5 +1,6 @@
 """Tests for private ISMRMRD-to-DICOM conversion."""
 
+import io
 from datetime import date, time
 
 import ismrmrd
@@ -367,3 +368,52 @@ def test_the_default_window_is_centred_on_the_data_not_on_half_its_width(
         ismrmrd.Image.from_array(values, transpose=False)
     ).dset
     assert float(dicom.WindowCenter) == pytest.approx(15.0, abs=0.5)
+
+
+def _ge_header(measurement):
+    """A GE header whose ``measurementInformation`` holds ``measurement``, read from XML."""
+    return ismrmrd.xsd.CreateFromDocument(
+        '<?xml version="1.0"?>'
+        '<ismrmrdHeader xmlns="http://www.ismrm.org/ISMRMRD">'
+        "<acquisitionSystemInformation><systemVendor>GE MEDICAL SYSTEMS"
+        "</systemVendor></acquisitionSystemInformation>"
+        "<experimentalConditions><H1resonanceFrequency_Hz>63500000"
+        "</H1resonanceFrequency_Hz></experimentalConditions>"
+        f"<measurementInformation>{measurement}</measurementInformation>"
+        "</ismrmrdHeader>"
+    )
+
+
+def _saved(dicom):
+    buffer = io.BytesIO()
+    dicom.save_as(buffer, enforce_file_format=True)
+    return pydicom.dcmread(io.BytesIO(buffer.getvalue()))
+
+
+def test_a_header_carrying_the_table_position_converts_and_saves():
+    header = _ge_header(
+        "<patientPosition>HFS</patientPosition>"
+        "<relativeTablePosition><x>0</x><y>0</y><z>-120</z></relativeTablePosition>"
+    )
+    image = ismrmrd.Image.from_array(np.ones((4, 4), dtype=np.float32), transpose=False)
+    saved = _saved(MrdDicomBuilder(header)(image).dset)
+    assert saved.PatientPosition == "HFS"
+    assert "TablePosition" not in saved
+
+
+def test_the_series_number_on_a_ge_system_is_the_measurement_id():
+    header = _ge_header(
+        "<measurementID>12</measurementID><patientPosition>HFS</patientPosition>"
+    )
+    image = ismrmrd.Image.from_array(np.ones((4, 4), dtype=np.float32), transpose=False)
+    converted = MrdDicomBuilder(header)(image)
+    assert _saved(converted.dset).SeriesNumber == 12
+    assert converted.filename == "EX0_12_image_001.dcm"
+
+
+def test_a_ge_measurement_id_that_is_not_a_series_number_is_refused():
+    header = _ge_header(
+        "<measurementID>M1</measurementID><patientPosition>HFS</patientPosition>"
+    )
+    with pytest.raises(ValueError, match="measurementID"):
+        MrdDicomBuilder(header)

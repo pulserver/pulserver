@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 import ismrmrd
+import ismrmrd.xsd as xsd
 
 from ..recon._runtime import constants
 from ..recon._runtime.concurrency import Slot, Slots, slot_devices
@@ -38,18 +39,24 @@ _CONNECT_TIMEOUT = 120.0
 _WORKER_TIMEOUT = 120.0
 # How often the accept loop looks at whether the proxy is closing.
 _ACCEPT_POLL = 0.5
+# How long a refused client may send nothing before the proxy stops reading it.
+_DRAIN_IDLE = 30.0
 
 
 class ReconProxy:
     """Routes each series of an MRD stream to a reconstruction worker.
 
-    One thread per client connection. The header's ``pulserver_session`` and
-    ``pulserver_revision`` name the design the series was played from; its
-    readout table enriches the header and every acquisition. The readouts
-    arrive demodulated to the prescribed field-of-view centre by the playout
+    One thread per client connection, which carries one series: an optional
+    config text, the header, one acquisition per readout of the chain and a
+    ``CLOSE``. The header's ``pulserver_session`` and ``pulserver_revision``
+    name the design the series was played from; its readout table enriches the
+    header and every acquisition. The readouts arrive demodulated to the
+    prescribed field-of-view centre by the playout
     (:func:`pulserver.ir.prescribe`), and their samples are passed on as
     received. The reconstruction plugin is the revision's, falling back to
-    the name in the client's config text.
+    the name in the client's config text. A series that breaks this is refused
+    with a text naming the reason and a ``CLOSE``, and what the client still
+    sends is discarded until it closes the connection.
 
     A series holds a slot for as long as it runs. On a host with GPUs, found
     through ``CUDA_VISIBLE_DEVICES`` or ``nvidia-smi``, each slot holds one,
@@ -191,15 +198,11 @@ class ReconProxy:
         # wrote rather than the mapping a parser makes of it.
         connection.add_reader(constants.GADGET_MESSAGE_CONFIG, read_text)
         try:
-            config = _first(connection)
-            header = _first(connection)
-            if header is None:
-                raise ValueError("the stream carried no header")
-            self._series(connection, str(config or ""), header)
+            config, header = _opening(connection)
+            self._series(connection, config, header)
         except Exception as error:
             _log.exception("series failed")
-            with contextlib.suppress(Exception):
-                connection.send(f"pulserver: {error}")
+            _refuse(connection, error)
         finally:
             connection.shutdown_close()
 
@@ -380,6 +383,48 @@ def _first(connection: Connection) -> Any:
         return None
 
 
+def _refuse(connection: Connection, error: Exception) -> None:
+    """Send why a series failed and a CLOSE, then discard what the client still sends.
+
+    The client reads the reason once it has sent its stream; closing the
+    socket while it sends would end its stream with a reset instead.
+    """
+    with contextlib.suppress(Exception):
+        connection.send(f"pulserver: {error}")
+    connection.send_close()
+    raw = connection.socket.socket
+    with contextlib.suppress(OSError):
+        raw.shutdown(socket.SHUT_WR)
+        raw.settimeout(_DRAIN_IDLE)
+        while raw.recv(1 << 16):
+            pass
+
+
+def _opening(connection: Connection) -> tuple[str, Any]:
+    """Return the config text and the header a stream opens with.
+
+    The config is optional: a stream may open with its header, which leaves
+    the reconstruction to the one the revision names.
+
+    Raises
+    ------
+    ValueError
+        If the stream carries no header after at most a config.
+    """
+    config = _first(connection)
+    if isinstance(config, xsd.ismrmrdHeader):
+        return "", config
+    header = _first(connection) if isinstance(config, str) else config
+    if not isinstance(header, xsd.ismrmrdHeader):
+        found = (
+            "nothing"
+            if header is None
+            else f"a message of type {type(header).__name__}"
+        )
+        raise ValueError(f"the stream carries {found} where its MRD header belongs")
+    return config, header
+
+
 def _config_plugin(config: str) -> str:
     """Return the plugin a config text names.
 
@@ -408,27 +453,40 @@ def _is_close_marker(item: Any) -> bool:
 def _enriched(client: Connection, revision: Revision) -> Iterator[Any]:
     """Yield the client's stream up to its close, acquisitions enriched in play order.
 
-    Acquisitions are matched to readouts by position, so once the client numbers
-    them, every ``scan_counter`` must follow the previous one by one: a gap or a
-    repeat is a dropped or duplicated readout that would shift every later row.
-    A stream whose counters stay 0 is not numbered and not checked.
+    Acquisitions are matched to readouts by position, so the stream carries
+    one per readout of the chain, and once the client numbers them, every
+    ``scan_counter`` must follow the previous one by one: a gap or a repeat is
+    a dropped or duplicated readout that would shift every later row. A stream
+    whose counters stay 0 is not numbered and not checked. An acquisition
+    flagged ``LAST_IN_MEASUREMENT`` ends the stream, so only the last may
+    carry the flag.
 
     Raises
     ------
     ValueError
-        If the stream carries more acquisitions than the sequence plays, or its
-        scan counters skip or repeat one.
+        If the stream carries more or fewer acquisitions than the sequence
+        plays, a second header, an acquisition flagged
+        ``LAST_IN_MEASUREMENT`` before the last, or scan counters that skip or
+        repeat one.
     """
     index = 0
     previous = None
+    readouts = len(revision.table)
     for item in client:
         if _is_close_marker(item):
-            return
+            break
+        if isinstance(item, xsd.ismrmrdHeader):
+            raise ValueError("the stream carries a second MRD header")
         if isinstance(item, ismrmrd.Acquisition):
-            if index >= len(revision.table):
+            if index >= readouts:
                 raise ValueError(
-                    f"the stream carries more than the {len(revision.table)} readouts "
+                    f"the stream carries more than the {readouts} readouts "
                     f"{revision.directory} plays"
+                )
+            if item.isFlagSet(ismrmrd.ACQ_LAST_IN_MEASUREMENT) and index + 1 < readouts:
+                raise ValueError(
+                    f"acquisition {index} is flagged LAST_IN_MEASUREMENT, which ends "
+                    f"the stream, and {revision.directory} plays {readouts} readouts"
                 )
             counter = int(item.scan_counter)
             numbered = previous is not None and (previous, counter) != (0, 0)
@@ -442,6 +500,11 @@ def _enriched(client: Connection, revision: Revision) -> Iterator[Any]:
             enrich_acquisition(item, revision.table, index)
             index += 1
         yield item
+    if index < readouts:
+        raise ValueError(
+            f"the stream ended after {index} of the {readouts} readouts "
+            f"{revision.directory} plays"
+        )
 
 
 def _forward(client: Connection, worker: Connection, revision: Revision) -> None:
