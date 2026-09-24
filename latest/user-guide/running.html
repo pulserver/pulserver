@@ -517,6 +517,7 @@
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#design-calls">Design calls</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#limits">Limits</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#design-store">Design store</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pushing-designs">Pushing designs</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#warm-server">Warm server</a></li>
 </ul>
 </li>
@@ -539,16 +540,19 @@
 processes: they resolve protocols and write the designs the scanner plays into a
 design store, one command per call or through a warm server. The
 reconstruction proxy receives the raw data of each series from the scanner’s
-reconstruction client, reads the design it was played from in the same store,
-and returns the images. When the two run on different computers, the store is
-a directory both can reach. The store and the identity of a design are
-described in <a class="reference internal" href="../explanations/designs.html"><span class="doc">Designs and the design store</span></a>.</p>
+reconstruction client, reads the design it was played from in a design store,
+and returns the images. When the two run on different computers, either the
+store is a directory both can reach, or the proxy keeps a store of its own and
+its design intake receives each design the design calls push to it. The store
+and the identity of a design are described in
+<a class="reference internal" href="../explanations/designs.html"><span class="doc">Designs and the design store</span></a>.</p>
 <section id="design-calls">
 <h2>Design calls<a class="headerlink" href="#design-calls" title="Link to this heading">#</a></h2>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pulserver<span class="w"> </span>design<span class="w"> </span>list<span class="w">     </span>--plugins<span class="w"> </span>DIR<span class="w"> </span>--plugin<span class="w"> </span>NAME
 pulserver<span class="w"> </span>design<span class="w"> </span>validate<span class="w"> </span>--plugins<span class="w"> </span>DIR<span class="w"> </span>--plugin<span class="w"> </span>NAME<span class="w"> </span>--limits<span class="w"> </span>FILE<span class="w"> </span>&lt;<span class="w"> </span>VALUES
-pulserver<span class="w"> </span>design<span class="w"> </span>generate<span class="w"> </span>--plugins<span class="w"> </span>DIR<span class="w"> </span>--plugin<span class="w"> </span>NAME<span class="w"> </span>--limits<span class="w"> </span>FILE<span class="w"> </span>--store<span class="w"> </span>DIR<span class="w"> </span>&lt;<span class="w"> </span>VALUES
-pulserver<span class="w"> </span>design<span class="w"> </span>import<span class="w">   </span>--limits<span class="w"> </span>FILE<span class="w"> </span>--store<span class="w"> </span>DIR<span class="w"> </span>&lt;<span class="w"> </span>IMPORT
+pulserver<span class="w"> </span>design<span class="w"> </span>generate<span class="w"> </span>--plugins<span class="w"> </span>DIR<span class="w"> </span>--plugin<span class="w"> </span>NAME<span class="w"> </span>--limits<span class="w"> </span>FILE<span class="w"> </span>--store<span class="w"> </span>DIR<span class="w"> </span><span class="o">[</span>--push<span class="w"> </span>URL<span class="o">]</span><span class="w"> </span>&lt;<span class="w"> </span>VALUES
+pulserver<span class="w"> </span>design<span class="w"> </span>import<span class="w">   </span>--limits<span class="w"> </span>FILE<span class="w"> </span>--store<span class="w"> </span>DIR<span class="w"> </span><span class="o">[</span>--push<span class="w"> </span>URL<span class="o">]</span><span class="w"> </span>&lt;<span class="w"> </span>IMPORT
+pulserver<span class="w"> </span>design<span class="w"> </span>push<span class="w">     </span>--store<span class="w"> </span>DIR<span class="w"> </span>--to<span class="w"> </span>URL<span class="w"> </span>ID...
 pulserver<span class="w"> </span>design<span class="w"> </span>prune<span class="w">    </span>--store<span class="w"> </span>DIR<span class="w"> </span><span class="o">[</span>--max-age-days<span class="w"> </span>D<span class="o">]</span><span class="w"> </span><span class="o">[</span>--max-bytes<span class="w"> </span>B<span class="o">]</span>
 </pre></div>
 </div>
@@ -575,7 +579,10 @@ arguments. <code class="docutils literal notranslate"><span class="pre">--plugin
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">import</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">IMPORTED</span> <span class="pre">&lt;id&gt;</span></code></p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">prune</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">push</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">PUSHED</span> <span class="pre">&lt;count&gt;</span></code>: the designs sent, not counting those the intake holds already</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">prune</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">PRUNED</span> <span class="pre">&lt;count&gt;</span></code></p></td>
 </tr>
 </tbody>
@@ -694,7 +701,24 @@ and the SHA-256 of every file. The identifier is three 24-bit integers, each
 held exactly by a float32 CV. <code class="docutils literal notranslate"><span class="pre">prune</span></code> removes designs least recently used
 first: those unused for longer than <code class="docutils literal notranslate"><span class="pre">--max-age-days</span></code>, then others until the
 store holds at most <code class="docutils literal notranslate"><span class="pre">--max-bytes</span></code>. Nothing is removed otherwise, and a design a
-series still needs must not be: the proxy reads it by identifier.</p>
+series still needs must not be: the proxy reads it by identifier. A store that
+receives pushed designs is pruned the same way, on the reconstruction computer.</p>
+</section>
+<section id="pushing-designs">
+<h3>Pushing designs<a class="headerlink" href="#pushing-designs" title="Link to this heading">#</a></h3>
+<p>With <code class="docutils literal notranslate"><span class="pre">--push</span></code>, or the <code class="docutils literal notranslate"><span class="pre">PULSERVER_DESIGN_PUSH</span></code> environment variable, naming the
+URL of a proxy’s design intake, <code class="docutils literal notranslate"><span class="pre">http://&lt;host&gt;:&lt;intake-port&gt;</span></code>, <code class="docutils literal notranslate"><span class="pre">generate</span></code> and
+<code class="docutils literal notranslate"><span class="pre">import</span></code> send the design they reply to that intake before replying; <code class="docutils literal notranslate"><span class="pre">push</span></code>
+sends the stored designs it names to the intake <code class="docutils literal notranslate"><span class="pre">--to</span></code> names. A design travels
+as a bundle, a gzip-compressed tar of the files of its directory, and the
+intake stores it only when every file has the SHA-256 its manifest records. A
+design the intake holds already is not sent again.</p>
+<p>A <code class="docutils literal notranslate"><span class="pre">generate</span></code> or <code class="docutils literal notranslate"><span class="pre">import</span></code> whose design cannot be pushed replies
+<code class="docutils literal notranslate"><span class="pre">ERROR</span> <span class="pre">design</span> <span class="pre">&lt;id&gt;</span> <span class="pre">is</span> <span class="pre">stored</span> <span class="pre">but</span> <span class="pre">not</span> <span class="pre">pushed:</span> <span class="pre">&lt;reason&gt;</span></code> and exits with status 1,
+so the interpreter receives no identifier of a design the intake lacks. The
+design stays stored, and the same call made again pushes it without designing
+again. <code class="docutils literal notranslate"><span class="pre">push</span></code> replies <code class="docutils literal notranslate"><span class="pre">ERROR</span> <span class="pre">design</span> <span class="pre">&lt;id&gt;</span> <span class="pre">is</span> <span class="pre">not</span> <span class="pre">pushed:</span> <span class="pre">&lt;reason&gt;</span></code> for the first
+design it cannot send.</p>
 <p><code class="docutils literal notranslate"><span class="pre">list</span></code> depends on the plugin file and the installed packages only, so its reply
 can be written when they are installed and read without a call.</p>
 </section>
@@ -720,7 +744,7 @@ permissions decide who may call.</p>
 </section>
 <section id="reconstruction-proxy">
 <h2>Reconstruction proxy<a class="headerlink" href="#reconstruction-proxy" title="Link to this heading">#</a></h2>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>-m<span class="w"> </span>pulserver.vre<span class="w"> </span>--store<span class="w"> </span>DIR<span class="w"> </span>--port<span class="w"> </span>N<span class="w"> </span>--plugins<span class="w"> </span>DIR<span class="w"> </span><span class="o">[</span>--host<span class="w"> </span>ADDR<span class="o">]</span><span class="w"> </span><span class="o">[</span>--queue<span class="w"> </span>DIR<span class="o">]</span><span class="w"> </span><span class="o">[</span>--slots<span class="w"> </span>N<span class="o">]</span><span class="w"> </span><span class="o">[</span>--gpu-slots<span class="w"> </span><span class="m">1</span><span class="o">]</span><span class="w"> </span><span class="o">[</span>--spares<span class="w"> </span><span class="m">1</span><span class="o">]</span><span class="w"> </span><span class="o">[</span>--recon-timeout<span class="w"> </span>S<span class="o">]</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>-m<span class="w"> </span>pulserver.vre<span class="w"> </span>--store<span class="w"> </span>DIR<span class="w"> </span>--port<span class="w"> </span>N<span class="w"> </span>--plugins<span class="w"> </span>DIR<span class="w"> </span><span class="o">[</span>--host<span class="w"> </span>ADDR<span class="o">]</span><span class="w"> </span><span class="o">[</span>--intake-port<span class="w"> </span>N<span class="o">]</span><span class="w"> </span><span class="o">[</span>--queue<span class="w"> </span>DIR<span class="o">]</span><span class="w"> </span><span class="o">[</span>--slots<span class="w"> </span>N<span class="o">]</span><span class="w"> </span><span class="o">[</span>--gpu-slots<span class="w"> </span><span class="m">1</span><span class="o">]</span><span class="w"> </span><span class="o">[</span>--spares<span class="w"> </span><span class="m">1</span><span class="o">]</span><span class="w"> </span><span class="o">[</span>--recon-timeout<span class="w"> </span>S<span class="o">]</span>
 </pre></div>
 </div>
 <div class="pst-scrollable-table-container"><table class="table">
@@ -731,7 +755,7 @@ permissions decide who may call.</p>
 </thead>
 <tbody>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--store</span></code></p></td>
-<td><p>The design store the design calls write; read only</p></td>
+<td><p>The design store the proxy reads: the one the design calls write, or the one the intake writes</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--port</span></code></p></td>
 <td><p>TCP port the scanner’s reconstruction client connects to</p></td>
@@ -739,22 +763,25 @@ permissions decide who may call.</p>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--host</span></code></p></td>
 <td><p>Address to listen on; the loopback interface when unset, <code class="docutils literal notranslate"><span class="pre">0.0.0.0</span></code> for every interface</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--plugins</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--intake-port</span></code></p></td>
+<td><p>TCP port of the design intake, on the <code class="docutils literal notranslate"><span class="pre">--host</span></code> address; no intake when unset</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--plugins</span></code></p></td>
 <td><p>Directory of reconstruction plugin files, <code class="docutils literal notranslate"><span class="pre">&lt;plugin&gt;.py</span></code></p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--queue</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--queue</span></code></p></td>
 <td><p>Directory the series waiting for a slot are written to; a temporary directory, removed when the proxy stops, when unset</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--slots</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--slots</span></code></p></td>
 <td><p>Series reconstructed at once; derived from available memory and the GPUs when unset</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--gpu-slots</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--gpu-slots</span></code></p></td>
 <td><p>Series reconstructed at once on each GPU when <code class="docutils literal notranslate"><span class="pre">--slots</span></code> is unset, default 1</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--spares</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--spares</span></code></p></td>
 <td><p>Worker processes started ahead of a series, default 1</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--recon-timeout</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--recon-timeout</span></code></p></td>
 <td><p>Seconds a reconstruction may run after its series ends; the worker is then terminated and the client told. Unlimited when unset</p></td>
 </tr>
 </tbody>
@@ -770,10 +797,19 @@ in <a class="reference internal" href="reconstruction-client.html"><span class="
 <p>A series that finds every slot busy is written to the queue directory as it
 arrives and reconstructed once a slot frees; the client stays connected
 meanwhile.</p>
+<p>With <code class="docutils literal notranslate"><span class="pre">--intake-port</span></code>, the proxy runs a design intake beside it
+(<a class="reference internal" href="../generated/pulserver.vre.DesignIntake.html#pulserver.vre.DesignIntake" title="pulserver.vre.DesignIntake"><code class="xref py py-class docutils literal notranslate"><span class="pre">DesignIntake</span></code></a>), an HTTP endpoint that writes the
+designs pushed to it into <code class="docutils literal notranslate"><span class="pre">--store</span></code>: <code class="docutils literal notranslate"><span class="pre">HEAD</span> <span class="pre">/designs/&lt;id&gt;</span></code> answers 200 when the
+store holds the design and 404 otherwise, and <code class="docutils literal notranslate"><span class="pre">PUT</span> <span class="pre">/designs/&lt;id&gt;</span></code> stores a
+bundle, answering 201, 200 for a design already stored, or 400 with the reason
+for a bundle that is not the design its path names. Asking for a design the
+store holds marks it as used for <code class="docutils literal notranslate"><span class="pre">prune</span></code>.</p>
 <p>The MRD stream is neither authenticated nor encrypted, and its header carries
-patient data. The proxy belongs on the network between the scanner and the
-reconstruction computer, with <code class="docutils literal notranslate"><span class="pre">--host</span></code> naming the address of the interface on
-it; a scanner’s reconstruction client cannot reach the loopback default.</p>
+patient data. The design intake is neither authenticated nor encrypted either,
+and writes the designs it accepts into the store the proxy reconstructs from.
+Both belong on the network between the scanner and the reconstruction
+computer, with <code class="docutils literal notranslate"><span class="pre">--host</span></code> naming the address of the interface on it; a scanner’s
+reconstruction client cannot reach the loopback default.</p>
 <p>The proxy and the warm design server stop on <code class="docutils literal notranslate"><span class="pre">SIGINT</span></code> or <code class="docutils literal notranslate"><span class="pre">SIGTERM</span></code>. The proxy
 waits for the series it is running before it exits.</p>
 </section>
@@ -838,6 +874,7 @@ waits for the series it is running before it exits.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#design-calls">Design calls</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#limits">Limits</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#design-store">Design store</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pushing-designs">Pushing designs</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#warm-server">Warm server</a></li>
 </ul>
 </li>

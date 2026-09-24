@@ -567,7 +567,8 @@ contains no sequence or reconstruction logic.</p>
 <img alt="../_images/architecture.svg" src="../_images/architecture.svg" />
 <figcaption>
 <p><span class="caption-text">The two pulserver services between the scanner and the engines, and the
-design store they share.</span><a class="headerlink" href="#id1" title="Link to this image">#</a></p>
+design store: one directory both reach, or the proxy’s own, to which the design
+calls push each design.</span><a class="headerlink" href="#id1" title="Link to this image">#</a></p>
 </figcaption>
 </figure>
 <p>The design calls, <code class="xref py py-mod docutils literal notranslate"><span class="pre">pulserver.host</span></code>, run on the scanner host and answer
@@ -583,7 +584,8 @@ protocol the design achieves and the scan time, or with the error the design
 raised (<a class="reference internal" href="protocol.html"><span class="doc">Protocol resolution</span></a>).</p></li>
 <li><p>When the scan is prepared, the process requests the design. The call designs
 the sequence, checks it, and stores the Pulseq files and the IR cache as a
-design of the design store, whose identifier it replies (<a class="reference internal" href="designs.html"><span class="doc">Designs and the design store</span></a>,
+design of the design store, pushes the design to the proxy when the proxy
+keeps a store of its own, and replies its identifier (<a class="reference internal" href="designs.html"><span class="doc">Designs and the design store</span></a>,
 <a class="reference internal" href="ir-cache.html"><span class="doc">The scanner IR</span></a>). The interpreter loads the IR cache and plays the sequence.</p></li>
 <li><p>The reconstruction client streams the raw data of the series as MRD. The
 header names the design the series was played from.</p></li>

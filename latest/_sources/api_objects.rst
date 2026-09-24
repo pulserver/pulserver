@@ -149,6 +149,7 @@ from.
    DesignCache
    Design
    DESIGN_PARAMETER
+   DesignIntake
    SequenceTable
    TableSpace
    enrich_header

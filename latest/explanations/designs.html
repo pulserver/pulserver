@@ -600,13 +600,21 @@ recently used first; a design is used when it is written or found again.</p>
 user parameter (<a class="reference internal" href="../user-guide/reconstruction-client.html"><span class="doc">Reconstruction clients</span></a>). A design is
 immutable, so the reconstruction proxy reads and tabulates it once and reuses
 the result for later series acquired with it, keeping the designs it read most
-recently (<a class="reference internal" href="../generated/pulserver.vre.DesignCache.html#pulserver.vre.DesignCache" title="pulserver.vre.DesignCache"><code class="xref py py-class docutils literal notranslate"><span class="pre">DesignCache</span></code></a>). When the design calls and the
-proxy run on different computers, the store is a directory both can read.</p>
+recently (<a class="reference internal" href="../generated/pulserver.vre.DesignCache.html#pulserver.vre.DesignCache" title="pulserver.vre.DesignCache"><code class="xref py py-class docutils literal notranslate"><span class="pre">DesignCache</span></code></a>).</p>
+<p>When the design calls and the proxy run on different computers, the proxy
+reads either a store both can reach or a store of its own, which its design
+intake fills with the designs the calls push (<a class="reference internal" href="../generated/pulserver.vre.DesignIntake.html#pulserver.vre.DesignIntake" title="pulserver.vre.DesignIntake"><code class="xref py py-class docutils literal notranslate"><span class="pre">DesignIntake</span></code></a>).
+A pushed design is carried as a bundle of the files of its directory, and the
+intake stores it only when the manifest’s identifier is that of the manifest’s
+identity and every file has the SHA-256 the manifest records, so the two
+stores hold the same files under the same identifier. A design is pushed before
+its identifier is replied, and a design that cannot be pushed fails the call,
+so the interpreter plays no design the proxy’s store lacks.</p>
 </section>
 <section id="see-also">
 <h2>See also<a class="headerlink" href="#see-also" title="Link to this heading">#</a></h2>
 <ul class="simple">
-<li><p><a class="reference internal" href="../user-guide/running.html"><span class="doc">Running the services</span></a> — the design calls, the warm server and pruning.</p></li>
+<li><p><a class="reference internal" href="../user-guide/running.html"><span class="doc">Running the services</span></a> — the design calls, the warm server, pushing and pruning.</p></li>
 <li><p><a class="reference internal" href="../api/host.html"><span class="doc">Design calls</span></a> — the design calls and the store.</p></li>
 <li><p><a class="reference internal" href="protocol.html"><span class="doc">Protocol resolution</span></a> — the resolution of a request into the protocol a design plays.</p></li>
 </ul>

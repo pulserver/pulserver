@@ -632,7 +632,9 @@ immutable once written. Its <em>identity</em> is the hash of what it depends on;
 <em>identifier</em> is the first 18 hexadecimal digits of the identity. The <em>design
 store</em> is the directory holding every design. A <em>design call</em> is one <code class="docutils literal notranslate"><span class="pre">list</span></code>,
 <code class="docutils literal notranslate"><span class="pre">validate</span></code>, <code class="docutils literal notranslate"><span class="pre">generate</span></code> or <code class="docutils literal notranslate"><span class="pre">import</span></code> of a PSD host process; no call keeps state
-beyond the designs it stores.</p>
+beyond the designs it stores. A design is <em>pushed</em> to the <em>design intake</em>, the
+proxy’s HTTP endpoint writing its store, as a <em>bundle</em> of the files of its
+directory.</p>
 <p><strong>IR.</strong> A <em>subsequence</em> is one file of a <code class="docutils literal notranslate"><span class="pre">NextSequence</span></code> chain. A <em>definition</em>
 is a distinct event after deduplication; an <em>instance</em> is its occurrence in a
 block, with its own amplitude. The <em>repeating unit</em> is the TR of a

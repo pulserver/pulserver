@@ -36,7 +36,8 @@ Scanner execution
 
 ```{figure} ../_static/architecture.svg
 The two pulserver services between the scanner and the engines, and the
-design store they share.
+design store: one directory both reach, or the proxy's own, to which the design
+calls push each design.
 ```
 
 The design calls, {mod}`pulserver.host`, run on the scanner host and answer
@@ -52,7 +53,8 @@ acquisition proceeds as follows.
    raised ({doc}`protocol`).
 2. When the scan is prepared, the process requests the design. The call designs
    the sequence, checks it, and stores the Pulseq files and the IR cache as a
-   design of the design store, whose identifier it replies ({doc}`designs`,
+   design of the design store, pushes the design to the proxy when the proxy
+   keeps a store of its own, and replies its identifier ({doc}`designs`,
    {doc}`ir-cache`). The interpreter loads the IR cache and plays the sequence.
 3. The reconstruction client streams the raw data of the series as MRD. The
    header names the design the series was played from.

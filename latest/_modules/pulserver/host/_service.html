@@ -482,6 +482,7 @@
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._blocks</span><span class="w"> </span><span class="kn">import</span> <span class="n">parse_import</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._limits</span><span class="w"> </span><span class="kn">import</span> <span class="n">split_limits</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">._push</span><span class="w"> </span><span class="kn">import</span> <span class="n">push</span> <span class="k">as</span> <span class="n">push_design</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._store</span><span class="w"> </span><span class="kn">import</span> <span class="n">DesignStore</span><span class="p">,</span> <span class="n">design_identity</span>
 
 <span class="n">_PLUGIN_NAME</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="sa">r</span><span class="s2">"[A-Za-z0-9_\-]+"</span><span class="p">)</span>
@@ -538,6 +539,7 @@
     <span class="n">limits</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
     <span class="n">block</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
     <span class="n">store</span><span class="p">:</span> <span class="n">DesignStore</span><span class="p">,</span>
+    <span class="n">push</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Reply ``GENERATED &lt;id&gt;`` for the design a request resolves to.</span>
 
@@ -548,13 +550,14 @@
 <span class="sd">    :func:`pulserver.ir.check`, converted to the IR cache at the prescribed</span>
 <span class="sd">    field-of-view offset, and stored. A request that resolves to other values</span>
 <span class="sd">    is designed from the resolved values, so a design is a function of its</span>
-<span class="sd">    identifier.</span>
+<span class="sd">    identifier. With ``push``, the URL of a design intake, the design is sent</span>
+<span class="sd">    there unless the intake holds it already.</span>
 
 <span class="sd">    Raises</span>
 <span class="sd">    ------</span>
 <span class="sd">    CallError</span>
-<span class="sd">        If the request is invalid or the design fails a check; nothing is</span>
-<span class="sd">        stored.</span>
+<span class="sd">        If the request is invalid or the design fails a check, when nothing</span>
+<span class="sd">        is stored; or if the design cannot be pushed, when it stays stored.</span>
 <span class="sd">    """</span>
     <span class="n">path</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">plugin_path</span><span class="p">(</span><span class="n">plugins</span><span class="p">,</span> <span class="n">plugin</span><span class="p">))</span>
     <span class="n">listing</span> <span class="o">=</span> <span class="n">_listing</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
@@ -575,7 +578,7 @@
     <span class="p">)</span>
     <span class="n">found</span> <span class="o">=</span> <span class="n">store</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="n">identity</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">found</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="k">return</span> <span class="sa">f</span><span class="s2">"GENERATED </span><span class="si">{</span><span class="n">found</span><span class="si">}</span><span class="se">\n</span><span class="s2">"</span>
+        <span class="k">return</span> <span class="sa">f</span><span class="s2">"GENERATED </span><span class="si">{</span><span class="n">_pushed</span><span class="p">(</span><span class="n">store</span><span class="p">,</span><span class="w"> </span><span class="n">found</span><span class="p">,</span><span class="w"> </span><span class="n">push</span><span class="p">)</span><span class="si">}</span><span class="se">\n</span><span class="s2">"</span>
     <span class="n">staged</span> <span class="o">=</span> <span class="n">store</span><span class="o">.</span><span class="n">stage</span><span class="p">()</span>
     <span class="k">try</span><span class="p">:</span>
         <span class="n">paths</span> <span class="o">=</span> <span class="n">scanner</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">app</span><span class="p">,</span> <span class="n">staged</span><span class="p">)</span>
@@ -595,25 +598,32 @@
             <span class="s2">"source"</span><span class="p">:</span> <span class="n">source</span><span class="p">,</span>
             <span class="s2">"scan_time"</span><span class="p">:</span> <span class="n">validation</span><span class="o">.</span><span class="n">duration</span><span class="p">,</span>
         <span class="p">}</span>
-        <span class="k">return</span> <span class="sa">f</span><span class="s2">"GENERATED </span><span class="si">{</span><span class="n">store</span><span class="o">.</span><span class="n">commit</span><span class="p">(</span><span class="n">identity</span><span class="p">,</span><span class="w"> </span><span class="n">staged</span><span class="p">,</span><span class="w"> </span><span class="n">manifest</span><span class="p">)</span><span class="si">}</span><span class="se">\n</span><span class="s2">"</span>
+        <span class="n">design</span> <span class="o">=</span> <span class="n">store</span><span class="o">.</span><span class="n">commit</span><span class="p">(</span><span class="n">identity</span><span class="p">,</span> <span class="n">staged</span><span class="p">,</span> <span class="n">manifest</span><span class="p">)</span>
     <span class="k">except</span> <span class="ne">BaseException</span><span class="p">:</span>
         <span class="n">store</span><span class="o">.</span><span class="n">discard</span><span class="p">(</span><span class="n">staged</span><span class="p">)</span>
         <span class="k">raise</span>
+    <span class="k">return</span> <span class="sa">f</span><span class="s2">"GENERATED </span><span class="si">{</span><span class="n">_pushed</span><span class="p">(</span><span class="n">store</span><span class="p">,</span><span class="w"> </span><span class="n">design</span><span class="p">,</span><span class="w"> </span><span class="n">push</span><span class="p">)</span><span class="si">}</span><span class="se">\n</span><span class="s2">"</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">import_chain</span><span class="p">(</span><span class="n">limits</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="n">block</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">store</span><span class="p">:</span> <span class="n">DesignStore</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">import_chain</span><span class="p">(</span>
+    <span class="n">limits</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
+    <span class="n">block</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">store</span><span class="p">:</span> <span class="n">DesignStore</span><span class="p">,</span>
+    <span class="n">push</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Reply ``IMPORTED &lt;id&gt;`` for a sequence file, its chain and their IR cache.</span>
 
 <span class="sd">    The files are identified by their names and contents and the</span>
 <span class="sd">    prescription of the import block. A chain already stored is returned;</span>
-<span class="sd">    otherwise it is copied, checked and converted as :func:`generate` does.</span>
-<span class="sd">    The first file is also reachable as ``sequence.seq``.</span>
+<span class="sd">    otherwise it is copied, checked and converted as :func:`generate` does,</span>
+<span class="sd">    and pushed as :func:`generate` pushes. The first file is also reachable as</span>
+<span class="sd">    ``sequence.seq``.</span>
 
 <span class="sd">    Raises</span>
 <span class="sd">    ------</span>
 <span class="sd">    CallError</span>
 <span class="sd">        If the block is malformed, a file cannot be read, or the chain fails</span>
-<span class="sd">        a check; nothing is stored.</span>
+<span class="sd">        a check, when nothing is stored; or if the design cannot be pushed.</span>
 <span class="sd">    """</span>
     <span class="k">try</span><span class="p">:</span>
         <span class="n">first</span><span class="p">,</span> <span class="n">offset_mm</span><span class="p">,</span> <span class="n">rotation</span> <span class="o">=</span> <span class="n">parse_import</span><span class="p">(</span><span class="n">block</span><span class="p">)</span>
@@ -630,7 +640,7 @@
     <span class="n">identity</span> <span class="o">=</span> <span class="n">design_identity</span><span class="p">(</span><span class="s2">""</span><span class="p">,</span> <span class="n">identified_limits</span><span class="p">(</span><span class="n">limits</span><span class="p">),</span> <span class="n">values</span><span class="p">)</span>
     <span class="n">found</span> <span class="o">=</span> <span class="n">store</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="n">identity</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">found</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="k">return</span> <span class="sa">f</span><span class="s2">"IMPORTED </span><span class="si">{</span><span class="n">found</span><span class="si">}</span><span class="se">\n</span><span class="s2">"</span>
+        <span class="k">return</span> <span class="sa">f</span><span class="s2">"IMPORTED </span><span class="si">{</span><span class="n">_pushed</span><span class="p">(</span><span class="n">store</span><span class="p">,</span><span class="w"> </span><span class="n">found</span><span class="p">,</span><span class="w"> </span><span class="n">push</span><span class="p">)</span><span class="si">}</span><span class="se">\n</span><span class="s2">"</span>
     <span class="n">staged</span> <span class="o">=</span> <span class="n">store</span><span class="o">.</span><span class="n">stage</span><span class="p">()</span>
     <span class="k">try</span><span class="p">:</span>
         <span class="k">for</span> <span class="n">file</span> <span class="ow">in</span> <span class="n">files</span><span class="p">:</span>
@@ -651,10 +661,11 @@
             <span class="s2">"fov_offset_mm"</span><span class="p">:</span> <span class="nb">list</span><span class="p">(</span><span class="n">offset_mm</span><span class="p">),</span>
             <span class="s2">"fov_rotation"</span><span class="p">:</span> <span class="n">rotation</span><span class="o">.</span><span class="n">ravel</span><span class="p">()</span><span class="o">.</span><span class="n">tolist</span><span class="p">(),</span>
         <span class="p">}</span>
-        <span class="k">return</span> <span class="sa">f</span><span class="s2">"IMPORTED </span><span class="si">{</span><span class="n">store</span><span class="o">.</span><span class="n">commit</span><span class="p">(</span><span class="n">identity</span><span class="p">,</span><span class="w"> </span><span class="n">staged</span><span class="p">,</span><span class="w"> </span><span class="n">manifest</span><span class="p">)</span><span class="si">}</span><span class="se">\n</span><span class="s2">"</span>
+        <span class="n">design</span> <span class="o">=</span> <span class="n">store</span><span class="o">.</span><span class="n">commit</span><span class="p">(</span><span class="n">identity</span><span class="p">,</span> <span class="n">staged</span><span class="p">,</span> <span class="n">manifest</span><span class="p">)</span>
     <span class="k">except</span> <span class="ne">BaseException</span><span class="p">:</span>
         <span class="n">store</span><span class="o">.</span><span class="n">discard</span><span class="p">(</span><span class="n">staged</span><span class="p">)</span>
         <span class="k">raise</span>
+    <span class="k">return</span> <span class="sa">f</span><span class="s2">"IMPORTED </span><span class="si">{</span><span class="n">_pushed</span><span class="p">(</span><span class="n">store</span><span class="p">,</span><span class="w"> </span><span class="n">design</span><span class="p">,</span><span class="w"> </span><span class="n">push</span><span class="p">)</span><span class="si">}</span><span class="se">\n</span><span class="s2">"</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">identified_limits</span><span class="p">(</span><span class="n">limits</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
@@ -699,6 +710,17 @@
         <span class="n">text</span> <span class="o">=</span> <span class="s2">" "</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">error</span><span class="p">)</span><span class="o">.</span><span class="n">split</span><span class="p">())</span> <span class="ow">or</span> <span class="nb">type</span><span class="p">(</span><span class="n">error</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span>
         <span class="k">return</span> <span class="mi">1</span><span class="p">,</span> <span class="sa">f</span><span class="s2">"ERROR </span><span class="si">{</span><span class="n">text</span><span class="si">}</span><span class="se">\n</span><span class="s2">"</span></div>
 
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_pushed</span><span class="p">(</span><span class="n">store</span><span class="p">:</span> <span class="n">DesignStore</span><span class="p">,</span> <span class="n">design</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">push</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">push</span><span class="p">:</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">push_design</span><span class="p">(</span><span class="n">store</span><span class="p">,</span> <span class="n">design</span><span class="p">,</span> <span class="n">push</span><span class="p">)</span>
+        <span class="k">except</span> <span class="p">(</span><span class="ne">OSError</span><span class="p">,</span> <span class="ne">ValueError</span><span class="p">)</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">CallError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"design </span><span class="si">{</span><span class="n">design</span><span class="si">}</span><span class="s2"> is stored but not pushed: </span><span class="si">{</span><span class="n">error</span><span class="si">}</span><span class="s2">"</span>
+            <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="kc">None</span>
+    <span class="k">return</span> <span class="n">design</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_request</span><span class="p">(</span><span class="n">block</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">listing</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Parameter</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>

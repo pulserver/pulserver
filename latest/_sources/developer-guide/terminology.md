@@ -61,7 +61,9 @@ immutable once written. Its *identity* is the hash of what it depends on; its
 *identifier* is the first 18 hexadecimal digits of the identity. The *design
 store* is the directory holding every design. A *design call* is one `list`,
 `validate`, `generate` or `import` of a PSD host process; no call keeps state
-beyond the designs it stores.
+beyond the designs it stores. A design is *pushed* to the *design intake*, the
+proxy's HTTP endpoint writing its store, as a *bundle* of the files of its
+directory.
 
 **IR.** A *subsequence* is one file of a `NextSequence` chain. A *definition*
 is a distinct event after deduplication; an *instance* is its occurrence in a

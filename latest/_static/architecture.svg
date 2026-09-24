@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 470" role="img" aria-labelledby="t d">
-<title id="t">pulserver architecture</title><desc id="d">The scanner interpreter exchanges protocols with the host daemon and streams raw data to the reconstruction proxy; the daemon writes revisions to a shared bucket that the proxy reads</desc>
+<title id="t">pulserver architecture</title><desc id="d">The scanner interpreter exchanges protocols with the design calls and streams raw data to the reconstruction proxy; the design calls write designs to the design store, or push them to the proxy's own, and the proxy reads them</desc>
 <style>
 .box{fill:#eef4fa;stroke:#2b76ad;stroke-width:2}
 .core{fill:#2b76ad;stroke:#174b70;stroke-width:2}
@@ -36,7 +36,7 @@
 <rect class="a" x="260" y="255" rx="10" width="200" height="85"/><text class="small" x="360" y="291" text-anchor="middle">pypulseqpp design,</text><text class="small" x="360" y="316" text-anchor="middle">IR conversion</text>
 <rect class="a" x="540" y="255" rx="10" width="200" height="85"/><text class="small" x="640" y="291" text-anchor="middle">Enrichment from</text><text class="small" x="640" y="316" text-anchor="middle">the sequence</text>
 <rect class="a" x="760" y="255" rx="10" width="200" height="85"/><text class="small" x="860" y="291" text-anchor="middle">ReconPlugin workers,</text><text class="small" x="860" y="316" text-anchor="middle">bartorch</text>
-<line class="arrow" x1="360" y1="340" x2="360" y2="387"/><text class="label" x="370" y="370">writes</text>
+<line class="arrow" x1="360" y1="340" x2="360" y2="387"/><text class="label" x="370" y="370">writes or pushes</text>
 <line class="arrow" x1="640" y1="390" x2="640" y2="343"/><text class="label" x="630" y="370" text-anchor="end">reads</text>
 <rect class="box" x="150" y="390" rx="10" width="700" height="60"/><text class="txt" x="500" y="427" text-anchor="middle">design store · one directory per design: .seq files, IR cache</text>
 </svg>
