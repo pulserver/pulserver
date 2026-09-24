@@ -1122,10 +1122,11 @@ void pulseg__compute_exec_stream_tr_start(pulseg_sequence_descriptor *desc)
 /* ================================================================== */
 
 /*
- * The blocks-per-TR a file declares in [DEFINITIONS] TRSize, or 0 when it
- * declares none.  A declaration is a claim about the block table, and the
- * caller verifies it against the same pattern its own search would have been
- * checked against; nothing here trusts the number.
+ * The blocks-per-TR a file declares in [DEFINITIONS] TRsize, as pypulseqpp
+ * writes it, or TRSize, or 0 when it declares none.  A declaration is a claim
+ * about the block table, and the caller verifies it against the same pattern
+ * its own search would have been checked against; nothing here trusts the
+ * number.
  */
 static int declared_tr_size(const pulseq_file *seq)
 {
@@ -1138,7 +1139,8 @@ static int declared_tr_size(const pulseq_file *seq)
 
     for (i = 0; i < seq->num_definitions; ++i)
     {
-        if (strcmp(seq->definitions_library[i].name, "TRSize") != 0)
+        if (strcmp(seq->definitions_library[i].name, "TRsize") != 0 &&
+            strcmp(seq->definitions_library[i].name, "TRSize") != 0)
             continue;
         if (seq->definitions_library[i].value_size < 1 || !seq->definitions_library[i].value ||
             !seq->definitions_library[i].value[0])
@@ -1267,11 +1269,11 @@ int pulseg__get_tr_in_sequence(
      * Per-instance RF amplitude or shim patterns are validated by
      * dedicated safety consistency checks, not by TR-period finding. */
 
-    /* A declared TRSize is taken when it holds, and ignored when it does
-     * not: the file states a period, this verifies it against the same
-     * pattern the search below would have verified, and a claim that fails
-     * costs one pass before detection runs as though it had never been
-     * made. */
+    /* A declared TRsize or TRSize is taken when it holds, and ignored when
+     * it does not: the file states a period, this verifies it against the
+     * same pattern the search below would have verified, and a claim that
+     * fails costs one pass before detection runs as though it had never
+     * been made. */
     declared = declared_tr_size(seq);
     if (declared > 0)
     {
