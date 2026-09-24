@@ -47,6 +47,7 @@ from.
    convert
    prescribe
    check
+   CheckLimits
    summary
    play
    chain
@@ -91,7 +92,10 @@ from.
    Parameter
    UIParam
    PRESCRIPTION
+   FOV_OFFSET
+   FOV_ROTATION
    prescribed_offset
+   prescribed_rotation
    PROTOCOL_BEGIN
    PROTOCOL_END
    format_listing

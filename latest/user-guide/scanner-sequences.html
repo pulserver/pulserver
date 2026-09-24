@@ -626,23 +626,37 @@ schema, as the daemon returns it to <code class="docutils literal notranslate"><
 <span class="go">fov_offset_x: float|off|0.0|-1000.0|1000.0|0.1|mm</span>
 <span class="go">fov_offset_y: float|off|0.0|-1000.0|1000.0|0.1|mm</span>
 <span class="go">fov_offset_z: float|off|0.0|-1000.0|1000.0|0.1|mm</span>
+<span class="go">fov_rotation_11: float|off|1.0|-1.0|1.0|1e-06|</span>
+<span class="go">fov_rotation_12: float|off|0.0|-1.0|1.0|1e-06|</span>
+<span class="go">fov_rotation_13: float|off|0.0|-1.0|1.0|1e-06|</span>
+<span class="go">fov_rotation_21: float|off|0.0|-1.0|1.0|1e-06|</span>
+<span class="go">fov_rotation_22: float|off|1.0|-1.0|1.0|1e-06|</span>
+<span class="go">fov_rotation_23: float|off|0.0|-1.0|1.0|1e-06|</span>
+<span class="go">fov_rotation_31: float|off|0.0|-1.0|1.0|1e-06|</span>
+<span class="go">fov_rotation_32: float|off|0.0|-1.0|1.0|1e-06|</span>
+<span class="go">fov_rotation_33: float|off|1.0|-1.0|1.0|1e-06|</span>
 <span class="go">[NimPulseqGUI Protocol End]</span>
 
 </pre></div>
 </div>
-<p>The last three entries are the field-of-view offset, which the interpreter
-fills from the scanner’s prescription and which the host applies when it
-builds the IR (<a class="reference internal" href="../explanations/ir-cache.html"><span class="doc">The scanner IR</span></a>).</p>
+<p>The last twelve entries are the prescription, which the interpreter fills from
+the scanner’s: the field-of-view offset, which the host applies when it builds
+the IR, and the rotation from the logical to the physical axes, in whose frame
+the host checks the design (<a class="reference internal" href="../explanations/ir-cache.html"><span class="doc">The scanner IR</span></a>).</p>
 <p><a class="reference internal" href="../generated/pulserver.design.ScannerSequence.validate.html#pulserver.design.ScannerSequence.validate" title="pulserver.design.ScannerSequence.validate"><code class="xref py py-meth docutils literal notranslate"><span class="pre">validate()</span></code></a> constructs the application
 under the scanner limits and returns the protocol it will play. Entries the
 request omits keep the application’s defaults:</p>
 <div class="highlight-pycon notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">pypulseqpp</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pp</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">system</span> <span class="o">=</span> <span class="n">pp</span><span class="o">.</span><span class="n">Opts</span><span class="p">(</span><span class="n">max_grad</span><span class="o">=</span><span class="mi">40</span><span class="p">,</span> <span class="n">grad_unit</span><span class="o">=</span><span class="s2">"mT/m"</span><span class="p">,</span> <span class="n">max_slew</span><span class="o">=</span><span class="mi">150</span><span class="p">,</span> <span class="n">slew_unit</span><span class="o">=</span><span class="s2">"T/m/s"</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">Gre2D</span><span class="p">()</span><span class="o">.</span><span class="n">validate</span><span class="p">(</span><span class="n">system</span><span class="p">,</span> <span class="p">{</span><span class="s2">"TE"</span><span class="p">:</span> <span class="n">TEPreset</span><span class="o">.</span><span class="n">MINIMUM</span><span class="p">,</span> <span class="s2">"nx"</span><span class="p">:</span> <span class="mi">96</span><span class="p">})</span>
-<span class="go">Validation(valid=True, duration=36.0, info='', values={'TE': 3080, 'TR': 250000, 'fov': 220.0, 'nx': 96, 'fov_offset_x': 0.0, 'fov_offset_y': 0.0, 'fov_offset_z': 0.0})</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">reply</span> <span class="o">=</span> <span class="n">Gre2D</span><span class="p">()</span><span class="o">.</span><span class="n">validate</span><span class="p">(</span><span class="n">system</span><span class="p">,</span> <span class="p">{</span><span class="s2">"TE"</span><span class="p">:</span> <span class="n">TEPreset</span><span class="o">.</span><span class="n">MINIMUM</span><span class="p">,</span> <span class="s2">"nx"</span><span class="p">:</span> <span class="mi">96</span><span class="p">})</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">reply</span><span class="o">.</span><span class="n">valid</span><span class="p">,</span> <span class="n">reply</span><span class="o">.</span><span class="n">duration</span><span class="p">,</span> <span class="n">reply</span><span class="o">.</span><span class="n">info</span>
+<span class="go">(True, 36.0, '')</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="p">{</span><span class="n">name</span><span class="p">:</span> <span class="n">reply</span><span class="o">.</span><span class="n">values</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"TE"</span><span class="p">,</span> <span class="s2">"TR"</span><span class="p">,</span> <span class="s2">"fov"</span><span class="p">,</span> <span class="s2">"nx"</span><span class="p">)}</span>
+<span class="go">{'TE': 3080, 'TR': 250000, 'fov': 220.0, 'nx': 96}</span>
 
 </pre></div>
 </div>
+<p>The values also carry the prescription entries as they were requested.</p>
 <p>The resolved <code class="docutils literal notranslate"><span class="pre">TE</span></code> is the echo time the design achieved: the value the
 application records with <a class="reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.sequences.SequenceApp.resolve.html#pypulseqpp.sequences.SequenceApp.resolve" title="(in pypulseqpp latest)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">resolve()</span></code></a> in
 <code class="docutils literal notranslate"><span class="pre">init_sequence</span></code>, as <a class="reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.sequences.SequenceApp.resolved.html#pypulseqpp.sequences.SequenceApp.resolved" title="(in pypulseqpp latest)"><code class="xref py py-attr docutils literal notranslate"><span class="pre">resolved</span></code></a> reports

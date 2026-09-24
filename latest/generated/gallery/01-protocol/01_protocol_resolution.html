@@ -600,6 +600,15 @@ nx: int|typein|128|32|512|2|
 fov_offset_x: float|off|0.0|-1000.0|1000.0|0.1|mm
 fov_offset_y: float|off|0.0|-1000.0|1000.0|0.1|mm
 fov_offset_z: float|off|0.0|-1000.0|1000.0|0.1|mm
+fov_rotation_11: float|off|1.0|-1.0|1.0|1e-06|
+fov_rotation_12: float|off|0.0|-1.0|1.0|1e-06|
+fov_rotation_13: float|off|0.0|-1.0|1.0|1e-06|
+fov_rotation_21: float|off|0.0|-1.0|1.0|1e-06|
+fov_rotation_22: float|off|1.0|-1.0|1.0|1e-06|
+fov_rotation_23: float|off|0.0|-1.0|1.0|1e-06|
+fov_rotation_31: float|off|0.0|-1.0|1.0|1e-06|
+fov_rotation_32: float|off|0.0|-1.0|1.0|1e-06|
+fov_rotation_33: float|off|1.0|-1.0|1.0|1e-06|
 [NimPulseqGUI Protocol End]
 </pre></div>
 </div>
@@ -695,11 +704,11 @@ protocol (<a class="reference internal" href="../../../explanations/sessions.htm
 </span><span class="nb">print</span><span class="p">(</span><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="dict"><span class="n">first</span><span class="o">.</span><span class="n">values</span></a><span class="p">)</span><span class="w">
 </span><span class="nb">print</span><span class="p">(</span><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="dict"><span class="n">again</span><span class="o">.</span><span class="n">values</span></a> <span class="o">==</span> <a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="dict"><span class="n">first</span><span class="o">.</span><span class="n">values</span></a><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="s2">scan time </span><span class="si">{</span><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="float"><span class="n">first</span><span class="o">.</span><span class="n">duration</span></a><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> s</span><span class="s2">&quot;</span><span class="p">)</span><span class="w">
 </span></pre></div></div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>{'TE': 3580, 'TR': 250000, 'bandwidth': 133333.0, 'fov': 220.0, 'nx': 192, 'fov_offset_x': 0.0, 'fov_offset_y': 0.0, 'fov_offset_z': 0.0}
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>{'TE': 3580, 'TR': 250000, 'bandwidth': 133333.0, 'fov': 220.0, 'nx': 192, 'fov_offset_x': 0.0, 'fov_offset_y': 0.0, 'fov_offset_z': 0.0, 'fov_rotation_11': 1.0, 'fov_rotation_12': 0.0, 'fov_rotation_13': 0.0, 'fov_rotation_21': 0.0, 'fov_rotation_22': 1.0, 'fov_rotation_23': 0.0, 'fov_rotation_31': 0.0, 'fov_rotation_32': 0.0, 'fov_rotation_33': 1.0}
 True scan time 36.0 s
 </pre></div>
 </div>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 2.426 seconds)</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 2.468 seconds)</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-generated-gallery-01-protocol-01-protocol-resolution-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
 <p><a class="reference download internal" download="" href="../../../_downloads/7417ea07f7e079f1bb4b10cb04fae4e2/01_protocol_resolution.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">01_protocol_resolution.ipynb</span></code></a></p>

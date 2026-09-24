@@ -460,10 +460,20 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">ClassVar</span>
 
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">pypulseqpp</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pp</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pypulseqpp</span><span class="w"> </span><span class="kn">import</span> <span class="n">sequences</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">..protocol</span><span class="w"> </span><span class="kn">import</span> <span class="n">PRESCRIPTION</span><span class="p">,</span> <span class="n">InputMode</span><span class="p">,</span> <span class="n">Kind</span><span class="p">,</span> <span class="n">Parameter</span><span class="p">,</span> <span class="n">Validation</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">..protocol</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">FOV_OFFSET</span><span class="p">,</span>
+    <span class="n">FOV_ROTATION</span><span class="p">,</span>
+    <span class="n">PRESCRIPTION</span><span class="p">,</span>
+    <span class="n">InputMode</span><span class="p">,</span>
+    <span class="n">Kind</span><span class="p">,</span>
+    <span class="n">Parameter</span><span class="p">,</span>
+    <span class="n">Validation</span><span class="p">,</span>
+    <span class="n">prescribed_rotation</span><span class="p">,</span>
+<span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..protocol._keys</span><span class="w"> </span><span class="kn">import</span> <span class="n">WIRE_NAMES</span>
 
 <span class="n">Preset</span> <span class="o">=</span> <span class="nb">float</span> <span class="o">|</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">pp</span><span class="o">.</span><span class="n">Opts</span><span class="p">],</span> <span class="nb">float</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span>
@@ -732,13 +742,14 @@
 
 <span class="sd">        An argument defaulting to ``None`` shows the preset that requests ``None``.</span>
 <span class="sd">        The ``PRESCRIPTION`` entries of :mod:`pulserver.protocol` follow the</span>
-<span class="sd">        declared ones, at zero and not editable in the UI.</span>
+<span class="sd">        declared ones, not editable in the UI: the offset at zero, the rotation</span>
+<span class="sd">        at the identity.</span>
 <span class="sd">        """</span>
         <span class="n">defaults</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">app</span><span class="o">.</span><span class="n">protocol</span><span class="p">()</span>
         <span class="n">listing</span> <span class="o">=</span> <span class="p">{</span>
             <span class="n">name</span><span class="p">:</span> <span class="n">_parameter</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">entry</span><span class="p">,</span> <span class="n">defaults</span><span class="p">)</span> <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">entry</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">ui</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
         <span class="p">}</span>
-        <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">PRESCRIPTION</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">FOV_OFFSET</span><span class="p">:</span>
             <span class="n">listing</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">Parameter</span><span class="p">(</span>
                 <span class="n">Kind</span><span class="o">.</span><span class="n">FLOAT</span><span class="p">,</span>
                 <span class="mf">0.0</span><span class="p">,</span>
@@ -747,6 +758,10 @@
                 <span class="n">OFFSET_LIMIT_MM</span><span class="p">,</span>
                 <span class="mf">0.1</span><span class="p">,</span>
                 <span class="s2">"mm"</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">FOV_ROTATION</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span><span class="o">.</span><span class="n">ravel</span><span class="p">(),</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+            <span class="n">listing</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">Parameter</span><span class="p">(</span>
+                <span class="n">Kind</span><span class="o">.</span><span class="n">FLOAT</span><span class="p">,</span> <span class="nb">float</span><span class="p">(</span><span class="n">value</span><span class="p">),</span> <span class="n">InputMode</span><span class="o">.</span><span class="n">OFF</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">1e-6</span><span class="p">,</span> <span class="s2">""</span>
             <span class="p">)</span>
         <span class="k">return</span> <span class="n">listing</span></div>
 
@@ -803,6 +818,7 @@
         <span class="n">values</span> <span class="o">=</span> <span class="p">{</span><span class="n">name</span><span class="p">:</span> <span class="n">p</span><span class="o">.</span><span class="n">value</span> <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">listing</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">p</span><span class="o">.</span><span class="n">editable</span><span class="p">}</span>
         <span class="n">values</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">request</span><span class="p">)</span>
         <span class="k">try</span><span class="p">:</span>
+            <span class="n">prescribed_rotation</span><span class="p">(</span><span class="n">values</span><span class="p">)</span>
             <span class="n">app</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">app</span><span class="p">(</span><span class="n">system</span><span class="p">,</span> <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_arguments</span><span class="p">(</span><span class="n">system</span><span class="p">,</span> <span class="n">values</span><span class="p">))</span>
             <span class="n">scan_time</span> <span class="o">=</span> <span class="n">app</span><span class="o">.</span><span class="n">scan_time</span><span class="p">()</span>
         <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>  <span class="c1"># a design refuses a protocol by raising</span>

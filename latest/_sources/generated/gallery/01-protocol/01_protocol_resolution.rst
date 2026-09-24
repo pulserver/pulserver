@@ -115,6 +115,15 @@ bandwidth its design achieves, and the reply carries those values.
     fov_offset_x: float|off|0.0|-1000.0|1000.0|0.1|mm
     fov_offset_y: float|off|0.0|-1000.0|1000.0|0.1|mm
     fov_offset_z: float|off|0.0|-1000.0|1000.0|0.1|mm
+    fov_rotation_11: float|off|1.0|-1.0|1.0|1e-06|
+    fov_rotation_12: float|off|0.0|-1.0|1.0|1e-06|
+    fov_rotation_13: float|off|0.0|-1.0|1.0|1e-06|
+    fov_rotation_21: float|off|0.0|-1.0|1.0|1e-06|
+    fov_rotation_22: float|off|1.0|-1.0|1.0|1e-06|
+    fov_rotation_23: float|off|0.0|-1.0|1.0|1e-06|
+    fov_rotation_31: float|off|0.0|-1.0|1.0|1e-06|
+    fov_rotation_32: float|off|0.0|-1.0|1.0|1e-06|
+    fov_rotation_33: float|off|1.0|-1.0|1.0|1e-06|
     [NimPulseqGUI Protocol End]
 
 
@@ -321,7 +330,7 @@ protocol (:doc:`/explanations/sessions`).
 
  .. code-block:: none
 
-    {'TE': 3580, 'TR': 250000, 'bandwidth': 133333.0, 'fov': 220.0, 'nx': 192, 'fov_offset_x': 0.0, 'fov_offset_y': 0.0, 'fov_offset_z': 0.0}
+    {'TE': 3580, 'TR': 250000, 'bandwidth': 133333.0, 'fov': 220.0, 'nx': 192, 'fov_offset_x': 0.0, 'fov_offset_y': 0.0, 'fov_offset_z': 0.0, 'fov_rotation_11': 1.0, 'fov_rotation_12': 0.0, 'fov_rotation_13': 0.0, 'fov_rotation_21': 0.0, 'fov_rotation_22': 1.0, 'fov_rotation_23': 0.0, 'fov_rotation_31': 0.0, 'fov_rotation_32': 0.0, 'fov_rotation_33': 1.0}
     True scan time 36.0 s
 
 
@@ -330,7 +339,7 @@ protocol (:doc:`/explanations/sessions`).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 2.426 seconds)
+   **Total running time of the script:** (0 minutes 2.468 seconds)
 
 
 .. _sphx_glr_download_generated_gallery_01-protocol_01_protocol_resolution.py:

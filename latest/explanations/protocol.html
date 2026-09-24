@@ -555,11 +555,14 @@ scan, and raises an error for a prescription it cannot realize.</p></li>
 units. An argument the application does not record keeps its requested
 value.</p></li>
 </ol>
-<p>The field-of-view offset is not a design argument. Every listing ends with the
-entries <code class="docutils literal notranslate"><span class="pre">fov_offset_x</span></code>, <code class="docutils literal notranslate"><span class="pre">fov_offset_y</span></code> and <code class="docutils literal notranslate"><span class="pre">fov_offset_z</span></code>, in mm and not
-editable in the UI, which the interpreter fills from the scanner’s
-prescription; resolution returns them unchanged, and the host applies the
-offset to the designed sequence when it builds the IR (<a class="reference internal" href="ir-cache.html"><span class="doc">The scanner IR</span></a>). A
+<p>The prescription is not a design argument. Every listing ends with its
+entries, not editable in the UI, which the interpreter fills from the
+scanner’s prescription: the field-of-view offset in <code class="docutils literal notranslate"><span class="pre">fov_offset_x</span></code>,
+<code class="docutils literal notranslate"><span class="pre">fov_offset_y</span></code> and <code class="docutils literal notranslate"><span class="pre">fov_offset_z</span></code>, in mm, and the rotation from the logical to
+the physical axes in the nine <code class="docutils literal notranslate"><span class="pre">fov_rotation_ij</span></code>, identity by default.
+Resolution returns them unchanged, refusing a rotation that is not orthonormal;
+the host applies the offset to the designed sequence when it builds the IR, and
+checks the design in the physical frame of the rotation (<a class="reference internal" href="ir-cache.html"><span class="doc">The scanner IR</span></a>). A
 scanner sequence cannot bind them to an argument.</p>
 <p>A request the design refuses is invalid. The reply carries the request
 unchanged and the error message the application raised, which the interpreter

@@ -591,6 +591,47 @@ their IR cache is written (<a class="reference internal" href="../explanations/i
 include the RF and ADC dead times, the RF ringdown time and the ADC sample
 divisor of the scanner; <code class="docutils literal notranslate"><span class="pre">pypulseqpp.Opts</span></code> sets the dead times to zero and the
 divisor to four when they are left out.</p>
+<p>The limits also carry what the host checks besides the gradient limits and
+rasters: the scanner’s nerve model, its forbidden gradient bands and, where
+local SAR is computed from virtual observation points, the VOPs. The PSD
+computes every other SAR and the gradient heating itself. A check whose limits
+are left out is not run.</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Limit</p></th>
+<th class="head"><p>Meaning</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">pns_chronaxie</span></code>, <code class="docutils literal notranslate"><span class="pre">pns_rheobase</span></code>, <code class="docutils literal notranslate"><span class="pre">pns_alpha</span></code></p></td>
+<td><p>Chronaxie nerve model: chronaxie in s, rheobase in T/m/s, <code class="docutils literal notranslate"><span class="pre">alpha</span></code> 1 when left out</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">pns_&lt;axis&gt;_&lt;field&gt;</span></code></p></td>
+<td><p>SAFE nerve model, for the axes <code class="docutils literal notranslate"><span class="pre">x</span></code>, <code class="docutils literal notranslate"><span class="pre">y</span></code> and <code class="docutils literal notranslate"><span class="pre">z</span></code> and the fields <code class="docutils literal notranslate"><span class="pre">a1</span></code> to <code class="docutils literal notranslate"><span class="pre">a3</span></code>, <code class="docutils literal notranslate"><span class="pre">tau1</span></code> to <code class="docutils literal notranslate"><span class="pre">tau3</span></code> in ms, <code class="docutils literal notranslate"><span class="pre">stim_limit</span></code> in T/m/s and <code class="docutils literal notranslate"><span class="pre">g_scale</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">pns_limit</span></code></p></td>
+<td><p>Largest PNS response allowed, as a fraction of the model’s threshold; 1 when left out</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">forbidden_band_&lt;n&gt;</span></code></p></td>
+<td><p>One forbidden band: its physical axis (<code class="docutils literal notranslate"><span class="pre">x</span></code>, <code class="docutils literal notranslate"><span class="pre">y</span></code>, <code class="docutils literal notranslate"><span class="pre">z</span></code> or <code class="docutils literal notranslate"><span class="pre">all</span></code>), its lowest and highest frequency in Hz and, optionally, the largest amplitude allowed in it in mT/m, separated by spaces</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">vop_file</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">.mat</span></code> or <code class="docutils literal notranslate"><span class="pre">.npz</span></code> file of VOPs, at a path the host daemon can read</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">vop_drive_per_hz</span></code></p></td>
+<td><p>Channel drive per Hz of RF amplitude, in the VOPs’ drive unit: one value, or one per channel separated by spaces</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">vop_local_limit</span></code>, <code class="docutils literal notranslate"><span class="pre">vop_global_limit</span></code></p></td>
+<td><p>Local and global SAR allowed, in W/kg; 10 and 3.2 when left out</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>A band given no amplitude is held to the <code class="docutils literal notranslate"><span class="pre">min_threshold</span></code> of
+<code class="docutils literal notranslate"><span class="pre">pypulseqpp.safety.check_mech_resonance</span></code>. The gradient, PNS and resonance
+checks are made in the physical frame of the prescription rotation each
+request carries. <code class="docutils literal notranslate"><span class="pre">OPEN</span></code> refuses limits it cannot read, and a revision is
+identified with the contents of the VOP file as well as its path.</p>
 <p>The commands and their replies are listed in
 <a class="reference internal" href="../generated/pulserver.host.HostDaemon.html#pulserver.host.HostDaemon" title="pulserver.host.HostDaemon"><code class="xref py py-class docutils literal notranslate"><span class="pre">HostDaemon</span></code></a>. <a class="reference internal" href="../generated/pulserver.host.HostClient.html#pulserver.host.HostClient" title="pulserver.host.HostClient"><code class="xref py py-class docutils literal notranslate"><span class="pre">HostClient</span></code></a> sends
 them as a PSD host process does, which exercises a plugin through the daemon
@@ -608,8 +649,8 @@ without a scanner:</p>
 </div>
 <p>A session opened without a plugin only imports sequence files
 (<a class="reference internal" href="../generated/pulserver.host.HostClient.import_sequence.html#pulserver.host.HostClient.import_sequence" title="pulserver.host.HostClient.import_sequence"><code class="xref py py-meth docutils literal notranslate"><span class="pre">import_sequence()</span></code></a>): the file and its
-<code class="docutils literal notranslate"><span class="pre">NextSequence</span></code> chain are copied into a revision, checked and converted to the
-IR cache there.</p>
+<code class="docutils literal notranslate"><span class="pre">NextSequence</span></code> chain are copied into a revision, checked in the physical frame
+of the rotation the import names and converted to the IR cache there.</p>
 <p>Plugin code runs in spawned worker processes, so a plugin that crashes fails
 the command it was running and the daemon replaces the pool. A plugin file is
 imported again when its modification time changes.</p>

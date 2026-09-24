@@ -615,9 +615,10 @@ sequence names its entries with them.</p>
 </section>
 <section id="prescription">
 <h2>Prescription<a class="headerlink" href="#prescription" title="Link to this heading">#</a></h2>
-<p>The field-of-view offset the interpreter fills from the scanner’s prescription.
-The entries close every listing and are not bound to a design argument; the
-host applies the offset when it builds the IR.</p>
+<p>The field-of-view offset and orientation the interpreter fills from the
+scanner’s prescription. The entries close every listing and are not bound to a
+design argument; the host applies the offset when it builds the IR, and checks
+the design in the physical frame the orientation gives.</p>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
 <tr class="row-odd"><th class="head"><p>Object</p></th>
@@ -626,10 +627,19 @@ host applies the offset when it builds the IR.</p>
 </thead>
 <tbody>
 <tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.protocol.PRESCRIPTION.html#pulserver.protocol.PRESCRIPTION" title="pulserver.protocol.PRESCRIPTION"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PRESCRIPTION</span></code></a></p></td>
+<td><p>Names of every prescription entry: the offset’s, then the rotation’s.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.protocol.FOV_OFFSET.html#pulserver.protocol.FOV_OFFSET" title="pulserver.protocol.FOV_OFFSET"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FOV_OFFSET</span></code></a></p></td>
 <td><p>Names of the field-of-view offset entries, in mm along the logical readout, phase and slice axes.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.protocol.FOV_ROTATION.html#pulserver.protocol.FOV_ROTATION" title="pulserver.protocol.FOV_ROTATION"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FOV_ROTATION</span></code></a></p></td>
+<td><p>Names of the rotation entries, row-major: element <code class="docutils literal notranslate"><span class="pre">(i,</span> <span class="pre">j)</span></code> of <code class="docutils literal notranslate"><span class="pre">R</span></code> in physical = R logical.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.protocol.prescribed_offset.html#pulserver.protocol.prescribed_offset" title="pulserver.protocol.prescribed_offset"><code class="xref py py-obj docutils literal notranslate"><span class="pre">prescribed_offset</span></code></a></p></td>
 <td><p>Field-of-view offset that protocol values carry, in metres.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.protocol.prescribed_rotation.html#pulserver.protocol.prescribed_rotation" title="pulserver.protocol.prescribed_rotation"><code class="xref py py-obj docutils literal notranslate"><span class="pre">prescribed_rotation</span></code></a></p></td>
+<td><p>Rotation from logical to physical axes that protocol values carry, made orthonormal.</p></td>
 </tr>
 </tbody>
 </table>

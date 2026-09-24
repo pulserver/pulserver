@@ -453,18 +453,32 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Mapping</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
 
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+
 <span class="kn">from</span><span class="w"> </span><span class="nn">._keys</span><span class="w"> </span><span class="kn">import</span> <span class="n">FloatKey</span>
 
-<span class="c1">#: The entries a protocol carries for the scanner's prescription: the</span>
-<span class="c1">#: translation of the field-of-view centre along the logical readout, phase and</span>
-<span class="c1">#: slice axes, in mm. The interpreter fills them from its prescription; no</span>
-<span class="c1">#: sequence argument receives them, and pulserver applies the translation when</span>
-<span class="c1">#: it builds the IR.</span>
-<span class="n">PRESCRIPTION</span> <span class="o">=</span> <span class="p">(</span>
+<span class="c1">#: The translation of the field-of-view centre along the logical readout,</span>
+<span class="c1">#: phase and slice axes, in mm.</span>
+<span class="n">FOV_OFFSET</span> <span class="o">=</span> <span class="p">(</span>
     <span class="nb">str</span><span class="p">(</span><span class="n">FloatKey</span><span class="o">.</span><span class="n">FOV_OFFSET_X</span><span class="p">),</span>
     <span class="nb">str</span><span class="p">(</span><span class="n">FloatKey</span><span class="o">.</span><span class="n">FOV_OFFSET_Y</span><span class="p">),</span>
     <span class="nb">str</span><span class="p">(</span><span class="n">FloatKey</span><span class="o">.</span><span class="n">FOV_OFFSET_Z</span><span class="p">),</span>
 <span class="p">)</span>
+
+<span class="c1">#: The rotation from the logical to the physical axes, row-major:</span>
+<span class="c1">#: ``fov_rotation_ij`` is element ``(i, j)`` of ``R`` in physical = R logical.</span>
+<span class="n">FOV_ROTATION</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span>
+    <span class="nb">str</span><span class="p">(</span><span class="n">FloatKey</span><span class="p">[</span><span class="sa">f</span><span class="s2">"FOV_ROTATION_</span><span class="si">{</span><span class="n">i</span><span class="si">}{</span><span class="n">j</span><span class="si">}</span><span class="s2">"</span><span class="p">])</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span> <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+<span class="p">)</span>
+
+<span class="c1">#: The entries a protocol carries for the scanner's prescription. The</span>
+<span class="c1">#: interpreter fills them from its prescription; no sequence argument receives</span>
+<span class="c1">#: them. Pulserver applies the translation when it builds the IR, and checks</span>
+<span class="c1">#: the gradients in the physical frame the rotation gives.</span>
+<span class="n">PRESCRIPTION</span> <span class="o">=</span> <span class="n">FOV_OFFSET</span> <span class="o">+</span> <span class="n">FOV_ROTATION</span>
+
+<span class="c1"># The protocol carries floats to six significant digits.</span>
+<span class="n">_ORTHONORMAL</span> <span class="o">=</span> <span class="mf">1e-4</span>
 
 
 <div class="viewcode-block" id="prescribed_offset">
@@ -475,8 +489,35 @@
 <span class="sd">    Along the logical readout, phase and slice axes; zero along an axis whose</span>
 <span class="sd">    entry is absent.</span>
 <span class="sd">    """</span>
-    <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">z</span> <span class="o">=</span> <span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">values</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">))</span> <span class="o">*</span> <span class="mf">1e-3</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">PRESCRIPTION</span><span class="p">)</span>
+    <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">z</span> <span class="o">=</span> <span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">values</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">))</span> <span class="o">*</span> <span class="mf">1e-3</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">FOV_OFFSET</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">z</span></div>
+
+
+
+<div class="viewcode-block" id="prescribed_rotation">
+<a class="viewcode-back" href="../../../generated/pulserver.protocol.prescribed_rotation.html#pulserver.protocol.prescribed_rotation">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">prescribed_rotation</span><span class="p">(</span><span class="n">values</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the ``(3, 3)`` rotation from logical to physical axes protocol values carry.</span>
+
+<span class="sd">    An absent entry is the identity's. The matrix is returned as the nearest</span>
+<span class="sd">    orthonormal one, with its determinant's sign, so a reflection stays one.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If the entries are not orthonormal to the six significant digits the</span>
+<span class="sd">        protocol carries.</span>
+<span class="sd">    """</span>
+    <span class="n">identity</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span><span class="o">.</span><span class="n">ravel</span><span class="p">()</span>
+    <span class="n">matrix</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span>
+        <span class="p">[</span><span class="nb">float</span><span class="p">(</span><span class="n">values</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">identity</span><span class="p">[</span><span class="n">k</span><span class="p">]))</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">name</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">FOV_ROTATION</span><span class="p">)]</span>
+    <span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">allclose</span><span class="p">(</span><span class="n">matrix</span> <span class="o">@</span> <span class="n">matrix</span><span class="o">.</span><span class="n">T</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="n">atol</span><span class="o">=</span><span class="n">_ORTHONORMAL</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"the prescription rotation </span><span class="si">{</span><span class="n">matrix</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span><span class="si">}</span><span class="s2"> is not orthonormal"</span>
+        <span class="p">)</span>
+    <span class="n">left</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">right</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">svd</span><span class="p">(</span><span class="n">matrix</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">left</span> <span class="o">@</span> <span class="n">right</span></div>
 
 </pre></div>
 

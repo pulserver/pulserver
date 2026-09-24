@@ -528,24 +528,36 @@
 <dl class="py function">
 <dt class="sig sig-object py" id="pulserver.ir.check">
 <span class="sig-prename descclassname"><span class="pre">pulserver.ir.</span></span><span class="sig-name descname"><span class="pre">check</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pulserver/ir/_checks.html#check"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.ir.check" title="Link to this definition">#</a></dt>
-<dd><p>Return the timing and gradient problems of a chain under a scanner’s limits.</p>
-<p>Each file of the <code class="docutils literal notranslate"><span class="pre">NextSequence</span></code> chain is checked with
-<code class="docutils literal notranslate"><span class="pre">pypulseqpp.check_timing</span></code>, gradient continuity across blocks included,
-and with <code class="docutils literal notranslate"><span class="pre">pypulseqpp.safety.check_max_grad</span></code> and <code class="docutils literal notranslate"><span class="pre">check_max_slew</span></code>,
-against the gradient limits, dead times and ringdown time of <code class="docutils literal notranslate"><span class="pre">system</span></code>.
-The waveforms are timed by the file’s own rasters, and are those of the
-logical frame with each block’s own rotation: the prescription’s rotation
-is applied by the scanner, after these checks.</p>
+<dd><p>Return the problems of a chain under a scanner’s limits, in the physical frame.</p>
+<p>Each file of the <code class="docutils literal notranslate"><span class="pre">NextSequence</span></code> chain is rotated by <code class="docutils literal notranslate"><span class="pre">rotation</span></code>,
+composed after each block’s own rotation with blocks labelled <code class="docutils literal notranslate"><span class="pre">NOROT</span></code>
+exempt, as the scanner plays it. It is then checked with
+<code class="docutils literal notranslate"><span class="pre">pypulseqpp.check_timing</span></code>, gradient continuity included, and with
+<code class="docutils literal notranslate"><span class="pre">pypulseqpp.safety.check_max_grad</span></code> and <code class="docutils literal notranslate"><span class="pre">check_max_slew</span></code>, against the
+gradient limits, dead times and ringdown time of <code class="docutils literal notranslate"><span class="pre">system</span></code>; and with
+<code class="docutils literal notranslate"><span class="pre">check_pns</span></code>, <code class="docutils literal notranslate"><span class="pre">check_mech_resonance</span></code> and <code class="docutils literal notranslate"><span class="pre">check_sar</span></code> where <code class="docutils literal notranslate"><span class="pre">limits</span></code>
+carries a nerve model, forbidden bands or VOPs. The waveforms are timed by
+the file’s own rasters.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Returns<span class="colon">:</span></dt>
-<dd class="field-odd"><p>One line per problem, naming the file when the chain has more than
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>seq_path</strong> – The first file of the chain.</p></li>
+<li><p><strong>system</strong> – The scanner’s gradient limits, dead times and ringdown time.</p></li>
+<li><p><strong>rotation</strong> – <code class="docutils literal notranslate"><span class="pre">(3,</span> <span class="pre">3)</span></code> prescription rotation from logical to physical axes, a
+reflection included; the identity by default.</p></li>
+<li><p><strong>limits</strong> – The nerve, resonance and SAR limits; none by default.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>One line per problem, naming the file when the chain has more than
 one; empty when every check passes.</p>
 </dd>
-<dt class="field-even">Return type<span class="colon">:</span></dt>
-<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#list" title="(in Python v3.14)">list</a> of <a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)">str</a></p>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#list" title="(in Python v3.14)">list</a> of <a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)">str</a></p>
 </dd>
-<dt class="field-odd">Raises<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If a file of the chain cannot be read.</p>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If a file of the chain cannot be read, or <code class="docutils literal notranslate"><span class="pre">rotation</span></code> is not
+    orthonormal.</p>
 </dd>
 </dl>
 </dd></dl>

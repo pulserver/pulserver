@@ -60,8 +60,11 @@ Because the hash is computed over the resolved protocol, two requests that
 differ only in a value the design replaces, such as a preset and the time it
 resolves to, identify the same revision ({doc}`protocol`). An imported revision
 is identified by the names and contents of the imported files and the
-field-of-view offset of the import. The offset of a generated revision is part
-of its resolved protocol.
+prescription of the import, offset and rotation. The prescription of a
+generated revision is part of its resolved protocol. Where the limits name a
+VOP file, the file's contents are part of the identity as well as its path, so
+a design checked against one set of VOPs is not returned for another written to
+the same file.
 
 ## Access from the reconstruction side
 

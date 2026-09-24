@@ -141,6 +141,10 @@ Every documented quantity carries its unit.
 | Gyromagnetic ratio, field strength | Hz/T, T |
 | Field-of-view offset in a protocol or an import block | mm |
 | Field-of-view offset passed to `ir.convert` and `ir.prescribe` | m |
+| Prescription rotation (`fov_rotation_ij`) | unitless, element (i, j) of an orthonormal matrix |
+| PNS limit (`pns_limit`) | fraction of the nerve model's threshold |
+| Forbidden band | Hz; amplitude allowed in it in mT/m |
+| SAR limits (`vop_local_limit`, `vop_global_limit`) | W/kg |
 | Dwell time in an enriched acquisition (`sample_time_us`) | µs |
 | k-space trajectory | 1/m, as pypulseqpp reports it |
 | Grid trajectory (`ReconBuffer.grid_trajectory`) | k times the reconstructed field of view; an N-point matrix spans [-N/2, N/2) |
@@ -148,9 +152,12 @@ Every documented quantity carries its unit.
 
 State the coordinate frame wherever a position or a k-space quantity appears.
 The field-of-view offset is expressed along the logical readout, phase and
-slice axes. The trajectory is expressed along the sequence's x, y and z
-gradient axes, with the sequence's block rotations applied and no prescription
-rotation.
+slice axes. The prescription rotation maps the logical axes to the physical x,
+y and z gradient axes, physical = R logical. The trajectory is expressed along
+the sequence's x, y and z gradient axes, with the sequence's block rotations
+applied and no prescription rotation. The host's checks are made in the
+physical frame, with the prescription rotation composed after the block
+rotations.
 
 State the precision a value is exchanged at when it matters: time entries are
 rounded to the nearest microsecond, ties to even, and float entries to six
@@ -160,8 +167,10 @@ significant digits.
 
 Pulserver performs no safety check of its own. The timing, gradient, PNS,
 mechanical-resonance and SAR checks belong to pypulseqpp and compute
-estimates; the host runs some of them before it writes an IR cache. Passing
-these checks does not establish scanner or patient safety.
+estimates; the host runs them, under the limits the PSD passes, before it
+writes an IR cache, and the PSD computes every other SAR and the gradient
+heating itself. Passing these checks does not establish scanner or patient
+safety.
 
 - Never write "safe", "validated", "compliant" or "approved" of a sequence, a
   protocol or a revision.

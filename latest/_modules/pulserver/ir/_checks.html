@@ -446,15 +446,18 @@
                 <article class="bd-article">
                   
   <h1>Source code for pulserver.ir._checks</h1><div class="highlight"><pre>
-<span></span><span class="sd">"""The timing and gradient checks a sequence chain passes before its IR is built."""</span>
+<span></span><span class="sd">"""The checks a sequence chain passes before its IR is built."""</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">contextlib</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">copy</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">io</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span><span class="p">,</span> <span class="n">replace</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
 
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">pypulseqpp</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pp</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pypulseqpp</span><span class="w"> </span><span class="kn">import</span> <span class="n">safety</span>
 
@@ -470,18 +473,86 @@
 <span class="p">)</span>
 
 
+<div class="viewcode-block" id="CheckLimits">
+<a class="viewcode-back" href="../../../generated/pulserver.ir.CheckLimits.html#pulserver.ir.CheckLimits">[docs]</a>
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">CheckLimits</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""The nerve, resonance and SAR limits a chain is checked against, besides ``pypulseqpp.Opts``.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    pns</span>
+<span class="sd">        Nerve model of ``pypulseqpp.safety.check_pns``: a ``ChronaxieModel``</span>
+<span class="sd">        or a SAFE description. ``None`` leaves out the PNS check.</span>
+<span class="sd">    pns_limit</span>
+<span class="sd">        Largest PNS response allowed, as a fraction of the model's threshold.</span>
+<span class="sd">    bands</span>
+<span class="sd">        Forbidden gradient bands of ``check_mech_resonance``, on the physical</span>
+<span class="sd">        axes. Without any, the resonance check is left out.</span>
+<span class="sd">    vops</span>
+<span class="sd">        VOPs of ``check_sar``, or the ``.mat`` or ``.npz`` file holding them,</span>
+<span class="sd">        which is read when a chain is checked. ``None`` leaves out the SAR</span>
+<span class="sd">        check.</span>
+<span class="sd">    drive_per_hz</span>
+<span class="sd">        Channel drive per Hz of RF amplitude, in the VOPs' drive unit: one</span>
+<span class="sd">        value, or one per channel.</span>
+<span class="sd">    local_sar_limit, global_sar_limit</span>
+<span class="sd">        SAR allowed over each window ``check_sar`` averages, in W/kg.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If VOPs are given without a drive, or the PNS limit is not positive.</span>
+<span class="sd">    """</span>
+
+    <span class="n">pns</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">pns_limit</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span>
+    <span class="n">bands</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">safety</span><span class="o">.</span><span class="n">ForbiddenBand</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="p">()</span>
+    <span class="n">vops</span><span class="p">:</span> <span class="n">safety</span><span class="o">.</span><span class="n">VopModel</span> <span class="o">|</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">drive_per_hz</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">local_sar_limit</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">10.0</span>
+    <span class="n">global_sar_limit</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">3.2</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">__post_init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">vops</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">drive_per_hz</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"a VOP check needs the channel drive per Hz"</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">pns_limit</span> <span class="o">&lt;=</span> <span class="mf">0.0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"the PNS limit must be positive"</span><span class="p">)</span></div>
+
+
+
 <div class="viewcode-block" id="check">
 <a class="viewcode-back" href="../../../generated/pulserver.ir.check.html#pulserver.ir.check">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">check</span><span class="p">(</span><span class="n">seq_path</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span> <span class="n">system</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Opts</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
-<span class="w">    </span><span class="sd">"""Return the timing and gradient problems of a chain under a scanner's limits.</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">check</span><span class="p">(</span>
+    <span class="n">seq_path</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">system</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Opts</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">rotation</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">limits</span><span class="p">:</span> <span class="n">CheckLimits</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Return the problems of a chain under a scanner's limits, in the physical frame.</span>
 
-<span class="sd">    Each file of the ``NextSequence`` chain is checked with</span>
-<span class="sd">    ``pypulseqpp.check_timing``, gradient continuity across blocks included,</span>
-<span class="sd">    and with ``pypulseqpp.safety.check_max_grad`` and ``check_max_slew``,</span>
-<span class="sd">    against the gradient limits, dead times and ringdown time of ``system``.</span>
-<span class="sd">    The waveforms are timed by the file's own rasters, and are those of the</span>
-<span class="sd">    logical frame with each block's own rotation: the prescription's rotation</span>
-<span class="sd">    is applied by the scanner, after these checks.</span>
+<span class="sd">    Each file of the ``NextSequence`` chain is rotated by ``rotation``,</span>
+<span class="sd">    composed after each block's own rotation with blocks labelled ``NOROT``</span>
+<span class="sd">    exempt, as the scanner plays it. It is then checked with</span>
+<span class="sd">    ``pypulseqpp.check_timing``, gradient continuity included, and with</span>
+<span class="sd">    ``pypulseqpp.safety.check_max_grad`` and ``check_max_slew``, against the</span>
+<span class="sd">    gradient limits, dead times and ringdown time of ``system``; and with</span>
+<span class="sd">    ``check_pns``, ``check_mech_resonance`` and ``check_sar`` where ``limits``</span>
+<span class="sd">    carries a nerve model, forbidden bands or VOPs. The waveforms are timed by</span>
+<span class="sd">    the file's own rasters.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    seq_path</span>
+<span class="sd">        The first file of the chain.</span>
+<span class="sd">    system</span>
+<span class="sd">        The scanner's gradient limits, dead times and ringdown time.</span>
+<span class="sd">    rotation</span>
+<span class="sd">        ``(3, 3)`` prescription rotation from logical to physical axes, a</span>
+<span class="sd">        reflection included; the identity by default.</span>
+<span class="sd">    limits</span>
+<span class="sd">        The nerve, resonance and SAR limits; none by default.</span>
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
@@ -492,15 +563,20 @@
 <span class="sd">    Raises</span>
 <span class="sd">    ------</span>
 <span class="sd">    ValueError</span>
-<span class="sd">        If a file of the chain cannot be read.</span>
+<span class="sd">        If a file of the chain cannot be read, or ``rotation`` is not</span>
+<span class="sd">        orthonormal.</span>
 <span class="sd">    """</span>
+    <span class="n">limits</span> <span class="o">=</span> <span class="n">CheckLimits</span><span class="p">()</span> <span class="k">if</span> <span class="n">limits</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">limits</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">limits</span><span class="o">.</span><span class="n">vops</span><span class="p">,</span> <span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="n">Path</span><span class="p">)):</span>
+        <span class="n">limits</span> <span class="o">=</span> <span class="n">replace</span><span class="p">(</span><span class="n">limits</span><span class="p">,</span> <span class="n">vops</span><span class="o">=</span><span class="n">safety</span><span class="o">.</span><span class="n">read_vops</span><span class="p">(</span><span class="n">limits</span><span class="o">.</span><span class="n">vops</span><span class="p">))</span>
     <span class="k">try</span><span class="p">:</span>
         <span class="n">chain_read</span> <span class="o">=</span> <span class="n">read_chain</span><span class="p">(</span><span class="n">seq_path</span><span class="p">,</span> <span class="n">verify</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
     <span class="k">except</span> <span class="ne">RuntimeError</span> <span class="k">as</span> <span class="n">failure</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"cannot read </span><span class="si">{</span><span class="n">seq_path</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">failure</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">failure</span>
+    <span class="n">turn</span> <span class="o">=</span> <span class="kc">None</span> <span class="k">if</span> <span class="n">rotation</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">_proper</span><span class="p">(</span><span class="n">rotation</span><span class="p">)</span>
     <span class="n">problems</span> <span class="o">=</span> <span class="p">[]</span>
     <span class="k">for</span> <span class="n">path</span><span class="p">,</span> <span class="n">sequence</span> <span class="ow">in</span> <span class="n">chain_read</span><span class="p">:</span>
-        <span class="n">found</span> <span class="o">=</span> <span class="n">_problems</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">system</span><span class="p">)</span>
+        <span class="n">found</span> <span class="o">=</span> <span class="n">_problems</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">system</span><span class="p">,</span> <span class="n">turn</span><span class="p">,</span> <span class="n">limits</span><span class="p">)</span>
         <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">chain_read</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
             <span class="n">found</span> <span class="o">=</span> <span class="p">[</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">path</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">problem</span><span class="si">}</span><span class="s2">"</span> <span class="k">for</span> <span class="n">problem</span> <span class="ow">in</span> <span class="n">found</span><span class="p">]</span>
         <span class="n">problems</span> <span class="o">+=</span> <span class="n">found</span>
@@ -508,11 +584,32 @@
 
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_problems</span><span class="p">(</span><span class="n">sequence</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Sequence</span><span class="p">,</span> <span class="n">system</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Opts</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
-    <span class="n">limits</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">copy</span><span class="p">(</span><span class="n">system</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_proper</span><span class="p">(</span><span class="n">rotation</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return a rotation with the per-axis magnitudes of ``rotation``, or ``None`` for the identity.</span>
+
+<span class="sd">    A reflection is made a rotation by reversing the physical z axis, which</span>
+<span class="sd">    changes the sign of what it plays and no check reads a sign.</span>
+<span class="sd">    """</span>
+    <span class="n">turn</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">rotation</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">turn</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">allclose</span><span class="p">(</span><span class="n">turn</span> <span class="o">@</span> <span class="n">turn</span><span class="o">.</span><span class="n">T</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="n">atol</span><span class="o">=</span><span class="mf">1e-9</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"the rotation </span><span class="si">{</span><span class="n">turn</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span><span class="si">}</span><span class="s2"> is not orthonormal"</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">det</span><span class="p">(</span><span class="n">turn</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mf">0.0</span><span class="p">:</span>
+        <span class="n">turn</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">*=</span> <span class="o">-</span><span class="mf">1.0</span>
+    <span class="k">return</span> <span class="kc">None</span> <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">allclose</span><span class="p">(</span><span class="n">turn</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">3</span><span class="p">))</span> <span class="k">else</span> <span class="n">turn</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_problems</span><span class="p">(</span>
+    <span class="n">sequence</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Sequence</span><span class="p">,</span>
+    <span class="n">system</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Opts</span><span class="p">,</span>
+    <span class="n">rotation</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">limits</span><span class="p">:</span> <span class="n">CheckLimits</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+    <span class="n">opts</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">copy</span><span class="p">(</span><span class="n">system</span><span class="p">)</span>
     <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">_RASTERS</span><span class="p">:</span>
-        <span class="nb">setattr</span><span class="p">(</span><span class="n">limits</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">name</span><span class="p">))</span>
-    <span class="n">sequence</span><span class="o">.</span><span class="n">system</span> <span class="o">=</span> <span class="n">limits</span>
+        <span class="nb">setattr</span><span class="p">(</span><span class="n">opts</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">name</span><span class="p">))</span>
+    <span class="n">sequence</span><span class="o">.</span><span class="n">system</span> <span class="o">=</span> <span class="n">opts</span>
+    <span class="k">if</span> <span class="n">rotation</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">pp</span><span class="o">.</span><span class="n">TransformFOV</span><span class="p">(</span><span class="n">rotation</span><span class="o">=</span><span class="n">rotation</span><span class="p">)</span><span class="o">.</span><span class="n">apply_to_sequence</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">in_place</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
     <span class="n">problems</span> <span class="o">=</span> <span class="p">[]</span>
     <span class="n">is_ok</span><span class="p">,</span> <span class="n">report</span> <span class="o">=</span> <span class="n">pp</span><span class="o">.</span><span class="n">check_timing</span><span class="p">(</span><span class="n">sequence</span><span class="p">)</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="n">is_ok</span><span class="p">:</span>
@@ -521,14 +618,70 @@
         <span class="p">(</span><span class="n">safety</span><span class="o">.</span><span class="n">check_max_grad</span><span class="p">,</span> <span class="s2">"gradient amplitude"</span><span class="p">,</span> <span class="s2">"mT/m"</span><span class="p">,</span> <span class="mf">1e3</span><span class="p">),</span>
         <span class="p">(</span><span class="n">safety</span><span class="o">.</span><span class="n">check_max_slew</span><span class="p">,</span> <span class="s2">"slew rate"</span><span class="p">,</span> <span class="s2">"T/m/s"</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">),</span>
     <span class="p">):</span>
-        <span class="n">is_ok</span><span class="p">,</span> <span class="n">found</span> <span class="o">=</span> <span class="n">check</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">limits</span><span class="p">)</span>
+        <span class="n">is_ok</span><span class="p">,</span> <span class="n">found</span> <span class="o">=</span> <span class="n">check</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">opts</span><span class="p">)</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">is_ok</span><span class="p">:</span>
             <span class="n">peak</span> <span class="o">=</span> <span class="n">found</span><span class="o">.</span><span class="n">per_axis</span>
             <span class="n">problems</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> of </span><span class="si">{</span><span class="n">peak</span><span class="o">.</span><span class="n">value</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="n">limits</span><span class="o">.</span><span class="n">gamma</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">scale</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">unit</span><span class="si">}</span><span class="s2"> on "</span>
+                <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> of </span><span class="si">{</span><span class="n">peak</span><span class="o">.</span><span class="n">value</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="n">opts</span><span class="o">.</span><span class="n">gamma</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">scale</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">unit</span><span class="si">}</span><span class="s2"> on "</span>
                 <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">peak</span><span class="o">.</span><span class="n">axis</span><span class="si">}</span><span class="s2"> in block </span><span class="si">{</span><span class="n">peak</span><span class="o">.</span><span class="n">block</span><span class="si">}</span><span class="s2"> exceeds "</span>
-                <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">found</span><span class="o">.</span><span class="n">limit</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="n">limits</span><span class="o">.</span><span class="n">gamma</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">scale</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">unit</span><span class="si">}</span><span class="s2">"</span>
+                <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">found</span><span class="o">.</span><span class="n">limit</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="n">opts</span><span class="o">.</span><span class="n">gamma</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">scale</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">unit</span><span class="si">}</span><span class="s2">"</span>
             <span class="p">)</span>
+    <span class="k">if</span> <span class="n">limits</span><span class="o">.</span><span class="n">pns</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">problems</span> <span class="o">+=</span> <span class="n">_pns</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">opts</span><span class="p">,</span> <span class="n">limits</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">limits</span><span class="o">.</span><span class="n">bands</span><span class="p">:</span>
+        <span class="n">problems</span> <span class="o">+=</span> <span class="n">_resonance</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">opts</span><span class="p">,</span> <span class="n">limits</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">limits</span><span class="o">.</span><span class="n">vops</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">problems</span> <span class="o">+=</span> <span class="n">_sar</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">limits</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">problems</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_pns</span><span class="p">(</span><span class="n">sequence</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Sequence</span><span class="p">,</span> <span class="n">system</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Opts</span><span class="p">,</span> <span class="n">limits</span><span class="p">:</span> <span class="n">CheckLimits</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+    <span class="n">_</span><span class="p">,</span> <span class="n">found</span> <span class="o">=</span> <span class="n">safety</span><span class="o">.</span><span class="n">check_pns</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">limits</span><span class="o">.</span><span class="n">pns</span><span class="p">,</span> <span class="n">system</span><span class="o">=</span><span class="n">system</span><span class="p">)</span>
+    <span class="n">peak</span> <span class="o">=</span> <span class="n">found</span><span class="o">.</span><span class="n">peak</span>
+    <span class="k">if</span> <span class="n">peak</span><span class="o">.</span><span class="n">value</span> <span class="o">&lt;</span> <span class="n">limits</span><span class="o">.</span><span class="n">pns_limit</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">[]</span>
+    <span class="n">axis</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">found</span><span class="o">.</span><span class="n">axes</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">reading</span><span class="p">:</span> <span class="n">reading</span><span class="o">.</span><span class="n">value</span><span class="p">)</span><span class="o">.</span><span class="n">axis</span>
+    <span class="k">return</span> <span class="p">[</span>
+        <span class="sa">f</span><span class="s2">"PNS of </span><span class="si">{</span><span class="n">peak</span><span class="o">.</span><span class="n">value</span><span class="si">:</span><span class="s2">.0%</span><span class="si">}</span><span class="s2"> of the </span><span class="si">{</span><span class="n">found</span><span class="o">.</span><span class="n">model</span><span class="si">}</span><span class="s2"> threshold, largest on "</span>
+        <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">axis</span><span class="si">}</span><span class="s2">, at </span><span class="si">{</span><span class="n">peak</span><span class="o">.</span><span class="n">time</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2"> s in block </span><span class="si">{</span><span class="n">peak</span><span class="o">.</span><span class="n">block</span><span class="si">}</span><span class="s2"> reaches "</span>
+        <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">limits</span><span class="o">.</span><span class="n">pns_limit</span><span class="si">:</span><span class="s2">.0%</span><span class="si">}</span><span class="s2">"</span>
+    <span class="p">]</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_resonance</span><span class="p">(</span>
+    <span class="n">sequence</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Sequence</span><span class="p">,</span> <span class="n">system</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Opts</span><span class="p">,</span> <span class="n">limits</span><span class="p">:</span> <span class="n">CheckLimits</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+    <span class="n">_</span><span class="p">,</span> <span class="n">found</span> <span class="o">=</span> <span class="n">safety</span><span class="o">.</span><span class="n">check_mech_resonance</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">limits</span><span class="o">.</span><span class="n">bands</span><span class="p">,</span> <span class="n">system</span><span class="o">=</span><span class="n">system</span><span class="p">)</span>
+    <span class="k">return</span> <span class="p">[</span>
+        <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">band</span><span class="o">.</span><span class="n">peak</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> mT/m at </span><span class="si">{</span><span class="n">band</span><span class="o">.</span><span class="n">frequency</span><span class="si">:</span><span class="s2">.0f</span><span class="si">}</span><span class="s2"> Hz on </span><span class="si">{</span><span class="n">band</span><span class="o">.</span><span class="n">peak_axis</span><span class="si">}</span><span class="s2"> in "</span>
+        <span class="sa">f</span><span class="s2">"the window at </span><span class="si">{</span><span class="n">band</span><span class="o">.</span><span class="n">window_start</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2"> s exceeds the </span><span class="si">{</span><span class="n">band</span><span class="o">.</span><span class="n">threshold</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> "</span>
+        <span class="sa">f</span><span class="s2">"mT/m of the forbidden band </span><span class="si">{</span><span class="n">band</span><span class="o">.</span><span class="n">f_min</span><span class="si">:</span><span class="s2">.0f</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="n">band</span><span class="o">.</span><span class="n">f_max</span><span class="si">:</span><span class="s2">.0f</span><span class="si">}</span><span class="s2"> Hz"</span>
+        <span class="o">+</span> <span class="p">(</span><span class="s2">""</span> <span class="k">if</span> <span class="n">band</span><span class="o">.</span><span class="n">axis</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="sa">f</span><span class="s2">" on </span><span class="si">{</span><span class="n">band</span><span class="o">.</span><span class="n">axis</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">band</span> <span class="ow">in</span> <span class="n">found</span><span class="o">.</span><span class="n">bands</span>
+        <span class="k">if</span> <span class="n">band</span><span class="o">.</span><span class="n">violations</span>
+    <span class="p">]</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_sar</span><span class="p">(</span><span class="n">sequence</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Sequence</span><span class="p">,</span> <span class="n">limits</span><span class="p">:</span> <span class="n">CheckLimits</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+    <span class="n">_</span><span class="p">,</span> <span class="n">found</span> <span class="o">=</span> <span class="n">safety</span><span class="o">.</span><span class="n">check_sar</span><span class="p">(</span>
+        <span class="n">sequence</span><span class="p">,</span>
+        <span class="n">limits</span><span class="o">.</span><span class="n">vops</span><span class="p">,</span>
+        <span class="n">drive_per_hz</span><span class="o">=</span><span class="n">limits</span><span class="o">.</span><span class="n">drive_per_hz</span><span class="p">,</span>
+        <span class="n">local_limit</span><span class="o">=</span><span class="n">limits</span><span class="o">.</span><span class="n">local_sar_limit</span><span class="p">,</span>
+        <span class="n">global_limit</span><span class="o">=</span><span class="n">limits</span><span class="o">.</span><span class="n">global_sar_limit</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">problems</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">local</span><span class="p">,</span> <span class="n">whole</span> <span class="o">=</span> <span class="n">found</span><span class="o">.</span><span class="n">worst_local</span><span class="p">,</span> <span class="n">found</span><span class="o">.</span><span class="n">worst_global</span>
+    <span class="k">if</span> <span class="n">local</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">local</span><span class="o">.</span><span class="n">sar</span> <span class="o">&gt;</span> <span class="n">limits</span><span class="o">.</span><span class="n">local_sar_limit</span><span class="p">:</span>
+        <span class="n">problems</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"local SAR of </span><span class="si">{</span><span class="n">local</span><span class="o">.</span><span class="n">sar</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2"> W/kg at VOP </span><span class="si">{</span><span class="n">local</span><span class="o">.</span><span class="n">vop</span><span class="si">}</span><span class="s2"> over blocks "</span>
+            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">local</span><span class="o">.</span><span class="n">first</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="n">local</span><span class="o">.</span><span class="n">last</span><span class="si">}</span><span class="s2"> exceeds </span><span class="si">{</span><span class="n">limits</span><span class="o">.</span><span class="n">local_sar_limit</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2"> W/kg"</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="n">whole</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">whole</span><span class="o">.</span><span class="n">sar</span> <span class="o">&gt;</span> <span class="n">limits</span><span class="o">.</span><span class="n">global_sar_limit</span><span class="p">:</span>
+        <span class="n">problems</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"global SAR of </span><span class="si">{</span><span class="n">whole</span><span class="o">.</span><span class="n">sar</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2"> W/kg over blocks </span><span class="si">{</span><span class="n">whole</span><span class="o">.</span><span class="n">first</span><span class="si">}</span><span class="s2">-"</span>
+            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">whole</span><span class="o">.</span><span class="n">last</span><span class="si">}</span><span class="s2"> exceeds </span><span class="si">{</span><span class="n">limits</span><span class="o">.</span><span class="n">global_sar_limit</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2"> W/kg"</span>
+        <span class="p">)</span>
     <span class="k">return</span> <span class="n">problems</span>
 
 
