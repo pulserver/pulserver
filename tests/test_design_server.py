@@ -1,11 +1,14 @@
 """The warm design server: forwarded calls, each answered in a child of its own."""
 
 import os
+import shutil
 import signal
 import subprocess
 import sys
+import tempfile
 import threading
 import time
+from pathlib import Path
 
 import pytest
 from _host import LIMITS, PLUGINS
@@ -41,10 +44,14 @@ def limits_file(tmp_path):
 
 
 @pytest.fixture
-def server(tmp_path_factory):
-    """A warm server over the test plugins, whose stalling plugin marks a file."""
-    directory = tmp_path_factory.mktemp("server")
-    socket_path = directory / "design.sock"
+def server():
+    """A warm server over the test plugins, whose stalling plugin marks a file.
+
+    The socket is in a directory of its own under the system's temporary
+    directory: a pytest directory can exceed the length of a Unix socket path.
+    """
+    directory = Path(tempfile.mkdtemp(prefix="ps"))
+    socket_path = directory / "s"
     marker = directory / "stalled"
     process = subprocess.Popen(
         [
@@ -71,6 +78,7 @@ def server(tmp_path_factory):
     if process.poll() is None:
         process.send_signal(signal.SIGTERM)
         process.wait(timeout=DEADLINE)
+    shutil.rmtree(directory, ignore_errors=True)
 
 
 def calls(limits_file, store=None):
@@ -181,18 +189,22 @@ def test_a_stopped_server_ends_its_running_calls(server, limits_file):
     assert not server.socket.exists()
 
 
+@pytest.mark.parametrize("length", [8, 200])
 def test_a_call_naming_a_socket_no_server_listens_on_is_answered_in_its_process(
-    tmp_path,
+    length,
 ):
-    listed = command(
-        "list",
-        "--plugins",
-        str(PLUGINS),
-        "--plugin",
-        "tiny",
-        "--socket",
-        str(tmp_path / "absent.sock"),
-    )
+    # No Unix socket path takes 200 characters, so no server listens there.
+    with tempfile.TemporaryDirectory(prefix="ps") as directory:
+        absent = Path(directory) / ("s" * length)
+        listed = command(
+            "list",
+            "--plugins",
+            str(PLUGINS),
+            "--plugin",
+            "tiny",
+            "--socket",
+            str(absent),
+        )
     assert listed.returncode == 0
     assert listed.stdout.startswith("PROTOCOL\n")
 

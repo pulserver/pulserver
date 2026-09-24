@@ -135,11 +135,15 @@ def request(args: argparse.Namespace, block: str) -> dict[str, Any]:
 
 
 def forward(socket_path: Path | str, call: dict[str, Any]) -> tuple[int, str] | None:
-    """Return a warm server's exit status and reply, or ``None`` when none listens."""
+    """Return a warm server's exit status and reply, or ``None`` when none listens.
+
+    No server listens on a path that does not exist, that no process accepts
+    on, or that is too long for a Unix socket.
+    """
     connection = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     try:
         connection.connect(str(socket_path))
-    except (FileNotFoundError, ConnectionRefusedError):
+    except OSError:
         connection.close()
         return None
     with connection:
