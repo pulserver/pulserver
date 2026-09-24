@@ -25,12 +25,6 @@ from ..recon._runtime.application import run_application
 from ..recon._runtime.connection import Connection
 from ..recon._runtime.exam import resolve_exam_id
 
-# Warming a spare means paying for the reconstruction engine's import here,
-# where no series is waiting on it. A host without it reconstructs with
-# whatever its plugins import instead.
-with contextlib.suppress(ImportError):
-    import bartorch  # noqa: F401
-
 _log = logging.getLogger("pulserver.vre")
 
 
@@ -118,10 +112,15 @@ class WorkerPool:
 
 
 def _warm(pipe: Pipe) -> None:
-    """Wait for an assignment, serve that one series, and exit."""
+    """Import the reconstruction engine, wait for an assignment, serve that one series, and exit.
+
+    A host without bartorch reconstructs with whatever its plugins import.
+    """
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s"
     )
+    with contextlib.suppress(ImportError):
+        import bartorch  # noqa: F401
     try:
         assignment = pipe.recv()
     except EOFError:

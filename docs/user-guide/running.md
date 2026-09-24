@@ -67,13 +67,14 @@ imported again when its modification time changes.
 ## Reconstruction proxy
 
 ```bash
-python -m pulserver.vre --base DIR --port N --plugins DIR [--slots N] [--spares 1] [--recon-timeout S]
+python -m pulserver.vre --base DIR --port N --plugins DIR [--host ADDR] [--slots N] [--spares 1] [--recon-timeout S]
 ```
 
 | Option | Meaning |
 | --- | --- |
 | `--base` | The host daemon's base directory |
 | `--port` | TCP port the scanner's reconstruction client connects to |
+| `--host` | Address to listen on; every interface when unset |
 | `--plugins` | Directory of reconstruction plugin files, `<plugin>.py` |
 | `--slots` | Series reconstructed at once; derived from available memory when unset |
 | `--spares` | Worker processes started ahead of a series, default 1 |
@@ -89,6 +90,10 @@ under `parameters.config`.
 A series that finds every slot busy is written to
 `bucket/<session>/queue/` as it arrives and reconstructed once a slot frees;
 the client stays connected meanwhile.
+
+The MRD stream is neither authenticated nor encrypted, and its header carries
+patient data. The proxy belongs on the network between the scanner and the
+reconstruction computer, with `--host` naming the interface on it.
 
 Both services stop on `SIGINT` or `SIGTERM`. The proxy waits for the series it
 is running before it exits.

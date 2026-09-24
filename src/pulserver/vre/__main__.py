@@ -17,6 +17,11 @@ def main(argv: list[str] | None = None) -> None:
     )
     parser.add_argument("--port", type=int, required=True, help="TCP port to listen on")
     parser.add_argument(
+        "--host",
+        default="",
+        help="address to listen on; every interface when unset",
+    )
+    parser.add_argument(
         "--plugins", type=Path, required=True, help="directory of <plugin>.py"
     )
     parser.add_argument(
@@ -46,7 +51,7 @@ def main(argv: list[str] | None = None) -> None:
         spares=args.spares,
         recon_timeout=args.recon_timeout,
     )
-    proxy.bind(args.port)
+    proxy.bind(args.port, args.host)
     for signum in (signal.SIGTERM, signal.SIGINT):
         signal.signal(signum, lambda _signum, _frame: proxy.stop())
     try:

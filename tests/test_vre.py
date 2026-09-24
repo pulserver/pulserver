@@ -1,6 +1,7 @@
 """The reconstruction proxy: a series streamed in, images streamed back."""
 
 import json
+import os
 import socket
 import subprocess
 import sys
@@ -380,3 +381,27 @@ def test_a_terminated_proxy_process_exits_cleanly(tmp_path):
     finally:
         process.kill()
         process.stderr.close()
+
+
+def test_the_proxy_process_does_not_import_the_reconstruction_engine(tmp_path):
+    """Only a worker imports bartorch; the proxy that spawns it does not."""
+    (tmp_path / "bartorch.py").write_text("raise SystemExit('imported bartorch')\n")
+    probe = "import sys, pulserver.vre; print('bartorch' in sys.modules)"
+    environment = {**os.environ, "PYTHONPATH": str(tmp_path)}
+    found = subprocess.run(
+        [sys.executable, "-c", probe],
+        capture_output=True,
+        text=True,
+        env=environment,
+        check=True,
+    )
+    assert found.stdout.strip() == "False"
+
+
+def test_the_proxy_listens_on_the_address_it_is_given(tmp_path):
+    proxy = ReconProxy(tmp_path, tmp_path, slots=1, spares=1)
+    try:
+        port = proxy.bind(0, "127.0.0.1")
+        assert proxy._server.getsockname() == ("127.0.0.1", port)
+    finally:
+        proxy.close()

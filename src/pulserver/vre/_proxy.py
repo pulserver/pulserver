@@ -101,11 +101,15 @@ class ReconProxy:
         self._threads: list[threading.Thread] = []
         self._queued = itertools.count(1)
 
-    def bind(self, port: int = 0) -> int:
-        """Listen on ``port`` and return the port bound; 0 takes a free one."""
+    def bind(self, port: int = 0, host: str = "") -> int:
+        """Listen on ``port`` and return the port bound; 0 takes a free one.
+
+        ``host`` is the address to listen on; the empty default is every
+        interface. The stream is neither authenticated nor encrypted.
+        """
         server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        server.bind(("", port))
+        server.bind((host, port))
         server.listen(16)
         server.settimeout(_ACCEPT_POLL)
         self._server = server
