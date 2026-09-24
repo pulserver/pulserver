@@ -615,7 +615,8 @@ e^{-2\pi i\,\mathbf{k}(t)\cdot\mathbf{r}}\, d\mathbf{r},
 \]</div>
 <p>with <span class="math notranslate nohighlight">\(\psi\)</span> the phase the RF pulses left, and the playout demodulates it by
 <span class="math notranslate nohighlight">\(\exp(i\theta(t))\)</span>, where the receiver phase <span class="math notranslate nohighlight">\(\theta\)</span> is the ADC phase offset at
-the ADC’s start and advances at its frequency offset. These are the
+the ADC’s start, advancing at its frequency offset, plus its phase
+modulation. These are the
 conventions under which the field-of-view translation applied when the IR is
 built (<a class="reference internal" href="ir-cache.html"><span class="doc">The scanner IR</span></a>) recentres an object: an object at the prescribed
 offset is acquired as the same object at the centre. The phantom’s ellipses
@@ -632,16 +633,16 @@ excitation of its file acquires zeros.</p>
 Cartesian, EPI, spiral and radial fixtures.</p></li>
 <li><p>The enrichment states that trajectory for every readout.</p></li>
 <li><p>An object at the prescribed offset is acquired centred by a Cartesian
-gradient echo and spin echo, and an object away from it is not.</p></li>
+gradient echo and spin echo, and by EPI and spiral readouts, which the
+translation gives a phase modulation; an object away from it is not.</p></li>
 <li><p>A series streamed through the proxy is reconstructed into the phantom’s
 image, at the prescribed position, and a series short of a readout is
 refused.</p></li>
 </ul>
-<p>The cache carries each readout’s frequency and phase offsets but not the phase
-modulation the translation adds to a readout under a varying gradient, so a
-radial, spiral or ramp-sampled readout is not demodulated to the prescribed
-centre; the virtual scanner acquires such a readout off its ideal, and the test
-suite records it as an expected failure.</p>
+<p>pypulseqpp’s field-of-view translation moves a block that carries a rotation
+extension by its unrotated gradients, so an off-centre design whose spokes are
+rotations of one readout, as the ZTE fixture’s are, is acquired off its ideal;
+the test suite records it as an expected failure.</p>
 </section>
 <section id="see-also">
 <h2>See also<a class="headerlink" href="#see-also" title="Link to this heading">#</a></h2>

@@ -55,7 +55,8 @@ $$
 
 with $\psi$ the phase the RF pulses left, and the playout demodulates it by
 $\exp(i\theta(t))$, where the receiver phase $\theta$ is the ADC phase offset at
-the ADC's start and advances at its frequency offset. These are the
+the ADC's start, advancing at its frequency offset, plus its phase
+modulation. These are the
 conventions under which the field-of-view translation applied when the IR is
 built ({doc}`ir-cache`) recentres an object: an object at the prescribed
 offset is acquired as the same object at the centre. The phantom's ellipses
@@ -72,16 +73,16 @@ excitation of its file acquires zeros.
   Cartesian, EPI, spiral and radial fixtures.
 - The enrichment states that trajectory for every readout.
 - An object at the prescribed offset is acquired centred by a Cartesian
-  gradient echo and spin echo, and an object away from it is not.
+  gradient echo and spin echo, and by EPI and spiral readouts, which the
+  translation gives a phase modulation; an object away from it is not.
 - A series streamed through the proxy is reconstructed into the phantom's
   image, at the prescribed position, and a series short of a readout is
   refused.
 
-The cache carries each readout's frequency and phase offsets but not the phase
-modulation the translation adds to a readout under a varying gradient, so a
-radial, spiral or ramp-sampled readout is not demodulated to the prescribed
-centre; the virtual scanner acquires such a readout off its ideal, and the test
-suite records it as an expected failure.
+pypulseqpp's field-of-view translation moves a block that carries a rotation
+extension by its unrotated gradients, so an off-centre design whose spokes are
+rotations of one readout, as the ZTE fixture's are, is acquired off its ideal;
+the test suite records it as an expected failure.
 
 ## See also
 

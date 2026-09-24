@@ -501,8 +501,8 @@
 
 <span class="sd">    One ``(coils, samples)`` complex64 array per readout, in play order,</span>
 <span class="sd">    multiplied by ``exp(i theta)``, where the receiver phase ``theta`` is the</span>
-<span class="sd">    ADC phase offset at the ADC's start and advances at its frequency offset,</span>
-<span class="sd">    as the playout demodulates. Only excitation and refocusing pulses act on</span>
+<span class="sd">    ADC phase offset at the ADC's start, advancing at its frequency offset,</span>
+<span class="sd">    plus its phase modulation, as the playout demodulates. Only excitation and refocusing pulses act on</span>
 <span class="sd">    the magnetization, and ideally; a readout before the first excitation of</span>
 <span class="sd">    its file acquires zeros. The signal model is that of</span>
 <span class="sd">    :doc:`/explanations/virtual-scanner`.</span>
@@ -525,6 +525,8 @@
     <span class="n">span</span> <span class="o">=</span> <span class="n">played</span><span class="p">[</span><span class="s2">"gradient_span"</span><span class="p">]</span>
     <span class="n">corners</span> <span class="o">=</span> <span class="n">played</span><span class="p">[</span><span class="s2">"gradient_time_us"</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">float</span><span class="p">)</span>
     <span class="n">values</span> <span class="o">=</span> <span class="n">played</span><span class="p">[</span><span class="s2">"gradient_waveform_hz_per_m"</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">float</span><span class="p">)</span>
+    <span class="n">modulation</span> <span class="o">=</span> <span class="n">played</span><span class="p">[</span><span class="s2">"adc_phase_modulation_rad"</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">float</span><span class="p">)</span>
+    <span class="n">modulated</span> <span class="o">=</span> <span class="n">played</span><span class="p">[</span><span class="s2">"adc_modulation_span"</span><span class="p">]</span>
     <span class="n">subsequence</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
     <span class="k">for</span> <span class="n">block</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">played</span><span class="p">[</span><span class="s2">"duration_us"</span><span class="p">]</span><span class="o">.</span><span class="n">size</span><span class="p">):</span>
         <span class="k">if</span> <span class="n">played</span><span class="p">[</span><span class="s2">"subsequence"</span><span class="p">][</span><span class="n">block</span><span class="p">]</span> <span class="o">!=</span> <span class="n">subsequence</span><span class="p">:</span>
@@ -560,6 +562,8 @@
                 <span class="nb">float</span><span class="p">(</span><span class="n">played</span><span class="p">[</span><span class="s2">"adc_phase_rad"</span><span class="p">][</span><span class="n">block</span><span class="p">])</span>
                 <span class="o">+</span> <span class="mf">2.0</span> <span class="o">*</span> <span class="n">math</span><span class="o">.</span><span class="n">pi</span> <span class="o">*</span> <span class="nb">float</span><span class="p">(</span><span class="n">played</span><span class="p">[</span><span class="s2">"adc_freq_hz"</span><span class="p">][</span><span class="n">block</span><span class="p">])</span> <span class="o">*</span> <span class="mf">1e-6</span> <span class="o">*</span> <span class="n">since</span>
             <span class="p">)</span>
+            <span class="k">if</span> <span class="n">modulated</span><span class="p">[</span><span class="n">block</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span> <span class="o">&gt;</span> <span class="n">modulated</span><span class="p">[</span><span class="n">block</span><span class="p">,</span> <span class="mi">0</span><span class="p">]:</span>
+                <span class="n">receiver</span> <span class="o">=</span> <span class="n">receiver</span> <span class="o">+</span> <span class="n">modulation</span><span class="p">[</span><span class="nb">slice</span><span class="p">(</span><span class="o">*</span><span class="n">modulated</span><span class="p">[</span><span class="n">block</span><span class="p">])]</span>
             <span class="k">yield</span> <span class="n">_Readout</span><span class="p">(</span>
                 <span class="n">kspace</span><span class="o">=</span><span class="n">k</span> <span class="o">-</span> <span class="p">(</span><span class="n">origin</span><span class="p">[:,</span> <span class="kc">None</span><span class="p">]</span> <span class="k">if</span> <span class="n">origin</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="mf">0.0</span><span class="p">),</span>
                 <span class="n">phase</span><span class="o">=</span><span class="n">reference</span> <span class="o">+</span> <span class="n">receiver</span><span class="p">,</span>

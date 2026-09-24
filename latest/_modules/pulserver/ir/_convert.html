@@ -720,7 +720,14 @@
 <span class="sd">          intervals before its first sample and after its last;</span>
 <span class="sd">        - ``gradient_span``: ``(blocks, 3, 2)``, the start and stop of each</span>
 <span class="sd">          block's gradient along x, y and z in those arrays; empty without</span>
-<span class="sd">          one.</span>
+<span class="sd">          one;</span>
+<span class="sd">        - ``adc_phase_modulation_rad``: the phase modulation of every played</span>
+<span class="sd">          readout, one phase per sample in radians, concatenated in play</span>
+<span class="sd">          order; the receiver phase of a sample is the ADC phase offset, plus</span>
+<span class="sd">          its frequency offset times the time since the ADC's start, plus</span>
+<span class="sd">          this;</span>
+<span class="sd">        - ``adc_modulation_span``: ``(blocks, 2)``, the start and stop of each</span>
+<span class="sd">          block's modulation in that array; empty without one.</span>
 
 <span class="sd">    Raises</span>
 <span class="sd">    ------</span>

@@ -577,7 +577,14 @@ gradient raster holds its end values over the half raster
 intervals before its first sample and after its last;</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">gradient_span</span></code>: <code class="docutils literal notranslate"><span class="pre">(blocks,</span> <span class="pre">3,</span> <span class="pre">2)</span></code>, the start and stop of each
 block’s gradient along x, y and z in those arrays; empty without
-one.</p></li>
+one;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">adc_phase_modulation_rad</span></code>: the phase modulation of every played
+readout, one phase per sample in radians, concatenated in play
+order; the receiver phase of a sample is the ADC phase offset, plus
+its frequency offset times the time since the ADC’s start, plus
+this;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">adc_modulation_span</span></code>: <code class="docutils literal notranslate"><span class="pre">(blocks,</span> <span class="pre">2)</span></code>, the start and stop of each
+block’s modulation in that array; empty without one.</p></li>
 </ul>
 </p>
 </dd>

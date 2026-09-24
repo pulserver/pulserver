@@ -535,8 +535,8 @@
 <dd><p>Return the samples the cache beside a sequence file acquires of a phantom.</p>
 <p>One <code class="docutils literal notranslate"><span class="pre">(coils,</span> <span class="pre">samples)</span></code> complex64 array per readout, in play order,
 multiplied by <code class="docutils literal notranslate"><span class="pre">exp(i</span> <span class="pre">theta)</span></code>, where the receiver phase <code class="docutils literal notranslate"><span class="pre">theta</span></code> is the
-ADC phase offset at the ADC’s start and advances at its frequency offset,
-as the playout demodulates. Only excitation and refocusing pulses act on
+ADC phase offset at the ADC’s start, advancing at its frequency offset,
+plus its phase modulation, as the playout demodulates. Only excitation and refocusing pulses act on
 the magnetization, and ideally; a readout before the first excitation of
 its file acquires zeros. The signal model is that of
 <a class="reference internal" href="../explanations/virtual-scanner.html"><span class="doc">The virtual scanner</span></a>.</p>
