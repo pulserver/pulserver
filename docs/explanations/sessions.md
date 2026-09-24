@@ -67,10 +67,11 @@ of its resolved protocol.
 
 The raw-data header of a series records the session key and the revision number
 in the `pulserver_session` and `pulserver_revision` user parameters. Since a
-revision is immutable, the reconstruction proxy reads and tabulates it once
-({class}`~pulserver.vre.RevisionStore`) and reuses the result for every later
-series acquired with it. When the two services run on different computers,
-the bucket is a directory both can access.
+revision is immutable, the reconstruction proxy reads and tabulates it once and
+reuses the result for later series acquired with it, keeping the revisions it
+read most recently ({class}`~pulserver.vre.RevisionStore`). When the two
+services run on different computers, the bucket is a directory both can
+access.
 
 ## See also
 

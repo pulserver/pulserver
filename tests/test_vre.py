@@ -2,6 +2,7 @@
 
 import json
 import os
+import shutil
 import socket
 import subprocess
 import sys
@@ -16,10 +17,12 @@ import numpy as np
 import pytest
 from _host import DAY, LIMITS, Daemon
 
+from pulserver.recon._runtime import concurrency
 from pulserver.recon._runtime.connection import Connection
-from pulserver.vre import ReconProxy, SequenceTable
+from pulserver.vre import ReconProxy, RevisionStore, SequenceTable, _revisions
 
 RECON_PLUGINS = Path(__file__).parent / "recon_plugins"
+FIXTURES = Path(__file__).parent / "fixtures" / "sequences"
 MATRIX = {"nx": 32, "ny": 16, "TE": 5000}
 CHANNELS = 2
 # Long enough that a stall fails the run instead of hanging it.
@@ -37,7 +40,7 @@ HEADER = """<?xml version="1.0"?>
   </encoding>
   <userParameters>
     <userParameterLong><name>pulserver_revision</name><value>{revision}</value></userParameterLong>
-    <userParameterString><name>pulserver_session</name><value>{session}</value></userParameterString>
+    <userParameterString><name>pulserver_session</name><value>{session}</value></userParameterString>{exam}
   </userParameters>
 </ismrmrdHeader>
 """
@@ -94,9 +97,15 @@ def start_proxy(bucket):
         thread.join(timeout=DEADLINE)
 
 
-def header_xml(series):
+def header_xml(series, exam=None):
     return HEADER.format(
-        channels=CHANNELS, session=series.session, revision=series.revision
+        channels=CHANNELS,
+        session=series.session,
+        revision=series.revision,
+        exam=""
+        if exam is None
+        else f"<userParameterString><name>ExamID</name><value>{exam}</value>"
+        "</userParameterString>",
     )
 
 
@@ -106,22 +115,21 @@ def flat(table, index):
 
 def point(table, index, position_m):
     """k-space of a point object at ``position_m``, in metres along the gradient axes."""
-    start = int(table.sample_offset[index])
-    k = table.k[:, start : start + int(table.num_samples[index])].astype(np.float64)
-    samples = np.exp(-2j * np.pi * (np.asarray(position_m) @ k))
+    samples = np.exp(-2j * np.pi * (np.asarray(position_m) @ table.readout_k(index)))
     return np.broadcast_to(samples, (CHANNELS, samples.size)).astype(np.complex64)
 
 
-def stream(port, series, *, config="", data=flat, counters=None):
+def stream(port, series, *, config="", data=flat, counters=None, exam=None):
     """Play one series' readouts as the scanner client does; return what came back.
 
     ``counters`` numbers the acquisitions' ``scan_counter``; unnumbered by default.
+    ``exam`` is the header's ``ExamID``; none by default.
     """
     stream = socket.create_connection(("127.0.0.1", port), timeout=DEADLINE)
     connection = Connection(stream)
     stream.settimeout(DEADLINE)
     connection.send_config(config)
-    connection.send_header(header_xml(series))
+    connection.send_header(header_xml(series, exam))
     for index in range(len(series.table)):
         acquisition = ismrmrd.Acquisition.from_array(data(series.table, index))
         if counters is not None:
@@ -390,3 +398,64 @@ def test_the_proxy_listens_on_the_loopback_interface_unless_told_otherwise(tmp_p
         assert proxy._server.getsockname() == ("127.0.0.1", port)
     finally:
         proxy.close()
+
+
+def test_the_series_of_one_exam_share_its_exam_cache(start_proxy, bucket):
+    _, series = bucket
+    port = start_proxy(slots=1).port
+    counts = [
+        [
+            int(np.abs(image.data).max())
+            for image in images(stream(port, series["raw"], config="exam", exam=exam))
+        ]
+        for exam in ("E1", "E1", "E2", "E1")
+    ]
+    assert counts == [[1], [2], [1], [1]]
+
+
+def test_a_closed_proxy_leaves_no_exam_directory(tmp_path):
+    proxy = ReconProxy(tmp_path, tmp_path, slots=1, spares=1)
+    root = proxy._exam_root
+    assert root.is_dir()
+    proxy.close()
+    assert not root.exists()
+
+
+def test_a_reconstruction_may_start_processes_of_its_own(start_proxy, bucket):
+    _, series = bucket
+    received = stream(start_proxy(slots=1).port, series["raw"], config="children")
+    assert [np.abs(image.data).max() for image in images(received)] == [1.0]
+
+
+@pytest.mark.parametrize(("listed", "read"), [(0, [0, 0]), (2, [1, 2])])
+def test_a_series_reads_the_gpu_its_slot_holds(
+    start_proxy, bucket, monkeypatch, listed, read
+):
+    monkeypatch.delenv("CUDA_VISIBLE_DEVICES", raising=False)
+    monkeypatch.setattr(concurrency, "_listed_gpus", lambda: listed)
+    _, series = bucket
+    port = start_proxy(slots=2).port
+    values = [
+        int(np.abs(image.data).max())
+        for _ in range(2)
+        for image in images(stream(port, series["raw"], config="device"))
+    ]
+    assert values == read
+
+
+def test_the_least_recently_read_revision_is_read_again_when_next_named(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(_revisions, "_KEPT", 2)
+    store = RevisionStore(tmp_path)
+    directories = []
+    for number in range(3):
+        directory = tmp_path / "bucket" / "session" / "rev" / str(number)
+        directory.mkdir(parents=True)
+        shutil.copy(FIXTURES / "gre_2d_3sl.seq", directory / "sequence.seq")
+        directories.append(directory)
+    first, second = store.read(directories[0]), store.read(directories[1])
+    assert store.read(directories[0]) is first
+    store.read(directories[2])
+    assert store.read(directories[0]) is first
+    assert store.read(directories[1]) is not second

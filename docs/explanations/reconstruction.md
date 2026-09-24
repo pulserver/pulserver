@@ -38,6 +38,34 @@ and the first-and-last flags (`FIRST_IN_SLICE`, `LAST_IN_SLICE` and the
 others), derived from the counters. A reconstruction plugin selects the data a
 reconstruction runs on by these flags.
 
+## Trajectory
+
+The k-space location of each sample is the integral of the sequence's
+gradients, with block rotations applied, in 1/m. The table does not hold it for
+the whole scan: it is integrated over ranges of blocks, each beginning at an
+excitation. An excitation resets k to zero at the pulse centre, so the samples
+that follow it do not depend on the gradients played before it, and a range
+integrated on its own gives the k-space locations of the scan integrated from
+its first block. A refocusing pulse reverses k rather than resetting it and
+does not begin a range, nor does an excitation in a block that also holds a
+readout.
+
+An acquisition carries as its trajectory every axis its encoding space varies
+along, up to the last, whether or not its own k moves along it: the line of a
+PROPELLER blade that is played unrotated keeps its phase encoding in ky. The
+partitions of a stack of spokes or spirals are Cartesian along z and placed by
+their `kspace_encode_step_2` counter, so their kz is not part of the
+trajectory. A reconstruction takes the trajectory in grid units, k times the
+reconstructed field of view, through
+{meth}`~pulserver.recon.ReconBuffer.grid_trajectory`.
+
+Tabulating a revision integrates every range once, for the echo sample of each
+readout and the k-space axes its trajectory spans, which decide the header's
+trajectory type. An acquisition's trajectory is integrated again when it is
+enriched, from the range holding it, and the table keeps the ranges it
+integrated last. The k-space locations the proxy holds therefore do not grow
+with the length of the scan.
+
 ## Workers
 
 Each series is reconstructed in its own worker process, with the reconstruction
@@ -47,8 +75,19 @@ and exits, which releases the host and GPU memory the reconstruction allocated.
 Importing a reconstruction engine takes seconds, so the proxy keeps spare
 worker processes that have already imported it.
 
+The series of one exam share a directory on the reconstruction computer. What
+a series stores in its exam cache is written there, and a later series of the
+exam reads it back, such as a coil calibration it need not compute again. The
+exam is the one the header names; the directory is deleted once a header names
+another exam and no series of the first is still reconstructed.
+
 The number of series reconstructed concurrently is bounded by a number of
-slots, derived from the available memory unless it is specified. A series that
+slots, derived from the available memory unless it is specified. On a host with
+GPUs, which the proxy finds from `CUDA_VISIBLE_DEVICES` or `nvidia-smi` without
+importing a GPU library, each slot holds one of them, one series per GPU unless
+more are allowed, and the reconstruction finds its GPU in `context.device`. A
+worker is an ordinary process, so a reconstruction may start processes of its
+own. A series that
 arrives when every slot is occupied is written to disk, enriched, as it
 arrives, and replayed to a worker once a slot is released. The client remains
 connected meanwhile, and the images are returned through its connection.

@@ -20,8 +20,9 @@ from typing import Any
 import ismrmrd
 
 from ..recon._runtime import constants
-from ..recon._runtime.concurrency import compute_max_concurrent
+from ..recon._runtime.concurrency import Slot, Slots, slot_devices
 from ..recon._runtime.connection import Connection
+from ..recon._runtime.exam import ExamCacheManager
 from ..recon._runtime.readers import deserialize_config, read_text
 from ._enrich import enrich_acquisition, enrich_header
 from ._queue import QueueFile
@@ -50,9 +51,12 @@ class ReconProxy:
     received. The reconstruction plugin is the revision's, falling back to
     the name in the client's config text.
 
-    A series holds a slot for as long as it runs. Its worker's images, DICOM
-    and text go back to the client as they arrive, the client's close closes
-    the worker, and the worker's close closes the client.
+    A series holds a slot for as long as it runs. On a host with GPUs, found
+    through ``CUDA_VISIBLE_DEVICES`` or ``nvidia-smi``, each slot holds one,
+    ``gpu_slots`` slots per GPU, and the reconstruction reads it as
+    ``context.device``. Its worker's images, DICOM and text go back to the
+    client as they arrive, the client's close closes the worker, and the
+    worker's close closes the client.
 
     A series that finds every slot busy is queued instead: its enriched stream
     is written to ``bucket/<session>/queue/<id>.h5`` while it arrives, its
@@ -62,6 +66,11 @@ class ReconProxy:
     Once the client's stream ends, the proxy waits for the worker to close,
     however long the reconstruction takes, unless ``recon_timeout`` caps it.
 
+    The series of one exam share a directory under the system's temporary
+    directory, through which a reconstruction reads what an earlier series of
+    the exam stored in its :class:`~pulserver.recon.ExamCache`. It is deleted
+    once a header names another exam and no series of the exam still runs.
+
     Parameters
     ----------
     base
@@ -69,7 +78,10 @@ class ReconProxy:
     plugins
         Directory of reconstruction plugin files, ``<plugin>.py``.
     slots
-        Series reconstructed at once; the memory-derived limit when ``None``.
+        Series reconstructed at once; derived from memory and the GPUs when
+        ``None``.
+    gpu_slots
+        Series reconstructed at once on each GPU, when ``slots`` is ``None``.
     spares
         Warm worker processes waiting for a series.
     recon_timeout
@@ -80,6 +92,8 @@ class ReconProxy:
     ----------
     workers : WorkerPool
         The spares assignments are taken from.
+    exams : ExamCacheManager
+        The current exam and its directory.
     """
 
     def __init__(
@@ -88,6 +102,7 @@ class ReconProxy:
         plugins: Path | str,
         *,
         slots: int | None = None,
+        gpu_slots: int = 1,
         spares: int = 1,
         recon_timeout: float | None = None,
     ) -> None:
@@ -95,7 +110,9 @@ class ReconProxy:
         self.plugins = Path(plugins)
         self.workers = WorkerPool(spares=spares)
         self.recon_timeout = recon_timeout
-        self._slots = threading.BoundedSemaphore(compute_max_concurrent(override=slots))
+        self._exam_root = Path(tempfile.mkdtemp(prefix="pulserver-exams-"))
+        self.exams = ExamCacheManager(directory=self._exam_root)
+        self._slots = Slots(slot_devices(slots, gpu_slots))
         self._server: socket.socket | None = None
         self._closing = threading.Event()
         self._stopping = False
@@ -163,6 +180,8 @@ class ReconProxy:
         for thread in self._threads:
             thread.join(timeout=_WORKER_TIMEOUT)
         self.workers.close()
+        self.exams.close()
+        shutil.rmtree(self._exam_root, ignore_errors=True)
 
     # %% one client connection
 
@@ -194,17 +213,19 @@ class ReconProxy:
             plugin.stem,
             len(revision.table),
         )
-        if self._slots.acquire(blocking=False):
+        slot = self._slots.take(wait=False)
+        if slot is not None:
             try:
                 self._run(
                     client,
                     config,
                     header,
                     plugin,
+                    slot,
                     lambda worker: _forward(client, worker, revision),
                 )
             finally:
-                self._slots.release()
+                self._slots.release(slot)
             return
         self._queue(client, config, header, revision, plugin)
 
@@ -225,17 +246,18 @@ class ReconProxy:
         _log.info("queued %s on %s", queued.path.name, revision.directory)
         try:
             others = _record(client, header, revision, queued)
-            self._slots.acquire()
+            slot = self._slots.take(wait=True)
             try:
                 self._run(
                     client,
                     config,
                     header,
                     plugin,
+                    slot,
                     lambda worker: _replay(queued, others, worker),
                 )
             finally:
-                self._slots.release()
+                self._slots.release(slot)
         finally:
             queued.unlink()
 
@@ -245,41 +267,43 @@ class ReconProxy:
         config: str,
         header: Any,
         plugin: Path,
+        slot: Slot,
         feed: Callable[[Connection], None],
     ) -> None:
         """Give a worker the config, the header and whatever ``feed`` sends it."""
-        channel = _WorkerChannel(self.workers, plugin)
-        with channel as worker:
-            worker.send_config(config)
-            worker.send_header(header)
-            relay = threading.Thread(
-                target=_relay, args=(worker, client), daemon=True, name="relay"
-            )
-            relay.start()
-            try:
-                feed(worker)
-            except BaseException:
-                # A series that cannot be fed whole is not reconstructed.
-                channel.terminate()
-                relay.join()
-                raise
-            worker.send_close()
-            relay.join(timeout=self.recon_timeout)
-            if relay.is_alive():
-                _log.warning(
-                    "%s exceeded %s s; terminating it",
-                    plugin.stem,
-                    self.recon_timeout,
+        with self.exams.lease(header) as exam:
+            channel = _WorkerChannel(self.workers, plugin, exam.directory, slot.device)
+            with channel as worker:
+                worker.send_config(config)
+                worker.send_header(header)
+                relay = threading.Thread(
+                    target=_relay, args=(worker, client), daemon=True, name="relay"
                 )
-                # The relay ends with the worker, so the notice cannot
-                # interleave with an image it is still sending.
-                channel.terminate()
-                relay.join()
-                with contextlib.suppress(Exception):
-                    client.send(
-                        f"pulserver: {plugin.stem} did not finish within "
-                        f"{self.recon_timeout:g} s of the end of the series"
+                relay.start()
+                try:
+                    feed(worker)
+                except BaseException:
+                    # A series that cannot be fed whole is not reconstructed.
+                    channel.terminate()
+                    relay.join()
+                    raise
+                worker.send_close()
+                relay.join(timeout=self.recon_timeout)
+                if relay.is_alive():
+                    _log.warning(
+                        "%s exceeded %s s; terminating it",
+                        plugin.stem,
+                        self.recon_timeout,
                     )
+                    # The relay ends with the worker, so the notice cannot
+                    # interleave with an image it is still sending.
+                    channel.terminate()
+                    relay.join()
+                    with contextlib.suppress(Exception):
+                        client.send(
+                            f"pulserver: {plugin.stem} did not finish within "
+                            f"{self.recon_timeout:g} s of the end of the series"
+                        )
 
     def _plugin_path(self, plugin: str) -> Path:
         if not plugin:
@@ -297,10 +321,18 @@ class ReconProxy:
 class _WorkerChannel:
     """A worker's end of one series: its Unix socket, its process, its stream."""
 
-    def __init__(self, pool: WorkerPool, plugin: Path) -> None:
+    def __init__(
+        self,
+        pool: WorkerPool,
+        plugin: Path,
+        exam_directory: Path | None,
+        device: str | None,
+    ) -> None:
         self._directory = Path(tempfile.mkdtemp(prefix="pulserver-series-"))
         self._pool = pool
         self._plugin = plugin
+        self._exam_directory = exam_directory
+        self._device = device
         self._process = None
         self.connection: Connection | None = None
 
@@ -311,7 +343,9 @@ class _WorkerChannel:
             listener.bind(str(path))
             listener.listen(1)
             listener.settimeout(_CONNECT_TIMEOUT)
-            process = self._process = self._pool.assign(self._plugin, path)
+            process = self._process = self._pool.assign(
+                self._plugin, path, self._exam_directory, self._device
+            )
             try:
                 stream, _ = listener.accept()
             except TimeoutError:

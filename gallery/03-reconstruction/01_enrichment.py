@@ -45,8 +45,10 @@ PAGE_WIDTH = 8.6  # inches, the width of the documentation column
 # The sequence is written as a generated revision holds it, in the binary
 # Pulseq form and in the logical frame, and tabulated with
 # :class:`~pulserver.vre.SequenceTable`: one row per readout in play order,
-# with its encoding counters, flags, dwell time and the k-space location of
-# every sample in 1/m.
+# with its encoding counters, flags and dwell time.
+# :meth:`~pulserver.vre.SequenceTable.readout_k` returns the k-space location
+# of each sample of a readout, in 1/m, integrated when it is asked for. The
+# simulation below joins them over the scan.
 
 import tempfile
 from pathlib import Path
@@ -66,6 +68,9 @@ work = Path(tempfile.mkdtemp())
 app = Gre2DApp(system, n_x=64, n_y=64, te=None, tr=None, n_dummy=0)
 files = app.write(work / "sequence.seq", offline=False)
 table = SequenceTable.read(files[0])
+
+k = np.hstack([table.readout_k(row) for row in range(len(table))])
+first_sample = np.cumsum(np.r_[0, table.num_samples[:-1]])
 
 print(f"{len(table)} readouts of {table.num_samples[0]} samples")
 print("LIN of the first readouts:", table.counters["LIN"][:6])
@@ -131,7 +136,7 @@ def wrapped(phase):
     return np.angle(np.exp(1j * phase))
 
 
-shift_phase = 2 * np.pi * (offset @ table.k)
+shift_phase = 2 * np.pi * (offset @ k)
 deviation = np.abs(wrapped(receive_phase(moved) - shift_phase)).max()
 print(f"largest |receive phase - 2 pi d.k| over the scan: {deviation:.1e} rad")
 
@@ -139,7 +144,7 @@ print(f"largest |receive phase - 2 pi d.k| over the scan: {deviation:.1e} rad")
 fig, ax = plt.subplots(figsize=(PAGE_WIDTH * 0.7, 3.0), layout="constrained")
 n_x = int(table.num_samples[0])
 for row in (0, 16, 32):
-    span = slice(int(table.sample_offset[row]), int(table.sample_offset[row]) + n_x)
+    span = slice(int(first_sample[row]), int(first_sample[row]) + n_x)
     lines = ax.plot(np.unwrap(receive_phase(moved)[span]) / (2 * np.pi), lw=1.5)
     ax.plot(
         np.unwrap(shift_phase[span]) / (2 * np.pi)
@@ -199,7 +204,7 @@ def phantom_signal(k, shift):
 
 
 def received(sequence):
-    samples = phantom_signal(table.k, offset) * np.exp(1j * receive_phase(sequence))
+    samples = phantom_signal(k, offset) * np.exp(1j * receive_phase(sequence))
     return samples.astype(np.complex64)
 
 
@@ -220,7 +225,7 @@ def vendor_stream(samples):
     )
     acquisitions = []
     for row in range(len(table)):
-        start, count = int(table.sample_offset[row]), int(table.num_samples[row])
+        start, count = int(first_sample[row]), int(table.num_samples[row])
         data = samples[start : start + count][np.newaxis]
         acquisitions.append(ismrmrd.Acquisition.from_array(data))
     return header, acquisitions

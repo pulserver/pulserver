@@ -267,6 +267,44 @@ class ReconBuffer:
             return None
         return (np.arange(self.readout) - self.center_sample) * self.sample_time
 
+    def grid_trajectory(self) -> Any:
+        """Return the trajectory in grid units, laid out as ``bartorch.linop.NUFFT`` takes it.
+
+        ``(*placement, readout, 3)``: the placement axes of :attr:`mask`, the
+        samples, then kx, ky and kz, each k in 1/m, as the proxy's enrichment
+        writes it, times the reconstructed field of view along its axis, so
+        that an ``N``-point image matrix spans ``[-N/2, N/2)``. Axes the
+        acquisitions do not carry are 0. The phase-encoding axis is the last
+        placement axis, so this is ``(*encoding, shots, samples, 3)`` against
+        :attr:`kspace` as ``(coils, *encoding, shots, samples)``.
+
+        Returns
+        -------
+        ndarray or None
+            ``float32``; ``None`` when no acquisition carried a trajectory.
+
+        Raises
+        ------
+        ValueError
+            If the header states no field of view along an axis the trajectory
+            carries.
+        """
+        if self.trajectory is None:
+            return None
+        dimensions = self.trajectory.shape[0]
+        fov = self.space.recon_fov or ()
+        if len(fov) < dimensions:
+            raise ValueError(
+                f"a trajectory of {dimensions} axes needs the field of view along "
+                f"each, and encoding space {self.space.index} states "
+                f"{len(fov)}"
+            )
+        grid = np.zeros((*self.trajectory.shape[1:], 3), dtype=np.float32)
+        grid[..., :dimensions] = (
+            np.moveaxis(self.trajectory, 0, -1) * fov[::-1][:dimensions]
+        )
+        return grid
+
     def points(self, **where: int) -> Any:
         """Return the trajectory at one position, indexed as :meth:`select` indexes.
 
