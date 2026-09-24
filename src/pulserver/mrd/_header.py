@@ -28,6 +28,20 @@ def _is_cartesian(encoding: Any) -> bool:
     return name.rsplit(".", 1)[-1].upper() == "CARTESIAN"
 
 
+def _fov(encoding: Any, dimensions: int) -> tuple[float, ...] | None:
+    """Return the reconstructed field of view in metres, ``(z, y, x)`` cut to ``dimensions``.
+
+    ``None`` unless the space states a positive extent along each of them.
+    """
+    space = getattr(encoding, "reconSpace", None) or encoding.encodedSpace
+    fov = getattr(space, "fieldOfView_mm", None)
+    if fov is None:
+        return None
+    extents = tuple(1e-3 * float(getattr(fov, axis, 0) or 0) for axis in "zyx")
+    extents = extents[3 - dimensions :]
+    return extents if all(extent > 0 for extent in extents) else None
+
+
 def _limit(limits: Any, name: str) -> int:
     """Extent of one encoding limit, or 0 when the header does not state it."""
     entry = getattr(limits, name, None) if limits is not None else None
@@ -57,6 +71,9 @@ class EncodingSpace:
         Image matrix, ``(n_y, n_x)`` for a plane or ``(n_z, n_y, n_x)`` for a
         volume. Independent of the buffer axes: a stack of spokes has no
         partition axis and a three-dimensional matrix.
+    recon_fov
+        Field of view of the image in metres, ordered as ``recon_matrix``;
+        ``None`` when the header states none.
 
     Examples
     --------
@@ -77,6 +94,7 @@ class EncodingSpace:
     loops: tuple[str, ...]
     loop_sizes: tuple[int, ...]
     recon_matrix: tuple[int, ...]
+    recon_fov: tuple[float, ...] | None = None
 
     @classmethod
     def from_header(cls, header: Any, index: int = 0) -> EncodingSpace:
@@ -86,8 +104,8 @@ class EncodingSpace:
         and the ``kspace_encoding_step_1`` limit, since an undersampled grid still
         needs every line. For a non-Cartesian space it is the limit, which counts
         views, or the encoded matrix when no limit is stated. ``partitions`` is
-        always the larger of the two. ``recon_matrix`` falls back to the encoded
-        matrix when the header has no ``reconSpace``.
+        always the larger of the two. ``recon_matrix`` and ``recon_fov`` fall
+        back to the encoded space when the header has no ``reconSpace``.
 
         Raises
         ------
@@ -132,6 +150,7 @@ class EncodingSpace:
             loops=tuple(loops),
             loop_sizes=tuple(sizes),
             recon_matrix=recon_matrix,
+            recon_fov=_fov(encoding, len(recon_matrix)),
         )
 
     @classmethod

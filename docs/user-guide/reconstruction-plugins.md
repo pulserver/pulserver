@@ -57,6 +57,30 @@ of its own, so a stored value reaches the next series pickled, through the
 exam's directory: it comes back as a copy, without its `cleanup`, and a value
 that cannot be pickled stays with its series.
 
+## Non-Cartesian data
+
+A buffer holds the trajectory of its samples beside the k-space, as the
+acquisitions carry it: k along the sequence's x, y and z axes, in 1/m.
+{meth}`~pulserver.recon.ReconBuffer.grid_trajectory` returns it in the grid
+units and layout `bartorch.linop.NUFFT` takes, with the coils of the buffer's
+`kspace` as a batch axis of the image:
+
+```python
+import torch
+from bartorch.linop import NUFFT
+
+buffer = self.buffers[0]
+nufft = NUFFT(
+    torch.from_numpy(buffer.grid_trajectory()),
+    image_shape=(buffer.coils, *buffer.image_shape),
+)
+coil_images = nufft.adjoint(torch.from_numpy(buffer.kspace))
+```
+
+The partitions of a stack of spokes or spirals are placed by their
+`kspace_encode_step_2` counter and carry no kz: the partition axis is
+transformed with an FFT before the in-plane NUFFT.
+
 ## Running a plugin offline
 
 The same hooks run outside the proxy.

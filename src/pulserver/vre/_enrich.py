@@ -14,6 +14,7 @@ __all__ = [
     "enrich_header",
 ]
 
+import dataclasses
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -87,9 +88,12 @@ class TableSpace:
     trajectory: bool
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class SequenceTable:
     """The readouts of a sequence chain as MRD describes them, in play order.
+
+    k-space is not tabulated: :meth:`readout_k` integrates a readout's when
+    asked, through the :class:`~pulserver.mrd.ReadoutTable` of its chain file.
 
     Attributes
     ----------
@@ -102,17 +106,16 @@ class SequenceTable:
         ``LAST_IN_MEASUREMENT`` on the final readout of the chain. A boundary
         is read within its encoding space and the other image-selecting
         counters, so a slice closes once per echo.
-    center_sample, trajectory_dimensions, num_samples : ndarray
+    center_sample, num_samples : ndarray
         As :class:`~pulserver.mrd.ReadoutTable` states them, over the chain.
+    trajectory_dimensions : ndarray
+        ``int8`` axes of k a readout carries as its trajectory: every axis its
+        encoding space varies along, up to the last, including those constant
+        across the readout; 0 for a readout whose k does not move.
     sample_time_us : ndarray
         ``float32`` dwell, in µs.
     encoding_space : ndarray
         ``int32`` index into :attr:`spaces`.
-    sample_offset : ndarray
-        ``int64`` column of each readout's first sample in :attr:`k`.
-    k : ndarray
-        ``float32``, ``(3, samples)``: absolute k of every sample, in 1/m,
-        with block rotations applied.
     spaces : tuple of TableSpace
         Numbered in chain order: each subsequence's primary space, then its
         navigator space when it has ``NAV`` readouts.
@@ -129,13 +132,21 @@ class SequenceTable:
     sample_time_us: np.ndarray
     encoding_space: np.ndarray
     num_samples: np.ndarray
-    sample_offset: np.ndarray
-    k: np.ndarray
     spaces: tuple[TableSpace, ...]
     sequence_parameters: dict[str, list[float]]
+    _files: tuple[ReadoutTable, ...] = dataclasses.field(repr=False)
+    _first_rows: np.ndarray = dataclasses.field(repr=False)
 
     def __len__(self) -> int:
         return int(self.num_samples.size)
+
+    def readout_k(self, index: int) -> np.ndarray:
+        """Return the k-space position of each sample of one readout, in 1/m.
+
+        ``(3, num_samples)``, absolute, with block rotations applied.
+        """
+        file = int(np.searchsorted(self._first_rows, index, side="right")) - 1
+        return self._files[file].readout_k(index - int(self._first_rows[file]))
 
     @classmethod
     def read(cls, path: Path | str) -> SequenceTable:
@@ -149,20 +160,19 @@ class SequenceTable:
             If the chain names a file it has already played.
         """
         parts: list[dict[str, Any]] = []
+        files: list[ReadoutTable] = []
         spaces: list[TableSpace] = []
         tr: list[float] = []
         te: list[float] = []
         ti: list[float] = []
         flip: list[float] = []
-        offset = 0
         for subsequence, (_, seq) in enumerate(read_chain(path)):
             readouts = ReadoutTable.from_sequence(seq)
             definitions = SequenceDefinitions.from_sequence(seq)
             part, part_spaces = _map_readouts(
                 readouts, definitions, subsequence, len(spaces)
             )
-            part["sample_offset"] = part["sample_offset"] + offset
-            offset += int(readouts.num_samples.sum())
+            files.append(readouts)
             parts.append(part)
             spaces.extend(part_spaces)
             tr.extend(definitions.tr)
@@ -176,6 +186,10 @@ class SequenceTable:
         flags = joined("flags", np.uint64)
         if flags.size:
             flags[-1] |= np.uint64(_F.LAST_IN_MEASUREMENT.value)
+        encoding_space = joined("encoding_space", np.int32)
+        moving = joined("trajectory_dimensions", np.int8)
+        widest = np.zeros(len(spaces), dtype=np.int8)
+        np.maximum.at(widest, encoding_space, moving)
 
         parameters: dict[str, list[float]] = {}
         if tr:
@@ -196,14 +210,14 @@ class SequenceTable:
             },
             flags=flags,
             center_sample=joined("center_sample", np.int32),
-            trajectory_dimensions=joined("trajectory_dimensions", np.int8),
+            trajectory_dimensions=np.where(moving > 0, widest[encoding_space], 0),
             sample_time_us=joined("sample_time_us", np.float32),
-            encoding_space=joined("encoding_space", np.int32),
+            encoding_space=encoding_space,
             num_samples=joined("num_samples", np.int32),
-            sample_offset=joined("sample_offset", np.int64),
-            k=np.concatenate([part["k"] for part in parts], axis=1).astype(np.float32),
             spaces=tuple(spaces),
             sequence_parameters=parameters,
+            _files=tuple(files),
+            _first_rows=np.cumsum([0] + [len(file) for file in files[:-1]]),
         )
 
 
@@ -302,11 +316,9 @@ def enrich_acquisition(acquisition: Any, table: SequenceTable, index: int) -> No
     acquisition.sample_time_us = float(table.sample_time_us[index])
     acquisition.encoding_space_ref = int(table.encoding_space[index])
 
-    start = int(table.sample_offset[index])
-    k = table.k[:, start : start + count]
-
     dimensions = int(table.trajectory_dimensions[index])
     if dimensions:
+        k = table.readout_k(index)
         data = np.array(acquisition.data)
         acquisition.resize(count, int(acquisition.active_channels), dimensions)
         acquisition.traj[:] = k[:dimensions].T
@@ -364,8 +376,6 @@ def _map_readouts(
         "sample_time_us": 1e6 * readouts.dwell,
         "encoding_space": first_space + local_space,
         "num_samples": readouts.num_samples,
-        "sample_offset": readouts.sample_offset,
-        "k": readouts.k,
     }
     return part, spaces
 

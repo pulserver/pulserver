@@ -2,6 +2,7 @@
 
 import json
 import os
+import shutil
 import socket
 import subprocess
 import sys
@@ -17,9 +18,10 @@ import pytest
 from _host import DAY, LIMITS, Daemon
 
 from pulserver.recon._runtime.connection import Connection
-from pulserver.vre import ReconProxy, SequenceTable
+from pulserver.vre import ReconProxy, RevisionStore, SequenceTable, _revisions
 
 RECON_PLUGINS = Path(__file__).parent / "recon_plugins"
+FIXTURES = Path(__file__).parent / "fixtures" / "sequences"
 MATRIX = {"nx": 32, "ny": 16, "TE": 5000}
 CHANNELS = 2
 # Long enough that a stall fails the run instead of hanging it.
@@ -112,9 +114,7 @@ def flat(table, index):
 
 def point(table, index, position_m):
     """k-space of a point object at ``position_m``, in metres along the gradient axes."""
-    start = int(table.sample_offset[index])
-    k = table.k[:, start : start + int(table.num_samples[index])].astype(np.float64)
-    samples = np.exp(-2j * np.pi * (np.asarray(position_m) @ k))
+    samples = np.exp(-2j * np.pi * (np.asarray(position_m) @ table.readout_k(index)))
     return np.broadcast_to(samples, (CHANNELS, samples.size)).astype(np.complex64)
 
 
@@ -418,3 +418,21 @@ def test_a_closed_proxy_leaves_no_exam_directory(tmp_path):
     assert root.is_dir()
     proxy.close()
     assert not root.exists()
+
+
+def test_the_least_recently_read_revision_is_read_again_when_next_named(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(_revisions, "_KEPT", 2)
+    store = RevisionStore(tmp_path)
+    directories = []
+    for number in range(3):
+        directory = tmp_path / "bucket" / "session" / "rev" / str(number)
+        directory.mkdir(parents=True)
+        shutil.copy(FIXTURES / "gre_2d_3sl.seq", directory / "sequence.seq")
+        directories.append(directory)
+    first, second = store.read(directories[0]), store.read(directories[1])
+    assert store.read(directories[0]) is first
+    store.read(directories[2])
+    assert store.read(directories[0]) is first
+    assert store.read(directories[1]) is not second
