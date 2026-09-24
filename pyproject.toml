@@ -48,6 +48,9 @@ doc = [
   "matplotlib>=3.8",
 ]
 
+[project.scripts]
+pulserver = "pulserver._cli:main"
+
 [project.urls]
 Homepage = "https://github.com/pulserver/pulserver"
 Documentation = "https://pulserver.github.io/pulserver/"

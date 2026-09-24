@@ -37,7 +37,7 @@ def _cached(path: str, mtime_ns: int) -> ScannerSequence:  # noqa: ARG001 -- par
     return load_plugin(Path(path))
 
 
-def _plugin(path: str) -> ScannerSequence:
+def plugin(path: str) -> ScannerSequence:
     """Return the plugin at ``path``, imported again when the file changed."""
     return _cached(path, Path(path).stat().st_mtime_ns)
 
@@ -195,7 +195,7 @@ def _band(text: str) -> safety.ForbiddenBand:
 
 
 def listing(path: str) -> dict[str, Parameter]:
-    return _plugin(path).listing()
+    return plugin(path).listing()
 
 
 def source(path: str) -> str:
@@ -208,7 +208,7 @@ def source(path: str) -> str:
     """
     digest = hashlib.sha256(Path(path).read_bytes())
     try:
-        module = inspect.getsourcefile(_plugin(path).app)
+        module = inspect.getsourcefile(plugin(path).app)
     except TypeError:
         module = None
     if module:
@@ -220,7 +220,7 @@ def source(path: str) -> str:
 def validate(
     path: str, limits: Mapping[str, Any], request: Mapping[str, Any]
 ) -> Validation:
-    return _plugin(path).validate(split_limits(limits)[0], request)
+    return plugin(path).validate(split_limits(limits)[0], request)
 
 
 def generate(
@@ -238,18 +238,18 @@ def generate(
     caller to discard.
     """
     system, options, checked = split_limits(limits)
-    plugin = _plugin(path)
-    validation, paths = plugin.generate(system, request, Path(directory))
+    scanner = plugin(path)
+    validation, paths = scanner.generate(system, request, Path(directory))
     if not paths:
-        return validation, paths, None, plugin.recon
+        return validation, paths, None, scanner.recon
     rotation = prescribed_rotation(validation.values)
     problems = ir.check(paths[0], system, rotation=rotation, limits=checked)
     if problems:
         refused = replace(validation, valid=False, info="; ".join(problems))
-        return refused, [], None, plugin.recon
+        return refused, [], None, scanner.recon
     offset = prescribed_offset(validation.values)
-    cache = _converted(paths[0], system, checked, offset, options)
-    return validation, paths, cache.name, plugin.recon
+    cache = converted(paths[0], system, checked, offset, options)
+    return validation, paths, cache.name, scanner.recon
 
 
 def chain(first: str) -> list[str]:
@@ -267,10 +267,10 @@ def convert(
     fov_offset: tuple[float, float, float] = (0.0, 0.0, 0.0),
 ) -> str:
     system, options, checked = split_limits(limits)
-    return _converted(seq_path, system, checked, fov_offset, options).name
+    return converted(seq_path, system, checked, fov_offset, options).name
 
 
-def _converted(
+def converted(
     seq_path: str,
     system: pp.Opts,
     checked: ir.CheckLimits,
