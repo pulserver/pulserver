@@ -210,10 +210,12 @@ class ScannerSequence:
     interpreter's parameter names: members of
     :class:`~pulserver.protocol.UIParam` or :class:`~pulserver.protocol.ConfigKey`,
     or user-entry keys. They are stored as plain strings. Entries a request
-    omits keep the application's defaults. Times travel as integer microseconds; other float
-    values are read and reported to six significant digits, the precision of a
-    float32 CV. Either way a reply stored in a CV and sent back resolves to
-    itself.
+    omits keep the application's defaults. An entry resolves to the value its
+    argument took in the design, as the application records it with
+    ``SequenceApp.resolve``, and otherwise keeps the requested value. Times
+    travel as integer microseconds; other float values are read and reported
+    to six significant digits, the precision of a float32 CV. Either way a
+    reply stored in a CV and sent back resolves to itself.
 
     Attributes
     ----------
@@ -275,32 +277,13 @@ class ScannerSequence:
             )
         return listing
 
-    def resolved(self, app: sequences.SequenceApp) -> Mapping[str, Any]:
-        """Return the value each bound argument took in a constructed application, in SI units.
-
-        By default, the application attribute named after the argument, where
-        one exists. Override when the application keeps a resolved value
-        elsewhere.
-        """
-        arguments = (getattr(entry, "argument", None) for entry in self.ui.values())
-        return {a: getattr(app, a) for a in arguments if a and hasattr(app, a)}
-
-    def duration(self, app: sequences.SequenceApp) -> float:
-        """Return the scan time in seconds.
-
-        The application's numeric ``duration`` attribute when it has one,
-        otherwise the length of the designed scan.
-        """
-        value = getattr(app, "duration", None)
-        if isinstance(value, int | float) and not isinstance(value, bool):
-            return float(value)
-        return float(app.design().duration()[0])
-
     def validate(self, system: pp.Opts, request: Mapping[str, Any]) -> Validation:
         """Resolve a request into the protocol the application will play.
 
-        A valid reply carries the resolved values; an invalid one carries the
-        request and the error the design raised.
+        A valid reply carries the resolved values, as the application's
+        ``resolved`` reports them, and its ``scan_time()``, which plays the
+        chain only when the application states no ``duration``. An invalid
+        one carries the request and the error the design raised.
 
         Raises
         ------
@@ -341,13 +324,14 @@ class ScannerSequence:
         values.update(request)
         try:
             app = self.app(system, **self._arguments(system, values))
+            scan_time = app.scan_time()
         except Exception as error:  # a design refuses a protocol by raising
             return None, Validation(
                 False, None, str(error) or type(error).__name__, values
             )
 
         resolved = dict(values)
-        readback = self.resolved(app)
+        readback = app.resolved
         for name, entry in self.ui.items():
             value = readback.get(getattr(entry, "argument", None))
             if value is None:
@@ -360,7 +344,7 @@ class ScannerSequence:
                 resolved[name] = int(value)
             else:
                 resolved[name] = value
-        return app, Validation(True, self.duration(app), "", resolved)
+        return app, Validation(True, scan_time, "", resolved)
 
     def _arguments(self, system: pp.Opts, values: Mapping[str, Any]) -> dict[str, Any]:
         arguments = {}
