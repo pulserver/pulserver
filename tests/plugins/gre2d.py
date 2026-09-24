@@ -36,10 +36,3 @@ class Gre2D(ScannerSequence):
         UIParam.NX: IntParam("n_x", range_min=32, range_max=512, range_incr=2),
         UIParam.NY: IntParam("n_y", range_min=32, range_max=512, range_incr=2),
     }
-
-    def resolved(self, app):
-        return {
-            "te": app.ro.echo_time,
-            "tr": app.repetition_time,
-            "readout_bandwidth_hz": app.ro.bandwidth_hz,
-        }

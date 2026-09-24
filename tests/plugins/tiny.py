@@ -20,6 +20,7 @@ class TinyApp(sequences.SequenceApp):
             )
         self.te = self.SHORTEST_TE if te is None else te
         self.n_repetitions = n_repetitions
+        self.resolve(te=self.te)
 
     def loop(self) -> None:
         for _ in range(self.n_repetitions):

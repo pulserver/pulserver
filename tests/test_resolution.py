@@ -3,8 +3,9 @@ from pathlib import Path
 import numpy as np
 import pypulseqpp as pp
 import pytest
+from pypulseqpp import sequences
 
-from pulserver.design import FloatParam, ScannerSequence, load_plugin
+from pulserver.design import FloatParam, ScannerSequence, TimeParam, load_plugin
 from pulserver.protocol import (
     PRESCRIPTION,
     FloatKey,
@@ -12,6 +13,7 @@ from pulserver.protocol import (
     Kind,
     TEPreset,
     TRPreset,
+    UIParam,
     prescribed_offset,
 )
 
@@ -27,6 +29,62 @@ PRESCRIPTIONS = [
     ("gre2d", {"TE": 5000, "TR": 30000, "bandwidth": 130e3}),
     ("gre2d", {"fov": 180.0, "nx": 96}),
 ]
+
+
+class StatedApp(sequences.SequenceApp):
+    """Records its echo time under another name and states its scan time."""
+
+    MAX_GRAD = 40.0
+    MAX_SLEW = 150.0
+
+    def init_sequence(self, te: float | None = None, tr: float = 10e-3) -> None:
+        self.echo = 2.5e-3 if te is None else te
+        self.duration = 4 * tr
+        self.resolve(te=self.echo)
+
+    def loop(self) -> None:
+        raise AssertionError("the scan was played")
+
+    def kernel(self) -> None:
+        pass
+
+
+class PrescannedApp(sequences.SequenceApp):
+    """States no scan time: a 1 ms prescan, then three 10 ms repetitions."""
+
+    MAX_GRAD = 40.0
+    MAX_SLEW = 150.0
+
+    def init_sequence(self, tr: float = 10e-3) -> None:
+        self.tr = tr
+
+    def prescans(self):
+        return {"calibration": self.calibration}
+
+    def calibration(self) -> None:
+        if self.tr > 1.0:
+            raise ValueError("the calibration cannot play a TR over 1 s")
+        self.seq.add_block(pp.make_delay(1e-3))
+
+    def loop(self) -> None:
+        for _ in range(3):
+            self.kernel()
+
+    def kernel(self) -> None:
+        self.seq.add_block(pp.make_delay(self.tr))
+
+
+class Stated(ScannerSequence):
+    app = StatedApp
+    ui = {
+        UIParam.TE: TimeParam("te", range_max=80000, presets={TEPreset.MINIMUM: None}),
+        UIParam.TR: TimeParam("tr", range_max=5_000_000),
+    }
+
+
+class Prescanned(ScannerSequence):
+    app = PrescannedApp
+    ui = {UIParam.TR: TimeParam("tr", range_max=5_000_000)}
 
 
 @pytest.fixture(scope="module")
@@ -56,6 +114,31 @@ def test_a_minimum_request_resolves_to_the_designed_value(tiny, gre2d):
     assert reply.valid, reply.info
     assert isinstance(reply.values["TE"], int)
     assert 0 < reply.values["TE"] < 8000
+
+
+def test_an_entry_resolves_to_the_value_the_application_records():
+    values = Stated().validate(SYSTEM, {"TE": TEPreset.MINIMUM}).values
+    assert (values["TE"], values["TR"]) == (2500, 10000)
+
+
+def test_a_stated_scan_time_is_reported_without_playing_the_scan():
+    reply = Stated().validate(SYSTEM, {"TR": 20000})
+    assert reply.valid, reply.info
+    assert reply.duration == pytest.approx(80e-3)
+
+
+def test_an_unstated_scan_time_is_that_of_the_chain_with_its_prescans():
+    reply = Prescanned().validate(SYSTEM, {"TR": 10000})
+    assert reply.valid, reply.info
+    assert reply.duration == pytest.approx(1e-3 + 3 * 10e-3)
+
+
+def test_a_design_refused_while_it_is_timed_is_invalid():
+    reply = Prescanned().validate(SYSTEM, {"TR": 2_000_000})
+    assert (reply.valid, reply.info) == (
+        False,
+        "the calibration cannot play a TR over 1 s",
+    )
 
 
 def test_an_infeasible_protocol_is_invalid_with_the_design_error_as_info(tiny, gre2d):

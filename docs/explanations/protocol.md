@@ -18,10 +18,12 @@ application's `init_sequence`. Resolving a request proceeds in three steps.
    is always a complete prescription.
 2. The UI values are converted to the application's arguments, and the
    application is constructed under the scanner limits. Construction designs
-   the sequence: it solves the gradient waveforms and timing against the
-   system limits and raises an error for a prescription it cannot realize.
-3. The value each argument took in the constructed application is read back
-   and converted to UI units ({meth}`~pulserver.design.ScannerSequence.resolved`).
+   the events and their timing against the system limits, without playing the
+   scan, and raises an error for a prescription it cannot realize.
+3. The value each argument took in the design, as the application records it
+   ({attr}`~pypulseqpp.sequences.SequenceApp.resolved`), is converted to UI
+   units. An argument the application does not record keeps its requested
+   value.
 
 The field-of-view offset is not a design argument. Every listing ends with the
 entries `fov_offset_x`, `fov_offset_y` and `fov_offset_z`, in mm and not
@@ -33,7 +35,7 @@ scanner sequence cannot bind them to an argument.
 A request the design refuses is invalid. The reply carries the request
 unchanged and the error message the application raised, which the interpreter
 shows to the operator. A valid reply carries the resolved values and the scan
-time in seconds.
+time in seconds ({meth}`~pypulseqpp.sequences.SequenceApp.scan_time`).
 
 ## Presets
 
