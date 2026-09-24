@@ -88,6 +88,41 @@ Plugin code runs in spawned worker processes, so a plugin that crashes fails
 the command it was running and the daemon replaces the pool. A plugin file is
 imported again when its modification time changes.
 
+## Design command
+
+```bash
+pulserver design list     --plugins DIR --plugin NAME
+pulserver design validate --plugins DIR --plugin NAME --limits FILE < VALUES
+pulserver design generate --plugins DIR --plugin NAME --limits FILE --store DIR < VALUES
+pulserver design import   --limits FILE --store DIR < IMPORT
+pulserver design prune    --store DIR [--max-age-days D] [--max-bytes B]
+```
+
+Each call is answered from its arguments and standard input alone, and writes
+the reply of the daemon command of the same purpose to standard output: `list`
+replies as `LIST_PROTOCOL`, `validate` as `VALIDATE`, and `generate` and
+`import` reply `GENERATED <id>` and `IMPORTED <id>`, where `<id>` names the
+design in the store. A call that fails replies `ERROR <message>` and exits with
+status 1. The limits file holds the `[Limits]` block `OPEN` takes: the scanner
+limits, the conversion options and the check limits above. A plugin that ends
+its process ends the call without a reply and with a nonzero exit status.
+
+The store holds one directory per design, `<store>/<id>/`: the Pulseq files of
+the chain, the IR cache, the resolved protocol and `manifest.json`, which
+records the plugin, the reconstruction plugin, the limits, the package versions
+and the SHA-256 of every file. The identifier is the first 18 hexadecimal
+digits of the SHA-256 of what the design depends on: the plugin and its source,
+the package versions, the limits and the resolved protocol, prescription
+included. A request that resolves to a stored design returns its identifier
+without designing again, and the identifier is three 24-bit integers, each held
+exactly by a float32 CV. A design is written into a stage and renamed into
+place, so it is read whole or not at all. `prune` removes designs least
+recently used first: those unused for longer than `--max-age-days`, then others
+until the store holds at most `--max-bytes`. Nothing is removed otherwise.
+
+`list` depends on the plugin file and the installed packages only, so its reply
+can be written when they are installed and read without a call.
+
 ## Reconstruction proxy
 
 ```bash

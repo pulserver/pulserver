@@ -37,6 +37,9 @@ from.
    SessionStore
    Session
    revision_hash
+   DesignStore
+   design_identity
+   design_id
 
 .. currentmodule:: pulserver.ir
 

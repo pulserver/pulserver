@@ -16,7 +16,9 @@
 
    ~ScannerSequence.generate
    ~ScannerSequence.listing
+   ~ScannerSequence.resolve
    ~ScannerSequence.validate
+   ~ScannerSequence.write
 
 
 
