@@ -28,7 +28,13 @@ def main(argv: list[str] | None = None) -> None:
         "--slots",
         type=int,
         default=None,
-        help="series reconstructed at once; memory decides when unset",
+        help="series reconstructed at once; memory and the GPUs decide when unset",
+    )
+    parser.add_argument(
+        "--gpu-slots",
+        type=int,
+        default=1,
+        help="series reconstructed at once on each GPU, when --slots is unset",
     )
     parser.add_argument(
         "--spares", type=int, default=1, help="warm worker processes kept waiting"
@@ -48,6 +54,7 @@ def main(argv: list[str] | None = None) -> None:
         args.base,
         args.plugins,
         slots=args.slots,
+        gpu_slots=args.gpu_slots,
         spares=args.spares,
         recon_timeout=args.recon_timeout,
     )

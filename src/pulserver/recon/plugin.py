@@ -381,6 +381,9 @@ class ReconContext:
         Artifact cache shared by the series of the exam.
     config
         Configuration payload the client sent with the stream.
+    device
+        The GPU the proxy gave this series, as a torch device such as
+        ``"cuda:0"``; ``None`` on the host, and offline.
 
     Examples
     --------
@@ -399,6 +402,7 @@ class ReconContext:
     header: Any
     exam: ExamCache
     config: Any = None
+    device: str | None = None
 
     @classmethod
     def offline(

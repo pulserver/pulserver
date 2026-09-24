@@ -82,7 +82,12 @@ exam is the one the header names; the directory is deleted once a header names
 another exam and no series of the first is still reconstructed.
 
 The number of series reconstructed concurrently is bounded by a number of
-slots, derived from the available memory unless it is specified. A series that
+slots, derived from the available memory unless it is specified. On a host with
+GPUs, which the proxy finds from `CUDA_VISIBLE_DEVICES` or `nvidia-smi` without
+importing a GPU library, each slot holds one of them, one series per GPU unless
+more are allowed, and the reconstruction finds its GPU in `context.device`. A
+worker is an ordinary process, so a reconstruction may start processes of its
+own. A series that
 arrives when every slot is occupied is written to disk, enriched, as it
 arrives, and replayed to a worker once a slot is released. The client remains
 connected meanwhile, and the images are returned through its connection.

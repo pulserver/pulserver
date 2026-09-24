@@ -17,6 +17,7 @@ import numpy as np
 import pytest
 from _host import DAY, LIMITS, Daemon
 
+from pulserver.recon._runtime import concurrency
 from pulserver.recon._runtime.connection import Connection
 from pulserver.vre import ReconProxy, RevisionStore, SequenceTable, _revisions
 
@@ -418,6 +419,28 @@ def test_a_closed_proxy_leaves_no_exam_directory(tmp_path):
     assert root.is_dir()
     proxy.close()
     assert not root.exists()
+
+
+def test_a_reconstruction_may_start_processes_of_its_own(start_proxy, bucket):
+    _, series = bucket
+    received = stream(start_proxy(slots=1).port, series["raw"], config="children")
+    assert [np.abs(image.data).max() for image in images(received)] == [1.0]
+
+
+@pytest.mark.parametrize(("listed", "read"), [(0, [0, 0]), (2, [1, 2])])
+def test_a_series_reads_the_gpu_its_slot_holds(
+    start_proxy, bucket, monkeypatch, listed, read
+):
+    monkeypatch.delenv("CUDA_VISIBLE_DEVICES", raising=False)
+    monkeypatch.setattr(concurrency, "_listed_gpus", lambda: listed)
+    _, series = bucket
+    port = start_proxy(slots=2).port
+    values = [
+        int(np.abs(image.data).max())
+        for _ in range(2)
+        for image in images(stream(port, series["raw"], config="device"))
+    ]
+    assert values == read
 
 
 def test_the_least_recently_read_revision_is_read_again_when_next_named(
