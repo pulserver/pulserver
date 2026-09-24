@@ -240,6 +240,7 @@
 <li class="toctree-l2"><a class="reference internal" href="user-guide/scanner-sequences.html">Scanner sequences</a></li>
 <li class="toctree-l2"><a class="reference internal" href="user-guide/reconstruction-plugins.html">Reconstruction plugins</a></li>
 <li class="toctree-l2"><a class="reference internal" href="user-guide/reconstruction-client.html">Reconstruction clients</a></li>
+<li class="toctree-l2"><a class="reference internal" href="user-guide/virtual-scanner.html">Scanning a phantom without a scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -248,6 +249,7 @@
 <li class="toctree-l2"><a class="reference internal" href="explanations/designs.html">Designs and the design store</a></li>
 <li class="toctree-l2"><a class="reference internal" href="explanations/ir-cache.html">The scanner IR</a></li>
 <li class="toctree-l2"><a class="reference internal" href="explanations/reconstruction.html">Raw-data enrichment and routing</a></li>
+<li class="toctree-l2"><a class="reference internal" href="explanations/virtual-scanner.html">The virtual scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="examples/index.html">Examples</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -273,6 +275,7 @@
 <li class="toctree-l2"><a class="reference internal" href="api/vre.html">Reconstruction proxy</a></li>
 <li class="toctree-l2"><a class="reference internal" href="api/recon.html">Reconstruction plugins</a></li>
 <li class="toctree-l2"><a class="reference internal" href="api/mrd.html">MRD data</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/virtual.html">Virtual scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="developer-guide/index.html">Developer guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -785,6 +788,26 @@ from.</p>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.recon.ReconResult.html#pulserver.recon.ReconResult" title="pulserver.recon.ReconResult"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ReconResult</span></code></a></p></td>
 <td><p>Image array for the runtime to package as an MRD image.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.virtual.trajectory.html#pulserver.virtual.trajectory" title="pulserver.virtual.trajectory"><code class="xref py py-obj docutils literal notranslate"><span class="pre">trajectory</span></code></a></p></td>
+<td><p>Return the k-space location of every ADC sample the cache beside a sequence file plays.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.virtual.acquire.html#pulserver.virtual.acquire" title="pulserver.virtual.acquire"><code class="xref py py-obj docutils literal notranslate"><span class="pre">acquire</span></code></a></p></td>
+<td><p>Return the samples the cache beside a sequence file acquires of a phantom.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.virtual.Phantom.html#pulserver.virtual.Phantom" title="pulserver.virtual.Phantom"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Phantom</span></code></a></p></td>
+<td><p>Ellipses whose signals add, received by one coil or several.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.virtual.Ellipse.html#pulserver.virtual.Ellipse" title="pulserver.virtual.Ellipse"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Ellipse</span></code></a></p></td>
+<td><p>An ellipse of uniform magnetization in a plane of constant z.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.virtual.send.html#pulserver.virtual.send" title="pulserver.virtual.send"><code class="xref py py-obj docutils literal notranslate"><span class="pre">send</span></code></a></p></td>
+<td><p>Send one series to the proxy at <code class="docutils literal notranslate"><span class="pre">address</span></code>; return what it sends back.</p></td>
 </tr>
 </tbody>
 </table>

@@ -23,6 +23,6 @@ passes and the cache layout are described in {doc}`../explanations/ir-cache`.
 | {obj}`~pulserver.ir.sar_ratios` | The RF energy of each subsequence of a chain at the VOPs, against the same repetitions of a hard, 180°, 1 ms reference pulse. |
 | {obj}`~pulserver.ir.SarRatio` | The local and global SAR ratios of one subsequence, as the cache carries them. |
 | {obj}`~pulserver.ir.summary` | Subsequences, segments, readouts and RF spectral statistics of a sequence, from the chain or from its cache. |
-| {obj}`~pulserver.ir.play` | Every block a cache plays, resolved as the scanner's playout resolves it. |
+| {obj}`~pulserver.ir.play` | Every block a cache plays, resolved as the scanner's playout resolves it, with its gradient waveforms on request. |
 | {obj}`~pulserver.ir.chain` | Files of the `NextSequence` chain starting at a sequence file, in play order. |
 | {obj}`~pulserver.ir.cache_path` | Cache file of a sequence file. |

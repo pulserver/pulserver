@@ -13,6 +13,7 @@ exchange are described in {doc}`../explanations/index`.
 | {doc}`scanner-sequences` | Binding a pypulseqpp sequence application to the scanner protocol. |
 | {doc}`reconstruction-plugins` | Writing a reconstruction and running it outside the proxy. |
 | {doc}`reconstruction-client` | The MRD stream a scanner's reconstruction client sends the proxy. |
+| {doc}`virtual-scanner` | Scanning an analytic phantom through a stored design, the proxy and a reconstruction plugin, without a scanner. |
 | {doc}`../explanations/index` | Architecture, protocol resolution, the design store, the scanner IR and raw-data enrichment. |
 | {doc}`../examples/index` | Executable examples: protocol resolution, segmentation for the scanner, and enrichment and reconstruction of a simulated series. |
 | {doc}`../api/index` | Exact interfaces, units and defaults. |
@@ -27,6 +28,7 @@ running
 scanner-sequences
 reconstruction-plugins
 reconstruction-client
+virtual-scanner
 ```
 
 ## Prerequisites and supported platforms

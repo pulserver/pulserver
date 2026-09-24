@@ -244,6 +244,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../user-guide/scanner-sequences.html">Scanner sequences</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../user-guide/reconstruction-plugins.html">Reconstruction plugins</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../user-guide/reconstruction-client.html">Reconstruction clients</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../user-guide/virtual-scanner.html">Scanning a phantom without a scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -252,6 +253,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../explanations/designs.html">Designs and the design store</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/ir-cache.html">The scanner IR</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/reconstruction.html">Raw-data enrichment and routing</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/virtual-scanner.html">The virtual scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../examples/index.html">Examples</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -277,6 +279,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../api/vre.html">Reconstruction proxy</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/recon.html">Reconstruction plugins</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/mrd.html">MRD data</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/virtual.html">Virtual scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">Developer guide</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
@@ -641,6 +644,11 @@ block, with its own amplitude. The <em>repeating unit</em> is the TR of a
 subsequence; a <em>segment</em> is part of it bounded by zero gradient amplitude; the
 <em>execution stream</em> is the order of segments over the scan. The <em>IR cache</em> is
 the file; the <em>collection</em> is what a reader loads from it.</p>
+<p><strong>Virtual scanner.</strong> The stand-ins for the scanner in tests: the <em>virtual
+interpreter</em>, which plays a cache with the C library’s cursor, the <em>phantom</em>
+acquired along the trajectory it plays, and the <em>virtual reconstruction
+client</em>, which sends the samples as the scanner’s reconstruction client does.
+The design calls, the IR, the proxy and the plugins are not stand-ins.</p>
 <p><strong>Raw data.</strong> A <em>series</em> is one MRD stream from the reconstruction client. An
 <em>acquisition</em> is one MRD readout record; a <em>readout</em> is the ADC event of the
 sequence it corresponds to. <em>Encoding counters</em> are the MRD <code class="docutils literal notranslate"><span class="pre">idx</span></code> fields;

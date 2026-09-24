@@ -239,6 +239,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../../../user-guide/scanner-sequences.html">Scanner sequences</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../user-guide/reconstruction-plugins.html">Reconstruction plugins</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../user-guide/reconstruction-client.html">Reconstruction clients</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/virtual-scanner.html">Scanning a phantom without a scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -247,6 +248,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../../../explanations/designs.html">Designs and the design store</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../explanations/ir-cache.html">The scanner IR</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../explanations/reconstruction.html">Raw-data enrichment and routing</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/virtual-scanner.html">The virtual scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../examples/index.html">Examples</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -272,6 +274,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../../../api/vre.html">Reconstruction proxy</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../api/recon.html">Reconstruction plugins</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../api/mrd.html">MRD data</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/virtual.html">Virtual scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../developer-guide/index.html">Developer guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -666,7 +669,9 @@
 
 <div class="viewcode-block" id="play">
 <a class="viewcode-back" href="../../../generated/pulserver.ir.play.html#pulserver.ir.play">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">play</span><span class="p">(</span><span class="n">seq_path</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span> <span class="n">cache_ext</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">".pseg"</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">play</span><span class="p">(</span>
+    <span class="n">seq_path</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span> <span class="n">cache_ext</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">".pseg"</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">waveforms</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">"""Walk the cache beside a sequence file as the scanner's playout does.</span>
 
 <span class="sd">    The cache is loaded by the C library a scanner links, and its execution</span>
@@ -686,6 +691,11 @@
 <span class="sd">          (gamma B1) and frequency and phase offsets, with ppm offsets</span>
 <span class="sd">          resolved at the field strength the cache was converted under; 0</span>
 <span class="sd">          without RF;</span>
+<span class="sd">        - ``rf_use``: the ``PULSEG_RF_USE_*`` code of the RF event, 1 for an</span>
+<span class="sd">          excitation and 2 for a refocusing pulse; an untagged event is a</span>
+<span class="sd">          refocusing pulse at a flip angle of 162 to 198 degrees and an</span>
+<span class="sd">          excitation otherwise; 0 without RF;</span>
+<span class="sd">        - ``rf_delay_us``: RF delay from the block's start, in µs;</span>
 <span class="sd">        - ``gradient_hz_per_m``: ``(blocks, 3)``, the amplitude of each</span>
 <span class="sd">          gradient event along x, y and z; an arbitrary gradient's shape</span>
 <span class="sd">          carries its own sign;</span>
@@ -694,7 +704,23 @@
 <span class="sd">        - ``norot``, ``nopos``: the block's NOROT and NOPOS flags;</span>
 <span class="sd">        - ``adc``, ``adc_freq_hz``, ``adc_phase_rad``: whether the block</span>
 <span class="sd">          acquires, and its frequency and phase offsets;</span>
+<span class="sd">        - ``adc_delay_us``, ``adc_dwell_ns``, ``adc_samples``: the ADC delay</span>
+<span class="sd">          from the block's start, dwell time and sample count; 0 without ADC;</span>
 <span class="sd">        - ``trid``: the TRID group in force, 0 when ungrouped.</span>
+
+<span class="sd">        With ``waveforms``, also:</span>
+
+<span class="sd">        - ``rf_center_us``: the time of the RF magnitude peak from the block's</span>
+<span class="sd">          start, in µs; NaN without RF;</span>
+<span class="sd">        - ``gradient_time_us``, ``gradient_waveform_hz_per_m``: the corners of</span>
+<span class="sd">          every played gradient, concatenated in play order: their times from</span>
+<span class="sd">          the block's start, in µs, and the gradient there, the instance's</span>
+<span class="sd">          amplitude times the shape the instance plays. A waveform on the</span>
+<span class="sd">          gradient raster holds its end values over the half raster</span>
+<span class="sd">          intervals before its first sample and after its last;</span>
+<span class="sd">        - ``gradient_span``: ``(blocks, 3, 2)``, the start and stop of each</span>
+<span class="sd">          block's gradient along x, y and z in those arrays; empty without</span>
+<span class="sd">          one.</span>
 
 <span class="sd">    Raises</span>
 <span class="sd">    ------</span>
@@ -703,7 +729,7 @@
 <span class="sd">    """</span>
     <span class="n">seq_path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">seq_path</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">require</span><span class="p">(</span><span class="s2">"play_cache"</span><span class="p">)(</span>
-        <span class="nb">str</span><span class="p">(</span><span class="n">cache_path</span><span class="p">(</span><span class="n">seq_path</span><span class="p">,</span> <span class="n">cache_ext</span><span class="p">)),</span> <span class="n">seq_path</span><span class="o">.</span><span class="n">stat</span><span class="p">()</span><span class="o">.</span><span class="n">st_size</span>
+        <span class="nb">str</span><span class="p">(</span><span class="n">cache_path</span><span class="p">(</span><span class="n">seq_path</span><span class="p">,</span> <span class="n">cache_ext</span><span class="p">)),</span> <span class="n">seq_path</span><span class="o">.</span><span class="n">stat</span><span class="p">()</span><span class="o">.</span><span class="n">st_size</span><span class="p">,</span> <span class="n">waveforms</span>
     <span class="p">)</span></div>
 
 

@@ -242,6 +242,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../user-guide/scanner-sequences.html">Scanner sequences</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../user-guide/reconstruction-plugins.html">Reconstruction plugins</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../user-guide/reconstruction-client.html">Reconstruction clients</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../user-guide/virtual-scanner.html">Scanning a phantom without a scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -250,6 +251,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../explanations/designs.html">Designs and the design store</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/ir-cache.html">The scanner IR</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/reconstruction.html">Raw-data enrichment and routing</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/virtual-scanner.html">The virtual scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../examples/index.html">Examples</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -275,6 +277,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../api/vre.html">Reconstruction proxy</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/recon.html">Reconstruction plugins</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/mrd.html">MRD data</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/virtual.html">Virtual scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../developer-guide/index.html">Developer guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -545,6 +548,11 @@ matches the file.</p>
 (gamma B1) and frequency and phase offsets, with ppm offsets
 resolved at the field strength the cache was converted under; 0
 without RF;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">rf_use</span></code>: the <code class="docutils literal notranslate"><span class="pre">PULSEG_RF_USE_*</span></code> code of the RF event, 1 for an
+excitation and 2 for a refocusing pulse; an untagged event is a
+refocusing pulse at a flip angle of 162 to 198 degrees and an
+excitation otherwise; 0 without RF;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">rf_delay_us</span></code>: RF delay from the block’s start, in µs;</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">gradient_hz_per_m</span></code>: <code class="docutils literal notranslate"><span class="pre">(blocks,</span> <span class="pre">3)</span></code>, the amplitude of each
 gradient event along x, y and z; an arbitrary gradient’s shape
 carries its own sign;</p></li>
@@ -553,7 +561,23 @@ without one;</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">norot</span></code>, <code class="docutils literal notranslate"><span class="pre">nopos</span></code>: the block’s NOROT and NOPOS flags;</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">adc</span></code>, <code class="docutils literal notranslate"><span class="pre">adc_freq_hz</span></code>, <code class="docutils literal notranslate"><span class="pre">adc_phase_rad</span></code>: whether the block
 acquires, and its frequency and phase offsets;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">adc_delay_us</span></code>, <code class="docutils literal notranslate"><span class="pre">adc_dwell_ns</span></code>, <code class="docutils literal notranslate"><span class="pre">adc_samples</span></code>: the ADC delay
+from the block’s start, dwell time and sample count; 0 without ADC;</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">trid</span></code>: the TRID group in force, 0 when ungrouped.</p></li>
+</ul>
+<p>With <code class="docutils literal notranslate"><span class="pre">waveforms</span></code>, also:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">rf_center_us</span></code>: the time of the RF magnitude peak from the block’s
+start, in µs; NaN without RF;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">gradient_time_us</span></code>, <code class="docutils literal notranslate"><span class="pre">gradient_waveform_hz_per_m</span></code>: the corners of
+every played gradient, concatenated in play order: their times from
+the block’s start, in µs, and the gradient there, the instance’s
+amplitude times the shape the instance plays. A waveform on the
+gradient raster holds its end values over the half raster
+intervals before its first sample and after its last;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">gradient_span</span></code>: <code class="docutils literal notranslate"><span class="pre">(blocks,</span> <span class="pre">3,</span> <span class="pre">2)</span></code>, the start and stop of each
+block’s gradient along x, y and z in those arrays; empty without
+one.</p></li>
 </ul>
 </p>
 </dd>

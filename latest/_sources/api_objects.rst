@@ -139,6 +139,18 @@ from.
    ReconBuffer
    ReconResult
 
+.. currentmodule:: pulserver.virtual
+
+.. autosummary::
+   :toctree: generated
+   :nosignatures:
+
+   trajectory
+   acquire
+   Phantom
+   Ellipse
+   send
+
 .. currentmodule:: pulserver.vre
 
 .. autosummary::

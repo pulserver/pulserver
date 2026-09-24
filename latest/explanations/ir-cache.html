@@ -246,6 +246,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../user-guide/scanner-sequences.html">Scanner sequences</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../user-guide/reconstruction-plugins.html">Reconstruction plugins</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../user-guide/reconstruction-client.html">Reconstruction clients</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../user-guide/virtual-scanner.html">Scanning a phantom without a scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">Explanations</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
@@ -254,6 +255,7 @@
 <li class="toctree-l2"><a class="reference internal" href="designs.html">Designs and the design store</a></li>
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">The scanner IR</a></li>
 <li class="toctree-l2"><a class="reference internal" href="reconstruction.html">Raw-data enrichment and routing</a></li>
+<li class="toctree-l2"><a class="reference internal" href="virtual-scanner.html">The virtual scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../examples/index.html">Examples</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -279,6 +281,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../api/vre.html">Reconstruction proxy</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/recon.html">Reconstruction plugins</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/mrd.html">MRD data</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/virtual.html">Virtual scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../developer-guide/index.html">Developer guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -575,7 +578,10 @@ relative to its excitation is <span class="math notranslate nohighlight">\(2\pi\
 </ul>
 <p>The readouts are therefore demodulated to the prescribed centre as they are
 acquired, and the reconstruction receives an object at <span class="math notranslate nohighlight">\(\mathbf{d}\)</span> at the
-centre of its field of view. The rotation of the prescription is not applied
+centre of its field of view. The cache carries each readout’s frequency and
+phase offsets but not its phase modulation: a readout under a constant
+gradient is demodulated exactly, and a readout under a varying one, radial,
+spiral or ramp-sampled, is not (<a class="reference internal" href="virtual-scanner.html"><span class="doc">The virtual scanner</span></a>). The rotation of the prescription is not applied
 to the cache: the scanner plays it through its rotation matrix, composed after
 each block’s own rotation. Two offsets make two caches of one design, and two
 designs (<a class="reference internal" href="designs.html"><span class="doc">Designs and the design store</span></a>).</p>
@@ -692,11 +698,13 @@ loaded from a vendor-neutral cache.</p>
 <h2>Playback<a class="headerlink" href="#playback" title="Link to this heading">#</a></h2>
 <p><a class="reference internal" href="../generated/pulserver.ir.play.html#pulserver.ir.play" title="pulserver.ir.play"><code class="xref py py-func docutils literal notranslate"><span class="pre">play()</span></code></a> loads a cache with the C library and walks its
 execution stream with the cursor a playout uses, resolving each block as the
-scanner plays it: its duration, the RF and ADC frequency and phase offsets, the
-gradient amplitudes and the rotation. It stands in for the interpreter, so the
-cache can be compared with the file it was converted from without a scanner;
-the test suite holds every played block of each fixture to the block its file
-designs.</p>
+scanner plays it: its duration, the RF and ADC frequency and phase offsets,
+the RF use, the ADC window, the gradient amplitudes and the rotation, and, on
+request, the gradient waveforms each instance plays. It stands in for the
+interpreter, so the cache can be compared with the file it was converted from
+without a scanner; the test suite holds every played block of each fixture to
+the block its file designs, and the trajectory the waveforms trace to the one
+the file designs (<a class="reference internal" href="virtual-scanner.html"><span class="doc">The virtual scanner</span></a>).</p>
 </section>
 <section id="language-constraint">
 <h2>Language constraint<a class="headerlink" href="#language-constraint" title="Link to this heading">#</a></h2>
