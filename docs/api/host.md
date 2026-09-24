@@ -15,7 +15,9 @@ python -m pulserver.host --base DIR --socket PATH --plugins DIR [--workers N]
 ```
 
 Sessions and revisions are stored under `<base>/bucket/`, in the layout
-described in {doc}`../explanations/sessions`.
+described in {doc}`../explanations/sessions`. The `pulserver design` command
+answers the same calls without a session, and stores each design in a
+{class}`~pulserver.host.DesignStore` ({doc}`../user-guide/running`).
 
 ## Daemon and client
 
@@ -33,3 +35,11 @@ described in {doc}`../explanations/sessions`.
 | {obj}`~pulserver.host.SessionStore` | Every session under `<base>/bucket/`. |
 | {obj}`~pulserver.host.Session` | State of one session: plugin, limits, revisions and the current revision. |
 | {obj}`~pulserver.host.revision_hash` | Identity of a design: plugin, scanner limits, resolved protocol and the source that designs it. |
+
+## Designs
+
+| Object | Description |
+| --- | --- |
+| {obj}`~pulserver.host.DesignStore` | The designs under one directory, each in `<id>/` and immutable once written. |
+| {obj}`~pulserver.host.design_identity` | SHA-256 of what a design depends on: plugin, limits, resolved protocol and source. |
+| {obj}`~pulserver.host.design_id` | Identifier of a design: the first 18 hexadecimal digits of its identity. |

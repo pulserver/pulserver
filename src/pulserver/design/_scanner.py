@@ -305,15 +305,12 @@ class ScannerSequence:
         ValueError
             If the request names an entry the UI does not declare.
         """
-        return self._resolve(system, request)[1]
+        return self.resolve(system, request)[1]
 
     def generate(
         self, system: pp.Opts, request: Mapping[str, Any], directory: Path
     ) -> tuple[Validation, list[str]]:
-        """Write the resolved design into ``directory`` as signed binary Pulseq.
-
-        The files keep the ``.seq`` name a chain names them by; what is in them
-        is the binary form, which the scanner IR conversion reads.
+        """Write the resolved design into ``directory``, as :meth:`write` does.
 
         Returns
         -------
@@ -323,14 +320,35 @@ class ScannerSequence:
             Written paths in play order, prescans first; empty for an invalid
             request, for which nothing is written.
         """
-        app, validation = self._resolve(system, request)
+        app, validation = self.resolve(system, request)
         if app is None:
             return validation, []
-        return validation, app.write(Path(directory) / "sequence.seq", offline=False)
+        return validation, self.write(app, directory)
 
-    def _resolve(
+    @staticmethod
+    def write(app: sequences.SequenceApp, directory: Path | str) -> list[str]:
+        """Write a resolved application into ``directory`` as signed binary Pulseq.
+
+        The first file is ``sequence.seq``. The files keep the ``.seq`` name a
+        chain names them by; what is in them is the binary form, which the
+        scanner IR conversion reads. Returns the written paths in play order,
+        prescans first.
+        """
+        return app.write(Path(directory) / "sequence.seq", offline=False)
+
+    def resolve(
         self, system: pp.Opts, request: Mapping[str, Any]
     ) -> tuple[sequences.SequenceApp | None, Validation]:
+        """Return the application a request constructs, and the validation of :meth:`validate`.
+
+        The application is ``None`` for an invalid request. It is constructed
+        once and not designed, so :meth:`write` designs it.
+
+        Raises
+        ------
+        ValueError
+            If the request names an entry the UI does not declare.
+        """
         listing = self.listing()
         unknown = set(request) - set(listing)
         if unknown:
