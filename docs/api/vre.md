@@ -11,7 +11,7 @@ and runs it on a reconstruction worker.
 The proxy listens on a TCP port and is started with
 
 ```bash
-python -m pulserver.vre --store DIR --port N --plugins DIR [--slots N] [--spares 1]
+python -m pulserver.vre --store DIR --port N --plugins DIR [--intake-port N] [--slots N] [--spares 1]
 ```
 
 The MRD header of a series names the design it was played from; the proxy
@@ -34,6 +34,7 @@ and fields of a series in {doc}`../user-guide/reconstruction-client`.
 | {obj}`~pulserver.vre.DesignCache` | The designs of a store, the most recently read kept tabulated. |
 | {obj}`~pulserver.vre.Design` | A stored design as the reconstruction side reads it. |
 | {obj}`~pulserver.vre.DESIGN_PARAMETER` | Header user parameter naming the design a series was played from. |
+| {obj}`~pulserver.vre.DesignIntake` | HTTP endpoint receiving pushed designs into the store the proxy reads. |
 
 ## Enrichment
 

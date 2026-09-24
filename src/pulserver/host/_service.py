@@ -33,6 +33,7 @@ from ..protocol import (
 )
 from ._blocks import parse_import
 from ._limits import split_limits
+from ._push import push as push_design
 from ._store import DesignStore, design_identity
 
 _PLUGIN_NAME = re.compile(r"[A-Za-z0-9_\-]+")
@@ -89,6 +90,7 @@ def generate(
     limits: Mapping[str, Any],
     block: str,
     store: DesignStore,
+    push: str | None = None,
 ) -> str:
     """Reply ``GENERATED <id>`` for the design a request resolves to.
 
@@ -99,13 +101,14 @@ def generate(
     :func:`pulserver.ir.check`, converted to the IR cache at the prescribed
     field-of-view offset, and stored. A request that resolves to other values
     is designed from the resolved values, so a design is a function of its
-    identifier.
+    identifier. With ``push``, the URL of a design intake, the design is sent
+    there unless the intake holds it already.
 
     Raises
     ------
     CallError
-        If the request is invalid or the design fails a check; nothing is
-        stored.
+        If the request is invalid or the design fails a check, when nothing
+        is stored; or if the design cannot be pushed, when it stays stored.
     """
     path = str(plugin_path(plugins, plugin))
     listing = _listing(path)
@@ -126,7 +129,7 @@ def generate(
     )
     found = store.find(identity)
     if found is not None:
-        return f"GENERATED {found}\n"
+        return f"GENERATED {_pushed(store, found, push)}\n"
     staged = store.stage()
     try:
         paths = scanner.write(app, staged)
@@ -146,25 +149,32 @@ def generate(
             "source": source,
             "scan_time": validation.duration,
         }
-        return f"GENERATED {store.commit(identity, staged, manifest)}\n"
+        design = store.commit(identity, staged, manifest)
     except BaseException:
         store.discard(staged)
         raise
+    return f"GENERATED {_pushed(store, design, push)}\n"
 
 
-def import_chain(limits: Mapping[str, Any], block: str, store: DesignStore) -> str:
+def import_chain(
+    limits: Mapping[str, Any],
+    block: str,
+    store: DesignStore,
+    push: str | None = None,
+) -> str:
     """Reply ``IMPORTED <id>`` for a sequence file, its chain and their IR cache.
 
     The files are identified by their names and contents and the
     prescription of the import block. A chain already stored is returned;
-    otherwise it is copied, checked and converted as :func:`generate` does.
-    The first file is also reachable as ``sequence.seq``.
+    otherwise it is copied, checked and converted as :func:`generate` does,
+    and pushed as :func:`generate` pushes. The first file is also reachable as
+    ``sequence.seq``.
 
     Raises
     ------
     CallError
         If the block is malformed, a file cannot be read, or the chain fails
-        a check; nothing is stored.
+        a check, when nothing is stored; or if the design cannot be pushed.
     """
     try:
         first, offset_mm, rotation = parse_import(block)
@@ -181,7 +191,7 @@ def import_chain(limits: Mapping[str, Any], block: str, store: DesignStore) -> s
     identity = design_identity("", identified_limits(limits), values)
     found = store.find(identity)
     if found is not None:
-        return f"IMPORTED {found}\n"
+        return f"IMPORTED {_pushed(store, found, push)}\n"
     staged = store.stage()
     try:
         for file in files:
@@ -202,10 +212,11 @@ def import_chain(limits: Mapping[str, Any], block: str, store: DesignStore) -> s
             "fov_offset_mm": list(offset_mm),
             "fov_rotation": rotation.ravel().tolist(),
         }
-        return f"IMPORTED {store.commit(identity, staged, manifest)}\n"
+        design = store.commit(identity, staged, manifest)
     except BaseException:
         store.discard(staged)
         raise
+    return f"IMPORTED {_pushed(store, design, push)}\n"
 
 
 def identified_limits(limits: Mapping[str, Any]) -> dict[str, Any]:
@@ -247,6 +258,17 @@ def call(name: str, **inputs: Any) -> tuple[int, str]:
     except Exception as error:
         text = " ".join(str(error).split()) or type(error).__name__
         return 1, f"ERROR {text}\n"
+
+
+def _pushed(store: DesignStore, design: str, push: str | None) -> str:
+    if push:
+        try:
+            push_design(store, design, push)
+        except (OSError, ValueError) as error:
+            raise CallError(
+                f"design {design} is stored but not pushed: {error}"
+            ) from None
+    return design
 
 
 def _request(block: str, listing: Mapping[str, Parameter]) -> dict[str, Any]:

@@ -13,6 +13,8 @@ from typing import Any
 #: The environment variable naming the socket of a warm server, when
 #: ``--socket`` does not.
 SOCKET_VARIABLE = "PULSERVER_DESIGN_SOCKET"
+#: The environment variable naming the design intake, when ``--push`` does not.
+PUSH_VARIABLE = "PULSERVER_DESIGN_PUSH"
 
 _DAY = 86400.0
 
@@ -22,6 +24,8 @@ is read from standard input; the reply is written to standard output, as the
 interpreter parses it, and ends with exit status 0, or 1 after an ERROR line.
 A call is forwarded to the warm server listening on --socket, or on
 $PULSERVER_DESIGN_SOCKET, and answered in this process when none listens.
+A design generated or imported is pushed to the design intake --push, or
+$PULSERVER_DESIGN_PUSH, names.
 """
 
 
@@ -47,7 +51,11 @@ def _parser() -> argparse.ArgumentParser:
             sub.add_argument(
                 "--store", type=Path, required=True, help="directory of designs"
             )
-        if name != "prune":
+        if name in ("generate", "import"):
+            sub.add_argument(
+                "--push", help="URL of the design intake to push the design to"
+            )
+        if name not in ("prune", "push"):
             sub.add_argument(
                 "--socket", type=Path, help="Unix socket of a warm design server"
             )
@@ -96,6 +104,15 @@ def _parser() -> argparse.ArgumentParser:
         type=int,
         help="then remove designs until the store holds at most",
     )
+    pushed = call(
+        "push",
+        "Push stored designs to a design intake.",
+        plugin=False,
+        limits=False,
+        store=True,
+    )
+    pushed.add_argument("--to", required=True, help="URL of the design intake")
+    pushed.add_argument("designs", nargs="+", metavar="ID", help="design identifiers")
     serve = calls.add_parser(
         "serve",
         help="Answer forwarded calls, one forked child per call.",
@@ -131,6 +148,10 @@ def request(args: argparse.Namespace, block: str) -> dict[str, Any]:
         found["store"] = str(args.store.absolute())
     if args.call in ("validate", "generate", "import"):
         found["input"] = block
+    if args.call in ("generate", "import"):
+        push = args.push or os.environ.get(PUSH_VARIABLE)
+        if push:
+            found["push"] = push
     return found
 
 
@@ -163,6 +184,8 @@ def main(argv: list[str] | None = None) -> int:
         from ._server import serve
 
         return serve(args.plugins, args.socket)
+    if args.call == "push":
+        return _push(args.store, args.designs, args.to)
     if args.call == "prune":
         from ._store import DesignStore
 
@@ -186,3 +209,19 @@ def main(argv: list[str] | None = None) -> int:
     status, output = answered
     sys.stdout.write(output)
     return status
+
+
+def _push(store: Path, designs: list[str], url: str) -> int:
+    from ._push import push
+    from ._store import DesignStore
+
+    stored = DesignStore(store)
+    sent = 0
+    for design in designs:
+        try:
+            sent += push(stored, design, url)
+        except (OSError, ValueError) as error:
+            sys.stdout.write(f"ERROR design {design} is not pushed: {error}\n")
+            return 1
+    sys.stdout.write(f"PUSHED {sent}\n")
+    return 0
