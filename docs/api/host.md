@@ -16,8 +16,9 @@ python -m pulserver.host --base DIR --socket PATH --plugins DIR [--workers N]
 
 Sessions and revisions are stored under `<base>/bucket/`, in the layout
 described in {doc}`../explanations/sessions`. The `pulserver design` command
-answers the same calls without a session, and stores each design in a
-{class}`~pulserver.host.DesignStore` ({doc}`../user-guide/running`).
+answers the same calls without a session, in its own process or in a warm
+server's, and stores each design in a {class}`~pulserver.host.DesignStore`
+({doc}`../user-guide/running`).
 
 ## Daemon and client
 
