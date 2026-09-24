@@ -23,7 +23,7 @@ Reconstruction
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The scope of this notebook is to enrich a simulated series the way the reconstruction proxy does, and to reconstruct it with a reconstruction plugin: what the sequence supplies to an MRD stream that carries no encoding information, and the displacement that demodulation to the prescription centre removes.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The scope of this notebook is to enrich a simulated series the way the reconstruction proxy does, and to reconstruct it with a reconstruction plugin: what the sequence supplies to an MRD stream that carries no encoding information, and how a field-of-view offset applied to the sequence when its IR is built places an object away from the isocentre at the centre of the image.">
 
 .. only:: html
 

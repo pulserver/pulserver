@@ -561,9 +561,10 @@ achieves, the scan time, and the design error for an infeasible prescription.</p
 <li><p>Design sessions and immutable revisions for every PSD host process of a
 scanner, served over a Unix socket.</p></li>
 <li><p>Segmentation of a <code class="docutils literal notranslate"><span class="pre">NextSequence</span></code> chain into a binary IR cache, read by an
-ANSI C library linked into the interpreter.</p></li>
+ANSI C library linked into the interpreter, with the prescribed field-of-view
+offset applied to the logical-frame design as RF and ADC frequency and phase.</p></li>
 <li><p>MRD enrichment: encoding counters, flags, encoding spaces and trajectories
-from the sequence, and demodulation to the prescription centre.</p></li>
+from the sequence.</p></li>
 <li><p>Reconstruction plugins run in isolated worker processes, over a live MRD
 stream, an ISMRMRD file or an assembled acquisition bucket.</p></li>
 </ul>

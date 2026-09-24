@@ -503,6 +503,7 @@
     <span class="n">seq_path</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span>
     <span class="n">system</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Opts</span><span class="p">,</span>
     <span class="o">*</span><span class="p">,</span>
+    <span class="n">fov_offset</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">vendor</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
     <span class="n">label_column_map</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span>
     <span class="n">cache_ext</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">".pseg"</span><span class="p">,</span>
@@ -515,12 +516,21 @@
 <span class="sd">    replaced. RF vendor statistics are left at zero: ``vendor`` only tags the</span>
 <span class="sd">    cache for the reader that loads it, which must be built for that vendor.</span>
 
+<span class="sd">    The files are expected in the logical frame, and each is moved to</span>
+<span class="sd">    ``fov_offset`` with :func:`prescribe` before it is segmented. The</span>
+<span class="sd">    prescription's rotation is not applied here: the scanner plays the cache</span>
+<span class="sd">    through its rotation matrix, composed after each block's own rotation.</span>
+
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
 <span class="sd">    seq_path</span>
 <span class="sd">        Text or binary Pulseq file.</span>
 <span class="sd">    system</span>
 <span class="sd">        Limits and rasters the scan is segmented under.</span>
+<span class="sd">    fov_offset</span>
+<span class="sd">        Translation of the field-of-view centre along the logical readout,</span>
+<span class="sd">        phase and slice axes, in metres. None or zero leaves the files as</span>
+<span class="sd">        designed.</span>
 <span class="sd">    vendor</span>
 <span class="sd">        ``PULSEG_VENDOR_*`` code; 0 is vendor-neutral.</span>
 <span class="sd">    label_column_map</span>
@@ -548,7 +558,7 @@
     <span class="n">target</span> <span class="o">=</span> <span class="n">cache_path</span><span class="p">(</span><span class="n">seq_path</span><span class="p">,</span> <span class="n">cache_ext</span><span class="p">)</span>
     <span class="n">target</span><span class="o">.</span><span class="n">unlink</span><span class="p">(</span><span class="n">missing_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
     <span class="n">require</span><span class="p">(</span><span class="s2">"convert_libraries"</span><span class="p">)(</span>
-        <span class="n">_payload</span><span class="p">(</span><span class="n">seq_path</span><span class="p">,</span> <span class="n">verify_signature</span><span class="p">),</span>
+        <span class="n">_payload</span><span class="p">(</span><span class="n">seq_path</span><span class="p">,</span> <span class="n">verify_signature</span><span class="p">,</span> <span class="n">fov_offset</span><span class="p">),</span>
         <span class="nb">str</span><span class="p">(</span><span class="n">seq_path</span><span class="p">),</span>
         <span class="o">*</span><span class="n">_scanner</span><span class="p">(</span><span class="n">system</span><span class="p">),</span>
         <span class="nb">int</span><span class="p">(</span><span class="n">vendor</span><span class="p">),</span>
@@ -599,6 +609,42 @@
 
 
 
+<div class="viewcode-block" id="prescribe">
+<a class="viewcode-back" href="../../../generated/pulserver.ir.prescribe.html#pulserver.ir.prescribe">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">prescribe</span><span class="p">(</span><span class="n">sequence</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Sequence</span><span class="p">,</span> <span class="n">fov_offset</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">float</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">pp</span><span class="o">.</span><span class="n">Sequence</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Move a logical-frame sequence to a prescribed field-of-view centre, in place.</span>
+
+<span class="sd">    An offset along the slice axis becomes an RF frequency, an in-plane offset</span>
+<span class="sd">    an RF and ADC phase, each referenced to the excitation it follows; blocks</span>
+<span class="sd">    labelled ``NOPOS`` are exempt. The gradient area is counted from the</span>
+<span class="sd">    sequence's first block.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    sequence</span>
+<span class="sd">        One file of a chain, as designed.</span>
+<span class="sd">    fov_offset</span>
+<span class="sd">        Translation along the logical readout, phase and slice axes, in metres.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    pypulseqpp.Sequence</span>
+<span class="sd">        ``sequence`` itself.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If ``fov_offset`` is not three values.</span>
+<span class="sd">    """</span>
+    <span class="n">shift</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">fov_offset</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">shift</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">3</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"fov_offset takes three values, got </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">shift</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="n">shift</span><span class="p">):</span>
+        <span class="n">pp</span><span class="o">.</span><span class="n">TransformFOV</span><span class="p">(</span><span class="n">translation</span><span class="o">=</span><span class="n">shift</span><span class="p">)</span><span class="o">.</span><span class="n">apply_to_sequence</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">in_place</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">sequence</span></div>
+
+
+
 <div class="viewcode-block" id="play">
 <a class="viewcode-back" href="../../../generated/pulserver.ir.play.html#pulserver.ir.play">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">play</span><span class="p">(</span><span class="n">seq_path</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span> <span class="n">cache_ext</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">".pseg"</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
@@ -643,8 +689,10 @@
 
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_payload</span><span class="p">(</span><span class="n">seq_path</span><span class="p">:</span> <span class="n">Path</span><span class="p">,</span> <span class="n">verify_signature</span><span class="p">:</span> <span class="nb">bool</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]:</span>
-<span class="w">    </span><span class="sd">"""Read the chain and return each file's libraries, in play order.</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_payload</span><span class="p">(</span>
+    <span class="n">seq_path</span><span class="p">:</span> <span class="n">Path</span><span class="p">,</span> <span class="n">verify_signature</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span> <span class="n">fov_offset</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]:</span>
+<span class="w">    </span><span class="sd">"""Read the chain and return each file's libraries, in play order, prescribed to ``fov_offset``.</span>
 
 <span class="sd">    A file the reader refuses raises ``ValueError``, whatever the reader</span>
 <span class="sd">    itself raised.</span>
@@ -653,7 +701,12 @@
         <span class="n">chain_read</span> <span class="o">=</span> <span class="n">read_chain</span><span class="p">(</span><span class="n">seq_path</span><span class="p">,</span> <span class="n">verify</span><span class="o">=</span><span class="n">verify_signature</span><span class="p">)</span>
     <span class="k">except</span> <span class="ne">RuntimeError</span> <span class="k">as</span> <span class="n">failure</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"cannot read </span><span class="si">{</span><span class="n">seq_path</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">failure</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">failure</span>
-    <span class="k">return</span> <span class="p">[</span><span class="n">conversion_payload</span><span class="p">(</span><span class="n">sequence</span><span class="p">)</span> <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">sequence</span> <span class="ow">in</span> <span class="n">chain_read</span><span class="p">]</span>
+    <span class="n">payload</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">sequence</span> <span class="ow">in</span> <span class="n">chain_read</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">fov_offset</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">prescribe</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">fov_offset</span><span class="p">)</span>
+        <span class="n">payload</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">conversion_payload</span><span class="p">(</span><span class="n">sequence</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">payload</span>
 </pre></div>
 
                 </article>

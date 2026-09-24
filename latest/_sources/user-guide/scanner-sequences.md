@@ -74,9 +74,16 @@ TE: int|dropdown|8000|1000|80000|10|us|-2
 TR: int|dropdown|250000|1000|5000000|1|us|-1
 fov: float|typein|220.0|50.0|500.0|1.0|mm
 nx: int|typein|128|32|512|2|
+fov_offset_x: float|off|0.0|-1000.0|1000.0|0.1|mm
+fov_offset_y: float|off|0.0|-1000.0|1000.0|0.1|mm
+fov_offset_z: float|off|0.0|-1000.0|1000.0|0.1|mm
 [NimPulseqGUI Protocol End]
 
 ```
+
+The last three entries are the field-of-view offset, which the interpreter
+fills from the scanner's prescription and which the host applies when it
+builds the IR ({doc}`../explanations/ir-cache`).
 
 {meth}`~pulserver.design.ScannerSequence.validate` designs the sequence under
 the scanner limits and returns the protocol it will play. Entries the request
@@ -86,7 +93,7 @@ omits keep the application's defaults:
 >>> import pypulseqpp as pp
 >>> system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
 >>> Gre2D().validate(system, {"TE": TEPreset.MINIMUM, "nx": 96})
-Validation(valid=True, duration=36.0, info='', values={'TE': 3080, 'TR': 250000, 'fov': 220.0, 'nx': 96})
+Validation(valid=True, duration=36.0, info='', values={'TE': 3080, 'TR': 250000, 'fov': 220.0, 'nx': 96, 'fov_offset_x': 0.0, 'fov_offset_y': 0.0, 'fov_offset_z': 0.0})
 
 ```
 

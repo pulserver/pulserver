@@ -532,10 +532,11 @@
 <p>Routes each series of an MRD stream to a reconstruction worker.</p>
 <p>One thread per client connection. The header’s <code class="docutils literal notranslate"><span class="pre">pulserver_session</span></code> and
 <code class="docutils literal notranslate"><span class="pre">pulserver_revision</span></code> name the design the series was played from; its
-readout table enriches the header and every acquisition, and its
-<code class="docutils literal notranslate"><span class="pre">pulserver_fov_offset_mm</span></code> demodulates them to the prescription centre.
-The reconstruction plugin is the revision’s, falling back to the name in
-the client’s config text.</p>
+readout table enriches the header and every acquisition. The readouts
+arrive demodulated to the prescribed field-of-view centre by the playout
+(<a class="reference internal" href="pulserver.ir.prescribe.html#pulserver.ir.prescribe" title="pulserver.ir.prescribe"><code class="xref py py-func docutils literal notranslate"><span class="pre">pulserver.ir.prescribe()</span></code></a>), and their samples are passed on as
+received. The reconstruction plugin is the revision’s, falling back to
+the name in the client’s config text.</p>
 <p>A series holds a slot for as long as it runs. Its worker’s images, DICOM
 and text go back to the client as they arrive, the client’s close closes
 the worker, and the worker’s close closes the client.</p>

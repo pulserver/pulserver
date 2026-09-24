@@ -553,6 +553,12 @@ system limits and raises an error for a prescription it cannot realize.</p></li>
 <li><p>The value each argument took in the constructed application is read back
 and converted to UI units (<a class="reference internal" href="../generated/pulserver.design.ScannerSequence.resolved.html#pulserver.design.ScannerSequence.resolved" title="pulserver.design.ScannerSequence.resolved"><code class="xref py py-meth docutils literal notranslate"><span class="pre">resolved()</span></code></a>).</p></li>
 </ol>
+<p>The field-of-view offset is not a design argument. Every listing ends with the
+entries <code class="docutils literal notranslate"><span class="pre">fov_offset_x</span></code>, <code class="docutils literal notranslate"><span class="pre">fov_offset_y</span></code> and <code class="docutils literal notranslate"><span class="pre">fov_offset_z</span></code>, in mm and not
+editable in the UI, which the interpreter fills from the scanner’s
+prescription; resolution returns them unchanged, and the host applies the
+offset to the designed sequence when it builds the IR (<a class="reference internal" href="ir-cache.html"><span class="doc">The scanner IR</span></a>). A
+scanner sequence cannot bind them to an argument.</p>
 <p>A request the design refuses is invalid. The reply carries the request
 unchanged and the error message the application raised, which the interpreter
 shows to the operator. A valid reply carries the resolved values and the scan

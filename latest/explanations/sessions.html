@@ -589,7 +589,9 @@ revision, even for an unchanged protocol.
 Because the hash is computed over the resolved protocol, two requests that
 differ only in a value the design replaces, such as a preset and the time it
 resolves to, identify the same revision (<a class="reference internal" href="protocol.html"><span class="doc">Protocol resolution</span></a>). An imported revision
-is identified by the names and contents of the imported files.</p>
+is identified by the names and contents of the imported files and the
+field-of-view offset of the import. The offset of a generated revision is part
+of its resolved protocol.</p>
 </section>
 <section id="access-from-the-reconstruction-side">
 <h2>Access from the reconstruction side<a class="headerlink" href="#access-from-the-reconstruction-side" title="Link to this heading">#</a></h2>

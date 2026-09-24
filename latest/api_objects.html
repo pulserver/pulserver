@@ -580,19 +580,22 @@ from.</p>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.ir.convert.html#pulserver.ir.convert" title="pulserver.ir.convert"><code class="xref py py-obj docutils literal notranslate"><span class="pre">convert</span></code></a></p></td>
 <td><p>Segment a sequence file and write its IR cache beside it.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.ir.check.html#pulserver.ir.check" title="pulserver.ir.check"><code class="xref py py-obj docutils literal notranslate"><span class="pre">check</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.ir.prescribe.html#pulserver.ir.prescribe" title="pulserver.ir.prescribe"><code class="xref py py-obj docutils literal notranslate"><span class="pre">prescribe</span></code></a></p></td>
+<td><p>Move a logical-frame sequence to a prescribed field-of-view centre, in place.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.ir.check.html#pulserver.ir.check" title="pulserver.ir.check"><code class="xref py py-obj docutils literal notranslate"><span class="pre">check</span></code></a></p></td>
 <td><p>Return the timing and gradient problems of a chain under a scanner's limits.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.ir.summary.html#pulserver.ir.summary" title="pulserver.ir.summary"><code class="xref py py-obj docutils literal notranslate"><span class="pre">summary</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.ir.summary.html#pulserver.ir.summary" title="pulserver.ir.summary"><code class="xref py py-obj docutils literal notranslate"><span class="pre">summary</span></code></a></p></td>
 <td><p>Return the segmentation of a sequence: subsequences, segments and readouts.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.ir.play.html#pulserver.ir.play" title="pulserver.ir.play"><code class="xref py py-obj docutils literal notranslate"><span class="pre">play</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.ir.play.html#pulserver.ir.play" title="pulserver.ir.play"><code class="xref py py-obj docutils literal notranslate"><span class="pre">play</span></code></a></p></td>
 <td><p>Walk the cache beside a sequence file as the scanner's playout does.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.ir.chain.html#pulserver.ir.chain" title="pulserver.ir.chain"><code class="xref py py-obj docutils literal notranslate"><span class="pre">chain</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.ir.chain.html#pulserver.ir.chain" title="pulserver.ir.chain"><code class="xref py py-obj docutils literal notranslate"><span class="pre">chain</span></code></a></p></td>
 <td><p>Return the files of the <code class="docutils literal notranslate"><span class="pre">NextSequence</span></code> chain starting at a sequence file, in play order.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.ir.cache_path.html#pulserver.ir.cache_path" title="pulserver.ir.cache_path"><code class="xref py py-obj docutils literal notranslate"><span class="pre">cache_path</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.ir.cache_path.html#pulserver.ir.cache_path" title="pulserver.ir.cache_path"><code class="xref py py-obj docutils literal notranslate"><span class="pre">cache_path</span></code></a></p></td>
 <td><p>Return the cache file of a sequence: its last suffix replaced by <code class="docutils literal notranslate"><span class="pre">cache_ext</span></code>.</p></td>
 </tr>
 </tbody>
@@ -666,6 +669,12 @@ from.</p>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.protocol.UIParam.html#pulserver.protocol.UIParam" title="pulserver.protocol.UIParam"><code class="xref py py-obj docutils literal notranslate"><span class="pre">UIParam</span></code></a></p></td>
 <td><p>The keys of the scanner UI's controls, from every typed group.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.protocol.PRESCRIPTION.html#pulserver.protocol.PRESCRIPTION" title="pulserver.protocol.PRESCRIPTION"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PRESCRIPTION</span></code></a></p></td>
+<td><p>Built-in immutable sequence.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.protocol.prescribed_offset.html#pulserver.protocol.prescribed_offset" title="pulserver.protocol.prescribed_offset"><code class="xref py py-obj docutils literal notranslate"><span class="pre">prescribed_offset</span></code></a></p></td>
+<td><p>Return the field-of-view offset protocol values carry, in metres.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.protocol.PROTOCOL_BEGIN.html#pulserver.protocol.PROTOCOL_BEGIN" title="pulserver.protocol.PROTOCOL_BEGIN"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PROTOCOL_BEGIN</span></code></a></p></td>
 <td><p>str(object='') -&gt; str str(bytes_or_buffer[, encoding[, errors]]) -&gt; str</p></td>
@@ -798,12 +807,6 @@ from.</p>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.vre.enrich_acquisition.html#pulserver.vre.enrich_acquisition" title="pulserver.vre.enrich_acquisition"><code class="xref py py-obj docutils literal notranslate"><span class="pre">enrich_acquisition</span></code></a></p></td>
 <td><p>Stamp row <code class="docutils literal notranslate"><span class="pre">index</span></code> of the table on one acquisition, in place.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.vre.fov_offset_m.html#pulserver.vre.fov_offset_m" title="pulserver.vre.fov_offset_m"><code class="xref py py-obj docutils literal notranslate"><span class="pre">fov_offset_m</span></code></a></p></td>
-<td><p>Return the prescription centre a header asks readouts to be demodulated to.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.vre.FOV_OFFSET_PARAMETER.html#pulserver.vre.FOV_OFFSET_PARAMETER" title="pulserver.vre.FOV_OFFSET_PARAMETER"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FOV_OFFSET_PARAMETER</span></code></a></p></td>
-<td><p>str(object='') -&gt; str str(bytes_or_buffer[, encoding[, errors]]) -&gt; str</p></td>
 </tr>
 </tbody>
 </table>

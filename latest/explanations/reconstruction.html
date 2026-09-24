@@ -52,8 +52,6 @@
     <script src="../_static/copybutton.js?v=f281be69"></script>
     <script src="../_static/sg-tags.js?v=d80f6fa4"></script>
     <script src="../_static/scripts/sphinx-book-theme.js?v=fab101a9"></script>
-    <script>window.MathJax = {"options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
-    <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js"></script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'explanations/reconstruction';</script>
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
@@ -516,7 +514,6 @@
             <nav aria-label="Page">
                 <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#enrichment">Enrichment</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#demodulation-to-the-prescription-centre">Demodulation to the prescription centre</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#workers">Workers</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See also</a></li>
 </ul>
@@ -540,6 +537,10 @@ non-Cartesian or segmented acquisition, the navigator readouts and the k-space
 location of each sample are defined by the sequence. The reconstruction proxy
 therefore replaces them with the values the sequence states, before any
 reconstruction code reads the stream.</p>
+<p>The readouts arrive demodulated to the prescribed field-of-view centre, which
+is applied to the sequence when its IR is built (<a class="reference internal" href="ir-cache.html"><span class="doc">The scanner IR</span></a>). The proxy
+leaves the samples as received, and the trajectory it attaches is that of the
+sequence as designed, in the logical frame.</p>
 <section id="enrichment">
 <h2>Enrichment<a class="headerlink" href="#enrichment" title="Link to this heading">#</a></h2>
 <p>The header names the revision the series was acquired with
@@ -563,21 +564,6 @@ row would be shifted.</p></li>
 and the first-and-last flags (<code class="docutils literal notranslate"><span class="pre">FIRST_IN_SLICE</span></code>, <code class="docutils literal notranslate"><span class="pre">LAST_IN_SLICE</span></code> and the
 others), derived from the counters. A reconstruction plugin selects the data a
 reconstruction runs on by these flags.</p>
-</section>
-<section id="demodulation-to-the-prescription-centre">
-<h2>Demodulation to the prescription centre<a class="headerlink" href="#demodulation-to-the-prescription-centre" title="Link to this heading">#</a></h2>
-<p>A Pulseq sequence is designed in logical coordinates about the isocentre. When
-the header records a prescription centre <span class="math notranslate nohighlight">\(\mathbf{d}\)</span>, in mm along the
-sequence’s gradient axes, in the <code class="docutils literal notranslate"><span class="pre">pulserver_fov_offset_mm</span></code> user parameter,
-every channel of each readout is multiplied by</p>
-<div class="math notranslate nohighlight">
-\[
-e^{+i 2\pi \mathbf{d} \cdot \mathbf{k}},
-\]</div>
-<p>where <span class="math notranslate nohighlight">\(\mathbf{k}\)</span> is the k-space location of each sample in 1/m, along the
-same axes with the sequence’s block rotations applied. This moves an
-object at <span class="math notranslate nohighlight">\(\mathbf{d}\)</span> to the centre of the reconstructed field of view. The
-trajectory is not changed.</p>
 </section>
 <section id="workers">
 <h2>Workers<a class="headerlink" href="#workers" title="Link to this heading">#</a></h2>
@@ -657,7 +643,6 @@ past which the worker is terminated and the client told so.</p>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#enrichment">Enrichment</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#demodulation-to-the-prescription-centre">Demodulation to the prescription centre</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#workers">Workers</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See also</a></li>
 </ul>

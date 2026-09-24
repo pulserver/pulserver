@@ -45,6 +45,7 @@ from.
    :nosignatures:
 
    convert
+   prescribe
    check
    summary
    play
@@ -89,6 +90,8 @@ from.
 
    Parameter
    UIParam
+   PRESCRIPTION
+   prescribed_offset
    PROTOCOL_BEGIN
    PROTOCOL_END
    format_listing
@@ -148,6 +151,4 @@ from.
    TableSpace
    enrich_header
    enrich_acquisition
-   fov_offset_m
-   FOV_OFFSET_PARAMETER
 

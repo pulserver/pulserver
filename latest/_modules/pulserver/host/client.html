@@ -543,9 +543,17 @@
 
 <div class="viewcode-block" id="HostClient.import_sequence">
 <a class="viewcode-back" href="../../../generated/pulserver.host.HostClient.import_sequence.html#pulserver.host.HostClient.import_sequence">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">import_sequence</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Return the revision holding a sequence file, its chain and their cache."""</span>
-        <span class="n">header</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_command</span><span class="p">(</span><span class="sa">f</span><span class="s2">"IMPORT </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">session</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span> <span class="n">format_import</span><span class="p">(</span><span class="n">path</span><span class="p">))</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">import_sequence</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span> <span class="n">fov_offset_mm</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Return the revision holding a sequence file, its chain and their cache.</span>
+
+<span class="sd">        ``fov_offset_mm`` is the prescribed field-of-view offset along the</span>
+<span class="sd">        logical readout, phase and slice axes, in mm, which the cache is</span>
+<span class="sd">        shifted to; none leaves the files as they are.</span>
+<span class="sd">        """</span>
+        <span class="n">block</span> <span class="o">=</span> <span class="n">format_import</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">fov_offset_mm</span><span class="p">)</span>
+        <span class="n">header</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_command</span><span class="p">(</span><span class="sa">f</span><span class="s2">"IMPORT </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">session</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span> <span class="n">block</span><span class="p">)</span>
         <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">header</span><span class="o">.</span><span class="n">split</span><span class="p">()[</span><span class="mi">1</span><span class="p">])</span></div>
 
 

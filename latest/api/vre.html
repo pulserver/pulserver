@@ -537,9 +537,10 @@ and runs it on a reconstruction worker.</p>
 </pre></div>
 </div>
 <p>The MRD header of a series names the revision it was played from; the proxy
-reads that revision’s sequence chain, fills in the header and every
-acquisition, and demodulates the readouts to the prescription centre. Routing,
-slots and the queue are described in <a class="reference internal" href="../explanations/reconstruction.html"><span class="doc">Raw-data enrichment and routing</span></a>.</p>
+reads that revision’s sequence chain and fills in the header and every
+acquisition. The readouts arrive demodulated to the prescribed field-of-view
+centre by the playout, and are passed on as received. Routing, slots and the
+queue are described in <a class="reference internal" href="../explanations/reconstruction.html"><span class="doc">Raw-data enrichment and routing</span></a>.</p>
 <section id="proxy">
 <h2>Proxy<a class="headerlink" href="#proxy" title="Link to this heading">#</a></h2>
 <div class="pst-scrollable-table-container"><table class="table">
@@ -601,12 +602,6 @@ slots and the queue are described in <a class="reference internal" href="../expl
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.vre.enrich_acquisition.html#pulserver.vre.enrich_acquisition" title="pulserver.vre.enrich_acquisition"><code class="xref py py-obj docutils literal notranslate"><span class="pre">enrich_acquisition</span></code></a></p></td>
 <td><p>Apply one row of the table to an acquisition, in place.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.vre.fov_offset_m.html#pulserver.vre.fov_offset_m" title="pulserver.vre.fov_offset_m"><code class="xref py py-obj docutils literal notranslate"><span class="pre">fov_offset_m</span></code></a></p></td>
-<td><p>Prescription centre a header requests readouts to be demodulated to, in metres.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.vre.FOV_OFFSET_PARAMETER.html#pulserver.vre.FOV_OFFSET_PARAMETER" title="pulserver.vre.FOV_OFFSET_PARAMETER"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FOV_OFFSET_PARAMETER</span></code></a></p></td>
-<td><p>Header user parameter holding the prescription centre, in mm along the gradient axes.</p></td>
 </tr>
 </tbody>
 </table>

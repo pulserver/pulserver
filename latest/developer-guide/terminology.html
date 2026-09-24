@@ -719,10 +719,10 @@ verb that classifies the operation: “Return…”, “Read…”, “Format…
 <tr class="row-odd"><td><p>Gyromagnetic ratio, field strength</p></td>
 <td><p>Hz/T, T</p></td>
 </tr>
-<tr class="row-even"><td><p>Prescription centre in the MRD header</p></td>
+<tr class="row-even"><td><p>Field-of-view offset in a protocol or an import block</p></td>
 <td><p>mm</p></td>
 </tr>
-<tr class="row-odd"><td><p>Prescription centre returned by <code class="docutils literal notranslate"><span class="pre">fov_offset_m</span></code></p></td>
+<tr class="row-odd"><td><p>Field-of-view offset passed to <code class="docutils literal notranslate"><span class="pre">ir.convert</span></code> and <code class="docutils literal notranslate"><span class="pre">ir.prescribe</span></code></p></td>
 <td><p>m</p></td>
 </tr>
 <tr class="row-even"><td><p>Dwell time in an enriched acquisition (<code class="docutils literal notranslate"><span class="pre">sample_time_us</span></code>)</p></td>
@@ -738,9 +738,10 @@ verb that classifies the operation: “Return…”, “Read…”, “Format…
 </table>
 </div>
 <p>State the coordinate frame wherever a position or a k-space quantity appears.
-The prescription centre and the trajectory are expressed along the sequence’s
-x, y and z gradient axes, with the sequence’s block rotations applied and no
-prescription rotation.</p>
+The field-of-view offset is expressed along the logical readout, phase and
+slice axes. The trajectory is expressed along the sequence’s x, y and z
+gradient axes, with the sequence’s block rotations applied and no prescription
+rotation.</p>
 <p>State the precision a value is exchanged at when it matters: time entries are
 rounded to the nearest microsecond, ties to even, and float entries to six
 significant digits.</p>

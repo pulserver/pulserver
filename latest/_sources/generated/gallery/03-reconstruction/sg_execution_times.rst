@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:00.699** total execution time for 1 file **from generated/gallery/03-reconstruction**:
+**00:01.198** total execution time for 1 file **from generated/gallery/03-reconstruction**:
 
 .. container::
 
@@ -33,5 +33,5 @@ Computation times
      - Time
      - Mem (MB)
    * - :ref:`sphx_glr_generated_gallery_03-reconstruction_01_enrichment.py` (``01_enrichment.py``)
-     - 00:00.699
+     - 00:01.198
      - 0.0

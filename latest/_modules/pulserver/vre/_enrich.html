@@ -456,12 +456,10 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
-    <span class="s2">"FOV_OFFSET_PARAMETER"</span><span class="p">,</span>
     <span class="s2">"SequenceTable"</span><span class="p">,</span>
     <span class="s2">"TableSpace"</span><span class="p">,</span>
     <span class="s2">"enrich_acquisition"</span><span class="p">,</span>
     <span class="s2">"enrich_header"</span><span class="p">,</span>
-    <span class="s2">"fov_offset_m"</span><span class="p">,</span>
 <span class="p">]</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
@@ -473,12 +471,7 @@
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">.._labels</span><span class="w"> </span><span class="kn">import</span> <span class="n">MRD_COUNTERS</span><span class="p">,</span> <span class="n">MRD_FLAGS</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..mrd._acquisitions</span><span class="w"> </span><span class="kn">import</span> <span class="n">AcquisitionFlag</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">..mrd._metadata</span><span class="w"> </span><span class="kn">import</span> <span class="n">user_parameter</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..mrd._sequence</span><span class="w"> </span><span class="kn">import</span> <span class="n">ReadoutTable</span><span class="p">,</span> <span class="n">SequenceDefinitions</span><span class="p">,</span> <span class="n">read_chain</span>
-
-<span class="c1">#: Header user parameter holding the prescription centre: a string of three</span>
-<span class="c1">#: numbers in mm, along the sequence's x, y and z gradient axes.</span>
-<span class="n">FOV_OFFSET_PARAMETER</span> <span class="o">=</span> <span class="s2">"pulserver_fov_offset_mm"</span>
 
 <span class="n">_F</span> <span class="o">=</span> <span class="n">AcquisitionFlag</span>
 
@@ -671,36 +664,6 @@
 
 
 
-<div class="viewcode-block" id="fov_offset_m">
-<a class="viewcode-back" href="../../../generated/pulserver.vre.fov_offset_m.html#pulserver.vre.fov_offset_m">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">fov_offset_m</span><span class="p">(</span><span class="n">header</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Return the prescription centre a header asks readouts to be demodulated to.</span>
-
-<span class="sd">    Read from the :data:`FOV_OFFSET_PARAMETER` user parameter.</span>
-
-<span class="sd">    Returns</span>
-<span class="sd">    -------</span>
-<span class="sd">    ndarray</span>
-<span class="sd">        ``(3,)`` in metres along the sequence's x, y and z gradient axes;</span>
-<span class="sd">        zeros when the header carries no offset.</span>
-
-<span class="sd">    Raises</span>
-<span class="sd">    ------</span>
-<span class="sd">    ValueError</span>
-<span class="sd">        If the parameter is not three numbers.</span>
-<span class="sd">    """</span>
-    <span class="n">value</span> <span class="o">=</span> <span class="n">user_parameter</span><span class="p">(</span><span class="n">header</span><span class="p">,</span> <span class="n">FOV_OFFSET_PARAMETER</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">value</span> <span class="ow">in</span> <span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="s2">""</span><span class="p">):</span>
-        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span>
-    <span class="n">parts</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">value</span><span class="p">)</span><span class="o">.</span><span class="n">split</span><span class="p">()</span>
-    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">parts</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">3</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">FOV_OFFSET_PARAMETER</span><span class="si">}</span><span class="s2"> must be three numbers in mm, got </span><span class="si">{</span><span class="n">value</span><span class="si">!r}</span><span class="s2">"</span>
-        <span class="p">)</span>
-    <span class="k">return</span> <span class="mf">1e-3</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="nb">float</span><span class="p">(</span><span class="n">part</span><span class="p">)</span> <span class="k">for</span> <span class="n">part</span> <span class="ow">in</span> <span class="n">parts</span><span class="p">])</span></div>
-
-
-
 <div class="viewcode-block" id="enrich_header">
 <a class="viewcode-back" href="../../../generated/pulserver.vre.enrich_header.html#pulserver.vre.enrich_header">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">enrich_header</span><span class="p">(</span><span class="n">header</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">table</span><span class="p">:</span> <span class="n">SequenceTable</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
@@ -767,27 +730,14 @@
 
 <div class="viewcode-block" id="enrich_acquisition">
 <a class="viewcode-back" href="../../../generated/pulserver.vre.enrich_acquisition.html#pulserver.vre.enrich_acquisition">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">enrich_acquisition</span><span class="p">(</span>
-    <span class="n">acquisition</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
-    <span class="n">table</span><span class="p">:</span> <span class="n">SequenceTable</span><span class="p">,</span>
-    <span class="n">index</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
-    <span class="n">fov_offset</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">enrich_acquisition</span><span class="p">(</span><span class="n">acquisition</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">table</span><span class="p">:</span> <span class="n">SequenceTable</span><span class="p">,</span> <span class="n">index</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Stamp row ``index`` of the table on one acquisition, in place.</span>
 
 <span class="sd">    Sets the encoding counters, flags, ``sample_time_us`` and</span>
 <span class="sd">    ``encoding_space_ref``, and ``center_sample`` unless k does not move</span>
 <span class="sd">    across the readout, in which case the received value stays. A readout</span>
-<span class="sd">    whose k moves gets it as ``traj``, trailing constant axes dropped. With</span>
-<span class="sd">    ``fov_offset``, every channel is multiplied by ``exp(+i 2 pi d . k)``,</span>
-<span class="sd">    which moves an object at ``d`` to the centre of the field of view; the</span>
-<span class="sd">    trajectory is not changed.</span>
-
-<span class="sd">    Parameters</span>
-<span class="sd">    ----------</span>
-<span class="sd">    fov_offset</span>
-<span class="sd">        ``(3,)`` in metres along the sequence's gradient axes; see</span>
-<span class="sd">        :func:`fov_offset_m`.</span>
+<span class="sd">    whose k moves gets it as ``traj``, trailing constant axes dropped. The</span>
+<span class="sd">    samples are left as received.</span>
 
 <span class="sd">    Raises</span>
 <span class="sd">    ------</span>
@@ -817,16 +767,12 @@
     <span class="n">start</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">table</span><span class="o">.</span><span class="n">sample_offset</span><span class="p">[</span><span class="n">index</span><span class="p">])</span>
     <span class="n">k</span> <span class="o">=</span> <span class="n">table</span><span class="o">.</span><span class="n">k</span><span class="p">[:,</span> <span class="n">start</span> <span class="p">:</span> <span class="n">start</span> <span class="o">+</span> <span class="n">count</span><span class="p">]</span>
 
-    <span class="n">data</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">acquisition</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">fov_offset</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">fov_offset</span><span class="p">):</span>
-        <span class="n">cycles</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">fov_offset</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span> <span class="o">@</span> <span class="n">k</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-        <span class="n">data</span> <span class="o">=</span> <span class="n">data</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="mi">2</span><span class="n">j</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span> <span class="o">*</span> <span class="n">cycles</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">complex64</span><span class="p">)</span>
-
     <span class="n">dimensions</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">table</span><span class="o">.</span><span class="n">trajectory_dimensions</span><span class="p">[</span><span class="n">index</span><span class="p">])</span>
     <span class="k">if</span> <span class="n">dimensions</span><span class="p">:</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">acquisition</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
         <span class="n">acquisition</span><span class="o">.</span><span class="n">resize</span><span class="p">(</span><span class="n">count</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="n">acquisition</span><span class="o">.</span><span class="n">active_channels</span><span class="p">),</span> <span class="n">dimensions</span><span class="p">)</span>
         <span class="n">acquisition</span><span class="o">.</span><span class="n">traj</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">k</span><span class="p">[:</span><span class="n">dimensions</span><span class="p">]</span><span class="o">.</span><span class="n">T</span>
-    <span class="n">acquisition</span><span class="o">.</span><span class="n">data</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">data</span></div>
+        <span class="n">acquisition</span><span class="o">.</span><span class="n">data</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">data</span></div>
 
 
 

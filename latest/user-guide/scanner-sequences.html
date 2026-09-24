@@ -625,17 +625,23 @@ schema, as the daemon returns it to <code class="docutils literal notranslate"><
 <span class="go">TR: int|dropdown|250000|1000|5000000|1|us|-1</span>
 <span class="go">fov: float|typein|220.0|50.0|500.0|1.0|mm</span>
 <span class="go">nx: int|typein|128|32|512|2|</span>
+<span class="go">fov_offset_x: float|off|0.0|-1000.0|1000.0|0.1|mm</span>
+<span class="go">fov_offset_y: float|off|0.0|-1000.0|1000.0|0.1|mm</span>
+<span class="go">fov_offset_z: float|off|0.0|-1000.0|1000.0|0.1|mm</span>
 <span class="go">[NimPulseqGUI Protocol End]</span>
 
 </pre></div>
 </div>
+<p>The last three entries are the field-of-view offset, which the interpreter
+fills from the scanner’s prescription and which the host applies when it
+builds the IR (<a class="reference internal" href="../explanations/ir-cache.html"><span class="doc">The scanner IR</span></a>).</p>
 <p><a class="reference internal" href="../generated/pulserver.design.ScannerSequence.validate.html#pulserver.design.ScannerSequence.validate" title="pulserver.design.ScannerSequence.validate"><code class="xref py py-meth docutils literal notranslate"><span class="pre">validate()</span></code></a> designs the sequence under
 the scanner limits and returns the protocol it will play. Entries the request
 omits keep the application’s defaults:</p>
 <div class="highlight-pycon notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">pypulseqpp</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pp</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">system</span> <span class="o">=</span> <span class="n">pp</span><span class="o">.</span><span class="n">Opts</span><span class="p">(</span><span class="n">max_grad</span><span class="o">=</span><span class="mi">40</span><span class="p">,</span> <span class="n">grad_unit</span><span class="o">=</span><span class="s2">"mT/m"</span><span class="p">,</span> <span class="n">max_slew</span><span class="o">=</span><span class="mi">150</span><span class="p">,</span> <span class="n">slew_unit</span><span class="o">=</span><span class="s2">"T/m/s"</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">Gre2D</span><span class="p">()</span><span class="o">.</span><span class="n">validate</span><span class="p">(</span><span class="n">system</span><span class="p">,</span> <span class="p">{</span><span class="s2">"TE"</span><span class="p">:</span> <span class="n">TEPreset</span><span class="o">.</span><span class="n">MINIMUM</span><span class="p">,</span> <span class="s2">"nx"</span><span class="p">:</span> <span class="mi">96</span><span class="p">})</span>
-<span class="go">Validation(valid=True, duration=36.0, info='', values={'TE': 3080, 'TR': 250000, 'fov': 220.0, 'nx': 96})</span>
+<span class="go">Validation(valid=True, duration=36.0, info='', values={'TE': 3080, 'TR': 250000, 'fov': 220.0, 'nx': 96, 'fov_offset_x': 0.0, 'fov_offset_y': 0.0, 'fov_offset_z': 0.0})</span>
 
 </pre></div>
 </div>

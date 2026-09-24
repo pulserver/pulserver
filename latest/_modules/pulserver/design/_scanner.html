@@ -463,10 +463,12 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">pypulseqpp</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pp</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pypulseqpp</span><span class="w"> </span><span class="kn">import</span> <span class="n">sequences</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">..protocol</span><span class="w"> </span><span class="kn">import</span> <span class="n">InputMode</span><span class="p">,</span> <span class="n">Kind</span><span class="p">,</span> <span class="n">Parameter</span><span class="p">,</span> <span class="n">Validation</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">..protocol</span><span class="w"> </span><span class="kn">import</span> <span class="n">PRESCRIPTION</span><span class="p">,</span> <span class="n">InputMode</span><span class="p">,</span> <span class="n">Kind</span><span class="p">,</span> <span class="n">Parameter</span><span class="p">,</span> <span class="n">Validation</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..protocol._keys</span><span class="w"> </span><span class="kn">import</span> <span class="n">WIRE_NAMES</span>
 
 <span class="n">Preset</span> <span class="o">=</span> <span class="nb">float</span> <span class="o">|</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">pp</span><span class="o">.</span><span class="n">Opts</span><span class="p">],</span> <span class="nb">float</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span>
+<span class="c1">#: Range of each prescription entry, in mm either side of the isocentre.</span>
+<span class="n">OFFSET_LIMIT_MM</span> <span class="o">=</span> <span class="mf">1000.0</span>
 
 <span class="c1"># FLT_DIG: the significant decimal digits a float32 CV holds through a round trip.</span>
 <span class="n">_SIGNIFICANT_DIGITS</span> <span class="o">=</span> <span class="mi">6</span>
@@ -695,7 +697,8 @@
 <span class="sd">    ------</span>
 <span class="sd">    ValueError</span>
 <span class="sd">        When a subclass is defined with a ``ui`` key the interpreter does not</span>
-<span class="sd">        know, which its parser would drop.</span>
+<span class="sd">        know, which its parser would drop, or with one of the prescription</span>
+<span class="sd">        entries, which pulserver applies itself.</span>
 <span class="sd">    """</span>
 
     <span class="n">app</span><span class="p">:</span> <span class="n">ClassVar</span><span class="p">[</span><span class="nb">type</span><span class="p">[</span><span class="n">sequences</span><span class="o">.</span><span class="n">SequenceApp</span><span class="p">]]</span>
@@ -712,6 +715,12 @@
                 <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="bp">cls</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> declares entries the interpreter does not know: "</span>
                 <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">unknown</span><span class="si">}</span><span class="s2">"</span>
             <span class="p">)</span>
+        <span class="n">reserved</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">name</span><span class="p">)</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="bp">cls</span><span class="o">.</span><span class="n">ui</span> <span class="k">if</span> <span class="nb">str</span><span class="p">(</span><span class="n">name</span><span class="p">)</span> <span class="ow">in</span> <span class="n">PRESCRIPTION</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">reserved</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="bp">cls</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> binds the prescription entries </span><span class="si">{</span><span class="n">reserved</span><span class="si">}</span><span class="s2">, which "</span>
+                <span class="s2">"pulserver applies when it builds the IR"</span>
+            <span class="p">)</span>
         <span class="bp">cls</span><span class="o">.</span><span class="n">ui</span> <span class="o">=</span> <span class="p">{</span><span class="nb">str</span><span class="p">(</span><span class="n">name</span><span class="p">):</span> <span class="n">entry</span> <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">entry</span> <span class="ow">in</span> <span class="bp">cls</span><span class="o">.</span><span class="n">ui</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
 
 <div class="viewcode-block" id="ScannerSequence.listing">
@@ -720,11 +729,24 @@
 <span class="w">        </span><span class="sd">"""Return the protocol with its schema, valued at the application's defaults.</span>
 
 <span class="sd">        An argument defaulting to ``None`` shows the preset that requests ``None``.</span>
+<span class="sd">        The ``PRESCRIPTION`` entries of :mod:`pulserver.protocol` follow the</span>
+<span class="sd">        declared ones, at zero and not editable in the UI.</span>
 <span class="sd">        """</span>
         <span class="n">defaults</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">app</span><span class="o">.</span><span class="n">protocol</span><span class="p">()</span>
-        <span class="k">return</span> <span class="p">{</span>
+        <span class="n">listing</span> <span class="o">=</span> <span class="p">{</span>
             <span class="n">name</span><span class="p">:</span> <span class="n">_parameter</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">entry</span><span class="p">,</span> <span class="n">defaults</span><span class="p">)</span> <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">entry</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">ui</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
-        <span class="p">}</span></div>
+        <span class="p">}</span>
+        <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">PRESCRIPTION</span><span class="p">:</span>
+            <span class="n">listing</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">Parameter</span><span class="p">(</span>
+                <span class="n">Kind</span><span class="o">.</span><span class="n">FLOAT</span><span class="p">,</span>
+                <span class="mf">0.0</span><span class="p">,</span>
+                <span class="n">InputMode</span><span class="o">.</span><span class="n">OFF</span><span class="p">,</span>
+                <span class="o">-</span><span class="n">OFFSET_LIMIT_MM</span><span class="p">,</span>
+                <span class="n">OFFSET_LIMIT_MM</span><span class="p">,</span>
+                <span class="mf">0.1</span><span class="p">,</span>
+                <span class="s2">"mm"</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">listing</span></div>
 
 
 <div class="viewcode-block" id="ScannerSequence.resolved">

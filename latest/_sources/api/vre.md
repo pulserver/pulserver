@@ -15,9 +15,10 @@ python -m pulserver.vre --base DIR --port N --plugins DIR [--slots N] [--spares 
 ```
 
 The MRD header of a series names the revision it was played from; the proxy
-reads that revision's sequence chain, fills in the header and every
-acquisition, and demodulates the readouts to the prescription centre. Routing,
-slots and the queue are described in {doc}`../explanations/reconstruction`.
+reads that revision's sequence chain and fills in the header and every
+acquisition. The readouts arrive demodulated to the prescribed field-of-view
+centre by the playout, and are passed on as received. Routing, slots and the
+queue are described in {doc}`../explanations/reconstruction`.
 
 ## Proxy
 
@@ -42,5 +43,3 @@ slots and the queue are described in {doc}`../explanations/reconstruction`.
 | {obj}`~pulserver.vre.TableSpace` | One encoding space of a sequence table. |
 | {obj}`~pulserver.vre.enrich_header` | Describe the table's encoding spaces and sequence parameters in an MRD header. |
 | {obj}`~pulserver.vre.enrich_acquisition` | Apply one row of the table to an acquisition, in place. |
-| {obj}`~pulserver.vre.fov_offset_m` | Prescription centre a header requests readouts to be demodulated to, in metres. |
-| {obj}`~pulserver.vre.FOV_OFFSET_PARAMETER` | Header user parameter holding the prescription centre, in mm along the gradient axes. |

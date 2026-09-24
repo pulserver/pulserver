@@ -119,6 +119,9 @@ rate from the readout module, where the application keeps them.
     bandwidth: float|typein|250000.0|1000.0|1000000.0|1.0|Hz
     fov: float|typein|220.0|50.0|500.0|1.0|mm
     nx: int|typein|128|32|512|2|
+    fov_offset_x: float|off|0.0|-1000.0|1000.0|0.1|mm
+    fov_offset_y: float|off|0.0|-1000.0|1000.0|0.1|mm
+    fov_offset_z: float|off|0.0|-1000.0|1000.0|0.1|mm
     [NimPulseqGUI Protocol End]
 
 
@@ -325,7 +328,7 @@ protocol (:doc:`/explanations/sessions`).
 
  .. code-block:: none
 
-    {'TE': 3580, 'TR': 250000, 'bandwidth': 133333.0, 'fov': 220.0, 'nx': 192}
+    {'TE': 3580, 'TR': 250000, 'bandwidth': 133333.0, 'fov': 220.0, 'nx': 192, 'fov_offset_x': 0.0, 'fov_offset_y': 0.0, 'fov_offset_z': 0.0}
     True scan time 36.0 s
 
 
@@ -334,7 +337,7 @@ protocol (:doc:`/explanations/sessions`).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 2.038 seconds)
+   **Total running time of the script:** (0 minutes 2.403 seconds)
 
 
 .. _sphx_glr_download_generated_gallery_01-protocol_01_protocol_resolution.py:

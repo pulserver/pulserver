@@ -532,17 +532,11 @@
 <p>Sets the encoding counters, flags, <code class="docutils literal notranslate"><span class="pre">sample_time_us</span></code> and
 <code class="docutils literal notranslate"><span class="pre">encoding_space_ref</span></code>, and <code class="docutils literal notranslate"><span class="pre">center_sample</span></code> unless k does not move
 across the readout, in which case the received value stays. A readout
-whose k moves gets it as <code class="docutils literal notranslate"><span class="pre">traj</span></code>, trailing constant axes dropped. With
-<code class="docutils literal notranslate"><span class="pre">fov_offset</span></code>, every channel is multiplied by <code class="docutils literal notranslate"><span class="pre">exp(+i</span> <span class="pre">2</span> <span class="pre">pi</span> <span class="pre">d</span> <span class="pre">.</span> <span class="pre">k)</span></code>,
-which moves an object at <code class="docutils literal notranslate"><span class="pre">d</span></code> to the centre of the field of view; the
-trajectory is not changed.</p>
+whose k moves gets it as <code class="docutils literal notranslate"><span class="pre">traj</span></code>, trailing constant axes dropped. The
+samples are left as received.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>fov_offset</strong> – <code class="docutils literal notranslate"><span class="pre">(3,)</span></code> in metres along the sequence’s gradient axes; see
-<a class="reference internal" href="pulserver.vre.fov_offset_m.html#pulserver.vre.fov_offset_m" title="pulserver.vre.fov_offset_m"><code class="xref py py-func docutils literal notranslate"><span class="pre">fov_offset_m()</span></code></a>.</p>
-</dd>
-<dt class="field-even">Raises<span class="colon">:</span></dt>
-<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If the acquisition’s sample count differs from the row’s.</p>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If the acquisition’s sample count differs from the row’s.</p>
 </dd>
 </dl>
 </dd></dl>

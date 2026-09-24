@@ -533,11 +533,18 @@
 subsequences of one scan. An existing cache at the destination is
 replaced. RF vendor statistics are left at zero: <code class="docutils literal notranslate"><span class="pre">vendor</span></code> only tags the
 cache for the reader that loads it, which must be built for that vendor.</p>
+<p>The files are expected in the logical frame, and each is moved to
+<code class="docutils literal notranslate"><span class="pre">fov_offset</span></code> with <a class="reference internal" href="pulserver.ir.prescribe.html#pulserver.ir.prescribe" title="pulserver.ir.prescribe"><code class="xref py py-func docutils literal notranslate"><span class="pre">prescribe()</span></code></a> before it is segmented. The
+prescription’s rotation is not applied here: the scanner plays the cache
+through its rotation matrix, composed after each block’s own rotation.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>seq_path</strong> – Text or binary Pulseq file.</p></li>
 <li><p><strong>system</strong> – Limits and rasters the scan is segmented under.</p></li>
+<li><p><strong>fov_offset</strong> – Translation of the field-of-view centre along the logical readout,
+phase and slice axes, in metres. None or zero leaves the files as
+designed.</p></li>
 <li><p><strong>vendor</strong> – <code class="docutils literal notranslate"><span class="pre">PULSEG_VENDOR_*</span></code> code; 0 is vendor-neutral.</p></li>
 <li><p><strong>label_column_map</strong> – Pulseq label state indices filling the three ADC label columns:
 0 SLC, 1 PHS, 2 REP, 3 AVG, 4 SEG, 5 SET, 6 ECO, 7 PAR, 8 LIN, 9 ACQ.</p></li>
