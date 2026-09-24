@@ -1,4 +1,8 @@
-"""ISMRMRD images to DICOM datasets, with series fields from the MRD XML header."""
+"""ISMRMRD images to DICOM datasets, with series fields from the MRD XML header.
+
+Adapted from the converter of
+python-ismrmrd-server (Copyright (c) 2024 Kelvin Chow; MIT, see ``LICENSES/python-ismrmrd-server-MIT.txt``).
+"""
 
 __all__ = ["DicomWithName", "MrdDicomBuilder"]
 

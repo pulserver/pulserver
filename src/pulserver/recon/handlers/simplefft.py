@@ -1,4 +1,8 @@
-"""Two-dimensional Cartesian FFT reconstruction, one image per slice."""
+"""Two-dimensional Cartesian FFT reconstruction, one image per slice.
+
+Adapted from the ``simplefft`` example of
+python-ismrmrd-server (Copyright (c) 2024 Kelvin Chow; MIT, see ``LICENSES/python-ismrmrd-server-MIT.txt``).
+"""
 
 from __future__ import annotations
 

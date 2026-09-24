@@ -1,4 +1,8 @@
-"""Writers for MRD streaming messages; each takes a destination with ``write(bytes)``."""
+"""Writers for MRD streaming messages; each takes a destination with ``write(bytes)``.
+
+Adapted from the writers of
+gadgetron-python (Copyright (c) 2019 Gadgetron; MIT, see ``LICENSES/gadgetron-python-MIT.txt``).
+"""
 
 __all__ = [
     "header_document",

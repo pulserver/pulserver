@@ -1,4 +1,8 @@
-"""Readers for MRD streaming messages; each takes a source with ``read(nbytes)``."""
+"""Readers for MRD streaming messages; each takes a source with ``read(nbytes)``.
+
+Adapted from the readers of
+gadgetron-python (Copyright (c) 2019 Gadgetron; MIT, see ``LICENSES/gadgetron-python-MIT.txt``).
+"""
 
 __all__ = [
     "deserialize_config",

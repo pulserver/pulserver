@@ -9,7 +9,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 dynamic = ["version"]
 license = "MIT"
-license-files = ["LICENSE"]
+license-files = ["LICENSE", "LICENSES/*"]
 keywords = ["mri", "pulseq", "mrd", "ismrmrd", "reconstruction", "scanner"]
 authors = [{ name = "Matteo Cencini", email = "matteo.cencini@gmail.com" }]
 classifiers = [
@@ -56,7 +56,7 @@ Source = "https://github.com/pulserver/pulserver"
 
 [tool.scikit-build]
 cmake.source-dir = "."
-sdist.include = ["src/**", "tests/**", "README.md", "LICENSE"]
+sdist.include = ["src/**", "tests/**", "README.md", "LICENSE", "LICENSES/**"]
 
 [tool.scikit-build.wheel]
 packages = { "pulserver" = "src/pulserver" }
