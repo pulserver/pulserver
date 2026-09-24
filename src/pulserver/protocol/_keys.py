@@ -70,6 +70,15 @@ class FloatKey(StrEnum):
     FOV_OFFSET_X = "fov_offset_x"
     FOV_OFFSET_Y = "fov_offset_y"
     FOV_OFFSET_Z = "fov_offset_z"
+    FOV_ROTATION_11 = "fov_rotation_11"
+    FOV_ROTATION_12 = "fov_rotation_12"
+    FOV_ROTATION_13 = "fov_rotation_13"
+    FOV_ROTATION_21 = "fov_rotation_21"
+    FOV_ROTATION_22 = "fov_rotation_22"
+    FOV_ROTATION_23 = "fov_rotation_23"
+    FOV_ROTATION_31 = "fov_rotation_31"
+    FOV_ROTATION_32 = "fov_rotation_32"
+    FOV_ROTATION_33 = "fov_rotation_33"
 
     RY = "Ry"
     RZ = "Rz"
@@ -181,6 +190,15 @@ class UIParam:
     FOV_OFFSET_X = FloatKey.FOV_OFFSET_X
     FOV_OFFSET_Y = FloatKey.FOV_OFFSET_Y
     FOV_OFFSET_Z = FloatKey.FOV_OFFSET_Z
+    FOV_ROTATION_11 = FloatKey.FOV_ROTATION_11
+    FOV_ROTATION_12 = FloatKey.FOV_ROTATION_12
+    FOV_ROTATION_13 = FloatKey.FOV_ROTATION_13
+    FOV_ROTATION_21 = FloatKey.FOV_ROTATION_21
+    FOV_ROTATION_22 = FloatKey.FOV_ROTATION_22
+    FOV_ROTATION_23 = FloatKey.FOV_ROTATION_23
+    FOV_ROTATION_31 = FloatKey.FOV_ROTATION_31
+    FOV_ROTATION_32 = FloatKey.FOV_ROTATION_32
+    FOV_ROTATION_33 = FloatKey.FOV_ROTATION_33
     RY = FloatKey.RY
     RZ = FloatKey.RZ
     COMPRESSED_SENSING = FloatKey.COMPRESSED_SENSING

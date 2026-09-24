@@ -46,14 +46,18 @@ sequence names its entries with them.
 
 ## Prescription
 
-The field-of-view offset the interpreter fills from the scanner's prescription.
-The entries close every listing and are not bound to a design argument; the
-host applies the offset when it builds the IR.
+The field-of-view offset and orientation the interpreter fills from the
+scanner's prescription. The entries close every listing and are not bound to a
+design argument; the host applies the offset when it builds the IR, and checks
+the design in the physical frame the orientation gives.
 
 | Object | Description |
 | --- | --- |
-| {obj}`~pulserver.protocol.PRESCRIPTION` | Names of the field-of-view offset entries, in mm along the logical readout, phase and slice axes. |
+| {obj}`~pulserver.protocol.PRESCRIPTION` | Names of every prescription entry: the offset's, then the rotation's. |
+| {obj}`~pulserver.protocol.FOV_OFFSET` | Names of the field-of-view offset entries, in mm along the logical readout, phase and slice axes. |
+| {obj}`~pulserver.protocol.FOV_ROTATION` | Names of the rotation entries, row-major: element `(i, j)` of `R` in physical = R logical. |
 | {obj}`~pulserver.protocol.prescribed_offset` | Field-of-view offset that protocol values carry, in metres. |
+| {obj}`~pulserver.protocol.prescribed_rotation` | Rotation from logical to physical axes that protocol values carry, made orthonormal. |
 
 ## Wire blocks
 

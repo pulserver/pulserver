@@ -157,7 +157,25 @@ extern "C"
  * rather than its continuous ones.  A request, not a setting: the vendor
  * layer offers it to the scanner, which grants or refuses it. */
 #define PULSEG_PARAM_ENABLE_SAR_BURST 94
-#define PULSEG_PARAM_COUNT 95 /* sentinel */
+/* --- FOV orientation ---
+ * The prescription's rotation from the logical readout, phase-encoding and
+ * slice axes to the physical x, y and z gradient axes, element (i, j) as
+ * FOV_ROTATION_ij, so that physical = R logical: column j is logical axis j
+ * in physical coordinates.  R is orthonormal, a reflection included, to the
+ * precision the protocol carries.  The interpreter fills these from its
+ * prescription and sends them with the protocol, identity when it has none.
+ * The host checks the design's gradients in the physical frame this rotation
+ * gives; the cache itself is played through the scanner's rotation matrix. */
+#define PULSEG_PARAM_FOV_ROTATION_11 95
+#define PULSEG_PARAM_FOV_ROTATION_12 96
+#define PULSEG_PARAM_FOV_ROTATION_13 97
+#define PULSEG_PARAM_FOV_ROTATION_21 98
+#define PULSEG_PARAM_FOV_ROTATION_22 99
+#define PULSEG_PARAM_FOV_ROTATION_23 100
+#define PULSEG_PARAM_FOV_ROTATION_31 101
+#define PULSEG_PARAM_FOV_ROTATION_32 102
+#define PULSEG_PARAM_FOV_ROTATION_33 103
+#define PULSEG_PARAM_COUNT 104 /* sentinel */
 
     /* ================================================================== */
     /*  Parameter types                                                   */

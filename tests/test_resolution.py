@@ -15,6 +15,7 @@ from pulserver.protocol import (
     TRPreset,
     UIParam,
     prescribed_offset,
+    prescribed_rotation,
 )
 
 PLUGINS = Path(__file__).parent / "plugins"
@@ -206,23 +207,37 @@ def test_a_plugin_file_must_define_exactly_one_scanner_sequence(tmp_path):
         load_plugin(empty)
 
 
-def test_the_listing_ends_with_the_prescription_at_zero_and_not_editable(tiny):
+def test_the_listing_ends_with_the_prescription_as_the_identity_and_not_editable(
+    tiny,
+):
     listing = tiny.listing()
-    assert list(listing)[-3:] == list(PRESCRIPTION)
-    for name in PRESCRIPTION:
+    assert list(listing)[-len(PRESCRIPTION) :] == list(PRESCRIPTION)
+    expected = [(0.0, "mm")] * 3 + [(float(v), "") for v in np.eye(3).ravel()]
+    for name, (value, unit) in zip(PRESCRIPTION, expected, strict=True):
         entry = listing[name]
         assert (entry.kind, entry.value, entry.mode, entry.unit) == (
             Kind.FLOAT,
-            0.0,
+            value,
             InputMode.OFF,
-            "mm",
+            unit,
         )
 
 
 def test_the_prescription_travels_through_resolution_unchanged(gre2d):
+    quarter = {"fov_rotation_11": 0.0, "fov_rotation_12": -1.0}
+    quarter |= {"fov_rotation_21": 1.0, "fov_rotation_22": 0.0}
     request = {"nx": 32, "ny": 32, "fov_offset_x": 12.5, "fov_offset_z": -4.0}
-    values = gre2d.validate(SYSTEM, request).values
+    values = gre2d.validate(SYSTEM, {**request, **quarter}).values
     assert prescribed_offset(values) == pytest.approx((0.0125, 0.0, -0.004))
+    np.testing.assert_allclose(
+        prescribed_rotation(values), [[0, -1, 0], [1, 0, 0], [0, 0, 1]], atol=1e-12
+    )
+
+
+def test_a_request_whose_rotation_is_not_orthonormal_is_invalid(tiny):
+    reply = tiny.validate(SYSTEM, {"fov_rotation_33": 1.01})
+    assert not reply.valid
+    assert "not orthonormal" in reply.info
 
 
 def test_a_scanner_sequence_may_not_bind_a_prescription_entry(tiny):

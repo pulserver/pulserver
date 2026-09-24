@@ -75,13 +75,23 @@ nx: int|typein|128|32|512|2|
 fov_offset_x: float|off|0.0|-1000.0|1000.0|0.1|mm
 fov_offset_y: float|off|0.0|-1000.0|1000.0|0.1|mm
 fov_offset_z: float|off|0.0|-1000.0|1000.0|0.1|mm
+fov_rotation_11: float|off|1.0|-1.0|1.0|1e-06|
+fov_rotation_12: float|off|0.0|-1.0|1.0|1e-06|
+fov_rotation_13: float|off|0.0|-1.0|1.0|1e-06|
+fov_rotation_21: float|off|0.0|-1.0|1.0|1e-06|
+fov_rotation_22: float|off|1.0|-1.0|1.0|1e-06|
+fov_rotation_23: float|off|0.0|-1.0|1.0|1e-06|
+fov_rotation_31: float|off|0.0|-1.0|1.0|1e-06|
+fov_rotation_32: float|off|0.0|-1.0|1.0|1e-06|
+fov_rotation_33: float|off|1.0|-1.0|1.0|1e-06|
 [NimPulseqGUI Protocol End]
 
 ```
 
-The last three entries are the field-of-view offset, which the interpreter
-fills from the scanner's prescription and which the host applies when it
-builds the IR ({doc}`../explanations/ir-cache`).
+The last twelve entries are the prescription, which the interpreter fills from
+the scanner's: the field-of-view offset, which the host applies when it builds
+the IR, and the rotation from the logical to the physical axes, in whose frame
+the host checks the design ({doc}`../explanations/ir-cache`).
 
 {meth}`~pulserver.design.ScannerSequence.validate` constructs the application
 under the scanner limits and returns the protocol it will play. Entries the
@@ -90,10 +100,15 @@ request omits keep the application's defaults:
 ```pycon
 >>> import pypulseqpp as pp
 >>> system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
->>> Gre2D().validate(system, {"TE": TEPreset.MINIMUM, "nx": 96})
-Validation(valid=True, duration=36.0, info='', values={'TE': 3080, 'TR': 250000, 'fov': 220.0, 'nx': 96, 'fov_offset_x': 0.0, 'fov_offset_y': 0.0, 'fov_offset_z': 0.0})
+>>> reply = Gre2D().validate(system, {"TE": TEPreset.MINIMUM, "nx": 96})
+>>> reply.valid, reply.duration, reply.info
+(True, 36.0, '')
+>>> {name: reply.values[name] for name in ("TE", "TR", "fov", "nx")}
+{'TE': 3080, 'TR': 250000, 'fov': 220.0, 'nx': 96}
 
 ```
+
+The values also carry the prescription entries as they were requested.
 
 The resolved `TE` is the echo time the design achieved: the value the
 application records with {meth}`~pypulseqpp.sequences.SequenceApp.resolve` in

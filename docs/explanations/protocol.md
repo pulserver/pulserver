@@ -25,11 +25,14 @@ application's `init_sequence`. Resolving a request proceeds in three steps.
    units. An argument the application does not record keeps its requested
    value.
 
-The field-of-view offset is not a design argument. Every listing ends with the
-entries `fov_offset_x`, `fov_offset_y` and `fov_offset_z`, in mm and not
-editable in the UI, which the interpreter fills from the scanner's
-prescription; resolution returns them unchanged, and the host applies the
-offset to the designed sequence when it builds the IR ({doc}`ir-cache`). A
+The prescription is not a design argument. Every listing ends with its
+entries, not editable in the UI, which the interpreter fills from the
+scanner's prescription: the field-of-view offset in `fov_offset_x`,
+`fov_offset_y` and `fov_offset_z`, in mm, and the rotation from the logical to
+the physical axes in the nine `fov_rotation_ij`, identity by default.
+Resolution returns them unchanged, refusing a rotation that is not orthonormal;
+the host applies the offset to the designed sequence when it builds the IR, and
+checks the design in the physical frame of the rotation ({doc}`ir-cache`). A
 scanner sequence cannot bind them to an argument.
 
 A request the design refuses is invalid. The reply carries the request
