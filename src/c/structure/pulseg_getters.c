@@ -2205,6 +2205,117 @@ float *pulseg_get_grad_time_us(const pulseg_collection *coll, int seg_idx, int b
     return decompressed.samples;
 }
 
+int pulseg_get_cursor_grad_waveform(
+    const pulseg_collection *coll,
+    int axis,
+    float **amplitude,
+    float **time_us)
+{
+    const pulseg_block_cursor *cursor;
+    const pulseg_sequence_descriptor *desc;
+    const pulseg_block_table_element *bte;
+    const pulseg_grad_table_element *gte;
+    const pulseg_grad_definition *gdef;
+    pulseq_shape decompressed;
+    float *a;
+    float *t;
+    int idx, id, n;
+
+    if (!coll || !amplitude || !time_us)
+        return PULSEG_ERR_NULL_POINTER;
+    *amplitude = NULL;
+    *time_us = NULL;
+    if (axis < PULSEG_GRAD_AXIS_X || axis > PULSEG_GRAD_AXIS_Z)
+        return PULSEG_ERR_INVALID_ARGUMENT;
+    cursor = &coll->block_cursor;
+    if (cursor->sequence_index < 0 || cursor->sequence_index >= coll->num_subsequences)
+        return PULSEG_ERR_INVALID_ARGUMENT;
+    desc = &coll->descriptors[cursor->sequence_index];
+    idx = pulseg__exec_block_idx(desc, cursor->exec_stream_position);
+    if (idx < 0 || idx >= desc->num_blocks)
+        return PULSEG_ERR_INVALID_ARGUMENT;
+    bte = &desc->block_table[idx];
+    if (axis == PULSEG_GRAD_AXIS_X)
+        id = bte->gx_id;
+    else if (axis == PULSEG_GRAD_AXIS_Y)
+        id = bte->gy_id;
+    else
+        id = bte->gz_id;
+    if (id < 0 || id >= desc->grad_table_size)
+        return 0;
+    gte = &desc->grad_table[id];
+    if (gte->id < 0 || gte->id >= desc->num_unique_grads)
+        return PULSEG_ERR_INVALID_ARGUMENT;
+    gdef = &desc->grad_definitions[gte->id];
+
+    if (gdef->type == 0)
+    {
+        n = (gdef->flat_time_or_unused > 0) ? 4 : 3;
+        a = (float *)PULSEG_ALLOC((size_t)n * sizeof(float));
+        t = (float *)PULSEG_ALLOC((size_t)n * sizeof(float));
+        if (!a || !t)
+        {
+            PULSEG_FREE(a);
+            PULSEG_FREE(t);
+            return PULSEG_ERR_ALLOC_FAILED;
+        }
+        a[0] = 0.0f;
+        a[1] = 1.0f;
+        a[n - 1] = 0.0f;
+        t[0] = 0.0f;
+        t[1] = (float)gdef->rise_time_or_unused;
+        if (n == 4)
+        {
+            a[2] = 1.0f;
+            t[2] = t[1] + (float)gdef->flat_time_or_unused;
+        }
+        t[n - 1] = t[n - 2] + (float)gdef->fall_time_or_num_uncompressed_samples;
+        *amplitude = a;
+        *time_us = t;
+        return n;
+    }
+
+    if (gte->shape_id < 1 || gte->shape_id > desc->num_shapes)
+        return PULSEG_ERR_INVALID_ARGUMENT;
+    decompressed.num_samples = 0;
+    decompressed.num_uncompressed_samples = 0;
+    decompressed.samples = NULL;
+    if (!pulseq_decompress_shape(&decompressed, &desc->shapes[gte->shape_id - 1], 1.0f))
+        return PULSEG_ERR_ALLOC_FAILED;
+    a = decompressed.samples;
+    n = decompressed.num_samples;
+
+    if (gdef->unused_or_time_shape_id > 0 && gdef->unused_or_time_shape_id <= desc->num_shapes)
+    {
+        decompressed.num_samples = 0;
+        decompressed.num_uncompressed_samples = 0;
+        decompressed.samples = NULL;
+        if (!pulseq_decompress_shape(
+                &decompressed,
+                &desc->shapes[gdef->unused_or_time_shape_id - 1],
+                desc->grad_raster_us) ||
+            decompressed.num_samples != n)
+        {
+            PULSEG_FREE(a);
+            PULSEG_FREE(decompressed.samples);
+            return PULSEG_ERR_INVALID_ARGUMENT;
+        }
+        t = decompressed.samples;
+    }
+    else
+    {
+        t = alloc_uniform_time_us(n, desc->grad_raster_us);
+        if (!t)
+        {
+            PULSEG_FREE(a);
+            return PULSEG_ERR_ALLOC_FAILED;
+        }
+    }
+    *amplitude = a;
+    *time_us = t;
+    return n;
+}
+
 /* ================================================================== */
 /*  ADC block queries (internal helpers)                               */
 /* ================================================================== */
@@ -2698,6 +2809,7 @@ static int resolve_block_instance(
 {
     const pulseg_block_table_element *bte;
     const pulseg_base_block *bdef;
+    const pulseg_rf_table_element *rte;
     int idx, i;
 
     if (exec_stream_position < 0 || exec_stream_position >= desc->exec_stream_len)
@@ -2719,12 +2831,17 @@ static int resolve_block_instance(
         inst->rf_amp_hz = desc->rf_table[bte->rf_id].amplitude;
         inst->rf_freq_hz = desc->rf_table[bte->rf_id].freq_offset;
         inst->rf_phase_rad = desc->rf_table[bte->rf_id].phase_offset;
+        rte = &desc->rf_table[bte->rf_id];
+        inst->rf_use = (rte->id >= 0 && rte->id < desc->num_unique_rfs)
+                           ? pulseg__rf_event_use(&desc->rf_definitions[rte->id], rte)
+                           : rte->rf_use;
     }
     else
     {
         inst->rf_amp_hz = 0.0f;
         inst->rf_freq_hz = 0.0f;
         inst->rf_phase_rad = 0.0f;
+        inst->rf_use = PULSEG_RF_USE_UNKNOWN;
     }
 
     /* Gradients */

@@ -756,6 +756,10 @@ char *pulseg__make_cache_path(const char *seq_path, const char *ext);
 /* --- Shared block-definition predicates (pulseg_structure.c) --- */
 int pulseg__block_def_is_pure_delay(const pulseg_base_block *b);
 
+/* PULSEG_RF_USE_* of an RF event: its tag, or, untagged, refocusing at a flip
+ * angle of 162 to 198 degrees and excitation otherwise. */
+int pulseg__rf_event_use(const pulseg_rf_definition *rdef, const pulseg_rf_table_element *rte);
+
 /* Worst-case gradient magnitude at the start / end of the instance held in
  * grad table row @p raw_id, in Hz/m.
  *

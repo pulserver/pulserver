@@ -8,6 +8,7 @@
  * scanner build links them without the conversion passes that fill it.
  */
 
+#include <math.h>
 #include <stddef.h>
 
 #include "pulseg_internal.h"
@@ -23,6 +24,18 @@
 int pulseg__block_def_is_pure_delay(const pulseg_base_block *b)
 {
     return (b->rf_id < 0 && b->gx_id < 0 && b->gy_id < 0 && b->gz_id < 0 && b->adc_id < 0);
+}
+
+int pulseg__rf_event_use(const pulseg_rf_definition *rdef, const pulseg_rf_table_element *rte)
+{
+    double flip_deg;
+
+    if (rte->rf_use != PULSEG_RF_USE_UNKNOWN || rdef->stats.base_amplitude_hz <= 0.0f)
+        return rte->rf_use;
+    flip_deg = (double)rdef->stats.flip_angle_rad * fabs((double)rte->amplitude) /
+               (double)rdef->stats.base_amplitude_hz * (180.0 / M_PI);
+    return (flip_deg > 162.0 && flip_deg < 198.0) ? PULSEG_RF_USE_REFOCUSING
+                                                  : PULSEG_RF_USE_EXCITATION;
 }
 
 int pulseg__block_defs_structurally_equal(

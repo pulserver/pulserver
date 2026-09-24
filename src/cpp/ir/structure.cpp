@@ -3785,7 +3785,6 @@ int pulseg__calc_segment_timing(pulseg_sequence_descriptor *desc, pulseg_diagnos
                 rf_def_id = rte->id;
                 if (rf_def_id >= 0 && rf_def_id < desc->num_unique_rfs)
                 {
-                    int use;
                     rdef = &desc->rf_definitions[rf_def_id];
                     rf_arr[rf_count].block_offset = blk;
                     rf_arr[rf_count].start_us = t_accum + (float)rdef->delay;
@@ -3794,21 +3793,7 @@ int pulseg__calc_segment_timing(pulseg_sequence_descriptor *desc, pulseg_diagnos
                     rf_arr[rf_count].isocenter_us =
                         t_accum + (float)rdef->delay + (float)rdef->stats.isodelay_us;
                     rf_arr[rf_count].base_amplitude_hz = rte->amplitude;
-
-                    /* rf_use: from file tag, or auto-detect from flip angle */
-                    use = rte->rf_use;
-                    if (use == PULSEG_RF_USE_UNKNOWN && rdef->stats.base_amplitude_hz > 0.0f)
-                    {
-                        float ratio =
-                            (float)fabs((double)rte->amplitude) / rdef->stats.base_amplitude_hz;
-                        float actual_flip =
-                            rdef->stats.flip_angle_rad * ratio * (180.0f / (float)M_PI);
-                        if (actual_flip > 162.0f && actual_flip < 198.0f)
-                            use = PULSEG_RF_USE_REFOCUSING;
-                        else
-                            use = PULSEG_RF_USE_EXCITATION;
-                    }
-                    rf_arr[rf_count].rf_use = use;
+                    rf_arr[rf_count].rf_use = pulseg__rf_event_use(rdef, rte);
                     rf_count++;
                 }
             }

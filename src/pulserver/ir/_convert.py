@@ -200,7 +200,9 @@ def prescribe(sequence: pp.Sequence, fov_offset: Sequence[float]) -> pp.Sequence
     return sequence
 
 
-def play(seq_path: Path | str, cache_ext: str = ".pseg") -> dict[str, Any]:
+def play(
+    seq_path: Path | str, cache_ext: str = ".pseg", *, waveforms: bool = False
+) -> dict[str, Any]:
     """Walk the cache beside a sequence file as the scanner's playout does.
 
     The cache is loaded by the C library a scanner links, and its execution
@@ -220,6 +222,11 @@ def play(seq_path: Path | str, cache_ext: str = ".pseg") -> dict[str, Any]:
           (gamma B1) and frequency and phase offsets, with ppm offsets
           resolved at the field strength the cache was converted under; 0
           without RF;
+        - ``rf_use``: the ``PULSEG_RF_USE_*`` code of the RF event, 1 for an
+          excitation and 2 for a refocusing pulse; an untagged event is a
+          refocusing pulse at a flip angle of 162 to 198 degrees and an
+          excitation otherwise; 0 without RF;
+        - ``rf_delay_us``: RF delay from the block's start, in µs;
         - ``gradient_hz_per_m``: ``(blocks, 3)``, the amplitude of each
           gradient event along x, y and z; an arbitrary gradient's shape
           carries its own sign;
@@ -228,7 +235,23 @@ def play(seq_path: Path | str, cache_ext: str = ".pseg") -> dict[str, Any]:
         - ``norot``, ``nopos``: the block's NOROT and NOPOS flags;
         - ``adc``, ``adc_freq_hz``, ``adc_phase_rad``: whether the block
           acquires, and its frequency and phase offsets;
+        - ``adc_delay_us``, ``adc_dwell_ns``, ``adc_samples``: the ADC delay
+          from the block's start, dwell time and sample count; 0 without ADC;
         - ``trid``: the TRID group in force, 0 when ungrouped.
+
+        With ``waveforms``, also:
+
+        - ``rf_center_us``: the time of the RF magnitude peak from the block's
+          start, in µs; NaN without RF;
+        - ``gradient_time_us``, ``gradient_waveform_hz_per_m``: the corners of
+          every played gradient, concatenated in play order: their times from
+          the block's start, in µs, and the gradient there, the instance's
+          amplitude times the shape the instance plays. A waveform on the
+          gradient raster holds its end values over the half raster
+          intervals before its first sample and after its last;
+        - ``gradient_span``: ``(blocks, 3, 2)``, the start and stop of each
+          block's gradient along x, y and z in those arrays; empty without
+          one.
 
     Raises
     ------
@@ -237,7 +260,7 @@ def play(seq_path: Path | str, cache_ext: str = ".pseg") -> dict[str, Any]:
     """
     seq_path = Path(seq_path)
     return require("play_cache")(
-        str(cache_path(seq_path, cache_ext)), seq_path.stat().st_size
+        str(cache_path(seq_path, cache_ext)), seq_path.stat().st_size, waveforms
     )
 
 
