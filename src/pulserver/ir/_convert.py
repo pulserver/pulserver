@@ -251,7 +251,14 @@ def play(
           intervals before its first sample and after its last;
         - ``gradient_span``: ``(blocks, 3, 2)``, the start and stop of each
           block's gradient along x, y and z in those arrays; empty without
-          one.
+          one;
+        - ``adc_phase_modulation_rad``: the phase modulation of every played
+          readout, one phase per sample in radians, concatenated in play
+          order; the receiver phase of a sample is the ADC phase offset, plus
+          its frequency offset times the time since the ADC's start, plus
+          this;
+        - ``adc_modulation_span``: ``(blocks, 2)``, the start and stop of each
+          block's modulation in that array; empty without one.
 
     Raises
     ------

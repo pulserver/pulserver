@@ -282,6 +282,17 @@ void played_gradient(
     }
 }
 
+/* Append the phase modulation of the ADC the block at the cursor plays, one
+ * phase per sample in radians; nothing when it carries none. */
+void played_modulation(const pulseg_collection *coll, std::vector<float> &phases)
+{
+    Waveform phase;
+    const int samples = pulseg_get_cursor_adc_phase_modulation(coll, &phase.samples);
+    if (samples < 0)
+        throw std::runtime_error("cannot read the phase modulation a readout plays");
+    phases.insert(phases.end(), phase.samples, phase.samples + samples);
+}
+
 /* Every block the cursor plays, in play order, one entry per block in each
  * array; with waveforms, also the gradients, RF timing and ADC windows. */
 py::dict play(pulseg_collection *coll, bool waveforms)
@@ -289,8 +300,8 @@ py::dict play(pulseg_collection *coll, bool waveforms)
     std::vector<int> subsequence, segment, duration_us, adc, trid, norot, nopos, rf_use;
     std::vector<float> rf_amp, rf_freq, rf_phase, adc_freq, adc_phase, gradient, rotation;
     std::vector<int> rf_delay_us, adc_delay_us, adc_dwell_ns, adc_samples;
-    std::vector<float> rf_centre_us, grad_time, grad_value;
-    std::vector<py::ssize_t> grad_span;
+    std::vector<float> rf_centre_us, grad_time, grad_value, modulation;
+    std::vector<py::ssize_t> grad_span, modulation_span;
     pulseg_cursor_reset(coll);
     pulseg_cursor_info info = PULSEG_CURSOR_INFO_INIT;
     int status;
@@ -338,6 +349,9 @@ py::dict play(pulseg_collection *coll, bool waveforms)
             played_gradient(coll, axis, amplitude[axis], b, grad_time, grad_value);
             grad_span.push_back(static_cast<py::ssize_t>(grad_time.size()));
         }
+        modulation_span.push_back(static_cast<py::ssize_t>(modulation.size()));
+        played_modulation(coll, modulation);
+        modulation_span.push_back(static_cast<py::ssize_t>(modulation.size()));
     }
     require(status, "cursor");
 
@@ -369,6 +383,9 @@ py::dict play(pulseg_collection *coll, bool waveforms)
         out["gradient_time_us"] = as_array(grad_time, {corners});
         out["gradient_waveform_hz_per_m"] = as_array(grad_value, {corners});
         out["gradient_span"] = as_array(grad_span, {count, 3, 2});
+        out["adc_phase_modulation_rad"] =
+            as_array(modulation, {static_cast<py::ssize_t>(modulation.size())});
+        out["adc_modulation_span"] = as_array(modulation_span, {count, 2});
     }
     return out;
 }

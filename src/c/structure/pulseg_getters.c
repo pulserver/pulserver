@@ -2357,6 +2357,35 @@ int pulseg_get_cursor_grad_waveform(
     return n;
 }
 
+int pulseg_get_cursor_adc_phase_modulation(const pulseg_collection *coll, float **phase_rad)
+{
+    const pulseg_sequence_descriptor *desc = NULL;
+    const pulseg_block_table_element *bte;
+    const pulseg_adc_table_element *ate;
+    pulseq_shape decompressed;
+
+    if (!coll || !phase_rad)
+        return PULSEG_ERR_NULL_POINTER;
+    *phase_rad = NULL;
+    bte = cursor_block(coll, &desc);
+    if (!bte)
+        return PULSEG_ERR_INVALID_ARGUMENT;
+    if (bte->adc_id < 0 || bte->adc_id >= desc->adc_table_size)
+        return 0;
+    ate = &desc->adc_table[bte->adc_id];
+    if (ate->phase_shape_id < 1)
+        return 0;
+    if (ate->phase_shape_id > desc->num_shapes)
+        return PULSEG_ERR_INVALID_ARGUMENT;
+    decompressed.num_samples = 0;
+    decompressed.num_uncompressed_samples = 0;
+    decompressed.samples = NULL;
+    if (!pulseq_decompress_shape(&decompressed, &desc->shapes[ate->phase_shape_id - 1], 1.0f))
+        return PULSEG_ERR_ALLOC_FAILED;
+    *phase_rad = decompressed.samples;
+    return decompressed.num_samples;
+}
+
 /* ================================================================== */
 /*  ADC block queries (internal helpers)                               */
 /* ================================================================== */

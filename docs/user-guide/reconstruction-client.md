@@ -56,7 +56,7 @@ noise scans and navigators included, and no other.
 | Field | Client | Proxy |
 | --- | --- | --- |
 | `number_of_samples` | The sample count of the readout's ADC event | Checked |
-| `active_channels`, data | The samples, demodulated to the prescribed field-of-view centre by the playout | Passed on unchanged |
+| `active_channels`, data | The samples, demodulated to the prescribed field-of-view centre by each ADC's frequency and phase offsets and its phase modulation | Passed on unchanged |
 | `scan_counter` | 0 on every acquisition, or increasing by one from any start | Checked |
 | `flags` | None, or `LAST_IN_MEASUREMENT` on the last acquisition | Replaced |
 | `idx`, `sample_time_us`, `encoding_space_ref` | Any value | Replaced |

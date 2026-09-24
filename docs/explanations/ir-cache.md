@@ -39,9 +39,11 @@ the passes run. No gradient is changed:
 The readouts are therefore demodulated to the prescribed centre as they are
 acquired, and the reconstruction receives an object at $\mathbf{d}$ at the
 centre of its field of view. The cache carries each readout's frequency and
-phase offsets but not its phase modulation: a readout under a constant
-gradient is demodulated exactly, and a readout under a varying one, radial,
-spiral or ramp-sampled, is not ({doc}`virtual-scanner`). The rotation of the prescription is not applied
+phase offsets and its phase modulation, one phase per sample, which
+`pulseg_get_cursor_adc_phase_modulation` returns; a playout whose receiver
+cannot vary its phase within a readout applies the modulation to the samples
+before they are sent. A chain whose modulation does not hold one phase per ADC
+sample is refused. The rotation of the prescription is not applied
 to the cache: the scanner plays it through its rotation matrix, composed after
 each block's own rotation. Two offsets make two caches of one design, and two
 designs ({doc}`designs`).
