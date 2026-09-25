@@ -1612,15 +1612,13 @@ int pulseg__get_unique_blocks(
     int *def_map = NULL;
 
     pulseq_raw_block raw;
-    pulseq_raw_extension ext;
-    int norot_flag, nopos_flag, pmc_flag, nav_flag;
-    int trid;
 
     if (!seq || !desc)
         return PULSEG_ERR_INVALID_ARGUMENT;
 
     num_blocks = seq->num_blocks;
-    if (num_blocks <= 0 || !seq->block_library)
+    if (num_blocks <= 0 || !seq->block_library || !seq->block_rotations || !seq->block_shims ||
+        !seq->block_flags || !seq->block_trid_set)
         return PULSEG_ERR_INVALID_ARGUMENT;
 
     desc->num_unique_rfs = 0;
@@ -1780,12 +1778,6 @@ int pulseg__get_unique_blocks(
     if (!int_rows || !unique_defs || !event_table)
         goto fail;
 
-    norot_flag = 0;
-    nopos_flag = 0;
-    pmc_flag = 1;
-    nav_flag = 0;
-    trid = 0;
-
     for (n = 0; n < num_blocks; ++n)
     {
         if (!pulseq_get_raw_block_content_ids(seq, &raw, n, 1))
@@ -1817,40 +1809,21 @@ int pulseg__get_unique_blocks(
             ? (int)(raw.block_duration * desc->block_raster_us)
             : -1;
 
-        if (raw.ext_count > 0 && seq->is_extensions_library_parsed && seq->extension_lut)
-        {
-            pulseq_get_raw_extension(seq, &ext, &raw);
-            tmp_blk_tab[n].rotation_id = ext.rotation_index;
-            tmp_blk_tab[n].digitalout_id = ext.trigger_index;
-            tmp_blk_tab[n].rf_shim_id = ext.rf_shim_index;
-            norot_flag = (ext.flag.norot >= 0) ? ext.flag.norot : norot_flag;
-            nopos_flag = (ext.flag.nopos >= 0) ? ext.flag.nopos : nopos_flag;
-            pmc_flag = (ext.flag.pmc >= 0) ? ext.flag.pmc : pmc_flag;
-            nav_flag = (ext.flag.nav >= 0) ? ext.flag.nav : nav_flag;
-            /* TRID: sticky (pulseq LABEL semantics) -- SET at a block
-             * persists until the next SET, exactly like norot/nopos/pmc/nav
-             * above. 0 = ungrouped (no TRID seen yet). trid_set marks the
-             * block carrying the label, which is where a repetition starts:
-             * an author re-SETs the same id at every one, so the sticky value
-             * alone does not say where one ends and the next begins. Both
-             * live on the per-occurrence block-table entry, never on the
-             * deduplicated block definition (int_rows/BLOCK_DEF_COLS above
-             * excludes them), so they have zero dedup footprint. */
-            trid = (ext.flag.trid >= 0) ? ext.flag.trid : trid;
-            tmp_blk_tab[n].trid_set = (ext.flag.trid >= 0) ? 1 : 0;
-        }
-        else
-        {
-            tmp_blk_tab[n].rotation_id = -1;
-            tmp_blk_tab[n].digitalout_id = -1;
-            tmp_blk_tab[n].rf_shim_id = -1;
-            tmp_blk_tab[n].trid_set = 0;
-        }
-        tmp_blk_tab[n].norot_flag = norot_flag;
-        tmp_blk_tab[n].nopos_flag = nopos_flag;
-        tmp_blk_tab[n].pmc_flag = pmc_flag;
-        tmp_blk_tab[n].nav_flag = nav_flag;
-        tmp_blk_tab[n].trid = trid;
+        tmp_blk_tab[n].rotation_id = seq->block_rotations[n];
+        tmp_blk_tab[n].rf_shim_id = seq->block_shims[n];
+        tmp_blk_tab[n].digitalout_id = pulseq_block_trigger(seq, &raw);
+        tmp_blk_tab[n].norot_flag = seq->block_flags[n][0];
+        tmp_blk_tab[n].nopos_flag = seq->block_flags[n][1];
+        tmp_blk_tab[n].pmc_flag = seq->block_flags[n][2];
+        tmp_blk_tab[n].nav_flag = seq->block_flags[n][3];
+        /* TRID is sticky: the group in force, 0 before any. trid_set marks
+         * the block that sets it, which is where a repetition starts: an
+         * author re-SETs the same id at every one, so the sticky value alone
+         * does not say where one ends and the next begins. Both live on the
+         * per-occurrence block-table entry, never on the deduplicated block
+         * definition, so they have no dedup footprint. */
+        tmp_blk_tab[n].trid = seq->block_flags[n][4];
+        tmp_blk_tab[n].trid_set = seq->block_trid_set[n];
     }
 
     /* step 3: dedup blocks */

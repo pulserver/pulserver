@@ -116,7 +116,7 @@ repetition.
 | Repetition | The repeating unit of each subsequence and its repetition time (TR): the unit pypulseqpp's `Sequence.repetition` finds, from the first block; a subsequence that does not repeat is one repetition, refused when it is longer than 15 s |
 | Segmentation | The repeating unit divided into segments at block boundaries where every gradient waveform is zero |
 | Execution stream | The order in which segments are played over the whole scan |
-| Label table | The Pulseq labels of every readout, three of which fill the ADC label columns |
+| Label table | The Pulseq labels in force at every readout, three of which fill the ADC label columns |
 | RF statistics | For each RF definition: its transmit channels, flip angle and energy, as pypulseqpp counts them; its duration from the envelope; and the bandwidth and bands of a multiband pulse from its spectrum |
 
 The limits and rasters of the scanner (`pypulseqpp.Opts`) are those under which
@@ -139,7 +139,11 @@ $|b_1|^2$, over its peak power, both summed over the channels.
 A pulse a file leaves unlabelled takes the use pypulseqpp detects for it when
 the chain is read. RF and ADC frequency and phase offsets are stored absolute:
 the ppm offsets are resolved on the host, at the gamma and B0 of the call's
-limits, by pypulseqpp's `SequenceLibraries.absolute_offsets`.
+limits, by pypulseqpp's `SequenceLibraries.absolute_offsets`. The labels
+and flags in force at each block, with `PMC` in force from the first, are
+pypulseqpp's `Sequence.evaluate_labels`, and a `TRID` group starts at each block
+`Sequence.label_blocks` lists as setting it; the rotation and RF shim a block
+plays are `Sequence.block_rotations` and `Sequence.block_shims`.
 `label_column_map` selects the three labels the
 interpreter records per readout, as indices in the order SLC, PHS, REP, AVG,
 SEG, SET, ECO, PAR, LIN, ACQ.

@@ -43,6 +43,25 @@ PULSEQ_REAL (*rows(const py::object &value, int &count))[Width]
     return out;
 }
 
+/* An (n, width) integer array as a freshly allocated C row array; null when
+ * empty. */
+template <int Width>
+int (*integer_rows(const py::object &value, int &count))[Width]
+{
+    const auto array = value.cast<py::array_t<int, py::array::c_style | py::array::forcecast>>();
+    if (array.ndim() != 2 || (array.shape(0) > 0 && array.shape(1) != Width))
+        throw std::invalid_argument(
+            "expected an (n, " + std::to_string(Width) + ") integer array");
+    count = static_cast<int>(array.shape(0));
+    if (count == 0)
+        return nullptr;
+    auto *out = static_cast<int (*)[Width]>(PULSEQ_ALLOC(sizeof(int) * (size_t)count * Width));
+    if (!out)
+        throw std::bad_alloc();
+    std::memcpy(out, array.data(), sizeof(int) * (size_t)count * Width);
+    return out;
+}
+
 int *integers(const py::object &value, int count)
 {
     const auto array = value.cast<py::array_t<int, py::array::c_style | py::array::forcecast>>();
@@ -260,6 +279,18 @@ void build_pulseq_file(pulseq_file &seq, const py::dict &libraries)
     for (int i = 0; i < seq.num_blocks; ++i)
         seq.block_ids[i] = i + 1;
     seq.is_block_library_parsed = 1;
+    seq.block_rotations = integers(libraries["block_rotations"], seq.num_blocks);
+    seq.block_shims = integers(libraries["block_shims"], seq.num_blocks);
+    seq.block_trid_set = integers(libraries["trid_set"], seq.num_blocks);
+    {
+        int flagged = 0;
+        seq.block_flags =
+            integer_rows<PULSEQ_BLOCK_FLAG_WIDTH>(libraries["block_flags"], flagged);
+        if (flagged != seq.num_blocks)
+            throw std::invalid_argument("a block flag table of the wrong length");
+    }
+    seq.adc_labels =
+        integer_rows<PULSEQ_ADC_LABEL_WIDTH>(libraries["adc_labels"], seq.num_adc_labels);
 
     seq.rf_library = rows<10>(libraries["rf"], seq.rf_library_size);
     seq.rf_use_tags = integers(libraries["rf_use"], seq.rf_library_size);

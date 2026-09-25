@@ -1,4 +1,4 @@
-"""Block extensions resolved through pypulseqpp against the file's own chains."""
+"""The specification tables read through pypulseqpp against the file's own rows."""
 
 from pathlib import Path
 
@@ -7,22 +7,9 @@ import pypulseqpp as pp
 import pytest
 from _seqtext import extension_chains, sections
 
-from pulserver.ir._source import (
-    COUNTER_LABELS,
-    FLAG_LABELS,
-    LABEL_IDS,
-    block_extensions,
-    specification_libraries,
-)
+from pulserver.ir._source import LABEL_IDS, specification_libraries
 
 FIXTURES = Path(__file__).parent / "fixtures" / "sequences"
-#: Specification table, as the extension the file declares it under.
-SPECIFICATIONS = {
-    "rotation": "ROTATIONS",
-    "rf_shim": "RF_SHIMS",
-    "trigger": "TRIGGERS",
-    "soft_delay": "DELAYS",
-}
 #: Soft-delay hint, as a Pulseq file numbers it; anything else is -1.
 HINT_IDS = {"TE": 1, "TR": 2, "TI": 3, "ESP": 4, "RECTIME": 5}
 # The file writes its cells at six significant digits.
@@ -31,58 +18,6 @@ SINGLE = 1e-6
 
 def fixtures():
     return sorted(p.name for p in FIXTURES.glob("*.seq"))
-
-
-def resolved_from_file(path):
-    """Walk every block's chain in the file and collect what it states.
-
-    An independent reading of the same chains: the block table names a head,
-    the head's links name a specification kind and a row, and a label row
-    names the label it is about.
-    """
-    found = sections(path)
-    chains, specifications = extension_chains(found.get("EXTENSIONS", []))
-    heads = [int(line.split()[7]) for line in found["BLOCKS"]]
-    count = len(heads)
-    labelset = {name: np.zeros(count, dtype=np.int32) for name in COUNTER_LABELS}
-    labelinc = {name: np.zeros(count, dtype=np.int32) for name in COUNTER_LABELS}
-    flags = {name: np.full(count, -1, dtype=np.int32) for name in FLAG_LABELS}
-    points = {name: np.full(count, -1, dtype=np.int32) for name in SPECIFICATIONS}
-
-    for index, head in enumerate(heads):
-        for kind, row in chains.get(head, []):
-            if kind in ("LABELSET", "LABELINC"):
-                value, label = specifications[kind][row]
-                if label in FLAG_LABELS:
-                    flags[label][index] = int(value)
-                else:
-                    target = labelset if kind == "LABELSET" else labelinc
-                    target[label][index] = int(value)
-            else:
-                for name, declared in SPECIFICATIONS.items():
-                    if declared == kind:
-                        points[name][index] = row - 1
-    return labelset, labelinc, flags, points
-
-
-def compare(path):
-    sequence = pp.Sequence()
-    sequence.read(path)
-    ours = block_extensions(sequence)
-    labelset, labelinc, flags, points = resolved_from_file(path)
-    for name in COUNTER_LABELS:
-        np.testing.assert_array_equal(
-            ours.labelset[name], labelset[name], err_msg=f"LABELSET {name}"
-        )
-        np.testing.assert_array_equal(
-            ours.labelinc[name], labelinc[name], err_msg=f"LABELINC {name}"
-        )
-    for name in FLAG_LABELS:
-        np.testing.assert_array_equal(
-            ours.flags[name], flags[name], err_msg=f"flag {name}"
-        )
-    for name in SPECIFICATIONS:
-        np.testing.assert_array_equal(getattr(ours, name), points[name], err_msg=name)
 
 
 @pytest.fixture
@@ -121,26 +56,6 @@ def extended(tmp_path):
     path = tmp_path / "extended.seq"
     sequence.write(path)
     return path
-
-
-@pytest.mark.parametrize("name", fixtures())
-def test_every_label_a_fixture_sets_is_the_one_its_chain_names(name):
-    compare(FIXTURES / name)
-
-
-def test_every_specification_a_block_points_at_is_the_one_its_chain_names(extended):
-    compare(extended)
-
-
-def test_the_extended_sequence_plays_one_of_every_extension(extended):
-    sequence = pp.Sequence()
-    sequence.read(extended)
-    resolved = block_extensions(sequence)
-    for name in SPECIFICATIONS:
-        assert (getattr(resolved, name) >= 0).any(), f"no block points at a {name}"
-    assert (resolved.flags["TRID"] >= 0).any()
-    assert (resolved.flags["NAV"] >= 0).any()
-    assert resolved.labelinc["LIN"].any()
 
 
 def specification_rows(path):

@@ -150,6 +150,8 @@ def summary(
     over a dynamic pTx pulse's channels.
     ``vop_sar_ratio`` and ``vop_global_sar_ratio`` are those the cache was
     written with, zero when the chain is read and segmented again.
+    ``readout_labels`` lists, per readout in play order, the values of the
+    three labels ``label_column_map`` selects, as in force at that readout.
 
     With ``cache_ext``, the cache beside the file is loaded instead of the
     chain being read and segmented again; this build loads only vendor-neutral

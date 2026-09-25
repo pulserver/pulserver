@@ -1240,124 +1240,8 @@ static int nav_split_merge(
 }
 
 /* ================================================================== */
-/*  Label table dry-run                                               */
+/*  Label table                                                       */
 /* ================================================================== */
-
-/*
- * apply_block_labels --
- *   Scan a block's extension chain and apply LABELSET / LABELINC
- *   operations to the running label state.
- *
- *   state[0..9]  = { slc, phs, rep, avg, seg, set, eco, par, lin, acq }
- *   state[10]    = OFF (Pulseq v1.5.1 LABELSET; 1 = discard downstream)
- */
-static void apply_block_labels(int *state, const pulseq_file *seq, const pulseq_raw_block *raw)
-{
-    int i, type_idx, ref_idx, ext_type, label_value, label_id;
-
-    if (!seq->is_extensions_library_parsed || !seq->extension_lut)
-        return;
-
-    for (i = 0; i < raw->ext_count; ++i)
-    {
-        type_idx = raw->ext[i][0];
-        ref_idx = raw->ext[i][1];
-        if (type_idx < 0 || type_idx > seq->extension_lut_size)
-            continue;
-        ext_type = seq->extension_lut[type_idx];
-        if (ref_idx < 0)
-            continue;
-
-        if (ext_type == PULSEQ_EXT_LABELSET)
-        {
-            if (!seq->labelset_library || ref_idx >= seq->labelset_library_size)
-                continue;
-            label_value = (int)seq->labelset_library[ref_idx][0];
-            label_id = (int)seq->labelset_library[ref_idx][1];
-            switch (label_id)
-            {
-            case PULSEQ_LABEL_SLC:
-                state[0] = label_value;
-                break;
-            case PULSEQ_LABEL_PHS:
-                state[1] = label_value;
-                break;
-            case PULSEQ_LABEL_REP:
-                state[2] = label_value;
-                break;
-            case PULSEQ_LABEL_AVG:
-                state[3] = label_value;
-                break;
-            case PULSEQ_LABEL_SEG:
-                state[4] = label_value;
-                break;
-            case PULSEQ_LABEL_SET:
-                state[5] = label_value;
-                break;
-            case PULSEQ_LABEL_ECO:
-                state[6] = label_value;
-                break;
-            case PULSEQ_LABEL_PAR:
-                state[7] = label_value;
-                break;
-            case PULSEQ_LABEL_LIN:
-                state[8] = label_value;
-                break;
-            case PULSEQ_LABEL_ACQ:
-                state[9] = label_value;
-                break;
-            case PULSEQ_LABEL_OFF:
-                state[10] = label_value ? 1 : 0;
-                break;
-            default:
-                break;
-            }
-        }
-        else if (ext_type == PULSEQ_EXT_LABELINC)
-        {
-            if (!seq->labelinc_library || ref_idx >= seq->labelinc_library_size)
-                continue;
-            label_value = (int)seq->labelinc_library[ref_idx][0];
-            label_id = (int)seq->labelinc_library[ref_idx][1];
-            switch (label_id)
-            {
-            case PULSEQ_LABEL_SLC:
-                state[0] += label_value;
-                break;
-            case PULSEQ_LABEL_PHS:
-                state[1] += label_value;
-                break;
-            case PULSEQ_LABEL_REP:
-                state[2] += label_value;
-                break;
-            case PULSEQ_LABEL_AVG:
-                state[3] += label_value;
-                break;
-            case PULSEQ_LABEL_SEG:
-                state[4] += label_value;
-                break;
-            case PULSEQ_LABEL_SET:
-                state[5] += label_value;
-                break;
-            case PULSEQ_LABEL_ECO:
-                state[6] += label_value;
-                break;
-            case PULSEQ_LABEL_PAR:
-                state[7] += label_value;
-                break;
-            case PULSEQ_LABEL_LIN:
-                state[8] += label_value;
-                break;
-            case PULSEQ_LABEL_ACQ:
-                state[9] += label_value;
-                break;
-            /* OFF is boolean; LABELINC on OFF is undefined and ignored. */
-            default:
-                break;
-            }
-        }
-    }
-}
 
 /*
  * record_adc_label --
@@ -1458,10 +1342,10 @@ int pulseg__build_label_table(pulseg_sequence_descriptor *desc, const pulseq_fil
 {
     int num_columns, total_adcs;
     int n, b, entry_idx;
-    int state[11];
     int *table;
     int *off_table = NULL;
-    pulseq_raw_block raw;
+    int *row_of_block = NULL;
+    const int *state;
 
     if (!desc || !seq)
         return PULSEG_ERR_NULL_POINTER;
@@ -1514,36 +1398,54 @@ int pulseg__build_label_table(pulseg_sequence_descriptor *desc, const pulseq_fil
     }
     memset(off_table, 0, (size_t)total_adcs * sizeof(int));
 
-    /* Initialize running label state to zero */
-    memset(state, 0, sizeof(state));
+    /* The labels in force at each acquiring block come from pypulseqpp, one
+     * row of seq->adc_labels per acquiring block in block order; block_table
+     * index == raw block index, so a block's row is the count of acquiring
+     * blocks before it. */
+    row_of_block = (int *)PULSEG_ALLOC((size_t)desc->num_blocks * sizeof(int));
+    if (!row_of_block)
+    {
+        PULSEG_FREE(table);
+        PULSEG_FREE(off_table);
+        return PULSEG_ERR_ALLOC_FAILED;
+    }
+    entry_idx = 0;
+    for (b = 0; b < desc->num_blocks; ++b)
+    {
+        row_of_block[b] = entry_idx;
+        if (desc->block_table[b].adc_id >= 0)
+            ++entry_idx;
+    }
+    if (entry_idx != seq->num_adc_labels || !seq->adc_labels)
+    {
+        PULSEG_FREE(row_of_block);
+        PULSEG_FREE(table);
+        PULSEG_FREE(off_table);
+        return PULSEG_ERR_INVALID_ARGUMENT;
+    }
+
     memset(&desc->label_limits, 0, sizeof(desc->label_limits));
     entry_idx = 0;
 
-    /* Walk the execution stream in playback order.  block_table index ==
-     * raw block index (pulseg__deduplicate_blocks fills block_table[n] from
-     * raw block n), so the stream position maps straight onto the raw block
-     * whose LABELSET/LABELINC directives advance the running state. */
+    /* One row per acquiring position of the execution stream, in playback
+     * order. */
     for (n = 0; n < desc->exec_stream_len; ++n)
     {
         b = pulseg__exec_block_idx(desc, n);
-        if (b < 0 || b >= desc->num_blocks)
+        if (b < 0 || b >= desc->num_blocks || desc->block_table[b].adc_id < 0)
             continue;
-
-        pulseq_get_raw_block_content_ids(seq, &raw, b, 1);
-        apply_block_labels(state, seq, &raw);
-        if (desc->block_table[b].adc_id >= 0)
-        {
-            record_adc_label(
-                &table[entry_idx * num_columns],
-                num_columns,
-                &desc->label_limits,
-                state,
-                desc->label_column_map,
-                entry_idx == 0);
-            off_table[entry_idx] = state[10];
-            ++entry_idx;
-        }
+        state = seq->adc_labels[row_of_block[b]];
+        record_adc_label(
+            &table[entry_idx * num_columns],
+            num_columns,
+            &desc->label_limits,
+            state,
+            desc->label_column_map,
+            entry_idx == 0);
+        off_table[entry_idx] = state[10];
+        ++entry_idx;
     }
+    PULSEG_FREE(row_of_block);
 
     desc->label_num_columns = num_columns;
     desc->label_num_entries = entry_idx;
