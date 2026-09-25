@@ -25,6 +25,11 @@ is applied to the stream as follows.
   subsequence, and one for its navigator readouts when it has any. Each space
   carries the matrix size and field of view the sequence defines and encoding
   limits from the counters its readouts reach.
+- The header's sequence parameters are the TR, TE, TI and flip angles the
+  sequence defines. The TR, TE and flip angles it does not define are
+  measured by pypulseqpp's `Sequence.test_report_dict`: TE from the excitation
+  before the closest approach to the k-space centre, TR between the
+  excitations around it, and every distinct flip angle the sequence plays.
 - Each acquisition is matched to a table row by its position in the stream and
   receives the encoding counters, the MRD flags, the dwell time and the
   encoding space reference, and the k-space trajectory when the k-space

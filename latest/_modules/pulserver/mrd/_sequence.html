@@ -460,6 +460,7 @@
 
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"ReadoutTable"</span><span class="p">,</span> <span class="s2">"SequenceDefinitions"</span><span class="p">,</span> <span class="s2">"read_chain"</span><span class="p">]</span>
 
+<span class="kn">import</span><span class="w"> </span><span class="nn">math</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">threading</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">collections</span><span class="w"> </span><span class="kn">import</span> <span class="n">OrderedDict</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span><span class="p">,</span> <span class="n">field</span>
@@ -497,6 +498,7 @@
 <span class="w">    </span><span class="sd">"""Read a sequence file and every file its ``NextSequence`` definitions name, in play order.</span>
 
 <span class="sd">    A ``NextSequence`` name is relative to the directory of the file naming it.</span>
+<span class="sd">    Each file is read by ``pypulseqpp.io.read``, onto a system built from it.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
@@ -529,8 +531,7 @@
         <span class="k">if</span> <span class="n">resolved</span> <span class="ow">in</span> <span class="n">played</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"the NextSequence chain returns to </span><span class="si">{</span><span class="n">current</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
         <span class="n">played</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">resolved</span><span class="p">)</span>
-        <span class="n">seq</span> <span class="o">=</span> <span class="n">pp</span><span class="o">.</span><span class="n">Sequence</span><span class="p">()</span>
-        <span class="n">seq</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">current</span><span class="p">,</span> <span class="n">verify</span><span class="o">=</span><span class="n">verify</span><span class="p">)</span>
+        <span class="n">seq</span> <span class="o">=</span> <span class="n">pp</span><span class="o">.</span><span class="n">io</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">current</span><span class="p">,</span> <span class="n">verify</span><span class="o">=</span><span class="n">verify</span><span class="p">)</span>
         <span class="n">chain</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">current</span><span class="p">,</span> <span class="n">seq</span><span class="p">))</span>
         <span class="n">following</span> <span class="o">=</span> <span class="n">seq</span><span class="o">.</span><span class="n">get_definition</span><span class="p">(</span><span class="s2">"NextSequence"</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">following</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">""</span><span class="p">,</span> <span class="kc">None</span><span class="p">):</span>
@@ -544,6 +545,11 @@
 <span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">SequenceDefinitions</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Definitions describing what a sequence acquires, in Pulseq units.</span>
+
+<span class="sd">    ``TR``, ``TE`` and ``FlipAngle`` a sequence does not define are measured</span>
+<span class="sd">    by ``Sequence.test_report_dict``: TE from the excitation before the</span>
+<span class="sd">    closest approach to the k-space centre, TR between the excitations around</span>
+<span class="sd">    it, and every distinct flip angle the sequence plays.</span>
 
 <span class="sd">    Attributes</span>
 <span class="sd">    ----------</span>
@@ -577,16 +583,28 @@
 <a class="viewcode-back" href="../../../generated/pulserver.mrd.SequenceDefinitions.from_sequence.html#pulserver.mrd.SequenceDefinitions.from_sequence">[docs]</a>
     <span class="nd">@classmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">from_sequence</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">seq</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SequenceDefinitions</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Read the definitions of a ``pypulseqpp.Sequence``."""</span>
+<span class="w">        </span><span class="sd">"""Read the definitions of a ``pypulseqpp.Sequence``, measuring those it lacks.</span>
+
+<span class="sd">        Measuring runs ``check_timing``, which may record ``TotalDuration`` and</span>
+<span class="sd">        needs the sequence on a system, as ``pypulseqpp.io.read`` builds one.</span>
+<span class="sd">        """</span>
+        <span class="n">tr</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">_numbers</span><span class="p">(</span><span class="n">seq</span><span class="o">.</span><span class="n">get_definition</span><span class="p">(</span><span class="s2">"TR"</span><span class="p">)))</span>
+        <span class="n">te</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">_numbers</span><span class="p">(</span><span class="n">seq</span><span class="o">.</span><span class="n">get_definition</span><span class="p">(</span><span class="s2">"TE"</span><span class="p">)))</span>
+        <span class="n">flip_angle</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">_numbers</span><span class="p">(</span><span class="n">seq</span><span class="o">.</span><span class="n">get_definition</span><span class="p">(</span><span class="s2">"FlipAngle"</span><span class="p">)))</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="n">tr</span> <span class="ow">and</span> <span class="n">te</span> <span class="ow">and</span> <span class="n">flip_angle</span><span class="p">):</span>
+            <span class="n">measured_tr</span><span class="p">,</span> <span class="n">measured_te</span><span class="p">,</span> <span class="n">measured_flip</span> <span class="o">=</span> <span class="n">_measured</span><span class="p">(</span><span class="n">seq</span><span class="p">)</span>
+            <span class="n">tr</span> <span class="o">=</span> <span class="n">tr</span> <span class="ow">or</span> <span class="n">measured_tr</span>
+            <span class="n">te</span> <span class="o">=</span> <span class="n">te</span> <span class="ow">or</span> <span class="n">measured_te</span>
+            <span class="n">flip_angle</span> <span class="o">=</span> <span class="n">flip_angle</span> <span class="ow">or</span> <span class="n">measured_flip</span>
         <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span>
             <span class="n">matrix</span><span class="o">=</span><span class="n">_triple</span><span class="p">(</span><span class="n">seq</span><span class="o">.</span><span class="n">get_definition</span><span class="p">(</span><span class="s2">"Matrix"</span><span class="p">),</span> <span class="nb">int</span><span class="p">),</span>
             <span class="n">fov</span><span class="o">=</span><span class="n">_triple</span><span class="p">(</span><span class="n">seq</span><span class="o">.</span><span class="n">get_definition</span><span class="p">(</span><span class="s2">"FOV"</span><span class="p">),</span> <span class="nb">float</span><span class="p">),</span>
             <span class="n">navigator_matrix</span><span class="o">=</span><span class="n">_triple</span><span class="p">(</span><span class="n">seq</span><span class="o">.</span><span class="n">get_definition</span><span class="p">(</span><span class="s2">"NavMatrix"</span><span class="p">),</span> <span class="nb">int</span><span class="p">),</span>
             <span class="n">navigator_fov</span><span class="o">=</span><span class="n">_triple</span><span class="p">(</span><span class="n">seq</span><span class="o">.</span><span class="n">get_definition</span><span class="p">(</span><span class="s2">"NavFOV"</span><span class="p">),</span> <span class="nb">float</span><span class="p">),</span>
-            <span class="n">tr</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="n">_numbers</span><span class="p">(</span><span class="n">seq</span><span class="o">.</span><span class="n">get_definition</span><span class="p">(</span><span class="s2">"TR"</span><span class="p">))),</span>
-            <span class="n">te</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="n">_numbers</span><span class="p">(</span><span class="n">seq</span><span class="o">.</span><span class="n">get_definition</span><span class="p">(</span><span class="s2">"TE"</span><span class="p">))),</span>
+            <span class="n">tr</span><span class="o">=</span><span class="n">tr</span><span class="p">,</span>
+            <span class="n">te</span><span class="o">=</span><span class="n">te</span><span class="p">,</span>
             <span class="n">ti</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="n">_numbers</span><span class="p">(</span><span class="n">seq</span><span class="o">.</span><span class="n">get_definition</span><span class="p">(</span><span class="s2">"TI"</span><span class="p">))),</span>
-            <span class="n">flip_angle</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="n">_numbers</span><span class="p">(</span><span class="n">seq</span><span class="o">.</span><span class="n">get_definition</span><span class="p">(</span><span class="s2">"FlipAngle"</span><span class="p">))),</span>
+            <span class="n">flip_angle</span><span class="o">=</span><span class="n">flip_angle</span><span class="p">,</span>
             <span class="n">centre_line</span><span class="o">=</span><span class="n">_counter</span><span class="p">(</span><span class="n">seq</span><span class="o">.</span><span class="n">get_definition</span><span class="p">(</span><span class="s2">"kSpaceCenterLine"</span><span class="p">)),</span>
             <span class="n">centre_partition</span><span class="o">=</span><span class="n">_counter</span><span class="p">(</span><span class="n">seq</span><span class="o">.</span><span class="n">get_definition</span><span class="p">(</span><span class="s2">"kSpaceCenterPartition"</span><span class="p">)),</span>
         <span class="p">)</span></div>
@@ -842,6 +860,22 @@
 <span class="k">def</span><span class="w"> </span><span class="nf">_step</span><span class="p">(</span><span class="n">swept</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">index</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">at</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Length of each readout's k step from sample ``at`` to the next."""</span>
     <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(((</span><span class="n">swept</span><span class="p">[</span><span class="n">index</span><span class="p">,</span> <span class="p">:,</span> <span class="n">at</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">swept</span><span class="p">[</span><span class="n">index</span><span class="p">,</span> <span class="p">:,</span> <span class="n">at</span><span class="p">])</span> <span class="o">**</span> <span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">))</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_measured</span><span class="p">(</span><span class="n">seq</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="o">...</span><span class="p">],</span> <span class="o">...</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""TR, TE and flip angles as pypulseqpp's report measures them; empty where it cannot.</span>
+
+<span class="sd">    A sequence without RF has no TR: the report's fallback to the total</span>
+<span class="sd">    duration is not one.</span>
+<span class="sd">    """</span>
+    <span class="n">report</span> <span class="o">=</span> <span class="n">seq</span><span class="o">.</span><span class="n">test_report_dict</span><span class="p">()</span>
+    <span class="n">tr</span><span class="p">,</span> <span class="n">te</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">report</span><span class="p">[</span><span class="s2">"TR"</span><span class="p">]),</span> <span class="nb">float</span><span class="p">(</span><span class="n">report</span><span class="p">[</span><span class="s2">"TE"</span><span class="p">])</span>
+    <span class="n">plays_rf</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">report</span><span class="p">[</span><span class="s2">"event_count"</span><span class="p">][</span><span class="s2">"rf"</span><span class="p">])</span> <span class="o">&gt;</span> <span class="mi">0</span>
+    <span class="k">return</span> <span class="p">(</span>
+        <span class="p">(</span><span class="n">tr</span><span class="p">,)</span> <span class="k">if</span> <span class="n">plays_rf</span> <span class="ow">and</span> <span class="n">math</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">tr</span><span class="p">)</span> <span class="k">else</span> <span class="p">(),</span>
+        <span class="p">(</span><span class="n">te</span><span class="p">,)</span> <span class="k">if</span> <span class="n">math</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">te</span><span class="p">)</span> <span class="k">else</span> <span class="p">(),</span>
+        <span class="nb">tuple</span><span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">angle</span><span class="p">)</span> <span class="k">for</span> <span class="n">angle</span> <span class="ow">in</span> <span class="n">report</span><span class="p">[</span><span class="s2">"flip_angles_deg"</span><span class="p">]),</span>
+    <span class="p">)</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_numbers</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]:</span>

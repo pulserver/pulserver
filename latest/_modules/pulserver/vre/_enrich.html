@@ -583,9 +583,10 @@
 <span class="sd">        Numbered in chain order: each subsequence's primary space, then its</span>
 <span class="sd">        navigator space when it has ``NAV`` readouts.</span>
 <span class="sd">    sequence_parameters : dict of str to list of float</span>
-<span class="sd">        Over the chain's definitions: the ``TR`` and ``TI`` minima and every</span>
-<span class="sd">        distinct ``TE`` in ascending order, in ms, and the ``FlipAngle``</span>
-<span class="sd">        maximum, in degrees. Keys no file defines are absent.</span>
+<span class="sd">        Over the chain's :class:`~pulserver.mrd.SequenceDefinitions`: the</span>
+<span class="sd">        ``TR`` and ``TI`` minima and every distinct ``TE`` in ascending order,</span>
+<span class="sd">        in ms, and every distinct ``FlipAngle`` in ascending order, in</span>
+<span class="sd">        degrees. Keys no file defines or measures are absent.</span>
 <span class="sd">    """</span>
 
     <span class="n">counters</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]</span>
@@ -635,8 +636,8 @@
         <span class="n">ti</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="n">flip</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="k">for</span> <span class="n">subsequence</span><span class="p">,</span> <span class="p">(</span><span class="n">_</span><span class="p">,</span> <span class="n">seq</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">read_chain</span><span class="p">(</span><span class="n">path</span><span class="p">)):</span>
-            <span class="n">readouts</span> <span class="o">=</span> <span class="n">ReadoutTable</span><span class="o">.</span><span class="n">from_sequence</span><span class="p">(</span><span class="n">seq</span><span class="p">)</span>
             <span class="n">definitions</span> <span class="o">=</span> <span class="n">SequenceDefinitions</span><span class="o">.</span><span class="n">from_sequence</span><span class="p">(</span><span class="n">seq</span><span class="p">)</span>
+            <span class="n">readouts</span> <span class="o">=</span> <span class="n">ReadoutTable</span><span class="o">.</span><span class="n">from_sequence</span><span class="p">(</span><span class="n">seq</span><span class="p">)</span>
             <span class="n">part</span><span class="p">,</span> <span class="n">part_spaces</span> <span class="o">=</span> <span class="n">_map_readouts</span><span class="p">(</span>
                 <span class="n">readouts</span><span class="p">,</span> <span class="n">definitions</span><span class="p">,</span> <span class="n">subsequence</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">spaces</span><span class="p">)</span>
             <span class="p">)</span>
@@ -667,7 +668,7 @@
         <span class="k">if</span> <span class="n">ti</span><span class="p">:</span>
             <span class="n">parameters</span><span class="p">[</span><span class="s2">"TI"</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="mf">1e3</span> <span class="o">*</span> <span class="nb">min</span><span class="p">(</span><span class="n">ti</span><span class="p">)]</span>
         <span class="k">if</span> <span class="n">flip</span><span class="p">:</span>
-            <span class="n">parameters</span><span class="p">[</span><span class="s2">"FlipAngle"</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="nb">max</span><span class="p">(</span><span class="n">flip</span><span class="p">)]</span>
+            <span class="n">parameters</span><span class="p">[</span><span class="s2">"FlipAngle"</span><span class="p">]</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">({</span><span class="nb">round</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span> <span class="k">for</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">flip</span><span class="p">})</span>
 
         <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span>
             <span class="n">counters</span><span class="o">=</span><span class="p">{</span>

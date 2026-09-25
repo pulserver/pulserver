@@ -533,7 +533,8 @@
 <dt class="sig sig-object py" id="pulserver.mrd.read_chain">
 <span class="sig-prename descclassname"><span class="pre">pulserver.mrd.</span></span><span class="sig-name descname"><span class="pre">read_chain</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pulserver/mrd/_sequence.html#read_chain"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.mrd.read_chain" title="Link to this definition">#</a></dt>
 <dd><p>Read a sequence file and every file its <code class="docutils literal notranslate"><span class="pre">NextSequence</span></code> definitions name, in play order.</p>
-<p>A <code class="docutils literal notranslate"><span class="pre">NextSequence</span></code> name is relative to the directory of the file naming it.</p>
+<p>A <code class="docutils literal notranslate"><span class="pre">NextSequence</span></code> name is relative to the directory of the file naming it.
+Each file is read by <code class="docutils literal notranslate"><span class="pre">pypulseqpp.io.read</span></code>, onto a system built from it.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">

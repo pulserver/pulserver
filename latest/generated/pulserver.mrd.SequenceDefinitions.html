@@ -534,6 +534,10 @@
 <span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pulserver.mrd.</span></span><span class="sig-name descname"><span class="pre">SequenceDefinitions</span></span><a class="reference internal" href="../_modules/pulserver/mrd/_sequence.html#SequenceDefinitions"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.mrd.SequenceDefinitions" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/builtins/functions.html#object" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
 <p>Definitions describing what a sequence acquires, in Pulseq units.</p>
+<p><code class="docutils literal notranslate"><span class="pre">TR</span></code>, <code class="docutils literal notranslate"><span class="pre">TE</span></code> and <code class="docutils literal notranslate"><span class="pre">FlipAngle</span></code> a sequence does not define are measured
+by <code class="docutils literal notranslate"><span class="pre">Sequence.test_report_dict</span></code>: TE from the excitation before the
+closest approach to the k-space centre, TR between the excitations around
+it, and every distinct flip angle the sequence plays.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Attributes<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -554,7 +558,7 @@ when undefined.</p></li>
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table">
 <tbody>
 <tr class="row-odd"><td><p><a class="reference internal" href="pulserver.mrd.SequenceDefinitions.from_sequence.html#pulserver.mrd.SequenceDefinitions.from_sequence" title="pulserver.mrd.SequenceDefinitions.from_sequence"><code class="xref py py-obj docutils literal notranslate"><span class="pre">from_sequence</span></code></a></p></td>
-<td><p>Read the definitions of a <code class="docutils literal notranslate"><span class="pre">pypulseqpp.Sequence</span></code>.</p></td>
+<td><p>Read the definitions of a <code class="docutils literal notranslate"><span class="pre">pypulseqpp.Sequence</span></code>, measuring those it lacks.</p></td>
 </tr>
 </tbody>
 </table>

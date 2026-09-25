@@ -554,9 +554,10 @@ across the readout; 0 for a readout whose k does not move.</p></li>
 <li><p><strong>encoding_space</strong> (<em>ndarray</em>) – <code class="docutils literal notranslate"><span class="pre">int32</span></code> index into <a class="reference internal" href="pulserver.vre.SequenceTable.spaces.html#pulserver.vre.SequenceTable.spaces" title="pulserver.vre.SequenceTable.spaces"><code class="xref py py-attr docutils literal notranslate"><span class="pre">spaces</span></code></a>.</p></li>
 <li><p><strong>spaces</strong> (<em>tuple of TableSpace</em>) – Numbered in chain order: each subsequence’s primary space, then its
 navigator space when it has <code class="docutils literal notranslate"><span class="pre">NAV</span></code> readouts.</p></li>
-<li><p><strong>sequence_parameters</strong> (<em>dict of str to list of float</em>) – Over the chain’s definitions: the <code class="docutils literal notranslate"><span class="pre">TR</span></code> and <code class="docutils literal notranslate"><span class="pre">TI</span></code> minima and every
-distinct <code class="docutils literal notranslate"><span class="pre">TE</span></code> in ascending order, in ms, and the <code class="docutils literal notranslate"><span class="pre">FlipAngle</span></code>
-maximum, in degrees. Keys no file defines are absent.</p></li>
+<li><p><strong>sequence_parameters</strong> (<em>dict of str to list of float</em>) – Over the chain’s <a class="reference internal" href="pulserver.mrd.SequenceDefinitions.html#pulserver.mrd.SequenceDefinitions" title="pulserver.mrd.SequenceDefinitions"><code class="xref py py-class docutils literal notranslate"><span class="pre">SequenceDefinitions</span></code></a>: the
+<code class="docutils literal notranslate"><span class="pre">TR</span></code> and <code class="docutils literal notranslate"><span class="pre">TI</span></code> minima and every distinct <code class="docutils literal notranslate"><span class="pre">TE</span></code> in ascending order,
+in ms, and every distinct <code class="docutils literal notranslate"><span class="pre">FlipAngle</span></code> in ascending order, in
+degrees. Keys no file defines or measures are absent.</p></li>
 </ul>
 </dd>
 </dl>
