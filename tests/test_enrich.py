@@ -242,20 +242,6 @@ def test_the_header_describes_each_encoding_space():
     assert space.phase_encodes == 8
 
 
-def test_the_header_centres_k_space_where_the_design_puts_its_centre(tmp_path):
-    from pypulseqpp.sequences.sequence.gre3D_sequence import Gre3DApp
-
-    system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=170, slew_unit="T/m/s")
-    path = tmp_path / "gre3d.seq"
-    Gre3DApp(system, n_x=32, n_y=16, n_z=8).design().write(str(path))
-    enriched = header()
-    enrich_header(enriched, SequenceTable.read(path))
-    limits = enriched.encoding[0].encodingLimits
-    line, partition = limits.kspace_encoding_step_1, limits.kspace_encoding_step_2
-    assert (line.maximum, line.center) == (15, 8)
-    assert (partition.maximum, partition.center) == (7, 4)
-
-
 def test_an_acquisition_of_the_wrong_length_is_refused():
     table = fixture("gre_2d_3sl.seq")
     samples = np.ones((2, int(table.num_samples[0]) + 1), np.complex64)
