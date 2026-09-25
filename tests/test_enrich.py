@@ -44,9 +44,7 @@ def fixture(name):
 
 
 def reference(name):
-    seq = pp.Sequence()
-    seq.read(FIXTURES / name)
-    return seq
+    return pp.io.read(FIXTURES / name)
 
 
 def acquisitions(table, data=None):
@@ -240,6 +238,14 @@ def test_the_header_describes_each_encoding_space():
     space = EncodingSpace.from_header(reparsed)
     assert space.loops == ("slice",)
     assert space.phase_encodes == 8
+
+
+def test_the_header_lists_every_flip_angle_the_sequence_plays():
+    seq = reference("gre_2d_3sl.seq")
+    measured = sorted({round(a, 3) for a in seq.test_report_dict()["flip_angles_deg"]})
+    enriched = header()
+    enrich_header(enriched, fixture("gre_2d_3sl.seq"))
+    assert pytest.approx(measured) == enriched.sequenceParameters.flipAngle_deg
 
 
 def test_the_header_centres_k_space_where_the_design_puts_its_centre(tmp_path):

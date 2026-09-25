@@ -126,9 +126,10 @@ class SequenceTable:
         Numbered in chain order: each subsequence's primary space, then its
         navigator space when it has ``NAV`` readouts.
     sequence_parameters : dict of str to list of float
-        Over the chain's definitions: the ``TR`` and ``TI`` minima and every
-        distinct ``TE`` in ascending order, in ms, and the ``FlipAngle``
-        maximum, in degrees. Keys no file defines are absent.
+        Over the chain's :class:`~pulserver.mrd.SequenceDefinitions`: the
+        ``TR`` and ``TI`` minima and every distinct ``TE`` in ascending order,
+        in ms, and every distinct ``FlipAngle`` in ascending order, in
+        degrees. Keys no file defines or measures are absent.
     """
 
     counters: dict[str, np.ndarray]
@@ -173,8 +174,8 @@ class SequenceTable:
         ti: list[float] = []
         flip: list[float] = []
         for subsequence, (_, seq) in enumerate(read_chain(path)):
-            readouts = ReadoutTable.from_sequence(seq)
             definitions = SequenceDefinitions.from_sequence(seq)
+            readouts = ReadoutTable.from_sequence(seq)
             part, part_spaces = _map_readouts(
                 readouts, definitions, subsequence, len(spaces)
             )
@@ -205,7 +206,7 @@ class SequenceTable:
         if ti:
             parameters["TI"] = [1e3 * min(ti)]
         if flip:
-            parameters["FlipAngle"] = [max(flip)]
+            parameters["FlipAngle"] = sorted({round(value, 3) for value in flip})
 
         return cls(
             counters={

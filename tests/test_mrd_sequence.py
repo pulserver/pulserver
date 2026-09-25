@@ -12,8 +12,7 @@ SEQUENCES = sorted(path.name for path in FIXTURES.glob("*.seq"))
 
 
 def fixture(name):
-    seq = pp.Sequence()
-    seq.read(FIXTURES / name)
+    seq = pp.io.read(FIXTURES / name)
     return seq, ReadoutTable.from_sequence(seq)
 
 
@@ -212,3 +211,37 @@ def test_definitions_are_read_in_pulseq_units():
     assert definitions.tr == pytest.approx((0.03,))
     assert definitions.navigator_matrix is None
     assert definitions.ti == ()
+
+
+def test_a_flip_angle_the_sequence_does_not_define_is_the_one_pypulseqpp_measures():
+    seq, _ = fixture("gre_2d_3sl.seq")
+    assert seq.get_definition("FlipAngle") == ""
+    measured = tuple(seq.test_report_dict()["flip_angles_deg"])
+    definitions = SequenceDefinitions.from_sequence(seq)
+    assert measured
+    assert definitions.flip_angle == pytest.approx(measured)
+    assert definitions.te == pytest.approx((0.005,))
+
+
+def test_te_and_tr_a_sequence_does_not_define_are_the_ones_pypulseqpp_measures():
+    system = pp.Opts()
+    seq = pp.Sequence(system)
+    for _ in range(2):
+        seq.add_block(
+            pp.make_block_pulse(
+                np.pi / 18, duration=1e-4, use="excitation", system=system
+            )
+        )
+        add_readout(seq)
+    report = seq.test_report_dict()
+    definitions = SequenceDefinitions.from_sequence(seq)
+    assert definitions.te == pytest.approx((report["TE"],))
+    assert definitions.tr == pytest.approx((report["TR"],))
+    assert definitions.flip_angle == pytest.approx((10.0,))
+
+
+def test_a_sequence_without_rf_measures_no_echo_or_repetition_time():
+    seq = pp.Sequence(pp.Opts())
+    add_readout(seq)
+    definitions = SequenceDefinitions.from_sequence(seq)
+    assert (definitions.tr, definitions.te, definitions.flip_angle) == ((), (), ())

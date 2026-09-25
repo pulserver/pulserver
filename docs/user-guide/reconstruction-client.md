@@ -42,7 +42,7 @@ connection, so the client can finish sending and read the reason.
 | `subjectInformation`, `studyInformation`, `measurementInformation`, `acquisitionSystemInformation` | Optional | Copied into the DICOM datasets; `relativeTablePosition` is not |
 | `measurementInformation.measurementID` | A non-negative integer when `systemVendor` names GE | The DICOM series number on a GE system |
 | `encoding` | Optional | Replaced by one encoding space per subsequence, and one more for the navigator readouts of a subsequence that has them; a matrix size or field of view the sequence does not define is kept from the client's encoding at the same index |
-| `sequenceParameters` | Optional | TR, TE, TI and flip angle replaced by those the sequence defines |
+| `sequenceParameters` | Optional | TR, TE, TI and flip angles replaced by those the sequence defines; TR, TE and flip angles it does not define are measured by pypulseqpp's `test_report_dict` |
 
 A header that the ISMRMRD schema does not accept, or that names no design of
 the store, is refused before any acquisition is read.
