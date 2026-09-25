@@ -17,3 +17,11 @@
    ~Phantom.kspace
 
 
+
+.. rubric:: Attributes
+
+.. autosummary::
+   :toctree:
+   :nosignatures:
+
+   ~Phantom.shifts_ppm

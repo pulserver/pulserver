@@ -462,12 +462,14 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pypulseqpp</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pp</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">..</span><span class="w"> </span><span class="kn">import</span> <span class="n">ir</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._phantom</span><span class="w"> </span><span class="kn">import</span> <span class="n">Phantom</span>
 
 <span class="n">_EXCITATION</span> <span class="o">=</span> <span class="mi">1</span>
 <span class="n">_REFOCUSING</span> <span class="o">=</span> <span class="mi">2</span>
+<span class="n">_SATURATION</span> <span class="o">=</span> <span class="mi">4</span>
 
 
 <span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
@@ -475,6 +477,11 @@
     <span class="n">kspace</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
     <span class="n">phase</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
     <span class="n">excited</span><span class="p">:</span> <span class="nb">bool</span>
+    <span class="c1">#: Seconds of free precession each sample has accrued, as refocused.</span>
+    <span class="n">precession</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+    <span class="c1">#: Each species' longitudinal magnetization when the readout's excitation</span>
+    <span class="c1">#: tipped it, as a fraction of equilibrium.</span>
+    <span class="n">longitudinal</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
 
 
 <div class="viewcode-block" id="trajectory">
@@ -509,6 +516,8 @@
     <span class="n">cache_ext</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">".pseg"</span><span class="p">,</span>
     <span class="o">*</span><span class="p">,</span>
     <span class="n">rotation</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">field_t</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">off_resonance_hz</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">"""Return the samples the cache beside a sequence file acquires of a phantom.</span>
 
@@ -517,29 +526,58 @@
 <span class="sd">    :func:`trajectory` the cache plays under the prescription's ``rotation``</span>
 <span class="sd">    and multiplied by ``exp(i theta)``, where the receiver phase ``theta`` is</span>
 <span class="sd">    the ADC phase offset at the ADC's start, advancing at its frequency</span>
-<span class="sd">    offset, plus its phase modulation, as the playout demodulates. Only</span>
-<span class="sd">    excitation and refocusing pulses act on the magnetization, and ideally; a</span>
-<span class="sd">    readout before the first excitation of its file acquires zeros. The</span>
-<span class="sd">    signal model is that of :doc:`/explanations/virtual-scanner`.</span>
+<span class="sd">    offset, plus its phase modulation, as the playout demodulates.</span>
+
+<span class="sd">    Each chemical shift of the phantom precesses at its frequency from the</span>
+<span class="sd">    scanner's centre frequency: the shift resolved at the field ``field_t``,</span>
+<span class="sd">    in T, with pypulseqpp's default gamma, plus ``off_resonance_hz``. It</span>
+<span class="sd">    accrues its phase from each excitation and a refocusing pulse negates</span>
+<span class="sd">    what it has accrued. Excitation and refocusing pulses act ideally and on</span>
+<span class="sd">    every shift alike; a saturation pulse scales the longitudinal</span>
+<span class="sd">    magnetization of each shift by the z component the pulse the cache plays</span>
+<span class="sd">    leaves at that frequency, in pypulseqpp's Bloch simulation, and the next</span>
+<span class="sd">    excitation tips what remains. No other pulse acts, and a readout before</span>
+<span class="sd">    the first excitation of its file acquires zeros. The signal model is that</span>
+<span class="sd">    of :doc:`/explanations/virtual-scanner`.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If the phantom has a chemical shift and ``field_t`` is not given, or</span>
+<span class="sd">        a saturation pulse plays under a gradient.</span>
 <span class="sd">    """</span>
+    <span class="n">shifts</span> <span class="o">=</span> <span class="n">phantom</span><span class="o">.</span><span class="n">shifts_ppm</span>
+    <span class="k">if</span> <span class="n">field_t</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">any</span><span class="p">(</span><span class="n">shifts</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"a phantom with a chemical shift is scanned at a field_t"</span><span class="p">)</span>
+    <span class="n">per_ppm</span> <span class="o">=</span> <span class="mf">0.0</span> <span class="k">if</span> <span class="n">field_t</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="mf">1e-6</span> <span class="o">*</span> <span class="n">pp</span><span class="o">.</span><span class="n">Opts</span><span class="p">()</span><span class="o">.</span><span class="n">gamma</span> <span class="o">*</span> <span class="n">field_t</span>
+    <span class="n">frequencies</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">per_ppm</span> <span class="o">*</span> <span class="n">s</span> <span class="o">+</span> <span class="n">off_resonance_hz</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">shifts</span><span class="p">])</span>
     <span class="n">samples</span> <span class="o">=</span> <span class="p">[]</span>
-    <span class="k">for</span> <span class="n">readout</span> <span class="ow">in</span> <span class="n">_play</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="n">seq_path</span><span class="p">),</span> <span class="n">cache_ext</span><span class="p">,</span> <span class="n">rotation</span><span class="p">):</span>
+    <span class="k">for</span> <span class="n">readout</span> <span class="ow">in</span> <span class="n">_play</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="n">seq_path</span><span class="p">),</span> <span class="n">cache_ext</span><span class="p">,</span> <span class="n">rotation</span><span class="p">,</span> <span class="n">frequencies</span><span class="p">):</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">readout</span><span class="o">.</span><span class="n">excited</span><span class="p">:</span>
             <span class="n">samples</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
                 <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">phantom</span><span class="o">.</span><span class="n">coils</span><span class="p">,</span> <span class="n">readout</span><span class="o">.</span><span class="n">kspace</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">complex64</span><span class="p">)</span>
             <span class="p">)</span>
             <span class="k">continue</span>
-        <span class="n">signal</span> <span class="o">=</span> <span class="n">phantom</span><span class="o">.</span><span class="n">kspace</span><span class="p">(</span><span class="n">readout</span><span class="o">.</span><span class="n">kspace</span><span class="p">)</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="mi">1</span><span class="n">j</span> <span class="o">*</span> <span class="n">readout</span><span class="o">.</span><span class="n">phase</span><span class="p">)</span>
-        <span class="n">samples</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">signal</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">complex64</span><span class="p">))</span>
+        <span class="n">signal</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span>
+            <span class="n">m</span>
+            <span class="o">*</span> <span class="n">phantom</span><span class="o">.</span><span class="n">kspace</span><span class="p">(</span><span class="n">readout</span><span class="o">.</span><span class="n">kspace</span><span class="p">,</span> <span class="n">s</span><span class="p">)</span>
+            <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="mi">2</span><span class="n">j</span> <span class="o">*</span> <span class="n">math</span><span class="o">.</span><span class="n">pi</span> <span class="o">*</span> <span class="n">f</span> <span class="o">*</span> <span class="n">readout</span><span class="o">.</span><span class="n">precession</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">s</span><span class="p">,</span> <span class="n">f</span><span class="p">,</span> <span class="n">m</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">shifts</span><span class="p">,</span> <span class="n">frequencies</span><span class="p">,</span> <span class="n">readout</span><span class="o">.</span><span class="n">longitudinal</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="n">samples</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">signal</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="mi">1</span><span class="n">j</span> <span class="o">*</span> <span class="n">readout</span><span class="o">.</span><span class="n">phase</span><span class="p">))</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">complex64</span><span class="p">))</span>
     <span class="k">return</span> <span class="n">samples</span></div>
 
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_play</span><span class="p">(</span>
-    <span class="n">seq_path</span><span class="p">:</span> <span class="n">Path</span><span class="p">,</span> <span class="n">cache_ext</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">prescription</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span>
+    <span class="n">seq_path</span><span class="p">:</span> <span class="n">Path</span><span class="p">,</span>
+    <span class="n">cache_ext</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">prescription</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">frequencies_hz</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">_Readout</span><span class="p">]:</span>
     <span class="n">played</span> <span class="o">=</span> <span class="n">ir</span><span class="o">.</span><span class="n">play</span><span class="p">(</span><span class="n">seq_path</span><span class="p">,</span> <span class="n">cache_ext</span><span class="p">,</span> <span class="n">waveforms</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
     <span class="n">turn</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span> <span class="k">if</span> <span class="n">prescription</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">prescription</span><span class="p">,</span> <span class="nb">float</span><span class="p">)</span>
+    <span class="n">frequencies</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span> <span class="k">if</span> <span class="n">frequencies_hz</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">frequencies_hz</span>
     <span class="n">span</span> <span class="o">=</span> <span class="n">played</span><span class="p">[</span><span class="s2">"gradient_span"</span><span class="p">]</span>
     <span class="n">corners</span> <span class="o">=</span> <span class="n">played</span><span class="p">[</span><span class="s2">"gradient_time_us"</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">float</span><span class="p">)</span>
     <span class="n">values</span> <span class="o">=</span> <span class="n">played</span><span class="p">[</span><span class="s2">"gradient_waveform_hz_per_m"</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">float</span><span class="p">)</span>
@@ -552,6 +590,10 @@
             <span class="n">unbroken</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span>
             <span class="n">origin</span> <span class="o">=</span> <span class="kc">None</span>
             <span class="n">reference</span> <span class="o">=</span> <span class="mf">0.0</span>
+            <span class="n">start_us</span> <span class="o">=</span> <span class="mf">0.0</span>
+            <span class="n">precession_origin_us</span> <span class="o">=</span> <span class="mf">0.0</span>
+            <span class="n">longitudinal</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">frequencies</span><span class="o">.</span><span class="n">size</span><span class="p">)</span>
+            <span class="n">tipped</span> <span class="o">=</span> <span class="n">longitudinal</span>
         <span class="n">rotation</span> <span class="o">=</span> <span class="n">played</span><span class="p">[</span><span class="s2">"rotation"</span><span class="p">][</span><span class="n">block</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">float</span><span class="p">)</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">played</span><span class="p">[</span><span class="s2">"norot"</span><span class="p">][</span><span class="n">block</span><span class="p">]:</span>
             <span class="n">rotation</span> <span class="o">=</span> <span class="n">turn</span> <span class="o">@</span> <span class="n">rotation</span>
@@ -569,15 +611,20 @@
             <span class="k">if</span> <span class="n">use</span> <span class="o">==</span> <span class="n">_EXCITATION</span><span class="p">:</span>
                 <span class="n">origin</span> <span class="o">=</span> <span class="n">at_centre</span>
                 <span class="n">reference</span> <span class="o">=</span> <span class="o">-</span><span class="n">phase</span> <span class="o">-</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="n">math</span><span class="o">.</span><span class="n">pi</span>
+                <span class="n">precession_origin_us</span> <span class="o">=</span> <span class="n">start_us</span> <span class="o">+</span> <span class="n">centre</span>
+                <span class="n">tipped</span> <span class="o">=</span> <span class="n">longitudinal</span>
+                <span class="n">longitudinal</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">frequencies</span><span class="o">.</span><span class="n">size</span><span class="p">)</span>
             <span class="k">elif</span> <span class="n">origin</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="n">origin</span> <span class="o">=</span> <span class="mf">2.0</span> <span class="o">*</span> <span class="n">at_centre</span> <span class="o">-</span> <span class="n">origin</span>
                 <span class="n">reference</span> <span class="o">=</span> <span class="o">-</span><span class="mf">2.0</span> <span class="o">*</span> <span class="n">phase</span> <span class="o">-</span> <span class="n">reference</span>
+                <span class="n">precession_origin_us</span> <span class="o">=</span> <span class="mf">2.0</span> <span class="o">*</span> <span class="p">(</span><span class="n">start_us</span> <span class="o">+</span> <span class="n">centre</span><span class="p">)</span> <span class="o">-</span> <span class="n">precession_origin_us</span>
+        <span class="k">elif</span> <span class="n">played</span><span class="p">[</span><span class="s2">"rf_amp_hz"</span><span class="p">][</span><span class="n">block</span><span class="p">]</span> <span class="o">!=</span> <span class="mf">0.0</span> <span class="ow">and</span> <span class="n">use</span> <span class="o">==</span> <span class="n">_SATURATION</span><span class="p">:</span>
+            <span class="n">longitudinal</span> <span class="o">=</span> <span class="n">longitudinal</span> <span class="o">*</span> <span class="n">_saturation</span><span class="p">(</span><span class="n">played</span><span class="p">,</span> <span class="n">block</span><span class="p">,</span> <span class="n">waves</span><span class="p">,</span> <span class="n">frequencies</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">played</span><span class="p">[</span><span class="s2">"adc"</span><span class="p">][</span><span class="n">block</span><span class="p">]:</span>
             <span class="n">opened</span> <span class="o">=</span> <span class="mf">1e-3</span> <span class="o">*</span> <span class="nb">float</span><span class="p">(</span><span class="n">played</span><span class="p">[</span><span class="s2">"adc_dwell_ns"</span><span class="p">][</span><span class="n">block</span><span class="p">])</span>
             <span class="n">since</span> <span class="o">=</span> <span class="n">opened</span> <span class="o">*</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">played</span><span class="p">[</span><span class="s2">"adc_samples"</span><span class="p">][</span><span class="n">block</span><span class="p">])</span> <span class="o">+</span> <span class="mf">0.5</span><span class="p">)</span>
-            <span class="n">k</span> <span class="o">=</span> <span class="n">_k</span><span class="p">(</span>
-                <span class="n">unbroken</span><span class="p">,</span> <span class="n">rotation</span><span class="p">,</span> <span class="n">waves</span><span class="p">,</span> <span class="nb">float</span><span class="p">(</span><span class="n">played</span><span class="p">[</span><span class="s2">"adc_delay_us"</span><span class="p">][</span><span class="n">block</span><span class="p">])</span> <span class="o">+</span> <span class="n">since</span>
-            <span class="p">)</span>
+            <span class="n">sampled_us</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">played</span><span class="p">[</span><span class="s2">"adc_delay_us"</span><span class="p">][</span><span class="n">block</span><span class="p">])</span> <span class="o">+</span> <span class="n">since</span>
+            <span class="n">k</span> <span class="o">=</span> <span class="n">_k</span><span class="p">(</span><span class="n">unbroken</span><span class="p">,</span> <span class="n">rotation</span><span class="p">,</span> <span class="n">waves</span><span class="p">,</span> <span class="n">sampled_us</span><span class="p">)</span>
             <span class="n">receiver</span> <span class="o">=</span> <span class="p">(</span>
                 <span class="nb">float</span><span class="p">(</span><span class="n">played</span><span class="p">[</span><span class="s2">"adc_phase_rad"</span><span class="p">][</span><span class="n">block</span><span class="p">])</span>
                 <span class="o">+</span> <span class="mf">2.0</span> <span class="o">*</span> <span class="n">math</span><span class="o">.</span><span class="n">pi</span> <span class="o">*</span> <span class="nb">float</span><span class="p">(</span><span class="n">played</span><span class="p">[</span><span class="s2">"adc_freq_hz"</span><span class="p">][</span><span class="n">block</span><span class="p">])</span> <span class="o">*</span> <span class="mf">1e-6</span> <span class="o">*</span> <span class="n">since</span>
@@ -588,10 +635,71 @@
                 <span class="n">kspace</span><span class="o">=</span><span class="n">k</span> <span class="o">-</span> <span class="p">(</span><span class="n">origin</span><span class="p">[:,</span> <span class="kc">None</span><span class="p">]</span> <span class="k">if</span> <span class="n">origin</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="mf">0.0</span><span class="p">),</span>
                 <span class="n">phase</span><span class="o">=</span><span class="n">reference</span> <span class="o">+</span> <span class="n">receiver</span><span class="p">,</span>
                 <span class="n">excited</span><span class="o">=</span><span class="n">origin</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">,</span>
+                <span class="n">precession</span><span class="o">=</span><span class="mf">1e-6</span> <span class="o">*</span> <span class="p">(</span><span class="n">start_us</span> <span class="o">+</span> <span class="n">sampled_us</span> <span class="o">-</span> <span class="n">precession_origin_us</span><span class="p">),</span>
+                <span class="n">longitudinal</span><span class="o">=</span><span class="n">tipped</span><span class="p">,</span>
             <span class="p">)</span>
         <span class="n">unbroken</span> <span class="o">=</span> <span class="n">_k</span><span class="p">(</span>
             <span class="n">unbroken</span><span class="p">,</span> <span class="n">rotation</span><span class="p">,</span> <span class="n">waves</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="nb">float</span><span class="p">(</span><span class="n">played</span><span class="p">[</span><span class="s2">"duration_us"</span><span class="p">][</span><span class="n">block</span><span class="p">])])</span>
         <span class="p">)[:,</span> <span class="mi">0</span><span class="p">]</span>
+        <span class="n">start_us</span> <span class="o">+=</span> <span class="nb">float</span><span class="p">(</span><span class="n">played</span><span class="p">[</span><span class="s2">"duration_us"</span><span class="p">][</span><span class="n">block</span><span class="p">])</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_saturation</span><span class="p">(</span>
+    <span class="n">played</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">],</span>
+    <span class="n">block</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">waves</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]],</span>
+    <span class="n">frequencies_hz</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the z component the saturation pulse of ``block`` leaves at each frequency, from +z.</span>
+
+<span class="sd">    The pulse is simulated in the frame of its own frequency, with the</span>
+<span class="sd">    channels of a pTx pulse at unit, in-phase sensitivity.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If a gradient plays during the pulse, which then saturates a band in</span>
+<span class="sd">        space rather than a species.</span>
+<span class="sd">    """</span>
+    <span class="n">start</span><span class="p">,</span> <span class="n">stop</span> <span class="o">=</span> <span class="n">played</span><span class="p">[</span><span class="s2">"rf_span"</span><span class="p">][</span><span class="n">block</span><span class="p">]</span>
+    <span class="n">channels</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">played</span><span class="p">[</span><span class="s2">"rf_channels"</span><span class="p">][</span><span class="n">block</span><span class="p">]),</span> <span class="mi">1</span><span class="p">)</span>
+    <span class="n">times</span> <span class="o">=</span> <span class="n">played</span><span class="p">[</span><span class="s2">"rf_time_us"</span><span class="p">][</span><span class="n">start</span><span class="p">:</span><span class="n">stop</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">float</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">channels</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="k">if</span> <span class="nb">any</span><span class="p">(</span>
+        <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">interp</span><span class="p">(</span><span class="n">times</span><span class="p">,</span> <span class="n">corners</span><span class="p">,</span> <span class="n">gradient</span><span class="p">,</span> <span class="n">left</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">right</span><span class="o">=</span><span class="mf">0.0</span><span class="p">))</span>
+        <span class="k">for</span> <span class="n">corners</span><span class="p">,</span> <span class="n">gradient</span> <span class="ow">in</span> <span class="n">waves</span>
+        <span class="k">if</span> <span class="n">corners</span><span class="o">.</span><span class="n">size</span>
+    <span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"the saturation pulse of block </span><span class="si">{</span><span class="n">block</span><span class="si">}</span><span class="s2"> plays under a gradient, "</span>
+            <span class="s2">"which saturates a band in space the phantom's species cannot hold"</span>
+        <span class="p">)</span>
+    <span class="n">b1</span> <span class="o">=</span> <span class="n">played</span><span class="p">[</span><span class="s2">"rf_waveform_hz"</span><span class="p">][</span><span class="n">start</span><span class="p">:</span><span class="n">stop</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">complex</span><span class="p">)</span>
+    <span class="n">b1</span> <span class="o">=</span> <span class="n">b1</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">channels</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+    <span class="n">b1</span><span class="p">,</span> <span class="n">step_us</span> <span class="o">=</span> <span class="n">_on_a_raster</span><span class="p">(</span><span class="n">times</span> <span class="o">-</span> <span class="nb">float</span><span class="p">(</span><span class="n">played</span><span class="p">[</span><span class="s2">"rf_delay_us"</span><span class="p">][</span><span class="n">block</span><span class="p">]),</span> <span class="n">b1</span><span class="p">)</span>
+    <span class="n">detuning</span> <span class="o">=</span> <span class="n">frequencies_hz</span> <span class="o">-</span> <span class="nb">float</span><span class="p">(</span><span class="n">played</span><span class="p">[</span><span class="s2">"rf_freq_hz"</span><span class="p">][</span><span class="n">block</span><span class="p">])</span>
+    <span class="k">return</span> <span class="n">pp</span><span class="o">.</span><span class="n">sim_bloch</span><span class="p">(</span><span class="n">b1</span><span class="p">,</span> <span class="n">detuning</span><span class="p">[:,</span> <span class="kc">None</span><span class="p">],</span> <span class="mf">1e-6</span> <span class="o">*</span> <span class="n">step_us</span><span class="p">)[:,</span> <span class="mi">2</span><span class="p">]</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_on_a_raster</span><span class="p">(</span><span class="n">times_us</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">b1</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="nb">float</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Return an RF pulse's samples on a uniform raster, and the raster in µs.</span>
+
+<span class="sd">    ``times_us`` are from the pulse's start. Samples at the middles of equal</span>
+<span class="sd">    intervals from the start, as a pulse on the RF raster holds them, are</span>
+<span class="sd">    returned as they are. The points of a time shape, a block pulse's two</span>
+<span class="sd">    corners among them, are joined linearly and sampled at the middles of</span>
+<span class="sd">    1 µs intervals, or of the shape's shortest step where that is shorter.</span>
+<span class="sd">    """</span>
+    <span class="n">steps</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">diff</span><span class="p">(</span><span class="n">times_us</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">steps</span><span class="o">.</span><span class="n">size</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">b1</span><span class="p">,</span> <span class="mf">2.0</span> <span class="o">*</span> <span class="nb">float</span><span class="p">(</span><span class="n">times_us</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+    <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">allclose</span><span class="p">(</span><span class="n">steps</span><span class="p">,</span> <span class="n">steps</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span> <span class="ow">and</span> <span class="n">np</span><span class="o">.</span><span class="n">isclose</span><span class="p">(</span><span class="n">times_us</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="n">steps</span><span class="p">[</span><span class="mi">0</span><span class="p">]):</span>
+        <span class="k">return</span> <span class="n">b1</span><span class="p">,</span> <span class="nb">float</span><span class="p">(</span><span class="n">steps</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+    <span class="n">step</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="mf">1.0</span><span class="p">,</span> <span class="nb">float</span><span class="p">(</span><span class="n">steps</span><span class="p">[</span><span class="n">steps</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">min</span><span class="p">()))</span>
+    <span class="n">count</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="nb">round</span><span class="p">((</span><span class="n">times_us</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">times_us</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span> <span class="o">/</span> <span class="n">step</span><span class="p">))</span>
+    <span class="n">grid</span> <span class="o">=</span> <span class="n">times_us</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">+</span> <span class="n">step</span> <span class="o">*</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">count</span><span class="p">)</span> <span class="o">+</span> <span class="mf">0.5</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">interp</span><span class="p">(</span><span class="n">grid</span><span class="p">,</span> <span class="n">times_us</span><span class="p">,</span> <span class="n">b1</span><span class="o">.</span><span class="n">real</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="n">j</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">interp</span><span class="p">(</span>
+        <span class="n">grid</span><span class="p">,</span> <span class="n">times_us</span><span class="p">,</span> <span class="n">b1</span><span class="o">.</span><span class="n">imag</span>
+    <span class="p">),</span> <span class="n">step</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_k</span><span class="p">(</span>

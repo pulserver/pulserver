@@ -522,6 +522,7 @@
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#generate-a-design">Generate a design</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#start-a-proxy">Start a proxy</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#acquire-and-send-the-series">Acquire and send the series</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#scan-water-and-fat">Scan water and fat</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#prescribe-an-orientation">Prescribe an orientation</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See also</a></li>
 </ul>
@@ -578,6 +579,24 @@ a prescription without a rotation; the object above is centred on the
 prescribed field of view, so it appears at the centre of the image. <code class="docutils literal notranslate"><span class="pre">received</span></code>
 holds the images, DICOM datasets and texts the reconstruction returned; a text
 beginning <code class="docutils literal notranslate"><span class="pre">pulserver:</span></code> reports a refused or failed series.</p>
+</section>
+<section id="scan-water-and-fat">
+<h2>Scan water and fat<a class="headerlink" href="#scan-water-and-fat" title="Link to this heading">#</a></h2>
+<p>An ellipse of fat carries its chemical shift, and the acquisition the
+magnet’s field strength, at which the shift is resolved; <code class="docutils literal notranslate"><span class="pre">off_resonance_hz</span></code>
+adds a frequency offset common to every spin:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">water</span> <span class="o">=</span> <span class="n">virtual</span><span class="o">.</span><span class="n">Ellipse</span><span class="p">((</span><span class="mf">0.02</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span> <span class="p">(</span><span class="mf">0.06</span><span class="p">,</span> <span class="mf">0.05</span><span class="p">))</span>
+<span class="n">fat</span> <span class="o">=</span> <span class="n">virtual</span><span class="o">.</span><span class="n">Ellipse</span><span class="p">((</span><span class="mf">0.02</span><span class="p">,</span> <span class="mf">0.07</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span> <span class="p">(</span><span class="mf">0.04</span><span class="p">,</span> <span class="mf">0.01</span><span class="p">),</span> <span class="n">shift_ppm</span><span class="o">=-</span><span class="mf">3.45</span><span class="p">)</span>
+<span class="n">readouts</span> <span class="o">=</span> <span class="n">virtual</span><span class="o">.</span><span class="n">acquire</span><span class="p">(</span>
+    <span class="n">sequence</span><span class="p">,</span> <span class="n">virtual</span><span class="o">.</span><span class="n">Phantom</span><span class="p">([</span><span class="n">water</span><span class="p">,</span> <span class="n">fat</span><span class="p">],</span> <span class="n">coils</span><span class="o">=</span><span class="mi">4</span><span class="p">),</span> <span class="n">field_t</span><span class="o">=</span><span class="mf">3.0</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>Fat is acquired at its chemical shift, and a fat saturation the design plays
+leaves it the magnetization its pulse leaves at that frequency. Generate the
+design under limits whose <code class="docutils literal notranslate"><span class="pre">B0</span></code> is the same field: the host resolves the ppm
+offsets of the design’s RF pulses at it when it builds the IR
+(<a class="reference internal" href="running.html"><span class="doc">Running the services</span></a>).</p>
 </section>
 <section id="prescribe-an-orientation">
 <h2>Prescribe an orientation<a class="headerlink" href="#prescribe-an-orientation" title="Link to this heading">#</a></h2>
@@ -670,6 +689,7 @@ slice directions.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#generate-a-design">Generate a design</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#start-a-proxy">Start a proxy</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#acquire-and-send-the-series">Acquire and send the series</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#scan-water-and-fat">Scan water and fat</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#prescribe-an-orientation">Prescribe an orientation</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See also</a></li>
 </ul>

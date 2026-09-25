@@ -473,13 +473,15 @@
 <span class="sd">    Lengths are in metres along the axes of the phantom it belongs to;</span>
 <span class="sd">    ``angle`` turns the first semi-axis from x towards y, in radians. The</span>
 <span class="sd">    ellipse is infinitely thin, so its signal depends on the k-space location</span>
-<span class="sd">    along z only through the phase of its plane.</span>
+<span class="sd">    along z only through the phase of its plane. ``shift_ppm`` is the chemical</span>
+<span class="sd">    shift of its spins from water, in ppm: -3.45 for the main fat resonance.</span>
 <span class="sd">    """</span>
 
     <span class="n">centre</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span>
     <span class="n">semi_axes</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span>
     <span class="n">angle</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span>
     <span class="n">intensity</span><span class="p">:</span> <span class="nb">complex</span> <span class="o">=</span> <span class="mf">1.0</span>
+    <span class="n">shift_ppm</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span>
 
 <div class="viewcode-block" id="Ellipse.spectrum">
 <a class="viewcode-back" href="../../../generated/pulserver.virtual.Ellipse.spectrum.html#pulserver.virtual.Ellipse.spectrum">[docs]</a>
@@ -556,31 +558,46 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_rotation</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span> <span class="k">if</span> <span class="n">rotation</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">rotation</span><span class="p">,</span> <span class="nb">float</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_position</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">position</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
 
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">shifts_ppm</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="o">...</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""The chemical shifts of its ellipses, each once, in ascending order."""</span>
+        <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span><span class="nb">sorted</span><span class="p">({</span><span class="n">ellipse</span><span class="o">.</span><span class="n">shift_ppm</span> <span class="k">for</span> <span class="n">ellipse</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">ellipses</span><span class="p">}))</span>
+
 <div class="viewcode-block" id="Phantom.kspace">
 <a class="viewcode-back" href="../../../generated/pulserver.virtual.Phantom.kspace.html#pulserver.virtual.Phantom.kspace">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">kspace</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">k</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Return each coil's signal at ``(3, n)`` physical k-space locations in 1/m: ``(coils, n)``."""</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">kspace</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">k</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">shift_ppm</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Return each coil's signal at ``(3, n)`` physical k-space locations in 1/m: ``(coils, n)``.</span>
+
+<span class="sd">        With ``shift_ppm``, of the ellipses of that chemical shift alone.</span>
+<span class="sd">        """</span>
         <span class="n">k</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">k</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
+        <span class="n">ellipses</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="n">e</span> <span class="k">for</span> <span class="n">e</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">ellipses</span> <span class="k">if</span> <span class="n">shift_ppm</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">e</span><span class="o">.</span><span class="n">shift_ppm</span> <span class="o">==</span> <span class="n">shift_ppm</span>
+        <span class="p">]</span>
         <span class="n">own</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rotation</span><span class="o">.</span><span class="n">T</span> <span class="o">@</span> <span class="n">k</span>
         <span class="n">signal</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">coils</span><span class="p">,</span> <span class="n">k</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]),</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">complex</span><span class="p">)</span>
         <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">coils</span><span class="p">):</span>
             <span class="n">wave</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_waves</span><span class="p">[:,</span> <span class="n">c</span> <span class="p">:</span> <span class="n">c</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span>
-            <span class="n">signal</span><span class="p">[</span><span class="n">c</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_spectrum</span><span class="p">(</span><span class="n">own</span><span class="p">)</span>
+            <span class="n">signal</span><span class="p">[</span><span class="n">c</span><span class="p">]</span> <span class="o">=</span> <span class="n">_spectrum</span><span class="p">(</span><span class="n">ellipses</span><span class="p">,</span> <span class="n">own</span><span class="p">)</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_depth</span><span class="p">:</span>
                 <span class="n">signal</span><span class="p">[</span><span class="n">c</span><span class="p">]</span> <span class="o">+=</span> <span class="p">(</span>
                     <span class="mf">0.5</span>
                     <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">_depth</span>
-                    <span class="o">*</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_spectrum</span><span class="p">(</span><span class="n">own</span> <span class="o">-</span> <span class="n">wave</span><span class="p">)</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">_spectrum</span><span class="p">(</span><span class="n">own</span> <span class="o">+</span> <span class="n">wave</span><span class="p">))</span>
+                    <span class="o">*</span> <span class="p">(</span>
+                        <span class="n">_spectrum</span><span class="p">(</span><span class="n">ellipses</span><span class="p">,</span> <span class="n">own</span> <span class="o">-</span> <span class="n">wave</span><span class="p">)</span>
+                        <span class="o">+</span> <span class="n">_spectrum</span><span class="p">(</span><span class="n">ellipses</span><span class="p">,</span> <span class="n">own</span> <span class="o">+</span> <span class="n">wave</span><span class="p">)</span>
+                    <span class="p">)</span>
                 <span class="p">)</span>
         <span class="k">return</span> <span class="n">signal</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="mi">2</span><span class="n">j</span> <span class="o">*</span> <span class="n">math</span><span class="o">.</span><span class="n">pi</span> <span class="o">*</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_position</span> <span class="o">@</span> <span class="n">k</span><span class="p">))</span></div>
+</div>
 
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_spectrum</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">k</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
-        <span class="n">total</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">k</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">complex</span><span class="p">)</span>
-        <span class="k">for</span> <span class="n">ellipse</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">ellipses</span><span class="p">:</span>
-            <span class="n">total</span> <span class="o">+=</span> <span class="n">ellipse</span><span class="o">.</span><span class="n">spectrum</span><span class="p">(</span><span class="n">k</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">total</span></div>
 
+<span class="k">def</span><span class="w"> </span><span class="nf">_spectrum</span><span class="p">(</span><span class="n">ellipses</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Ellipse</span><span class="p">],</span> <span class="n">k</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+    <span class="n">total</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">k</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">complex</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">ellipse</span> <span class="ow">in</span> <span class="n">ellipses</span><span class="p">:</span>
+        <span class="n">total</span> <span class="o">+=</span> <span class="n">ellipse</span><span class="o">.</span><span class="n">spectrum</span><span class="p">(</span><span class="n">k</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">total</span>
 </pre></div>
 
                 </article>

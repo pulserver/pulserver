@@ -569,7 +569,7 @@ sent as the scanner’s reconstruction client sends them.</p>
 <tr class="row-even"><td><p>Physics</p></td>
 <td><p>Magnet, coils and subject</p></td>
 <td><p><a class="reference internal" href="../generated/pulserver.virtual.Phantom.html#pulserver.virtual.Phantom" title="pulserver.virtual.Phantom"><code class="xref py py-class docutils literal notranslate"><span class="pre">Phantom</span></code></a>, <a class="reference internal" href="../generated/pulserver.virtual.acquire.html#pulserver.virtual.acquire" title="pulserver.virtual.acquire"><code class="xref py py-func docutils literal notranslate"><span class="pre">acquire()</span></code></a></p></td>
-<td><p>The trajectory the enrichment has to state, the demodulation of the prescription</p></td>
+<td><p>The trajectory the enrichment has to state, the demodulation of the prescription, the timing of every echo, the RF frequencies ppm offsets resolve to</p></td>
 </tr>
 <tr class="row-odd"><td><p>Reconstruction client</p></td>
 <td><p>The scanner’s reconstruction client</p></td>
@@ -590,7 +590,10 @@ start. The accessors that answer for a segment position,
 its representative, the instance of largest energy; where the instances of
 one position play distinct shapes, as the interleaves of a spiral drawn as
 distinct shapes do, <code class="docutils literal notranslate"><span class="pre">pulseg_get_cursor_grad_waveform</span></code> returns the shape of
-the instance at the cursor.</p>
+the instance at the cursor. It also returns each played RF pulse: the
+instance’s amplitude times the magnitude and phase shapes of its definition,
+which <code class="docutils literal notranslate"><span class="pre">pulseg_get_rf_magnitude</span></code> and <code class="docutils literal notranslate"><span class="pre">pulseg_get_rf_phase</span></code> return, the phase in
+cycles as Pulseq stores it.</p>
 <p><a class="reference internal" href="../generated/pulserver.virtual.trajectory.html#pulserver.virtual.trajectory" title="pulserver.virtual.trajectory"><code class="xref py py-func docutils literal notranslate"><span class="pre">trajectory()</span></code></a> integrates those gradients into the
 k-space location <span class="math notranslate nohighlight">\(\mathbf{k}\)</span> of every ADC sample, in 1/m along the physical
 axes. The rotation <span class="math notranslate nohighlight">\(R\)</span> of the prescription, from logical to physical axes, is
@@ -608,23 +611,40 @@ checks, and the trajectory of the identity to the one the enrichment states.</p>
 <section id="signal-model">
 <h2>Signal model<a class="headerlink" href="#signal-model" title="Link to this heading">#</a></h2>
 <p>The phantom lies in the physical frame, where a rotation and a position place
-it (<a class="reference internal" href="../generated/pulserver.virtual.Phantom.html#pulserver.virtual.Phantom" title="pulserver.virtual.Phantom"><code class="xref py py-class docutils literal notranslate"><span class="pre">Phantom</span></code></a>). After an excitation of RF phase
-<span class="math notranslate nohighlight">\(\phi_e\)</span> at its centre, the magnetization is transverse, at the phantom’s
-density <span class="math notranslate nohighlight">\(\rho(\mathbf{r})\)</span> whatever the flip angle, with phase
-<span class="math notranslate nohighlight">\(-\phi_e - \pi/2\)</span>, and it precesses as
-<span class="math notranslate nohighlight">\(\exp(-2\pi i\,\mathbf{k}\cdot\mathbf{r})\)</span>, with <span class="math notranslate nohighlight">\(\mathbf{r}\)</span> and
-<span class="math notranslate nohighlight">\(\mathbf{k}\)</span> along the physical axes. A refocusing pulse of phase
-<span class="math notranslate nohighlight">\(\phi_r\)</span> conjugates it about <span class="math notranslate nohighlight">\(-\phi_r\)</span>. The RF phase at the centre is the
-pulse’s phase offset plus its frequency offset times the time since the pulse
-began. Coil <span class="math notranslate nohighlight">\(c\)</span>, of sensitivity <span class="math notranslate nohighlight">\(s_c(\mathbf{r})\)</span>, receives</p>
+it (<a class="reference internal" href="../generated/pulserver.virtual.Phantom.html#pulserver.virtual.Phantom" title="pulserver.virtual.Phantom"><code class="xref py py-class docutils literal notranslate"><span class="pre">Phantom</span></code></a>). Each of its ellipses holds spins of
+one chemical shift <span class="math notranslate nohighlight">\(\sigma\)</span>, in ppm from water, which precess at
+<span class="math notranslate nohighlight">\(f_\sigma = 10^{-6}\sigma\gamma B_0 + \Delta f\)</span> from the scanner’s centre
+frequency: the shift resolved at the magnet’s field <span class="math notranslate nohighlight">\(B_0\)</span> with pypulseqpp’s
+default <span class="math notranslate nohighlight">\(\gamma\)</span>, in Hz/T, plus an off-resonance <span class="math notranslate nohighlight">\(\Delta f\)</span> common to every
+spin.</p>
+<p>After an excitation of RF phase <span class="math notranslate nohighlight">\(\phi_e\)</span> at its centre, the magnetization is
+transverse, at the phantom’s density <span class="math notranslate nohighlight">\(\rho_\sigma(\mathbf{r})\)</span> whatever the
+flip angle, with phase <span class="math notranslate nohighlight">\(-\phi_e - \pi/2\)</span>, and it precesses as
+<span class="math notranslate nohighlight">\(\exp(-2\pi i\,(\mathbf{k}\cdot\mathbf{r} + f_\sigma\tau))\)</span>, with
+<span class="math notranslate nohighlight">\(\mathbf{r}\)</span> and <span class="math notranslate nohighlight">\(\mathbf{k}\)</span> along the physical axes and <span class="math notranslate nohighlight">\(\tau\)</span> the time it
+has precessed freely: counted from the excitation’s centre and, as
+<span class="math notranslate nohighlight">\(\mathbf{k}\)</span> is, negated about the centre of each refocusing pulse, so that a
+spin echo refocuses it. A refocusing pulse of phase <span class="math notranslate nohighlight">\(\phi_r\)</span> conjugates the
+magnetization about <span class="math notranslate nohighlight">\(-\phi_r\)</span>. The RF phase at the centre is the pulse’s
+phase offset plus its frequency offset times the time since the pulse began.
+Coil <span class="math notranslate nohighlight">\(c\)</span>, of sensitivity <span class="math notranslate nohighlight">\(s_c(\mathbf{r})\)</span>, receives</p>
 <div class="math notranslate nohighlight">
 \[
-S_c(t) = e^{i\psi} \int \rho(\mathbf{r})\, s_c(\mathbf{r})\,
-e^{-2\pi i\,\mathbf{k}(t)\cdot\mathbf{r}}\, d\mathbf{r},
+S_c(t) = e^{i\psi} \sum_\sigma m_\sigma \int \rho_\sigma(\mathbf{r})\,
+s_c(\mathbf{r})\, e^{-2\pi i\,(\mathbf{k}(t)\cdot\mathbf{r} + f_\sigma\tau(t))}\,
+d\mathbf{r},
 \]</div>
-<p>with <span class="math notranslate nohighlight">\(\psi\)</span> the phase the RF pulses left, and the playout demodulates it by
-<span class="math notranslate nohighlight">\(\exp(i\theta(t))\)</span>, where the receiver phase <span class="math notranslate nohighlight">\(\theta\)</span> is the ADC phase offset at
-the ADC’s start, advancing at its frequency offset, plus its phase
+<p>with <span class="math notranslate nohighlight">\(\psi\)</span> the phase the RF pulses left and <span class="math notranslate nohighlight">\(m_\sigma\)</span> the longitudinal
+magnetization of shift <span class="math notranslate nohighlight">\(\sigma\)</span> the excitation tipped, as a fraction of
+equilibrium. A saturation pulse scales <span class="math notranslate nohighlight">\(m_\sigma\)</span> by the <span class="math notranslate nohighlight">\(z\)</span> component it
+leaves at <span class="math notranslate nohighlight">\(f_\sigma\)</span>, from <span class="math notranslate nohighlight">\(+z\)</span>, in pypulseqpp’s relaxation-free Bloch
+simulation (<code class="docutils literal notranslate"><span class="pre">pypulseqpp.sim_bloch</span></code>) of the pulse the cache plays, in the frame
+of its frequency. The next excitation tips what remains, and the
+magnetization is at equilibrium again after it. A saturation pulse played
+under a gradient saturates a band in space, which a species of the phantom
+does not hold, and is refused. The playout demodulates <span class="math notranslate nohighlight">\(S_c\)</span> by
+<span class="math notranslate nohighlight">\(\exp(i\theta(t))\)</span>, where the receiver phase <span class="math notranslate nohighlight">\(\theta\)</span> is the ADC phase
+offset at the ADC’s start, advancing at its frequency offset, plus its phase
 modulation.</p>
 <p>These are the conventions under which the field-of-view translation applied
 when the IR is built (<a class="reference internal" href="ir-cache.html"><span class="doc">The scanner IR</span></a>) recentres an object. Where every block
@@ -638,8 +658,11 @@ prescribed centre, its axes turned by <span class="math notranslate nohighlight"
 object at the isocentre under the identity, a reflection in <span class="math notranslate nohighlight">\(R\)</span> included. The
 phantom’s ellipses and its sensitivities, sums of plane waves, have analytic
 transforms, so <span class="math notranslate nohighlight">\(S_c\)</span> is evaluated exactly at every sample.</p>
-<p>Relaxation, off-resonance, diffusion, slice profiles and every RF use other
-than excitation and refocusing are not modelled. A readout before the first
+<p>Relaxation, diffusion, slice profiles and every RF use other than
+excitation, refocusing and saturation are not modelled. Without relaxation, a
+saturation pulse leaves spins at its own frequency at the cosine of its flip
+angle: pypulseqpp’s <code class="docutils literal notranslate"><span class="pre">FatSaturation</span></code>, of 110° by default, leaves fat at
+<span class="math notranslate nohighlight">\(\cos 110° \approx -0.34\)</span> of its magnetization. A readout before the first
 excitation of its file acquires zeros.</p>
 </section>
 <section id="what-a-run-establishes">
@@ -651,7 +674,14 @@ an oblique and a reflected prescription the one <code class="docutils literal no
 turns the design into for the checks. A block labelled <code class="docutils literal notranslate"><span class="pre">NOROT</span></code> plays turned
 by its own rotation alone.</p></li>
 <li><p>The cache carries the RF centre a design records where it is away from the
-magnitude peak.</p></li>
+magnitude peak, and plays every RF pulse of a fat-saturated EPI and of a
+spin echo as the design draws it.</p></li>
+<li><p>Off resonance, every sample of the fixtures and of every shipped sequence
+accrues the phase its file’s excitation, refocusing and ADC timing give it,
+so the cache plays each echo as the design times it.</p></li>
+<li><p>Fat precesses at its chemical shift at the magnet’s field. A fat saturation
+leaves water and fat what pypulseqpp’s Bloch simulation of the designed
+pulse leaves them, and one converted at another field misses the fat.</p></li>
 <li><p>The enrichment states the trajectory of the identity, along the logical
 axes, for every readout.</p></li>
 <li><p>An object posed where an axial, an oblique or a reflected prescription

@@ -574,6 +574,16 @@ from the block’s start, dwell time and sample count; 0 without ADC;</p></li>
 <ul class="simple">
 <li><p><code class="docutils literal notranslate"><span class="pre">rf_center_us</span></code>: the time of the RF centre the design records, from
 the block’s start, in µs; NaN without RF;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">rf_time_us</span></code>, <code class="docutils literal notranslate"><span class="pre">rf_waveform_hz</span></code>: the samples of every played RF
+pulse, concatenated in play order: their times from the block’s
+start, in µs, and the instance’s amplitude times the magnitude
+shape and <code class="docutils literal notranslate"><span class="pre">exp(i</span> <span class="pre">phase)</span></code> of the phase shape its definition
+carries, complex, in Hz. The pulse plays each sample turned by the
+phase offset and advancing at the frequency offset from its start.
+The channels of a pTx pulse follow one another, each over the one
+time base;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">rf_span</span></code>: <code class="docutils literal notranslate"><span class="pre">(blocks,</span> <span class="pre">2)</span></code>, the start and stop of each block’s
+RF in those arrays; empty without RF;</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">gradient_time_us</span></code>, <code class="docutils literal notranslate"><span class="pre">gradient_waveform_hz_per_m</span></code>: the corners of
 every played gradient, concatenated in play order: their times from
 the block’s start, in µs, and the gradient there, the instance’s

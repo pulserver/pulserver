@@ -537,7 +537,8 @@
 <p>Lengths are in metres along the axes of the phantom it belongs to;
 <code class="docutils literal notranslate"><span class="pre">angle</span></code> turns the first semi-axis from x towards y, in radians. The
 ellipse is infinitely thin, so its signal depends on the k-space location
-along z only through the phase of its plane.</p>
+along z only through the phase of its plane. <code class="docutils literal notranslate"><span class="pre">shift_ppm</span></code> is the chemical
+shift of its spins from water, in ppm: -3.45 for the main fat resonance.</p>
 </dd></dl>
 
 <p class="rubric">Methods</p>
@@ -558,10 +559,13 @@ along z only through the phase of its plane.</p>
 <tr class="row-even"><td><p><a class="reference internal" href="pulserver.virtual.Ellipse.intensity.html#pulserver.virtual.Ellipse.intensity" title="pulserver.virtual.Ellipse.intensity"><code class="xref py py-obj docutils literal notranslate"><span class="pre">intensity</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.virtual.Ellipse.centre.html#pulserver.virtual.Ellipse.centre" title="pulserver.virtual.Ellipse.centre"><code class="xref py py-obj docutils literal notranslate"><span class="pre">centre</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.virtual.Ellipse.shift_ppm.html#pulserver.virtual.Ellipse.shift_ppm" title="pulserver.virtual.Ellipse.shift_ppm"><code class="xref py py-obj docutils literal notranslate"><span class="pre">shift_ppm</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pulserver.virtual.Ellipse.semi_axes.html#pulserver.virtual.Ellipse.semi_axes" title="pulserver.virtual.Ellipse.semi_axes"><code class="xref py py-obj docutils literal notranslate"><span class="pre">semi_axes</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.virtual.Ellipse.centre.html#pulserver.virtual.Ellipse.centre" title="pulserver.virtual.Ellipse.centre"><code class="xref py py-obj docutils literal notranslate"><span class="pre">centre</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.virtual.Ellipse.semi_axes.html#pulserver.virtual.Ellipse.semi_axes" title="pulserver.virtual.Ellipse.semi_axes"><code class="xref py py-obj docutils literal notranslate"><span class="pre">semi_axes</span></code></a></p></td>
 <td><p></p></td>
 </tr>
 </tbody>

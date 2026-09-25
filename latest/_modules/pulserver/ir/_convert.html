@@ -727,6 +727,16 @@
 
 <span class="sd">        - ``rf_center_us``: the time of the RF centre the design records, from</span>
 <span class="sd">          the block's start, in µs; NaN without RF;</span>
+<span class="sd">        - ``rf_time_us``, ``rf_waveform_hz``: the samples of every played RF</span>
+<span class="sd">          pulse, concatenated in play order: their times from the block's</span>
+<span class="sd">          start, in µs, and the instance's amplitude times the magnitude</span>
+<span class="sd">          shape and ``exp(i phase)`` of the phase shape its definition</span>
+<span class="sd">          carries, complex, in Hz. The pulse plays each sample turned by the</span>
+<span class="sd">          phase offset and advancing at the frequency offset from its start.</span>
+<span class="sd">          The channels of a pTx pulse follow one another, each over the one</span>
+<span class="sd">          time base;</span>
+<span class="sd">        - ``rf_span``: ``(blocks, 2)``, the start and stop of each block's</span>
+<span class="sd">          RF in those arrays; empty without RF;</span>
 <span class="sd">        - ``gradient_time_us``, ``gradient_waveform_hz_per_m``: the corners of</span>
 <span class="sd">          every played gradient, concatenated in play order: their times from</span>
 <span class="sd">          the block's start, in µs, and the gradient there, the instance's</span>
