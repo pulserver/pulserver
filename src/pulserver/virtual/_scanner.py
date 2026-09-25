@@ -32,7 +32,8 @@ def trajectory(seq_path: Path | str, cache_ext: str = ".pseg") -> list[np.ndarra
     logical axes. The locations are integrated from the gradients the cache
     plays (:func:`pulserver.ir.play`), rotated by each block's rotation. An
     excitation returns k to zero, and a refocusing pulse negates it, at the
-    RF magnitude peak; each file of a chain starts from zero.
+    RF centre the cache records (``rf_center_us``); each file of a chain
+    starts from zero.
     """
     return [readout.kspace for readout in _play(Path(seq_path), cache_ext)]
 
