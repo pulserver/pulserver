@@ -383,6 +383,11 @@ typedef struct pulseq_file
      * bandwidth (Hz), band count, widest band's bandwidth (Hz), then each
      * band's offset from the carrier (Hz). NULL when not supplied. */
     PULSEQ_REAL (*rf_spectra)[PULSEQ_RF_SPECTRUM_WIDTH];
+    /* Per-RF-event flip angle (degrees) and transmit channels, as pypulseqpp's
+     * Sequence.rf_flip_angles and Sequence.rf_channels give them. NULL when
+     * not supplied. */
+    PULSEQ_REAL *rf_flip_deg;
+    int *rf_channels;
     int is_grad_library_parsed;
     int grad_library_size;
     PULSEQ_REAL (*grad_library)[7];

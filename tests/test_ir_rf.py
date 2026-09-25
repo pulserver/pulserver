@@ -110,3 +110,36 @@ def test_a_dynamic_ptx_pulse_is_cached_with_as_many_channels_as_it_drives(
     convert(path, SYSTEM)
     played = play(path)
     assert set(played["rf_channels"][played["rf_amp_hz"] != 0]) == {channels}
+
+
+@pytest.mark.parametrize("from_cache", [False, True], ids=["chain", "cache"])
+def test_each_rf_definition_carries_the_flip_angle_pypulseqpp_gives_it(
+    tmp_path, from_cache
+):
+    path = _written(tmp_path, _pulses())
+    if from_cache:
+        convert(path, SYSTEM)
+    report = summary(path, SYSTEM, cache_ext=".pseg" if from_cache else None)
+    reported = [entry["flip_angle_deg"] for entry in report["subsequences"][0]["rf"]]
+    expected = sorted(set(pp.io.read(path).rf_flip_angles()))
+    assert sorted(reported) == pytest.approx(expected, rel=1e-5)
+
+
+def test_a_dynamic_ptx_pulse_flips_by_the_coherent_sum_of_its_channels(tmp_path):
+    """Channels played in antiphase cancel: the flip is not the root sum of squares."""
+    samples = np.hanning(100) * 200.0
+    signal = np.stack([samples, -samples]).astype(complex)
+    pulse = pp.make_ptx_pulse(signal, dwell=1e-5, system=SYSTEM, use="excitation")
+    path = _written(tmp_path, [pulse])
+    (entry,) = summary(path, SYSTEM)["subsequences"][0]["rf"]
+    assert entry["flip_angle_deg"] == pytest.approx(0.0, abs=1e-6)
+
+
+def test_an_unlabelled_pulse_is_cached_with_the_use_pypulseqpp_detects(tmp_path):
+    """Past 90 degrees pypulseqpp calls it refocusing, where the cache alone would not."""
+    pulse = pp.make_block_pulse(np.deg2rad(120.0), duration=1e-3, system=SYSTEM)
+    path = _written(tmp_path, [pulse], repetitions=1)
+    assert pp.io.read(path).libraries().rf_use == ("undefined",)
+    convert(path, SYSTEM)
+    played = play(path)
+    assert set(played["rf_use"][played["rf_amp_hz"] != 0]) == {2}

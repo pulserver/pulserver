@@ -139,9 +139,11 @@ def summary(
 ) -> dict[str, Any]:
     """Return the segmentation of a sequence: subsequences, segments and readouts.
 
-    Each subsequence lists its unique RF definitions under ``rf``: the
-    bandwidth at half the spectral peak, the number of bands, each band's
-    offset from the carrier and the widest band's bandwidth, all in Hz, as
+    Each subsequence lists its unique RF definitions under ``rf``: the flip
+    angle in degrees at the largest amplitude the definition plays, as
+    ``pypulseqpp.Sequence.rf_flip_angles`` gives it; and the bandwidth at half
+    the spectral peak, the number of bands, each band's offset from the
+    carrier and the widest band's bandwidth, all in Hz, as
     ``pypulseqpp.calc_rf_bandwidth`` measures them. ``vop_sar_ratio`` and
     ``vop_global_sar_ratio`` are those the cache was written with, zero when
     the chain is read and segmented again.
@@ -226,9 +228,11 @@ def play(
           resolved at the field strength the cache was converted under; 0
           without RF;
         - ``rf_use``: the ``PULSEG_RF_USE_*`` code of the RF event, 1 for an
-          excitation and 2 for a refocusing pulse; an untagged event is a
-          refocusing pulse at a flip angle of 162 to 198 degrees and an
-          excitation otherwise; 0 without RF;
+          excitation and 2 for a refocusing pulse; a pulse the file leaves
+          unlabelled takes the use pypulseqpp detects when the chain is read,
+          and an event a cache carries without one is a refocusing pulse at a
+          flip angle of 162 to 198 degrees and an excitation otherwise; 0
+          without RF;
         - ``rf_delay_us``: RF delay from the block's start, in µs;
         - ``rf_channels``: the transmit channels the RF waveform holds, one
           after another over one time base for a dynamic pTx pulse; 0 without
