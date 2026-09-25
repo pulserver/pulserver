@@ -98,10 +98,31 @@ the client's stream ends, the proxy waits for the worker to close however long
 the reconstruction takes, unless it was started with a reconstruction timeout,
 past which the worker is terminated and the client told so.
 
+## Reconstruction server
+
+A proxy given a server to forward to reconstructs no series itself. It
+enriches each series as it arrives and sends it on over TCP to that MRD server:
+a reconstruction server ({class}`~pulserver.vre.ReconServer`) on another
+computer, or any server that reads the MRD streaming protocol. The server
+receives a config file message naming the reconstruction plugin of the series,
+or a name the proxy is configured with, then the enriched header and
+acquisitions. What it returns is relayed to the client as a worker's output
+is, and a reconstruction timeout closes the connection to it. With DICOM
+conversion enabled, the proxy converts each image the server returns to DICOM
+from the enriched header before relaying it.
+
+A reconstruction server runs each series it receives with the plugin its
+config names, in workers, slots and a queue of its own, and enriches nothing:
+the series a proxy forwards arrive enriched.
+
+An MRD message carries no length by which a reader can skip a message type it
+does not know. A message the proxy has no reader for therefore ends what it
+relays, and the client receives a text naming the message's type.
+
 ## See also
 
 * {doc}`../user-guide/reconstruction-plugins` — writing a reconstruction.
 * {doc}`../user-guide/reconstruction-client` — the MRD stream a reconstruction client sends.
-* {doc}`../api/vre` — the proxy and the enrichment interface.
+* {doc}`../api/vre` — the proxy, the reconstruction server and the enrichment interface.
 * {doc}`../api/recon` — the reconstruction plugin interface.
 * {doc}`/generated/gallery/03-reconstruction/01_enrichment` — enrichment and reconstruction of a simulated series.

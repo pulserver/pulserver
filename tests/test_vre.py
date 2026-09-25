@@ -4,6 +4,7 @@ import json
 import os
 import shutil
 import socket
+import struct
 import subprocess
 import sys
 import threading
@@ -21,10 +22,12 @@ from pulserver.host import DesignStore
 from pulserver.host._push import push
 from pulserver.recon._runtime import concurrency
 from pulserver.recon._runtime.connection import Connection
+from pulserver.recon._runtime.mrd2dicom import DicomWithName
 from pulserver.vre import (
     DesignCache,
     DesignIntake,
     ReconProxy,
+    ReconServer,
     SequenceTable,
     _designs,
 )
@@ -91,6 +94,56 @@ def start_proxy(bucket):
     for proxy, thread in running:
         proxy.close()
         thread.join(timeout=DEADLINE)
+
+
+@pytest.fixture
+def start_server():
+    """Start reconstruction servers over the test plugins; each is closed when the test ends."""
+    running = []
+
+    def start(**options):
+        server = ReconServer(RECON_PLUGINS, **options)
+        server.bind(0)
+        thread = threading.Thread(target=server.serve, daemon=True)
+        thread.start()
+        running.append((server, thread))
+        return server
+
+    yield start
+    for server, thread in running:
+        server.close()
+        thread.join(timeout=DEADLINE)
+
+
+class _RecordingServer:
+    """An MRD server that keeps what one forwarded series carries, then runs ``answer``."""
+
+    def __init__(self, answer):
+        self._listener = socket.create_server(("127.0.0.1", 0))
+        self.port = self._listener.getsockname()[1]
+        self.received = []
+        self._answer = answer
+        self._thread = threading.Thread(target=self._serve, daemon=True)
+        self._thread.start()
+
+    def _serve(self):
+        stream, _ = self._listener.accept()
+        self._listener.close()
+        stream.settimeout(DEADLINE)
+        connection = Connection(stream)
+        for item in connection:
+            if isinstance(item, ismrmrd.Acquisition) and not item.number_of_samples:
+                break
+            self.received.append(item)
+        self._answer(connection, stream)
+        connection.shutdown_close()
+
+    def join(self):
+        self._thread.join(timeout=DEADLINE)
+
+
+def _texts(connection, _stream):
+    connection.send("forwarded")
 
 
 def header_xml(series, exam=None, design=None):
@@ -486,7 +539,7 @@ def test_the_series_of_one_exam_share_its_exam_cache(start_proxy, bucket):
 
 def test_a_closed_proxy_leaves_no_exam_directory(tmp_path):
     proxy = ReconProxy(tmp_path, tmp_path, slots=1, spares=1)
-    root = proxy._exam_root
+    root = proxy._reconstruction._exam_root
     assert root.is_dir()
     proxy.close()
     assert not root.exists()
@@ -568,3 +621,155 @@ def test_a_series_naming_no_stored_design_is_refused(
     proxy = start_proxy(slots=1)
     received = stream(proxy.port, series["bound"], design=design)
     assert _refused(received, reason)
+
+
+def test_a_forwarded_series_returns_the_image_a_local_worker_returns(
+    start_proxy, start_server, bucket
+):
+    _, series = bucket
+    server = start_server(slots=1)
+    forwarding = start_proxy(forward=("127.0.0.1", server.port))
+    local = start_proxy(slots=1)
+
+    def kspace(table, index):
+        return point(table, index, (0.004, -0.002, 0.0))
+
+    forwarded = stream(forwarding.port, series["bound"], data=kspace)
+    reconstructed = stream(local.port, series["bound"], data=kspace)
+
+    assert closed(forwarded)
+    assert forwarding.workers is None
+    assert len(images(forwarded)) == len(images(reconstructed)) == 1
+    np.testing.assert_array_equal(
+        images(forwarded)[0].data, images(reconstructed)[0].data
+    )
+
+
+@pytest.mark.parametrize("configured", [None, "default.xml"])
+def test_a_forwarded_series_names_its_reconstruction_in_a_config_file_message(
+    start_proxy, bucket, configured
+):
+    _, series = bucket
+    recording = _RecordingServer(_texts)
+    proxy = start_proxy(
+        forward=("127.0.0.1", recording.port), forward_config=configured
+    )
+
+    received = stream(proxy.port, series["bound"], config='{"parameters": {}}')
+    recording.join()
+
+    name, header, *acquisitions = recording.received
+    assert name == (configured or "gre2d")
+    assert header.encoding[0].encodedSpace.matrixSize.x == MATRIX["nx"]
+    assert len(acquisitions) == len(series["bound"].table)
+    assert "forwarded" in received
+    assert closed(received)
+
+
+def test_a_message_the_proxy_cannot_read_ends_the_output_with_its_type(
+    start_proxy, bucket
+):
+    _, series = bucket
+
+    def unreadable(connection, stream):
+        connection.send("first")
+        stream.sendall(struct.pack("<H", 1030) + bytes(64))
+
+    recording = _RecordingServer(unreadable)
+    proxy = start_proxy(forward=("127.0.0.1", recording.port))
+    received = stream(proxy.port, series["bound"])
+    recording.join()
+
+    assert "first" in received
+    assert any(
+        isinstance(item, str) and "message of type 1030" in item for item in received
+    )
+    assert closed(received)
+
+
+def test_forwarded_images_come_back_as_dicom_when_asked(
+    start_proxy, start_server, bucket
+):
+    _, series = bucket
+    server = start_server(slots=1)
+    proxy = start_proxy(forward=("127.0.0.1", server.port), forward_dicom=True)
+    received = stream(proxy.port, series["bound"])
+
+    assert not images(received)
+    assert sum(isinstance(item, DicomWithName) for item in received) == 1
+    assert closed(received)
+
+
+def test_a_forwarded_series_past_the_recon_timeout_is_stopped_and_reported(
+    start_proxy, bucket
+):
+    _, series = bucket
+    released = threading.Event()
+    recording = _RecordingServer(lambda *_: released.wait(DEADLINE))
+    proxy = start_proxy(forward=("127.0.0.1", recording.port), recon_timeout=1.0)
+    received = stream(proxy.port, series["bound"])
+    released.set()
+    recording.join()
+    assert _refused(
+        received,
+        f"the reconstruction server at 127.0.0.1:{recording.port} did not finish "
+        "within 1 s",
+    )
+    assert closed(received)
+
+
+@pytest.mark.parametrize("arguments", [[], ["--forward", "no-port"]])
+def test_the_proxy_command_needs_plugins_or_a_server_address(tmp_path, arguments):
+    from pulserver.vre.__main__ import main
+
+    with pytest.raises(SystemExit) as stopped:
+        main(["--store", str(tmp_path), "--port", "0", *arguments])
+    assert stopped.value.code == 2
+
+
+def test_a_series_forwarded_to_no_server_is_refused(start_proxy, bucket):
+    _, series = bucket
+    with socket.create_server(("127.0.0.1", 0)) as unused:
+        port = unused.getsockname()[1]
+    proxy = start_proxy(forward=("127.0.0.1", port))
+    received = stream(proxy.port, series["bound"])
+    assert _refused(received, f"the reconstruction server at 127.0.0.1:{port}")
+
+
+def test_a_series_whose_config_names_no_plugin_is_refused_by_the_server(
+    start_server, bucket
+):
+    _, series = bucket
+    server = start_server(slots=1)
+    received = stream(server.port, series["bound"], config="")
+    assert _refused(received, "the config names no reconstruction")
+
+
+def test_a_proxy_that_neither_forwards_nor_has_plugins_is_refused(tmp_path):
+    with pytest.raises(ValueError, match="needs a plugin directory"):
+        ReconProxy(tmp_path)
+
+
+def test_a_terminated_server_process_exits_cleanly():
+    process = subprocess.Popen(
+        [
+            sys.executable,
+            "-m",
+            "pulserver.recon",
+            "--plugins",
+            str(RECON_PLUGINS),
+            "--port",
+            "0",
+        ],
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        for line in process.stderr:
+            if "serving" in line:
+                break
+        process.terminate()
+        assert process.wait(timeout=30) == 0
+    finally:
+        process.kill()
+        process.stderr.close()

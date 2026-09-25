@@ -93,8 +93,8 @@ design is not a `.seq` file, and the IR cache is not the design of record.
 
 ### Fixed vocabulary
 
-- **design calls**, **warm server**, **reconstruction proxy**;
-  `pulserver.host` and `pulserver.vre` when the module is meant.
+- **design calls**, **warm server**, **reconstruction proxy**, **reconstruction
+  server**; `pulserver.host` and `pulserver.vre` when the module is meant.
 - **PSD host process**, not "host PSD" or "PSD process".
 - **interpreter** for the scanner-side program; **reconstruction client** for
   the scanner-side sender of raw data.
