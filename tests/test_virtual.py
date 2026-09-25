@@ -8,7 +8,7 @@ import ismrmrd
 import numpy as np
 import pypulseqpp as pp
 import pytest
-from _host import generate
+from _host import ANY_ORIENTATION, generate
 from _virtual import OBLIQUE, OFFSET, ORIENTATIONS, REFLECTED, phantom, posed
 from pypulseqpp.sequences.sequence.gre2D_sequence import Gre2DApp
 from pypulseqpp.sequences.sequence.se2D_sequence import Se2DApp
@@ -302,7 +302,7 @@ def _scan(proxy, tmp_path, rotation, readouts=None):
     values = {"TE": 5000, "nx": MATRIX, "ny": MATRIX}
     values.update(zip(FOV_OFFSET, 1e3 * OFFSET, strict=True))
     values.update(zip(FOV_ROTATION, rotation.ravel(), strict=True))
-    design = generate(store, "gre2d_oblique", values)
+    design = generate(store, "gre2d", values, limits=ANY_ORIENTATION)
     seq = store.directory(design) / "sequence.seq"
     acquired = virtual.acquire(seq, posed(rotation), rotation=rotation)
     received = virtual.send(

@@ -51,13 +51,12 @@ beginning `pulserver:` reports a refused or failed series.
 
 Add the nine `fov_rotation_ij` entries to the protocol block the design is
 generated from: element (i, j) of the rotation $R$ from logical to physical
-axes, the identity's where absent ({doc}`../explanations/protocol`). The
-design is checked in
-the physical frame $R$ gives, where logical axes played together add on one
-physical axis, so a design at the scanner's limits on several axes at once can
-be refused ({doc}`../explanations/ir-cache`). The acquisition and the client
-are given the same $R$, and the client sends $R$ times the offset as the
-field-of-view centre:
+axes, the identity's where absent ({doc}`../explanations/protocol`). The design
+is checked in the physical frame $R$ gives, where logical axes played together
+add on one physical axis, so derate the limits it is designed under for $R$ in
+the `design_max_grad` and `design_max_slew` lines of the limits file
+({doc}`running`). The acquisition and the client are given the same $R$, and
+the client sends $R$ times the offset as the field-of-view centre:
 
 ```python
 import numpy as np

@@ -79,6 +79,23 @@ include the RF and ADC dead times, the RF ringdown time and the ADC sample
 divisor of the scanner; `pypulseqpp.Opts` sets the dead times to zero and the
 divisor to four when they are left out.
 
+`max_grad` and `max_slew` are the limits of the gradient coils, which the checks
+hold every physical axis to. Two design limits cap the limits a sequence is
+designed under:
+
+| Limit | Meaning |
+| --- | --- |
+| `design_max_grad` | Gradient amplitude each logical axis is designed under, in `grad_unit` as `max_grad` is |
+| `design_max_slew` | Slew rate each logical axis is designed under, in `slew_unit` as `max_slew` is |
+
+The scanner derates them for the prescription's rotation: logical axes played
+together add on one physical axis, so under an oblique prescription a design
+held under `max_grad` and `max_slew` alone can exceed them on a physical axis,
+and is then refused. A design limit above the scanner's leaves the scanner's,
+one left out is the scanner's, and `validate` resolves a request under the same
+limits as `generate`. An imported chain is not designed, and is checked against
+`max_grad` and `max_slew` alone.
+
 The limits also carry what the host checks besides the gradient limits and
 rasters, the scanner's nerve model and its forbidden gradient bands, and, where
 SAR is computed from virtual observation points, the VOPs. A check whose limits

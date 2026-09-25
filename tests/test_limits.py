@@ -11,7 +11,7 @@ from pypulseqpp import safety
 from pulserver import ir
 from pulserver.host import DesignStore, call
 from pulserver.host._blocks import format_import
-from pulserver.host._limits import check_limits, split_limits
+from pulserver.host._limits import check_limits, design_system, split_limits
 from pulserver.protocol import FOV_ROTATION, prescribed_rotation
 
 SCANNER = {
@@ -102,6 +102,48 @@ def test_a_design_under_a_vop_file_carries_its_sar_ratios_in_the_cache(tmp_path)
     # A 90 degree, 1 ms hard pulse deposits a quarter of the reference's energy.
     assert loaded["vop_sar_ratio"] == pytest.approx(0.25)
     assert loaded["vop_global_sar_ratio"] == 0.0
+
+
+def test_design_limits_cap_the_design_and_leave_the_scanner_limits_to_the_checks():
+    limits = {**SCANNER, "design_max_grad": 23.0, "design_max_slew": 86.0}
+    scanner = pp.Opts(**SCANNER)
+    assert split_limits(limits)[0].max_grad == scanner.max_grad
+    assert split_limits(limits)[0].max_slew == scanner.max_slew
+    design = design_system(limits)
+    assert design.max_grad == pytest.approx(
+        pp.Opts(max_grad=23.0, grad_unit="mT/m").max_grad
+    )
+    assert design.max_slew == pytest.approx(
+        pp.Opts(max_slew=86.0, slew_unit="T/m/s").max_slew
+    )
+
+
+def test_design_limits_are_in_the_units_of_the_scanner_limits():
+    limits = {"B0": 3.0, "max_grad": 1.0e6, "design_max_grad": 5.0e5}
+    assert design_system(limits).max_grad == pytest.approx(5.0e5)
+
+
+def test_a_design_limit_above_the_scanners_leaves_it():
+    limits = {**SCANNER, "design_max_slew": 200.0}
+    assert design_system(limits).max_slew == pp.Opts(**SCANNER).max_slew
+
+
+def test_without_design_limits_a_design_is_held_under_the_scanner_limits():
+    design, scanner = design_system(SCANNER), pp.Opts(**SCANNER)
+    assert (design.max_grad, design.max_slew) == (scanner.max_grad, scanner.max_slew)
+
+
+@pytest.mark.parametrize(
+    ("limits", "message"),
+    [
+        ({"design_max_rf": 10.0}, "not design limits"),
+        ({"design_max_slew": 0.0}, "positive"),
+        ({"design_max_grad": -20.0}, "positive"),
+    ],
+)
+def test_design_limits_that_cannot_be_read_are_refused(limits, message):
+    with pytest.raises(ValueError, match=message):
+        split_limits({**SCANNER, **limits})
 
 
 def test_limits_without_the_field_strength_are_refused_naming_it():

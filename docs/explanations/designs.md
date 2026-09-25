@@ -17,8 +17,8 @@ the SHA-256 hash of these ({func}`~pulserver.host.design_identity`):
 - the plugin name;
 - a digest of the plugin file, the source file of the application it binds,
   and the installed versions of pypulseqpp and pulserver;
-- the scanner limits, conversion options and check limits, with the contents
-  of the VOP file they name;
+- the scanner limits, design limits, conversion options and check limits,
+  with the contents of the VOP file they name;
 - the resolved protocol, prescription included.
 
 A changed plugin, application or package gives a new design for an unchanged

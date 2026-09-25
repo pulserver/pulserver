@@ -32,7 +32,7 @@ from ..protocol import (
     prescribed_rotation,
 )
 from ._blocks import parse_import
-from ._limits import split_limits
+from ._limits import design_system, split_limits
 from ._push import push as push_design
 from ._store import DesignStore, design_identity
 
@@ -75,8 +75,8 @@ def validate(
 ) -> str:
     """Reply ``VALID <seconds>`` or ``INVALID``, an ``INFO`` line and the value block.
 
-    The application is constructed and its scan time computed; the sequence
-    is not designed.
+    The application is constructed under the design limits and its scan
+    time computed; the sequence is not designed.
     """
     path = str(plugin_path(plugins, plugin))
     listing = _listing(path)
@@ -96,8 +96,10 @@ def generate(
 
     A design already stored for the resolved protocol, the plugin source, the
     package versions and the limits is returned without designing again.
-    Otherwise the application is designed once, written in the logical frame,
-    checked in the physical frame of the prescription rotation with
+    Otherwise the application is designed once, under the scanner limits
+    capped by the design limits ``design_max_grad`` and ``design_max_slew``,
+    written in the logical frame, checked in the physical frame of the
+    prescription rotation against the scanner limits with
     :func:`pulserver.ir.check`, converted to the IR cache at the prescribed
     field-of-view offset, and stored. A request that resolves to other values
     is designed from the resolved values, so a design is a function of its
@@ -115,12 +117,13 @@ def generate(
     request = _request(block, listing)
     limits = _read(limits)
     system, options, checked = split_limits(limits)
+    design = design_system(limits)
     scanner = _plugin(path)
     requested = {name: p.value for name, p in listing.items() if p.editable}
     requested.update(request)
-    app, validation = scanner.resolve(system, requested)
+    app, validation = scanner.resolve(design, requested)
     if app is not None and validation.values != requested:
-        app, validation = scanner.resolve(system, validation.values)
+        app, validation = scanner.resolve(design, validation.values)
     if app is None:
         raise CallError(validation.info)
     source = _source(path)
@@ -333,7 +336,7 @@ def _source(path: str) -> str:
 def _validated(
     path: str, limits: Mapping[str, Any], request: Mapping[str, Any]
 ) -> Validation:
-    return _plugin(path).validate(split_limits(limits)[0], request)
+    return _plugin(path).validate(design_system(limits), request)
 
 
 def _chain(first: str) -> list[str]:

@@ -17,9 +17,11 @@ application's `init_sequence`. Resolving a request proceeds in three steps.
 1. Every entry the request omits takes the application's default, so a request
    is always a complete prescription.
 2. The UI values are converted to the application's arguments, and the
-   application is constructed under the scanner limits. Construction designs
-   the events and their timing against the system limits, without playing the
-   scan, and raises an error for a prescription it cannot realize.
+   application is constructed under the scanner limits, capped by the design
+   limits the scanner derates for the prescription
+   ({doc}`../user-guide/running`). Construction designs the events and their
+   timing against those limits, without playing the scan, and raises an error
+   for a prescription it cannot realize.
 3. The value each argument took in the design, as the application records it
    ({attr}`~pypulseqpp.sequences.SequenceApp.resolved`), is converted to UI
    units. An argument the application does not record keeps its requested
