@@ -591,20 +591,29 @@ its representative, the instance of largest energy; where the instances of
 one position play distinct shapes, as the interleaves of a spiral drawn as
 distinct shapes do, <code class="docutils literal notranslate"><span class="pre">pulseg_get_cursor_grad_waveform</span></code> returns the shape of
 the instance at the cursor.</p>
-<p><a class="reference internal" href="../generated/pulserver.virtual.trajectory.html#pulserver.virtual.trajectory" title="pulserver.virtual.trajectory"><code class="xref py py-func docutils literal notranslate"><span class="pre">trajectory()</span></code></a> integrates those gradients, rotated by
-each block’s rotation, into the k-space location <span class="math notranslate nohighlight">\(\mathbf{k}\)</span> of every ADC
-sample, in 1/m along the logical axes. An excitation returns <span class="math notranslate nohighlight">\(\mathbf{k}\)</span> to
-zero, and a refocusing pulse negates it, at the RF centre the design records,
-which the cache carries for each RF event with its use; each file of a chain
-starts from zero. The test suite holds this trajectory to the one each
-fixture’s file designs, and to the one the enrichment states.</p>
+<p><a class="reference internal" href="../generated/pulserver.virtual.trajectory.html#pulserver.virtual.trajectory" title="pulserver.virtual.trajectory"><code class="xref py py-func docutils literal notranslate"><span class="pre">trajectory()</span></code></a> integrates those gradients into the
+k-space location <span class="math notranslate nohighlight">\(\mathbf{k}\)</span> of every ADC sample, in 1/m along the physical
+axes. The rotation <span class="math notranslate nohighlight">\(R\)</span> of the prescription, from logical to physical axes, is
+not in the cache (<a class="reference internal" href="ir-cache.html"><span class="doc">The scanner IR</span></a>): the virtual interpreter is given it, as a
+playout is, and turns each block’s gradients by the block’s own rotation and
+then by <span class="math notranslate nohighlight">\(R\)</span>, except in blocks labelled <code class="docutils literal notranslate"><span class="pre">NOROT</span></code>, which play turned by their own
+rotation alone. This is the frame <a class="reference internal" href="../generated/pulserver.ir.check.html#pulserver.ir.check" title="pulserver.ir.check"><code class="xref py py-func docutils literal notranslate"><span class="pre">check()</span></code></a> checks in. Under
+the identity the physical axes are the logical ones. An excitation returns
+<span class="math notranslate nohighlight">\(\mathbf{k}\)</span> to zero, and a refocusing pulse negates it, at the RF centre the
+design records, which the cache carries for each RF event with its use; each
+file of a chain starts from zero. The test suite holds this trajectory to the
+one each file designs, turned as <code class="docutils literal notranslate"><span class="pre">pypulseqpp.TransformFOV</span></code> turns it for the
+checks, and the trajectory of the identity to the one the enrichment states.</p>
 </section>
 <section id="signal-model">
 <h2>Signal model<a class="headerlink" href="#signal-model" title="Link to this heading">#</a></h2>
-<p>After an excitation of RF phase <span class="math notranslate nohighlight">\(\phi_e\)</span> at its centre, the
-magnetization is transverse, at the phantom’s density <span class="math notranslate nohighlight">\(\rho(\mathbf{r})\)</span>
-whatever the flip angle, with phase <span class="math notranslate nohighlight">\(-\phi_e - \pi/2\)</span>, and it precesses as
-<span class="math notranslate nohighlight">\(\exp(-2\pi i\,\mathbf{k}\cdot\mathbf{r})\)</span>. A refocusing pulse of phase
+<p>The phantom lies in the physical frame, where a rotation and a position place
+it (<a class="reference internal" href="../generated/pulserver.virtual.Phantom.html#pulserver.virtual.Phantom" title="pulserver.virtual.Phantom"><code class="xref py py-class docutils literal notranslate"><span class="pre">Phantom</span></code></a>). After an excitation of RF phase
+<span class="math notranslate nohighlight">\(\phi_e\)</span> at its centre, the magnetization is transverse, at the phantom’s
+density <span class="math notranslate nohighlight">\(\rho(\mathbf{r})\)</span> whatever the flip angle, with phase
+<span class="math notranslate nohighlight">\(-\phi_e - \pi/2\)</span>, and it precesses as
+<span class="math notranslate nohighlight">\(\exp(-2\pi i\,\mathbf{k}\cdot\mathbf{r})\)</span>, with <span class="math notranslate nohighlight">\(\mathbf{r}\)</span> and
+<span class="math notranslate nohighlight">\(\mathbf{k}\)</span> along the physical axes. A refocusing pulse of phase
 <span class="math notranslate nohighlight">\(\phi_r\)</span> conjugates it about <span class="math notranslate nohighlight">\(-\phi_r\)</span>. The RF phase at the centre is the
 pulse’s phase offset plus its frequency offset times the time since the pulse
 began. Coil <span class="math notranslate nohighlight">\(c\)</span>, of sensitivity <span class="math notranslate nohighlight">\(s_c(\mathbf{r})\)</span>, receives</p>
@@ -616,12 +625,19 @@ e^{-2\pi i\,\mathbf{k}(t)\cdot\mathbf{r}}\, d\mathbf{r},
 <p>with <span class="math notranslate nohighlight">\(\psi\)</span> the phase the RF pulses left, and the playout demodulates it by
 <span class="math notranslate nohighlight">\(\exp(i\theta(t))\)</span>, where the receiver phase <span class="math notranslate nohighlight">\(\theta\)</span> is the ADC phase offset at
 the ADC’s start, advancing at its frequency offset, plus its phase
-modulation. These are the
-conventions under which the field-of-view translation applied when the IR is
-built (<a class="reference internal" href="ir-cache.html"><span class="doc">The scanner IR</span></a>) recentres an object: an object at the prescribed
-offset is acquired as the same object at the centre. The phantom’s ellipses
-and its sensitivities, sums of plane waves, have analytic transforms, so
-<span class="math notranslate nohighlight">\(S_c\)</span> is evaluated exactly at every sample.</p>
+modulation.</p>
+<p>These are the conventions under which the field-of-view translation applied
+when the IR is built (<a class="reference internal" href="ir-cache.html"><span class="doc">The scanner IR</span></a>) recentres an object. Where every block
+is turned by <span class="math notranslate nohighlight">\(R\)</span>, <span class="math notranslate nohighlight">\(\mathbf{k}\)</span> is <span class="math notranslate nohighlight">\(R\mathbf{k}_L\)</span>, with <span class="math notranslate nohighlight">\(\mathbf{k}_L\)</span> its
+value along the logical axes. An object displaced to the prescribed centre
+<span class="math notranslate nohighlight">\(R\mathbf{d}\)</span>, for the offset <span class="math notranslate nohighlight">\(\mathbf{d}\)</span> along the logical axes, gains the
+phase <span class="math notranslate nohighlight">\(-2\pi\,(R\mathbf{d})\cdot(R\mathbf{k}_L) = -2\pi\,\mathbf{d}\cdot\mathbf{k}_L\)</span>,
+which the demodulation removes, and an object turned by <span class="math notranslate nohighlight">\(R\)</span> presents at
+<span class="math notranslate nohighlight">\(R\mathbf{k}_L\)</span> its own transform at <span class="math notranslate nohighlight">\(\mathbf{k}_L\)</span>. An object posed at the
+prescribed centre, its axes turned by <span class="math notranslate nohighlight">\(R\)</span>, is therefore acquired as the same
+object at the isocentre under the identity, a reflection in <span class="math notranslate nohighlight">\(R\)</span> included. The
+phantom’s ellipses and its sensitivities, sums of plane waves, have analytic
+transforms, so <span class="math notranslate nohighlight">\(S_c\)</span> is evaluated exactly at every sample.</p>
 <p>Relaxation, off-resonance, diffusion, slice profiles and every RF use other
 than excitation and refocusing are not modelled. A readout before the first
 excitation of its file acquires zeros.</p>
@@ -630,16 +646,23 @@ excitation of its file acquires zeros.</p>
 <h2>What a run establishes<a class="headerlink" href="#what-a-run-establishes" title="Link to this heading">#</a></h2>
 <ul class="simple">
 <li><p>The trajectory the cache plays is the one each file designs, for the
-fixtures and for every sequence pypulseqpp ships, at small sizes.</p></li>
+fixtures and for every sequence pypulseqpp ships, at small sizes, and under
+an oblique and a reflected prescription the one <code class="docutils literal notranslate"><span class="pre">pypulseqpp.TransformFOV</span></code>
+turns the design into for the checks. A block labelled <code class="docutils literal notranslate"><span class="pre">NOROT</span></code> plays turned
+by its own rotation alone.</p></li>
 <li><p>The cache carries the RF centre a design records where it is away from the
 magnitude peak.</p></li>
-<li><p>The enrichment states that trajectory for every readout.</p></li>
-<li><p>An object at the prescribed offset is acquired centred by every shipped
-sequence, EPI and spiral readouts, which the translation gives a phase
+<li><p>The enrichment states the trajectory of the identity, along the logical
+axes, for every readout.</p></li>
+<li><p>An object posed where an axial, an oblique or a reflected prescription
+places the field of view is acquired by every shipped sequence as it is at
+the isocentre, EPI and spiral readouts, which the translation gives a phase
 modulation, and readouts turned by a rotation extension included; an object
-away from it is not.</p></li>
-<li><p>A series streamed through the proxy is reconstructed into the phantom’s
-image, at the prescribed position, and a series short of a readout is
+away from the offset, or turned otherwise than prescribed, is not.</p></li>
+<li><p>A series streamed through the proxy under an axial, an oblique and a
+reflected prescription is reconstructed into the image of the phantom at the
+isocentre, and the image carries the prescribed centre and the columns of
+<span class="math notranslate nohighlight">\(R\)</span> as its read, phase and slice directions; a series short of a readout is
 refused.</p></li>
 </ul>
 </section>

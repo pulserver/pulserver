@@ -479,37 +479,51 @@
 
 <div class="viewcode-block" id="trajectory">
 <a class="viewcode-back" href="../../../generated/pulserver.virtual.trajectory.html#pulserver.virtual.trajectory">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">trajectory</span><span class="p">(</span><span class="n">seq_path</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span> <span class="n">cache_ext</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">".pseg"</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]:</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">trajectory</span><span class="p">(</span>
+    <span class="n">seq_path</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">cache_ext</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">".pseg"</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">rotation</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">"""Return the k-space location of every ADC sample the cache beside a sequence file plays.</span>
 
 <span class="sd">    One ``(3, samples)`` array per readout, in play order, in 1/m along the</span>
-<span class="sd">    logical axes. The locations are integrated from the gradients the cache</span>
-<span class="sd">    plays (:func:`pulserver.ir.play`), rotated by each block's rotation. An</span>
-<span class="sd">    excitation returns k to zero, and a refocusing pulse negates it, at the</span>
-<span class="sd">    RF centre the cache records (``rf_center_us``); each file of a chain</span>
-<span class="sd">    starts from zero.</span>
+<span class="sd">    physical axes. The locations are integrated from the gradients the cache</span>
+<span class="sd">    plays (:func:`pulserver.ir.play`), turned by each block's rotation and</span>
+<span class="sd">    then, except in blocks labelled ``NOROT``, by the prescription's</span>
+<span class="sd">    ``rotation`` from logical to physical axes, a reflection included, as</span>
+<span class="sd">    :func:`pulserver.ir.check` turns them. Under the default identity the</span>
+<span class="sd">    physical axes are the logical ones. An excitation returns k to zero, and</span>
+<span class="sd">    a refocusing pulse negates it, at the RF centre the cache records</span>
+<span class="sd">    (``rf_center_us``); each file of a chain starts from zero.</span>
 <span class="sd">    """</span>
-    <span class="k">return</span> <span class="p">[</span><span class="n">readout</span><span class="o">.</span><span class="n">kspace</span> <span class="k">for</span> <span class="n">readout</span> <span class="ow">in</span> <span class="n">_play</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="n">seq_path</span><span class="p">),</span> <span class="n">cache_ext</span><span class="p">)]</span></div>
+    <span class="k">return</span> <span class="p">[</span><span class="n">readout</span><span class="o">.</span><span class="n">kspace</span> <span class="k">for</span> <span class="n">readout</span> <span class="ow">in</span> <span class="n">_play</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="n">seq_path</span><span class="p">),</span> <span class="n">cache_ext</span><span class="p">,</span> <span class="n">rotation</span><span class="p">)]</span></div>
 
 
 
 <div class="viewcode-block" id="acquire">
 <a class="viewcode-back" href="../../../generated/pulserver.virtual.acquire.html#pulserver.virtual.acquire">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">acquire</span><span class="p">(</span>
-    <span class="n">seq_path</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span> <span class="n">phantom</span><span class="p">:</span> <span class="n">Phantom</span><span class="p">,</span> <span class="n">cache_ext</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">".pseg"</span>
+    <span class="n">seq_path</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">phantom</span><span class="p">:</span> <span class="n">Phantom</span><span class="p">,</span>
+    <span class="n">cache_ext</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">".pseg"</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">rotation</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">"""Return the samples the cache beside a sequence file acquires of a phantom.</span>
 
-<span class="sd">    One ``(coils, samples)`` complex64 array per readout, in play order,</span>
-<span class="sd">    multiplied by ``exp(i theta)``, where the receiver phase ``theta`` is the</span>
-<span class="sd">    ADC phase offset at the ADC's start, advancing at its frequency offset,</span>
-<span class="sd">    plus its phase modulation, as the playout demodulates. Only excitation and refocusing pulses act on</span>
-<span class="sd">    the magnetization, and ideally; a readout before the first excitation of</span>
-<span class="sd">    its file acquires zeros. The signal model is that of</span>
-<span class="sd">    :doc:`/explanations/virtual-scanner`.</span>
+<span class="sd">    One ``(coils, samples)`` complex64 array per readout, in play order, of</span>
+<span class="sd">    the phantom as it lies in the physical frame, sampled along the</span>
+<span class="sd">    :func:`trajectory` the cache plays under the prescription's ``rotation``</span>
+<span class="sd">    and multiplied by ``exp(i theta)``, where the receiver phase ``theta`` is</span>
+<span class="sd">    the ADC phase offset at the ADC's start, advancing at its frequency</span>
+<span class="sd">    offset, plus its phase modulation, as the playout demodulates. Only</span>
+<span class="sd">    excitation and refocusing pulses act on the magnetization, and ideally; a</span>
+<span class="sd">    readout before the first excitation of its file acquires zeros. The</span>
+<span class="sd">    signal model is that of :doc:`/explanations/virtual-scanner`.</span>
 <span class="sd">    """</span>
     <span class="n">samples</span> <span class="o">=</span> <span class="p">[]</span>
-    <span class="k">for</span> <span class="n">readout</span> <span class="ow">in</span> <span class="n">_play</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="n">seq_path</span><span class="p">),</span> <span class="n">cache_ext</span><span class="p">):</span>
+    <span class="k">for</span> <span class="n">readout</span> <span class="ow">in</span> <span class="n">_play</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="n">seq_path</span><span class="p">),</span> <span class="n">cache_ext</span><span class="p">,</span> <span class="n">rotation</span><span class="p">):</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">readout</span><span class="o">.</span><span class="n">excited</span><span class="p">:</span>
             <span class="n">samples</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
                 <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">phantom</span><span class="o">.</span><span class="n">coils</span><span class="p">,</span> <span class="n">readout</span><span class="o">.</span><span class="n">kspace</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">complex64</span><span class="p">)</span>
@@ -521,8 +535,11 @@
 
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_play</span><span class="p">(</span><span class="n">seq_path</span><span class="p">:</span> <span class="n">Path</span><span class="p">,</span> <span class="n">cache_ext</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">_Readout</span><span class="p">]:</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_play</span><span class="p">(</span>
+    <span class="n">seq_path</span><span class="p">:</span> <span class="n">Path</span><span class="p">,</span> <span class="n">cache_ext</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">prescription</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">_Readout</span><span class="p">]:</span>
     <span class="n">played</span> <span class="o">=</span> <span class="n">ir</span><span class="o">.</span><span class="n">play</span><span class="p">(</span><span class="n">seq_path</span><span class="p">,</span> <span class="n">cache_ext</span><span class="p">,</span> <span class="n">waveforms</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">turn</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span> <span class="k">if</span> <span class="n">prescription</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">prescription</span><span class="p">,</span> <span class="nb">float</span><span class="p">)</span>
     <span class="n">span</span> <span class="o">=</span> <span class="n">played</span><span class="p">[</span><span class="s2">"gradient_span"</span><span class="p">]</span>
     <span class="n">corners</span> <span class="o">=</span> <span class="n">played</span><span class="p">[</span><span class="s2">"gradient_time_us"</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">float</span><span class="p">)</span>
     <span class="n">values</span> <span class="o">=</span> <span class="n">played</span><span class="p">[</span><span class="s2">"gradient_waveform_hz_per_m"</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">float</span><span class="p">)</span>
@@ -536,6 +553,8 @@
             <span class="n">origin</span> <span class="o">=</span> <span class="kc">None</span>
             <span class="n">reference</span> <span class="o">=</span> <span class="mf">0.0</span>
         <span class="n">rotation</span> <span class="o">=</span> <span class="n">played</span><span class="p">[</span><span class="s2">"rotation"</span><span class="p">][</span><span class="n">block</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">float</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">played</span><span class="p">[</span><span class="s2">"norot"</span><span class="p">][</span><span class="n">block</span><span class="p">]:</span>
+            <span class="n">rotation</span> <span class="o">=</span> <span class="n">turn</span> <span class="o">@</span> <span class="n">rotation</span>
         <span class="n">waves</span> <span class="o">=</span> <span class="p">[</span>
             <span class="p">(</span><span class="n">corners</span><span class="p">[</span><span class="nb">slice</span><span class="p">(</span><span class="o">*</span><span class="n">span</span><span class="p">[</span><span class="n">block</span><span class="p">,</span> <span class="n">axis</span><span class="p">])],</span> <span class="n">values</span><span class="p">[</span><span class="nb">slice</span><span class="p">(</span><span class="o">*</span><span class="n">span</span><span class="p">[</span><span class="n">block</span><span class="p">,</span> <span class="n">axis</span><span class="p">])])</span>
             <span class="k">for</span> <span class="n">axis</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span>

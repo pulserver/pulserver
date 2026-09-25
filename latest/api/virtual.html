@@ -539,7 +539,8 @@ reconstruction client sends them.</p>
 <p>The design calls, the IR, the reconstruction proxy and the reconstruction
 plugins are the production code; what each stand-in exercises, and the signal
 model, are described in <a class="reference internal" href="../explanations/virtual-scanner.html"><span class="doc">The virtual scanner</span></a>. Positions are
-in metres and k-space locations in 1/m, along the logical axes.</p>
+in metres and k-space locations in 1/m, along the physical axes: the logical
+axes turned by the prescription’s rotation, the identity unless one is given.</p>
 <section id="acquisition">
 <h2>Acquisition<a class="headerlink" href="#acquisition" title="Link to this heading">#</a></h2>
 <div class="pst-scrollable-table-container"><table class="table">
@@ -569,7 +570,7 @@ in metres and k-space locations in 1/m, along the logical axes.</p>
 </thead>
 <tbody>
 <tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.virtual.Phantom.html#pulserver.virtual.Phantom" title="pulserver.virtual.Phantom"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Phantom</span></code></a></p></td>
-<td><p>Ellipses whose signals add, received by one coil or several of analytic sensitivity.</p></td>
+<td><p>Ellipses whose signals add, received by one coil or several of analytic sensitivity, placed in the physical frame by a rotation and a position.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.virtual.Ellipse.html#pulserver.virtual.Ellipse" title="pulserver.virtual.Ellipse"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Ellipse</span></code></a></p></td>
 <td><p>An ellipse of uniform magnetization in a plane of constant z.</p></td>

@@ -533,13 +533,15 @@
 <dt class="sig sig-object py" id="pulserver.virtual.acquire">
 <span class="sig-prename descclassname"><span class="pre">pulserver.virtual.</span></span><span class="sig-name descname"><span class="pre">acquire</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pulserver/virtual/_scanner.html#acquire"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.virtual.acquire" title="Link to this definition">#</a></dt>
 <dd><p>Return the samples the cache beside a sequence file acquires of a phantom.</p>
-<p>One <code class="docutils literal notranslate"><span class="pre">(coils,</span> <span class="pre">samples)</span></code> complex64 array per readout, in play order,
-multiplied by <code class="docutils literal notranslate"><span class="pre">exp(i</span> <span class="pre">theta)</span></code>, where the receiver phase <code class="docutils literal notranslate"><span class="pre">theta</span></code> is the
-ADC phase offset at the ADC’s start, advancing at its frequency offset,
-plus its phase modulation, as the playout demodulates. Only excitation and refocusing pulses act on
-the magnetization, and ideally; a readout before the first excitation of
-its file acquires zeros. The signal model is that of
-<a class="reference internal" href="../explanations/virtual-scanner.html"><span class="doc">The virtual scanner</span></a>.</p>
+<p>One <code class="docutils literal notranslate"><span class="pre">(coils,</span> <span class="pre">samples)</span></code> complex64 array per readout, in play order, of
+the phantom as it lies in the physical frame, sampled along the
+<a class="reference internal" href="pulserver.virtual.trajectory.html#pulserver.virtual.trajectory" title="pulserver.virtual.trajectory"><code class="xref py py-func docutils literal notranslate"><span class="pre">trajectory()</span></code></a> the cache plays under the prescription’s <code class="docutils literal notranslate"><span class="pre">rotation</span></code>
+and multiplied by <code class="docutils literal notranslate"><span class="pre">exp(i</span> <span class="pre">theta)</span></code>, where the receiver phase <code class="docutils literal notranslate"><span class="pre">theta</span></code> is
+the ADC phase offset at the ADC’s start, advancing at its frequency
+offset, plus its phase modulation, as the playout demodulates. Only
+excitation and refocusing pulses act on the magnetization, and ideally; a
+readout before the first excitation of its file acquires zeros. The
+signal model is that of <a class="reference internal" href="../explanations/virtual-scanner.html"><span class="doc">The virtual scanner</span></a>.</p>
 </dd></dl>
 
 </section>

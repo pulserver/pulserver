@@ -481,6 +481,7 @@
     <span class="o">*</span><span class="p">,</span>
     <span class="n">frequency_hz</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">123_200_000.0</span><span class="p">,</span>
     <span class="n">position_mm</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span>
+    <span class="n">rotation</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">config</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">exam</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">600.0</span><span class="p">,</span>
@@ -490,12 +491,15 @@
 <span class="sd">    The header carries the design identifier, the resonance frequency, the</span>
 <span class="sd">    coil count and, with ``exam``, the ``ExamID``; the acquisitions carry the</span>
 <span class="sd">    samples, scan counters from one, ``LAST_IN_MEASUREMENT`` on the last,</span>
-<span class="sd">    and the field-of-view centre ``position_mm`` along axes that are the</span>
-<span class="sd">    logical ones. Nothing else of the sequence is sent, as</span>
+<span class="sd">    the field-of-view centre ``position_mm``, in mm along the physical axes,</span>
+<span class="sd">    and as ``read_dir``, ``phase_dir`` and ``slice_dir`` the columns of the</span>
+<span class="sd">    prescription's ``rotation`` from logical to physical axes, the identity</span>
+<span class="sd">    by default. Nothing else of the sequence is sent, as</span>
 <span class="sd">    :doc:`/user-guide/reconstruction-client` specifies. The reply is the</span>
 <span class="sd">    images, DICOM datasets and texts in the order they arrive.</span>
 <span class="sd">    """</span>
     <span class="n">coils</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">readouts</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">readouts</span><span class="p">)</span> <span class="k">else</span> <span class="mi">1</span>
+    <span class="n">directions</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span> <span class="k">if</span> <span class="n">rotation</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">rotation</span><span class="p">,</span> <span class="nb">float</span><span class="p">)</span>
     <span class="n">stream</span> <span class="o">=</span> <span class="n">socket</span><span class="o">.</span><span class="n">create_connection</span><span class="p">(</span><span class="n">address</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">)</span>
     <span class="n">connection</span> <span class="o">=</span> <span class="n">Connection</span><span class="p">(</span><span class="n">stream</span><span class="p">)</span>
     <span class="k">try</span><span class="p">:</span>
@@ -509,9 +513,9 @@
             <span class="p">)</span>
             <span class="n">acquisition</span><span class="o">.</span><span class="n">scan_counter</span> <span class="o">=</span> <span class="n">index</span> <span class="o">+</span> <span class="mi">1</span>
             <span class="n">acquisition</span><span class="o">.</span><span class="n">position</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">position_mm</span>
-            <span class="n">acquisition</span><span class="o">.</span><span class="n">read_dir</span><span class="p">[:]</span> <span class="o">=</span> <span class="p">(</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>
-            <span class="n">acquisition</span><span class="o">.</span><span class="n">phase_dir</span><span class="p">[:]</span> <span class="o">=</span> <span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>
-            <span class="n">acquisition</span><span class="o">.</span><span class="n">slice_dir</span><span class="p">[:]</span> <span class="o">=</span> <span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">)</span>
+            <span class="n">acquisition</span><span class="o">.</span><span class="n">read_dir</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">directions</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]</span>
+            <span class="n">acquisition</span><span class="o">.</span><span class="n">phase_dir</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">directions</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">]</span>
+            <span class="n">acquisition</span><span class="o">.</span><span class="n">slice_dir</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">directions</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">]</span>
             <span class="k">if</span> <span class="n">index</span> <span class="o">==</span> <span class="n">last</span><span class="p">:</span>
                 <span class="n">acquisition</span><span class="o">.</span><span class="n">setFlag</span><span class="p">(</span><span class="n">ismrmrd</span><span class="o">.</span><span class="n">ACQ_LAST_IN_MEASUREMENT</span><span class="p">)</span>
             <span class="n">connection</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">acquisition</span><span class="p">)</span>

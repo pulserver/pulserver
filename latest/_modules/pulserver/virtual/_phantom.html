@@ -470,10 +470,10 @@
 <span class="k">class</span><span class="w"> </span><span class="nc">Ellipse</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""An ellipse of uniform magnetization in a plane of constant z.</span>
 
-<span class="sd">    Lengths are in metres along the logical axes; ``angle`` turns the first</span>
-<span class="sd">    semi-axis from x towards y, in radians. The ellipse is infinitely thin, so</span>
-<span class="sd">    its signal depends on the k-space location along z only through the phase</span>
-<span class="sd">    of its plane.</span>
+<span class="sd">    Lengths are in metres along the axes of the phantom it belongs to;</span>
+<span class="sd">    ``angle`` turns the first semi-axis from x towards y, in radians. The</span>
+<span class="sd">    ellipse is infinitely thin, so its signal depends on the k-space location</span>
+<span class="sd">    along z only through the phase of its plane.</span>
 <span class="sd">    """</span>
 
     <span class="n">centre</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span>
@@ -486,7 +486,8 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">spectrum</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">k</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""Return its magnetization's Fourier transform at ``(3, n)`` k-space locations in 1/m.</span>
 
-<span class="sd">        The transform of magnetization m is the integral of m(r) exp(-2 pi i k.r).</span>
+<span class="sd">        The transform of magnetization m is the integral of m(r) exp(-2 pi i k.r),</span>
+<span class="sd">        with k and r along the phantom's axes.</span>
 <span class="sd">        """</span>
         <span class="n">k</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">k</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
         <span class="n">a</span><span class="p">,</span> <span class="n">b</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">semi_axes</span>
@@ -507,7 +508,10 @@
 <span class="k">class</span><span class="w"> </span><span class="nc">Phantom</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Ellipses whose signals add, received by one coil or several.</span>
 
-<span class="sd">    With ``coils`` above one, coil c's sensitivity is</span>
+<span class="sd">    The ellipses and the sensitivities are stated along the phantom's own</span>
+<span class="sd">    axes, which ``rotation`` and ``position`` place in the physical frame:</span>
+<span class="sd">    the phantom's point r lies at ``rotation @ r + position``, and its coils</span>
+<span class="sd">    move with it. With ``coils`` above one, coil c's sensitivity is</span>
 <span class="sd">    ``1 + depth cos(2 pi q_c.r)``, where ``q_c`` has magnitude</span>
 <span class="sd">    ``1 / period`` and points at ``2 pi c / coils`` from x towards y, so each</span>
 <span class="sd">    coil's k-space is the object's, and two copies shifted by ``q_c``: every</span>
@@ -523,6 +527,11 @@
 <span class="sd">        Spatial period of the sensitivities, in metres.</span>
 <span class="sd">    depth</span>
 <span class="sd">        Their modulation depth.</span>
+<span class="sd">    rotation</span>
+<span class="sd">        ``(3, 3)`` orthonormal matrix from the phantom's axes to the physical</span>
+<span class="sd">        ones, a reflection included; the identity by default.</span>
+<span class="sd">    position</span>
+<span class="sd">        Physical location of the phantom's origin, in metres.</span>
 <span class="sd">    """</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
@@ -532,6 +541,8 @@
         <span class="n">coils</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
         <span class="n">period</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.5</span><span class="p">,</span>
         <span class="n">depth</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.5</span><span class="p">,</span>
+        <span class="n">rotation</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">position</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">if</span> <span class="n">coils</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"a phantom is received by one coil or more, not </span><span class="si">{</span><span class="n">coils</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
@@ -542,23 +553,26 @@
             <span class="n">np</span><span class="o">.</span><span class="n">stack</span><span class="p">([</span><span class="n">np</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">angles</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">angles</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">coils</span><span class="p">)])</span> <span class="o">/</span> <span class="n">period</span>
         <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_depth</span> <span class="o">=</span> <span class="n">depth</span> <span class="k">if</span> <span class="n">coils</span> <span class="o">&gt;</span> <span class="mi">1</span> <span class="k">else</span> <span class="mf">0.0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_rotation</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span> <span class="k">if</span> <span class="n">rotation</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">rotation</span><span class="p">,</span> <span class="nb">float</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_position</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">position</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
 
 <div class="viewcode-block" id="Phantom.kspace">
 <a class="viewcode-back" href="../../../generated/pulserver.virtual.Phantom.kspace.html#pulserver.virtual.Phantom.kspace">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">kspace</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">k</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Return each coil's signal at ``(3, n)`` k-space locations in 1/m: ``(coils, n)``."""</span>
+<span class="w">        </span><span class="sd">"""Return each coil's signal at ``(3, n)`` physical k-space locations in 1/m: ``(coils, n)``."""</span>
         <span class="n">k</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">k</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
+        <span class="n">own</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rotation</span><span class="o">.</span><span class="n">T</span> <span class="o">@</span> <span class="n">k</span>
         <span class="n">signal</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">coils</span><span class="p">,</span> <span class="n">k</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]),</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">complex</span><span class="p">)</span>
         <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">coils</span><span class="p">):</span>
             <span class="n">wave</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_waves</span><span class="p">[:,</span> <span class="n">c</span> <span class="p">:</span> <span class="n">c</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span>
-            <span class="n">signal</span><span class="p">[</span><span class="n">c</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_spectrum</span><span class="p">(</span><span class="n">k</span><span class="p">)</span>
+            <span class="n">signal</span><span class="p">[</span><span class="n">c</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_spectrum</span><span class="p">(</span><span class="n">own</span><span class="p">)</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_depth</span><span class="p">:</span>
                 <span class="n">signal</span><span class="p">[</span><span class="n">c</span><span class="p">]</span> <span class="o">+=</span> <span class="p">(</span>
                     <span class="mf">0.5</span>
                     <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">_depth</span>
-                    <span class="o">*</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_spectrum</span><span class="p">(</span><span class="n">k</span> <span class="o">-</span> <span class="n">wave</span><span class="p">)</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">_spectrum</span><span class="p">(</span><span class="n">k</span> <span class="o">+</span> <span class="n">wave</span><span class="p">))</span>
+                    <span class="o">*</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_spectrum</span><span class="p">(</span><span class="n">own</span> <span class="o">-</span> <span class="n">wave</span><span class="p">)</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">_spectrum</span><span class="p">(</span><span class="n">own</span> <span class="o">+</span> <span class="n">wave</span><span class="p">))</span>
                 <span class="p">)</span>
-        <span class="k">return</span> <span class="n">signal</span></div>
+        <span class="k">return</span> <span class="n">signal</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="mi">2</span><span class="n">j</span> <span class="o">*</span> <span class="n">math</span><span class="o">.</span><span class="n">pi</span> <span class="o">*</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_position</span> <span class="o">@</span> <span class="n">k</span><span class="p">))</span></div>
 
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_spectrum</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">k</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>

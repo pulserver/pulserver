@@ -536,8 +536,10 @@
 <p>The header carries the design identifier, the resonance frequency, the
 coil count and, with <code class="docutils literal notranslate"><span class="pre">exam</span></code>, the <code class="docutils literal notranslate"><span class="pre">ExamID</span></code>; the acquisitions carry the
 samples, scan counters from one, <code class="docutils literal notranslate"><span class="pre">LAST_IN_MEASUREMENT</span></code> on the last,
-and the field-of-view centre <code class="docutils literal notranslate"><span class="pre">position_mm</span></code> along axes that are the
-logical ones. Nothing else of the sequence is sent, as
+the field-of-view centre <code class="docutils literal notranslate"><span class="pre">position_mm</span></code>, in mm along the physical axes,
+and as <code class="docutils literal notranslate"><span class="pre">read_dir</span></code>, <code class="docutils literal notranslate"><span class="pre">phase_dir</span></code> and <code class="docutils literal notranslate"><span class="pre">slice_dir</span></code> the columns of the
+prescription’s <code class="docutils literal notranslate"><span class="pre">rotation</span></code> from logical to physical axes, the identity
+by default. Nothing else of the sequence is sent, as
 <a class="reference internal" href="../user-guide/reconstruction-client.html"><span class="doc">Reconstruction clients</span></a> specifies. The reply is the
 images, DICOM datasets and texts in the order they arrive.</p>
 </dd></dl>

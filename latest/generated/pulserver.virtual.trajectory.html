@@ -534,11 +534,14 @@
 <span class="sig-prename descclassname"><span class="pre">pulserver.virtual.</span></span><span class="sig-name descname"><span class="pre">trajectory</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pulserver/virtual/_scanner.html#trajectory"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.virtual.trajectory" title="Link to this definition">#</a></dt>
 <dd><p>Return the k-space location of every ADC sample the cache beside a sequence file plays.</p>
 <p>One <code class="docutils literal notranslate"><span class="pre">(3,</span> <span class="pre">samples)</span></code> array per readout, in play order, in 1/m along the
-logical axes. The locations are integrated from the gradients the cache
-plays (<a class="reference internal" href="pulserver.ir.play.html#pulserver.ir.play" title="pulserver.ir.play"><code class="xref py py-func docutils literal notranslate"><span class="pre">pulserver.ir.play()</span></code></a>), rotated by each block’s rotation. An
-excitation returns k to zero, and a refocusing pulse negates it, at the
-RF centre the cache records (<code class="docutils literal notranslate"><span class="pre">rf_center_us</span></code>); each file of a chain
-starts from zero.</p>
+physical axes. The locations are integrated from the gradients the cache
+plays (<a class="reference internal" href="pulserver.ir.play.html#pulserver.ir.play" title="pulserver.ir.play"><code class="xref py py-func docutils literal notranslate"><span class="pre">pulserver.ir.play()</span></code></a>), turned by each block’s rotation and
+then, except in blocks labelled <code class="docutils literal notranslate"><span class="pre">NOROT</span></code>, by the prescription’s
+<code class="docutils literal notranslate"><span class="pre">rotation</span></code> from logical to physical axes, a reflection included, as
+<a class="reference internal" href="pulserver.ir.check.html#pulserver.ir.check" title="pulserver.ir.check"><code class="xref py py-func docutils literal notranslate"><span class="pre">pulserver.ir.check()</span></code></a> turns them. Under the default identity the
+physical axes are the logical ones. An excitation returns k to zero, and
+a refocusing pulse negates it, at the RF centre the cache records
+(<code class="docutils literal notranslate"><span class="pre">rf_center_us</span></code>); each file of a chain starts from zero.</p>
 </dd></dl>
 
 </section>

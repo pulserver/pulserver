@@ -41,11 +41,45 @@ readouts = virtual.acquire(sequence, phantom)
 received = virtual.send(("127.0.0.1", 9002), design, readouts, position_mm=(20.0, 0.0, 0.0))
 ```
 
-The phantom is placed in the logical frame, about the isocentre; the object
-above is centred on the prescribed field of view, so it appears at the centre
-of the image. `received` holds the images, DICOM datasets and texts the
-reconstruction returned; a text beginning `pulserver:` reports a refused or
-failed series.
+The phantom lies in the physical frame, whose axes are the logical ones under
+a prescription without a rotation; the object above is centred on the
+prescribed field of view, so it appears at the centre of the image. `received`
+holds the images, DICOM datasets and texts the reconstruction returned; a text
+beginning `pulserver:` reports a refused or failed series.
+
+## Prescribe an orientation
+
+Add the nine `fov_rotation_ij` entries to the protocol block the design is
+generated from: element (i, j) of the rotation $R$ from logical to physical
+axes, the identity's where absent ({doc}`../explanations/protocol`). The
+design is checked in
+the physical frame $R$ gives, where logical axes played together add on one
+physical axis, so a design at the scanner's limits on several axes at once can
+be refused ({doc}`../explanations/ir-cache`). The acquisition and the client
+are given the same $R$, and the client sends $R$ times the offset as the
+field-of-view centre:
+
+```python
+import numpy as np
+
+rotation = np.array([[0.866025, -0.5, 0.0], [0.5, 0.866025, 0.0], [0.0, 0.0, 1.0]])
+centre = rotation @ (0.02, 0.0, 0.0)
+phantom = virtual.Phantom(
+    [virtual.Ellipse((0.0, 0.0, 0.0), (0.08, 0.06))],
+    coils=4,
+    rotation=rotation,
+    position=centre,
+)
+readouts = virtual.acquire(sequence, phantom, rotation=rotation)
+received = virtual.send(
+    ("127.0.0.1", 9002), design, readouts, position_mm=1e3 * centre, rotation=rotation
+)
+```
+
+The phantom, posed at the prescribed centre with its axes turned by $R$,
+appears at the centre of the image as it would at the isocentre without a
+rotation, and the images carry the columns of $R$ as their read, phase and
+slice directions.
 
 ## See also
 

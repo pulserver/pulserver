@@ -52,6 +52,8 @@
     <script src="../_static/copybutton.js?v=f281be69"></script>
     <script src="../_static/sg-tags.js?v=d80f6fa4"></script>
     <script src="../_static/scripts/sphinx-book-theme.js?v=fab101a9"></script>
+    <script>window.MathJax = {"options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+    <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js"></script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'user-guide/virtual-scanner';</script>
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
@@ -520,6 +522,7 @@
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#generate-a-design">Generate a design</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#start-a-proxy">Start a proxy</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#acquire-and-send-the-series">Acquire and send the series</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#prescribe-an-orientation">Prescribe an orientation</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See also</a></li>
 </ul>
             </nav>
@@ -570,11 +573,43 @@ field-of-view offset in the protocol block (<a class="reference internal" href="
 <span class="n">received</span> <span class="o">=</span> <span class="n">virtual</span><span class="o">.</span><span class="n">send</span><span class="p">((</span><span class="s2">"127.0.0.1"</span><span class="p">,</span> <span class="mi">9002</span><span class="p">),</span> <span class="n">design</span><span class="p">,</span> <span class="n">readouts</span><span class="p">,</span> <span class="n">position_mm</span><span class="o">=</span><span class="p">(</span><span class="mf">20.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">))</span>
 </pre></div>
 </div>
-<p>The phantom is placed in the logical frame, about the isocentre; the object
-above is centred on the prescribed field of view, so it appears at the centre
-of the image. <code class="docutils literal notranslate"><span class="pre">received</span></code> holds the images, DICOM datasets and texts the
-reconstruction returned; a text beginning <code class="docutils literal notranslate"><span class="pre">pulserver:</span></code> reports a refused or
-failed series.</p>
+<p>The phantom lies in the physical frame, whose axes are the logical ones under
+a prescription without a rotation; the object above is centred on the
+prescribed field of view, so it appears at the centre of the image. <code class="docutils literal notranslate"><span class="pre">received</span></code>
+holds the images, DICOM datasets and texts the reconstruction returned; a text
+beginning <code class="docutils literal notranslate"><span class="pre">pulserver:</span></code> reports a refused or failed series.</p>
+</section>
+<section id="prescribe-an-orientation">
+<h2>Prescribe an orientation<a class="headerlink" href="#prescribe-an-orientation" title="Link to this heading">#</a></h2>
+<p>Add the nine <code class="docutils literal notranslate"><span class="pre">fov_rotation_ij</span></code> entries to the protocol block the design is
+generated from: element (i, j) of the rotation <span class="math notranslate nohighlight">\(R\)</span> from logical to physical
+axes, the identity’s where absent (<a class="reference internal" href="../explanations/protocol.html"><span class="doc">Protocol resolution</span></a>). The
+design is checked in
+the physical frame <span class="math notranslate nohighlight">\(R\)</span> gives, where logical axes played together add on one
+physical axis, so a design at the scanner’s limits on several axes at once can
+be refused (<a class="reference internal" href="../explanations/ir-cache.html"><span class="doc">The scanner IR</span></a>). The acquisition and the client
+are given the same <span class="math notranslate nohighlight">\(R\)</span>, and the client sends <span class="math notranslate nohighlight">\(R\)</span> times the offset as the
+field-of-view centre:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+
+<span class="n">rotation</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="mf">0.866025</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">],</span> <span class="p">[</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.866025</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">],</span> <span class="p">[</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">]])</span>
+<span class="n">centre</span> <span class="o">=</span> <span class="n">rotation</span> <span class="o">@</span> <span class="p">(</span><span class="mf">0.02</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>
+<span class="n">phantom</span> <span class="o">=</span> <span class="n">virtual</span><span class="o">.</span><span class="n">Phantom</span><span class="p">(</span>
+    <span class="p">[</span><span class="n">virtual</span><span class="o">.</span><span class="n">Ellipse</span><span class="p">((</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span> <span class="p">(</span><span class="mf">0.08</span><span class="p">,</span> <span class="mf">0.06</span><span class="p">))],</span>
+    <span class="n">coils</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span>
+    <span class="n">rotation</span><span class="o">=</span><span class="n">rotation</span><span class="p">,</span>
+    <span class="n">position</span><span class="o">=</span><span class="n">centre</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">readouts</span> <span class="o">=</span> <span class="n">virtual</span><span class="o">.</span><span class="n">acquire</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">phantom</span><span class="p">,</span> <span class="n">rotation</span><span class="o">=</span><span class="n">rotation</span><span class="p">)</span>
+<span class="n">received</span> <span class="o">=</span> <span class="n">virtual</span><span class="o">.</span><span class="n">send</span><span class="p">(</span>
+    <span class="p">(</span><span class="s2">"127.0.0.1"</span><span class="p">,</span> <span class="mi">9002</span><span class="p">),</span> <span class="n">design</span><span class="p">,</span> <span class="n">readouts</span><span class="p">,</span> <span class="n">position_mm</span><span class="o">=</span><span class="mf">1e3</span> <span class="o">*</span> <span class="n">centre</span><span class="p">,</span> <span class="n">rotation</span><span class="o">=</span><span class="n">rotation</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>The phantom, posed at the prescribed centre with its axes turned by <span class="math notranslate nohighlight">\(R\)</span>,
+appears at the centre of the image as it would at the isocentre without a
+rotation, and the images carry the columns of <span class="math notranslate nohighlight">\(R\)</span> as their read, phase and
+slice directions.</p>
 </section>
 <section id="see-also">
 <h2>See also<a class="headerlink" href="#see-also" title="Link to this heading">#</a></h2>
@@ -636,6 +671,7 @@ failed series.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#generate-a-design">Generate a design</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#start-a-proxy">Start a proxy</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#acquire-and-send-the-series">Acquire and send the series</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#prescribe-an-orientation">Prescribe an orientation</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See also</a></li>
 </ul>
   </nav></div>

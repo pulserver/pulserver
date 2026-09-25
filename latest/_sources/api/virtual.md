@@ -11,7 +11,8 @@ reconstruction client sends them.
 The design calls, the IR, the reconstruction proxy and the reconstruction
 plugins are the production code; what each stand-in exercises, and the signal
 model, are described in {doc}`../explanations/virtual-scanner`. Positions are
-in metres and k-space locations in 1/m, along the logical axes.
+in metres and k-space locations in 1/m, along the physical axes: the logical
+axes turned by the prescription's rotation, the identity unless one is given.
 
 ## Acquisition
 
@@ -24,7 +25,7 @@ in metres and k-space locations in 1/m, along the logical axes.
 
 | Object | Description |
 | --- | --- |
-| {obj}`~pulserver.virtual.Phantom` | Ellipses whose signals add, received by one coil or several of analytic sensitivity. |
+| {obj}`~pulserver.virtual.Phantom` | Ellipses whose signals add, received by one coil or several of analytic sensitivity, placed in the physical frame by a rotation and a position. |
 | {obj}`~pulserver.virtual.Ellipse` | An ellipse of uniform magnetization in a plane of constant z. |
 
 ## Reconstruction client

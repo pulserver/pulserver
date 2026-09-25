@@ -534,7 +534,10 @@
 <span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pulserver.virtual.</span></span><span class="sig-name descname"><span class="pre">Phantom</span></span><a class="reference internal" href="../_modules/pulserver/virtual/_phantom.html#Phantom"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.virtual.Phantom" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/builtins/functions.html#object" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
 <p>Ellipses whose signals add, received by one coil or several.</p>
-<p>With <code class="docutils literal notranslate"><span class="pre">coils</span></code> above one, coil c’s sensitivity is
+<p>The ellipses and the sensitivities are stated along the phantom’s own
+axes, which <code class="docutils literal notranslate"><span class="pre">rotation</span></code> and <code class="docutils literal notranslate"><span class="pre">position</span></code> place in the physical frame:
+the phantom’s point r lies at <code class="docutils literal notranslate"><span class="pre">rotation</span> <span class="pre">&#64;</span> <span class="pre">r</span> <span class="pre">+</span> <span class="pre">position</span></code>, and its coils
+move with it. With <code class="docutils literal notranslate"><span class="pre">coils</span></code> above one, coil c’s sensitivity is
 <code class="docutils literal notranslate"><span class="pre">1</span> <span class="pre">+</span> <span class="pre">depth</span> <span class="pre">cos(2</span> <span class="pre">pi</span> <span class="pre">q_c.r)</span></code>, where <code class="docutils literal notranslate"><span class="pre">q_c</span></code> has magnitude
 <code class="docutils literal notranslate"><span class="pre">1</span> <span class="pre">/</span> <span class="pre">period</span></code> and points at <code class="docutils literal notranslate"><span class="pre">2</span> <span class="pre">pi</span> <span class="pre">c</span> <span class="pre">/</span> <span class="pre">coils</span></code> from x towards y, so each
 coil’s k-space is the object’s, and two copies shifted by <code class="docutils literal notranslate"><span class="pre">q_c</span></code>: every
@@ -546,6 +549,9 @@ coil is analytic.</p>
 <li><p><strong>coils</strong> – Receive channels.</p></li>
 <li><p><strong>period</strong> – Spatial period of the sensitivities, in metres.</p></li>
 <li><p><strong>depth</strong> – Their modulation depth.</p></li>
+<li><p><strong>rotation</strong> – <code class="docutils literal notranslate"><span class="pre">(3,</span> <span class="pre">3)</span></code> orthonormal matrix from the phantom’s axes to the physical
+ones, a reflection included; the identity by default.</p></li>
+<li><p><strong>position</strong> – Physical location of the phantom’s origin, in metres.</p></li>
 </ul>
 </dd>
 </dl>
@@ -555,7 +561,7 @@ coil is analytic.</p>
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table">
 <tbody>
 <tr class="row-odd"><td><p><a class="reference internal" href="pulserver.virtual.Phantom.kspace.html#pulserver.virtual.Phantom.kspace" title="pulserver.virtual.Phantom.kspace"><code class="xref py py-obj docutils literal notranslate"><span class="pre">kspace</span></code></a></p></td>
-<td><p>Return each coil's signal at <code class="docutils literal notranslate"><span class="pre">(3,</span> <span class="pre">n)</span></code> k-space locations in 1/m: <code class="docutils literal notranslate"><span class="pre">(coils,</span> <span class="pre">n)</span></code>.</p></td>
+<td><p>Return each coil's signal at <code class="docutils literal notranslate"><span class="pre">(3,</span> <span class="pre">n)</span></code> physical k-space locations in 1/m: <code class="docutils literal notranslate"><span class="pre">(coils,</span> <span class="pre">n)</span></code>.</p></td>
 </tr>
 </tbody>
 </table>
