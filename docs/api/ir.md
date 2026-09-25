@@ -8,8 +8,9 @@ IR cache the scanner interpreter loads beside the sequence file.
 ```
 
 The chain is read with `pypulseqpp.Sequence`, text or binary. Event
-deduplication, repetition detection, segmentation and the execution stream are
-computed in the compiled extension, and the cache is written by the C library
+deduplication, segmentation of the repetition pypulseqpp finds, and the
+execution stream are computed in the compiled extension, and the cache is
+written by the C library
 the interpreter reads it back with. The files are read in the logical frame and
 moved to the prescribed field-of-view offset before they are segmented. The
 passes and the cache layout are described in {doc}`../explanations/ir-cache`.
@@ -22,7 +23,7 @@ passes and the cache layout are described in {doc}`../explanations/ir-cache`.
 | {obj}`~pulserver.ir.CheckLimits` | The nerve model and forbidden bands a chain is checked against, and the VOPs of its SAR ratios, besides the gradient limits. |
 | {obj}`~pulserver.ir.sar_ratios` | The RF energy of each subsequence of a chain at the VOPs, against the same repetitions of a hard, 180°, 1 ms reference pulse. |
 | {obj}`~pulserver.ir.SarRatio` | The local and global SAR ratios of one subsequence, as the cache carries them. |
-| {obj}`~pulserver.ir.summary` | Subsequences, segments, readouts and RF spectral statistics of a sequence, from the chain or from its cache. |
+| {obj}`~pulserver.ir.summary` | Subsequences, segments, readouts, readout labels and RF spectral statistics of a sequence, from the chain or from its cache. |
 | {obj}`~pulserver.ir.play` | Every block a cache plays, resolved as the scanner's playout resolves it, with its gradient waveforms on request. |
 | {obj}`~pulserver.ir.chain` | Files of the `NextSequence` chain starting at a sequence file, in play order. |
 | {obj}`~pulserver.ir.cache_path` | Cache file of a sequence file. |

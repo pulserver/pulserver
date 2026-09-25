@@ -5,7 +5,7 @@
  * A file is filled from the libraries a sequence was read into (see
  * from_libraries.cpp); what is here is its lifecycle and the two accessors
  * the passes resolve a block through -- the content ids a block names, and
- * the extension chain it carries.
+ * the trigger its extension chain carries.
  */
 
 #include <math.h>
@@ -63,6 +63,12 @@ static void seq_file_set_defaults(pulseq_file *seq)
 
     INIT_LIBRARY(seq, block_library, num_blocks, is_block_library_parsed);
     seq->block_ids = NULL;
+    seq->block_rotations = NULL;
+    seq->block_shims = NULL;
+    seq->block_flags = NULL;
+    seq->block_trid_set = NULL;
+    seq->num_adc_labels = 0;
+    seq->adc_labels = NULL;
     INIT_LIBRARY(seq, rf_library, rf_library_size, is_rf_library_parsed);
     seq->rf_use_tags = NULL;
     seq->rf_spectra = NULL;
@@ -137,6 +143,11 @@ void pulseq__file_reset(pulseq_file *seq)
         PULSEQ_FREE(seq->block_library);
         PULSEQ_FREE(seq->block_ids);
         seq->block_ids = NULL;
+        PULSEQ_FREE(seq->block_rotations);
+        PULSEQ_FREE(seq->block_shims);
+        PULSEQ_FREE(seq->block_flags);
+        PULSEQ_FREE(seq->block_trid_set);
+        PULSEQ_FREE(seq->adc_labels);
     }
     if (seq->is_rf_library_parsed)
     {
@@ -260,189 +271,19 @@ int pulseq_get_raw_block_content_ids(
     return 1;
 }
 
-static void raw_extension_init(pulseq_raw_extension *re)
+int pulseq_block_trigger(const pulseq_file *seq, const pulseq_raw_block *raw)
 {
-    if (!re)
-        return;
-    memset(&re->labelset, 0, sizeof(re->labelset));
-    memset(&re->labelinc, 0, sizeof(re->labelinc));
-    re->flag.trid = -1;
-    re->flag.nav = -1;
-    re->flag.rev = -1;
-    re->flag.sms = -1;
-    re->flag.ref = -1;
-    re->flag.ima = -1;
-    re->flag.noise = -1;
-    re->flag.pmc = -1;
-    re->flag.norot = -1;
-    re->flag.nopos = -1;
-    re->flag.noscl = -1;
-    re->flag.once = -1;
-    re->rotation_index = -1;
-    re->rf_shim_index = -1;
-    re->trigger_index = -1;
-    re->soft_delay_index = -1;
-}
+    int i, type_idx, found = -1;
 
-void pulseq_get_raw_extension(
-    const pulseq_file *seq,
-    pulseq_raw_extension *re,
-    const pulseq_raw_block *raw)
-{
-    int i, type_idx, ref_idx, ext_type, label_value, label_id;
-
-    raw_extension_init(re);
-    if (!seq || !re || !raw)
-        return;
-    if (!seq->is_extensions_library_parsed || !seq->extension_lut)
-        return;
-
+    if (!seq || !raw || !seq->is_extensions_library_parsed || !seq->extension_lut)
+        return -1;
     for (i = 0; i < raw->ext_count; ++i)
     {
         type_idx = raw->ext[i][0];
-        ref_idx = raw->ext[i][1];
-        if (type_idx < 0 || type_idx > seq->extension_lut_size)
+        if (type_idx < 0 || type_idx > seq->extension_lut_size || raw->ext[i][1] < 0)
             continue;
-        ext_type = seq->extension_lut[type_idx];
-        if (ref_idx < 0)
-            continue;
-
-        switch (ext_type)
-        {
-        case PULSEQ_EXT_LABELSET:
-            if (seq->labelset_library && ref_idx < seq->labelset_library_size)
-            {
-                label_value = (int)seq->labelset_library[ref_idx][0];
-                label_id = (int)seq->labelset_library[ref_idx][1];
-                switch (label_id)
-                {
-                case PULSEQ_LABEL_SLC:
-                    re->labelset.slc = label_value;
-                    break;
-                case PULSEQ_LABEL_SEG:
-                    re->labelset.seg = label_value;
-                    break;
-                case PULSEQ_LABEL_REP:
-                    re->labelset.rep = label_value;
-                    break;
-                case PULSEQ_LABEL_AVG:
-                    re->labelset.avg = label_value;
-                    break;
-                case PULSEQ_LABEL_SET:
-                    re->labelset.set = label_value;
-                    break;
-                case PULSEQ_LABEL_ECO:
-                    re->labelset.eco = label_value;
-                    break;
-                case PULSEQ_LABEL_PHS:
-                    re->labelset.phs = label_value;
-                    break;
-                case PULSEQ_LABEL_LIN:
-                    re->labelset.lin = label_value;
-                    break;
-                case PULSEQ_LABEL_PAR:
-                    re->labelset.par = label_value;
-                    break;
-                case PULSEQ_LABEL_ACQ:
-                    re->labelset.acq = label_value;
-                    break;
-                case PULSEQ_LABEL_NAV:
-                    re->flag.nav = label_value;
-                    break;
-                case PULSEQ_LABEL_REV:
-                    re->flag.rev = label_value;
-                    break;
-                case PULSEQ_LABEL_SMS:
-                    re->flag.sms = label_value;
-                    break;
-                case PULSEQ_LABEL_REF:
-                    re->flag.ref = label_value;
-                    break;
-                case PULSEQ_LABEL_IMA:
-                    re->flag.ima = label_value;
-                    break;
-                case PULSEQ_LABEL_NOISE:
-                    re->flag.noise = label_value;
-                    break;
-                case PULSEQ_LABEL_PMC:
-                    re->flag.pmc = label_value;
-                    break;
-                case PULSEQ_LABEL_NOROT:
-                    re->flag.norot = label_value;
-                    break;
-                case PULSEQ_LABEL_NOPOS:
-                    re->flag.nopos = label_value;
-                    break;
-                case PULSEQ_LABEL_NOSCL:
-                    re->flag.noscl = label_value;
-                    break;
-                case PULSEQ_LABEL_ONCE:
-                    re->flag.once = label_value;
-                    break;
-                case PULSEQ_LABEL_TRID:
-                    re->flag.trid = label_value;
-                    break;
-                default:
-                    break;
-                }
-            }
-            break;
-        case PULSEQ_EXT_LABELINC:
-            if (seq->labelinc_library && ref_idx < seq->labelinc_library_size)
-            {
-                label_value = (int)seq->labelinc_library[ref_idx][0];
-                label_id = (int)seq->labelinc_library[ref_idx][1];
-                switch (label_id)
-                {
-                case PULSEQ_LABEL_SLC:
-                    re->labelinc.slc = label_value;
-                    break;
-                case PULSEQ_LABEL_SEG:
-                    re->labelinc.seg = label_value;
-                    break;
-                case PULSEQ_LABEL_REP:
-                    re->labelinc.rep = label_value;
-                    break;
-                case PULSEQ_LABEL_AVG:
-                    re->labelinc.avg = label_value;
-                    break;
-                case PULSEQ_LABEL_SET:
-                    re->labelinc.set = label_value;
-                    break;
-                case PULSEQ_LABEL_ECO:
-                    re->labelinc.eco = label_value;
-                    break;
-                case PULSEQ_LABEL_PHS:
-                    re->labelinc.phs = label_value;
-                    break;
-                case PULSEQ_LABEL_LIN:
-                    re->labelinc.lin = label_value;
-                    break;
-                case PULSEQ_LABEL_PAR:
-                    re->labelinc.par = label_value;
-                    break;
-                case PULSEQ_LABEL_ACQ:
-                    re->labelinc.acq = label_value;
-                    break;
-                default:
-                    break;
-                }
-            }
-            break;
-        case PULSEQ_EXT_ROTATION:
-            re->rotation_index = ref_idx;
-            break;
-        case PULSEQ_EXT_RF_SHIM:
-            re->rf_shim_index = ref_idx;
-            break;
-        case PULSEQ_EXT_TRIGGER:
-            re->trigger_index = ref_idx;
-            break;
-        case PULSEQ_EXT_DELAY:
-            re->soft_delay_index = ref_idx;
-            break;
-        default:
-            break;
-        }
+        if (seq->extension_lut[type_idx] == PULSEQ_EXT_TRIGGER)
+            found = raw->ext[i][1];
     }
+    return found;
 }

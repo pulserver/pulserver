@@ -33,6 +33,11 @@
  * and widest band's bandwidth, then one offset per band. */
 #define PULSEQ_RF_SPECTRUM_MAX_BANDS 8
 #define PULSEQ_RF_SPECTRUM_WIDTH (3 + PULSEQ_RF_SPECTRUM_MAX_BANDS)
+/* Columns of pulseq_file.block_flags: NOROT, NOPOS, PMC, NAV, TRID. */
+#define PULSEQ_BLOCK_FLAG_WIDTH 5
+/* Columns of pulseq_file.adc_labels: SLC, PHS, REP, AVG, SEG, SET, ECO, PAR,
+ * LIN, ACQ, OFF -- the label state a label_column_map indexes. */
+#define PULSEQ_ADC_LABEL_WIDTH 11
 
 /* ================================================================== */
 /*  RF use codes (the trailing e/r/i/s use tag on an RF library row)   */
@@ -52,8 +57,8 @@
 /* ================================================================== */
 /*  Extension type codes for a block's extension chain, and for any    */
 /*  extensions_library row written by an external raw-model producer.  */
-/*  These values are load-bearing wire values: pulseq_get_raw_block_-  */
-/*  content_ids() and pulseq_get_raw_extension() switch on them.       */
+/*  These values are load-bearing wire values: a file's extension_map  */
+/*  is indexed by them, and pulseq_block_trigger() switches on them.   */
 /* ================================================================== */
 #define PULSEQ_EXT_LIST 0
 #define PULSEQ_EXT_TRIGGER 1
@@ -68,9 +73,9 @@
 /*  Label / flag ids                                                  */
 /*                                                                    */
 /*  Numeric ids for the names appearing in a LABELSET / LABELINC row  */
-/*  (column 1).  Load-bearing wire values: pulseq_get_raw_extension() */
-/*  decodes against them, and any external producer of a pulseq_file  */
-/*  must be looked up by the name the file gives them.                */
+/*  (column 1).  Any external producer of a pulseq_file must look them */
+/*  up by the name the file gives them.  The label values a block      */
+/*  carries reach the conversion resolved, in block_flags/adc_labels.  */
 /* ================================================================== */
 #define PULSEQ_LABEL_SLC 1
 #define PULSEQ_LABEL_SEG 2
@@ -159,47 +164,6 @@ typedef struct pulseq_shape
 /*  Raw event types (one raw pulseq library entry, pre-dedup)          */
 /* ================================================================== */
 
-/** @brief The ten Pulseq counter labels carried by one block. */
-typedef struct pulseq_label_event
-{
-    int slc;
-    int seg;
-    int rep;
-    int avg;
-    int set;
-    int eco;
-    int phs;
-    int lin;
-    int par;
-    int acq;
-} pulseq_label_event;
-
-/** @brief Boolean flags (plus the two sticky ids) carried by one block. */
-typedef struct pulseq_flag_event
-{
-    /* TRID: a sticky int id, not a boolean.  Pulseq's own definition is
-     * "an integer ID of the TR (sequence segment) used by the GE interpreter
-     * (and some others) to optimize the execution on the scanner", and
-     * MATLAB's addTRID('fat_suppression') names the repeating units of a
-     * multi-contrast scan with it.  Pulserver reads it as exactly that: the
-     * safety group a block belongs to, so a hyper-TR made of several
-     * contrasts can be checked per contrast rather than as one 32-second
-     * lump.  It lives here rather than with the counters because
-     * LABELMAP_COUNTER's LABELINC-increment semantics do not apply to it. */
-    int trid;
-    int nav;
-    int rev;
-    int sms;
-    int ref;
-    int ima;
-    int noise;
-    int pmc;
-    int norot;
-    int nopos;
-    int noscl;
-    int once;
-} pulseq_flag_event;
-
 /**
  * @brief Digital trigger / physio event (raw TRIGGERS library entry, and
  * per-block resolved trigger).
@@ -239,22 +203,6 @@ typedef struct pulseq_raw_block
     int ext_count;
     int ext[PULSEQ_MAX_EXTENSIONS_PER_BLOCK][2];
 } pulseq_raw_block;
-
-/**
- * @brief Resolved extension chain for one block (labels/flags/rotation/
- * shim/trigger/soft-delay indices; rotation/shim/trigger/soft-delay are
- * indices into the owning pulseq_file's libraries, -1 if absent).
- */
-typedef struct pulseq_raw_extension
-{
-    pulseq_label_event labelset;
-    pulseq_label_event labelinc;
-    pulseq_flag_event flag;
-    int rotation_index;
-    int rf_shim_index;
-    int trigger_index;
-    int soft_delay_index;
-} pulseq_raw_extension;
 
 /* ================================================================== */
 /*  Sequence file                                                     */
@@ -313,6 +261,10 @@ typedef struct pulseq_reserved_definitions
      *  matrix; 0 when no VOPs were given. */
     PULSEQ_REAL vop_sar_ratio;
     PULSEQ_REAL vop_global_sar_ratio;
+    /** Computed by the host, not declared by the file: blocks per repetition,
+     *  counted from the first block, as pypulseqpp's Sequence.repetition
+     *  finds it; the whole table when the sequence does not repeat. */
+    int repetition_size;
 } pulseq_reserved_definitions;
 
 /** @brief One RF_SHIMS library entry (parallel-transmit channel weights). */
@@ -375,6 +327,20 @@ typedef struct pulseq_file
     int num_blocks;
     PULSEQ_REAL (*block_library)[7];
     int *block_ids;
+    /* Per block, as pypulseqpp gives them: the ROTATIONS and RF_SHIMS rows it
+     * plays, counted from 0 and -1 for none (Sequence.block_rotations and
+     * Sequence.block_shims); the NOROT, NOPOS, PMC, NAV and TRID values in
+     * force once its labels apply (Sequence.evaluate_labels, PMC starting at
+     * 1); and 1 where it sets TRID (Sequence.label_blocks). */
+    int *block_rotations;
+    int *block_shims;
+    int (*block_flags)[PULSEQ_BLOCK_FLAG_WIDTH];
+    int *block_trid_set;
+    /* Per acquiring block, in block order: the SLC, PHS, REP, AVG, SEG, SET,
+     * ECO, PAR, LIN, ACQ and OFF (0 or 1) values in force, as
+     * Sequence.evaluate_labels gives them. */
+    int num_adc_labels;
+    int (*adc_labels)[PULSEQ_ADC_LABEL_WIDTH];
     int is_rf_library_parsed;
     int rf_library_size;
     PULSEQ_REAL (*rf_library)[10];

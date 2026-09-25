@@ -107,6 +107,19 @@ py::list tr_groups(const pulseg_collection *coll, int subseq_idx)
     return out;
 }
 
+/* The label columns each readout of one subsequence records, in play order. */
+py::list readout_labels(const pulseg_collection *coll, int subseq_idx, const pulseg_subseq_info &s)
+{
+    py::list out;
+    std::vector<int> values((size_t)std::max(s.num_label_columns, 0));
+    for (int i = 0; i < s.num_adc_occurrences; ++i)
+    {
+        require(pulseg_get_adc_label(coll, values.data(), subseq_idx, i), "readout labels");
+        out.append(py::cast(values));
+    }
+    return out;
+}
+
 /* The flip angle and spectral statistics of each unique RF definition of one
  * subsequence. */
 py::list rf_statistics(const pulseg_collection *coll, int subseq_idx, int num_unique_rf)
@@ -154,6 +167,7 @@ py::dict summarize(const pulseg_collection *coll)
         entry["vop_global_sar_ratio"] = s.vop_global_sar_ratio;
         entry["tr_groups"] = tr_groups(coll, i);
         entry["rf"] = rf_statistics(coll, i, s.num_unique_rf);
+        entry["readout_labels"] = readout_labels(coll, i, s);
         subsequences.append(entry);
     }
 

@@ -107,7 +107,7 @@ def convert(
     seq_path = Path(seq_path)
     target = cache_path(seq_path, cache_ext)
     target.unlink(missing_ok=True)
-    payload = _payload(seq_path, verify_signature, fov_offset)
+    payload = _payload(seq_path, system, verify_signature, fov_offset)
     if sar_ratios is not None:
         if len(sar_ratios) != len(payload):
             raise ValueError(
@@ -150,6 +150,8 @@ def summary(
     over a dynamic pTx pulse's channels.
     ``vop_sar_ratio`` and ``vop_global_sar_ratio`` are those the cache was
     written with, zero when the chain is read and segmented again.
+    ``readout_labels`` lists, per readout in play order, the values of the
+    three labels ``label_column_map`` selects, as in force at that readout.
 
     With ``cache_ext``, the cache beside the file is loaded instead of the
     chain being read and segmented again; this build loads only vendor-neutral
@@ -163,7 +165,7 @@ def summary(
     seq_path = Path(seq_path)
     if cache_ext is None:
         return require("summary_from_libraries")(
-            _payload(seq_path, verify_signature=False),
+            _payload(seq_path, system, verify_signature=False),
             *_scanner(system),
             list(label_column_map),
         )
@@ -285,7 +287,10 @@ def play(
 
 
 def _payload(
-    seq_path: Path, verify_signature: bool, fov_offset: Sequence[float] | None = None
+    seq_path: Path,
+    system: pp.Opts,
+    verify_signature: bool,
+    fov_offset: Sequence[float] | None = None,
 ) -> list[dict[str, Any]]:
     """Read the chain and return each file's libraries, in play order, prescribed to ``fov_offset``.
 
@@ -300,5 +305,5 @@ def _payload(
     for _, sequence in chain_read:
         if fov_offset is not None:
             prescribe(sequence, fov_offset)
-        payload.append(conversion_payload(sequence))
+        payload.append(conversion_payload(sequence, system))
     return payload

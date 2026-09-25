@@ -40,11 +40,11 @@ extern "C"
         int block_index,
         int parse_extensions);
 
-    /** @brief Walk a block's extension chain into a resolved index set. */
-    void pulseq_get_raw_extension(
-        const pulseq_file *seq,
-        pulseq_raw_extension *ext,
-        const pulseq_raw_block *raw);
+    /**
+     * @brief The TRIGGERS row a block's extension chain names, counted from
+     * 0; the last one when it names several, -1 for none.
+     */
+    int pulseq_block_trigger(const pulseq_file *seq, const pulseq_raw_block *raw);
 
 #ifdef __cplusplus
 }

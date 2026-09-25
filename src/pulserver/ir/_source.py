@@ -3,17 +3,15 @@
 from __future__ import annotations
 
 __all__ = [
-    "BlockExtensions",
     "SequenceLibraries",
     "Shape",
     "SpecificationLibraries",
-    "block_extensions",
     "conversion_payload",
     "sequence_libraries",
     "specification_libraries",
 ]
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
@@ -40,32 +38,25 @@ _ARBITRARY = 1
 #: Bands an RF spectrum row has room for, as the cache stores them.
 MAX_BANDS = 8
 
-#: Labels that count a position in the scan, in the order Pulseq numbers them.
-COUNTER_LABELS = ("SLC", "SEG", "REP", "AVG", "SET", "ECO", "PHS", "LIN", "PAR", "ACQ")
+#: Flags the IR keeps per block, in the order of the payload's block_flags
+#: columns.
+_BLOCK_FLAGS = ("NOROT", "NOPOS", "PMC", "NAV", "TRID")
 
-#: Labels that state something about a block rather than counting one.
-FLAG_LABELS = (
-    "TRID",
-    "NAV",
-    "REV",
-    "SMS",
-    "REF",
-    "IMA",
-    "NOISE",
-    "PMC",
-    "NOROT",
-    "NOPOS",
-    "NOSCL",
-    "ONCE",
+#: Labels the IR records per readout, in the order of the converter's label
+#: state, which label_column_map indexes.
+_READOUT_LABELS = (
+    "SLC",
+    "PHS",
+    "REP",
+    "AVG",
+    "SEG",
+    "SET",
+    "ECO",
+    "PAR",
+    "LIN",
+    "ACQ",
+    "OFF",
 )
-
-#: Extension specification naming each kind of row a block can point at.
-_SPECIFICATIONS = {
-    "rotation": "ROTATIONS",
-    "rf_shim": "RF_SHIMS",
-    "trigger": "TRIGGERS",
-    "soft_delay": "DELAYS",
-}
 
 #: Label ids the raw library rows carry. Past ACQ these are the scanner
 #: converter's own numbering, which is not pypulseqpp's: a file names its
@@ -217,66 +208,6 @@ def sequence_libraries(sequence: Any) -> SequenceLibraries:
 
 
 @dataclass(frozen=True)
-class BlockExtensions:
-    """Per block, what its extension chain resolves to.
-
-    Attributes
-    ----------
-    labelset, labelinc : dict[str, NDArray[np.int32]]
-        One array per label of :data:`COUNTER_LABELS`, holding what the block
-        sets or increments it by. 0 where the block says nothing about it,
-        which is also what setting it to zero looks like.
-    flags : dict[str, NDArray[np.int32]]
-        One array per label of :data:`FLAG_LABELS`; -1 where the block states
-        none. ``TRID`` is an identifier rather than a flag and carries the
-        block's own value, not a running one.
-    rotation, rf_shim, trigger, soft_delay : NDArray[np.int32]
-        Row of that specification the block points at, counted from 0; -1 for
-        none.
-    """
-
-    labelset: dict[str, NDArray[np.int32]]
-    labelinc: dict[str, NDArray[np.int32]]
-    flags: dict[str, NDArray[np.int32]]
-    rotation: NDArray[np.int32]
-    rf_shim: NDArray[np.int32]
-    trigger: NDArray[np.int32]
-    soft_delay: NDArray[np.int32]
-
-
-def block_extensions(sequence: Any) -> BlockExtensions:
-    """Resolve every block's extension chain.
-
-    Each distinct chain is resolved once: blocks sharing a chain head resolve
-    to the same thing. A label outside :data:`COUNTER_LABELS` and
-    :data:`FLAG_LABELS` is not carried.
-    """
-    tables = _tables(sequence)
-    kinds = _declared_types(tables)
-    heads = tables.blocks[:, 5]
-    resolved = {0: _Chain()}
-    for head in {int(value) for value in heads} - {0}:
-        resolved[head] = _resolve(tables, head, kinds)
-
-    count = heads.size
-    labelset = {name: np.zeros(count, dtype=np.int32) for name in COUNTER_LABELS}
-    labelinc = {name: np.zeros(count, dtype=np.int32) for name in COUNTER_LABELS}
-    flags = {name: np.full(count, -1, dtype=np.int32) for name in FLAG_LABELS}
-    points = {name: np.full(count, -1, dtype=np.int32) for name in _SPECIFICATIONS}
-    for index, head in enumerate(heads):
-        chain = resolved[int(head)]
-        for name, value in chain.labelset.items():
-            labelset[name][index] = value
-        for name, value in chain.labelinc.items():
-            labelinc[name][index] = value
-        for name, value in chain.flags.items():
-            flags[name][index] = value
-        for name, value in chain.points.items():
-            points[name][index] = value
-    return BlockExtensions(labelset, labelinc, flags, **points)
-
-
-@dataclass(frozen=True)
 class SpecificationLibraries:
     """The specification tables of a sequence, indexed by its ids.
 
@@ -316,16 +247,33 @@ def specification_libraries(sequence: Any) -> SpecificationLibraries:
     return _specification_libraries(_tables(sequence))
 
 
-def conversion_payload(sequence: Any) -> dict[str, Any]:
+def conversion_payload(sequence: Any, system: pp.Opts) -> dict[str, Any]:
     """Everything one sequence file contributes to a conversion.
 
     The libraries, the specification tables and the chain rows that link a
     block to them, in the layout a parsed file holds: times in µs, fields of
     view in cm, rasters in µs. The chain rows are the sequence's own, and
     each block names the head of its chain.
+
+    RF and ADC frequency and phase offsets are absolute: the ppm offsets are
+    resolved at the gamma and B0 of ``system`` by
+    ``pypulseqpp.io.SequenceLibraries.absolute_offsets``, and the ppm columns
+    are zero. The repetition the conversion segments is the one
+    ``pypulseqpp.Sequence.repetition`` finds. Each block's rotation and shim,
+    the flags in force at it and the labels at each readout are pypulseqpp's
+    ``block_rotations``, ``block_shims``, ``evaluate_labels`` and
+    ``label_blocks``; the conversion reads the chain rows for triggers alone.
+
+    Raises
+    ------
+    ValueError
+        If pypulseqpp exports its tables in another layout, an ADC's phase
+        modulation has not one phase per sample, or the repetition does not
+        start at the first block.
     """
     tables = _tables(sequence)
     libraries = _sequence_libraries(sequence, tables)
+    _resolve_ppm(libraries, tables, system)
     specifications = _specification_libraries(tables)
     blocks = libraries.blocks.copy()
     rf, grad, adc, rf_use, rf_spectra, rf_flip_deg, rf_channels, rf_b1sq = _compact(
@@ -360,6 +308,7 @@ def conversion_payload(sequence: Any) -> dict[str, Any]:
             ),
             "vop_sar_ratio": 0.0,
             "vop_global_sar_ratio": 0.0,
+            "repetition_size": _repetition_size(sequence),
             "name": str(declared.get("Name", "")),
             "next_sequence": str(declared.get("NextSequence", "")),
         },
@@ -385,6 +334,7 @@ def conversion_payload(sequence: Any) -> dict[str, Any]:
         "labelinc": specifications.labelinc,
         "soft_delays": specifications.soft_delays,
         "rf_shims": list(specifications.rf_shims),
+        **_block_states(sequence, blocks),
     }
 
 
@@ -550,16 +500,6 @@ def _adc_library(tables: Any) -> NDArray[np.float64]:
     return rows
 
 
-@dataclass
-class _Chain:
-    """One extension chain, resolved."""
-
-    labelset: dict[str, int] = field(default_factory=dict)
-    labelinc: dict[str, int] = field(default_factory=dict)
-    flags: dict[str, int] = field(default_factory=dict)
-    points: dict[str, int] = field(default_factory=dict)
-
-
 def _declared_types(tables: Any) -> dict[str, int]:
     """Return the type number the sequence gives each specification; -1 for none."""
     return {name: tables.extension_types.get(name, -1) for name in _EXTENSION_KINDS}
@@ -578,39 +518,6 @@ def _links(extensions: NDArray[np.int32], head: int) -> list[tuple[int, int]]:
         kind, row, node = (int(value) for value in extensions[node - 1])
         links.append((kind, row))
     return links
-
-
-def _resolve(tables: Any, head: int, kinds: dict[str, int]) -> _Chain:
-    """Resolve one chain: the last row it names of each kind, and its labels in order."""
-    chain = _Chain()
-    links = _links(tables.extensions, head)
-    for name, specification in _SPECIFICATIONS.items():
-        referenced = [row for kind, row in links if kind == kinds[specification]]
-        if referenced:
-            # The chain names a 1-based row; the tables count from 0.
-            chain.points[name] = referenced[-1] - 1
-    labels = {
-        kinds["LABELSET"]: (
-            tables.label_set_values,
-            tables.label_set_labels,
-            chain.labelset,
-        ),
-        kinds["LABELINC"]: (
-            tables.label_inc_values,
-            tables.label_inc_labels,
-            chain.labelinc,
-        ),
-    }
-    for kind, row in links:
-        if kind < 0 or kind not in labels:
-            continue
-        values, names, target = labels[kind]
-        value, label = int(values[row - 1]), names[row - 1]
-        if label in FLAG_LABELS:
-            chain.flags[label] = value
-        elif label in COUNTER_LABELS:
-            target[label] = value
-    return chain
 
 
 def _specification_libraries(tables: Any) -> SpecificationLibraries:
@@ -656,6 +563,60 @@ def _label_rows(values: Any, labels: Any) -> NDArray[np.float64]:
     rows[:, 0] = values
     rows[:, 1] = [LABEL_IDS.get(label, -1) for label in labels]
     return rows
+
+
+def _block_states(
+    sequence: Any, blocks: NDArray[np.float64]
+) -> dict[str, NDArray[np.int32]]:
+    """Per block, the rows it plays and the flags in force; per readout, the labels.
+
+    ``block_rotations`` and ``block_shims`` count the ROTATIONS and RF_SHIMS
+    rows from 0, -1 for none. ``block_flags`` holds :data:`_BLOCK_FLAGS` and
+    ``adc_labels``, one row per acquiring block in block order,
+    :data:`_READOUT_LABELS`: the values in force once the block's own labels
+    apply, PMC starting at 1 and every other label at 0, with OFF as 0 or 1.
+    ``trid_set`` is 1 at a block that sets TRID, which is where a repetition of
+    that group starts even when it sets the value already in force.
+    """
+    count = blocks.shape[0]
+    start = dict.fromkeys((*_BLOCK_FLAGS, *_READOUT_LABELS), 0)
+    start["PMC"] = 1
+    found = sequence.evaluate_labels(init=start, evolution="blocks")
+    state = {
+        name: np.broadcast_to(np.asarray(found[name], dtype=np.int32), (count,))
+        for name in start
+    }
+    labels = np.stack([state[name] for name in _READOUT_LABELS], axis=1)
+    labels = labels[blocks[:, 5] > 0]
+    labels[:, -1] = labels[:, -1] != 0
+    trid_set = np.zeros(count, dtype=np.int32)
+    trid_set[np.asarray(sequence.label_blocks("TRID"), dtype=np.int64) - 1] = 1
+    return {
+        "block_rotations": np.asarray(sequence.block_rotations(), dtype=np.int32) - 1,
+        "block_shims": np.asarray(sequence.block_shims(), dtype=np.int32) - 1,
+        "block_flags": np.stack([state[name] for name in _BLOCK_FLAGS], axis=1),
+        "trid_set": trid_set,
+        "adc_labels": labels,
+    }
+
+
+def _repetition_size(sequence: Any) -> int:
+    size, start = sequence.repetition()
+    if start != 1:
+        raise ValueError(
+            f"the sequence repeats from block {start}; the IR segments a "
+            "repetition that starts at the first block"
+        )
+    return int(size)
+
+
+def _resolve_ppm(libraries: SequenceLibraries, tables: Any, system: pp.Opts) -> None:
+    """Fold the ppm offsets of the RF and ADC rows into their absolute offsets, in place."""
+    rf_offsets, adc_offsets = tables.absolute_offsets(system)
+    libraries.rf[:, 8:10] = rf_offsets
+    libraries.rf[:, 6:8] = 0.0
+    libraries.adc[:, 5:7] = adc_offsets
+    libraries.adc[:, 3:5] = 0.0
 
 
 def _compact(

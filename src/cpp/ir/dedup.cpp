@@ -133,17 +133,9 @@ int pulseg__deduplicate_int_rows(
 /*  RF dedup helpers                                                  */
 /* ================================================================== */
 
-static void build_rf_def_row(
-    const pulseq_file *seq,
-    int *row,
-    float *params,
-    int rf_idx,
-    const pulseg_opts *opts)
+static void build_rf_def_row(const pulseq_file *seq, int *row, float *params, int rf_idx)
 {
-    float gamma = opts->gamma_hz_per_t;
-    float b0 = opts->b0_t;
     float *rf = seq->rf_library[rf_idx];
-    float ppm_to_hz = 1e-6f * gamma * b0;
 
     row[0] = (int)rf[1]; /* mag shape id */
     row[1] = (int)rf[2]; /* phase shape id */
@@ -151,16 +143,15 @@ static void build_rf_def_row(
     row[3] = (int)rf[5]; /* delay */
     row[4] = (int)floor(rf[4] + 0.5f); /* centre (us) */
 
-    params[0] = rf[0];                     /* amplitude */
-    params[1] = rf[8] + ppm_to_hz * rf[6]; /* freq offset + ppm * freqPPM */
-    params[2] = rf[9] + ppm_to_hz * rf[7]; /* phase offset + ppm * phasePPM */
+    params[0] = rf[0]; /* amplitude */
+    params[1] = rf[8]; /* frequency offset, ppm resolved on the host (Hz) */
+    params[2] = rf[9]; /* phase offset, ppm resolved on the host (rad) */
 }
 
 static int deduplicate_rf_library(
     const pulseq_file *seq,
     pulseg_rf_definition *rf_defs,
-    pulseg_rf_table_element *rf_table,
-    const pulseg_opts *opts)
+    pulseg_rf_table_element *rf_table)
 {
     int(*int_rows)[RF_DEF_COLS] = NULL;
     float(*params)[RF_PARAMS_COLS] = NULL;
@@ -190,7 +181,7 @@ static int deduplicate_rf_library(
     }
 
     for (i = 0; i < num_rows; ++i)
-        build_rf_def_row(seq, int_rows[i], params[i], i, opts);
+        build_rf_def_row(seq, int_rows[i], params[i], i);
 
     num_unique = pulseg__deduplicate_int_rows(
         unique_defs,
@@ -333,30 +324,21 @@ static int deduplicate_grad_library(
 /*  ADC dedup helpers                                                 */
 /* ================================================================== */
 
-static void build_adc_def_row(
-    const pulseq_file *seq,
-    int *row,
-    float *params,
-    int adc_idx,
-    const pulseg_opts *opts)
+static void build_adc_def_row(const pulseq_file *seq, int *row, float *params, int adc_idx)
 {
-    float gamma = opts->gamma_hz_per_t;
-    float b0 = opts->b0_t;
     float *adc = seq->adc_library[adc_idx];
-    float ppm_to_hz = 1e-6f * gamma * b0;
 
-    row[0] = (int)adc[0];                    /* num_samples */
-    row[1] = (int)adc[1];                    /* dwell_time_ns */
-    row[2] = (int)adc[2];                    /* delay */
-    params[0] = adc[5] + ppm_to_hz * adc[3]; /* freq offset */
-    params[1] = adc[6] + ppm_to_hz * adc[4]; /* phase offset */
+    row[0] = (int)adc[0]; /* num_samples */
+    row[1] = (int)adc[1]; /* dwell_time_ns */
+    row[2] = (int)adc[2]; /* delay */
+    params[0] = adc[5];   /* frequency offset, ppm resolved on the host (Hz) */
+    params[1] = adc[6];   /* phase offset, ppm resolved on the host (rad) */
 }
 
 static int deduplicate_adc_library(
     const pulseq_file *seq,
     pulseg_adc_definition *adc_defs,
-    pulseg_adc_table_element *adc_table,
-    const pulseg_opts *opts)
+    pulseg_adc_table_element *adc_table)
 {
     int(*int_rows)[ADC_DEF_COLS] = NULL;
     float(*params)[ADC_PARAMS_COLS] = NULL;
@@ -386,7 +368,7 @@ static int deduplicate_adc_library(
     }
 
     for (i = 0; i < num_rows; ++i)
-        build_adc_def_row(seq, int_rows[i], params[i], i, opts);
+        build_adc_def_row(seq, int_rows[i], params[i], i);
 
     num_unique = pulseg__deduplicate_int_rows(
         unique_defs,
@@ -1630,15 +1612,13 @@ int pulseg__get_unique_blocks(
     int *def_map = NULL;
 
     pulseq_raw_block raw;
-    pulseq_raw_extension ext;
-    int norot_flag, nopos_flag, pmc_flag, nav_flag;
-    int trid;
 
     if (!seq || !desc)
         return PULSEG_ERR_INVALID_ARGUMENT;
 
     num_blocks = seq->num_blocks;
-    if (num_blocks <= 0 || !seq->block_library)
+    if (num_blocks <= 0 || !seq->block_library || !seq->block_rotations || !seq->block_shims ||
+        !seq->block_flags || !seq->block_trid_set)
         return PULSEG_ERR_INVALID_ARGUMENT;
 
     desc->num_unique_rfs = 0;
@@ -1736,7 +1716,7 @@ int pulseg__get_unique_blocks(
     /* ---- step 1: dedup event libraries ---- */
     if (seq->rf_library_size > 0)
     {
-        num_unique_rf = deduplicate_rf_library(seq, tmp_rf_defs, tmp_rf_tab, opts);
+        num_unique_rf = deduplicate_rf_library(seq, tmp_rf_defs, tmp_rf_tab);
         desc->num_unique_rfs = num_unique_rf;
         desc->rf_table_size = seq->rf_library_size;
         /* Neutral RF stats (flip angle, amplitudes, area, duration, isodelay,
@@ -1786,7 +1766,7 @@ int pulseg__get_unique_blocks(
     }
     if (seq->adc_library_size > 0)
     {
-        num_unique_adc = deduplicate_adc_library(seq, tmp_adc_defs, tmp_adc_tab, opts);
+        num_unique_adc = deduplicate_adc_library(seq, tmp_adc_defs, tmp_adc_tab);
         desc->num_unique_adcs = num_unique_adc;
         desc->adc_table_size = seq->adc_library_size;
     }
@@ -1797,12 +1777,6 @@ int pulseg__get_unique_blocks(
     event_table = (int *)PULSEG_ALLOC(num_blocks * sizeof(int));
     if (!int_rows || !unique_defs || !event_table)
         goto fail;
-
-    norot_flag = 0;
-    nopos_flag = 0;
-    pmc_flag = 1;
-    nav_flag = 0;
-    trid = 0;
 
     for (n = 0; n < num_blocks; ++n)
     {
@@ -1835,40 +1809,21 @@ int pulseg__get_unique_blocks(
             ? (int)(raw.block_duration * desc->block_raster_us)
             : -1;
 
-        if (raw.ext_count > 0 && seq->is_extensions_library_parsed && seq->extension_lut)
-        {
-            pulseq_get_raw_extension(seq, &ext, &raw);
-            tmp_blk_tab[n].rotation_id = ext.rotation_index;
-            tmp_blk_tab[n].digitalout_id = ext.trigger_index;
-            tmp_blk_tab[n].rf_shim_id = ext.rf_shim_index;
-            norot_flag = (ext.flag.norot >= 0) ? ext.flag.norot : norot_flag;
-            nopos_flag = (ext.flag.nopos >= 0) ? ext.flag.nopos : nopos_flag;
-            pmc_flag = (ext.flag.pmc >= 0) ? ext.flag.pmc : pmc_flag;
-            nav_flag = (ext.flag.nav >= 0) ? ext.flag.nav : nav_flag;
-            /* TRID: sticky (pulseq LABEL semantics) -- SET at a block
-             * persists until the next SET, exactly like norot/nopos/pmc/nav
-             * above. 0 = ungrouped (no TRID seen yet). trid_set marks the
-             * block carrying the label, which is where a repetition starts:
-             * an author re-SETs the same id at every one, so the sticky value
-             * alone does not say where one ends and the next begins. Both
-             * live on the per-occurrence block-table entry, never on the
-             * deduplicated block definition (int_rows/BLOCK_DEF_COLS above
-             * excludes them), so they have zero dedup footprint. */
-            trid = (ext.flag.trid >= 0) ? ext.flag.trid : trid;
-            tmp_blk_tab[n].trid_set = (ext.flag.trid >= 0) ? 1 : 0;
-        }
-        else
-        {
-            tmp_blk_tab[n].rotation_id = -1;
-            tmp_blk_tab[n].digitalout_id = -1;
-            tmp_blk_tab[n].rf_shim_id = -1;
-            tmp_blk_tab[n].trid_set = 0;
-        }
-        tmp_blk_tab[n].norot_flag = norot_flag;
-        tmp_blk_tab[n].nopos_flag = nopos_flag;
-        tmp_blk_tab[n].pmc_flag = pmc_flag;
-        tmp_blk_tab[n].nav_flag = nav_flag;
-        tmp_blk_tab[n].trid = trid;
+        tmp_blk_tab[n].rotation_id = seq->block_rotations[n];
+        tmp_blk_tab[n].rf_shim_id = seq->block_shims[n];
+        tmp_blk_tab[n].digitalout_id = pulseq_block_trigger(seq, &raw);
+        tmp_blk_tab[n].norot_flag = seq->block_flags[n][0];
+        tmp_blk_tab[n].nopos_flag = seq->block_flags[n][1];
+        tmp_blk_tab[n].pmc_flag = seq->block_flags[n][2];
+        tmp_blk_tab[n].nav_flag = seq->block_flags[n][3];
+        /* TRID is sticky: the group in force, 0 before any. trid_set marks
+         * the block that sets it, which is where a repetition starts: an
+         * author re-SETs the same id at every one, so the sticky value alone
+         * does not say where one ends and the next begins. Both live on the
+         * per-occurrence block-table entry, never on the deduplicated block
+         * definition, so they have no dedup footprint. */
+        tmp_blk_tab[n].trid = seq->block_flags[n][4];
+        tmp_blk_tab[n].trid_set = seq->block_trid_set[n];
     }
 
     /* step 3: dedup blocks */

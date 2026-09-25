@@ -65,24 +65,21 @@ def test_a_converted_cache_reads_back_as_the_sequence_it_came_from(name, tmp_pat
 
 def _designed(seq_path):
     """Each block of a chain as its files state it, in the units the scanner plays."""
-    hz_per_ppm = SYSTEM.gamma * SYSTEM.B0 * 1e-6
     rows = []
     for subsequence, (_, sequence) in enumerate(read_chain(seq_path)):
         for index in range(1, len(sequence) + 1):
             block = sequence.get_block(index)
             rf, adc = block.rf, block.adc
+            rf_offsets = _absolute(rf)
+            adc_offsets = _absolute(adc)
             gradients = [getattr(block, f"g{axis}") for axis in "xyz"]
             rows.append(
                 {
                     "subsequence": subsequence,
                     "duration_us": round(sequence.block_durations[index] * 1e6),
                     "rf_amp_hz": 0.0 if rf is None else np.abs(rf.signal).max(),
-                    "rf_freq_hz": 0.0
-                    if rf is None
-                    else rf.freq_offset + rf.freq_ppm * hz_per_ppm,
-                    "rf_phase_rad": 0.0
-                    if rf is None
-                    else rf.phase_offset + rf.phase_ppm * hz_per_ppm,
+                    "rf_freq_hz": rf_offsets[0],
+                    "rf_phase_rad": rf_offsets[1],
                     "rf_use": 0 if rf is None else RF_USES[rf.use],
                     "rf_delay_us": 0 if rf is None else round(rf.delay * 1e6),
                     "gradient_hz_per_m": [
@@ -90,18 +87,21 @@ def _designed(seq_path):
                     ],
                     "rotation": _matrix(block.rotation),
                     "adc": adc is not None,
-                    "adc_freq_hz": 0.0
-                    if adc is None
-                    else adc.freq_offset + adc.freq_ppm * hz_per_ppm,
-                    "adc_phase_rad": 0.0
-                    if adc is None
-                    else adc.phase_offset + adc.phase_ppm * hz_per_ppm,
+                    "adc_freq_hz": adc_offsets[0],
+                    "adc_phase_rad": adc_offsets[1],
                     "adc_delay_us": 0 if adc is None else round(adc.delay * 1e6),
                     "adc_dwell_ns": 0 if adc is None else round(adc.dwell * 1e9),
                     "adc_samples": 0 if adc is None else int(adc.num_samples),
                 }
             )
     return {key: np.array([row[key] for row in rows]) for key in rows[0]}
+
+
+def _absolute(event):
+    """An event's frequency and phase offsets at the scanner's field; zero without one."""
+    if event is None:
+        return 0.0, 0.0
+    return pp.calc_absolute_offsets(event, system=SYSTEM)
 
 
 def _matrix(rotation):
