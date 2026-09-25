@@ -315,6 +315,12 @@ void build_pulseq_file(pulseq_file &seq, const py::dict &libraries)
 
     seq.grad_library = rows<7>(libraries["grad"], seq.grad_library_size);
     seq.is_grad_library_parsed = 1;
+    {
+        int measured = 0;
+        seq.grad_statistics = rows<3>(libraries["grad_statistics"], measured);
+        if (measured != seq.grad_library_size)
+            throw std::invalid_argument("a gradient statistics table of the wrong length");
+    }
 
     seq.adc_library = rows<8>(libraries["adc"], seq.adc_library_size);
     seq.is_adc_library_parsed = 1;

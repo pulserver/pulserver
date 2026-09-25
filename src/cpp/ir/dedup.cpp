@@ -437,24 +437,6 @@ static int record_grad_shape_ids(
 }
 
 /* ================================================================== */
-/*  Waveform normalisation                                            */
-/* ================================================================== */
-
-static float normalize_waveform(float *waveform, int n)
-{
-    float max_abs;
-    int i;
-
-    max_abs = pulseg__get_max_abs_real(waveform, n);
-    if (max_abs > 1e-9f)
-    {
-        for (i = 0; i < n; ++i)
-            waveform[i] /= max_abs;
-    }
-    return max_abs;
-}
-
-/* ================================================================== */
 /*  Trapezoid statistics                                               */
 /* ================================================================== */
 
@@ -487,36 +469,6 @@ static void compute_trapezoid_stats(
 }
 
 /*
- * Integral of (dw/dt)^2 over a piecewise-linear normalised waveform -- the
- * second moment of S(f), by Parseval, and so the quantity that ranks
- * instances for PNS / mechanical resonance / SPL.  Exact for the
- * piecewise-linear reading the rest of this file uses: on each interval the
- * derivative is constant, so the integral is sum (dw)^2 / dt.
- *
- * @p time_us may be NULL, in which case the samples sit on a uniform raster.
- * Returned in 1/s (the waveform is dimensionless, the times are seconds).
- */
-static float grad_slew_energy(const float *w, const float *time_us, int n, float raster_us)
-{
-    float total = 0.0f;
-    float dt, dw;
-    int i;
-
-    if (!w || n < 2)
-        return 0.0f;
-
-    for (i = 1; i < n; ++i)
-    {
-        dt = (time_us ? (time_us[i] - time_us[i - 1]) : raster_us) * 1e-6f;
-        if (dt <= 0.0f)
-            continue;
-        dw = w[i] - w[i - 1];
-        total += dw * dw / dt;
-    }
-    return total;
-}
-
-/*
  * Keep @p cand if it scores higher than what @p best already holds.
  */
 static void grad_keep_best(pulseg_grad_representative *best, const pulseg_grad_representative *cand)
@@ -529,48 +481,23 @@ static void grad_keep_best(pulseg_grad_representative *best, const pulseg_grad_r
 /*  Gradient statistics                                               */
 /* ================================================================== */
 
-/* The record a structure-only file writes for a gradient shape it carries
- * without samples: two equal values opening a run of length -1.5, which no
- * run-length decoder accepts, then the first sample, the last sample and
- * the peak magnitude. */
-#define GRAD_SHAPE_STUB_LENGTH 6
-
-static int grad_shape_is_stub(const pulseq_shape *shape)
-{
-    return shape->samples != NULL && shape->num_samples == GRAD_SHAPE_STUB_LENGTH &&
-        shape->num_uncompressed_samples > GRAD_SHAPE_STUB_LENGTH && shape->samples[0] == 0.0f &&
-        shape->samples[1] == 0.0f && shape->samples[2] == -1.5f;
-}
-
 static int compute_grad_stats(
     const pulseq_file *seq,
     pulseg_sequence_descriptor *desc,
     pulseg_grad_definition *grad_defs,
     int num_unique,
     const pulseg_grad_table_element *grad_table,
-    int grad_table_size,
-    const pulseg_opts *opts)
+    int grad_table_size)
 {
-    int def_idx, i, row, num_samples, has_time;
-    int grad_type, time_id, shape_id;
+    int def_idx, i, row, grad_type, shape_id;
     float rise_us, flat_us, fall_us, abs_amp;
-    float grad_raster_us;
     float slew_energy, amp2;
     pulseg_grad_representative cand;
-    pulseq_shape decomp_wave, decomp_time;
-    float *waveform = NULL;
-    float *sq_wave = NULL;
-    float *time_us = NULL;
     int *shape_def_seen = NULL;
     pulseg_grad_definition *gd;
 
     if (!seq || !grad_defs || num_unique <= 0)
         return PULSEG_SUCCESS;
-
-    if (seq->reserved_definitions_library.gradient_raster_time > 0.0f)
-        grad_raster_us = seq->reserved_definitions_library.gradient_raster_time;
-    else
-        grad_raster_us = opts->grad_raster_us;
 
     /* Which definition last visited each shape: the distinct-shape walk
      * below must skip repeats without scanning the rows already walked,
@@ -613,13 +540,6 @@ static int compute_grad_stats(
             desc->grad_shape_energy[i] = 0.0f;
         }
     }
-
-    decomp_wave.num_samples = 0;
-    decomp_wave.num_uncompressed_samples = 0;
-    decomp_wave.samples = NULL;
-    decomp_time.num_samples = 0;
-    decomp_time.num_uncompressed_samples = 0;
-    decomp_time.samples = NULL;
 
     for (def_idx = 0; def_idx < num_unique; ++def_idx)
     {
@@ -687,239 +607,77 @@ static int compute_grad_stats(
 
             cand.score = amp2 * slew_energy;
             grad_keep_best(&gd->spectral, &cand);
+            continue;
         }
-        else
+
+        /* An arbitrary gradient: each of this definition's distinct shapes,
+         * enumerated from the instance table, since one definition covers
+         * every shape of its sample count.  The statistics are pypulseqpp's,
+         * measured on the waveform the event plays (seq->grad_statistics),
+         * over the amplitude that plays it, so they belong to the normalised
+         * shape; the edge values are the ones the library row stores. */
+        for (row = 0; row < grad_table_size; ++row)
         {
-            time_id = gd->unused_or_time_shape_id;
-            time_us = NULL;
-            has_time = 0;
-            if (time_id > 0 && time_id <= seq->shapes_library_size)
+            float amplitude;
+            const PULSEQ_REAL *measured;
+
+            if (!grad_table || grad_table[row].id != def_idx)
+                continue;
+            shape_id = grad_table[row].shape_id;
+            if (shape_id <= 0 || shape_id > seq->shapes_library_size)
+                continue;
+            if (shape_def_seen && shape_def_seen[shape_id - 1] == def_idx)
+                continue;
+            if (shape_def_seen)
+                shape_def_seen[shape_id - 1] = def_idx;
+
+            cand.first_value = 0.0f;
+            cand.last_value = 0.0f;
+            cand.slew_rate = 0.0f;
+            cand.energy = 0.0f;
+            slew_energy = 0.0f;
+            amplitude = (float)seq->grad_library[row][1];
+            if (amplitude > 1e-9f || amplitude < -1e-9f)
             {
-                if (!pulseq_decompress_shape(
-                        &decomp_time,
-                        &seq->shapes_library[time_id - 1],
-                        grad_raster_us))
-                    goto fail;
-                time_us =
-                    (float *)PULSEG_ALLOC(decomp_time.num_uncompressed_samples * sizeof(float));
-                if (!time_us)
-                    goto fail;
-                for (i = 0; i < decomp_time.num_uncompressed_samples; ++i)
-                    time_us[i] = decomp_time.samples[i];
-                has_time = 1;
-                PULSEG_FREE(decomp_time.samples);
-                decomp_time.samples = NULL;
+                abs_amp = amplitude < 0.0f ? -amplitude : amplitude;
+                cand.first_value = (float)seq->grad_library[row][2] / amplitude;
+                cand.last_value = (float)seq->grad_library[row][3] / amplitude;
+                if (seq->grad_statistics)
+                {
+                    measured = seq->grad_statistics[row];
+                    cand.slew_rate = (float)measured[0] / abs_amp;
+                    cand.energy = (float)(measured[1] / ((double)abs_amp * abs_amp));
+                    slew_energy = (float)(measured[2] / ((double)abs_amp * abs_amp));
+                }
             }
-
-            /* Enumerate this definition's distinct shapes straight from the
-             * instance table: with no per-definition list there is nothing to
-             * cap, and a shape seen twice is skipped by the scan below. */
-            for (row = 0; row < grad_table_size; ++row)
+            if (desc && desc->grad_shape_first && shape_id <= desc->num_grad_shape_stats)
             {
-                int seen;
-                const pulseq_shape *stored;
-                const PULSEQ_REAL *w;
-                float peak;
-
-                if (!grad_table || grad_table[row].id != def_idx)
-                    continue;
-                shape_id = grad_table[row].shape_id;
-                if (shape_id <= 0 || shape_id > seq->shapes_library_size)
-                    continue;
-                seen = (shape_def_seen && shape_def_seen[shape_id - 1] == def_idx);
-                if (seen)
-                    continue;
-                if (shape_def_seen)
-                    shape_def_seen[shape_id - 1] = def_idx;
-
-                /* A shape stored uncompressed is read where it lies; only a
-                 * run-length-coded one is expanded into a buffer of its own. */
-                stored = &seq->shapes_library[shape_id - 1];
-                if (opts->structure_only && grad_shape_is_stub(stored))
-                {
-                    /* A shape carried for structure alone: first sample,
-                     * last sample and peak magnitude, normalised as the
-                     * sweep below normalises them; the statistics that
-                     * need the waveform stay at zero. */
-                    float p;
-
-                    p = (stored->samples[5] > 1e-9f) ? stored->samples[5] : 1.0f;
-                    peak = p;
-                    cand.first_value = stored->samples[3] / p;
-                    cand.last_value = stored->samples[4] / p;
-                    cand.slew_rate = 0.0f;
-                    cand.energy = 0.0f;
-                    slew_energy = 0.0f;
-                    num_samples = stored->num_uncompressed_samples;
-                    goto stats_ready;
-                }
-                if (stored->num_samples == stored->num_uncompressed_samples && stored->samples)
-                {
-                    w = stored->samples;
-                    num_samples = stored->num_samples;
-                }
-                else
-                {
-                    if (!pulseq_decompress_shape(&decomp_wave, stored, 1.0f))
-                        goto fail;
-                    w = decomp_wave.samples;
-                    num_samples = decomp_wave.num_uncompressed_samples;
-                }
-
-                if (!has_time && num_samples >= 2)
-                {
-                    /* The uniform shape's statistics in one pass over the
-                     * decompressed samples, the peak normalisation applied
-                     * analytically afterwards: every stat of w/p is the raw
-                     * stat scaled by 1/p (1/p^2 for the quadratic ones), so
-                     * no normalised copy and no squared copy is ever built. */
-                    double tz_sq, dsq;
-                    float w_prev, w_cur, max_abs, max_dabs, a, d, p;
-
-                    w_prev = (float)w[0];
-                    max_abs = w_prev < 0.0f ? -w_prev : w_prev;
-                    max_dabs = 0.0f;
-                    tz_sq = 0.0;
-                    dsq = 0.0;
-                    for (i = 1; i < num_samples; ++i)
-                    {
-                        w_cur = (float)w[i];
-                        a = w_cur < 0.0f ? -w_cur : w_cur;
-                        if (a > max_abs)
-                            max_abs = a;
-                        d = w_cur - w_prev;
-                        if (d < 0.0f)
-                            d = -d;
-                        if (d > max_dabs)
-                            max_dabs = d;
-                        tz_sq += 0.5 * ((double)w_prev * w_prev + (double)w_cur * w_cur);
-                        dsq += (double)(w_cur - w_prev) * (double)(w_cur - w_prev);
-                        w_prev = w_cur;
-                    }
-
-                    p = (max_abs > 1e-9f) ? max_abs : 1.0f;
-                    peak = p;
-                    cand.first_value = (float)w[0] / p;
-                    cand.last_value = (float)w[num_samples - 1] / p;
-                    cand.slew_rate = (max_dabs / p) / grad_raster_us * 1e6f;
-                    cand.energy = (float)(tz_sq / ((double)p * p)) * grad_raster_us * 1e-6f;
-                    slew_energy = (float)(dsq / ((double)p * p) / ((double)grad_raster_us * 1e-6));
-                }
-                else
-                {
-                    waveform = (float *)PULSEG_ALLOC(num_samples * sizeof(float));
-                    sq_wave = (float *)PULSEG_ALLOC(num_samples * sizeof(float));
-                    if (!waveform || !sq_wave)
-                        goto fail;
-
-                    for (i = 0; i < num_samples; ++i)
-                        waveform[i] = w[i];
-                    peak = normalize_waveform(waveform, num_samples);
-                    if (!(peak > 1e-9f))
-                        peak = 1.0f;
-
-                    for (i = 0; i < num_samples; ++i)
-                        sq_wave[i] = waveform[i] * waveform[i];
-
-                    cand.first_value = waveform[0];
-                    cand.last_value = waveform[num_samples - 1];
-                    if (has_time && time_us)
-                    {
-                        cand.slew_rate =
-                            pulseg__max_slew_real_nonuniform(waveform, time_us, num_samples);
-                        cand.energy = pulseg__trapz_real_nonuniform(sq_wave, time_us, num_samples);
-                    }
-                    else
-                    {
-                        cand.slew_rate =
-                            pulseg__max_slew_real_uniform(waveform, num_samples, grad_raster_us);
-                        cand.energy =
-                            pulseg__trapz_real_uniform(sq_wave, num_samples, grad_raster_us);
-                    }
-                    cand.slew_rate *= 1e6f;
-                    cand.energy *= 1e-6f;
-                    slew_energy = grad_slew_energy(
-                        waveform,
-                        has_time ? time_us : NULL,
-                        num_samples,
-                        grad_raster_us);
-
-                    PULSEG_FREE(waveform);
-                    waveform = NULL;
-                    PULSEG_FREE(sq_wave);
-                    sq_wave = NULL;
-                }
-
-            stats_ready:
-                /* The values at the event's edges are the ones its library row
-                 * stores. A uniform shape's samples sit half a raster inside
-                 * the event, so its end samples differ from them by up to
-                 * slew x raster / 2. */
-                {
-                    const float scale = (float)seq->grad_library[row][1] * peak;
-                    if (scale > 1e-9f || scale < -1e-9f)
-                    {
-                        cand.first_value = (float)seq->grad_library[row][2] / scale;
-                        cand.last_value = (float)seq->grad_library[row][3] / scale;
-                    }
-                }
-                if (desc && desc->grad_shape_first && shape_id <= desc->num_grad_shape_stats)
-                {
-                    desc->grad_shape_first[shape_id - 1] = cand.first_value;
-                    desc->grad_shape_last[shape_id - 1] = cand.last_value;
-                }
-                {
-                    float fv = cand.first_value < 0.0f ? -cand.first_value : cand.first_value;
-                    float lv = cand.last_value < 0.0f ? -cand.last_value : cand.last_value;
-                    if (fv > gd->any.max_abs_first)
-                        gd->any.max_abs_first = fv;
-                    if (lv > gd->any.max_abs_last)
-                        gd->any.max_abs_last = lv;
-                }
-                if (cand.slew_rate > gd->any.max_slew_rate)
-                    gd->any.max_slew_rate = cand.slew_rate;
-                if (desc && desc->grad_shape_slew && shape_id <= desc->num_grad_shape_stats)
-                    desc->grad_shape_slew[shape_id - 1] = cand.slew_rate;
-                if (desc && desc->grad_shape_energy && shape_id <= desc->num_grad_shape_stats)
-                    desc->grad_shape_energy[shape_id - 1] = cand.energy;
-
-                cand.shape_id = shape_id;
-                cand.amplitude = gd->any.max_amplitude;
-                amp2 = cand.amplitude * cand.amplitude;
-
-                cand.score = amp2 * slew_energy;
-                grad_keep_best(&gd->spectral, &cand);
-
-                if (decomp_wave.samples)
-                    PULSEG_FREE(decomp_wave.samples);
-                decomp_wave.samples = NULL;
+                desc->grad_shape_first[shape_id - 1] = cand.first_value;
+                desc->grad_shape_last[shape_id - 1] = cand.last_value;
+                desc->grad_shape_slew[shape_id - 1] = cand.slew_rate;
+                desc->grad_shape_energy[shape_id - 1] = cand.energy;
             }
-
-            if (time_us)
             {
-                PULSEG_FREE(time_us);
-                time_us = NULL;
+                float fv = cand.first_value < 0.0f ? -cand.first_value : cand.first_value;
+                float lv = cand.last_value < 0.0f ? -cand.last_value : cand.last_value;
+                if (fv > gd->any.max_abs_first)
+                    gd->any.max_abs_first = fv;
+                if (lv > gd->any.max_abs_last)
+                    gd->any.max_abs_last = lv;
             }
+            if (cand.slew_rate > gd->any.max_slew_rate)
+                gd->any.max_slew_rate = cand.slew_rate;
+
+            cand.shape_id = shape_id;
+            cand.amplitude = gd->any.max_amplitude;
+            amp2 = cand.amplitude * cand.amplitude;
+            cand.score = amp2 * slew_energy;
+            grad_keep_best(&gd->spectral, &cand);
         }
     }
     if (shape_def_seen)
         PULSEG_FREE(shape_def_seen);
     return PULSEG_SUCCESS;
-
-fail:
-    if (shape_def_seen)
-        PULSEG_FREE(shape_def_seen);
-    if (waveform)
-        PULSEG_FREE(waveform);
-    if (sq_wave)
-        PULSEG_FREE(sq_wave);
-    if (time_us)
-        PULSEG_FREE(time_us);
-    if (decomp_wave.samples)
-        PULSEG_FREE(decomp_wave.samples);
-    if (decomp_time.samples)
-        PULSEG_FREE(decomp_time.samples);
-    return PULSEG_ERR_ALLOC_FAILED;
 }
 
 /* ================================================================== */
@@ -1751,13 +1509,7 @@ int pulseg__get_unique_blocks(
         }
 
         rc = compute_grad_stats(
-            seq,
-            desc,
-            tmp_grad_defs,
-            num_unique_grad,
-            tmp_grad_tab,
-            seq->grad_library_size,
-            opts);
+            seq, desc, tmp_grad_defs, num_unique_grad, tmp_grad_tab, seq->grad_library_size);
         if (PULSEG_FAILED(rc))
         {
             result = rc;

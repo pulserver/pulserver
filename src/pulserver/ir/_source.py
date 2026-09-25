@@ -175,6 +175,11 @@ class SequenceLibraries:
         rise, flat and fall times in µs, delay in µs. An arbitrary gradient
         (1): amplitude in Hz/m, the waveform's first and last values in Hz/m,
         the waveform and time shape ids, delay in µs.
+    grad_statistics : NDArray[np.float64]
+        ``(G, 3)``: the steepest slew rate in Hz/m/s, and the integrals of the
+        squared gradient in (Hz/m)^2 s and of the squared slew rate in
+        (Hz/m/s)^2 s, of the waveform each row plays, as
+        ``pypulseqpp.Sequence.gradient_statistics`` measures them.
     adc : NDArray[np.float64]
         ``(A, 8)``: sample count; dwell in ns; delay in µs; the frequency and
         phase ppm offsets; the frequency offset in Hz; the phase offset in
@@ -191,6 +196,7 @@ class SequenceLibraries:
     rf_channels: NDArray[np.int32]
     rf_b1sq_integral: NDArray[np.float64]
     grad: NDArray[np.float64]
+    grad_statistics: NDArray[np.float64]
     adc: NDArray[np.float64]
     shapes: tuple[Shape, ...]
 
@@ -277,9 +283,17 @@ def conversion_payload(sequence: Any, system: pp.Opts) -> dict[str, Any]:
     _resolve_ppm(libraries, tables, system)
     specifications = _specification_libraries(tables)
     blocks = libraries.blocks.copy()
-    rf, grad, adc, rf_use, rf_spectra, rf_flip_deg, rf_channels, rf_b1sq = _compact(
-        blocks, libraries
-    )
+    (
+        rf,
+        grad,
+        grad_statistics,
+        adc,
+        rf_use,
+        rf_spectra,
+        rf_flip_deg,
+        rf_channels,
+        rf_b1sq,
+    ) = _compact(blocks, libraries)
     declared = sequence.definitions
 
     return {
@@ -322,6 +336,7 @@ def conversion_payload(sequence: Any, system: pp.Opts) -> dict[str, Any]:
         "rf_channels": rf_channels,
         "rf_b1sq_integral": rf_b1sq,
         "grad": grad,
+        "grad_statistics": grad_statistics,
         "adc": adc,
         "shapes": [
             (shape.num_uncompressed_samples, shape.samples)
@@ -364,6 +379,10 @@ def _sequence_libraries(sequence: Any, tables: Any) -> SequenceLibraries:
     shapes = _ShapeTable(tables.shapes)
     rf, rf_use, rf_spectra, rf_b1sq = _rf_library(sequence, tables, blocks)
     grad = _grad_library(tables, shapes)
+    measured = sequence.gradient_statistics()
+    grad_statistics = np.stack(
+        (measured.peak_slew, measured.energy, measured.slew_energy), axis=1
+    ).reshape(-1, 3)
     adc = _adc_library(tables)
     return SequenceLibraries(
         blocks,
@@ -374,6 +393,7 @@ def _sequence_libraries(sequence: Any, tables: Any) -> SequenceLibraries:
         np.asarray(sequence.rf_channels(), dtype=np.int32),
         rf_b1sq,
         grad,
+        grad_statistics,
         adc,
         shapes.entries(),
     )
@@ -642,6 +662,7 @@ def _compact(
     """
     rf, rf_map = _played(libraries.rf, blocks, (1,))
     grad, grad_map = _played(libraries.grad, blocks, (2, 3, 4))
+    grad_statistics, _ = _played(libraries.grad_statistics, blocks, (2, 3, 4))
     adc, adc_map = _played(libraries.adc, blocks, (5,))
     played_rf = [old - 1 for old in sorted(rf_map, key=rf_map.get)]
     uses = np.array([libraries.rf_use[row] for row in played_rf], dtype=np.int32)
@@ -654,7 +675,7 @@ def _compact(
             blocks[:, column] = [
                 mapping.get(int(value), 0) for value in blocks[:, column]
             ]
-    return rf, grad, adc, uses, spectra, flips, channels, integrals
+    return rf, grad, grad_statistics, adc, uses, spectra, flips, channels, integrals
 
 
 def _played(

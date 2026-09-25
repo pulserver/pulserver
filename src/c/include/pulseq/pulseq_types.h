@@ -367,6 +367,11 @@ typedef struct pulseq_file
     int is_grad_library_parsed;
     int grad_library_size;
     PULSEQ_REAL (*grad_library)[7];
+    /* Per gradient event, as pypulseqpp's Sequence.gradient_statistics
+     * measures the waveform it plays: the steepest slew rate, in Hz/m/s, and
+     * the integrals of the squared gradient, in (Hz/m)^2 s, and of the
+     * squared slew rate, in (Hz/m/s)^2 s. */
+    PULSEQ_REAL (*grad_statistics)[3];
     int is_adc_library_parsed;
     int adc_library_size;
     PULSEQ_REAL (*adc_library)[8];
