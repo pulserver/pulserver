@@ -127,7 +127,16 @@ repetition.
 The limits and rasters of the scanner (`pypulseqpp.Opts`) are those under which
 the scan is segmented. A segment boundary falls where every gradient is zero,
 judged by the first and last values each arbitrary gradient's library row
-stores for the event's edges; a trapezoid starts and ends at zero. The
+stores for the event's edges; a trapezoid starts and ends at zero. A segment
+is prepared from the RF and gradient definitions of the blocks of one
+repetition; a block instance sets only their amplitudes, frequency and phase
+offsets, rotation and gradient shape. Every repetition that plays a segment
+therefore plays the same RF and gradient definitions at each position, and the
+same ADC definition wherever it acquires. A repetition that plays other
+definitions, such as a pulse of its own per shot in a repetition pypulseqpp
+finds by block duration and the channels played, or that digitises with other
+ADC events, plays a segment of its own; a segment with more than 64 such
+variants of either kind is refused. The
 spectral statistics are measured by pypulseqpp's
 `calc_rf_bandwidth` when the chain is read, with the Pulseq recipe of the width
 at half the spectral peak; a band is a run of the spectrum above 30 % of its

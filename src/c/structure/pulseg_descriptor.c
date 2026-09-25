@@ -38,7 +38,11 @@ int pulseg__rf_event_use(const pulseg_rf_definition *rdef, const pulseg_rf_table
                                                   : PULSEG_RF_USE_EXCITATION;
 }
 
-int pulseg__block_defs_structurally_equal(
+/* Two block definitions play the same RF and gradient definitions for the
+ * same duration, and differ at most in the ADC definition.  A prepared segment
+ * position is built from one definition's pulses, so only such definitions
+ * may share it; which readout it digitises with is refined per repetition. */
+int pulseg__block_defs_play_same_pulses(
     const pulseg_sequence_descriptor *desc,
     int id_a,
     int id_b)
@@ -56,19 +60,8 @@ int pulseg__block_defs_structurally_equal(
     a = &desc->base_blocks[id_a];
     b = &desc->base_blocks[id_b];
 
-    if (a->duration_us != b->duration_us)
-        return 0;
-    if ((a->rf_id >= 0) != (b->rf_id >= 0))
-        return 0;
-    if ((a->gx_id >= 0) != (b->gx_id >= 0))
-        return 0;
-    if ((a->gy_id >= 0) != (b->gy_id >= 0))
-        return 0;
-    if ((a->gz_id >= 0) != (b->gz_id >= 0))
-        return 0;
-    if ((a->adc_id >= 0) != (b->adc_id >= 0))
-        return 0;
-    return 1;
+    return a->duration_us == b->duration_us && a->rf_id == b->rf_id && a->gx_id == b->gx_id &&
+           a->gy_id == b->gy_id && a->gz_id == b->gz_id && (a->adc_id >= 0) == (b->adc_id >= 0);
 }
 
 /* ================================================================== */

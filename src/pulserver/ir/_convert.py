@@ -294,6 +294,9 @@ def play(
     ------
     ValueError
         If the cache cannot be loaded.
+    RuntimeError
+        With ``waveforms``, if a block's gradient holds another number of
+        samples than the segment position it plays at is prepared with.
     """
     seq_path = Path(seq_path)
     return require("play_cache")(

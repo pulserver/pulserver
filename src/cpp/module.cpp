@@ -238,7 +238,9 @@ float recorded_rf_centre_us(
  * block's start, and the instance's amplitude times its normalised waveform.
  * A waveform on the gradient raster is sampled at the middle of each raster
  * interval; over the half intervals at its ends it holds its end values,
- * which keeps the area its samples give. */
+ * which keeps the area its samples give. The instance's shape is played in
+ * the waveform its segment position is prepared with, so the two must hold
+ * as many samples. */
 void played_gradient(
     const pulseg_collection *coll,
     int axis,
@@ -252,6 +254,11 @@ void played_gradient(
         pulseg_get_cursor_grad_waveform(coll, axis, &shape.samples, &time.samples);
     if (samples < 0)
         throw std::runtime_error("cannot read the gradient a block plays");
+    if (samples != std::max(b.grad_num_samples[axis], 0))
+        throw std::runtime_error(
+            "a block plays a gradient of " + std::to_string(samples) +
+            " samples at a segment position prepared for " +
+            std::to_string(std::max(b.grad_num_samples[axis], 0)));
     if (samples == 0)
         return;
     const float *t = time.samples;

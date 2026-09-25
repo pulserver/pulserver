@@ -435,6 +435,9 @@ static int check_rf_shim_periodicity(
  *
  *   For each contiguous group of entries sharing the same seg_id,
  *   position within the group gives the position within the segment.
+ *   An entry that acquires nothing may stand at a position whose definition
+ *   plays the same pulses with a readout; any other difference is refused,
+ *   because the position is prepared from its own definition's pulses.
  */
 static int check_exec_stream_segments(
     const pulseg_sequence_descriptor *desc,
@@ -446,7 +449,7 @@ static int check_exec_stream_segments(
     const pulseg_base_block *bdef_actual;
     const pulseg_base_block *bdef_expected;
     int both_pure_delay;
-    int structural_match;
+    int same_pulses;
 
     prev_seg_id = -2; /* impossible value to force reset */
     pos_in_seg = 0;
@@ -497,7 +500,7 @@ static int check_exec_stream_segments(
         expected_id = seg->unique_block_indices[pos_in_seg];
 
         both_pure_delay = 0;
-        structural_match = 0;
+        same_pulses = 0;
         if (bdef_id >= 0 && bdef_id < desc->num_unique_blocks && expected_id >= 0 &&
             expected_id < desc->num_unique_blocks)
         {
@@ -510,14 +513,14 @@ static int check_exec_stream_segments(
                                bdef_expected->gz_id == -1 && bdef_expected->adc_id == -1)
                 ? 1
                 : 0;
-            if (!both_pure_delay)
+            if (!both_pure_delay && desc->block_table[bt_idx].adc_id < 0)
             {
-                structural_match =
-                    pulseg__block_defs_structurally_equal(desc, bdef_id, expected_id);
+                same_pulses =
+                    pulseg__block_defs_play_same_pulses(desc, bdef_id, expected_id);
             }
         }
 
-        if (bdef_id != expected_id && !both_pure_delay && !structural_match)
+        if (bdef_id != expected_id && !both_pure_delay && !same_pulses)
         {
             if (diag)
             {

@@ -762,7 +762,7 @@ float pulseg__grad_instance_energy(
  * @return rise/3 + flat + fall/3, converted to seconds.
  */
 float pulseg__trap_energy(float rise_us, float flat_us, float fall_us);
-int pulseg__block_defs_structurally_equal(
+int pulseg__block_defs_play_same_pulses(
     const pulseg_sequence_descriptor *desc,
     int id_a,
     int id_b);

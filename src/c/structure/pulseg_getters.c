@@ -1980,10 +1980,7 @@ float **pulseg_get_grad_amplitude(
 
     /* Resolve through the frozen representative (max-energy) instance record
      * so that the grad_definition (and thus the set of shot waveforms)
-     * matches the actual physical block at that instance.  This is necessary
-     * when different segment instances have gradients with different
-     * time_shape_ids, which places them in separate grad_definitions despite
-     * occupying the same segment position. */
+     * matches the actual physical block at that instance. */
     grad_id = resolve_grad_def_via_max_energy_instance(desc, seg, local_blk, axis);
     if (grad_id < 0)
         return NULL;
