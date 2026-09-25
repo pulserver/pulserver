@@ -81,15 +81,9 @@ class DesignIntake:
                 bundle = self.rfile.read(length)
                 held = (intake.store.directory(design) / MANIFEST).is_file()
                 try:
-                    received = intake.store.receive(bundle)
+                    intake.store.receive(bundle, design)
                 except ValueError as error:
                     self._answer(HTTPStatus.BAD_REQUEST, str(error))
-                    return
-                if received != design:
-                    self._answer(
-                        HTTPStatus.BAD_REQUEST,
-                        f"the bundle holds design {received}, not {design}",
-                    )
                     return
                 _log.info("received design %s", design)
                 self._answer(HTTPStatus.OK if held else HTTPStatus.CREATED)

@@ -76,11 +76,12 @@ When the design calls and the proxy run on different computers, the proxy
 reads either a store both can reach or a store of its own, which its design
 intake fills with the designs the calls push ({class}`~pulserver.vre.DesignIntake`).
 A pushed design is carried as a bundle of the files of its directory, and the
-intake stores it only when the manifest's identifier is that of the manifest's
-identity and every file has the SHA-256 the manifest records, so the two
-stores hold the same files under the same identifier. A design is pushed before
-its identifier is replied, and a design that cannot be pushed fails the call,
-so the interpreter plays no design the proxy's store lacks.
+intake stores it only when the manifest's identity is a SHA-256, its identifier
+is that of the identity and the one the push names, and every file has the
+SHA-256 the manifest records, so the two stores hold the same files under the
+same identifier. A design is pushed before its identifier is replied, and a
+design that cannot be pushed fails the call, so the interpreter plays no design
+the proxy's store lacks.
 
 ## See also
 

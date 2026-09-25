@@ -135,6 +135,25 @@ def test_a_bundle_whose_manifest_names_another_identifier_is_refused(host, tmp_p
         DesignStore(tmp_path / "other").receive(bundle)
 
 
+@pytest.mark.parametrize("identity", ["../escaped", "../../escaped", "/escaped"])
+def test_a_manifest_naming_a_path_places_nothing_outside_the_store(tmp_path, identity):
+    content = b"a sequence"
+    manifest = {
+        "identity": identity,
+        "id": identity[:18],
+        "files": {"sequence.seq": hashlib.sha256(content).hexdigest()},
+    }
+    bundle = _tar(
+        [("manifest.json", json.dumps(manifest).encode()), ("sequence.seq", content)]
+    )
+    store = DesignStore(tmp_path / "a" / "store")
+    with pytest.raises(ValueError, match="names no design"):
+        store.receive(bundle)
+    assert not any(store.root.iterdir())
+    assert not (tmp_path / "a" / "escaped").exists()
+    assert not (tmp_path / "escaped").exists()
+
+
 def test_bytes_that_are_not_a_bundle_are_refused(tmp_path):
     with pytest.raises(ValueError, match="cannot be read"):
         DesignStore(tmp_path / "store").receive(b"not a tar")
@@ -167,6 +186,7 @@ def test_the_intake_refuses_a_bundle_under_another_design_identifier(host, intak
     status, text = _put(intake, other, host.pack(design))
     assert status == 400
     assert f"holds design {design}, not {other}" in text
+    assert not intake.store.directory(design).exists()
 
 
 def test_the_intake_refuses_a_tampered_bundle_with_the_reason(host, intake):

@@ -6,6 +6,7 @@ import hashlib
 import io
 import json
 import os
+import re
 import shutil
 import tarfile
 import tempfile
@@ -21,6 +22,8 @@ ID_DIGITS = 18
 MANIFEST = "manifest.json"
 #: Largest bundle a store receives, in bytes, compressed or not.
 BUNDLE_LIMIT = 1 << 31
+# What design_identity returns; nothing else names a design directory.
+_IDENTITY = re.compile(r"[0-9a-f]{64}")
 # A stage older than this is left by a process that ended mid-design.
 _STALE_STAGE = 3600.0
 
@@ -147,19 +150,20 @@ class DesignStore:
                 bundle.add(path, arcname=path.name, recursive=False)
         return buffer.getvalue()
 
-    def receive(self, bundle: bytes) -> str:
+    def receive(self, bundle: bytes, design: str | None = None) -> str:
         """Store a bundle :meth:`pack` made, after checking it; return its identifier.
 
-        The bundle's manifest must name the identifier of its identity, every
+        The bundle's manifest must name a SHA-256 identity and the identifier
+        of that identity, which must be ``design`` when one is given; every
         file must be one the manifest records, with the SHA-256 it records, and
-        a symbolic link must name a file of the bundle. A design already stored
-        is kept.
+        a symbolic link must name a file of the bundle. Nothing is written
+        before these checks pass. A design already stored is kept.
 
         Raises
         ------
         ValueError
-            If the bundle is not a design :meth:`pack` makes, or a file
-            differs from its manifest.
+            If the bundle is not a design :meth:`pack` makes, is not
+            ``design``, or a file differs from its manifest.
         """
         files, links = _read_bundle(bundle)
         try:
@@ -167,8 +171,16 @@ class DesignStore:
         except (KeyError, ValueError):
             raise ValueError("the bundle holds no manifest") from None
         identity = manifest.get("identity")
-        if not isinstance(identity, str) or manifest.get("id") != design_id(identity):
+        if (
+            not isinstance(identity, str)
+            or not _IDENTITY.fullmatch(identity)
+            or manifest.get("id") != design_id(identity)
+        ):
             raise ValueError("the bundle's manifest names no design")
+        if design is not None and design_id(identity) != design:
+            raise ValueError(
+                f"the bundle holds design {design_id(identity)}, not {design}"
+            )
         recorded = manifest.get("files")
         if not isinstance(recorded, dict) or set(recorded) != set(files) - {MANIFEST}:
             raise ValueError("the bundle's files are not those its manifest records")
