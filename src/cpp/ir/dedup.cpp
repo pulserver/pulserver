@@ -27,7 +27,7 @@ extern "C"
 /* ================================================================== */
 /*  File-scope constants                                              */
 /* ================================================================== */
-#define RF_DEF_COLS 4
+#define RF_DEF_COLS 5
 #define RF_PARAMS_COLS 3
 #define GRAD_DEF_COLS 6
 #define ADC_DEF_COLS 3
@@ -149,6 +149,7 @@ static void build_rf_def_row(
     row[1] = (int)rf[2]; /* phase shape id */
     row[2] = (int)rf[3]; /* time shape id */
     row[3] = (int)rf[5]; /* delay */
+    row[4] = (int)floor(rf[4] + 0.5f); /* centre (us) */
 
     params[0] = rf[0];                     /* amplitude */
     params[1] = rf[8] + ppm_to_hz * rf[6]; /* freq offset + ppm * freqPPM */
@@ -989,9 +990,8 @@ static int compute_rf_stats(
     float *rf_im_uniform = NULL;
     int num_samples, num_uniform, num_real;
     int mag_id, phase_id, time_id;
-    int has_phase, has_time;
-    int first, last;
-    float max_mag, duration, time_center, rf_raster_us;
+    int has_phase, has_time, on_raster;
+    float max_mag, duration, last_us, time_center, rf_raster_us;
     pulseg_rf_definition *rd;
 
 
@@ -1022,8 +1022,6 @@ static int compute_rf_stats(
     for (def_idx = 0; def_idx < num_unique; ++def_idx)
     {
         rd = &rf_defs[def_idx];
-        first = -1;
-        last = -1;
 
         rd->stats.num_samples = 0;
         rd->stats.flip_angle_rad = 0.0f;
@@ -1189,6 +1187,7 @@ static int compute_rf_stats(
             PULSEG_FREE(decomp_time.samples);
             decomp_time.samples = NULL;
         }
+        on_raster = !has_time;
         if (!has_time)
         {
             time_us = (float *)PULSEG_ALLOC(num_samples * sizeof(float));
@@ -1201,29 +1200,19 @@ static int compute_rf_stats(
             has_time = 1;
         }
 
-        duration =
-            (has_time && num_samples > 0) ? time_us[num_samples - 1] : (num_samples * rf_raster_us);
+        /* The shape duration, as pypulseqpp counts it: the samples on the RF
+         * raster, or the last sample time rounded up onto the raster. */
+        last_us = (num_samples > 0) ? time_us[num_samples - 1] : 0.0f;
+        if (on_raster)
+            duration = (float)num_samples * rf_raster_us;
+        else
+            duration = (float)(ceil((double)last_us / rf_raster_us - 1e-6) * rf_raster_us);
         rd->stats.duration_us = duration;
 
-        /* find peak indices for isodelay */
+        /* The isodelay is counted from the centre the design records, which
+         * the definition is keyed on. */
         max_mag = pulseg__get_max_abs_real(magnitude, num_samples);
-        for (i = 0; i < num_samples; ++i)
-        {
-            if ((float)fabs(magnitude[i]) >= 0.99999f * max_mag)
-            {
-                if (first < 0)
-                    first = i;
-                last = i;
-            }
-        }
-        if (first < 0)
-        {
-            first = 0;
-            last = 0;
-        }
-
-        time_center = (has_time && time_us) ? 0.5f * (time_us[first] + time_us[last])
-                                            : 0.5f * ((float)(first + last)) * rf_raster_us;
+        time_center = seq->rf_library[rd->id][4];
         rd->stats.isodelay_us = (int)(duration - time_center);
 
         /* normalise */
@@ -1253,8 +1242,8 @@ static int compute_rf_stats(
             }
         }
 
-        /* uniform grid */
-        num_uniform = (int)(duration / rf_raster_us) + 1;
+        /* uniform grid, from the first raster point to the last sample */
+        num_uniform = (int)(last_us / rf_raster_us) + 1;
         if (num_uniform < 2)
             num_uniform = 2;
 

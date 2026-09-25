@@ -160,8 +160,9 @@ extern "C"
     /**
      * @brief Return the RF isocenter time (us) relative to segment start.
      *
-     * Looks up the segment timing RF anchor matching @p blk_idx.
-     * Returns -1.0f if the block has no RF anchor.
+     * The block's start, its RF delay and the centre its design records:
+     * duration_us less isodelay_us of the RF definition.
+     * Returns -1.0f if the block has no RF event.
      */
     float pulseg_get_rf_isocenter_us(const pulseg_collection *coll, int seg_idx, int blk_idx);
 

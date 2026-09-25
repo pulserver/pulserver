@@ -126,6 +126,23 @@ def test_every_spiral_interleave_plays_its_own_gradient_shape(tmp_path):
     assert len(shapes) > 1
 
 
+def test_the_scanner_plays_an_rf_pulse_at_the_centre_its_design_records(tmp_path):
+    """A centre away from the magnitude peak is the one the cache carries."""
+    rf = pp.make_slr_pulse(np.pi / 2, duration=2e-3, center_pos=0.3, system=SYSTEM)
+    seq = pp.Sequence(SYSTEM)
+    seq.add_block(rf)
+    seq.add_block(pp.make_delay(1e-3))
+    path = tmp_path / "scan.seq"
+    seq.write(str(path))
+    ir.convert(path, SYSTEM)
+    played = ir.play(path, waveforms=True)
+    peak = float(np.asarray(rf.t)[np.argmax(np.abs(np.asarray(rf.signal)))])
+    assert abs(peak - rf.center) > 1e-4
+    assert played["rf_center_us"][0] == pytest.approx(
+        1e6 * (rf.delay + rf.center), abs=1e-3
+    )
+
+
 @pytest.mark.parametrize("application", [Gre2DApp, Se2DApp])
 def test_an_object_at_the_prescribed_offset_is_acquired_centred(application, tmp_path):
     seq = tmp_path / "scan.seq"

@@ -198,46 +198,14 @@ struct Waveform
     ~Waveform() { PULSEG_FREE(samples); }
 };
 
-struct Waveforms
+/* The RF centre the cache records, from the block's start, in us. */
+float recorded_rf_centre_us(
+    const pulseg_collection *coll, int seg, int blk, const pulseg_block_info &b)
 {
-    float **shots = nullptr;
-    int count = 0;
-    ~Waveforms()
-    {
-        if (shots == nullptr)
-            return;
-        for (int i = 0; i < count; ++i)
-            PULSEG_FREE(shots[i]);
-        PULSEG_FREE(shots);
-    }
-};
-
-/* The time, from the block's start, of the RF waveform's magnitude peak: the
- * middle of the samples within a part in 1e5 of the largest. NaN when the
- * waveform cannot be read. */
-float rf_peak_us(const pulseg_collection *coll, int seg, int blk, const pulseg_block_info &b)
-{
-    Waveforms magnitude;
-    int samples = 0;
-    magnitude.shots = pulseg_get_rf_magnitude(coll, &magnitude.count, &samples, seg, blk);
-    Waveform time;
-    time.samples = pulseg_get_rf_time_us(coll, seg, blk);
-    if (magnitude.shots == nullptr || magnitude.count < 1 || samples < 1 ||
-        magnitude.shots[0] == nullptr || time.samples == nullptr)
+    const float isocentre = pulseg_get_rf_isocenter_us(coll, seg, blk);
+    if (isocentre < 0.0f)
         return std::numeric_limits<float>::quiet_NaN();
-    const float *m = magnitude.shots[0];
-    float peak = 0.0f;
-    for (int i = 0; i < samples; ++i)
-        peak = std::max(peak, std::fabs(m[i]));
-    int first = -1, last = -1;
-    for (int i = 0; i < samples; ++i)
-        if (std::fabs(m[i]) >= 0.99999f * peak)
-        {
-            if (first < 0)
-                first = i;
-            last = i;
-        }
-    return static_cast<float>(b.rf_delay_us) + 0.5f * (time.samples[first] + time.samples[last]);
+    return isocentre - static_cast<float>(b.start_time_us);
 }
 
 /* Append one axis of the block at the cursor: its corners, timed from the
@@ -343,7 +311,7 @@ py::dict play(pulseg_collection *coll, bool waveforms)
         if (!waveforms)
             continue;
         rf_centre_us.push_back(
-            b.has_rf ? rf_peak_us(coll, info.segment_id, position, b)
+            b.has_rf ? recorded_rf_centre_us(coll, info.segment_id, position, b)
                      : std::numeric_limits<float>::quiet_NaN());
         for (int axis = 0; axis < 3; ++axis)
         {
