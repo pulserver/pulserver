@@ -132,6 +132,16 @@ def test_a_single_readout_sees_the_labels_in_force_at_it():
     assert table.labels["LIN"].tolist() == [3]
 
 
+def test_a_sequence_without_readouts_tabulates_none_and_no_labels():
+    seq = pp.Sequence(pp.Opts())
+    seq.add_block(pp.make_label("LIN", "SET", 2), pp.make_delay(1e-3))
+
+    table = ReadoutTable.from_sequence(seq)
+
+    assert table.block.size == 0
+    assert table.labels == {}
+
+
 def test_the_echo_index_is_the_design_centre_sample():
     seq, table = fixture("gre_2d_3sl.seq")
     design = int(np.atleast_1d(seq.get_definition("kSpaceCenterSample"))[0])
