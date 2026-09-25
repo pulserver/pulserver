@@ -156,28 +156,6 @@ static void build_rf_def_row(
     params[2] = rf[9] + ppm_to_hz * rf[7]; /* phase offset + ppm * phasePPM */
 }
 
-/* The transmit channels a pulse's time shape describes: a dynamic pTx pulse
- * holds its channels one after another over one time base, so the count is
- * the number of samples at the first time, accepted only when the times are
- * that many identical copies (pypulseqpp's channels.hpp states the same rule);
- * anything else is one channel. */
-static int rf_channels(const PULSEQ_REAL *times, int count)
-{
-    int copies = 0;
-    int per_channel, i;
-
-    for (i = 0; i < count; ++i)
-        if (times[i] == times[0])
-            ++copies;
-    if (copies < 2 || count % copies != 0)
-        return 1;
-    per_channel = count / copies;
-    for (i = per_channel; i < count; ++i)
-        if (times[i] != times[i - per_channel])
-            return 1;
-    return copies;
-}
-
 static int deduplicate_rf_library(
     const pulseq_file *seq,
     pulseg_rf_definition *rf_defs,
@@ -223,28 +201,14 @@ static int deduplicate_rf_library(
 
     for (i = 0; i < num_unique; ++i)
     {
-        int time_id;
         rf_defs[i].id = unique_defs[i];
         rf_defs[i].mag_shape_id = int_rows[unique_defs[i]][0];
         rf_defs[i].phase_shape_id = int_rows[unique_defs[i]][1];
         rf_defs[i].time_shape_id = int_rows[unique_defs[i]][2];
         rf_defs[i].delay = int_rows[unique_defs[i]][3];
-        rf_defs[i].num_channels = 1;
-
-        time_id = rf_defs[i].time_shape_id;
-        if (time_id > 0 && time_id <= seq->shapes_library_size)
-        {
-            pulseq_shape decomp;
-            decomp.num_samples = 0;
-            decomp.num_uncompressed_samples = 0;
-            decomp.samples = NULL;
-            if (pulseq_decompress_shape(&decomp, &seq->shapes_library[time_id - 1], 1.0f))
-            {
-                rf_defs[i].num_channels =
-                    rf_channels(decomp.samples, decomp.num_uncompressed_samples);
-                PULSEG_FREE(decomp.samples);
-            }
-        }
+        /* pypulseqpp counts the channels; the time shape is keyed above, so
+         * every row of a definition holds as many. */
+        rf_defs[i].num_channels = seq->rf_channels ? seq->rf_channels[unique_defs[i]] : 1;
     }
     for (i = 0; i < num_rows; ++i)
     {
@@ -1044,7 +1008,8 @@ static int compute_rf_stats(
                 rd->stats.band_freq_offsets_hz[bi] = 0.0f;
         }
 
-        /* max amplitude from table */
+        /* The largest amplitude any event of the definition plays, and the
+         * flip angle pypulseqpp gives that event. */
         if (rf_table && rf_table_size > 0)
         {
             for (i = 0; i < rf_table_size; ++i)
@@ -1052,6 +1017,12 @@ static int compute_rf_stats(
                 if (rf_table[i].id == def_idx)
                 {
                     float amp = (float)fabs(rf_table[i].amplitude);
+                    if (seq->rf_flip_deg)
+                    {
+                        float flip = (float)(seq->rf_flip_deg[i] * M_PI / 180.0);
+                        if (flip > rd->stats.flip_angle_rad)
+                            rd->stats.flip_angle_rad = flip;
+                    }
                     if (amp > rd->stats.base_amplitude_hz)
                         rd->stats.base_amplitude_hz = amp;
                 }
@@ -1266,17 +1237,16 @@ static int compute_rf_stats(
             rf_im,
             num_samples);
 
-        /* Compute signed complex integral once — used for both area and flip_angle.
+        /* The signed integral of the envelope, for the area.
          * Trapezoidal rule on the NATIVE (un-interpolated) time grid. */
         {
-            double dre = 0.0, dim = 0.0;
+            double dre = 0.0;
             if (has_time && time_us && num_samples >= 2)
             {
                 for (i = 0; i < num_samples - 1; ++i)
                 {
                     double dt = ((double)time_us[i + 1] - (double)time_us[i]) * 1e-6;
                     dre += 0.5 * dt * ((double)rf_re[i] + (double)rf_re[i + 1]);
-                    dim += 0.5 * dt * ((double)rf_im[i] + (double)rf_im[i + 1]);
                 }
             }
             else
@@ -1286,18 +1256,10 @@ static int compute_rf_stats(
                 for (i = 0; i < num_samples - 1; ++i)
                 {
                     dre += 0.5 * dt * ((double)rf_re[i] + (double)rf_re[i + 1]);
-                    dim += 0.5 * dt * ((double)rf_im[i] + (double)rf_im[i + 1]);
                 }
             }
             /* area = signed real part = ∫h_norm dt [s] */
             sum_signed = (float)dre;
-
-            /* flip angle = γ|∫B1 dt| [rad]; stored in flip_angle_rad */
-            {
-                double mag_d = sqrt(dre * dre + dim * dim);
-                rd->stats.flip_angle_rad =
-                    (float)(2.0 * 3.14159265358979323846 * (double)rd->stats.base_amplitude_hz * mag_d); /* radians */
-            }
         }
         /* b1sq power (neutral) still needs the uniform-grid envelope. */
         sum_sq = 0.0f;

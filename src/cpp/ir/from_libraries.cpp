@@ -57,6 +57,22 @@ int *integers(const py::object &value, int count)
     return out;
 }
 
+PULSEQ_REAL *reals(const py::object &value, int count)
+{
+    const auto array = value.cast<Rows>();
+    if (static_cast<int>(array.size()) != count)
+        throw std::invalid_argument("a real column of the wrong length");
+    if (count == 0)
+        return nullptr;
+    auto *out = static_cast<PULSEQ_REAL *>(PULSEQ_ALLOC(sizeof(PULSEQ_REAL) * (size_t)count));
+    if (!out)
+        throw std::bad_alloc();
+    const double *data = array.data();
+    for (int i = 0; i < count; ++i)
+        out[i] = static_cast<PULSEQ_REAL>(data[i]);
+    return out;
+}
+
 void copy_name(char *destination, size_t size, const std::string &name)
 {
     const size_t length = name.size() < size - 1 ? name.size() : size - 1;
@@ -246,6 +262,8 @@ void build_pulseq_file(pulseq_file &seq, const py::dict &libraries)
 
     seq.rf_library = rows<10>(libraries["rf"], seq.rf_library_size);
     seq.rf_use_tags = integers(libraries["rf_use"], seq.rf_library_size);
+    seq.rf_flip_deg = reals(libraries["rf_flip_deg"], seq.rf_library_size);
+    seq.rf_channels = integers(libraries["rf_channels"], seq.rf_library_size);
     seq.is_rf_library_parsed = 1;
     {
         int spectra = 0;

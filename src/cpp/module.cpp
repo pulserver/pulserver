@@ -107,8 +107,9 @@ py::list tr_groups(const pulseg_collection *coll, int subseq_idx)
     return out;
 }
 
-/* The spectral statistics of each unique RF definition of one subsequence. */
-py::list rf_spectra(const pulseg_collection *coll, int subseq_idx, int num_unique_rf)
+/* The flip angle and spectral statistics of each unique RF definition of one
+ * subsequence. */
+py::list rf_statistics(const pulseg_collection *coll, int subseq_idx, int num_unique_rf)
 {
     py::list out;
     for (int i = 0; i < num_unique_rf; ++i)
@@ -120,6 +121,7 @@ py::list rf_spectra(const pulseg_collection *coll, int subseq_idx, int num_uniqu
         for (int b = 0; b < bands; ++b)
             offsets.append(stats.band_freq_offsets_hz[b]);
         py::dict entry;
+        entry["flip_angle_deg"] = stats.flip_angle_rad * 180.0 / M_PI;
         entry["bandwidth_hz"] = stats.bandwidth_hz;
         entry["num_bands"] = stats.num_bands;
         entry["band_freq_offsets_hz"] = offsets;
@@ -150,7 +152,7 @@ py::dict summarize(const pulseg_collection *coll)
         entry["vop_sar_ratio"] = s.vop_sar_ratio;
         entry["vop_global_sar_ratio"] = s.vop_global_sar_ratio;
         entry["tr_groups"] = tr_groups(coll, i);
-        entry["rf"] = rf_spectra(coll, i, s.num_unique_rf);
+        entry["rf"] = rf_statistics(coll, i, s.num_unique_rf);
         subsequences.append(entry);
     }
 

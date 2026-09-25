@@ -43,8 +43,9 @@ _RF, _ADC, _COLUMNS = 1, 5, 7
 def read_chain(path: Path | str, *, verify: bool = False) -> list[tuple[Path, Any]]:
     """Read a sequence file and every file its ``NextSequence`` definitions name, in play order.
 
-    A ``NextSequence`` name is relative to the directory of the file naming it.
-    Each file is read by ``pypulseqpp.io.read``, onto a system built from it.
+    ``pypulseqpp.io.read_chain``, with the use of every pulse a file leaves
+    unlabelled detected by pypulseqpp's rule, so that the cache, the
+    enrichment and the virtual scanner take one use for each pulse.
 
     Parameters
     ----------
@@ -67,22 +68,7 @@ def read_chain(path: Path | str, *, verify: bool = False) -> list[tuple[Path, An
     """
     import pypulseqpp as pp
 
-    chain: list[tuple[Path, Any]] = []
-    played: set[Path] = set()
-    current = Path(path)
-    while True:
-        if not current.is_file():
-            raise FileNotFoundError(f"sequence chain file not found: {current}")
-        resolved = current.resolve()
-        if resolved in played:
-            raise ValueError(f"the NextSequence chain returns to {current}")
-        played.add(resolved)
-        seq = pp.io.read(current, verify=verify)
-        chain.append((current, seq))
-        following = seq.get_definition("NextSequence")
-        if following in ("", None):
-            return chain
-        current = current.parent / str(following)
+    return pp.io.read_chain(path, detect_rf_use=True, verify=verify)
 
 
 @dataclass(frozen=True)

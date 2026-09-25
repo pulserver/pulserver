@@ -168,6 +168,12 @@ class SequenceLibraries:
         bandwidth in Hz, then each band's offset from the carrier in Hz, as
         ``pypulseqpp.calc_rf_bandwidth`` measures them; unused offsets are 0,
         and so is every row no block plays.
+    rf_flip_deg : NDArray[np.float64]
+        ``(R,)``: each row's flip angle in degrees, as
+        ``pypulseqpp.Sequence.rf_flip_angles`` gives it.
+    rf_channels : NDArray[np.int32]
+        ``(R,)``: the transmit channels each row holds, as
+        ``pypulseqpp.Sequence.rf_channels`` counts them.
     grad : NDArray[np.float64]
         ``(G, 7)``, by type in column 0. A trapezoid (0): amplitude in Hz/m,
         rise, flat and fall times in µs, delay in µs. An arbitrary gradient
@@ -185,6 +191,8 @@ class SequenceLibraries:
     rf: NDArray[np.float64]
     rf_use: NDArray[np.int32]
     rf_spectra: NDArray[np.float64]
+    rf_flip_deg: NDArray[np.float64]
+    rf_channels: NDArray[np.int32]
     grad: NDArray[np.float64]
     adc: NDArray[np.float64]
     shapes: tuple[Shape, ...]
@@ -314,7 +322,9 @@ def conversion_payload(sequence: Any) -> dict[str, Any]:
     libraries = _sequence_libraries(sequence, tables)
     specifications = _specification_libraries(tables)
     blocks = libraries.blocks.copy()
-    rf, grad, adc, rf_use, rf_spectra = _compact(blocks, libraries)
+    rf, grad, adc, rf_use, rf_spectra, rf_flip_deg, rf_channels = _compact(
+        blocks, libraries
+    )
     declared = sequence.definitions
 
     return {
@@ -352,6 +362,8 @@ def conversion_payload(sequence: Any) -> dict[str, Any]:
         "rf": rf,
         "rf_use": rf_use,
         "rf_spectra": rf_spectra,
+        "rf_flip_deg": rf_flip_deg,
+        "rf_channels": rf_channels,
         "grad": grad,
         "adc": adc,
         "shapes": [
@@ -396,7 +408,15 @@ def _sequence_libraries(sequence: Any, tables: Any) -> SequenceLibraries:
     grad = _grad_library(tables, shapes)
     adc = _adc_library(tables)
     return SequenceLibraries(
-        blocks, rf, rf_use, rf_spectra, grad, adc, shapes.entries()
+        blocks,
+        rf,
+        rf_use,
+        rf_spectra,
+        np.asarray(sequence.rf_flip_angles(), dtype=np.float64),
+        np.asarray(sequence.rf_channels(), dtype=np.int32),
+        grad,
+        adc,
+        shapes.entries(),
     )
 
 
@@ -615,7 +635,7 @@ def _label_rows(values: Any, labels: Any) -> NDArray[np.float64]:
 
 def _compact(
     blocks: NDArray[np.float64], libraries: SequenceLibraries
-) -> tuple[Any, Any, Any, Any, Any]:
+) -> tuple[Any, ...]:
     """Drop the library rows no block plays, renumbering the block table in place.
 
     A row no block plays would deduplicate into a definition of its own that
@@ -628,12 +648,14 @@ def _compact(
     played_rf = [old - 1 for old in sorted(rf_map, key=rf_map.get)]
     uses = np.array([libraries.rf_use[row] for row in played_rf], dtype=np.int32)
     spectra = libraries.rf_spectra[played_rf]
+    flips = libraries.rf_flip_deg[played_rf]
+    channels = libraries.rf_channels[played_rf]
     for columns, mapping in (((1,), rf_map), ((2, 3, 4), grad_map), ((5,), adc_map)):
         for column in columns:
             blocks[:, column] = [
                 mapping.get(int(value), 0) for value in blocks[:, column]
             ]
-    return rf, grad, adc, uses, spectra
+    return rf, grad, adc, uses, spectra, flips, channels
 
 
 def _played(
