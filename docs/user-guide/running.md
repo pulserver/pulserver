@@ -62,8 +62,10 @@ design returns its identifier without designing again.
 ### Limits
 
 The limits file holds a `[Limits]` block, one `name: value` per line between
-`[Limits]` and `[Limits End]`: keyword arguments of `pypulseqpp.Opts`, plus
-three optional options for the IR conversion:
+`[Limits]` and `[Limits End]`. The lines are keyword arguments of
+`pypulseqpp.Opts`, of which `B0`, the field in T the scan runs at, is
+required: ppm offsets are resolved at it, and a call without it is refused.
+Three further options are for the IR conversion:
 
 | Option | Meaning |
 | --- | --- |
