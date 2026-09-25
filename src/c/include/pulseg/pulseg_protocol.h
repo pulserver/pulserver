@@ -307,7 +307,8 @@ extern "C"
     /**
      * @brief Serialize a protocol as a value-only preamble (no schema).
      *
-     * This is the form the VALIDATE and GENERATE bridge commands send.
+     * This is the value block `pulserver design validate` and
+     * `pulserver design generate` read on standard input.
      *
      * @param[in]  p      Protocol to serialize.
      * @param[out] buf    Destination buffer.

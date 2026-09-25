@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import sys
 
-_USAGE = "usage: pulserver design {list,validate,generate,import,prune} ...\n"
+_USAGE = (
+    "usage: pulserver design {list,validate,generate,import,prune,push,serve} ...\n"
+)
 
 
 def main(argv: list[str] | None = None) -> int:

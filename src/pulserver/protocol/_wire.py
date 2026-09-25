@@ -19,7 +19,7 @@ PROTOCOL_END = "[NimPulseqGUI Protocol End]"
 
 @dataclass(frozen=True)
 class Validation:
-    """Reply to ``VALIDATE``.
+    """Reply of the ``validate`` design call.
 
     Attributes
     ----------
@@ -89,7 +89,7 @@ def _block_lines(text: str) -> list[tuple[str, str]]:
 
 
 def format_listing(parameters: Mapping[str, Parameter]) -> str:
-    """Format a protocol with its schema, as ``LIST_PROTOCOL`` sends it."""
+    """Format a protocol with its schema, as the ``list`` design call replies it."""
     lines = [_listing_line(name, p) for name, p in parameters.items()]
     return "\n".join([PROTOCOL_BEGIN, *lines, PROTOCOL_END]) + "\n"
 
@@ -175,7 +175,7 @@ def parse_values(
 
 
 def format_validation(validation: Validation, listing: Mapping[str, Parameter]) -> str:
-    """Format a ``VALIDATE`` reply: status line, info line, value block.
+    """Format a ``validate`` reply: status line, info line, value block.
 
     Whitespace in the info text, newlines included, is folded to single spaces.
     """
@@ -189,7 +189,7 @@ def format_validation(validation: Validation, listing: Mapping[str, Parameter]) 
 
 
 def parse_validation(text: str, listing: Mapping[str, Parameter]) -> Validation:
-    """Read a ``VALIDATE`` reply."""
+    """Read a ``validate`` reply."""
     status, info, block = text.split("\n", 2)
     word, _, duration = status.partition(" ")
     valid = word == "VALID"
