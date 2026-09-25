@@ -1,5 +1,6 @@
 """Limits and plugins the design tests share, and a design generated in-process."""
 
+import math
 from pathlib import Path
 
 from pulserver.host import DesignStore, call
@@ -26,6 +27,13 @@ LIMITS = {
     "max_slew": 150.0,
     "slew_unit": "T/m/s",
     "B0": 3.0,
+}
+# Each logical axis designed at 1/sqrt(3) of LIMITS keeps every physical axis
+# within them after any rotation.
+ANY_ORIENTATION = {
+    **LIMITS,
+    "design_max_grad": LIMITS["max_grad"] / math.sqrt(3.0),
+    "design_max_slew": LIMITS["max_slew"] / math.sqrt(3.0),
 }
 
 

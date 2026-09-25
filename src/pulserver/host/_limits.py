@@ -1,4 +1,4 @@
-"""The limits a design call carries: scanner limits, IR conversion options and check limits."""
+"""The limits a design call carries: scanner limits, design limits, IR conversion options and check limits."""
 
 from __future__ import annotations
 
@@ -16,6 +16,7 @@ from .. import ir
 
 _IR_OPTIONS = ("ir_vendor", "ir_label_column_map", "ir_cache_ext")
 _CHECK_PREFIXES = ("pns_", "forbidden_band_", "vop_")
+_DESIGN_LIMITS = {"design_max_grad": "max_grad", "design_max_slew": "max_slew"}
 _CHRONAXIE = {
     "pns_chronaxie": "chronaxie",
     "pns_rheobase": "rheobase",
@@ -34,15 +35,16 @@ def split_limits(
     Keys starting with ``ir_`` are conversion options: ``ir_vendor``,
     ``ir_label_column_map`` (three integers separated by spaces) and
     ``ir_cache_ext``. Keys starting with ``pns_``, ``forbidden_band_`` and
-    ``vop_`` are the check limits of :func:`check_limits`. The other keys are
-    ``pypulseqpp.Opts`` keyword arguments, among which ``B0`` is required: the
-    field in T the scan runs at, which ppm offsets are resolved at.
+    ``vop_`` are the check limits of :func:`check_limits`, and those starting
+    with ``design_`` the design limits of :func:`design_system`. The other keys
+    are ``pypulseqpp.Opts`` keyword arguments, among which ``B0`` is required:
+    the field in T the scan runs at, which ppm offsets are resolved at.
 
     Raises
     ------
     ValueError
         If ``B0`` is missing, an ``ir_`` key is not a conversion option, or
-        the check limits are malformed.
+        the design or check limits are malformed.
     """
     if "B0" not in limits:
         raise ValueError(
@@ -52,13 +54,8 @@ def split_limits(
     unknown = [k for k in limits if k.startswith("ir_") and k not in _IR_OPTIONS]
     if unknown:
         raise ValueError(f"not IR conversion options: {unknown}")
-    system = pp.Opts(
-        **{
-            k: v
-            for k, v in limits.items()
-            if not k.startswith(("ir_", *_CHECK_PREFIXES))
-        }
-    )
+    _design_ceilings(limits)
+    system = pp.Opts(**_scanner_arguments(limits))
     options: dict[str, Any] = {}
     if "ir_vendor" in limits:
         options["vendor"] = int(limits["ir_vendor"])
@@ -68,6 +65,56 @@ def split_limits(
     if "ir_cache_ext" in limits:
         options["cache_ext"] = str(limits["ir_cache_ext"])
     return system, options, check_limits(limits)
+
+
+def design_system(limits: Mapping[str, Any]) -> pp.Opts:
+    """Return the scanner limits an application is designed under.
+
+    The scanner limits of :func:`split_limits`, with the gradient amplitude and
+    slew rate capped by ``design_max_grad`` and ``design_max_slew`` where the
+    limits carry them, in the units of ``max_grad`` and ``max_slew``: the
+    limits per logical axis a scanner derates for the prescription's rotation.
+    A design limit above the scanner's leaves the scanner's. The checks hold
+    the waveforms played in the physical frame to ``max_grad`` and
+    ``max_slew`` themselves.
+
+    Raises
+    ------
+    ValueError
+        If the limits are malformed, as :func:`split_limits` raises.
+    """
+    system = split_limits(limits)[0]
+    ceilings = _design_ceilings(limits)
+    if not ceilings:
+        return system
+    derated = pp.Opts(**{**_scanner_arguments(limits), **ceilings})
+    return pp.cap_system(
+        system,
+        max_grad=derated.max_grad,
+        max_slew=derated.max_slew,
+        grad_unit="Hz/m",
+        slew_unit="Hz/m/s",
+    )
+
+
+def _scanner_arguments(limits: Mapping[str, Any]) -> dict[str, Any]:
+    prefixes = ("ir_", "design_", *_CHECK_PREFIXES)
+    return {k: v for k, v in limits.items() if not k.startswith(prefixes)}
+
+
+def _design_ceilings(limits: Mapping[str, Any]) -> dict[str, float]:
+    """Return the design limits as ``pypulseqpp.Opts`` arguments, ``max_grad`` and ``max_slew``."""
+    unknown = [k for k in limits if k.startswith("design_") and k not in _DESIGN_LIMITS]
+    if unknown:
+        raise ValueError(f"not design limits: {unknown}")
+    ceilings = {}
+    for key, name in _DESIGN_LIMITS.items():
+        if key in limits:
+            value = float(limits[key])
+            if not value > 0.0:
+                raise ValueError(f"the design limit {key} must be positive: {value}")
+            ceilings[name] = value
+    return ceilings
 
 
 def check_limits(limits: Mapping[str, Any]) -> ir.CheckLimits:

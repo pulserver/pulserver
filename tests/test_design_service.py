@@ -12,12 +12,20 @@ from pathlib import Path
 import numpy as np
 import pypulseqpp as pp
 import pytest
-from _host import FIXTURE_LIMITS, GE_IR, LIMITS, PLUGINS
+from _host import ANY_ORIENTATION, FIXTURE_LIMITS, GE_IR, LIMITS, PLUGINS
+from _virtual import OBLIQUE
 
 from pulserver.host import DesignStore, design_id, design_identity
 from pulserver.host import _service as service
 from pulserver.host._blocks import format_import, format_limits
-from pulserver.protocol import PROTOCOL_BEGIN, PROTOCOL_END, TEPreset, parse_listing
+from pulserver.protocol import (
+    FOV_ROTATION,
+    PROTOCOL_BEGIN,
+    PROTOCOL_END,
+    TEPreset,
+    parse_listing,
+    parse_validation,
+)
 
 FIXTURES = Path(__file__).parent / "fixtures" / "sequences"
 GRE = {"nx": 32, "ny": 32, "TE": 5000}
@@ -231,6 +239,40 @@ def test_a_design_beyond_the_scanner_limits_is_refused_and_stores_nothing(store)
     assert status == 1
     assert "gradient amplitude of 60.0 mT/m on x" in text
     assert not any(store.root.iterdir())
+
+
+def test_an_oblique_design_is_held_under_the_design_limits_and_checked_against_the_scanners(
+    store,
+):
+    oblique = {**GRE, **dict(zip(FOV_ROTATION, OBLIQUE.ravel(), strict=True))}
+    derated = {
+        "max_grad": ANY_ORIENTATION["design_max_grad"],
+        "max_slew": ANY_ORIENTATION["design_max_slew"],
+    }
+    for limits in (LIMITS, {**LIMITS, **derated}):
+        status, text = generate(store, "gre2d", oblique, limits=limits)
+        assert status == 1
+        assert "slew rate of" in text
+    design = generated(generate(store, "gre2d", oblique, limits=ANY_ORIENTATION))
+    assert store.manifest(design)["limits"] == ANY_ORIENTATION
+
+
+def test_a_request_is_validated_under_the_design_limits(store):
+    listed = service.call("list", plugins=PLUGINS, plugin="gre2d")[1]
+    listing = parse_listing(listed.split("\n", 1)[1])
+    request = block({**GRE, "TE": TEPreset.MINIMUM})
+    shortest = {}
+    for name, limits in (("scanner", LIMITS), ("design", ANY_ORIENTATION)):
+        reply = service.call(
+            "validate", plugins=PLUGINS, plugin="gre2d", limits=limits, block=request
+        )[1]
+        shortest[name] = parse_validation(reply, listing).values["TE"]
+    assert shortest["design"] > shortest["scanner"]
+    generated(
+        generate(
+            store, "gre2d", {**GRE, "TE": shortest["design"]}, limits=ANY_ORIENTATION
+        )
+    )
 
 
 def test_a_design_in_a_forbidden_band_is_refused(store):
