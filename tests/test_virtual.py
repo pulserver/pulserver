@@ -9,12 +9,14 @@ import numpy as np
 import pypulseqpp as pp
 import pytest
 from _host import generate
+from _virtual import OBLIQUE, OFFSET, ORIENTATIONS, REFLECTED, phantom, posed
 from pypulseqpp.sequences.sequence.gre2D_sequence import Gre2DApp
 from pypulseqpp.sequences.sequence.se2D_sequence import Se2DApp
 
 from pulserver import ir, virtual
 from pulserver.host import DesignStore
 from pulserver.mrd import read_chain
+from pulserver.protocol import FOV_OFFSET, FOV_ROTATION
 from pulserver.vre import ReconProxy, SequenceTable
 
 ROOT = Path(__file__).parents[1]
@@ -40,7 +42,6 @@ SYSTEM = pp.Opts(
 )
 # A small fraction of the k-space spacing of every fixture.
 K_TOLERANCE = 1e-3
-OFFSET = np.array([0.02, -0.012, 0.0])
 MATRIX = 32
 DEADLINE = 180.0
 
@@ -50,31 +51,20 @@ def _copy(name, directory):
     return directory / name
 
 
-def _designed_trajectory(seq):
-    """The k-space location of every ADC sample of a chain, as its files design it."""
+def _designed_trajectory(seq, rotation=None):
+    """The k-space location of every ADC sample of a chain as its files design it, turned by ``rotation`` as the checks turn it."""
+    files = [sequence for _, sequence in read_chain(seq)]
+    if rotation is not None:
+        files = [pp.TransformFOV(rotation=rotation).apply_to_sequence(s) for s in files]
     return np.concatenate(
-        [sequence.calculate_kspace()[0] for _, sequence in read_chain(seq)], axis=1
+        [sequence.calculate_kspace()[0] for sequence in files], axis=1
     )
 
 
-def _phantom(centre, coils=2):
-    """An object without a mirror symmetry, centred at ``centre``."""
-    centre = np.asarray(centre, dtype=float)
-    return virtual.Phantom(
-        [
-            virtual.Ellipse(tuple(centre), (0.08, 0.06), 0.3),
-            virtual.Ellipse(
-                tuple(centre + np.array([0.03, 0.02, 0.0])), (0.02, 0.015), 0.0, 0.5
-            ),
-        ],
-        coils=coils,
-    )
-
-
-def _ideal(seq, phantom, offset):
-    """What a scanner acquires of ``phantom``, demodulated to ``offset``, one array per readout."""
+def _ideal(seq, phantom):
+    """What an unshifted, unrotated prescription acquires of ``phantom``, one array per readout."""
     k = _designed_trajectory(seq)
-    signal = phantom.kspace(k) * np.exp(2j * np.pi * (np.asarray(offset) @ k))
+    signal = phantom.kspace(k)
     sizes = [
         int(sequence.get_block(index).adc.num_samples)
         for _, sequence in read_chain(seq)
@@ -91,12 +81,53 @@ def _residual(acquired, ideal):
     return np.linalg.norm(a - factor * b) / np.linalg.norm(b), abs(factor)
 
 
+@pytest.mark.parametrize("rotation", ORIENTATIONS.values(), ids=ORIENTATIONS.keys())
 @pytest.mark.parametrize("name", SEQUENCES)
-def test_the_played_trajectory_is_the_one_each_file_designs(name, tmp_path):
+def test_the_played_trajectory_is_the_one_each_file_designs_turned_as_it_is_checked(
+    name, rotation, tmp_path
+):
     seq = _copy(name, tmp_path)
     ir.convert(seq, SYSTEM)
-    played = np.concatenate(virtual.trajectory(seq), axis=1)
-    np.testing.assert_allclose(played, _designed_trajectory(seq), atol=K_TOLERANCE)
+    played = np.concatenate(virtual.trajectory(seq, rotation=rotation), axis=1)
+    np.testing.assert_allclose(
+        played, _designed_trajectory(seq, rotation), atol=K_TOLERANCE
+    )
+
+
+def test_the_prescription_turns_a_block_after_its_own_rotation_unless_it_is_labelled_norot(
+    tmp_path,
+):
+    quarter_turn = np.array([[0.0, -1.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]])
+    rf = pp.make_block_pulse(np.pi / 2, duration=2e-4, system=SYSTEM)
+    prephaser = pp.make_trapezoid("x", area=-500.0, duration=1e-3, system=SYSTEM)
+    readout = pp.make_trapezoid("x", flat_area=1000.0, flat_time=2e-3, system=SYSTEM)
+    adc = pp.make_adc(
+        num_samples=64,
+        duration=readout.flat_time,
+        delay=readout.rise_time,
+        system=SYSTEM,
+    )
+    seq = pp.Sequence(SYSTEM)
+    # The prephaser plays unturned before a turned readout, then turned before
+    # an unturned one; the readout carries a rotation of its own throughout.
+    for norot in (1, 0):
+        seq.add_block(rf, pp.make_label(label="NOROT", type="SET", value=0))
+        seq.add_block(prephaser, pp.make_label(label="NOROT", type="SET", value=norot))
+        seq.add_block(
+            readout,
+            adc,
+            pp.make_rotation(quarter_turn),
+            pp.make_label(label="NOROT", type="SET", value=1 - norot),
+        )
+    path = tmp_path / "scan.seq"
+    seq.write(str(path))
+    ir.convert(path, SYSTEM)
+    played = np.concatenate(virtual.trajectory(path, rotation=REFLECTED), axis=1)
+    np.testing.assert_allclose(
+        played, _designed_trajectory(path, REFLECTED), atol=K_TOLERANCE
+    )
+    logical = _designed_trajectory(path)
+    assert not np.allclose(played, REFLECTED @ logical, atol=1.0)
 
 
 @pytest.mark.parametrize("name", SEQUENCES)
@@ -143,14 +174,17 @@ def test_the_scanner_plays_an_rf_pulse_at_the_centre_its_design_records(tmp_path
     )
 
 
+@pytest.mark.parametrize("rotation", ORIENTATIONS.values(), ids=ORIENTATIONS.keys())
 @pytest.mark.parametrize("application", [Gre2DApp, Se2DApp])
-def test_an_object_at_the_prescribed_offset_is_acquired_centred(application, tmp_path):
+def test_an_object_posed_as_prescribed_is_acquired_as_at_the_isocentre(
+    application, rotation, tmp_path
+):
     seq = tmp_path / "scan.seq"
     application(SYSTEM, n_x=MATRIX, n_y=MATRIX).design().write(seq)
     ir.convert(seq, SYSTEM, fov_offset=OFFSET)
-    phantom = _phantom(OFFSET)
     residual, gain = _residual(
-        virtual.acquire(seq, phantom), _ideal(seq, phantom, OFFSET)
+        virtual.acquire(seq, posed(rotation), rotation=rotation),
+        _ideal(seq, phantom()),
     )
     assert residual < 1e-4
     assert gain == pytest.approx(1.0, rel=1e-4)
@@ -160,9 +194,28 @@ def test_an_object_off_the_prescription_is_not_acquired_centred(tmp_path):
     seq = tmp_path / "scan.seq"
     Gre2DApp(SYSTEM, n_x=MATRIX, n_y=MATRIX).design().write(seq)
     ir.convert(seq, SYSTEM)
-    phantom = _phantom(OFFSET)
-    residual, _ = _residual(virtual.acquire(seq, phantom), _ideal(seq, phantom, OFFSET))
+    residual, _ = _residual(
+        virtual.acquire(seq, phantom(OFFSET)), _ideal(seq, phantom())
+    )
     assert residual > 0.5
+
+
+@pytest.mark.parametrize(
+    ("rotation", "turned"),
+    [(OBLIQUE, np.eye(3)), (REFLECTED, OBLIQUE)],
+    ids=["unturned", "unreflected"],
+)
+def test_an_object_turned_otherwise_than_prescribed_is_not_acquired_as_at_the_isocentre(
+    rotation, turned, tmp_path
+):
+    seq = tmp_path / "scan.seq"
+    Gre2DApp(SYSTEM, n_x=MATRIX, n_y=MATRIX).design().write(seq)
+    ir.convert(seq, SYSTEM, fov_offset=OFFSET)
+    residual, _ = _residual(
+        virtual.acquire(seq, phantom(rotation @ OFFSET, turned), rotation=rotation),
+        _ideal(seq, phantom()),
+    )
+    assert residual > 0.3
 
 
 @pytest.mark.parametrize(
@@ -178,9 +231,8 @@ def test_a_readout_under_a_varying_gradient_is_acquired_centred_off_the_isocentr
 ):
     seq = _copy(name, tmp_path)
     ir.convert(seq, SYSTEM, fov_offset=OFFSET)
-    phantom = _phantom(OFFSET, coils=1)
-    acquired = virtual.acquire(seq, phantom)
-    ideal = _ideal(seq, phantom, OFFSET)
+    acquired = virtual.acquire(seq, phantom(OFFSET, coils=1))
+    ideal = _ideal(seq, phantom(coils=1))
     excited = [i for i, samples in enumerate(acquired) if np.abs(samples).any()]
     residual, _ = _residual([acquired[i] for i in excited], [ideal[i] for i in excited])
     assert residual < 1e-4
@@ -244,36 +296,43 @@ def proxy(tmp_path):
     thread.join(timeout=DEADLINE)
 
 
-def _scan(proxy, tmp_path, offset_mm, readouts=None):
+def _scan(proxy, tmp_path, rotation, readouts=None):
+    """Design a 2D gradient echo prescribed at ``OFFSET`` and ``rotation``, and scan the phantom posed there."""
     store = DesignStore(tmp_path / "designs")
     values = {"TE": 5000, "nx": MATRIX, "ny": MATRIX}
-    values.update(
-        zip(("fov_offset_x", "fov_offset_y", "fov_offset_z"), offset_mm, strict=True)
-    )
-    design = generate(store, "gre2d", values)
+    values.update(zip(FOV_OFFSET, 1e3 * OFFSET, strict=True))
+    values.update(zip(FOV_ROTATION, rotation.ravel(), strict=True))
+    design = generate(store, "gre2d_oblique", values)
     seq = store.directory(design) / "sequence.seq"
-    phantom = _phantom(np.asarray(offset_mm) * 1e-3)
-    acquired = virtual.acquire(seq, phantom)
+    acquired = virtual.acquire(seq, posed(rotation), rotation=rotation)
     received = virtual.send(
         ("127.0.0.1", proxy.port),
         design,
         acquired if readouts is None else acquired[:readouts],
-        position_mm=offset_mm,
+        position_mm=1e3 * rotation @ OFFSET,
+        rotation=rotation,
         timeout=DEADLINE,
     )
-    return seq, phantom, received
+    return seq, received
 
 
-def test_a_virtual_scan_reconstructs_the_phantom_at_its_prescription(proxy, tmp_path):
-    offset_mm = tuple(1e3 * OFFSET)
-    seq, phantom, received = _scan(proxy, tmp_path, offset_mm)
+@pytest.mark.parametrize("rotation", ORIENTATIONS.values(), ids=ORIENTATIONS.keys())
+def test_a_virtual_scan_reconstructs_the_phantom_where_it_is_prescribed(
+    proxy, tmp_path, rotation
+):
+    """The phantom posed as prescribed is imaged as at the isocentre and placed where it is."""
+    seq, received = _scan(proxy, tmp_path, rotation)
     (image,) = [item for item in received if isinstance(item, ismrmrd.Image)]
     reconstructed = np.squeeze(np.abs(image.data)).astype(float)
-    expected = _image(_ideal(seq, phantom, OFFSET), MATRIX)
+    expected = _image(_ideal(seq, phantom()), MATRIX)
     reconstructed /= reconstructed.max()
     expected /= expected.max()
     assert np.linalg.norm(reconstructed - expected) / np.linalg.norm(expected) < 1e-3
-    np.testing.assert_allclose(image.position, offset_mm, atol=1e-4)
+    np.testing.assert_allclose(image.position, 1e3 * rotation @ OFFSET, atol=1e-4)
+    for direction, axis in zip(
+        (image.read_dir, image.phase_dir, image.slice_dir), rotation.T, strict=True
+    ):
+        np.testing.assert_allclose(direction, axis, atol=1e-6)
     fov = pp.Sequence()
     fov.read(str(seq))
     np.testing.assert_allclose(
@@ -282,6 +341,6 @@ def test_a_virtual_scan_reconstructs_the_phantom_at_its_prescription(proxy, tmp_
 
 
 def test_a_virtual_series_short_of_a_readout_is_refused(proxy, tmp_path):
-    _, _, received = _scan(proxy, tmp_path, (0.0, 0.0, 0.0), readouts=MATRIX - 1)
+    _, received = _scan(proxy, tmp_path, np.eye(3), readouts=MATRIX - 1)
     assert not [item for item in received if isinstance(item, ismrmrd.Image)]
     assert any(isinstance(item, str) and "pulserver:" in item for item in received)

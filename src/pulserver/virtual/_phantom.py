@@ -16,10 +16,10 @@ from scipy.special import j1
 class Ellipse:
     """An ellipse of uniform magnetization in a plane of constant z.
 
-    Lengths are in metres along the logical axes; ``angle`` turns the first
-    semi-axis from x towards y, in radians. The ellipse is infinitely thin, so
-    its signal depends on the k-space location along z only through the phase
-    of its plane.
+    Lengths are in metres along the axes of the phantom it belongs to;
+    ``angle`` turns the first semi-axis from x towards y, in radians. The
+    ellipse is infinitely thin, so its signal depends on the k-space location
+    along z only through the phase of its plane.
     """
 
     centre: tuple[float, float, float]
@@ -30,7 +30,8 @@ class Ellipse:
     def spectrum(self, k: np.ndarray) -> np.ndarray:
         """Return its magnetization's Fourier transform at ``(3, n)`` k-space locations in 1/m.
 
-        The transform of magnetization m is the integral of m(r) exp(-2 pi i k.r).
+        The transform of magnetization m is the integral of m(r) exp(-2 pi i k.r),
+        with k and r along the phantom's axes.
         """
         k = np.asarray(k, dtype=float)
         a, b = self.semi_axes
@@ -47,7 +48,10 @@ class Ellipse:
 class Phantom:
     """Ellipses whose signals add, received by one coil or several.
 
-    With ``coils`` above one, coil c's sensitivity is
+    The ellipses and the sensitivities are stated along the phantom's own
+    axes, which ``rotation`` and ``position`` place in the physical frame:
+    the phantom's point r lies at ``rotation @ r + position``, and its coils
+    move with it. With ``coils`` above one, coil c's sensitivity is
     ``1 + depth cos(2 pi q_c.r)``, where ``q_c`` has magnitude
     ``1 / period`` and points at ``2 pi c / coils`` from x towards y, so each
     coil's k-space is the object's, and two copies shifted by ``q_c``: every
@@ -63,6 +67,11 @@ class Phantom:
         Spatial period of the sensitivities, in metres.
     depth
         Their modulation depth.
+    rotation
+        ``(3, 3)`` orthonormal matrix from the phantom's axes to the physical
+        ones, a reflection included; the identity by default.
+    position
+        Physical location of the phantom's origin, in metres.
     """
 
     def __init__(
@@ -72,6 +81,8 @@ class Phantom:
         coils: int = 1,
         period: float = 0.5,
         depth: float = 0.5,
+        rotation: np.ndarray | None = None,
+        position: Sequence[float] = (0.0, 0.0, 0.0),
     ) -> None:
         if coils < 1:
             raise ValueError(f"a phantom is received by one coil or more, not {coils}")
@@ -82,21 +93,24 @@ class Phantom:
             np.stack([np.cos(angles), np.sin(angles), np.zeros(coils)]) / period
         )
         self._depth = depth if coils > 1 else 0.0
+        self._rotation = np.eye(3) if rotation is None else np.asarray(rotation, float)
+        self._position = np.asarray(position, dtype=float)
 
     def kspace(self, k: np.ndarray) -> np.ndarray:
-        """Return each coil's signal at ``(3, n)`` k-space locations in 1/m: ``(coils, n)``."""
+        """Return each coil's signal at ``(3, n)`` physical k-space locations in 1/m: ``(coils, n)``."""
         k = np.asarray(k, dtype=float)
+        own = self._rotation.T @ k
         signal = np.empty((self.coils, k.shape[1]), dtype=complex)
         for c in range(self.coils):
             wave = self._waves[:, c : c + 1]
-            signal[c] = self._spectrum(k)
+            signal[c] = self._spectrum(own)
             if self._depth:
                 signal[c] += (
                     0.5
                     * self._depth
-                    * (self._spectrum(k - wave) + self._spectrum(k + wave))
+                    * (self._spectrum(own - wave) + self._spectrum(own + wave))
                 )
-        return signal
+        return signal * np.exp(-2j * math.pi * (self._position @ k))
 
     def _spectrum(self, k: np.ndarray) -> np.ndarray:
         total = np.zeros(k.shape[1], dtype=complex)

@@ -3,12 +3,12 @@
 import numpy as np
 import pypulseqpp as pp
 import pytest
+from _virtual import OFFSET, ORIENTATIONS, phantom, posed
 from _zoo import SMALL
 from pypulseqpp import sequences
 
 from pulserver import ir, virtual
 
-OFFSET = np.array([0.02, -0.012, 0.0])
 # A small fraction of the k-space spacing of every sequence here.
 K_TOLERANCE = 1e-3
 
@@ -22,27 +22,25 @@ def design(request, tmp_path_factory):
     return name, sequence, path
 
 
-def test_every_shipped_sequence_plays_the_trajectory_it_designs(design):
+@pytest.mark.parametrize("rotation", ORIENTATIONS.values(), ids=ORIENTATIONS.keys())
+def test_every_shipped_sequence_plays_its_design_turned_as_it_is_checked(
+    design, rotation
+):
     _, sequence, path = design
     ir.convert(path, pp.Opts())
-    played = np.concatenate(virtual.trajectory(path), axis=1)
-    np.testing.assert_allclose(played, sequence.calculate_kspace()[0], atol=K_TOLERANCE)
+    played = np.concatenate(virtual.trajectory(path, rotation=rotation), axis=1)
+    turned = pp.TransformFOV(rotation=rotation).apply_to_sequence(sequence)
+    np.testing.assert_allclose(played, turned.calculate_kspace()[0], atol=K_TOLERANCE)
 
 
-def test_every_shipped_sequence_scans_an_object_where_it_is_prescribed(design):
+@pytest.mark.parametrize("rotation", ORIENTATIONS.values(), ids=ORIENTATIONS.keys())
+def test_every_shipped_sequence_scans_an_object_posed_as_prescribed_as_at_the_isocentre(
+    design, rotation
+):
     _, sequence, path = design
     ir.convert(path, pp.Opts(), fov_offset=OFFSET)
-    phantom = virtual.Phantom(
-        [
-            virtual.Ellipse(tuple(OFFSET), (0.08, 0.06), 0.3),
-            virtual.Ellipse(
-                tuple(OFFSET + np.array([0.03, 0.02, 0.0])), (0.02, 0.015), 0.0, 0.5
-            ),
-        ]
-    )
-    acquired = virtual.acquire(path, phantom)
-    k = sequence.calculate_kspace()[0]
-    ideal = phantom.kspace(k) * np.exp(2j * np.pi * (OFFSET @ k))
+    acquired = virtual.acquire(path, posed(rotation, coils=1), rotation=rotation)
+    ideal = phantom(coils=1).kspace(sequence.calculate_kspace()[0])
     ideal = np.split(ideal, np.cumsum([a.shape[1] for a in acquired])[:-1], axis=1)
     excited = [i for i, samples in enumerate(acquired) if np.abs(samples).any()]
     a = np.concatenate([acquired[i] for i in excited], axis=1)
