@@ -1,4 +1,4 @@
-"""Run the reconstruction proxy: ``python -m pulserver.vre --store DIR --port N --plugins DIR``."""
+"""Run the reconstruction proxy: ``python -m pulserver.vre --store DIR --port N (--plugins DIR | --forward HOST:PORT)``."""
 
 from __future__ import annotations
 
@@ -26,7 +26,10 @@ def main(argv: list[str] | None = None) -> None:
         help="address to listen on; the loopback interface when unset",
     )
     parser.add_argument(
-        "--plugins", type=Path, required=True, help="directory of <plugin>.py"
+        "--plugins",
+        type=Path,
+        default=None,
+        help="directory of <plugin>.py; required unless --forward is given",
     )
     parser.add_argument(
         "--slots",
@@ -62,7 +65,27 @@ def main(argv: list[str] | None = None) -> None:
         default=None,
         help="seconds a reconstruction may run after its series ends; unlimited when unset",
     )
+    parser.add_argument(
+        "--forward",
+        type=_address,
+        default=None,
+        metavar="HOST:PORT",
+        help="MRD server that reconstructs every series instead of local workers",
+    )
+    parser.add_argument(
+        "--forward-config",
+        default=None,
+        help="config name sent to the --forward server; the series' reconstruction "
+        "plugin when unset",
+    )
+    parser.add_argument(
+        "--forward-dicom",
+        action="store_true",
+        help="convert the images the --forward server sends back to DICOM",
+    )
     args = parser.parse_args(argv)
+    if args.forward is None and args.plugins is None:
+        parser.error("--plugins is required unless --forward is given")
 
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s"
@@ -75,6 +98,9 @@ def main(argv: list[str] | None = None) -> None:
         spares=args.spares,
         recon_timeout=args.recon_timeout,
         queue=args.queue,
+        forward=args.forward,
+        forward_config=args.forward_config,
+        forward_dicom=args.forward_dicom,
     )
     proxy.bind(args.port, args.host)
     intake = None
@@ -89,6 +115,13 @@ def main(argv: list[str] | None = None) -> None:
         if intake is not None:
             intake.close()
         proxy.close()
+
+
+def _address(text: str) -> tuple[str, int]:
+    host, separator, port = text.rpartition(":")
+    if not separator or not host or not port.isdigit():
+        raise argparse.ArgumentTypeError(f"{text!r} is not HOST:PORT")
+    return host, int(port)
 
 
 if __name__ == "__main__":

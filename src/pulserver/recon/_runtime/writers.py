@@ -10,6 +10,7 @@ __all__ = [
     "write_acquisition_header",
     "write_array",
     "write_byte_string",
+    "write_config_file",
     "write_config_text",
     "write_dicom",
     "write_header",
@@ -167,6 +168,23 @@ def write_text(destination: Any, contents: str) -> None:
     contents_with_nul = f"{contents}\0"
     destination.write(constants.uint32.pack(len(contents_with_nul.encode())))
     destination.write(contents_with_nul.encode())
+
+
+def write_config_file(destination: Any, name: str) -> None:
+    """Write a config file message: the name in a fixed 1024-byte NUL-padded field.
+
+    Raises
+    ------
+    ValueError
+        If the name does not fit the field with a NUL after it.
+    """
+    encoded = name.encode("utf-8")
+    if len(encoded) >= constants.SIZEOF_GADGET_MESSAGE_CONFIGURATION_FILE:
+        raise ValueError(f"the config name {name!r} does not fit a config file message")
+    destination.write(
+        constants.GadgetMessageIdentifier.pack(constants.GADGET_MESSAGE_FILENAME)
+    )
+    destination.write(constants.GadgetMessageConfigurationFile.pack(encoded))
 
 
 def write_config_text(destination: Any, contents: str) -> None:

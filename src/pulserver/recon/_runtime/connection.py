@@ -37,6 +37,7 @@ from .readers import (
 from .writers import (
     header_document,
     write_acquisition,
+    write_config_file,
     write_config_text,
     write_dicom,
     write_header,
@@ -183,6 +184,12 @@ class Connection:
     auto_read_config_header
         Read the config and header messages on construction into ``config``
         and ``header``, each ``None`` when the stream ends first.
+
+    Attributes
+    ----------
+    unreadable : int | None
+        Identifier of the message with no reader that ended reading; ``None``
+        while none has.
     """
 
     class SocketWrapper:
@@ -250,6 +257,7 @@ class Connection:
         # and results still go out until shutdown_close.
         self.is_exhausted = False
         self._send_closed = False
+        self.unreadable: int | None = None
 
         if auto_read_config_header:
             self._auto_read_config_header()
@@ -397,6 +405,10 @@ class Connection:
         """Send a config text message, which a peer reads ahead of the header."""
         self._send_raw(write_config_text, text)
 
+    def send_config_file(self, name: str) -> None:
+        """Send a config file message naming a configuration the peer holds, ahead of the header."""
+        self._send_raw(write_config_file, name)
+
     def send_header(self, header: Any) -> None:
         """Send an MRD XML header message, from a parsed header or its document."""
         self._send_raw(write_header, header)
@@ -475,6 +487,7 @@ class Connection:
             logging.error(
                 f"Received message (id: {message_identifier}) with no registered readers."
             )
+            self.unreadable = message_identifier
             raise StopIteration
 
         reader = self.readers.get(message_identifier, unknown_message_identifier)
