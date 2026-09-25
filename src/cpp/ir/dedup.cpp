@@ -155,6 +155,28 @@ static void build_rf_def_row(
     params[2] = rf[9] + ppm_to_hz * rf[7]; /* phase offset + ppm * phasePPM */
 }
 
+/* The transmit channels a pulse's time shape describes: a dynamic pTx pulse
+ * holds its channels one after another over one time base, so the count is
+ * the number of samples at the first time, accepted only when the times are
+ * that many identical copies (pypulseqpp's channels.hpp states the same rule);
+ * anything else is one channel. */
+static int rf_channels(const PULSEQ_REAL *times, int count)
+{
+    int copies = 0;
+    int per_channel, i;
+
+    for (i = 0; i < count; ++i)
+        if (times[i] == times[0])
+            ++copies;
+    if (copies < 2 || count % copies != 0)
+        return 1;
+    per_channel = count / copies;
+    for (i = per_channel; i < count; ++i)
+        if (times[i] != times[i - per_channel])
+            return 1;
+    return copies;
+}
+
 static int deduplicate_rf_library(
     const pulseq_file *seq,
     pulseg_rf_definition *rf_defs,
@@ -200,7 +222,7 @@ static int deduplicate_rf_library(
 
     for (i = 0; i < num_unique; ++i)
     {
-        int time_id, nz, j;
+        int time_id;
         rf_defs[i].id = unique_defs[i];
         rf_defs[i].mag_shape_id = int_rows[unique_defs[i]][0];
         rf_defs[i].phase_shape_id = int_rows[unique_defs[i]][1];
@@ -208,7 +230,6 @@ static int deduplicate_rf_library(
         rf_defs[i].delay = int_rows[unique_defs[i]][3];
         rf_defs[i].num_channels = 1;
 
-        /* detect multichannel RF from tiled time shape */
         time_id = rf_defs[i].time_shape_id;
         if (time_id > 0 && time_id <= seq->shapes_library_size)
         {
@@ -218,12 +239,8 @@ static int deduplicate_rf_library(
             decomp.samples = NULL;
             if (pulseq_decompress_shape(&decomp, &seq->shapes_library[time_id - 1], 1.0f))
             {
-                nz = 0;
-                for (j = 0; j < decomp.num_uncompressed_samples; ++j)
-                    if (decomp.samples[j] == 0.0f)
-                        ++nz;
-                if (nz > 1)
-                    rf_defs[i].num_channels = nz;
+                rf_defs[i].num_channels =
+                    rf_channels(decomp.samples, decomp.num_uncompressed_samples);
                 PULSEG_FREE(decomp.samples);
             }
         }

@@ -227,6 +227,9 @@ def play(
           refocusing pulse at a flip angle of 162 to 198 degrees and an
           excitation otherwise; 0 without RF;
         - ``rf_delay_us``: RF delay from the block's start, in µs;
+        - ``rf_channels``: the transmit channels the RF waveform holds, one
+          after another over one time base for a dynamic pTx pulse; 0 without
+          RF;
         - ``gradient_hz_per_m``: ``(blocks, 3)``, the amplitude of each
           gradient event along x, y and z; an arbitrary gradient's shape
           carries its own sign;

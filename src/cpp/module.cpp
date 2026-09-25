@@ -298,6 +298,7 @@ void played_modulation(const pulseg_collection *coll, std::vector<float> &phases
 py::dict play(pulseg_collection *coll, bool waveforms)
 {
     std::vector<int> subsequence, segment, duration_us, adc, trid, norot, nopos, rf_use;
+    std::vector<int> rf_channels;
     std::vector<float> rf_amp, rf_freq, rf_phase, adc_freq, adc_phase, gradient, rotation;
     std::vector<int> rf_delay_us, adc_delay_us, adc_dwell_ns, adc_samples;
     std::vector<float> rf_centre_us, grad_time, grad_value, modulation;
@@ -335,6 +336,7 @@ py::dict play(pulseg_collection *coll, bool waveforms)
         if (block.adc_flag)
             require(pulseg_get_adc_def(coll, &window, b.adc_def_id), "ADC definition");
         rf_delay_us.push_back(b.has_rf ? b.rf_delay_us : 0);
+        rf_channels.push_back(b.has_rf ? b.rf_num_channels : 0);
         adc_delay_us.push_back(block.adc_flag ? b.adc_delay_us : 0);
         adc_dwell_ns.push_back(window.dwell_ns);
         adc_samples.push_back(window.num_samples);
@@ -365,6 +367,7 @@ py::dict play(pulseg_collection *coll, bool waveforms)
     out["rf_phase_rad"] = as_array(rf_phase, {count});
     out["rf_use"] = as_array(rf_use, {count});
     out["rf_delay_us"] = as_array(rf_delay_us, {count});
+    out["rf_channels"] = as_array(rf_channels, {count});
     out["gradient_hz_per_m"] = as_array(gradient, {count, 3});
     out["rotation"] = as_array(rotation, {count, 3, 3});
     out["norot"] = as_array(norot, {count});
