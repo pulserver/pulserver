@@ -4,7 +4,7 @@ import numpy as np
 import pypulseqpp as pp
 import pytest
 
-from pulserver.ir import convert, summary
+from pulserver.ir import convert, play, summary
 
 SYSTEM = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
 
@@ -97,3 +97,16 @@ def test_amplitude_and_frequency_offset_leave_a_definitions_spectrum_alone(tmp_p
     bandwidths = {round(e["bandwidth_hz"], 3) for e in report["subsequences"][0]["rf"]}
 
     assert bandwidths == {round(pp.calc_rf_bandwidth(sinc), 3)}
+
+
+@pytest.mark.parametrize("channels", [1, 2, 3])
+def test_a_dynamic_ptx_pulse_is_cached_with_as_many_channels_as_it_drives(
+    tmp_path, channels
+):
+    samples = np.hanning(100) * 200.0
+    signal = np.stack([samples * np.exp(0.3j * channel) for channel in range(channels)])
+    pulse = pp.make_ptx_pulse(signal, dwell=1e-5, system=SYSTEM, use="excitation")
+    path = _written(tmp_path, [pulse])
+    convert(path, SYSTEM)
+    played = play(path)
+    assert set(played["rf_channels"][played["rf_amp_hz"] != 0]) == {channels}
