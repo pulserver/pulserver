@@ -24,6 +24,8 @@
    :toctree:
    :nosignatures:
 
+   ~SequenceDefinitions.centre_line
+   ~SequenceDefinitions.centre_partition
    ~SequenceDefinitions.matrix
    ~SequenceDefinitions.fov
    ~SequenceDefinitions.navigator_matrix

@@ -533,13 +533,19 @@
 <span class="sd">    trajectory</span>
 <span class="sd">        Whether some readout of the space keeps more than one k axis, which</span>
 <span class="sd">        makes the space non-Cartesian.</span>
+<span class="sd">    centre_line, centre_partition</span>
+<span class="sd">        The ``LIN`` and ``PAR`` counter of the k-space centre, from</span>
+<span class="sd">        ``kSpaceCenterLine`` and ``kSpaceCenterPartition``; ``None`` when</span>
+<span class="sd">        undefined, and for a navigator.</span>
 <span class="sd">    """</span>
 
     <span class="n">subsequence</span><span class="p">:</span> <span class="nb">int</span>
     <span class="n">navigator</span><span class="p">:</span> <span class="nb">bool</span>
     <span class="n">matrix</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span>
     <span class="n">fov_mm</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span>
-    <span class="n">trajectory</span><span class="p">:</span> <span class="nb">bool</span></div>
+    <span class="n">trajectory</span><span class="p">:</span> <span class="nb">bool</span>
+    <span class="n">centre_line</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">centre_partition</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span></div>
 
 
 
@@ -692,7 +698,8 @@
 
 <span class="sd">    For every space, sets ``encodedSpace`` and ``reconSpace`` from the</span>
 <span class="sd">    sequence's matrix and field of view when defined, ``encodingLimits`` from</span>
-<span class="sd">    the counters of its readouts (minimum 0, centre half the maximum), and</span>
+<span class="sd">    the counters of its readouts (minimum 0, centre half the maximum, or for</span>
+<span class="sd">    ``kspace_encoding_step_1`` and ``_2`` the centre the sequence defines), and</span>
 <span class="sd">    ``trajectory`` to ``OTHER`` or ``CARTESIAN``. Other fields of an existing</span>
 <span class="sd">    encoding are kept; missing encodings are appended. Sequence parameters the</span>
 <span class="sd">    table holds replace the header's.</span>
@@ -718,9 +725,12 @@
             <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">MRD_COUNTERS</span>
             <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">_STANDARD_LIMITS</span> <span class="ow">or</span> <span class="n">table</span><span class="o">.</span><span class="n">counters</span><span class="p">[</span><span class="n">name</span><span class="p">][</span><span class="n">members</span><span class="p">]</span><span class="o">.</span><span class="n">any</span><span class="p">()</span>
         <span class="p">]</span>
+        <span class="n">centres</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"LIN"</span><span class="p">:</span> <span class="n">space</span><span class="o">.</span><span class="n">centre_line</span><span class="p">,</span> <span class="s2">"PAR"</span><span class="p">:</span> <span class="n">space</span><span class="o">.</span><span class="n">centre_partition</span><span class="p">}</span>
         <span class="n">limits</span> <span class="o">=</span> <span class="n">xsd</span><span class="o">.</span><span class="n">encodingLimitsType</span><span class="p">(</span>
             <span class="o">**</span><span class="p">{</span>
-                <span class="n">_LIMIT_FIELDS</span><span class="p">[</span><span class="n">name</span><span class="p">]:</span> <span class="n">_limit</span><span class="p">(</span><span class="n">table</span><span class="o">.</span><span class="n">counters</span><span class="p">[</span><span class="n">name</span><span class="p">][</span><span class="n">members</span><span class="p">])</span>
+                <span class="n">_LIMIT_FIELDS</span><span class="p">[</span><span class="n">name</span><span class="p">]:</span> <span class="n">_limit</span><span class="p">(</span>
+                    <span class="n">table</span><span class="o">.</span><span class="n">counters</span><span class="p">[</span><span class="n">name</span><span class="p">][</span><span class="n">members</span><span class="p">],</span> <span class="n">centres</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
+                <span class="p">)</span>
                 <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">written</span>
             <span class="p">}</span>
         <span class="p">)</span>
@@ -835,6 +845,8 @@
                 <span class="n">trajectory</span><span class="o">=</span><span class="nb">bool</span><span class="p">(</span>
                     <span class="p">(</span><span class="n">readouts</span><span class="o">.</span><span class="n">trajectory_dimensions</span><span class="p">[</span><span class="n">local_space</span> <span class="o">==</span> <span class="n">local</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">any</span><span class="p">()</span>
                 <span class="p">),</span>
+                <span class="n">centre_line</span><span class="o">=</span><span class="kc">None</span> <span class="k">if</span> <span class="n">is_navigator</span> <span class="k">else</span> <span class="n">definitions</span><span class="o">.</span><span class="n">centre_line</span><span class="p">,</span>
+                <span class="n">centre_partition</span><span class="o">=</span><span class="kc">None</span> <span class="k">if</span> <span class="n">is_navigator</span> <span class="k">else</span> <span class="n">definitions</span><span class="o">.</span><span class="n">centre_partition</span><span class="p">,</span>
             <span class="p">)</span>
         <span class="p">)</span>
 
@@ -876,9 +888,11 @@
     <span class="k">return</span> <span class="n">flags</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_limit</span><span class="p">(</span><span class="n">values</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_limit</span><span class="p">(</span><span class="n">values</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">centre</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
     <span class="n">maximum</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">values</span><span class="o">.</span><span class="n">max</span><span class="p">())</span> <span class="k">if</span> <span class="n">values</span><span class="o">.</span><span class="n">size</span> <span class="k">else</span> <span class="mi">0</span>
-    <span class="k">return</span> <span class="n">xsd</span><span class="o">.</span><span class="n">limitType</span><span class="p">(</span><span class="n">minimum</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">maximum</span><span class="o">=</span><span class="n">maximum</span><span class="p">,</span> <span class="n">center</span><span class="o">=</span><span class="n">maximum</span> <span class="o">//</span> <span class="mi">2</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">xsd</span><span class="o">.</span><span class="n">limitType</span><span class="p">(</span>
+        <span class="n">minimum</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">maximum</span><span class="o">=</span><span class="n">maximum</span><span class="p">,</span> <span class="n">center</span><span class="o">=</span><span class="n">maximum</span> <span class="o">//</span> <span class="mi">2</span> <span class="k">if</span> <span class="n">centre</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">centre</span>
+    <span class="p">)</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_encoding_space</span><span class="p">(</span><span class="n">space</span><span class="p">:</span> <span class="n">TableSpace</span><span class="p">,</span> <span class="n">current</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>

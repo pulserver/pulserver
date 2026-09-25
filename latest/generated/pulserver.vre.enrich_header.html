@@ -535,7 +535,8 @@
 <dd><p>Describe the table’s encoding spaces and sequence parameters in an MRD header.</p>
 <p>For every space, sets <code class="docutils literal notranslate"><span class="pre">encodedSpace</span></code> and <code class="docutils literal notranslate"><span class="pre">reconSpace</span></code> from the
 sequence’s matrix and field of view when defined, <code class="docutils literal notranslate"><span class="pre">encodingLimits</span></code> from
-the counters of its readouts (minimum 0, centre half the maximum), and
+the counters of its readouts (minimum 0, centre half the maximum, or for
+<code class="docutils literal notranslate"><span class="pre">kspace_encoding_step_1</span></code> and <code class="docutils literal notranslate"><span class="pre">_2</span></code> the centre the sequence defines), and
 <code class="docutils literal notranslate"><span class="pre">trajectory</span></code> to <code class="docutils literal notranslate"><span class="pre">OTHER</span></code> or <code class="docutils literal notranslate"><span class="pre">CARTESIAN</span></code>. Other fields of an existing
 encoding are kept; missing encodings are appended. Sequence parameters the
 table holds replace the header’s.</p>

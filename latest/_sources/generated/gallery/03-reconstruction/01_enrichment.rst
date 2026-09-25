@@ -110,7 +110,7 @@ simulation below joins them over the scan.
 
     64 readouts of 128 samples
     LIN of the first readouts: [0 1 2 3 4 5]
-    encoding spaces: (TableSpace(subsequence=0, navigator=False, matrix=(64, 64, 1), fov_mm=(220.0, 220.0, 5.0), trajectory=False),)
+    encoding spaces: (TableSpace(subsequence=0, navigator=False, matrix=(64, 64, 1), fov_mm=(220.0, 220.0, 5.0), trajectory=False, centre_line=32, centre_partition=None),)
 
 
 
@@ -446,7 +446,7 @@ to the gradients or the trajectory.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 1.197 seconds)
+   **Total running time of the script:** (0 minutes 0.826 seconds)
 
 
 .. _sphx_glr_download_generated_gallery_03-reconstruction_01_enrichment.py:

@@ -16,6 +16,8 @@
    :toctree:
    :nosignatures:
 
+   ~TableSpace.centre_line
+   ~TableSpace.centre_partition
    ~TableSpace.subsequence
    ~TableSpace.navigator
    ~TableSpace.matrix
