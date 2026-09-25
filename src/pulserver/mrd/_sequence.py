@@ -8,6 +8,7 @@ from __future__ import annotations
 
 __all__ = ["ReadoutTable", "SequenceDefinitions", "read_chain"]
 
+import math
 import threading
 from collections import OrderedDict
 from dataclasses import dataclass, field
@@ -43,6 +44,7 @@ def read_chain(path: Path | str, *, verify: bool = False) -> list[tuple[Path, An
     """Read a sequence file and every file its ``NextSequence`` definitions name, in play order.
 
     A ``NextSequence`` name is relative to the directory of the file naming it.
+    Each file is read by ``pypulseqpp.io.read``, onto a system built from it.
 
     Parameters
     ----------
@@ -75,8 +77,7 @@ def read_chain(path: Path | str, *, verify: bool = False) -> list[tuple[Path, An
         if resolved in played:
             raise ValueError(f"the NextSequence chain returns to {current}")
         played.add(resolved)
-        seq = pp.Sequence()
-        seq.read(current, verify=verify)
+        seq = pp.io.read(current, verify=verify)
         chain.append((current, seq))
         following = seq.get_definition("NextSequence")
         if following in ("", None):
@@ -87,6 +88,11 @@ def read_chain(path: Path | str, *, verify: bool = False) -> list[tuple[Path, An
 @dataclass(frozen=True)
 class SequenceDefinitions:
     """Definitions describing what a sequence acquires, in Pulseq units.
+
+    ``TR``, ``TE`` and ``FlipAngle`` a sequence does not define are measured
+    by ``Sequence.test_report_dict``: TE from the excitation before the
+    closest approach to the k-space centre, TR between the excitations around
+    it, and every distinct flip angle the sequence plays.
 
     Attributes
     ----------
@@ -118,16 +124,28 @@ class SequenceDefinitions:
 
     @classmethod
     def from_sequence(cls, seq: Any) -> SequenceDefinitions:
-        """Read the definitions of a ``pypulseqpp.Sequence``."""
+        """Read the definitions of a ``pypulseqpp.Sequence``, measuring those it lacks.
+
+        Measuring runs ``check_timing``, which may record ``TotalDuration`` and
+        needs the sequence on a system, as ``pypulseqpp.io.read`` builds one.
+        """
+        tr = tuple(_numbers(seq.get_definition("TR")))
+        te = tuple(_numbers(seq.get_definition("TE")))
+        flip_angle = tuple(_numbers(seq.get_definition("FlipAngle")))
+        if not (tr and te and flip_angle):
+            measured_tr, measured_te, measured_flip = _measured(seq)
+            tr = tr or measured_tr
+            te = te or measured_te
+            flip_angle = flip_angle or measured_flip
         return cls(
             matrix=_triple(seq.get_definition("Matrix"), int),
             fov=_triple(seq.get_definition("FOV"), float),
             navigator_matrix=_triple(seq.get_definition("NavMatrix"), int),
             navigator_fov=_triple(seq.get_definition("NavFOV"), float),
-            tr=tuple(_numbers(seq.get_definition("TR"))),
-            te=tuple(_numbers(seq.get_definition("TE"))),
+            tr=tr,
+            te=te,
             ti=tuple(_numbers(seq.get_definition("TI"))),
-            flip_angle=tuple(_numbers(seq.get_definition("FlipAngle"))),
+            flip_angle=flip_angle,
             centre_line=_counter(seq.get_definition("kSpaceCenterLine")),
             centre_partition=_counter(seq.get_definition("kSpaceCenterPartition")),
         )
@@ -372,6 +390,22 @@ def _echo_and_dimensions(
 def _step(swept: np.ndarray, index: np.ndarray, at: np.ndarray) -> np.ndarray:
     """Length of each readout's k step from sample ``at`` to the next."""
     return np.sqrt(((swept[index, :, at + 1] - swept[index, :, at]) ** 2).sum(axis=1))
+
+
+def _measured(seq: Any) -> tuple[tuple[float, ...], ...]:
+    """TR, TE and flip angles as pypulseqpp's report measures them; empty where it cannot.
+
+    A sequence without RF has no TR: the report's fallback to the total
+    duration is not one.
+    """
+    report = seq.test_report_dict()
+    tr, te = float(report["TR"]), float(report["TE"])
+    plays_rf = int(report["event_count"]["rf"]) > 0
+    return (
+        (tr,) if plays_rf and math.isfinite(tr) else (),
+        (te,) if math.isfinite(te) else (),
+        tuple(float(angle) for angle in report["flip_angles_deg"]),
+    )
 
 
 def _numbers(value: Any) -> list[float]:
