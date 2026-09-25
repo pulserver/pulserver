@@ -37,12 +37,12 @@ def test_readouts_follow_the_adc_windows_in_play_order():
     np.testing.assert_allclose(table.dwell, 1e-5)
 
 
-@pytest.mark.parametrize("range_samples", [_sequence._RANGE_SAMPLES, 1])
+@pytest.mark.parametrize("run_samples", [_sequence._RUN_SAMPLES, 1])
 @pytest.mark.parametrize("name", SEQUENCES)
-def test_k_integrated_from_an_excitation_is_k_integrated_from_the_first_block(
-    monkeypatch, name, range_samples
+def test_k_integrated_a_run_at_a_time_is_k_integrated_from_the_first_block(
+    monkeypatch, name, run_samples
 ):
-    monkeypatch.setattr(_sequence, "_RANGE_SAMPLES", range_samples)
+    monkeypatch.setattr(_sequence, "_RUN_SAMPLES", run_samples)
     seq, table = fixture(name)
     whole = seq.calculate_kspace()[0]
     # The float32 resolution of the largest k, which an MRD trajectory carries.
@@ -57,7 +57,7 @@ def test_k_integrated_from_an_excitation_is_k_integrated_from_the_first_block(
 
 
 def test_a_spin_echo_train_keeps_the_k_its_refocusing_pulses_reverse(monkeypatch):
-    monkeypatch.setattr(_sequence, "_RANGE_SAMPLES", 1)
+    monkeypatch.setattr(_sequence, "_RUN_SAMPLES", 1)
     system = pp.Opts()
     excitation = pp.make_block_pulse(np.pi / 2, duration=1e-3, system=system)
     refocusing = pp.make_block_pulse(
@@ -74,7 +74,7 @@ def test_a_spin_echo_train_keeps_the_k_its_refocusing_pulses_reverse(monkeypatch
             seq.add_block(refocusing)
             seq.add_block(readout, adc)
     table = ReadoutTable.from_sequence(seq)
-    assert len(table._ranges._first) == 2
+    assert len(table._runs.first) == len(table)
     for index in range(len(table)):
         np.testing.assert_allclose(
             table.readout_k(index), whole_scan_k(seq, table, index), atol=1e-9
@@ -82,8 +82,9 @@ def test_a_spin_echo_train_keeps_the_k_its_refocusing_pulses_reverse(monkeypatch
     assert table.center_sample.tolist() == [SAMPLES // 2] * 6
 
 
-def test_an_excitation_holding_a_readout_starts_no_range(monkeypatch):
-    monkeypatch.setattr(_sequence, "_RANGE_SAMPLES", 1)
+def test_a_readout_in_an_excitations_block_keeps_the_k_before_it(monkeypatch):
+    """The block's readout plays before its pulse, so its run starts before the block."""
+    monkeypatch.setattr(_sequence, "_RUN_SAMPLES", 1)
     system = pp.Opts()
     readout = pp.make_trapezoid("x", flat_area=SAMPLES * 5.0, flat_time=3.2e-3)
     adc = pp.make_adc(num_samples=SAMPLES, duration=3.2e-3, delay=readout.rise_time)
@@ -95,20 +96,33 @@ def test_an_excitation_holding_a_readout_starts_no_range(monkeypatch):
     seq.add_block(readout, adc)
     seq.add_block(readout, adc, late)
     table = ReadoutTable.from_sequence(seq)
-    assert table._ranges._first.tolist() == [1]
+    assert table._runs.first.tolist() == [0, 1]
     np.testing.assert_allclose(
         table.readout_k(1), whole_scan_k(seq, table, 1), atol=1e-9
     )
     assert np.abs(table.readout_k(1)[0]).min() > np.abs(table.readout_k(0)[0]).max()
 
 
-def test_a_table_keeps_the_k_of_two_ranges_at_most(monkeypatch):
-    monkeypatch.setattr(_sequence, "_RANGE_SAMPLES", 1)
+def test_a_table_keeps_the_k_of_two_runs_at_most(monkeypatch):
+    monkeypatch.setattr(_sequence, "_RUN_SAMPLES", 1)
     _, table = fixture("gre_2d_3sl.seq")
     for index in range(len(table)):
         table.readout_k(index)
-    assert len(table._ranges._first) == len(table)
-    assert len(table._ranges._kept) == _sequence._KEPT_RANGES == 2
+    assert len(table._runs.first) == len(table)
+    assert len(table._runs._kept) == _sequence._KEPT_RUNS == 2
+
+
+def test_runs_split_the_readouts_where_their_samples_pass_a_multiple_of_the_run(
+    monkeypatch,
+):
+    seq, table = fixture("gre_2d_3sl.seq")
+    monkeypatch.setattr(_sequence, "_RUN_SAMPLES", 3 * int(table.num_samples[0]))
+    table = ReadoutTable.from_sequence(seq)
+    assert table._runs.first.tolist() == list(range(0, len(table), 3))
+    for index in (0, 2, 3, len(table) - 1):
+        np.testing.assert_allclose(
+            table.readout_k(index), whole_scan_k(seq, table, index), atol=1e-6
+        )
 
 
 def test_labels_are_the_values_in_force_at_each_readout():
