@@ -60,8 +60,9 @@ acquisition proceeds as follows.
    header names the design the series was played from.
 4. The proxy reads the design's sequence files, completes the MRD header and
    every acquisition from them, and runs the reconstruction plugin the sequence
-   names in a worker process ({doc}`reconstruction`). The images return to the
-   console through the client's connection.
+   names in a worker process, or forwards the completed series to a
+   reconstruction server on another computer ({doc}`reconstruction`). The
+   images return to the console through the client's connection.
 
 ## Representations at each boundary
 
@@ -70,7 +71,7 @@ acquisition proceeds as follows.
 | Protocol block (`[NimPulseqGUI Protocol]`) | Design calls and interpreter | Both; the grammar is in {mod}`pulserver.protocol` and `pulseg_protocol.h` |
 | Pulseq files, binary form | pypulseqpp, in a design call | The IR conversion and the reconstruction proxy |
 | IR cache (`.pseg`; `.pge` on GE) | {func}`pulserver.ir.convert` | The interpreter, through the C library in `src/c/` |
-| MRD stream | Reconstruction client | Reconstruction proxy and its workers |
+| MRD stream | Reconstruction client; the proxy, forwarding | Reconstruction proxy and its workers; a reconstruction server |
 
 The reconstruction side reads the Pulseq files of a design, not its IR cache:
 the cache is a derived representation for playout, and the Pulseq files remain

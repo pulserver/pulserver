@@ -9,7 +9,9 @@ and returns the images. When the two run on different computers, either the
 store is a directory both can reach, or the proxy keeps a store of its own and
 its design intake receives each design the design calls push to it. The store
 and the identity of a design are described in
-{doc}`../explanations/designs`.
+{doc}`../explanations/designs`. Where the reconstructions run on a computer of
+their own, a reconstruction server runs there and the proxy forwards each
+series to it.
 
 ## Design calls
 
@@ -171,6 +173,7 @@ permissions decide who may call.
 
 ```bash
 python -m pulserver.vre --store DIR --port N --plugins DIR [--host ADDR] [--intake-port N] [--queue DIR] [--slots N] [--gpu-slots 1] [--spares 1] [--recon-timeout S]
+python -m pulserver.vre --store DIR --port N --forward HOST:PORT [--forward-config NAME] [--forward-dicom] [--host ADDR] [--intake-port N] [--recon-timeout S]
 ```
 
 | Option | Meaning |
@@ -179,12 +182,15 @@ python -m pulserver.vre --store DIR --port N --plugins DIR [--host ADDR] [--inta
 | `--port` | TCP port the scanner's reconstruction client connects to |
 | `--host` | Address to listen on; the loopback interface when unset, `0.0.0.0` for every interface |
 | `--intake-port` | TCP port of the design intake, on the `--host` address; no intake when unset |
-| `--plugins` | Directory of reconstruction plugin files, `<plugin>.py` |
+| `--plugins` | Directory of reconstruction plugin files, `<plugin>.py`; required unless `--forward` is given |
 | `--queue` | Directory the series waiting for a slot are written to; a temporary directory, removed when the proxy stops, when unset |
 | `--slots` | Series reconstructed at once; derived from available memory and the GPUs when unset |
 | `--gpu-slots` | Series reconstructed at once on each GPU when `--slots` is unset, default 1 |
 | `--spares` | Worker processes started ahead of a series, default 1 |
-| `--recon-timeout` | Seconds a reconstruction may run after its series ends; the worker is then terminated and the client told. Unlimited when unset |
+| `--recon-timeout` | Seconds a reconstruction may run after its series ends; the worker is then terminated, or the connection to the server closed, and the client told. Unlimited when unset |
+| `--forward` | `HOST:PORT` of the MRD server that reconstructs every series, instead of local workers |
+| `--forward-config` | Config name sent to the `--forward` server; the series' reconstruction plugin when unset |
+| `--forward-dicom` | Convert each image the `--forward` server returns to DICOM before it is relayed |
 
 The MRD header of each series names the design it was played from in the
 `pulserver_design` user parameter, and the proxy refuses a series whose header
@@ -197,6 +203,15 @@ in {doc}`reconstruction-client`.
 A series that finds every slot busy is written to the queue directory as it
 arrives and reconstructed once a slot frees; the client stays connected
 meanwhile.
+
+With `--forward`, the proxy runs no workers: each series is enriched as it
+arrives and sent on to the MRD server at `HOST:PORT`, whose own slots and queue
+determine when it is reconstructed. The server receives a config file message naming the series'
+reconstruction plugin, which a reconstruction server runs, or the
+`--forward-config` name, such as the configuration a Gadgetron or a FIRE server
+selects its pipeline by. The client's config text is not forwarded. What the
+server returns is relayed to the client; a message the proxy has no reader for
+ends the relay, and the client receives a `pulserver:` text naming its type.
 
 With `--intake-port`, the proxy runs a design intake beside it
 ({class}`~pulserver.vre.DesignIntake`), an HTTP endpoint that writes the
@@ -216,9 +231,25 @@ reconstruction client cannot reach the loopback default.
 The proxy and the warm design server stop on `SIGINT` or `SIGTERM`. The proxy
 waits for the series it is running before it exits.
 
+## Reconstruction server
+
+```bash
+python -m pulserver.recon --plugins DIR --port N [--host ADDR] [--queue DIR] [--slots N] [--gpu-slots 1] [--spares 1] [--recon-timeout S]
+```
+
+The reconstruction server is what a forwarding proxy sends its series to, on
+the computer that reconstructs them. It reconstructs each series it receives
+with the plugin its config names, as a config file message or as a config text
+naming it as a bare name or under `parameters.config`, and enriches nothing:
+the series a proxy forwards arrive enriched. Its options are the proxy's, with
+the same workers, slots, queue and exam directories. Its stream is neither
+authenticated nor encrypted, and `--host` names the interface the proxy
+reaches it on. It stops on `SIGINT` or `SIGTERM` and waits for the series it is
+running.
+
 ## See also
 
 * {doc}`../explanations/architecture` — the services and what passes between them.
 * {doc}`../explanations/designs` — the design store and the identity of a design.
 * {doc}`reconstruction-client` — the MRD stream of a series.
-* {doc}`../api/host` and {doc}`../api/vre` — the design calls and the proxy.
+* {doc}`../api/host` and {doc}`../api/vre` — the design calls, the proxy and the reconstruction server.

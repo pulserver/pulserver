@@ -533,7 +533,7 @@
 <dt class="sig sig-object py" id="pulserver.vre.ReconProxy">
 <span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pulserver.vre.</span></span><span class="sig-name descname"><span class="pre">ReconProxy</span></span><a class="reference internal" href="../_modules/pulserver/vre/_proxy.html#ReconProxy"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.vre.ReconProxy" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/builtins/functions.html#object" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
-<p>Routes each series of an MRD stream to a reconstruction worker.</p>
+<p>Routes each series of an MRD stream to a reconstruction.</p>
 <p>One thread per client connection, which carries one series: an optional
 config text, the header, one acquisition per readout of the chain and a
 <code class="docutils literal notranslate"><span class="pre">CLOSE</span></code>. The header’s <code class="docutils literal notranslate"><span class="pre">pulserver_design</span></code> names the design of the store
@@ -545,42 +545,60 @@ received. The reconstruction plugin is the design’s, falling back to
 the name in the client’s config text. A series that breaks this is refused
 with a text naming the reason and a <code class="docutils literal notranslate"><span class="pre">CLOSE</span></code>, and what the client still
 sends is discarded until it closes the connection.</p>
-<p>A series holds a slot for as long as it runs. On a host with GPUs, found
-through <code class="docutils literal notranslate"><span class="pre">CUDA_VISIBLE_DEVICES</span></code> or <code class="docutils literal notranslate"><span class="pre">nvidia-smi</span></code>, each slot holds one,
-<code class="docutils literal notranslate"><span class="pre">gpu_slots</span></code> slots per GPU, and the reconstruction reads it as
-<code class="docutils literal notranslate"><span class="pre">context.device</span></code>. Its worker’s images, DICOM and text go back to the
-client as they arrive, the client’s close closes the worker, and the
-worker’s close closes the client.</p>
-<p>A series that finds every slot busy is queued instead: its enriched stream
-is written to a file of <code class="docutils literal notranslate"><span class="pre">queue</span></code> while it arrives, its client stays
-connected, and the file is replayed to a worker and deleted once a slot
-frees.</p>
-<p>Once the client’s stream ends, the proxy waits for the worker to close,
-however long the reconstruction takes, unless <code class="docutils literal notranslate"><span class="pre">recon_timeout</span></code> caps it.</p>
-<p>The series of one exam share a directory under the system’s temporary
-directory, through which a reconstruction reads what an earlier series of
-the exam stored in its <a class="reference internal" href="pulserver.recon.ExamCache.html#pulserver.recon.ExamCache" title="pulserver.recon.ExamCache"><code class="xref py py-class docutils literal notranslate"><span class="pre">ExamCache</span></code></a>. It is deleted
-once a header names another exam and no series of the exam still runs.</p>
+<p>The enriched series is reconstructed by a local worker, or, with
+<code class="docutils literal notranslate"><span class="pre">forward</span></code>, by the MRD server at that address. Whatever reconstructs it,
+its images, DICOM and text go back to the client as they arrive, the
+client’s close closes the reconstruction’s stream, and the
+reconstruction’s close closes the client. A message the proxy has no
+reader for ends what goes back, with a text naming its type. Once the
+client’s stream ends, the proxy waits for the reconstruction to close,
+however long it takes, unless <code class="docutils literal notranslate"><span class="pre">recon_timeout</span></code> caps it.</p>
+<p>A local series holds a slot for as long as it runs. On a host with GPUs,
+found through <code class="docutils literal notranslate"><span class="pre">CUDA_VISIBLE_DEVICES</span></code> or <code class="docutils literal notranslate"><span class="pre">nvidia-smi</span></code>, each slot holds
+one, <code class="docutils literal notranslate"><span class="pre">gpu_slots</span></code> slots per GPU, and the reconstruction reads it as
+<code class="docutils literal notranslate"><span class="pre">context.device</span></code>. A series that finds every slot busy is queued instead:
+its enriched stream is written to a file of <code class="docutils literal notranslate"><span class="pre">queue</span></code> while it arrives, its
+client stays connected, and the file is replayed to a worker and deleted
+once a slot frees. The series of one exam share a directory under the
+system’s temporary directory, through which a reconstruction reads what an
+earlier series of the exam stored in its
+<a class="reference internal" href="pulserver.recon.ExamCache.html#pulserver.recon.ExamCache" title="pulserver.recon.ExamCache"><code class="xref py py-class docutils literal notranslate"><span class="pre">ExamCache</span></code></a>. It is deleted once a header names
+another exam and no series of the exam still runs.</p>
+<p>A forwarded series is sent on as it arrives; the server’s own slots and
+queue determine when it is reconstructed. The server is sent a config file message naming
+<code class="docutils literal notranslate"><span class="pre">forward_config</span></code>, or else the series’ reconstruction plugin; the client’s
+config text itself is not forwarded.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>store</strong> – Directory of designs, as the design calls write it; read only.</p></li>
-<li><p><strong>plugins</strong> – Directory of reconstruction plugin files, <code class="docutils literal notranslate"><span class="pre">&lt;plugin&gt;.py</span></code>.</p></li>
+<li><p><strong>plugins</strong> – Directory of reconstruction plugin files, <code class="docutils literal notranslate"><span class="pre">&lt;plugin&gt;.py</span></code>; required
+unless the proxy forwards.</p></li>
 <li><p><strong>slots</strong> – Series reconstructed at once; derived from memory and the GPUs when
 <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
 <li><p><strong>gpu_slots</strong> – Series reconstructed at once on each GPU, when <code class="docutils literal notranslate"><span class="pre">slots</span></code> is <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
 <li><p><strong>spares</strong> – Warm worker processes waiting for a series.</p></li>
-<li><p><strong>recon_timeout</strong> – Seconds a worker may take after the stream ends before it is
-terminated and the client told so; <code class="docutils literal notranslate"><span class="pre">None</span></code> waits for its close.</p></li>
+<li><p><strong>recon_timeout</strong> – Seconds a reconstruction may take after the stream ends before it is
+stopped and the client told so; <code class="docutils literal notranslate"><span class="pre">None</span></code> waits for its close. A local
+worker is terminated; a forwarded series’ connection is closed.</p></li>
 <li><p><strong>queue</strong> – Directory the queued series are written to; a temporary directory,
 removed on <a class="reference internal" href="pulserver.vre.ReconProxy.close.html#pulserver.vre.ReconProxy.close" title="pulserver.vre.ReconProxy.close"><code class="xref py py-meth docutils literal notranslate"><span class="pre">close()</span></code></a>, when <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
+<li><p><strong>forward</strong> – <code class="docutils literal notranslate"><span class="pre">(host,</span> <span class="pre">port)</span></code> of the MRD server that reconstructs every series;
+local workers when <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
+<li><p><strong>forward_config</strong> – Config name sent to that server instead of the reconstruction plugin.</p></li>
+<li><p><strong>forward_dicom</strong> – Convert each image the server sends back to DICOM, from the enriched
+header.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Attributes<span class="colon">:</span></dt>
 <dd class="field-even"><ul class="simple">
-<li><p><strong>workers</strong> (<em>WorkerPool</em>) – The spares assignments are taken from.</p></li>
-<li><p><strong>exams</strong> (<em>ExamCacheManager</em>) – The current exam and its directory.</p></li>
+<li><p><strong>workers</strong> (<em>WorkerPool | None</em>) – The spares assignments are taken from; <code class="docutils literal notranslate"><span class="pre">None</span></code> when forwarding.</p></li>
+<li><p><strong>exams</strong> (<em>ExamCacheManager | None</em>) – The current exam and its directory; <code class="docutils literal notranslate"><span class="pre">None</span></code> when forwarding.</p></li>
+<li><p><strong>queue</strong> (<em>Path | None</em>) – The queue directory; <code class="docutils literal notranslate"><span class="pre">None</span></code> when forwarding.</p></li>
 </ul>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If the proxy neither forwards nor has a plugin directory.</p>
 </dd>
 </dl>
 </dd></dl>
@@ -592,7 +610,7 @@ removed on <a class="reference internal" href="pulserver.vre.ReconProxy.close.ht
 <td><p>Listen on <code class="docutils literal notranslate"><span class="pre">port</span></code> and return the port bound; 0 takes a free one.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="pulserver.vre.ReconProxy.close.html#pulserver.vre.ReconProxy.close" title="pulserver.vre.ReconProxy.close"><code class="xref py py-obj docutils literal notranslate"><span class="pre">close</span></code></a></p></td>
-<td><p>Stop accepting clients, release the spares and wait for running series.</p></td>
+<td><p>Stop accepting clients, wait for running series and release the spares.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="pulserver.vre.ReconProxy.serve.html#pulserver.vre.ReconProxy.serve" title="pulserver.vre.ReconProxy.serve"><code class="xref py py-obj docutils literal notranslate"><span class="pre">serve</span></code></a></p></td>
 <td><p>Accept clients until <code class="xref py py-meth docutils literal notranslate"><span class="pre">stop()</span></code> or <code class="xref py py-meth docutils literal notranslate"><span class="pre">close()</span></code>, one thread each.</p></td>
@@ -607,7 +625,7 @@ removed on <a class="reference internal" href="pulserver.vre.ReconProxy.close.ht
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table">
 <tbody>
 <tr class="row-odd"><td><p><a class="reference internal" href="pulserver.vre.ReconProxy.port.html#pulserver.vre.ReconProxy.port" title="pulserver.vre.ReconProxy.port"><code class="xref py py-obj docutils literal notranslate"><span class="pre">port</span></code></a></p></td>
-<td><p>Port the proxy listens on.</p></td>
+<td><p>Port the server listens on.</p></td>
 </tr>
 </tbody>
 </table>

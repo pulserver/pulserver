@@ -525,6 +525,7 @@
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reconstruction-proxy">Reconstruction proxy</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reconstruction-server">Reconstruction server</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See also</a></li>
 </ul>
             </nav>
@@ -548,7 +549,9 @@ and returns the images. When the two run on different computers, either the
 store is a directory both can reach, or the proxy keeps a store of its own and
 its design intake receives each design the design calls push to it. The store
 and the identity of a design are described in
-<a class="reference internal" href="../explanations/designs.html"><span class="doc">Designs and the design store</span></a>.</p>
+<a class="reference internal" href="../explanations/designs.html"><span class="doc">Designs and the design store</span></a>. Where the reconstructions run on a computer of
+their own, a reconstruction server runs there and the proxy forwards each
+series to it.</p>
 <section id="design-calls">
 <h2>Design calls<a class="headerlink" href="#design-calls" title="Link to this heading">#</a></h2>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pulserver<span class="w"> </span>design<span class="w"> </span>list<span class="w">     </span>--plugins<span class="w"> </span>DIR<span class="w"> </span>--plugin<span class="w"> </span>NAME
@@ -748,6 +751,7 @@ permissions decide who may call.</p>
 <section id="reconstruction-proxy">
 <h2>Reconstruction proxy<a class="headerlink" href="#reconstruction-proxy" title="Link to this heading">#</a></h2>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>-m<span class="w"> </span>pulserver.vre<span class="w"> </span>--store<span class="w"> </span>DIR<span class="w"> </span>--port<span class="w"> </span>N<span class="w"> </span>--plugins<span class="w"> </span>DIR<span class="w"> </span><span class="o">[</span>--host<span class="w"> </span>ADDR<span class="o">]</span><span class="w"> </span><span class="o">[</span>--intake-port<span class="w"> </span>N<span class="o">]</span><span class="w"> </span><span class="o">[</span>--queue<span class="w"> </span>DIR<span class="o">]</span><span class="w"> </span><span class="o">[</span>--slots<span class="w"> </span>N<span class="o">]</span><span class="w"> </span><span class="o">[</span>--gpu-slots<span class="w"> </span><span class="m">1</span><span class="o">]</span><span class="w"> </span><span class="o">[</span>--spares<span class="w"> </span><span class="m">1</span><span class="o">]</span><span class="w"> </span><span class="o">[</span>--recon-timeout<span class="w"> </span>S<span class="o">]</span>
+python<span class="w"> </span>-m<span class="w"> </span>pulserver.vre<span class="w"> </span>--store<span class="w"> </span>DIR<span class="w"> </span>--port<span class="w"> </span>N<span class="w"> </span>--forward<span class="w"> </span>HOST:PORT<span class="w"> </span><span class="o">[</span>--forward-config<span class="w"> </span>NAME<span class="o">]</span><span class="w"> </span><span class="o">[</span>--forward-dicom<span class="o">]</span><span class="w"> </span><span class="o">[</span>--host<span class="w"> </span>ADDR<span class="o">]</span><span class="w"> </span><span class="o">[</span>--intake-port<span class="w"> </span>N<span class="o">]</span><span class="w"> </span><span class="o">[</span>--recon-timeout<span class="w"> </span>S<span class="o">]</span>
 </pre></div>
 </div>
 <div class="pst-scrollable-table-container"><table class="table">
@@ -770,7 +774,7 @@ permissions decide who may call.</p>
 <td><p>TCP port of the design intake, on the <code class="docutils literal notranslate"><span class="pre">--host</span></code> address; no intake when unset</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--plugins</span></code></p></td>
-<td><p>Directory of reconstruction plugin files, <code class="docutils literal notranslate"><span class="pre">&lt;plugin&gt;.py</span></code></p></td>
+<td><p>Directory of reconstruction plugin files, <code class="docutils literal notranslate"><span class="pre">&lt;plugin&gt;.py</span></code>; required unless <code class="docutils literal notranslate"><span class="pre">--forward</span></code> is given</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--queue</span></code></p></td>
 <td><p>Directory the series waiting for a slot are written to; a temporary directory, removed when the proxy stops, when unset</p></td>
@@ -785,7 +789,16 @@ permissions decide who may call.</p>
 <td><p>Worker processes started ahead of a series, default 1</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--recon-timeout</span></code></p></td>
-<td><p>Seconds a reconstruction may run after its series ends; the worker is then terminated and the client told. Unlimited when unset</p></td>
+<td><p>Seconds a reconstruction may run after its series ends; the worker is then terminated, or the connection to the server closed, and the client told. Unlimited when unset</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--forward</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">HOST:PORT</span></code> of the MRD server that reconstructs every series, instead of local workers</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--forward-config</span></code></p></td>
+<td><p>Config name sent to the <code class="docutils literal notranslate"><span class="pre">--forward</span></code> server; the series’ reconstruction plugin when unset</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--forward-dicom</span></code></p></td>
+<td><p>Convert each image the <code class="docutils literal notranslate"><span class="pre">--forward</span></code> server returns to DICOM before it is relayed</p></td>
 </tr>
 </tbody>
 </table>
@@ -800,6 +813,14 @@ in <a class="reference internal" href="reconstruction-client.html"><span class="
 <p>A series that finds every slot busy is written to the queue directory as it
 arrives and reconstructed once a slot frees; the client stays connected
 meanwhile.</p>
+<p>With <code class="docutils literal notranslate"><span class="pre">--forward</span></code>, the proxy runs no workers: each series is enriched as it
+arrives and sent on to the MRD server at <code class="docutils literal notranslate"><span class="pre">HOST:PORT</span></code>, whose own slots and queue
+determine when it is reconstructed. The server receives a config file message naming the series’
+reconstruction plugin, which a reconstruction server runs, or the
+<code class="docutils literal notranslate"><span class="pre">--forward-config</span></code> name, such as the configuration a Gadgetron or a FIRE server
+selects its pipeline by. The client’s config text is not forwarded. What the
+server returns is relayed to the client; a message the proxy has no reader for
+ends the relay, and the client receives a <code class="docutils literal notranslate"><span class="pre">pulserver:</span></code> text naming its type.</p>
 <p>With <code class="docutils literal notranslate"><span class="pre">--intake-port</span></code>, the proxy runs a design intake beside it
 (<a class="reference internal" href="../generated/pulserver.vre.DesignIntake.html#pulserver.vre.DesignIntake" title="pulserver.vre.DesignIntake"><code class="xref py py-class docutils literal notranslate"><span class="pre">DesignIntake</span></code></a>), an HTTP endpoint that writes the
 designs pushed to it into <code class="docutils literal notranslate"><span class="pre">--store</span></code>: <code class="docutils literal notranslate"><span class="pre">HEAD</span> <span class="pre">/designs/&lt;id&gt;</span></code> answers 200 when the
@@ -816,13 +837,28 @@ reconstruction client cannot reach the loopback default.</p>
 <p>The proxy and the warm design server stop on <code class="docutils literal notranslate"><span class="pre">SIGINT</span></code> or <code class="docutils literal notranslate"><span class="pre">SIGTERM</span></code>. The proxy
 waits for the series it is running before it exits.</p>
 </section>
+<section id="reconstruction-server">
+<h2>Reconstruction server<a class="headerlink" href="#reconstruction-server" title="Link to this heading">#</a></h2>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>-m<span class="w"> </span>pulserver.recon<span class="w"> </span>--plugins<span class="w"> </span>DIR<span class="w"> </span>--port<span class="w"> </span>N<span class="w"> </span><span class="o">[</span>--host<span class="w"> </span>ADDR<span class="o">]</span><span class="w"> </span><span class="o">[</span>--queue<span class="w"> </span>DIR<span class="o">]</span><span class="w"> </span><span class="o">[</span>--slots<span class="w"> </span>N<span class="o">]</span><span class="w"> </span><span class="o">[</span>--gpu-slots<span class="w"> </span><span class="m">1</span><span class="o">]</span><span class="w"> </span><span class="o">[</span>--spares<span class="w"> </span><span class="m">1</span><span class="o">]</span><span class="w"> </span><span class="o">[</span>--recon-timeout<span class="w"> </span>S<span class="o">]</span>
+</pre></div>
+</div>
+<p>The reconstruction server is what a forwarding proxy sends its series to, on
+the computer that reconstructs them. It reconstructs each series it receives
+with the plugin its config names, as a config file message or as a config text
+naming it as a bare name or under <code class="docutils literal notranslate"><span class="pre">parameters.config</span></code>, and enriches nothing:
+the series a proxy forwards arrive enriched. Its options are the proxy’s, with
+the same workers, slots, queue and exam directories. Its stream is neither
+authenticated nor encrypted, and <code class="docutils literal notranslate"><span class="pre">--host</span></code> names the interface the proxy
+reaches it on. It stops on <code class="docutils literal notranslate"><span class="pre">SIGINT</span></code> or <code class="docutils literal notranslate"><span class="pre">SIGTERM</span></code> and waits for the series it is
+running.</p>
+</section>
 <section id="see-also">
 <h2>See also<a class="headerlink" href="#see-also" title="Link to this heading">#</a></h2>
 <ul class="simple">
 <li><p><a class="reference internal" href="../explanations/architecture.html"><span class="doc">Architecture</span></a> — the services and what passes between them.</p></li>
 <li><p><a class="reference internal" href="../explanations/designs.html"><span class="doc">Designs and the design store</span></a> — the design store and the identity of a design.</p></li>
 <li><p><a class="reference internal" href="reconstruction-client.html"><span class="doc">Reconstruction clients</span></a> — the MRD stream of a series.</p></li>
-<li><p><a class="reference internal" href="../api/host.html"><span class="doc">Design calls</span></a> and <a class="reference internal" href="../api/vre.html"><span class="doc">Reconstruction proxy</span></a> — the design calls and the proxy.</p></li>
+<li><p><a class="reference internal" href="../api/host.html"><span class="doc">Design calls</span></a> and <a class="reference internal" href="../api/vre.html"><span class="doc">Reconstruction proxy</span></a> — the design calls, the proxy and the reconstruction server.</p></li>
 </ul>
 </section>
 </section>
@@ -882,6 +918,7 @@ waits for the series it is running before it exits.</p>
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reconstruction-proxy">Reconstruction proxy</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reconstruction-server">Reconstruction server</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See also</a></li>
 </ul>
   </nav></div>

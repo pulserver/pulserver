@@ -12,6 +12,14 @@ The proxy listens on a TCP port and is started with
 
 ```bash
 python -m pulserver.vre --store DIR --port N --plugins DIR [--intake-port N] [--slots N] [--spares 1]
+python -m pulserver.vre --store DIR --port N --forward HOST:PORT [--forward-config NAME] [--forward-dicom]
+```
+
+the second forwarding every enriched series to the reconstruction server at
+`HOST:PORT`, which is started with
+
+```bash
+python -m pulserver.recon --plugins DIR --port N [--slots N] [--spares 1]
 ```
 
 The MRD header of a series names the design it was played from; the proxy
@@ -21,11 +29,12 @@ centre by the playout, and are passed on as received. Routing, slots and the
 queue are described in {doc}`../explanations/reconstruction`, and the messages
 and fields of a series in {doc}`../user-guide/reconstruction-client`.
 
-## Proxy
+## Servers
 
 | Object | Description |
 | --- | --- |
-| {obj}`~pulserver.vre.ReconProxy` | TCP MRD server routing each series to a reconstruction worker. |
+| {obj}`~pulserver.vre.ReconProxy` | TCP MRD server enriching each series and routing it to a reconstruction worker or server. |
+| {obj}`~pulserver.vre.ReconServer` | TCP MRD server reconstructing each series with the plugin its config names. |
 
 ## Designs
 

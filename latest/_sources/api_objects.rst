@@ -158,6 +158,7 @@ from.
    :nosignatures:
 
    ReconProxy
+   ReconServer
    DesignCache
    Design
    DESIGN_PARAMETER
