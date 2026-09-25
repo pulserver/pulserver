@@ -141,8 +141,6 @@ typedef struct pulseg_rf_view
 typedef struct pulseg_opts
 {
     int vendor;                    /**< PULSEG_VENDOR_* constant       */
-    float gamma_hz_per_t;          /**< gyromagnetic ratio  (Hz / T)      */
-    float b0_t;                    /**< static field strength (T)         */
     float rf_raster_us;            /**< RF sample raster (us)             */
     float grad_raster_us;          /**< gradient sample raster (us)       */
     float adc_raster_us;           /**< ADC dwell raster (us)             */

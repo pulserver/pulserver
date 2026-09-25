@@ -10,8 +10,8 @@ from pulserver.ir._source import conversion_payload
 
 FIXTURES = Path(__file__).parent / "fixtures" / "sequences"
 # The scanner the fixtures convert for; the period does not depend on it.
-SCANNER = (42576000.0, 3.0, 2.0, 20.0, 2.0, 20.0)
-SYSTEM = pp.Opts(B0=SCANNER[1])
+SYSTEM = pp.Opts(B0=3.0)
+RASTERS_US = (2.0, 20.0, 2.0, 20.0)
 
 
 def fixtures():
@@ -21,7 +21,7 @@ def fixtures():
 def segmented(sequence):
     """The one subsequence the converter makes of ``sequence``."""
     summary = _ext.summary_from_libraries(
-        [conversion_payload(sequence, SYSTEM)], *SCANNER, [0, 1, 2]
+        [conversion_payload(sequence, SYSTEM)], *RASTERS_US, [0, 1, 2]
     )
     (unit,) = summary["subsequences"]
     return unit
