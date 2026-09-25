@@ -533,14 +533,15 @@
 <dt class="sig sig-object py" id="pulserver.host.DesignStore.receive">
 <span class="sig-prename descclassname"><span class="pre">DesignStore.</span></span><span class="sig-name descname"><span class="pre">receive</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pulserver/host/_store.html#DesignStore.receive"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.host.DesignStore.receive" title="Link to this definition">#</a></dt>
 <dd><p>Store a bundle <a class="reference internal" href="pulserver.host.DesignStore.pack.html#pulserver.host.DesignStore.pack" title="pulserver.host.DesignStore.pack"><code class="xref py py-meth docutils literal notranslate"><span class="pre">pack()</span></code></a> made, after checking it; return its identifier.</p>
-<p>The bundle’s manifest must name the identifier of its identity, every
+<p>The bundle’s manifest must name a SHA-256 identity and the identifier
+of that identity, which must be <code class="docutils literal notranslate"><span class="pre">design</span></code> when one is given; every
 file must be one the manifest records, with the SHA-256 it records, and
-a symbolic link must name a file of the bundle. A design already stored
-is kept.</p>
+a symbolic link must name a file of the bundle. Nothing is written
+before these checks pass. A design already stored is kept.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Raises<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If the bundle is not a design <a class="reference internal" href="pulserver.host.DesignStore.pack.html#pulserver.host.DesignStore.pack" title="pulserver.host.DesignStore.pack"><code class="xref py py-meth docutils literal notranslate"><span class="pre">pack()</span></code></a> makes, or a file
-    differs from its manifest.</p>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If the bundle is not a design <a class="reference internal" href="pulserver.host.DesignStore.pack.html#pulserver.host.DesignStore.pack" title="pulserver.host.DesignStore.pack"><code class="xref py py-meth docutils literal notranslate"><span class="pre">pack()</span></code></a> makes, is not
+    <code class="docutils literal notranslate"><span class="pre">design</span></code>, or a file differs from its manifest.</p>
 </dd>
 </dl>
 </dd></dl>

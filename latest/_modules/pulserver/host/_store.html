@@ -458,6 +458,7 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">io</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">re</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">shutil</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">tarfile</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">tempfile</span>
@@ -473,6 +474,8 @@
 <span class="n">MANIFEST</span> <span class="o">=</span> <span class="s2">"manifest.json"</span>
 <span class="c1">#: Largest bundle a store receives, in bytes, compressed or not.</span>
 <span class="n">BUNDLE_LIMIT</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="mi">31</span>
+<span class="c1"># What design_identity returns; nothing else names a design directory.</span>
+<span class="n">_IDENTITY</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="sa">r</span><span class="s2">"[0-9a-f]</span><span class="si">{64}</span><span class="s2">"</span><span class="p">)</span>
 <span class="c1"># A stage older than this is left by a process that ended mid-design.</span>
 <span class="n">_STALE_STAGE</span> <span class="o">=</span> <span class="mf">3600.0</span>
 
@@ -627,19 +630,20 @@
 
 <div class="viewcode-block" id="DesignStore.receive">
 <a class="viewcode-back" href="../../../generated/pulserver.host.DesignStore.receive.html#pulserver.host.DesignStore.receive">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">receive</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">bundle</span><span class="p">:</span> <span class="nb">bytes</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">receive</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">bundle</span><span class="p">:</span> <span class="nb">bytes</span><span class="p">,</span> <span class="n">design</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""Store a bundle :meth:`pack` made, after checking it; return its identifier.</span>
 
-<span class="sd">        The bundle's manifest must name the identifier of its identity, every</span>
+<span class="sd">        The bundle's manifest must name a SHA-256 identity and the identifier</span>
+<span class="sd">        of that identity, which must be ``design`` when one is given; every</span>
 <span class="sd">        file must be one the manifest records, with the SHA-256 it records, and</span>
-<span class="sd">        a symbolic link must name a file of the bundle. A design already stored</span>
-<span class="sd">        is kept.</span>
+<span class="sd">        a symbolic link must name a file of the bundle. Nothing is written</span>
+<span class="sd">        before these checks pass. A design already stored is kept.</span>
 
 <span class="sd">        Raises</span>
 <span class="sd">        ------</span>
 <span class="sd">        ValueError</span>
-<span class="sd">            If the bundle is not a design :meth:`pack` makes, or a file</span>
-<span class="sd">            differs from its manifest.</span>
+<span class="sd">            If the bundle is not a design :meth:`pack` makes, is not</span>
+<span class="sd">            ``design``, or a file differs from its manifest.</span>
 <span class="sd">        """</span>
         <span class="n">files</span><span class="p">,</span> <span class="n">links</span> <span class="o">=</span> <span class="n">_read_bundle</span><span class="p">(</span><span class="n">bundle</span><span class="p">)</span>
         <span class="k">try</span><span class="p">:</span>
@@ -647,8 +651,16 @@
         <span class="k">except</span> <span class="p">(</span><span class="ne">KeyError</span><span class="p">,</span> <span class="ne">ValueError</span><span class="p">):</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"the bundle holds no manifest"</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="kc">None</span>
         <span class="n">identity</span> <span class="o">=</span> <span class="n">manifest</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"identity"</span><span class="p">)</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">identity</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="ow">or</span> <span class="n">manifest</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"id"</span><span class="p">)</span> <span class="o">!=</span> <span class="n">design_id</span><span class="p">(</span><span class="n">identity</span><span class="p">):</span>
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">identity</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span>
+            <span class="ow">or</span> <span class="ow">not</span> <span class="n">_IDENTITY</span><span class="o">.</span><span class="n">fullmatch</span><span class="p">(</span><span class="n">identity</span><span class="p">)</span>
+            <span class="ow">or</span> <span class="n">manifest</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"id"</span><span class="p">)</span> <span class="o">!=</span> <span class="n">design_id</span><span class="p">(</span><span class="n">identity</span><span class="p">)</span>
+        <span class="p">):</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"the bundle's manifest names no design"</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">design</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">design_id</span><span class="p">(</span><span class="n">identity</span><span class="p">)</span> <span class="o">!=</span> <span class="n">design</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"the bundle holds design </span><span class="si">{</span><span class="n">design_id</span><span class="p">(</span><span class="n">identity</span><span class="p">)</span><span class="si">}</span><span class="s2">, not </span><span class="si">{</span><span class="n">design</span><span class="si">}</span><span class="s2">"</span>
+            <span class="p">)</span>
         <span class="n">recorded</span> <span class="o">=</span> <span class="n">manifest</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"files"</span><span class="p">)</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">recorded</span><span class="p">,</span> <span class="nb">dict</span><span class="p">)</span> <span class="ow">or</span> <span class="nb">set</span><span class="p">(</span><span class="n">recorded</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">set</span><span class="p">(</span><span class="n">files</span><span class="p">)</span> <span class="o">-</span> <span class="p">{</span><span class="n">MANIFEST</span><span class="p">}:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"the bundle's files are not those its manifest records"</span><span class="p">)</span>
