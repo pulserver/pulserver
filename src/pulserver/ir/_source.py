@@ -316,16 +316,22 @@ def specification_libraries(sequence: Any) -> SpecificationLibraries:
     return _specification_libraries(_tables(sequence))
 
 
-def conversion_payload(sequence: Any) -> dict[str, Any]:
+def conversion_payload(sequence: Any, system: pp.Opts) -> dict[str, Any]:
     """Everything one sequence file contributes to a conversion.
 
     The libraries, the specification tables and the chain rows that link a
     block to them, in the layout a parsed file holds: times in µs, fields of
     view in cm, rasters in µs. The chain rows are the sequence's own, and
     each block names the head of its chain.
+
+    RF and ADC frequency and phase offsets are absolute: the ppm offsets are
+    resolved at the gamma and B0 of ``system`` by
+    ``pypulseqpp.io.SequenceLibraries.absolute_offsets``, and the ppm columns
+    are zero.
     """
     tables = _tables(sequence)
     libraries = _sequence_libraries(sequence, tables)
+    _resolve_ppm(libraries, tables, system)
     specifications = _specification_libraries(tables)
     blocks = libraries.blocks.copy()
     rf, grad, adc, rf_use, rf_spectra, rf_flip_deg, rf_channels, rf_b1sq = _compact(
@@ -656,6 +662,15 @@ def _label_rows(values: Any, labels: Any) -> NDArray[np.float64]:
     rows[:, 0] = values
     rows[:, 1] = [LABEL_IDS.get(label, -1) for label in labels]
     return rows
+
+
+def _resolve_ppm(libraries: SequenceLibraries, tables: Any, system: pp.Opts) -> None:
+    """Fold the ppm offsets of the RF and ADC rows into their absolute offsets, in place."""
+    rf_offsets, adc_offsets = tables.absolute_offsets(system)
+    libraries.rf[:, 8:10] = rf_offsets
+    libraries.rf[:, 6:8] = 0.0
+    libraries.adc[:, 5:7] = adc_offsets
+    libraries.adc[:, 3:5] = 0.0
 
 
 def _compact(

@@ -133,17 +133,9 @@ int pulseg__deduplicate_int_rows(
 /*  RF dedup helpers                                                  */
 /* ================================================================== */
 
-static void build_rf_def_row(
-    const pulseq_file *seq,
-    int *row,
-    float *params,
-    int rf_idx,
-    const pulseg_opts *opts)
+static void build_rf_def_row(const pulseq_file *seq, int *row, float *params, int rf_idx)
 {
-    float gamma = opts->gamma_hz_per_t;
-    float b0 = opts->b0_t;
     float *rf = seq->rf_library[rf_idx];
-    float ppm_to_hz = 1e-6f * gamma * b0;
 
     row[0] = (int)rf[1]; /* mag shape id */
     row[1] = (int)rf[2]; /* phase shape id */
@@ -151,16 +143,15 @@ static void build_rf_def_row(
     row[3] = (int)rf[5]; /* delay */
     row[4] = (int)floor(rf[4] + 0.5f); /* centre (us) */
 
-    params[0] = rf[0];                     /* amplitude */
-    params[1] = rf[8] + ppm_to_hz * rf[6]; /* freq offset + ppm * freqPPM */
-    params[2] = rf[9] + ppm_to_hz * rf[7]; /* phase offset + ppm * phasePPM */
+    params[0] = rf[0]; /* amplitude */
+    params[1] = rf[8]; /* frequency offset, ppm resolved on the host (Hz) */
+    params[2] = rf[9]; /* phase offset, ppm resolved on the host (rad) */
 }
 
 static int deduplicate_rf_library(
     const pulseq_file *seq,
     pulseg_rf_definition *rf_defs,
-    pulseg_rf_table_element *rf_table,
-    const pulseg_opts *opts)
+    pulseg_rf_table_element *rf_table)
 {
     int(*int_rows)[RF_DEF_COLS] = NULL;
     float(*params)[RF_PARAMS_COLS] = NULL;
@@ -190,7 +181,7 @@ static int deduplicate_rf_library(
     }
 
     for (i = 0; i < num_rows; ++i)
-        build_rf_def_row(seq, int_rows[i], params[i], i, opts);
+        build_rf_def_row(seq, int_rows[i], params[i], i);
 
     num_unique = pulseg__deduplicate_int_rows(
         unique_defs,
@@ -333,30 +324,21 @@ static int deduplicate_grad_library(
 /*  ADC dedup helpers                                                 */
 /* ================================================================== */
 
-static void build_adc_def_row(
-    const pulseq_file *seq,
-    int *row,
-    float *params,
-    int adc_idx,
-    const pulseg_opts *opts)
+static void build_adc_def_row(const pulseq_file *seq, int *row, float *params, int adc_idx)
 {
-    float gamma = opts->gamma_hz_per_t;
-    float b0 = opts->b0_t;
     float *adc = seq->adc_library[adc_idx];
-    float ppm_to_hz = 1e-6f * gamma * b0;
 
-    row[0] = (int)adc[0];                    /* num_samples */
-    row[1] = (int)adc[1];                    /* dwell_time_ns */
-    row[2] = (int)adc[2];                    /* delay */
-    params[0] = adc[5] + ppm_to_hz * adc[3]; /* freq offset */
-    params[1] = adc[6] + ppm_to_hz * adc[4]; /* phase offset */
+    row[0] = (int)adc[0]; /* num_samples */
+    row[1] = (int)adc[1]; /* dwell_time_ns */
+    row[2] = (int)adc[2]; /* delay */
+    params[0] = adc[5];   /* frequency offset, ppm resolved on the host (Hz) */
+    params[1] = adc[6];   /* phase offset, ppm resolved on the host (rad) */
 }
 
 static int deduplicate_adc_library(
     const pulseq_file *seq,
     pulseg_adc_definition *adc_defs,
-    pulseg_adc_table_element *adc_table,
-    const pulseg_opts *opts)
+    pulseg_adc_table_element *adc_table)
 {
     int(*int_rows)[ADC_DEF_COLS] = NULL;
     float(*params)[ADC_PARAMS_COLS] = NULL;
@@ -386,7 +368,7 @@ static int deduplicate_adc_library(
     }
 
     for (i = 0; i < num_rows; ++i)
-        build_adc_def_row(seq, int_rows[i], params[i], i, opts);
+        build_adc_def_row(seq, int_rows[i], params[i], i);
 
     num_unique = pulseg__deduplicate_int_rows(
         unique_defs,
@@ -1736,7 +1718,7 @@ int pulseg__get_unique_blocks(
     /* ---- step 1: dedup event libraries ---- */
     if (seq->rf_library_size > 0)
     {
-        num_unique_rf = deduplicate_rf_library(seq, tmp_rf_defs, tmp_rf_tab, opts);
+        num_unique_rf = deduplicate_rf_library(seq, tmp_rf_defs, tmp_rf_tab);
         desc->num_unique_rfs = num_unique_rf;
         desc->rf_table_size = seq->rf_library_size;
         /* Neutral RF stats (flip angle, amplitudes, area, duration, isodelay,
@@ -1786,7 +1768,7 @@ int pulseg__get_unique_blocks(
     }
     if (seq->adc_library_size > 0)
     {
-        num_unique_adc = deduplicate_adc_library(seq, tmp_adc_defs, tmp_adc_tab, opts);
+        num_unique_adc = deduplicate_adc_library(seq, tmp_adc_defs, tmp_adc_tab);
         desc->num_unique_adcs = num_unique_adc;
         desc->adc_table_size = seq->adc_library_size;
     }

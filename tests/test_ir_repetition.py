@@ -11,6 +11,7 @@ from pulserver.ir._source import conversion_payload
 FIXTURES = Path(__file__).parent / "fixtures" / "sequences"
 # The scanner the fixtures convert for; the period does not depend on it.
 SCANNER = (42576000.0, 3.0, 2.0, 20.0, 2.0, 20.0)
+SYSTEM = pp.Opts(B0=SCANNER[1])
 
 
 def fixtures():
@@ -22,7 +23,7 @@ def detected(path):
     sequence = pp.Sequence()
     sequence.read(path)
     summary = _ext.summary_from_libraries(
-        [conversion_payload(sequence)], *SCANNER, [0, 1, 2]
+        [conversion_payload(sequence, SYSTEM)], *SCANNER, [0, 1, 2]
     )
     return (
         [part["tr_size"] for part in summary["subsequences"]],
@@ -93,7 +94,7 @@ def test_the_repetition_time_counts_each_delay_at_the_duration_it_plays(tmp_path
     sequence = pp.Sequence()
     sequence.read(written(tmp_path, "gradient_in_a_tr.seq", build))
     summary = _ext.summary_from_libraries(
-        [conversion_payload(sequence)], *SCANNER, [0, 1, 2]
+        [conversion_payload(sequence, SYSTEM)], *SCANNER, [0, 1, 2]
     )
     (unit,) = summary["subsequences"]
     assert unit["tr_size"] == 3
@@ -108,7 +109,7 @@ def test_a_hyper_tr_declared_as_pypulseqpp_writes_it_is_the_repeating_unit(tmp_p
     sequence = pp.Sequence()
     sequence.read(written(tmp_path, "declared_hyper_tr.seq", build))
     summary = _ext.summary_from_libraries(
-        [conversion_payload(sequence)], *SCANNER, [0, 1, 2]
+        [conversion_payload(sequence, SYSTEM)], *SCANNER, [0, 1, 2]
     )
     (unit,) = summary["subsequences"]
     assert unit["tr_size"] == 6

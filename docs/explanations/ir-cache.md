@@ -137,7 +137,10 @@ The energy is held as the integral of the squared envelope scaled to unit
 peak, in seconds: pypulseqpp's `calc_rf_power` energy, the integral of
 $|b_1|^2$, over its peak power, both summed over the channels.
 A pulse a file leaves unlabelled takes the use pypulseqpp detects for it when
-the chain is read. `label_column_map` selects the three labels the
+the chain is read. RF and ADC frequency and phase offsets are stored absolute:
+the ppm offsets are resolved on the host, at the gamma and B0 of the call's
+limits, by pypulseqpp's `SequenceLibraries.absolute_offsets`.
+`label_column_map` selects the three labels the
 interpreter records per readout, as indices in the order SLC, PHS, REP, AVG,
 SEG, SET, ECO, PAR, LIN, ACQ.
 
