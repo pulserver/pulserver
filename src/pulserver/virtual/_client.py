@@ -27,6 +27,7 @@ def send(
     *,
     frequency_hz: float = 123_200_000.0,
     position_mm: Sequence[float] = (0.0, 0.0, 0.0),
+    rotation: np.ndarray | None = None,
     config: str | None = None,
     exam: str | None = None,
     timeout: float = 600.0,
@@ -36,12 +37,15 @@ def send(
     The header carries the design identifier, the resonance frequency, the
     coil count and, with ``exam``, the ``ExamID``; the acquisitions carry the
     samples, scan counters from one, ``LAST_IN_MEASUREMENT`` on the last,
-    and the field-of-view centre ``position_mm`` along axes that are the
-    logical ones. Nothing else of the sequence is sent, as
+    the field-of-view centre ``position_mm``, in mm along the physical axes,
+    and as ``read_dir``, ``phase_dir`` and ``slice_dir`` the columns of the
+    prescription's ``rotation`` from logical to physical axes, the identity
+    by default. Nothing else of the sequence is sent, as
     :doc:`/user-guide/reconstruction-client` specifies. The reply is the
     images, DICOM datasets and texts in the order they arrive.
     """
     coils = int(readouts[0].shape[0]) if len(readouts) else 1
+    directions = np.eye(3) if rotation is None else np.asarray(rotation, float)
     stream = socket.create_connection(address, timeout=timeout)
     connection = Connection(stream)
     try:
@@ -55,9 +59,9 @@ def send(
             )
             acquisition.scan_counter = index + 1
             acquisition.position[:] = position_mm
-            acquisition.read_dir[:] = (1.0, 0.0, 0.0)
-            acquisition.phase_dir[:] = (0.0, 1.0, 0.0)
-            acquisition.slice_dir[:] = (0.0, 0.0, 1.0)
+            acquisition.read_dir[:] = directions[:, 0]
+            acquisition.phase_dir[:] = directions[:, 1]
+            acquisition.slice_dir[:] = directions[:, 2]
             if index == last:
                 acquisition.setFlag(ismrmrd.ACQ_LAST_IN_MEASUREMENT)
             connection.send(acquisition)

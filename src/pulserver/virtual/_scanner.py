@@ -25,34 +25,48 @@ class _Readout:
     excited: bool
 
 
-def trajectory(seq_path: Path | str, cache_ext: str = ".pseg") -> list[np.ndarray]:
+def trajectory(
+    seq_path: Path | str,
+    cache_ext: str = ".pseg",
+    *,
+    rotation: np.ndarray | None = None,
+) -> list[np.ndarray]:
     """Return the k-space location of every ADC sample the cache beside a sequence file plays.
 
     One ``(3, samples)`` array per readout, in play order, in 1/m along the
-    logical axes. The locations are integrated from the gradients the cache
-    plays (:func:`pulserver.ir.play`), rotated by each block's rotation. An
-    excitation returns k to zero, and a refocusing pulse negates it, at the
-    RF centre the cache records (``rf_center_us``); each file of a chain
-    starts from zero.
+    physical axes. The locations are integrated from the gradients the cache
+    plays (:func:`pulserver.ir.play`), turned by each block's rotation and
+    then, except in blocks labelled ``NOROT``, by the prescription's
+    ``rotation`` from logical to physical axes, a reflection included, as
+    :func:`pulserver.ir.check` turns them. Under the default identity the
+    physical axes are the logical ones. An excitation returns k to zero, and
+    a refocusing pulse negates it, at the RF centre the cache records
+    (``rf_center_us``); each file of a chain starts from zero.
     """
-    return [readout.kspace for readout in _play(Path(seq_path), cache_ext)]
+    return [readout.kspace for readout in _play(Path(seq_path), cache_ext, rotation)]
 
 
 def acquire(
-    seq_path: Path | str, phantom: Phantom, cache_ext: str = ".pseg"
+    seq_path: Path | str,
+    phantom: Phantom,
+    cache_ext: str = ".pseg",
+    *,
+    rotation: np.ndarray | None = None,
 ) -> list[np.ndarray]:
     """Return the samples the cache beside a sequence file acquires of a phantom.
 
-    One ``(coils, samples)`` complex64 array per readout, in play order,
-    multiplied by ``exp(i theta)``, where the receiver phase ``theta`` is the
-    ADC phase offset at the ADC's start, advancing at its frequency offset,
-    plus its phase modulation, as the playout demodulates. Only excitation and refocusing pulses act on
-    the magnetization, and ideally; a readout before the first excitation of
-    its file acquires zeros. The signal model is that of
-    :doc:`/explanations/virtual-scanner`.
+    One ``(coils, samples)`` complex64 array per readout, in play order, of
+    the phantom as it lies in the physical frame, sampled along the
+    :func:`trajectory` the cache plays under the prescription's ``rotation``
+    and multiplied by ``exp(i theta)``, where the receiver phase ``theta`` is
+    the ADC phase offset at the ADC's start, advancing at its frequency
+    offset, plus its phase modulation, as the playout demodulates. Only
+    excitation and refocusing pulses act on the magnetization, and ideally; a
+    readout before the first excitation of its file acquires zeros. The
+    signal model is that of :doc:`/explanations/virtual-scanner`.
     """
     samples = []
-    for readout in _play(Path(seq_path), cache_ext):
+    for readout in _play(Path(seq_path), cache_ext, rotation):
         if not readout.excited:
             samples.append(
                 np.zeros((phantom.coils, readout.kspace.shape[1]), dtype=np.complex64)
@@ -63,8 +77,11 @@ def acquire(
     return samples
 
 
-def _play(seq_path: Path, cache_ext: str) -> Iterator[_Readout]:
+def _play(
+    seq_path: Path, cache_ext: str, prescription: np.ndarray | None
+) -> Iterator[_Readout]:
     played = ir.play(seq_path, cache_ext, waveforms=True)
+    turn = np.eye(3) if prescription is None else np.asarray(prescription, float)
     span = played["gradient_span"]
     corners = played["gradient_time_us"].astype(float)
     values = played["gradient_waveform_hz_per_m"].astype(float)
@@ -78,6 +95,8 @@ def _play(seq_path: Path, cache_ext: str) -> Iterator[_Readout]:
             origin = None
             reference = 0.0
         rotation = played["rotation"][block].astype(float)
+        if not played["norot"][block]:
+            rotation = turn @ rotation
         waves = [
             (corners[slice(*span[block, axis])], values[slice(*span[block, axis])])
             for axis in range(3)
