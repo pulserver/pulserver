@@ -19,6 +19,7 @@ SCANNER = {
     "grad_unit": "mT/m",
     "max_slew": 150.0,
     "slew_unit": "T/m/s",
+    "B0": 3.0,
 }
 SAFE = {
     "a1": 0.4,
@@ -101,6 +102,34 @@ def test_a_design_under_a_vop_file_carries_its_sar_ratios_in_the_cache(tmp_path)
     # A 90 degree, 1 ms hard pulse deposits a quarter of the reference's energy.
     assert loaded["vop_sar_ratio"] == pytest.approx(0.25)
     assert loaded["vop_global_sar_ratio"] == 0.0
+
+
+def test_limits_without_the_field_strength_are_refused_naming_it():
+    without = {k: v for k, v in SCANNER.items() if k != "B0"}
+
+    with pytest.raises(ValueError, match="B0"):
+        split_limits(without)
+
+
+def test_a_call_without_the_field_strength_is_refused_naming_it(tmp_path):
+    without = {k: v for k, v in SCANNER.items() if k != "B0"}
+    system = pp.Opts(**SCANNER)
+    seq = pp.Sequence(system)
+    seq.add_block(
+        pp.make_block_pulse(flip_angle=np.pi / 2, duration=1e-3, system=system)
+    )
+    path = tmp_path / "sequence.seq"
+    seq.write(path)
+
+    status, reply = call(
+        "import",
+        limits=without,
+        block=format_import(path),
+        store=DesignStore(tmp_path / "designs"),
+    )
+
+    assert status == 1
+    assert "B0" in reply
 
 
 def test_limits_without_check_limits_check_timing_and_gradients_only():

@@ -25,6 +25,7 @@ LIMITS = {
     "grad_unit": "mT/m",
     "max_slew": 150.0,
     "slew_unit": "T/m/s",
+    "B0": 3.0,
 }
 
 

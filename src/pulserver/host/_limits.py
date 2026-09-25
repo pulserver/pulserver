@@ -35,14 +35,20 @@ def split_limits(
     ``ir_label_column_map`` (three integers separated by spaces) and
     ``ir_cache_ext``. Keys starting with ``pns_``, ``forbidden_band_`` and
     ``vop_`` are the check limits of :func:`check_limits`. The other keys are
-    ``pypulseqpp.Opts`` keyword arguments.
+    ``pypulseqpp.Opts`` keyword arguments, among which ``B0`` is required: the
+    field in T the scan runs at, which ppm offsets are resolved at.
 
     Raises
     ------
     ValueError
-        If an ``ir_`` key is not a conversion option, or the check limits
-        are malformed.
+        If ``B0`` is missing, an ``ir_`` key is not a conversion option, or
+        the check limits are malformed.
     """
+    if "B0" not in limits:
+        raise ValueError(
+            "the limits give no B0: the field in T the scan runs at, which ppm "
+            "offsets are resolved at"
+        )
     unknown = [k for k in limits if k.startswith("ir_") and k not in _IR_OPTIONS]
     if unknown:
         raise ValueError(f"not IR conversion options: {unknown}")
