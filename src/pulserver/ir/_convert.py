@@ -173,7 +173,8 @@ def prescribe(sequence: pp.Sequence, fov_offset: Sequence[float]) -> pp.Sequence
     An offset along the slice axis becomes an RF frequency, an in-plane offset
     an RF and ADC phase, each referenced to the excitation it follows; blocks
     labelled ``NOPOS`` are exempt. The gradient area is counted from the
-    sequence's first block.
+    sequence's first block. A block that carries a rotation extension is moved
+    by the gradients it plays: those it draws, turned by that rotation.
 
     Parameters
     ----------
@@ -196,7 +197,9 @@ def prescribe(sequence: pp.Sequence, fov_offset: Sequence[float]) -> pp.Sequence
     if len(shift) != 3:
         raise ValueError(f"fov_offset takes three values, got {len(shift)}")
     if any(shift):
-        pp.TransformFOV(translation=shift).apply_to_sequence(sequence, in_place=True)
+        pp.TransformFOV(translation=shift, through_rotation=True).apply_to_sequence(
+            sequence, in_place=True
+        )
     return sequence
 
 

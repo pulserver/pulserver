@@ -36,6 +36,9 @@ the passes run. No gradient is changed:
   $\mathbf{k}$ the k-space location of the sample in 1/m;
 - blocks labelled `NOPOS` keep the phases they were designed with.
 
+A block that carries a rotation extension plays its drawn gradients turned by
+that rotation, and it is moved by the gradients it plays.
+
 The readouts are therefore demodulated to the prescribed centre as they are
 acquired, and the reconstruction receives an object at $\mathbf{d}$ at the
 centre of its field of view. The cache carries each readout's frequency and
