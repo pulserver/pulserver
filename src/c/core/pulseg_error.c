@@ -81,8 +81,6 @@ const char *pulseg_get_error_message(int code)
         return "Sequence contains no blocks";
     case PULSEG_ERR_TR_NO_PERIODIC_PATTERN:
         return "No periodic TR pattern found";
-    case PULSEG_ERR_TR_PATTERN_MISMATCH:
-        return "TR pattern does not repeat consistently across the block table";
     case PULSEG_ERR_SEG_NONZERO_START_GRAD:
         return "TR does not start with zero gradient amplitude";
     case PULSEG_ERR_SEG_NONZERO_END_GRAD:

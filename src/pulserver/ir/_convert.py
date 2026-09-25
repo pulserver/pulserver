@@ -14,11 +14,9 @@ from ._checks import SarRatio
 from ._source import conversion_payload
 
 
-def _scanner(system: pp.Opts) -> tuple[float, ...]:
-    """Gyromagnetic ratio, field strength and the four rasters, in Hz/T, T and us."""
+def _rasters(system: pp.Opts) -> tuple[float, ...]:
+    """Return the RF, gradient, ADC and block rasters, in us."""
     return (
-        float(system.gamma),
-        float(system.B0),
         system.rf_raster_time * 1e6,
         system.grad_raster_time * 1e6,
         system.adc_raster_time * 1e6,
@@ -120,7 +118,7 @@ def convert(
     require("convert_libraries")(
         payload,
         str(seq_path),
-        *_scanner(system),
+        *_rasters(system),
         int(vendor),
         list(label_column_map),
         cache_ext,
@@ -166,7 +164,7 @@ def summary(
     if cache_ext is None:
         return require("summary_from_libraries")(
             _payload(seq_path, system, verify_signature=False),
-            *_scanner(system),
+            *_rasters(system),
             list(label_column_map),
         )
     return require("summary_from_cache")(

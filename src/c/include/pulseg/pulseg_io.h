@@ -42,8 +42,6 @@ extern "C"
      */
     void pulseg_opts_init(
         pulseg_opts *opts,
-        float gamma_hz_per_t,
-        float b0_t,
         float rf_raster_us,
         float grad_raster_us,
         float adc_raster_us,

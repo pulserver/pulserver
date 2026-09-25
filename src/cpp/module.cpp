@@ -41,8 +41,6 @@ struct CollectionFree
 using Collection = std::unique_ptr<pulseg_collection, CollectionFree>;
 
 pulseg_opts make_opts(
-    float gamma_hz_per_t,
-    float b0_t,
     float rf_raster_us,
     float grad_raster_us,
     float adc_raster_us,
@@ -53,14 +51,7 @@ pulseg_opts make_opts(
 {
     pulseg_opts opts;
     std::memset(&opts, 0, sizeof(opts));
-    pulseg_opts_init(
-        &opts,
-        gamma_hz_per_t,
-        b0_t,
-        rf_raster_us,
-        grad_raster_us,
-        adc_raster_us,
-        block_raster_us);
+    pulseg_opts_init(&opts, rf_raster_us, grad_raster_us, adc_raster_us, block_raster_us);
     if (cache_ext.size() >= sizeof(opts.cache_ext))
         throw std::invalid_argument("cache extension '" + cache_ext + "' is too long");
     std::memcpy(opts.cache_ext, cache_ext.c_str(), cache_ext.size() + 1);
@@ -494,8 +485,6 @@ PYBIND11_MODULE(_ext, module)
         "convert_libraries",
         [](const py::list &chain,
            const std::string &seq_path,
-           float gamma_hz_per_t,
-           float b0_t,
            float rf_raster_us,
            float grad_raster_us,
            float adc_raster_us,
@@ -505,8 +494,6 @@ PYBIND11_MODULE(_ext, module)
            const std::string &cache_ext)
         {
             const pulseg_opts opts = make_opts(
-                gamma_hz_per_t,
-                b0_t,
                 rf_raster_us,
                 grad_raster_us,
                 adc_raster_us,
@@ -523,8 +510,6 @@ PYBIND11_MODULE(_ext, module)
     module.def(
         "summary_from_libraries",
         [](const py::list &chain,
-           float gamma_hz_per_t,
-           float b0_t,
            float rf_raster_us,
            float grad_raster_us,
            float adc_raster_us,
@@ -532,8 +517,6 @@ PYBIND11_MODULE(_ext, module)
            const std::array<int, 3> &label_column_map)
         {
             const pulseg_opts opts = make_opts(
-                gamma_hz_per_t,
-                b0_t,
                 rf_raster_us,
                 grad_raster_us,
                 adc_raster_us,
