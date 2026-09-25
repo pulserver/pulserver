@@ -538,9 +538,12 @@ angle in degrees at the largest amplitude the definition plays, as
 <code class="docutils literal notranslate"><span class="pre">pypulseqpp.Sequence.rf_flip_angles</span></code> gives it; and the bandwidth at half
 the spectral peak, the number of bands, each band’s offset from the
 carrier and the widest band’s bandwidth, all in Hz, as
-<code class="docutils literal notranslate"><span class="pre">pypulseqpp.calc_rf_bandwidth</span></code> measures them. <code class="docutils literal notranslate"><span class="pre">vop_sar_ratio</span></code> and
-<code class="docutils literal notranslate"><span class="pre">vop_global_sar_ratio</span></code> are those the cache was written with, zero when
-the chain is read and segmented again.</p>
+<code class="docutils literal notranslate"><span class="pre">pypulseqpp.calc_rf_bandwidth</span></code> measures them; and <code class="docutils literal notranslate"><span class="pre">b1sq_integral_s</span></code>,
+the integral of the squared envelope scaled to unit peak, in s:
+<code class="docutils literal notranslate"><span class="pre">pypulseqpp.calc_rf_power</span></code>’s energy over its peak power, both summed
+over a dynamic pTx pulse’s channels.
+<code class="docutils literal notranslate"><span class="pre">vop_sar_ratio</span></code> and <code class="docutils literal notranslate"><span class="pre">vop_global_sar_ratio</span></code> are those the cache was
+written with, zero when the chain is read and segmented again.</p>
 <p>With <code class="docutils literal notranslate"><span class="pre">cache_ext</span></code>, the cache beside the file is loaded instead of the
 chain being read and segmented again; this build loads only vendor-neutral
 caches, and only when the size recorded in the cache matches the file.</p>

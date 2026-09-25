@@ -669,13 +669,16 @@ repetition.</p>
 <td><p>The Pulseq labels of every readout, three of which fill the ADC label columns</p></td>
 </tr>
 <tr class="row-odd"><td><p>RF statistics</p></td>
-<td><p>For each RF definition: its transmit channels and flip angle, as pypulseqpp counts them; its duration and power from the envelope; and the bandwidth and bands of a multiband pulse from its spectrum</p></td>
+<td><p>For each RF definition: its transmit channels, flip angle and energy, as pypulseqpp counts them; its duration from the envelope; and the bandwidth and bands of a multiband pulse from its spectrum</p></td>
 </tr>
 </tbody>
 </table>
 </div>
 <p>The limits and rasters of the scanner (<code class="docutils literal notranslate"><span class="pre">pypulseqpp.Opts</span></code>) are those under which
-the scan is segmented. The spectral statistics are measured by pypulseqpp’s
+the scan is segmented. A segment boundary falls where every gradient is zero,
+judged by the first and last values each arbitrary gradient’s library row
+stores for the event’s edges; a trapezoid starts and ends at zero. The
+spectral statistics are measured by pypulseqpp’s
 <code class="docutils literal notranslate"><span class="pre">calc_rf_bandwidth</span></code> when the chain is read, with the Pulseq recipe of the width
 at half the spectral peak; a band is a run of the spectrum above 30 % of its
 peak, and its offset is measured from the carrier. A dynamic pTx pulse holds
@@ -685,6 +688,9 @@ time, when the times are that many identical copies. Its flip angle is
 pypulseqpp’s <code class="docutils literal notranslate"><span class="pre">Sequence.rf_flip_angles</span></code>, the channels’ integrals summed
 coherently, the flip where every channel has unit, in-phase sensitivity; the
 envelope for the power statistics is the root sum of squares of the channels.
+The energy is held as the integral of the squared envelope scaled to unit
+peak, in seconds: pypulseqpp’s <code class="docutils literal notranslate"><span class="pre">calc_rf_power</span></code> energy, the integral of
+<span class="math notranslate nohighlight">\(|b_1|^2\)</span>, over its peak power, both summed over the channels.
 A pulse a file leaves unlabelled takes the use pypulseqpp detects for it when
 the chain is read. <code class="docutils literal notranslate"><span class="pre">label_column_map</span></code> selects the three labels the
 interpreter records per readout, as indices in the order SLC, PHS, REP, AVG,
