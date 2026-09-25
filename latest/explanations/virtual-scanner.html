@@ -594,18 +594,18 @@ the instance at the cursor.</p>
 <p><a class="reference internal" href="../generated/pulserver.virtual.trajectory.html#pulserver.virtual.trajectory" title="pulserver.virtual.trajectory"><code class="xref py py-func docutils literal notranslate"><span class="pre">trajectory()</span></code></a> integrates those gradients, rotated by
 each block’s rotation, into the k-space location <span class="math notranslate nohighlight">\(\mathbf{k}\)</span> of every ADC
 sample, in 1/m along the logical axes. An excitation returns <span class="math notranslate nohighlight">\(\mathbf{k}\)</span> to
-zero at the RF magnitude peak and a refocusing pulse negates it there, by the
-use the cache records for each RF event; each file of a chain starts from
-zero. The test suite holds this trajectory to the one each fixture’s file
-designs, and to the one the enrichment states.</p>
+zero, and a refocusing pulse negates it, at the RF centre the design records,
+which the cache carries for each RF event with its use; each file of a chain
+starts from zero. The test suite holds this trajectory to the one each
+fixture’s file designs, and to the one the enrichment states.</p>
 </section>
 <section id="signal-model">
 <h2>Signal model<a class="headerlink" href="#signal-model" title="Link to this heading">#</a></h2>
-<p>After an excitation of RF phase <span class="math notranslate nohighlight">\(\phi_e\)</span> at its magnitude peak, the
+<p>After an excitation of RF phase <span class="math notranslate nohighlight">\(\phi_e\)</span> at its centre, the
 magnetization is transverse, at the phantom’s density <span class="math notranslate nohighlight">\(\rho(\mathbf{r})\)</span>
 whatever the flip angle, with phase <span class="math notranslate nohighlight">\(-\phi_e - \pi/2\)</span>, and it precesses as
 <span class="math notranslate nohighlight">\(\exp(-2\pi i\,\mathbf{k}\cdot\mathbf{r})\)</span>. A refocusing pulse of phase
-<span class="math notranslate nohighlight">\(\phi_r\)</span> conjugates it about <span class="math notranslate nohighlight">\(-\phi_r\)</span>. The RF phase at the peak is the
+<span class="math notranslate nohighlight">\(\phi_r\)</span> conjugates it about <span class="math notranslate nohighlight">\(-\phi_r\)</span>. The RF phase at the centre is the
 pulse’s phase offset plus its frequency offset times the time since the pulse
 began. Coil <span class="math notranslate nohighlight">\(c\)</span>, of sensitivity <span class="math notranslate nohighlight">\(s_c(\mathbf{r})\)</span>, receives</p>
 <div class="math notranslate nohighlight">
@@ -631,6 +631,8 @@ excitation of its file acquires zeros.</p>
 <ul class="simple">
 <li><p>The trajectory the cache plays is the one each file designs, for the
 fixtures and for every sequence pypulseqpp ships, at small sizes.</p></li>
+<li><p>The cache carries the RF centre a design records where it is away from the
+magnitude peak.</p></li>
 <li><p>The enrichment states that trajectory for every readout.</p></li>
 <li><p>An object at the prescribed offset is acquired centred by every shipped
 sequence, EPI and spiral readouts, which the translation gives a phase
@@ -640,10 +642,6 @@ away from it is not.</p></li>
 image, at the prescribed position, and a series short of a readout is
 refused.</p></li>
 </ul>
-<p>One difference is recorded as an expected failure. The cache places an RF
-pulse at its magnitude peak, so a refocusing pulse whose peak lies a sample
-from the centre its design records, as in the shipped 2D spin echoes and the
-3D fast spin echo, negates k a sample late.</p>
 </section>
 <section id="see-also">
 <h2>See also<a class="headerlink" href="#see-also" title="Link to this heading">#</a></h2>

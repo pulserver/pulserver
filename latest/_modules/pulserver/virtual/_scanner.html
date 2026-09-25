@@ -486,7 +486,8 @@
 <span class="sd">    logical axes. The locations are integrated from the gradients the cache</span>
 <span class="sd">    plays (:func:`pulserver.ir.play`), rotated by each block's rotation. An</span>
 <span class="sd">    excitation returns k to zero, and a refocusing pulse negates it, at the</span>
-<span class="sd">    RF magnitude peak; each file of a chain starts from zero.</span>
+<span class="sd">    RF centre the cache records (``rf_center_us``); each file of a chain</span>
+<span class="sd">    starts from zero.</span>
 <span class="sd">    """</span>
     <span class="k">return</span> <span class="p">[</span><span class="n">readout</span><span class="o">.</span><span class="n">kspace</span> <span class="k">for</span> <span class="n">readout</span> <span class="ow">in</span> <span class="n">_play</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="n">seq_path</span><span class="p">),</span> <span class="n">cache_ext</span><span class="p">)]</span></div>
 

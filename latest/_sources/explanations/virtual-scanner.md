@@ -33,18 +33,18 @@ the instance at the cursor.
 {func}`~pulserver.virtual.trajectory` integrates those gradients, rotated by
 each block's rotation, into the k-space location $\mathbf{k}$ of every ADC
 sample, in 1/m along the logical axes. An excitation returns $\mathbf{k}$ to
-zero at the RF magnitude peak and a refocusing pulse negates it there, by the
-use the cache records for each RF event; each file of a chain starts from
-zero. The test suite holds this trajectory to the one each fixture's file
-designs, and to the one the enrichment states.
+zero, and a refocusing pulse negates it, at the RF centre the design records,
+which the cache carries for each RF event with its use; each file of a chain
+starts from zero. The test suite holds this trajectory to the one each
+fixture's file designs, and to the one the enrichment states.
 
 ## Signal model
 
-After an excitation of RF phase $\phi_e$ at its magnitude peak, the
+After an excitation of RF phase $\phi_e$ at its centre, the
 magnetization is transverse, at the phantom's density $\rho(\mathbf{r})$
 whatever the flip angle, with phase $-\phi_e - \pi/2$, and it precesses as
 $\exp(-2\pi i\,\mathbf{k}\cdot\mathbf{r})$. A refocusing pulse of phase
-$\phi_r$ conjugates it about $-\phi_r$. The RF phase at the peak is the
+$\phi_r$ conjugates it about $-\phi_r$. The RF phase at the centre is the
 pulse's phase offset plus its frequency offset times the time since the pulse
 began. Coil $c$, of sensitivity $s_c(\mathbf{r})$, receives
 
@@ -71,6 +71,8 @@ excitation of its file acquires zeros.
 
 - The trajectory the cache plays is the one each file designs, for the
   fixtures and for every sequence pypulseqpp ships, at small sizes.
+- The cache carries the RF centre a design records where it is away from the
+  magnitude peak.
 - The enrichment states that trajectory for every readout.
 - An object at the prescribed offset is acquired centred by every shipped
   sequence, EPI and spiral readouts, which the translation gives a phase
@@ -79,11 +81,6 @@ excitation of its file acquires zeros.
 - A series streamed through the proxy is reconstructed into the phantom's
   image, at the prescribed position, and a series short of a readout is
   refused.
-
-One difference is recorded as an expected failure. The cache places an RF
-pulse at its magnitude peak, so a refocusing pulse whose peak lies a sample
-from the centre its design records, as in the shipped 2D spin echoes and the
-3D fast spin echo, negates k a sample late.
 
 ## See also
 

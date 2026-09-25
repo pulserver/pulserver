@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:03.086** total execution time for 1 file **from generated/gallery/01-protocol**:
+**00:02.728** total execution time for 1 file **from generated/gallery/01-protocol**:
 
 .. container::
 
@@ -33,5 +33,5 @@ Computation times
      - Time
      - Mem (MB)
    * - :ref:`sphx_glr_generated_gallery_01-protocol_01_protocol_resolution.py` (``01_protocol_resolution.py``)
-     - 00:03.086
+     - 00:02.728
      - 0.0
