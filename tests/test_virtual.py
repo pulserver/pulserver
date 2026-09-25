@@ -153,7 +153,14 @@ def test_an_object_off_the_prescription_is_not_acquired_centred(tmp_path):
     [
         "epi_2d_main.seq",
         "mprage_stack_of_spirals_3d.seq",
-        "zte_3d.seq",
+        pytest.param(
+            "zte_3d.seq",
+            marks=pytest.mark.xfail(
+                strict=True,
+                reason="pypulseqpp's field-of-view translation moves a block that "
+                "carries a rotation by its unrotated gradients",
+            ),
+        ),
     ],
 )
 def test_a_readout_under_a_varying_gradient_is_acquired_centred_off_the_isocentre(

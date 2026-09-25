@@ -230,7 +230,7 @@ class ReadoutTable:
         """Return the k-space position of each sample of one readout, in 1/m.
 
         ``(3, num_samples)``, absolute, with block rotations applied, as
-        ``Sequence.adc_kspace`` returns it.
+        ``Sequence.calculate_kspace`` returns it.
         """
         ranges = self._ranges
         k = ranges.k(int(ranges.of_readout[index]))
@@ -270,7 +270,7 @@ class _Ranges:
                 return self._kept[part]
             first, last = int(self._first[part]), int(self._last[part])
             k = np.asarray(
-                self._sequence.adc_kspace(block_range=(first, last)),
+                self._sequence.calculate_kspace(block_range=(first, last))[0],
                 dtype=np.float64,
             ).reshape(3, -1)
             if k.shape[1] != self._samples[part]:
