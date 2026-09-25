@@ -1509,197 +1509,64 @@ float pulseg__grad_boundary_last(const pulseg_sequence_descriptor *desc, int raw
     return grad_boundary_value(desc, raw_id, 1);
 }
 
-/* Normalised waveform values are in [-1, 1], so a plain absolute tolerance is
- * a relative one.  Loose enough to absorb the float32 round trip through the
- * shape codec, tight enough that a real ramp -- which crosses the whole range
- * over a few tens of microseconds -- never reads as flat. */
-#define PULSEG_GRAD_FLAT_TOL 1e-5f
-
-/*
- * Is the gradient that grad-table row @p raw_id plays FLAT across the window
- * [@p t0_us, @p t1_us], both measured from the start of the block playing it?
- *
- * Flat means the normalised waveform does not change over the window, so the
- * physical gradient during it is one vector rather than a function of time.
- * That is the entire premise of moving a selective excitation with a carrier
- * offset: with a single G, translating the excited slab by dr is exactly a
- * frequency shift of G.dr, and with a time-varying G it is not a frequency
- * shift at all.
- *
- * A window that runs off either end of the event is deliberately NOT flat.
- * Outside its support the gradient is zero, which is constant but is not the
- * gradient the window is asking about; accepting it would silently sweep the
- * ramps into the answer.
- *
- * Returns 1 and writes the signed normalised level to *level_out, else 0.
- */
-static int grad_flat_over_window(
-    const pulseg_sequence_descriptor *desc,
-    int raw_id,
-    float t0_us,
-    float t1_us,
-    float *level_out)
-{
-    const pulseg_grad_table_element *gte;
-    const pulseg_grad_definition *gdef;
-    pulseq_shape wave, tshape;
-    float delay_us, rise_us, flat_us;
-    float grad_raster_us, level;
-    int num_samples, has_time_shape, i, i0, i1, flat;
-
-    if (!desc || !level_out || raw_id < 0 || raw_id >= desc->grad_table_size)
-        return 0;
-    gte = &desc->grad_table[raw_id];
-    if (gte->id < 0 || gte->id >= desc->num_unique_grads)
-        return 0;
-    gdef = &desc->grad_definitions[gte->id];
-    delay_us = (float)gdef->delay;
-
-    if (gdef->type == 0)
-    {
-        /* Trapezoid: the only flat stretch is the plateau, and it is flat by
-         * construction -- no shape to inspect, just the timing. */
-        rise_us = (float)gdef->rise_time_or_unused;
-        flat_us = (float)gdef->flat_time_or_unused;
-        if (flat_us <= 0.0f)
-            return 0;
-        if (t0_us < delay_us + rise_us || t1_us > delay_us + rise_us + flat_us)
-            return 0;
-        *level_out = 1.0f;
-        return 1;
-    }
-
-    /* Arbitrary: walk the samples the window spans.  The times must match
-     * pulseg__render_grad_block exactly, or the window lands on the wrong
-     * samples -- hence the same time-shape / half-raster split. */
-    num_samples = gdef->fall_time_or_num_uncompressed_samples;
-    if (num_samples <= 0 || gte->shape_id <= 0 || gte->shape_id > desc->num_shapes)
-        return 0;
-
-    wave.samples = NULL;
-    tshape.samples = NULL;
-    if (!pulseq_decompress_shape(&wave, &desc->shapes[gte->shape_id - 1], 1.0f))
-        return 0;
-    if (wave.num_uncompressed_samples < num_samples)
-    {
-        PULSEG_FREE(wave.samples);
-        return 0;
-    }
-
-    grad_raster_us = desc->grad_raster_us;
-    has_time_shape = 0;
-    if (gdef->unused_or_time_shape_id > 0 && gdef->unused_or_time_shape_id <= desc->num_shapes)
-    {
-        if (pulseq_decompress_shape(
-                &tshape,
-                &desc->shapes[gdef->unused_or_time_shape_id - 1],
-                grad_raster_us) &&
-            tshape.num_uncompressed_samples >= num_samples)
-            has_time_shape = 1;
-    }
-
-    /* Bracket the window: the last sample at or before t0, the first at or
-     * after t1.  Interpolation runs between samples, so both brackets have to
-     * be inside the event and every sample between them has to agree. */
-    i0 = -1;
-    i1 = -1;
-    for (i = 0; i < num_samples; ++i)
-    {
-        float t = has_time_shape ? delay_us + (float)tshape.samples[i]
-                                 : delay_us + 0.5f * grad_raster_us + (float)i * grad_raster_us;
-        if (t <= t0_us)
-            i0 = i;
-        if (t >= t1_us && i1 < 0)
-            i1 = i;
-    }
-
-    flat = 0;
-    if (i0 >= 0 && i1 >= i0)
-    {
-        level = (float)wave.samples[i0];
-        flat = 1;
-        for (i = i0 + 1; i <= i1; ++i)
-        {
-            float d = (float)wave.samples[i] - level;
-            if (d < -PULSEG_GRAD_FLAT_TOL || d > PULSEG_GRAD_FLAT_TOL)
-            {
-                flat = 0;
-                break;
-            }
-        }
-        if (flat)
-            *level_out = level;
-    }
-
-    PULSEG_FREE(wave.samples);
-    if (tshape.samples)
-        PULSEG_FREE(tshape.samples);
-    return flat;
-}
+/* Two instances play one level when their normalised levels, which are in
+ * [-1, 1], agree to this: the float32 rounding of a gradient over the
+ * amplitude of the event playing it. */
+#define PULSEG_GRAD_LEVEL_TOL 1e-5f
 
 /*
  * Can the excitation in block-table row @p bt_idx be moved by a carrier
  * offset alone?  See pulseg_block_initial_state::rf_grad_constant.
  *
- * Writes the per-axis normalised level on success.  Answers for ONE instance;
- * the caller AND-reduces over the instances of the position, because a
- * position that is flat in some instances and not in others has no single
- * gradient to offset against.
+ * Whether the gradient under the pulse is steady, and what it is there, are
+ * pypulseqpp's (pulseq_file::block_rf_steady); the level on each axis is that
+ * gradient over the amplitude of the event playing it.  Answers for ONE
+ * instance; the caller AND-reduces over the instances of the position,
+ * because a position that is steady in some instances and not in others has
+ * no single gradient to offset against.
  */
 static int rf_grad_constant_at(
     const pulseg_sequence_descriptor *desc,
+    const pulseq_file *seq,
     int bt_idx,
     float level_out[3])
 {
     const pulseg_block_table_element *bte;
-    const pulseg_rf_definition *rdef;
     int ax_raw[3];
-    float t0_us, t1_us;
-    int ax, rf_def_id;
+    int ax;
 
     level_out[0] = 0.0f;
     level_out[1] = 0.0f;
     level_out[2] = 0.0f;
 
-    if (!desc || bt_idx < 0 || bt_idx >= desc->num_blocks)
+    if (!desc || !seq || bt_idx < 0 || bt_idx >= desc->num_blocks ||
+        bt_idx >= seq->num_blocks || !seq->block_rf_steady || !seq->block_rf_gradient)
         return 0;
     bte = &desc->block_table[bt_idx];
 
     /* A rotation extension rotates the trajectory inside the logical frame,
      * so the gradient this block actually plays is R times the one recorded
-     * here.  Still flat -- R of a constant vector is constant -- but no longer
-     * this vector, and an excitation moved with the wrong G lands in the wrong
-     * place silently.  Refuse rather than guess. */
+     * here.  Still steady -- R of a constant vector is constant -- but no
+     * longer this vector, and an excitation moved with the wrong G lands in
+     * the wrong place silently.  Refuse rather than guess. */
     if (bte->rotation_id != -1 && bte->rotation_id < desc->num_rotations &&
         !pulseg__is_identity3(desc->rotation_matrices[bte->rotation_id]))
         return 0;
 
-    if (bte->rf_id < 0 || bte->rf_id >= desc->rf_table_size)
-        return 0;
-    rf_def_id = desc->rf_table[bte->rf_id].id;
-    if (rf_def_id < 0 || rf_def_id >= desc->num_unique_rfs)
-        return 0;
-    rdef = &desc->rf_definitions[rf_def_id];
-
-    /* The RF's active window, from the start of the block.  Nominal duration,
-     * not the support of |B1| > 0: a pulse whose tails are zero still has to
-     * see the same gradient there, because the window is what the offset is
-     * claimed to be valid over. */
-    t0_us = (float)rdef->delay;
-    t1_us = (float)rdef->delay + rdef->stats.duration_us;
-    if (t1_us <= t0_us)
+    if (bte->rf_id < 0 || bte->rf_id >= desc->rf_table_size || !seq->block_rf_steady[bt_idx])
         return 0;
 
     ax_raw[0] = bte->gx_id;
     ax_raw[1] = bte->gy_id;
     ax_raw[2] = bte->gz_id;
-
     for (ax = 0; ax < 3; ++ax)
     {
+        float amplitude;
         if (ax_raw[ax] < 0 || ax_raw[ax] >= desc->grad_table_size)
-            continue; /* no gradient on this axis: flat at zero, nothing to add */
-        if (!grad_flat_over_window(desc, ax_raw[ax], t0_us, t1_us, &level_out[ax]))
-            return 0;
+            continue; /* no gradient on this axis: steady at zero */
+        amplitude = desc->grad_table[ax_raw[ax]].amplitude;
+        if (amplitude != 0.0f)
+            level_out[ax] = (float)seq->block_rf_gradient[bt_idx][ax] / amplitude;
     }
 
     /* A pulse with no accompanying gradient at all excites everything, so
@@ -2140,6 +2007,7 @@ static int scan_boundary_gradients_ok(
 
 int pulseg__get_exec_stream_segments(
     pulseg_sequence_descriptor *desc,
+    const pulseq_file *seq,
     pulseg_diagnostic *diag,
     const pulseg_opts *opts)
 {
@@ -3052,7 +2920,8 @@ int pulseg__get_exec_stream_segments(
                 pulseg_block_initial_state *st =
                     &desc->segment_definitions[seg_id].initial_states[b];
                 float lvl[3];
-                int ok = rf_grad_constant_at(desc, pulseg__exec_block_idx(desc, n + b), lvl);
+                int ok =
+                    rf_grad_constant_at(desc, seq, pulseg__exec_block_idx(desc, n + b), lvl);
 
                 if (st->rf_grad_constant == -1)
                 {
@@ -3071,7 +2940,7 @@ int pulseg__get_exec_stream_segments(
                     for (ax = 0; ax < 3; ++ax)
                     {
                         float d = lvl[ax] - st->rf_grad_level[ax];
-                        if (d < -PULSEG_GRAD_FLAT_TOL || d > PULSEG_GRAD_FLAT_TOL)
+                        if (d < -PULSEG_GRAD_LEVEL_TOL || d > PULSEG_GRAD_LEVEL_TOL)
                         {
                             st->rf_grad_constant = 0;
                             break;

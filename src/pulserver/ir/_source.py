@@ -260,8 +260,9 @@ def conversion_payload(sequence: Any, system: pp.Opts) -> dict[str, Any]:
     ``pypulseqpp.io.SequenceLibraries.absolute_offsets``, and the ppm columns
     are zero. The repetition the conversion segments is the one
     ``pypulseqpp.Sequence.repetition`` finds. Each block's rotation and shim,
-    the flags in force at it and the labels at each readout are pypulseqpp's
-    ``block_rotations``, ``block_shims``, ``evaluate_labels`` and
+    the flags in force at it, the gradient its RF pulse plays under and the
+    labels at each readout are pypulseqpp's ``block_rotations``,
+    ``block_shims``, ``evaluate_labels``, ``rf_gradients`` and
     ``label_blocks``; the conversion reads the chain rows for triggers alone.
 
     Raises
@@ -567,8 +568,8 @@ def _label_rows(values: Any, labels: Any) -> NDArray[np.float64]:
 
 def _block_states(
     sequence: Any, blocks: NDArray[np.float64]
-) -> dict[str, NDArray[np.int32]]:
-    """Per block, the rows it plays and the flags in force; per readout, the labels.
+) -> dict[str, NDArray[Any]]:
+    """Per block, the rows it plays, the flags in force and the gradient under its RF; per readout, the labels.
 
     ``block_rotations`` and ``block_shims`` count the ROTATIONS and RF_SHIMS
     rows from 0, -1 for none. ``block_flags`` holds :data:`_BLOCK_FLAGS` and
@@ -577,6 +578,9 @@ def _block_states(
     apply, PMC starting at 1 and every other label at 0, with OFF as 0 or 1.
     ``trid_set`` is 1 at a block that sets TRID, which is where a repetition of
     that group starts even when it sets the value already in force.
+    ``rf_steady`` is 1 at a block whose RF pulse plays under a gradient that
+    holds one value along every channel axis, and ``rf_gradient`` is the
+    gradient along x, y and z at the pulse's centre, in Hz/m.
     """
     count = blocks.shape[0]
     start = dict.fromkeys((*_BLOCK_FLAGS, *_READOUT_LABELS), 0)
@@ -591,11 +595,19 @@ def _block_states(
     labels[:, -1] = labels[:, -1] != 0
     trid_set = np.zeros(count, dtype=np.int32)
     trid_set[np.asarray(sequence.label_blocks("TRID"), dtype=np.int64) - 1] = 1
+    under = sequence.rf_gradients()
+    pulsed = under.block.astype(np.int64) - 1
+    rf_steady = np.zeros(count, dtype=np.int32)
+    rf_steady[pulsed] = under.steady.all(axis=1)
+    rf_gradient = np.zeros((count, 3), dtype=np.float64)
+    rf_gradient[pulsed] = under.gradient
     return {
         "block_rotations": np.asarray(sequence.block_rotations(), dtype=np.int32) - 1,
         "block_shims": np.asarray(sequence.block_shims(), dtype=np.int32) - 1,
         "block_flags": np.stack([state[name] for name in _BLOCK_FLAGS], axis=1),
         "trid_set": trid_set,
+        "rf_steady": rf_steady,
+        "rf_gradient": rf_gradient,
         "adc_labels": labels,
     }
 

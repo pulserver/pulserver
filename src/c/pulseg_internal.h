@@ -309,8 +309,9 @@ typedef struct pulseg_block_initial_state
 
     /* Can this excitation be moved by a frequency offset alone?
      *
-     * Set when the position has RF and every accompanying gradient is FLAT
-     * across the RF's active window -- so the whole pulse sees one gradient
+     * Set when the position has RF and every accompanying gradient holds one
+     * value from the pulse's first sample to its last, as pypulseqpp's
+     * Sequence.rf_gradients finds it -- so the whole pulse sees one gradient
      * vector G, and translating what it excites by dr is exactly a carrier
      * offset of G.dr.  That is the one case where prospective motion
      * correction can move a *selective* excitation at run time, which the
@@ -319,11 +320,11 @@ typedef struct pulseg_block_initial_state
      * everything, so the offset is zero and there is nothing to get wrong.
      *
      * AND-reduced over every instance of the position, and 0 when the block
-     * carries a rotation extension -- the rotated gradient is still flat, but
+     * carries a rotation extension -- the rotated gradient is still steady, but
      * it is no longer the vector recorded here, and a wrong G moves the slab
      * to the wrong place rather than failing.
      *
-     * rf_grad_level is the NORMALISED level over that window, per axis; the
+     * rf_grad_level is the NORMALISED level across the pulse, per axis; the
      * physical gradient is grad_amplitude_hz_per_m (per instance) times it. */
     int rf_grad_constant;
     float rf_grad_level[3];
@@ -821,6 +822,7 @@ int pulseg__get_tr_in_sequence(
 int pulseg__build_exec_stream(pulseg_sequence_descriptor *desc, pulseg_diagnostic *diag);
 int pulseg__get_exec_stream_segments(
     pulseg_sequence_descriptor *desc,
+    const pulseq_file *seq,
     pulseg_diagnostic *diag,
     const pulseg_opts *opts);
 void pulseg__compute_exec_stream_tr_start(pulseg_sequence_descriptor *desc);

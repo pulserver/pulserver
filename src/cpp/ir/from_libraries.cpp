@@ -282,6 +282,13 @@ void build_pulseq_file(pulseq_file &seq, const py::dict &libraries)
     seq.block_rotations = integers(libraries["block_rotations"], seq.num_blocks);
     seq.block_shims = integers(libraries["block_shims"], seq.num_blocks);
     seq.block_trid_set = integers(libraries["trid_set"], seq.num_blocks);
+    seq.block_rf_steady = integers(libraries["rf_steady"], seq.num_blocks);
+    {
+        int pulses = 0;
+        seq.block_rf_gradient = rows<3>(libraries["rf_gradient"], pulses);
+        if (pulses != seq.num_blocks)
+            throw std::invalid_argument("an RF gradient table of the wrong length");
+    }
     {
         int flagged = 0;
         seq.block_flags =

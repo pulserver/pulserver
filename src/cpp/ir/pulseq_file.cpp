@@ -67,6 +67,8 @@ static void seq_file_set_defaults(pulseq_file *seq)
     seq->block_shims = NULL;
     seq->block_flags = NULL;
     seq->block_trid_set = NULL;
+    seq->block_rf_steady = NULL;
+    seq->block_rf_gradient = NULL;
     seq->num_adc_labels = 0;
     seq->adc_labels = NULL;
     INIT_LIBRARY(seq, rf_library, rf_library_size, is_rf_library_parsed);
@@ -147,6 +149,8 @@ void pulseq__file_reset(pulseq_file *seq)
         PULSEQ_FREE(seq->block_shims);
         PULSEQ_FREE(seq->block_flags);
         PULSEQ_FREE(seq->block_trid_set);
+        PULSEQ_FREE(seq->block_rf_steady);
+        PULSEQ_FREE(seq->block_rf_gradient);
         PULSEQ_FREE(seq->adc_labels);
     }
     if (seq->is_rf_library_parsed)

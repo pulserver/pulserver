@@ -240,6 +240,13 @@ def play(
         - ``rf_channels``: the transmit channels the RF waveform holds, one
           after another over one time base for a dynamic pTx pulse; 0 without
           RF;
+        - ``rf_grad_constant``, ``rf_grad_level``: 1 where every instance of
+          the block's position plays its RF pulse under one gradient,
+          steady from the pulse's first sample to its last as
+          ``pypulseqpp.Sequence.rf_gradients`` finds it, and the block
+          carries no rotation, so the scanner may move the excitation by a
+          carrier offset; and ``(blocks, 3)``, that gradient along x, y and z
+          over the amplitude of the event playing it there;
         - ``gradient_hz_per_m``: ``(blocks, 3)``, the amplitude of each
           gradient event along x, y and z; an arbitrary gradient's shape
           carries its own sign;
