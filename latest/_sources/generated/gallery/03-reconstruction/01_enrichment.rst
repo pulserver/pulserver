@@ -219,7 +219,7 @@ the phase an object at :math:`\mathbf{d}` accumulates.
 
  .. code-block:: none
 
-    largest |receive phase - 2 pi d.k| over the scan: 5.0e-11 rad
+    largest |receive phase - 2 pi d.k| over the scan: 5.0e-12 rad
 
 
 
@@ -446,7 +446,7 @@ to the gradients or the trajectory.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.826 seconds)
+   **Total running time of the script:** (0 minutes 1.188 seconds)
 
 
 .. _sphx_glr_download_generated_gallery_03-reconstruction_01_enrichment.py:

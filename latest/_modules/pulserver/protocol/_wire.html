@@ -473,7 +473,7 @@
 <a class="viewcode-back" href="../../../generated/pulserver.protocol.Validation.html#pulserver.protocol.Validation">[docs]</a>
 <span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">Validation</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Reply to ``VALIDATE``.</span>
+<span class="w">    </span><span class="sd">"""Reply of the ``validate`` design call.</span>
 
 <span class="sd">    Attributes</span>
 <span class="sd">    ----------</span>
@@ -546,7 +546,7 @@
 <div class="viewcode-block" id="format_listing">
 <a class="viewcode-back" href="../../../generated/pulserver.protocol.format_listing.html#pulserver.protocol.format_listing">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">format_listing</span><span class="p">(</span><span class="n">parameters</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Parameter</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Format a protocol with its schema, as ``LIST_PROTOCOL`` sends it."""</span>
+<span class="w">    </span><span class="sd">"""Format a protocol with its schema, as the ``list`` design call replies it."""</span>
     <span class="n">lines</span> <span class="o">=</span> <span class="p">[</span><span class="n">_listing_line</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">p</span><span class="p">)</span> <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">parameters</span><span class="o">.</span><span class="n">items</span><span class="p">()]</span>
     <span class="k">return</span> <span class="s2">"</span><span class="se">\n</span><span class="s2">"</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="n">PROTOCOL_BEGIN</span><span class="p">,</span> <span class="o">*</span><span class="n">lines</span><span class="p">,</span> <span class="n">PROTOCOL_END</span><span class="p">])</span> <span class="o">+</span> <span class="s2">"</span><span class="se">\n</span><span class="s2">"</span></div>
 
@@ -644,7 +644,7 @@
 <div class="viewcode-block" id="format_validation">
 <a class="viewcode-back" href="../../../generated/pulserver.protocol.format_validation.html#pulserver.protocol.format_validation">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">format_validation</span><span class="p">(</span><span class="n">validation</span><span class="p">:</span> <span class="n">Validation</span><span class="p">,</span> <span class="n">listing</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Parameter</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Format a ``VALIDATE`` reply: status line, info line, value block.</span>
+<span class="w">    </span><span class="sd">"""Format a ``validate`` reply: status line, info line, value block.</span>
 
 <span class="sd">    Whitespace in the info text, newlines included, is folded to single spaces.</span>
 <span class="sd">    """</span>
@@ -661,7 +661,7 @@
 <div class="viewcode-block" id="parse_validation">
 <a class="viewcode-back" href="../../../generated/pulserver.protocol.parse_validation.html#pulserver.protocol.parse_validation">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">parse_validation</span><span class="p">(</span><span class="n">text</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">listing</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Parameter</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Validation</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Read a ``VALIDATE`` reply."""</span>
+<span class="w">    </span><span class="sd">"""Read a ``validate`` reply."""</span>
     <span class="n">status</span><span class="p">,</span> <span class="n">info</span><span class="p">,</span> <span class="n">block</span> <span class="o">=</span> <span class="n">text</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">"</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
     <span class="n">word</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">duration</span> <span class="o">=</span> <span class="n">status</span><span class="o">.</span><span class="n">partition</span><span class="p">(</span><span class="s2">" "</span><span class="p">)</span>
     <span class="n">valid</span> <span class="o">=</span> <span class="n">word</span> <span class="o">==</span> <span class="s2">"VALID"</span>

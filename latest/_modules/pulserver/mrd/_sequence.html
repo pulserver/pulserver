@@ -706,7 +706,7 @@
 <span class="w">        </span><span class="sd">"""Return the k-space position of each sample of one readout, in 1/m.</span>
 
 <span class="sd">        ``(3, num_samples)``, absolute, with block rotations applied, as</span>
-<span class="sd">        ``Sequence.calculate_kspace`` returns it.</span>
+<span class="sd">        ``Sequence.adc_kspace`` returns it.</span>
 <span class="sd">        """</span>
         <span class="n">ranges</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ranges</span>
         <span class="n">k</span> <span class="o">=</span> <span class="n">ranges</span><span class="o">.</span><span class="n">k</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">ranges</span><span class="o">.</span><span class="n">of_readout</span><span class="p">[</span><span class="n">index</span><span class="p">]))</span>
@@ -748,7 +748,7 @@
                 <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_kept</span><span class="p">[</span><span class="n">part</span><span class="p">]</span>
             <span class="n">first</span><span class="p">,</span> <span class="n">last</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_first</span><span class="p">[</span><span class="n">part</span><span class="p">]),</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_last</span><span class="p">[</span><span class="n">part</span><span class="p">])</span>
             <span class="n">k</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_sequence</span><span class="o">.</span><span class="n">calculate_kspace</span><span class="p">(</span><span class="n">block_range</span><span class="o">=</span><span class="p">(</span><span class="n">first</span><span class="p">,</span> <span class="n">last</span><span class="p">))[</span><span class="mi">0</span><span class="p">],</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_sequence</span><span class="o">.</span><span class="n">adc_kspace</span><span class="p">(</span><span class="n">block_range</span><span class="o">=</span><span class="p">(</span><span class="n">first</span><span class="p">,</span> <span class="n">last</span><span class="p">)),</span>
                 <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">,</span>
             <span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">k</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_samples</span><span class="p">[</span><span class="n">part</span><span class="p">]:</span>

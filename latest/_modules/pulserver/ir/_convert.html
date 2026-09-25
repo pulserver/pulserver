@@ -639,7 +639,8 @@
 <span class="sd">    An offset along the slice axis becomes an RF frequency, an in-plane offset</span>
 <span class="sd">    an RF and ADC phase, each referenced to the excitation it follows; blocks</span>
 <span class="sd">    labelled ``NOPOS`` are exempt. The gradient area is counted from the</span>
-<span class="sd">    sequence's first block.</span>
+<span class="sd">    sequence's first block. A block that carries a rotation extension is moved</span>
+<span class="sd">    by the gradients it plays: those it draws, turned by that rotation.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
@@ -662,7 +663,9 @@
     <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">shift</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">3</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"fov_offset takes three values, got </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">shift</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
     <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="n">shift</span><span class="p">):</span>
-        <span class="n">pp</span><span class="o">.</span><span class="n">TransformFOV</span><span class="p">(</span><span class="n">translation</span><span class="o">=</span><span class="n">shift</span><span class="p">)</span><span class="o">.</span><span class="n">apply_to_sequence</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">in_place</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">pp</span><span class="o">.</span><span class="n">TransformFOV</span><span class="p">(</span><span class="n">translation</span><span class="o">=</span><span class="n">shift</span><span class="p">,</span> <span class="n">through_rotation</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">apply_to_sequence</span><span class="p">(</span>
+            <span class="n">sequence</span><span class="p">,</span> <span class="n">in_place</span><span class="o">=</span><span class="kc">True</span>
+        <span class="p">)</span>
     <span class="k">return</span> <span class="n">sequence</span></div>
 
 

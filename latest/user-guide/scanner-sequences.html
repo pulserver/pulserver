@@ -536,8 +536,8 @@
 <p>A scanner sequence is a plugin file in the <code class="docutils literal notranslate"><span class="pre">--plugins</span></code> directory of the design calls.
 It defines one <a class="reference internal" href="../generated/pulserver.design.ScannerSequence.html#pulserver.design.ScannerSequence" title="pulserver.design.ScannerSequence"><code class="xref py py-class docutils literal notranslate"><span class="pre">ScannerSequence</span></code></a> subclass, which binds
 a pypulseqpp <a class="reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.sequences.SequenceApp.html#pypulseqpp.sequences.SequenceApp" title="(in pypulseqpp latest)"><code class="xref py py-class docutils literal notranslate"><span class="pre">SequenceApp</span></code></a> to the entries of the
-scanner protocol. The daemon loads the file by its stem: <code class="docutils literal notranslate"><span class="pre">gre2d.py</span></code> is the
-plugin a PSD host process opens as <code class="docutils literal notranslate"><span class="pre">gre2d</span></code>.</p>
+scanner protocol. A design call loads the file by its stem: <code class="docutils literal notranslate"><span class="pre">gre2d.py</span></code> is the
+plugin a PSD host process names with <code class="docutils literal notranslate"><span class="pre">--plugin</span> <span class="pre">gre2d</span></code>.</p>
 <section id="binding-the-protocol">
 <h2>Binding the protocol<a class="headerlink" href="#binding-the-protocol" title="Link to this heading">#</a></h2>
 <p><code class="docutils literal notranslate"><span class="pre">app</span></code> is the sequence application and <code class="docutils literal notranslate"><span class="pre">ui</span></code> maps parameters of the interpreter’s
@@ -619,7 +619,7 @@ reconstructed with (see <a class="reference internal" href="reconstruction-plugi
 <section id="resolving-a-protocol">
 <h2>Resolving a protocol<a class="headerlink" href="#resolving-a-protocol" title="Link to this heading">#</a></h2>
 <p><a class="reference internal" href="../generated/pulserver.design.ScannerSequence.listing.html#pulserver.design.ScannerSequence.listing" title="pulserver.design.ScannerSequence.listing"><code class="xref py py-meth docutils literal notranslate"><span class="pre">listing()</span></code></a> is the protocol with its
-schema, as the daemon returns it to <code class="docutils literal notranslate"><span class="pre">LIST_PROTOCOL</span></code>:</p>
+schema, as the <code class="docutils literal notranslate"><span class="pre">list</span></code> design call replies it:</p>
 <div class="highlight-pycon notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">pulserver.protocol</span><span class="w"> </span><span class="kn">import</span> <span class="n">format_listing</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">format_listing</span><span class="p">(</span><span class="n">Gre2D</span><span class="p">()</span><span class="o">.</span><span class="n">listing</span><span class="p">()),</span> <span class="n">end</span><span class="o">=</span><span class="s2">""</span><span class="p">)</span>
 <span class="go">[NimPulseqGUI Protocol]</span>

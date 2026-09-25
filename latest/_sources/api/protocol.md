@@ -61,9 +61,9 @@ the design in the physical frame the orientation gives.
 
 ## Wire blocks
 
-A listing carries every entry with its schema, as `LIST_PROTOCOL` returns it; a
-value block carries values only, as `VALIDATE` and `GENERATE` requests and
-replies do.
+A listing carries every entry with its schema, as the `list` design call replies
+it; a value block carries values only, as the `validate` and `generate` calls
+read and reply them.
 
 | Object | Description |
 | --- | --- |

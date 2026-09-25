@@ -26,8 +26,8 @@ protocol, and so does a VOP file rewritten at the same path. Because the hash
 is computed over the resolved protocol, two requests that differ only in a
 value the design replaces, such as a preset and the time it resolves to,
 identify the same design ({doc}`protocol`). A design is made from its resolved
-protocol: a request that resolves to itself, such as a `VALIDATE` reply sent
-back, constructs its application once, and one that resolves to other values
+protocol: a request that resolves to itself, such as the value block of a
+`validate` reply sent back, constructs its application once, and one that resolves to other values
 is constructed again from those, so the files of a design are a function of
 its identity.
 
