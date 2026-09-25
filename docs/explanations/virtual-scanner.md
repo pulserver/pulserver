@@ -108,6 +108,40 @@ angle: pypulseqpp's `FatSaturation`, of 110° by default, leaves fat at
 $\cos 110° \approx -0.34$ of its magnetization. A readout before the first
 excitation of its file acquires zeros.
 
+## External simulators
+
+A Bloch simulator that reads Pulseq files, KomaMRI for example, models what
+the signal model above leaves out: relaxation, slice profiles and the action
+of every RF pulse on the magnetization. A simulation of the design would test
+the design alone; {func}`~pulserver.virtual.export` writes the blocks the
+cache plays instead, so that a simulation of the file tests the IR as the
+virtual interpreter does. Each played block becomes one block of a Pulseq 1.4.1 file,
+of the duration it plays:
+
+- The RF pulse the cache plays, on the RF raster, with its phase offset and
+  its frequency offset from the pulse's start applied to the samples, so that
+  the file's RF offsets are zero and no convention for them is left to the
+  simulator. The channels of a pTx pulse are summed, as at unit, in-phase
+  sensitivity.
+- The gradients along the physical axes, turned by the block's rotation and
+  then by $R$ except in blocks labelled `NOROT`, as the virtual interpreter
+  turns them. A time-shaped gradient through the corners of all three axes
+  carries each, and a step from or to zero at a gradient's first or last
+  corner is a ramp 10 ns wide, since a time shape holds one value per time.
+  The file therefore needs no rotation extension, which revision 1.4.1 does
+  not have.
+- The ADC window without its offsets. Revision 1.4.1 cannot carry a phase
+  modulation, so the receiver phase $\theta$ of every sample is returned
+  instead, and the simulated samples are demodulated by it as the playout
+  demodulates.
+
+The file holds the standard sections alone. It carries neither the RF use nor
+the RF centre, which a Bloch simulation does not read. The text format writes
+a gradient's amplitude to six significant figures, and a turned gradient's
+amplitude is written as the rotation leaves it, so the k-space of a file
+exported under an oblique prescription agrees with the played trajectory to a
+relative $10^{-5}$ of its extent.
+
 ## What a run establishes
 
 - The trajectory the cache plays is the one each file designs, for the
@@ -136,9 +170,12 @@ excitation of its file acquires zeros.
   isocentre, and the image carries the prescribed centre and the columns of
   $R$ as its read, phase and slice directions; a series short of a readout is
   refused.
+- The exported file of every fixture and every shipped sequence, read and
+  integrated by pypulseqpp, has the trajectory the cache plays, under an
+  axial, an oblique and a reflected prescription.
 
 ## See also
 
 * {doc}`ir-cache` — the IR, its prescription and its playback.
 * {doc}`../user-guide/reconstruction-client` — the stream the virtual reconstruction client sends.
-* {doc}`../api/virtual` — the phantom, the acquisition and the client.
+* {doc}`../api/virtual` — the phantom, the acquisition, the client and the export.
