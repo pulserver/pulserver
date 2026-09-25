@@ -180,3 +180,18 @@ def test_a_dynamic_ptx_pulse_integrates_the_power_of_every_channel(tmp_path):
     assert entry["b1sq_integral_s"] == pytest.approx(
         _b1sq_integral(pulse, channels=2), rel=1e-5
     )
+
+
+def test_a_zero_flip_pulse_converts_with_no_energy_and_the_fallback_bandwidth(tmp_path):
+    """A 0 degree pulse has no spectrum to measure; the IR gives it 3.12 over its duration."""
+    sinc, _, _ = _pulses()
+    zero = pp.make_sinc_pulse(0.0, duration=2e-3, time_bw_product=4, system=SYSTEM)
+    path = _written(tmp_path, [zero, sinc])
+    convert(path, SYSTEM)
+    report = summary(path, SYSTEM, cache_ext=".pseg")
+    silent, played = sorted(
+        report["subsequences"][0]["rf"], key=lambda entry: entry["b1sq_integral_s"]
+    )
+    assert silent["b1sq_integral_s"] == 0.0
+    assert silent["bandwidth_hz"] == pytest.approx(3.12 / 2e-3, rel=1e-6)
+    assert played["b1sq_integral_s"] == pytest.approx(_b1sq_integral(sinc), rel=1e-5)

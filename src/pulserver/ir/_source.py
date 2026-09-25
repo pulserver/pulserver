@@ -167,7 +167,7 @@ class SequenceLibraries:
         ``(R, 3 + MAX_BANDS)``: bandwidth in Hz, number of bands, widest band's
         bandwidth in Hz, then each band's offset from the carrier in Hz, as
         ``pypulseqpp.calc_rf_bandwidth`` measures them; unused offsets are 0,
-        and so is every row no block plays.
+        and so is every row whose shapes no block plays at a nonzero amplitude.
     rf_flip_deg : NDArray[np.float64]
         ``(R,)``: each row's flip angle in degrees, as
         ``pypulseqpp.Sequence.rf_flip_angles`` gives it.
@@ -177,7 +177,7 @@ class SequenceLibraries:
     rf_energy : NDArray[np.float64]
         ``(R,)``: each row's energy, the integral of ``|rf|^2`` in Hz^2 s
         summed over its channels, as ``pypulseqpp.calc_rf_power`` gives it; 0
-        for every row no block plays.
+        for every row no block plays and every row of zero amplitude.
     grad : NDArray[np.float64]
         ``(G, 7)``, by type in column 0. A trapezoid (0): amplitude in Hz/m,
         rise, flat and fall times in µs, delay in µs. An arbitrary gradient
@@ -459,26 +459,28 @@ def _rf_library(
     spectra = np.zeros((rows.shape[0], 3 + MAX_BANDS), dtype=np.float64)
     energies = np.zeros(rows.shape[0], dtype=np.float64)
     raster = sequence.rf_raster_time
-    measured: dict[tuple[float, float, float], NDArray[np.float64]] = {}
-    per_amplitude: dict[tuple[float, float, float], float] = {}
+    # The spectrum's shape depends on the waveform alone: amplitude scales it
+    # and a frequency offset moves it, neither of which the bands see. The
+    # energy goes with the square of the amplitude. Both are measured once per
+    # set of shapes, on a row that plays something: a pulse of zero amplitude
+    # has no spectrum, and its row keeps none.
+    measured: dict[tuple[float, float, float], tuple[NDArray[np.float64], float]] = {}
     played = blocks[:, 1].astype(np.int64)
-    for identifier in np.unique(played[played > 0]):
+    identifiers = np.unique(played[played > 0])
+    for identifier in identifiers:
         row = rows[identifier - 1]
-        # The spectrum's shape depends on the waveform alone: amplitude scales
-        # it and a frequency offset moves it, neither of which the bands see.
-        # The energy goes with the square of the amplitude.
         key = (row[1], row[2], row[3])
-        needs_energy = key not in per_amplitude and row[0] != 0.0
-        if key not in measured or needs_energy:
+        if row[0] != 0.0 and key not in measured:
             block = int(np.argmax(played == identifier)) + 1
             event = sequence.get_block(block).rf
-            if needs_energy:
-                energy, _, _ = pp.calc_rf_power(event, dt=raster)
-                per_amplitude[key] = energy / row[0] ** 2
-            if key not in measured:
-                measured[key] = _spectrum_row(event, raster)
-        spectra[identifier - 1] = measured[key]
-        energies[identifier - 1] = per_amplitude.get(key, 0.0) * row[0] ** 2
+            energy, _, _ = pp.calc_rf_power(event, dt=raster)
+            measured[key] = (_spectrum_row(event, raster), energy / row[0] ** 2)
+    for identifier in identifiers:
+        row = rows[identifier - 1]
+        found = measured.get((row[1], row[2], row[3]))
+        if found is not None:
+            spectra[identifier - 1] = found[0]
+            energies[identifier - 1] = found[1] * row[0] ** 2
     return rows, uses, spectra, energies
 
 
