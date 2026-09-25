@@ -17,16 +17,6 @@ from typing import Any
 
 import numpy as np
 
-#: Range of an axis over a readout, relative to its widest axis, at or below
-#: which the axis is constant.
-_CONSTANT = 1e-6
-
-#: Echo tie tolerance, as a fraction of the k step at the nearest sample.
-_ECHO_TIE = 1e-2
-
-#: Samples per chunk when readouts are processed in bulk.
-_CHUNK_SAMPLES = 1 << 22
-
 #: ADC samples a range of blocks holds before an excitation may start the next.
 _RANGE_SAMPLES = 1 << 17
 
@@ -160,14 +150,13 @@ class ReadoutTable:
         Every label the sequence writes, with the ``int64`` value in force at
         each readout. Labels the sequence never writes are absent.
     center_sample : ndarray
-        ``int32`` echo index: the sample of smallest ``|k|`` over the axes
-        that vary across the readout. Samples within 1% of the k step at that
-        sample tie, and a tie goes to the later sample, or to the earlier one
-        on a readout labelled ``REV``, so reversed lines mirror onto forward
-        ones. -1 when no axis varies.
+        ``int32`` echo index: of the samples ``pypulseqpp.Sequence.adc_echoes``
+        finds nearest the centre of k-space over the axes the readout moves
+        along, the last, or the first on a readout labelled ``REV``, so
+        reversed lines mirror onto forward ones. -1 when no axis moves.
     trajectory_dimensions : ndarray
         ``int8`` axes of :meth:`readout_k` a readout keeps once the trailing
-        axes constant across it are dropped; 0 when no axis varies.
+        axes it does not move along are dropped; 0 when no axis moves.
 
     Examples
     --------
@@ -200,34 +189,25 @@ class ReadoutTable:
         """Tabulate the readouts of a ``pypulseqpp.Sequence``."""
         events = np.array(list(seq.block_events.values()), dtype=np.int64)
         events = events.reshape(-1, _COLUMNS)
-        block = np.flatnonzero(events[:, _ADC]) + 1
+        echoes = seq.adc_echoes()
+        block = echoes.block.astype(np.int64)
         count = block.size
+        num_samples = echoes.num_samples.astype(np.int32)
         adcs, which = _events_by_id(seq, events[block - 1, _ADC], block, "adc")
-        sizes = np.array([int(adc.num_samples) for adc in adcs], dtype=np.int32)
-        num_samples = sizes[which]
         dwell = np.array([float(adc.dwell) for adc in adcs])[which]
-        labels = (
-            {
-                name: np.broadcast_to(
-                    np.asarray(value, dtype=np.int64), (count,)
-                ).copy()
-                for name, value in seq.evaluate_labels(evolution="adc").items()
-            }
-            if count
-            else {}
-        )
+        labels = _labels_at(seq, block)
 
         ranges = _Ranges(
             seq, _range_starts(seq, events, block, num_samples), block, num_samples
         )
         reverse = labels.get("REV", np.zeros(count, dtype=np.int64)) != 0
-        center_sample = np.full(count, -1, dtype=np.int32)
-        dimensions = np.zeros(count, dtype=np.int8)
-        for part in np.unique(ranges.of_readout).tolist():
-            rows = np.flatnonzero(ranges.of_readout == part)
-            center_sample[rows], dimensions[rows] = _echo_and_dimensions(
-                ranges.k(part), ranges.start[rows], num_samples[rows], reverse[rows]
-            )
+        moves = echoes.moving.any(axis=1)
+        center_sample = np.where(
+            moves, np.where(reverse, echoes.echo[:, 0], echoes.echo[:, 1]), -1
+        ).astype(np.int32)
+        # The last axis moved along, counted from 1.
+        last_moving = 3 - np.argmax(echoes.moving[:, ::-1], axis=1)
+        dimensions = np.where(moves, last_moving, 0).astype(np.int8)
         return cls(
             block=block,
             num_samples=num_samples,
@@ -308,6 +288,30 @@ def _events_by_id(
     return decoded, which.reshape(-1)
 
 
+def _labels_at(seq: Any, block: np.ndarray) -> dict[str, np.ndarray]:
+    """Return every label the sequence writes, with its value at each readout block.
+
+    pypulseqpp answers a single recorded point with the labels' final values,
+    so a sequence with one readout is read at that block of the evolution over
+    every block.
+    """
+    if block.size == 0:
+        return {}
+    if block.size > 1:
+        found = seq.evaluate_labels(evolution="adc")
+        return {
+            name: np.asarray(value, dtype=np.int64).copy()
+            for name, value in found.items()
+        }
+    at = int(block[0]) - 1
+    return {
+        name: np.atleast_1d(np.asarray(value, dtype=np.int64))[
+            [at if np.size(value) > 1 else 0]
+        ]
+        for name, value in seq.evaluate_labels(evolution="blocks").items()
+    }
+
+
 def _range_starts(
     seq: Any, events: np.ndarray, readout_blocks: np.ndarray, num_samples: np.ndarray
 ) -> np.ndarray:
@@ -330,52 +334,6 @@ def _range_starts(
             starts.append(block)
             since = samples
     return np.array(starts, dtype=np.int64)
-
-
-def _echo_and_dimensions(
-    k: np.ndarray,
-    sample_offset: np.ndarray,
-    num_samples: np.ndarray,
-    reverse: np.ndarray,
-) -> tuple[np.ndarray, np.ndarray]:
-    count = sample_offset.size
-    center = np.full(count, -1, dtype=np.int32)
-    dimensions = np.zeros(count, dtype=np.int8)
-    for n in (int(n) for n in np.unique(num_samples)):
-        if n == 0:
-            continue
-        rows_of_size = np.flatnonzero(num_samples == n)
-        chunk = max(1, _CHUNK_SAMPLES // n)
-        for start in range(0, rows_of_size.size, chunk):
-            rows = rows_of_size[start : start + chunk]
-            kk = k[:, sample_offset[rows, None] + np.arange(n)].transpose(1, 0, 2)
-            span = np.ptp(kk, axis=2)
-            varying = span > _CONSTANT * span.max(axis=1, keepdims=True)
-            moving = varying.any(axis=1)
-            last_varying = 2 - np.argmax(varying[:, ::-1], axis=1)
-            dimensions[rows] = np.where(moving, last_varying + 1, 0)
-            if n < 2:
-                continue
-
-            swept = kk * varying[:, :, None]
-            distance = np.sqrt((swept**2).sum(axis=1))
-            nearest = distance.argmin(axis=1)
-            index = np.arange(rows.size)
-            step = np.maximum(
-                _step(swept, index, np.clip(nearest - 1, 0, n - 2)),
-                _step(swept, index, np.clip(nearest, 0, n - 2)),
-            )
-            tied = distance <= (distance[index, nearest] + _ECHO_TIE * step)[:, None]
-            earliest = tied.argmax(axis=1)
-            latest = n - 1 - tied[:, ::-1].argmax(axis=1)
-            chosen = np.where(reverse[rows], earliest, latest)
-            center[rows] = np.where(moving, chosen, -1)
-    return center, dimensions
-
-
-def _step(swept: np.ndarray, index: np.ndarray, at: np.ndarray) -> np.ndarray:
-    """Length of each readout's k step from sample ``at`` to the next."""
-    return np.sqrt(((swept[index, :, at + 1] - swept[index, :, at]) ** 2).sum(axis=1))
 
 
 def _measured(seq: Any) -> tuple[tuple[float, ...], ...]:

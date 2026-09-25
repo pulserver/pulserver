@@ -121,6 +121,17 @@ def test_labels_are_the_values_in_force_at_each_readout():
         )
 
 
+def test_a_single_readout_sees_the_labels_in_force_at_it():
+    """Not the values the labels end the sequence with."""
+    seq = pp.Sequence(pp.Opts())
+    add_readout(seq, pp.make_label("LIN", "SET", 3))
+    seq.add_block(pp.make_label("LIN", "SET", 7), pp.make_delay(1e-3))
+
+    table = ReadoutTable.from_sequence(seq)
+
+    assert table.labels["LIN"].tolist() == [3]
+
+
 def test_the_echo_index_is_the_design_centre_sample():
     seq, table = fixture("gre_2d_3sl.seq")
     design = int(np.atleast_1d(seq.get_definition("kSpaceCenterSample"))[0])
