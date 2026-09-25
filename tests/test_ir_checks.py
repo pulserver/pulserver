@@ -84,10 +84,12 @@ def test_the_prescription_moves_a_train_into_the_forbidden_band_of_another_axis(
     assert len(ir.check(train, SYSTEM, rotation=QUARTER, limits=on_y)) == 1
 
 
-def test_a_reflected_prescription_is_checked_as_the_rotation_it_mirrors(train):
+def test_a_reflected_prescription_is_checked_as_it_plays(train):
+    """Reflected onto -y, the train drives the band on y as the quarter turn does."""
     mirrored = np.diag([1.0, -1.0, 1.0]) @ QUARTER
-    on_y = ir.CheckLimits(bands=(BAND_Y,))
+    on_x, on_y = (ir.CheckLimits(bands=(band,)) for band in (BAND_X, BAND_Y))
     assert np.linalg.det(mirrored) == pytest.approx(-1.0)
+    assert ir.check(train, SYSTEM, rotation=mirrored, limits=on_x) == []
     assert ir.check(train, SYSTEM, rotation=mirrored, limits=on_y) == ir.check(
         train, SYSTEM, rotation=QUARTER, limits=on_y
     )

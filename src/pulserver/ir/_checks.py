@@ -138,7 +138,7 @@ def check(
         chain_read = read_chain(seq_path, verify=False)
     except RuntimeError as failure:
         raise ValueError(f"cannot read {seq_path}: {failure}") from failure
-    turn = None if rotation is None else _proper(rotation)
+    turn = None if rotation is None else _prescription(rotation)
     problems = []
     for path, sequence in chain_read:
         found = _problems(sequence, system, turn, limits)
@@ -148,17 +148,11 @@ def check(
     return problems
 
 
-def _proper(rotation: np.ndarray) -> np.ndarray | None:
-    """Return a rotation with the per-axis magnitudes of ``rotation``, or ``None`` for the identity.
-
-    A reflection is made a rotation by reversing the physical z axis, which
-    changes the sign of what it plays and no check reads a sign.
-    """
+def _prescription(rotation: np.ndarray) -> np.ndarray | None:
+    """Return ``rotation`` as a matrix, or ``None`` for the identity."""
     turn = np.array(rotation, dtype=float)
     if turn.shape != (3, 3) or not np.allclose(turn @ turn.T, np.eye(3), atol=1e-9):
         raise ValueError(f"the rotation {turn.tolist()} is not orthonormal")
-    if np.linalg.det(turn) < 0.0:
-        turn[2] *= -1.0
     return None if np.allclose(turn, np.eye(3)) else turn
 
 

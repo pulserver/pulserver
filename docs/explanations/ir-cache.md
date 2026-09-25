@@ -60,9 +60,8 @@ axis at 45°. So the checks are made in the physical frame. The prescription's
 rotation $R$, from logical to physical axes, reaches the host in the nine
 `fov_rotation_ij` entries of the protocol, element $(i, j)$ of $R$, and each
 file is rotated by it as the scanner plays it: composed after each block's own
-rotation, with blocks labelled `NOROT` left unrotated. A reflection is checked
-as the rotation that mirrors it, since reversing a physical axis changes the
-sign of the gradient on it and no check reads a sign.
+rotation, with blocks labelled `NOROT` left unrotated. A prescription with a
+reflection in it is checked as it plays, reflection included.
 
 Before a chain is converted, {func}`~pulserver.ir.check` runs pypulseqpp's
 timing check, gradient continuity included, and its gradient amplitude and
