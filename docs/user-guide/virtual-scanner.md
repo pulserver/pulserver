@@ -47,6 +47,26 @@ prescribed field of view, so it appears at the centre of the image. `received`
 holds the images, DICOM datasets and texts the reconstruction returned; a text
 beginning `pulserver:` reports a refused or failed series.
 
+## Scan water and fat
+
+An ellipse of fat carries its chemical shift, and the acquisition the
+magnet's field strength, at which the shift is resolved; `off_resonance_hz`
+adds a frequency offset common to every spin:
+
+```python
+water = virtual.Ellipse((0.02, 0.0, 0.0), (0.06, 0.05))
+fat = virtual.Ellipse((0.02, 0.07, 0.0), (0.04, 0.01), shift_ppm=-3.45)
+readouts = virtual.acquire(
+    sequence, virtual.Phantom([water, fat], coils=4), field_t=3.0
+)
+```
+
+Fat is acquired at its chemical shift, and a fat saturation the design plays
+leaves it the magnetization its pulse leaves at that frequency. Generate the
+design under limits whose `B0` is the same field: the host resolves the ppm
+offsets of the design's RF pulses at it when it builds the IR
+({doc}`running`).
+
 ## Prescribe an orientation
 
 Add the nine `fov_rotation_ij` entries to the protocol block the design is

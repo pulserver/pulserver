@@ -19,13 +19,15 @@ class Ellipse:
     Lengths are in metres along the axes of the phantom it belongs to;
     ``angle`` turns the first semi-axis from x towards y, in radians. The
     ellipse is infinitely thin, so its signal depends on the k-space location
-    along z only through the phase of its plane.
+    along z only through the phase of its plane. ``shift_ppm`` is the chemical
+    shift of its spins from water, in ppm: -3.45 for the main fat resonance.
     """
 
     centre: tuple[float, float, float]
     semi_axes: tuple[float, float]
     angle: float = 0.0
     intensity: complex = 1.0
+    shift_ppm: float = 0.0
 
     def spectrum(self, k: np.ndarray) -> np.ndarray:
         """Return its magnetization's Fourier transform at ``(3, n)`` k-space locations in 1/m.
@@ -96,24 +98,39 @@ class Phantom:
         self._rotation = np.eye(3) if rotation is None else np.asarray(rotation, float)
         self._position = np.asarray(position, dtype=float)
 
-    def kspace(self, k: np.ndarray) -> np.ndarray:
-        """Return each coil's signal at ``(3, n)`` physical k-space locations in 1/m: ``(coils, n)``."""
+    @property
+    def shifts_ppm(self) -> tuple[float, ...]:
+        """The chemical shifts of its ellipses, each once, in ascending order."""
+        return tuple(sorted({ellipse.shift_ppm for ellipse in self.ellipses}))
+
+    def kspace(self, k: np.ndarray, shift_ppm: float | None = None) -> np.ndarray:
+        """Return each coil's signal at ``(3, n)`` physical k-space locations in 1/m: ``(coils, n)``.
+
+        With ``shift_ppm``, of the ellipses of that chemical shift alone.
+        """
         k = np.asarray(k, dtype=float)
+        ellipses = [
+            e for e in self.ellipses if shift_ppm is None or e.shift_ppm == shift_ppm
+        ]
         own = self._rotation.T @ k
         signal = np.empty((self.coils, k.shape[1]), dtype=complex)
         for c in range(self.coils):
             wave = self._waves[:, c : c + 1]
-            signal[c] = self._spectrum(own)
+            signal[c] = _spectrum(ellipses, own)
             if self._depth:
                 signal[c] += (
                     0.5
                     * self._depth
-                    * (self._spectrum(own - wave) + self._spectrum(own + wave))
+                    * (
+                        _spectrum(ellipses, own - wave)
+                        + _spectrum(ellipses, own + wave)
+                    )
                 )
         return signal * np.exp(-2j * math.pi * (self._position @ k))
 
-    def _spectrum(self, k: np.ndarray) -> np.ndarray:
-        total = np.zeros(k.shape[1], dtype=complex)
-        for ellipse in self.ellipses:
-            total += ellipse.spectrum(k)
-        return total
+
+def _spectrum(ellipses: Sequence[Ellipse], k: np.ndarray) -> np.ndarray:
+    total = np.zeros(k.shape[1], dtype=complex)
+    for ellipse in ellipses:
+        total += ellipse.spectrum(k)
+    return total
