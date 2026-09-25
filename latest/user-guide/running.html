@@ -643,6 +643,32 @@ their IR cache is written (<a class="reference internal" href="../explanations/i
 include the RF and ADC dead times, the RF ringdown time and the ADC sample
 divisor of the scanner; <code class="docutils literal notranslate"><span class="pre">pypulseqpp.Opts</span></code> sets the dead times to zero and the
 divisor to four when they are left out.</p>
+<p><code class="docutils literal notranslate"><span class="pre">max_grad</span></code> and <code class="docutils literal notranslate"><span class="pre">max_slew</span></code> are the limits of the gradient coils, which the checks
+hold every physical axis to. Two design limits cap the limits a sequence is
+designed under:</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Limit</p></th>
+<th class="head"><p>Meaning</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">design_max_grad</span></code></p></td>
+<td><p>Gradient amplitude each logical axis is designed under, in <code class="docutils literal notranslate"><span class="pre">grad_unit</span></code> as <code class="docutils literal notranslate"><span class="pre">max_grad</span></code> is</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">design_max_slew</span></code></p></td>
+<td><p>Slew rate each logical axis is designed under, in <code class="docutils literal notranslate"><span class="pre">slew_unit</span></code> as <code class="docutils literal notranslate"><span class="pre">max_slew</span></code> is</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>The scanner derates them for the prescription’s rotation: logical axes played
+together add on one physical axis, so under an oblique prescription a design
+held under <code class="docutils literal notranslate"><span class="pre">max_grad</span></code> and <code class="docutils literal notranslate"><span class="pre">max_slew</span></code> alone can exceed them on a physical axis,
+and is then refused. A design limit above the scanner’s leaves the scanner’s,
+one left out is the scanner’s, and <code class="docutils literal notranslate"><span class="pre">validate</span></code> resolves a request under the same
+limits as <code class="docutils literal notranslate"><span class="pre">generate</span></code>. An imported chain is not designed, and is checked against
+<code class="docutils literal notranslate"><span class="pre">max_grad</span></code> and <code class="docutils literal notranslate"><span class="pre">max_slew</span></code> alone.</p>
 <p>The limits also carry what the host checks besides the gradient limits and
 rasters, the scanner’s nerve model and its forbidden gradient bands, and, where
 SAR is computed from virtual observation points, the VOPs. A check whose limits

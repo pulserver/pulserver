@@ -551,9 +551,11 @@ application’s <code class="docutils literal notranslate"><span class="pre">ini
 <li><p>Every entry the request omits takes the application’s default, so a request
 is always a complete prescription.</p></li>
 <li><p>The UI values are converted to the application’s arguments, and the
-application is constructed under the scanner limits. Construction designs
-the events and their timing against the system limits, without playing the
-scan, and raises an error for a prescription it cannot realize.</p></li>
+application is constructed under the scanner limits, capped by the design
+limits the scanner derates for the prescription
+(<a class="reference internal" href="../user-guide/running.html"><span class="doc">Running the services</span></a>). Construction designs the events and their
+timing against those limits, without playing the scan, and raises an error
+for a prescription it cannot realize.</p></li>
 <li><p>The value each argument took in the design, as the application records it
 (<a class="reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.sequences.SequenceApp.resolved.html#pypulseqpp.sequences.SequenceApp.resolved" title="(in pypulseqpp latest)"><code class="xref py py-attr docutils literal notranslate"><span class="pre">resolved</span></code></a>), is converted to UI
 units. An argument the application does not record keeps its requested

@@ -600,7 +600,11 @@ rotation <span class="math notranslate nohighlight">\(R\)</span>, from logical t
 <code class="docutils literal notranslate"><span class="pre">fov_rotation_ij</span></code> entries of the protocol, element <span class="math notranslate nohighlight">\((i, j)\)</span> of <span class="math notranslate nohighlight">\(R\)</span>, and each
 file is rotated by it as the scanner plays it: composed after each block’s own
 rotation, with blocks labelled <code class="docutils literal notranslate"><span class="pre">NOROT</span></code> left unrotated. A prescription with a
-reflection in it is checked as it plays, reflection included.</p>
+reflection in it is checked as it plays, reflection included. A design is held
+under limits per logical axis that the scanner derates for the rotation, the
+<code class="docutils literal notranslate"><span class="pre">design_max_grad</span></code> and <code class="docutils literal notranslate"><span class="pre">design_max_slew</span></code> of the call’s limits, and its physical
+axes are checked against the gradient coils’ own, <code class="docutils literal notranslate"><span class="pre">max_grad</span></code> and <code class="docutils literal notranslate"><span class="pre">max_slew</span></code>
+(<a class="reference internal" href="../user-guide/running.html"><span class="doc">Running the services</span></a>).</p>
 <p>Before a chain is converted, <a class="reference internal" href="../generated/pulserver.ir.check.html#pulserver.ir.check" title="pulserver.ir.check"><code class="xref py py-func docutils literal notranslate"><span class="pre">check()</span></code></a> runs pypulseqpp’s
 timing check, gradient continuity included, and its gradient amplitude and
 slew-rate checks on every file, against the gradient limits, dead times and

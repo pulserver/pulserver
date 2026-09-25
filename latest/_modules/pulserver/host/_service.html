@@ -484,7 +484,7 @@
     <span class="n">prescribed_rotation</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._blocks</span><span class="w"> </span><span class="kn">import</span> <span class="n">parse_import</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">._limits</span><span class="w"> </span><span class="kn">import</span> <span class="n">split_limits</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">._limits</span><span class="w"> </span><span class="kn">import</span> <span class="n">design_system</span><span class="p">,</span> <span class="n">split_limits</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._push</span><span class="w"> </span><span class="kn">import</span> <span class="n">push</span> <span class="k">as</span> <span class="n">push_design</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._store</span><span class="w"> </span><span class="kn">import</span> <span class="n">DesignStore</span><span class="p">,</span> <span class="n">design_identity</span>
 
@@ -527,8 +527,8 @@
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Reply ``VALID &lt;seconds&gt;`` or ``INVALID``, an ``INFO`` line and the value block.</span>
 
-<span class="sd">    The application is constructed and its scan time computed; the sequence</span>
-<span class="sd">    is not designed.</span>
+<span class="sd">    The application is constructed under the design limits and its scan</span>
+<span class="sd">    time computed; the sequence is not designed.</span>
 <span class="sd">    """</span>
     <span class="n">path</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">plugin_path</span><span class="p">(</span><span class="n">plugins</span><span class="p">,</span> <span class="n">plugin</span><span class="p">))</span>
     <span class="n">listing</span> <span class="o">=</span> <span class="n">_listing</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
@@ -548,8 +548,10 @@
 
 <span class="sd">    A design already stored for the resolved protocol, the plugin source, the</span>
 <span class="sd">    package versions and the limits is returned without designing again.</span>
-<span class="sd">    Otherwise the application is designed once, written in the logical frame,</span>
-<span class="sd">    checked in the physical frame of the prescription rotation with</span>
+<span class="sd">    Otherwise the application is designed once, under the scanner limits</span>
+<span class="sd">    capped by the design limits ``design_max_grad`` and ``design_max_slew``,</span>
+<span class="sd">    written in the logical frame, checked in the physical frame of the</span>
+<span class="sd">    prescription rotation against the scanner limits with</span>
 <span class="sd">    :func:`pulserver.ir.check`, converted to the IR cache at the prescribed</span>
 <span class="sd">    field-of-view offset, and stored. A request that resolves to other values</span>
 <span class="sd">    is designed from the resolved values, so a design is a function of its</span>
@@ -567,12 +569,13 @@
     <span class="n">request</span> <span class="o">=</span> <span class="n">_request</span><span class="p">(</span><span class="n">block</span><span class="p">,</span> <span class="n">listing</span><span class="p">)</span>
     <span class="n">limits</span> <span class="o">=</span> <span class="n">_read</span><span class="p">(</span><span class="n">limits</span><span class="p">)</span>
     <span class="n">system</span><span class="p">,</span> <span class="n">options</span><span class="p">,</span> <span class="n">checked</span> <span class="o">=</span> <span class="n">split_limits</span><span class="p">(</span><span class="n">limits</span><span class="p">)</span>
+    <span class="n">design</span> <span class="o">=</span> <span class="n">design_system</span><span class="p">(</span><span class="n">limits</span><span class="p">)</span>
     <span class="n">scanner</span> <span class="o">=</span> <span class="n">_plugin</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
     <span class="n">requested</span> <span class="o">=</span> <span class="p">{</span><span class="n">name</span><span class="p">:</span> <span class="n">p</span><span class="o">.</span><span class="n">value</span> <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">listing</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">p</span><span class="o">.</span><span class="n">editable</span><span class="p">}</span>
     <span class="n">requested</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">request</span><span class="p">)</span>
-    <span class="n">app</span><span class="p">,</span> <span class="n">validation</span> <span class="o">=</span> <span class="n">scanner</span><span class="o">.</span><span class="n">resolve</span><span class="p">(</span><span class="n">system</span><span class="p">,</span> <span class="n">requested</span><span class="p">)</span>
+    <span class="n">app</span><span class="p">,</span> <span class="n">validation</span> <span class="o">=</span> <span class="n">scanner</span><span class="o">.</span><span class="n">resolve</span><span class="p">(</span><span class="n">design</span><span class="p">,</span> <span class="n">requested</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">app</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">validation</span><span class="o">.</span><span class="n">values</span> <span class="o">!=</span> <span class="n">requested</span><span class="p">:</span>
-        <span class="n">app</span><span class="p">,</span> <span class="n">validation</span> <span class="o">=</span> <span class="n">scanner</span><span class="o">.</span><span class="n">resolve</span><span class="p">(</span><span class="n">system</span><span class="p">,</span> <span class="n">validation</span><span class="o">.</span><span class="n">values</span><span class="p">)</span>
+        <span class="n">app</span><span class="p">,</span> <span class="n">validation</span> <span class="o">=</span> <span class="n">scanner</span><span class="o">.</span><span class="n">resolve</span><span class="p">(</span><span class="n">design</span><span class="p">,</span> <span class="n">validation</span><span class="o">.</span><span class="n">values</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">app</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">raise</span> <span class="n">CallError</span><span class="p">(</span><span class="n">validation</span><span class="o">.</span><span class="n">info</span><span class="p">)</span>
     <span class="n">source</span> <span class="o">=</span> <span class="n">_source</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
@@ -788,7 +791,7 @@
 <span class="k">def</span><span class="w"> </span><span class="nf">_validated</span><span class="p">(</span>
     <span class="n">path</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">limits</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="n">request</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Validation</span><span class="p">:</span>
-    <span class="k">return</span> <span class="n">_plugin</span><span class="p">(</span><span class="n">path</span><span class="p">)</span><span class="o">.</span><span class="n">validate</span><span class="p">(</span><span class="n">split_limits</span><span class="p">(</span><span class="n">limits</span><span class="p">)[</span><span class="mi">0</span><span class="p">],</span> <span class="n">request</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">_plugin</span><span class="p">(</span><span class="n">path</span><span class="p">)</span><span class="o">.</span><span class="n">validate</span><span class="p">(</span><span class="n">design_system</span><span class="p">(</span><span class="n">limits</span><span class="p">),</span> <span class="n">request</span><span class="p">)</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_chain</span><span class="p">(</span><span class="n">first</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>

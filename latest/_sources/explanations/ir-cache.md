@@ -61,7 +61,11 @@ rotation $R$, from logical to physical axes, reaches the host in the nine
 `fov_rotation_ij` entries of the protocol, element $(i, j)$ of $R$, and each
 file is rotated by it as the scanner plays it: composed after each block's own
 rotation, with blocks labelled `NOROT` left unrotated. A prescription with a
-reflection in it is checked as it plays, reflection included.
+reflection in it is checked as it plays, reflection included. A design is held
+under limits per logical axis that the scanner derates for the rotation, the
+`design_max_grad` and `design_max_slew` of the call's limits, and its physical
+axes are checked against the gradient coils' own, `max_grad` and `max_slew`
+({doc}`../user-guide/running`).
 
 Before a chain is converted, {func}`~pulserver.ir.check` runs pypulseqpp's
 timing check, gradient continuity included, and its gradient amplitude and

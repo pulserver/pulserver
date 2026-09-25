@@ -583,13 +583,12 @@ beginning <code class="docutils literal notranslate"><span class="pre">pulserver
 <h2>Prescribe an orientation<a class="headerlink" href="#prescribe-an-orientation" title="Link to this heading">#</a></h2>
 <p>Add the nine <code class="docutils literal notranslate"><span class="pre">fov_rotation_ij</span></code> entries to the protocol block the design is
 generated from: element (i, j) of the rotation <span class="math notranslate nohighlight">\(R\)</span> from logical to physical
-axes, the identity’s where absent (<a class="reference internal" href="../explanations/protocol.html"><span class="doc">Protocol resolution</span></a>). The
-design is checked in
-the physical frame <span class="math notranslate nohighlight">\(R\)</span> gives, where logical axes played together add on one
-physical axis, so a design at the scanner’s limits on several axes at once can
-be refused (<a class="reference internal" href="../explanations/ir-cache.html"><span class="doc">The scanner IR</span></a>). The acquisition and the client
-are given the same <span class="math notranslate nohighlight">\(R\)</span>, and the client sends <span class="math notranslate nohighlight">\(R\)</span> times the offset as the
-field-of-view centre:</p>
+axes, the identity’s where absent (<a class="reference internal" href="../explanations/protocol.html"><span class="doc">Protocol resolution</span></a>). The design
+is checked in the physical frame <span class="math notranslate nohighlight">\(R\)</span> gives, where logical axes played together
+add on one physical axis, so derate the limits it is designed under for <span class="math notranslate nohighlight">\(R\)</span> in
+the <code class="docutils literal notranslate"><span class="pre">design_max_grad</span></code> and <code class="docutils literal notranslate"><span class="pre">design_max_slew</span></code> lines of the limits file
+(<a class="reference internal" href="running.html"><span class="doc">Running the services</span></a>). The acquisition and the client are given the same <span class="math notranslate nohighlight">\(R\)</span>, and
+the client sends <span class="math notranslate nohighlight">\(R\)</span> times the offset as the field-of-view centre:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 
 <span class="n">rotation</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="mf">0.866025</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">],</span> <span class="p">[</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.866025</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">],</span> <span class="p">[</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">]])</span>
