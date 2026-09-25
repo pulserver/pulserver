@@ -599,9 +599,8 @@ axis at 45°. So the checks are made in the physical frame. The prescription’s
 rotation <span class="math notranslate nohighlight">\(R\)</span>, from logical to physical axes, reaches the host in the nine
 <code class="docutils literal notranslate"><span class="pre">fov_rotation_ij</span></code> entries of the protocol, element <span class="math notranslate nohighlight">\((i, j)\)</span> of <span class="math notranslate nohighlight">\(R\)</span>, and each
 file is rotated by it as the scanner plays it: composed after each block’s own
-rotation, with blocks labelled <code class="docutils literal notranslate"><span class="pre">NOROT</span></code> left unrotated. A reflection is checked
-as the rotation that mirrors it, since reversing a physical axis changes the
-sign of the gradient on it and no check reads a sign.</p>
+rotation, with blocks labelled <code class="docutils literal notranslate"><span class="pre">NOROT</span></code> left unrotated. A prescription with a
+reflection in it is checked as it plays, reflection included.</p>
 <p>Before a chain is converted, <a class="reference internal" href="../generated/pulserver.ir.check.html#pulserver.ir.check" title="pulserver.ir.check"><code class="xref py py-func docutils literal notranslate"><span class="pre">check()</span></code></a> runs pypulseqpp’s
 timing check, gradient continuity included, and its gradient amplitude and
 slew-rate checks on every file, against the gradient limits, dead times and
@@ -656,8 +655,8 @@ repetition.</p>
 <tr class="row-even"><td><p>Event deduplication</p></td>
 <td><p>A library of distinct RF, gradient and ADC definitions, and a per-block instance table recording the definition each block plays and its amplitude</p></td>
 </tr>
-<tr class="row-odd"><td><p>Repetition detection</p></td>
-<td><p>The repeating unit of each subsequence, its repetition time (TR), and the preparation and cool-down regions around it</p></td>
+<tr class="row-odd"><td><p>Repetition</p></td>
+<td><p>The repeating unit of each subsequence and its repetition time (TR): the unit pypulseqpp’s <code class="docutils literal notranslate"><span class="pre">Sequence.repetition</span></code> finds, from the first block; a subsequence that does not repeat is one repetition, refused when it is longer than 15 s</p></td>
 </tr>
 <tr class="row-even"><td><p>Segmentation</p></td>
 <td><p>The repeating unit divided into segments at block boundaries where every gradient waveform is zero</p></td>
@@ -666,7 +665,7 @@ repetition.</p>
 <td><p>The order in which segments are played over the whole scan</p></td>
 </tr>
 <tr class="row-even"><td><p>Label table</p></td>
-<td><p>The Pulseq labels of every readout, three of which fill the ADC label columns</p></td>
+<td><p>The Pulseq labels in force at every readout, three of which fill the ADC label columns</p></td>
 </tr>
 <tr class="row-odd"><td><p>RF statistics</p></td>
 <td><p>For each RF definition: its transmit channels, flip angle and energy, as pypulseqpp counts them; its duration from the envelope; and the bandwidth and bands of a multiband pulse from its spectrum</p></td>
@@ -692,7 +691,14 @@ The energy is held as the integral of the squared envelope scaled to unit
 peak, in seconds: pypulseqpp’s <code class="docutils literal notranslate"><span class="pre">calc_rf_power</span></code> energy, the integral of
 <span class="math notranslate nohighlight">\(|b_1|^2\)</span>, over its peak power, both summed over the channels.
 A pulse a file leaves unlabelled takes the use pypulseqpp detects for it when
-the chain is read. <code class="docutils literal notranslate"><span class="pre">label_column_map</span></code> selects the three labels the
+the chain is read. RF and ADC frequency and phase offsets are stored absolute:
+the ppm offsets are resolved on the host, at the gamma and B0 of the call’s
+limits, by pypulseqpp’s <code class="docutils literal notranslate"><span class="pre">SequenceLibraries.absolute_offsets</span></code>. The labels
+and flags in force at each block, with <code class="docutils literal notranslate"><span class="pre">PMC</span></code> in force from the first, are
+pypulseqpp’s <code class="docutils literal notranslate"><span class="pre">Sequence.evaluate_labels</span></code>, and a <code class="docutils literal notranslate"><span class="pre">TRID</span></code> group starts at each block
+<code class="docutils literal notranslate"><span class="pre">Sequence.label_blocks</span></code> lists as setting it; the rotation and RF shim a block
+plays are <code class="docutils literal notranslate"><span class="pre">Sequence.block_rotations</span></code> and <code class="docutils literal notranslate"><span class="pre">Sequence.block_shims</span></code>.
+<code class="docutils literal notranslate"><span class="pre">label_column_map</span></code> selects the three labels the
 interpreter records per readout, as indices in the order SLC, PHS, REP, AVG,
 SEG, SET, ECO, PAR, LIN, ACQ.</p>
 </section>

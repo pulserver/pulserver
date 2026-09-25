@@ -520,8 +520,9 @@
 <p>Segmentation of a Pulseq sequence and its <code class="docutils literal notranslate"><span class="pre">NextSequence</span></code> chain into the binary
 IR cache the scanner interpreter loads beside the sequence file.</p>
 <p>The chain is read with <code class="docutils literal notranslate"><span class="pre">pypulseqpp.Sequence</span></code>, text or binary. Event
-deduplication, repetition detection, segmentation and the execution stream are
-computed in the compiled extension, and the cache is written by the C library
+deduplication, segmentation of the repetition pypulseqpp finds, and the
+execution stream are computed in the compiled extension, and the cache is
+written by the C library
 the interpreter reads it back with. The files are read in the logical frame and
 moved to the prescribed field-of-view offset before they are segmented. The
 passes and the cache layout are described in <a class="reference internal" href="../explanations/ir-cache.html"><span class="doc">The scanner IR</span></a>.</p>
@@ -551,7 +552,7 @@ passes and the cache layout are described in <a class="reference internal" href=
 <td><p>The local and global SAR ratios of one subsequence, as the cache carries them.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.ir.summary.html#pulserver.ir.summary" title="pulserver.ir.summary"><code class="xref py py-obj docutils literal notranslate"><span class="pre">summary</span></code></a></p></td>
-<td><p>Subsequences, segments, readouts and RF spectral statistics of a sequence, from the chain or from its cache.</p></td>
+<td><p>Subsequences, segments, readouts, readout labels and RF spectral statistics of a sequence, from the chain or from its cache.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.ir.play.html#pulserver.ir.play" title="pulserver.ir.play"><code class="xref py py-obj docutils literal notranslate"><span class="pre">play</span></code></a></p></td>
 <td><p>Every block a cache plays, resolved as the scanner’s playout resolves it, with its gradient waveforms on request.</p></td>

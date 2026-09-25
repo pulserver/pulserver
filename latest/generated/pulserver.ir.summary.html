@@ -543,7 +543,9 @@ the integral of the squared envelope scaled to unit peak, in s:
 <code class="docutils literal notranslate"><span class="pre">pypulseqpp.calc_rf_power</span></code>’s energy over its peak power, both summed
 over a dynamic pTx pulse’s channels.
 <code class="docutils literal notranslate"><span class="pre">vop_sar_ratio</span></code> and <code class="docutils literal notranslate"><span class="pre">vop_global_sar_ratio</span></code> are those the cache was
-written with, zero when the chain is read and segmented again.</p>
+written with, zero when the chain is read and segmented again.
+<code class="docutils literal notranslate"><span class="pre">readout_labels</span></code> lists, per readout in play order, the values of the
+three labels <code class="docutils literal notranslate"><span class="pre">label_column_map</span></code> selects, as in force at that readout.</p>
 <p>With <code class="docutils literal notranslate"><span class="pre">cache_ext</span></code>, the cache beside the file is loaded instead of the
 chain being read and segmented again; this build loads only vendor-neutral
 caches, and only when the size recorded in the cache matches the file.</p>

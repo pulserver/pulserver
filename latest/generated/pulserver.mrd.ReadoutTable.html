@@ -548,13 +548,12 @@ this, which must not change once tabulated.</p>
 <li><p><strong>dwell</strong> (<em>ndarray</em>) – <code class="docutils literal notranslate"><span class="pre">float64</span></code> dwell time, in seconds.</p></li>
 <li><p><strong>labels</strong> (<em>dict of str to ndarray</em>) – Every label the sequence writes, with the <code class="docutils literal notranslate"><span class="pre">int64</span></code> value in force at
 each readout. Labels the sequence never writes are absent.</p></li>
-<li><p><strong>center_sample</strong> (<em>ndarray</em>) – <code class="docutils literal notranslate"><span class="pre">int32</span></code> echo index: the sample of smallest <code class="docutils literal notranslate"><span class="pre">|k|</span></code> over the axes
-that vary across the readout. Samples within 1% of the k step at that
-sample tie, and a tie goes to the later sample, or to the earlier one
-on a readout labelled <code class="docutils literal notranslate"><span class="pre">REV</span></code>, so reversed lines mirror onto forward
-ones. -1 when no axis varies.</p></li>
+<li><p><strong>center_sample</strong> (<em>ndarray</em>) – <code class="docutils literal notranslate"><span class="pre">int32</span></code> echo index: of the samples <code class="docutils literal notranslate"><span class="pre">pypulseqpp.Sequence.adc_echoes</span></code>
+finds nearest the centre of k-space over the axes the readout moves
+along, the last, or the first on a readout labelled <code class="docutils literal notranslate"><span class="pre">REV</span></code>, so
+reversed lines mirror onto forward ones. -1 when no axis moves.</p></li>
 <li><p><strong>trajectory_dimensions</strong> (<em>ndarray</em>) – <code class="docutils literal notranslate"><span class="pre">int8</span></code> axes of <a class="reference internal" href="pulserver.mrd.ReadoutTable.readout_k.html#pulserver.mrd.ReadoutTable.readout_k" title="pulserver.mrd.ReadoutTable.readout_k"><code class="xref py py-meth docutils literal notranslate"><span class="pre">readout_k()</span></code></a> a readout keeps once the trailing
-axes constant across it are dropped; 0 when no axis varies.</p></li>
+axes it does not move along are dropped; 0 when no axis moves.</p></li>
 </ul>
 </dd>
 </dl>

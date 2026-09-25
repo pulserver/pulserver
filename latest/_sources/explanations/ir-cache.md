@@ -60,9 +60,8 @@ axis at 45°. So the checks are made in the physical frame. The prescription's
 rotation $R$, from logical to physical axes, reaches the host in the nine
 `fov_rotation_ij` entries of the protocol, element $(i, j)$ of $R$, and each
 file is rotated by it as the scanner plays it: composed after each block's own
-rotation, with blocks labelled `NOROT` left unrotated. A reflection is checked
-as the rotation that mirrors it, since reversing a physical axis changes the
-sign of the gradient on it and no check reads a sign.
+rotation, with blocks labelled `NOROT` left unrotated. A prescription with a
+reflection in it is checked as it plays, reflection included.
 
 Before a chain is converted, {func}`~pulserver.ir.check` runs pypulseqpp's
 timing check, gradient continuity included, and its gradient amplitude and
@@ -114,10 +113,10 @@ repetition.
 | Pass | Result |
 | --- | --- |
 | Event deduplication | A library of distinct RF, gradient and ADC definitions, and a per-block instance table recording the definition each block plays and its amplitude |
-| Repetition detection | The repeating unit of each subsequence, its repetition time (TR), and the preparation and cool-down regions around it |
+| Repetition | The repeating unit of each subsequence and its repetition time (TR): the unit pypulseqpp's `Sequence.repetition` finds, from the first block; a subsequence that does not repeat is one repetition, refused when it is longer than 15 s |
 | Segmentation | The repeating unit divided into segments at block boundaries where every gradient waveform is zero |
 | Execution stream | The order in which segments are played over the whole scan |
-| Label table | The Pulseq labels of every readout, three of which fill the ADC label columns |
+| Label table | The Pulseq labels in force at every readout, three of which fill the ADC label columns |
 | RF statistics | For each RF definition: its transmit channels, flip angle and energy, as pypulseqpp counts them; its duration from the envelope; and the bandwidth and bands of a multiband pulse from its spectrum |
 
 The limits and rasters of the scanner (`pypulseqpp.Opts`) are those under which
@@ -138,7 +137,14 @@ The energy is held as the integral of the squared envelope scaled to unit
 peak, in seconds: pypulseqpp's `calc_rf_power` energy, the integral of
 $|b_1|^2$, over its peak power, both summed over the channels.
 A pulse a file leaves unlabelled takes the use pypulseqpp detects for it when
-the chain is read. `label_column_map` selects the three labels the
+the chain is read. RF and ADC frequency and phase offsets are stored absolute:
+the ppm offsets are resolved on the host, at the gamma and B0 of the call's
+limits, by pypulseqpp's `SequenceLibraries.absolute_offsets`. The labels
+and flags in force at each block, with `PMC` in force from the first, are
+pypulseqpp's `Sequence.evaluate_labels`, and a `TRID` group starts at each block
+`Sequence.label_blocks` lists as setting it; the rotation and RF shim a block
+plays are `Sequence.block_rotations` and `Sequence.block_shims`.
+`label_column_map` selects the three labels the
 interpreter records per readout, as indices in the order SLC, PHS, REP, AVG,
 SEG, SET, ECO, PAR, LIN, ACQ.
 
