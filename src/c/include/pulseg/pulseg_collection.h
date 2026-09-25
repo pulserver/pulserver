@@ -318,11 +318,13 @@ extern "C"
         int blk_idx);
 
     /**
-     * @brief Return decompressed RF phase waveform (rad, multi-channel).
+     * @brief Return decompressed RF phase waveform (cycles, multi-channel).
      *
      * Returns an array of num_channels pointers, each pointing to
-     * num_samples floats.  Caller must free each result[ch] with
-     * PULSEG_FREE, then the result pointer with PULSEG_FREE.
+     * num_samples floats: the phase in cycles, as Pulseq stores an RF phase
+     * shape, so that 2 pi times a sample is its phase in radians.  Caller
+     * must free each result[ch] with PULSEG_FREE, then the result pointer
+     * with PULSEG_FREE.
      */
     float **pulseg_get_rf_phase(
         const pulseg_collection *coll,
@@ -363,9 +365,9 @@ extern "C"
         int rf_def_id);
 
     /**
-     * @brief Return decompressed RF phase waveform, keyed by RF definition.
-     * Same semantics/ownership as pulseg_get_rf_phase(). NULL if the
-     * definition has no phase shape (a common phase, not encoded as one).
+     * @brief Return decompressed RF phase waveform (cycles), keyed by RF
+     * definition. Same semantics/ownership as pulseg_get_rf_phase(). NULL if
+     * the definition has no phase shape (a common phase, not encoded as one).
      */
     float **pulseg_get_rf_def_phase(
         const pulseg_collection *coll,

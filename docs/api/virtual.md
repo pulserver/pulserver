@@ -13,6 +13,8 @@ plugins are the production code; what each stand-in exercises, and the signal
 model, are described in {doc}`../explanations/virtual-scanner`. Positions are
 in metres and k-space locations in 1/m, along the physical axes: the logical
 axes turned by the prescription's rotation, the identity unless one is given.
+Chemical shifts are in ppm from water, and frequencies in Hz from the
+scanner's centre frequency.
 
 ## Acquisition
 
@@ -26,7 +28,7 @@ axes turned by the prescription's rotation, the identity unless one is given.
 | Object | Description |
 | --- | --- |
 | {obj}`~pulserver.virtual.Phantom` | Ellipses whose signals add, received by one coil or several of analytic sensitivity, placed in the physical frame by a rotation and a position. |
-| {obj}`~pulserver.virtual.Ellipse` | An ellipse of uniform magnetization in a plane of constant z. |
+| {obj}`~pulserver.virtual.Ellipse` | An ellipse of uniform magnetization in a plane of constant z, of one chemical shift. |
 
 ## Reconstruction client
 

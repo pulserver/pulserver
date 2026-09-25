@@ -175,7 +175,7 @@ loaded from a vendor-neutral cache.
 execution stream with the cursor a playout uses, resolving each block as the
 scanner plays it: its duration, the RF and ADC frequency and phase offsets,
 the RF use, the ADC window, the gradient amplitudes and the rotation, and, on
-request, the gradient waveforms each instance plays. It stands in for the
+request, the RF and gradient waveforms each instance plays. It stands in for the
 interpreter, so the cache can be compared with the file it was converted from
 without a scanner; the test suite holds every played block of each fixture to
 the block its file designs, and the trajectory the waveforms trace to the one

@@ -3,7 +3,7 @@
 import numpy as np
 import pypulseqpp as pp
 import pytest
-from _virtual import OFFSET, ORIENTATIONS, phantom, posed
+from _virtual import OFF_RESONANCE_HZ, OFFSET, ORIENTATIONS, phantom, posed, precession
 from _zoo import SMALL
 from pypulseqpp import sequences
 
@@ -47,3 +47,16 @@ def test_every_shipped_sequence_scans_an_object_posed_as_prescribed_as_at_the_is
     b = np.concatenate([ideal[i] for i in excited], axis=1)
     factor = np.vdot(b, a) / np.vdot(b, b)
     assert np.linalg.norm(a - factor * b) / np.linalg.norm(b) < 1e-3
+
+
+def test_every_shipped_sequence_accrues_off_resonance_as_its_design_times_it(design):
+    _, sequence, path = design
+    ir.convert(path, pp.Opts())
+    tissue = phantom(coils=1)
+    on = np.concatenate(virtual.acquire(path, tissue), axis=1)
+    off = np.concatenate(
+        virtual.acquire(path, tissue, off_resonance_hz=OFF_RESONANCE_HZ), axis=1
+    )
+    accrued = np.nan_to_num(precession(sequence))
+    expected = on * np.exp(-2j * np.pi * OFF_RESONANCE_HZ * accrued)
+    assert np.linalg.norm(off - expected) / np.linalg.norm(on) < 1e-4
