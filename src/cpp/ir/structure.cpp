@@ -1,16 +1,15 @@
 /**
  * @file structure.cpp
- * @brief Sequence structure: TR detection, segmentation, execution stream,
+ * @brief Sequence structure: the repetition, segmentation, execution stream,
  *        and timing anchors.
  *
- * Turns a deduplicated block list into a playable structure: finds the
- * repeating TR pattern and its prep/cooldown regions, cuts the TR into
- * virtual segments at zero-gradient boundaries, expands the execution stream
- * over passes and averages, and derives the per-segment RF isocenter / ADC
- * k-zero anchors that freq-mod, SSP placement and the trajectory all key off.
+ * Turns a deduplicated block list into a playable structure: takes the
+ * repetition pypulseqpp found, cuts it into virtual segments at zero-gradient
+ * boundaries, tiles them over the execution stream, and derives the
+ * per-segment RF isocenter / ADC k-zero anchors that freq-mod, SSP placement
+ * and the trajectory all key off.
  */
 
-#include <limits.h>
 #include <string.h>
 #include <stdlib.h>
 #include <math.h>
@@ -147,129 +146,6 @@ static int segments_structurally_equal(
             return 0;
     }
     return 1;
-}
-
-/* ================================================================== */
-/*  TR detection helpers                                              */
-/* ================================================================== */
-
-/* The identity a repetition is recognised by: a block definition with its ADC
- * left out.  Which readout a block digitises with is a property of the
- * instance, not of the rhythm the sequence repeats at.  Counting it would
- * scale the period by the number of readout variants a position holds, and
- * the window-based safety checks cost at least the square of the period.
- *
- * Returns a dense id per block definition, caller frees; NULL on failure. */
-static int *build_geometry_ids(const pulseg_sequence_descriptor *desc)
-{
-    enum
-    {
-        GEOM_COLS = 5
-    };
-    int *rows = NULL;
-    int *reps = NULL;
-    int *ids = NULL;
-    int i, n;
-
-    n = desc->num_unique_blocks;
-    if (n <= 0)
-        return NULL;
-
-    rows = (int *)PULSEG_ALLOC((size_t)n * GEOM_COLS * sizeof(int));
-    reps = (int *)PULSEG_ALLOC((size_t)n * sizeof(int));
-    ids = (int *)PULSEG_ALLOC((size_t)n * sizeof(int));
-    if (!rows || !reps || !ids)
-    {
-        if (rows)
-            PULSEG_FREE(rows);
-        if (reps)
-            PULSEG_FREE(reps);
-        if (ids)
-            PULSEG_FREE(ids);
-        return NULL;
-    }
-
-    for (i = 0; i < n; ++i)
-    {
-        const pulseg_base_block *b = &desc->base_blocks[i];
-        rows[i * GEOM_COLS + 0] = b->duration_us;
-        rows[i * GEOM_COLS + 1] = b->rf_id;
-        rows[i * GEOM_COLS + 2] = b->gx_id;
-        rows[i * GEOM_COLS + 3] = b->gy_id;
-        rows[i * GEOM_COLS + 4] = b->gz_id;
-    }
-
-    (void)pulseg__deduplicate_int_rows(reps, ids, rows, n, GEOM_COLS);
-
-    PULSEG_FREE(rows);
-    PULSEG_FREE(reps);
-    return ids;
-}
-
-static int first_repeating_segment(const int *s, int len)
-{
-    int l, i, match;
-
-    if (len <= 1)
-        return len;
-
-    /* Find the shortest period starting at offset 0.
-     * The caller already strips the prep region, so the repeating
-     * pattern always starts at the beginning of the array.
-     * Searching from non-zero offsets is harmful: it picks up short
-     * sub-patterns (e.g. [rephaser,nav,rephaser,nav] inside an EPI
-     * readout train) that don't span the whole array.               */
-    for (l = 1; l <= len / 2; ++l)
-    {
-        match = 1;
-        for (i = 0; i < l; ++i)
-        {
-            if (s[i] != s[i + l])
-            {
-                match = 0;
-                break;
-            }
-        }
-        if (match)
-            return l;
-    }
-    return len;
-}
-
-static int first_repeating_segment_structural(
-    const pulseg_sequence_descriptor *desc,
-    int start,
-    int len)
-{
-    int l, i, match;
-    int a_idx, b_idx;
-    int a_id, b_id;
-
-    if (!desc || len <= 1)
-        return len;
-
-    for (l = 1; l <= len / 2; ++l)
-    {
-        if (len % l != 0)
-            continue;
-        match = 1;
-        for (i = 0; i < len; ++i)
-        {
-            a_idx = start + i;
-            b_idx = start + (i % l);
-            a_id = desc->block_table[a_idx].id;
-            b_id = desc->block_table[b_idx].id;
-            if (!pulseg__block_defs_structurally_equal(desc, a_id, b_id))
-            {
-                match = 0;
-                break;
-            }
-        }
-        if (match)
-            return l;
-    }
-
-    return len;
 }
 
 /* Ceiling on the distinct readout patterns one segment definition may carry.
@@ -1119,59 +995,24 @@ void pulseg__compute_exec_stream_tr_start(pulseg_sequence_descriptor *desc)
 }
 
 /* ================================================================== */
-/*  find_tr_in_sequence                                               */
+/*  The repetition                                                    */
 /* ================================================================== */
 
-/*
- * The blocks-per-TR a file declares in [DEFINITIONS] TRsize, as pypulseqpp
- * writes it, or TRSize, or 0 when it declares none.  A declaration is a claim
- * about the block table, and the caller verifies it against the same pattern
- * its own search would have been checked against; nothing here trusts the
- * number.
- */
-static int declared_tr_size(const pulseq_file *seq)
+/* How long block @p n plays: a pure delay its own duration, anything else its
+ * definition's. */
+static double played_duration_us(const pulseg_sequence_descriptor *desc, int n)
 {
-    int i;
-    long value;
-    char *end;
-
-    if (!seq || !seq->definitions_library)
-        return 0;
-
-    for (i = 0; i < seq->num_definitions; ++i)
-    {
-        if (strcmp(seq->definitions_library[i].name, "TRsize") != 0 &&
-            strcmp(seq->definitions_library[i].name, "TRSize") != 0)
-            continue;
-        if (seq->definitions_library[i].value_size < 1 || !seq->definitions_library[i].value ||
-            !seq->definitions_library[i].value[0])
-            return 0;
-        value = strtol(seq->definitions_library[i].value[0], &end, 10);
-        if (end == seq->definitions_library[i].value[0])
-            return 0;
-        if (value <= 0 || value > INT_MAX)
-            return 0;
-        return (int)value;
-    }
-    return 0;
+    const pulseg_block_table_element *entry = &desc->block_table[n];
+    return (double)((entry->duration_us >= 0) ? entry->duration_us
+                                              : desc->base_blocks[entry->id].duration_us);
 }
 
 /*
- * Whether @p pat repeats with period @p period over its whole length.
- * The same test the period search applies to a candidate it found.
+ * The repetition is the one pypulseqpp's Sequence.repetition finds, handed
+ * over in the file's reserved definitions and anchored at the first block;
+ * a last copy cut short is part of it.  A sequence that does not repeat is
+ * one repetition, refused when its span exceeds SINGLE_TR_MAX_DURATION_US.
  */
-static int period_holds(const int *pat, int nblocks, int period)
-{
-    int i;
-
-    if (period <= 0 || period > nblocks || (nblocks % period) != 0)
-        return 0;
-    for (i = period; i < nblocks; ++i)
-        if (pat[i] != pat[i % period])
-            return 0;
-    return 1;
-}
-
 int pulseg__get_tr_in_sequence(
     pulseg_sequence_descriptor *desc,
     const pulseq_file *seq,
@@ -1179,17 +1020,8 @@ int pulseg__get_tr_in_sequence(
 {
     pulseg_tr_descriptor *tr = &desc->tr_descriptor;
     pulseg_diagnostic local_diag;
-    int i, n;
-    int nblocks;
-    int *seq_pat = NULL;
-    int *base_pat = NULL;
-    int *block_dur = NULL;
-    int *geom_id = NULL;
-    double span_dur_us; /* one pass, delays included; can exceed an int */
-    int found, l, declared;
-    int mismatch_pos;
-    float tr_dur;
-    int tr_start;
+    double span_us; /* one pass, delays included; can exceed an int */
+    int n, nblocks, size;
 
     if (!diag)
     {
@@ -1198,10 +1030,6 @@ int pulseg__get_tr_in_sequence(
     }
     else
         pulseg_diagnostic_init(diag);
-
-    found = 0;
-    l = 0;
-    mismatch_pos = -1;
 
     if (desc->num_blocks <= 0 || !desc->block_table || !desc->base_blocks)
     {
@@ -1213,212 +1041,34 @@ int pulseg__get_tr_in_sequence(
     tr->tr_duration_us = 0.0f;
 
     nblocks = desc->num_blocks;
-    pulseg__diag_printf(diag, "block count=%d", nblocks);
-
-    /* unique-block count for diagnostics */
+    size = seq->reserved_definitions_library.repetition_size;
+    pulseg__diag_printf(diag, "block count=%d repetition=%d", nblocks, size);
+    if (size <= 0 || size > nblocks)
     {
-        int max_u = 0;
-        for (n = 0; n < desc->num_blocks; ++n)
-            if (desc->block_table[n].id > max_u)
-                max_u = desc->block_table[n].id;
-        pulseg__diag_printf(diag, " unique blocks=%d", max_u + 1);
-    }
-
-    seq_pat = (int *)PULSEG_ALLOC(desc->num_blocks * sizeof(int));
-    block_dur = (int *)PULSEG_ALLOC(desc->num_blocks * sizeof(int));
-    if (!seq_pat || !block_dur)
-    {
-        if (seq_pat)
-            PULSEG_FREE(seq_pat);
-        if (block_dur)
-            PULSEG_FREE(block_dur);
-        diag->code = PULSEG_ERR_ALLOC_FAILED;
+        diag->code = PULSEG_ERR_INVALID_ARGUMENT;
         return diag->code;
     }
 
-    geom_id = build_geometry_ids(desc);
-    if (!geom_id)
+    if (size == nblocks)
     {
-        PULSEG_FREE(seq_pat);
-        PULSEG_FREE(block_dur);
-        diag->code = PULSEG_ERR_ALLOC_FAILED;
-        return diag->code;
-    }
-
-    for (n = 0; n < desc->num_blocks; ++n)
-    {
-        block_dur[n] = desc->base_blocks[desc->block_table[n].id].duration_us;
-        seq_pat[n] = (desc->block_table[n].duration_us >= 0)
-            ? block_dur[n]
-            : -1 * geom_id[desc->block_table[n].id];
-    }
-
-    /* Save a copy of seq_pat before RF augmentation (used for VFA check) */
-    base_pat = (int *)PULSEG_ALLOC(desc->num_blocks * sizeof(int));
-    if (!base_pat)
-    {
-        PULSEG_FREE(seq_pat);
-        PULSEG_FREE(block_dur);
-        PULSEG_FREE(geom_id);
-        diag->code = PULSEG_ERR_ALLOC_FAILED;
-        return diag->code;
-    }
-    for (n = 0; n < desc->num_blocks; ++n)
-        base_pat[n] = seq_pat[n];
-
-    /* Canonical TR identification is timing/block-structure based.
-     * Per-instance RF amplitude or shim patterns are validated by
-     * dedicated safety consistency checks, not by TR-period finding. */
-
-    /* A declared TRsize or TRSize is taken when it holds, and ignored when
-     * it does not: the file states a period, this verifies it against the
-     * same pattern the search below would have verified, and a claim that
-     * fails costs one pass before detection runs as though it had never
-     * been made. */
-    declared = declared_tr_size(seq);
-    if (declared > 0)
-    {
-        pulseg__diag_printf(diag, " declared TR=%d", declared);
-        if (declared < nblocks && period_holds(seq_pat, nblocks, declared))
+        span_us = 0.0;
+        for (n = 0; n < nblocks; ++n)
+            span_us += played_duration_us(desc, n);
+        if (span_us > (double)SINGLE_TR_MAX_DURATION_US)
         {
-            l = declared;
-            found = 1;
-        }
-        else
-        {
-            pulseg__diag_printf(diag, " declared TR rejected");
-        }
-    }
-
-    if (!found)
-    {
-        l = first_repeating_segment(seq_pat, nblocks);
-        if (l == nblocks)
-        {
-            int l_struct = first_repeating_segment_structural(desc, 0, nblocks);
-            if (l_struct > 0 && l_struct < l)
-                l = l_struct;
-        }
-        pulseg__diag_printf(diag, " candidate TR=%d", l);
-    }
-
-    /* l == nblocks means neither search found a period: the region is its
-     * own shortest repeat.  That is not a discovery, so it must not short
-     * circuit past the fallback chain below -- the single-TR branch there is
-     * where such a region is length-checked before being accepted.  A
-     * declaration of the whole table is therefore not accepted above: it
-     * takes that branch, so the duration cap still applies to it. */
-    if (!found)
-        found = (l > 0 && l < nblocks) ? 1 : 0;
-
-    if (found)
-    {
-        for (i = 0; i < nblocks; ++i)
-        {
-            if (seq_pat[i] != seq_pat[i % l])
-            {
-                mismatch_pos = i;
-                pulseg__diag_printf(diag, " mismatch at block=%d", i);
-                found = 0;
-                break;
-            }
-        }
-    }
-
-    if (!found)
-    {
-        /* ---------------------------------------------------------
-         * VFA rejection: if the structural (base) pattern has a
-         * valid shorter period but the RF-augmented pattern does
-         * not, the sequence contains non-periodic RF over a
-         * repeating structure (e.g. VFA SPGR).  Such sequences
-         * should be designed as separate subsequences, so we
-         * reject them instead of falling through to single-TR.
-         * --------------------------------------------------------- */
-        int base_l, base_ok;
-        base_l = first_repeating_segment(base_pat, nblocks);
-        base_ok = 0;
-        if (base_l > 0 && base_l < nblocks)
-        {
-            base_ok = 1;
-            for (i = 0; i < nblocks && base_ok; ++i)
-            {
-                if (base_pat[i] != base_pat[i % base_l])
-                    base_ok = 0;
-            }
-        }
-
-        if (!base_ok)
-        {
-            int structural_l;
-
-            /* Fallback for flows where block IDs differ across
-             * interleaves but the ordered block structure is periodic. */
-            structural_l = first_repeating_segment_structural(desc, 0, nblocks);
-            if (structural_l > 0 && structural_l < nblocks)
-            {
-                l = structural_l;
-                found = 1;
-            }
-
-            if (found)
-            {
-                /* Structural period recovered; continue with normal
-                 * TR descriptor population and degeneracy checks. */
-            }
-            else
-            {
-                /* Base pattern also non-periodic -> genuine single-TR:
-                 * the whole table IS the single TR. */
-                span_dur_us = 0.0;
-                for (n = 0; n < desc->num_blocks; ++n)
-                    span_dur_us +=
-                        (double)((desc->block_table[n].duration_us >= 0)
-                                     ? desc->block_table[n].duration_us
-                                     : desc->base_blocks[desc->block_table[n].id].duration_us);
-
-                if (span_dur_us <= (double)SINGLE_TR_MAX_DURATION_US)
-                {
-                    l = nblocks; /* single-TR = the entire table */
-                    found = 1;
-                }
-            }
-        }
-
-        if (!found)
-        {
-            /* VFA case (base_ok=1) or genuinely too-long non-periodic:
-             * reject with a pattern error. */
-            diag->code = (mismatch_pos >= 0) ? PULSEG_ERR_TR_PATTERN_MISMATCH
-                                             : PULSEG_ERR_TR_NO_PERIODIC_PATTERN;
-            PULSEG_FREE(seq_pat);
-            PULSEG_FREE(block_dur);
-            PULSEG_FREE(base_pat);
-            PULSEG_FREE(geom_id);
+            diag->code = PULSEG_ERR_TR_NO_PERIODIC_PATTERN;
             return diag->code;
         }
     }
 
-    tr->tr_size = l;
-    tr_dur = 0.0f;
-    tr_start = 0;
-    for (i = 0; i < l; ++i)
-    {
-        n = tr_start + i;
-        /* A pure delay plays its own duration, not its shared definition's. */
-        tr_dur += (float)((desc->block_table[n].duration_us >= 0)
-                              ? desc->block_table[n].duration_us
-                              : block_dur[n]);
-    }
-    tr->tr_duration_us = tr_dur;
-
-    tr->num_trs = nblocks / l;
+    span_us = 0.0;
+    for (n = 0; n < size; ++n)
+        span_us += played_duration_us(desc, n);
+    tr->tr_size = size;
+    tr->tr_duration_us = (float)span_us;
+    tr->num_trs = nblocks / size;
 
     diag->code = PULSEG_SUCCESS;
-    PULSEG_FREE(seq_pat);
-    PULSEG_FREE(block_dur);
-    PULSEG_FREE(base_pat);
-    PULSEG_FREE(geom_id);
     return PULSEG_SUCCESS;
 }
 

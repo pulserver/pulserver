@@ -313,6 +313,10 @@ typedef struct pulseq_reserved_definitions
      *  matrix; 0 when no VOPs were given. */
     PULSEQ_REAL vop_sar_ratio;
     PULSEQ_REAL vop_global_sar_ratio;
+    /** Computed by the host, not declared by the file: blocks per repetition,
+     *  counted from the first block, as pypulseqpp's Sequence.repetition
+     *  finds it; the whole table when the sequence does not repeat. */
+    int repetition_size;
 } pulseq_reserved_definitions;
 
 /** @brief One RF_SHIMS library entry (parallel-transmit channel weights). */

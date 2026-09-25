@@ -244,6 +244,7 @@ void build_pulseq_file(pulseq_file &seq, const py::dict &libraries)
     reserved.vop_sar_ratio = static_cast<PULSEQ_REAL>(declared["vop_sar_ratio"].cast<double>());
     reserved.vop_global_sar_ratio =
         static_cast<PULSEQ_REAL>(declared["vop_global_sar_ratio"].cast<double>());
+    reserved.repetition_size = declared["repetition_size"].cast<int>();
     copy_name(reserved.name, sizeof(reserved.name), declared["name"].cast<std::string>());
     copy_name(
         reserved.next_sequence,

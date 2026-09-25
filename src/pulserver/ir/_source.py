@@ -327,7 +327,15 @@ def conversion_payload(sequence: Any, system: pp.Opts) -> dict[str, Any]:
     RF and ADC frequency and phase offsets are absolute: the ppm offsets are
     resolved at the gamma and B0 of ``system`` by
     ``pypulseqpp.io.SequenceLibraries.absolute_offsets``, and the ppm columns
-    are zero.
+    are zero. The repetition the conversion segments is the one
+    ``pypulseqpp.Sequence.repetition`` finds.
+
+    Raises
+    ------
+    ValueError
+        If pypulseqpp exports its tables in another layout, an ADC's phase
+        modulation has not one phase per sample, or the repetition does not
+        start at the first block.
     """
     tables = _tables(sequence)
     libraries = _sequence_libraries(sequence, tables)
@@ -366,6 +374,7 @@ def conversion_payload(sequence: Any, system: pp.Opts) -> dict[str, Any]:
             ),
             "vop_sar_ratio": 0.0,
             "vop_global_sar_ratio": 0.0,
+            "repetition_size": _repetition_size(sequence),
             "name": str(declared.get("Name", "")),
             "next_sequence": str(declared.get("NextSequence", "")),
         },
@@ -662,6 +671,16 @@ def _label_rows(values: Any, labels: Any) -> NDArray[np.float64]:
     rows[:, 0] = values
     rows[:, 1] = [LABEL_IDS.get(label, -1) for label in labels]
     return rows
+
+
+def _repetition_size(sequence: Any) -> int:
+    size, start = sequence.repetition()
+    if start != 1:
+        raise ValueError(
+            f"the sequence repeats from block {start}; the IR segments a "
+            "repetition that starts at the first block"
+        )
+    return int(size)
 
 
 def _resolve_ppm(libraries: SequenceLibraries, tables: Any, system: pp.Opts) -> None:

@@ -113,7 +113,7 @@ repetition.
 | Pass | Result |
 | --- | --- |
 | Event deduplication | A library of distinct RF, gradient and ADC definitions, and a per-block instance table recording the definition each block plays and its amplitude |
-| Repetition detection | The repeating unit of each subsequence, its repetition time (TR), and the preparation and cool-down regions around it |
+| Repetition | The repeating unit of each subsequence and its repetition time (TR): the unit pypulseqpp's `Sequence.repetition` finds, from the first block; a subsequence that does not repeat is one repetition, refused when it is longer than 15 s |
 | Segmentation | The repeating unit divided into segments at block boundaries where every gradient waveform is zero |
 | Execution stream | The order in which segments are played over the whole scan |
 | Label table | The Pulseq labels of every readout, three of which fill the ADC label columns |

@@ -8,8 +8,9 @@ IR cache the scanner interpreter loads beside the sequence file.
 ```
 
 The chain is read with `pypulseqpp.Sequence`, text or binary. Event
-deduplication, repetition detection, segmentation and the execution stream are
-computed in the compiled extension, and the cache is written by the C library
+deduplication, segmentation of the repetition pypulseqpp finds, and the
+execution stream are computed in the compiled extension, and the cache is
+written by the C library
 the interpreter reads it back with. The files are read in the logical frame and
 moved to the prescribed field-of-view offset before they are segmented. The
 passes and the cache layout are described in {doc}`../explanations/ir-cache`.

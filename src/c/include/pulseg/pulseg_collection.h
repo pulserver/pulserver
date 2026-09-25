@@ -2,9 +2,9 @@
  * @file pulseg_collection.h
  * @brief The loaded sequence collection: lifecycle, diagnostics, getters, cursor.
  *
- * A pulseg_collection is one or more chained .seq subsequences after dedup,
- * TR detection and segmentation -- the central object every other module
- * takes as input. This header carries its lifecycle, the error and
+ * A pulseg_collection is one or more chained .seq subsequences after dedup
+ * and the segmentation of each one's repetition -- the central object every
+ * other module takes as input. This header carries its lifecycle, the error and
  * diagnostic surface, the read-only
  * getters that expose its contents without revealing the internal tables,
  * and the block cursor used to walk the execution stream at scan time.
