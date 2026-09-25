@@ -615,8 +615,10 @@ design returns its identifier without designing again.</p>
 <section id="limits">
 <h3>Limits<a class="headerlink" href="#limits" title="Link to this heading">#</a></h3>
 <p>The limits file holds a <code class="docutils literal notranslate"><span class="pre">[Limits]</span></code> block, one <code class="docutils literal notranslate"><span class="pre">name:</span> <span class="pre">value</span></code> per line between
-<code class="docutils literal notranslate"><span class="pre">[Limits]</span></code> and <code class="docutils literal notranslate"><span class="pre">[Limits</span> <span class="pre">End]</span></code>: keyword arguments of <code class="docutils literal notranslate"><span class="pre">pypulseqpp.Opts</span></code>, plus
-three optional options for the IR conversion:</p>
+<code class="docutils literal notranslate"><span class="pre">[Limits]</span></code> and <code class="docutils literal notranslate"><span class="pre">[Limits</span> <span class="pre">End]</span></code>. The lines are keyword arguments of
+<code class="docutils literal notranslate"><span class="pre">pypulseqpp.Opts</span></code>, of which <code class="docutils literal notranslate"><span class="pre">B0</span></code>, the field in T the scan runs at, is
+required: ppm offsets are resolved at it, and a call without it is refused.
+Three further options are for the IR conversion:</p>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
 <tr class="row-odd"><th class="head"><p>Option</p></th>
