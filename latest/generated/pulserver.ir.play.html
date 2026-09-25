@@ -553,6 +553,9 @@ excitation and 2 for a refocusing pulse; an untagged event is a
 refocusing pulse at a flip angle of 162 to 198 degrees and an
 excitation otherwise; 0 without RF;</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">rf_delay_us</span></code>: RF delay from the block’s start, in µs;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">rf_channels</span></code>: the transmit channels the RF waveform holds, one
+after another over one time base for a dynamic pTx pulse; 0 without
+RF;</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">gradient_hz_per_m</span></code>: <code class="docutils literal notranslate"><span class="pre">(blocks,</span> <span class="pre">3)</span></code>, the amplitude of each
 gradient event along x, y and z; an arbitrary gradient’s shape
 carries its own sign;</p></li>

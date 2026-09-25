@@ -115,13 +115,17 @@ repetition.
 | Segmentation | The repeating unit divided into segments at block boundaries where every gradient waveform is zero |
 | Execution stream | The order in which segments are played over the whole scan |
 | Label table | The Pulseq labels of every readout, three of which fill the ADC label columns |
-| RF statistics | For each RF definition: flip angle, duration and power from the envelope, and the bandwidth and bands of a multiband pulse from its spectrum |
+| RF statistics | For each RF definition: its transmit channels, flip angle, duration and power from the envelope, and the bandwidth and bands of a multiband pulse from its spectrum |
 
 The limits and rasters of the scanner (`pypulseqpp.Opts`) are those under which
 the scan is segmented. The spectral statistics are measured by pypulseqpp's
 `calc_rf_bandwidth` when the chain is read, with the Pulseq recipe of the width
 at half the spectral peak; a band is a run of the spectrum above 30 % of its
-peak, and its offset is measured from the carrier. `label_column_map` selects the three labels the
+peak, and its offset is measured from the carrier. A dynamic pTx pulse holds
+its channels one after another over one time base; its channel count is the
+number of samples at its first sample time, when the times are that many
+identical copies, which is pypulseqpp's rule, and its envelope for the
+statistics is the root sum of squares of the channels. `label_column_map` selects the three labels the
 interpreter records per readout, as indices in the order SLC, PHS, REP, AVG,
 SEG, SET, ECO, PAR, LIN, ACQ.
 
