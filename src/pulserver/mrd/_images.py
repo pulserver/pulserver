@@ -20,8 +20,9 @@ def center_crop(image: Any, shape: Any) -> Any:
     Returns
     -------
     array
-        A view of ``image``. An odd surplus leaves the extra sample after the
-        window.
+        A view of ``image``. Along each axis the sample at index ``n // 2``,
+        the centre of a centred FFT of ``n`` samples, is at index
+        ``size // 2`` of the window.
 
     Raises
     ------
@@ -47,7 +48,7 @@ def center_crop(image: Any, shape: Any) -> Any:
         current = image.shape[axis]
         if not 0 < size <= current:
             raise ValueError(f"cannot crop axis {axis} of {current} samples to {size}")
-        start = (current - size) // 2
+        start = current // 2 - size // 2
         selection[axis] = slice(start, start + size)
     return image[tuple(selection)]
 

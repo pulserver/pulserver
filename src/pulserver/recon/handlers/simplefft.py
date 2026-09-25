@@ -70,9 +70,9 @@ PLUGIN = SimpleFftRecon()
 def _reconstruct(lines: list[Any], header: Any) -> np.ndarray:
     """Return the ``(x, y)`` image of lines stacked as ``(coils, x, y)``."""
     stacked = np.stack([acquisition.data for acquisition in lines], axis=-1)
-    data = fft.fftshift(stacked, axes=(1, 2))
+    data = fft.ifftshift(stacked, axes=(1, 2))
     data = fft.ifft2(data, axes=(1, 2))
-    data = fft.ifftshift(data, axes=(1, 2))
+    data = fft.fftshift(data, axes=(1, 2))
     data = coil_combine(data, coil_axis=0)
 
     maximum = float(data.max(initial=0.0))
