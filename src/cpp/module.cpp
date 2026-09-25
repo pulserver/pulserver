@@ -126,6 +126,7 @@ py::list rf_statistics(const pulseg_collection *coll, int subseq_idx, int num_un
         entry["num_bands"] = stats.num_bands;
         entry["band_freq_offsets_hz"] = offsets;
         entry["band_bandwidth_hz"] = stats.band_bandwidth_hz;
+        entry["b1sq_integral_s"] = stats.total_b1sq_power;
         out.append(entry);
     }
     return out;
@@ -213,8 +214,8 @@ float recorded_rf_centre_us(
 /* Append one axis of the block at the cursor: its corners, timed from the
  * block's start, and the instance's amplitude times its normalised waveform.
  * A waveform on the gradient raster is sampled at the middle of each raster
- * interval; over the half intervals at its ends it holds its end values, as
- * the cache's boundary checks take them, which keeps its area. */
+ * interval; over the half intervals at its ends it holds its end values,
+ * which keeps the area its samples give. */
 void played_gradient(
     const pulseg_collection *coll,
     int axis,

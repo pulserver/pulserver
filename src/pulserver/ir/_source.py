@@ -167,13 +167,18 @@ class SequenceLibraries:
         ``(R, 3 + MAX_BANDS)``: bandwidth in Hz, number of bands, widest band's
         bandwidth in Hz, then each band's offset from the carrier in Hz, as
         ``pypulseqpp.calc_rf_bandwidth`` measures them; unused offsets are 0,
-        and so is every row no block plays.
+        and so is every row whose shapes no block plays at a nonzero amplitude.
     rf_flip_deg : NDArray[np.float64]
         ``(R,)``: each row's flip angle in degrees, as
         ``pypulseqpp.Sequence.rf_flip_angles`` gives it.
     rf_channels : NDArray[np.int32]
         ``(R,)``: the transmit channels each row holds, as
         ``pypulseqpp.Sequence.rf_channels`` counts them.
+    rf_b1sq_integral : NDArray[np.float64]
+        ``(R,)``: the integral of each row's squared envelope scaled to unit
+        peak, in s: ``pypulseqpp.calc_rf_power``'s energy over its peak power,
+        both summed over the channels; 0 for every row whose shapes no block
+        plays at a nonzero amplitude.
     grad : NDArray[np.float64]
         ``(G, 7)``, by type in column 0. A trapezoid (0): amplitude in Hz/m,
         rise, flat and fall times in µs, delay in µs. An arbitrary gradient
@@ -193,6 +198,7 @@ class SequenceLibraries:
     rf_spectra: NDArray[np.float64]
     rf_flip_deg: NDArray[np.float64]
     rf_channels: NDArray[np.int32]
+    rf_b1sq_integral: NDArray[np.float64]
     grad: NDArray[np.float64]
     adc: NDArray[np.float64]
     shapes: tuple[Shape, ...]
@@ -322,7 +328,7 @@ def conversion_payload(sequence: Any) -> dict[str, Any]:
     libraries = _sequence_libraries(sequence, tables)
     specifications = _specification_libraries(tables)
     blocks = libraries.blocks.copy()
-    rf, grad, adc, rf_use, rf_spectra, rf_flip_deg, rf_channels = _compact(
+    rf, grad, adc, rf_use, rf_spectra, rf_flip_deg, rf_channels, rf_b1sq = _compact(
         blocks, libraries
     )
     declared = sequence.definitions
@@ -364,6 +370,7 @@ def conversion_payload(sequence: Any) -> dict[str, Any]:
         "rf_spectra": rf_spectra,
         "rf_flip_deg": rf_flip_deg,
         "rf_channels": rf_channels,
+        "rf_b1sq_integral": rf_b1sq,
         "grad": grad,
         "adc": adc,
         "shapes": [
@@ -404,7 +411,7 @@ def _sequence_libraries(sequence: Any, tables: Any) -> SequenceLibraries:
     blocks[:, 1:] = tables.blocks
 
     shapes = _ShapeTable(tables.shapes)
-    rf, rf_use, rf_spectra = _rf_library(sequence, tables, blocks)
+    rf, rf_use, rf_spectra, rf_b1sq = _rf_library(sequence, tables, blocks)
     grad = _grad_library(tables, shapes)
     adc = _adc_library(tables)
     return SequenceLibraries(
@@ -414,6 +421,7 @@ def _sequence_libraries(sequence: Any, tables: Any) -> SequenceLibraries:
         rf_spectra,
         np.asarray(sequence.rf_flip_angles(), dtype=np.float64),
         np.asarray(sequence.rf_channels(), dtype=np.int32),
+        rf_b1sq,
         grad,
         adc,
         shapes.entries(),
@@ -443,24 +451,41 @@ class _ShapeTable:
 
 def _rf_library(
     sequence: Any, tables: Any, blocks: NDArray[np.float64]
-) -> tuple[NDArray[np.float64], NDArray[np.int32], NDArray[np.float64]]:
+) -> tuple[
+    NDArray[np.float64], NDArray[np.int32], NDArray[np.float64], NDArray[np.float64]
+]:
     rows = np.array(tables.rf, dtype=np.float64).reshape(-1, 10)
     rows[:, 4:6] = _micro(rows[:, 4:6])
     uses = np.array([_RF_USE[use] for use in tables.rf_use], dtype=np.int32)
     spectra = np.zeros((rows.shape[0], 3 + MAX_BANDS), dtype=np.float64)
+    integrals = np.zeros(rows.shape[0], dtype=np.float64)
     raster = sequence.rf_raster_time
-    measured: dict[tuple[float, float, float], NDArray[np.float64]] = {}
+    # The bands and the unit-peak integral depend on the waveform alone: the
+    # amplitude scales the spectrum and cancels from the integral, and a
+    # frequency offset only moves the spectrum. Both are measured once per set
+    # of shapes, on a row that plays something: a pulse of zero amplitude has
+    # no spectrum, and its row keeps none.
+    measured: dict[tuple[float, float, float], tuple[NDArray[np.float64], float]] = {}
     played = blocks[:, 1].astype(np.int64)
-    for identifier in np.unique(played[played > 0]):
+    identifiers = np.unique(played[played > 0])
+    for identifier in identifiers:
         row = rows[identifier - 1]
-        # The spectrum's shape depends on the waveform alone: amplitude scales
-        # it and a frequency offset moves it, neither of which the bands see.
         key = (row[1], row[2], row[3])
-        if key not in measured:
+        if row[0] != 0.0 and key not in measured:
             block = int(np.argmax(played == identifier)) + 1
-            measured[key] = _spectrum_row(sequence.get_block(block).rf, raster)
-        spectra[identifier - 1] = measured[key]
-    return rows, uses, spectra
+            event = sequence.get_block(block).rf
+            energy, peak, _ = pp.calc_rf_power(event, dt=raster)
+            measured[key] = (
+                _spectrum_row(event, raster),
+                energy / peak if peak else 0.0,
+            )
+    for identifier in identifiers:
+        row = rows[identifier - 1]
+        found = measured.get((row[1], row[2], row[3]))
+        if found is not None:
+            spectra[identifier - 1] = found[0]
+            integrals[identifier - 1] = found[1]
+    return rows, uses, spectra, integrals
 
 
 def _spectrum_row(event: Any, raster: float) -> NDArray[np.float64]:
@@ -650,12 +675,13 @@ def _compact(
     spectra = libraries.rf_spectra[played_rf]
     flips = libraries.rf_flip_deg[played_rf]
     channels = libraries.rf_channels[played_rf]
+    integrals = libraries.rf_b1sq_integral[played_rf]
     for columns, mapping in (((1,), rf_map), ((2, 3, 4), grad_map), ((5,), adc_map)):
         for column in columns:
             blocks[:, column] = [
                 mapping.get(int(value), 0) for value in blocks[:, column]
             ]
-    return rf, grad, adc, uses, spectra, flips, channels
+    return rf, grad, adc, uses, spectra, flips, channels, integrals
 
 
 def _played(

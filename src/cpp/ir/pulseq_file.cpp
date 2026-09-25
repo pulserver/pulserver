@@ -68,6 +68,7 @@ static void seq_file_set_defaults(pulseq_file *seq)
     seq->rf_spectra = NULL;
     seq->rf_flip_deg = NULL;
     seq->rf_channels = NULL;
+    seq->rf_b1sq_integral = NULL;
     INIT_LIBRARY(seq, grad_library, grad_library_size, is_grad_library_parsed);
     INIT_LIBRARY(seq, adc_library, adc_library_size, is_adc_library_parsed);
     INIT_LIBRARY(seq, extensions_library, extensions_library_size, is_extensions_library_parsed);
@@ -152,6 +153,9 @@ void pulseq__file_reset(pulseq_file *seq)
         if (seq->rf_channels)
             PULSEQ_FREE(seq->rf_channels);
         seq->rf_channels = NULL;
+        if (seq->rf_b1sq_integral)
+            PULSEQ_FREE(seq->rf_b1sq_integral);
+        seq->rf_b1sq_integral = NULL;
     }
     if (seq->is_grad_library_parsed)
         PULSEQ_FREE(seq->grad_library);

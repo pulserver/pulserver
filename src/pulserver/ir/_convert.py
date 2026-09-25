@@ -144,9 +144,12 @@ def summary(
     ``pypulseqpp.Sequence.rf_flip_angles`` gives it; and the bandwidth at half
     the spectral peak, the number of bands, each band's offset from the
     carrier and the widest band's bandwidth, all in Hz, as
-    ``pypulseqpp.calc_rf_bandwidth`` measures them. ``vop_sar_ratio`` and
-    ``vop_global_sar_ratio`` are those the cache was written with, zero when
-    the chain is read and segmented again.
+    ``pypulseqpp.calc_rf_bandwidth`` measures them; and ``b1sq_integral_s``,
+    the integral of the squared envelope scaled to unit peak, in s:
+    ``pypulseqpp.calc_rf_power``'s energy over its peak power, both summed
+    over a dynamic pTx pulse's channels.
+    ``vop_sar_ratio`` and ``vop_global_sar_ratio`` are those the cache was
+    written with, zero when the chain is read and segmented again.
 
     With ``cache_ext``, the cache beside the file is loaded instead of the
     chain being read and segmented again; this build loads only vendor-neutral

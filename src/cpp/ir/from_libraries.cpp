@@ -264,6 +264,7 @@ void build_pulseq_file(pulseq_file &seq, const py::dict &libraries)
     seq.rf_use_tags = integers(libraries["rf_use"], seq.rf_library_size);
     seq.rf_flip_deg = reals(libraries["rf_flip_deg"], seq.rf_library_size);
     seq.rf_channels = integers(libraries["rf_channels"], seq.rf_library_size);
+    seq.rf_b1sq_integral = reals(libraries["rf_b1sq_integral"], seq.rf_library_size);
     seq.is_rf_library_parsed = 1;
     {
         int spectra = 0;
