@@ -3,8 +3,8 @@
 A scanner sequence is a plugin file in the `--plugins` directory of the design calls.
 It defines one {class}`~pulserver.design.ScannerSequence` subclass, which binds
 a pypulseqpp {class}`~pypulseqpp.sequences.SequenceApp` to the entries of the
-scanner protocol. The daemon loads the file by its stem: `gre2d.py` is the
-plugin a PSD host process opens as `gre2d`.
+scanner protocol. A design call loads the file by its stem: `gre2d.py` is the
+plugin a PSD host process names with `--plugin gre2d`.
 
 ## Binding the protocol
 
@@ -62,7 +62,7 @@ reconstructed with (see {doc}`reconstruction-plugins`).
 ## Resolving a protocol
 
 {meth}`~pulserver.design.ScannerSequence.listing` is the protocol with its
-schema, as the daemon returns it to `LIST_PROTOCOL`:
+schema, as the `list` design call replies it:
 
 ```pycon
 >>> from pulserver.protocol import format_listing

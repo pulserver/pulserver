@@ -1,4 +1,4 @@
-"""The event and shape libraries of a sequence, as the IR conversion reads them."""
+"""The event and shape libraries of a sequence, as the IR conversion reads them from pypulseqpp."""
 
 from __future__ import annotations
 
@@ -19,7 +19,6 @@ from typing import Any
 import numpy as np
 import pypulseqpp as pp
 from numpy.typing import NDArray
-from pypulseqpp import _ext as _core
 
 #: Use tag of an RF event, as a Pulseq file writes it. A pulse the file does
 #: not label is 0, which is what a reader that switches on the tag treats as
@@ -120,6 +119,10 @@ _HINTS = {
 }
 
 
+#: The layout of ``pypulseqpp.io.SequenceLibraries`` this module reads.
+_LAYOUT = 1
+
+
 @dataclass(frozen=True)
 class Shape:
     """One entry of the shape library.
@@ -127,9 +130,11 @@ class Shape:
     Attributes
     ----------
     num_uncompressed_samples
-        Samples :attr:`samples` decompresses to.
+        Samples :attr:`samples` stands for.
     samples
-        Run-length encoded on the derivative, as Pulseq stores a shape.
+        As pypulseqpp stores the shape: run-length encoded on its derivative
+        when there are fewer values than samples, the samples themselves when
+        there are as many.
     """
 
     num_uncompressed_samples: int
@@ -140,14 +145,11 @@ class Shape:
 class SequenceLibraries:
     """The libraries of one sequence, in the layout the IR conversion keys on.
 
-    Event ids are the file's own, so a row's position is the id a block names
-    and row 0 is id 1. A library entry no block plays is not recoverable and
-    is absent: the rows reach as far as the largest id in use.
-
-    Shape ids are minted here in first-use order. pypulseqpp hands a decoded
-    event its samples but not the shape it is stored under, so what survives
-    is which events share a shape, not the number the file gave it; shapes a
-    file left duplicated are one here.
+    Event and shape ids are the sequence's own, so a row's position is the id
+    a block names and row 0 is id 1. Every row the sequence holds is here,
+    played or not. A time grid pypulseqpp states by rule rather than as a
+    shape, an arbitrary gradient sampled every half raster, is appended to
+    the shapes as a shape of its own.
 
     Attributes
     ----------
@@ -164,7 +166,8 @@ class SequenceLibraries:
     rf_spectra : NDArray[np.float64]
         ``(R, 3 + MAX_BANDS)``: bandwidth in Hz, number of bands, widest band's
         bandwidth in Hz, then each band's offset from the carrier in Hz, as
-        ``pypulseqpp.calc_rf_bandwidth`` measures them; unused offsets are 0.
+        ``pypulseqpp.calc_rf_bandwidth`` measures them; unused offsets are 0,
+        and so is every row no block plays.
     grad : NDArray[np.float64]
         ``(G, 7)``, by type in column 0. A trapezoid (0): amplitude in Hz/m,
         rise, flat and fall times in µs, delay in µs. An arbitrary gradient
@@ -190,205 +193,13 @@ class SequenceLibraries:
 def sequence_libraries(sequence: Any) -> SequenceLibraries:
     """Read one ``pypulseqpp.Sequence`` into the libraries the IR conversion keys on.
 
-    Each event id is decoded once, from the first block that plays it.
-
     Raises
     ------
     ValueError
-        If an event id is played on no block the sequence can decode.
+        If pypulseqpp exports its tables in another layout, or an ADC's phase
+        modulation has not one phase per sample.
     """
-    core = sequence._native
-    events = np.asarray(core.block_events(), dtype=np.int64)
-    durations = np.asarray(core.block_durations(), dtype=np.float64)
-
-    blocks = np.zeros((durations.size, 7), dtype=np.float64)
-    blocks[:, 0] = np.rint(durations / core.block_duration_raster())
-    blocks[:, 1:] = events
-
-    shapes = _ShapeTable()
-    rf, rf_use, rf_spectra = _rf_library(core, events, shapes)
-    grad = _grad_library(core, events, shapes)
-    adc = _adc_library(core, events, shapes)
-    return SequenceLibraries(
-        blocks, rf, rf_use, rf_spectra, grad, adc, shapes.entries()
-    )
-
-
-# %% private module subroutines
-
-
-class _ShapeTable:
-    """Interns decompressed waveforms, handing out 1-based ids in first-use order."""
-
-    def __init__(self) -> None:
-        self._ids: dict[bytes, int] = {}
-        self._entries: list[Shape] = []
-
-    def intern(self, samples: NDArray[np.float64]) -> int:
-        samples = np.ascontiguousarray(samples, dtype=np.float64)
-        key = samples.tobytes()
-        if key not in self._ids:
-            self._entries.append(
-                Shape(int(samples.size), np.asarray(_core.compress_shape(samples)))
-            )
-            self._ids[key] = len(self._entries)
-        return self._ids[key]
-
-    def entries(self) -> tuple[Shape, ...]:
-        return tuple(self._entries)
-
-
-def _decoded(
-    core: Any, events: NDArray[np.int64], column: int | tuple[int, ...]
-) -> Any:
-    """Yield ``(id, event)`` for every id played in ``column``, in id order.
-
-    ``column`` is an index into the block table's event columns, or several
-    when one library serves more than one, as the three gradient axes do.
-    """
-    columns = (column,) if isinstance(column, int) else column
-    names = {0: "rf", 1: "gx", 2: "gy", 3: "gz", 4: "adc"}
-    first: dict[int, tuple[int, str]] = {}
-    for index, row in enumerate(events):
-        for which in columns:
-            identifier = int(row[which])
-            if identifier > 0 and identifier not in first:
-                first[identifier] = (index + 1, names[which])
-    for identifier in sorted(first):
-        block, name = first[identifier]
-        event = core.decode_block(block)[name]
-        if event is None:
-            raise ValueError(f"block {block} does not decode the {name} it names")
-        yield identifier, event
-
-
-def _rows(decoded: list[tuple[int, Any]], width: int) -> NDArray[np.float64]:
-    """Rows reaching the largest id played; an id no block plays keeps a zero row."""
-    return np.zeros((max((i for i, _ in decoded), default=0), width), dtype=np.float64)
-
-
-def _micro(seconds: float) -> float:
-    return float(np.rint(float(seconds) * 1e6))
-
-
-def _time_shape(times: NDArray[np.float64], raster: float, shapes: _ShapeTable) -> int:
-    """Return the shape id of a vector of sample times, 0 when it lies on the raster.
-
-    Times are stored in raster units. The grid ``0.5, 1.5, ...`` is what an
-    event with no time shape plays, so a file that stores that grid explicitly
-    reads back as an event with none.
-    """
-    ticks = np.asarray(times, dtype=np.float64) / raster
-    if ticks.size and np.allclose(ticks, np.arange(ticks.size) + 0.5):
-        return 0
-    return shapes.intern(ticks)
-
-
-def _rf_library(
-    core: Any, events: NDArray[np.int64], shapes: _ShapeTable
-) -> tuple[NDArray[np.float64], NDArray[np.int32], NDArray[np.float64]]:
-    decoded = list(_decoded(core, events, 0))
-    rows = _rows(decoded, 10)
-    uses = np.zeros(rows.shape[0], dtype=np.int32)
-    spectra = np.zeros((rows.shape[0], 3 + MAX_BANDS), dtype=np.float64)
-    raster = core.rf_raster_time()
-    measured: dict[tuple[float, float, float], NDArray[np.float64]] = {}
-    for identifier, event in decoded:
-        row = rows[identifier - 1]
-        row[0] = event.amplitude
-        row[1] = shapes.intern(np.asarray(event.magnitude))
-        row[2] = shapes.intern(np.asarray(event.phase))
-        row[3] = _time_shape(np.asarray(event.t), raster, shapes)
-        row[4] = _micro(event.center)
-        row[5] = _micro(event.delay)
-        row[6] = event.freq_ppm
-        row[7] = event.phase_ppm
-        row[8] = event.freq_offset
-        row[9] = event.phase_offset
-        uses[identifier - 1] = _RF_USE[event.use]
-        # The spectrum's shape depends on the waveform alone: amplitude scales
-        # it and a frequency offset moves it, neither of which the bands see.
-        key = (row[1], row[2], row[3])
-        if key not in measured:
-            measured[key] = _spectrum_row(event, raster)
-        spectra[identifier - 1] = measured[key]
-    return rows, uses, spectra
-
-
-def _spectrum_row(event: Any, raster: float) -> NDArray[np.float64]:
-    """Bandwidth, band count, widest band and band offsets of one RF event, in Hz.
-
-    Measured at the carrier: the event's frequency offsets are zeroed, which
-    is harmless because a decoded event is a snapshot the sequence does not
-    hold, and its offsets are already in the library row.
-    """
-    event.freq_offset = 0.0
-    event.freq_ppm = 0.0
-    result = pp.calc_rf_bandwidth(event, dt=raster, compat=False)
-    row = np.zeros(3 + MAX_BANDS, dtype=np.float64)
-    count = min(result.num_bands, MAX_BANDS)
-    row[0] = result.bandwidth
-    row[1] = max(result.num_bands, 1)
-    row[2] = result.band_bandwidths.max() if result.num_bands else result.bandwidth
-    # Measured on 10 Hz bins; below a millihertz an offset is the float32 of a
-    # binary file's shape samples, not a property of the pulse.
-    row[3 : 3 + count] = np.round(result.band_offsets[:count], 3)
-    return row
-
-
-def _grad_library(
-    core: Any, events: NDArray[np.int64], shapes: _ShapeTable
-) -> NDArray[np.float64]:
-    decoded = list(_decoded(core, events, (1, 2, 3)))
-    rows = _rows(decoded, 7)
-    raster = core.grad_raster_time()
-    for identifier, event in decoded:
-        row = rows[identifier - 1]
-        if event.type == "trap":
-            row[0] = _TRAPEZOID
-            row[1] = event.amplitude
-            row[2] = _micro(event.rise_time)
-            row[3] = _micro(event.flat_time)
-            row[4] = _micro(event.fall_time)
-            row[5] = _micro(event.delay)
-            continue
-        waveform = np.asarray(event.waveform, dtype=np.float64)
-        # A gradient of no amplitude plays nothing whatever its stored shape.
-        normalised = (
-            waveform / event.amplitude if event.amplitude else np.zeros_like(waveform)
-        )
-        row[0] = _ARBITRARY
-        row[1] = event.amplitude
-        row[2] = event.first
-        row[3] = event.last
-        row[4] = shapes.intern(normalised)
-        row[5] = _time_shape(np.asarray(event.tt), raster, shapes)
-        row[6] = _micro(event.delay)
-    return rows
-
-
-def _adc_library(
-    core: Any, events: NDArray[np.int64], shapes: _ShapeTable
-) -> NDArray[np.float64]:
-    decoded = list(_decoded(core, events, 4))
-    rows = _rows(decoded, 8)
-    for identifier, event in decoded:
-        row = rows[identifier - 1]
-        row[0] = event.num_samples
-        row[1] = float(np.rint(event.dwell * 1e9))
-        row[2] = _micro(event.delay)
-        row[3] = event.freq_ppm
-        row[4] = event.phase_ppm
-        row[5] = event.freq_offset
-        row[6] = event.phase_offset
-        modulation = np.asarray(event.phase_modulation, dtype=np.float64)
-        if modulation.size and modulation.size != event.num_samples:
-            raise ValueError(
-                f"ADC {identifier} acquires {event.num_samples:g} samples but its "
-                f"phase modulation has {modulation.size}"
-            )
-        row[7] = shapes.intern(modulation) if modulation.size else 0
-    return rows
+    return _sequence_libraries(sequence, _tables(sequence))
 
 
 @dataclass(frozen=True)
@@ -422,16 +233,16 @@ class BlockExtensions:
 def block_extensions(sequence: Any) -> BlockExtensions:
     """Resolve every block's extension chain.
 
-    Each distinct chain is resolved once, from the first block that plays it:
-    blocks sharing a chain head resolve to the same thing.
+    Each distinct chain is resolved once: blocks sharing a chain head resolve
+    to the same thing. A label outside :data:`COUNTER_LABELS` and
+    :data:`FLAG_LABELS` is not carried.
     """
-    core = sequence._native
-    kinds = _declared_types(core)
-    heads = np.asarray(core.block_events(), dtype=np.int64)[:, 5]
+    tables = _tables(sequence)
+    kinds = _declared_types(tables)
+    heads = tables.blocks[:, 5]
     resolved = {0: _Chain()}
-    for index, head in enumerate(heads):
-        if int(head) not in resolved:
-            resolved[int(head)] = _resolve(core, int(head), index + 1, kinds)
+    for head in {int(value) for value in heads} - {0}:
+        resolved[head] = _resolve(tables, head, kinds)
 
     count = heads.size
     labelset = {name: np.zeros(count, dtype=np.int32) for name in COUNTER_LABELS}
@@ -451,58 +262,12 @@ def block_extensions(sequence: Any) -> BlockExtensions:
     return BlockExtensions(labelset, labelinc, flags, **points)
 
 
-@dataclass
-class _Chain:
-    """One extension chain, resolved."""
-
-    labelset: dict[str, int] = field(default_factory=dict)
-    labelinc: dict[str, int] = field(default_factory=dict)
-    flags: dict[str, int] = field(default_factory=dict)
-    points: dict[str, int] = field(default_factory=dict)
-
-
-def _declared_types(core: Any) -> dict[str, int]:
-    """Return the type number the file declared for each specification it carries.
-
-    Read from the numbers the file declared rather than asked for by name:
-    asking by name mints one for a specification the file does not carry, and
-    reading a sequence does not change it.
-    """
-    declared = {
-        core.extension_type_name(number): number
-        for number in range(1, 8)
-        if core.extension_type_name(number)
-    }
-    return {name: declared.get(name, -1) for name in _EXTENSION_KINDS}
-
-
-def _resolve(core: Any, head: int, block: int, types: dict[str, int]) -> _Chain:
-    """Resolve one chain: its labels from the block that plays it, its rows from the chain."""
-    chain = _Chain()
-    links = np.asarray(core.extension_chain(head), dtype=np.int64).reshape(2, -1)
-    kinds = {
-        name: types[specification] for name, specification in _SPECIFICATIONS.items()
-    }
-    for name, kind in kinds.items():
-        referenced = links[1][links[0] == kind]
-        if referenced.size:
-            # The chain names a 1-based row; the tables count from 0.
-            chain.points[name] = int(referenced[-1]) - 1
-    for label in core.decode_block(block).get("label") or ():
-        target = chain.labelset if label.setting else chain.labelinc
-        if label.label in FLAG_LABELS:
-            chain.flags[label.label] = int(label.value)
-        else:
-            target[label.label] = int(label.value)
-    return chain
-
-
 @dataclass(frozen=True)
 class SpecificationLibraries:
-    """The rows a block's extension chain points at, indexed by the file's ids.
+    """The specification tables of a sequence, indexed by its ids.
 
-    Row 0 is id 1, as in :class:`SequenceLibraries`. A row no block points at
-    is not recoverable and is absent.
+    Row 0 is id 1, as in :class:`SequenceLibraries`, and every row the
+    sequence holds is here.
 
     Attributes
     ----------
@@ -518,10 +283,9 @@ class SpecificationLibraries:
         the hint it names; -1 for a hint the format does not number.
     labelset, labelinc : NDArray[np.float64]
         ``(L, 2)``: the value and the label it applies to, numbered as
-        :data:`LABEL_IDS` numbers it.
+        :data:`LABEL_IDS` numbers it; -1 for a label it does not number.
     referenced : dict[str, tuple[int, ...]]
-        Per table, the ids some chain points at. A row between them that no
-        chain names is not recoverable and reads as zeros.
+        Per table, the ids some block's chain points at.
     """
 
     rotations: NDArray[np.float64]
@@ -534,123 +298,8 @@ class SpecificationLibraries:
 
 
 def specification_libraries(sequence: Any) -> SpecificationLibraries:
-    """Read the rows every extension chain of a sequence points at.
-
-    Each chain is decoded once and its events are attributed to the ids the
-    chain names, in chain order, which is the order a decoded block lists them
-    in.
-    """
-    core = sequence._native
-    types = _declared_types(core)
-    heads = np.asarray(core.block_events(), dtype=np.int64)[:, 5]
-    kinds = {
-        name: types[specification] for name, specification in _SPECIFICATIONS.items()
-    }
-    kinds["labelset"] = types["LABELSET"]
-    kinds["labelinc"] = types["LABELINC"]
-
-    rows: dict[str, dict[int, Any]] = {name: {} for name in kinds}
-    seen: set[int] = set()
-    for index, head in enumerate(heads):
-        head = int(head)
-        if head == 0 or head in seen:
-            continue
-        seen.add(head)
-        _read_chain(core, head, index + 1, kinds, rows)
-
-    return SpecificationLibraries(
-        rotations=_table(rows["rotation"], 4),
-        triggers=_table(rows["trigger"], 4),
-        rf_shims=_ragged(rows["rf_shim"]),
-        soft_delays=_table(rows["soft_delay"], 4),
-        labelset=_table(rows["labelset"], 2),
-        labelinc=_table(rows["labelinc"], 2),
-        referenced={
-            table: tuple(sorted(rows[name]))
-            for name, table in (
-                ("rotation", "rotations"),
-                ("trigger", "triggers"),
-                ("rf_shim", "rf_shims"),
-                ("soft_delay", "soft_delays"),
-                ("labelset", "labelset"),
-                ("labelinc", "labelinc"),
-            )
-        },
-    )
-
-
-def _read_chain(
-    core: Any,
-    head: int,
-    block: int,
-    kinds: dict[str, int],
-    rows: dict[str, dict[int, Any]],
-) -> None:
-    links = np.asarray(core.extension_chain(head), dtype=np.int64).reshape(2, -1)
-    decoded = core.decode_block(block)
-    labels = list(decoded.get("label") or ())
-    triggers = list(decoded.get("trig") or ())
-    for name, kind in kinds.items():
-        referenced = links[1][links[0] == kind]
-        for position, identifier in enumerate(referenced):
-            identifier = int(identifier)
-            if identifier in rows[name]:
-                continue
-            row = _specification_row(name, position, decoded, labels, triggers)
-            if row is not None:
-                rows[name][identifier] = row
-
-
-def _specification_row(
-    name: str,
-    position: int,
-    decoded: dict[str, Any],
-    labels: list[Any],
-    triggers: list[Any],
-) -> Any:
-    """One row of a specification, taken from the event at ``position`` of its kind."""
-    if name == "rotation":
-        return np.asarray(decoded["rotation"].quaternion, dtype=np.float64)
-    if name == "trigger":
-        event = triggers[position]
-        return np.array(
-            [
-                event.control,
-                event.channel_code,
-                _micro(event.delay),
-                _micro(event.duration),
-            ]
-        )
-    if name == "rf_shim":
-        shim = np.asarray(decoded["rf_shim"].shim_vector)
-        return np.stack([np.abs(shim), np.angle(shim)], axis=1).reshape(-1)
-    if name == "soft_delay":
-        event = decoded["soft_delay"]
-        return np.array(
-            [
-                event.numID,
-                _micro(event.offset),
-                event.factor,
-                _HINTS.get(event.hint, -1),
-            ]
-        )
-    matching = [label for label in labels if label.setting == (name == "labelset")]
-    event = matching[position]
-    return np.array([event.value, LABEL_IDS.get(event.label, -1)])
-
-
-def _table(rows: dict[int, Any], width: int) -> NDArray[np.float64]:
-    table = np.zeros((max(rows, default=0), width), dtype=np.float64)
-    for identifier, row in rows.items():
-        table[identifier - 1] = row
-    return table
-
-
-def _ragged(rows: dict[int, Any]) -> tuple[NDArray[np.float64], ...]:
-    empty = np.zeros(0, dtype=np.float64)
-    return tuple(
-        rows.get(identifier + 1, empty) for identifier in range(max(rows, default=0))
-    )
+    """Read the specification tables of a sequence and the rows its chains name."""
+    return _specification_libraries(_tables(sequence))
 
 
 def conversion_payload(sequence: Any) -> dict[str, Any]:
@@ -658,33 +307,27 @@ def conversion_payload(sequence: Any) -> dict[str, Any]:
 
     The libraries, the specification tables and the chain rows that link a
     block to them, in the layout a parsed file holds: times in µs, fields of
-    view in cm, rasters in µs.
-
-    Chain rows are minted here. pypulseqpp names a block's chain by its head
-    and hands back the links it resolves to, not the rows they are stored in,
-    so the chain is written out again -- one run of rows per distinct head,
-    each block pointing at the head of its own.
+    view in cm, rasters in µs. The chain rows are the sequence's own, and
+    each block names the head of its chain.
     """
-    core = sequence._native
-    libraries = sequence_libraries(sequence)
-    specifications = specification_libraries(sequence)
-    chains, heads = _chain_rows(core)
+    tables = _tables(sequence)
+    libraries = _sequence_libraries(sequence, tables)
+    specifications = _specification_libraries(tables)
     blocks = libraries.blocks.copy()
-    blocks[:, 6] = heads
     rf, grad, adc, rf_use, rf_spectra = _compact(blocks, libraries)
-    declared = core.definitions()
+    declared = sequence.definitions
 
     return {
         "version": [
-            core.version_major(),
-            core.version_minor(),
-            core.version_revision(),
+            sequence.version_major,
+            sequence.version_minor,
+            sequence.version_revision,
         ],
         "rasters": [
-            1e6 * core.rf_raster_time(),
-            1e6 * core.grad_raster_time(),
-            1e6 * core.adc_raster_time(),
-            1e6 * core.block_duration_raster(),
+            1e6 * sequence.rf_raster_time,
+            1e6 * sequence.grad_raster_time,
+            1e6 * sequence.adc_raster_time,
+            1e6 * sequence.block_duration_raster,
         ],
         "reserved": {
             "fov": [100.0 * value for value in _numbers(declared, "FOV", 3)],
@@ -715,8 +358,8 @@ def conversion_payload(sequence: Any) -> dict[str, Any]:
             (shape.num_uncompressed_samples, shape.samples)
             for shape in libraries.shapes
         ],
-        "extensions": chains,
-        "extension_map": _extension_map(core),
+        "extensions": np.asarray(tables.extensions, dtype=np.float64).reshape(-1, 3),
+        "extension_map": _extension_map(tables),
         "triggers": specifications.triggers,
         "rotations": specifications.rotations,
         "labelset": specifications.labelset,
@@ -726,13 +369,256 @@ def conversion_payload(sequence: Any) -> dict[str, Any]:
     }
 
 
+# %% private module subroutines
+
+
+def _tables(sequence: Any) -> Any:
+    tables = sequence.libraries()
+    if tables.layout != _LAYOUT:
+        raise ValueError(
+            f"pypulseqpp exports its libraries in layout {tables.layout}; the IR "
+            f"conversion reads layout {_LAYOUT}"
+        )
+    return tables
+
+
+def _micro(seconds: Any) -> Any:
+    return np.rint(np.asarray(seconds, dtype=np.float64) * 1e6)
+
+
+def _sequence_libraries(sequence: Any, tables: Any) -> SequenceLibraries:
+    blocks = np.zeros((tables.blocks.shape[0], 7), dtype=np.float64)
+    blocks[:, 0] = np.rint(tables.block_durations / sequence.block_duration_raster)
+    blocks[:, 1:] = tables.blocks
+
+    shapes = _ShapeTable(tables.shapes)
+    rf, rf_use, rf_spectra = _rf_library(sequence, tables, blocks)
+    grad = _grad_library(tables, shapes)
+    adc = _adc_library(tables)
+    return SequenceLibraries(
+        blocks, rf, rf_use, rf_spectra, grad, adc, shapes.entries()
+    )
+
+
+class _ShapeTable:
+    """pypulseqpp's shapes under its own ids, then the time grids appended after them."""
+
+    def __init__(self, exported: Any) -> None:
+        self._entries = [
+            Shape(int(shape.num_samples), np.asarray(shape.data, dtype=np.float64))
+            for shape in exported
+        ]
+        self._grids: dict[int, int] = {}
+
+    def half_raster(self, count: int) -> int:
+        """Return the id of a time shape of ``count`` samples every half raster."""
+        if count not in self._grids:
+            self._entries.append(Shape(count, 0.5 * np.arange(1.0, count + 1.0)))
+            self._grids[count] = len(self._entries)
+        return self._grids[count]
+
+    def entries(self) -> tuple[Shape, ...]:
+        return tuple(self._entries)
+
+
+def _rf_library(
+    sequence: Any, tables: Any, blocks: NDArray[np.float64]
+) -> tuple[NDArray[np.float64], NDArray[np.int32], NDArray[np.float64]]:
+    rows = np.array(tables.rf, dtype=np.float64).reshape(-1, 10)
+    rows[:, 4:6] = _micro(rows[:, 4:6])
+    uses = np.array([_RF_USE[use] for use in tables.rf_use], dtype=np.int32)
+    spectra = np.zeros((rows.shape[0], 3 + MAX_BANDS), dtype=np.float64)
+    raster = sequence.rf_raster_time
+    measured: dict[tuple[float, float, float], NDArray[np.float64]] = {}
+    played = blocks[:, 1].astype(np.int64)
+    for identifier in np.unique(played[played > 0]):
+        row = rows[identifier - 1]
+        # The spectrum's shape depends on the waveform alone: amplitude scales
+        # it and a frequency offset moves it, neither of which the bands see.
+        key = (row[1], row[2], row[3])
+        if key not in measured:
+            block = int(np.argmax(played == identifier)) + 1
+            measured[key] = _spectrum_row(sequence.get_block(block).rf, raster)
+        spectra[identifier - 1] = measured[key]
+    return rows, uses, spectra
+
+
+def _spectrum_row(event: Any, raster: float) -> NDArray[np.float64]:
+    """Bandwidth, band count, widest band and band offsets of one RF event, in Hz.
+
+    Measured at the carrier: the event's frequency offsets are zeroed, which
+    is harmless because a decoded event is a snapshot the sequence does not
+    hold, and its offsets are already in the library row.
+    """
+    event.freq_offset = 0.0
+    event.freq_ppm = 0.0
+    result = pp.calc_rf_bandwidth(event, dt=raster, compat=False)
+    row = np.zeros(3 + MAX_BANDS, dtype=np.float64)
+    count = min(result.num_bands, MAX_BANDS)
+    row[0] = result.bandwidth
+    row[1] = max(result.num_bands, 1)
+    row[2] = result.band_bandwidths.max() if result.num_bands else result.bandwidth
+    # Measured on 10 Hz bins; below a millihertz an offset is the float32 of a
+    # binary file's shape samples, not a property of the pulse.
+    row[3 : 3 + count] = np.round(result.band_offsets[:count], 3)
+    return row
+
+
+def _grad_library(tables: Any, shapes: _ShapeTable) -> NDArray[np.float64]:
+    count = tables.trapezoid_ids.size + tables.arbitrary_gradient_ids.size
+    rows = np.zeros((count, 7), dtype=np.float64)
+    trapezoids = np.zeros((tables.trapezoid_ids.size, 7), dtype=np.float64)
+    trapezoids[:, 0] = _TRAPEZOID
+    trapezoids[:, 1] = tables.trapezoids[:, 0]
+    trapezoids[:, 2:6] = _micro(tables.trapezoids[:, 1:5])
+    rows[tables.trapezoid_ids - 1] = trapezoids
+    for identifier, row in zip(
+        tables.arbitrary_gradient_ids, tables.arbitrary_gradients, strict=True
+    ):
+        time_shape = int(row[4])
+        if time_shape == -1:
+            time_shape = shapes.half_raster(tables.shapes[int(row[3]) - 1].num_samples)
+        rows[identifier - 1] = [
+            _ARBITRARY,
+            row[0],
+            row[1],
+            row[2],
+            row[3],
+            time_shape,
+            _micro(row[5]),
+        ]
+    return rows
+
+
+def _adc_library(tables: Any) -> NDArray[np.float64]:
+    rows = np.array(tables.adc, dtype=np.float64).reshape(-1, 8)
+    rows[:, 1] = np.rint(rows[:, 1] * 1e9)
+    rows[:, 2] = _micro(rows[:, 2])
+    for identifier, row in enumerate(rows, start=1):
+        modulation = int(row[7])
+        size = tables.shapes[modulation - 1].num_samples if modulation else 0
+        if size and size != row[0]:
+            raise ValueError(
+                f"ADC {identifier} acquires {row[0]:g} samples but its "
+                f"phase modulation has {size}"
+            )
+    return rows
+
+
+@dataclass
+class _Chain:
+    """One extension chain, resolved."""
+
+    labelset: dict[str, int] = field(default_factory=dict)
+    labelinc: dict[str, int] = field(default_factory=dict)
+    flags: dict[str, int] = field(default_factory=dict)
+    points: dict[str, int] = field(default_factory=dict)
+
+
+def _declared_types(tables: Any) -> dict[str, int]:
+    """Return the type number the sequence gives each specification; -1 for none."""
+    return {name: tables.extension_types.get(name, -1) for name in _EXTENSION_KINDS}
+
+
+def _links(extensions: NDArray[np.int32], head: int) -> list[tuple[int, int]]:
+    """Return the ``(type, row)`` of every link of the chain from ``head``, in order.
+
+    A chain ends at a next of 0, and at a link it has already visited.
+    """
+    links: list[tuple[int, int]] = []
+    seen: set[int] = set()
+    node = head
+    while 0 < node <= len(extensions) and node not in seen:
+        seen.add(node)
+        kind, row, node = (int(value) for value in extensions[node - 1])
+        links.append((kind, row))
+    return links
+
+
+def _resolve(tables: Any, head: int, kinds: dict[str, int]) -> _Chain:
+    """Resolve one chain: the last row it names of each kind, and its labels in order."""
+    chain = _Chain()
+    links = _links(tables.extensions, head)
+    for name, specification in _SPECIFICATIONS.items():
+        referenced = [row for kind, row in links if kind == kinds[specification]]
+        if referenced:
+            # The chain names a 1-based row; the tables count from 0.
+            chain.points[name] = referenced[-1] - 1
+    labels = {
+        kinds["LABELSET"]: (
+            tables.label_set_values,
+            tables.label_set_labels,
+            chain.labelset,
+        ),
+        kinds["LABELINC"]: (
+            tables.label_inc_values,
+            tables.label_inc_labels,
+            chain.labelinc,
+        ),
+    }
+    for kind, row in links:
+        if kind < 0 or kind not in labels:
+            continue
+        values, names, target = labels[kind]
+        value, label = int(values[row - 1]), names[row - 1]
+        if label in FLAG_LABELS:
+            chain.flags[label] = value
+        elif label in COUNTER_LABELS:
+            target[label] = value
+    return chain
+
+
+def _specification_libraries(tables: Any) -> SpecificationLibraries:
+    kinds = _declared_types(tables)
+    referenced: dict[str, set[int]] = {kind: set() for kind in _EXTENSION_KINDS}
+    numbers = {number: kind for kind, number in kinds.items() if number >= 0}
+    for head in {int(value) for value in tables.blocks[:, 5]} - {0}:
+        for kind, row in _links(tables.extensions, head):
+            if kind in numbers:
+                referenced[numbers[kind]].add(row)
+
+    triggers = np.array(tables.triggers, dtype=np.float64).reshape(-1, 4)
+    triggers[:, 2:4] = _micro(triggers[:, 2:4])
+    soft_delays = np.zeros((len(tables.soft_delay_hints), 4), dtype=np.float64)
+    soft_delays[:, 0] = tables.soft_delays[:, 0]
+    soft_delays[:, 1] = _micro(tables.soft_delays[:, 1])
+    soft_delays[:, 2] = tables.soft_delays[:, 2]
+    soft_delays[:, 3] = [_HINTS.get(hint, -1) for hint in tables.soft_delay_hints]
+
+    return SpecificationLibraries(
+        rotations=np.array(tables.rotations, dtype=np.float64).reshape(-1, 4),
+        triggers=triggers,
+        rf_shims=tuple(np.array(row, dtype=np.float64) for row in tables.rf_shims),
+        soft_delays=soft_delays,
+        labelset=_label_rows(tables.label_set_values, tables.label_set_labels),
+        labelinc=_label_rows(tables.label_inc_values, tables.label_inc_labels),
+        referenced={
+            table: tuple(sorted(referenced[kind]))
+            for kind, table in (
+                ("ROTATIONS", "rotations"),
+                ("TRIGGERS", "triggers"),
+                ("RF_SHIMS", "rf_shims"),
+                ("DELAYS", "soft_delays"),
+                ("LABELSET", "labelset"),
+                ("LABELINC", "labelinc"),
+            )
+        },
+    )
+
+
+def _label_rows(values: Any, labels: Any) -> NDArray[np.float64]:
+    rows = np.zeros((len(labels), 2), dtype=np.float64)
+    rows[:, 0] = values
+    rows[:, 1] = [LABEL_IDS.get(label, -1) for label in labels]
+    return rows
+
+
 def _compact(
     blocks: NDArray[np.float64], libraries: SequenceLibraries
 ) -> tuple[Any, Any, Any, Any, Any]:
     """Drop the library rows no block plays, renumbering the block table in place.
 
-    A row a decoded sequence never named is not recoverable, and a placeholder
-    kept in its place would deduplicate into a definition of its own that
+    A row no block plays would deduplicate into a definition of its own that
     nothing plays. Numbering the played rows again keeps the libraries to what
     the scan actually asks for.
     """
@@ -763,35 +649,12 @@ def _played(
     return library[[old - 1 for old in named]], mapping
 
 
-def _extension_map(core: Any) -> list[int]:
-    """Return the type number the file gave each kind of specification, -1 for absent."""
+def _extension_map(tables: Any) -> list[int]:
+    """Return the type number the sequence gives each kind of specification, -1 for absent."""
     mapping = [-1] * 8
-    for name, number in _declared_types(core).items():
+    for name, number in _declared_types(tables).items():
         mapping[_EXTENSION_KINDS[name]] = number
     return mapping
-
-
-def _chain_rows(core: Any) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
-    """Return the chain rows blocks point at, and the row each block starts at."""
-    heads = np.asarray(core.block_events(), dtype=np.int64)[:, 5]
-    rows: list[list[float]] = []
-    start: dict[int, int] = {}
-    for head in sorted({int(value) for value in heads} - {0}):
-        links = np.asarray(core.extension_chain(head), dtype=np.int64).reshape(2, -1)
-        start[head] = len(rows) + 1
-        for position in range(links.shape[1]):
-            last = position + 1 == links.shape[1]
-            rows.append(
-                [
-                    float(links[0, position]),
-                    float(links[1, position]),
-                    0.0 if last else float(len(rows) + 2),
-                ]
-            )
-    table = np.asarray(rows, dtype=np.float64).reshape(-1, 3)
-    return table, np.array(
-        [start.get(int(head), 0) for head in heads], dtype=np.float64
-    )
 
 
 def _numbers(declared: dict[str, Any], name: str, count: int) -> list[float]:
