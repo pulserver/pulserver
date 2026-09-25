@@ -122,6 +122,7 @@ repetition.
 | Execution stream | The order in which segments are played over the whole scan |
 | Label table | The Pulseq labels in force at every readout, three of which fill the ADC label columns |
 | RF statistics | For each RF definition: its transmit channels, flip angle and energy, as pypulseqpp counts them; its duration from the envelope; and the bandwidth and bands of a multiband pulse from its spectrum |
+| Gradient statistics | For each gradient definition: the range of amplitudes its instances play; and for each shape it plays, the steepest slew rate and the integrals of the squared waveform and of its squared slew rate, pypulseqpp's `Sequence.gradient_statistics` over the amplitude that plays the shape |
 
 The limits and rasters of the scanner (`pypulseqpp.Opts`) are those under which
 the scan is segmented. A segment boundary falls where every gradient is zero,
@@ -147,7 +148,11 @@ limits, by pypulseqpp's `SequenceLibraries.absolute_offsets`. The labels
 and flags in force at each block, with `PMC` in force from the first, are
 pypulseqpp's `Sequence.evaluate_labels`, and a `TRID` group starts at each block
 `Sequence.label_blocks` lists as setting it; the rotation and RF shim a block
-plays are `Sequence.block_rotations` and `Sequence.block_shims`.
+plays are `Sequence.block_rotations` and `Sequence.block_shims`. A segment
+position records whether the scanner may move its excitation at run time by a
+carrier offset alone: every instance plays its RF pulse under one gradient,
+steady from the pulse's first sample to its last as
+`Sequence.rf_gradients` finds it, in a block without a rotation.
 `label_column_map` selects the three labels the
 interpreter records per readout, as indices in the order SLC, PHS, REP, AVG,
 SEG, SET, ECO, PAR, LIN, ACQ.
