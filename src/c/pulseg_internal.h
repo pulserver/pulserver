@@ -41,7 +41,7 @@ typedef struct pulseg_segment_rf_anchor
     int block_offset;        /* block index within segment         */
     float start_us;          /* RF start time within segment (us)  */
     float end_us;            /* RF end time within segment (us)    */
-    float isocenter_us;      /* isodelay time within segment (us)  */
+    float isocenter_us;      /* RF centre within segment (us)      */
     float base_amplitude_hz; /* base RF amplitude (Hz)             */
     int rf_use;              /* PULSEG_RF_USE_*                 */
 } pulseg_segment_rf_anchor;

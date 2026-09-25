@@ -261,8 +261,10 @@ typedef struct pulseg_rf_stats
      *  is vendor-defined -- e.g. GE's abswidth/effwidth/dtycyc/maxpw live
      *  in src_gelib/pulserver_ge_rf_stats.h as PULSERVER_GE_RF_* accessors. */
     float vendor_stat[4];
-    float duration_us;       /**< total RF event duration (us)          */
-    int isodelay_us;         /**< isodelay from center to echo (us)     */
+    float duration_us;       /**< shape duration (us): the samples on the RF
+                               *  raster, or the last sample time rounded up
+                               *  onto it */
+    int isodelay_us;         /**< duration_us less the recorded centre (us) */
     float bandwidth_hz;      /**< bandwidth at half the spectral peak (Hz) */
     float base_amplitude_hz; /**< base (nominal) peak |gamma*B1| (Hz)   */
     int num_samples;         /**< waveform sample count                 */
@@ -672,7 +674,7 @@ typedef struct pulseg_block_info
     int rf_delay_us;       /**< RF delay (us), -1 if absent       */
     int rf_num_channels;   /**< Tx channel count, -1 if absent    */
     int rf_num_samples;    /**< samples per channel, -1 if absent */
-    int rf_duration_us;    /**< RF duration (us) from last time-shape sample; -1 if absent */
+    int rf_duration_us;    /**< RF shape duration (us), -1 if absent */
     int rf_is_complex;     /**< 1 if phase shape exists           */
     int rf_uniform_raster; /**< 1 if time shape present           */
 

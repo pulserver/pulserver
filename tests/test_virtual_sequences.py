@@ -11,15 +11,6 @@ from pulserver import ir, virtual
 OFFSET = np.array([0.02, -0.012, 0.0])
 # A small fraction of the k-space spacing of every sequence here.
 K_TOLERANCE = 1e-3
-# Their refocusing pulses peak one sample away from the centre they record.
-PEAK_OFF_CENTRE = {
-    "fse3D_sequence",
-    "se2D_sequence",
-    "se_epi_propeller2D_sequence",
-    "se_propeller2D_sequence",
-    "se_radial2D_sequence",
-    "se_spiral2D_sequence",
-}
 
 
 @pytest.fixture(scope="module", params=sorted(SMALL))
@@ -31,16 +22,8 @@ def design(request, tmp_path_factory):
     return name, sequence, path
 
 
-def test_every_shipped_sequence_plays_the_trajectory_it_designs(design, request):
-    name, sequence, path = design
-    if name in PEAK_OFF_CENTRE:
-        request.applymarker(
-            pytest.mark.xfail(
-                strict=True,
-                reason="the cache places an RF pulse at its magnitude peak, not at "
-                "the centre the design records",
-            )
-        )
+def test_every_shipped_sequence_plays_the_trajectory_it_designs(design):
+    _, sequence, path = design
     ir.convert(path, pp.Opts())
     played = np.concatenate(virtual.trajectory(path), axis=1)
     np.testing.assert_allclose(played, sequence.calculate_kspace()[0], atol=K_TOLERANCE)

@@ -3790,8 +3790,9 @@ int pulseg__calc_segment_timing(pulseg_sequence_descriptor *desc, pulseg_diagnos
                     rf_arr[rf_count].start_us = t_accum + (float)rdef->delay;
                     rf_arr[rf_count].end_us =
                         t_accum + (float)rdef->delay + rdef->stats.duration_us;
-                    rf_arr[rf_count].isocenter_us =
-                        t_accum + (float)rdef->delay + (float)rdef->stats.isodelay_us;
+                    rf_arr[rf_count].isocenter_us = t_accum + (float)rdef->delay +
+                                                    rdef->stats.duration_us -
+                                                    (float)rdef->stats.isodelay_us;
                     rf_arr[rf_count].base_amplitude_hz = rte->amplitude;
                     rf_arr[rf_count].rf_use = pulseg__rf_event_use(rdef, rte);
                     rf_count++;

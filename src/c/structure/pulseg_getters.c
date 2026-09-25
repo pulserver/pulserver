@@ -1227,7 +1227,8 @@ float pulseg_get_rf_isocenter_us(const pulseg_collection *coll, int seg_idx, int
         return -1.0f;
 
     rdef = &desc->rf_definitions[bdef->rf_id];
-    return start_us + (float)rdef->delay + (float)rdef->stats.isodelay_us;
+    return start_us + (float)rdef->delay + rdef->stats.duration_us
+         - (float)rdef->stats.isodelay_us;
 }
 
 /* ================================================================== */
@@ -1439,8 +1440,8 @@ static int get_rf_duration_us(const pulseg_collection *coll, int seg_idx, int bl
         return -1;
 
     rdef = &desc->rf_definitions[bdef->rf_id];
-    /* stats.duration_us is the last time-shape sample time (accounts for
-     * custom non-uniform time shapes). Round to nearest integer µs. */
+    /* stats.duration_us is the shape duration: the samples on the RF raster,
+     * or the last time-shape sample rounded up onto it. */
     return (int)(rdef->stats.duration_us);
 }
 

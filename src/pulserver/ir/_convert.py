@@ -247,8 +247,8 @@ def play(
 
         With ``waveforms``, also:
 
-        - ``rf_center_us``: the time of the RF magnitude peak from the block's
-          start, in µs; NaN without RF;
+        - ``rf_center_us``: the time of the RF centre the design records, from
+          the block's start, in µs; NaN without RF;
         - ``gradient_time_us``, ``gradient_waveform_hz_per_m``: the corners of
           every played gradient, concatenated in play order: their times from
           the block's start, in µs, and the gradient there, the instance's
