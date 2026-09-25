@@ -669,7 +669,7 @@ repetition.</p>
 <td><p>The Pulseq labels of every readout, three of which fill the ADC label columns</p></td>
 </tr>
 <tr class="row-odd"><td><p>RF statistics</p></td>
-<td><p>For each RF definition: its transmit channels, flip angle, duration and power from the envelope, and the bandwidth and bands of a multiband pulse from its spectrum</p></td>
+<td><p>For each RF definition: its transmit channels and flip angle, as pypulseqpp counts them; its duration and power from the envelope; and the bandwidth and bands of a multiband pulse from its spectrum</p></td>
 </tr>
 </tbody>
 </table>
@@ -679,10 +679,14 @@ the scan is segmented. The spectral statistics are measured by pypulseqpp’s
 <code class="docutils literal notranslate"><span class="pre">calc_rf_bandwidth</span></code> when the chain is read, with the Pulseq recipe of the width
 at half the spectral peak; a band is a run of the spectrum above 30 % of its
 peak, and its offset is measured from the carrier. A dynamic pTx pulse holds
-its channels one after another over one time base; its channel count is the
-number of samples at its first sample time, when the times are that many
-identical copies, which is pypulseqpp’s rule, and its envelope for the
-statistics is the root sum of squares of the channels. <code class="docutils literal notranslate"><span class="pre">label_column_map</span></code> selects the three labels the
+its channels one after another over one time base. Its channel count is
+pypulseqpp’s <code class="docutils literal notranslate"><span class="pre">Sequence.rf_channels</span></code>: the number of samples at its first sample
+time, when the times are that many identical copies. Its flip angle is
+pypulseqpp’s <code class="docutils literal notranslate"><span class="pre">Sequence.rf_flip_angles</span></code>, the channels’ integrals summed
+coherently, the flip where every channel has unit, in-phase sensitivity; the
+envelope for the power statistics is the root sum of squares of the channels.
+A pulse a file leaves unlabelled takes the use pypulseqpp detects for it when
+the chain is read. <code class="docutils literal notranslate"><span class="pre">label_column_map</span></code> selects the three labels the
 interpreter records per readout, as indices in the order SLC, PHS, REP, AVG,
 SEG, SET, ECO, PAR, LIN, ACQ.</p>
 </section>

@@ -549,9 +549,11 @@ matches the file.</p>
 resolved at the field strength the cache was converted under; 0
 without RF;</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">rf_use</span></code>: the <code class="docutils literal notranslate"><span class="pre">PULSEG_RF_USE_*</span></code> code of the RF event, 1 for an
-excitation and 2 for a refocusing pulse; an untagged event is a
-refocusing pulse at a flip angle of 162 to 198 degrees and an
-excitation otherwise; 0 without RF;</p></li>
+excitation and 2 for a refocusing pulse; a pulse the file leaves
+unlabelled takes the use pypulseqpp detects when the chain is read,
+and an event a cache carries without one is a refocusing pulse at a
+flip angle of 162 to 198 degrees and an excitation otherwise; 0
+without RF;</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">rf_delay_us</span></code>: RF delay from the block’s start, in µs;</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">rf_channels</span></code>: the transmit channels the RF waveform holds, one
 after another over one time base for a dynamic pTx pulse; 0 without

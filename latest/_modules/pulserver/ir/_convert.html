@@ -602,9 +602,11 @@
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">"""Return the segmentation of a sequence: subsequences, segments and readouts.</span>
 
-<span class="sd">    Each subsequence lists its unique RF definitions under ``rf``: the</span>
-<span class="sd">    bandwidth at half the spectral peak, the number of bands, each band's</span>
-<span class="sd">    offset from the carrier and the widest band's bandwidth, all in Hz, as</span>
+<span class="sd">    Each subsequence lists its unique RF definitions under ``rf``: the flip</span>
+<span class="sd">    angle in degrees at the largest amplitude the definition plays, as</span>
+<span class="sd">    ``pypulseqpp.Sequence.rf_flip_angles`` gives it; and the bandwidth at half</span>
+<span class="sd">    the spectral peak, the number of bands, each band's offset from the</span>
+<span class="sd">    carrier and the widest band's bandwidth, all in Hz, as</span>
 <span class="sd">    ``pypulseqpp.calc_rf_bandwidth`` measures them. ``vop_sar_ratio`` and</span>
 <span class="sd">    ``vop_global_sar_ratio`` are those the cache was written with, zero when</span>
 <span class="sd">    the chain is read and segmented again.</span>
@@ -695,9 +697,11 @@
 <span class="sd">          resolved at the field strength the cache was converted under; 0</span>
 <span class="sd">          without RF;</span>
 <span class="sd">        - ``rf_use``: the ``PULSEG_RF_USE_*`` code of the RF event, 1 for an</span>
-<span class="sd">          excitation and 2 for a refocusing pulse; an untagged event is a</span>
-<span class="sd">          refocusing pulse at a flip angle of 162 to 198 degrees and an</span>
-<span class="sd">          excitation otherwise; 0 without RF;</span>
+<span class="sd">          excitation and 2 for a refocusing pulse; a pulse the file leaves</span>
+<span class="sd">          unlabelled takes the use pypulseqpp detects when the chain is read,</span>
+<span class="sd">          and an event a cache carries without one is a refocusing pulse at a</span>
+<span class="sd">          flip angle of 162 to 198 degrees and an excitation otherwise; 0</span>
+<span class="sd">          without RF;</span>
 <span class="sd">        - ``rf_delay_us``: RF delay from the block's start, in µs;</span>
 <span class="sd">        - ``rf_channels``: the transmit channels the RF waveform holds, one</span>
 <span class="sd">          after another over one time base for a dynamic pTx pulse; 0 without</span>

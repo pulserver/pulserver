@@ -110,7 +110,7 @@ segmentation.
     repeating unit: 9 blocks, TR 18.02 ms, played 64 times
     segment 0: blocks 1-2, 3.56 ms, events
     segment 1: blocks 3-3, 0.02 ms, pure delay
-    segment 2: blocks 4-8, 12.02 ms, events
+    segment 2: blocks 4-8, 12.04 ms, events
 
 
 
@@ -240,7 +240,7 @@ definition, and both subsequences are played from the same two definitions.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.560 seconds)
+   **Total running time of the script:** (0 minutes 0.421 seconds)
 
 
 .. _sphx_glr_download_generated_gallery_02-scanner-ir_01_segmentation.py:
