@@ -3,6 +3,7 @@
 import shutil
 import threading
 from pathlib import Path
+from types import SimpleNamespace
 
 import ismrmrd
 import numpy as np
@@ -131,19 +132,32 @@ def _fat_saturated_epi(path, system):
 
 
 def _left_by_saturation(design, system, field_t, phantom):
-    """The z component the designed saturation pulse, resolved at ``system.B0``, leaves of each shift at ``field_t``."""
+    """The z component the designed saturation pulse, resolved at ``system.B0``, leaves of each shift at ``field_t``.
+
+    From pypulseqpp's ``sim_rf`` of the pulse as the design holds it.
+    """
     rf = next(
         block.rf
         for block in (design.get_block(i) for i in range(1, len(design) + 1))
         if block.rf is not None and block.rf.use == "saturation"
     )
-    frequency, _ = pp.calc_absolute_offsets(rf, system=system)
+    frequency, phase = pp.calc_absolute_offsets(rf, system=system)
+    resolved = SimpleNamespace(
+        t=np.asarray(rf.t),
+        signal=np.asarray(rf.signal),
+        shape_dur=rf.shape_dur,
+        center=rf.center,
+        delay=rf.delay,
+        freq_offset=frequency,
+        phase_offset=phase,
+        freq_ppm=0.0,
+        phase_ppm=0.0,
+        use=rf.use,
+    )
+    longitudinal, _, frequencies = pp.sim_rf(resolved, df=0.1, dt=1e-6)[:3]
     per_ppm = 1e-6 * pp.Opts().gamma * field_t
-    step = float(rf.t[1] - rf.t[0])
     return {
-        shift: float(
-            pp.sim_bloch(rf.signal, [[per_ppm * shift - frequency]], step)[0, 2]
-        )
+        shift: float(np.interp(per_ppm * shift, frequencies, longitudinal))
         for shift in phantom.shifts_ppm
     }
 
@@ -372,6 +386,51 @@ def test_a_fat_saturation_converted_at_another_field_misses_the_fat(tmp_path):
         )
     )
     assert misfit > 0.1
+
+
+def test_a_hard_saturation_pulse_acts_over_its_duration(tmp_path):
+    """A block pulse is held as the two corners of a time shape, one duration apart."""
+    system = pp.Opts(B0=3.0)
+    seq = pp.Sequence(system)
+    seq.add_block(
+        pp.make_block_pulse(
+            np.pi / 2,
+            duration=8e-3,
+            freq_ppm=FAT_SHIFT_PPM,
+            use="saturation",
+            system=system,
+        )
+    )
+    seq.add_block(pp.make_block_pulse(np.pi / 2, duration=0.5e-3, system=system))
+    seq.add_block(pp.make_adc(num_samples=64, duration=6.4e-3, system=system))
+    path = tmp_path / "scan.seq"
+    seq.write(str(path))
+    ir.convert(path, system)
+    tissue = water_and_fat(coils=1)
+    left = _left_by_saturation(seq, system, system.B0, tissue)
+    assert abs(left[FAT_SHIFT_PPM]) < 1e-3
+    acquired = virtual.acquire(path, tissue, field_t=system.B0)
+    residual, _ = _residual(
+        acquired, _ideal(path, tissue, field_t=system.B0, longitudinal=left)
+    )
+    assert residual < 1e-4
+
+
+def test_a_readout_before_the_first_excitation_acquires_nothing(tmp_path):
+    adc = pp.make_adc(num_samples=64, duration=3.2e-3, system=SYSTEM)
+    seq = pp.Sequence(SYSTEM)
+    seq.add_block(
+        pp.make_block_pulse(np.pi, duration=1e-3, use="refocusing", system=SYSTEM)
+    )
+    seq.add_block(adc)
+    seq.add_block(pp.make_block_pulse(np.pi / 2, duration=0.5e-3, system=SYSTEM))
+    seq.add_block(adc)
+    path = tmp_path / "scan.seq"
+    seq.write(str(path))
+    ir.convert(path, SYSTEM)
+    before, after = virtual.acquire(path, phantom(coils=1))
+    assert not np.abs(before).any()
+    assert np.abs(after).all()
 
 
 def test_a_saturation_band_selected_in_space_is_refused(tmp_path):
