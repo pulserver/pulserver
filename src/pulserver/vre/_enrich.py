@@ -79,6 +79,10 @@ class TableSpace:
     trajectory
         Whether some readout of the space keeps more than one k axis, which
         makes the space non-Cartesian.
+    centre_line, centre_partition
+        The ``LIN`` and ``PAR`` counter of the k-space centre, from
+        ``kSpaceCenterLine`` and ``kSpaceCenterPartition``; ``None`` when
+        undefined, and for a navigator.
     """
 
     subsequence: int
@@ -86,6 +90,8 @@ class TableSpace:
     matrix: tuple[int, int, int] | None
     fov_mm: tuple[float, float, float] | None
     trajectory: bool
+    centre_line: int | None = None
+    centre_partition: int | None = None
 
 
 @dataclass(frozen=True, eq=False)
@@ -226,7 +232,8 @@ def enrich_header(header: Any, table: SequenceTable) -> None:
 
     For every space, sets ``encodedSpace`` and ``reconSpace`` from the
     sequence's matrix and field of view when defined, ``encodingLimits`` from
-    the counters of its readouts (minimum 0, centre half the maximum), and
+    the counters of its readouts (minimum 0, centre half the maximum, or for
+    ``kspace_encoding_step_1`` and ``_2`` the centre the sequence defines), and
     ``trajectory`` to ``OTHER`` or ``CARTESIAN``. Other fields of an existing
     encoding are kept; missing encodings are appended. Sequence parameters the
     table holds replace the header's.
@@ -252,9 +259,12 @@ def enrich_header(header: Any, table: SequenceTable) -> None:
             for name in MRD_COUNTERS
             if name in _STANDARD_LIMITS or table.counters[name][members].any()
         ]
+        centres = {"LIN": space.centre_line, "PAR": space.centre_partition}
         limits = xsd.encodingLimitsType(
             **{
-                _LIMIT_FIELDS[name]: _limit(table.counters[name][members])
+                _LIMIT_FIELDS[name]: _limit(
+                    table.counters[name][members], centres.get(name)
+                )
                 for name in written
             }
         )
@@ -365,6 +375,8 @@ def _map_readouts(
                 trajectory=bool(
                     (readouts.trajectory_dimensions[local_space == local] > 1).any()
                 ),
+                centre_line=None if is_navigator else definitions.centre_line,
+                centre_partition=None if is_navigator else definitions.centre_partition,
             )
         )
 
@@ -406,9 +418,11 @@ def _boundary_flags(
     return flags
 
 
-def _limit(values: np.ndarray) -> Any:
+def _limit(values: np.ndarray, centre: int | None = None) -> Any:
     maximum = int(values.max()) if values.size else 0
-    return xsd.limitType(minimum=0, maximum=maximum, center=maximum // 2)
+    return xsd.limitType(
+        minimum=0, maximum=maximum, center=maximum // 2 if centre is None else centre
+    )
 
 
 def _encoding_space(space: TableSpace, current: Any) -> Any:

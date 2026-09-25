@@ -99,6 +99,10 @@ class SequenceDefinitions:
         ``TR``, ``TE`` and ``TI`` values, in seconds; empty when undefined.
     flip_angle : tuple of float
         ``FlipAngle`` values, in degrees; empty when undefined.
+    centre_line, centre_partition : int or None
+        ``kSpaceCenterLine`` and ``kSpaceCenterPartition``: the ``LIN`` and
+        ``PAR`` counter at which k-space is sampled at its centre; ``None``
+        when undefined.
     """
 
     matrix: tuple[int, int, int] | None
@@ -109,6 +113,8 @@ class SequenceDefinitions:
     te: tuple[float, ...]
     ti: tuple[float, ...]
     flip_angle: tuple[float, ...]
+    centre_line: int | None = None
+    centre_partition: int | None = None
 
     @classmethod
     def from_sequence(cls, seq: Any) -> SequenceDefinitions:
@@ -122,6 +128,8 @@ class SequenceDefinitions:
             te=tuple(_numbers(seq.get_definition("TE"))),
             ti=tuple(_numbers(seq.get_definition("TI"))),
             flip_angle=tuple(_numbers(seq.get_definition("FlipAngle"))),
+            centre_line=_counter(seq.get_definition("kSpaceCenterLine")),
+            centre_partition=_counter(seq.get_definition("kSpaceCenterPartition")),
         )
 
 
@@ -375,3 +383,8 @@ def _numbers(value: Any) -> list[float]:
 def _triple(value: Any, kind: type) -> tuple | None:
     numbers = _numbers(value)
     return tuple(kind(number) for number in numbers[:3]) if len(numbers) >= 3 else None
+
+
+def _counter(value: Any) -> int | None:
+    numbers = _numbers(value)
+    return round(numbers[0]) if numbers else None
