@@ -31,13 +31,6 @@ def design(request, tmp_path_factory):
     return name, sequence, path
 
 
-def _rotated(sequence):
-    return any(
-        sequence.get_block(index).rotation is not None
-        for index in range(1, len(sequence) + 1)
-    )
-
-
 def test_every_shipped_sequence_plays_the_trajectory_it_designs(design, request):
     name, sequence, path = design
     if name in PEAK_OFF_CENTRE:
@@ -53,16 +46,8 @@ def test_every_shipped_sequence_plays_the_trajectory_it_designs(design, request)
     np.testing.assert_allclose(played, sequence.calculate_kspace()[0], atol=K_TOLERANCE)
 
 
-def test_every_shipped_sequence_scans_an_object_where_it_is_prescribed(design, request):
+def test_every_shipped_sequence_scans_an_object_where_it_is_prescribed(design):
     _, sequence, path = design
-    if _rotated(sequence):
-        request.applymarker(
-            pytest.mark.xfail(
-                strict=True,
-                reason="pypulseqpp's field-of-view translation moves a block that "
-                "carries a rotation by its unrotated gradients",
-            )
-        )
     ir.convert(path, pp.Opts(), fov_offset=OFFSET)
     phantom = virtual.Phantom(
         [
