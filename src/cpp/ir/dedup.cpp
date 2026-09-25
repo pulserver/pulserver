@@ -977,7 +977,6 @@ static int compute_rf_stats(
 
 
     float sum_signed;
-    double energy_per_amp2;
     float *mag_view = NULL;
     float *phase_view = NULL;
     int fail_rc = PULSEG_ERR_ALLOC_FAILED;
@@ -1026,9 +1025,8 @@ static int compute_rf_stats(
         }
 
         /* The largest amplitude any event of the definition plays, the flip
-         * angle pypulseqpp gives that event, and pypulseqpp's energy of it per
-         * unit amplitude squared, which every event of the definition shares. */
-        energy_per_amp2 = 0.0;
+         * angle pypulseqpp gives that event, and pypulseqpp's integral of the
+         * unit-peak envelope, which every event of the definition shares. */
         if (rf_table && rf_table_size > 0)
         {
             for (i = 0; i < rf_table_size; ++i)
@@ -1043,11 +1041,10 @@ static int compute_rf_stats(
                             rd->stats.flip_angle_rad = flip;
                     }
                     if (amp > rd->stats.base_amplitude_hz)
-                    {
                         rd->stats.base_amplitude_hz = amp;
-                        if (seq->rf_energy)
-                            energy_per_amp2 = seq->rf_energy[i] / ((double)amp * amp);
-                    }
+                    if (seq->rf_b1sq_integral &&
+                        (float)seq->rf_b1sq_integral[i] > rd->stats.total_b1sq_power)
+                        rd->stats.total_b1sq_power = (float)seq->rf_b1sq_integral[i];
                 }
             }
         }
@@ -1285,9 +1282,6 @@ static int compute_rf_stats(
             sum_signed = (float)dre;
         }
         rd->stats.area = sum_signed;
-        /* The integral of |B1(t)|^2 of the unit-peak envelope, in s. */
-        rd->stats.total_b1sq_power =
-            (max_mag > 1e-9f) ? (float)(energy_per_amp2 / ((double)max_mag * max_mag)) : 0.0f;
 
         /* Vendor-specific envelope stats: computed by the optional
          * callback from a read-only view of the uniform-grid envelope;

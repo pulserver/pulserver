@@ -134,9 +134,9 @@ time, when the times are that many identical copies. Its flip angle is
 pypulseqpp's `Sequence.rf_flip_angles`, the channels' integrals summed
 coherently, the flip where every channel has unit, in-phase sensitivity; the
 envelope for the power statistics is the root sum of squares of the channels.
-The energy is pypulseqpp's `calc_rf_power`, the integral of $|b_1|^2$ summed
-over the channels, divided by the square of the envelope's peak: the cache
-holds it for the envelope scaled to unit peak, in seconds.
+The energy is held as the integral of the squared envelope scaled to unit
+peak, in seconds: pypulseqpp's `calc_rf_power` energy, the integral of
+$|b_1|^2$, over its peak power, both summed over the channels.
 A pulse a file leaves unlabelled takes the use pypulseqpp detects for it when
 the chain is read. `label_column_map` selects the three labels the
 interpreter records per readout, as indices in the order SLC, PHS, REP, AVG,

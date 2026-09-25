@@ -145,11 +145,10 @@ def test_an_unlabelled_pulse_is_cached_with_the_use_pypulseqpp_detects(tmp_path)
     assert set(played["rf_use"][played["rf_amp_hz"] != 0]) == {2}
 
 
-def _b1sq_integral(pulse, channels=1):
-    """pypulseqpp's energy of a pulse over the square of its root-sum-of-squares peak, in s."""
-    energy, _, _ = pp.calc_rf_power(pulse, dt=SYSTEM.rf_raster_time)
-    per_channel = np.abs(np.asarray(pulse.signal)).reshape(channels, -1)
-    return energy / float(np.max(np.sum(per_channel**2, axis=0)))
+def _b1sq_integral(pulse):
+    """pypulseqpp's energy of a pulse over its peak power, in s."""
+    energy, peak, _ = pp.calc_rf_power(pulse, dt=SYSTEM.rf_raster_time)
+    return energy / peak
 
 
 @pytest.mark.parametrize("from_cache", [False, True], ids=["chain", "cache"])
@@ -177,9 +176,7 @@ def test_a_dynamic_ptx_pulse_integrates_the_power_of_every_channel(tmp_path):
     signal = np.stack([samples, 0.5 * samples * np.exp(0.3j)])
     pulse = pp.make_ptx_pulse(signal, dwell=1e-5, system=SYSTEM, use="excitation")
     (entry,) = summary(_written(tmp_path, [pulse]), SYSTEM)["subsequences"][0]["rf"]
-    assert entry["b1sq_integral_s"] == pytest.approx(
-        _b1sq_integral(pulse, channels=2), rel=1e-5
-    )
+    assert entry["b1sq_integral_s"] == pytest.approx(_b1sq_integral(pulse), rel=1e-5)
 
 
 def test_a_zero_flip_pulse_converts_with_no_energy_and_the_fallback_bandwidth(tmp_path):

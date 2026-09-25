@@ -146,8 +146,8 @@ def summary(
     carrier and the widest band's bandwidth, all in Hz, as
     ``pypulseqpp.calc_rf_bandwidth`` measures them; and ``b1sq_integral_s``,
     the integral of the squared envelope scaled to unit peak, in s:
-    ``pypulseqpp.calc_rf_power``'s energy over the square of the peak, both
-    over the root sum of squares of a dynamic pTx pulse's channels.
+    ``pypulseqpp.calc_rf_power``'s energy over its peak power, both summed
+    over a dynamic pTx pulse's channels.
     ``vop_sar_ratio`` and ``vop_global_sar_ratio`` are those the cache was
     written with, zero when the chain is read and segmented again.
 
