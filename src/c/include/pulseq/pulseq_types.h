@@ -388,6 +388,10 @@ typedef struct pulseq_file
      * not supplied. */
     PULSEQ_REAL *rf_flip_deg;
     int *rf_channels;
+    /* Per-RF-event energy, the integral of |rf|^2 in Hz^2 s summed over the
+     * transmit channels, as pypulseqpp.calc_rf_power gives it. NULL when
+     * not supplied. */
+    PULSEQ_REAL *rf_energy;
     int is_grad_library_parsed;
     int grad_library_size;
     PULSEQ_REAL (*grad_library)[7];

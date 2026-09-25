@@ -174,6 +174,10 @@ class SequenceLibraries:
     rf_channels : NDArray[np.int32]
         ``(R,)``: the transmit channels each row holds, as
         ``pypulseqpp.Sequence.rf_channels`` counts them.
+    rf_energy : NDArray[np.float64]
+        ``(R,)``: each row's energy, the integral of ``|rf|^2`` in Hz^2 s
+        summed over its channels, as ``pypulseqpp.calc_rf_power`` gives it; 0
+        for every row no block plays.
     grad : NDArray[np.float64]
         ``(G, 7)``, by type in column 0. A trapezoid (0): amplitude in Hz/m,
         rise, flat and fall times in µs, delay in µs. An arbitrary gradient
@@ -193,6 +197,7 @@ class SequenceLibraries:
     rf_spectra: NDArray[np.float64]
     rf_flip_deg: NDArray[np.float64]
     rf_channels: NDArray[np.int32]
+    rf_energy: NDArray[np.float64]
     grad: NDArray[np.float64]
     adc: NDArray[np.float64]
     shapes: tuple[Shape, ...]
@@ -322,7 +327,7 @@ def conversion_payload(sequence: Any) -> dict[str, Any]:
     libraries = _sequence_libraries(sequence, tables)
     specifications = _specification_libraries(tables)
     blocks = libraries.blocks.copy()
-    rf, grad, adc, rf_use, rf_spectra, rf_flip_deg, rf_channels = _compact(
+    rf, grad, adc, rf_use, rf_spectra, rf_flip_deg, rf_channels, rf_energy = _compact(
         blocks, libraries
     )
     declared = sequence.definitions
@@ -364,6 +369,7 @@ def conversion_payload(sequence: Any) -> dict[str, Any]:
         "rf_spectra": rf_spectra,
         "rf_flip_deg": rf_flip_deg,
         "rf_channels": rf_channels,
+        "rf_energy": rf_energy,
         "grad": grad,
         "adc": adc,
         "shapes": [
@@ -404,7 +410,7 @@ def _sequence_libraries(sequence: Any, tables: Any) -> SequenceLibraries:
     blocks[:, 1:] = tables.blocks
 
     shapes = _ShapeTable(tables.shapes)
-    rf, rf_use, rf_spectra = _rf_library(sequence, tables, blocks)
+    rf, rf_use, rf_spectra, rf_energy = _rf_library(sequence, tables, blocks)
     grad = _grad_library(tables, shapes)
     adc = _adc_library(tables)
     return SequenceLibraries(
@@ -414,6 +420,7 @@ def _sequence_libraries(sequence: Any, tables: Any) -> SequenceLibraries:
         rf_spectra,
         np.asarray(sequence.rf_flip_angles(), dtype=np.float64),
         np.asarray(sequence.rf_channels(), dtype=np.int32),
+        rf_energy,
         grad,
         adc,
         shapes.entries(),
@@ -443,24 +450,36 @@ class _ShapeTable:
 
 def _rf_library(
     sequence: Any, tables: Any, blocks: NDArray[np.float64]
-) -> tuple[NDArray[np.float64], NDArray[np.int32], NDArray[np.float64]]:
+) -> tuple[
+    NDArray[np.float64], NDArray[np.int32], NDArray[np.float64], NDArray[np.float64]
+]:
     rows = np.array(tables.rf, dtype=np.float64).reshape(-1, 10)
     rows[:, 4:6] = _micro(rows[:, 4:6])
     uses = np.array([_RF_USE[use] for use in tables.rf_use], dtype=np.int32)
     spectra = np.zeros((rows.shape[0], 3 + MAX_BANDS), dtype=np.float64)
+    energies = np.zeros(rows.shape[0], dtype=np.float64)
     raster = sequence.rf_raster_time
     measured: dict[tuple[float, float, float], NDArray[np.float64]] = {}
+    per_amplitude: dict[tuple[float, float, float], float] = {}
     played = blocks[:, 1].astype(np.int64)
     for identifier in np.unique(played[played > 0]):
         row = rows[identifier - 1]
         # The spectrum's shape depends on the waveform alone: amplitude scales
         # it and a frequency offset moves it, neither of which the bands see.
+        # The energy goes with the square of the amplitude.
         key = (row[1], row[2], row[3])
-        if key not in measured:
+        needs_energy = key not in per_amplitude and row[0] != 0.0
+        if key not in measured or needs_energy:
             block = int(np.argmax(played == identifier)) + 1
-            measured[key] = _spectrum_row(sequence.get_block(block).rf, raster)
+            event = sequence.get_block(block).rf
+            if needs_energy:
+                energy, _, _ = pp.calc_rf_power(event, dt=raster)
+                per_amplitude[key] = energy / row[0] ** 2
+            if key not in measured:
+                measured[key] = _spectrum_row(event, raster)
         spectra[identifier - 1] = measured[key]
-    return rows, uses, spectra
+        energies[identifier - 1] = per_amplitude.get(key, 0.0) * row[0] ** 2
+    return rows, uses, spectra, energies
 
 
 def _spectrum_row(event: Any, raster: float) -> NDArray[np.float64]:
@@ -650,12 +669,13 @@ def _compact(
     spectra = libraries.rf_spectra[played_rf]
     flips = libraries.rf_flip_deg[played_rf]
     channels = libraries.rf_channels[played_rf]
+    energies = libraries.rf_energy[played_rf]
     for columns, mapping in (((1,), rf_map), ((2, 3, 4), grad_map), ((5,), adc_map)):
         for column in columns:
             blocks[:, column] = [
                 mapping.get(int(value), 0) for value in blocks[:, column]
             ]
-    return rf, grad, adc, uses, spectra, flips, channels
+    return rf, grad, adc, uses, spectra, flips, channels, energies
 
 
 def _played(

@@ -143,3 +143,40 @@ def test_an_unlabelled_pulse_is_cached_with_the_use_pypulseqpp_detects(tmp_path)
     convert(path, SYSTEM)
     played = play(path)
     assert set(played["rf_use"][played["rf_amp_hz"] != 0]) == {2}
+
+
+def _b1sq_integral(pulse, channels=1):
+    """pypulseqpp's energy of a pulse over the square of its root-sum-of-squares peak, in s."""
+    energy, _, _ = pp.calc_rf_power(pulse, dt=SYSTEM.rf_raster_time)
+    per_channel = np.abs(np.asarray(pulse.signal)).reshape(channels, -1)
+    return energy / float(np.max(np.sum(per_channel**2, axis=0)))
+
+
+@pytest.mark.parametrize("from_cache", [False, True], ids=["chain", "cache"])
+def test_each_rf_definition_carries_the_energy_pypulseqpp_measures(
+    tmp_path, from_cache
+):
+    pulses = _pulses()
+    path = _written(tmp_path, pulses)
+    if from_cache:
+        convert(path, SYSTEM)
+    report = summary(path, SYSTEM, cache_ext=".pseg" if from_cache else None)
+    reported = sorted(e["b1sq_integral_s"] for e in report["subsequences"][0]["rf"])
+    expected = sorted(_b1sq_integral(pulse) for pulse in pulses)
+    assert reported == pytest.approx(expected, rel=1e-5)
+
+
+def test_a_hard_pulse_at_unit_peak_integrates_to_its_duration(tmp_path):
+    _, _, hard = _pulses()
+    (entry,) = summary(_written(tmp_path, [hard]), SYSTEM)["subsequences"][0]["rf"]
+    assert entry["b1sq_integral_s"] == pytest.approx(1e-3, rel=1e-6)
+
+
+def test_a_dynamic_ptx_pulse_integrates_the_power_of_every_channel(tmp_path):
+    samples = np.hanning(100) * 200.0
+    signal = np.stack([samples, 0.5 * samples * np.exp(0.3j)])
+    pulse = pp.make_ptx_pulse(signal, dwell=1e-5, system=SYSTEM, use="excitation")
+    (entry,) = summary(_written(tmp_path, [pulse]), SYSTEM)["subsequences"][0]["rf"]
+    assert entry["b1sq_integral_s"] == pytest.approx(
+        _b1sq_integral(pulse, channels=2), rel=1e-5
+    )

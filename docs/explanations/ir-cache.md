@@ -118,10 +118,13 @@ repetition.
 | Segmentation | The repeating unit divided into segments at block boundaries where every gradient waveform is zero |
 | Execution stream | The order in which segments are played over the whole scan |
 | Label table | The Pulseq labels of every readout, three of which fill the ADC label columns |
-| RF statistics | For each RF definition: its transmit channels and flip angle, as pypulseqpp counts them; its duration and power from the envelope; and the bandwidth and bands of a multiband pulse from its spectrum |
+| RF statistics | For each RF definition: its transmit channels, flip angle and energy, as pypulseqpp counts them; its duration from the envelope; and the bandwidth and bands of a multiband pulse from its spectrum |
 
 The limits and rasters of the scanner (`pypulseqpp.Opts`) are those under which
-the scan is segmented. The spectral statistics are measured by pypulseqpp's
+the scan is segmented. A segment boundary falls where every gradient is zero,
+judged by the first and last values each arbitrary gradient's library row
+stores for the event's edges; a trapezoid starts and ends at zero. The
+spectral statistics are measured by pypulseqpp's
 `calc_rf_bandwidth` when the chain is read, with the Pulseq recipe of the width
 at half the spectral peak; a band is a run of the spectrum above 30 % of its
 peak, and its offset is measured from the carrier. A dynamic pTx pulse holds
@@ -131,6 +134,9 @@ time, when the times are that many identical copies. Its flip angle is
 pypulseqpp's `Sequence.rf_flip_angles`, the channels' integrals summed
 coherently, the flip where every channel has unit, in-phase sensitivity; the
 envelope for the power statistics is the root sum of squares of the channels.
+The energy is pypulseqpp's `calc_rf_power`, the integral of $|b_1|^2$ summed
+over the channels, divided by the square of the envelope's peak: the cache
+holds it for the envelope scaled to unit peak, in seconds.
 A pulse a file leaves unlabelled takes the use pypulseqpp detects for it when
 the chain is read. `label_column_map` selects the three labels the
 interpreter records per readout, as indices in the order SLC, PHS, REP, AVG,

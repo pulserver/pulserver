@@ -737,6 +737,7 @@ static int compute_grad_stats(
                 int seen;
                 const pulseq_shape *stored;
                 const PULSEQ_REAL *w;
+                float peak;
 
                 if (!grad_table || grad_table[row].id != def_idx)
                     continue;
@@ -761,6 +762,7 @@ static int compute_grad_stats(
                     float p;
 
                     p = (stored->samples[5] > 1e-9f) ? stored->samples[5] : 1.0f;
+                    peak = p;
                     cand.first_value = stored->samples[3] / p;
                     cand.last_value = stored->samples[4] / p;
                     cand.slew_rate = 0.0f;
@@ -814,6 +816,7 @@ static int compute_grad_stats(
                     }
 
                     p = (max_abs > 1e-9f) ? max_abs : 1.0f;
+                    peak = p;
                     cand.first_value = (float)w[0] / p;
                     cand.last_value = (float)w[num_samples - 1] / p;
                     cand.slew_rate = (max_dabs / p) / grad_raster_us * 1e6f;
@@ -829,7 +832,9 @@ static int compute_grad_stats(
 
                     for (i = 0; i < num_samples; ++i)
                         waveform[i] = w[i];
-                    normalize_waveform(waveform, num_samples);
+                    peak = normalize_waveform(waveform, num_samples);
+                    if (!(peak > 1e-9f))
+                        peak = 1.0f;
 
                     for (i = 0; i < num_samples; ++i)
                         sq_wave[i] = waveform[i] * waveform[i];
@@ -864,6 +869,18 @@ static int compute_grad_stats(
                 }
 
             stats_ready:
+                /* The values at the event's edges are the ones its library row
+                 * stores. A uniform shape's samples sit half a raster inside
+                 * the event, so its end samples differ from them by up to
+                 * slew x raster / 2. */
+                {
+                    const float scale = (float)seq->grad_library[row][1] * peak;
+                    if (scale > 1e-9f || scale < -1e-9f)
+                    {
+                        cand.first_value = (float)seq->grad_library[row][2] / scale;
+                        cand.last_value = (float)seq->grad_library[row][3] / scale;
+                    }
+                }
                 if (desc && desc->grad_shape_first && shape_id <= desc->num_grad_shape_stats)
                 {
                     desc->grad_shape_first[shape_id - 1] = cand.first_value;
@@ -959,8 +976,8 @@ static int compute_rf_stats(
     pulseg_rf_definition *rd;
 
 
-    float rf_abs, sum_signed;
-    float sum_sq;
+    float sum_signed;
+    double energy_per_amp2;
     float *mag_view = NULL;
     float *phase_view = NULL;
     int fail_rc = PULSEG_ERR_ALLOC_FAILED;
@@ -1008,8 +1025,10 @@ static int compute_rf_stats(
                 rd->stats.band_freq_offsets_hz[bi] = 0.0f;
         }
 
-        /* The largest amplitude any event of the definition plays, and the
-         * flip angle pypulseqpp gives that event. */
+        /* The largest amplitude any event of the definition plays, the flip
+         * angle pypulseqpp gives that event, and pypulseqpp's energy of it per
+         * unit amplitude squared, which every event of the definition shares. */
+        energy_per_amp2 = 0.0;
         if (rf_table && rf_table_size > 0)
         {
             for (i = 0; i < rf_table_size; ++i)
@@ -1024,7 +1043,11 @@ static int compute_rf_stats(
                             rd->stats.flip_angle_rad = flip;
                     }
                     if (amp > rd->stats.base_amplitude_hz)
+                    {
                         rd->stats.base_amplitude_hz = amp;
+                        if (seq->rf_energy)
+                            energy_per_amp2 = seq->rf_energy[i] / ((double)amp * amp);
+                    }
                 }
             }
         }
@@ -1261,18 +1284,10 @@ static int compute_rf_stats(
             /* area = signed real part = ∫h_norm dt [s] */
             sum_signed = (float)dre;
         }
-        /* b1sq power (neutral) still needs the uniform-grid envelope. */
-        sum_sq = 0.0f;
-        for (i = 0; i < num_uniform; ++i)
-        {
-            rf_abs = (float)sqrt(
-                rf_re_uniform[i] * rf_re_uniform[i] + rf_im_uniform[i] * rf_im_uniform[i]);
-            sum_sq += rf_abs * rf_abs;
-        }
-
         rd->stats.area = sum_signed;
-        /* b1sq power: integral |B1_norm(t)|^2 dt (normalised waveform, units: s) */
-        rd->stats.total_b1sq_power = sum_sq * rf_raster_us * 1e-6f;
+        /* The integral of |B1(t)|^2 of the unit-peak envelope, in s. */
+        rd->stats.total_b1sq_power =
+            (max_mag > 1e-9f) ? (float)(energy_per_amp2 / ((double)max_mag * max_mag)) : 0.0f;
 
         /* Vendor-specific envelope stats: computed by the optional
          * callback from a read-only view of the uniform-grid envelope;

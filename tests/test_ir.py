@@ -422,6 +422,44 @@ def test_an_offset_is_three_values():
         ir.prescribe(pp.Sequence(), (0.01, 0.0))
 
 
+def _lobe_waveform():
+    """A sine lobe on the gradient raster, in Hz/m.
+
+    Its samples sit half a raster inside the event, so the last one is live
+    whatever value a library row stores for the lobe's end.
+    """
+    count = 50
+    return 0.5 * SYSTEM.max_grad * np.sin(np.pi * (np.arange(count) + 0.5) / count)
+
+
+def _lobe(path, last):
+    """A pulse, then the lobe on x, starting at zero and ending at ``last`` Hz/m."""
+    sequence = pp.Sequence(SYSTEM)
+    sequence.add_block(
+        pp.make_sinc_pulse(
+            flip_angle=0.1, duration=1e-3, use="excitation", system=SYSTEM
+        )
+    )
+    sequence.add_block(
+        pp.make_arbitrary_grad(
+            "x", _lobe_waveform(), first=0.0, last=last, system=SYSTEM
+        )
+    )
+    sequence.write(path)
+    return path
+
+
+def test_a_gradient_its_file_ends_at_zero_may_end_the_repetition(tmp_path):
+    assert _lobe_waveform()[-1] > 100.0
+    assert ir.convert(_lobe(tmp_path / "lobe.seq", last=0.0), SYSTEM).is_file()
+
+
+def test_a_gradient_its_file_ends_live_may_not_end_the_repetition(tmp_path):
+    seq = _lobe(tmp_path / "live.seq", last=float(_lobe_waveform()[-1]))
+    with pytest.raises(ValueError, match="does not end with zero gradient"):
+        ir.convert(seq, SYSTEM)
+
+
 def test_a_file_within_the_scanner_limits_has_no_problem():
     """The fixture's 20 us gradient raster times its waveforms, not the scanner's 10 us."""
     assert ir.check(FIXTURES / "gre_2d_3sl.seq", SYSTEM) == []

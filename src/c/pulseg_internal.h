@@ -156,8 +156,8 @@ typedef struct pulseg_grad_aggregate
 {
     float max_amplitude; /* largest |amplitude| any instance reaches  */
     float min_amplitude; /* smallest                                  */
-    float max_abs_first; /* largest |w[0]| over the shapes used        */
-    float max_abs_last;  /* largest |w[n-1]|                          */
+    float max_abs_first; /* largest |first value| over the shapes used */
+    float max_abs_last;  /* largest |last value|                       */
     float max_slew_rate; /* largest normalised slew, 1/s              */
 } pulseg_grad_aggregate;
 
@@ -773,8 +773,9 @@ int pulseg__rf_event_use(const pulseg_rf_definition *rdef, const pulseg_rf_table
 float pulseg__grad_boundary_first(const pulseg_sequence_descriptor *desc, int raw_id);
 float pulseg__grad_boundary_last(const pulseg_sequence_descriptor *desc, int raw_id);
 
-/* Signed endpoint values of the NORMALISED waveform of pulseq shape @p
- * shape_id, or 0 when there is no such shape (a trapezoid, notably, which
+/* Signed values of the NORMALISED waveform of pulseq shape @p shape_id at
+ * the start and end of the event, as the gradient's library row stores
+ * them, or 0 when there is no such shape (a trapezoid, notably, which
  * starts and ends at zero by construction).  Multiply by an instance's own
  * amplitude for the value that instance actually plays. */
 float pulseg__grad_shape_first(const pulseg_sequence_descriptor *desc, int shape_id);
