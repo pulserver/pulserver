@@ -214,16 +214,25 @@ amplitude is written as the rotation leaves it, so the k-space of a file
 exported under an oblique prescription agrees with the played trajectory to a
 relative $10^{-5}$ of its extent.
 
-A scheduled job simulates every fixture and every sequence pypulseqpp ships
-with KomaMRI twice, as designed and as exported from its cache, over one
-phantom whose density, relaxation times and off-resonance vary across it, and
-compares the two signals sample by sample. KomaMRI drops the ppm term of an
-offset, so a design file carrying one is given to it as Pulseq 1.4.1, whose
-writer resolves the term; and its rotation of a block can drop a corner a
-gradient holds twice, such as the peak of a trapezoid without a flat top, so
-the job turns a design's gradients itself. The two simulations then differ
-only where the cache plays something other than the design, or by the rounding
-of the text format.
+A job run every night and on demand simulates every fixture and every sequence
+pypulseqpp ships with KomaMRI, over one phantom whose density, relaxation times
+and off-resonance vary across it: as designed, and as exported from its cache.
+KomaMRI drops the ppm term of an offset, so a design file carrying one is given
+to it as Pulseq 1.4.1, whose writer resolves the term; and its rotation of a
+block can drop a corner a gradient holds twice, such as the peak of a trapezoid
+without a flat top, so the job turns a design's gradients itself. The two
+simulations then differ only where the cache plays something other than the
+design, or by the rounding of the text format.
+
+The same job compares KomaMRI with pypulseqpp's Bloch simulation. KomaMRI adds
+a pulse's phase shape and phase offset to its field with the opposite sign to
+pypulseqpp, and refers the phase its frequency offset accrues to the pulse's
+centre. The exported file is therefore simulated a third time with each pulse
+rewritten in KomaMRI's convention, its samples conjugated and its phase offset
+$\phi$ replaced by $-\phi - 2\pi f t_c$, for the frequency offset $f$ and the
+centre $t_c$, so that KomaMRI plays the field pypulseqpp plays. That signal,
+demodulated by the receiver phase the export returns, is compared with
+pypulseqpp's simulation of the cache on the same spins.
 
 ## What a run establishes
 
@@ -279,7 +288,10 @@ of the text format.
   the samples, offsets, centre and use of the design's.
 - In the scheduled KomaMRI job, the signal simulated from the exported file of
   every fixture and every shipped sequence is the one simulated from its
-  design, to the rounding of the text format.
+  design, to the rounding of the text format, and pypulseqpp's Bloch
+  simulation of the cache gives the signal KomaMRI simulates of the exported
+  file in its own RF convention, to the difference of the two simulators' time
+  steps through an RF pulse.
 
 ## See also
 

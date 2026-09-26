@@ -1,26 +1,17 @@
 name: KomaMRI
 
 # Simulates, with the KomaMRI Bloch simulator, every fixture and every sequence
-# pypulseqpp ships, twice: as designed, and as the file virtual.export writes of
-# what its cache plays. The two signals agree unless the cache plays something
-# other than the design. Every night against pypulseqpp's latest release, and
-# on a pull request that changes the IR, the export, the requirements or the
-# job itself.
+# pypulseqpp ships: as designed, and as the file virtual.export writes of what
+# its cache plays, whose signals agree unless the cache plays something other
+# than the design; and as that file in KomaMRI's RF convention, whose signal
+# pypulseqpp's Bloch simulation of the cache reproduces. Every night against
+# pypulseqpp's latest release, and on demand. The virtual scanner's own tests
+# hold the cache to the design on every pull request.
 
 on:
   schedule:
     - cron: "17 3 * * *"
   workflow_dispatch:
-  pull_request:
-    paths:
-      - ".github/workflows/koma.yml"
-      - "pyproject.toml"
-      - "src/c/**"
-      - "src/cpp/**"
-      - "src/pulserver/ir/**"
-      - "src/pulserver/virtual/_export.py"
-      - "tests/koma/**"
-      - "tests/test_koma.py"
 
 permissions:
   contents: read
