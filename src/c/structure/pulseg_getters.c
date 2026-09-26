@@ -2965,15 +2965,15 @@ static int resolve_block_instance(
     inst->norot_flag = bte->norot_flag;
     inst->nopos_flag = bte->nopos_flag;
 
-    /* Digital output */
-    inst->digitalout_flag = (bte->digitalout_id >= 0) ? 1 : 0;
-    if (inst->digitalout_flag && bte->digitalout_id < desc->num_triggers)
+    /* Digital output: a trigger event of output type.  An input trigger is
+     * its segment's, which the segment reports. */
+    inst->digitalout_flag = 0;
+    inst->digitalout_channel = -1;
+    if (bte->digitalout_id >= 0 && bte->digitalout_id < desc->num_triggers &&
+        desc->trigger_events[bte->digitalout_id].trigger_type == PULSEQ_TRIGGER_TYPE_OUTPUT)
     {
+        inst->digitalout_flag = 1;
         inst->digitalout_channel = desc->trigger_events[bte->digitalout_id].trigger_channel;
-    }
-    else
-    {
-        inst->digitalout_channel = -1;
     }
 
     /* ADC */

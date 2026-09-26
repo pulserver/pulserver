@@ -25,12 +25,13 @@ with `waveforms`, returns each played block's gradients: the instance's
 amplitude times the waveform that instance plays, timed from the block's
 start. The accessors that answer for a segment position,
 `pulseg_get_grad_amplitude` and `pulseg_get_grad_time_us`, answer through
-its representative, the instance of largest energy; where the instances of
-one position play distinct shapes, as the interleaves of a spiral drawn as
-distinct shapes do, `pulseg_get_cursor_grad_waveform` returns the shape of
-the instance at the cursor. A block at a position whose blocks carry a
-rotation plays its rotated wave instead, which `pulseg_materialize_wave`
-returns, at the amplitudes the instance sets ({doc}`ir-cache`). It also
+its representative, the instance of largest energy, whose events the position
+is prepared with; `pulseg_get_cursor_grad_waveform` answers for the instance
+at the cursor. A block at a position that plays waves, one whose blocks carry
+a rotation or play a shape the prepared events do not hold, as the interleaves
+of a spiral drawn as distinct shapes do, plays its wave instead, which
+`pulseg_materialize_wave` returns, at the amplitudes the instance sets
+({doc}`ir-cache`). It also
 returns each played RF pulse: the
 instance's amplitude times the magnitude and phase shapes of its definition,
 which `pulseg_get_rf_magnitude` and `pulseg_get_rf_phase` return, the phase in

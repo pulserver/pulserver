@@ -1,6 +1,7 @@
 /**
  * @file pulseg_waves.c
- * @brief Rotated waves: the waveform each axis of a rotated block plays.
+ * @brief Waves: the waveform each axis plays of a block at a position that
+ *        plays waves, and where a playout holds them.
  *
  * See pulseg_wave in pulseg_internal.h for what a wave is, and
  * pulseg_materialize_wave() for how it is sampled.
@@ -417,7 +418,7 @@ int pulseg__wave_materialize(
 
 /* The amplitude of largest magnitude, with its sign, among the gradient
  * events of @p bte, the first axis on a tie; 0 when it drives none.  What a
- * rotated wave is scaled by. */
+ * wave is scaled by. */
 static float wave_scale(
     const pulseg_sequence_descriptor *desc,
     const pulseg_block_table_element *bte)
@@ -717,9 +718,7 @@ int pulseg_sample_wave(
     return PULSEG_SUCCESS;
 }
 
-/* The raster intervals that cover [start_us, end_us]: the first starts on the
- * raster at or before start_us, the last ends at or after end_us. */
-static void cover(float start_us, float end_us, float raster_us, pulseg_wave_region *region)
+void pulseg__wave_cover(float start_us, float end_us, float raster_us, pulseg_wave_region *region)
 {
     const double first = floor((double)start_us / (double)raster_us + 1e-4) * (double)raster_us;
     const long n = (long)ceil(((double)end_us - first) / (double)raster_us - 1e-4);
@@ -830,7 +829,8 @@ static int lay_out_waves(const pulseg_collection *coll, float raster_us, pulseg_
         plan->num_waves[s] = desc->num_waves;
         for (w = 0; w < desc->num_waves; ++w)
         {
-            cover(desc->waves[w].start_us, desc->waves[w].end_us, raster_us, &plan->waves[s][w]);
+            pulseg__wave_cover(
+                desc->waves[w].start_us, desc->waves[w].end_us, raster_us, &plan->waves[s][w]);
             place(&plan->waves[s][w], peak_axes(&desc->waves[w]), plan->resident_samples);
         }
     }
@@ -858,7 +858,7 @@ static int lay_out_position(
         slot[h].samples = 0;
         slot[h].start_us = 0.0f;
         if (block.wave_points > 0)
-            cover(block.wave_start_us, block.wave_end_us, raster_us, &slot[h]);
+            pulseg__wave_cover(block.wave_start_us, block.wave_end_us, raster_us, &slot[h]);
         place(&slot[h], block.wave_points > 0 ? block.wave_axes : 0, used);
     }
     return PULSEG_SUCCESS;
@@ -971,7 +971,7 @@ static void note_spare(
     }
 }
 
-static int global_segment(const pulseg_collection *coll, int s, int local)
+int pulseg__global_segment(const pulseg_collection *coll, int s, int local)
 {
     if (!coll->seg_local_to_global)
         return local;
@@ -1009,7 +1009,7 @@ static int check_loading(
         walk.last = -1;
         for (n = 0; n < desc->exec_stream_len; ++n)
             if (instance_starts(&walk, desc, n))
-                note_spare(plan, budget, &walk, global_segment(coll, s, walk.local), s, n);
+                note_spare(plan, budget, &walk, pulseg__global_segment(coll, s, walk.local), s, n);
     }
     if (plan->tightest_subseq < 0)
         plan->least_spare_us = 0.0f;
@@ -1055,7 +1055,7 @@ static int wave_memory_shortfall(
         diag->code = PULSEG_ERR_WAVE_MEMORY;
         pulseg__diag_printf(
             diag,
-            "rotated waves take %ld, %ld, %ld samples at once and %ld, %ld, %ld in two slots "
+            "waves take %ld, %ld, %ld samples at once and %ld, %ld, %ld in two slots "
             "per position, against %ld per axis",
             plan->resident_samples[0], plan->resident_samples[1], plan->resident_samples[2],
             plan->streamed_samples[0], plan->streamed_samples[1], plan->streamed_samples[2],
@@ -1071,7 +1071,7 @@ static int wave_loading_shortfall(const pulseg_wave_plan *plan, pulseg_diagnosti
         diag->code = PULSEG_ERR_WAVE_LOADING;
         pulseg__diag_printf(
             diag,
-            "subsequence %d, execution-stream position %d: loading its rotated waves "
+            "subsequence %d, execution-stream position %d: loading its waves "
             "overruns the playout before it by %.1f us",
             plan->tightest_subseq, plan->tightest_position, (double)(-plan->least_spare_us));
     }

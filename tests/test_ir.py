@@ -400,8 +400,8 @@ def _repetition_lines(seq, count):
     return lines
 
 
-@pytest.fixture(scope="module")
-def scanner_reader(tmp_path_factory):
+@pytest.fixture(name="scanner_reader", scope="module")
+def scanner_reader_fixture(tmp_path_factory):
     """The cache reader compiled as a scanner builds it: 32-bit, for one vendor."""
     directory = tmp_path_factory.mktemp("reader")
     probe = directory / "probe.c"
@@ -413,7 +413,7 @@ def scanner_reader(tmp_path_factory):
     )
     if toolchain.returncode != 0:
         pytest.skip("no 32-bit C toolchain")
-    folders = ("pulseq", "core", "io", "structure", "cache")
+    folders = ("pulseq", "core", "io", "structure", "cache", "playout")
     sources = [
         str(p) for folder in folders for p in sorted((C_SOURCES / folder).glob("*.c"))
     ]
@@ -512,11 +512,68 @@ def test_the_scanner_reader_lays_out_the_rotated_waves_as_the_host_does(
         check=True,
     ).stdout.splitlines()
     first = printed.index(next(x for x in printed if x.startswith("wave_plan")))
+    last = printed.index(next(x for x in printed if x.startswith("prepare")))
     # This build loads vendor-neutral caches alone.
     convert(seq, SYSTEM)
     plan = ir.plan_waves(seq, ir.WaveBudget(max_samples, 4.0))
     assert plan["mode"] == ("resident" if max_samples == 10**6 else "streamed")
-    assert printed[first:] == _plan_lines(plan)
+    assert printed[first:last] == _plan_lines(plan)
+
+
+def _playout_lines(record):
+    """What the scanner reader prints of both stages, from the host's record."""
+    blocks = record["blocks"]
+    loads = record["loads"]
+    streamed = record["mode"] == "streamed"
+    lines = [
+        f"prepare rc 1 positions {record['positions']['segment'].size} "
+        f"loads {0 if streamed else loads}"
+    ]
+    for n in range(blocks["segment"].size):
+        if blocks["position"][n] == 0:
+            lines.append(
+                f"instance {blocks['subsequence'][n]} {blocks['segment'][n]} "
+                f"{blocks['instance'][n]} {blocks['half'][n]} {blocks['first_position'][n]}"
+            )
+        if blocks["wave"][n] >= 0:
+            offsets = " ".join(str(o) for o in blocks["wave_offset"][n])
+            lines.append(
+                f"block {n} wave {blocks['wave'][n]} offset {offsets} "
+                f"samples {blocks['wave_samples'][n]}"
+            )
+    lines.append(
+        f"scan rc 1 instances {record['instances']} blocks {blocks['segment'].size} "
+        f"loads {loads if streamed else 0}"
+    )
+    return lines
+
+
+@pytest.mark.parametrize("max_samples", [10**6, 3000])
+def test_the_scanner_reader_plays_the_waves_as_the_host_records_them(
+    max_samples, tmp_path, scanner_reader
+):
+    seq = _copy("zte_3d.seq", tmp_path)
+    cache = convert(
+        seq, SYSTEM, vendor=VENDOR, label_column_map=LABELS, cache_ext=".cache"
+    )
+    printed = subprocess.run(
+        [
+            str(scanner_reader),
+            str(cache),
+            str(seq.stat().st_size),
+            str(max_samples),
+            "4",
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.splitlines()
+    first = printed.index(next(x for x in printed if x.startswith("prepare")))
+    # This build loads vendor-neutral caches alone.
+    convert(seq, SYSTEM)
+    record = ir.playout(seq, ir.WaveBudget(max_samples, 4.0))
+    assert record["mode"] == ("resident" if max_samples == 10**6 else "streamed")
+    assert printed[first:] == _playout_lines(record)
 
 
 def test_the_scanner_reader_reads_the_sar_ratios_a_cache_carries(

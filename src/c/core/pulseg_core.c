@@ -1023,7 +1023,7 @@ static int segments_content_equal(
             return 0;
         if (sa->nopos_flag[b] != sb->nopos_flag[b])
             return 0;
-        /* A shared rotated-wave slot is reserved once, at one span. */
+        /* A shared wave slot is reserved once, at one span. */
         if (sa->initial_states && sb->initial_states &&
             !same_wave_slot(&sa->initial_states[b], &sb->initial_states[b]))
             return 0;

@@ -1,14 +1,16 @@
 /**
  * @file waves.cpp
- * @brief The rotated waves of a subsequence: every distinct combination its
- *        rotated blocks play, the wave each block plays, and the length each
- *        segment position reserves for them.
+ * @brief The waves of a subsequence: every distinct combination the blocks at
+ *        its wave positions play, the wave each block plays, and the span
+ *        each segment position reserves for them.
  */
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstring>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 extern "C"
@@ -197,71 +199,283 @@ class WaveTable
     std::vector<pulseg_wave> waves_;
 };
 
-/* The position each execution-stream entry plays at in its segment
- * instance, entry by entry. */
+/* A segment position: its segment, -1 outside every segment, and the index
+ * of its block in the segment. */
+struct Position
+{
+    int segment = -1;
+    int index = 0;
+};
+
+/* The position each execution-stream entry plays at, entry by entry. */
 class PositionWalk
 {
   public:
-    /* The block-table entry @p n plays where the blocks of its position carry
-     * a rotation, with @p state that position's record, null when the segment
-     * keeps none; -1 elsewhere. */
-    int rotated_block(pulseg_sequence_descriptor *desc, int n, pulseg_block_initial_state *&state)
+    Position next(const pulseg_sequence_descriptor *desc, int n)
     {
-        const int block = pulseg__exec_block_idx(desc, n);
-        const bool rotated = advance(desc, pulseg__exec_seg_id(desc, n), state);
-        return (rotated && block >= 0 && block < desc->num_blocks) ? block : -1;
-    }
-
-  private:
-    bool advance(pulseg_sequence_descriptor *desc, int s, pulseg_block_initial_state *&state)
-    {
-        state = nullptr;
+        const int s = pulseg__exec_seg_id(desc, n);
         if (s < 0 || s >= desc->num_unique_segments)
         {
             previous_ = -1;
-            return false;
+            return Position{};
         }
-        pulseg_virtual_segment &seg = desc->segment_definitions[s];
-        const int blocks = seg.num_blocks > 0 ? seg.num_blocks : 1;
-        position_ = (s == previous_) ? (position_ + 1) % blocks : 0;
+        const int blocks = std::max(desc->segment_definitions[s].num_blocks, 1);
+        index_ = (s == previous_) ? (index_ + 1) % blocks : 0;
         previous_ = s;
-        if (!seg.has_rotation || !seg.has_rotation[position_])
-            return false;
-        if (seg.initial_states)
-            state = &seg.initial_states[position_];
-        return true;
+        return Position{s, index_};
     }
 
+  private:
     int previous_ = -1;
-    int position_ = 0;
+    int index_ = 0;
 };
 
-} // namespace
+/* Per axis, the gradient definition and shape a block plays; -1 where it
+ * drives none. */
+using Events = std::array<std::array<int, 2>, 3>;
 
-/* Record, for a subsequence whose segments and execution stream are built,
- * the rotated wave of every block at a position whose blocks carry a
- * rotation, and at each such position the points, span and axes of the waves
- * it plays.  Blocks at other positions play their own shapes and get none. */
-extern "C" int pulseg__build_waves(pulseg_sequence_descriptor *desc)
+Events gradient_events(const pulseg_sequence_descriptor *desc, const pulseg_block_table_element &bte)
 {
-    int rc = reset_waves(desc);
-    if (PULSEG_FAILED(rc) || desc->num_blocks <= 0)
-        return rc;
+    const int ids[3] = {bte.gx_id, bte.gy_id, bte.gz_id};
+    Events events;
+    for (int d = 0; d < 3; ++d)
+    {
+        events[static_cast<size_t>(d)] = {-1, 0};
+        if (ids[d] < 0 || ids[d] >= desc->grad_table_size)
+            continue;
+        const pulseg_grad_table_element &element = desc->grad_table[ids[d]];
+        if (element.id >= 0 && element.id < desc->num_unique_grads)
+            events[static_cast<size_t>(d)] = {element.id, element.shape_id};
+    }
+    return events;
+}
 
-    WaveTable waves(desc);
+/* Per segment position, whether a block there drives an axis with a gradient
+ * definition or shape other than the one the position's initial state names:
+ * the event a playout prepares for the position, which cannot follow it by
+ * its amplitude.  An axis a block does not drive plays that event at zero. */
+class ShapeVariation
+{
+  public:
+    explicit ShapeVariation(const pulseg_sequence_descriptor *desc)
+        : desc_(desc), varies_(static_cast<size_t>(std::max(desc->num_unique_segments, 0)))
+    {
+        for (size_t s = 0; s < varies_.size(); ++s)
+            varies_[s].assign(
+                static_cast<size_t>(std::max(desc->segment_definitions[s].num_blocks, 1)), 0);
+    }
+
+    void note(const Position &at, const Events &events)
+    {
+        const pulseg_virtual_segment &seg = desc_->segment_definitions[at.segment];
+        if (!seg.initial_states || at.index >= seg.num_blocks)
+            return;
+        const pulseg_block_initial_state &prepared = seg.initial_states[at.index];
+        for (int d = 0; d < 3; ++d)
+        {
+            const std::array<int, 2> &played = events[static_cast<size_t>(d)];
+            if (played[0] >= 0 &&
+                (played[0] != prepared.grad_def_id[d] || played[1] != prepared.grad_shape_id[d]))
+                flag(at) = 1;
+        }
+    }
+
+    bool varies(const Position &at) { return flag(at) != 0; }
+
+  private:
+    char &flag(const Position &at)
+    {
+        return varies_[static_cast<size_t>(at.segment)][static_cast<size_t>(at.index)];
+    }
+
+    const pulseg_sequence_descriptor *desc_;
+    std::vector<std::vector<char>> varies_;
+};
+
+/* Whether the blocks at @p at play waves rather than the position's own
+ * gradient events: where they carry a rotation, or drive an axis the events
+ * cannot play. */
+bool plays_waves(const pulseg_sequence_descriptor *desc, const Position &at, ShapeVariation &shapes)
+{
+    const pulseg_virtual_segment &seg = desc->segment_definitions[at.segment];
+    return (seg.has_rotation && seg.has_rotation[at.index]) || shapes.varies(at);
+}
+
+/* The waves and the positions that play them, joined into groups that share
+ * one span: every wave, and every position that plays one, covers the union
+ * of the spans of the waves of its group.  The waves a position plays then
+ * all cover the one interval, and so does every position a wave plays at. */
+class SpanGroups
+{
+  public:
+    explicit SpanGroups(const pulseg_sequence_descriptor *desc)
+    {
+        int total = 0;
+        first_.reserve(static_cast<size_t>(std::max(desc->num_unique_segments, 0)));
+        for (int s = 0; s < desc->num_unique_segments; ++s)
+        {
+            first_.push_back(total);
+            total += std::max(desc->segment_definitions[s].num_blocks, 1);
+        }
+        positions_ = total;
+    }
+
+    void played(const Position &at, int wave)
+    {
+        edges_.emplace_back(node(at), wave);
+    }
+
+    /* Widen the spans of the waves of @p desc and of the positions that play
+     * them to those of their groups. */
+    void widen(pulseg_sequence_descriptor *desc)
+    {
+        parent_.resize(static_cast<size_t>(positions_ + desc->num_waves));
+        for (size_t i = 0; i < parent_.size(); ++i)
+            parent_[i] = static_cast<int>(i);
+        for (const auto &edge : edges_)
+            parent_[static_cast<size_t>(root(edge.first))] = root(positions_ + edge.second);
+        std::vector<std::pair<float, float>> span(parent_.size(), {0.0f, 0.0f});
+        std::vector<bool> spanned(parent_.size(), false);
+        for (int w = 0; w < desc->num_waves; ++w)
+        {
+            const size_t r = static_cast<size_t>(root(positions_ + w));
+            const pulseg_wave &wave = desc->waves[w];
+            span[r] = spanned[r] ? std::make_pair(std::min(span[r].first, wave.start_us),
+                                                  std::max(span[r].second, wave.end_us))
+                                 : std::make_pair(wave.start_us, wave.end_us);
+            spanned[r] = true;
+        }
+        for (int w = 0; w < desc->num_waves; ++w)
+        {
+            const auto &group = span[static_cast<size_t>(root(positions_ + w))];
+            desc->waves[w].start_us = group.first;
+            desc->waves[w].end_us = group.second;
+        }
+        for (int s = 0; s < desc->num_unique_segments; ++s)
+            widen_positions(desc->segment_definitions[s], s, span);
+    }
+
+  private:
+    int node(const Position &at) const
+    {
+        return first_[static_cast<size_t>(at.segment)] + at.index;
+    }
+
+    int root(int x)
+    {
+        while (parent_[static_cast<size_t>(x)] != x)
+        {
+            parent_[static_cast<size_t>(x)] =
+                parent_[static_cast<size_t>(parent_[static_cast<size_t>(x)])];
+            x = parent_[static_cast<size_t>(x)];
+        }
+        return x;
+    }
+
+    void widen_positions(
+        pulseg_virtual_segment &seg,
+        int s,
+        const std::vector<std::pair<float, float>> &span)
+    {
+        if (!seg.initial_states)
+            return;
+        for (int b = 0; b < seg.num_blocks; ++b)
+        {
+            pulseg_block_initial_state &state = seg.initial_states[b];
+            if (state.wave_points == 0)
+                continue;
+            const auto &group = span[static_cast<size_t>(root(node(Position{s, b})))];
+            state.wave_start_us = group.first;
+            state.wave_end_us = group.second;
+        }
+    }
+
+    std::vector<int> first_;
+    int positions_ = 0;
+    std::vector<std::pair<int, int>> edges_;
+    std::vector<int> parent_;
+};
+
+/* Note, entry by entry, the gradient events each position's blocks play. */
+void note_shapes(const pulseg_sequence_descriptor *desc, ShapeVariation &shapes)
+{
     PositionWalk walk;
     for (int n = 0; n < desc->exec_stream_len; ++n)
     {
-        pulseg_block_initial_state *state = nullptr;
-        const int block = walk.rotated_block(desc, n, state);
+        const Position at = walk.next(desc, n);
+        const int block = pulseg__exec_block_idx(desc, n);
+        if (at.segment >= 0 && block >= 0 && block < desc->num_blocks)
+            shapes.note(at, gradient_events(desc, desc->block_table[block]));
+    }
+}
+
+/* The block-table entry execution-stream entry @p n plays, at @p at, where
+ * that position plays waves; -1 elsewhere. */
+int wave_block(
+    const pulseg_sequence_descriptor *desc,
+    int n,
+    const Position &at,
+    ShapeVariation &shapes)
+{
+    const int block = pulseg__exec_block_idx(desc, n);
+    if (at.segment < 0 || block < 0 || block >= desc->num_blocks || !plays_waves(desc, at, shapes))
+        return -1;
+    return block;
+}
+
+/* Give every block at a position that plays waves its wave, and each such
+ * position its record of the waves it plays. */
+int assign_waves(
+    pulseg_sequence_descriptor *desc,
+    ShapeVariation &shapes,
+    WaveTable &waves,
+    SpanGroups &groups)
+{
+    int rc = PULSEG_SUCCESS;
+    PositionWalk walk;
+    for (int n = 0; n < desc->exec_stream_len; ++n)
+    {
+        const Position at = walk.next(desc, n);
+        const int block = wave_block(desc, n, at, shapes);
         if (block < 0)
             continue;
         if (desc->block_wave[block] < 0)
             desc->block_wave[block] = waves.intern(block, rc);
         if (PULSEG_FAILED(rc))
             return rc;
-        if (state && desc->block_wave[block] >= 0)
-            reserve(*state, waves[desc->block_wave[block]]);
+        const int w = desc->block_wave[block];
+        if (w < 0)
+            continue;
+        pulseg_virtual_segment &seg = desc->segment_definitions[at.segment];
+        if (seg.initial_states)
+            reserve(seg.initial_states[at.index], waves[w]);
+        groups.played(at, w);
     }
-    return waves.store(desc);
+    return rc;
+}
+
+} // namespace
+
+/* Record, for a subsequence whose segments and execution stream are built,
+ * the wave of every block at a position that plays waves -- one whose blocks
+ * carry a rotation, or drive an axis with a gradient definition or shape other
+ * than the one the position's events are prepared with -- and at each such
+ * position the points, span and axes of the waves it plays.  Blocks at other
+ * positions play their position's events and get none. */
+extern "C" int pulseg__build_waves(pulseg_sequence_descriptor *desc)
+{
+    int rc = reset_waves(desc);
+    if (PULSEG_FAILED(rc) || desc->num_blocks <= 0)
+        return rc;
+
+    ShapeVariation shapes(desc);
+    note_shapes(desc, shapes);
+    WaveTable waves(desc);
+    SpanGroups groups(desc);
+    rc = assign_waves(desc, shapes, waves, groups);
+    if (PULSEG_SUCCEEDED(rc))
+        rc = waves.store(desc);
+    if (PULSEG_SUCCEEDED(rc))
+        groups.widen(desc);
+    return rc;
 }

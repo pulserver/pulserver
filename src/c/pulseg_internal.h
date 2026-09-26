@@ -330,11 +330,10 @@ typedef struct pulseg_block_initial_state
     int rf_grad_constant;
     float rf_grad_level[3];
 
-    /* The rotated waves (pulseg_wave) the instances of this position play:
-     * the points per axis of the longest, the span from the earliest start
-     * to the latest end, in us from the block's start, and a bit per axis
-     * (1 << axis) that one of them drives.  All zero where the position plays
-     * none. */
+    /* The waves (pulseg_wave) the instances of this position play: the
+     * points per axis of the longest, the span every one of them covers, in
+     * us from the block's start, and a bit per axis (1 << axis) that one of
+     * them drives.  All zero where the position plays none. */
     int wave_points;
     float wave_start_us;
     float wave_end_us;
@@ -351,13 +350,16 @@ typedef struct pulseg_block_initial_state
 #define PULSEG_BLOCK_INITIAL_STATE_WORDS 20
 
 /* ================================================================== */
-/*  Rotated wave                                                      */
+/*  Wave                                                              */
 /* ================================================================== */
-/* The gradients a rotated block plays, as one combination per axis.
+/* The gradients a block plays as one combination per axis, at a position
+ * that plays waves: one whose blocks carry a rotation, or play a gradient
+ * definition or shape the position's prepared events do not hold.
  *
  * A rotation extension turns a block's gradients within the logical frame, so
  * output axis o plays sum_d rotation[o][d] * a_d * w_d(t): the block's three
- * normalised waveforms w_d, combined.  With m the a_d of largest magnitude,
+ * normalised waveforms w_d, combined, with the identity for a block without
+ * one.  With m the a_d of largest magnitude,
  * sign included, and ratio[d] = a_d / m, that is
  * m * sum_d rotation[o][d] * ratio[d] * w_d(t), so the combination is fixed by
  * the definitions, the shapes, the rotation and the ratios, and an instance
@@ -600,7 +602,7 @@ typedef struct pulseg_sequence_descriptor
      * downstream, 0 = keep. NULL when no LABELSET OFF is present. */
     int *off_table;
 
-    /* The rotated waves of this subsequence, serialized in COMMON, and the
+    /* The waves of this subsequence, serialized in COMMON, and the
      * wave each block-table entry plays, -1 where none, serialized in
      * INSTANCES [num_blocks].  See pulseg_wave. */
     int num_waves;
@@ -820,13 +822,21 @@ int pulseg__block_gradients(
     float *gradient[3],
     int *n);
 
-/* The rotated wave block-table entry @p block_idx plays and the amplitude it
- * plays each axis at: -1 and zeros where it plays none. */
+/* The wave block-table entry @p block_idx plays and the amplitude it plays
+ * each axis at: -1 and zeros where it plays none. */
 void pulseg__block_wave(
     const pulseg_sequence_descriptor *desc,
     int block_idx,
     int *wave_id,
     float amp_hz_per_m[3]);
+
+/* Fill @p region with the raster intervals that cover [start_us, end_us]:
+ * the first starts on the raster at or before start_us, the last ends at or
+ * after end_us.  Its offsets are left as they are. */
+void pulseg__wave_cover(float start_us, float end_us, float raster_us, pulseg_wave_region *region);
+
+/* The global segment that local segment @p local of subsequence @p s is. */
+int pulseg__global_segment(const pulseg_collection *coll, int s, int local);
 
 /* Steepest slew of the NORMALISED waveform of pulseq shape @p shape_id, in
  * 1/s, or 0 when there is no such shape.  Multiply by an instance's own
@@ -940,9 +950,9 @@ void pulseg__free_exec_stream_scratch(pulseg_sequence_descriptor *desc);
 int pulseg__build_label_table(pulseg_sequence_descriptor *desc, const pulseq_file *seq);
 int pulseg__calc_segment_timing(pulseg_sequence_descriptor *desc, pulseg_diagnostic *diag);
 
-/* The rotated waves (pulseg_wave) of a subsequence whose segments and
- * execution stream are built: the waves, the wave each block-table entry
- * plays and each segment position's wave_points. */
+/* The waves (pulseg_wave) of a subsequence whose segments and execution
+ * stream are built: the waves, the wave each block-table entry plays and each
+ * segment position's record of the waves it plays. */
 int pulseg__build_waves(pulseg_sequence_descriptor *desc);
 
 /* Per position and axis within the TR, whether the gradient amplitude varies

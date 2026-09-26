@@ -150,7 +150,7 @@ def summary(
     written with, zero when the chain is read and segmented again.
     ``readout_labels`` lists, per readout in play order, the values of the
     three labels ``label_column_map`` selects, as in force at that readout.
-    ``waves`` lists the subsequence's rotated waves, as :func:`play` indexes
+    ``waves`` lists the subsequence's waves, as :func:`play` indexes
     them: each one's point count, and its largest magnitude along x, y and z
     over that of the largest gradient event it combines.
 
@@ -252,15 +252,16 @@ def play(
           over the amplitude of the event playing it there;
         - ``gradient_hz_per_m``: ``(blocks, 3)``, the amplitude along the
           logical x, y and z axes: the factor on the shape of the gradient
-          event, or on the rotated wave, the block plays there, each
-          normalised to a largest magnitude of one;
-        - ``wave``: the rotated wave the block plays, as indexed by the
+          event, or on the wave, the block plays there, each normalised to a
+          largest magnitude of one;
+        - ``wave``: the wave the block plays, as indexed by the
           subsequence's ``waves`` in :func:`summary`, or -1 for a block that
           plays its gradient events as they are. A block plays one at every
           segment position where an instance carries a rotation other than
-          the identity: its gradient events combined and turned by its
-          rotation, so that the prescription's rotation is the only one the
-          scanner applies;
+          the identity, or plays a gradient definition or shape other than
+          the one the position's events are prepared with: its gradient
+          events combined and turned by its rotation, so that the
+          prescription's rotation is the only one the scanner applies;
         - ``norot``, ``nopos``: the block's NOROT and NOPOS flags;
         - ``adc``, ``adc_freq_hz``, ``adc_phase_rad``: whether the block
           acquires, and its frequency and phase offsets;
@@ -309,7 +310,7 @@ def play(
     RuntimeError
         With ``waveforms``, if a block's gradient holds another number of
         samples than the segment position it plays at is prepared with, or
-        its rotated wave more points than that position reserves.
+        its wave more points than that position reserves.
     """
     seq_path = Path(seq_path)
     return require("play_cache")(

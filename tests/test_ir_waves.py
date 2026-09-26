@@ -1,4 +1,4 @@
-"""Where a playout holds the rotated waves, and the samples it loads into them."""
+"""Where a playout holds the waves, and the samples it loads into them."""
 
 import itertools
 import math
