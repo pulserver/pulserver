@@ -522,6 +522,7 @@
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#stand-ins">Stand-ins</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#played-trajectory">Played trajectory</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#signal-model">Signal model</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#external-simulators">External simulators</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#what-a-run-establishes">What a run establishes</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See also</a></li>
 </ul>
@@ -665,6 +666,40 @@ angle: pypulseqpp’s <code class="docutils literal notranslate"><span class="pr
 <span class="math notranslate nohighlight">\(\cos 110° \approx -0.34\)</span> of its magnetization. A readout before the first
 excitation of its file acquires zeros.</p>
 </section>
+<section id="external-simulators">
+<h2>External simulators<a class="headerlink" href="#external-simulators" title="Link to this heading">#</a></h2>
+<p>A Bloch simulator that reads Pulseq files, KomaMRI for example, models what
+the signal model above leaves out: relaxation, slice profiles and the action
+of every RF pulse on the magnetization. A simulation of the design would test
+the design alone; <a class="reference internal" href="../generated/pulserver.virtual.export.html#pulserver.virtual.export" title="pulserver.virtual.export"><code class="xref py py-func docutils literal notranslate"><span class="pre">export()</span></code></a> writes the blocks the
+cache plays instead, so that a simulation of the file tests the IR as the
+virtual interpreter does. Each played block becomes one block of a Pulseq 1.4.1 file,
+of the duration it plays:</p>
+<ul class="simple">
+<li><p>The RF pulse the cache plays, on the RF raster, with its phase offset and
+its frequency offset from the pulse’s start applied to the samples, so that
+the file’s RF offsets are zero and no convention for them is left to the
+simulator. The channels of a pTx pulse are summed, as at unit, in-phase
+sensitivity.</p></li>
+<li><p>The gradients along the physical axes, turned by the block’s rotation and
+then by <span class="math notranslate nohighlight">\(R\)</span> except in blocks labelled <code class="docutils literal notranslate"><span class="pre">NOROT</span></code>, as the virtual interpreter
+turns them. A time-shaped gradient through the corners of all three axes
+carries each, and a step from or to zero at a gradient’s first or last
+corner is a ramp 10 ns wide, since a time shape holds one value per time.
+The file therefore needs no rotation extension, which revision 1.4.1 does
+not have.</p></li>
+<li><p>The ADC window without its offsets. Revision 1.4.1 cannot carry a phase
+modulation, so the receiver phase <span class="math notranslate nohighlight">\(\theta\)</span> of every sample is returned
+instead, and the simulated samples are demodulated by it as the playout
+demodulates.</p></li>
+</ul>
+<p>The file holds the standard sections alone. It carries neither the RF use nor
+the RF centre, which a Bloch simulation does not read. The text format writes
+a gradient’s amplitude to six significant figures, and a turned gradient’s
+amplitude is written as the rotation leaves it, so the k-space of a file
+exported under an oblique prescription agrees with the played trajectory to a
+relative <span class="math notranslate nohighlight">\(10^{-5}\)</span> of its extent.</p>
+</section>
 <section id="what-a-run-establishes">
 <h2>What a run establishes<a class="headerlink" href="#what-a-run-establishes" title="Link to this heading">#</a></h2>
 <ul class="simple">
@@ -694,6 +729,9 @@ reflected prescription is reconstructed into the image of the phantom at the
 isocentre, and the image carries the prescribed centre and the columns of
 <span class="math notranslate nohighlight">\(R\)</span> as its read, phase and slice directions; a series short of a readout is
 refused.</p></li>
+<li><p>The exported file of every fixture and every shipped sequence, read and
+integrated by pypulseqpp, has the trajectory the cache plays, under an
+axial, an oblique and a reflected prescription.</p></li>
 </ul>
 </section>
 <section id="see-also">
@@ -701,7 +739,7 @@ refused.</p></li>
 <ul class="simple">
 <li><p><a class="reference internal" href="ir-cache.html"><span class="doc">The scanner IR</span></a> — the IR, its prescription and its playback.</p></li>
 <li><p><a class="reference internal" href="../user-guide/reconstruction-client.html"><span class="doc">Reconstruction clients</span></a> — the stream the virtual reconstruction client sends.</p></li>
-<li><p><a class="reference internal" href="../api/virtual.html"><span class="doc">Virtual scanner</span></a> — the phantom, the acquisition and the client.</p></li>
+<li><p><a class="reference internal" href="../api/virtual.html"><span class="doc">Virtual scanner</span></a> — the phantom, the acquisition, the client and the export.</p></li>
 </ul>
 </section>
 </section>
@@ -756,6 +794,7 @@ refused.</p></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#stand-ins">Stand-ins</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#played-trajectory">Played trajectory</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#signal-model">Signal model</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#external-simulators">External simulators</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#what-a-run-establishes">What a run establishes</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See also</a></li>
 </ul>

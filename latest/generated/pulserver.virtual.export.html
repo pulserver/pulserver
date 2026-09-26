@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>Virtual scanner &#8212; pulserver documentation</title>
+    <title>export &#8212; pulserver documentation</title>
   
   
   
@@ -52,7 +52,7 @@
     <script src="../_static/copybutton.js?v=f281be69"></script>
     <script src="../_static/sg-tags.js?v=d80f6fa4"></script>
     <script src="../_static/scripts/sphinx-book-theme.js?v=fab101a9"></script>
-    <script>DOCUMENTATION_OPTIONS.pagename = 'api/virtual';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'generated/pulserver.virtual.export';</script>
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
@@ -61,11 +61,9 @@
             true;
         </script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
-    <link rel="canonical" href="https://pulserver.github.io/pulserver/latest/api/virtual.html" />
+    <link rel="canonical" href="https://pulserver.github.io/pulserver/latest/generated/pulserver.virtual.export.html" />
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Developer guide" href="../developer-guide/index.html" />
-    <link rel="prev" title="MRD data" href="mrd.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   <meta name="docsearch:version" content="latest" />
@@ -238,7 +236,7 @@
                 </a>
             </li>
         </ul>
-        <ul class="current nav bd-sidenav">
+        <ul class="nav bd-sidenav">
 <li class="toctree-l1 has-children"><a class="reference internal" href="../user-guide/index.html">User guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../user-guide/running.html">Running the services</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../user-guide/scanner-sequences.html">Scanner sequences</a></li>
@@ -258,28 +256,28 @@
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../examples/index.html">Examples</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../examples/protocol.html">Protocol resolution</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-protocol/01_protocol_resolution.html">Protocol resolution for a 2D gradient echo</a></li>
+<li class="toctree-l3"><a class="reference internal" href="gallery/01-protocol/01_protocol_resolution.html">Protocol resolution for a 2D gradient echo</a></li>
 </ul>
 </details></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../examples/scanner-ir.html">Scanner IR</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/02-scanner-ir/01_segmentation.html">Segmentation of a sequence for the scanner</a></li>
+<li class="toctree-l3"><a class="reference internal" href="gallery/02-scanner-ir/01_segmentation.html">Segmentation of a sequence for the scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../examples/reconstruction.html">Reconstruction</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/03-reconstruction/01_enrichment.html">Raw-data enrichment and reconstruction</a></li>
+<li class="toctree-l3"><a class="reference internal" href="gallery/03-reconstruction/01_enrichment.html">Raw-data enrichment and reconstruction</a></li>
 </ul>
 </details></li>
 </ul>
 </details></li>
-<li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">API reference</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
-<li class="toctree-l2"><a class="reference internal" href="protocol.html">Protocol</a></li>
-<li class="toctree-l2"><a class="reference internal" href="design.html">Scanner sequences</a></li>
-<li class="toctree-l2"><a class="reference internal" href="host.html">Design calls</a></li>
-<li class="toctree-l2"><a class="reference internal" href="ir.html">IR conversion</a></li>
-<li class="toctree-l2"><a class="reference internal" href="vre.html">Reconstruction proxy</a></li>
-<li class="toctree-l2"><a class="reference internal" href="recon.html">Reconstruction plugins</a></li>
-<li class="toctree-l2"><a class="reference internal" href="mrd.html">MRD data</a></li>
-<li class="toctree-l2 current active"><a class="current reference internal" href="#">Virtual scanner</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../api/index.html">API reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../api/protocol.html">Protocol</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/design.html">Scanner sequences</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/host.html">Design calls</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/ir.html">IR conversion</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/vre.html">Reconstruction proxy</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/recon.html">Reconstruction plugins</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/mrd.html">MRD data</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/virtual.html">Virtual scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../developer-guide/index.html">Developer guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -377,7 +375,7 @@
       
       
       
-      <li><a href="https://github.com/pulserver/pulserver/edit/main/docs/api/virtual.md" target="_blank"
+      <li><a href="https://github.com/pulserver/pulserver/edit/main/docs/generated/pulserver.virtual.export.rst" target="_blank"
    class="btn btn-sm btn-source-edit-button dropdown-item"
    title="Suggest edit"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -394,7 +392,7 @@
       
       
       
-      <li><a href="https://github.com/pulserver/pulserver/issues/new?title=Issue%20on%20page%20%2Fapi/virtual.html&body=Your%20issue%20content%20here." target="_blank"
+      <li><a href="https://github.com/pulserver/pulserver/issues/new?title=Issue%20on%20page%20%2Fgenerated/pulserver.virtual.export.html&body=Your%20issue%20content%20here." target="_blank"
    class="btn btn-sm btn-source-issues-button dropdown-item"
    title="Open an issue"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -424,7 +422,7 @@
       
       
       
-      <li><a href="../_sources/api/virtual.md" target="_blank"
+      <li><a href="../_sources/generated/pulserver.virtual.export.rst" target="_blank"
    class="btn btn-sm btn-download-source-button dropdown-item"
    title="Download source file"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -434,7 +432,7 @@
 <span class="btn__icon-container">
   <i class="fas fa-file"></i>
   </span>
-<span class="btn__text-container">.md</span>
+<span class="btn__text-container">.rst</span>
 </a>
 </li>
       
@@ -507,7 +505,7 @@
               
 
 <div id="jb-print-docs-body" class="onlyprint">
-    <h1>Virtual scanner</h1>
+    <h1>export</h1>
     <!-- Table of contents -->
     <div id="print-main-content">
         <div id="jb-print-toc">
@@ -517,10 +515,7 @@
             </div>
             <nav aria-label="Page">
                 <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#acquisition">Acquisition</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#external-simulators">External simulators</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#phantom">Phantom</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reconstruction-client">Reconstruction client</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.virtual.export"><code class="docutils literal notranslate"><span class="pre">export()</span></code></a></li>
 </ul>
             </nav>
         </div>
@@ -532,89 +527,54 @@
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section class="tex2jax_ignore mathjax_ignore" id="virtual-scanner">
-<h1>Virtual scanner<a class="headerlink" href="#virtual-scanner" title="Link to this heading">#</a></h1>
-<p>The stand-ins for the scanner: the cache played, an analytic phantom acquired
-along the trajectory it plays, and the raw data sent as the scanner’s
-reconstruction client sends them; and the blocks the cache plays, written as a
-Pulseq file for a simulator that reads one.</p>
-<p>The design calls, the IR, the reconstruction proxy and the reconstruction
-plugins are the production code; what each stand-in exercises, and the signal
-model, are described in <a class="reference internal" href="../explanations/virtual-scanner.html"><span class="doc">The virtual scanner</span></a>. Positions are
-in metres and k-space locations in 1/m, along the physical axes: the logical
-axes turned by the prescription’s rotation, the identity unless one is given.
-Chemical shifts are in ppm from water, and frequencies in Hz from the
-scanner’s centre frequency.</p>
-<section id="acquisition">
-<h2>Acquisition<a class="headerlink" href="#acquisition" title="Link to this heading">#</a></h2>
-<div class="pst-scrollable-table-container"><table class="table">
-<thead>
-<tr class="row-odd"><th class="head"><p>Object</p></th>
-<th class="head"><p>Description</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.virtual.trajectory.html#pulserver.virtual.trajectory" title="pulserver.virtual.trajectory"><code class="xref py py-obj docutils literal notranslate"><span class="pre">trajectory</span></code></a></p></td>
-<td><p>The k-space location of every ADC sample the cache beside a sequence file plays.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.virtual.acquire.html#pulserver.virtual.acquire" title="pulserver.virtual.acquire"><code class="xref py py-obj docutils literal notranslate"><span class="pre">acquire</span></code></a></p></td>
-<td><p>The samples the cache beside a sequence file acquires of a phantom, demodulated as the playout demodulates.</p></td>
-</tr>
-</tbody>
-</table>
-</div>
-</section>
-<section id="external-simulators">
-<h2>External simulators<a class="headerlink" href="#external-simulators" title="Link to this heading">#</a></h2>
-<div class="pst-scrollable-table-container"><table class="table">
-<thead>
-<tr class="row-odd"><th class="head"><p>Object</p></th>
-<th class="head"><p>Description</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.virtual.export.html#pulserver.virtual.export" title="pulserver.virtual.export"><code class="xref py py-obj docutils literal notranslate"><span class="pre">export</span></code></a></p></td>
-<td><p>Write the blocks the cache beside a sequence file plays as one Pulseq 1.4.1 file, and return the receiver phase of every readout.</p></td>
-</tr>
-</tbody>
-</table>
-</div>
-</section>
-<section id="phantom">
-<h2>Phantom<a class="headerlink" href="#phantom" title="Link to this heading">#</a></h2>
-<div class="pst-scrollable-table-container"><table class="table">
-<thead>
-<tr class="row-odd"><th class="head"><p>Object</p></th>
-<th class="head"><p>Description</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.virtual.Phantom.html#pulserver.virtual.Phantom" title="pulserver.virtual.Phantom"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Phantom</span></code></a></p></td>
-<td><p>Ellipses whose signals add, received by one coil or several of analytic sensitivity, placed in the physical frame by a rotation and a position.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.virtual.Ellipse.html#pulserver.virtual.Ellipse" title="pulserver.virtual.Ellipse"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Ellipse</span></code></a></p></td>
-<td><p>An ellipse of uniform magnetization in a plane of constant z, of one chemical shift.</p></td>
-</tr>
-</tbody>
-</table>
-</div>
-</section>
-<section id="reconstruction-client">
-<h2>Reconstruction client<a class="headerlink" href="#reconstruction-client" title="Link to this heading">#</a></h2>
-<div class="pst-scrollable-table-container"><table class="table">
-<thead>
-<tr class="row-odd"><th class="head"><p>Object</p></th>
-<th class="head"><p>Description</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.virtual.send.html#pulserver.virtual.send" title="pulserver.virtual.send"><code class="xref py py-obj docutils literal notranslate"><span class="pre">send</span></code></a></p></td>
-<td><p>Send one series to a reconstruction proxy as the scanner’s client sends it; return what comes back.</p></td>
-</tr>
-</tbody>
-</table>
-</div>
-</section>
+  <section id="export">
+<h1>export<a class="headerlink" href="#export" title="Link to this heading">#</a></h1>
+<dl class="py function">
+<dt class="sig sig-object py" id="pulserver.virtual.export">
+<span class="sig-prename descclassname"><span class="pre">pulserver.virtual.</span></span><span class="sig-name descname"><span class="pre">export</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pulserver/virtual/_export.html#export"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.virtual.export" title="Link to this definition">#</a></dt>
+<dd><p>Write the blocks the cache beside a sequence file plays as one Pulseq 1.4.1 file.</p>
+<p>Every block <a class="reference internal" href="pulserver.ir.play.html#pulserver.ir.play" title="pulserver.ir.play"><code class="xref py py-func docutils literal notranslate"><span class="pre">pulserver.ir.play()</span></code></a> walks, across the files of a chain,
+is one block of <code class="docutils literal notranslate"><span class="pre">target</span></code> of the duration it plays, holding what the
+cache plays in it:</p>
+<ul class="simple">
+<li><p>its RF pulse on the RF raster of <code class="docutils literal notranslate"><span class="pre">system</span></code>, with the pulse’s phase
+offset and its frequency offset from the pulse’s start applied to the
+samples, and the channels of a pTx pulse summed, as at unit, in-phase
+sensitivity;</p></li>
+<li><p>its gradients along the physical axes: turned by the block’s rotation
+and then, except in a block labelled <code class="docutils literal notranslate"><span class="pre">NOROT</span></code>, by the prescription’s
+<code class="docutils literal notranslate"><span class="pre">rotation</span></code> from logical to physical axes, as
+<a class="reference internal" href="pulserver.virtual.trajectory.html#pulserver.virtual.trajectory" title="pulserver.virtual.trajectory"><code class="xref py py-func docutils literal notranslate"><span class="pre">trajectory()</span></code></a> turns them, each as a time-shaped
+gradient through the corners the cache plays, a step from or to zero
+as a ramp 10 ns wide;</p></li>
+<li><p>its ADC window, without frequency or phase offsets.</p></li>
+</ul>
+<p>The file holds the standard sections alone: no rotation, label, trigger or
+soft-delay extension, and no RF use, which Pulseq 1.4.1 does not carry.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>seq_path</strong> – The first file of a chain, beside its cache.</p></li>
+<li><p><strong>target</strong> – Where to write the file.</p></li>
+<li><p><strong>system</strong> – The scanner the cache was converted for; its rasters time the file.</p></li>
+<li><p><strong>cache_ext</strong> – The extension of the cache.</p></li>
+<li><p><strong>rotation</strong> – The prescription’s rotation from logical to physical axes; the
+identity by default.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The receiver phase of every readout, in play order, in radians, one
+per sample: the ADC phase offset at the ADC’s start, advancing at its
+frequency offset, plus its phase modulation. The playout demodulates by
+it, as <a class="reference internal" href="pulserver.virtual.acquire.html#pulserver.virtual.acquire" title="pulserver.virtual.acquire"><code class="xref py py-func docutils literal notranslate"><span class="pre">acquire()</span></code></a> does, and <code class="docutils literal notranslate"><span class="pre">target</span></code> leaves
+it out.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#list" title="(in Python v3.14)">list</a> of ndarray</p>
+</dd>
+</dl>
+</dd></dl>
+
 </section>
 
 
@@ -628,24 +588,6 @@ scanner’s centre frequency.</p>
                 <footer class="prev-next-footer d-print-none">
                   
 <div class="prev-next-area">
-    <a class="left-prev"
-       href="mrd.html"
-       title="previous page">
-      <i class="fa-solid fa-angle-left"></i>
-      <div class="prev-next-info">
-        <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">MRD data</p>
-      </div>
-    </a>
-    <a class="right-next"
-       href="../developer-guide/index.html"
-       title="next page">
-      <div class="prev-next-info">
-        <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Developer guide</p>
-      </div>
-      <i class="fa-solid fa-angle-right"></i>
-    </a>
 </div>
                 </footer>
               
@@ -664,10 +606,7 @@ scanner’s centre frequency.</p>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#acquisition">Acquisition</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#external-simulators">External simulators</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#phantom">Phantom</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reconstruction-client">Reconstruction client</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.virtual.export"><code class="docutils literal notranslate"><span class="pre">export()</span></code></a></li>
 </ul>
   </nav></div>
 

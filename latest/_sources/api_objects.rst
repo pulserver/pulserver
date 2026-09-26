@@ -147,6 +147,7 @@ from.
 
    trajectory
    acquire
+   export
    Phantom
    Ellipse
    send
