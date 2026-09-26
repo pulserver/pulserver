@@ -1,9 +1,9 @@
 # Scanning a phantom without a scanner
 
 The virtual scanner plays a stored design's IR cache, acquires an analytic
-phantom along the trajectory the cache plays, and sends the series to a
-reconstruction proxy as the scanner's reconstruction client does
-({doc}`../explanations/virtual-scanner`). A scanner-sequence plugin and a
+phantom along the trajectory the cache plays or simulates the cache on the
+phantom's isochromats, and sends the series to a reconstruction proxy as the
+scanner's reconstruction client does ({doc}`../explanations/virtual-scanner`). A scanner-sequence plugin and a
 reconstruction plugin are exercised together, through the production design
 calls and proxy.
 
@@ -67,6 +67,33 @@ design under limits whose `B0` is the same field: the host resolves the ppm
 offsets of the design's RF pulses at it when it builds the IR
 ({doc}`running`).
 
+## Simulate relaxation and the RF pulses
+
+The analytic acquisition acts on the phantom's density alone. For relaxation,
+flip angles and slice profiles, sample the phantom as isochromats and play the
+cache on them in pypulseqpp's Bloch simulation; the readouts are sent as
+before:
+
+```python
+tissue = virtual.Phantom(
+    [
+        virtual.Ellipse((0.02, 0.0, 0.0), (0.08, 0.06), t1=0.9, t2=0.07),
+        virtual.Ellipse((0.02, 0.02, 0.0), (0.02, 0.015), t1=1.8, t2=0.25),
+    ],
+    coils=4,
+)
+readouts = virtual.simulate(sequence, tissue.isochromats(1e-3))
+```
+
+The isochromats approximate the phantom in k-space below $1/(2\Delta)$ for a
+grid spacing $\Delta$, here 1 mm, so choose a spacing several times finer than
+the pixel; their number, and the time the simulation takes, grow as
+$1/\Delta^2$. A phantom with a chemical shift is sampled at the magnet's field,
+`tissue.isochromats(1e-3, field_t=3.0)`. The simulation starts from the
+magnetization the isochromats hold, so a second scan of the same isochromats
+continues the first: sample them again, or call their `reset`, to start from
+equilibrium.
+
 ## Prescribe an orientation
 
 Add the nine `fov_rotation_ij` entries to the protocol block the design is
@@ -89,7 +116,7 @@ phantom = virtual.Phantom(
     rotation=rotation,
     position=centre,
 )
-readouts = virtual.acquire(sequence, phantom, rotation=rotation)
+readouts = virtual.acquire(sequence, phantom, rotation=rotation)  # or virtual.simulate
 received = virtual.send(
     ("127.0.0.1", 9002), design, readouts, position_mm=1e3 * centre, rotation=rotation
 )
@@ -103,5 +130,5 @@ slice directions.
 ## See also
 
 * {doc}`../explanations/virtual-scanner` — the stand-ins and the signal model.
-* {doc}`../api/virtual` — the phantom, the acquisition and the client.
+* {doc}`../api/virtual` — the phantom, the acquisition, the Bloch simulation and the client.
 * {doc}`reconstruction-client` — the stream the client sends.

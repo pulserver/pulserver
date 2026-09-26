@@ -151,7 +151,7 @@ def _play(
             ) * 1e-6 * (centre - float(played["rf_delay_us"][block]))
             if use == _EXCITATION:
                 origin = at_centre
-                reference = -phase - 0.5 * math.pi
+                reference = 0.5 * math.pi - phase
                 precession_origin_us = start_us + centre
                 tipped = longitudinal
                 longitudinal = np.ones(frequencies.size)

@@ -1,9 +1,10 @@
 # Virtual scanner
 
 The stand-ins for the scanner: the cache played, an analytic phantom acquired
-along the trajectory it plays, and the raw data sent as the scanner's
-reconstruction client sends them; and the blocks the cache plays, written as a
-Pulseq file for a simulator that reads one.
+along the trajectory it plays or the blocks it plays simulated on isochromats,
+and the raw data sent as the scanner's reconstruction client sends them; and
+the blocks the cache plays, written as a Pulseq file for a simulator that reads
+one.
 
 ```{eval-rst}
 .. currentmodule:: pulserver.virtual
@@ -23,6 +24,7 @@ scanner's centre frequency.
 | --- | --- |
 | {obj}`~pulserver.virtual.trajectory` | The k-space location of every ADC sample the cache beside a sequence file plays. |
 | {obj}`~pulserver.virtual.acquire` | The samples the cache beside a sequence file acquires of a phantom, demodulated as the playout demodulates. |
+| {obj}`~pulserver.virtual.simulate` | The samples the cache beside a sequence file acquires of isochromats, in pypulseqpp's Bloch simulation of the blocks it plays. |
 
 ## External simulators
 
@@ -34,8 +36,8 @@ scanner's centre frequency.
 
 | Object | Description |
 | --- | --- |
-| {obj}`~pulserver.virtual.Phantom` | Ellipses whose signals add, received by one coil or several of analytic sensitivity, placed in the physical frame by a rotation and a position. |
-| {obj}`~pulserver.virtual.Ellipse` | An ellipse of uniform magnetization in a plane of constant z, of one chemical shift. |
+| {obj}`~pulserver.virtual.Phantom` | Ellipses whose signals add, received by one coil or several of analytic sensitivity, placed in the physical frame by a rotation and a position; sampled as isochromats for the Bloch simulation. |
+| {obj}`~pulserver.virtual.Ellipse` | An ellipse of uniform magnetization in a plane of constant z, of one chemical shift and one pair of relaxation times. |
 
 ## Reconstruction client
 

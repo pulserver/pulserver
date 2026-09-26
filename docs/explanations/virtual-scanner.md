@@ -6,8 +6,9 @@ enrichment computes cannot test the enrichment, and a design compared only
 with itself cannot test the IR. The virtual scanner stands in for the scanner
 and nothing else: the design calls, the IR, the reconstruction proxy and the
 reconstruction plugins it drives are the production code. Its data are
-acquired from an analytic phantom along the trajectory the cache plays, and
-sent as the scanner's reconstruction client sends them.
+acquired along the trajectory the cache plays, from an analytic phantom or by a
+Bloch simulation of the blocks the cache plays, and sent as the scanner's
+reconstruction client sends them.
 
 ## Stand-ins
 
@@ -15,7 +16,7 @@ sent as the scanner's reconstruction client sends them.
 | --- | --- | --- | --- |
 | Design call | The interpreter host process's call | `pulserver design generate`, or {func}`~pulserver.host.call` | Request and reply blocks, presets, design errors, check failures |
 | Virtual interpreter | The playout | The C library's two playout stages over a recording backend, {func}`~pulserver.ir.playout` | Segmentation, the events each segment position is prepared with, the registers the scan loop sets on each block, the rotation and trigger of each segment instance, the waves and the waveform memory they are loaded into |
-| Physics | Magnet, coils and subject | {class}`~pulserver.virtual.Phantom`, {func}`~pulserver.virtual.acquire` | The trajectory the enrichment has to state, the demodulation of the prescription, the timing of every echo, the RF frequencies ppm offsets resolve to |
+| Physics | Magnet, coils and subject | {class}`~pulserver.virtual.Phantom`, {func}`~pulserver.virtual.acquire`, {func}`~pulserver.virtual.simulate` | The trajectory the enrichment has to state, the demodulation of the prescription, the timing of every echo, the RF frequencies ppm offsets resolve to; in the Bloch simulation, every RF pulse, gradient and receiver phase the cache plays |
 | Reconstruction client | The scanner's reconstruction client | {func}`~pulserver.virtual.send` | The header and acquisition contract of {doc}`../user-guide/reconstruction-client` |
 
 ## Played trajectory
@@ -67,12 +68,14 @@ spin.
 
 After an excitation of RF phase $\phi_e$ at its centre, the magnetization is
 transverse, at the phantom's density $\rho_\sigma(\mathbf{r})$ whatever the
-flip angle, with phase $-\phi_e - \pi/2$, and it precesses as
+flip angle, with phase $\pi/2 - \phi_e$, and it precesses as
 $\exp(-2\pi i\,(\mathbf{k}\cdot\mathbf{r} + f_\sigma\tau))$, with
 $\mathbf{r}$ and $\mathbf{k}$ along the physical axes and $\tau$ the time it
 has precessed freely: counted from the excitation's centre and, as
 $\mathbf{k}$ is, negated about the centre of each refocusing pulse, so that a
-spin echo refocuses it. A refocusing pulse of phase $\phi_r$ conjugates the
+spin echo refocuses it. A pulse of phase zero turns the magnetization from
+$+z$ towards $+y$, as it turns the magnetic moment of a nucleus of positive
+gyromagnetic ratio. A refocusing pulse of phase $\phi_r$ conjugates the
 magnetization about $-\phi_r$. The RF phase at the centre is the pulse's
 phase offset plus its frequency offset times the time since the pulse began.
 Coil $c$, of sensitivity $s_c(\mathbf{r})$, receives
@@ -115,6 +118,40 @@ saturation pulse leaves spins at its own frequency at the cosine of its flip
 angle: pypulseqpp's `FatSaturation`, of 110° by default, leaves fat at
 $\cos 110° \approx -0.34$ of its magnetization. A readout before the first
 excitation of its file acquires zeros.
+
+## Bloch simulation
+
+The signal model leaves out what an RF pulse does beyond an ideal excitation,
+refocusing or saturation, and what the magnetization does between them.
+{func}`~pulserver.virtual.simulate` plays the blocks
+{func}`~pulserver.ir.playout` returns on isochromats instead, with
+pypulseqpp's Bloch simulation ({class}`pypulseqpp.Isochromats`): flip angles,
+slice profiles, relaxation and the coherences one repetition leaves to the next
+act as the Bloch equation gives them, and the magnetization is carried from
+each block to the next, across the files of a chain. Each block's gradients are
+those of the played trajectory, turned by $R$ except in blocks labelled
+`NOROT`. Its RF pulse and its ADC play as pypulseqpp plays the RF and ADC
+events of a Pulseq block, with the frequency and phase offsets the playout
+sets, and each sample is demodulated by $\exp(i\theta(t))$ as above. A 90°
+excitation of phase $\phi_e$ leaves the magnetization at the phase
+$\pi/2 - \phi_e$ of the signal model.
+
+{meth}`~pulserver.virtual.Phantom.isochromats` samples the phantom on a square
+grid aligned with its axes. Each ellipse contributes the points of the grid
+inside it, each an isochromat of proton density the ellipse's intensity times
+the area of a grid cell, relaxing with the ellipse's $T_1$ and $T_2$ and
+precessing at its $f_\sigma$; the coil sensitivities are sampled at the same
+points. The sum over the isochromats approximates each ellipse's transform
+below the grid's Nyquist frequency, $1/(2\Delta)$ for a spacing $\Delta$, and
+converges to it as the grid is refined, so a grid several times finer than the
+image's pixel acquires the analytic phantom wherever the signal model holds.
+
+The cache played on isochromats samples what pypulseqpp's `Sequence.simulate`
+samples of the design, turned as the checks turn it, to the single precision
+of the cache's waveforms. A gradient turned by a block's rotation is stored as
+the rotation leaves it, in single precision, and in a sequence that leaves its
+transverse magnetization unspoiled from one repetition to the next, the phase
+that rounding accrues is what separates the two.
 
 ## External simulators
 
@@ -193,6 +230,15 @@ of the text format.
   isocentre, and the image carries the prescribed centre and the columns of
   $R$ as its read, phase and slice directions; a series short of a readout is
   refused.
+- Played on isochromats, the cache of every fixture samples what pypulseqpp's
+  simulation of its design samples, under an axial, an oblique and a reflected
+  prescription, with the magnetization carried across the files of a chain.
+- The phantom sampled as isochromats, posed where an axial, an oblique or a
+  reflected prescription places the field of view and scanned by a
+  single-shot EPI, is acquired as the analytic phantom is: a 90° excitation
+  leaves its density at the phase the signal model states. Each ellipse's
+  isochromats relax with its $T_1$ and $T_2$ and precess at its chemical shift
+  at the magnet's field.
 - The exported file of every fixture and every shipped sequence, read and
   integrated by pypulseqpp, has the trajectory the cache plays, under an
   axial, an oblique and a reflected prescription, and holds each RF pulse with
@@ -205,4 +251,5 @@ of the text format.
 
 * {doc}`ir-cache` — the IR, its prescription and its playback.
 * {doc}`../user-guide/reconstruction-client` — the stream the virtual reconstruction client sends.
-* {doc}`../api/virtual` — the phantom, the acquisition, the client and the export.
+* {doc}`../api/virtual` — the phantom, the acquisition, the Bloch simulation, the client and the export.
+* {class}`pypulseqpp.Isochromats` — the Bloch simulation the cache is played with, and how it plays each Pulseq event.

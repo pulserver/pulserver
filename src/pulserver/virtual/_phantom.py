@@ -9,6 +9,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 import numpy as np
+import pypulseqpp as pp
 from scipy.special import j1
 
 
@@ -21,6 +22,7 @@ class Ellipse:
     ellipse is infinitely thin, so its signal depends on the k-space location
     along z only through the phase of its plane. ``shift_ppm`` is the chemical
     shift of its spins from water, in ppm: -3.45 for the main fat resonance.
+    ``t1`` and ``t2``, in s, act in :meth:`Phantom.isochromats` alone.
     """
 
     centre: tuple[float, float, float]
@@ -28,6 +30,8 @@ class Ellipse:
     angle: float = 0.0
     intensity: complex = 1.0
     shift_ppm: float = 0.0
+    t1: float = math.inf
+    t2: float = math.inf
 
     def spectrum(self, k: np.ndarray) -> np.ndarray:
         """Return its magnetization's Fourier transform at ``(3, n)`` k-space locations in 1/m.
@@ -98,6 +102,69 @@ class Phantom:
         self._rotation = np.eye(3) if rotation is None else np.asarray(rotation, float)
         self._position = np.asarray(position, dtype=float)
 
+    def isochromats(
+        self,
+        spacing: float,
+        *,
+        field_t: float | None = None,
+        off_resonance_hz: float = 0.0,
+        threads: int = 0,
+    ) -> pp.Isochromats:
+        """Return the phantom sampled as isochromats, for :func:`~pulserver.virtual.simulate`.
+
+        Each ellipse is sampled at the points of a square grid, aligned with the
+        phantom's origin and axes, that lie inside it: each an isochromat of
+        proton density ``intensity * spacing**2`` relaxing with the ellipse's
+        ``t1`` and ``t2``, so that the sum over them approximates the
+        ellipse's transform below the grid's Nyquist frequency. Overlapping
+        ellipses are separate isochromats. The positions are placed in the
+        physical frame as the phantom is, and the receive sensitivities are the
+        coils'.
+
+        Parameters
+        ----------
+        spacing
+            Grid spacing, in metres.
+        field_t
+            The magnet's field, in T, at which each ellipse's chemical shift is
+            resolved into a frequency, with pypulseqpp's default gamma.
+        off_resonance_hz
+            Frequency of every isochromat from the scanner's centre frequency,
+            in Hz, beside its chemical shift.
+        threads
+            Worker threads of the simulation; 0 for every core.
+
+        Raises
+        ------
+        ValueError
+            If an ellipse has a complex intensity, or the phantom has a chemical
+            shift and ``field_t`` is not given.
+        """
+        if field_t is None and any(self.shifts_ppm):
+            raise ValueError("a phantom with a chemical shift is scanned at a field_t")
+        per_ppm = 0.0 if field_t is None else 1e-6 * pp.Opts().gamma * field_t
+        points = [_sampled(ellipse, spacing) for ellipse in self.ellipses]
+        counts = [len(inside) for inside in points]
+        own = np.concatenate(points)
+
+        def each(values):
+            return np.repeat(np.asarray(values, dtype=float), counts)
+
+        return pp.Isochromats(
+            own @ self._rotation.T + self._position,
+            proton_density=each([np.real(e.intensity) for e in self.ellipses])
+            * spacing**2,
+            t1=each([e.t1 for e in self.ellipses]),
+            t2=each([e.t2 for e in self.ellipses]),
+            off_resonance=each(
+                [per_ppm * e.shift_ppm + off_resonance_hz for e in self.ellipses]
+            ),
+            receive=1.0 + self._depth * np.cos(2.0 * math.pi * (own @ self._waves))
+            if self.coils > 1
+            else None,
+            threads=threads,
+        )
+
     @property
     def shifts_ppm(self) -> tuple[float, ...]:
         """The chemical shifts of its ellipses, each once, in ascending order."""
@@ -127,6 +194,30 @@ class Phantom:
                     )
                 )
         return signal * np.exp(-2j * math.pi * (self._position @ k))
+
+
+def _sampled(ellipse: Ellipse, spacing: float) -> np.ndarray:
+    """Return the points of the grid of ``spacing`` inside ``ellipse``, ``(n, 3)`` along the phantom's axes."""
+    if np.imag(ellipse.intensity) != 0.0:
+        raise ValueError(
+            "isochromats carry a real proton density, not a complex intensity"
+        )
+    reach = max(ellipse.semi_axes) + spacing
+    lo = np.floor((np.asarray(ellipse.centre[:2]) - reach) / spacing)
+    hi = np.ceil((np.asarray(ellipse.centre[:2]) + reach) / spacing)
+    x, y = np.meshgrid(
+        np.arange(lo[0], hi[0] + 1) * spacing,
+        np.arange(lo[1], hi[1] + 1) * spacing,
+        indexing="ij",
+    )
+    cos, sin = math.cos(ellipse.angle), math.sin(ellipse.angle)
+    dx, dy = x.ravel() - ellipse.centre[0], y.ravel() - ellipse.centre[1]
+    along = (cos * dx + sin * dy) / ellipse.semi_axes[0]
+    across = (-sin * dx + cos * dy) / ellipse.semi_axes[1]
+    inside = along**2 + across**2 <= 1.0
+    return np.column_stack(
+        [x.ravel()[inside], y.ravel()[inside], np.full(inside.sum(), ellipse.centre[2])]
+    )
 
 
 def _spectrum(ellipses: Sequence[Ellipse], k: np.ndarray) -> np.ndarray:
