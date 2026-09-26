@@ -153,6 +153,10 @@
   
 
   
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
 </div>
 
     </header>
@@ -490,7 +494,9 @@
 <button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
     <i class="fa-solid fa-magnifying-glass fa-lg"></i>
 </button>
-
+<button class="sidebar-toggle secondary-toggle btn btn-sm pst-navbar-icon" title="Toggle secondary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="fa-solid fa-list"></span>
+</button>
 </div></div>
       
     </div>
@@ -506,6 +512,14 @@
     <div id="print-main-content">
         <div id="jb-print-toc">
             
+            <div>
+                <h2> Contents </h2>
+            </div>
+            <nav aria-label="Page">
+                <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#simulation-with-komamri">Simulation with KomaMRI</a></li>
+</ul>
+            </nav>
         </div>
     </div>
 </div>
@@ -531,6 +545,23 @@ without a device.</p>
 nothing in <code class="docutils literal notranslate"><span class="pre">src/cpp/</span></code>, whose passes run only on the host. Docstrings are NumPy
 style; comments and docstrings describe the code as it is, not its history.
 <code class="docutils literal notranslate"><span class="pre">AGENTS.md</span></code> states these rules in full.</p>
+<section id="simulation-with-komamri">
+<h2>Simulation with KomaMRI<a class="headerlink" href="#simulation-with-komamri" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">tests/test_koma.py</span></code> simulates every fixture and every sequence pypulseqpp
+ships with KomaMRI, as designed and as <a class="reference internal" href="../generated/pulserver.virtual.export.html#pulserver.virtual.export" title="pulserver.virtual.export"><code class="xref py py-func docutils literal notranslate"><span class="pre">export()</span></code></a>
+writes what its cache plays, and compares the two signals. It runs where
+<code class="docutils literal notranslate"><span class="pre">PULSERVER_KOMA_PROJECT</span></code> names a Julia project holding KomaMRI and <code class="docutils literal notranslate"><span class="pre">julia</span></code> is
+on the path, and skips elsewhere. The KomaMRI workflow runs it every night and
+on a pull request that changes the IR, the export or the requirements. To run
+it locally with Julia 1.10 or later:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>julia<span class="w"> </span>--project<span class="o">=</span>tests/koma<span class="w"> </span>-e<span class="w"> </span><span class="s1">'using Pkg; Pkg.instantiate()'</span>
+<span class="nv">PULSERVER_KOMA_PROJECT</span><span class="o">=</span>tests/koma<span class="w"> </span>pytest<span class="w"> </span>-q<span class="w"> </span>tests/test_koma.py
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">tests/koma/Project.toml</span></code> admits the patch releases of the KomaMRI minor
+versions it names; a newer minor version is adopted by editing its <code class="docutils literal notranslate"><span class="pre">[compat]</span></code>
+entries.</p>
+</section>
 </section>
 
 
@@ -568,6 +599,23 @@ style; comments and docstrings describe the code as it is, not its history.
             </div>
             
             
+              
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item"><div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> Contents
+  </div>
+  <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#simulation-with-komamri">Simulation with KomaMRI</a></li>
+</ul>
+  </nav></div>
+
+</div></div>
               
             
           </div>

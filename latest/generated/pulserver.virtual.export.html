@@ -532,15 +532,15 @@
 <dl class="py function">
 <dt class="sig sig-object py" id="pulserver.virtual.export">
 <span class="sig-prename descclassname"><span class="pre">pulserver.virtual.</span></span><span class="sig-name descname"><span class="pre">export</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pulserver/virtual/_export.html#export"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.virtual.export" title="Link to this definition">#</a></dt>
-<dd><p>Write the blocks the cache beside a sequence file plays as one Pulseq 1.4.1 file.</p>
+<dd><p>Write the blocks the cache beside a sequence file plays as one Pulseq 1.5.1 file.</p>
 <p>Every block <a class="reference internal" href="pulserver.ir.play.html#pulserver.ir.play" title="pulserver.ir.play"><code class="xref py py-func docutils literal notranslate"><span class="pre">pulserver.ir.play()</span></code></a> walks, across the files of a chain,
 is one block of <code class="docutils literal notranslate"><span class="pre">target</span></code> of the duration it plays, holding what the
 cache plays in it:</p>
 <ul class="simple">
-<li><p>its RF pulse on the RF raster of <code class="docutils literal notranslate"><span class="pre">system</span></code>, with the pulse’s phase
-offset and its frequency offset from the pulse’s start applied to the
-samples, and the channels of a pTx pulse summed, as at unit, in-phase
-sensitivity;</p></li>
+<li><p>its RF pulse as the cache holds it: its samples at their times, its
+frequency and phase offsets with their ppm terms resolved, its centre
+and its use, with the channels of a pTx pulse summed, as at unit,
+in-phase sensitivity;</p></li>
 <li><p>its gradients along the physical axes: turned by the block’s rotation
 and then, except in a block labelled <code class="docutils literal notranslate"><span class="pre">NOROT</span></code>, by the prescription’s
 <code class="docutils literal notranslate"><span class="pre">rotation</span></code> from logical to physical axes, as
@@ -550,7 +550,7 @@ as a ramp 10 ns wide;</p></li>
 <li><p>its ADC window, without frequency or phase offsets.</p></li>
 </ul>
 <p>The file holds the standard sections alone: no rotation, label, trigger or
-soft-delay extension, and no RF use, which Pulseq 1.4.1 does not carry.</p>
+soft-delay extension.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">

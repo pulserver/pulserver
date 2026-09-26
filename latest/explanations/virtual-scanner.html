@@ -673,32 +673,46 @@ the signal model above leaves out: relaxation, slice profiles and the action
 of every RF pulse on the magnetization. A simulation of the design would test
 the design alone; <a class="reference internal" href="../generated/pulserver.virtual.export.html#pulserver.virtual.export" title="pulserver.virtual.export"><code class="xref py py-func docutils literal notranslate"><span class="pre">export()</span></code></a> writes the blocks the
 cache plays instead, so that a simulation of the file tests the IR as the
-virtual interpreter does. Each played block becomes one block of a Pulseq 1.4.1 file,
-of the duration it plays:</p>
+virtual interpreter does. Each played block becomes one block of a Pulseq
+1.5.1 file, of the duration it plays:</p>
 <ul class="simple">
-<li><p>The RF pulse the cache plays, on the RF raster, with its phase offset and
-its frequency offset from the pulse’s start applied to the samples, so that
-the file’s RF offsets are zero and no convention for them is left to the
-simulator. The channels of a pTx pulse are summed, as at unit, in-phase
-sensitivity.</p></li>
+<li><p>The RF pulse as the cache holds it: its samples at their times, its
+frequency and phase offsets with their ppm terms resolved at the field the
+cache was converted at, its centre and its use. The channels of a pTx pulse
+are summed, as at unit, in-phase sensitivity. A simulator reads the pulse as
+it reads the design’s, and applies the offsets as it applies a design’s. In
+Pulseq, a frequency offset and the same phase ramp written into the samples
+play one pulse; KomaMRI simulates the offset in the pulse’s rotating frame
+but takes the samples’ phase in the opposite sense of rotation, so from the
+ramp it would excite the mirror image of an offset slice. It refers the
+offset’s phase to the pulse’s centre, which the file therefore records.</p></li>
 <li><p>The gradients along the physical axes, turned by the block’s rotation and
 then by <span class="math notranslate nohighlight">\(R\)</span> except in blocks labelled <code class="docutils literal notranslate"><span class="pre">NOROT</span></code>, as the virtual interpreter
 turns them. A time-shaped gradient through the corners of all three axes
 carries each, and a step from or to zero at a gradient’s first or last
 corner is a ramp 10 ns wide, since a time shape holds one value per time.
-The file therefore needs no rotation extension, which revision 1.4.1 does
-not have.</p></li>
-<li><p>The ADC window without its offsets. Revision 1.4.1 cannot carry a phase
-modulation, so the receiver phase <span class="math notranslate nohighlight">\(\theta\)</span> of every sample is returned
-instead, and the simulated samples are demodulated by it as the playout
-demodulates.</p></li>
+The file therefore needs no rotation extension.</p></li>
+<li><p>The ADC window without its offsets. The receiver phase <span class="math notranslate nohighlight">\(\theta\)</span> of every
+sample is returned instead, and the simulated samples are demodulated by it
+as the playout demodulates. The offsets act on the samples alone, so no
+simulator has to apply them; KomaMRI applies an ADC’s phase offset but
+neither its frequency offset nor a phase modulation.</p></li>
 </ul>
-<p>The file holds the standard sections alone. It carries neither the RF use nor
-the RF centre, which a Bloch simulation does not read. The text format writes
-a gradient’s amplitude to six significant figures, and a turned gradient’s
+<p>The file holds the standard sections alone. The text format writes a
+gradient’s amplitude to six significant figures, and a turned gradient’s
 amplitude is written as the rotation leaves it, so the k-space of a file
 exported under an oblique prescription agrees with the played trajectory to a
 relative <span class="math notranslate nohighlight">\(10^{-5}\)</span> of its extent.</p>
+<p>A scheduled job simulates every fixture and every sequence pypulseqpp ships
+with KomaMRI twice, as designed and as exported from its cache, over one
+phantom whose density, relaxation times and off-resonance vary across it, and
+compares the two signals sample by sample. KomaMRI drops the ppm term of an
+offset, so a design file carrying one is given to it as Pulseq 1.4.1, whose
+writer resolves the term; and its rotation of a block can drop a corner a
+gradient holds twice, such as the peak of a trapezoid without a flat top, so
+the job turns a design’s gradients itself. The two simulations then differ
+only where the cache plays something other than the design, or by the rounding
+of the text format.</p>
 </section>
 <section id="what-a-run-establishes">
 <h2>What a run establishes<a class="headerlink" href="#what-a-run-establishes" title="Link to this heading">#</a></h2>
@@ -731,7 +745,11 @@ isocentre, and the image carries the prescribed centre and the columns of
 refused.</p></li>
 <li><p>The exported file of every fixture and every shipped sequence, read and
 integrated by pypulseqpp, has the trajectory the cache plays, under an
-axial, an oblique and a reflected prescription.</p></li>
+axial, an oblique and a reflected prescription, and holds each RF pulse with
+the samples, offsets, centre and use of the design’s.</p></li>
+<li><p>In the scheduled KomaMRI job, the signal simulated from the exported file of
+every fixture and every shipped sequence is the one simulated from its
+design, to the rounding of the text format.</p></li>
 </ul>
 </section>
 <section id="see-also">

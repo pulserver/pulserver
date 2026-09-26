@@ -464,12 +464,15 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">pypulseqpp</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pp</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">..</span><span class="w"> </span><span class="kn">import</span> <span class="n">ir</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">..ir._source</span><span class="w"> </span><span class="kn">import</span> <span class="n">_RF_USE</span>
 
 <span class="c1">#: Width of the ramp, in µs, that stands in for a gradient's step from or to</span>
 <span class="c1">#: zero at its first or last corner: a time shape holds one value per time.</span>
 <span class="n">_STEP_US</span> <span class="o">=</span> <span class="mf">1e-2</span>
 <span class="c1">#: Corner times are compared at this resolution, in µs.</span>
 <span class="n">_RESOLUTION_US</span> <span class="o">=</span> <span class="mf">1e-3</span>
+<span class="c1">#: The use of an RF pulse, by the code the cache holds for it.</span>
+<span class="n">_USES</span> <span class="o">=</span> <span class="p">{</span><span class="n">code</span><span class="p">:</span> <span class="n">use</span> <span class="k">for</span> <span class="n">use</span><span class="p">,</span> <span class="n">code</span> <span class="ow">in</span> <span class="n">_RF_USE</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">use</span><span class="p">}</span>
 
 
 <div class="viewcode-block" id="export">
@@ -482,16 +485,16 @@
     <span class="o">*</span><span class="p">,</span>
     <span class="n">rotation</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]:</span>
-<span class="w">    </span><span class="sd">"""Write the blocks the cache beside a sequence file plays as one Pulseq 1.4.1 file.</span>
+<span class="w">    </span><span class="sd">"""Write the blocks the cache beside a sequence file plays as one Pulseq 1.5.1 file.</span>
 
 <span class="sd">    Every block :func:`pulserver.ir.play` walks, across the files of a chain,</span>
 <span class="sd">    is one block of ``target`` of the duration it plays, holding what the</span>
 <span class="sd">    cache plays in it:</span>
 
-<span class="sd">    - its RF pulse on the RF raster of ``system``, with the pulse's phase</span>
-<span class="sd">      offset and its frequency offset from the pulse's start applied to the</span>
-<span class="sd">      samples, and the channels of a pTx pulse summed, as at unit, in-phase</span>
-<span class="sd">      sensitivity;</span>
+<span class="sd">    - its RF pulse as the cache holds it: its samples at their times, its</span>
+<span class="sd">      frequency and phase offsets with their ppm terms resolved, its centre</span>
+<span class="sd">      and its use, with the channels of a pTx pulse summed, as at unit,</span>
+<span class="sd">      in-phase sensitivity;</span>
 <span class="sd">    - its gradients along the physical axes: turned by the block's rotation</span>
 <span class="sd">      and then, except in a block labelled ``NOROT``, by the prescription's</span>
 <span class="sd">      ``rotation`` from logical to physical axes, as</span>
@@ -501,7 +504,7 @@
 <span class="sd">    - its ADC window, without frequency or phase offsets.</span>
 
 <span class="sd">    The file holds the standard sections alone: no rotation, label, trigger or</span>
-<span class="sd">    soft-delay extension, and no RF use, which Pulseq 1.4.1 does not carry.</span>
+<span class="sd">    soft-delay extension.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
@@ -570,7 +573,7 @@
             <span class="n">receiver</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">phase</span><span class="p">)</span>
         <span class="n">events</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">pp</span><span class="o">.</span><span class="n">make_delay</span><span class="p">(</span><span class="mf">1e-6</span> <span class="o">*</span> <span class="n">duration_us</span><span class="p">))</span>
         <span class="n">seq</span><span class="o">.</span><span class="n">add_block</span><span class="p">(</span><span class="o">*</span><span class="n">events</span><span class="p">)</span>
-    <span class="n">seq</span><span class="o">.</span><span class="n">write_v141</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">target</span><span class="p">))</span>
+    <span class="n">seq</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">target</span><span class="p">))</span>
     <span class="k">return</span> <span class="n">receiver</span></div>
 
 
@@ -637,62 +640,32 @@
 <span class="k">def</span><span class="w"> </span><span class="nf">_pulse</span><span class="p">(</span>
     <span class="n">played</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">],</span> <span class="n">block</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">system</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Opts</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">types</span><span class="o">.</span><span class="n">SimpleNamespace</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Return the RF pulse ``block`` plays as an RF event on the RF raster, its offsets in its samples."""</span>
+<span class="w">    </span><span class="sd">"""Return the RF pulse ``block`` plays as an RF event, as the cache holds it."""</span>
     <span class="n">start</span><span class="p">,</span> <span class="n">stop</span> <span class="o">=</span> <span class="n">played</span><span class="p">[</span><span class="s2">"rf_span"</span><span class="p">][</span><span class="n">block</span><span class="p">]</span>
     <span class="n">channels</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">played</span><span class="p">[</span><span class="s2">"rf_channels"</span><span class="p">][</span><span class="n">block</span><span class="p">]),</span> <span class="mi">1</span><span class="p">)</span>
     <span class="n">delay_us</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">played</span><span class="p">[</span><span class="s2">"rf_delay_us"</span><span class="p">][</span><span class="n">block</span><span class="p">])</span>
-    <span class="n">times</span> <span class="o">=</span> <span class="n">played</span><span class="p">[</span><span class="s2">"rf_time_us"</span><span class="p">][</span><span class="n">start</span><span class="p">:</span><span class="n">stop</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">float</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">channels</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
-    <span class="n">b1</span> <span class="o">=</span> <span class="n">played</span><span class="p">[</span><span class="s2">"rf_waveform_hz"</span><span class="p">][</span><span class="n">start</span><span class="p">:</span><span class="n">stop</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">complex</span><span class="p">)</span>
-    <span class="n">b1</span> <span class="o">=</span> <span class="n">b1</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">channels</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
-    <span class="n">raster_us</span> <span class="o">=</span> <span class="mf">1e6</span> <span class="o">*</span> <span class="n">system</span><span class="o">.</span><span class="n">rf_raster_time</span>
-    <span class="n">b1</span> <span class="o">=</span> <span class="n">_on_raster</span><span class="p">(</span><span class="n">times</span> <span class="o">-</span> <span class="n">delay_us</span><span class="p">,</span> <span class="n">b1</span><span class="p">,</span> <span class="n">raster_us</span><span class="p">)</span>
-    <span class="n">since</span> <span class="o">=</span> <span class="n">raster_us</span> <span class="o">*</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">b1</span><span class="o">.</span><span class="n">size</span><span class="p">)</span> <span class="o">+</span> <span class="mf">0.5</span><span class="p">)</span>
-    <span class="n">signal</span> <span class="o">=</span> <span class="n">b1</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span>
-        <span class="mi">1</span><span class="n">j</span>
-        <span class="o">*</span> <span class="p">(</span>
-            <span class="nb">float</span><span class="p">(</span><span class="n">played</span><span class="p">[</span><span class="s2">"rf_phase_rad"</span><span class="p">][</span><span class="n">block</span><span class="p">])</span>
-            <span class="o">+</span> <span class="mf">2.0</span> <span class="o">*</span> <span class="n">math</span><span class="o">.</span><span class="n">pi</span> <span class="o">*</span> <span class="nb">float</span><span class="p">(</span><span class="n">played</span><span class="p">[</span><span class="s2">"rf_freq_hz"</span><span class="p">][</span><span class="n">block</span><span class="p">])</span> <span class="o">*</span> <span class="mf">1e-6</span> <span class="o">*</span> <span class="n">since</span>
-        <span class="p">)</span>
+    <span class="n">since_us</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">played</span><span class="p">[</span><span class="s2">"rf_time_us"</span><span class="p">][</span><span class="n">start</span><span class="p">:</span><span class="n">stop</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">float</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">channels</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="o">-</span> <span class="n">delay_us</span>
     <span class="p">)</span>
+    <span class="n">b1</span> <span class="o">=</span> <span class="n">played</span><span class="p">[</span><span class="s2">"rf_waveform_hz"</span><span class="p">][</span><span class="n">start</span><span class="p">:</span><span class="n">stop</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">complex</span><span class="p">)</span>
+    <span class="n">raster_us</span> <span class="o">=</span> <span class="mf">1e6</span> <span class="o">*</span> <span class="n">system</span><span class="o">.</span><span class="n">rf_raster_time</span>
     <span class="k">return</span> <span class="n">types</span><span class="o">.</span><span class="n">SimpleNamespace</span><span class="p">(</span>
         <span class="nb">type</span><span class="o">=</span><span class="s2">"rf"</span><span class="p">,</span>
-        <span class="n">signal</span><span class="o">=</span><span class="n">signal</span><span class="p">,</span>
-        <span class="n">t</span><span class="o">=</span><span class="mf">1e-6</span> <span class="o">*</span> <span class="n">since</span><span class="p">,</span>
-        <span class="n">shape_dur</span><span class="o">=</span><span class="mf">1e-6</span> <span class="o">*</span> <span class="n">raster_us</span> <span class="o">*</span> <span class="n">b1</span><span class="o">.</span><span class="n">size</span><span class="p">,</span>
+        <span class="n">signal</span><span class="o">=</span><span class="n">b1</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">channels</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">),</span>
+        <span class="n">t</span><span class="o">=</span><span class="mf">1e-6</span> <span class="o">*</span> <span class="n">since_us</span><span class="p">,</span>
+        <span class="c1"># As a reader finds it: the last sample time, rounded up to the raster.</span>
+        <span class="n">shape_dur</span><span class="o">=</span><span class="mf">1e-6</span> <span class="o">*</span> <span class="n">raster_us</span> <span class="o">*</span> <span class="n">math</span><span class="o">.</span><span class="n">ceil</span><span class="p">(</span><span class="n">since_us</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">/</span> <span class="n">raster_us</span> <span class="o">-</span> <span class="mf">1e-9</span><span class="p">),</span>
         <span class="n">delay</span><span class="o">=</span><span class="mf">1e-6</span> <span class="o">*</span> <span class="n">delay_us</span><span class="p">,</span>
         <span class="n">center</span><span class="o">=</span><span class="mf">1e-6</span> <span class="o">*</span> <span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">played</span><span class="p">[</span><span class="s2">"rf_center_us"</span><span class="p">][</span><span class="n">block</span><span class="p">])</span> <span class="o">-</span> <span class="n">delay_us</span><span class="p">),</span>
-        <span class="n">freq_offset</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
-        <span class="n">phase_offset</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
+        <span class="n">freq_offset</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">played</span><span class="p">[</span><span class="s2">"rf_freq_hz"</span><span class="p">][</span><span class="n">block</span><span class="p">]),</span>
+        <span class="n">phase_offset</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">played</span><span class="p">[</span><span class="s2">"rf_phase_rad"</span><span class="p">][</span><span class="n">block</span><span class="p">]),</span>
         <span class="n">freq_ppm</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
         <span class="n">phase_ppm</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
         <span class="n">dead_time</span><span class="o">=</span><span class="n">system</span><span class="o">.</span><span class="n">rf_dead_time</span><span class="p">,</span>
         <span class="n">ringdown_time</span><span class="o">=</span><span class="n">system</span><span class="o">.</span><span class="n">rf_ringdown_time</span><span class="p">,</span>
-        <span class="n">use</span><span class="o">=</span><span class="s2">"undefined"</span><span class="p">,</span>
+        <span class="n">use</span><span class="o">=</span><span class="n">_USES</span><span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">played</span><span class="p">[</span><span class="s2">"rf_use"</span><span class="p">][</span><span class="n">block</span><span class="p">])],</span>
     <span class="p">)</span>
-
-
-<span class="k">def</span><span class="w"> </span><span class="nf">_on_raster</span><span class="p">(</span><span class="n">times_us</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">b1</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">raster_us</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Return an RF pulse's samples at the middles of the raster intervals from its start.</span>
-
-<span class="sd">    ``times_us`` are from the pulse's start. Samples at the middles of equal</span>
-<span class="sd">    intervals a whole number of rasters wide are held over each interval, as</span>
-<span class="sd">    the pulse plays them; the points of a time shape are joined linearly, up</span>
-<span class="sd">    to the last of them.</span>
-<span class="sd">    """</span>
-    <span class="n">steps</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">diff</span><span class="p">(</span><span class="n">times_us</span><span class="p">)</span>
-    <span class="k">if</span> <span class="p">(</span>
-        <span class="n">steps</span><span class="o">.</span><span class="n">size</span>
-        <span class="ow">and</span> <span class="n">np</span><span class="o">.</span><span class="n">allclose</span><span class="p">(</span><span class="n">steps</span><span class="p">,</span> <span class="n">steps</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
-        <span class="ow">and</span> <span class="n">np</span><span class="o">.</span><span class="n">isclose</span><span class="p">(</span><span class="n">times_us</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="n">steps</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
-    <span class="p">):</span>
-        <span class="n">held</span> <span class="o">=</span> <span class="n">steps</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">/</span> <span class="n">raster_us</span>
-        <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">isclose</span><span class="p">(</span><span class="n">held</span><span class="p">,</span> <span class="nb">round</span><span class="p">(</span><span class="n">held</span><span class="p">))</span> <span class="ow">and</span> <span class="nb">round</span><span class="p">(</span><span class="n">held</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="mi">1</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">repeat</span><span class="p">(</span><span class="n">b1</span><span class="p">,</span> <span class="nb">round</span><span class="p">(</span><span class="n">held</span><span class="p">))</span>
-    <span class="k">elif</span> <span class="ow">not</span> <span class="n">steps</span><span class="o">.</span><span class="n">size</span> <span class="ow">and</span> <span class="n">np</span><span class="o">.</span><span class="n">isclose</span><span class="p">(</span><span class="n">times_us</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="n">raster_us</span><span class="p">):</span>
-        <span class="k">return</span> <span class="n">b1</span>
-    <span class="n">count</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="nb">round</span><span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">times_us</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span> <span class="o">/</span> <span class="n">raster_us</span><span class="p">))</span>
-    <span class="n">grid</span> <span class="o">=</span> <span class="n">raster_us</span> <span class="o">*</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">count</span><span class="p">)</span> <span class="o">+</span> <span class="mf">0.5</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">interp</span><span class="p">(</span><span class="n">grid</span><span class="p">,</span> <span class="n">times_us</span><span class="p">,</span> <span class="n">b1</span><span class="o">.</span><span class="n">real</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="n">j</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">interp</span><span class="p">(</span><span class="n">grid</span><span class="p">,</span> <span class="n">times_us</span><span class="p">,</span> <span class="n">b1</span><span class="o">.</span><span class="n">imag</span><span class="p">)</span>
 </pre></div>
 
                 </article>
