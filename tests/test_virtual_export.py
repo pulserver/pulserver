@@ -39,7 +39,7 @@ def _exported(path, target, rotation=None):
     ir.convert(path, SYSTEM)
     phases = virtual.export(path, target, SYSTEM, rotation=rotation)
     back = pp.Sequence(SYSTEM)
-    back.read(str(target), detect_rf_use=True)
+    back.read(str(target))
     return back, phases
 
 
@@ -93,23 +93,37 @@ def test_every_shipped_sequence_exports_each_block_as_long_as_its_cache_plays_it
     np.testing.assert_allclose(1e6 * np.array(exported), played, atol=1e-6)
 
 
-def test_a_pulse_carries_its_phase_and_frequency_offsets_in_its_samples(tmp_path):
-    """A sinc pulse on the raster and a block pulse drawn by its two corners."""
-    offsets = [(1500.0, 0.7), (-800.0, -1.1)]
+def test_a_pulse_keeps_its_samples_offsets_centre_and_use(tmp_path):
+    """A sinc pulse on the raster, a block pulse drawn by its two corners, a
+    pulse sampled every two rasters and a fat saturation pulse offset in ppm."""
+    raster = SYSTEM.rf_raster_time
     pulses = [
         pp.make_sinc_pulse(
             math.pi / 6,
             duration=2e-3,
-            freq_offset=offsets[0][0],
-            phase_offset=offsets[0][1],
+            freq_offset=1500.0,
+            phase_offset=0.7,
+            use="excitation",
             system=SYSTEM,
         ),
         pp.make_block_pulse(
             math.pi / 6,
             duration=1e-3,
-            freq_offset=offsets[1][0],
-            phase_offset=offsets[1][1],
+            freq_offset=-800.0,
+            phase_offset=-1.1,
+            use="excitation",
             system=SYSTEM,
+        ),
+        pp.make_arbitrary_rf(
+            np.sinc(np.linspace(-2.0, 2.0, 200)).astype(complex),
+            math.pi / 6,
+            dwell=2 * raster,
+            delay=SYSTEM.rf_dead_time,
+            use="excitation",
+            system=SYSTEM,
+        ),
+        pp.make_gauss_pulse(
+            math.pi / 2, duration=4e-3, freq_ppm=-3.45, use="saturation", system=SYSTEM
         ),
     ]
     seq = pp.Sequence(SYSTEM)
@@ -120,24 +134,41 @@ def test_a_pulse_carries_its_phase_and_frequency_offsets_in_its_samples(tmp_path
 
     back, _ = _exported(path, tmp_path / "exported.seq")
 
-    for block, pulse, (freq, phase) in zip((1, 2), pulses, offsets, strict=True):
+    for block, pulse in enumerate(pulses, start=1):
         rf = back.get_block(block).rf
-        raster = SYSTEM.rf_raster_time
-        t = raster * (np.arange(round(pulse.shape_dur / raster)) + 0.5)
-        envelope = np.interp(t, pulse.t, pulse.signal.real) + 1j * np.interp(
-            t, pulse.t, pulse.signal.imag
-        )
-        expected = envelope * np.exp(1j * (phase + 2 * math.pi * freq * t))
-        assert rf.freq_offset == rf.phase_offset == 0.0
-        assert rf.delay == pytest.approx(pulse.delay)
-        np.testing.assert_allclose(rf.t, t, atol=1e-12)
+        frequency, phase = pp.calc_absolute_offsets(pulse, system=SYSTEM)
+        np.testing.assert_allclose(rf.t, pulse.t, rtol=0, atol=1e-12)
         np.testing.assert_allclose(
-            rf.signal, expected, rtol=0, atol=1e-5 * np.abs(expected).max()
+            rf.signal, pulse.signal, rtol=0, atol=1e-5 * np.abs(pulse.signal).max()
         )
+        assert (rf.freq_offset, rf.phase_offset) == pytest.approx((frequency, phase))
+        assert rf.freq_ppm == rf.phase_ppm == 0.0
+        assert (rf.delay, rf.center) == pytest.approx((pulse.delay, pulse.center))
+        assert rf.use == pulse.use
 
 
-# The file holds no RF pulse, so there is no use to detect.
-@pytest.mark.filterwarnings("ignore:read\\(\\)\\x3a detect_rf_use had nothing to do")
+def test_a_ptx_pulse_plays_the_sum_of_its_channels(tmp_path):
+    raster = SYSTEM.rf_raster_time
+    envelope = 200.0 * np.hanning(100)
+    channels = np.stack([envelope * np.exp(0.3j), 0.5 * envelope * np.exp(-1.2j)])
+    seq = pp.Sequence(SYSTEM)
+    seq.add_block(
+        pp.make_ptx_pulse(
+            channels, delay=SYSTEM.rf_dead_time, use="excitation", system=SYSTEM
+        )
+    )
+    path = tmp_path / "ptx.seq"
+    seq.write(str(path))
+
+    back, _ = _exported(path, tmp_path / "exported.seq")
+
+    rf = back.get_block(1).rf
+    np.testing.assert_allclose(rf.t, raster * (np.arange(100) + 0.5), atol=1e-12)
+    np.testing.assert_allclose(
+        rf.signal, channels.sum(axis=0), rtol=0, atol=1e-5 * envelope.max()
+    )
+
+
 def test_a_gradient_that_starts_and_ends_away_from_zero_inside_its_block_steps_there(
     tmp_path,
 ):
@@ -165,28 +196,6 @@ def test_a_gradient_that_starts_and_ends_away_from_zero_inside_its_block_steps_t
 
     played = np.concatenate(virtual.trajectory(path), axis=1)
     _assert_same_trajectory(back.calculate_kspace()[0], played)
-
-
-def test_a_pulse_sampled_every_two_rasters_holds_each_sample_over_both(tmp_path):
-    raster = SYSTEM.rf_raster_time
-    signal = np.sinc(np.linspace(-2.0, 2.0, 200)).astype(complex)
-    pulse = pp.make_arbitrary_rf(
-        signal, math.pi / 6, dwell=2 * raster, delay=SYSTEM.rf_dead_time, system=SYSTEM
-    )
-    seq = pp.Sequence(SYSTEM)
-    seq.add_block(pulse)
-    path = tmp_path / "pulse.seq"
-    seq.write(str(path))
-
-    back, _ = _exported(path, tmp_path / "exported.seq")
-
-    rf = back.get_block(1).rf
-    np.testing.assert_allclose(
-        rf.signal,
-        np.repeat(pulse.signal, 2),
-        rtol=0,
-        atol=1e-5 * np.abs(pulse.signal).max(),
-    )
 
 
 def test_the_receiver_phase_is_the_adc_offsets_advancing_from_its_start_and_its_modulation(
@@ -221,12 +230,12 @@ def test_the_receiver_phase_is_the_adc_offsets_advancing_from_its_start_and_its_
     assert window.delay == pytest.approx(1e-4)
 
 
-def test_the_file_is_pulseq_1_4_1_with_standard_sections_alone(tmp_path):
+def test_the_file_is_pulseq_1_5_1_with_standard_sections_alone(tmp_path):
     path = _fixture("epi_2d_main.seq", tmp_path)
     target = tmp_path / "exported.seq"
 
     _exported(path, target)
 
     text = target.read_text()
-    assert re.search(r"\[VERSION\]\s+major 1\s+minor 4\s+revision 1", text)
+    assert re.search(r"\[VERSION\]\s+major 1\s+minor 5\s+revision 1", text)
     assert set(re.findall(r"^\[(\w+)\]", text, re.MULTILINE)) <= STANDARD_SECTIONS

@@ -28,7 +28,7 @@ scanner's centre frequency.
 
 | Object | Description |
 | --- | --- |
-| {obj}`~pulserver.virtual.export` | Write the blocks the cache beside a sequence file plays as one Pulseq 1.4.1 file, and return the receiver phase of every readout. |
+| {obj}`~pulserver.virtual.export` | Write the blocks the cache beside a sequence file plays as one Pulseq 1.5.1 file, and return the receiver phase of every readout. |
 
 ## Phantom
 
