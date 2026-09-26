@@ -17,6 +17,7 @@ reconstruction client sends them.
 | Design call | The interpreter host process's call | `pulserver design generate`, or {func}`~pulserver.host.call` | Request and reply blocks, presets, design errors, check failures |
 | Virtual interpreter | The playout | The C library's two playout stages over a recording backend, {func}`~pulserver.ir.playout` | Segmentation, the events each segment position is prepared with, the registers the scan loop sets on each block, the rotation and trigger of each segment instance, the waves and the waveform memory they are loaded into |
 | Physics | Magnet, coils and subject | {class}`~pulserver.virtual.Phantom`, {func}`~pulserver.virtual.acquire`, {func}`~pulserver.virtual.simulate` | The trajectory the enrichment has to state, the demodulation of the prescription, the timing of every echo, the RF frequencies ppm offsets resolve to; in the Bloch simulation, every RF pulse, gradient and receiver phase the cache plays |
+| Scan clock | The scanner's acquisition in real time, and its gradient coils' sound | {class}`~pulserver.virtual.Scan` | The rate at which readouts reach the reconstruction; the sound of the gradients the cache plays |
 | Reconstruction client | The scanner's reconstruction client | {func}`~pulserver.virtual.send` | The header and acquisition contract of {doc}`../user-guide/reconstruction-client` |
 
 ## Played trajectory
@@ -153,6 +154,28 @@ the rotation leaves it, in single precision, and in a sequence that leaves its
 transverse magnetization unspoiled from one repetition to the next, the phase
 that rounding accrues is what separates the two.
 
+## Scan clock and sound
+
+A scanner acquires in real time: each readout reaches the reconstruction once
+the scanner has played it, and the gradients sound as they play.
+{class}`~pulserver.virtual.Scan` plays the cache on isochromats against a scan
+clock, the sum of the durations of the blocks played, in spans of whole blocks.
+Each span carries the readouts of its blocks, as
+{func}`~pulserver.virtual.simulate` returns them, and the sound of the gradients
+it plays. At a speed, a span is released once the wall clock, running that many
+times as fast as the scan, has passed its end, so that a reconstruction
+receives the readouts at the rate a scanner acquires them;
+{func}`~pulserver.virtual.send` sends each readout as it is released.
+
+The sound is MATLAB Pulseq's, from `pypulseqpp.gradient_sound`: the gradients
+along the physical axes, the x axis on the left channel, the y axis on the
+right and half of the z axis on both, smoothed by MATLAB's Gaussian window of
+$2\,\mathrm{round}(f_s/6000) + 1$ samples at the sample rate $f_s$, and scaled
+so that the loudest sample of the scan is 0.95. The window reaches past the
+ends of each span into the gradients on either side, so the spans' sounds,
+joined, are the sound of the whole scan: that of `Sequence.sound` of the design
+under the same prescription, to the single precision of the cache.
+
 ## External simulators
 
 A Bloch simulator that reads Pulseq files, KomaMRI for example, models what
@@ -239,6 +262,13 @@ of the text format.
   leaves its density at the phase the signal model states. Each ellipse's
   isochromats relax with its $T_1$ and $T_2$ and precess at its chemical shift
   at the magnet's field.
+- Played in spans, the scan of every fixture plays each block once: the
+  spans' readouts are those of the whole scan, and the sound of a single-file
+  fixture, joined across its spans, is `Sequence.sound` of its design as the
+  checks turn it, under an axial, an oblique and a reflected prescription. A
+  span played at a speed is released once the clock has passed it, and a
+  series streamed readout by readout is reconstructed as the same series sent
+  whole.
 - The exported file of every fixture and every shipped sequence, read and
   integrated by pypulseqpp, has the trajectory the cache plays, under an
   axial, an oblique and a reflected prescription, and holds each RF pulse with
@@ -251,5 +281,5 @@ of the text format.
 
 * {doc}`ir-cache` — the IR, its prescription and its playback.
 * {doc}`../user-guide/reconstruction-client` — the stream the virtual reconstruction client sends.
-* {doc}`../api/virtual` — the phantom, the acquisition, the Bloch simulation, the client and the export.
+* {doc}`../api/virtual` — the phantom, the acquisition, the Bloch simulation, the scan clock, the client and the export.
 * {class}`pypulseqpp.Isochromats` — the Bloch simulation the cache is played with, and how it plays each Pulseq event.

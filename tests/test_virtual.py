@@ -600,6 +600,26 @@ def test_a_virtual_scan_reconstructs_the_phantom_where_it_is_prescribed(
     )
 
 
+def test_a_series_streamed_as_it_is_acquired_is_reconstructed_as_one_sent_whole(
+    proxy, tmp_path
+):
+    store = DesignStore(tmp_path / "designs")
+    design = generate(store, "gre2d", {"TE": 5000, "nx": MATRIX, "ny": MATRIX})
+    seq = store.directory(design) / "sequence.seq"
+    scan = virtual.Scan(seq, phantom().isochromats(2e-3))
+    streamed = (readout for chunk in scan.chunks() for readout in chunk.readouts)
+    whole = virtual.simulate(seq, phantom().isochromats(2e-3))
+    images = []
+    for readouts in (streamed, whole):
+        received = virtual.send(
+            ("127.0.0.1", proxy.port), design, readouts, timeout=DEADLINE
+        )
+        (image,) = [item for item in received if isinstance(item, ismrmrd.Image)]
+        images.append(np.squeeze(np.abs(image.data)).astype(float))
+    np.testing.assert_array_equal(images[0], images[1])
+    assert images[0].max() > 0.0
+
+
 def test_a_virtual_series_short_of_a_readout_is_refused(proxy, tmp_path):
     _, received = _scan(proxy, tmp_path, np.eye(3), readouts=MATRIX - 1)
     assert not [item for item in received if isinstance(item, ismrmrd.Image)]

@@ -5,7 +5,7 @@ from __future__ import annotations
 __all__ = ["send"]
 
 import socket
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from typing import Any
 
 import ismrmrd
@@ -23,7 +23,7 @@ _PLACEHOLDER = 1
 def send(
     address: tuple[str, int],
     design: str,
-    readouts: Sequence[np.ndarray],
+    readouts: Iterable[np.ndarray],
     *,
     frequency_hz: float = 123_200_000.0,
     position_mm: Sequence[float] = (0.0, 0.0, 0.0),
@@ -43,8 +43,14 @@ def send(
     by default. Nothing else of the sequence is sent, as
     :doc:`/user-guide/reconstruction-client` specifies. The reply is the
     images, DICOM datasets and texts in the order they arrive.
+
+    ``readouts`` may be an iterator: the header is sent once its first
+    readout is taken, and each readout once the next one is, so that the
+    last carries its flag.
     """
-    coils = int(readouts[0].shape[0]) if len(readouts) else 1
+    pending = iter(readouts)
+    current = next(pending, None)
+    coils = 1 if current is None else int(current.shape[0])
     directions = np.eye(3) if rotation is None else np.asarray(rotation, float)
     stream = socket.create_connection(address, timeout=timeout)
     connection = Connection(stream)
@@ -52,19 +58,22 @@ def send(
         if config is not None:
             connection.send_config(config)
         connection.send_header(_header(design, coils, frequency_hz, exam))
-        last = len(readouts) - 1
-        for index, samples in enumerate(readouts):
+        counter = 0
+        while current is not None:
+            following = next(pending, None)
+            counter += 1
             acquisition = ismrmrd.Acquisition.from_array(
-                np.asarray(samples, np.complex64)
+                np.asarray(current, np.complex64)
             )
-            acquisition.scan_counter = index + 1
+            acquisition.scan_counter = counter
             acquisition.position[:] = position_mm
             acquisition.read_dir[:] = directions[:, 0]
             acquisition.phase_dir[:] = directions[:, 1]
             acquisition.slice_dir[:] = directions[:, 2]
-            if index == last:
+            if following is None:
                 acquisition.setFlag(ismrmrd.ACQ_LAST_IN_MEASUREMENT)
             connection.send(acquisition)
+            current = following
         connection.send_close()
         return list(connection)
     finally:

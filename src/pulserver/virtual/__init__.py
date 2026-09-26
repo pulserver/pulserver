@@ -5,5 +5,17 @@ from ._client import send
 from ._export import export
 from ._phantom import Ellipse, Phantom
 from ._scanner import acquire, trajectory
+from ._stream import SAMPLE_RATE, Chunk, Scan
 
-__all__ = ["Ellipse", "Phantom", "acquire", "export", "send", "simulate", "trajectory"]
+__all__ = [
+    "SAMPLE_RATE",
+    "Chunk",
+    "Ellipse",
+    "Phantom",
+    "Scan",
+    "acquire",
+    "export",
+    "send",
+    "simulate",
+    "trajectory",
+]

@@ -94,6 +94,35 @@ magnetization the isochromats hold, so a second scan of the same isochromats
 continues the first: sample them again, or call their `reset`, to start from
 equilibrium.
 
+## Stream a scan in real time, with its sound
+
+A scan played against its clock releases each readout once it is acquired, and
+the client sends it on; the sound of its gradients can be written as it plays:
+
+```python
+import wave
+
+import numpy as np
+
+scan = virtual.Scan(sequence, tissue.isochromats(1e-3))
+with wave.open("scan.wav", "wb") as audio:
+    audio.setnchannels(2)
+    audio.setsampwidth(2)
+    audio.setframerate(int(virtual.SAMPLE_RATE))
+
+    def acquired():
+        for chunk in scan.chunks(speed=1.0):
+            print(f"{chunk.stop:6.2f} s of {scan.duration:.2f} s")
+            audio.writeframes(np.round(32767 * chunk.sound.T).astype("<i2").tobytes())
+            yield from chunk.readouts
+
+    received = virtual.send(("127.0.0.1", 9002), design, acquired())
+```
+
+At `speed=1.0` the scan lasts as long as it would on a scanner, or longer where
+the simulation takes longer than the blocks it plays; without `speed`, the
+spans come as fast as they are computed.
+
 ## Prescribe an orientation
 
 Add the nine `fov_rotation_ij` entries to the protocol block the design is
@@ -130,5 +159,5 @@ slice directions.
 ## See also
 
 * {doc}`../explanations/virtual-scanner` — the stand-ins and the signal model.
-* {doc}`../api/virtual` — the phantom, the acquisition, the Bloch simulation and the client.
+* {doc}`../api/virtual` — the phantom, the acquisition, the Bloch simulation, the scan clock and the client.
 * {doc}`reconstruction-client` — the stream the client sends.

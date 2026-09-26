@@ -144,26 +144,34 @@ class Phantom:
             raise ValueError("a phantom with a chemical shift is scanned at a field_t")
         per_ppm = 0.0 if field_t is None else 1e-6 * pp.Opts().gamma * field_t
         points = [_sampled(ellipse, spacing) for ellipse in self.ellipses]
-        counts = [len(inside) for inside in points]
         own = np.concatenate(points)
-
-        def each(values):
-            return np.repeat(np.asarray(values, dtype=float), counts)
-
+        tissues = [
+            (
+                np.real(e.intensity) * spacing**2,
+                e.t1,
+                e.t2,
+                per_ppm * e.shift_ppm + off_resonance_hz,
+            )
+            for e in self.ellipses
+        ]
+        density, t1, t2, frequency = np.repeat(
+            np.array(tissues, dtype=float), [len(p) for p in points], axis=0
+        ).T
         return pp.Isochromats(
             own @ self._rotation.T + self._position,
-            proton_density=each([np.real(e.intensity) for e in self.ellipses])
-            * spacing**2,
-            t1=each([e.t1 for e in self.ellipses]),
-            t2=each([e.t2 for e in self.ellipses]),
-            off_resonance=each(
-                [per_ppm * e.shift_ppm + off_resonance_hz for e in self.ellipses]
-            ),
-            receive=1.0 + self._depth * np.cos(2.0 * math.pi * (own @ self._waves))
-            if self.coils > 1
-            else None,
+            proton_density=density,
+            t1=t1,
+            t2=t2,
+            off_resonance=frequency,
+            receive=self._received(own),
             threads=threads,
         )
+
+    def _received(self, points: np.ndarray) -> np.ndarray | None:
+        """Return each coil's sensitivity at ``(n, 3)`` points along the phantom's axes; None for one coil."""
+        if self.coils == 1:
+            return None
+        return 1.0 + self._depth * np.cos(2.0 * math.pi * (points @ self._waves))
 
     @property
     def shifts_ppm(self) -> tuple[float, ...]:

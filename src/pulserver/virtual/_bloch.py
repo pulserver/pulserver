@@ -36,19 +36,26 @@ def simulate(
     """
     played = ir.playout(Path(seq_path), waveforms=True, cache_ext=cache_ext)["blocks"]
     turn = None if rotation is None else np.asarray(rotation, dtype=float)
-    readouts = []
-    for block in range(played["duration_us"].size):
-        adc = _adc(played, block)
-        signal = isochromats.play(
-            1e-6 * float(played["duration_us"][block]),
-            gradients=_gradients(played, block),
-            rotation=turn if played["rotate"][block] else None,
-            rf=_rf(played, block),
-            adc=adc,
-        )
-        if adc is not None:
-            readouts.append(signal.astype(np.complex64))
-    return readouts
+    readouts = (
+        _played(played, block, isochromats, turn)
+        for block in range(played["duration_us"].size)
+    )
+    return [readout for readout in readouts if readout is not None]
+
+
+def _played(
+    played: dict, block: int, isochromats: pp.Isochromats, turn: np.ndarray | None
+) -> np.ndarray | None:
+    """Play one block on the isochromats; return its readout, or None where it has no ADC."""
+    adc = _adc(played, block)
+    signal = isochromats.play(
+        1e-6 * float(played["duration_us"][block]),
+        gradients=_gradients(played, block),
+        rotation=turn if played["rotate"][block] else None,
+        rf=_rf(played, block),
+        adc=adc,
+    )
+    return None if adc is None else signal.astype(np.complex64)
 
 
 def _gradients(played: dict, block: int) -> list[np.ndarray | None]:

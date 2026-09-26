@@ -26,6 +26,14 @@ scanner's centre frequency.
 | {obj}`~pulserver.virtual.acquire` | The samples the cache beside a sequence file acquires of a phantom, demodulated as the playout demodulates. |
 | {obj}`~pulserver.virtual.simulate` | The samples the cache beside a sequence file acquires of isochromats, in pypulseqpp's Bloch simulation of the blocks it plays. |
 
+## Scan clock and sound
+
+| Object | Description |
+| --- | --- |
+| {obj}`~pulserver.virtual.Scan` | The cache beside a sequence file played on isochromats block by block against a scan clock, in spans carrying their readouts and the sound of their gradients. |
+| {obj}`~pulserver.virtual.Chunk` | A span of a scan between two block boundaries: its bounds in scan time, its readouts and its sound. |
+| {obj}`~pulserver.virtual.SAMPLE_RATE` | MATLAB Pulseq's audio sample rate, which a scan's sound takes unless given another. |
+
 ## External simulators
 
 | Object | Description |
@@ -43,4 +51,4 @@ scanner's centre frequency.
 
 | Object | Description |
 | --- | --- |
-| {obj}`~pulserver.virtual.send` | Send one series to a reconstruction proxy as the scanner's client sends it; return what comes back. |
+| {obj}`~pulserver.virtual.send` | Send one series to a reconstruction proxy as the scanner's client sends it, each readout as it is acquired; return what comes back. |

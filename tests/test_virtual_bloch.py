@@ -1,7 +1,9 @@
 """The virtual scanner on isochromats: the cache played through pypulseqpp's Bloch simulation."""
 
+import itertools
 import math
 import shutil
+import time
 from pathlib import Path
 
 import numpy as np
@@ -71,6 +73,56 @@ def test_the_cache_played_on_isochromats_samples_what_its_design_simulated_sampl
     designed = _designed(converted / name, rotation)
     assert played.shape == designed.shape
     assert np.abs(played - designed).max() < PRECISION * np.abs(designed).max()
+
+
+@pytest.mark.parametrize("rotation", ORIENTATIONS.values(), ids=ORIENTATIONS.keys())
+@pytest.mark.parametrize("name", SEQUENCES)
+def test_a_scan_played_in_spans_plays_its_blocks_once_each(name, rotation, converted):
+    scan = virtual.Scan(
+        converted / name, pp.Isochromats(POSITIONS, **TISSUE), rotation=rotation
+    )
+    chunks = list(scan.chunks(0.01))
+    assert chunks[0].start == 0.0 and chunks[-1].stop == scan.duration
+    assert all(a.stop == b.start for a, b in itertools.pairwise(chunks))
+    assert all(chunk.stop - chunk.start >= 0.01 for chunk in chunks[:-1])
+    whole = virtual.simulate(
+        converted / name, pp.Isochromats(POSITIONS, **TISSUE), rotation=rotation
+    )
+    streamed = [readout for chunk in chunks for readout in chunk.readouts]
+    assert len(streamed) == len(whole)
+    assert all(np.array_equal(a, b) for a, b in zip(streamed, whole, strict=True))
+
+
+@pytest.mark.parametrize("rotation", ORIENTATIONS.values(), ids=ORIENTATIONS.keys())
+@pytest.mark.parametrize("name", [name for name in SEQUENCES if "pair" not in name])
+def test_the_spans_of_a_scan_sound_as_its_design_sounds(name, rotation, converted):
+    """The sound of a single-file scan, span by span, is ``Sequence.sound`` of the design as the checks turn it."""
+    scan = virtual.Scan(converted / name, pp.Isochromats(POSITIONS), rotation=rotation)
+    sound = np.concatenate([chunk.sound for chunk in scan.chunks(0.01)], axis=1)
+    ((_, design),) = read_chain(converted / name)
+    designed = pp.TransformFOV(rotation=rotation).apply_to_sequence(design).sound()
+    assert sound.shape == designed.shape
+    np.testing.assert_allclose(sound, designed, rtol=0, atol=1e-5)
+
+
+def test_a_scan_played_at_a_speed_yields_each_span_once_its_clock_passes_it(
+    converted,
+):
+    scan = virtual.Scan(converted / "gre_2d_3sl.seq", pp.Isochromats(POSITIONS))
+    started = time.monotonic()
+    for chunk in scan.chunks(0.05, speed=4.0, sound=False):
+        assert time.monotonic() - started >= chunk.stop / 4.0
+        assert chunk.sound.shape == (2, 0)
+
+
+@pytest.mark.parametrize(
+    ("given", "message"),
+    [({"length": 0.0}, "positive time"), ({"speed": 0.0}, "speed")],
+)
+def test_a_span_of_no_time_or_a_scan_at_no_speed_is_refused(given, message, converted):
+    scan = virtual.Scan(converted / "gre_2d_3sl.seq", pp.Isochromats(POSITIONS))
+    with pytest.raises(ValueError, match=message):
+        next(scan.chunks(**given))
 
 
 def _single_shot(path, fov_offset=None):
