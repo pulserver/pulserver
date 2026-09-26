@@ -1,7 +1,7 @@
 # Running the services
 
-Pulserver runs two services. The design calls answer the scanner's PSD host
-processes: they resolve protocols and write the designs the scanner plays into a
+Pulserver runs two services. The design calls answer the scanner's interpreter
+host processes: they resolve protocols and write the designs the scanner plays into a
 design store, one command per call or through a warm server. The
 reconstruction proxy receives the raw data of each series from the scanner's
 reconstruction client, reads the design it was played from in a design store,
@@ -101,8 +101,8 @@ rasters, the scanner's nerve model and its forbidden gradient bands, and, where
 SAR is computed from virtual observation points, the VOPs. A check whose limits
 are left out is not run. No SAR limit is checked on the host: it writes into
 the cache each subsequence's SAR at the VOPs relative to a reference pulse
-({doc}`../explanations/ir-cache`), and the PSD computes the SAR and the
-gradient heating.
+({doc}`../explanations/ir-cache`), and the interpreter computes the SAR and
+the gradient heating.
 
 | Limit | Meaning |
 | --- | --- |
@@ -142,7 +142,7 @@ The store holds one directory per design, `<store>/<id>/`: the Pulseq files of
 the chain, the IR cache, the resolved protocol and `manifest.json`, which
 records the plugin, the reconstruction plugin, the limits, the package versions
 and the SHA-256 of every file. The identifier is three 24-bit integers, each
-held exactly by a float32 CV. `prune` removes designs least recently used
+held exactly by a float32 scanner parameter. `prune` removes designs least recently used
 first: those unused for longer than `--max-age-days`, then others until the
 store holds at most `--max-bytes`. Nothing is removed otherwise, and a design a
 series still needs must not be: the proxy reads it by identifier. A store that
@@ -191,8 +191,8 @@ permissions decide who may call.
 ## Reconstruction proxy
 
 ```bash
-python -m pulserver.vre --store DIR --port N --plugins DIR [--host ADDR] [--intake-port N] [--queue DIR] [--slots N] [--gpu-slots 1] [--spares 1] [--recon-timeout S]
-python -m pulserver.vre --store DIR --port N --forward HOST:PORT [--forward-config NAME] [--forward-dicom] [--host ADDR] [--intake-port N] [--recon-timeout S]
+python -m pulserver.proxy --store DIR --port N --plugins DIR [--host ADDR] [--intake-port N] [--queue DIR] [--slots N] [--gpu-slots 1] [--spares 1] [--recon-timeout S]
+python -m pulserver.proxy --store DIR --port N --forward HOST:PORT [--forward-config NAME] [--forward-dicom] [--host ADDR] [--intake-port N] [--recon-timeout S]
 ```
 
 | Option | Meaning |
@@ -233,7 +233,7 @@ server returns is relayed to the client; a message the proxy has no reader for
 ends the relay, and the client receives a `pulserver:` text naming its type.
 
 With `--intake-port`, the proxy runs a design intake beside it
-({class}`~pulserver.vre.DesignIntake`), an HTTP endpoint that writes the
+({class}`~pulserver.proxy.DesignIntake`), an HTTP endpoint that writes the
 designs pushed to it into `--store`: `HEAD /designs/<id>` answers 200 when the
 store holds the design and 404 otherwise, and `PUT /designs/<id>` stores a
 bundle, answering 201, 200 for a design already stored, or 400 with the reason
@@ -271,4 +271,4 @@ running.
 * {doc}`../explanations/architecture` — the services and what passes between them.
 * {doc}`../explanations/designs` — the design store and the identity of a design.
 * {doc}`reconstruction-client` — the MRD stream of a series.
-* {doc}`../api/host` and {doc}`../api/vre` — the design calls, the proxy and the reconstruction server.
+* {doc}`../api/host` and {doc}`../api/proxy` — the design calls, the proxy and the reconstruction server.

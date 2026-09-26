@@ -20,7 +20,7 @@
 
 /* A block definition is a pure delay when it carries no RF, gradient or ADC
  * event -- only a duration (matches the parser's block_table duration_us >= 0
- * marker).  Its duration is runtime-adjustable via setperiod. */
+ * marker).  Its duration can be set per instance at run time. */
 int pulseg__block_def_is_pure_delay(const pulseg_base_block *b)
 {
     return (b->rf_id < 0 && b->gx_id < 0 && b->gy_id < 0 && b->gz_id < 0 && b->adc_id < 0);
@@ -70,7 +70,7 @@ int pulseg__block_defs_play_same_pulses(
 
 /* Locate the run covering stream position @p n.
  *
- * scancore is real-time and walks the stream strictly in order, so the
+ * The scan loop is real-time and walks the stream strictly in order, so the
  * cached hint is checked first: the same run, then its successor. Both are
  * O(1), which is what the hot path actually sees. Binary search is only the
  * random-access fallback (safety sweeps, trajectory build). The hint is a

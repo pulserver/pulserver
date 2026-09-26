@@ -369,7 +369,7 @@ static int pulseg__rf_pulse_at(
  * pulseg__rf_position_max --
  *   Worst-case |amplitude| at canonical position @p pos across every TR
  *   instance (degenerate path) or pass (non-degenerate path). Feeds
- *   pulseg_rf_stats.peak_amplitude_hz: peak-only consumers (GE peakB1())
+ *   pulseg_rf_stats.peak_amplitude_hz: peak-only consumers (peak-B1 checks)
  *   need per-position dominance across every instance --
  *   Â_pos >= |A_{u,pos}| for every instance u by construction.
  *
@@ -904,9 +904,7 @@ int pulseg_get_tr_groups(
         {
             /* n_inst * one_instance_duration_us can overflow a 32-bit int
              * for large num_trs even when one_instance_duration_us alone
-             * passes the caller's ceiling check -- same defensive clamp
-             * pattern as PulserverImplementationPredownload.e's nettime_us
-             * computation. */
+             * passes the caller's ceiling check, so the product is clamped. */
             double total_d = (double)n_inst * (double)one_instance_duration_us;
             if (total_d > 2.0e9)
                 total_d = 2.0e9;
@@ -2031,7 +2029,8 @@ float **pulseg_get_grad_amplitude(
         for (shot = 0; shot < 1; ++shot)
         {
             /* The shape the representative (max-energy) instance plays -- the
-             * same one the initial state names, and the one pulsegen binds.
+             * same one the initial state names, and the one pulse generation
+             * binds.
              * NOT a safety representative: those answer "what is the worst
              * case", and this answers "what does this block actually play". */
             int init_shape = pulseg_get_grad_initial_shape_id(coll, seg_idx, blk_idx, axis);
@@ -2747,9 +2746,8 @@ void pulseg_cursor_reset(pulseg_collection *coll)
      * sequence_index, so a collection whose cursor has already run to its
      * terminal PULSEG_CURSOR_DONE state (sequence_index == num_subsequences)
      * can be replayed from the top.  Required when one loaded collection is
-     * traversed by more than one RSP entry point (e.g. aps2 then scan, which
-     * reuse s_sc_coll because the SIM framework does not call psdcleanup
-     * between entry points). */
+     * traversed more than once without being freed in between, e.g. by a
+     * prescan and then by the scan. */
     coll->block_cursor.sequence_index = 0;
     coll->block_cursor.exec_stream_position = -1; /* -1 = before first block */
     coll->block_cursor.from_last_reset = 0;
@@ -3267,15 +3265,17 @@ int pulseg_get_block_info(
 
     /* Pure-delay block: no RF/gradient/ADC waveform AND no digital-output
      * trigger or rotation -- literally only a duration -- so it CAN be played
-     * as a runtime setperiod wait.  Excluding digitalout/rotation keeps this in
-     * lock-step with the segment-dedup delay-flex criterion (a trigger/rotation
-     * block must NOT be collapsed onto a fixed-duration wait).
+     * as a wait whose period is set per instance.  Excluding
+     * digitalout/rotation keeps this in lock-step with the segment-dedup
+     * delay-flex criterion (a trigger/rotation block must NOT be collapsed
+     * onto a fixed-duration wait).
      *
      * is_variable_delay is only set when the duration ALSO actually differs
      * across scan-table instances (block_is_dynamic_delay).  A pure
      * delay whose duration is constant in every instance is "static": it
-     * needs no setperiod wait and no interior SSP packet, and is represented
-     * purely by its block position -- exactly like any other fixed block. */
+     * needs no per-instance period and no instruction inside the segment,
+     * and is represented purely by its block position -- exactly like any
+     * other fixed block. */
     info->is_variable_delay =
         (!info->has_grad[0] && !info->has_grad[1] && !info->has_grad[2] && !info->has_rf &&
          !info->has_adc && !info->has_digitalout && !info->has_rotation &&

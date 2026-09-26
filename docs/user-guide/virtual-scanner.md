@@ -9,7 +9,7 @@ calls and proxy.
 
 ## Generate a design
 
-Generate the design as the PSD host process does, with the prescribed
+Generate the design as the interpreter host process does, with the prescribed
 field-of-view offset in the protocol block ({doc}`running`):
 
 ```bash
@@ -24,7 +24,7 @@ The reply is `GENERATED <id>`.
 Start a reconstruction proxy on the same store ({doc}`running`):
 
 ```bash
-python -m pulserver.vre --store designs --port 9002 --plugins recon
+python -m pulserver.proxy --store designs --port 9002 --plugins recon
 ```
 
 ## Acquire and send the series

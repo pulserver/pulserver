@@ -8,7 +8,7 @@ import pytest
 from _synthetic import DELTA_K, add_readout
 
 from pulserver.mrd import AcquisitionFlag, EncodingSpace
-from pulserver.vre._enrich import (
+from pulserver.proxy._enrich import (
     SequenceTable,
     enrich_acquisition,
     enrich_header,

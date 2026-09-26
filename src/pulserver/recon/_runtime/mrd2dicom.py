@@ -337,8 +337,8 @@ class MrdDicomBuilder:
 
         self.dicomDset = dicomDset
         self.mrdHead = mrdHead
-        # GE image numbers are 1-based; the local image-database broker rejects
-        # a C-STORE with image number 0 (A700 OutOfResources), so start at 1.
+        # Image numbers start at 1: a scanner's image database can reject a
+        # C-STORE with image number 0 (A700 OutOfResources).
         self.instanceNumber = 1
 
     def __call__(self, mrdImg: ismrmrd.Image) -> DicomWithName:

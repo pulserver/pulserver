@@ -9,7 +9,7 @@ import pytest
 
 DOCS = Path(__file__).resolve().parents[1] / "docs"
 GUIDE_PAGES = sorted((DOCS / "user-guide").glob("*.md"))
-SUBPACKAGES = ("design", "host", "ir", "mrd", "protocol", "recon", "vre")
+SUBPACKAGES = ("design", "host", "ir", "mrd", "protocol", "proxy", "recon")
 
 
 @pytest.mark.parametrize("page", GUIDE_PAGES, ids=lambda page: page.name)

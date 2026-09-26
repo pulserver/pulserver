@@ -46,7 +46,7 @@ The default branch is `main`; pull requests target it.
 | `src/pulserver/protocol/` | Protocol parameters and the text blocks that carry them to the interpreter |
 | `src/pulserver/host/` | The design calls, the `pulserver design` command and its warm server, and the design store |
 | `src/pulserver/ir/` | Conversion of a `NextSequence` chain into the IR cache |
-| `src/pulserver/vre/` | Reconstruction proxy: design lookup, MRD enrichment, workers, queue |
+| `src/pulserver/proxy/` | Reconstruction proxy: design lookup, MRD enrichment, workers, queue |
 | `src/pulserver/recon/` | Reconstruction plugin contract and the runtime that drives it over MRD |
 | `src/pulserver/mrd/` | MRD acquisitions, header entries, images and readout tables |
 | `src/cpp/` | The extension `pulserver._ext`: the IR passes in `ir/` |

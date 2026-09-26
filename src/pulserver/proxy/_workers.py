@@ -25,7 +25,7 @@ from ..recon._runtime.application import run_application
 from ..recon._runtime.connection import Connection
 from ..recon._runtime.exam import resolve_exam_id
 
-_log = logging.getLogger("pulserver.vre")
+_log = logging.getLogger("pulserver.proxy")
 
 
 @dataclass(frozen=True)

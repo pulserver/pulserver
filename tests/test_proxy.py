@@ -20,10 +20,7 @@ from _host import generate
 
 from pulserver.host import DesignStore
 from pulserver.host._push import push
-from pulserver.recon._runtime import concurrency
-from pulserver.recon._runtime.connection import Connection
-from pulserver.recon._runtime.mrd2dicom import DicomWithName
-from pulserver.vre import (
+from pulserver.proxy import (
     DesignCache,
     DesignIntake,
     ReconProxy,
@@ -31,6 +28,9 @@ from pulserver.vre import (
     SequenceTable,
     _designs,
 )
+from pulserver.recon._runtime import concurrency
+from pulserver.recon._runtime.connection import Connection
+from pulserver.recon._runtime.mrd2dicom import DicomWithName
 
 RECON_PLUGINS = Path(__file__).parent / "recon_plugins"
 FIXTURES = Path(__file__).parent / "fixtures" / "sequences"
@@ -67,7 +67,7 @@ class Series:
 @pytest.fixture(scope="module")
 def bucket(tmp_path_factory):
     """A store holding one design bound to a reconstruction and one unbound."""
-    store = DesignStore(tmp_path_factory.mktemp("vre") / "designs")
+    store = DesignStore(tmp_path_factory.mktemp("proxy") / "designs")
     series = {}
     for plugin, name in (("gre2d", "bound"), ("gre2d_raw", "raw")):
         design = generate(store, plugin, MATRIX)
@@ -268,7 +268,7 @@ def test_a_reconstruction_outlasting_the_worker_timeout_still_returns_its_image(
     start_proxy, bucket, monkeypatch
 ):
     _, series = bucket
-    monkeypatch.setattr("pulserver.vre._proxy._WORKER_TIMEOUT", 1.0)
+    monkeypatch.setattr("pulserver.proxy._proxy._WORKER_TIMEOUT", 1.0)
     proxy = start_proxy(slots=1)
     config = json.dumps({"parameters": {"config": "gre2d", "delay": 3.0}})
     received = stream(proxy.port, series["bound"], config=config)
@@ -478,7 +478,7 @@ def test_a_terminated_proxy_process_exits_cleanly(tmp_path):
         [
             sys.executable,
             "-m",
-            "pulserver.vre",
+            "pulserver.proxy",
             "--store",
             str(tmp_path),
             "--port",
@@ -503,7 +503,7 @@ def test_a_terminated_proxy_process_exits_cleanly(tmp_path):
 def test_the_proxy_process_does_not_import_the_reconstruction_engine(tmp_path):
     """Only a worker imports bartorch; the proxy that spawns it does not."""
     (tmp_path / "bartorch.py").write_text("raise SystemExit('imported bartorch')\n")
-    probe = "import sys, pulserver.vre; print('bartorch' in sys.modules)"
+    probe = "import sys, pulserver.proxy; print('bartorch' in sys.modules)"
     environment = {**os.environ, "PYTHONPATH": str(tmp_path)}
     found = subprocess.run(
         [sys.executable, "-c", probe],
@@ -720,7 +720,7 @@ def test_a_forwarded_series_past_the_recon_timeout_is_stopped_and_reported(
 
 @pytest.mark.parametrize("arguments", [[], ["--forward", "no-port"]])
 def test_the_proxy_command_needs_plugins_or_a_server_address(tmp_path, arguments):
-    from pulserver.vre.__main__ import main
+    from pulserver.proxy.__main__ import main
 
     with pytest.raises(SystemExit) as stopped:
         main(["--store", str(tmp_path), "--port", "0", *arguments])

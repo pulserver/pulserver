@@ -75,9 +75,9 @@ gre = Gre2D()
 print(format_listing(gre.listing()), end="")
 
 # %%
-# The scanner limits are those a PSD host process sends with each call. The
-# rasters are stated explicitly because the achieved bandwidth depends on
-# them.
+# The scanner limits are those an interpreter host process sends with each
+# call. The rasters are stated explicitly because the achieved bandwidth
+# depends on them.
 
 system = pp.Opts(
     max_grad=40,
@@ -196,7 +196,7 @@ print(reply.info)
 
 # %%
 # A valid reply carries the resolved protocol at the precision a scanner
-# control variable stores. Sending it back resolves to the same protocol,
+# parameter stores. Sending it back resolves to the same protocol,
 # which is what lets a design be identified by its resolved protocol
 # (:doc:`/explanations/designs`).
 

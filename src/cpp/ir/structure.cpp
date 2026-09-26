@@ -6,8 +6,8 @@
  * Turns a deduplicated block list into a playable structure: takes the
  * repetition pypulseqpp found, cuts it into virtual segments at zero-gradient
  * boundaries, tiles them over the execution stream, and derives the
- * per-segment RF isocenter / ADC k-zero anchors that freq-mod, SSP placement
- * and the trajectory all key off.
+ * per-segment RF isocenter / ADC k-zero anchors that frequency modulation,
+ * the placement of control instructions and the trajectory all key off.
  */
 
 #include <string.h>
@@ -55,8 +55,8 @@ extern "C"
 /* True if the block at scan-table position scan_pos is an ADJUSTABLE pure
  * delay: no RF/grad/ADC (definition) AND no digital-output trigger or
  * non-identity rotation (table).  Matches pulseg_get_block_info()'s
- * is_variable_delay so the segment-dedup relaxation and the EPIC setperiod
- * wait stay in lock-step (a trigger/rotation delay must NOT be collapsed onto
+ * is_variable_delay so the segment-dedup relaxation and the per-instance
+ * period stay in lock-step (a trigger/rotation delay must NOT be collapsed onto
  * a fixed wait). */
 static int is_adjustable_delay_at(
     const pulseg_sequence_descriptor *desc,
@@ -84,9 +84,10 @@ static int is_adjustable_delay_at(
 
 /* Compare two expanded segments for dedup equality with pure-delay flex: a
  * position whose two blocks differ is still "equal" iff BOTH are adjustable
- * pure delays (played as runtime setperiod waits), so segments differing only
- * in such a block's duration share one definition.  start_block here is a
- * scan-table position (step 7 runs before it is remapped to a block index). */
+ * pure delays (played as waits whose period is set per instance), so
+ * segments differing only in such a block's duration share one definition.
+ * start_block here is a scan-table position (step 7 runs before it is
+ * remapped to a block index). */
 static int segs_delay_flex_equal(
     const pulseg_sequence_descriptor *desc,
     const int *scan_block_idx,
@@ -1578,7 +1579,7 @@ static int nav_split_merge(
  *
  *   The 3 output columns are driven by label_column_map: each entry
  *   is a state-array index (0=SLC,1=PHS,2=REP,3=AVG,4=SEG,5=SET,6=ECO,
- *   7=PAR,8=LIN,9=ACQ). GE's convention is {8,0,6} = [LIN, SLC, ECO].
+ *   7=PAR,8=LIN,9=ACQ), for example {8,0,6} = [LIN, SLC, ECO].
  *   Named limits (lin/slc/eco/...) always track every label by its fixed
  *   state index, independent of which 3 are chosen as table columns.
  */
@@ -1917,12 +1918,12 @@ static int rf_grad_constant_at(
  * `rotation_id` is deliberately NOT here.  A ROTATIONS extension rotates the
  * trajectory *within* the logical frame, so it is a property of the waveform
  * and not of the prescription.  It stays an event all the way through: the
- * `.seq` carries it, this collection carries it, and the `.pge` cache carries
+ * `.seq` carries it, this collection carries it, and the IR cache carries
  * it.  Each consumer materialises what it needs when it loads that cache --
- * the PSD the rotated gradient waveform, the recon the rotated trajectory and
- * phase modulation -- so a spoke that points elsewhere costs a wave pointer,
- * not a segment.  Splitting on it would put every radial spoke in a segment of
- * its own for nothing.
+ * the playout the rotated gradient waveform, the recon the rotated
+ * trajectory and phase modulation -- so a spoke that points elsewhere costs a
+ * wave pointer, not a segment.  Splitting on it would put every radial spoke
+ * in a segment of its own for nothing.
  *
  * PMC is here even though it looks static in the file, because its matrix
  * arrives from the tracking system during the scan: a segment mixing PMC-on
@@ -3241,8 +3242,9 @@ int pulseg__get_exec_stream_segments(
             /* is_dynamic_delay: OR-reduce — true iff this position is an
              * adjustable pure delay AND its duration differs from the first
              * instance observed at this position.  A position whose duration
-             * never varies stays "static": no runtime setperiod wait, no
-             * interior SSP packet -- represented purely by block position. */
+             * never varies stays "static": no per-instance period, no
+             * instruction inside the segment -- represented purely by block
+             * position. */
             if (is_adjustable_delay_at(desc, desc->exec_stream_block_idx, n + b))
             {
                 if (delay_baseline[seg_id][b] == -2)
@@ -3314,7 +3316,8 @@ int pulseg__get_exec_stream_segments(
      * segment position into a flat record on the segment definition.  After
      * this, every consumer that materialises segment memory reads the record
      * instead of walking exec_stream/block_table/rf_table/grad_table, so the
-     * pulsegen cache load can drop those O(scan-length) sections entirely.
+     * pulse-generation cache load can drop those O(scan-length) sections
+     * entirely.
      * Must run AFTER 11c (max_energy_start_block final). */
     for (i = 0; i < num_unique; ++i)
     {

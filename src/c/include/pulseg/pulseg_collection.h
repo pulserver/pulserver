@@ -561,8 +561,8 @@ extern "C"
      * Unlike pulseg_cursor_rewind() (which is a relative rewind-to-mark),
      * this resets sequence_index as well, so a collection whose cursor has
      * already reached PULSEG_CURSOR_DONE can be traversed again from the
-     * top.  Use before replaying a loaded collection from a fresh RSP entry
-     * point.
+     * top.  Use before replaying a loaded collection, e.g. for the scan after
+     * a prescan.
      */
     void pulseg_cursor_reset(pulseg_collection *coll);
 

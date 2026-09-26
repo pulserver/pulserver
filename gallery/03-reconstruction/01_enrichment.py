@@ -44,9 +44,9 @@ PAGE_WIDTH = 8.6  # inches, the width of the documentation column
 #
 # The sequence is written as a stored design holds it, in the binary
 # Pulseq form and in the logical frame, and tabulated with
-# :class:`~pulserver.vre.SequenceTable`: one row per readout in play order,
+# :class:`~pulserver.proxy.SequenceTable`: one row per readout in play order,
 # with its encoding counters, flags and dwell time.
-# :meth:`~pulserver.vre.SequenceTable.readout_k` returns the k-space location
+# :meth:`~pulserver.proxy.SequenceTable.readout_k` returns the k-space location
 # of each sample of a readout, in 1/m, integrated when it is asked for. The
 # simulation below joins them over the scan.
 
@@ -60,7 +60,7 @@ import pypulseqpp as pp
 from pypulseqpp.sequences.sequence.gre2D_sequence import Gre2DApp
 
 from pulserver.ir import prescribe
-from pulserver.vre import SequenceTable, enrich_acquisition, enrich_header
+from pulserver.proxy import SequenceTable, enrich_acquisition, enrich_header
 
 system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
 work = Path(tempfile.mkdtemp())
@@ -240,8 +240,8 @@ print("flags of acquisition 63:", acquisitions[63].flags)
 # Enrichment
 # ----------
 #
-# :func:`~pulserver.vre.enrich_header` describes the table's encoding space in
-# the header. :func:`~pulserver.vre.enrich_acquisition` applies one table row
+# :func:`~pulserver.proxy.enrich_header` describes the table's encoding space in
+# the header. :func:`~pulserver.proxy.enrich_acquisition` applies one table row
 # to each acquisition, in stream order, and leaves the samples as received.
 
 enrich_header(header, table)

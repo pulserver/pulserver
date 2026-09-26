@@ -19,8 +19,8 @@ PUSH_VARIABLE = "PULSERVER_DESIGN_PUSH"
 _DAY = 86400.0
 
 _DESCRIPTION = """\
-Answer one design call of a PSD host process. The protocol or import block
-is read from standard input; the reply is written to standard output, as the
+Answer one design call of an interpreter host process. The protocol or import
+block is read from standard input; the reply is written to standard output, as the
 interpreter parses it, and ends with exit status 0, or 1 after an ERROR line.
 A call is forwarded to the warm server listening on --socket, or on
 $PULSERVER_DESIGN_SOCKET, and answered in this process when none listens.

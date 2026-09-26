@@ -46,7 +46,7 @@ def minimal_mrd_header() -> ismrmrd.xsd.ismrmrdHeader:
 
     header.acquisitionSystemInformation = ismrmrd.xsd.acquisitionSystemInformationType()
     header.acquisitionSystemInformation.systemVendor = "GE"
-    header.acquisitionSystemInformation.systemModel = "SIGNA"
+    header.acquisitionSystemInformation.systemModel = "Model 1"
     header.acquisitionSystemInformation.systemFieldStrength_T = 1.5
     header.acquisitionSystemInformation.institutionName = "Test Hospital"
 
@@ -218,7 +218,7 @@ def test_the_builder_maps_acquisition_system_information(minimal_mrd_header):
     builder = MrdDicomBuilder(minimal_mrd_header)
 
     assert builder.dicomDset.Manufacturer == "GE"
-    assert builder.dicomDset.ManufacturerModelName == "SIGNA"
+    assert builder.dicomDset.ManufacturerModelName == "Model 1"
     assert builder.dicomDset.MagneticFieldStrength == 1.5
     assert builder.dicomDset.InstitutionName == "Test Hospital"
 

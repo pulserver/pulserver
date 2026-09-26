@@ -70,11 +70,11 @@ The raw-data header of a series names its design in the `pulserver_design`
 user parameter ({doc}`../user-guide/reconstruction-client`). A design is
 immutable, so the reconstruction proxy reads and tabulates it once and reuses
 the result for later series acquired with it, keeping the designs it read most
-recently ({class}`~pulserver.vre.DesignCache`).
+recently ({class}`~pulserver.proxy.DesignCache`).
 
 When the design calls and the proxy run on different computers, the proxy
 reads either a store both can reach or a store of its own, which its design
-intake fills with the designs the calls push ({class}`~pulserver.vre.DesignIntake`).
+intake fills with the designs the calls push ({class}`~pulserver.proxy.DesignIntake`).
 A pushed design is carried as a bundle of the files of its directory, and the
 intake stores it only when the manifest's identity is a SHA-256, its identifier
 is that of the identity and the one the push names, and every file has the

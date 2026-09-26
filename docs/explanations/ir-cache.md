@@ -74,7 +74,7 @@ ringdown time of the scanner. Where the call's limits carry them
 ({class}`~pulserver.ir.CheckLimits`), it also runs pypulseqpp's PNS check
 under the scanner's nerve model and its mechanical-resonance check against the
 scanner's forbidden gradient bands. The waveforms are timed by the rasters the
-file declares. The PSD passes these limits with every design call
+file declares. The interpreter passes these limits with every design call
 ({doc}`../user-guide/running`); it computes the SAR and the gradient heating.
 
 No design is stored for a generated design or an imported chain that fails a
@@ -84,7 +84,7 @@ establish scanner or patient safety.
 
 ## SAR against a reference pulse
 
-The PSD computes SAR under its own calibration of the transmit chain. Where
+The interpreter computes SAR under its own calibration of the transmit chain. Where
 local SAR is computed from virtual observation points (VOPs), the energy a
 pulse deposits at VOP $v$ is $\int \mathbf{b}(t)^H Q_v\, \mathbf{b}(t)\,dt$,
 with $\mathbf{b}$ the drive of each transmit channel and $Q_v$ the VOP's
@@ -108,8 +108,8 @@ pulses. The global SAR matrix of the VOP file gives the same ratio for global
 SAR. A scale common to every channel's drive and to the VOPs cancels in both.
 
 The cache carries the two ratios of each subsequence in its
-`pulseg_subseq_info`, zero without VOPs or without RF, and the PSD computes
-the SAR of the subsequence as the ratio times its SAR for the reference
+`pulseg_subseq_info`, zero without VOPs or without RF, and the interpreter
+computes the SAR of the subsequence as the ratio times its SAR for the reference
 repetition.
 
 ## Passes
@@ -169,7 +169,7 @@ SEG, SET, ECO, PAR, LIN, ACQ.
 ## Cache file
 
 The cache has the name of the first sequence file with its extension replaced:
-`.pseg` by default and `.pge` on GE. It is divided into sections that a
+`.pseg` by default. It is divided into sections that a
 consumer loads independently. The pulse-generation stage of a playout reads the
 definitions and their waveforms; the scan loop also reads the per-block
 instances, the rotations and the execution stream, whose size scales with the

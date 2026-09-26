@@ -1,4 +1,4 @@
-"""Host half of the orchestrator: the design calls of scanner PSD host processes."""
+"""Host half of the orchestrator: the design calls of interpreter host processes."""
 
 from ._store import DesignStore, design_id, design_identity
 

@@ -27,9 +27,9 @@ the checks pypulseqpp provides does not establish scanner or patient safety.
 
 - Protocol resolution: the echo time, repetition time and bandwidth a design
   achieves, the scan time, and the design error for an infeasible prescription.
-- Stateless design calls for every PSD host process of a scanner, one command
-  per call or through a warm server, and a store of immutable designs named by
-  their content.
+- Stateless design calls for every interpreter host process of a scanner, one
+  command per call or through a warm server, and a store of immutable designs
+  named by their content.
 - Segmentation of a `NextSequence` chain into a binary IR cache, read by an
   ANSI C library linked into the interpreter, with the prescribed field-of-view
   offset applied to the logical-frame design as RF and ADC frequency and phase.
@@ -48,7 +48,7 @@ pip install pulserver
 
 ```bash
 pulserver design serve --plugins sequences/ --socket /tmp/pulserver.sock
-python -m pulserver.vre --store /srv/pulserver/designs --port 9002 --plugins recon/
+python -m pulserver.proxy --store /srv/pulserver/designs --port 9002 --plugins recon/
 ```
 
 ## Documentation

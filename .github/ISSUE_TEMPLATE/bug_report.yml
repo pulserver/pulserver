@@ -10,7 +10,7 @@ body:
         - "Scanner sequences (pulserver.design, pulserver.protocol)"
         - "Design calls and the design store (pulserver.host)"
         - "IR conversion or the C cache library (pulserver.ir, src/c)"
-        - "Reconstruction proxy and enrichment (pulserver.vre)"
+        - "Reconstruction proxy and enrichment (pulserver.proxy)"
         - "Reconstruction plugins and MRD data (pulserver.recon, pulserver.mrd)"
         - "Documentation"
         - "Other"

@@ -2,10 +2,10 @@
  * @file pulseg_cache.h
  * @brief Binary sequence cache: whole-file save/load plus per-section loads.
  *
- * The cache sits beside the .seq file and holds the PSD-side structures
+ * The cache sits beside the .seq file and holds the playout's structures
  * that are expensive to recompute (dedup tables, segmentation, the
  * execution stream). Its extension is vendor-selectable via
- * pulseg_opts.cache_ext -- .pseg by default, .pge on GE. The recon side
+ * pulseg_opts.cache_ext, .pseg by default. The recon side
  * reads the seqfile directly and never touches the cache.
  *
  * pulseg_save_cache() writes every section; the per-section loaders exist so
@@ -30,7 +30,7 @@ extern "C"
     /* ================================================================== */
 
     /**
-     * @brief Load the pulsegen-stage cache for a sequence path.
+     * @brief Load the pulse-generation-stage cache for a sequence path.
      *
      * Reads the COMMON + SHAPES sections only -- neither the per-instance
      * event tables (INSTANCES) nor the execution stream (SCANLOOP), which
@@ -121,7 +121,7 @@ extern "C"
      * &len) to obtain a caller-allocated (PULSEG_ALLOC'd) buffer, writes it
      * verbatim as a length-prefixed section, then frees the buffer. A NULL
      * @c vendor_section_write_fn is not an error -- it simply means no
-     * VENDOR section is written. GE leaves this callback unset.
+     * VENDOR section is written.
      *
      * @param[in] coll      Loaded collection whose base cache is already on
      *                       disk, i.e. called after pulseg_save_cache().

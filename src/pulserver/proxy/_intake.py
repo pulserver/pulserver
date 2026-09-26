@@ -14,7 +14,7 @@ from pathlib import Path
 
 from ..host._store import BUNDLE_LIMIT, ID_DIGITS, MANIFEST, DesignStore
 
-_log = logging.getLogger("pulserver.vre")
+_log = logging.getLogger("pulserver.proxy")
 _PATH = re.compile(rf"/designs/([0-9a-f]{{{ID_DIGITS}}})")
 # Seconds a connection may stay silent before the intake drops it.
 _TIMEOUT = 60.0

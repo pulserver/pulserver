@@ -9,9 +9,9 @@
  * seqfile directly rather than any cache section.
  *
  * All integer and float fields are 4 bytes. Endianness is recorded in the
- * header, and a reader on the opposite endianness byte-swaps on the way in --
- * the GE target processor is big-endian while the host that writes the cache
- * is not.
+ * header, and a reader on the opposite endianness byte-swaps on the way in:
+ * a scanner's real-time processor can be big-endian while the host that
+ * writes the cache is not.
  */
 
 #include <string.h>
@@ -42,15 +42,15 @@
 /* Per-instance event tables: block_table, rf/grad/adc tables and the label
  * table -- everything whose size scales with the scan length rather than
  * with the number of unique definitions. Loaded by the scan path only; the
- * pulsegen path resolves per-position state from the segment definitions'
- * frozen initial-state records instead. */
+ * pulse-generation path resolves per-position state from the segment
+ * definitions' frozen initial-state records instead. */
 #define PULSEG_CACHE_SECTION_INSTANCES 1
 #define PULSEG_CACHE_SECTION_ROTATIONS 2
 #define PULSEG_CACHE_SECTION_SHAPES 3
 #define PULSEG_CACHE_SECTION_SCANLOOP 4
 /* Opaque vendor extension section: length-prefixed blob, written
- * only when pulseg_opts.vendor_section_write_fn is set (GE leaves it
- * unused). Format: [int byte_len][byte_len raw bytes]. */
+ * only when pulseg_opts.vendor_section_write_fn is set.
+ * Format: [int byte_len][byte_len raw bytes]. */
 #define PULSEG_CACHE_SECTION_VENDOR 5
 
 /* Total number of defined section IDs (0..5 above). write_cache() reserves
@@ -405,8 +405,9 @@ static int write_common(FILE *f, const pulseg_sequence_descriptor *d)
                 return 0;
             /* Frozen per-position initial event state (structure step 11e):
              * what the representative scan instance resolves to, so the
-             * pulsegen path never needs the INSTANCES section. All fields are
-             * 4-byte, so the records serialize as a packed word array. */
+             * pulse-generation path never needs the INSTANCES section. All
+             * fields are 4-byte, so the records serialize as a packed word
+             * array. */
             if (!pulseg__write4(
                     f,
                     seg->initial_states,
@@ -504,8 +505,8 @@ static int write_shapes(FILE *f, const pulseg_sequence_descriptor *d)
 /* ------ Serialize the INSTANCES region of a descriptor ------ */
 /* The per-instance event tables -- everything sized by the scan length
  * rather than by the number of unique definitions. Only the scan path
- * loads this; pulsegen resolves per-position state from the segment
- * definitions' initial-state records in COMMON. */
+ * loads this; the pulse-generation pass resolves per-position state from
+ * the segment definitions' initial-state records in COMMON. */
 
 /* Each of the four tables below is an array of structs whose members are all
  * 4 bytes wide and declared in exactly the order they are serialized, so the
@@ -514,7 +515,7 @@ static int write_shapes(FILE *f, const pulseg_sequence_descriptor *d)
  * time loop emitted. It matters because the block table is the one part of the
  * cache that scales with the scan -- at a couple of million blocks that is
  * some 36M one-word fwrite() calls the long way round, and glibc's per-call
- * locking and buffer arithmetic, not the disk, is then what the predownload
+ * locking and buffer arithmetic, not the disk, is then what a conversion
  * waits on.
  * PULSEG_ASSERT_PACKED (below) is what keeps the premise true: adding a member
  * of another width, or reordering one, breaks the build rather than the file
@@ -1136,7 +1137,8 @@ static int read_common(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
 
 /* ------ Deserialize the INSTANCES region into an existing descriptor ------ */
 /* Mirrors write_instances. COMMON must have been read first (it allocates
- * and zeroes the descriptor); the scan path is the only PSD consumer. */
+ * and zeroes the descriptor); the scan path is its only consumer on the
+ * scanner. */
 
 static int read_instances(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
 {
@@ -1232,7 +1234,7 @@ static int read_instances(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
 
     /* label table.
      * These reads MUST honour do_swap like everything above: unswapped
-     * counts on a big-endian reader (IPG) misalign the rest of the stream
+     * counts on a big-endian reader misalign the rest of the stream
      * and silently corrupt the heap while still returning success. */
     if (fread(&d->label_num_columns, sizeof(int), 1, f) != 1)
         return 0;
@@ -2028,7 +2030,7 @@ static int read_sections(
     return 1;
 }
 
-/* ------ Read the full descriptor (all PSD-internal sections) ------ */
+/* ------ Read the full descriptor (every section a playout reads) ------ */
 
 static int read_full_cache(
     const char *cache_path,
@@ -2056,7 +2058,7 @@ static int read_full_cache(
         ids,
         readers,
         5);
-    /* Every PSD-internal section is present here, so the cross-subsequence
+    /* Every section a playout reads is present here, so the cross-subsequence
      * segment dedup remap can be rebuilt deterministically (identical to the
      * convert-time map). */
     if (ok)
@@ -2214,8 +2216,9 @@ static int load_cache_from_seq_path(
     return PULSEG_SUCCESS;
 }
 
-/* Pulsegen: COMMON + SHAPES. Neither INSTANCES nor SCANLOOP is loaded — this
- * pass builds one hardware image per segment DEFINITION, and every per-position
+/* Pulse generation: COMMON + SHAPES. Neither INSTANCES nor SCANLOOP is
+ * loaded — this pass builds one hardware image per segment DEFINITION, and
+ * every per-position
  * quantity it needs (the representative instance's block definition, RF
  * amplitude, gradient definition/shot/amplitude, digital-output event) is
  * frozen into the segment definitions' initial-state records at parse time
@@ -2230,7 +2233,7 @@ int pulseg__load_geninstructions_cache_ext(
     static const payload_reader_fn readers[2] = {read_common_payload, read_shapes_payload};
     int rc = load_cache_from_seq_path(out_coll, seq_path, cache_ext, ids, readers, 2, 0);
     /* Rebuild the cross-subsequence segment dedup remap so the global segment
-     * ids the pulsegen loop builds match those the scan cursor emits. */
+     * ids the pulse-generation pass builds match those the scan cursor emits. */
     if (rc == PULSEG_SUCCESS && out_coll && *out_coll)
         pulseg__build_segment_remap(*out_coll);
     return rc;
@@ -2245,8 +2248,8 @@ int pulseg_load_geninstructions_cache(pulseg_collection **out_coll, const char *
  * SCANLOOP carry the per-instance event tables the cursor replays; SHAPES is
  * loaded (even though scan never plays raw waveforms) so
  * pulseg__build_segment_remap() recomputes the SAME cross-subsequence segment
- * deduplication the pulsegen path computed — otherwise the cursor's global
- * segment ids would not match the built buffers. */
+ * deduplication the pulse-generation path computed — otherwise the cursor's
+ * global segment ids would not match the built buffers. */
 int pulseg__load_scanloop_cache_ext(
     pulseg_collection **out_coll,
     const char *seq_path,
