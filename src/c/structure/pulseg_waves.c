@@ -152,27 +152,32 @@ static int axis_corners_build(
     return ok;
 }
 
-static float axis_value_at(const axis_corners *c, float x)
+float pulseg__linear_at(const float *t, const float *v, int n, float x)
 {
     int lo, hi;
     float span;
 
-    if (c->n < 2 || x < c->t[0] || x > c->t[c->n - 1])
+    if (n < 2 || x < t[0] || x > t[n - 1])
         return 0.0f;
     lo = 0;
-    hi = c->n - 1;
+    hi = n - 1;
     while (hi - lo > 1)
     {
         const int mid = (lo + hi) / 2;
-        if (c->t[mid] <= x)
+        if (t[mid] <= x)
             lo = mid;
         else
             hi = mid;
     }
-    span = c->t[hi] - c->t[lo];
+    span = t[hi] - t[lo];
     if (span <= 0.0f)
-        return c->v[hi];
-    return c->v[lo] + (c->v[hi] - c->v[lo]) * (x - c->t[lo]) / span;
+        return v[hi];
+    return v[lo] + (v[hi] - v[lo]) * (x - t[lo]) / span;
+}
+
+static float axis_value_at(const axis_corners *c, float x)
+{
+    return pulseg__linear_at(c->t, c->v, c->n, x);
 }
 
 /* 1 when one driven axis is an arbitrary gradient on the raster: its samples
@@ -410,6 +415,91 @@ int pulseg__wave_materialize(
     return rc;
 }
 
+/* The amplitude of largest magnitude, with its sign, among the gradient
+ * events of @p bte, the first axis on a tie; 0 when it drives none.  What a
+ * rotated wave is scaled by. */
+static float wave_scale(
+    const pulseg_sequence_descriptor *desc,
+    const pulseg_block_table_element *bte)
+{
+    const pulseg_grad_table_element *element;
+    int ids[3];
+    float scale;
+    int d;
+
+    ids[0] = bte->gx_id;
+    ids[1] = bte->gy_id;
+    ids[2] = bte->gz_id;
+    scale = 0.0f;
+    for (d = 0; d < 3; ++d)
+    {
+        if (ids[d] < 0 || ids[d] >= desc->grad_table_size)
+            continue;
+        element = &desc->grad_table[ids[d]];
+        if (element->id < 0 || element->id >= desc->num_unique_grads)
+            continue;
+        if (fabs((double)element->amplitude) > fabs((double)scale))
+            scale = element->amplitude;
+    }
+    return scale;
+}
+
+/* The grid of @p g and the combination on it, times @p scale, into arrays of
+ * its own. */
+static int grid_copy(
+    const pulseg_wave *wave,
+    const wave_grid *g,
+    float scale,
+    float **time_us,
+    float *gradient[3])
+{
+    int a, i;
+
+    *time_us = (float *)PULSEG_ALLOC((size_t)g->n * sizeof(float));
+    for (a = 0; a < 3; ++a)
+        gradient[a] = (float *)PULSEG_ALLOC((size_t)g->n * sizeof(float));
+    if (!*time_us || !gradient[0] || !gradient[1] || !gradient[2])
+        return PULSEG_ERR_ALLOC_FAILED;
+    for (i = 0; i < g->n; ++i)
+    {
+        (*time_us)[i] = g->t[i];
+        for (a = 0; a < 3; ++a)
+            gradient[a][i] = scale * wave_grid_value(wave, g, a, i);
+    }
+    return PULSEG_SUCCESS;
+}
+
+int pulseg__block_gradients(
+    const pulseg_sequence_descriptor *desc,
+    int block_idx,
+    float **time_us,
+    float *gradient[3],
+    int *n)
+{
+    const pulseg_block_table_element *bte;
+    pulseg_wave wave;
+    wave_grid g;
+    int rc;
+
+    *time_us = NULL;
+    gradient[0] = gradient[1] = gradient[2] = NULL;
+    *n = 0;
+    if (block_idx < 0 || block_idx >= desc->num_blocks)
+        return PULSEG_ERR_INVALID_ARGUMENT;
+    bte = &desc->block_table[block_idx];
+    if (!pulseg__block_combination(desc, bte, &wave))
+        return PULSEG_SUCCESS;
+    rc = wave_grid_build(desc, &wave, &g);
+    if (PULSEG_FAILED(rc))
+        return rc;
+    if (g.n > 0)
+        rc = grid_copy(&wave, &g, wave_scale(desc, bte), time_us, gradient);
+    if (PULSEG_SUCCEEDED(rc))
+        *n = g.n;
+    wave_grid_free(&g);
+    return rc;
+}
+
 int pulseg_get_num_waves(const pulseg_collection *coll, int subseq_idx)
 {
     if (!coll)
@@ -463,30 +553,81 @@ int pulseg_materialize_wave(
         out_peak);
 }
 
-float pulseg__wave_scale(
+/* Each axis's definition, shape and amplitude, into @p wave and
+ * @p amplitude; 0 when the block drives none. */
+static int block_axes(
     const pulseg_sequence_descriptor *desc,
-    const pulseg_block_table_element *bte)
+    const pulseg_block_table_element *bte,
+    pulseg_wave *wave,
+    float amplitude[3])
 {
     const pulseg_grad_table_element *element;
     int ids[3];
-    float scale;
-    int d;
+    int d, driven = 0;
 
     ids[0] = bte->gx_id;
     ids[1] = bte->gy_id;
     ids[2] = bte->gz_id;
-    scale = 0.0f;
     for (d = 0; d < 3; ++d)
     {
+        wave->grad_def[d] = -1;
+        wave->shape_id[d] = 0;
+        amplitude[d] = 0.0f;
         if (ids[d] < 0 || ids[d] >= desc->grad_table_size)
             continue;
         element = &desc->grad_table[ids[d]];
         if (element->id < 0 || element->id >= desc->num_unique_grads)
             continue;
-        if (fabs((double)element->amplitude) > fabs((double)scale))
-            scale = element->amplitude;
+        wave->grad_def[d] = element->id;
+        wave->shape_id[d] = element->shape_id;
+        amplitude[d] = element->amplitude;
+        driven = 1;
     }
-    return scale;
+    return driven;
+}
+
+/* The rotation of @p bte, the identity without one. */
+static void block_rotation(
+    const pulseg_sequence_descriptor *desc,
+    const pulseg_block_table_element *bte,
+    pulseg_wave *wave)
+{
+    const int rotated = bte->rotation_id >= 0 && bte->rotation_id < desc->num_rotations &&
+        desc->rotation_matrices != NULL;
+    int i;
+
+    wave->rotation_id = rotated ? bte->rotation_id : -1;
+    for (i = 0; i < 9; ++i)
+        wave->rotation[i] = rotated ? desc->rotation_matrices[bte->rotation_id][i]
+                                    : ((i % 4 == 0) ? 1.0f : 0.0f);
+}
+
+int pulseg__block_combination(
+    const pulseg_sequence_descriptor *desc,
+    const pulseg_block_table_element *bte,
+    pulseg_wave *wave)
+{
+    float amplitude[3];
+    float scale;
+    int d;
+
+    wave->num_points = 0;
+    wave->start_us = 0.0f;
+    wave->end_us = 0.0f;
+    for (d = 0; d < 3; ++d)
+    {
+        wave->ratio[d] = 0.0f;
+        wave->peak[d] = 0.0f;
+    }
+    block_rotation(desc, bte, wave);
+    if (!block_axes(desc, bte, wave, amplitude))
+        return 0;
+    scale = wave_scale(desc, bte);
+    if (scale == 0.0f)
+        return 0;
+    for (d = 0; d < 3; ++d)
+        wave->ratio[d] = amplitude[d] / scale;
+    return 1;
 }
 
 /* The wave block-table entry @p block_idx plays, -1 where it plays none. */
@@ -518,7 +659,7 @@ void pulseg__block_wave(
     if (w < 0)
         return;
 
-    scale = pulseg__wave_scale(desc, &desc->block_table[block_idx]);
+    scale = wave_scale(desc, &desc->block_table[block_idx]);
     wave = &desc->waves[w];
     for (d = 0; d < 3; ++d)
         amp_hz_per_m[d] = scale * wave->peak[d];
@@ -766,19 +907,6 @@ static float segment_load_us(const pulseg_wave_plan *plan, int g, float load_us_
     return total;
 }
 
-/* What block-table entry @p block plays for: its own duration, or its
- * definition's where it records none. */
-static int block_duration_us(const pulseg_sequence_descriptor *desc, int block)
-{
-    const pulseg_block_table_element *bte = &desc->block_table[block];
-
-    if (bte->duration_us >= 0)
-        return bte->duration_us;
-    if (bte->id >= 0 && bte->id < desc->num_unique_blocks)
-        return desc->base_blocks[bte->id].duration_us;
-    return 0;
-}
-
 /* The scan's segment instances, walked entry by entry across the chain. */
 typedef struct instance_walk
 {
@@ -815,7 +943,7 @@ static int instance_starts(instance_walk *walk, const pulseg_sequence_descriptor
         walk->current_us = 0.0f;
     }
     if (block >= 0 && block < desc->num_blocks)
-        walk->current_us += (float)block_duration_us(desc, block);
+        walk->current_us += (float)pulseg__played_duration_us(desc, block);
     return walk->position == 0;
 }
 

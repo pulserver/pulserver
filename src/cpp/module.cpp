@@ -632,6 +632,57 @@ py::dict plan_waves(const pulseg_collection *coll, const pulseg_wave_budget &bud
     return out;
 }
 
+/* A corner-point stream, released with it. */
+struct CornerPoints
+{
+    pulseg_corner_point_stream stream = PULSEG_CORNER_POINT_STREAM_INIT;
+
+    CornerPoints() = default;
+    CornerPoints(const CornerPoints &) = delete;
+    CornerPoints &operator=(const CornerPoints &) = delete;
+    ~CornerPoints() { pulseg_corner_point_stream_free(&stream); }
+};
+
+/* The gradients of subsequence @p subsequence's heaviest repetition, and,
+ * with a positive @p raster_us, its samples on that raster. */
+py::dict repetition_gradients(const pulseg_collection *coll, int subsequence, float raster_us)
+{
+    CornerPoints corners;
+    const pulseg_corner_point_stream &s = corners.stream;
+    pulseg_diagnostic diag = PULSEG_DIAGNOSTIC_INIT;
+    const int rc = pulseg_get_tr_corner_points(coll, &corners.stream, &diag, subsequence);
+    if (PULSEG_FAILED(rc))
+        throw std::invalid_argument(
+            std::string(pulseg_get_error_message(rc)) + ": " + diag.message);
+
+    const auto n = static_cast<py::ssize_t>(s.num_points);
+    std::vector<float> gradient;
+    gradient.reserve(static_cast<size_t>(3 * n));
+    for (py::ssize_t i = 0; i < n; ++i)
+    {
+        gradient.push_back(s.gx_hz_per_m[i]);
+        gradient.push_back(s.gy_hz_per_m[i]);
+        gradient.push_back(s.gz_hz_per_m[i]);
+    }
+    py::dict out;
+    out["first_position"] = s.first_position;
+    out["duration_us"] = s.duration_us;
+    out["energy"] = s.energy;
+    out["time_us"] = as_array(std::vector<float>(s.time_us, s.time_us + n), {n});
+    out["gradient_hz_per_m"] = as_array(gradient, {n, 3});
+    if (raster_us <= 0.0f)
+        return out;
+    const auto m = static_cast<long>(std::ceil(s.duration_us / raster_us - 1e-3f));
+    std::vector<float> samples(static_cast<size_t>(3 * (m > 0 ? m : 0)));
+    for (int axis = 0; axis < 3 && m > 0; ++axis)
+        require(
+            pulseg_sample_corner_points(
+                &s, axis, raster_us, m, samples.data() + static_cast<size_t>(axis * m)),
+            "repetition sampling");
+    out["samples_hz_per_m"] = as_array(samples, {3, static_cast<py::ssize_t>(m > 0 ? m : 0)});
+    return out;
+}
+
 Collection load(const std::string &cache_path, int source_size)
 {
     Collection coll(pulseg_collection_alloc());
@@ -768,6 +819,12 @@ PYBIND11_MODULE(_ext, module)
             return plan_waves(load(cache_path, source_size).get(), budget);
         },
         "Lay out a written cache's rotated waves in a playout's waveform memory.");
+
+    module.def(
+        "repetition_gradients_from_cache",
+        [](const std::string &cache_path, int source_size, int subsequence, float raster_us)
+        { return repetition_gradients(load(cache_path, source_size).get(), subsequence, raster_us); },
+        "The gradients of a written cache's heaviest repetition of one subsequence.");
 
     module.def(
         "sample_wave_from_cache",

@@ -440,11 +440,6 @@ static int record_grad_shape_ids(
 /*  Trapezoid statistics                                               */
 /* ================================================================== */
 
-float pulseg__trap_energy(float rise_us, float flat_us, float fall_us)
-{
-    return (rise_us / 3.0f + flat_us + fall_us / 3.0f) * 1e-6f;
-}
-
 static void compute_trapezoid_stats(
     float *slew,
     float *energy,

@@ -389,6 +389,17 @@ def _reader_lines(s):
     return lines
 
 
+def _repetition_lines(seq, count):
+    lines = []
+    for i in range(count):
+        r = ir.repetition_gradients(seq, i)
+        lines.append(
+            f"repetition {i} rc 1 first {r['first_position']} "
+            f"points {r['time_us'].size} duration_us {r['duration_us']:.1f}"
+        )
+    return lines
+
+
 @pytest.fixture(scope="module")
 def scanner_reader(tmp_path_factory):
     """The cache reader compiled as a scanner builds it: 32-bit, for one vendor."""
@@ -452,7 +463,11 @@ def test_a_vendor_cache_written_here_loads_in_the_scanner_reader(
         check=True,
     ).stdout
     expected = summary(seq, SYSTEM, label_column_map=LABELS)
-    assert printed.splitlines() == _reader_lines(expected)
+    # This build loads vendor-neutral caches alone.
+    convert(seq, SYSTEM)
+    assert printed.splitlines() == _reader_lines(expected) + _repetition_lines(
+        seq, expected["num_subsequences"]
+    )
 
 
 def _plan_lines(plan):

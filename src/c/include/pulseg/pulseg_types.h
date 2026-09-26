@@ -734,6 +734,36 @@ typedef struct pulseg_block_info
 /* clang-format on */
 
 /* ================================================================== */
+/*  Gradients of one repetition                                        */
+/* ================================================================== */
+
+/**
+ * @brief The gradients of one repetition, as corner points on its timeline.
+ *
+ * All three axes share @c time_us, and each is linear between consecutive
+ * points, so this is the waveform itself, not a sampling of it: each block's
+ * gradients at their own corners, a rotated block's through its wave, joined
+ * from the repetition's start.  Along the logical axes: each block's own
+ * rotation is in, the prescription's is not.
+ */
+typedef struct pulseg_corner_point_stream
+{
+    int num_points;
+    float *time_us;     /**< [num_points] from the repetition's start       */
+    float *gx_hz_per_m; /**< [num_points]                                   */
+    float *gy_hz_per_m; /**< [num_points]                                   */
+    float *gz_hz_per_m; /**< [num_points]                                   */
+    float duration_us;  /**< the repetition's duration                      */
+    int first_position; /**< execution-stream position of its first block   */
+    float energy;       /**< integral of the squared gradient, summed over
+                             the axes, over the repetition: (Hz/m)^2 s      */
+} pulseg_corner_point_stream;
+
+/* clang-format off */
+#define PULSEG_CORNER_POINT_STREAM_INIT {0, NULL, NULL, NULL, NULL, 0.0f, -1, 0.0f}
+/* clang-format on */
+
+/* ================================================================== */
 /*  Waveform memory for rotated waves                                 */
 /* ================================================================== */
 

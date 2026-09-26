@@ -27,6 +27,7 @@ set(PULSEG_SOURCES
     structure/pulseg_getters.c
     structure/pulseg_descriptor.c
     structure/pulseg_waves.c
+    structure/pulseg_repetition.c
     cache/pulseg_cache.c
 )
 

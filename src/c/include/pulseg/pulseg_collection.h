@@ -582,6 +582,59 @@ extern "C"
     /** @brief Release what pulseg_plan_waves() allocated and reset @p plan. */
     void pulseg_free_wave_plan(pulseg_wave_plan *plan);
 
+    /* ================================================================== */
+    /*  Gradients of the heaviest repetition                              */
+    /* ================================================================== */
+
+    /**
+     * @brief Return the gradients of a subsequence's repetition of most
+     * gradient energy, as corner points.
+     *
+     * The repetition is one the scanner plays, with its blocks' own
+     * amplitudes, shapes and rotations: of the repetitions the execution
+     * stream holds, from its first block, the one over which the squared
+     * gradient summed over the axes integrates to the most, the earliest on
+     * a tie; the whole subsequence where it does not repeat.  That energy is
+     * the same whatever the rotations, so the choice does not depend on them.
+     * What a scanner's gradient-heating and acoustic models are evaluated on.
+     *
+     * The points run from 0, zero where no gradient plays at the
+     * repetition's start, to its duration, zero where none plays up to its
+     * end; where one block's gradient meets the next's, the later block's
+     * corner stands.  Needs the execution stream: a full cache.
+     *
+     * @param[in]  coll        Loaded collection.
+     * @param[out] out         Overwritten; release with
+     *                         pulseg_corner_point_stream_free().
+     * @param[out] diag        Diagnostic on failure; may be NULL.
+     * @param[in]  subseq_idx  Subsequence index.
+     * @return PULSEG_SUCCESS, or a negative error code.
+     */
+    int pulseg_get_tr_corner_points(
+        const pulseg_collection *coll,
+        pulseg_corner_point_stream *out,
+        pulseg_diagnostic *diag,
+        int subseq_idx);
+
+    /** @brief Release what pulseg_get_tr_corner_points() allocated and reset @p s. */
+    void pulseg_corner_point_stream_free(pulseg_corner_point_stream *s);
+
+    /**
+     * @brief Sample one axis of a corner-point stream on a raster.
+     *
+     * Writes the gradient at the centres (i + 0.5) raster_us of
+     * @p num_samples raster intervals from the stream's start, in Hz/m, zero
+     * outside its points: what an acoustic model transforms.
+     *
+     * @return PULSEG_SUCCESS, or a negative error code.
+     */
+    int pulseg_sample_corner_points(
+        const pulseg_corner_point_stream *s,
+        int axis,
+        float raster_us,
+        long num_samples,
+        float *out);
+
     /**
      * @brief Return the phase modulation of the ADC the block at the cursor plays.
      *

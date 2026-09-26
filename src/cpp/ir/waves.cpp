@@ -46,48 +46,6 @@ struct WaveKeyHash
     }
 };
 
-/* The definition, shape and amplitude of each axis block-table entry @p bte
- * drives; false when it drives none. */
-bool axes_of_block(
-    const pulseg_sequence_descriptor *desc,
-    const pulseg_block_table_element *bte,
-    pulseg_wave &wave,
-    float amplitude[3])
-{
-    const int ids[3] = {bte->gx_id, bte->gy_id, bte->gz_id};
-    bool driven = false;
-
-    for (int d = 0; d < 3; ++d)
-    {
-        wave.grad_def[d] = -1;
-        amplitude[d] = 0.0f;
-        if (ids[d] < 0 || ids[d] >= desc->grad_table_size)
-            continue;
-        const pulseg_grad_table_element &element = desc->grad_table[ids[d]];
-        if (element.id < 0 || element.id >= desc->num_unique_grads)
-            continue;
-        wave.grad_def[d] = element.id;
-        wave.shape_id[d] = element.shape_id;
-        amplitude[d] = element.amplitude;
-        driven = true;
-    }
-    return driven;
-}
-
-/* The rotation of @p bte, the identity without one. */
-void rotation_of_block(
-    const pulseg_sequence_descriptor *desc,
-    const pulseg_block_table_element *bte,
-    pulseg_wave &wave)
-{
-    const bool rotated = bte->rotation_id >= 0 && bte->rotation_id < desc->num_rotations &&
-        desc->rotation_matrices;
-    wave.rotation_id = rotated ? bte->rotation_id : -1;
-    for (int i = 0; i < 9; ++i)
-        wave.rotation[i] = rotated ? desc->rotation_matrices[bte->rotation_id][i]
-                                   : (i % 4 == 0 ? 1.0f : 0.0f);
-}
-
 /* The wave block-table entry @p bte plays, without its peaks and point count;
  * false when it drives no gradient. */
 bool wave_of_block(
@@ -96,18 +54,10 @@ bool wave_of_block(
     pulseg_wave &wave,
     WaveKey &key)
 {
-    float amplitude[3];
-
-    wave = pulseg_wave{};
-    if (!axes_of_block(desc, bte, wave, amplitude))
+    if (!pulseg__block_combination(desc, bte, &wave))
         return false;
-    const float scale = pulseg__wave_scale(desc, bte);
-    if (scale == 0.0f)
-        return false;
-    rotation_of_block(desc, bte, wave);
     for (int d = 0; d < 3; ++d)
     {
-        wave.ratio[d] = amplitude[d] / scale;
         key.v[d] = wave.grad_def[d];
         key.v[3 + d] = wave.shape_id[d];
         key.v[7 + d] = static_cast<int>(std::lround(wave.ratio[d] / PULSEG_WAVE_RATIO_STEP));

@@ -1,4 +1,4 @@
-"""Where a playout holds a cache's rotated waves, and what it loads into them."""
+"""What a playout plays from a cache's gradients: its rotated waves and its heaviest repetition."""
 
 from __future__ import annotations
 
@@ -148,4 +148,48 @@ def sample_wave(
             )
             for axis in range(3)
         ]
+    )
+
+
+def repetition_gradients(
+    seq_path: Path | str,
+    subsequence: int = 0,
+    *,
+    raster_us: float | None = None,
+    cache_ext: str = ".pseg",
+) -> dict[str, Any]:
+    """Return the gradients of a subsequence's repetition of most gradient energy.
+
+    The C library's choice (``pulseg_get_tr_corner_points``): of the
+    repetitions the cache's execution stream holds, from its first block,
+    the one over which the squared gradient summed over the axes integrates
+    to the most, the earliest on a tie; the whole subsequence where it does
+    not repeat. The repetition is one the scanner plays, with its blocks'
+    own amplitudes, shapes and rotations. A scanner evaluates its
+    gradient-heating and acoustic models on it.
+
+    Returns
+    -------
+    dict of str to Any
+        - ``first_position``: execution-stream position of its first block;
+        - ``duration_us``: its duration, in µs;
+        - ``energy``: that integral, in (Hz/m)² s;
+        - ``time_us``, ``gradient_hz_per_m``: ``(points,)`` and
+          ``(points, 3)``, its corner points from its start, along the logical
+          axes, linear in between; from zero at 0 where no gradient plays
+          there, to zero at its end where none plays up to it;
+        - with ``raster_us``, ``samples_hz_per_m``: ``(3, samples)``, the
+          gradient at the centres of the raster intervals that cover it.
+
+    Raises
+    ------
+    ValueError
+        If the cache cannot be loaded or holds no such subsequence.
+    """
+    seq_path = Path(seq_path)
+    return require("repetition_gradients_from_cache")(
+        str(cache_path(seq_path, cache_ext)),
+        seq_path.stat().st_size,
+        subsequence,
+        0.0 if raster_us is None else raster_us,
     )
