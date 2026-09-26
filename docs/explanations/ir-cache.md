@@ -201,6 +201,22 @@ raster is evaluated at the centres of that raster, across the span of all its
 events, and holds its first and last values over the half intervals at its two
 ends, which keeps the area of every event whose corners lie on the raster.
 
+A playout holds the rotated waves in waveform memory it sets aside for them on
+each gradient axis. {func}`~pulserver.ir.plan_waves` lays that memory out from
+the definitions alone, so the pulse-generation stage and the scan loop lay it
+out alike, and the C library a scanner links computes it
+(`pulseg_plan_waves`). A wave, or a slot, occupies the intervals of the
+playout's gradient raster from the one holding its first point to the one
+holding its last, sampled at their centres ({func}`~pulserver.ir.sample_wave`),
+on the axes it drives. Where every wave fits at once, each is loaded before the
+scan and an instance only selects it. Otherwise each segment position that
+plays waves holds two slots; the $n$-th instance of a segment in the scan plays
+half $n \bmod 2$, and its waves are loaded while the instance before it plays.
+Given the time the playout takes to load one sample, that loading is checked:
+for every instance but the first, it has to fit within a set share of the
+duration of the instance before. A chain whose waves fit neither layout, or an
+instance of which cannot be loaded in time, is refused.
+
 ## Cache file
 
 The cache has the name of the first sequence file with its extension replaced:

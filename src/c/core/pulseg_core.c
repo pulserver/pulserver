@@ -913,6 +913,14 @@ static int seg_trigger_type(
 /* Deep content equality of two segments (possibly in different subsequences).
  * Returns 1 iff the instruction memory a playout materialises for them is
  * identical. */
+static int same_wave_slot(
+    const pulseg_block_initial_state *a,
+    const pulseg_block_initial_state *b)
+{
+    return a->wave_points == b->wave_points && a->wave_start_us == b->wave_start_us &&
+        a->wave_end_us == b->wave_end_us && a->wave_axes == b->wave_axes;
+}
+
 static int segments_content_equal(
     const pulseg_collection *coll,
     int subseq_a,
@@ -1015,9 +1023,9 @@ static int segments_content_equal(
             return 0;
         if (sa->nopos_flag[b] != sb->nopos_flag[b])
             return 0;
-        /* A shared rotated-wave slot is reserved once, at one length. */
+        /* A shared rotated-wave slot is reserved once, at one span. */
         if (sa->initial_states && sb->initial_states &&
-            sa->initial_states[b].wave_points != sb->initial_states[b].wave_points)
+            !same_wave_slot(&sa->initial_states[b], &sb->initial_states[b]))
             return 0;
     }
     return 1;

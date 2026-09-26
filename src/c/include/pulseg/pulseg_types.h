@@ -458,8 +458,8 @@ typedef struct pulseg_block_instance
 typedef struct pulseg_cursor_info
 {
     int subseq_idx;    /**< current subsequence index                     */
-    int scan_pos;      /**< exec-stream position; indexes a chunk plan's
-                            position_wave[] to find this block's waveform */
+    int scan_pos;      /**< position in the subsequence's execution
+                            stream                                        */
     int segment_id;    /**< current segment ID (global)                   */
     int segment_start; /**< 1 if first block of current segment           */
     int segment_end;   /**< 1 if last block of current segment            */
@@ -714,16 +714,115 @@ typedef struct pulseg_block_info
                              *   multiply by the instance amplitude for the physical
                              *   gradient.  Meaningless when rf_grad_constant is 0. */
     int wave_points;        /**< points per axis of the longest rotated wave an
-                             *   instance of this position plays, which a waveform
-                             *   slot reserved here has to hold; 0 where the
+                             *   instance of this position plays, as
+                             *   pulseg_materialize_wave() returns it; 0 where the
                              *   position plays none */
+    float wave_start_us;    /**< earliest start of those waves, us from the
+                             *   block's start */
+    float wave_end_us;      /**< latest end of those waves */
+    int wave_axes;          /**< bit (1 << axis) set for each axis one of them
+                             *   drives */
 } pulseg_block_info;
 
 /* clang-format off */
 #define PULSEG_BLOCK_INFO_INIT \
     { \
     0, 0, {0, 0, 0}, {0, 0, 0}, {-1, -1, -1}, {-1, -1, -1}, {-1, -1, -1}, {-1, -1, -1}, 0, \
-    -1, -1, -1, -1, 0, 0, 0, -1, -1, 0, -1, -1, -1, 0, 0, 0, 0, 0, {0.0f, 0.0f, 0.0f}, 0 \
+    -1, -1, -1, -1, 0, 0, 0, -1, -1, 0, -1, -1, -1, 0, 0, 0, 0, 0, {0.0f, 0.0f, 0.0f}, 0, \
+    0.0f, 0.0f, 0 \
+    }
+/* clang-format on */
+
+/* ================================================================== */
+/*  Waveform memory for rotated waves                                 */
+/* ================================================================== */
+
+/** How a playout holds the rotated waves: pulseg_wave_plan::mode. */
+#define PULSEG_WAVES_NONE 0     /**< the collection plays no rotated wave     */
+#define PULSEG_WAVES_RESIDENT 1 /**< every wave held at once, loaded before
+                                     the scan                                 */
+#define PULSEG_WAVES_STREAMED 2 /**< two slots per position that plays waves;
+                                     each segment instance's waves loaded
+                                     while the instance before it plays      */
+
+/**
+ * @brief What a playout's waveform memory affords the rotated waves.
+ *
+ * A property of the playout, not of the sequence.
+ */
+typedef struct pulseg_wave_budget
+{
+    long max_samples;         /**< samples each gradient axis holds for
+                                   rotated waves                           */
+    float raster_us;          /**< the playout's gradient raster, us per
+                                   sample                                  */
+    float load_us_per_sample; /**< time to sample and load one sample on one
+                                   axis; 0 leaves the loading unchecked    */
+    float headroom;           /**< share of a segment instance's duration
+                                   the next instance's loading may take    */
+} pulseg_wave_budget;
+
+/* clang-format off */
+#define PULSEG_WAVE_BUDGET_INIT {0L, 0.0f, 0.0f, 0.5f}
+/* clang-format on */
+
+/**
+ * @brief One stretch of waveform memory: a wave, or a slot waves are loaded
+ * into.
+ *
+ * It holds @c samples samples on each axis it drives, at the centres of the
+ * raster intervals from @c start_us, and plays them from there.
+ */
+typedef struct pulseg_wave_region
+{
+    long offset[3]; /**< per axis, its first sample in that axis's memory;
+                         -1 on an axis it does not drive                  */
+    long samples;   /**< samples per driven axis                          */
+    float start_us; /**< start of its first raster interval, us from the
+                         block's start, on the playout's raster           */
+} pulseg_wave_region;
+
+/**
+ * @brief Where a playout holds the rotated waves, from pulseg_plan_waves().
+ *
+ * Both layouts are filled; @c mode says which the budget affords.
+ * RESIDENT holds each wave of each subsequence in a region of its own.
+ * STREAMED holds two slots per segment position that plays waves; the n-th
+ * instance of a segment in the scan plays the slots of half n % 2, loaded
+ * while the instance before it plays.
+ */
+typedef struct pulseg_wave_plan
+{
+    int mode;                  /**< PULSEG_WAVES_*                          */
+    long samples[3];           /**< per axis, what @c mode holds            */
+    long resident_samples[3];  /**< per axis, every wave at once            */
+    long streamed_samples[3];  /**< per axis, the two slots of every
+                                    position                                */
+    int num_subsequences;
+    int *num_waves;            /**< [subsequence]                           */
+    pulseg_wave_region **waves; /**< [subsequence][wave]: RESIDENT           */
+    int num_segments;
+    int *num_positions;        /**< [segment]: its blocks                   */
+    pulseg_wave_region **slots; /**< [segment][2 * position + half]:
+                                    STREAMED; samples 0 where the position
+                                    plays no wave                           */
+    int loading_checked;       /**< 1 when the fields below were computed:
+                                    STREAMED, a load rate, and the execution
+                                    stream loaded                           */
+    float least_spare_us;      /**< least, over segment instances, of the
+                                    headroom times the preceding instance's
+                                    duration less the instance's loading    */
+    int tightest_subseq;       /**< the instance it is found at, -1 when
+                                    none                                    */
+    int tightest_position;     /**< execution-stream position of that
+                                    instance's first block                  */
+} pulseg_wave_plan;
+
+/* clang-format off */
+#define PULSEG_WAVE_PLAN_INIT \
+    { \
+    PULSEG_WAVES_NONE, {0L, 0L, 0L}, {0L, 0L, 0L}, {0L, 0L, 0L}, 0, NULL, NULL, 0, NULL, \
+    NULL, 0, 0.0f, -1, -1 \
     }
 /* clang-format on */
 

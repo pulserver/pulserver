@@ -528,6 +528,61 @@ extern "C"
         float *out_peak);
 
     /**
+     * @brief Sample one axis of a rotated wave on a playout's gradient raster.
+     *
+     * Writes the wave pulseg_materialize_wave() returns, normalised to unit
+     * peak, at the centres start_us + (i + 0.5) raster_us of @p num_samples
+     * raster intervals: linear between its points, zero outside them.  What
+     * a playout loads into the region pulseg_plan_waves() assigns, from that
+     * region's start_us.
+     *
+     * @return PULSEG_SUCCESS or a negative error code.
+     */
+    int pulseg_sample_wave(
+        const pulseg_collection *coll,
+        int subseq_idx,
+        int wave_idx,
+        int out_axis,
+        float start_us,
+        float raster_us,
+        long num_samples,
+        float *out);
+
+    /**
+     * @brief Lay out the rotated waves of a collection in a playout's
+     * waveform memory.
+     *
+     * Every wave is held at once (PULSEG_WAVES_RESIDENT) where that fits the
+     * budget on every axis, and otherwise each segment position that plays
+     * waves holds two slots (PULSEG_WAVES_STREAMED), refilled for each
+     * segment instance while the instance before it plays.  Each wave or slot
+     * holds its span on the playout's raster, on the axes it drives.  The
+     * layout needs the definitions alone, so the pulse-generation stage and
+     * the scan loop compute the same one.  When the execution stream is
+     * loaded, a streamed layout with a load rate is also checked for time:
+     * every instance but the first loads its waves while the instance before
+     * it plays, within the budget's headroom.
+     *
+     * @param[in]  coll    Loaded collection.
+     * @param[in]  budget  The playout's waveform memory, raster and load rate.
+     * @param[out] plan    Overwritten; release with pulseg_free_wave_plan(),
+     *                     whatever the result.
+     * @param[out] diag    States the shortfall on failure; may be NULL.
+     * @return PULSEG_SUCCESS; PULSEG_ERR_WAVE_MEMORY when neither layout fits,
+     *         with the sizes filled; PULSEG_ERR_WAVE_LOADING when an instance
+     *         cannot be loaded in time, with the plan filled and the instance
+     *         named; or another negative error code.
+     */
+    int pulseg_plan_waves(
+        const pulseg_collection *coll,
+        const pulseg_wave_budget *budget,
+        pulseg_wave_plan *plan,
+        pulseg_diagnostic *diag);
+
+    /** @brief Release what pulseg_plan_waves() allocated and reset @p plan. */
+    void pulseg_free_wave_plan(pulseg_wave_plan *plan);
+
+    /**
      * @brief Return the phase modulation of the ADC the block at the cursor plays.
      *
      * The receiver phase of sample i is the ADC phase offset, plus its

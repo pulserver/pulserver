@@ -455,6 +455,55 @@ def test_a_vendor_cache_written_here_loads_in_the_scanner_reader(
     assert printed.splitlines() == _reader_lines(expected)
 
 
+def _plan_lines(plan):
+    lines = [
+        f"wave_plan rc 1 mode {('none', 'resident', 'streamed').index(plan['mode'])} "
+        f"samples {' '.join(str(n) for n in plan['samples'])}"
+    ]
+
+    def region(what, i, j, r):
+        offsets = " ".join(str(o) for o in r["offset"])
+        return (
+            f"{what} {i} {j} offset {offsets} samples {r['samples']} "
+            f"start_us {r['start_us']:.3f}"
+        )
+
+    for i, waves in enumerate(plan["waves"]):
+        lines += [region("wave", i, j, r) for j, r in enumerate(waves)]
+    for i, positions in enumerate(plan["slots"]):
+        halves = [half for pair in positions for half in pair]
+        lines += [region("slot", i, j, r) for j, r in enumerate(halves)]
+    return lines
+
+
+@pytest.mark.parametrize("max_samples", [10**6, 3000])
+def test_the_scanner_reader_lays_out_the_rotated_waves_as_the_host_does(
+    max_samples, tmp_path, scanner_reader
+):
+    seq = _copy("zte_3d.seq", tmp_path)
+    cache = convert(
+        seq, SYSTEM, vendor=VENDOR, label_column_map=LABELS, cache_ext=".cache"
+    )
+    printed = subprocess.run(
+        [
+            str(scanner_reader),
+            str(cache),
+            str(seq.stat().st_size),
+            str(max_samples),
+            "4",
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.splitlines()
+    first = printed.index(next(x for x in printed if x.startswith("wave_plan")))
+    # This build loads vendor-neutral caches alone.
+    convert(seq, SYSTEM)
+    plan = ir.plan_waves(seq, ir.WaveBudget(max_samples, 4.0))
+    assert plan["mode"] == ("resident" if max_samples == 10**6 else "streamed")
+    assert printed[first:] == _plan_lines(plan)
+
+
 def test_the_scanner_reader_reads_the_sar_ratios_a_cache_carries(
     tmp_path, scanner_reader
 ):
