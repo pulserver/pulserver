@@ -469,17 +469,14 @@
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 
-<span class="c1">#: ADC samples a range of blocks holds before an excitation may start the next.</span>
-<span class="n">_RANGE_SAMPLES</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="mi">17</span>
+<span class="c1">#: ADC samples after which a run of readouts ends and the next starts.</span>
+<span class="n">_RUN_SAMPLES</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="mi">17</span>
 
-<span class="c1">#: Ranges whose k-space a table keeps.</span>
-<span class="n">_KEPT_RANGES</span> <span class="o">=</span> <span class="mi">2</span>
+<span class="c1">#: Runs whose k-space a table keeps.</span>
+<span class="n">_KEPT_RUNS</span> <span class="o">=</span> <span class="mi">2</span>
 
-<span class="c1">#: RF uses whose pulse centre resets k-space to zero, as pypulseqpp integrates it.</span>
-<span class="n">_RESETTING</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">({</span><span class="s2">"excitation"</span><span class="p">,</span> <span class="s2">"undefined"</span><span class="p">})</span>
-
-<span class="c1">#: RF and ADC columns of ``Sequence.block_events``, and the number of columns.</span>
-<span class="n">_RF</span><span class="p">,</span> <span class="n">_ADC</span><span class="p">,</span> <span class="n">_COLUMNS</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">7</span>
+<span class="c1">#: ADC column of ``Sequence.block_events``, and the number of columns.</span>
+<span class="n">_ADC</span><span class="p">,</span> <span class="n">_COLUMNS</span> <span class="o">=</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">7</span>
 
 
 <div class="viewcode-block" id="read_chain">
@@ -594,12 +591,12 @@
 <span class="k">class</span><span class="w"> </span><span class="nc">ReadoutTable</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Every ADC readout of one sequence, in play order.</span>
 
-<span class="sd">    k-space is integrated over ranges of blocks, each starting at the first</span>
-<span class="sd">    block or at an excitation without a readout, whose pulse centre resets k:</span>
-<span class="sd">    a range needs nothing from the blocks before it. Tabulating integrates</span>
-<span class="sd">    every range once; :meth:`readout_k` integrates a readout's range again</span>
-<span class="sd">    when it is not among the last few kept. The table holds the sequence for</span>
-<span class="sd">    this, which must not change once tabulated.</span>
+<span class="sd">    k-space is integrated a run of consecutive readouts at a time, by</span>
+<span class="sd">    ``Sequence.adc_kspace(readouts=...)``, from the last pulse before the run</span>
+<span class="sd">    that resets it. Tabulating integrates the whole sequence once, to find</span>
+<span class="sd">    each readout's echo; :meth:`readout_k` integrates a readout's run when it</span>
+<span class="sd">    is not among the last few kept. The table holds the sequence for this,</span>
+<span class="sd">    which must not change once tabulated.</span>
 
 <span class="sd">    Attributes</span>
 <span class="sd">    ----------</span>
@@ -642,7 +639,7 @@
     <span class="n">labels</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]</span>
     <span class="n">center_sample</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
     <span class="n">trajectory_dimensions</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
-    <span class="n">_ranges</span><span class="p">:</span> <span class="n">_Ranges</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="nb">repr</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">_runs</span><span class="p">:</span> <span class="n">_Runs</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="nb">repr</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
         <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_samples</span><span class="o">.</span><span class="n">size</span><span class="p">)</span>
@@ -662,9 +659,6 @@
         <span class="n">dwell</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="nb">float</span><span class="p">(</span><span class="n">adc</span><span class="o">.</span><span class="n">dwell</span><span class="p">)</span> <span class="k">for</span> <span class="n">adc</span> <span class="ow">in</span> <span class="n">adcs</span><span class="p">])[</span><span class="n">which</span><span class="p">]</span>
         <span class="n">labels</span> <span class="o">=</span> <span class="n">_labels_at</span><span class="p">(</span><span class="n">seq</span><span class="p">,</span> <span class="n">block</span><span class="p">)</span>
 
-        <span class="n">ranges</span> <span class="o">=</span> <span class="n">_Ranges</span><span class="p">(</span>
-            <span class="n">seq</span><span class="p">,</span> <span class="n">_range_starts</span><span class="p">(</span><span class="n">seq</span><span class="p">,</span> <span class="n">events</span><span class="p">,</span> <span class="n">block</span><span class="p">,</span> <span class="n">num_samples</span><span class="p">),</span> <span class="n">block</span><span class="p">,</span> <span class="n">num_samples</span>
-        <span class="p">)</span>
         <span class="n">reverse</span> <span class="o">=</span> <span class="n">labels</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"REV"</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">count</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">))</span> <span class="o">!=</span> <span class="mi">0</span>
         <span class="n">moves</span> <span class="o">=</span> <span class="n">echoes</span><span class="o">.</span><span class="n">moving</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
         <span class="n">center_sample</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span>
@@ -680,7 +674,7 @@
             <span class="n">labels</span><span class="o">=</span><span class="n">labels</span><span class="p">,</span>
             <span class="n">center_sample</span><span class="o">=</span><span class="n">center_sample</span><span class="p">,</span>
             <span class="n">trajectory_dimensions</span><span class="o">=</span><span class="n">dimensions</span><span class="p">,</span>
-            <span class="n">_ranges</span><span class="o">=</span><span class="n">ranges</span><span class="p">,</span>
+            <span class="n">_runs</span><span class="o">=</span><span class="n">_Runs</span><span class="p">(</span><span class="n">seq</span><span class="p">,</span> <span class="n">num_samples</span><span class="p">),</span>
         <span class="p">)</span></div>
 
 
@@ -692,56 +686,45 @@
 <span class="sd">        ``(3, num_samples)``, absolute, with block rotations applied, as</span>
 <span class="sd">        ``Sequence.adc_kspace`` returns it.</span>
 <span class="sd">        """</span>
-        <span class="n">ranges</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ranges</span>
-        <span class="n">k</span> <span class="o">=</span> <span class="n">ranges</span><span class="o">.</span><span class="n">k</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">ranges</span><span class="o">.</span><span class="n">of_readout</span><span class="p">[</span><span class="n">index</span><span class="p">]))</span>
-        <span class="n">start</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">ranges</span><span class="o">.</span><span class="n">start</span><span class="p">[</span><span class="n">index</span><span class="p">])</span>
-        <span class="k">return</span> <span class="n">k</span><span class="p">[:,</span> <span class="n">start</span> <span class="p">:</span> <span class="n">start</span> <span class="o">+</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_samples</span><span class="p">[</span><span class="n">index</span><span class="p">])]</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span></div>
+        <span class="n">runs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_runs</span>
+        <span class="n">run</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">searchsorted</span><span class="p">(</span><span class="n">runs</span><span class="o">.</span><span class="n">first</span><span class="p">,</span> <span class="n">index</span><span class="p">,</span> <span class="n">side</span><span class="o">=</span><span class="s2">"right"</span><span class="p">))</span> <span class="o">-</span> <span class="mi">1</span>
+        <span class="n">start</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">runs</span><span class="o">.</span><span class="n">before</span><span class="p">[</span><span class="n">index</span><span class="p">]</span> <span class="o">-</span> <span class="n">runs</span><span class="o">.</span><span class="n">before</span><span class="p">[</span><span class="n">runs</span><span class="o">.</span><span class="n">first</span><span class="p">[</span><span class="n">run</span><span class="p">]])</span>
+        <span class="k">return</span> <span class="n">runs</span><span class="o">.</span><span class="n">k</span><span class="p">(</span><span class="n">run</span><span class="p">)[:,</span> <span class="n">start</span> <span class="p">:</span> <span class="n">start</span> <span class="o">+</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_samples</span><span class="p">[</span><span class="n">index</span><span class="p">])]</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span></div>
 </div>
 
 
 
-<span class="k">class</span><span class="w"> </span><span class="nc">_Ranges</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""The ranges of blocks a sequence's k-space is integrated over, and the last few integrated."""</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">_Runs</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Consecutive readouts whose k-space is integrated together, and the last few integrated.</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span>
-        <span class="n">seq</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
-        <span class="n">starts</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
-        <span class="n">readout_blocks</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
-        <span class="n">num_samples</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="sd">    A run starts at each readout whose first sample, counted over the whole</span>
+<span class="sd">    sequence, is the first at or past a multiple of ``_RUN_SAMPLES``.</span>
+<span class="sd">    """</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">seq</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">num_samples</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_sequence</span> <span class="o">=</span> <span class="n">seq</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_first</span> <span class="o">=</span> <span class="n">starts</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_last</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">starts</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">seq</span><span class="p">))</span>
-        <span class="n">before</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(([</span><span class="mi">0</span><span class="p">],</span> <span class="n">np</span><span class="o">.</span><span class="n">cumsum</span><span class="p">(</span><span class="n">num_samples</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)))</span>
-        <span class="n">first_readout</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-            <span class="n">np</span><span class="o">.</span><span class="n">searchsorted</span><span class="p">(</span><span class="n">readout_blocks</span><span class="p">,</span> <span class="n">starts</span><span class="p">),</span> <span class="n">num_samples</span><span class="o">.</span><span class="n">size</span>
+        <span class="c1">#: Samples before each readout, and after the last.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">before</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(([</span><span class="mi">0</span><span class="p">],</span> <span class="n">np</span><span class="o">.</span><span class="n">cumsum</span><span class="p">(</span><span class="n">num_samples</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)))</span>
+        <span class="c1">#: First readout of each run.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">first</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">flatnonzero</span><span class="p">(</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">diff</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">before</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">//</span> <span class="n">_RUN_SAMPLES</span><span class="p">,</span> <span class="n">prepend</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
         <span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_samples</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">diff</span><span class="p">(</span><span class="n">before</span><span class="p">[</span><span class="n">first_readout</span><span class="p">])</span>
-        <span class="c1">#: Range of each readout, and its first sample's column in that range.</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">of_readout</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">searchsorted</span><span class="p">(</span><span class="n">starts</span><span class="p">,</span> <span class="n">readout_blocks</span><span class="p">,</span> <span class="n">side</span><span class="o">=</span><span class="s2">"right"</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">start</span> <span class="o">=</span> <span class="n">before</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">before</span><span class="p">[</span><span class="n">first_readout</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">of_readout</span><span class="p">]]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_stop</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">first</span><span class="p">[</span><span class="mi">1</span><span class="p">:],</span> <span class="n">num_samples</span><span class="o">.</span><span class="n">size</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_kept</span><span class="p">:</span> <span class="n">OrderedDict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Lock</span><span class="p">()</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">k</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">part</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Return the ``(3, samples)`` k of every ADC sample in a range, in 1/m."""</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">k</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">run</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Return the ``(3, samples)`` k of every ADC sample of a run, in 1/m."""</span>
         <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span><span class="p">:</span>
-            <span class="k">if</span> <span class="n">part</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_kept</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_kept</span><span class="o">.</span><span class="n">move_to_end</span><span class="p">(</span><span class="n">part</span><span class="p">)</span>
-                <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_kept</span><span class="p">[</span><span class="n">part</span><span class="p">]</span>
-            <span class="n">first</span><span class="p">,</span> <span class="n">last</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_first</span><span class="p">[</span><span class="n">part</span><span class="p">]),</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_last</span><span class="p">[</span><span class="n">part</span><span class="p">])</span>
+            <span class="k">if</span> <span class="n">run</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_kept</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_kept</span><span class="o">.</span><span class="n">move_to_end</span><span class="p">(</span><span class="n">run</span><span class="p">)</span>
+                <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_kept</span><span class="p">[</span><span class="n">run</span><span class="p">]</span>
+            <span class="n">readouts</span> <span class="o">=</span> <span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">first</span><span class="p">[</span><span class="n">run</span><span class="p">]),</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_stop</span><span class="p">[</span><span class="n">run</span><span class="p">]))</span>
             <span class="n">k</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_sequence</span><span class="o">.</span><span class="n">adc_kspace</span><span class="p">(</span><span class="n">block_range</span><span class="o">=</span><span class="p">(</span><span class="n">first</span><span class="p">,</span> <span class="n">last</span><span class="p">)),</span>
-                <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_sequence</span><span class="o">.</span><span class="n">adc_kspace</span><span class="p">(</span><span class="n">readouts</span><span class="o">=</span><span class="n">readouts</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span>
             <span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
-            <span class="k">if</span> <span class="n">k</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_samples</span><span class="p">[</span><span class="n">part</span><span class="p">]:</span>
-                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
-                    <span class="sa">f</span><span class="s2">"blocks </span><span class="si">{</span><span class="n">first</span><span class="si">}</span><span class="s2"> to </span><span class="si">{</span><span class="n">last</span><span class="si">}</span><span class="s2"> play </span><span class="si">{</span><span class="n">k</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="si">}</span><span class="s2"> ADC samples, "</span>
-                    <span class="sa">f</span><span class="s2">"their readouts </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_samples</span><span class="p">[</span><span class="n">part</span><span class="p">]</span><span class="si">}</span><span class="s2">"</span>
-                <span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_kept</span><span class="p">[</span><span class="n">part</span><span class="p">]</span> <span class="o">=</span> <span class="n">k</span>
-            <span class="k">while</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_kept</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">_KEPT_RANGES</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_kept</span><span class="p">[</span><span class="n">run</span><span class="p">]</span> <span class="o">=</span> <span class="n">k</span>
+            <span class="k">while</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_kept</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">_KEPT_RUNS</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_kept</span><span class="o">.</span><span class="n">popitem</span><span class="p">(</span><span class="n">last</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
             <span class="k">return</span> <span class="n">k</span>
 
@@ -780,30 +763,6 @@
         <span class="p">]</span>
         <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">seq</span><span class="o">.</span><span class="n">evaluate_labels</span><span class="p">(</span><span class="n">evolution</span><span class="o">=</span><span class="s2">"blocks"</span><span class="p">)</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
     <span class="p">}</span>
-
-
-<span class="k">def</span><span class="w"> </span><span class="nf">_range_starts</span><span class="p">(</span>
-    <span class="n">seq</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">events</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">readout_blocks</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">num_samples</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Return the first block of each k-space range.</span>
-
-<span class="sd">    Block 1, then each excitation without a readout that follows at least</span>
-<span class="sd">    ``_RANGE_SAMPLES`` samples of the range before it. A block holding a</span>
-<span class="sd">    readout never starts a range, whatever its RF, so no readout precedes a</span>
-<span class="sd">    pulse centre in the block its range starts at.</span>
-<span class="sd">    """</span>
-    <span class="n">rf_blocks</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">flatnonzero</span><span class="p">(</span><span class="n">events</span><span class="p">[:,</span> <span class="n">_RF</span><span class="p">])</span> <span class="o">+</span> <span class="mi">1</span>
-    <span class="n">pulses</span><span class="p">,</span> <span class="n">which</span> <span class="o">=</span> <span class="n">_events_by_id</span><span class="p">(</span><span class="n">seq</span><span class="p">,</span> <span class="n">events</span><span class="p">[</span><span class="n">rf_blocks</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span> <span class="n">_RF</span><span class="p">],</span> <span class="n">rf_blocks</span><span class="p">,</span> <span class="s2">"rf"</span><span class="p">)</span>
-    <span class="n">resetting</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">pulse</span><span class="o">.</span><span class="n">use</span> <span class="ow">in</span> <span class="n">_RESETTING</span> <span class="k">for</span> <span class="n">pulse</span> <span class="ow">in</span> <span class="n">pulses</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
-    <span class="n">candidates</span> <span class="o">=</span> <span class="n">rf_blocks</span><span class="p">[</span><span class="n">resetting</span><span class="p">[</span><span class="n">which</span><span class="p">]</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">events</span><span class="p">[</span><span class="n">rf_blocks</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span> <span class="n">_ADC</span><span class="p">]</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)]</span>
-    <span class="n">before</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(([</span><span class="mi">0</span><span class="p">],</span> <span class="n">np</span><span class="o">.</span><span class="n">cumsum</span><span class="p">(</span><span class="n">num_samples</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)))</span>
-    <span class="n">reached</span> <span class="o">=</span> <span class="n">before</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">searchsorted</span><span class="p">(</span><span class="n">readout_blocks</span><span class="p">,</span> <span class="n">candidates</span><span class="p">)]</span>
-    <span class="n">starts</span><span class="p">,</span> <span class="n">since</span> <span class="o">=</span> <span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="mi">0</span>
-    <span class="k">for</span> <span class="n">block</span><span class="p">,</span> <span class="n">samples</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">candidates</span><span class="o">.</span><span class="n">tolist</span><span class="p">(),</span> <span class="n">reached</span><span class="o">.</span><span class="n">tolist</span><span class="p">(),</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
-        <span class="k">if</span> <span class="n">samples</span> <span class="o">-</span> <span class="n">since</span> <span class="o">&gt;=</span> <span class="n">_RANGE_SAMPLES</span><span class="p">:</span>
-            <span class="n">starts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">block</span><span class="p">)</span>
-            <span class="n">since</span> <span class="o">=</span> <span class="n">samples</span>
-    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">starts</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_measured</span><span class="p">(</span><span class="n">seq</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="o">...</span><span class="p">],</span> <span class="o">...</span><span class="p">]:</span>

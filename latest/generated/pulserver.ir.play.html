@@ -558,6 +558,13 @@ without RF;</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">rf_channels</span></code>: the transmit channels the RF waveform holds, one
 after another over one time base for a dynamic pTx pulse; 0 without
 RF;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">rf_grad_constant</span></code>, <code class="docutils literal notranslate"><span class="pre">rf_grad_level</span></code>: 1 where every instance of
+the block’s position plays its RF pulse under one gradient,
+steady from the pulse’s first sample to its last as
+<code class="docutils literal notranslate"><span class="pre">pypulseqpp.Sequence.rf_gradients</span></code> finds it, and the block
+carries no rotation, so the scanner may move the excitation by a
+carrier offset; and <code class="docutils literal notranslate"><span class="pre">(blocks,</span> <span class="pre">3)</span></code>, that gradient along x, y and z
+over the amplitude of the event playing it there;</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">gradient_hz_per_m</span></code>: <code class="docutils literal notranslate"><span class="pre">(blocks,</span> <span class="pre">3)</span></code>, the amplitude of each
 gradient event along x, y and z; an arbitrary gradient’s shape
 carries its own sign;</p></li>
@@ -607,7 +614,11 @@ block’s modulation in that array; empty without one.</p></li>
 <dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="(in Python v3.14)">dict</a> of str to ndarray</p>
 </dd>
 <dt class="field-odd">Raises<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If the cache cannot be loaded.</p>
+<dd class="field-odd"><ul class="simple">
+<li><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If the cache cannot be loaded.</p></li>
+<li><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#RuntimeError" title="(in Python v3.14)"><strong>RuntimeError</strong></a> – With <code class="docutils literal notranslate"><span class="pre">waveforms</span></code>, if a block’s gradient holds another number of
+    samples than the segment position it plays at is prepared with.</p></li>
+</ul>
 </dd>
 </dl>
 </dd></dl>

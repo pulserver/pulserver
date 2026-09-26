@@ -674,13 +674,25 @@ repetition.</p>
 <tr class="row-odd"><td><p>RF statistics</p></td>
 <td><p>For each RF definition: its transmit channels, flip angle and energy, as pypulseqpp counts them; its duration from the envelope; and the bandwidth and bands of a multiband pulse from its spectrum</p></td>
 </tr>
+<tr class="row-even"><td><p>Gradient statistics</p></td>
+<td><p>For each gradient definition: the range of amplitudes its instances play; and for each shape it plays, the steepest slew rate and the integrals of the squared waveform and of its squared slew rate, pypulseqpp’s <code class="docutils literal notranslate"><span class="pre">Sequence.gradient_statistics</span></code> over the amplitude that plays the shape</p></td>
+</tr>
 </tbody>
 </table>
 </div>
 <p>The limits and rasters of the scanner (<code class="docutils literal notranslate"><span class="pre">pypulseqpp.Opts</span></code>) are those under which
 the scan is segmented. A segment boundary falls where every gradient is zero,
 judged by the first and last values each arbitrary gradient’s library row
-stores for the event’s edges; a trapezoid starts and ends at zero. The
+stores for the event’s edges; a trapezoid starts and ends at zero. A segment
+is prepared from the RF and gradient definitions of the blocks of one
+repetition; a block instance sets only their amplitudes, frequency and phase
+offsets, rotation and gradient shape. Every repetition that plays a segment
+therefore plays the same RF and gradient definitions at each position, and the
+same ADC definition wherever it acquires. A repetition that plays other
+definitions, such as a pulse of its own per shot in a repetition pypulseqpp
+finds by block duration and the channels played, or that digitises with other
+ADC events, plays a segment of its own; a segment with more than 64 such
+variants of either kind is refused. The
 spectral statistics are measured by pypulseqpp’s
 <code class="docutils literal notranslate"><span class="pre">calc_rf_bandwidth</span></code> when the chain is read, with the Pulseq recipe of the width
 at half the spectral peak; a band is a run of the spectrum above 30 % of its
@@ -701,7 +713,11 @@ limits, by pypulseqpp’s <code class="docutils literal notranslate"><span class
 and flags in force at each block, with <code class="docutils literal notranslate"><span class="pre">PMC</span></code> in force from the first, are
 pypulseqpp’s <code class="docutils literal notranslate"><span class="pre">Sequence.evaluate_labels</span></code>, and a <code class="docutils literal notranslate"><span class="pre">TRID</span></code> group starts at each block
 <code class="docutils literal notranslate"><span class="pre">Sequence.label_blocks</span></code> lists as setting it; the rotation and RF shim a block
-plays are <code class="docutils literal notranslate"><span class="pre">Sequence.block_rotations</span></code> and <code class="docutils literal notranslate"><span class="pre">Sequence.block_shims</span></code>.
+plays are <code class="docutils literal notranslate"><span class="pre">Sequence.block_rotations</span></code> and <code class="docutils literal notranslate"><span class="pre">Sequence.block_shims</span></code>. A segment
+position records whether the scanner may move its excitation at run time by a
+carrier offset alone: every instance plays its RF pulse under one gradient,
+steady from the pulse’s first sample to its last as
+<code class="docutils literal notranslate"><span class="pre">Sequence.rf_gradients</span></code> finds it, in a block without a rotation.
 <code class="docutils literal notranslate"><span class="pre">label_column_map</span></code> selects the three labels the
 interpreter records per readout, as indices in the order SLC, PHS, REP, AVG,
 SEG, SET, ECO, PAR, LIN, ACQ.</p>

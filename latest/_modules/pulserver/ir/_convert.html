@@ -709,6 +709,13 @@
 <span class="sd">        - ``rf_channels``: the transmit channels the RF waveform holds, one</span>
 <span class="sd">          after another over one time base for a dynamic pTx pulse; 0 without</span>
 <span class="sd">          RF;</span>
+<span class="sd">        - ``rf_grad_constant``, ``rf_grad_level``: 1 where every instance of</span>
+<span class="sd">          the block's position plays its RF pulse under one gradient,</span>
+<span class="sd">          steady from the pulse's first sample to its last as</span>
+<span class="sd">          ``pypulseqpp.Sequence.rf_gradients`` finds it, and the block</span>
+<span class="sd">          carries no rotation, so the scanner may move the excitation by a</span>
+<span class="sd">          carrier offset; and ``(blocks, 3)``, that gradient along x, y and z</span>
+<span class="sd">          over the amplitude of the event playing it there;</span>
 <span class="sd">        - ``gradient_hz_per_m``: ``(blocks, 3)``, the amplitude of each</span>
 <span class="sd">          gradient event along x, y and z; an arbitrary gradient's shape</span>
 <span class="sd">          carries its own sign;</span>
@@ -756,6 +763,9 @@
 <span class="sd">    ------</span>
 <span class="sd">    ValueError</span>
 <span class="sd">        If the cache cannot be loaded.</span>
+<span class="sd">    RuntimeError</span>
+<span class="sd">        With ``waveforms``, if a block's gradient holds another number of</span>
+<span class="sd">        samples than the segment position it plays at is prepared with.</span>
 <span class="sd">    """</span>
     <span class="n">seq_path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">seq_path</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">require</span><span class="p">(</span><span class="s2">"play_cache"</span><span class="p">)(</span>

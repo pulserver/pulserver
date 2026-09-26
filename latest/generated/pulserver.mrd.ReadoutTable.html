@@ -534,12 +534,12 @@
 <span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pulserver.mrd.</span></span><span class="sig-name descname"><span class="pre">ReadoutTable</span></span><a class="reference internal" href="../_modules/pulserver/mrd/_sequence.html#ReadoutTable"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.mrd.ReadoutTable" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/builtins/functions.html#object" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
 <p>Every ADC readout of one sequence, in play order.</p>
-<p>k-space is integrated over ranges of blocks, each starting at the first
-block or at an excitation without a readout, whose pulse centre resets k:
-a range needs nothing from the blocks before it. Tabulating integrates
-every range once; <a class="reference internal" href="pulserver.mrd.ReadoutTable.readout_k.html#pulserver.mrd.ReadoutTable.readout_k" title="pulserver.mrd.ReadoutTable.readout_k"><code class="xref py py-meth docutils literal notranslate"><span class="pre">readout_k()</span></code></a> integrates a readout’s range again
-when it is not among the last few kept. The table holds the sequence for
-this, which must not change once tabulated.</p>
+<p>k-space is integrated a run of consecutive readouts at a time, by
+<code class="docutils literal notranslate"><span class="pre">Sequence.adc_kspace(readouts=...)</span></code>, from the last pulse before the run
+that resets it. Tabulating integrates the whole sequence once, to find
+each readout’s echo; <a class="reference internal" href="pulserver.mrd.ReadoutTable.readout_k.html#pulserver.mrd.ReadoutTable.readout_k" title="pulserver.mrd.ReadoutTable.readout_k"><code class="xref py py-meth docutils literal notranslate"><span class="pre">readout_k()</span></code></a> integrates a readout’s run when it
+is not among the last few kept. The table holds the sequence for this,
+which must not change once tabulated.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Attributes<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
