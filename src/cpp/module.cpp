@@ -43,6 +43,7 @@ using native::played_modulation;
 using native::played_rf;
 using native::recorded_rf_centre_us;
 using native::require;
+using native::unit_sample;
 using native::Waveform;
 using native::Waves;
 
@@ -714,6 +715,9 @@ PYBIND11_MODULE(_ext, module)
                     coll.get(), subsequence, wave, axis, start_us, raster_us, samples,
                     values.data()),
                 "wave sampling");
+            std::vector<PULSEG_WAVE_SAMPLE> loaded(values.size());
+            pulseg_wave_samples(values.data(), samples, loaded.data());
+            std::transform(loaded.begin(), loaded.end(), values.begin(), unit_sample);
             return as_array(values, {static_cast<py::ssize_t>(values.size())});
         },
         "One axis of a written cache's wave on a playout's raster.");

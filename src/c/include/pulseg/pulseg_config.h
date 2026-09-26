@@ -7,6 +7,7 @@
  *   PULSEG_VENDOR    -- compile-time default vendor
  *   PULSEG_ALLOC     -- heap allocator  (default: malloc)
  *   PULSEG_FREE      -- heap deallocator (default: free)
+ *   PULSEG_WAVE_*    -- the type and scale of a waveform-memory sample
  */
 
 #ifndef PULSEG_CONFIG_H
@@ -39,35 +40,6 @@
 #endif
 
 /* ================================================================== */
-/*  Acoustic peak-detection defaults                                  */
-/* ================================================================== */
-
-#ifndef PULSEG_PEAK_LOG10_THRESHOLD_DEFAULT
-#define PULSEG_PEAK_LOG10_THRESHOLD_DEFAULT 2.25f
-#endif
-
-#ifndef PULSEG_PEAK_NORM_SCALE_DEFAULT
-#define PULSEG_PEAK_NORM_SCALE_DEFAULT 10.0f
-#endif
-
-#ifndef PULSEG_PEAK_EPS_DEFAULT
-#define PULSEG_PEAK_EPS_DEFAULT 1e-30f
-#endif
-
-#ifndef PULSEG_PEAK_PROMINENCE_DEFAULT
-#define PULSEG_PEAK_PROMINENCE_DEFAULT 0.0f
-#endif
-
-/* ================================================================== */
-/*  Structural mechanical resonance analysis defaults                  */
-/* ================================================================== */
-
-/** Minimum waveform samples before sub-period detection is applied. */
-#ifndef PULSEG_MIN_ARBITRARY_SAMPLES
-#define PULSEG_MIN_ARBITRARY_SAMPLES 10
-#endif
-
-/* ================================================================== */
 /*  Allocator overrides                                               */
 /* ================================================================== */
 
@@ -88,23 +60,40 @@
 #endif
 
 /* ================================================================== */
-/*  Hardware frequency-conversion overrides (D9)                      */
+/*  Waveform-memory samples                                           */
 /* ================================================================== */
 
 /*
- * Override PULSEG_HW_FREQ_CONVERSION / PULSEG_HW_WAVEFORM_END before
- * including this header for vendor-specific DAC parameters, e.g.:
+ * A playout's waveform memory holds samples of type PULSEG_WAVE_SAMPLE.
+ * A value normalised to unit peak is scaled by PULSEG_WAVE_FULL_SCALE, and
+ * a phase, in radians, by PULSEG_WAVE_FULL_SCALE / PULSEG_WAVE_PHASE_FULL_SCALE;
+ * PULSEG_WAVE_QUANTIZE(x) turns the scaled value, a double within
+ * [-PULSEG_WAVE_FULL_SCALE, PULSEG_WAVE_FULL_SCALE], into a sample.  The
+ * physical scale of a gradient or an RF magnitude is not in its samples: it
+ * is the amplitude each block plays them at.  Override before including
+ * this header, e.g. for signed 16-bit samples:
  *
- *   #define PULSEG_HW_FREQ_CONVERSION  VendorFreqRes
- *   #define PULSEG_HW_WAVEFORM_END     VendorWeosBit
+ *   #define PULSEG_WAVE_SAMPLE          short
+ *   #define PULSEG_WAVE_FULL_SCALE      32767.0
+ *   #define PULSEG_WAVE_QUANTIZE(x)     ((short)((x) < 0.0 ? (x) - 0.5 : (x) + 0.5))
  *   #include "pulseg_config.h"
  */
-#ifndef PULSEG_HW_FREQ_CONVERSION
-#define PULSEG_HW_FREQ_CONVERSION 0.25f
+#ifndef PULSEG_WAVE_SAMPLE
+#define PULSEG_WAVE_SAMPLE float
 #endif
 
-#ifndef PULSEG_HW_WAVEFORM_END
-#define PULSEG_HW_WAVEFORM_END 0
+#ifndef PULSEG_WAVE_FULL_SCALE
+#define PULSEG_WAVE_FULL_SCALE 1.0
+#endif
+
+/* The phase, in radians, a sample of PULSEG_WAVE_FULL_SCALE plays: with pi,
+ * the signed samples span the 2 pi a phase is wrapped into. */
+#ifndef PULSEG_WAVE_PHASE_FULL_SCALE
+#define PULSEG_WAVE_PHASE_FULL_SCALE 3.14159265358979323846
+#endif
+
+#ifndef PULSEG_WAVE_QUANTIZE
+#define PULSEG_WAVE_QUANTIZE(x) ((PULSEG_WAVE_SAMPLE)(x))
 #endif
 
 /* ================================================================== */
