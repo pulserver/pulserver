@@ -329,15 +329,52 @@ typedef struct pulseg_block_initial_state
      * physical gradient is grad_amplitude_hz_per_m (per instance) times it. */
     int rf_grad_constant;
     float rf_grad_level[3];
+
+    /* Points per axis of the longest rotated wave (pulseg_wave) any instance
+     * of this position plays; 0 where the position plays none.  What the
+     * waveform slot a playout reserves here has to hold. */
+    int wave_points;
 } pulseg_block_initial_state;
 
 /* clang-format off */
 #define PULSEG_BLOCK_INITIAL_STATE_INIT \
-    {-1, -1, {-1, -1, -1}, {0, 0, 0}, 0.0f, {1.0f, 1.0f, 1.0f}, 0, {0.0f, 0.0f, 0.0f}}
+    {-1, -1, {-1, -1, -1}, {0, 0, 0}, 0.0f, {1.0f, 1.0f, 1.0f}, 0, {0.0f, 0.0f, 0.0f}, 0}
 /* clang-format on */
 
 /* Number of 4-byte words in pulseg_block_initial_state (cache serialization). */
-#define PULSEG_BLOCK_INITIAL_STATE_WORDS 16
+#define PULSEG_BLOCK_INITIAL_STATE_WORDS 17
+
+/* ================================================================== */
+/*  Rotated wave                                                      */
+/* ================================================================== */
+/* The gradients a rotated block plays, as one combination per axis.
+ *
+ * A rotation extension turns a block's gradients within the logical frame, so
+ * output axis o plays sum_d rotation[o][d] * a_d * w_d(t): the block's three
+ * normalised waveforms w_d, combined.  With m the a_d of largest magnitude
+ * (pulseg__wave_scale) and ratio[d] = a_d / m, that is
+ * m * sum_d rotation[o][d] * ratio[d] * w_d(t), so the combination is fixed by
+ * the definitions, the shapes, the rotation and the ratios, and an instance
+ * only scales it, its polarity included.  A playout loads the combination
+ * normalised to unit peak and plays it at m * peak[o].
+ *
+ * One record per distinct (definitions, shapes, rotation, ratios), ratios
+ * compared to PULSEG_WAVE_RATIO_STEP.  Every field is 4 bytes, so the records
+ * serialize as a packed word array. */
+typedef struct pulseg_wave
+{
+    int grad_def[3];   /* per logical axis; -1 = not driven               */
+    int shape_id[3];   /* per logical axis; 0 = trapezoid or not driven   */
+    int rotation_id;   /* rotation_matrices index; -1 = identity           */
+    float rotation[9]; /* row-major, logical to output axis                */
+    float ratio[3];    /* a_d over the scale m                             */
+    float peak[3];     /* per output axis, the combination's largest |.|   */
+    int num_points;    /* materialised points per output axis              */
+} pulseg_wave;
+
+#define PULSEG_WAVE_WORDS 23
+/* Amplitude ratios this close are one wave. */
+#define PULSEG_WAVE_RATIO_STEP 1.0e-4f
 
 /* ================================================================== */
 /*  Virtual segment                                                   */
@@ -555,6 +592,13 @@ typedef struct pulseg_sequence_descriptor
      * downstream, 0 = keep. NULL when no LABELSET OFF is present. */
     int *off_table;
 
+    /* The rotated waves of this subsequence, serialized in COMMON, and the
+     * wave each block-table entry plays, -1 where none, serialized in
+     * INSTANCES [num_blocks].  See pulseg_wave. */
+    int num_waves;
+    pulseg_wave *waves;
+    int *block_wave;
+
     /* Copy of pulseg_opts.cache_ext at dedup time. Not part of the
      * cache payload itself (it only names the cache FILE, not its
      * contents) -- deliberately placed after all cache-serialized fields
@@ -580,7 +624,7 @@ typedef struct pulseg_sequence_descriptor
     NULL, /* exec_runs */ 0, NULL, /* seg runs */ 0, 0, NULL, NULL, \
     /* hints */ 0, 0, /* tr_start anchor */ -1, NULL, 0, 0, NULL, \
     {{0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, \
-    {0, 0}, {0, 0}, {0, 0}, {0, 0}}, NULL, \
+    {0, 0}, {0, 0}, {0, 0}, {0, 0}}, NULL, /* waves */ 0, NULL, NULL, \
     PULSEG_CACHE_EXT_DEFAULT, 0, 0 \
     }
 /* clang-format on */
@@ -735,6 +779,32 @@ float pulseg__grad_boundary_last(const pulseg_sequence_descriptor *desc, int raw
 float pulseg__grad_shape_first(const pulseg_sequence_descriptor *desc, int shape_id);
 float pulseg__grad_shape_last(const pulseg_sequence_descriptor *desc, int shape_id);
 
+/* pulseg_materialize_wave() on one descriptor's wave; see there. */
+int pulseg__wave_materialize(
+    const pulseg_sequence_descriptor *desc,
+    const pulseg_wave *wave,
+    int out_axis,
+    float *out_time_us,
+    float *out_amp,
+    int max_points,
+    int *out_num_points,
+    float *out_peak);
+
+/* The amplitude of largest magnitude, with its sign, among the gradient
+ * events of block-table entry @p bte, the first axis on a tie; 0 when it
+ * drives none.  What a rotated wave is scaled by. */
+float pulseg__wave_scale(
+    const pulseg_sequence_descriptor *desc,
+    const pulseg_block_table_element *bte);
+
+/* The rotated wave block-table entry @p block_idx plays and the amplitude it
+ * plays each axis at: -1 and zeros where it plays none. */
+void pulseg__block_wave(
+    const pulseg_sequence_descriptor *desc,
+    int block_idx,
+    int *wave_id,
+    float amp_hz_per_m[3]);
+
 /* Steepest slew of the NORMALISED waveform of pulseq shape @p shape_id, in
  * 1/s, or 0 when there is no such shape.  Multiply by an instance's own
  * amplitude for the slew that instance actually plays. */
@@ -838,6 +908,11 @@ long pulseg__verify_exec_runs(const pulseg_sequence_descriptor *desc);
 void pulseg__free_exec_stream_scratch(pulseg_sequence_descriptor *desc);
 int pulseg__build_label_table(pulseg_sequence_descriptor *desc, const pulseq_file *seq);
 int pulseg__calc_segment_timing(pulseg_sequence_descriptor *desc, pulseg_diagnostic *diag);
+
+/* The rotated waves (pulseg_wave) of a subsequence whose segments and
+ * execution stream are built: the waves, the wave each block-table entry
+ * plays and each segment position's wave_points. */
+int pulseg__build_waves(pulseg_sequence_descriptor *desc);
 
 /* Per position and axis within the TR, whether the gradient amplitude varies
  * across TR instances. Allocates desc->variable_grad_flags (tr_size * 3 ints)

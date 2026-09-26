@@ -470,6 +470,63 @@ extern "C"
         float **amplitude,
         float **time_us);
 
+    /* ================================================================== */
+    /*  Rotated waves                                                     */
+    /* ================================================================== */
+
+    /**
+     * @brief Return how many rotated waves a subsequence plays.
+     *
+     * A block at a position whose blocks carry a rotation plays, on each
+     * axis, the rotated combination of its three gradients; the IR keeps
+     * each distinct combination once.  An instance names its wave in
+     * pulseg_block_instance::wave_id, and a position the longest wave it
+     * plays in pulseg_block_info::wave_points.  Loaded by every cache path.
+     *
+     * @return The wave count, or a negative error code.
+     */
+    int pulseg_get_num_waves(const pulseg_collection *coll, int subseq_idx);
+
+    /**
+     * @brief Return one rotated wave on one axis, normalised to unit peak.
+     *
+     * Axis @p out_axis of wave @p wave_idx plays
+     * sum_d R[out_axis][d] * ratio[d] * w_d(t), with w_d the block's
+     * normalised gradient on logical axis d: this function returns it divided
+     * by its largest magnitude, which it stores in @p out_peak.  An instance
+     * plays it at pulseg_block_instance::wave_amp_hz_per_m.
+     *
+     * Where every driven axis is a trapezoid or an arbitrary gradient with a
+     * time shape, the wave is piecewise linear through the union of their
+     * corner times, which reproduces each exactly.  Where one axis is sampled
+     * on the gradient raster, every axis is evaluated at the centres of that
+     * raster instead, over the span of all of them, and the wave holds its
+     * first and last values over the half intervals at its two ends: those
+     * edges are its first and last points.
+     *
+     * @param[out] out_time_us    Point times, us from the block's start;
+     *                            with @p out_amp NULL as well, only
+     *                            @p out_num_points is set.
+     * @param[out] out_amp        Normalised amplitude at each point.
+     * @param[in]  max_points     Room in both arrays.
+     * @param[out] out_num_points Points the wave has, the same on every axis.
+     * @param[out] out_peak       Largest magnitude of the combination, before
+     *                            normalisation, 0 on an axis the rotation
+     *                            leaves silent; may be NULL.
+     * @return PULSEG_SUCCESS, PULSEG_ERR_INDEX when the arrays are too small
+     *         (with @p out_num_points set), or a negative error code.
+     */
+    int pulseg_materialize_wave(
+        const pulseg_collection *coll,
+        int subseq_idx,
+        int wave_idx,
+        int out_axis,
+        float *out_time_us,
+        float *out_amp,
+        int max_points,
+        int *out_num_points,
+        float *out_peak);
+
     /**
      * @brief Return the phase modulation of the ADC the block at the cursor plays.
      *

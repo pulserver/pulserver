@@ -15,6 +15,7 @@
 #include <cstddef>
 #include <cstring>
 #include <limits>
+#include <map>
 #include <memory>
 #include <new>
 #include <stdexcept>
@@ -161,6 +162,24 @@ py::dict summarize(const pulseg_collection *coll)
         entry["tr_groups"] = tr_groups(coll, i);
         entry["rf"] = rf_statistics(coll, i, s.num_unique_rf);
         entry["readout_labels"] = readout_labels(coll, i, s);
+        py::list waves;
+        const int num_waves = pulseg_get_num_waves(coll, i);
+        require(num_waves, "rotated waves");
+        for (int w = 0; w < num_waves; ++w)
+        {
+            int points = 0;
+            float peak[3] = {0.0f, 0.0f, 0.0f};
+            for (int axis = 0; axis < 3; ++axis)
+                require(
+                    pulseg_materialize_wave(
+                        coll, i, w, axis, nullptr, nullptr, 0, &points, &peak[axis]),
+                    "rotated wave");
+            py::dict wave;
+            wave["points"] = points;
+            wave["peak"] = py::make_tuple(peak[0], peak[1], peak[2]);
+            waves.append(wave);
+        }
+        entry["waves"] = waves;
         subsequences.append(entry);
     }
 
@@ -283,6 +302,111 @@ void played_gradient(
     }
 }
 
+/* The amplitude a block plays each axis at: its gradient events', or, for a
+ * block that plays a rotated wave, the wave's, the rotation in it. */
+std::array<float, 3> played_amplitudes(const pulseg_block_instance &block)
+{
+    if (block.wave_id >= 0)
+        return {block.wave_amp_hz_per_m[0], block.wave_amp_hz_per_m[1], block.wave_amp_hz_per_m[2]};
+    return {block.gx_amp_hz_per_m, block.gy_amp_hz_per_m, block.gz_amp_hz_per_m};
+}
+
+/* The rotated waves of a cache, each materialised once: every axis of wave w
+ * of subsequence s, normalised, timed from its block's start. */
+class Waves
+{
+  public:
+    explicit Waves(const pulseg_collection *coll) : coll_(coll) {}
+
+    /* Append one axis of wave @p wave played at @p amplitude.  The position
+     * the block plays at reserves @p reserved points for it. */
+    void append(
+        int subsequence,
+        int wave,
+        int axis,
+        float amplitude,
+        int reserved,
+        std::vector<float> &times,
+        std::vector<float> &values)
+    {
+        const Axes &axes = get(subsequence, wave);
+        const auto &t = axes[static_cast<size_t>(axis)].first;
+        const auto &a = axes[static_cast<size_t>(axis)].second;
+        if (static_cast<int>(t.size()) > reserved)
+            throw std::runtime_error(
+                "a block plays a rotated wave of " + std::to_string(t.size()) +
+                " points at a segment position reserving " + std::to_string(reserved));
+        for (size_t i = 0; i < t.size(); ++i)
+        {
+            times.push_back(t[i]);
+            values.push_back(amplitude * a[i]);
+        }
+    }
+
+  private:
+    using Axis = std::pair<std::vector<float>, std::vector<float>>;
+    using Axes = std::array<Axis, 3>;
+
+    const Axes &get(int subsequence, int wave)
+    {
+        const auto key = std::make_pair(subsequence, wave);
+        auto found = cache_.find(key);
+        if (found != cache_.end())
+            return found->second;
+        Axes axes;
+        for (int axis = 0; axis < 3; ++axis)
+        {
+            int points = 0;
+            require(
+                pulseg_materialize_wave(
+                    coll_, subsequence, wave, axis, nullptr, nullptr, 0, &points, nullptr),
+                "rotated wave");
+            Axis &out = axes[static_cast<size_t>(axis)];
+            out.first.resize(static_cast<size_t>(points));
+            out.second.resize(static_cast<size_t>(points));
+            require(
+                pulseg_materialize_wave(
+                    coll_, subsequence, wave, axis, out.first.data(), out.second.data(), points,
+                    &points, nullptr),
+                "rotated wave");
+        }
+        return cache_.emplace(key, std::move(axes)).first->second;
+    }
+
+    const pulseg_collection *coll_;
+    std::map<std::pair<int, int>, Axes> cache_;
+};
+
+/* The gradient corners of every played block, in play order, with the start
+ * and stop of each block's axes in them. */
+struct PlayedGradients
+{
+    std::vector<float> time_us;
+    std::vector<float> value;
+    std::vector<py::ssize_t> span;
+
+    void append(
+        const pulseg_collection *coll,
+        Waves &waves,
+        int subsequence,
+        const pulseg_block_instance &block,
+        const pulseg_block_info &b,
+        const std::array<float, 3> &amplitude)
+    {
+        for (int axis = 0; axis < 3; ++axis)
+        {
+            span.push_back(static_cast<py::ssize_t>(time_us.size()));
+            if (block.wave_id >= 0)
+                waves.append(
+                    subsequence, block.wave_id, axis, amplitude[axis], b.wave_points, time_us,
+                    value);
+            else
+                played_gradient(coll, axis, amplitude[axis], b, time_us, value);
+            span.push_back(static_cast<py::ssize_t>(time_us.size()));
+        }
+    }
+};
+
 /* Append the RF pulse the block at the cursor plays: its samples, timed from
  * the block's start, and the instance's amplitude times the magnitude shape
  * and the phase shape of its definition, which the library returns in
@@ -337,13 +461,15 @@ void played_modulation(const pulseg_collection *coll, std::vector<float> &phases
 py::dict play(pulseg_collection *coll, bool waveforms)
 {
     std::vector<int> subsequence, segment, duration_us, adc, trid, norot, nopos, rf_use;
-    std::vector<int> rf_channels, rf_grad_constant;
-    std::vector<float> rf_amp, rf_freq, rf_phase, adc_freq, adc_phase, gradient, rotation;
+    std::vector<int> rf_channels, rf_grad_constant, wave;
+    std::vector<float> rf_amp, rf_freq, rf_phase, adc_freq, adc_phase, gradient;
     std::vector<float> rf_grad_level;
     std::vector<int> rf_delay_us, adc_delay_us, adc_dwell_ns, adc_samples;
-    std::vector<float> rf_centre_us, rf_time, grad_time, grad_value, modulation;
+    std::vector<float> rf_centre_us, rf_time, modulation;
     std::vector<std::complex<float>> rf_value;
-    std::vector<py::ssize_t> rf_span, grad_span, modulation_span;
+    std::vector<py::ssize_t> rf_span, modulation_span;
+    PlayedGradients gradients;
+    Waves waves(coll);
     pulseg_cursor_reset(coll);
     pulseg_cursor_info info = PULSEG_CURSOR_INFO_INIT;
     int status;
@@ -360,10 +486,9 @@ py::dict play(pulseg_collection *coll, bool waveforms)
         rf_freq.push_back(block.rf_freq_hz);
         rf_phase.push_back(block.rf_phase_rad);
         rf_use.push_back(block.rf_use);
-        const float amplitude[3] = {
-            block.gx_amp_hz_per_m, block.gy_amp_hz_per_m, block.gz_amp_hz_per_m};
-        gradient.insert(gradient.end(), amplitude, amplitude + 3);
-        rotation.insert(rotation.end(), block.rotmat, block.rotmat + 9);
+        const std::array<float, 3> amplitude = played_amplitudes(block);
+        gradient.insert(gradient.end(), amplitude.begin(), amplitude.end());
+        wave.push_back(block.wave_id);
         norot.push_back(block.norot_flag);
         nopos.push_back(block.nopos_flag);
         adc.push_back(block.adc_flag);
@@ -392,12 +517,7 @@ py::dict play(pulseg_collection *coll, bool waveforms)
         if (b.has_rf)
             played_rf(coll, info.segment_id, position, block.rf_amp_hz, b, rf_time, rf_value);
         rf_span.push_back(static_cast<py::ssize_t>(rf_time.size()));
-        for (int axis = 0; axis < 3; ++axis)
-        {
-            grad_span.push_back(static_cast<py::ssize_t>(grad_time.size()));
-            played_gradient(coll, axis, amplitude[axis], b, grad_time, grad_value);
-            grad_span.push_back(static_cast<py::ssize_t>(grad_time.size()));
-        }
+        gradients.append(coll, waves, info.subseq_idx, block, b, amplitude);
         modulation_span.push_back(static_cast<py::ssize_t>(modulation.size()));
         played_modulation(coll, modulation);
         modulation_span.push_back(static_cast<py::ssize_t>(modulation.size()));
@@ -418,7 +538,7 @@ py::dict play(pulseg_collection *coll, bool waveforms)
     out["rf_grad_constant"] = as_array(rf_grad_constant, {count});
     out["rf_grad_level"] = as_array(rf_grad_level, {count, 3});
     out["gradient_hz_per_m"] = as_array(gradient, {count, 3});
-    out["rotation"] = as_array(rotation, {count, 3, 3});
+    out["wave"] = as_array(wave, {count});
     out["norot"] = as_array(norot, {count});
     out["nopos"] = as_array(nopos, {count});
     out["adc"] = as_array(adc, {count});
@@ -430,15 +550,15 @@ py::dict play(pulseg_collection *coll, bool waveforms)
     out["trid"] = as_array(trid, {count});
     if (waveforms)
     {
-        const auto corners = static_cast<py::ssize_t>(grad_time.size());
+        const auto corners = static_cast<py::ssize_t>(gradients.time_us.size());
         out["rf_center_us"] = as_array(rf_centre_us, {count});
         const auto rf_samples = static_cast<py::ssize_t>(rf_time.size());
         out["rf_time_us"] = as_array(rf_time, {rf_samples});
         out["rf_waveform_hz"] = as_array(rf_value, {rf_samples});
         out["rf_span"] = as_array(rf_span, {count, 2});
-        out["gradient_time_us"] = as_array(grad_time, {corners});
-        out["gradient_waveform_hz_per_m"] = as_array(grad_value, {corners});
-        out["gradient_span"] = as_array(grad_span, {count, 3, 2});
+        out["gradient_time_us"] = as_array(gradients.time_us, {corners});
+        out["gradient_waveform_hz_per_m"] = as_array(gradients.value, {corners});
+        out["gradient_span"] = as_array(gradients.span, {count, 3, 2});
         out["adc_phase_modulation_rad"] =
             as_array(modulation, {static_cast<py::ssize_t>(modulation.size())});
         out["adc_modulation_span"] = as_array(modulation_span, {count, 2});

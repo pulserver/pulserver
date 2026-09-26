@@ -10,6 +10,36 @@
 #include "pulseg.h"
 #include "pulseg_cache.h"
 
+static void print_subsequence(const pulseg_collection *coll, int i)
+{
+    pulseg_subseq_info s = PULSEG_SUBSEQ_INFO_INIT;
+    pulseg_tr_group *groups = NULL;
+    int n, num_groups, num_waves;
+
+    pulseg_get_subseq_info(coll, &s, i);
+    printf("subsequence %d num_trs %d tr_size %d num_unique_adcs %d num_unique_rf %d "
+           "vop_sar_ratio %g vop_global_sar_ratio %g\n",
+           i, s.num_trs, s.tr_size, s.num_unique_adcs, s.num_unique_rf,
+           (double)s.vop_sar_ratio, (double)s.vop_global_sar_ratio);
+    num_groups = pulseg_get_tr_groups(coll, &groups, i);
+    for (n = 0; n < num_groups; ++n)
+        printf("group %d %d trid %d num_instances %d one_instance_duration_us %d\n",
+               i, n, groups[n].trid, groups[n].num_instances,
+               groups[n].one_instance_duration_us);
+    if (groups)
+        free(groups);
+    num_waves = pulseg_get_num_waves(coll, i);
+    for (n = 0; n < num_waves; ++n)
+    {
+        float peak[3] = {0.0f, 0.0f, 0.0f};
+        int axis, points = 0;
+        for (axis = 0; axis < 3; ++axis)
+            pulseg_materialize_wave(coll, i, n, axis, NULL, NULL, 0, &points, &peak[axis]);
+        printf("wave %d %d points %d peak %.4f %.4f %.4f\n", i, n, points,
+               (double)peak[0], (double)peak[1], (double)peak[2]);
+    }
+}
+
 int main(int argc, char **argv)
 {
     pulseg_collection *coll;
@@ -39,23 +69,7 @@ int main(int argc, char **argv)
     printf("max_adc_samples %d\n", info.max_adc_samples);
     printf("total_readouts %d\n", info.total_readouts);
     for (i = 0; i < info.num_subsequences; ++i)
-    {
-        pulseg_subseq_info s = PULSEG_SUBSEQ_INFO_INIT;
-        pulseg_tr_group *groups = NULL;
-        int n, num_groups;
-        pulseg_get_subseq_info(coll, &s, i);
-        printf("subsequence %d num_trs %d tr_size %d num_unique_adcs %d num_unique_rf %d "
-               "vop_sar_ratio %g vop_global_sar_ratio %g\n",
-               i, s.num_trs, s.tr_size, s.num_unique_adcs, s.num_unique_rf,
-               (double)s.vop_sar_ratio, (double)s.vop_global_sar_ratio);
-        num_groups = pulseg_get_tr_groups(coll, &groups, i);
-        for (n = 0; n < num_groups; ++n)
-            printf("group %d %d trid %d num_instances %d one_instance_duration_us %d\n",
-                   i, n, groups[n].trid, groups[n].num_instances,
-                   groups[n].one_instance_duration_us);
-        if (groups)
-            free(groups);
-    }
+        print_subsequence(coll, i);
     for (i = 0; i < info.num_segments; ++i)
     {
         pulseg_segment_info g = PULSEG_SEGMENT_INFO_INIT;

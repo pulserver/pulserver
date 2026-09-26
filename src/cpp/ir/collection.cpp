@@ -154,6 +154,13 @@ static int convert_collection(
             goto fail;
         }
 
+        result = pulseg__build_waves(&desc);
+        if (PULSEG_FAILED(result))
+        {
+            diag->code = result;
+            goto fail;
+        }
+
         pulseg__compute_exec_stream_tr_start(&desc);
 
         if (parse_labels)

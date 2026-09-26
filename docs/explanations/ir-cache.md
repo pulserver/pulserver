@@ -130,7 +130,8 @@ judged by the first and last values each arbitrary gradient's library row
 stores for the event's edges; a trapezoid starts and ends at zero. A segment
 is prepared from the RF and gradient definitions of the blocks of one
 repetition; a block instance sets only their amplitudes, frequency and phase
-offsets, rotation and gradient shape. Every repetition that plays a segment
+offsets and gradient shape, or, where the blocks carry a rotation, the rotated
+wave it plays. Every repetition that plays a segment
 therefore plays the same RF and gradient definitions at each position, and the
 same ADC definition wherever it acquires. A repetition that plays other
 definitions, such as a pulse of its own per shot in a repetition pypulseqpp
@@ -166,14 +167,48 @@ steady from the pulse's first sample to its last as
 interpreter records per readout, as indices in the order SLC, PHS, REP, AVG,
 SEG, SET, ECO, PAR, LIN, ACQ.
 
+## Rotated waves
+
+A rotation extension turns a block's gradients within the logical frame, so
+the waveform each axis plays combines the block's three gradient events.
+Logical axis $o$ plays
+
+$$
+g_o(t) = \sum_d R_{od}\, a_d\, w_d(t) = m \sum_d R_{od}\, \frac{a_d}{m}\, w_d(t),
+$$
+
+with $R$ the block's rotation, $a_d$ the amplitude of the event on axis $d$,
+$w_d$ its waveform normalised to a largest magnitude of one, and $m$ the
+$a_d$ of largest magnitude, sign included. The sum on the right is fixed by
+the events' definitions and shapes, the rotation and the amplitude ratios
+$a_d/m$; an instance only scales it by $m$. The conversion keeps each distinct
+sum once per subsequence, with ratios that round to the same multiple of
+$10^{-4}$ taken as equal, normalised on each axis to a largest magnitude of
+one: a rotated wave. Blocks that differ in amplitude or polarity alone share
+one.
+
+At every segment position where an instance carries a rotation other than
+the identity, each block with a gradient event plays its rotated wave on each
+axis, at $m$ times the wave's largest magnitude there, and the scanner applies
+the prescription's rotation alone, or no rotation under `NOROT`. Each such
+position records the number of points of the longest wave it plays, which the
+waveform memory reserved for it has to hold.
+
+A wave that combines trapezoids and arbitrary gradients with time shapes is
+piecewise linear through the union of their corner times, which reproduces
+each event exactly. A wave that combines an arbitrary gradient on the gradient
+raster is evaluated at the centres of that raster, across the span of all its
+events, and holds its first and last values over the half intervals at its two
+ends, which keeps the area of every event whose corners lie on the raster.
+
 ## Cache file
 
 The cache has the name of the first sequence file with its extension replaced:
 `.pseg` by default. It is divided into sections that a
 consumer loads independently. The pulse-generation stage of a playout reads the
-definitions and their waveforms; the scan loop also reads the per-block
-instances, the rotations and the execution stream, whose size scales with the
-scan length. Integer and float fields are 4 bytes. The byte order is recorded
+definitions, their waveforms and the rotated waves; the scan loop also reads
+the per-block instances, the rotations and the execution stream, whose size
+scales with the scan length. Integer and float fields are 4 bytes. The byte order is recorded
 in the file, and a reader on a machine of the other byte order swaps on load. A
 cache whose format version differs from the reader's is rejected rather than
 read in part.
@@ -188,12 +223,13 @@ loaded from a vendor-neutral cache.
 {func}`~pulserver.ir.play` loads a cache with the C library and walks its
 execution stream with the cursor a playout uses, resolving each block as the
 scanner plays it: its duration, the RF and ADC frequency and phase offsets,
-the RF use, the ADC window, the gradient amplitudes and the rotation, and, on
-request, the RF and gradient waveforms each instance plays. It stands in for the
-interpreter, so the cache can be compared with the file it was converted from
-without a scanner; the test suite holds every played block of each fixture to
-the block its file designs, and the trajectory the waveforms trace to the one
-the file designs ({doc}`virtual-scanner`).
+the RF use, the ADC window, the gradient amplitudes and the rotated wave,
+and, on request, the RF and gradient waveforms each instance plays. It stands
+in for the interpreter, so the cache can be compared with the file it was
+converted from without a scanner; the test suite holds every played block of
+each fixture to the block its file designs, every rotated wave to the block's
+gradients turned by its rotation, and the trajectory the waveforms trace to
+the one the file designs ({doc}`virtual-scanner`).
 
 ## Language constraint
 

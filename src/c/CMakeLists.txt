@@ -26,6 +26,7 @@ set(PULSEG_SOURCES
     io/pulseg_protocol.c
     structure/pulseg_getters.c
     structure/pulseg_descriptor.c
+    structure/pulseg_waves.c
     cache/pulseg_cache.c
 )
 

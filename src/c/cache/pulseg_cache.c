@@ -32,7 +32,7 @@
 /* The full (major, minor, revision) triple must match exactly on read: a
  * cache at any other revision is rejected outright and the .seq is
  * re-parsed, never partially or heuristically read. */
-#define PULSEG_CACHE_VERSION_REVISION 18
+#define PULSEG_CACHE_VERSION_REVISION 19
 
 /* Per-consumer sections. Each carries its own distinct payload.
  * COMMON establishes the collection + descriptor framing; the others
@@ -156,6 +156,55 @@ static long get_file_size(const char *path)
  * Everything whose size scales with the scan length lives in INSTANCES; raw
  * shape samples, rotation matrices, exec_stream and variable_grad_flags live
  * in SHAPES/ROTATIONS/SCANLOOP. */
+
+/* The rotated waves, in COMMON: their count, then their records. */
+static int write_waves(FILE *f, const pulseg_sequence_descriptor *d)
+{
+    if (!pulseg__write4(f, &d->num_waves, 1))
+        return 0;
+    return d->num_waves <= 0 || pulseg__write4(f, d->waves, d->num_waves * PULSEG_WAVE_WORDS);
+}
+
+static int read_waves(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
+{
+    if (!pulseg__read4(f, &d->num_waves, 1))
+        return 0;
+    if (do_swap)
+        pulseg__swap4(&d->num_waves);
+    if (d->num_waves <= 0)
+        return d->num_waves == 0;
+    d->waves = (pulseg_wave *)PULSEG_ALLOC((size_t)d->num_waves * sizeof(pulseg_wave));
+    if (!d->waves || !pulseg__read4(f, d->waves, d->num_waves * PULSEG_WAVE_WORDS))
+        return 0;
+    if (do_swap)
+        pulseg__swap4_array(d->waves, d->num_waves * PULSEG_WAVE_WORDS);
+    return 1;
+}
+
+/* The rotated wave each block plays, in INSTANCES: one word per block, -1
+ * where none. */
+static int write_block_waves(FILE *f, const pulseg_sequence_descriptor *d)
+{
+    const int none = -1;
+    int i;
+
+    if (d->block_wave)
+        return d->num_blocks <= 0 || pulseg__write4(f, d->block_wave, d->num_blocks);
+    for (i = 0; i < d->num_blocks; ++i)
+        if (!pulseg__write4(f, &none, 1))
+            return 0;
+    return 1;
+}
+
+static int read_block_waves(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
+{
+    d->block_wave = (int *)PULSEG_ALLOC((size_t)d->num_blocks * sizeof(int));
+    if (!d->block_wave || !pulseg__read4(f, d->block_wave, d->num_blocks))
+        return 0;
+    if (do_swap)
+        pulseg__swap4_array(d->block_wave, d->num_blocks);
+    return 1;
+}
 
 static int write_common(FILE *f, const pulseg_sequence_descriptor *d)
 {
@@ -458,6 +507,9 @@ static int write_common(FILE *f, const pulseg_sequence_descriptor *d)
                 d->segment_table.num_main_segments))
             return 0;
 
+    if (!write_waves(f, d))
+        return 0;
+
     /* exec_stream + variable_grad_flags: emitted in the SCANLOOP section
      * (write_scanloop) */
 
@@ -528,6 +580,7 @@ PULSEG_ASSERT_PACKED(pulseg_adc_table_element, 4); /* id, freq, phase, phase_sha
  * way, by word count rather than field by field, so the count and the struct
  * have to stay in step. */
 PULSEG_ASSERT_PACKED(pulseg_block_initial_state, PULSEG_BLOCK_INITIAL_STATE_WORDS);
+PULSEG_ASSERT_PACKED(pulseg_wave, PULSEG_WAVE_WORDS);
 
 /* Word count of one record, derived rather than written down.  The literals
  * this replaces drifted once already: removing freq_mod_id shrank the block
@@ -537,9 +590,9 @@ PULSEG_ASSERT_PACKED(pulseg_block_initial_state, PULSEG_BLOCK_INITIAL_STATE_WORD
  * four lines below it. */
 #define PULSEG_TABLE_WORDS(type) ((int)(sizeof(type) / 4))
 
-static int write_instances(FILE *f, const pulseg_sequence_descriptor *d)
+/* The block table, and the rotated wave each block plays. */
+static int write_block_table(FILE *f, const pulseg_sequence_descriptor *d)
 {
-    /* block table */
     if (!pulseg__write4(f, &d->num_blocks, 1))
         return 0;
     if (d->num_blocks > 0 &&
@@ -547,6 +600,13 @@ static int write_instances(FILE *f, const pulseg_sequence_descriptor *d)
             f,
             d->block_table,
             d->num_blocks * PULSEG_TABLE_WORDS(pulseg_block_table_element)))
+        return 0;
+    return write_block_waves(f, d);
+}
+
+static int write_instances(FILE *f, const pulseg_sequence_descriptor *d)
+{
+    if (!write_block_table(f, d))
         return 0;
 
     /* RF table */
@@ -1129,6 +1189,9 @@ static int read_common(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
                 d->segment_table.num_main_segments);
     }
 
+    if (!read_waves(f, d, do_swap))
+        return 0;
+
     /* exec_stream + variable_grad_flags: read from the SCANLOOP section
      * (read_scanloop) */
 
@@ -1140,11 +1203,11 @@ static int read_common(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
  * and zeroes the descriptor); the scan path is its only consumer on the
  * scanner. */
 
-static int read_instances(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
+/* The block table, and the rotated wave each block plays.  One read for the
+ * whole table, and one swap pass over it -- see the PULSEG_ASSERT_PACKED block
+ * above write_instances for why the struct's storage is the record layout. */
+static int read_block_table(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
 {
-    /* block table. One read for the whole array, and one swap pass over it --
-     * see the PULSEG_ASSERT_PACKED block above write_instances for why the
-     * struct's storage is the record layout. */
     if (!pulseg__read4(f, &d->num_blocks, 1))
         return 0;
     if (do_swap)
@@ -1153,18 +1216,21 @@ static int read_instances(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
         (size_t)d->num_blocks * sizeof(pulseg_block_table_element));
     if (!d->block_table)
         return 0;
-    if (d->num_blocks > 0)
-    {
-        if (!pulseg__read4(
-                f,
-                d->block_table,
-                d->num_blocks * PULSEG_TABLE_WORDS(pulseg_block_table_element)))
-            return 0;
-        if (do_swap)
-            pulseg__swap4_array(
-                d->block_table,
-                d->num_blocks * PULSEG_TABLE_WORDS(pulseg_block_table_element));
-    }
+    if (d->num_blocks <= 0)
+        return 1;
+    if (!pulseg__read4(
+            f, d->block_table, d->num_blocks * PULSEG_TABLE_WORDS(pulseg_block_table_element)))
+        return 0;
+    if (do_swap)
+        pulseg__swap4_array(
+            d->block_table, d->num_blocks * PULSEG_TABLE_WORDS(pulseg_block_table_element));
+    return read_block_waves(f, d, do_swap);
+}
+
+static int read_instances(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
+{
+    if (!read_block_table(f, d, do_swap))
+        return 0;
 
     /* RF table */
     if (!pulseg__read4(f, &d->rf_table_size, 1))

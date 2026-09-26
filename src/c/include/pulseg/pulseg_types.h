@@ -425,13 +425,23 @@ typedef struct pulseg_block_instance
      * to 198 degrees and an excitation otherwise.  PULSEG_RF_USE_UNKNOWN
      * without RF. */
     int rf_use;
+
+    /* Rotated wave (appended; do not reorder above).  At a position whose
+     * blocks carry a rotation, the gradients play as one wave per axis,
+     * pulseg_materialize_wave(wave_id), each at wave_amp_hz_per_m -- the
+     * block's logical amplitude of largest magnitude, with its sign, times
+     * the wave's peak on that axis.  The rotation matrix above is then
+     * already in the wave.  wave_id is -1 elsewhere, and the amplitudes 0:
+     * the block plays its own shapes at the g*_amp_hz_per_m above. */
+    int wave_id;
+    float wave_amp_hz_per_m[3];
 } pulseg_block_instance;
 
 /* clang-format off */
 #define PULSEG_BLOCK_INSTANCE_INIT \
     { \
     0, 0.0f, 0.0f, 0.0f, -1, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0, 0, 0, {1, 0, 0, 0, 1, 0, 0, \
-    0, 1}, 0, 0, 0, -1, 0, 0.0f, 0.0f, 0, 0 \
+    0, 1}, 0, 0, 0, -1, 0, 0.0f, 0.0f, 0, 0, -1, {0.0f, 0.0f, 0.0f} \
     }
 /* clang-format on */
 
@@ -703,13 +713,17 @@ typedef struct pulseg_block_info
     float rf_grad_level[3]; /**< normalised gradient level across the pulse, per axis;
                              *   multiply by the instance amplitude for the physical
                              *   gradient.  Meaningless when rf_grad_constant is 0. */
+    int wave_points;        /**< points per axis of the longest rotated wave an
+                             *   instance of this position plays, which a waveform
+                             *   slot reserved here has to hold; 0 where the
+                             *   position plays none */
 } pulseg_block_info;
 
 /* clang-format off */
 #define PULSEG_BLOCK_INFO_INIT \
     { \
     0, 0, {0, 0, 0}, {0, 0, 0}, {-1, -1, -1}, {-1, -1, -1}, {-1, -1, -1}, {-1, -1, -1}, 0, \
-    -1, -1, -1, -1, 0, 0, 0, -1, -1, 0, -1, -1, -1, 0, 0, 0, 0, 0, {0.0f, 0.0f, 0.0f} \
+    -1, -1, -1, -1, 0, 0, 0, -1, -1, 0, -1, -1, -1, 0, 0, 0, 0, 0, {0.0f, 0.0f, 0.0f}, 0 \
     }
 /* clang-format on */
 

@@ -150,6 +150,9 @@ def summary(
     written with, zero when the chain is read and segmented again.
     ``readout_labels`` lists, per readout in play order, the values of the
     three labels ``label_column_map`` selects, as in force at that readout.
+    ``waves`` lists the subsequence's rotated waves, as :func:`play` indexes
+    them: each one's point count, and its largest magnitude along x, y and z
+    over that of the largest gradient event it combines.
 
     With ``cache_ext``, the cache beside the file is loaded instead of the
     chain being read and segmented again; this build loads only vendor-neutral
@@ -247,11 +250,17 @@ def play(
           carries no rotation, so the scanner may move the excitation by a
           carrier offset; and ``(blocks, 3)``, that gradient along x, y and z
           over the amplitude of the event playing it there;
-        - ``gradient_hz_per_m``: ``(blocks, 3)``, the amplitude of each
-          gradient event along x, y and z; an arbitrary gradient's shape
-          carries its own sign;
-        - ``rotation``: ``(blocks, 3, 3)``, the block's rotation, identity
-          without one;
+        - ``gradient_hz_per_m``: ``(blocks, 3)``, the amplitude along the
+          logical x, y and z axes: the factor on the shape of the gradient
+          event, or on the rotated wave, the block plays there, each
+          normalised to a largest magnitude of one;
+        - ``wave``: the rotated wave the block plays, as indexed by the
+          subsequence's ``waves`` in :func:`summary`, or -1 for a block that
+          plays its gradient events as they are. A block plays one at every
+          segment position where an instance carries a rotation other than
+          the identity: its gradient events combined and turned by its
+          rotation, so that the prescription's rotation is the only one the
+          scanner applies;
         - ``norot``, ``nopos``: the block's NOROT and NOPOS flags;
         - ``adc``, ``adc_freq_hz``, ``adc_phase_rad``: whether the block
           acquires, and its frequency and phase offsets;
@@ -275,10 +284,13 @@ def play(
           RF in those arrays; empty without RF;
         - ``gradient_time_us``, ``gradient_waveform_hz_per_m``: the corners of
           every played gradient, concatenated in play order: their times from
-          the block's start, in µs, and the gradient there, the instance's
-          amplitude times the shape the instance plays. A waveform on the
+          the block's start, in µs, and the gradient there, the amplitude
+          times the shape or wave the instance plays. A waveform on the
           gradient raster holds its end values over the half raster
-          intervals before its first sample and after its last;
+          intervals before its first sample and after its last. A rotated
+          wave takes the corners of every gradient event it combines, or the
+          raster centres across them when one is an arbitrary gradient on
+          the raster;
         - ``gradient_span``: ``(blocks, 3, 2)``, the start and stop of each
           block's gradient along x, y and z in those arrays; empty without
           one;
@@ -296,7 +308,8 @@ def play(
         If the cache cannot be loaded.
     RuntimeError
         With ``waveforms``, if a block's gradient holds another number of
-        samples than the segment position it plays at is prepared with.
+        samples than the segment position it plays at is prepared with, or
+        its rotated wave more points than that position reserves.
     """
     seq_path = Path(seq_path)
     return require("play_cache")(

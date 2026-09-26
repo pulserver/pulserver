@@ -3015,6 +3015,8 @@ static int resolve_block_instance(
         }
     }
 
+    pulseg__block_wave(desc, idx, &inst->wave_id, inst->wave_amp_hz_per_m);
+
     return PULSEG_SUCCESS;
 }
 
@@ -3285,6 +3287,7 @@ int pulseg_get_block_info(
 
     /* Frozen at structure-build time, where the gradient shapes still exist:
      * scan loads no SHAPES section and could not re-derive this. */
+    info->wave_points = 0;
     {
         const pulseg_block_initial_state *st = block_initial_state(coll, seg_idx, blk_idx);
         if (st)
@@ -3293,6 +3296,7 @@ int pulseg_get_block_info(
             info->rf_grad_level[0] = st->rf_grad_level[0];
             info->rf_grad_level[1] = st->rf_grad_level[1];
             info->rf_grad_level[2] = st->rf_grad_level[2];
+            info->wave_points = st->wave_points;
         }
     }
 
