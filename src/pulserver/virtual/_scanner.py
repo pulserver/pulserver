@@ -42,13 +42,14 @@ def trajectory(
 
     One ``(3, samples)`` array per readout, in play order, in 1/m along the
     physical axes. The locations are integrated from the gradients the cache
-    plays (:func:`pulserver.ir.play`), turned by each block's rotation and
-    then, except in blocks labelled ``NOROT``, by the prescription's
-    ``rotation`` from logical to physical axes, a reflection included, as
-    :func:`pulserver.ir.check` turns them. Under the default identity the
-    physical axes are the logical ones. An excitation returns k to zero, and
-    a refocusing pulse negates it, at the RF centre the cache records
-    (``rf_center_us``); each file of a chain starts from zero.
+    plays (:func:`pulserver.ir.play`), along the logical axes, each block's
+    own rotation included, turned, except in blocks labelled ``NOROT``, by
+    the prescription's ``rotation`` from logical to physical axes, a
+    reflection included, as :func:`pulserver.ir.check` turns them. Under the
+    default identity the physical axes are the logical ones. An excitation
+    returns k to zero, and a refocusing pulse negates it, at the RF centre
+    the cache records (``rf_center_us``); each file of a chain starts from
+    zero.
     """
     return [readout.kspace for readout in _play(Path(seq_path), cache_ext, rotation)]
 
@@ -118,7 +119,8 @@ def _play(
     frequencies_hz: np.ndarray | None = None,
 ) -> Iterator[_Readout]:
     played = ir.play(seq_path, cache_ext, waveforms=True)
-    turn = np.eye(3) if prescription is None else np.asarray(prescription, float)
+    identity = np.eye(3)
+    turn = identity if prescription is None else np.asarray(prescription, float)
     frequencies = np.zeros(0) if frequencies_hz is None else frequencies_hz
     span = played["gradient_span"]
     corners = played["gradient_time_us"].astype(float)
@@ -136,9 +138,7 @@ def _play(
             precession_origin_us = 0.0
             longitudinal = np.ones(frequencies.size)
             tipped = longitudinal
-        rotation = played["rotation"][block].astype(float)
-        if not played["norot"][block]:
-            rotation = turn @ rotation
+        rotation = identity if played["norot"][block] else turn
         waves = [
             (corners[slice(*span[block, axis])], values[slice(*span[block, axis])])
             for axis in range(3)

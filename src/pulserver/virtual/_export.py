@@ -41,9 +41,10 @@ def export(
       frequency and phase offsets with their ppm terms resolved, its centre
       and its use, with the channels of a pTx pulse summed, as at unit,
       in-phase sensitivity;
-    - its gradients along the physical axes: turned by the block's rotation
-      and then, except in a block labelled ``NOROT``, by the prescription's
-      ``rotation`` from logical to physical axes, as
+    - its gradients along the physical axes: those the cache plays along the
+      logical axes, the block's own rotation included, turned, except in a
+      block labelled ``NOROT``, by the prescription's ``rotation`` from
+      logical to physical axes, as
       :func:`~pulserver.virtual.trajectory` turns them, each as a time-shaped
       gradient through the corners the cache plays, a step from or to zero
       as a ramp 10 ns wide;
@@ -76,7 +77,8 @@ def export(
         it out.
     """
     played = ir.play(seq_path, cache_ext, waveforms=True)
-    turn = np.eye(3) if rotation is None else np.asarray(rotation, dtype=float)
+    identity = np.eye(3)
+    turn = identity if rotation is None else np.asarray(rotation, dtype=float)
     span = played["gradient_span"]
     corners = played["gradient_time_us"].astype(float)
     values = played["gradient_waveform_hz_per_m"].astype(float)
@@ -87,9 +89,7 @@ def export(
     receiver = []
     for block in range(played["duration_us"].size):
         duration_us = float(played["duration_us"][block])
-        turned = played["rotation"][block].astype(float)
-        if not played["norot"][block]:
-            turned = turn @ turned
+        turned = identity if played["norot"][block] else turn
         waves = [
             (corners[slice(*span[block, axis])], values[slice(*span[block, axis])])
             for axis in range(3)
@@ -131,7 +131,7 @@ def _gradients(
 ) -> list[types.SimpleNamespace]:
     """Return one block's gradients along the physical axes, as time-shaped gradient events.
 
-    ``waves`` are the corners of the block's gradients along its channel
+    ``waves`` are the corners of the block's gradients along the logical
     axes, in µs from the block's start, zero outside them; ``turned`` takes
     those axes to the physical ones. The events share the corners of all
     three, and start and end on the gradient raster.

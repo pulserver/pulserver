@@ -222,6 +222,17 @@ void pulseg_sequence_descriptor_free(pulseg_sequence_descriptor *d)
     }
     d->label_num_columns = 0;
     d->label_num_entries = 0;
+    if (d->waves)
+    {
+        PULSEG_FREE(d->waves);
+        d->waves = NULL;
+    }
+    if (d->block_wave)
+    {
+        PULSEG_FREE(d->block_wave);
+        d->block_wave = NULL;
+    }
+    d->num_waves = 0;
 }
 
 void pulseg_collection_free(pulseg_collection *c)
@@ -1003,6 +1014,10 @@ static int segments_content_equal(
         if (sa->norot_flag[b] != sb->norot_flag[b])
             return 0;
         if (sa->nopos_flag[b] != sb->nopos_flag[b])
+            return 0;
+        /* A shared rotated-wave slot is reserved once, at one length. */
+        if (sa->initial_states && sb->initial_states &&
+            sa->initial_states[b].wave_points != sb->initial_states[b].wave_points)
             return 0;
     }
     return 1;

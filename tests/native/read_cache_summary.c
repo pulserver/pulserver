@@ -42,7 +42,7 @@ int main(int argc, char **argv)
     {
         pulseg_subseq_info s = PULSEG_SUBSEQ_INFO_INIT;
         pulseg_tr_group *groups = NULL;
-        int n, num_groups;
+        int n, num_groups, num_waves;
         pulseg_get_subseq_info(coll, &s, i);
         printf("subsequence %d num_trs %d tr_size %d num_unique_adcs %d num_unique_rf %d "
                "vop_sar_ratio %g vop_global_sar_ratio %g\n",
@@ -55,6 +55,16 @@ int main(int argc, char **argv)
                    groups[n].one_instance_duration_us);
         if (groups)
             free(groups);
+        num_waves = pulseg_get_num_waves(coll, i);
+        for (n = 0; n < num_waves; ++n)
+        {
+            float peak[3] = {0.0f, 0.0f, 0.0f};
+            int axis, points = 0;
+            for (axis = 0; axis < 3; ++axis)
+                pulseg_materialize_wave(coll, i, n, axis, NULL, NULL, 0, &points, &peak[axis]);
+            printf("wave %d %d points %d peak %.4f %.4f %.4f\n", i, n, points,
+                   (double)peak[0], (double)peak[1], (double)peak[2]);
+        }
     }
     for (i = 0; i < info.num_segments; ++i)
     {

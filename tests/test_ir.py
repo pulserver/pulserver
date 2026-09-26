@@ -124,14 +124,24 @@ def _played_as_designed(seq):
     assert played["adc"].astype(bool).tolist() == designed["adc"].tolist()
     for key in ("rf_use", "rf_delay_us", "adc_delay_us", "adc_dwell_ns", "adc_samples"):
         assert played[key].tolist() == designed[key].tolist(), key
-    for key in ("rf_amp_hz", "rf_freq_hz", "gradient_hz_per_m", "adc_freq_hz"):
+    for key in ("rf_amp_hz", "rf_freq_hz", "adc_freq_hz"):
         np.testing.assert_allclose(
             played[key], designed[key], rtol=1e-6, atol=1e-6, err_msg=key
         )
     for key in ("rf_phase_rad", "adc_phase_rad"):
         wrapped = np.angle(np.exp(1j * (played[key] - designed[key])))
         np.testing.assert_allclose(wrapped, 0.0, atol=1e-6, err_msg=key)
-    np.testing.assert_allclose(played["rotation"], designed["rotation"], atol=1e-6)
+    # A block turned by its rotation plays a wave; every other plays its events.
+    driven = np.abs(designed["gradient_hz_per_m"]).max(axis=1) > 0.0
+    turned = np.abs(designed["rotation"] - np.eye(3)).max(axis=(1, 2)) > 1e-6
+    assert (played["wave"] >= 0)[driven & turned].all()
+    unturned = played["wave"] < 0
+    np.testing.assert_allclose(
+        played["gradient_hz_per_m"][unturned],
+        designed["gradient_hz_per_m"][unturned],
+        rtol=1e-6,
+        atol=1e-6,
+    )
 
 
 @pytest.mark.parametrize("name", SEQUENCES)
@@ -139,6 +149,85 @@ def test_the_scanner_plays_every_block_as_its_file_designs_it(name, tmp_path):
     seq = _copy(name, tmp_path)
     convert(seq, SYSTEM)
     _played_as_designed(seq)
+
+
+def _played_gradient(played, block, axis):
+    """One axis of a played block: point times from its start, in s, and values."""
+    start, stop = played["gradient_span"][block, axis]
+    times = 1e-6 * played["gradient_time_us"][start:stop].astype(float)
+    return times, played["gradient_waveform_hz_per_m"][start:stop].astype(float)
+
+
+def test_a_rotated_block_plays_its_gradients_turned_by_its_rotation(tmp_path):
+    seq = _copy("zte_3d.seq", tmp_path)
+    convert(seq, SYSTEM)
+    played = ir.play(seq, waveforms=True)
+    ((_, sequence),) = read_chain(seq)
+    rotated = np.flatnonzero(played["wave"] >= 0)
+    assert rotated.size
+    for block in rotated:
+        turned = sequence.get_gradients(block_range=(block + 1, block + 1))
+        scale = np.abs(played["gradient_hz_per_m"][block]).max()
+        for axis, spline in enumerate(turned):
+            times, values = _played_gradient(played, block, axis)
+            expected = np.zeros_like(times) if spline is None else spline(times)
+            np.testing.assert_allclose(values, expected, atol=1e-4 * scale)
+
+
+def _turned_on_the_raster(path, factor):
+    """A lobe on the gradient raster beside a trapezoid, rotated; then both times ``factor``."""
+    lobe = 2e5 * np.sin(np.pi * (np.arange(40) + 0.5) / 40)
+    arbitrary = pp.make_arbitrary_grad("x", lobe, first=0.0, last=0.0, system=SYSTEM)
+    trapezoid = pp.make_trapezoid(
+        "y", amplitude=1e5, rise_time=1e-4, flat_time=2e-4, system=SYSTEM
+    )
+    rotation = pp.make_rotation(np.pi / 6)
+    sequence = pp.Sequence(SYSTEM)
+    sequence.add_block(arbitrary, trapezoid, rotation)
+    sequence.add_block(
+        pp.scale_grad(arbitrary, factor), pp.scale_grad(trapezoid, factor), rotation
+    )
+    sequence.write(path)
+    return lobe, trapezoid, rotation
+
+
+def test_a_rotated_wave_on_the_raster_keeps_the_area_of_the_gradients_it_turns(
+    tmp_path,
+):
+    seq = tmp_path / "turned.seq"
+    lobe, trapezoid, _ = _turned_on_the_raster(seq, 1.0)
+    convert(seq, SYSTEM)
+    played = ir.play(seq, waveforms=True)
+    ((_, sequence),) = read_chain(seq)
+    angle = np.pi / 6
+    turn = np.array([[np.cos(angle), -np.sin(angle)], [np.sin(angle), np.cos(angle)]])
+    designed = turn @ [lobe.sum() * SYSTEM.grad_raster_time, trapezoid.area]
+    turned = sequence.get_gradients(block_range=(1, 1))
+    for axis in range(2):
+        times, values = _played_gradient(played, 0, axis)
+        np.testing.assert_allclose(
+            np.trapezoid(values, times), designed[axis], rtol=1e-5
+        )
+        # The raster centres, between the two held edges, lie on the design.
+        np.testing.assert_allclose(
+            values[1:-1], turned[axis](times[1:-1]), rtol=1e-5, atol=1.0
+        )
+
+
+@pytest.mark.parametrize("factor", [0.5, -0.5])
+def test_rotated_blocks_in_one_proportion_share_a_wave_at_their_own_amplitude(
+    factor, tmp_path
+):
+    seq = tmp_path / "turned.seq"
+    _turned_on_the_raster(seq, factor)
+    convert(seq, SYSTEM)
+    played = ir.play(seq)
+    assert played["wave"].tolist() == [0, 0]
+    np.testing.assert_allclose(
+        played["gradient_hz_per_m"][1],
+        factor * played["gradient_hz_per_m"][0],
+        rtol=1e-5,
+    )
 
 
 def test_a_binary_file_segments_into_the_scan_its_text_does(tmp_path):
@@ -287,6 +376,11 @@ def _reader_lines(s):
             f"one_instance_duration_us {g['one_instance_duration_us']}"
             for n, g in enumerate(x["tr_groups"])
         ]
+        lines += [
+            f"wave {i} {n} points {w['points']} peak "
+            + " ".join(f"{v:.4f}" for v in w["peak"])
+            for n, w in enumerate(x["waves"])
+        ]
     lines += [
         f"segment {i} duration_us {x['duration_us']} num_blocks {x['num_blocks']} "
         f"start_block {x['start_block']} is_nav {x['is_nav']}"
@@ -336,7 +430,13 @@ def scanner_reader(tmp_path_factory):
 
 
 @pytest.mark.parametrize(
-    "name", ["gre_2d_3sl.seq", "epi_2d_main.seq", "mprage_stack_of_spirals_3d.seq"]
+    "name",
+    [
+        "gre_2d_3sl.seq",
+        "epi_2d_main.seq",
+        "mprage_stack_of_spirals_3d.seq",
+        "zte_3d.seq",
+    ],
 )
 def test_a_vendor_cache_written_here_loads_in_the_scanner_reader(
     name, tmp_path, scanner_reader
