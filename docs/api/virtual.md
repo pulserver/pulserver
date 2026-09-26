@@ -52,3 +52,4 @@ scanner's centre frequency.
 | Object | Description |
 | --- | --- |
 | {obj}`~pulserver.virtual.send` | Send one series to a reconstruction proxy as the scanner's client sends it, each readout as it is acquired; return what comes back. |
+| {obj}`~pulserver.virtual.record` | Write one series to an ISMRMRD file as `send` sends it. |

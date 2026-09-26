@@ -269,6 +269,10 @@ of the text format.
   span played at a speed is released once the clock has passed it, and a
   series streamed readout by readout is reconstructed as the same series sent
   whole.
+- `pulserver scan` records the series the virtual scanner acquires of an
+  imported file, sample for sample, and streams a generated design to a
+  reconstruction proxy, whose image carries the prescribed centre and
+  directions.
 - The exported file of every fixture and every shipped sequence, read and
   integrated by pypulseqpp, has the trajectory the cache plays, under an
   axial, an oblique and a reflected prescription, and holds each RF pulse with

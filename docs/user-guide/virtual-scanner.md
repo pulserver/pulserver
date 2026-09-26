@@ -123,6 +123,61 @@ At `speed=1.0` the scan lasts as long as it would on a scanner, or longer where
 the simulation takes longer than the blocks it plays; without `speed`, the
 spans come as fast as they are computed.
 
+## Scan from the command line
+
+`pulserver scan` runs a scan without a script. It imports a sequence file or
+generates a design from a scanner-sequence plugin, as the design calls do,
+plays its IR cache on a phantom in the Bloch simulation, and writes the series
+to an ISMRMRD file, streams it to a reconstruction proxy, or both:
+
+```bash
+pulserver scan --seq sequence.seq --limits limits.txt \
+  --orientation coronal --center 10 -5 3 --mrd raw.h5 --sound scan.wav
+
+pulserver scan --plugins sequences --plugin gre2d --protocol protocol.txt \
+  --limits limits.txt --store designs --recon 127.0.0.1:9002 --output images
+```
+
+The design call's reply, `IMPORTED <id>` or `GENERATED <id>`, or its `ERROR`
+line, is written to standard output, and the scan clock to standard error.
+
+- `--limits` is the `[Limits]` block of {doc}`running`; the phantom's chemical
+  shifts are resolved at its `B0`. `--protocol` holds a protocol block, as
+  `pulserver design generate` reads it on standard input; without it, the
+  plugin's defaults are designed.
+- `--orientation` names the rotation from logical to physical axes by the
+  physical direction of each logical axis:
+
+  | Orientation | Readout | Phase encoding | Slice selection |
+  | --- | --- | --- | --- |
+  | `axial` | +x | +y | +z |
+  | `coronal` | +x | +z | −y |
+  | `sagittal` | +y | +z | +x |
+
+  `--rotation` gives the nine elements of another, row by row, and `--center`
+  the field-of-view centre, in mm along the physical axes. They replace the
+  field-of-view entries of the protocol block.
+- `--phantom` is a JSON file of ellipses, each an object of the fields of
+  {class}`~pulserver.virtual.Ellipse`, in its units:
+
+  ```json
+  {"ellipses": [
+    {"centre": [0.0, 0.0, 0.0], "semi_axes": [0.08, 0.06], "t1": 0.9, "t2": 0.07},
+    {"centre": [0.02, 0.02, 0.0], "semi_axes": [0.02, 0.015], "shift_ppm": -3.45}
+  ]}
+  ```
+
+  Without it, the phantom is seven vials of water around one of fat, with T1
+  from 0.3 s to 2.0 s and T2 from 0.04 s to 0.3 s. `--spacing`, in mm, and
+  `--coils` set its isochromats and its receive coils.
+- `--recon` streams the series to a reconstruction proxy, which looks the
+  design up in its store: give that store as `--store`, or the proxy's design
+  intake as `--push`. The images go to `images.h5` in `--output`, the DICOM
+  datasets to the files they are named by, and a text beginning `pulserver:`
+  ends the command with status 1.
+- `--speed` plays the scan that many times as fast as a scanner; without it,
+  the scan runs as fast as the simulation.
+
 ## Prescribe an orientation
 
 Add the nine `fov_rotation_ij` entries to the protocol block the design is

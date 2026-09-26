@@ -1,11 +1,12 @@
-"""The virtual reconstruction client: one series sent to a reconstruction proxy as the scanner's client sends it."""
+"""The virtual reconstruction client: one series sent to a reconstruction proxy as the scanner's client sends it, or recorded."""
 
 from __future__ import annotations
 
-__all__ = ["send"]
+__all__ = ["record", "send"]
 
 import socket
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Iterator, Sequence
+from pathlib import Path
 from typing import Any
 
 import ismrmrd
@@ -48,22 +49,76 @@ def send(
     readout is taken, and each readout once the next one is, so that the
     last carries its flag.
     """
-    pending = iter(readouts)
-    current = next(pending, None)
-    coils = 1 if current is None else int(current.shape[0])
-    directions = np.eye(3) if rotation is None else np.asarray(rotation, float)
+    header, acquisitions = _series(
+        design, readouts, frequency_hz, position_mm, rotation, exam
+    )
     stream = socket.create_connection(address, timeout=timeout)
     connection = Connection(stream)
     try:
         if config is not None:
             connection.send_config(config)
-        connection.send_header(_header(design, coils, frequency_hz, exam))
-        counter = 0
-        while current is not None:
+        connection.send_header(header)
+        for acquisition in acquisitions:
+            connection.send(acquisition)
+        connection.send_close()
+        return list(connection)
+    finally:
+        connection.shutdown_close()
+
+
+def record(
+    path: Path | str,
+    design: str,
+    readouts: Iterable[np.ndarray],
+    *,
+    frequency_hz: float = 123_200_000.0,
+    position_mm: Sequence[float] = (0.0, 0.0, 0.0),
+    rotation: np.ndarray | None = None,
+    exam: str | None = None,
+) -> int:
+    """Write one series to an ISMRMRD file as :func:`send` sends it; return the readouts written.
+
+    The header and the acquisitions are those :func:`send` sends, in the
+    group ``dataset`` of the file, which is created where it does not exist.
+    """
+    import ismrmrd.hdf5
+
+    header, acquisitions = _series(
+        design, readouts, frequency_hz, position_mm, rotation, exam
+    )
+    dataset = ismrmrd.hdf5.Dataset(str(path), "dataset", create_if_needed=True)
+    try:
+        dataset.write_xml_header(header)
+        written = 0
+        for acquisition in acquisitions:
+            dataset.append_acquisition(acquisition)
+            written += 1
+    finally:
+        dataset.close()
+    return written
+
+
+def _series(
+    design: str,
+    readouts: Iterable[np.ndarray],
+    frequency_hz: float,
+    position_mm: Sequence[float],
+    rotation: np.ndarray | None,
+    exam: str | None,
+) -> tuple[str, Iterator[ismrmrd.Acquisition]]:
+    """Return the header of a series, its first readout taken, and its acquisitions."""
+    pending = iter(readouts)
+    current = next(pending, None)
+    coils = 1 if current is None else int(current.shape[0])
+    directions = np.eye(3) if rotation is None else np.asarray(rotation, float)
+
+    def acquisitions() -> Iterator[ismrmrd.Acquisition]:
+        counter, samples = 0, current
+        while samples is not None:
             following = next(pending, None)
             counter += 1
             acquisition = ismrmrd.Acquisition.from_array(
-                np.asarray(current, np.complex64)
+                np.asarray(samples, np.complex64)
             )
             acquisition.scan_counter = counter
             acquisition.position[:] = position_mm
@@ -72,12 +127,10 @@ def send(
             acquisition.slice_dir[:] = directions[:, 2]
             if following is None:
                 acquisition.setFlag(ismrmrd.ACQ_LAST_IN_MEASUREMENT)
-            connection.send(acquisition)
-            current = following
-        connection.send_close()
-        return list(connection)
-    finally:
-        connection.shutdown_close()
+            yield acquisition
+            samples = following
+
+    return _header(design, coils, frequency_hz, exam), acquisitions()
 
 
 def _header(design: str, coils: int, frequency_hz: float, exam: str | None) -> str:
