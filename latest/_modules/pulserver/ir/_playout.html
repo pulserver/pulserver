@@ -459,8 +459,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">.._accelerators</span><span class="w"> </span><span class="kn">import</span> <span class="n">require</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">._convert</span><span class="w"> </span><span class="kn">import</span> <span class="n">cache_path</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">._waves</span><span class="w"> </span><span class="kn">import</span> <span class="n">WaveBudget</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">._convert</span><span class="w"> </span><span class="kn">import</span> <span class="n">WaveBudget</span><span class="p">,</span> <span class="n">_held</span><span class="p">,</span> <span class="n">cache_path</span>
 
 
 <div class="viewcode-block" id="Prescan">
@@ -501,8 +500,8 @@
 <span class="sd">    the first stage prepares at each segment position, a model of the</span>
 <span class="sd">    waveform memory the waves are loaded into, and the registers the scan</span>
 <span class="sd">    loop sets on each block, with the samples its wave reads from that</span>
-<span class="sd">    memory when it is set. Without a ``budget``, the playout holds every</span>
-<span class="sd">    wave at once on the gradient raster of the chain's first file.</span>
+<span class="sd">    memory when it is set. The waves are held as :func:`plan_waves` lays</span>
+<span class="sd">    them out for ``budget``, or, without one, as the cache lays them out.</span>
 
 <span class="sd">    With ``prescan``, the scan loop plays that receive-gain calibration</span>
 <span class="sd">    instead. It waits for no trigger, drives no digital output, and plays at</span>
@@ -511,20 +510,21 @@
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
 <span class="sd">    dict of str to Any</span>
-<span class="sd">        - ``mode``, ``memory_samples``: how :func:`plan_waves` holds the</span>
-<span class="sd">          waves, and the samples per axis it reserves;</span>
+<span class="sd">        - ``mode``, ``memory_samples``, ``slots``: how :func:`plan_waves`</span>
+<span class="sd">          holds the waves, the samples per axis it reserves, and the slots</span>
+<span class="sd">          of a position's ring;</span>
 <span class="sd">        - ``positions``: per prepared segment position, in segment order,</span>
 <span class="sd">          ``segment`` and ``position``; where the position plays no wave, its</span>
 <span class="sd">          gradient events as corners at unit amplitude, ``event_time_us`` from</span>
 <span class="sd">          the block's start and ``event_shape``, with ``event_span``</span>
 <span class="sd">          ``(positions, 3, 2)`` into them; where it does, ``slot_offset``</span>
-<span class="sd">          ``(positions, 2, 3)``, ``slot_samples`` and ``slot_start_us``: its</span>
-<span class="sd">          two slots, or, with offsets -1, the span every resident wave it</span>
-<span class="sd">          plays covers;</span>
+<span class="sd">          ``(positions, slots, 3)``, ``slot_samples`` and ``slot_start_us``:</span>
+<span class="sd">          its ring of slots, or, with offsets -1, the span every resident wave</span>
+<span class="sd">          it plays covers;</span>
 <span class="sd">        - ``blocks``: per played block, in play order, ``subsequence``,</span>
 <span class="sd">          ``segment``, ``position``, ``instance`` (instances of its segment</span>
-<span class="sd">          played before its own), ``half`` (of the streamed slots, -1</span>
-<span class="sd">          otherwise), ``rotate`` (0 where NOROT keeps the prescription</span>
+<span class="sd">          played before its own), ``slot`` (of its position's ring, -1 unless</span>
+<span class="sd">          the waves are streamed), ``rotate`` (0 where NOROT keeps the prescription</span>
 <span class="sd">          rotation out), ``await_trigger``, ``first_position`` (the</span>
 <span class="sd">          execution-stream position of its instance's first block) and</span>
 <span class="sd">          ``duration_us``; the registers ``rf_amp_hz``, ``rf_phase_rad``,</span>
@@ -557,23 +557,13 @@
 <span class="sd">        exist.</span>
 <span class="sd">    """</span>
     <span class="n">seq_path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">seq_path</span><span class="p">)</span>
-    <span class="n">held</span> <span class="o">=</span> <span class="p">(</span>
-        <span class="kc">None</span>
-        <span class="k">if</span> <span class="n">budget</span> <span class="ow">is</span> <span class="kc">None</span>
-        <span class="k">else</span> <span class="p">(</span>
-            <span class="n">budget</span><span class="o">.</span><span class="n">max_samples</span><span class="p">,</span>
-            <span class="n">budget</span><span class="o">.</span><span class="n">raster_us</span><span class="p">,</span>
-            <span class="n">budget</span><span class="o">.</span><span class="n">load_us_per_sample</span><span class="p">,</span>
-            <span class="n">budget</span><span class="o">.</span><span class="n">headroom</span><span class="p">,</span>
-        <span class="p">)</span>
-    <span class="p">)</span>
     <span class="n">calibration</span> <span class="o">=</span> <span class="p">(</span>
         <span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="k">if</span> <span class="n">prescan</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="p">(</span><span class="n">prescan</span><span class="o">.</span><span class="n">subsequence</span><span class="p">,</span> <span class="n">prescan</span><span class="o">.</span><span class="n">readouts</span><span class="p">)</span>
     <span class="p">)</span>
     <span class="k">return</span> <span class="n">require</span><span class="p">(</span><span class="s2">"playout_from_cache"</span><span class="p">)(</span>
         <span class="nb">str</span><span class="p">(</span><span class="n">cache_path</span><span class="p">(</span><span class="n">seq_path</span><span class="p">,</span> <span class="n">cache_ext</span><span class="p">)),</span>
         <span class="n">seq_path</span><span class="o">.</span><span class="n">stat</span><span class="p">()</span><span class="o">.</span><span class="n">st_size</span><span class="p">,</span>
-        <span class="n">held</span><span class="p">,</span>
+        <span class="n">_held</span><span class="p">(</span><span class="n">budget</span><span class="p">),</span>
         <span class="n">calibration</span><span class="p">,</span>
         <span class="n">waveforms</span><span class="p">,</span>
     <span class="p">)</span></div>

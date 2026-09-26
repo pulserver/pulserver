@@ -65,13 +65,24 @@ The limits file holds a `[Limits]` block, one `name: value` per line between
 `[Limits]` and `[Limits End]`. The lines are keyword arguments of
 `pypulseqpp.Opts`, of which `B0`, the field in T the scan runs at, is
 required: ppm offsets are resolved at it, and a call without it is refused.
-Three further options are for the IR conversion:
+Further options are for the IR conversion:
 
 | Option | Meaning |
 | --- | --- |
 | `ir_vendor` | `PULSEG_VENDOR_*` code the cache is tagged with; 0 is vendor-neutral |
 | `ir_label_column_map` | Three Pulseq label state indices, separated by spaces, filling the ADC label columns |
 | `ir_cache_ext` | Extension of the cache file, `.pseg` by default |
+| `ir_wave_max_samples` | Samples each gradient axis of the playout's waveform memory holds for waves |
+| `ir_wave_raster_us` | The playout's gradient raster, in µs per sample |
+| `ir_wave_load_us_per_sample` | Time the playout takes to load one sample on one axis, in µs; 0, the default, leaves the loading unchecked |
+| `ir_wave_headroom` | Share of the playout's time its loading may take, 0.5 by default |
+| `ir_wave_slots` | Slots per segment position that a playout streaming the waves rings through, 2 by default |
+
+The `ir_wave_` options are the waveform memory of the scanner's playout, which
+the cache lays the waves out for ({class}`~pulserver.ir.WaveBudget`);
+`ir_wave_max_samples` and `ir_wave_raster_us` come together. Without them every
+wave is held at once on the gradient raster of the chain's first file, and a
+playout that holds them otherwise refuses the cache.
 
 A generated design and an imported chain are checked against the limits before
 their IR cache is written ({doc}`../explanations/ir-cache`), so the limits

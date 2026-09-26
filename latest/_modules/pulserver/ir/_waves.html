@@ -454,90 +454,53 @@
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">.._accelerators</span><span class="w"> </span><span class="kn">import</span> <span class="n">require</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">._convert</span><span class="w"> </span><span class="kn">import</span> <span class="n">cache_path</span>
-
-
-<div class="viewcode-block" id="WaveBudget">
-<a class="viewcode-back" href="../../../generated/pulserver.ir.WaveBudget.html#pulserver.ir.WaveBudget">[docs]</a>
-<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-<span class="k">class</span><span class="w"> </span><span class="nc">WaveBudget</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""What a playout's waveform memory affords the waves.</span>
-
-<span class="sd">    A property of the playout, not of the sequence: the C library's</span>
-<span class="sd">    ``pulseg_wave_budget``.</span>
-
-<span class="sd">    Attributes</span>
-<span class="sd">    ----------</span>
-<span class="sd">    max_samples</span>
-<span class="sd">        Samples each gradient axis holds for waves.</span>
-<span class="sd">    raster_us</span>
-<span class="sd">        The playout's gradient raster, in µs per sample.</span>
-<span class="sd">    load_us_per_sample</span>
-<span class="sd">        Time to sample and load one sample on one axis, in µs; 0 leaves the</span>
-<span class="sd">        loading unchecked.</span>
-<span class="sd">    headroom</span>
-<span class="sd">        Share of a segment instance's duration that loading the next one may</span>
-<span class="sd">        take.</span>
-
-<span class="sd">    Raises</span>
-<span class="sd">    ------</span>
-<span class="sd">    ValueError</span>
-<span class="sd">        If the raster or the headroom is not positive, or the memory or the</span>
-<span class="sd">        load rate is negative.</span>
-<span class="sd">    """</span>
-
-    <span class="n">max_samples</span><span class="p">:</span> <span class="nb">int</span>
-    <span class="n">raster_us</span><span class="p">:</span> <span class="nb">float</span>
-    <span class="n">load_us_per_sample</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span>
-    <span class="n">headroom</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.5</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">__post_init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">raster_us</span> <span class="o">&lt;=</span> <span class="mf">0.0</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">headroom</span> <span class="o">&lt;=</span> <span class="mf">0.0</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"the raster and the headroom must be positive"</span><span class="p">)</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_samples</span> <span class="o">&lt;</span> <span class="mi">0</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">load_us_per_sample</span> <span class="o">&lt;</span> <span class="mf">0.0</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"the memory and the load rate cannot be negative"</span><span class="p">)</span></div>
-
+<span class="kn">from</span><span class="w"> </span><span class="nn">._convert</span><span class="w"> </span><span class="kn">import</span> <span class="n">WaveBudget</span><span class="p">,</span> <span class="n">_held</span><span class="p">,</span> <span class="n">cache_path</span>
 
 
 <div class="viewcode-block" id="plan_waves">
 <a class="viewcode-back" href="../../../generated/pulserver.ir.plan_waves.html#pulserver.ir.plan_waves">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">plan_waves</span><span class="p">(</span>
-    <span class="n">seq_path</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span> <span class="n">budget</span><span class="p">:</span> <span class="n">WaveBudget</span><span class="p">,</span> <span class="n">cache_ext</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">".pseg"</span>
+    <span class="n">seq_path</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span> <span class="n">budget</span><span class="p">:</span> <span class="n">WaveBudget</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">cache_ext</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">".pseg"</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">"""Lay out the waves of the cache beside a sequence file in a playout's waveform memory.</span>
 
-<span class="sd">    The layout is the C library's, computed from the definitions alone, as</span>
-<span class="sd">    both stages of a playout compute it. Every wave is held at once where</span>
-<span class="sd">    that fits the budget's memory on each gradient axis; otherwise each</span>
-<span class="sd">    segment position that plays waves holds two slots, and the n-th instance</span>
-<span class="sd">    of a segment in the scan plays the slots of half ``n % 2``, loaded while</span>
-<span class="sd">    the instance before it plays. With a load rate, that loading is checked</span>
-<span class="sd">    against the headroom times the duration of the instance before, for</span>
-<span class="sd">    every instance but the first.</span>
+<span class="sd">    With ``budget``, the layout is computed for it here, as :func:`convert`</span>
+<span class="sd">    computes the one a cache carries; without one, it is the layout the cache</span>
+<span class="sd">    carries. Every wave is held at once where that fits the budget's memory</span>
+<span class="sd">    on each gradient axis; otherwise each segment position that plays waves</span>
+<span class="sd">    holds a ring of ``slots`` slots, and the n-th instance of a segment in the</span>
+<span class="sd">    scan plays slot ``n % slots``. With a load rate, the loading is checked</span>
+<span class="sd">    on the playout's timeline scaled by the headroom: the scan starts with</span>
+<span class="sd">    its first instance's waves loaded, and the waves of each later instance</span>
+<span class="sd">    are loaded one instance after another, from once the instance</span>
+<span class="sd">    ``slots - 1`` before it has started, and have to be loaded before it</span>
+<span class="sd">    starts.</span>
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
 <span class="sd">    dict of str to Any</span>
+<span class="sd">        - ``budget``: the budget it is laid out for, as :class:`WaveBudget`</span>
+<span class="sd">          fields;</span>
 <span class="sd">        - ``mode``: ``"none"``, ``"resident"`` or ``"streamed"``;</span>
 <span class="sd">        - ``samples``, ``resident_samples``, ``streamed_samples``: per axis,</span>
-<span class="sd">          what the mode holds, every wave at once, and two slots per</span>
+<span class="sd">          what the mode holds, every wave at once, and the slots of every</span>
 <span class="sd">          position;</span>
 <span class="sd">        - ``waves``: per subsequence, the region of each wave, for a resident</span>
 <span class="sd">          layout;</span>
-<span class="sd">        - ``slots``: per segment, the regions of each position's two halves,</span>
-<span class="sd">          for a streamed layout; ``samples`` is 0 where the position plays no</span>
-<span class="sd">          wave;</span>
+<span class="sd">        - ``slots``: per segment, the ring of regions of each position, for a</span>
+<span class="sd">          streamed layout; ``samples`` is 0 where the position plays no wave;</span>
 <span class="sd">        - ``loading_checked``, ``least_spare_us``, ``tightest``: whether the</span>
-<span class="sd">          loading was checked, the least spare time over segment instances in</span>
-<span class="sd">          µs, and the subsequence and execution-stream position of the</span>
-<span class="sd">          instance it is found at.</span>
+<span class="sd">          loading was checked; the least, over the instances after the first</span>
+<span class="sd">          up to the first whose loading ends after it starts, of how long</span>
+<span class="sd">          before its start its loading ends, on the scaled timeline, in µs;</span>
+<span class="sd">          and the subsequence and execution-stream position of the instance</span>
+<span class="sd">          it is found at.</span>
 
 <span class="sd">        A region holds ``samples`` samples on each axis it drives, from</span>
 <span class="sd">        ``offset`` in that axis's memory, -1 on another, sampled at the</span>
@@ -552,12 +515,7 @@
 <span class="sd">    """</span>
     <span class="n">seq_path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">seq_path</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">require</span><span class="p">(</span><span class="s2">"plan_waves_from_cache"</span><span class="p">)(</span>
-        <span class="nb">str</span><span class="p">(</span><span class="n">cache_path</span><span class="p">(</span><span class="n">seq_path</span><span class="p">,</span> <span class="n">cache_ext</span><span class="p">)),</span>
-        <span class="n">seq_path</span><span class="o">.</span><span class="n">stat</span><span class="p">()</span><span class="o">.</span><span class="n">st_size</span><span class="p">,</span>
-        <span class="n">budget</span><span class="o">.</span><span class="n">max_samples</span><span class="p">,</span>
-        <span class="n">budget</span><span class="o">.</span><span class="n">raster_us</span><span class="p">,</span>
-        <span class="n">budget</span><span class="o">.</span><span class="n">load_us_per_sample</span><span class="p">,</span>
-        <span class="n">budget</span><span class="o">.</span><span class="n">headroom</span><span class="p">,</span>
+        <span class="nb">str</span><span class="p">(</span><span class="n">cache_path</span><span class="p">(</span><span class="n">seq_path</span><span class="p">,</span> <span class="n">cache_ext</span><span class="p">)),</span> <span class="n">seq_path</span><span class="o">.</span><span class="n">stat</span><span class="p">()</span><span class="o">.</span><span class="n">st_size</span><span class="p">,</span> <span class="n">_held</span><span class="p">(</span><span class="n">budget</span><span class="p">)</span>
     <span class="p">)</span></div>
 
 

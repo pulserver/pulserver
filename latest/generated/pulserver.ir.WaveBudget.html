@@ -531,11 +531,12 @@
 <h1>WaveBudget<a class="headerlink" href="#wavebudget" title="Link to this heading">#</a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="pulserver.ir.WaveBudget">
-<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pulserver.ir.</span></span><span class="sig-name descname"><span class="pre">WaveBudget</span></span><a class="reference internal" href="../_modules/pulserver/ir/_waves.html#WaveBudget"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.ir.WaveBudget" title="Link to this definition">#</a></dt>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pulserver.ir.</span></span><span class="sig-name descname"><span class="pre">WaveBudget</span></span><a class="reference internal" href="../_modules/pulserver/ir/_convert.html#WaveBudget"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.ir.WaveBudget" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/builtins/functions.html#object" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
 <p>What a playout’s waveform memory affords the waves.</p>
 <p>A property of the playout, not of the sequence: the C library’s
-<code class="docutils literal notranslate"><span class="pre">pulseg_wave_budget</span></code>.</p>
+<code class="docutils literal notranslate"><span class="pre">pulseg_wave_budget</span></code>. <a class="reference internal" href="pulserver.ir.convert.html#pulserver.ir.convert" title="pulserver.ir.convert"><code class="xref py py-func docutils literal notranslate"><span class="pre">convert()</span></code></a> lays the waves out for it, and a
+playout refuses a cache laid out for another budget.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Attributes<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -543,13 +544,15 @@
 <li><p><strong>raster_us</strong> (<em>float</em>) – The playout’s gradient raster, in µs per sample.</p></li>
 <li><p><strong>load_us_per_sample</strong> (<em>float</em>) – Time to sample and load one sample on one axis, in µs; 0 leaves the
 loading unchecked.</p></li>
-<li><p><strong>headroom</strong> (<em>float</em>) – Share of a segment instance’s duration that loading the next one may
-take.</p></li>
+<li><p><strong>headroom</strong> (<em>float</em>) – Share of the playout’s time its loading may take.</p></li>
+<li><p><strong>slots</strong> (<em>int</em>) – Slots per segment position a streamed layout rings through, at least
+2: one more than the segment instances the loading may run ahead of
+the playout.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Raises<span class="colon">:</span></dt>
-<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If the raster or the headroom is not positive, or the memory or the
-    load rate is negative.</p>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If the raster or the headroom is not positive, the memory or the load
+    rate is negative, or there are fewer than two slots.</p>
 </dd>
 </dl>
 </dd></dl>
@@ -563,10 +566,13 @@ take.</p></li>
 <tr class="row-even"><td><p><a class="reference internal" href="pulserver.ir.WaveBudget.load_us_per_sample.html#pulserver.ir.WaveBudget.load_us_per_sample" title="pulserver.ir.WaveBudget.load_us_per_sample"><code class="xref py py-obj docutils literal notranslate"><span class="pre">load_us_per_sample</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.ir.WaveBudget.max_samples.html#pulserver.ir.WaveBudget.max_samples" title="pulserver.ir.WaveBudget.max_samples"><code class="xref py py-obj docutils literal notranslate"><span class="pre">max_samples</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.ir.WaveBudget.slots.html#pulserver.ir.WaveBudget.slots" title="pulserver.ir.WaveBudget.slots"><code class="xref py py-obj docutils literal notranslate"><span class="pre">slots</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pulserver.ir.WaveBudget.raster_us.html#pulserver.ir.WaveBudget.raster_us" title="pulserver.ir.WaveBudget.raster_us"><code class="xref py py-obj docutils literal notranslate"><span class="pre">raster_us</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.ir.WaveBudget.max_samples.html#pulserver.ir.WaveBudget.max_samples" title="pulserver.ir.WaveBudget.max_samples"><code class="xref py py-obj docutils literal notranslate"><span class="pre">max_samples</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.ir.WaveBudget.raster_us.html#pulserver.ir.WaveBudget.raster_us" title="pulserver.ir.WaveBudget.raster_us"><code class="xref py py-obj docutils literal notranslate"><span class="pre">raster_us</span></code></a></p></td>
 <td><p></p></td>
 </tr>
 </tbody>

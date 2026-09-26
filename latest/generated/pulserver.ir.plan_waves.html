@@ -533,30 +533,36 @@
 <dt class="sig sig-object py" id="pulserver.ir.plan_waves">
 <span class="sig-prename descclassname"><span class="pre">pulserver.ir.</span></span><span class="sig-name descname"><span class="pre">plan_waves</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pulserver/ir/_waves.html#plan_waves"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.ir.plan_waves" title="Link to this definition">#</a></dt>
 <dd><p>Lay out the waves of the cache beside a sequence file in a playout’s waveform memory.</p>
-<p>The layout is the C library’s, computed from the definitions alone, as
-both stages of a playout compute it. Every wave is held at once where
-that fits the budget’s memory on each gradient axis; otherwise each
-segment position that plays waves holds two slots, and the n-th instance
-of a segment in the scan plays the slots of half <code class="docutils literal notranslate"><span class="pre">n</span> <span class="pre">%</span> <span class="pre">2</span></code>, loaded while
-the instance before it plays. With a load rate, that loading is checked
-against the headroom times the duration of the instance before, for
-every instance but the first.</p>
+<p>With <code class="docutils literal notranslate"><span class="pre">budget</span></code>, the layout is computed for it here, as <a class="reference internal" href="pulserver.ir.convert.html#pulserver.ir.convert" title="pulserver.ir.convert"><code class="xref py py-func docutils literal notranslate"><span class="pre">convert()</span></code></a>
+computes the one a cache carries; without one, it is the layout the cache
+carries. Every wave is held at once where that fits the budget’s memory
+on each gradient axis; otherwise each segment position that plays waves
+holds a ring of <code class="docutils literal notranslate"><span class="pre">slots</span></code> slots, and the n-th instance of a segment in the
+scan plays slot <code class="docutils literal notranslate"><span class="pre">n</span> <span class="pre">%</span> <span class="pre">slots</span></code>. With a load rate, the loading is checked
+on the playout’s timeline scaled by the headroom: the scan starts with
+its first instance’s waves loaded, and the waves of each later instance
+are loaded one instance after another, from once the instance
+<code class="docutils literal notranslate"><span class="pre">slots</span> <span class="pre">-</span> <span class="pre">1</span></code> before it has started, and have to be loaded before it
+starts.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
 <dd class="field-odd"><p><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">budget</span></code>: the budget it is laid out for, as <a class="reference internal" href="pulserver.ir.WaveBudget.html#pulserver.ir.WaveBudget" title="pulserver.ir.WaveBudget"><code class="xref py py-class docutils literal notranslate"><span class="pre">WaveBudget</span></code></a>
+fields;</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">mode</span></code>: <code class="docutils literal notranslate"><span class="pre">&quot;none&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;resident&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">&quot;streamed&quot;</span></code>;</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">samples</span></code>, <code class="docutils literal notranslate"><span class="pre">resident_samples</span></code>, <code class="docutils literal notranslate"><span class="pre">streamed_samples</span></code>: per axis,
-what the mode holds, every wave at once, and two slots per
+what the mode holds, every wave at once, and the slots of every
 position;</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">waves</span></code>: per subsequence, the region of each wave, for a resident
 layout;</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">slots</span></code>: per segment, the regions of each position’s two halves,
-for a streamed layout; <code class="docutils literal notranslate"><span class="pre">samples</span></code> is 0 where the position plays no
-wave;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">slots</span></code>: per segment, the ring of regions of each position, for a
+streamed layout; <code class="docutils literal notranslate"><span class="pre">samples</span></code> is 0 where the position plays no wave;</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">loading_checked</span></code>, <code class="docutils literal notranslate"><span class="pre">least_spare_us</span></code>, <code class="docutils literal notranslate"><span class="pre">tightest</span></code>: whether the
-loading was checked, the least spare time over segment instances in
-µs, and the subsequence and execution-stream position of the
-instance it is found at.</p></li>
+loading was checked; the least, over the instances after the first
+up to the first whose loading ends after it starts, of how long
+before its start its loading ends, on the scaled timeline, in µs;
+and the subsequence and execution-stream position of the instance
+it is found at.</p></li>
 </ul>
 <p>A region holds <code class="docutils literal notranslate"><span class="pre">samples</span></code> samples on each axis it drives, from
 <code class="docutils literal notranslate"><span class="pre">offset</span></code> in that axis’s memory, -1 on another, sampled at the

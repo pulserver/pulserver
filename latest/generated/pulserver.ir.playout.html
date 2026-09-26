@@ -538,28 +538,29 @@
 the first stage prepares at each segment position, a model of the
 waveform memory the waves are loaded into, and the registers the scan
 loop sets on each block, with the samples its wave reads from that
-memory when it is set. Without a <code class="docutils literal notranslate"><span class="pre">budget</span></code>, the playout holds every
-wave at once on the gradient raster of the chain’s first file.</p>
+memory when it is set. The waves are held as <a class="reference internal" href="pulserver.ir.plan_waves.html#pulserver.ir.plan_waves" title="pulserver.ir.plan_waves"><code class="xref py py-func docutils literal notranslate"><span class="pre">plan_waves()</span></code></a> lays
+them out for <code class="docutils literal notranslate"><span class="pre">budget</span></code>, or, without one, as the cache lays them out.</p>
 <p>With <code class="docutils literal notranslate"><span class="pre">prescan</span></code>, the scan loop plays that receive-gain calibration
 instead. It waits for no trigger, drives no digital output, and plays at
 zero every gradient whose amplitude varies across repetitions.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
 <dd class="field-odd"><p><ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">mode</span></code>, <code class="docutils literal notranslate"><span class="pre">memory_samples</span></code>: how <a class="reference internal" href="pulserver.ir.plan_waves.html#pulserver.ir.plan_waves" title="pulserver.ir.plan_waves"><code class="xref py py-func docutils literal notranslate"><span class="pre">plan_waves()</span></code></a> holds the
-waves, and the samples per axis it reserves;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">mode</span></code>, <code class="docutils literal notranslate"><span class="pre">memory_samples</span></code>, <code class="docutils literal notranslate"><span class="pre">slots</span></code>: how <a class="reference internal" href="pulserver.ir.plan_waves.html#pulserver.ir.plan_waves" title="pulserver.ir.plan_waves"><code class="xref py py-func docutils literal notranslate"><span class="pre">plan_waves()</span></code></a>
+holds the waves, the samples per axis it reserves, and the slots
+of a position’s ring;</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">positions</span></code>: per prepared segment position, in segment order,
 <code class="docutils literal notranslate"><span class="pre">segment</span></code> and <code class="docutils literal notranslate"><span class="pre">position</span></code>; where the position plays no wave, its
 gradient events as corners at unit amplitude, <code class="docutils literal notranslate"><span class="pre">event_time_us</span></code> from
 the block’s start and <code class="docutils literal notranslate"><span class="pre">event_shape</span></code>, with <code class="docutils literal notranslate"><span class="pre">event_span</span></code>
 <code class="docutils literal notranslate"><span class="pre">(positions,</span> <span class="pre">3,</span> <span class="pre">2)</span></code> into them; where it does, <code class="docutils literal notranslate"><span class="pre">slot_offset</span></code>
-<code class="docutils literal notranslate"><span class="pre">(positions,</span> <span class="pre">2,</span> <span class="pre">3)</span></code>, <code class="docutils literal notranslate"><span class="pre">slot_samples</span></code> and <code class="docutils literal notranslate"><span class="pre">slot_start_us</span></code>: its
-two slots, or, with offsets -1, the span every resident wave it
-plays covers;</p></li>
+<code class="docutils literal notranslate"><span class="pre">(positions,</span> <span class="pre">slots,</span> <span class="pre">3)</span></code>, <code class="docutils literal notranslate"><span class="pre">slot_samples</span></code> and <code class="docutils literal notranslate"><span class="pre">slot_start_us</span></code>:
+its ring of slots, or, with offsets -1, the span every resident wave
+it plays covers;</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">blocks</span></code>: per played block, in play order, <code class="docutils literal notranslate"><span class="pre">subsequence</span></code>,
 <code class="docutils literal notranslate"><span class="pre">segment</span></code>, <code class="docutils literal notranslate"><span class="pre">position</span></code>, <code class="docutils literal notranslate"><span class="pre">instance</span></code> (instances of its segment
-played before its own), <code class="docutils literal notranslate"><span class="pre">half</span></code> (of the streamed slots, -1
-otherwise), <code class="docutils literal notranslate"><span class="pre">rotate</span></code> (0 where NOROT keeps the prescription
+played before its own), <code class="docutils literal notranslate"><span class="pre">slot</span></code> (of its position’s ring, -1 unless
+the waves are streamed), <code class="docutils literal notranslate"><span class="pre">rotate</span></code> (0 where NOROT keeps the prescription
 rotation out), <code class="docutils literal notranslate"><span class="pre">await_trigger</span></code>, <code class="docutils literal notranslate"><span class="pre">first_position</span></code> (the
 execution-stream position of its instance’s first block) and
 <code class="docutils literal notranslate"><span class="pre">duration_us</span></code>; the registers <code class="docutils literal notranslate"><span class="pre">rf_amp_hz</span></code>, <code class="docutils literal notranslate"><span class="pre">rf_phase_rad</span></code>,

@@ -18,5 +18,6 @@
 
    ~WaveBudget.headroom
    ~WaveBudget.load_us_per_sample
+   ~WaveBudget.slots
    ~WaveBudget.max_samples
    ~WaveBudget.raster_us

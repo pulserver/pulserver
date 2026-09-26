@@ -557,6 +557,9 @@ designed.</p></li>
 file carrying none is read either way.</p></li>
 <li><p><strong>sar_ratios</strong> – One per file of the chain, as <a class="reference internal" href="pulserver.ir.sar_ratios.html#pulserver.ir.sar_ratios" title="pulserver.ir.sar_ratios"><code class="xref py py-func docutils literal notranslate"><span class="pre">sar_ratios()</span></code></a> returns them, written
 into each subsequence of the cache; zero when None.</p></li>
+<li><p><strong>wave_budget</strong> – The waveform memory of the playout the cache is for, which the cache
+lays the waves out in (<a class="reference internal" href="pulserver.ir.plan_waves.html#pulserver.ir.plan_waves" title="pulserver.ir.plan_waves"><code class="xref py py-func docutils literal notranslate"><span class="pre">plan_waves()</span></code></a>); None holds every wave at
+once on the gradient raster of the chain’s first file.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
@@ -567,8 +570,9 @@ into each subsequence of the cache; zero when None.</p></li>
 </dd>
 <dt class="field-even">Raises<span class="colon">:</span></dt>
 <dd class="field-even"><ul class="simple">
-<li><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If a file of the chain cannot be read, verified or segmented, or
-    <code class="docutils literal notranslate"><span class="pre">sar_ratios</span></code> does not give one per file.</p></li>
+<li><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If a file of the chain cannot be read, verified or segmented,
+    <code class="docutils literal notranslate"><span class="pre">sar_ratios</span></code> does not give one per file, or the waves fit neither
+    layout of <code class="docutils literal notranslate"><span class="pre">wave_budget</span></code> or cannot be loaded in time.</p></li>
 <li><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#OSError" title="(in Python v3.14)"><strong>OSError</strong></a> – If no cache was written.</p></li>
 </ul>
 </dd>

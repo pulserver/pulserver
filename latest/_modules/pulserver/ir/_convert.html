@@ -455,6 +455,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Sequence</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
 
@@ -473,6 +474,68 @@
         <span class="n">system</span><span class="o">.</span><span class="n">grad_raster_time</span> <span class="o">*</span> <span class="mf">1e6</span><span class="p">,</span>
         <span class="n">system</span><span class="o">.</span><span class="n">adc_raster_time</span> <span class="o">*</span> <span class="mf">1e6</span><span class="p">,</span>
         <span class="n">system</span><span class="o">.</span><span class="n">block_duration_raster</span> <span class="o">*</span> <span class="mf">1e6</span><span class="p">,</span>
+    <span class="p">)</span>
+
+
+<div class="viewcode-block" id="WaveBudget">
+<a class="viewcode-back" href="../../../generated/pulserver.ir.WaveBudget.html#pulserver.ir.WaveBudget">[docs]</a>
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">WaveBudget</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""What a playout's waveform memory affords the waves.</span>
+
+<span class="sd">    A property of the playout, not of the sequence: the C library's</span>
+<span class="sd">    ``pulseg_wave_budget``. :func:`convert` lays the waves out for it, and a</span>
+<span class="sd">    playout refuses a cache laid out for another budget.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    max_samples</span>
+<span class="sd">        Samples each gradient axis holds for waves.</span>
+<span class="sd">    raster_us</span>
+<span class="sd">        The playout's gradient raster, in µs per sample.</span>
+<span class="sd">    load_us_per_sample</span>
+<span class="sd">        Time to sample and load one sample on one axis, in µs; 0 leaves the</span>
+<span class="sd">        loading unchecked.</span>
+<span class="sd">    headroom</span>
+<span class="sd">        Share of the playout's time its loading may take.</span>
+<span class="sd">    slots</span>
+<span class="sd">        Slots per segment position a streamed layout rings through, at least</span>
+<span class="sd">        2: one more than the segment instances the loading may run ahead of</span>
+<span class="sd">        the playout.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If the raster or the headroom is not positive, the memory or the load</span>
+<span class="sd">        rate is negative, or there are fewer than two slots.</span>
+<span class="sd">    """</span>
+
+    <span class="n">max_samples</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">raster_us</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="n">load_us_per_sample</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span>
+    <span class="n">headroom</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.5</span>
+    <span class="n">slots</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">2</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">__post_init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">raster_us</span> <span class="o">&lt;=</span> <span class="mf">0.0</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">headroom</span> <span class="o">&lt;=</span> <span class="mf">0.0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"the raster and the headroom must be positive"</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_samples</span> <span class="o">&lt;</span> <span class="mi">0</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">load_us_per_sample</span> <span class="o">&lt;</span> <span class="mf">0.0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"the memory and the load rate cannot be negative"</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">slots</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"a streamed layout rings through at least two slots"</span><span class="p">)</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_held</span><span class="p">(</span><span class="n">budget</span><span class="p">:</span> <span class="n">WaveBudget</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the budget as the extension takes it."""</span>
+    <span class="k">if</span> <span class="n">budget</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="k">return</span> <span class="p">(</span>
+        <span class="n">budget</span><span class="o">.</span><span class="n">max_samples</span><span class="p">,</span>
+        <span class="n">budget</span><span class="o">.</span><span class="n">raster_us</span><span class="p">,</span>
+        <span class="n">budget</span><span class="o">.</span><span class="n">load_us_per_sample</span><span class="p">,</span>
+        <span class="n">budget</span><span class="o">.</span><span class="n">headroom</span><span class="p">,</span>
+        <span class="n">budget</span><span class="o">.</span><span class="n">slots</span><span class="p">,</span>
     <span class="p">)</span>
 
 
@@ -512,6 +575,7 @@
     <span class="n">cache_ext</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">".pseg"</span><span class="p">,</span>
     <span class="n">verify_signature</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
     <span class="n">sar_ratios</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">SarRatio</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">wave_budget</span><span class="p">:</span> <span class="n">WaveBudget</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Path</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Segment a sequence file and write its IR cache beside it.</span>
 
@@ -548,6 +612,10 @@
 <span class="sd">    sar_ratios</span>
 <span class="sd">        One per file of the chain, as :func:`sar_ratios` returns them, written</span>
 <span class="sd">        into each subsequence of the cache; zero when None.</span>
+<span class="sd">    wave_budget</span>
+<span class="sd">        The waveform memory of the playout the cache is for, which the cache</span>
+<span class="sd">        lays the waves out in (:func:`plan_waves`); None holds every wave at</span>
+<span class="sd">        once on the gradient raster of the chain's first file.</span>
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
@@ -557,8 +625,9 @@
 <span class="sd">    Raises</span>
 <span class="sd">    ------</span>
 <span class="sd">    ValueError</span>
-<span class="sd">        If a file of the chain cannot be read, verified or segmented, or</span>
-<span class="sd">        ``sar_ratios`` does not give one per file.</span>
+<span class="sd">        If a file of the chain cannot be read, verified or segmented,</span>
+<span class="sd">        ``sar_ratios`` does not give one per file, or the waves fit neither</span>
+<span class="sd">        layout of ``wave_budget`` or cannot be loaded in time.</span>
 <span class="sd">    OSError</span>
 <span class="sd">        If no cache was written.</span>
 <span class="sd">    """</span>
@@ -582,6 +651,7 @@
         <span class="nb">int</span><span class="p">(</span><span class="n">vendor</span><span class="p">),</span>
         <span class="nb">list</span><span class="p">(</span><span class="n">label_column_map</span><span class="p">),</span>
         <span class="n">cache_ext</span><span class="p">,</span>
+        <span class="n">_held</span><span class="p">(</span><span class="n">wave_budget</span><span class="p">),</span>
     <span class="p">)</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="n">target</span><span class="o">.</span><span class="n">is_file</span><span class="p">():</span>
         <span class="k">raise</span> <span class="ne">OSError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"no cache was written for </span><span class="si">{</span><span class="n">seq_path</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>

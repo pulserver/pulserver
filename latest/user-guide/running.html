@@ -618,7 +618,7 @@ design returns its identifier without designing again.</p>
 <code class="docutils literal notranslate"><span class="pre">[Limits]</span></code> and <code class="docutils literal notranslate"><span class="pre">[Limits</span> <span class="pre">End]</span></code>. The lines are keyword arguments of
 <code class="docutils literal notranslate"><span class="pre">pypulseqpp.Opts</span></code>, of which <code class="docutils literal notranslate"><span class="pre">B0</span></code>, the field in T the scan runs at, is
 required: ppm offsets are resolved at it, and a call without it is refused.
-Three further options are for the IR conversion:</p>
+Further options are for the IR conversion:</p>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
 <tr class="row-odd"><th class="head"><p>Option</p></th>
@@ -635,9 +635,29 @@ Three further options are for the IR conversion:</p>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ir_cache_ext</span></code></p></td>
 <td><p>Extension of the cache file, <code class="docutils literal notranslate"><span class="pre">.pseg</span></code> by default</p></td>
 </tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">ir_wave_max_samples</span></code></p></td>
+<td><p>Samples each gradient axis of the playout’s waveform memory holds for waves</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ir_wave_raster_us</span></code></p></td>
+<td><p>The playout’s gradient raster, in µs per sample</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">ir_wave_load_us_per_sample</span></code></p></td>
+<td><p>Time the playout takes to load one sample on one axis, in µs; 0, the default, leaves the loading unchecked</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ir_wave_headroom</span></code></p></td>
+<td><p>Share of the playout’s time its loading may take, 0.5 by default</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">ir_wave_slots</span></code></p></td>
+<td><p>Slots per segment position that a playout streaming the waves rings through, 2 by default</p></td>
+</tr>
 </tbody>
 </table>
 </div>
+<p>The <code class="docutils literal notranslate"><span class="pre">ir_wave_</span></code> options are the waveform memory of the scanner’s playout, which
+the cache lays the waves out for (<a class="reference internal" href="../generated/pulserver.ir.WaveBudget.html#pulserver.ir.WaveBudget" title="pulserver.ir.WaveBudget"><code class="xref py py-class docutils literal notranslate"><span class="pre">WaveBudget</span></code></a>);
+<code class="docutils literal notranslate"><span class="pre">ir_wave_max_samples</span></code> and <code class="docutils literal notranslate"><span class="pre">ir_wave_raster_us</span></code> come together. Without them every
+wave is held at once on the gradient raster of the chain’s first file, and a
+playout that holds them otherwise refuses the cache.</p>
 <p>A generated design and an imported chain are checked against the limits before
 their IR cache is written (<a class="reference internal" href="../explanations/ir-cache.html"><span class="doc">The scanner IR</span></a>), so the limits
 include the RF and ADC dead times, the RF ringdown time and the ADC sample

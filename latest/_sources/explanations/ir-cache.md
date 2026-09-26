@@ -212,19 +212,26 @@ events, and holds its first and last values over the half intervals at its two
 ends, which keeps the area of every event whose corners lie on the raster.
 
 A playout holds the waves in waveform memory it sets aside for them on each
-gradient axis. {func}`~pulserver.ir.plan_waves` lays that memory out from the
-definitions alone, so the pulse-generation stage and the scan loop lay it out
-alike, and the C library a scanner links computes it (`pulseg_plan_waves`). A
+gradient axis. How much memory, on what raster, how fast it loads a sample and
+how far its loading may run ahead of the playout are its budget
+({class}`~pulserver.ir.WaveBudget`). The conversion lays the waves out for the
+budget it is given ({func}`~pulserver.ir.plan_waves`), and the cache carries
+the layout, with the budget it was made for, where both stages of a playout
+read it (`pulseg_get_wave_plan`); a playout with another budget refuses it. A
 wave, or a slot, occupies the intervals of the playout's gradient raster that
 cover its span, sampled at their centres ({func}`~pulserver.ir.sample_wave`),
 on the axes it drives. Where every wave fits at once, each is loaded before the
 scan and an instance only selects it. Otherwise each segment position that
-plays waves holds two slots; the $n$-th instance of a segment in the scan plays
-half $n \bmod 2$, and its waves are loaded while the instance before it plays.
-Given the time the playout takes to load one sample, that loading is checked:
-for every instance but the first, it has to fit within a set share of the
-duration of the instance before. A chain whose waves fit neither layout, or an
-instance of which cannot be loaded in time, is refused.
+plays waves holds a ring of $K$ slots; the $n$-th instance of a segment in the
+scan plays slot $n \bmod K$, loaded while the instances before it play. Given
+the time the playout takes to load one sample, that loading is checked on the
+playout's timeline, scaled by the share of it the loading may take. The scan
+starts with its first instance's waves loaded. The waves of each later
+instance are loaded one instance after another, from once the instance $K - 1$
+before it has started, and have to be loaded before it starts: with two slots,
+while the instance before it plays; with more, from further ahead. A chain
+whose waves fit neither layout, or an instance of which cannot be loaded in
+time, is refused at conversion.
 
 ## The two stages of a playout
 
@@ -234,10 +241,11 @@ provides (`pulseg_playout_prepare` and `pulseg_playout_scan`, in
 library's, so every playout built on it plays a chain alike; what each call
 does to the hardware is the backend's.
 
-The first stage needs the definitions alone. It lays out the waves and
-reserves their memory, hands the backend each segment and each of its
-positions, with the span that position's waves cover and, where they are
-streamed, its two slots, and loads the waves a resident layout holds.
+The first stage needs the definitions and the layout of the waves alone. It
+reserves the memory the layout gives the waves, hands the backend each segment
+and each of its positions, with the span that position's waves cover and,
+where they are streamed, its ring of slots, and loads the waves a resident
+layout holds.
 
 The second stage walks the execution stream one segment instance at a time.
 It sets the instance's rotation, the prescription's or none under `NOROT`, and
@@ -245,7 +253,7 @@ whether it waits for a physiological trigger. Both follow the instance's own
 blocks: a segment definition is shared by instances that differ in either, a
 trigger delay and a plain delay for one, so the definition cannot say. For
 each block it loads the
-block's wave into the half the instance plays where the waves are streamed,
+block's wave into the slot the instance plays where the waves are streamed,
 and sets the block's registers: the RF amplitude, phase and frequency offsets
 and shim, the gradient amplitudes or the wave and its amplitudes, the ADC
 frequency and phase offsets, and the digital output. Then it starts the
@@ -283,16 +291,16 @@ to that type.
 ## The heaviest repetition
 
 A scanner evaluates its gradient-heating and acoustic models on the gradients
-of a repetition. For each subsequence the C library returns the repetition,
-of those the execution stream holds from its first block, over which
+of a repetition. For each subsequence the conversion finds the repetition, of
+those the execution stream holds from its first block, over which
 
 $$
 E = \int \lVert \mathbf{g}(t) \rVert^2 \, dt
 $$
 
 is largest, the earliest on a tie, or the whole subsequence where it does not
-repeat ({func}`~pulserver.ir.repetition_gradients`,
-`pulseg_get_tr_corner_points`). $E$ sums, over the blocks and their gradient
+repeat, and the cache carries its gradients
+({func}`~pulserver.ir.repetition_gradients`, `pulseg_get_tr_corner_points`). $E$ sums, over the blocks and their gradient
 events, the square of each event's amplitude times the integral of its
 normalised waveform's square, which a rotation leaves unchanged, so the choice
 does not depend on the blocks' rotations. The repetition is one the scanner
@@ -309,7 +317,8 @@ raster samples them at the centres of its intervals
 The cache has the name of the first sequence file with its extension replaced:
 `.pseg` by default. It is divided into sections that a
 consumer loads independently. The pulse-generation stage of a playout reads the
-definitions, their waveforms and the waves; the scan loop also reads
+definitions, their waveforms, the waves and their layout, and the gradients of
+each subsequence's heaviest repetition; the scan loop also reads
 the per-block instances, the rotations and the execution stream, whose size
 scales with the scan length. Integer and float fields are 4 bytes. The byte order is recorded
 in the file, and a reader on a machine of the other byte order swaps on load. A
@@ -337,10 +346,12 @@ playout to the cursor's, bit for bit.
 
 ## Language constraint
 
-The IR is built by C++ passes in `src/cpp/ir/`, which run only on the host. The
-cache reader, and the accessors a playout uses to walk the loaded collection,
-are compiled into the interpreter, whose vendor toolchains accept ANSI C. They
-are therefore C89, in `src/c/`, and call nothing in `src/cpp/`. The test suite
+The IR is built by C++ passes in `src/cpp/ir/`, which run only on the host:
+the segmentation, the waves, their layout in a playout's waveform memory and
+each subsequence's heaviest repetition. The cache reader and writer, the
+accessors a playout uses to walk the loaded collection, and the two stages of a
+playout are compiled into the interpreter, whose vendor toolchains accept ANSI
+C. They are therefore C89, in `src/c/`, and call nothing in `src/cpp/`. The test suite
 compiles `src/c/` as a scanner build does, 32-bit and vendor-tagged, and reads
 back a cache written on the host.
 
