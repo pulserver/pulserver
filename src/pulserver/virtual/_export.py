@@ -12,12 +12,15 @@ import numpy as np
 import pypulseqpp as pp
 
 from .. import ir
+from ..ir._source import _RF_USE
 
 #: Width of the ramp, in µs, that stands in for a gradient's step from or to
 #: zero at its first or last corner: a time shape holds one value per time.
 _STEP_US = 1e-2
 #: Corner times are compared at this resolution, in µs.
 _RESOLUTION_US = 1e-3
+#: The use of an RF pulse, by the code the cache holds for it.
+_USES = {code: use for use, code in _RF_USE.items() if use}
 
 
 def export(
@@ -28,16 +31,16 @@ def export(
     *,
     rotation: np.ndarray | None = None,
 ) -> list[np.ndarray]:
-    """Write the blocks the cache beside a sequence file plays as one Pulseq 1.4.1 file.
+    """Write the blocks the cache beside a sequence file plays as one Pulseq 1.5.1 file.
 
     Every block :func:`pulserver.ir.play` walks, across the files of a chain,
     is one block of ``target`` of the duration it plays, holding what the
     cache plays in it:
 
-    - its RF pulse on the RF raster of ``system``, with the pulse's phase
-      offset and its frequency offset from the pulse's start applied to the
-      samples, and the channels of a pTx pulse summed, as at unit, in-phase
-      sensitivity;
+    - its RF pulse as the cache holds it: its samples at their times, its
+      frequency and phase offsets with their ppm terms resolved, its centre
+      and its use, with the channels of a pTx pulse summed, as at unit,
+      in-phase sensitivity;
     - its gradients along the physical axes: turned by the block's rotation
       and then, except in a block labelled ``NOROT``, by the prescription's
       ``rotation`` from logical to physical axes, as
@@ -47,7 +50,7 @@ def export(
     - its ADC window, without frequency or phase offsets.
 
     The file holds the standard sections alone: no rotation, label, trigger or
-    soft-delay extension, and no RF use, which Pulseq 1.4.1 does not carry.
+    soft-delay extension.
 
     Parameters
     ----------
@@ -116,7 +119,7 @@ def export(
             receiver.append(phase)
         events.append(pp.make_delay(1e-6 * duration_us))
         seq.add_block(*events)
-    seq.write_v141(str(target))
+    seq.write(str(target))
     return receiver
 
 
@@ -182,59 +185,29 @@ def _resolved(times_us: np.ndarray) -> np.ndarray:
 def _pulse(
     played: dict[str, np.ndarray], block: int, system: pp.Opts
 ) -> types.SimpleNamespace:
-    """Return the RF pulse ``block`` plays as an RF event on the RF raster, its offsets in its samples."""
+    """Return the RF pulse ``block`` plays as an RF event, as the cache holds it."""
     start, stop = played["rf_span"][block]
     channels = max(int(played["rf_channels"][block]), 1)
     delay_us = float(played["rf_delay_us"][block])
-    times = played["rf_time_us"][start:stop].astype(float).reshape(channels, -1)[0]
-    b1 = played["rf_waveform_hz"][start:stop].astype(complex)
-    b1 = b1.reshape(channels, -1).sum(axis=0)
-    raster_us = 1e6 * system.rf_raster_time
-    b1 = _on_raster(times - delay_us, b1, raster_us)
-    since = raster_us * (np.arange(b1.size) + 0.5)
-    signal = b1 * np.exp(
-        1j
-        * (
-            float(played["rf_phase_rad"][block])
-            + 2.0 * math.pi * float(played["rf_freq_hz"][block]) * 1e-6 * since
-        )
+    since_us = (
+        played["rf_time_us"][start:stop].astype(float).reshape(channels, -1)[0]
+        - delay_us
     )
+    b1 = played["rf_waveform_hz"][start:stop].astype(complex)
+    raster_us = 1e6 * system.rf_raster_time
     return types.SimpleNamespace(
         type="rf",
-        signal=signal,
-        t=1e-6 * since,
-        shape_dur=1e-6 * raster_us * b1.size,
+        signal=b1.reshape(channels, -1).sum(axis=0),
+        t=1e-6 * since_us,
+        # As a reader finds it: the last sample time, rounded up to the raster.
+        shape_dur=1e-6 * raster_us * math.ceil(since_us[-1] / raster_us - 1e-9),
         delay=1e-6 * delay_us,
         center=1e-6 * (float(played["rf_center_us"][block]) - delay_us),
-        freq_offset=0.0,
-        phase_offset=0.0,
+        freq_offset=float(played["rf_freq_hz"][block]),
+        phase_offset=float(played["rf_phase_rad"][block]),
         freq_ppm=0.0,
         phase_ppm=0.0,
         dead_time=system.rf_dead_time,
         ringdown_time=system.rf_ringdown_time,
-        use="undefined",
+        use=_USES[int(played["rf_use"][block])],
     )
-
-
-def _on_raster(times_us: np.ndarray, b1: np.ndarray, raster_us: float) -> np.ndarray:
-    """Return an RF pulse's samples at the middles of the raster intervals from its start.
-
-    ``times_us`` are from the pulse's start. Samples at the middles of equal
-    intervals a whole number of rasters wide are held over each interval, as
-    the pulse plays them; the points of a time shape are joined linearly, up
-    to the last of them.
-    """
-    steps = np.diff(times_us)
-    if (
-        steps.size
-        and np.allclose(steps, steps[0])
-        and np.isclose(times_us[0], 0.5 * steps[0])
-    ):
-        held = steps[0] / raster_us
-        if np.isclose(held, round(held)) and round(held) >= 1:
-            return np.repeat(b1, round(held))
-    elif not steps.size and np.isclose(times_us[0], 0.5 * raster_us):
-        return b1
-    count = max(1, round(float(times_us[-1]) / raster_us))
-    grid = raster_us * (np.arange(count) + 0.5)
-    return np.interp(grid, times_us, b1.real) + 1j * np.interp(grid, times_us, b1.imag)
