@@ -450,7 +450,7 @@
                 <article class="bd-article">
                   
   <h1>Source code for pulserver.ir._waves</h1><div class="highlight"><pre>
-<span></span><span class="sd">"""What a playout plays from a cache's gradients: its rotated waves and its heaviest repetition."""</span>
+<span></span><span class="sd">"""What a playout plays from a cache's gradients: its waves and its heaviest repetition."""</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
@@ -468,7 +468,7 @@
 <a class="viewcode-back" href="../../../generated/pulserver.ir.WaveBudget.html#pulserver.ir.WaveBudget">[docs]</a>
 <span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">WaveBudget</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""What a playout's waveform memory affords the rotated waves.</span>
+<span class="w">    </span><span class="sd">"""What a playout's waveform memory affords the waves.</span>
 
 <span class="sd">    A property of the playout, not of the sequence: the C library's</span>
 <span class="sd">    ``pulseg_wave_budget``.</span>
@@ -476,7 +476,7 @@
 <span class="sd">    Attributes</span>
 <span class="sd">    ----------</span>
 <span class="sd">    max_samples</span>
-<span class="sd">        Samples each gradient axis holds for rotated waves.</span>
+<span class="sd">        Samples each gradient axis holds for waves.</span>
 <span class="sd">    raster_us</span>
 <span class="sd">        The playout's gradient raster, in µs per sample.</span>
 <span class="sd">    load_us_per_sample</span>
@@ -511,7 +511,7 @@
 <span class="k">def</span><span class="w"> </span><span class="nf">plan_waves</span><span class="p">(</span>
     <span class="n">seq_path</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span> <span class="n">budget</span><span class="p">:</span> <span class="n">WaveBudget</span><span class="p">,</span> <span class="n">cache_ext</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">".pseg"</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
-<span class="w">    </span><span class="sd">"""Lay out the rotated waves of the cache beside a sequence file in a playout's waveform memory.</span>
+<span class="w">    </span><span class="sd">"""Lay out the waves of the cache beside a sequence file in a playout's waveform memory.</span>
 
 <span class="sd">    The layout is the C library's, computed from the definitions alone, as</span>
 <span class="sd">    both stages of a playout compute it. Every wave is held at once where</span>
@@ -571,7 +571,7 @@
     <span class="n">budget</span><span class="p">:</span> <span class="n">WaveBudget</span><span class="p">,</span>
     <span class="n">cache_ext</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">".pseg"</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Return a rotated wave as a playout loads it into a region, normalised to unit peak.</span>
+<span class="w">    </span><span class="sd">"""Return a wave as a playout loads it into a region, normalised to unit peak.</span>
 
 <span class="sd">    ``wave`` is the subsequence and the wave's index there, as</span>
 <span class="sd">    :func:`~pulserver.ir.play` reports it, and ``region`` one that</span>

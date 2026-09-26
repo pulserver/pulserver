@@ -533,13 +533,13 @@
 <dt class="sig sig-object py" id="pulserver.ir.WaveBudget">
 <span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pulserver.ir.</span></span><span class="sig-name descname"><span class="pre">WaveBudget</span></span><a class="reference internal" href="../_modules/pulserver/ir/_waves.html#WaveBudget"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.ir.WaveBudget" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/builtins/functions.html#object" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
-<p>What a playout’s waveform memory affords the rotated waves.</p>
+<p>What a playout’s waveform memory affords the waves.</p>
 <p>A property of the playout, not of the sequence: the C library’s
 <code class="docutils literal notranslate"><span class="pre">pulseg_wave_budget</span></code>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Attributes<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>max_samples</strong> (<em>int</em>) – Samples each gradient axis holds for rotated waves.</p></li>
+<li><p><strong>max_samples</strong> (<em>int</em>) – Samples each gradient axis holds for waves.</p></li>
 <li><p><strong>raster_us</strong> (<em>float</em>) – The playout’s gradient raster, in µs per sample.</p></li>
 <li><p><strong>load_us_per_sample</strong> (<em>float</em>) – Time to sample and load one sample on one axis, in µs; 0 leaves the
 loading unchecked.</p></li>

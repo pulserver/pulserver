@@ -613,9 +613,10 @@
 <span class="sd">    written with, zero when the chain is read and segmented again.</span>
 <span class="sd">    ``readout_labels`` lists, per readout in play order, the values of the</span>
 <span class="sd">    three labels ``label_column_map`` selects, as in force at that readout.</span>
-<span class="sd">    ``waves`` lists the subsequence's rotated waves, as :func:`play` indexes</span>
+<span class="sd">    ``waves`` lists the subsequence's waves, as :func:`play` indexes</span>
 <span class="sd">    them: each one's point count, and its largest magnitude along x, y and z</span>
-<span class="sd">    over that of the largest gradient event it combines.</span>
+<span class="sd">    over that of the largest gradient event it combines. ``grad_raster_us``</span>
+<span class="sd">    is the raster the file's gradient shapes are sampled on, in µs.</span>
 
 <span class="sd">    With ``cache_ext``, the cache beside the file is loaded instead of the</span>
 <span class="sd">    chain being read and segmented again; this build loads only vendor-neutral</span>
@@ -721,15 +722,16 @@
 <span class="sd">          over the amplitude of the event playing it there;</span>
 <span class="sd">        - ``gradient_hz_per_m``: ``(blocks, 3)``, the amplitude along the</span>
 <span class="sd">          logical x, y and z axes: the factor on the shape of the gradient</span>
-<span class="sd">          event, or on the rotated wave, the block plays there, each</span>
-<span class="sd">          normalised to a largest magnitude of one;</span>
-<span class="sd">        - ``wave``: the rotated wave the block plays, as indexed by the</span>
+<span class="sd">          event, or on the wave, the block plays there, each normalised to a</span>
+<span class="sd">          largest magnitude of one;</span>
+<span class="sd">        - ``wave``: the wave the block plays, as indexed by the</span>
 <span class="sd">          subsequence's ``waves`` in :func:`summary`, or -1 for a block that</span>
 <span class="sd">          plays its gradient events as they are. A block plays one at every</span>
 <span class="sd">          segment position where an instance carries a rotation other than</span>
-<span class="sd">          the identity: its gradient events combined and turned by its</span>
-<span class="sd">          rotation, so that the prescription's rotation is the only one the</span>
-<span class="sd">          scanner applies;</span>
+<span class="sd">          the identity, or plays a gradient definition or shape other than</span>
+<span class="sd">          the one the position's events are prepared with: its gradient</span>
+<span class="sd">          events combined and turned by its rotation, so that the</span>
+<span class="sd">          prescription's rotation is the only one the scanner applies;</span>
 <span class="sd">        - ``norot``, ``nopos``: the block's NOROT and NOPOS flags;</span>
 <span class="sd">        - ``adc``, ``adc_freq_hz``, ``adc_phase_rad``: whether the block</span>
 <span class="sd">          acquires, and its frequency and phase offsets;</span>
@@ -778,7 +780,7 @@
 <span class="sd">    RuntimeError</span>
 <span class="sd">        With ``waveforms``, if a block's gradient holds another number of</span>
 <span class="sd">        samples than the segment position it plays at is prepared with, or</span>
-<span class="sd">        its rotated wave more points than that position reserves.</span>
+<span class="sd">        its wave more points than that position reserves.</span>
 <span class="sd">    """</span>
     <span class="n">seq_path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">seq_path</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">require</span><span class="p">(</span><span class="s2">"play_cache"</span><span class="p">)(</span>

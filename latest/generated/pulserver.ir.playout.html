@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>play &#8212; pulserver documentation</title>
+    <title>playout &#8212; pulserver documentation</title>
   
   
   
@@ -52,7 +52,7 @@
     <script src="../_static/copybutton.js?v=f281be69"></script>
     <script src="../_static/sg-tags.js?v=d80f6fa4"></script>
     <script src="../_static/scripts/sphinx-book-theme.js?v=fab101a9"></script>
-    <script>DOCUMENTATION_OPTIONS.pagename = 'generated/pulserver.ir.play';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'generated/pulserver.ir.playout';</script>
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
@@ -61,7 +61,7 @@
             true;
         </script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
-    <link rel="canonical" href="https://pulserver.github.io/pulserver/latest/generated/pulserver.ir.play.html" />
+    <link rel="canonical" href="https://pulserver.github.io/pulserver/latest/generated/pulserver.ir.playout.html" />
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -375,7 +375,7 @@
       
       
       
-      <li><a href="https://github.com/pulserver/pulserver/edit/main/docs/generated/pulserver.ir.play.rst" target="_blank"
+      <li><a href="https://github.com/pulserver/pulserver/edit/main/docs/generated/pulserver.ir.playout.rst" target="_blank"
    class="btn btn-sm btn-source-edit-button dropdown-item"
    title="Suggest edit"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -392,7 +392,7 @@
       
       
       
-      <li><a href="https://github.com/pulserver/pulserver/issues/new?title=Issue%20on%20page%20%2Fgenerated/pulserver.ir.play.html&body=Your%20issue%20content%20here." target="_blank"
+      <li><a href="https://github.com/pulserver/pulserver/issues/new?title=Issue%20on%20page%20%2Fgenerated/pulserver.ir.playout.html&body=Your%20issue%20content%20here." target="_blank"
    class="btn btn-sm btn-source-issues-button dropdown-item"
    title="Open an issue"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -422,7 +422,7 @@
       
       
       
-      <li><a href="../_sources/generated/pulserver.ir.play.rst" target="_blank"
+      <li><a href="../_sources/generated/pulserver.ir.playout.rst" target="_blank"
    class="btn btn-sm btn-download-source-button dropdown-item"
    title="Download source file"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -505,7 +505,7 @@
               
 
 <div id="jb-print-docs-body" class="onlyprint">
-    <h1>play</h1>
+    <h1>playout</h1>
     <!-- Table of contents -->
     <div id="print-main-content">
         <div id="jb-print-toc">
@@ -515,7 +515,7 @@
             </div>
             <nav aria-label="Page">
                 <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.ir.play"><code class="docutils literal notranslate"><span class="pre">play()</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.ir.playout"><code class="docutils literal notranslate"><span class="pre">playout()</span></code></a></li>
 </ul>
             </nav>
         </div>
@@ -527,109 +527,72 @@
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section id="play">
-<h1>play<a class="headerlink" href="#play" title="Link to this heading">#</a></h1>
+  <section id="playout">
+<h1>playout<a class="headerlink" href="#playout" title="Link to this heading">#</a></h1>
 <dl class="py function">
-<dt class="sig sig-object py" id="pulserver.ir.play">
-<span class="sig-prename descclassname"><span class="pre">pulserver.ir.</span></span><span class="sig-name descname"><span class="pre">play</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pulserver/ir/_convert.html#play"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.ir.play" title="Link to this definition">#</a></dt>
-<dd><p>Walk the cache beside a sequence file as the scanner’s playout does.</p>
-<p>The cache is loaded by the C library a scanner links, and its execution
-stream is walked with that library’s cursor: one entry per played block,
-in play order, across the subsequences of the chain. This build loads only
-vendor-neutral caches, and only when the size recorded in the cache
-matches the file.</p>
+<dt class="sig sig-object py" id="pulserver.ir.playout">
+<span class="sig-prename descclassname"><span class="pre">pulserver.ir.</span></span><span class="sig-name descname"><span class="pre">playout</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pulserver/ir/_playout.html#playout"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.ir.playout" title="Link to this definition">#</a></dt>
+<dd><p>Play the cache beside a sequence file as a segmented playout plays it, recording both stages.</p>
+<p>The stages are the C library’s, <code class="docutils literal notranslate"><span class="pre">pulseg_playout_prepare</span></code> and
+<code class="docutils literal notranslate"><span class="pre">pulseg_playout_scan</span></code>, over a backend that plays nothing: it keeps what
+the first stage prepares at each segment position, a model of the
+waveform memory the waves are loaded into, and the registers the scan
+loop sets on each block, with the samples its wave reads from that
+memory when it is set. Without a <code class="docutils literal notranslate"><span class="pre">budget</span></code>, the playout holds every
+wave at once on the gradient raster of the chain’s first file.</p>
+<p>With <code class="docutils literal notranslate"><span class="pre">prescan</span></code>, the scan loop plays that receive-gain calibration
+instead. It waits for no trigger, drives no digital output, and plays at
+zero every gradient whose amplitude varies across repetitions.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
-<dd class="field-odd"><p><p>One entry per played block in each:</p>
-<ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">subsequence</span></code>, <code class="docutils literal notranslate"><span class="pre">segment</span></code>: chain file and cache segment indices;</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">duration_us</span></code>: block duration, in µs;</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">rf_amp_hz</span></code>, <code class="docutils literal notranslate"><span class="pre">rf_freq_hz</span></code>, <code class="docutils literal notranslate"><span class="pre">rf_phase_rad</span></code>: RF amplitude
-(gamma B1) and frequency and phase offsets, with ppm offsets
-resolved at the field strength the cache was converted under; 0
-without RF;</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">rf_use</span></code>: the <code class="docutils literal notranslate"><span class="pre">PULSEG_RF_USE_*</span></code> code of the RF event, 1 for an
-excitation and 2 for a refocusing pulse; a pulse the file leaves
-unlabelled takes the use pypulseqpp detects when the chain is read,
-and an event a cache carries without one is a refocusing pulse at a
-flip angle of 162 to 198 degrees and an excitation otherwise; 0
-without RF;</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">rf_delay_us</span></code>: RF delay from the block’s start, in µs;</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">rf_channels</span></code>: the transmit channels the RF waveform holds, one
-after another over one time base for a dynamic pTx pulse; 0 without
-RF;</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">rf_grad_constant</span></code>, <code class="docutils literal notranslate"><span class="pre">rf_grad_level</span></code>: 1 where every instance of
-the block’s position plays its RF pulse under one gradient,
-steady from the pulse’s first sample to its last as
-<code class="docutils literal notranslate"><span class="pre">pypulseqpp.Sequence.rf_gradients</span></code> finds it, and the block
-carries no rotation, so the scanner may move the excitation by a
-carrier offset; and <code class="docutils literal notranslate"><span class="pre">(blocks,</span> <span class="pre">3)</span></code>, that gradient along x, y and z
-over the amplitude of the event playing it there;</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">gradient_hz_per_m</span></code>: <code class="docutils literal notranslate"><span class="pre">(blocks,</span> <span class="pre">3)</span></code>, the amplitude along the
-logical x, y and z axes: the factor on the shape of the gradient
-event, or on the wave, the block plays there, each normalised to a
-largest magnitude of one;</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">wave</span></code>: the wave the block plays, as indexed by the
-subsequence’s <code class="docutils literal notranslate"><span class="pre">waves</span></code> in <a class="reference internal" href="pulserver.ir.summary.html#pulserver.ir.summary" title="pulserver.ir.summary"><code class="xref py py-func docutils literal notranslate"><span class="pre">summary()</span></code></a>, or -1 for a block that
-plays its gradient events as they are. A block plays one at every
-segment position where an instance carries a rotation other than
-the identity, or plays a gradient definition or shape other than
-the one the position’s events are prepared with: its gradient
-events combined and turned by its rotation, so that the
-prescription’s rotation is the only one the scanner applies;</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">norot</span></code>, <code class="docutils literal notranslate"><span class="pre">nopos</span></code>: the block’s NOROT and NOPOS flags;</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">adc</span></code>, <code class="docutils literal notranslate"><span class="pre">adc_freq_hz</span></code>, <code class="docutils literal notranslate"><span class="pre">adc_phase_rad</span></code>: whether the block
-acquires, and its frequency and phase offsets;</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">adc_delay_us</span></code>, <code class="docutils literal notranslate"><span class="pre">adc_dwell_ns</span></code>, <code class="docutils literal notranslate"><span class="pre">adc_samples</span></code>: the ADC delay
-from the block’s start, dwell time and sample count; 0 without ADC;</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">trid</span></code>: the TRID group in force, 0 when ungrouped.</p></li>
-</ul>
-<p>With <code class="docutils literal notranslate"><span class="pre">waveforms</span></code>, also:</p>
-<ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">rf_center_us</span></code>: the time of the RF centre the design records, from
-the block’s start, in µs; NaN without RF;</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">rf_time_us</span></code>, <code class="docutils literal notranslate"><span class="pre">rf_waveform_hz</span></code>: the samples of every played RF
-pulse, concatenated in play order: their times from the block’s
-start, in µs, and the instance’s amplitude times the magnitude
-shape and <code class="docutils literal notranslate"><span class="pre">exp(i</span> <span class="pre">phase)</span></code> of the phase shape its definition
-carries, complex, in Hz. The pulse plays each sample turned by the
-phase offset and advancing at the frequency offset from its start.
-The channels of a pTx pulse follow one another, each over the one
-time base;</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">rf_span</span></code>: <code class="docutils literal notranslate"><span class="pre">(blocks,</span> <span class="pre">2)</span></code>, the start and stop of each block’s
-RF in those arrays; empty without RF;</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">gradient_time_us</span></code>, <code class="docutils literal notranslate"><span class="pre">gradient_waveform_hz_per_m</span></code>: the corners of
-every played gradient, concatenated in play order: their times from
-the block’s start, in µs, and the gradient there, the amplitude
-times the shape or wave the instance plays. A waveform on the
-gradient raster holds its end values over the half raster
-intervals before its first sample and after its last. A rotated
-wave takes the corners of every gradient event it combines, or the
-raster centres across them when one is an arbitrary gradient on
-the raster;</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">gradient_span</span></code>: <code class="docutils literal notranslate"><span class="pre">(blocks,</span> <span class="pre">3,</span> <span class="pre">2)</span></code>, the start and stop of each
-block’s gradient along x, y and z in those arrays; empty without
-one;</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">adc_phase_modulation_rad</span></code>: the phase modulation of every played
-readout, one phase per sample in radians, concatenated in play
-order; the receiver phase of a sample is the ADC phase offset, plus
-its frequency offset times the time since the ADC’s start, plus
-this;</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">adc_modulation_span</span></code>: <code class="docutils literal notranslate"><span class="pre">(blocks,</span> <span class="pre">2)</span></code>, the start and stop of each
-block’s modulation in that array; empty without one.</p></li>
+<dd class="field-odd"><p><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">mode</span></code>, <code class="docutils literal notranslate"><span class="pre">memory_samples</span></code>: how <a class="reference internal" href="pulserver.ir.plan_waves.html#pulserver.ir.plan_waves" title="pulserver.ir.plan_waves"><code class="xref py py-func docutils literal notranslate"><span class="pre">plan_waves()</span></code></a> holds the
+waves, and the samples per axis it reserves;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">positions</span></code>: per prepared segment position, in segment order,
+<code class="docutils literal notranslate"><span class="pre">segment</span></code> and <code class="docutils literal notranslate"><span class="pre">position</span></code>; where the position plays no wave, its
+gradient events as corners at unit amplitude, <code class="docutils literal notranslate"><span class="pre">event_time_us</span></code> from
+the block’s start and <code class="docutils literal notranslate"><span class="pre">event_shape</span></code>, with <code class="docutils literal notranslate"><span class="pre">event_span</span></code>
+<code class="docutils literal notranslate"><span class="pre">(positions,</span> <span class="pre">3,</span> <span class="pre">2)</span></code> into them; where it does, <code class="docutils literal notranslate"><span class="pre">slot_offset</span></code>
+<code class="docutils literal notranslate"><span class="pre">(positions,</span> <span class="pre">2,</span> <span class="pre">3)</span></code>, <code class="docutils literal notranslate"><span class="pre">slot_samples</span></code> and <code class="docutils literal notranslate"><span class="pre">slot_start_us</span></code>: its
+two slots, or, with offsets -1, the span every resident wave it
+plays covers;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">blocks</span></code>: per played block, in play order, <code class="docutils literal notranslate"><span class="pre">subsequence</span></code>,
+<code class="docutils literal notranslate"><span class="pre">segment</span></code>, <code class="docutils literal notranslate"><span class="pre">position</span></code>, <code class="docutils literal notranslate"><span class="pre">instance</span></code> (instances of its segment
+played before its own), <code class="docutils literal notranslate"><span class="pre">half</span></code> (of the streamed slots, -1
+otherwise), <code class="docutils literal notranslate"><span class="pre">rotate</span></code> (0 where NOROT keeps the prescription
+rotation out), <code class="docutils literal notranslate"><span class="pre">await_trigger</span></code>, <code class="docutils literal notranslate"><span class="pre">first_position</span></code> (the
+execution-stream position of its instance’s first block) and
+<code class="docutils literal notranslate"><span class="pre">duration_us</span></code>; the registers <code class="docutils literal notranslate"><span class="pre">rf_amp_hz</span></code>, <code class="docutils literal notranslate"><span class="pre">rf_phase_rad</span></code>,
+<code class="docutils literal notranslate"><span class="pre">rf_freq_hz</span></code>, <code class="docutils literal notranslate"><span class="pre">rf_shim</span></code>, <code class="docutils literal notranslate"><span class="pre">rf_use</span></code>, <code class="docutils literal notranslate"><span class="pre">gradient_hz_per_m</span></code>
+<code class="docutils literal notranslate"><span class="pre">(blocks,</span> <span class="pre">3)</span></code>, <code class="docutils literal notranslate"><span class="pre">adc</span></code>, <code class="docutils literal notranslate"><span class="pre">adc_freq_hz</span></code>, <code class="docutils literal notranslate"><span class="pre">adc_phase_rad</span></code> and
+<code class="docutils literal notranslate"><span class="pre">digitalout</span></code>, and <code class="docutils literal notranslate"><span class="pre">gradient_variable</span></code>, where the amplitude of
+that gradient varies across repetitions; and its wave, <code class="docutils literal notranslate"><span class="pre">wave</span></code> (-1
+without one) at <code class="docutils literal notranslate"><span class="pre">wave_amp_hz_per_m</span></code>, from the region
+<code class="docutils literal notranslate"><span class="pre">wave_offset</span></code>, <code class="docutils literal notranslate"><span class="pre">wave_samples</span></code> and <code class="docutils literal notranslate"><span class="pre">wave_start_us</span></code>, with the
+samples it reads there in <code class="docutils literal notranslate"><span class="pre">wave_read</span></code>, <code class="docutils literal notranslate"><span class="pre">wave_read_span</span></code>
+<code class="docutils literal notranslate"><span class="pre">(blocks,</span> <span class="pre">3,</span> <span class="pre">2)</span></code> into them. With <code class="docutils literal notranslate"><span class="pre">waveforms</span></code>, also what each
+block plays, keyed as <a class="reference internal" href="pulserver.ir.play.html#pulserver.ir.play" title="pulserver.ir.play"><code class="xref py py-func docutils literal notranslate"><span class="pre">play()</span></code></a> keys it: the RF pulse and
+readout its position prepares, the pulse at the block’s amplitude,
+the readout’s phase modulation, and the gradients: the events its
+position prepares at the block’s amplitudes, or the samples its wave
+reads at the centres of the raster intervals, the first and last
+held over the half intervals at its two ends;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">instances</span></code> and <code class="docutils literal notranslate"><span class="pre">loads</span></code>: the segment instances played and the
+loads into waveform memory;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">overwrites</span></code>: loads that wrote over memory the instance in play
+was reading, and <code class="docutils literal notranslate"><span class="pre">unloaded</span></code>: samples a block read where nothing
+was loaded. Both are 0 where every block plays what was loaded for
+it.</p></li>
 </ul>
 </p>
 </dd>
 <dt class="field-even">Return type<span class="colon">:</span></dt>
-<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="(in Python v3.14)">dict</a> of str to ndarray</p>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="(in Python v3.14)">dict</a> of str to Any</p>
 </dd>
 <dt class="field-odd">Raises<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If the cache cannot be loaded.</p></li>
-<li><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#RuntimeError" title="(in Python v3.14)"><strong>RuntimeError</strong></a> – With <code class="docutils literal notranslate"><span class="pre">waveforms</span></code>, if a block’s gradient holds another number of
-    samples than the segment position it plays at is prepared with, or
-    its wave more points than that position reserves.</p></li>
-</ul>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If the cache cannot be loaded, if the waves do not fit the budget or
+    cannot be loaded in time, or if the prescan’s subsequence does not
+    exist.</p>
 </dd>
 </dl>
 </dd></dl>
@@ -665,7 +628,7 @@ block’s modulation in that array; empty without one.</p></li>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.ir.play"><code class="docutils literal notranslate"><span class="pre">play()</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.ir.playout"><code class="docutils literal notranslate"><span class="pre">playout()</span></code></a></li>
 </ul>
   </nav></div>
 

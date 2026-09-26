@@ -564,8 +564,8 @@ sent as the scanner’s reconstruction client sends them.</p>
 </tr>
 <tr class="row-odd"><td><p>Virtual interpreter</p></td>
 <td><p>The playout</p></td>
-<td><p>The C library’s cursor over the cache, <a class="reference internal" href="../generated/pulserver.ir.play.html#pulserver.ir.play" title="pulserver.ir.play"><code class="xref py py-func docutils literal notranslate"><span class="pre">play()</span></code></a></p></td>
-<td><p>Segmentation, execution stream, the waveforms and offsets the cache carries</p></td>
+<td><p>The C library’s two playout stages over a recording backend, <a class="reference internal" href="../generated/pulserver.ir.playout.html#pulserver.ir.playout" title="pulserver.ir.playout"><code class="xref py py-func docutils literal notranslate"><span class="pre">playout()</span></code></a></p></td>
+<td><p>Segmentation, the events each segment position is prepared with, the registers the scan loop sets on each block, the rotation and trigger of each segment instance, the waves and the waveform memory they are loaded into</p></td>
 </tr>
 <tr class="row-even"><td><p>Physics</p></td>
 <td><p>Magnet, coils and subject</p></td>
@@ -583,28 +583,33 @@ sent as the scanner’s reconstruction client sends them.</p>
 </section>
 <section id="played-trajectory">
 <h2>Played trajectory<a class="headerlink" href="#played-trajectory" title="Link to this heading">#</a></h2>
-<p><a class="reference internal" href="../generated/pulserver.ir.play.html#pulserver.ir.play" title="pulserver.ir.play"><code class="xref py py-func docutils literal notranslate"><span class="pre">play()</span></code></a> walks the cache with the cursor a playout uses and,
-with <code class="docutils literal notranslate"><span class="pre">waveforms</span></code>, returns each played block’s gradients: the instance’s
-amplitude times the waveform that instance plays, timed from the block’s
-start. The accessors that answer for a segment position,
-<code class="docutils literal notranslate"><span class="pre">pulseg_get_grad_amplitude</span></code> and <code class="docutils literal notranslate"><span class="pre">pulseg_get_grad_time_us</span></code>, answer through
-its representative, the instance of largest energy; where the instances of
-one position play distinct shapes, as the interleaves of a spiral drawn as
-distinct shapes do, <code class="docutils literal notranslate"><span class="pre">pulseg_get_cursor_grad_waveform</span></code> returns the shape of
-the instance at the cursor. A block at a position whose blocks carry a
-rotation plays its rotated wave instead, which <code class="docutils literal notranslate"><span class="pre">pulseg_materialize_wave</span></code>
-returns, at the amplitudes the instance sets (<a class="reference internal" href="ir-cache.html"><span class="doc">The scanner IR</span></a>). It also
-returns each played RF pulse: the
-instance’s amplitude times the magnitude and phase shapes of its definition,
-which <code class="docutils literal notranslate"><span class="pre">pulseg_get_rf_magnitude</span></code> and <code class="docutils literal notranslate"><span class="pre">pulseg_get_rf_phase</span></code> return, the phase in
-cycles as Pulseq stores it.</p>
+<p><a class="reference internal" href="../generated/pulserver.ir.playout.html#pulserver.ir.playout" title="pulserver.ir.playout"><code class="xref py py-func docutils literal notranslate"><span class="pre">playout()</span></code></a> plays the cache through the two stages of a
+playout: the first prepares the events of each segment position, and the
+scan loop sets the registers of each block of each segment instance
+(<a class="reference internal" href="ir-cache.html"><span class="doc">The scanner IR</span></a>). With <code class="docutils literal notranslate"><span class="pre">waveforms</span></code>, it returns what each block plays, timed
+from the block’s start. Its gradients are the events its position is prepared
+with, through the position’s representative instance, the one of largest
+energy (<code class="docutils literal notranslate"><span class="pre">pulseg_get_grad_amplitude</span></code> and <code class="docutils literal notranslate"><span class="pre">pulseg_get_grad_time_us</span></code>), at the
+amplitudes the scan loop sets. At a position that plays waves, one whose
+blocks carry a rotation or play a shape the prepared events do not hold, as
+the interleaves of a spiral drawn as distinct shapes do, they are the wave
+the scan loop selects, which <code class="docutils literal notranslate"><span class="pre">pulseg_materialize_wave</span></code> returns, at the wave’s
+amplitudes. Its RF pulse is the magnitude and phase shapes its position is
+prepared with, which <code class="docutils literal notranslate"><span class="pre">pulseg_get_rf_magnitude</span></code> and <code class="docutils literal notranslate"><span class="pre">pulseg_get_rf_phase</span></code>
+return, the phase in cycles as Pulseq stores it, at the block’s amplitude.
+A wave plays as the IR defines it, linear between its points; how a
+playout’s hardware plays the samples it loads on its own raster is not
+modelled. <a class="reference internal" href="../generated/pulserver.ir.play.html#pulserver.ir.play" title="pulserver.ir.play"><code class="xref py py-func docutils literal notranslate"><span class="pre">play()</span></code></a> walks the same cache with the cursor and
+resolves each block by its own instance, and the test suite holds the two to
+the same waveforms, bit for bit.</p>
 <p><a class="reference internal" href="../generated/pulserver.virtual.trajectory.html#pulserver.virtual.trajectory" title="pulserver.virtual.trajectory"><code class="xref py py-func docutils literal notranslate"><span class="pre">trajectory()</span></code></a> integrates those gradients into the
 k-space location <span class="math notranslate nohighlight">\(\mathbf{k}\)</span> of every ADC sample, in 1/m along the physical
 axes. The rotation <span class="math notranslate nohighlight">\(R\)</span> of the prescription, from logical to physical axes, is
 not in the cache (<a class="reference internal" href="ir-cache.html"><span class="doc">The scanner IR</span></a>): the virtual interpreter is given it, as a
 playout is, and turns each block’s gradients, which carry the block’s own
-rotation, by <span class="math notranslate nohighlight">\(R\)</span>, except in blocks labelled <code class="docutils literal notranslate"><span class="pre">NOROT</span></code>, which play as the cache
-holds them. This is the frame <a class="reference internal" href="../generated/pulserver.ir.check.html#pulserver.ir.check" title="pulserver.ir.check"><code class="xref py py-func docutils literal notranslate"><span class="pre">check()</span></code></a> checks in. Under
+rotation, by <span class="math notranslate nohighlight">\(R\)</span>, except in the segment instances whose blocks are labelled
+<code class="docutils literal notranslate"><span class="pre">NOROT</span></code>, which play as the cache holds them. This is the frame
+<a class="reference internal" href="../generated/pulserver.ir.check.html#pulserver.ir.check" title="pulserver.ir.check"><code class="xref py py-func docutils literal notranslate"><span class="pre">check()</span></code></a> checks in. Under
 the identity the physical axes are the logical ones. An excitation returns
 <span class="math notranslate nohighlight">\(\mathbf{k}\)</span> to zero, and a refocusing pulse negates it, at the RF centre the
 design records, which the cache carries for each RF event with its use; each

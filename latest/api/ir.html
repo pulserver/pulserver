@@ -558,13 +558,19 @@ passes and the cache layout are described in <a class="reference internal" href=
 <td><p>Every block a cache plays, resolved as the scanner’s playout resolves it, with its gradient waveforms on request.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.ir.plan_waves.html#pulserver.ir.plan_waves" title="pulserver.ir.plan_waves"><code class="xref py py-obj docutils literal notranslate"><span class="pre">plan_waves</span></code></a></p></td>
-<td><p>Where a playout holds a cache’s rotated waves in its waveform memory, all at once or two slots per position, and whether it loads them in time.</p></td>
+<td><p>Where a playout holds a cache’s waves in its waveform memory, all at once or two slots per position, and whether it loads them in time.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.ir.WaveBudget.html#pulserver.ir.WaveBudget" title="pulserver.ir.WaveBudget"><code class="xref py py-obj docutils literal notranslate"><span class="pre">WaveBudget</span></code></a></p></td>
-<td><p>The waveform memory, gradient raster and load rate a playout affords the rotated waves.</p></td>
+<td><p>The waveform memory, gradient raster and load rate a playout affords the waves.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.ir.sample_wave.html#pulserver.ir.sample_wave" title="pulserver.ir.sample_wave"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sample_wave</span></code></a></p></td>
-<td><p>A cache’s rotated wave on a playout’s gradient raster, as loaded into a region of its waveform memory.</p></td>
+<td><p>A cache’s wave on a playout’s gradient raster, as loaded into a region of its waveform memory.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.ir.playout.html#pulserver.ir.playout" title="pulserver.ir.playout"><code class="xref py py-obj docutils literal notranslate"><span class="pre">playout</span></code></a></p></td>
+<td><p>Both stages of a segmented playout of a cache, the scan or its receive-gain prescan, recorded: what each position prepares, the registers of each block, what each wave reads from waveform memory and, on request, the waveforms each block plays.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.ir.Prescan.html#pulserver.ir.Prescan" title="pulserver.ir.Prescan"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Prescan</span></code></a></p></td>
+<td><p>The receive-gain calibration a playout plays instead of the scan: one subsequence, to the instance completing its readouts.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.ir.repetition_gradients.html#pulserver.ir.repetition_gradients" title="pulserver.ir.repetition_gradients"><code class="xref py py-obj docutils literal notranslate"><span class="pre">repetition_gradients</span></code></a></p></td>
 <td><p>The gradients of a subsequence’s repetition of most gradient energy, as corner points and on a raster: what a scanner’s heating and acoustic models are evaluated on.</p></td>

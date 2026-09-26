@@ -52,6 +52,8 @@ from.
    plan_waves
    WaveBudget
    sample_wave
+   playout
+   Prescan
    repetition_gradients
    chain
    cache_path

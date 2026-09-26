@@ -546,9 +546,10 @@ over a dynamic pTx pulse’s channels.
 written with, zero when the chain is read and segmented again.
 <code class="docutils literal notranslate"><span class="pre">readout_labels</span></code> lists, per readout in play order, the values of the
 three labels <code class="docutils literal notranslate"><span class="pre">label_column_map</span></code> selects, as in force at that readout.
-<code class="docutils literal notranslate"><span class="pre">waves</span></code> lists the subsequence’s rotated waves, as <a class="reference internal" href="pulserver.ir.play.html#pulserver.ir.play" title="pulserver.ir.play"><code class="xref py py-func docutils literal notranslate"><span class="pre">play()</span></code></a> indexes
+<code class="docutils literal notranslate"><span class="pre">waves</span></code> lists the subsequence’s waves, as <a class="reference internal" href="pulserver.ir.play.html#pulserver.ir.play" title="pulserver.ir.play"><code class="xref py py-func docutils literal notranslate"><span class="pre">play()</span></code></a> indexes
 them: each one’s point count, and its largest magnitude along x, y and z
-over that of the largest gradient event it combines.</p>
+over that of the largest gradient event it combines. <code class="docutils literal notranslate"><span class="pre">grad_raster_us</span></code>
+is the raster the file’s gradient shapes are sampled on, in µs.</p>
 <p>With <code class="docutils literal notranslate"><span class="pre">cache_ext</span></code>, the cache beside the file is loaded instead of the
 chain being read and segmented again; this build loads only vendor-neutral
 caches, and only when the size recorded in the cache matches the file.</p>
