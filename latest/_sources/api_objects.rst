@@ -49,6 +49,9 @@ from.
    SarRatio
    summary
    play
+   plan_waves
+   WaveBudget
+   sample_wave
    chain
    cache_path
 
