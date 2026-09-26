@@ -258,6 +258,18 @@ drives no digital output, and every gradient whose amplitude varies across
 repetitions, a phase encoding for instance, plays at zero, as does a wave any
 of whose logical axes varies.
 
+Waveform memory holds samples of the type and scale a scanner build defines
+before it includes the library: `PULSEG_WAVE_SAMPLE`, the type;
+`PULSEG_WAVE_FULL_SCALE`, the sample at the peak of a waveform normalised to
+unit peak; `PULSEG_WAVE_PHASE_FULL_SCALE`, the phase in radians that sample
+plays on a phase waveform; and `PULSEG_WAVE_QUANTIZE`, which turns a scaled
+value into a sample. A wave, an arbitrary gradient shape or an RF magnitude is
+normalised to unit peak, scaled, and clamped to the full scale
+(`pulseg_wave_samples`); its physical scale is the amplitude each block plays
+it at. A phase is wrapped into $[-\pi, \pi)$ before it is scaled
+(`pulseg_phase_samples`). The defaults are single-precision samples at a full
+scale of one, and a phase full scale of $\pi$.
+
 {func}`~pulserver.ir.playout` runs both stages over a backend that plays
 nothing and records what each stage hands it, with a model of the waveform
 memory. The test suite holds every block the record plays, the events its
@@ -265,7 +277,8 @@ position prepared at the amplitudes the scan loop set or the samples its wave
 read from memory, to the block {func}`~pulserver.ir.play` resolves; checks
 that no load writes over memory the instance in play reads; and compiles both
 stages into the 32-bit scanner reader, which plays the same instances and
-waves as the host.
+waves as the host and, built with 16-bit samples, loads the same waves scaled
+to that type.
 
 ## The heaviest repetition
 

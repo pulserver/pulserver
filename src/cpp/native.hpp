@@ -48,6 +48,12 @@ py::array_t<T> as_array(const std::vector<T> &values, std::vector<py::ssize_t> s
     return out;
 }
 
+/* A waveform-memory sample back at unit peak. */
+inline float unit_sample(PULSEG_WAVE_SAMPLE sample)
+{
+    return static_cast<float>(static_cast<double>(sample) / PULSEG_WAVE_FULL_SCALE);
+}
+
 /* A waveform the library allocated: freed with it, however the caller leaves. */
 struct Waveform
 {

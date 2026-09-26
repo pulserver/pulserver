@@ -62,9 +62,9 @@ extern "C"
     /**
      * @brief Samples to load into waveform memory.
      *
-     * One axis of wave @c wave of subsequence @c subsequence, normalised to
-     * unit peak, at the centres of @c count raster intervals: the region it
-     * is loaded into, from @c offset in that axis's memory.
+     * One axis of wave @c wave of subsequence @c subsequence at the centres of
+     * @c count raster intervals, as pulseg_wave_samples() converts it: the
+     * region it is loaded into, from @c offset in that axis's memory.
      */
     typedef struct pulseg_wave_load
     {
@@ -73,8 +73,32 @@ extern "C"
         int axis;
         long offset;
         long count;
-        const float *samples;
+        const PULSEG_WAVE_SAMPLE *samples;
     } pulseg_wave_load;
+
+    /**
+     * @brief Values normalised to unit peak, as waveform-memory samples.
+     *
+     * Each is scaled by PULSEG_WAVE_FULL_SCALE, clamped to
+     * [-PULSEG_WAVE_FULL_SCALE, PULSEG_WAVE_FULL_SCALE] and quantized with
+     * PULSEG_WAVE_QUANTIZE.  For a wave, an arbitrary gradient shape or an RF
+     * magnitude, whose physical scale is the amplitude a block plays it at.
+     */
+    void pulseg_wave_samples(const float *values, long count, PULSEG_WAVE_SAMPLE *samples);
+
+    /**
+     * @brief Phases as waveform-memory samples.
+     *
+     * Each phase, times @p radians_per_unit, is wrapped into [-pi, pi), scaled
+     * by PULSEG_WAVE_FULL_SCALE / PULSEG_WAVE_PHASE_FULL_SCALE, clamped and
+     * quantized as pulseg_wave_samples() does.  An RF phase shape holds
+     * cycles, 2 pi radians per unit; an ADC's phase modulation, radians.
+     */
+    void pulseg_phase_samples(
+        const float *phase,
+        long count,
+        double radians_per_unit,
+        PULSEG_WAVE_SAMPLE *samples);
 
     /**
      * @brief A playout's side of the two stages.

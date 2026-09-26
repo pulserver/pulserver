@@ -4,19 +4,63 @@
  *        pulseg_playout.h.
  */
 
+#include <math.h>
 #include <string.h>
 
 #include "pulseg_internal.h"
 #include "pulseg.h"
 
+/* ================================================================== */
+/*  Waveform-memory samples                                           */
+/* ================================================================== */
+
+static PULSEG_WAVE_SAMPLE to_sample(double scaled)
+{
+    const double full = (double)PULSEG_WAVE_FULL_SCALE;
+    const double x = scaled > full ? full : scaled < -full ? -full : scaled;
+    return PULSEG_WAVE_QUANTIZE(x);
+}
+
+void pulseg_wave_samples(const float *values, long count, PULSEG_WAVE_SAMPLE *samples)
+{
+    long i;
+
+    for (i = 0; i < count; ++i)
+        samples[i] = to_sample((double)values[i] * (double)PULSEG_WAVE_FULL_SCALE);
+}
+
+void pulseg_phase_samples(
+    const float *phase,
+    long count,
+    double radians_per_unit,
+    PULSEG_WAVE_SAMPLE *samples)
+{
+    const double turn = 2.0 * M_PI;
+    long i;
+
+    for (i = 0; i < count; ++i)
+    {
+        double rad = (double)phase[i] * radians_per_unit;
+        rad -= turn * floor((rad + M_PI) / turn);
+        samples[i] = to_sample(
+            rad * ((double)PULSEG_WAVE_FULL_SCALE / (double)PULSEG_WAVE_PHASE_FULL_SCALE));
+    }
+}
+
+/* ================================================================== */
+/*  Loading waves                                                     */
+/* ================================================================== */
+
 /* Loading waves into waveform memory: on which raster, through which
- * backend, with room for the longest region the layout holds. */
+ * backend, with room for the longest region the layout holds, sampled and
+ * converted. */
 typedef struct wave_loader
 {
     const pulseg_collection *coll;
     const pulseg_playout_backend *backend;
     float raster_us;
     float *scratch;
+    PULSEG_WAVE_SAMPLE *samples;
 } wave_loader;
 
 static long longest_region(const pulseg_wave_plan *plan)
@@ -42,18 +86,24 @@ static int loader_open(
     float raster_us,
     const pulseg_wave_plan *plan)
 {
+    const size_t longest = (size_t)longest_region(plan);
+
     l->coll = coll;
     l->backend = backend;
     l->raster_us = raster_us;
-    l->scratch = (float *)PULSEG_ALLOC((size_t)longest_region(plan) * sizeof(float));
-    return l->scratch ? PULSEG_SUCCESS : PULSEG_ERR_ALLOC_FAILED;
+    l->scratch = (float *)PULSEG_ALLOC(longest * sizeof(float));
+    l->samples = (PULSEG_WAVE_SAMPLE *)PULSEG_ALLOC(longest * sizeof(PULSEG_WAVE_SAMPLE));
+    return (l->scratch && l->samples) ? PULSEG_SUCCESS : PULSEG_ERR_ALLOC_FAILED;
 }
 
 static void loader_close(wave_loader *l)
 {
     if (l->scratch)
         PULSEG_FREE(l->scratch);
+    if (l->samples)
+        PULSEG_FREE(l->samples);
     l->scratch = NULL;
+    l->samples = NULL;
 }
 
 /* Sample wave @p w of subsequence @p s over @p region and load each axis it
@@ -66,7 +116,7 @@ static int load_wave(const wave_loader *l, int s, int w, const pulseg_wave_regio
     load.subsequence = s;
     load.wave = w;
     load.count = region->samples;
-    load.samples = l->scratch;
+    load.samples = l->samples;
     for (a = 0; a < 3 && PULSEG_SUCCEEDED(rc); ++a)
     {
         if (region->offset[a] < 0)
@@ -75,7 +125,10 @@ static int load_wave(const wave_loader *l, int s, int w, const pulseg_wave_regio
         load.offset = region->offset[a];
         rc = pulseg_sample_wave(
             l->coll, s, w, a, region->start_us, l->raster_us, region->samples, l->scratch);
-        if (PULSEG_SUCCEEDED(rc) && l->backend->load_wave)
+        if (PULSEG_FAILED(rc))
+            break;
+        pulseg_wave_samples(l->scratch, region->samples, l->samples);
+        if (l->backend->load_wave)
             rc = l->backend->load_wave(l->backend->ctx, &load);
     }
     return rc;

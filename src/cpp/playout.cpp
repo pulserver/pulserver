@@ -412,7 +412,9 @@ class Recorder
         overwrites_ += std::count_if(
             playing_.begin(), playing_.end(),
             [&written](const Span &read) { return overlap(written, read); });
-        std::copy(load.samples, load.samples + load.count, memory_[axis].begin() + load.offset);
+        std::transform(
+            load.samples, load.samples + load.count, memory_[axis].begin() + load.offset,
+            unit_sample);
         loads_ += 1;
         return PULSEG_SUCCESS;
     }

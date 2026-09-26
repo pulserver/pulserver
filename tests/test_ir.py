@@ -400,10 +400,8 @@ def _repetition_lines(seq, count):
     return lines
 
 
-@pytest.fixture(name="scanner_reader", scope="module")
-def scanner_reader_fixture(tmp_path_factory):
-    """The cache reader compiled as a scanner builds it: 32-bit, for one vendor."""
-    directory = tmp_path_factory.mktemp("reader")
+def _scanner_build(directory, program, name, *defines):
+    """``program`` linked with the C library as a scanner builds it: 32-bit, for one vendor."""
     probe = directory / "probe.c"
     probe.write_text("int main(void) { return 0; }\n")
     toolchain = subprocess.run(
@@ -421,15 +419,16 @@ def scanner_reader_fixture(tmp_path_factory):
         f"-I{C_SOURCES / sub}"
         for sub in ("", "include", "include/pulseg", "include/pulseq", "pulseq")
     ]
-    output = directory / "read_cache_summary"
+    output = directory / name
     subprocess.run(
         [
             "gcc",
             "-m32",
             "-std=c89",
             f"-DPULSEG_VENDOR={VENDOR}",
+            *defines,
             *includes,
-            str(ROOT / "tests" / "native" / "read_cache_summary.c"),
+            str(ROOT / "tests" / "native" / program),
             *sources,
             "-lm",
             "-o",
@@ -438,6 +437,14 @@ def scanner_reader_fixture(tmp_path_factory):
         check=True,
     )
     return output
+
+
+@pytest.fixture(name="scanner_reader", scope="module")
+def scanner_reader_fixture(tmp_path_factory):
+    """The cache reader compiled as a scanner builds it."""
+    return _scanner_build(
+        tmp_path_factory.mktemp("reader"), "read_cache_summary.c", "read_cache_summary"
+    )
 
 
 @pytest.mark.parametrize(
@@ -574,6 +581,113 @@ def test_the_scanner_reader_plays_the_waves_as_the_host_records_them(
     record = ir.playout(seq, ir.WaveBudget(max_samples, 4.0))
     assert record["mode"] == ("resident" if max_samples == 10**6 else "streamed")
     assert printed[first:] == _playout_lines(record)
+
+
+# A scanner build whose waveform memory holds signed 16-bit samples.
+SHORT_SAMPLES = (
+    "-DPULSEG_WAVE_SAMPLE=short",
+    "-DPULSEG_WAVE_FULL_SCALE=32767",
+    "-DPULSEG_WAVE_QUANTIZE(x)=((short)((x) < 0.0 ? (x) - 0.5 : (x) + 0.5))",
+)
+
+
+@pytest.fixture(name="sample_printers", scope="module")
+def sample_printers_fixture(tmp_path_factory):
+    """The sample printer built with the default float samples, and with SHORT_SAMPLES."""
+    directory = tmp_path_factory.mktemp("samples")
+    return (
+        _scanner_build(directory, "print_wave_samples.c", "float_samples"),
+        _scanner_build(
+            directory, "print_wave_samples.c", "short_samples", *SHORT_SAMPLES
+        ),
+    )
+
+
+def _printed(printer, *args):
+    return [
+        line.split()
+        for line in subprocess.run(
+            [str(printer), *(str(a) for a in args)],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.splitlines()
+    ]
+
+
+def _short(scaled):
+    """The SHORT_SAMPLES sample of a scaled value, clamped to full scale."""
+    x = min(max(scaled, -32767.0), 32767.0)
+    return int(x - 0.5) if x < 0.0 else int(x + 0.5)
+
+
+def _single(value):
+    return float(np.float32(value))
+
+
+def test_a_scanner_build_scales_unit_peak_values_to_its_full_scale_and_clamps_them(
+    sample_printers,
+):
+    values = [0.5, -0.25, 1.0, 1.5, -2.0, 0.1, -1e-6]
+    floats, shorts = (_printed(p, "values", *values)[0] for p in sample_printers)
+    assert shorts[1:] == [str(_short(_single(v) * 32767.0)) for v in values]
+    assert shorts[1:6] == ["16384", "-8192", "32767", "32767", "-32767"]
+    # The default build keeps the values, clamped to unit peak.
+    assert [_single(f) for f in floats[1:]] == [
+        min(max(_single(v), -1.0), 1.0) for v in values
+    ]
+
+
+def test_a_scanner_build_wraps_a_phase_into_one_turn_and_plays_pi_at_full_scale(
+    sample_printers,
+):
+    def expected(rad):
+        rad -= 2.0 * np.pi * np.floor((rad + np.pi) / (2.0 * np.pi))
+        return str(_short(rad * (32767.0 / np.pi)))
+
+    cycles = [0.1, 0.6, -0.3, 0.5, 1.1]
+    radians = [1.0, -2.0, 4.0]
+    _, shorts = sample_printers
+    assert _printed(shorts, "cycles", *cycles)[0][1:] == [
+        expected(_single(c) * 2.0 * np.pi) for c in cycles
+    ]
+    assert _printed(shorts, "radians", *radians)[0][1:] == [
+        expected(_single(r)) for r in radians
+    ]
+    # Half a turn is the start of the turn a phase is wrapped into.
+    assert _printed(shorts, "cycles", 0.5, -0.5)[0][1:] == ["-32767", "-32767"]
+
+
+@pytest.mark.parametrize("max_samples", [10**6, 3000])
+def test_a_scanner_build_loads_each_wave_as_its_float_samples_at_its_own_sample_type(
+    max_samples, tmp_path, sample_printers
+):
+    seq = _copy("zte_3d.seq", tmp_path)
+    cache = convert(
+        seq, SYSTEM, vendor=VENDOR, label_column_map=LABELS, cache_ext=".cache"
+    )
+    args = ("loads", cache, seq.stat().st_size, max_samples, 4)
+    floats, shorts = (_printed(p, *args) for p in sample_printers)
+    assert len(floats) == len(shorts) > 0
+    for f, s in zip(floats, shorts, strict=True):
+        assert f[:6] == s[:6]
+        assert s[6:] == [str(_short(_single(v) * 32767.0)) for v in f[6:]]
+    if max_samples == 10**6:
+        _assert_the_host_samples_the_waves_loaded(seq, floats, max_samples)
+
+
+def _assert_the_host_samples_the_waves_loaded(seq, loads, max_samples):
+    """Each resident load holds the samples the host gives its wave's region."""
+    # This build loads vendor-neutral caches alone.
+    convert(seq, SYSTEM)
+    budget = ir.WaveBudget(max_samples, 4.0)
+    plan = ir.plan_waves(seq, budget)
+    for load in loads:
+        subsequence, wave, axis = (int(v) for v in load[1:4])
+        region = plan["waves"][subsequence][wave]
+        assert int(load[4]) == region["offset"][axis]
+        host = ir.sample_wave(seq, (subsequence, wave), region, budget)[axis]
+        np.testing.assert_allclose([float(v) for v in load[6:]], host, atol=1e-6)
 
 
 def test_the_scanner_reader_reads_the_sar_ratios_a_cache_carries(
