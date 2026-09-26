@@ -1,8 +1,10 @@
 /*
  * Print a cache's summary as a scanner build of the library loads it: one
  * "key value" line per quantity, in the order pulserver.ir.summary returns
- * them; and, given a waveform memory and a raster, the layout of its rotated
- * waves, as pulserver.ir.plan_waves returns it.  Compiled by tests/test_ir.py
+ * them, and each subsequence's heaviest repetition, as
+ * pulserver.ir.repetition_gradients returns it; and, given a waveform memory
+ * and a raster, the layout of its rotated waves, as pulserver.ir.plan_waves
+ * returns it.  Compiled by tests/test_ir.py
  * with the scanner's word size and vendor.
  */
 
@@ -40,6 +42,16 @@ static void print_subsequence(const pulseg_collection *coll, int i)
         printf("wave %d %d points %d peak %.4f %.4f %.4f\n", i, n, points,
                (double)peak[0], (double)peak[1], (double)peak[2]);
     }
+}
+
+static void print_repetition(const pulseg_collection *coll, int i)
+{
+    pulseg_corner_point_stream stream = PULSEG_CORNER_POINT_STREAM_INIT;
+    const int rc = pulseg_get_tr_corner_points(coll, &stream, NULL, i);
+
+    printf("repetition %d rc %d first %d points %d duration_us %.1f\n", i, rc,
+           stream.first_position, stream.num_points, (double)stream.duration_us);
+    pulseg_corner_point_stream_free(&stream);
 }
 
 static void print_region(const char *what, int i, int j, const pulseg_wave_region *region)
@@ -106,6 +118,8 @@ int main(int argc, char **argv)
         printf("segment %d duration_us %d num_blocks %d start_block %d is_nav %d\n",
                i, g.duration_us, g.num_blocks, g.start_block, g.is_nav);
     }
+    for (i = 0; i < info.num_subsequences; ++i)
+        print_repetition(coll, i);
 
     if (argc == 5)
         print_wave_plan(coll, atol(argv[3]), (float)atof(argv[4]));

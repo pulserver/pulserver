@@ -1327,15 +1327,6 @@ void pulseg__compute_exec_stream_tr_start(pulseg_sequence_descriptor *desc)
 /*  The repetition                                                    */
 /* ================================================================== */
 
-/* How long block @p n plays: a pure delay its own duration, anything else its
- * definition's. */
-static double played_duration_us(const pulseg_sequence_descriptor *desc, int n)
-{
-    const pulseg_block_table_element *entry = &desc->block_table[n];
-    return (double)((entry->duration_us >= 0) ? entry->duration_us
-                                              : desc->base_blocks[entry->id].duration_us);
-}
-
 /*
  * The repetition is the one pypulseqpp's Sequence.repetition finds, handed
  * over in the file's reserved definitions and anchored at the first block;
@@ -1382,7 +1373,7 @@ int pulseg__get_tr_in_sequence(
     {
         span_us = 0.0;
         for (n = 0; n < nblocks; ++n)
-            span_us += played_duration_us(desc, n);
+            span_us += (double)pulseg__played_duration_us(desc, n);
         if (span_us > (double)SINGLE_TR_MAX_DURATION_US)
         {
             diag->code = PULSEG_ERR_TR_NO_PERIODIC_PATTERN;
@@ -1392,7 +1383,7 @@ int pulseg__get_tr_in_sequence(
 
     span_us = 0.0;
     for (n = 0; n < size; ++n)
-        span_us += played_duration_us(desc, n);
+        span_us += (double)pulseg__played_duration_us(desc, n);
     tr->tr_size = size;
     tr->tr_duration_us = (float)span_us;
     tr->num_trs = nblocks / size;
@@ -1807,25 +1798,6 @@ static float grad_boundary_value(const pulseg_sequence_descriptor *desc, int raw
                            : pulseg__grad_shape_first(desc, gte->shape_id);
     gdef = &desc->grad_definitions[gte->id];
     return normalised * gdef->any.max_amplitude;
-}
-
-float pulseg__grad_instance_energy(
-    const pulseg_sequence_descriptor *desc,
-    const pulseg_grad_definition *gd,
-    int shape_id)
-{
-    if (shape_id > 0)
-    {
-        if (!desc || !desc->grad_shape_energy || shape_id > desc->num_grad_shape_stats)
-            return 0.0f;
-        return desc->grad_shape_energy[shape_id - 1];
-    }
-    if (!gd || gd->type != 0)
-        return 0.0f;
-    return pulseg__trap_energy(
-        (float)gd->rise_time_or_unused,
-        (float)gd->flat_time_or_unused,
-        (float)gd->fall_time_or_num_uncompressed_samples);
 }
 
 float pulseg__grad_boundary_first(const pulseg_sequence_descriptor *desc, int raw_id)

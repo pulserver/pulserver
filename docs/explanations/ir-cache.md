@@ -217,6 +217,30 @@ for every instance but the first, it has to fit within a set share of the
 duration of the instance before. A chain whose waves fit neither layout, or an
 instance of which cannot be loaded in time, is refused.
 
+## The heaviest repetition
+
+A scanner evaluates its gradient-heating and acoustic models on the gradients
+of a repetition. For each subsequence the C library returns the repetition,
+of those the execution stream holds from its first block, over which
+
+$$
+E = \int \lVert \mathbf{g}(t) \rVert^2 \, dt
+$$
+
+is largest, the earliest on a tie, or the whole subsequence where it does not
+repeat ({func}`~pulserver.ir.repetition_gradients`,
+`pulseg_get_tr_corner_points`). $E$ sums, over the blocks and their gradient
+events, the square of each event's amplitude times the integral of its
+normalised waveform's square, which a rotation leaves unchanged, so the choice
+does not depend on the blocks' rotations. The repetition is one the scanner
+plays, each block at its own amplitudes and with its own shapes and rotation,
+a rotated block through its wave: a waveform that plays, not an envelope of
+several. Its gradients are joined over its blocks as corner points on one
+timeline, along the logical axes and linear in between; the prescription's
+rotation takes them to the physical axes, and a model that needs them on a
+raster samples them at the centres of its intervals
+(`pulseg_sample_corner_points`).
+
 ## Cache file
 
 The cache has the name of the first sequence file with its extension replaced:

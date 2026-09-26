@@ -357,8 +357,8 @@ typedef struct pulseg_block_initial_state
  *
  * A rotation extension turns a block's gradients within the logical frame, so
  * output axis o plays sum_d rotation[o][d] * a_d * w_d(t): the block's three
- * normalised waveforms w_d, combined.  With m the a_d of largest magnitude
- * (pulseg__wave_scale) and ratio[d] = a_d / m, that is
+ * normalised waveforms w_d, combined.  With m the a_d of largest magnitude,
+ * sign included, and ratio[d] = a_d / m, that is
  * m * sum_d rotation[o][d] * ratio[d] * w_d(t), so the combination is fixed by
  * the definitions, the shapes, the rotation and the ratios, and an instance
  * only scales it, its polarity included.  A playout loads the combination
@@ -798,12 +798,27 @@ int pulseg__wave_materialize(
     int *out_num_points,
     float *out_peak);
 
-/* The amplitude of largest magnitude, with its sign, among the gradient
- * events of block-table entry @p bte, the first axis on a tie; 0 when it
- * drives none.  What a rotated wave is scaled by. */
-float pulseg__wave_scale(
+/* The combination block-table entry @p bte plays, as a wave without its
+ * peaks, point count or span: each axis's definition and shape, its
+ * rotation, the identity without one, and the amplitude ratios over the
+ * amplitude of largest magnitude, with its sign.  0 when it drives no
+ * gradient. */
+int pulseg__block_combination(
     const pulseg_sequence_descriptor *desc,
-    const pulseg_block_table_element *bte);
+    const pulseg_block_table_element *bte,
+    pulseg_wave *wave);
+
+/* The gradients block-table entry @p block_idx plays, combined and turned by
+ * its rotation: @p *n points at times from the block's start, in us, and the
+ * gradient there along each logical axis, in Hz/m, linear in between, in
+ * arrays the caller frees with PULSEG_FREE (NULL when @p *n is 0, as for a
+ * block that drives none; on failure some may be allocated). */
+int pulseg__block_gradients(
+    const pulseg_sequence_descriptor *desc,
+    int block_idx,
+    float **time_us,
+    float *gradient[3],
+    int *n);
 
 /* The rotated wave block-table entry @p block_idx plays and the amplitude it
  * plays each axis at: -1 and zeros where it plays none. */
@@ -831,6 +846,14 @@ float pulseg__grad_instance_energy(
     const pulseg_sequence_descriptor *desc,
     const pulseg_grad_definition *gd,
     int shape_id);
+
+/* How long block-table entry @p block plays, in us: its own duration, which
+ * a pure delay carries, or its definition's. */
+int pulseg__played_duration_us(const pulseg_sequence_descriptor *desc, int block);
+
+/* The value at @p x of the piecewise-linear curve through the @p n points
+ * (t[i], v[i]), t increasing; zero outside them. */
+float pulseg__linear_at(const float *t, const float *v, int n, float x);
 
 /**
  * @brief Integral of w^2 over a normalised trapezoid, in s.

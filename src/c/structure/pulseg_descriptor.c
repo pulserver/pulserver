@@ -182,6 +182,41 @@ int pulseg__exec_tr_start(const pulseg_sequence_descriptor *desc, int n)
 /*  Gradient shape statistics                                          */
 /* ================================================================== */
 
+int pulseg__played_duration_us(const pulseg_sequence_descriptor *desc, int block)
+{
+    const pulseg_block_table_element *bte = &desc->block_table[block];
+
+    if (bte->duration_us >= 0)
+        return bte->duration_us;
+    if (bte->id >= 0 && bte->id < desc->num_unique_blocks)
+        return desc->base_blocks[bte->id].duration_us;
+    return 0;
+}
+
+float pulseg__trap_energy(float rise_us, float flat_us, float fall_us)
+{
+    return (rise_us / 3.0f + flat_us + fall_us / 3.0f) * 1e-6f;
+}
+
+float pulseg__grad_instance_energy(
+    const pulseg_sequence_descriptor *desc,
+    const pulseg_grad_definition *gd,
+    int shape_id)
+{
+    if (shape_id > 0)
+    {
+        if (!desc || !desc->grad_shape_energy || shape_id > desc->num_grad_shape_stats)
+            return 0.0f;
+        return desc->grad_shape_energy[shape_id - 1];
+    }
+    if (!gd || gd->type != 0)
+        return 0.0f;
+    return pulseg__trap_energy(
+        (float)gd->rise_time_or_unused,
+        (float)gd->flat_time_or_unused,
+        (float)gd->fall_time_or_num_uncompressed_samples);
+}
+
 float pulseg__grad_shape_first(const pulseg_sequence_descriptor *desc, int shape_id)
 {
     if (!desc || !desc->grad_shape_first || shape_id <= 0 || shape_id > desc->num_grad_shape_stats)
