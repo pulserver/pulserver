@@ -237,6 +237,11 @@ def simulated(tmp_path_factory):
     return signals
 
 
+def _apart(signal, reference):
+    """Return the largest difference between two signals, relative to the reference's peak sample."""
+    return np.abs(signal - reference).max() / np.abs(reference).max()
+
+
 @pytest.mark.parametrize("name", NAMES)
 def test_komamri_simulates_the_signal_of_the_design_from_the_exported_cache(
     simulated, name
@@ -244,6 +249,7 @@ def test_komamri_simulates_the_signal_of_the_design_from_the_exported_cache(
     design, exported = simulated[name].design, simulated[name].exported
 
     assert exported.size == design.size
+    print(f"{name}: {_apart(exported, design):.1e} of the design's peak")
     np.testing.assert_allclose(
         exported, design, rtol=0, atol=TOLERANCE * np.abs(design).max()
     )
@@ -256,6 +262,7 @@ def test_komamri_and_pypulseqpps_bloch_simulation_give_one_signal_of_the_cache(
     komamri, engine = simulated[name].komamri, simulated[name].engine
 
     assert engine.size == komamri.size
+    print(f"{name}: {_apart(engine, komamri):.1e} of KomaMRI's peak")
     np.testing.assert_allclose(
         engine, komamri, rtol=0, atol=ENGINE_TOLERANCE * np.abs(komamri).max()
     )

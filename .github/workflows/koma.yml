@@ -51,9 +51,10 @@ jobs:
       - name: Install KomaMRI
         run: julia --project=tests/koma -e 'using Pkg; Pkg.instantiate()'
 
-      # -ra so a skip is visible rather than reading as a pass.
+      # -rA so a skip is visible rather than reading as a pass, and so that
+      # each case prints how far apart its signals are.
       - name: Simulate
         env:
           PULSERVER_KOMA_PROJECT: tests/koma
           JULIA_NUM_THREADS: auto
-        run: pytest -q -ra tests/test_koma.py
+        run: pytest -q -rA tests/test_koma.py
