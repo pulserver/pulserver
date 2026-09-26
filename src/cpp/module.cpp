@@ -566,6 +566,82 @@ py::dict play(pulseg_collection *coll, bool waveforms)
     return out;
 }
 
+py::dict region_dict(const pulseg_wave_region &region)
+{
+    py::dict out;
+    out["offset"] = py::make_tuple(region.offset[0], region.offset[1], region.offset[2]);
+    out["samples"] = region.samples;
+    out["start_us"] = region.start_us;
+    return out;
+}
+
+/* A wave plan, released with it. */
+struct WavePlan
+{
+    pulseg_wave_plan plan = PULSEG_WAVE_PLAN_INIT;
+
+    WavePlan() = default;
+    WavePlan(const WavePlan &) = delete;
+    WavePlan &operator=(const WavePlan &) = delete;
+    ~WavePlan() { pulseg_free_wave_plan(&plan); }
+};
+
+/* The waveform memory a playout on @p budget gives the rotated waves. */
+py::dict plan_waves(const pulseg_collection *coll, const pulseg_wave_budget &budget)
+{
+    WavePlan planned;
+    const pulseg_wave_plan &plan = planned.plan;
+    pulseg_diagnostic diag = PULSEG_DIAGNOSTIC_INIT;
+    const int rc = pulseg_plan_waves(coll, &budget, &planned.plan, &diag);
+    if (PULSEG_FAILED(rc))
+        throw std::invalid_argument(
+            std::string(pulseg_get_error_message(rc)) + ": " + diag.message);
+
+    static const char *const modes[] = {"none", "resident", "streamed"};
+    py::dict out;
+    out["mode"] = modes[plan.mode];
+    out["samples"] = py::make_tuple(plan.samples[0], plan.samples[1], plan.samples[2]);
+    out["resident_samples"] = py::make_tuple(
+        plan.resident_samples[0], plan.resident_samples[1], plan.resident_samples[2]);
+    out["streamed_samples"] = py::make_tuple(
+        plan.streamed_samples[0], plan.streamed_samples[1], plan.streamed_samples[2]);
+    py::list waves;
+    for (int s = 0; s < plan.num_subsequences; ++s)
+    {
+        py::list regions;
+        for (int w = 0; w < plan.num_waves[s]; ++w)
+            regions.append(region_dict(plan.waves[s][w]));
+        waves.append(regions);
+    }
+    out["waves"] = waves;
+    py::list slots;
+    for (int g = 0; g < plan.num_segments; ++g)
+    {
+        py::list positions;
+        for (int b = 0; b < plan.num_positions[g]; ++b)
+            positions.append(py::make_tuple(
+                region_dict(plan.slots[g][2 * b]), region_dict(plan.slots[g][2 * b + 1])));
+        slots.append(positions);
+    }
+    out["slots"] = slots;
+    out["loading_checked"] = plan.loading_checked != 0;
+    out["least_spare_us"] = plan.least_spare_us;
+    out["tightest"] = plan.tightest_subseq < 0
+        ? py::object(py::none())
+        : py::object(py::make_tuple(plan.tightest_subseq, plan.tightest_position));
+    return out;
+}
+
+Collection load(const std::string &cache_path, int source_size)
+{
+    Collection coll(pulseg_collection_alloc());
+    if (!coll)
+        throw std::bad_alloc();
+    if (PULSEG_FAILED(pulseg_load_cache(coll.get(), cache_path.c_str(), source_size)))
+        throw std::invalid_argument("cannot load the cache " + cache_path);
+    return coll;
+}
+
 /* Convert a chain of sequences, each given as the libraries it was read into. */
 Collection convert(const py::list &chain, const pulseg_opts &opts)
 {
@@ -663,29 +739,55 @@ PYBIND11_MODULE(_ext, module)
     module.def(
         "summary_from_cache",
         [](const std::string &cache_path, int source_size)
-        {
-            Collection coll(pulseg_collection_alloc());
-            if (!coll)
-                throw std::bad_alloc();
-            if (PULSEG_FAILED(pulseg_load_cache(coll.get(), cache_path.c_str(), source_size)))
-                throw std::invalid_argument("cannot load the cache " + cache_path);
-            return summarize(coll.get());
-        },
+        { return summarize(load(cache_path, source_size).get()); },
         "The summary a written cache carries.");
 
     module.def(
         "play_cache",
         [](const std::string &cache_path, int source_size, bool waveforms)
-        {
-            Collection coll(pulseg_collection_alloc());
-            if (!coll)
-                throw std::bad_alloc();
-            if (PULSEG_FAILED(pulseg_load_cache(coll.get(), cache_path.c_str(), source_size)))
-                throw std::invalid_argument("cannot load the cache " + cache_path);
-            return play(coll.get(), waveforms);
-        },
+        { return play(load(cache_path, source_size).get(), waveforms); },
         py::arg("cache_path"),
         py::arg("source_size"),
         py::arg("waveforms") = false,
         "Walk a written cache with the scanner's cursor, one entry per played block.");
+
+    module.def(
+        "plan_waves_from_cache",
+        [](const std::string &cache_path,
+           int source_size,
+           long max_samples,
+           float raster_us,
+           float load_us_per_sample,
+           float headroom)
+        {
+            pulseg_wave_budget budget = PULSEG_WAVE_BUDGET_INIT;
+            budget.max_samples = max_samples;
+            budget.raster_us = raster_us;
+            budget.load_us_per_sample = load_us_per_sample;
+            budget.headroom = headroom;
+            return plan_waves(load(cache_path, source_size).get(), budget);
+        },
+        "Lay out a written cache's rotated waves in a playout's waveform memory.");
+
+    module.def(
+        "sample_wave_from_cache",
+        [](const std::string &cache_path,
+           int source_size,
+           int subsequence,
+           int wave,
+           int axis,
+           float start_us,
+           float raster_us,
+           long samples)
+        {
+            const Collection coll = load(cache_path, source_size);
+            std::vector<float> values(static_cast<size_t>(samples > 0 ? samples : 0));
+            require(
+                pulseg_sample_wave(
+                    coll.get(), subsequence, wave, axis, start_us, raster_us, samples,
+                    values.data()),
+                "rotated wave sampling");
+            return as_array(values, {static_cast<py::ssize_t>(values.size())});
+        },
+        "One axis of a written cache's rotated wave on a playout's raster.");
 }

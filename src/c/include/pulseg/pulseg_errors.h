@@ -45,8 +45,9 @@
 #define PULSEG_ERR_SEG_TOO_MANY_ADC_VARIANTS -207
 #define PULSEG_ERR_SEG_TOO_MANY_PULSE_VARIANTS -208
 
-/* Chunk planning errors (-250 to -259) */
-#define PULSEG_ERR_CHUNK_INFEASIBLE -250
+/* Waveform memory errors (-250 to -259) */
+#define PULSEG_ERR_WAVE_MEMORY -250
+#define PULSEG_ERR_WAVE_LOADING -251
 
 /* Mechanical resonance errors (-400 to -449) */
 #define PULSEG_ERR_MECH_RESONANCES_NO_WAVEFORM -402

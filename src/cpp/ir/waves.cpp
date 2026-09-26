@@ -116,7 +116,7 @@ bool wave_of_block(
     return true;
 }
 
-/* Fill the peak of each axis and the point count of @p wave. */
+/* Fill the peak of each axis, the point count and the span of @p wave. */
 int measure_wave(const pulseg_sequence_descriptor *desc, pulseg_wave &wave)
 {
     wave.num_points = 0;
@@ -132,14 +132,35 @@ int measure_wave(const pulseg_sequence_descriptor *desc, pulseg_wave &wave)
         if (points > wave.num_points)
             wave.num_points = points;
     }
+    wave.start_us = 0.0f;
+    wave.end_us = 0.0f;
+    if (wave.num_points < 1)
+        return PULSEG_SUCCESS;
+    /* Every axis shares one grid, so one axis gives the span. */
+    std::vector<float> time_us(static_cast<size_t>(wave.num_points));
+    std::vector<float> amplitude(static_cast<size_t>(wave.num_points));
+    int points = 0;
+    const int rc = pulseg__wave_materialize(
+        desc, &wave, 0, time_us.data(), amplitude.data(), wave.num_points, &points, nullptr);
+    if (PULSEG_FAILED(rc))
+        return rc;
+    wave.start_us = time_us.front();
+    wave.end_us = time_us[static_cast<size_t>(points - 1)];
     return PULSEG_SUCCESS;
 }
 
 /* Widen a position's record of the waves it plays by @p wave. */
 void reserve(pulseg_block_initial_state &state, const pulseg_wave &wave)
 {
+    if (state.wave_points == 0 || wave.start_us < state.wave_start_us)
+        state.wave_start_us = wave.start_us;
+    if (state.wave_points == 0 || wave.end_us > state.wave_end_us)
+        state.wave_end_us = wave.end_us;
     if (wave.num_points > state.wave_points)
         state.wave_points = wave.num_points;
+    for (int axis = 0; axis < 3; ++axis)
+        if (wave.peak[axis] > 0.0f)
+            state.wave_axes |= 1 << axis;
 }
 
 /* Clear what an earlier build left, and give every block no wave. */
@@ -164,7 +185,12 @@ int reset_waves(pulseg_sequence_descriptor *desc)
         pulseg_virtual_segment &seg = desc->segment_definitions[s];
         if (seg.initial_states)
             for (int b = 0; b < seg.num_blocks; ++b)
+            {
                 seg.initial_states[b].wave_points = 0;
+                seg.initial_states[b].wave_start_us = 0.0f;
+                seg.initial_states[b].wave_end_us = 0.0f;
+                seg.initial_states[b].wave_axes = 0;
+            }
     }
     return PULSEG_SUCCESS;
 }
@@ -264,8 +290,8 @@ class PositionWalk
 
 /* Record, for a subsequence whose segments and execution stream are built,
  * the rotated wave of every block at a position whose blocks carry a
- * rotation, and at each such position the longest wave it plays.  Blocks at
- * other positions play their own shapes and get none. */
+ * rotation, and at each such position the points, span and axes of the waves
+ * it plays.  Blocks at other positions play their own shapes and get none. */
 extern "C" int pulseg__build_waves(pulseg_sequence_descriptor *desc)
 {
     int rc = reset_waves(desc);

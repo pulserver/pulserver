@@ -89,8 +89,12 @@ const char *pulseg_get_error_message(int code)
         return "TR does not end with zero gradient amplitude";
     case PULSEG_ERR_SEG_NO_SEGMENTS_FOUND:
         return "No segment boundaries could be identified in TR";
-    case PULSEG_ERR_CHUNK_INFEASIBLE:
-        return "No chunk split satisfies both the waveform memory budget and the playout rate";
+    case PULSEG_ERR_WAVE_MEMORY:
+        return "The rotated waves fit waveform memory neither all at once nor two slots per "
+               "position";
+    case PULSEG_ERR_WAVE_LOADING:
+        return "A segment instance's rotated waves take longer to load than the instance "
+               "before it plays";
     case PULSEG_ERR_SEG_ROTATION_MID_GRADIENT:
         return "Rotation state changes across a live gradient (no zero-gradient junction)";
     case PULSEG_ERR_MECH_RESONANCES_NO_WAVEFORM:
@@ -169,6 +173,14 @@ const char *pulseg_get_error_hint(int code)
                "combination needs a segment of its own. Vary a pulse by its "
                "amplitude, phase or frequency rather than its shape, or split the "
                "repetitions into separate subsequences.";
+    case PULSEG_ERR_WAVE_MEMORY:
+        return "A rotation extension mixes a block's gradients into waves of their own. "
+               "Reuse one rotation, and one ratio between the gradients it turns, "
+               "across more blocks, or split the scan into subsequences.";
+    case PULSEG_ERR_WAVE_LOADING:
+        return "The segment instance before the one named is too short to load the "
+               "rotated waves of the next. Lengthen it, or let fewer positions of the "
+               "next segment carry a rotation.";
     case PULSEG_ERR_MAX_GRAD_EXCEEDED:
         return "The gradient sum-of-squares amplitude exceeds the system limit. "
                "See diagnostic message for details.";

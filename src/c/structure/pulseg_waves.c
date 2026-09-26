@@ -6,6 +6,7 @@
  * pulseg_materialize_wave() for how it is sampled.
  */
 
+#include <float.h>
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -418,6 +419,21 @@ int pulseg_get_num_waves(const pulseg_collection *coll, int subseq_idx)
     return coll->descriptors[subseq_idx].num_waves;
 }
 
+/* The descriptor of subsequence @p subseq_idx where it holds wave
+ * @p wave_idx; NULL otherwise. */
+static const pulseg_sequence_descriptor *wave_owner(
+    const pulseg_collection *coll,
+    int subseq_idx,
+    int wave_idx)
+{
+    const pulseg_sequence_descriptor *desc;
+
+    if (subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
+        return NULL;
+    desc = &coll->descriptors[subseq_idx];
+    return (desc->waves && wave_idx >= 0 && wave_idx < desc->num_waves) ? desc : NULL;
+}
+
 int pulseg_materialize_wave(
     const pulseg_collection *coll,
     int subseq_idx,
@@ -433,10 +449,8 @@ int pulseg_materialize_wave(
 
     if (!coll || !out_num_points)
         return PULSEG_ERR_NULL_POINTER;
-    if (subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
-        return PULSEG_ERR_INVALID_ARGUMENT;
-    desc = &coll->descriptors[subseq_idx];
-    if (wave_idx < 0 || wave_idx >= desc->num_waves || !desc->waves)
+    desc = wave_owner(coll, subseq_idx, wave_idx);
+    if (!desc)
         return PULSEG_ERR_INVALID_ARGUMENT;
     return pulseg__wave_materialize(
         desc,
@@ -509,4 +523,472 @@ void pulseg__block_wave(
     for (d = 0; d < 3; ++d)
         amp_hz_per_m[d] = scale * wave->peak[d];
     *wave_id = w;
+}
+
+/* One axis of a wave's points, normalised, in arrays of its own. */
+static int wave_points(
+    const pulseg_sequence_descriptor *desc,
+    int wave_idx,
+    int out_axis,
+    axis_corners *out)
+{
+    const pulseg_wave *wave = &desc->waves[wave_idx];
+    int n = 0;
+    int rc = pulseg__wave_materialize(desc, wave, out_axis, NULL, NULL, 0, &n, NULL);
+
+    if (PULSEG_FAILED(rc) || n < 1)
+        return rc;
+    if (!axis_corners_alloc(out, n))
+        return PULSEG_ERR_ALLOC_FAILED;
+    rc = pulseg__wave_materialize(desc, wave, out_axis, out->t, out->v, n, &n, NULL);
+    if (PULSEG_FAILED(rc))
+        axis_corners_free(out);
+    return rc;
+}
+
+int pulseg_sample_wave(
+    const pulseg_collection *coll,
+    int subseq_idx,
+    int wave_idx,
+    int out_axis,
+    float start_us,
+    float raster_us,
+    long num_samples,
+    float *out)
+{
+    const pulseg_sequence_descriptor *desc;
+    axis_corners points;
+    long i;
+    int rc;
+
+    if (!coll || !out)
+        return PULSEG_ERR_NULL_POINTER;
+    desc = wave_owner(coll, subseq_idx, wave_idx);
+    if (!desc || raster_us <= 0.0f || num_samples < 0)
+        return PULSEG_ERR_INVALID_ARGUMENT;
+    memset(&points, 0, sizeof(points));
+    rc = wave_points(desc, wave_idx, out_axis, &points);
+    if (PULSEG_FAILED(rc))
+        return rc;
+    for (i = 0; i < num_samples; ++i)
+        out[i] = axis_value_at(&points, start_us + ((float)i + 0.5f) * raster_us);
+    axis_corners_free(&points);
+    return PULSEG_SUCCESS;
+}
+
+/* The raster intervals that cover [start_us, end_us]: the first starts on the
+ * raster at or before start_us, the last ends at or after end_us. */
+static void cover(float start_us, float end_us, float raster_us, pulseg_wave_region *region)
+{
+    const double first = floor((double)start_us / (double)raster_us + 1e-4) * (double)raster_us;
+    const long n = (long)ceil(((double)end_us - first) / (double)raster_us - 1e-4);
+
+    region->start_us = (float)first;
+    region->samples = n > 0 ? n : 1;
+}
+
+/* Give @p region an offset on each axis of @p axes, after what @p used
+ * holds there, and -1 on the others. */
+static void place(pulseg_wave_region *region, int axes, long used[3])
+{
+    int a;
+
+    for (a = 0; a < 3; ++a)
+    {
+        region->offset[a] = -1;
+        if (axes & (1 << a))
+        {
+            region->offset[a] = used[a];
+            used[a] += region->samples;
+        }
+    }
+}
+
+static int peak_axes(const pulseg_wave *wave)
+{
+    int a, axes = 0;
+
+    for (a = 0; a < 3; ++a)
+        if (wave->peak[a] > 0.0f)
+            axes |= 1 << a;
+    return axes;
+}
+
+static int driven_axes(const pulseg_wave_region *region)
+{
+    return (region->offset[0] >= 0) + (region->offset[1] >= 0) + (region->offset[2] >= 0);
+}
+
+static void free_regions(pulseg_wave_region **regions, int count)
+{
+    int i;
+
+    if (!regions)
+        return;
+    for (i = 0; i < count; ++i)
+        if (regions[i])
+            PULSEG_FREE(regions[i]);
+    PULSEG_FREE(regions);
+}
+
+void pulseg_free_wave_plan(pulseg_wave_plan *plan)
+{
+    static const pulseg_wave_plan empty = PULSEG_WAVE_PLAN_INIT;
+
+    if (!plan)
+        return;
+    free_regions(plan->waves, plan->num_subsequences);
+    free_regions(plan->slots, plan->num_segments);
+    if (plan->num_waves)
+        PULSEG_FREE(plan->num_waves);
+    if (plan->num_positions)
+        PULSEG_FREE(plan->num_positions);
+    *plan = empty;
+}
+
+/* @p count empty region tables and their lengths; 1 on success. */
+static int alloc_tables(int count, int **lengths, pulseg_wave_region ***tables)
+{
+    int i;
+
+    if (count <= 0)
+        return 1;
+    *lengths = (int *)PULSEG_ALLOC((size_t)count * sizeof(int));
+    *tables = (pulseg_wave_region **)PULSEG_ALLOC((size_t)count * sizeof(pulseg_wave_region *));
+    if (!*lengths || !*tables)
+        return 0;
+    for (i = 0; i < count; ++i)
+    {
+        (*lengths)[i] = 0;
+        (*tables)[i] = NULL;
+    }
+    return 1;
+}
+
+static pulseg_wave_region *alloc_regions(int count)
+{
+    return (pulseg_wave_region *)PULSEG_ALLOC((size_t)count * sizeof(pulseg_wave_region));
+}
+
+/* RESIDENT: a region per wave of each subsequence, laid out in order. */
+static int lay_out_waves(const pulseg_collection *coll, float raster_us, pulseg_wave_plan *plan)
+{
+    int s, w;
+
+    plan->num_subsequences = coll->num_subsequences;
+    if (!alloc_tables(coll->num_subsequences, &plan->num_waves, &plan->waves))
+        return PULSEG_ERR_ALLOC_FAILED;
+    for (s = 0; s < coll->num_subsequences; ++s)
+    {
+        const pulseg_sequence_descriptor *desc = &coll->descriptors[s];
+        if (desc->num_waves <= 0 || !desc->waves)
+            continue;
+        plan->waves[s] = alloc_regions(desc->num_waves);
+        if (!plan->waves[s])
+            return PULSEG_ERR_ALLOC_FAILED;
+        plan->num_waves[s] = desc->num_waves;
+        for (w = 0; w < desc->num_waves; ++w)
+        {
+            cover(desc->waves[w].start_us, desc->waves[w].end_us, raster_us, &plan->waves[s][w]);
+            place(&plan->waves[s][w], peak_axes(&desc->waves[w]), plan->resident_samples);
+        }
+    }
+    return PULSEG_SUCCESS;
+}
+
+/* The two slots of position @p b of segment @p g, empty where it plays no
+ * wave. */
+static int lay_out_position(
+    const pulseg_collection *coll,
+    int g,
+    int b,
+    float raster_us,
+    pulseg_wave_region slot[2],
+    long used[3])
+{
+    pulseg_block_info block = PULSEG_BLOCK_INFO_INIT;
+    int h;
+    const int rc = pulseg_get_block_info(coll, &block, g, b);
+
+    if (PULSEG_FAILED(rc))
+        return rc;
+    for (h = 0; h < 2; ++h)
+    {
+        slot[h].samples = 0;
+        slot[h].start_us = 0.0f;
+        if (block.wave_points > 0)
+            cover(block.wave_start_us, block.wave_end_us, raster_us, &slot[h]);
+        place(&slot[h], block.wave_points > 0 ? block.wave_axes : 0, used);
+    }
+    return PULSEG_SUCCESS;
+}
+
+/* STREAMED: two slots per position of each segment that plays waves. */
+static int lay_out_slots(const pulseg_collection *coll, float raster_us, pulseg_wave_plan *plan)
+{
+    pulseg_segment_info seg = PULSEG_SEGMENT_INFO_INIT;
+    int g, b;
+
+    plan->num_segments = coll->total_unique_segments;
+    if (!alloc_tables(plan->num_segments, &plan->num_positions, &plan->slots))
+        return PULSEG_ERR_ALLOC_FAILED;
+    for (g = 0; g < plan->num_segments; ++g)
+    {
+        int rc = pulseg_get_segment_info(coll, &seg, g);
+        if (PULSEG_FAILED(rc))
+            return rc;
+        if (seg.num_blocks <= 0)
+            continue;
+        plan->slots[g] = alloc_regions(2 * seg.num_blocks);
+        if (!plan->slots[g])
+            return PULSEG_ERR_ALLOC_FAILED;
+        plan->num_positions[g] = seg.num_blocks;
+        for (b = 0; b < seg.num_blocks && PULSEG_SUCCEEDED(rc); ++b)
+            rc = lay_out_position(
+                coll, g, b, raster_us, &plan->slots[g][2 * b], plan->streamed_samples);
+        if (PULSEG_FAILED(rc))
+            return rc;
+    }
+    return PULSEG_SUCCESS;
+}
+
+/* How long loading a segment's waves into its slots takes. */
+static float segment_load_us(const pulseg_wave_plan *plan, int g, float load_us_per_sample)
+{
+    float total = 0.0f;
+    int b;
+
+    if (g < 0 || g >= plan->num_segments || !plan->slots[g])
+        return 0.0f;
+    for (b = 0; b < plan->num_positions[g]; ++b)
+        total += (float)plan->slots[g][2 * b].samples *
+            (float)driven_axes(&plan->slots[g][2 * b]) * load_us_per_sample;
+    return total;
+}
+
+/* What block-table entry @p block plays for: its own duration, or its
+ * definition's where it records none. */
+static int block_duration_us(const pulseg_sequence_descriptor *desc, int block)
+{
+    const pulseg_block_table_element *bte = &desc->block_table[block];
+
+    if (bte->duration_us >= 0)
+        return bte->duration_us;
+    if (bte->id >= 0 && bte->id < desc->num_unique_blocks)
+        return desc->base_blocks[bte->id].duration_us;
+    return 0;
+}
+
+/* The scan's segment instances, walked entry by entry across the chain. */
+typedef struct instance_walk
+{
+    int last;          /* segment of the previous entry, -1 at a subsequence's start */
+    int local;         /* segment of the current entry */
+    int position;      /* the current entry's position in its instance */
+    int started;       /* 1 once an instance has begun */
+    int has_previous;  /* 1 once an instance has ended */
+    float previous_us; /* duration of the instance before the current one */
+    float current_us;  /* duration of the current instance so far */
+} instance_walk;
+
+/* Account entry @p n of @p desc; 1 when it starts a segment instance. */
+static int instance_starts(instance_walk *walk, const pulseg_sequence_descriptor *desc, int n)
+{
+    const int local = pulseg__exec_seg_id(desc, n);
+    const int block = pulseg__exec_block_idx(desc, n);
+    int blocks;
+
+    if (local < 0 || local >= desc->num_unique_segments)
+    {
+        walk->last = -1;
+        return 0;
+    }
+    blocks = desc->segment_definitions[local].num_blocks;
+    walk->position = (local == walk->last && blocks > 0) ? (walk->position + 1) % blocks : 0;
+    walk->last = local;
+    walk->local = local;
+    if (walk->position == 0)
+    {
+        walk->has_previous = walk->started;
+        walk->previous_us = walk->current_us;
+        walk->started = 1;
+        walk->current_us = 0.0f;
+    }
+    if (block >= 0 && block < desc->num_blocks)
+        walk->current_us += (float)block_duration_us(desc, block);
+    return walk->position == 0;
+}
+
+/* Record the spare time loading segment @p g leaves while the instance
+ * before it plays, where it is the least yet. */
+static void note_spare(
+    pulseg_wave_plan *plan,
+    const pulseg_wave_budget *budget,
+    const instance_walk *walk,
+    int g,
+    int s,
+    int n)
+{
+    float spare;
+
+    if (!walk->has_previous)
+        return;
+    spare = budget->headroom * walk->previous_us -
+        segment_load_us(plan, g, budget->load_us_per_sample);
+    if (spare < plan->least_spare_us)
+    {
+        plan->least_spare_us = spare;
+        plan->tightest_subseq = s;
+        plan->tightest_position = n;
+    }
+}
+
+static int global_segment(const pulseg_collection *coll, int s, int local)
+{
+    if (!coll->seg_local_to_global)
+        return local;
+    return coll->seg_local_to_global[coll->subsequence_info[s].segment_id_offset + local];
+}
+
+static int scan_loop_loaded(const pulseg_collection *coll)
+{
+    int s;
+
+    for (s = 0; s < coll->num_subsequences; ++s)
+        if (coll->descriptors[s].exec_stream_len <= 0 || coll->descriptors[s].num_exec_runs <= 0)
+            return 0;
+    return 1;
+}
+
+/* Walk the scan's segment instances, each loaded while the one before it
+ * plays, for the least spare time.  0 when the execution stream is not
+ * loaded. */
+static int check_loading(
+    const pulseg_collection *coll,
+    const pulseg_wave_budget *budget,
+    pulseg_wave_plan *plan)
+{
+    instance_walk walk;
+    int s, n;
+
+    if (!scan_loop_loaded(coll))
+        return 0;
+    memset(&walk, 0, sizeof(walk));
+    plan->least_spare_us = FLT_MAX;
+    for (s = 0; s < coll->num_subsequences; ++s)
+    {
+        const pulseg_sequence_descriptor *desc = &coll->descriptors[s];
+        walk.last = -1;
+        for (n = 0; n < desc->exec_stream_len; ++n)
+            if (instance_starts(&walk, desc, n))
+                note_spare(plan, budget, &walk, global_segment(coll, s, walk.local), s, n);
+    }
+    if (plan->tightest_subseq < 0)
+        plan->least_spare_us = 0.0f;
+    return 1;
+}
+
+/* PULSEG_WAVES_* the budget affords, or -1 when neither layout fits. */
+static int affordable_mode(const pulseg_wave_plan *plan, long max_samples)
+{
+    int a, any = 0, resident = 1, streamed = 1;
+
+    for (a = 0; a < 3; ++a)
+    {
+        any |= plan->resident_samples[a] > 0;
+        resident &= plan->resident_samples[a] <= max_samples;
+        streamed &= plan->streamed_samples[a] <= max_samples;
+    }
+    if (!any)
+        return PULSEG_WAVES_NONE;
+    if (resident)
+        return PULSEG_WAVES_RESIDENT;
+    return streamed ? PULSEG_WAVES_STREAMED : -1;
+}
+
+static void adopt(pulseg_wave_plan *plan, int mode)
+{
+    const long *held = (mode == PULSEG_WAVES_STREAMED) ? plan->streamed_samples
+                                                       : plan->resident_samples;
+    int a;
+
+    plan->mode = mode;
+    for (a = 0; a < 3; ++a)
+        plan->samples[a] = held[a];
+}
+
+static int wave_memory_shortfall(
+    const pulseg_wave_plan *plan,
+    const pulseg_wave_budget *budget,
+    pulseg_diagnostic *diag)
+{
+    if (diag)
+    {
+        diag->code = PULSEG_ERR_WAVE_MEMORY;
+        pulseg__diag_printf(
+            diag,
+            "rotated waves take %ld, %ld, %ld samples at once and %ld, %ld, %ld in two slots "
+            "per position, against %ld per axis",
+            plan->resident_samples[0], plan->resident_samples[1], plan->resident_samples[2],
+            plan->streamed_samples[0], plan->streamed_samples[1], plan->streamed_samples[2],
+            budget->max_samples);
+    }
+    return PULSEG_ERR_WAVE_MEMORY;
+}
+
+static int wave_loading_shortfall(const pulseg_wave_plan *plan, pulseg_diagnostic *diag)
+{
+    if (diag)
+    {
+        diag->code = PULSEG_ERR_WAVE_LOADING;
+        pulseg__diag_printf(
+            diag,
+            "subsequence %d, execution-stream position %d: loading its rotated waves "
+            "overruns the playout before it by %.1f us",
+            plan->tightest_subseq, plan->tightest_position, (double)(-plan->least_spare_us));
+    }
+    return PULSEG_ERR_WAVE_LOADING;
+}
+
+static int plan_arguments(
+    const pulseg_collection *coll,
+    const pulseg_wave_budget *budget,
+    pulseg_wave_plan *plan)
+{
+    static const pulseg_wave_plan empty = PULSEG_WAVE_PLAN_INIT;
+
+    if (!coll || !budget || !plan)
+        return PULSEG_ERR_NULL_POINTER;
+    *plan = empty;
+    if (budget->raster_us <= 0.0f || budget->max_samples < 0 || budget->load_us_per_sample < 0.0f ||
+        budget->headroom <= 0.0f)
+        return PULSEG_ERR_INVALID_ARGUMENT;
+    return PULSEG_SUCCESS;
+}
+
+int pulseg_plan_waves(
+    const pulseg_collection *coll,
+    const pulseg_wave_budget *budget,
+    pulseg_wave_plan *plan,
+    pulseg_diagnostic *diag)
+{
+    int mode;
+    int rc = plan_arguments(coll, budget, plan);
+
+    if (PULSEG_SUCCEEDED(rc))
+        rc = lay_out_waves(coll, budget->raster_us, plan);
+    if (PULSEG_SUCCEEDED(rc))
+        rc = lay_out_slots(coll, budget->raster_us, plan);
+    if (PULSEG_FAILED(rc))
+        return rc;
+
+    mode = affordable_mode(plan, budget->max_samples);
+    if (mode < 0)
+        return wave_memory_shortfall(plan, budget, diag);
+    adopt(plan, mode);
+    if (mode == PULSEG_WAVES_STREAMED && budget->load_us_per_sample > 0.0f)
+        plan->loading_checked = check_loading(coll, budget, plan);
+    if (plan->loading_checked && plan->least_spare_us < 0.0f)
+        return wave_loading_shortfall(plan, diag);
+    return PULSEG_SUCCESS;
 }

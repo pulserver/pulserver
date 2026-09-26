@@ -330,19 +330,25 @@ typedef struct pulseg_block_initial_state
     int rf_grad_constant;
     float rf_grad_level[3];
 
-    /* Points per axis of the longest rotated wave (pulseg_wave) any instance
-     * of this position plays; 0 where the position plays none.  What the
-     * waveform slot a playout reserves here has to hold. */
+    /* The rotated waves (pulseg_wave) the instances of this position play:
+     * the points per axis of the longest, the span from the earliest start
+     * to the latest end, in us from the block's start, and a bit per axis
+     * (1 << axis) that one of them drives.  All zero where the position plays
+     * none. */
     int wave_points;
+    float wave_start_us;
+    float wave_end_us;
+    int wave_axes;
 } pulseg_block_initial_state;
 
 /* clang-format off */
 #define PULSEG_BLOCK_INITIAL_STATE_INIT \
-    {-1, -1, {-1, -1, -1}, {0, 0, 0}, 0.0f, {1.0f, 1.0f, 1.0f}, 0, {0.0f, 0.0f, 0.0f}, 0}
+    {-1, -1, {-1, -1, -1}, {0, 0, 0}, 0.0f, {1.0f, 1.0f, 1.0f}, 0, {0.0f, 0.0f, 0.0f}, 0, \
+     0.0f, 0.0f, 0}
 /* clang-format on */
 
 /* Number of 4-byte words in pulseg_block_initial_state (cache serialization). */
-#define PULSEG_BLOCK_INITIAL_STATE_WORDS 17
+#define PULSEG_BLOCK_INITIAL_STATE_WORDS 20
 
 /* ================================================================== */
 /*  Rotated wave                                                      */
@@ -370,9 +376,11 @@ typedef struct pulseg_wave
     float ratio[3];    /* a_d over the scale m                             */
     float peak[3];     /* per output axis, the combination's largest |.|   */
     int num_points;    /* materialised points per output axis              */
+    float start_us;    /* first point, us from the block's start           */
+    float end_us;      /* last point                                       */
 } pulseg_wave;
 
-#define PULSEG_WAVE_WORDS 23
+#define PULSEG_WAVE_WORDS 25
 /* Amplitude ratios this close are one wave. */
 #define PULSEG_WAVE_RATIO_STEP 1.0e-4f
 
