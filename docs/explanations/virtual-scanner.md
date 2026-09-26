@@ -14,36 +14,40 @@ sent as the scanner's reconstruction client sends them.
 | Stand-in | Replaces | Built from | Exercises |
 | --- | --- | --- | --- |
 | Design call | The interpreter host process's call | `pulserver design generate`, or {func}`~pulserver.host.call` | Request and reply blocks, presets, design errors, check failures |
-| Virtual interpreter | The playout | The C library's cursor over the cache, {func}`~pulserver.ir.play` | Segmentation, execution stream, the waveforms and offsets the cache carries |
+| Virtual interpreter | The playout | The C library's two playout stages over a recording backend, {func}`~pulserver.ir.playout` | Segmentation, the events each segment position is prepared with, the registers the scan loop sets on each block, the rotation and trigger of each segment instance, the waves and the waveform memory they are loaded into |
 | Physics | Magnet, coils and subject | {class}`~pulserver.virtual.Phantom`, {func}`~pulserver.virtual.acquire` | The trajectory the enrichment has to state, the demodulation of the prescription, the timing of every echo, the RF frequencies ppm offsets resolve to |
 | Reconstruction client | The scanner's reconstruction client | {func}`~pulserver.virtual.send` | The header and acquisition contract of {doc}`../user-guide/reconstruction-client` |
 
 ## Played trajectory
 
-{func}`~pulserver.ir.play` walks the cache with the cursor a playout uses and,
-with `waveforms`, returns each played block's gradients: the instance's
-amplitude times the waveform that instance plays, timed from the block's
-start. The accessors that answer for a segment position,
-`pulseg_get_grad_amplitude` and `pulseg_get_grad_time_us`, answer through
-its representative, the instance of largest energy, whose events the position
-is prepared with; `pulseg_get_cursor_grad_waveform` answers for the instance
-at the cursor. A block at a position that plays waves, one whose blocks carry
-a rotation or play a shape the prepared events do not hold, as the interleaves
-of a spiral drawn as distinct shapes do, plays its wave instead, which
-`pulseg_materialize_wave` returns, at the amplitudes the instance sets
-({doc}`ir-cache`). It also
-returns each played RF pulse: the
-instance's amplitude times the magnitude and phase shapes of its definition,
-which `pulseg_get_rf_magnitude` and `pulseg_get_rf_phase` return, the phase in
-cycles as Pulseq stores it.
+{func}`~pulserver.ir.playout` plays the cache through the two stages of a
+playout: the first prepares the events of each segment position, and the
+scan loop sets the registers of each block of each segment instance
+({doc}`ir-cache`). With `waveforms`, it returns what each block plays, timed
+from the block's start. Its gradients are the events its position is prepared
+with, through the position's representative instance, the one of largest
+energy (`pulseg_get_grad_amplitude` and `pulseg_get_grad_time_us`), at the
+amplitudes the scan loop sets. At a position that plays waves, one whose
+blocks carry a rotation or play a shape the prepared events do not hold, as
+the interleaves of a spiral drawn as distinct shapes do, they are the wave
+the scan loop selects, which `pulseg_materialize_wave` returns, at the wave's
+amplitudes. Its RF pulse is the magnitude and phase shapes its position is
+prepared with, which `pulseg_get_rf_magnitude` and `pulseg_get_rf_phase`
+return, the phase in cycles as Pulseq stores it, at the block's amplitude.
+A wave plays as the IR defines it, linear between its points; how a
+playout's hardware plays the samples it loads on its own raster is not
+modelled. {func}`~pulserver.ir.play` walks the same cache with the cursor and
+resolves each block by its own instance, and the test suite holds the two to
+the same waveforms, bit for bit.
 
 {func}`~pulserver.virtual.trajectory` integrates those gradients into the
 k-space location $\mathbf{k}$ of every ADC sample, in 1/m along the physical
 axes. The rotation $R$ of the prescription, from logical to physical axes, is
 not in the cache ({doc}`ir-cache`): the virtual interpreter is given it, as a
 playout is, and turns each block's gradients, which carry the block's own
-rotation, by $R$, except in blocks labelled `NOROT`, which play as the cache
-holds them. This is the frame {func}`~pulserver.ir.check` checks in. Under
+rotation, by $R$, except in the segment instances whose blocks are labelled
+`NOROT`, which play as the cache holds them. This is the frame
+{func}`~pulserver.ir.check` checks in. Under
 the identity the physical axes are the logical ones. An excitation returns
 $\mathbf{k}$ to zero, and a refocusing pulse negates it, at the RF centre the
 design records, which the cache carries for each RF event with its use; each

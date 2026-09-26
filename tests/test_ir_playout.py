@@ -8,7 +8,7 @@ import pypulseqpp as pp
 import pytest
 
 from pulserver import ir
-from pulserver.ir import WaveBudget
+from pulserver.ir import Prescan, WaveBudget
 
 FIXTURES = Path(__file__).parent / "fixtures" / "sequences"
 SYSTEM = pp.Opts(
@@ -81,18 +81,59 @@ def test_the_scan_loop_sets_every_block_the_cursor_plays(played):
         np.testing.assert_array_equal(blocks["rotate"], 1 - cursor["norot"])
 
 
-def _prepared_event(record, segment, position, axis):
-    positions = record["positions"]
-    (row,) = np.flatnonzero(
-        (positions["segment"] == segment) & (positions["position"] == position)
-    )
-    start, stop = positions["event_span"][row, axis]
-    return positions["event_time_us"][start:stop], positions["event_shape"][start:stop]
+#: What each block plays, keyed as :func:`pulserver.ir.play` keys it.
+WAVEFORMS = (
+    "duration_us",
+    "rf_use",
+    "rf_delay_us",
+    "rf_channels",
+    "rf_center_us",
+    "rf_time_us",
+    "rf_waveform_hz",
+    "rf_span",
+    "adc_delay_us",
+    "adc_dwell_ns",
+    "adc_samples",
+    "adc_phase_modulation_rad",
+    "adc_modulation_span",
+    "gradient_time_us",
+    "gradient_waveform_hz_per_m",
+    "gradient_span",
+)
 
 
-def _read(blocks, block, axis):
-    start, stop = blocks["wave_read_span"][block, axis]
-    return blocks["wave_read"][start:stop]
+def test_every_block_plays_the_waveforms_the_cursor_plays(played):
+    seq, cursor = played
+    for budget in _budgets(seq).values():
+        blocks = ir.playout(seq, budget, waveforms=True)["blocks"]
+        for key in WAVEFORMS:
+            np.testing.assert_array_equal(blocks[key], cursor[key], err_msg=key)
+
+
+@pytest.mark.parametrize("name", WAVED)
+def test_without_a_budget_every_wave_is_held_on_the_files_gradient_raster(
+    name, tmp_path
+):
+    seq = _converted(name, tmp_path)
+    raster = ir.summary(seq, SYSTEM, cache_ext=".pseg")["subsequences"][0][
+        "grad_raster_us"
+    ]
+    record = ir.playout(seq)
+    plan = ir.plan_waves(seq, WaveBudget(LOTS, raster))
+    assert record["mode"] == "resident"
+    assert record["memory_samples"] == plan["resident_samples"]
+    assert record["unloaded"] == 0
+
+
+def test_the_summary_states_the_gradient_raster_of_each_file(tmp_path):
+    seq = _converted("zte_3d.seq", tmp_path)
+    (declared,) = {1e6 * s.grad_raster_time for _, s in pp.io.read_chain(seq)}
+    for summary in (
+        ir.summary(seq, SYSTEM),
+        ir.summary(seq, SYSTEM, cache_ext=".pseg"),
+    ):
+        (subsequence,) = summary["subsequences"]
+        assert subsequence["grad_raster_us"] == pytest.approx(declared)
 
 
 def _cursor_axis(cursor, block, axis):
@@ -103,41 +144,23 @@ def _cursor_axis(cursor, block, axis):
     )
 
 
-def _assert_plays_event(record, block, axis, cursor):
-    """The event its position prepared, at the amplitude the scan loop set."""
-    blocks = record["blocks"]
-    times, values = _cursor_axis(cursor, block, axis)
-    t, shape = _prepared_event(
-        record, blocks["segment"][block], blocks["position"][block], axis
-    )
-    np.testing.assert_array_equal(t, times)
-    np.testing.assert_allclose(
-        blocks["gradient_hz_per_m"][block, axis] * shape, values, rtol=1e-6
-    )
-
-
-def _assert_plays_wave(record, block, axis, cursor):
-    """The samples its wave read from memory, at the amplitude the scan loop set."""
-    blocks = record["blocks"]
-    times, values = _cursor_axis(cursor, block, axis)
-    samples = _read(blocks, block, axis)
-    centres = blocks["wave_start_us"][block] + RASTER_US * (
-        np.arange(samples.size) + 0.5
-    )
-    np.testing.assert_allclose(
-        blocks["wave_amp_hz_per_m"][block, axis] * samples,
-        np.interp(centres, times, values, left=0.0, right=0.0),
-        atol=1e-4 * max(np.abs(values).max(initial=0.0), 1.0),
-    )
-
-
-def test_a_block_plays_the_gradients_the_cursor_plays(played):
+def test_a_wave_reads_its_own_samples_from_memory(played):
     seq, cursor = played
     for record in _layouts(seq):
-        waved = record["blocks"]["wave"] >= 0
-        for block, axis in np.ndindex(waved.size, 3):
-            plays = _assert_plays_wave if waved[block] else _assert_plays_event
-            plays(record, block, axis, cursor)
+        blocks = record["blocks"]
+        for block in np.flatnonzero(blocks["wave"] >= 0):
+            for axis in range(3):
+                times, values = _cursor_axis(cursor, block, axis)
+                start, stop = blocks["wave_read_span"][block, axis]
+                samples = blocks["wave_read"][start:stop]
+                centres = blocks["wave_start_us"][block] + RASTER_US * (
+                    np.arange(samples.size) + 0.5
+                )
+                np.testing.assert_allclose(
+                    blocks["wave_amp_hz_per_m"][block, axis] * samples,
+                    np.interp(centres, times, values, left=0.0, right=0.0),
+                    atol=1e-4 * max(np.abs(values).max(initial=0.0), 1.0),
+                )
 
 
 def test_nothing_is_read_before_it_is_loaded_or_loaded_over_what_plays(played):
@@ -189,7 +212,7 @@ def test_the_prescan_plays_one_subsequence_to_the_instance_completing_its_readou
     tmp_path,
 ):
     seq = _converted("gre_2d_3sl.seq", tmp_path)
-    record = ir.playout(seq, WaveBudget(LOTS, RASTER_US), prescan=0, prescan_readouts=5)
+    record = ir.playout(seq, WaveBudget(LOTS, RASTER_US), prescan=Prescan(0, 5))
     blocks = record["blocks"]
     assert (blocks["subsequence"] == 0).all()
     readouts = np.cumsum(blocks["adc"])
@@ -203,7 +226,7 @@ def test_the_prescan_plays_one_subsequence_to_the_instance_completing_its_readou
 def test_the_prescan_plays_no_gradient_whose_amplitude_varies(tmp_path):
     seq = _converted("gre_2d_3sl.seq", tmp_path)
     budget = WaveBudget(LOTS, RASTER_US)
-    prescan = ir.playout(seq, budget, prescan=0, prescan_readouts=10**6)["blocks"]
+    prescan = ir.playout(seq, budget, prescan=Prescan(0, 10**6))["blocks"]
     scan = ir.playout(seq, budget)["blocks"]
     count = prescan["segment"].size
     varies = prescan["gradient_variable"] != 0
@@ -287,7 +310,7 @@ def test_each_instance_is_turned_as_its_own_blocks_are_labelled(tmp_path):
 
 def test_the_prescan_waits_for_no_trigger_and_pulses_no_output(tmp_path):
     path = _gated(tmp_path / "gated.seq")
-    blocks = ir.playout(path, WaveBudget(LOTS, RASTER_US), prescan=0)["blocks"]
+    blocks = ir.playout(path, WaveBudget(LOTS, RASTER_US), prescan=Prescan())["blocks"]
     assert blocks["adc"].sum() == 1
     assert not blocks["await_trigger"].any()
     assert not blocks["digitalout"].any()
@@ -306,4 +329,4 @@ def test_waves_that_cannot_be_loaded_in_time_are_refused_before_anything_plays(
 def test_a_prescan_of_a_subsequence_the_scan_lacks_is_refused(tmp_path):
     seq = _converted("gre_2d_3sl.seq", tmp_path)
     with pytest.raises(ValueError):
-        ir.playout(seq, WaveBudget(LOTS, RASTER_US), prescan=5)
+        ir.playout(seq, WaveBudget(LOTS, RASTER_US), prescan=Prescan(5))

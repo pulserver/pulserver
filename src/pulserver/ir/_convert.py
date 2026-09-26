@@ -152,7 +152,8 @@ def summary(
     three labels ``label_column_map`` selects, as in force at that readout.
     ``waves`` lists the subsequence's waves, as :func:`play` indexes
     them: each one's point count, and its largest magnitude along x, y and z
-    over that of the largest gradient event it combines.
+    over that of the largest gradient event it combines. ``grad_raster_us``
+    is the raster the file's gradient shapes are sampled on, in µs.
 
     With ``cache_ext``, the cache beside the file is loaded instead of the
     chain being read and segmented again; this build loads only vendor-neutral

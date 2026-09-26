@@ -579,12 +579,15 @@ typedef struct pulseg_subseq_info
     float vop_sar_ratio;
     /** The same ratio for the VOP file's global SAR matrix; 0 without one. */
     float vop_global_sar_ratio;
+    /** The raster the file's gradient shapes are sampled on, in us: its
+     *  GradientRasterTime, or the conversion's where it declares none. */
+    float grad_raster_us;
 } pulseg_subseq_info;
 
 /* clang-format off */
 #define PULSEG_SUBSEQ_INFO_INIT \
     { \
-    0.0f, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0.0f, 0.0f \
+    0.0f, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0.0f, 0.0f, 0.0f \
     }
 /* clang-format on */
 

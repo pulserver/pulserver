@@ -76,7 +76,7 @@ def export(
         it, as :func:`~pulserver.virtual.acquire` does, and ``target`` leaves
         it out.
     """
-    played = ir.play(seq_path, cache_ext, waveforms=True)
+    played = ir.playout(seq_path, waveforms=True, cache_ext=cache_ext)["blocks"]
     turn = np.eye(3) if rotation is None else np.asarray(rotation, dtype=float)
     span = played["gradient_span"]
     corners = played["gradient_time_us"].astype(float)
@@ -88,7 +88,7 @@ def export(
     receiver = []
     for block in range(played["duration_us"].size):
         duration_us = float(played["duration_us"][block])
-        turned = np.eye(3) if played["norot"][block] else turn
+        turned = turn if played["rotate"][block] else np.eye(3)
         waves = [
             (corners[slice(*span[block, axis])], values[slice(*span[block, axis])])
             for axis in range(3)

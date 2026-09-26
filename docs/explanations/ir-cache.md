@@ -311,15 +311,16 @@ loaded from a vendor-neutral cache.
 ## Playback
 
 {func}`~pulserver.ir.play` loads a cache with the C library and walks its
-execution stream with the cursor a playout uses, resolving each block as the
-scanner plays it: its duration, the RF and ADC frequency and phase offsets,
-the RF use, the ADC window, the gradient amplitudes and the wave,
-and, on request, the RF and gradient waveforms each instance plays. It stands
-in for the interpreter, so the cache can be compared with the file it was
-converted from without a scanner; the test suite holds every played block of
-each fixture to the block its file designs, every wave to the block's
-gradients turned by its rotation, and the trajectory the waveforms trace to
-the one the file designs ({doc}`virtual-scanner`).
+execution stream with the cursor, resolving each block by its own instance:
+its duration, the RF and ADC frequency and phase offsets, the RF use, the ADC
+window, the gradient amplitudes and the wave, and, on request, the RF and
+gradient waveforms each instance plays. With it the cache is compared with the
+file it was converted from, without a scanner: the test suite holds every
+played block of each fixture to the block its file designs, every wave to the
+block's gradients turned by its rotation, and the trajectory the waveforms
+trace to the one the file designs ({doc}`virtual-scanner`). It also holds the
+waveforms {func}`~pulserver.ir.playout` records through both stages of a
+playout to the cursor's, bit for bit.
 
 ## Language constraint
 

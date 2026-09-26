@@ -18,6 +18,7 @@
 #include <map>
 #include <memory>
 #include <new>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <tuple>
@@ -38,9 +39,12 @@ namespace
 {
 
 using native::as_array;
-using native::Channels;
+using native::played_modulation;
+using native::played_rf;
+using native::recorded_rf_centre_us;
 using native::require;
 using native::Waveform;
+using native::Waves;
 
 struct CollectionFree
 {
@@ -161,6 +165,7 @@ py::dict summarize(const pulseg_collection *coll)
         entry["rf_amplitude_variable"] = s.rf_amplitude_variable;
         entry["vop_sar_ratio"] = s.vop_sar_ratio;
         entry["vop_global_sar_ratio"] = s.vop_global_sar_ratio;
+        entry["grad_raster_us"] = s.grad_raster_us;
         entry["tr_groups"] = tr_groups(coll, i);
         entry["rf"] = rf_statistics(coll, i, s.num_unique_rf);
         entry["readout_labels"] = readout_labels(coll, i, s);
@@ -213,16 +218,6 @@ py::dict summarize(const pulseg_collection *coll)
     return result;
 }
 
-/* The RF centre the cache records, from the block's start, in us. */
-float recorded_rf_centre_us(
-    const pulseg_collection *coll, int seg, int blk, const pulseg_block_info &b)
-{
-    const float isocentre = pulseg_get_rf_isocenter_us(coll, seg, blk);
-    if (isocentre < 0.0f)
-        return std::numeric_limits<float>::quiet_NaN();
-    return isocentre - static_cast<float>(b.start_time_us);
-}
-
 /* Append one axis of the block at the cursor: its corners, timed from the
  * block's start, and the instance's amplitude times its normalised waveform.
  * The instance's shape is played in the waveform its segment position is
@@ -261,72 +256,6 @@ std::array<float, 3> played_amplitudes(const pulseg_block_instance &block)
     return {block.gx_amp_hz_per_m, block.gy_amp_hz_per_m, block.gz_amp_hz_per_m};
 }
 
-/* The waves of a cache, each materialised once: every axis of wave w
- * of subsequence s, normalised, timed from its block's start. */
-class Waves
-{
-  public:
-    explicit Waves(const pulseg_collection *coll) : coll_(coll) {}
-
-    /* Append one axis of wave @p wave played at @p amplitude.  The position
-     * the block plays at reserves @p reserved points for it. */
-    void append(
-        int subsequence,
-        int wave,
-        int axis,
-        float amplitude,
-        int reserved,
-        std::vector<float> &times,
-        std::vector<float> &values)
-    {
-        const Axes &axes = get(subsequence, wave);
-        const auto &t = axes[static_cast<size_t>(axis)].first;
-        const auto &a = axes[static_cast<size_t>(axis)].second;
-        if (static_cast<int>(t.size()) > reserved)
-            throw std::runtime_error(
-                "a block plays a wave of " + std::to_string(t.size()) +
-                " points at a segment position reserving " + std::to_string(reserved));
-        for (size_t i = 0; i < t.size(); ++i)
-        {
-            times.push_back(t[i]);
-            values.push_back(amplitude * a[i]);
-        }
-    }
-
-  private:
-    using Axis = std::pair<std::vector<float>, std::vector<float>>;
-    using Axes = std::array<Axis, 3>;
-
-    const Axes &get(int subsequence, int wave)
-    {
-        const auto key = std::make_pair(subsequence, wave);
-        auto found = cache_.find(key);
-        if (found != cache_.end())
-            return found->second;
-        Axes axes;
-        for (int axis = 0; axis < 3; ++axis)
-        {
-            int points = 0;
-            require(
-                pulseg_materialize_wave(
-                    coll_, subsequence, wave, axis, nullptr, nullptr, 0, &points, nullptr),
-                "wave");
-            Axis &out = axes[static_cast<size_t>(axis)];
-            out.first.resize(static_cast<size_t>(points));
-            out.second.resize(static_cast<size_t>(points));
-            require(
-                pulseg_materialize_wave(
-                    coll_, subsequence, wave, axis, out.first.data(), out.second.data(), points,
-                    &points, nullptr),
-                "wave");
-        }
-        return cache_.emplace(key, std::move(axes)).first->second;
-    }
-
-    const pulseg_collection *coll_;
-    std::map<std::pair<int, int>, Axes> cache_;
-};
-
 /* The gradient corners of every played block, in play order, with the start
  * and stop of each block's axes in them. */
 struct PlayedGradients
@@ -356,54 +285,6 @@ struct PlayedGradients
         }
     }
 };
-
-/* Append the RF pulse the block at the cursor plays: its samples, timed from
- * the block's start, and the instance's amplitude times the magnitude shape
- * and the phase shape of its definition, which the library returns in
- * cycles. The channels of a pTx pulse follow one another, each over the one
- * time base. */
-void played_rf(
-    const pulseg_collection *coll,
-    int segment,
-    int position,
-    float amplitude,
-    const pulseg_block_info &b,
-    std::vector<float> &times,
-    std::vector<std::complex<float>> &values)
-{
-    Channels magnitude, phase;
-    int samples = 0;
-    int phase_samples = 0;
-    magnitude.samples =
-        pulseg_get_rf_magnitude(coll, &magnitude.count, &samples, segment, position);
-    phase.samples =
-        pulseg_get_rf_phase(coll, &phase.count, &phase_samples, segment, position);
-    Waveform time;
-    time.samples = pulseg_get_rf_time_us(coll, segment, position);
-    if (!magnitude.samples || samples <= 0 || !time.samples)
-        throw std::runtime_error("cannot read the RF pulse a block plays");
-    const bool phased = phase.samples && phase.count == magnitude.count && phase_samples == samples;
-    const float delay = static_cast<float>(std::max(b.rf_delay_us, 0));
-    for (int c = 0; c < magnitude.count; ++c)
-        for (int i = 0; i < samples; ++i)
-        {
-            times.push_back(delay + time.samples[i]);
-            const float cycles = phased ? phase.samples[c][i] : 0.0f;
-            values.push_back(std::polar(
-                amplitude * magnitude.samples[c][i], static_cast<float>(2.0 * M_PI) * cycles));
-        }
-}
-
-/* Append the phase modulation of the ADC the block at the cursor plays, one
- * phase per sample in radians; nothing when it carries none. */
-void played_modulation(const pulseg_collection *coll, std::vector<float> &phases)
-{
-    Waveform phase;
-    const int samples = pulseg_get_cursor_adc_phase_modulation(coll, &phase.samples);
-    if (samples < 0)
-        throw std::runtime_error("cannot read the phase modulation a readout plays");
-    phases.insert(phases.end(), phase.samples, phase.samples + samples);
-}
 
 /* Every block the cursor plays, in play order, one entry per block in each
  * array; with waveforms, also the RF pulses and their timing, the gradients
@@ -579,6 +460,30 @@ py::dict plan_waves(const pulseg_collection *coll, const pulseg_wave_budget &bud
         ? py::object(py::none())
         : py::object(py::make_tuple(plan.tightest_subseq, plan.tightest_position));
     return out;
+}
+
+/* A playout's waveform memory, gradient raster, load rate and headroom, as
+ * pulserver.ir.WaveBudget holds them. */
+using Budget = std::tuple<long, float, float, float>;
+
+/* The budget @p given, or, without one, every wave held at once on the
+ * gradient raster of the chain's first file. */
+pulseg_wave_budget budget_for(const pulseg_collection *coll, const std::optional<Budget> &given)
+{
+    pulseg_wave_budget b = PULSEG_WAVE_BUDGET_INIT;
+    if (given)
+    {
+        b.max_samples = std::get<0>(*given);
+        b.raster_us = std::get<1>(*given);
+        b.load_us_per_sample = std::get<2>(*given);
+        b.headroom = std::get<3>(*given);
+        return b;
+    }
+    pulseg_subseq_info first = PULSEG_SUBSEQ_INFO_INIT;
+    require(pulseg_get_subseq_info(coll, &first, 0), "subsequence info");
+    b.max_samples = std::numeric_limits<long>::max();
+    b.raster_us = first.grad_raster_us;
+    return b;
 }
 
 /* A corner-point stream, released with it. */
@@ -772,18 +677,16 @@ PYBIND11_MODULE(_ext, module)
         "playout_from_cache",
         [](const std::string &cache_path,
            int source_size,
-           const std::tuple<long, float, float, float> &budget,
-           const std::array<int, 2> &prescan)
+           const std::optional<Budget> &budget,
+           const std::array<int, 2> &prescan,
+           bool waveforms)
         {
-            pulseg_wave_budget b = PULSEG_WAVE_BUDGET_INIT;
-            b.max_samples = std::get<0>(budget);
-            b.raster_us = std::get<1>(budget);
-            b.load_us_per_sample = std::get<2>(budget);
-            b.headroom = std::get<3>(budget);
+            const Collection coll = load(cache_path, source_size);
             pulseg_playout_options options = PULSEG_PLAYOUT_OPTIONS_INIT;
             options.prescan_subsequence = prescan[0];
             options.prescan_readouts = prescan[1];
-            return native::record_playout(load(cache_path, source_size).get(), b, options);
+            return native::record_playout(
+                coll.get(), budget_for(coll.get(), budget), options, waveforms);
         },
         "Play a written cache's two stages over a backend that records them.");
 
