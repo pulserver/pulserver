@@ -5,6 +5,7 @@
  *        segment position reserves for them.
  */
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <unordered_map>
@@ -45,22 +46,21 @@ struct WaveKeyHash
     }
 };
 
-/* The wave block-table entry @p bte plays, without its peaks and point count;
- * false when it drives no gradient. */
-bool wave_of_block(
+/* The definition, shape and amplitude of each axis block-table entry @p bte
+ * drives; false when it drives none. */
+bool axes_of_block(
     const pulseg_sequence_descriptor *desc,
     const pulseg_block_table_element *bte,
     pulseg_wave &wave,
-    WaveKey &key)
+    float amplitude[3])
 {
     const int ids[3] = {bte->gx_id, bte->gy_id, bte->gz_id};
-    float amplitude[3] = {0.0f, 0.0f, 0.0f};
     bool driven = false;
 
-    std::memset(&wave, 0, sizeof(wave));
     for (int d = 0; d < 3; ++d)
     {
         wave.grad_def[d] = -1;
+        amplitude[d] = 0.0f;
         if (ids[d] < 0 || ids[d] >= desc->grad_table_size)
             continue;
         const pulseg_grad_table_element &element = desc->grad_table[ids[d]];
@@ -71,21 +71,40 @@ bool wave_of_block(
         amplitude[d] = element.amplitude;
         driven = true;
     }
-    const float scale = pulseg__wave_scale(desc, bte);
-    if (!driven || scale == 0.0f)
-        return false;
+    return driven;
+}
 
-    wave.rotation_id = -1;
+/* The rotation of @p bte, the identity without one. */
+void rotation_of_block(
+    const pulseg_sequence_descriptor *desc,
+    const pulseg_block_table_element *bte,
+    pulseg_wave &wave)
+{
+    const bool rotated = bte->rotation_id >= 0 && bte->rotation_id < desc->num_rotations &&
+        desc->rotation_matrices;
+    wave.rotation_id = rotated ? bte->rotation_id : -1;
     for (int i = 0; i < 9; ++i)
-        wave.rotation[i] = (i % 4 == 0) ? 1.0f : 0.0f;
-    if (bte->rotation_id >= 0 && bte->rotation_id < desc->num_rotations &&
-        desc->rotation_matrices)
-    {
-        wave.rotation_id = bte->rotation_id;
-        for (int i = 0; i < 9; ++i)
-            wave.rotation[i] = desc->rotation_matrices[bte->rotation_id][i];
-    }
+        wave.rotation[i] = rotated ? desc->rotation_matrices[bte->rotation_id][i]
+                                   : (i % 4 == 0 ? 1.0f : 0.0f);
+}
 
+/* The wave block-table entry @p bte plays, without its peaks and point count;
+ * false when it drives no gradient. */
+bool wave_of_block(
+    const pulseg_sequence_descriptor *desc,
+    const pulseg_block_table_element *bte,
+    pulseg_wave &wave,
+    WaveKey &key)
+{
+    float amplitude[3];
+
+    wave = pulseg_wave{};
+    if (!axes_of_block(desc, bte, wave, amplitude))
+        return false;
+    const float scale = pulseg__wave_scale(desc, bte);
+    if (scale == 0.0f)
+        return false;
+    rotation_of_block(desc, bte, wave);
     for (int d = 0; d < 3; ++d)
     {
         wave.ratio[d] = amplitude[d] / scale;
@@ -116,13 +135,15 @@ int measure_wave(const pulseg_sequence_descriptor *desc, pulseg_wave &wave)
     return PULSEG_SUCCESS;
 }
 
-} // namespace
+/* Widen a position's record of the waves it plays by @p wave. */
+void reserve(pulseg_block_initial_state &state, const pulseg_wave &wave)
+{
+    if (wave.num_points > state.wave_points)
+        state.wave_points = wave.num_points;
+}
 
-/* Record, for a subsequence whose segments and execution stream are built,
- * the rotated wave of every block at a position whose blocks carry a
- * rotation, and at each such position the longest wave it plays.  Blocks at
- * other positions play their own shapes and get none. */
-extern "C" int pulseg__build_waves(pulseg_sequence_descriptor *desc)
+/* Clear what an earlier build left, and give every block no wave. */
+int reset_waves(pulseg_sequence_descriptor *desc)
 {
     if (desc->waves)
         PULSEG_FREE(desc->waves);
@@ -137,8 +158,7 @@ extern "C" int pulseg__build_waves(pulseg_sequence_descriptor *desc)
     desc->block_wave = static_cast<int *>(PULSEG_ALLOC((size_t)desc->num_blocks * sizeof(int)));
     if (!desc->block_wave)
         return PULSEG_ERR_ALLOC_FAILED;
-    for (int i = 0; i < desc->num_blocks; ++i)
-        desc->block_wave[i] = -1;
+    std::fill(desc->block_wave, desc->block_wave + desc->num_blocks, -1);
     for (int s = 0; s < desc->num_unique_segments; ++s)
     {
         pulseg_virtual_segment &seg = desc->segment_definitions[s];
@@ -146,66 +166,126 @@ extern "C" int pulseg__build_waves(pulseg_sequence_descriptor *desc)
             for (int b = 0; b < seg.num_blocks; ++b)
                 seg.initial_states[b].wave_points = 0;
     }
+    return PULSEG_SUCCESS;
+}
 
-    std::unordered_map<WaveKey, int, WaveKeyHash> index;
-    std::vector<pulseg_wave> waves;
-    int previous = -1;
-    int position = 0;
-    for (int n = 0; n < desc->exec_stream_len; ++n)
+/* The distinct waves of a subsequence, in the order its blocks first play
+ * them. */
+class WaveTable
+{
+  public:
+    explicit WaveTable(const pulseg_sequence_descriptor *desc) : desc_(desc) {}
+
+    /* The index of the wave block-table entry @p block plays, -1 when it
+     * drives no gradient; @p rc says whether measuring a new one failed. */
+    int intern(int block, int &rc)
     {
-        const int s = pulseg__exec_seg_id(desc, n);
+        pulseg_wave wave;
+        WaveKey key;
+        if (!wave_of_block(desc_, &desc_->block_table[block], wave, key))
+            return -1;
+        const auto found = index_.find(key);
+        if (found != index_.end())
+            return found->second;
+        if (!desc_->structure_only)
+        {
+            rc = measure_wave(desc_, wave);
+            if (PULSEG_FAILED(rc))
+                return -1;
+        }
+        const int added = static_cast<int>(waves_.size());
+        index_.emplace(key, added);
+        waves_.push_back(wave);
+        return added;
+    }
+
+    const pulseg_wave &operator[](int w) const { return waves_[static_cast<size_t>(w)]; }
+
+    /* Hand the waves to @p desc. */
+    int store(pulseg_sequence_descriptor *desc) const
+    {
+        if (waves_.empty())
+            return PULSEG_SUCCESS;
+        desc->waves =
+            static_cast<pulseg_wave *>(PULSEG_ALLOC(waves_.size() * sizeof(pulseg_wave)));
+        if (!desc->waves)
+            return PULSEG_ERR_ALLOC_FAILED;
+        std::copy(waves_.begin(), waves_.end(), desc->waves);
+        desc->num_waves = static_cast<int>(waves_.size());
+        return PULSEG_SUCCESS;
+    }
+
+  private:
+    const pulseg_sequence_descriptor *desc_;
+    std::unordered_map<WaveKey, int, WaveKeyHash> index_;
+    std::vector<pulseg_wave> waves_;
+};
+
+/* The position each execution-stream entry plays at in its segment
+ * instance, entry by entry. */
+class PositionWalk
+{
+  public:
+    /* The block-table entry @p n plays where the blocks of its position carry
+     * a rotation, with @p state that position's record, null when the segment
+     * keeps none; -1 elsewhere. */
+    int rotated_block(pulseg_sequence_descriptor *desc, int n, pulseg_block_initial_state *&state)
+    {
+        const int block = pulseg__exec_block_idx(desc, n);
+        const bool rotated = advance(desc, pulseg__exec_seg_id(desc, n), state);
+        return (rotated && block >= 0 && block < desc->num_blocks) ? block : -1;
+    }
+
+  private:
+    bool advance(pulseg_sequence_descriptor *desc, int s, pulseg_block_initial_state *&state)
+    {
+        state = nullptr;
         if (s < 0 || s >= desc->num_unique_segments)
         {
-            previous = -1;
-            continue;
+            previous_ = -1;
+            return false;
         }
         pulseg_virtual_segment &seg = desc->segment_definitions[s];
         const int blocks = seg.num_blocks > 0 ? seg.num_blocks : 1;
-        position = (s == previous) ? (position + 1) % blocks : 0;
-        previous = s;
-        if (!seg.has_rotation || !seg.has_rotation[position])
-            continue;
+        position_ = (s == previous_) ? (position_ + 1) % blocks : 0;
+        previous_ = s;
+        if (!seg.has_rotation || !seg.has_rotation[position_])
+            return false;
+        if (seg.initial_states)
+            state = &seg.initial_states[position_];
+        return true;
+    }
 
-        const int block = pulseg__exec_block_idx(desc, n);
-        if (block < 0 || block >= desc->num_blocks)
+    int previous_ = -1;
+    int position_ = 0;
+};
+
+} // namespace
+
+/* Record, for a subsequence whose segments and execution stream are built,
+ * the rotated wave of every block at a position whose blocks carry a
+ * rotation, and at each such position the longest wave it plays.  Blocks at
+ * other positions play their own shapes and get none. */
+extern "C" int pulseg__build_waves(pulseg_sequence_descriptor *desc)
+{
+    int rc = reset_waves(desc);
+    if (PULSEG_FAILED(rc) || desc->num_blocks <= 0)
+        return rc;
+
+    WaveTable waves(desc);
+    PositionWalk walk;
+    for (int n = 0; n < desc->exec_stream_len; ++n)
+    {
+        pulseg_block_initial_state *state = nullptr;
+        const int block = walk.rotated_block(desc, n, state);
+        if (block < 0)
             continue;
         if (desc->block_wave[block] < 0)
-        {
-            pulseg_wave wave;
-            WaveKey key;
-            if (!wave_of_block(desc, &desc->block_table[block], wave, key))
-                continue;
-            auto found = index.find(key);
-            if (found == index.end())
-            {
-                if (!desc->structure_only)
-                {
-                    const int rc = measure_wave(desc, wave);
-                    if (PULSEG_FAILED(rc))
-                        return rc;
-                }
-                found = index.emplace(key, static_cast<int>(waves.size())).first;
-                waves.push_back(wave);
-            }
-            desc->block_wave[block] = found->second;
-        }
-        if (seg.initial_states)
-        {
-            int &reserved = seg.initial_states[position].wave_points;
-            const int points = waves[static_cast<size_t>(desc->block_wave[block])].num_points;
-            if (points > reserved)
-                reserved = points;
-        }
+            desc->block_wave[block] = waves.intern(block, rc);
+        if (PULSEG_FAILED(rc))
+            return rc;
+        if (state && desc->block_wave[block] >= 0)
+            reserve(*state, waves[desc->block_wave[block]]);
     }
-
-    if (!waves.empty())
-    {
-        desc->waves =
-            static_cast<pulseg_wave *>(PULSEG_ALLOC(waves.size() * sizeof(pulseg_wave)));
-        if (!desc->waves)
-            return PULSEG_ERR_ALLOC_FAILED;
-        std::memcpy(desc->waves, waves.data(), waves.size() * sizeof(pulseg_wave));
-        desc->num_waves = static_cast<int>(waves.size());
-    }
-    return PULSEG_SUCCESS;
+    return waves.store(desc);
 }

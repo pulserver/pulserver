@@ -33,6 +33,90 @@ static void axis_corners_free(axis_corners *c)
     c->n = 0;
 }
 
+static int axis_corners_alloc(axis_corners *c, int n)
+{
+    c->t = (float *)PULSEG_ALLOC((size_t)n * sizeof(float));
+    c->v = (float *)PULSEG_ALLOC((size_t)n * sizeof(float));
+    if (c->t && c->v)
+    {
+        c->n = n;
+        return 1;
+    }
+    axis_corners_free(c);
+    return 0;
+}
+
+static int trapezoid_corners(const pulseg_grad_definition *gd, axis_corners *out)
+{
+    const float delay = (float)gd->delay;
+    const int k = (gd->flat_time_or_unused > 0) ? 4 : 3;
+
+    if (!axis_corners_alloc(out, k))
+        return 0;
+    out->t[0] = delay;
+    out->v[0] = 0.0f;
+    out->t[1] = delay + (float)gd->rise_time_or_unused;
+    out->v[1] = 1.0f;
+    if (k == 4)
+    {
+        out->t[2] = out->t[1] + (float)gd->flat_time_or_unused;
+        out->v[2] = 1.0f;
+    }
+    out->t[k - 1] = out->t[k - 2] + (float)gd->fall_time_or_num_uncompressed_samples;
+    out->v[k - 1] = 0.0f;
+    return 1;
+}
+
+/* On a time shape of as many samples the first and last samples are the
+ * event's edges.  On the raster the samples sit at interval centres, and the
+ * event holds its end samples over the half intervals at its edges, which
+ * keeps the area the samples give. */
+static int arbitrary_corners(
+    const pulseg_grad_definition *gd,
+    const pulseq_shape *samples,
+    const pulseq_shape *times,
+    float raster,
+    axis_corners *out)
+{
+    const float delay = (float)gd->delay;
+    const int ns = samples->num_samples;
+    const int has_time = times->num_samples == ns;
+    int i, k;
+
+    if (!axis_corners_alloc(out, has_time ? ns : ns + 2))
+        return 0;
+    k = 0;
+    if (!has_time)
+    {
+        out->t[k] = delay;
+        out->v[k++] = samples->samples[0];
+    }
+    for (i = 0; i < ns; ++i)
+    {
+        out->t[k] = delay + (has_time ? times->samples[i] : ((float)i + 0.5f) * raster);
+        out->v[k++] = samples->samples[i];
+    }
+    if (!has_time)
+    {
+        out->t[k] = delay + (float)ns * raster;
+        out->v[k] = samples->samples[ns - 1];
+    }
+    return 1;
+}
+
+/* Shape @p id (1-based) decompressed at @p scale; 1 on success, an absent
+ * shape leaving @p out empty. */
+static int decompressed(
+    const pulseg_sequence_descriptor *desc,
+    int id,
+    float scale,
+    pulseq_shape *out)
+{
+    if (id < 1 || id > desc->num_shapes)
+        return 1;
+    return pulseq_decompress_shape(out, &desc->shapes[id - 1], scale);
+}
+
 /* 1 on success (an undriven axis has no corners), 0 when out of memory. */
 static int axis_corners_build(
     const pulseg_sequence_descriptor *desc,
@@ -43,8 +127,7 @@ static int axis_corners_build(
     const pulseg_grad_definition *gd;
     pulseq_shape samples;
     pulseq_shape times;
-    float delay, raster;
-    int i, k, ns, has_time;
+    int ok;
 
     out->t = NULL;
     out->v = NULL;
@@ -52,110 +135,25 @@ static int axis_corners_build(
     if (grad_def_id < 0 || grad_def_id >= desc->num_unique_grads)
         return 1;
     gd = &desc->grad_definitions[grad_def_id];
-    delay = (float)gd->delay;
-
     if (gd->type == 0)
-    {
-        k = (gd->flat_time_or_unused > 0) ? 4 : 3;
-        out->t = (float *)PULSEG_ALLOC((size_t)k * sizeof(float));
-        out->v = (float *)PULSEG_ALLOC((size_t)k * sizeof(float));
-        if (!out->t || !out->v)
-        {
-            axis_corners_free(out);
-            return 0;
-        }
-        out->t[0] = delay;
-        out->v[0] = 0.0f;
-        out->t[1] = delay + (float)gd->rise_time_or_unused;
-        out->v[1] = 1.0f;
-        if (k == 4)
-        {
-            out->t[2] = out->t[1] + (float)gd->flat_time_or_unused;
-            out->v[2] = 1.0f;
-        }
-        out->t[k - 1] = out->t[k - 2] + (float)gd->fall_time_or_num_uncompressed_samples;
-        out->v[k - 1] = 0.0f;
-        out->n = k;
-        return 1;
-    }
+        return trapezoid_corners(gd, out);
 
-    if (shape_id < 1 || shape_id > desc->num_shapes)
-        return 1;
-    samples.samples = NULL;
-    samples.num_samples = 0;
-    samples.num_uncompressed_samples = 0;
-    if (!pulseq_decompress_shape(&samples, &desc->shapes[shape_id - 1], 1.0f))
-        return 0;
-    ns = samples.num_samples;
-    if (ns <= 0)
-    {
-        if (samples.samples)
-            PULSEG_FREE(samples.samples);
-        return 1;
-    }
-
-    raster = desc->grad_raster_us;
-    times.samples = NULL;
-    times.num_samples = 0;
-    times.num_uncompressed_samples = 0;
-    has_time = 0;
-    if (gd->unused_or_time_shape_id > 0 && gd->unused_or_time_shape_id <= desc->num_shapes)
-    {
-        if (!pulseq_decompress_shape(&times, &desc->shapes[gd->unused_or_time_shape_id - 1], raster))
-        {
-            PULSEG_FREE(samples.samples);
-            if (times.samples)
-                PULSEG_FREE(times.samples);
-            return 0;
-        }
-        has_time = times.num_samples == ns;
-    }
-
-    out->t = (float *)PULSEG_ALLOC((size_t)(ns + 2) * sizeof(float));
-    out->v = (float *)PULSEG_ALLOC((size_t)(ns + 2) * sizeof(float));
-    if (!out->t || !out->v)
-    {
-        axis_corners_free(out);
+    memset(&samples, 0, sizeof(samples));
+    memset(&times, 0, sizeof(times));
+    ok = decompressed(desc, shape_id, 1.0f, &samples) &&
+        decompressed(desc, gd->unused_or_time_shape_id, desc->grad_raster_us, &times);
+    if (ok && samples.num_samples > 0)
+        ok = arbitrary_corners(gd, &samples, &times, desc->grad_raster_us, out);
+    if (samples.samples)
         PULSEG_FREE(samples.samples);
-        if (times.samples)
-            PULSEG_FREE(times.samples);
-        return 0;
-    }
-
-    /* On a time shape the first and last samples are the event's edges.  On
-     * the raster the samples sit at interval centres, and the event holds
-     * its end samples over the half intervals at its edges, which keeps the
-     * area the samples give. */
-    k = 0;
-    if (!has_time)
-    {
-        out->t[k] = delay;
-        out->v[k] = samples.samples[0];
-        k++;
-    }
-    for (i = 0; i < ns; ++i)
-    {
-        out->t[k] = delay + (has_time ? times.samples[i] : ((float)i + 0.5f) * raster);
-        out->v[k] = samples.samples[i];
-        k++;
-    }
-    if (!has_time)
-    {
-        out->t[k] = delay + (float)ns * raster;
-        out->v[k] = samples.samples[ns - 1];
-        k++;
-    }
-    out->n = k;
-
-    PULSEG_FREE(samples.samples);
     if (times.samples)
         PULSEG_FREE(times.samples);
-    return 1;
+    return ok;
 }
 
 static float axis_value_at(const axis_corners *c, float x)
 {
-    int lo, hi, mid;
+    int lo, hi;
     float span;
 
     if (c->n < 2 || x < c->t[0] || x > c->t[c->n - 1])
@@ -164,7 +162,7 @@ static float axis_value_at(const axis_corners *c, float x)
     hi = c->n - 1;
     while (hi - lo > 1)
     {
-        mid = (lo + hi) / 2;
+        const int mid = (lo + hi) / 2;
         if (c->t[mid] <= x)
             lo = mid;
         else
@@ -201,6 +199,185 @@ static int float_cmp(const void *a, const void *b)
     return (fa < fb) ? -1 : ((fa > fb) ? 1 : 0);
 }
 
+/* The points a wave is materialised at, over the three axes it combines. */
+typedef struct wave_grid
+{
+    axis_corners axis[3];
+    float *t;
+    int n;
+    int centred; /* raster centres between two held edges */
+} wave_grid;
+
+static void wave_grid_free(wave_grid *g)
+{
+    int d;
+
+    for (d = 0; d < 3; ++d)
+        axis_corners_free(&g->axis[d]);
+    if (g->t)
+        PULSEG_FREE(g->t);
+    g->t = NULL;
+    g->n = 0;
+}
+
+/* 1 and the earliest start and latest end of the driven axes; 0 when none is. */
+static int axes_span(const axis_corners axis[3], float *lo, float *hi)
+{
+    int d, have = 0;
+
+    for (d = 0; d < 3; ++d)
+    {
+        if (axis[d].n < 1)
+            continue;
+        if (!have || axis[d].t[0] < *lo)
+            *lo = axis[d].t[0];
+        if (!have || axis[d].t[axis[d].n - 1] > *hi)
+            *hi = axis[d].t[axis[d].n - 1];
+        have = 1;
+    }
+    return have;
+}
+
+/* The centres of the raster from the earliest start, rounded down onto it,
+ * to the latest end, and the two edges the wave holds its end values to. */
+static int centre_grid(wave_grid *g, float raster)
+{
+    float lo = 0.0f;
+    float hi = 0.0f;
+    int i, m;
+
+    if (!axes_span(g->axis, &lo, &hi) || hi <= lo || raster <= 0.0f)
+        return PULSEG_SUCCESS;
+    lo = (float)floor((double)(lo / raster) + 1e-6) * raster;
+    m = (int)ceil((double)((hi - lo) / raster) - 1e-6);
+    if (m < 1)
+        m = 1;
+    g->t = (float *)PULSEG_ALLOC((size_t)(m + 2) * sizeof(float));
+    if (!g->t)
+        return PULSEG_ERR_ALLOC_FAILED;
+    g->t[0] = lo;
+    for (i = 0; i < m; ++i)
+        g->t[i + 1] = lo + ((float)i + 0.5f) * raster;
+    g->t[m + 1] = lo + (float)m * raster;
+    g->n = m + 2;
+    return PULSEG_SUCCESS;
+}
+
+/* Each axis is linear between its corners, so the union of the corner times
+ * carries the combination exactly. */
+static int corner_grid(wave_grid *g)
+{
+    const int total = g->axis[0].n + g->axis[1].n + g->axis[2].n;
+    int d, i, k;
+
+    if (total == 0)
+        return PULSEG_SUCCESS;
+    g->t = (float *)PULSEG_ALLOC((size_t)total * sizeof(float));
+    if (!g->t)
+        return PULSEG_ERR_ALLOC_FAILED;
+    k = 0;
+    for (d = 0; d < 3; ++d)
+        for (i = 0; i < g->axis[d].n; ++i)
+            g->t[k++] = g->axis[d].t[i];
+    qsort(g->t, (size_t)total, sizeof(float), float_cmp);
+    k = 0;
+    for (i = 0; i < total; ++i)
+        if (k == 0 || g->t[i] > g->t[k - 1])
+            g->t[k++] = g->t[i];
+    g->n = k;
+    return PULSEG_SUCCESS;
+}
+
+static int wave_grid_build(
+    const pulseg_sequence_descriptor *desc,
+    const pulseg_wave *wave,
+    wave_grid *g)
+{
+    int d, rc;
+
+    memset(g, 0, sizeof(*g));
+    rc = PULSEG_SUCCESS;
+    for (d = 0; d < 3 && PULSEG_SUCCEEDED(rc); ++d)
+        if (!axis_corners_build(desc, wave->grad_def[d], wave->shape_id[d], &g->axis[d]))
+            rc = PULSEG_ERR_ALLOC_FAILED;
+    if (PULSEG_SUCCEEDED(rc))
+    {
+        g->centred = wave_on_raster_centres(desc, wave);
+        rc = g->centred ? centre_grid(g, desc->grad_raster_us) : corner_grid(g);
+    }
+    if (PULSEG_FAILED(rc))
+        wave_grid_free(g);
+    return rc;
+}
+
+/* The combination on output axis @p out_axis at point @p i; on raster
+ * centres the edges hold the first and last centres. */
+static float wave_grid_value(const pulseg_wave *wave, const wave_grid *g, int out_axis, int i)
+{
+    float x = g->t[i];
+    float v = 0.0f;
+    int d;
+
+    if (g->centred && i == 0)
+        x = g->t[1];
+    else if (g->centred && i == g->n - 1)
+        x = g->t[g->n - 2];
+    for (d = 0; d < 3; ++d)
+        v += wave->rotation[out_axis * 3 + d] * wave->ratio[d] * axis_value_at(&g->axis[d], x);
+    return v;
+}
+
+/* The combination at every point of @p g, written to the arrays when they
+ * are given, for as many points as they hold; the largest magnitude. */
+static float wave_grid_fill(
+    const pulseg_wave *wave,
+    const wave_grid *g,
+    int out_axis,
+    float *out_time_us,
+    float *out_amp,
+    int max_points)
+{
+    float peak = 0.0f;
+    int i;
+
+    for (i = 0; i < g->n; ++i)
+    {
+        const float v = wave_grid_value(wave, g, out_axis, i);
+        if ((float)fabs((double)v) > peak)
+            peak = (float)fabs((double)v);
+        if (out_time_us && out_amp && i < max_points)
+        {
+            out_time_us[i] = g->t[i];
+            out_amp[i] = v;
+        }
+    }
+    return peak;
+}
+
+static int normalised(float *amp, int n, float peak)
+{
+    if (peak > 0.0f)
+    {
+        int i;
+        for (i = 0; i < n; ++i)
+            amp[i] /= peak;
+    }
+    return PULSEG_SUCCESS;
+}
+
+static int materialize_arguments(
+    const pulseg_sequence_descriptor *desc,
+    const pulseg_wave *wave,
+    int out_axis,
+    const int *out_num_points)
+{
+    if (!desc || !wave || !out_num_points)
+        return PULSEG_ERR_NULL_POINTER;
+    if (out_axis < PULSEG_GRAD_AXIS_X || out_axis > PULSEG_GRAD_AXIS_Z)
+        return PULSEG_ERR_INVALID_ARGUMENT;
+    return PULSEG_SUCCESS;
+}
+
 int pulseg__wave_materialize(
     const pulseg_sequence_descriptor *desc,
     const pulseg_wave *wave,
@@ -211,139 +388,24 @@ int pulseg__wave_materialize(
     int *out_num_points,
     float *out_peak)
 {
-    axis_corners axis[3];
-    float *grid = NULL;
-    float peak, v, x, lo, hi, raster;
-    int total, n, i, d, have, rc;
-    int centred = 0;
+    wave_grid g;
+    float peak;
+    int rc;
 
-    if (!desc || !wave || !out_num_points)
-        return PULSEG_ERR_NULL_POINTER;
-    if (out_axis < PULSEG_GRAD_AXIS_X || out_axis > PULSEG_GRAD_AXIS_Z)
-        return PULSEG_ERR_INVALID_ARGUMENT;
-    *out_num_points = 0;
-    if (out_peak)
-        *out_peak = 0.0f;
+    rc = materialize_arguments(desc, wave, out_axis, out_num_points);
+    if (PULSEG_FAILED(rc))
+        return rc;
+    rc = wave_grid_build(desc, wave, &g);
+    if (PULSEG_FAILED(rc))
+        return rc;
 
-    for (d = 0; d < 3; ++d)
-    {
-        axis[d].t = NULL;
-        axis[d].v = NULL;
-        axis[d].n = 0;
-    }
-    rc = PULSEG_SUCCESS;
-    total = 0;
-    for (d = 0; d < 3; ++d)
-    {
-        if (!axis_corners_build(desc, wave->grad_def[d], wave->shape_id[d], &axis[d]))
-        {
-            rc = PULSEG_ERR_ALLOC_FAILED;
-            goto done;
-        }
-        total += axis[d].n;
-    }
-    if (total == 0)
-        goto done;
-
-    if (wave_on_raster_centres(desc, wave))
-    {
-        /* Centres of the raster from the earliest start, rounded down onto
-         * it, to the latest end. */
-        raster = desc->grad_raster_us;
-        lo = 0.0f;
-        hi = 0.0f;
-        have = 0;
-        for (d = 0; d < 3; ++d)
-        {
-            if (axis[d].n < 1)
-                continue;
-            if (!have || axis[d].t[0] < lo)
-                lo = axis[d].t[0];
-            if (!have || axis[d].t[axis[d].n - 1] > hi)
-                hi = axis[d].t[axis[d].n - 1];
-            have = 1;
-        }
-        if (!have || hi <= lo || raster <= 0.0f)
-            goto done;
-        lo = (float)floor((double)(lo / raster) + 1e-6) * raster;
-        n = (int)ceil((double)((hi - lo) / raster) - 1e-6);
-        if (n < 1)
-            n = 1;
-        /* The centres, and the two edges the wave holds its end values to. */
-        grid = (float *)PULSEG_ALLOC((size_t)(n + 2) * sizeof(float));
-        if (!grid)
-        {
-            rc = PULSEG_ERR_ALLOC_FAILED;
-            goto done;
-        }
-        grid[0] = lo;
-        for (i = 0; i < n; ++i)
-            grid[i + 1] = lo + ((float)i + 0.5f) * raster;
-        grid[n + 1] = lo + (float)n * raster;
-        n += 2;
-        centred = 1;
-    }
-    else
-    {
-        /* Each axis is linear between its corners, so the union of the
-         * corner times carries the combination exactly. */
-        grid = (float *)PULSEG_ALLOC((size_t)total * sizeof(float));
-        if (!grid)
-        {
-            rc = PULSEG_ERR_ALLOC_FAILED;
-            goto done;
-        }
-        n = 0;
-        for (d = 0; d < 3; ++d)
-            for (i = 0; i < axis[d].n; ++i)
-                grid[n++] = axis[d].t[i];
-        qsort(grid, (size_t)n, sizeof(float), float_cmp);
-        total = 0;
-        for (i = 0; i < n; ++i)
-            if (i == 0 || grid[i] > grid[total - 1])
-                grid[total++] = grid[i];
-        n = total;
-    }
-
-    *out_num_points = n;
-    peak = 0.0f;
-    for (i = 0; i < n; ++i)
-    {
-        /* On raster centres the edges hold the first and last centres. */
-        x = grid[i];
-        if (centred && i == 0)
-            x = grid[1];
-        else if (centred && i == n - 1)
-            x = grid[n - 2];
-        v = 0.0f;
-        for (d = 0; d < 3; ++d)
-            v += wave->rotation[out_axis * 3 + d] * wave->ratio[d] * axis_value_at(&axis[d], x);
-        if ((float)fabs((double)v) > peak)
-            peak = (float)fabs((double)v);
-        if (out_time_us && out_amp && i < max_points)
-        {
-            out_time_us[i] = grid[i];
-            out_amp[i] = v;
-        }
-    }
+    peak = wave_grid_fill(wave, &g, out_axis, out_time_us, out_amp, max_points);
+    *out_num_points = g.n;
     if (out_peak)
         *out_peak = peak;
-    if (!out_time_us || !out_amp)
-        goto done;
-    if (max_points < n)
-    {
-        rc = PULSEG_ERR_INDEX;
-        goto done;
-    }
-    if (peak > 0.0f)
-        for (i = 0; i < n; ++i)
-            out_amp[i] /= peak;
-
-done:
-    if (grid)
-        PULSEG_FREE(grid);
-    for (d = 0; d < 3; ++d)
-        axis_corners_free(&axis[d]);
+    if (out_time_us && out_amp)
+        rc = (max_points < g.n) ? PULSEG_ERR_INDEX : normalised(out_amp, g.n, peak);
+    wave_grid_free(&g);
     return rc;
 }
 
