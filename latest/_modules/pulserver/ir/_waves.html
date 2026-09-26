@@ -450,7 +450,7 @@
                 <article class="bd-article">
                   
   <h1>Source code for pulserver.ir._waves</h1><div class="highlight"><pre>
-<span></span><span class="sd">"""Where a playout holds a cache's rotated waves, and what it loads into them."""</span>
+<span></span><span class="sd">"""What a playout plays from a cache's gradients: its rotated waves and its heaviest repetition."""</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
@@ -608,6 +608,53 @@
             <span class="p">)</span>
             <span class="k">for</span> <span class="n">axis</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span>
         <span class="p">]</span>
+    <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="repetition_gradients">
+<a class="viewcode-back" href="../../../generated/pulserver.ir.repetition_gradients.html#pulserver.ir.repetition_gradients">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">repetition_gradients</span><span class="p">(</span>
+    <span class="n">seq_path</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">subsequence</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">raster_us</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">cache_ext</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">".pseg"</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Return the gradients of a subsequence's repetition of most gradient energy.</span>
+
+<span class="sd">    The C library's choice (``pulseg_get_tr_corner_points``): of the</span>
+<span class="sd">    repetitions the cache's execution stream holds, from its first block,</span>
+<span class="sd">    the one over which the squared gradient summed over the axes integrates</span>
+<span class="sd">    to the most, the earliest on a tie; the whole subsequence where it does</span>
+<span class="sd">    not repeat. The repetition is one the scanner plays, with its blocks'</span>
+<span class="sd">    own amplitudes, shapes and rotations. A scanner evaluates its</span>
+<span class="sd">    gradient-heating and acoustic models on it.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    dict of str to Any</span>
+<span class="sd">        - ``first_position``: execution-stream position of its first block;</span>
+<span class="sd">        - ``duration_us``: its duration, in µs;</span>
+<span class="sd">        - ``energy``: that integral, in (Hz/m)² s;</span>
+<span class="sd">        - ``time_us``, ``gradient_hz_per_m``: ``(points,)`` and</span>
+<span class="sd">          ``(points, 3)``, its corner points from its start, along the logical</span>
+<span class="sd">          axes, linear in between; from zero at 0 where no gradient plays</span>
+<span class="sd">          there, to zero at its end where none plays up to it;</span>
+<span class="sd">        - with ``raster_us``, ``samples_hz_per_m``: ``(3, samples)``, the</span>
+<span class="sd">          gradient at the centres of the raster intervals that cover it.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If the cache cannot be loaded or holds no such subsequence.</span>
+<span class="sd">    """</span>
+    <span class="n">seq_path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">seq_path</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">require</span><span class="p">(</span><span class="s2">"repetition_gradients_from_cache"</span><span class="p">)(</span>
+        <span class="nb">str</span><span class="p">(</span><span class="n">cache_path</span><span class="p">(</span><span class="n">seq_path</span><span class="p">,</span> <span class="n">cache_ext</span><span class="p">)),</span>
+        <span class="n">seq_path</span><span class="o">.</span><span class="n">stat</span><span class="p">()</span><span class="o">.</span><span class="n">st_size</span><span class="p">,</span>
+        <span class="n">subsequence</span><span class="p">,</span>
+        <span class="mf">0.0</span> <span class="k">if</span> <span class="n">raster_us</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">raster_us</span><span class="p">,</span>
     <span class="p">)</span></div>
 
 </pre></div>

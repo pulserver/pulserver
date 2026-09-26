@@ -52,6 +52,7 @@ from.
    plan_waves
    WaveBudget
    sample_wave
+   repetition_gradients
    chain
    cache_path
 

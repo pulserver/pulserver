@@ -28,5 +28,6 @@ passes and the cache layout are described in {doc}`../explanations/ir-cache`.
 | {obj}`~pulserver.ir.plan_waves` | Where a playout holds a cache's rotated waves in its waveform memory, all at once or two slots per position, and whether it loads them in time. |
 | {obj}`~pulserver.ir.WaveBudget` | The waveform memory, gradient raster and load rate a playout affords the rotated waves. |
 | {obj}`~pulserver.ir.sample_wave` | A cache's rotated wave on a playout's gradient raster, as loaded into a region of its waveform memory. |
+| {obj}`~pulserver.ir.repetition_gradients` | The gradients of a subsequence's repetition of most gradient energy, as corner points and on a raster: what a scanner's heating and acoustic models are evaluated on. |
 | {obj}`~pulserver.ir.chain` | Files of the `NextSequence` chain starting at a sequence file, in play order. |
 | {obj}`~pulserver.ir.cache_path` | Cache file of a sequence file. |
