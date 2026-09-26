@@ -27,6 +27,7 @@
 #include "pulseg_io.h"
 #include "pulseg_collection.h"
 #include "pulseg_cache.h"
+#include "pulseg_playout.h"
 
 #include "pulseg_protocol.h"
 

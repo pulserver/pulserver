@@ -1,4 +1,4 @@
-"""What a playout plays from a cache's gradients: its rotated waves and its heaviest repetition."""
+"""What a playout plays from a cache's gradients: its waves and its heaviest repetition."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from ._convert import cache_path
 
 @dataclass(frozen=True)
 class WaveBudget:
-    """What a playout's waveform memory affords the rotated waves.
+    """What a playout's waveform memory affords the waves.
 
     A property of the playout, not of the sequence: the C library's
     ``pulseg_wave_budget``.
@@ -22,7 +22,7 @@ class WaveBudget:
     Attributes
     ----------
     max_samples
-        Samples each gradient axis holds for rotated waves.
+        Samples each gradient axis holds for waves.
     raster_us
         The playout's gradient raster, in µs per sample.
     load_us_per_sample
@@ -54,7 +54,7 @@ class WaveBudget:
 def plan_waves(
     seq_path: Path | str, budget: WaveBudget, cache_ext: str = ".pseg"
 ) -> dict[str, Any]:
-    """Lay out the rotated waves of the cache beside a sequence file in a playout's waveform memory.
+    """Lay out the waves of the cache beside a sequence file in a playout's waveform memory.
 
     The layout is the C library's, computed from the definitions alone, as
     both stages of a playout compute it. Every wave is held at once where
@@ -111,7 +111,7 @@ def sample_wave(
     budget: WaveBudget,
     cache_ext: str = ".pseg",
 ) -> np.ndarray:
-    """Return a rotated wave as a playout loads it into a region, normalised to unit peak.
+    """Return a wave as a playout loads it into a region, normalised to unit peak.
 
     ``wave`` is the subsequence and the wave's index there, as
     :func:`~pulserver.ir.play` reports it, and ``region`` one that

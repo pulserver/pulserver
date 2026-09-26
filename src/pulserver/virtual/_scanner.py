@@ -118,7 +118,7 @@ def _play(
     prescription: np.ndarray | None,
     frequencies_hz: np.ndarray | None = None,
 ) -> Iterator[_Readout]:
-    played = ir.play(seq_path, cache_ext, waveforms=True)
+    played = ir.playout(seq_path, waveforms=True, cache_ext=cache_ext)["blocks"]
     turn = np.eye(3) if prescription is None else np.asarray(prescription, float)
     frequencies = np.zeros(0) if frequencies_hz is None else frequencies_hz
     span = played["gradient_span"]
@@ -137,7 +137,7 @@ def _play(
             precession_origin_us = 0.0
             longitudinal = np.ones(frequencies.size)
             tipped = longitudinal
-        rotation = np.eye(3) if played["norot"][block] else turn
+        rotation = turn if played["rotate"][block] else np.eye(3)
         waves = [
             (corners[slice(*span[block, axis])], values[slice(*span[block, axis])])
             for axis in range(3)

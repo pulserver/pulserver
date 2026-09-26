@@ -25,9 +25,11 @@ passes and the cache layout are described in {doc}`../explanations/ir-cache`.
 | {obj}`~pulserver.ir.SarRatio` | The local and global SAR ratios of one subsequence, as the cache carries them. |
 | {obj}`~pulserver.ir.summary` | Subsequences, segments, readouts, readout labels and RF spectral statistics of a sequence, from the chain or from its cache. |
 | {obj}`~pulserver.ir.play` | Every block a cache plays, resolved as the scanner's playout resolves it, with its gradient waveforms on request. |
-| {obj}`~pulserver.ir.plan_waves` | Where a playout holds a cache's rotated waves in its waveform memory, all at once or two slots per position, and whether it loads them in time. |
-| {obj}`~pulserver.ir.WaveBudget` | The waveform memory, gradient raster and load rate a playout affords the rotated waves. |
-| {obj}`~pulserver.ir.sample_wave` | A cache's rotated wave on a playout's gradient raster, as loaded into a region of its waveform memory. |
+| {obj}`~pulserver.ir.plan_waves` | Where a playout holds a cache's waves in its waveform memory, all at once or two slots per position, and whether it loads them in time. |
+| {obj}`~pulserver.ir.WaveBudget` | The waveform memory, gradient raster and load rate a playout affords the waves. |
+| {obj}`~pulserver.ir.sample_wave` | A cache's wave on a playout's gradient raster, as loaded into a region of its waveform memory. |
+| {obj}`~pulserver.ir.playout` | Both stages of a segmented playout of a cache, the scan or its receive-gain prescan, recorded: what each position prepares, the registers of each block, what each wave reads from waveform memory and, on request, the waveforms each block plays. |
+| {obj}`~pulserver.ir.Prescan` | The receive-gain calibration a playout plays instead of the scan: one subsequence, to the instance completing its readouts. |
 | {obj}`~pulserver.ir.repetition_gradients` | The gradients of a subsequence's repetition of most gradient energy, as corner points and on a raster: what a scanner's heating and acoustic models are evaluated on. |
 | {obj}`~pulserver.ir.chain` | Files of the `NextSequence` chain starting at a sequence file, in play order. |
 | {obj}`~pulserver.ir.cache_path` | Cache file of a sequence file. |

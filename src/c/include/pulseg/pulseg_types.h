@@ -426,13 +426,15 @@ typedef struct pulseg_block_instance
      * without RF. */
     int rf_use;
 
-    /* Rotated wave (appended; do not reorder above).  At a position whose
-     * blocks carry a rotation, the gradients play as one wave per axis,
-     * pulseg_materialize_wave(wave_id), each at wave_amp_hz_per_m -- the
-     * block's logical amplitude of largest magnitude, with its sign, times
-     * the wave's peak on that axis.  The rotation matrix above is then
-     * already in the wave.  wave_id is -1 elsewhere, and the amplitudes 0:
-     * the block plays its own shapes at the g*_amp_hz_per_m above. */
+    /* Wave (appended; do not reorder above).  At a position that plays
+     * waves -- one whose blocks carry a rotation, or play a gradient shape the
+     * position's prepared events do not hold -- the gradients play as one
+     * wave per axis, pulseg_materialize_wave(wave_id), each at
+     * wave_amp_hz_per_m: the block's logical amplitude of largest magnitude,
+     * with its sign, times the wave's peak on that axis.  The rotation matrix
+     * above is then already in the wave.  wave_id is -1 elsewhere, and the
+     * amplitudes 0: the block plays its position's events at the
+     * g*_amp_hz_per_m above. */
     int wave_id;
     float wave_amp_hz_per_m[3];
 } pulseg_block_instance;
@@ -464,7 +466,9 @@ typedef struct pulseg_cursor_info
     int segment_start; /**< 1 if first block of current segment           */
     int segment_end;   /**< 1 if last block of current segment            */
     int is_nav;        /**< 1 if current segment is a NAV segment         */
-    int has_trigger;   /**< 1 if current segment has a trigger/digitalout */
+    int has_trigger;   /**< 1 if an instance of the current segment waits
+                            for a physiological trigger; which ones is
+                            pulseg_playout_segment::await_trigger        */
     int tr_start;      /**< 1 if first block of a main-region TR          */
     int pmc;           /**< 1 if current subsequence has PMC enabled      */
 } pulseg_cursor_info;
@@ -575,12 +579,15 @@ typedef struct pulseg_subseq_info
     float vop_sar_ratio;
     /** The same ratio for the VOP file's global SAR matrix; 0 without one. */
     float vop_global_sar_ratio;
+    /** The raster the file's gradient shapes are sampled on, in us: its
+     *  GradientRasterTime, or the conversion's where it declares none. */
+    float grad_raster_us;
 } pulseg_subseq_info;
 
 /* clang-format off */
 #define PULSEG_SUBSEQ_INFO_INIT \
     { \
-    0.0f, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0.0f, 0.0f \
+    0.0f, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0.0f, 0.0f, 0.0f \
     }
 /* clang-format on */
 
@@ -599,7 +606,9 @@ typedef struct pulseg_segment_info
     int num_blocks;          /**< unique blocks in the segment        */
     int start_block;         /**< start block index in the sequence   */
     int pure_delay;          /**< 1 if segment is a bare delay        */
-    int has_trigger;         /**< 1 if physio trigger attached        */
+    int has_trigger;         /**< 1 if an instance waits for a physio
+                                  trigger; which ones is
+                                  pulseg_playout_segment::await_trigger */
     int trigger_type;        /**< trigger type (1=output/TTL, 2=input/ECG), 0 if none */
     int trigger_delay_us;    /**< trigger delay (us), -1 if none      */
     int trigger_duration_us; /**< trigger duration (us), -1 if none   */
@@ -713,13 +722,13 @@ typedef struct pulseg_block_info
     float rf_grad_level[3]; /**< normalised gradient level across the pulse, per axis;
                              *   multiply by the instance amplitude for the physical
                              *   gradient.  Meaningless when rf_grad_constant is 0. */
-    int wave_points;        /**< points per axis of the longest rotated wave an
+    int wave_points;        /**< points per axis of the longest wave an
                              *   instance of this position plays, as
                              *   pulseg_materialize_wave() returns it; 0 where the
                              *   position plays none */
-    float wave_start_us;    /**< earliest start of those waves, us from the
-                             *   block's start */
-    float wave_end_us;      /**< latest end of those waves */
+    float wave_start_us;    /**< start of the span every one of those waves
+                             *   covers, us from the block's start */
+    float wave_end_us;      /**< end of that span */
     int wave_axes;          /**< bit (1 << axis) set for each axis one of them
                              *   drives */
 } pulseg_block_info;
@@ -764,11 +773,11 @@ typedef struct pulseg_corner_point_stream
 /* clang-format on */
 
 /* ================================================================== */
-/*  Waveform memory for rotated waves                                 */
+/*  Waveform memory for waves                                         */
 /* ================================================================== */
 
-/** How a playout holds the rotated waves: pulseg_wave_plan::mode. */
-#define PULSEG_WAVES_NONE 0     /**< the collection plays no rotated wave     */
+/** How a playout holds the waves: pulseg_wave_plan::mode. */
+#define PULSEG_WAVES_NONE 0     /**< the collection plays no wave             */
 #define PULSEG_WAVES_RESIDENT 1 /**< every wave held at once, loaded before
                                      the scan                                 */
 #define PULSEG_WAVES_STREAMED 2 /**< two slots per position that plays waves;
@@ -776,14 +785,14 @@ typedef struct pulseg_corner_point_stream
                                      while the instance before it plays      */
 
 /**
- * @brief What a playout's waveform memory affords the rotated waves.
+ * @brief What a playout's waveform memory affords the waves.
  *
  * A property of the playout, not of the sequence.
  */
 typedef struct pulseg_wave_budget
 {
     long max_samples;         /**< samples each gradient axis holds for
-                                   rotated waves                           */
+                                   waves                                   */
     float raster_us;          /**< the playout's gradient raster, us per
                                    sample                                  */
     float load_us_per_sample; /**< time to sample and load one sample on one
@@ -813,7 +822,7 @@ typedef struct pulseg_wave_region
 } pulseg_wave_region;
 
 /**
- * @brief Where a playout holds the rotated waves, from pulseg_plan_waves().
+ * @brief Where a playout holds the waves, from pulseg_plan_waves().
  *
  * Both layouts are filled; @c mode says which the budget affords.
  * RESIDENT holds each wave of each subsequence in a region of its own.

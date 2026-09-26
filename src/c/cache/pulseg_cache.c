@@ -32,7 +32,7 @@
 /* The full (major, minor, revision) triple must match exactly on read: a
  * cache at any other revision is rejected outright and the .seq is
  * re-parsed, never partially or heuristically read. */
-#define PULSEG_CACHE_VERSION_REVISION 20
+#define PULSEG_CACHE_VERSION_REVISION 21
 
 /* Per-consumer sections. Each carries its own distinct payload.
  * COMMON establishes the collection + descriptor framing; the others
@@ -157,7 +157,7 @@ static long get_file_size(const char *path)
  * shape samples, rotation matrices, exec_stream and variable_grad_flags live
  * in SHAPES/ROTATIONS/SCANLOOP. */
 
-/* The rotated waves, in COMMON: their count, then their records. */
+/* The waves, in COMMON: their count, then their records. */
 static int write_waves(FILE *f, const pulseg_sequence_descriptor *d)
 {
     if (!pulseg__write4(f, &d->num_waves, 1))
@@ -181,7 +181,7 @@ static int read_waves(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
     return 1;
 }
 
-/* The rotated wave each block plays, in INSTANCES: one word per block, -1
+/* The wave each block plays, in INSTANCES: one word per block, -1
  * where none. */
 static int write_block_waves(FILE *f, const pulseg_sequence_descriptor *d)
 {
@@ -590,7 +590,7 @@ PULSEG_ASSERT_PACKED(pulseg_wave, PULSEG_WAVE_WORDS);
  * four lines below it. */
 #define PULSEG_TABLE_WORDS(type) ((int)(sizeof(type) / 4))
 
-/* The block table, and the rotated wave each block plays. */
+/* The block table, and the wave each block plays. */
 static int write_block_table(FILE *f, const pulseg_sequence_descriptor *d)
 {
     if (!pulseg__write4(f, &d->num_blocks, 1))
@@ -1203,7 +1203,7 @@ static int read_common(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
  * and zeroes the descriptor); the scan path is its only consumer on the
  * scanner. */
 
-/* The block table, and the rotated wave each block plays.  One read for the
+/* The block table, and the wave each block plays.  One read for the
  * whole table, and one swap pass over it -- see the PULSEG_ASSERT_PACKED block
  * above write_instances for why the struct's storage is the record layout. */
 static int read_block_table(FILE *f, pulseg_sequence_descriptor *d, int do_swap)

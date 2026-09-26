@@ -90,10 +90,10 @@ const char *pulseg_get_error_message(int code)
     case PULSEG_ERR_SEG_NO_SEGMENTS_FOUND:
         return "No segment boundaries could be identified in TR";
     case PULSEG_ERR_WAVE_MEMORY:
-        return "The rotated waves fit waveform memory neither all at once nor two slots per "
+        return "The waves fit waveform memory neither all at once nor two slots per "
                "position";
     case PULSEG_ERR_WAVE_LOADING:
-        return "A segment instance's rotated waves take longer to load than the instance "
+        return "A segment instance's waves take longer to load than the instance "
                "before it plays";
     case PULSEG_ERR_SEG_ROTATION_MID_GRADIENT:
         return "Rotation state changes across a live gradient (no zero-gradient junction)";
@@ -174,13 +174,14 @@ const char *pulseg_get_error_hint(int code)
                "amplitude, phase or frequency rather than its shape, or split the "
                "repetitions into separate subsequences.";
     case PULSEG_ERR_WAVE_MEMORY:
-        return "A rotation extension mixes a block's gradients into waves of their own. "
-               "Reuse one rotation, and one ratio between the gradients it turns, "
-               "across more blocks, or split the scan into subsequences.";
+        return "A rotation extension, or a gradient shape a segment position plays in some "
+               "instances only, puts a block's gradients into waves of their own. Reuse one "
+               "rotation, one ratio between the gradients it turns and one shape across more "
+               "blocks, or split the scan into subsequences.";
     case PULSEG_ERR_WAVE_LOADING:
         return "The segment instance before the one named is too short to load the "
-               "rotated waves of the next. Lengthen it, or let fewer positions of the "
-               "next segment carry a rotation.";
+               "waves of the next. Lengthen it, or let fewer positions of the next "
+               "segment play waves.";
     case PULSEG_ERR_MAX_GRAD_EXCEEDED:
         return "The gradient sum-of-squares amplitude exceeds the system limit. "
                "See diagnostic message for details.";

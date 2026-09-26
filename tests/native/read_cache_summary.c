@@ -3,13 +3,14 @@
  * "key value" line per quantity, in the order pulserver.ir.summary returns
  * them, and each subsequence's heaviest repetition, as
  * pulserver.ir.repetition_gradients returns it; and, given a waveform memory
- * and a raster, the layout of its rotated waves, as pulserver.ir.plan_waves
- * returns it.  Compiled by tests/test_ir.py
- * with the scanner's word size and vendor.
+ * and a raster, the layout of its waves, as pulserver.ir.plan_waves returns
+ * it, and what both stages of a playout set, as pulserver.ir.playout records
+ * it.  Compiled by tests/test_ir.py with the scanner's word size and vendor.
  */
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "pulseg.h"
 #include "pulseg_cache.h"
@@ -81,6 +82,80 @@ static void print_wave_plan(const pulseg_collection *coll, long max_samples, flo
     pulseg_free_wave_plan(&plan);
 }
 
+/* What a playout backend was handed, counted. */
+typedef struct counts
+{
+    long positions;
+    long loads;
+    long instances;
+    long blocks;
+} counts;
+
+static int count_position(
+    void *ctx,
+    int segment,
+    int position,
+    const pulseg_block_info *info,
+    const pulseg_wave_region *slot)
+{
+    (void)segment;
+    (void)position;
+    (void)info;
+    (void)slot;
+    ((counts *)ctx)->positions += 1;
+    return PULSEG_SUCCESS;
+}
+
+static int count_load(void *ctx, const pulseg_wave_load *load)
+{
+    (void)load;
+    ((counts *)ctx)->loads += 1;
+    return PULSEG_SUCCESS;
+}
+
+static int print_instance(void *ctx, const pulseg_playout_segment *s)
+{
+    printf("instance %d %d %d %d %d\n", s->subsequence, s->segment, s->instance, s->half,
+           s->first_position);
+    ((counts *)ctx)->instances += 1;
+    return PULSEG_SUCCESS;
+}
+
+static int print_block(void *ctx, const pulseg_playout_segment *s, const pulseg_playout_block *b)
+{
+    counts *c = (counts *)ctx;
+
+    (void)s;
+    if (b->wave)
+        printf("block %ld wave %d offset %ld %ld %ld samples %ld\n", c->blocks, b->instance.wave_id,
+               b->wave->offset[0], b->wave->offset[1], b->wave->offset[2], b->wave->samples);
+    c->blocks += 1;
+    return PULSEG_SUCCESS;
+}
+
+static void print_playout(pulseg_collection *coll, long max_samples, float raster_us)
+{
+    pulseg_wave_budget budget = PULSEG_WAVE_BUDGET_INIT;
+    pulseg_playout_backend backend;
+    counts c;
+    int rc;
+
+    memset(&backend, 0, sizeof(backend));
+    memset(&c, 0, sizeof(c));
+    backend.ctx = &c;
+    backend.prepare_block = count_position;
+    backend.load_wave = count_load;
+    backend.begin_instance = print_instance;
+    backend.set_block = print_block;
+    budget.max_samples = max_samples;
+    budget.raster_us = raster_us;
+    rc = pulseg_playout_prepare(coll, &budget, &backend, NULL);
+    printf("prepare rc %d positions %ld loads %ld\n", rc, c.positions, c.loads);
+    c.loads = 0;
+    rc = pulseg_playout_scan(coll, &budget, &backend, NULL, NULL);
+    printf("scan rc %d instances %ld blocks %ld loads %ld\n", rc, c.instances, c.blocks, c.loads);
+}
+
 int main(int argc, char **argv)
 {
     pulseg_collection *coll;
@@ -122,7 +197,10 @@ int main(int argc, char **argv)
         print_repetition(coll, i);
 
     if (argc == 5)
+    {
         print_wave_plan(coll, atol(argv[3]), (float)atof(argv[4]));
+        print_playout(coll, atol(argv[3]), (float)atof(argv[4]));
+    }
 
     pulseg_collection_free(coll);
     return 0;

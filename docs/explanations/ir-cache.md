@@ -167,32 +167,42 @@ steady from the pulse's first sample to its last as
 interpreter records per readout, as indices in the order SLC, PHS, REP, AVG,
 SEG, SET, ECO, PAR, LIN, ACQ.
 
-## Rotated waves
+## Waves
 
-A rotation extension turns a block's gradients within the logical frame, so
-the waveform each axis plays combines the block's three gradient events.
-Logical axis $o$ plays
+A playout prepares the gradient events of each segment position once, before
+the scan, and each segment instance sets only their amplitudes. Two kinds of
+position cannot be played that way. A rotation extension turns a block's
+gradients within the logical frame, so the waveform each axis plays combines
+the block's three gradient events. And where the instances of a position play
+a gradient definition or shape other than the one its events are prepared
+with, as the interleaves of a spiral drawn as distinct shapes do, no amplitude
+makes the prepared event play them. At both, a block plays one waveform per
+axis from waveform memory: a wave. Logical axis $o$ plays
 
 $$
 g_o(t) = \sum_d R_{od}\, a_d\, w_d(t) = m \sum_d R_{od}\, \frac{a_d}{m}\, w_d(t),
 $$
 
-with $R$ the block's rotation, $a_d$ the amplitude of the event on axis $d$,
-$w_d$ its waveform normalised to a largest magnitude of one, and $m$ the
-$a_d$ of largest magnitude, sign included. The sum on the right is fixed by
-the events' definitions and shapes, the rotation and the amplitude ratios
-$a_d/m$; an instance only scales it by $m$. The conversion keeps each distinct
-sum once per subsequence, with ratios that round to the same multiple of
-$10^{-4}$ taken as equal, normalised on each axis to a largest magnitude of
-one: a rotated wave. Blocks that differ in amplitude or polarity alone share
-one.
+with $R$ the block's rotation, the identity for a block without one, $a_d$ the
+amplitude of the event on axis $d$, $w_d$ its waveform normalised to a largest
+magnitude of one, and $m$ the $a_d$ of largest magnitude, sign included. The
+sum on the right is fixed by the events' definitions and shapes, the rotation
+and the amplitude ratios $a_d/m$; an instance only scales it by $m$. The
+conversion keeps each distinct sum once per subsequence, with ratios that
+round to the same multiple of $10^{-4}$ taken as equal, normalised on each
+axis to a largest magnitude of one. Blocks that differ in amplitude or
+polarity alone share one wave.
 
 At every segment position where an instance carries a rotation other than
-the identity, each block with a gradient event plays its rotated wave on each
-axis, at $m$ times the wave's largest magnitude there, and the scanner applies
-the prescription's rotation alone, or no rotation under `NOROT`. Each such
-position records the number of points of the longest wave it plays, which the
-waveform memory reserved for it has to hold.
+the identity, or plays a gradient the position's events are not prepared
+with, each block with a gradient event plays its wave on each axis, at $m$
+times the wave's largest magnitude there, and the scanner applies the
+prescription's rotation alone, or no rotation under `NOROT`. Each such
+position records the number of points of the longest wave it plays, and the
+span of time the waves cover. Every wave a position plays, and every position
+a wave plays at, is given the union of those spans, so that the waves one
+position plays all cover one interval and a playout can prepare one waveform
+of that length for it.
 
 A wave that combines trapezoids and arbitrary gradients with time shapes is
 piecewise linear through the union of their corner times, which reproduces
@@ -201,13 +211,12 @@ raster is evaluated at the centres of that raster, across the span of all its
 events, and holds its first and last values over the half intervals at its two
 ends, which keeps the area of every event whose corners lie on the raster.
 
-A playout holds the rotated waves in waveform memory it sets aside for them on
-each gradient axis. {func}`~pulserver.ir.plan_waves` lays that memory out from
-the definitions alone, so the pulse-generation stage and the scan loop lay it
-out alike, and the C library a scanner links computes it
-(`pulseg_plan_waves`). A wave, or a slot, occupies the intervals of the
-playout's gradient raster from the one holding its first point to the one
-holding its last, sampled at their centres ({func}`~pulserver.ir.sample_wave`),
+A playout holds the waves in waveform memory it sets aside for them on each
+gradient axis. {func}`~pulserver.ir.plan_waves` lays that memory out from the
+definitions alone, so the pulse-generation stage and the scan loop lay it out
+alike, and the C library a scanner links computes it (`pulseg_plan_waves`). A
+wave, or a slot, occupies the intervals of the playout's gradient raster that
+cover its span, sampled at their centres ({func}`~pulserver.ir.sample_wave`),
 on the axes it drives. Where every wave fits at once, each is loaded before the
 scan and an instance only selects it. Otherwise each segment position that
 plays waves holds two slots; the $n$-th instance of a segment in the scan plays
@@ -216,6 +225,47 @@ Given the time the playout takes to load one sample, that loading is checked:
 for every instance but the first, it has to fit within a set share of the
 duration of the instance before. A chain whose waves fit neither layout, or an
 instance of which cannot be loaded in time, is refused.
+
+## The two stages of a playout
+
+The C library runs both stages of a playout over a backend the playout
+provides (`pulseg_playout_prepare` and `pulseg_playout_scan`, in
+`pulseg_playout.h`). The order of the calls and the values they carry are the
+library's, so every playout built on it plays a chain alike; what each call
+does to the hardware is the backend's.
+
+The first stage needs the definitions alone. It lays out the waves and
+reserves their memory, hands the backend each segment and each of its
+positions, with the span that position's waves cover and, where they are
+streamed, its two slots, and loads the waves a resident layout holds.
+
+The second stage walks the execution stream one segment instance at a time.
+It sets the instance's rotation, the prescription's or none under `NOROT`, and
+whether it waits for a physiological trigger. Both follow the instance's own
+blocks: a segment definition is shared by instances that differ in either, a
+trigger delay and a plain delay for one, so the definition cannot say. For
+each block it loads the
+block's wave into the half the instance plays where the waves are streamed,
+and sets the block's registers: the RF amplitude, phase and frequency offsets
+and shim, the gradient amplitudes or the wave and its amplitudes, the ADC
+frequency and phase offsets, and the digital output. Then it starts the
+instance.
+
+The receive-gain calibration prescan plays one subsequence from its start to
+the segment instance that completes the readouts its sequence declares
+(`NumGainCalibrationReadouts`, at least one). It waits for no trigger and
+drives no digital output, and every gradient whose amplitude varies across
+repetitions, a phase encoding for instance, plays at zero, as does a wave any
+of whose logical axes varies.
+
+{func}`~pulserver.ir.playout` runs both stages over a backend that plays
+nothing and records what each stage hands it, with a model of the waveform
+memory. The test suite holds every block the record plays, the events its
+position prepared at the amplitudes the scan loop set or the samples its wave
+read from memory, to the block {func}`~pulserver.ir.play` resolves; checks
+that no load writes over memory the instance in play reads; and compiles both
+stages into the 32-bit scanner reader, which plays the same instances and
+waves as the host.
 
 ## The heaviest repetition
 
@@ -234,7 +284,7 @@ events, the square of each event's amplitude times the integral of its
 normalised waveform's square, which a rotation leaves unchanged, so the choice
 does not depend on the blocks' rotations. The repetition is one the scanner
 plays, each block at its own amplitudes and with its own shapes and rotation,
-a rotated block through its wave: a waveform that plays, not an envelope of
+or through its wave: a waveform that plays, not an envelope of
 several. Its gradients are joined over its blocks as corner points on one
 timeline, along the logical axes and linear in between; the prescription's
 rotation takes them to the physical axes, and a model that needs them on a
@@ -246,7 +296,7 @@ raster samples them at the centres of its intervals
 The cache has the name of the first sequence file with its extension replaced:
 `.pseg` by default. It is divided into sections that a
 consumer loads independently. The pulse-generation stage of a playout reads the
-definitions, their waveforms and the rotated waves; the scan loop also reads
+definitions, their waveforms and the waves; the scan loop also reads
 the per-block instances, the rotations and the execution stream, whose size
 scales with the scan length. Integer and float fields are 4 bytes. The byte order is recorded
 in the file, and a reader on a machine of the other byte order swaps on load. A
@@ -261,15 +311,16 @@ loaded from a vendor-neutral cache.
 ## Playback
 
 {func}`~pulserver.ir.play` loads a cache with the C library and walks its
-execution stream with the cursor a playout uses, resolving each block as the
-scanner plays it: its duration, the RF and ADC frequency and phase offsets,
-the RF use, the ADC window, the gradient amplitudes and the rotated wave,
-and, on request, the RF and gradient waveforms each instance plays. It stands
-in for the interpreter, so the cache can be compared with the file it was
-converted from without a scanner; the test suite holds every played block of
-each fixture to the block its file designs, every rotated wave to the block's
-gradients turned by its rotation, and the trajectory the waveforms trace to
-the one the file designs ({doc}`virtual-scanner`).
+execution stream with the cursor, resolving each block by its own instance:
+its duration, the RF and ADC frequency and phase offsets, the RF use, the ADC
+window, the gradient amplitudes and the wave, and, on request, the RF and
+gradient waveforms each instance plays. With it the cache is compared with the
+file it was converted from, without a scanner: the test suite holds every
+played block of each fixture to the block its file designs, every wave to the
+block's gradients turned by its rotation, and the trajectory the waveforms
+trace to the one the file designs ({doc}`virtual-scanner`). It also holds the
+waveforms {func}`~pulserver.ir.playout` records through both stages of a
+playout to the cursor's, bit for bit.
 
 ## Language constraint
 

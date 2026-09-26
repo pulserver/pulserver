@@ -29,6 +29,7 @@ set(PULSEG_SOURCES
     structure/pulseg_waves.c
     structure/pulseg_repetition.c
     cache/pulseg_cache.c
+    playout/pulseg_playout.c
 )
 
 add_library(pulseg STATIC ${PULSEG_SOURCES})

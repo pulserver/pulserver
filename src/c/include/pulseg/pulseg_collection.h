@@ -471,24 +471,27 @@ extern "C"
         float **time_us);
 
     /* ================================================================== */
-    /*  Rotated waves                                                     */
+    /*  Waves                                                             */
     /* ================================================================== */
 
     /**
-     * @brief Return how many rotated waves a subsequence plays.
+     * @brief Return how many waves a subsequence plays.
      *
-     * A block at a position whose blocks carry a rotation plays, on each
-     * axis, the rotated combination of its three gradients; the IR keeps
-     * each distinct combination once.  An instance names its wave in
-     * pulseg_block_instance::wave_id, and a position the longest wave it
-     * plays in pulseg_block_info::wave_points.  Loaded by every cache path.
+     * A block at a position that plays waves plays, on each axis, the
+     * combination of its three gradients its rotation makes, the identity
+     * without one.  A position plays waves where its blocks carry a rotation,
+     * or play a gradient definition or shape other than the one its events
+     * are prepared with; the IR keeps each distinct combination once.  An
+     * instance names its wave in pulseg_block_instance::wave_id, and a
+     * position the longest wave it plays in pulseg_block_info::wave_points,
+     * and the span each of them covers.  Loaded by every cache path.
      *
      * @return The wave count, or a negative error code.
      */
     int pulseg_get_num_waves(const pulseg_collection *coll, int subseq_idx);
 
     /**
-     * @brief Return one rotated wave on one axis, normalised to unit peak.
+     * @brief Return one wave on one axis, normalised to unit peak.
      *
      * Axis @p out_axis of wave @p wave_idx plays
      * sum_d R[out_axis][d] * ratio[d] * w_d(t), with w_d the block's
@@ -528,7 +531,7 @@ extern "C"
         float *out_peak);
 
     /**
-     * @brief Sample one axis of a rotated wave on a playout's gradient raster.
+     * @brief Sample one axis of a wave on a playout's gradient raster.
      *
      * Writes the wave pulseg_materialize_wave() returns, normalised to unit
      * peak, at the centres start_us + (i + 0.5) raster_us of @p num_samples
@@ -549,8 +552,8 @@ extern "C"
         float *out);
 
     /**
-     * @brief Lay out the rotated waves of a collection in a playout's
-     * waveform memory.
+     * @brief Lay out the waves of a collection in a playout's waveform
+     * memory.
      *
      * Every wave is held at once (PULSEG_WAVES_RESIDENT) where that fits the
      * budget on every axis, and otherwise each segment position that plays

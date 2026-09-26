@@ -2,10 +2,12 @@
 
 from ._checks import CheckLimits, SarRatio, check, sar_ratios
 from ._convert import cache_path, chain, convert, play, prescribe, summary
+from ._playout import Prescan, playout
 from ._waves import WaveBudget, plan_waves, repetition_gradients, sample_wave
 
 __all__ = [
     "CheckLimits",
+    "Prescan",
     "SarRatio",
     "WaveBudget",
     "cache_path",
@@ -14,6 +16,7 @@ __all__ = [
     "convert",
     "plan_waves",
     "play",
+    "playout",
     "prescribe",
     "repetition_gradients",
     "sample_wave",
