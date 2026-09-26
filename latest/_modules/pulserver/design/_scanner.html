@@ -271,7 +271,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../../../api/design.html">Scanner sequences</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../api/host.html">Design calls</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../api/ir.html">IR conversion</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../api/vre.html">Reconstruction proxy</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/proxy.html">Reconstruction proxy</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../api/recon.html">Reconstruction plugins</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../api/mrd.html">MRD data</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../api/virtual.html">Virtual scanner</a></li>
@@ -484,7 +484,7 @@
 <span class="c1">#: Range of each prescription entry, in mm either side of the isocentre.</span>
 <span class="n">OFFSET_LIMIT_MM</span> <span class="o">=</span> <span class="mf">1000.0</span>
 
-<span class="c1"># FLT_DIG: the significant decimal digits a float32 CV holds through a round trip.</span>
+<span class="c1"># FLT_DIG: the significant decimal digits a float32 parameter holds through a round trip.</span>
 <span class="n">_SIGNIFICANT_DIGITS</span> <span class="o">=</span> <span class="mi">6</span>
 <span class="n">_MICROSECOND</span> <span class="o">=</span> <span class="n">Decimal</span><span class="p">(</span><span class="s2">"1e-6"</span><span class="p">)</span>
 
@@ -516,7 +516,7 @@
 <span class="w">    </span><span class="sd">"""A time UI entry bound to an ``init_sequence`` argument in seconds.</span>
 
 <span class="sd">    Values, ranges and options are integer microseconds, the unit of the</span>
-<span class="sd">    scanner's time CVs, so the value a CV holds is the value the design</span>
+<span class="sd">    scanner's time parameters, so the value a parameter holds is the value the design</span>
 <span class="sd">    reported. Each key of ``presets`` is a dropdown preset; its value is the</span>
 <span class="sd">    time it requests: seconds, ``None`` for the application's own shortest</span>
 <span class="sd">    choice, or a function of the scanner limits. The entry is a dropdown when</span>
@@ -699,8 +699,8 @@
 <span class="sd">    argument took in the design, as the application records it with</span>
 <span class="sd">    ``SequenceApp.resolve``, and otherwise keeps the requested value. Times</span>
 <span class="sd">    travel as integer microseconds; other float values are read and reported</span>
-<span class="sd">    to six significant digits, the precision of a float32 CV. Either way a</span>
-<span class="sd">    reply stored in a CV and sent back resolves to itself.</span>
+<span class="sd">    to six significant digits, the precision of a float32 parameter. Either way</span>
+<span class="sd">    a reply stored in scanner parameters and sent back resolves to itself.</span>
 
 <span class="sd">    Attributes</span>
 <span class="sd">    ----------</span>

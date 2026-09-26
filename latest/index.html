@@ -277,7 +277,7 @@
 <li class="toctree-l2"><a class="reference internal" href="api/design.html">Scanner sequences</a></li>
 <li class="toctree-l2"><a class="reference internal" href="api/host.html">Design calls</a></li>
 <li class="toctree-l2"><a class="reference internal" href="api/ir.html">IR conversion</a></li>
-<li class="toctree-l2"><a class="reference internal" href="api/vre.html">Reconstruction proxy</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/proxy.html">Reconstruction proxy</a></li>
 <li class="toctree-l2"><a class="reference internal" href="api/recon.html">Reconstruction plugins</a></li>
 <li class="toctree-l2"><a class="reference internal" href="api/mrd.html">MRD data</a></li>
 <li class="toctree-l2"><a class="reference internal" href="api/virtual.html">Virtual scanner</a></li>
@@ -562,9 +562,9 @@ the checks pypulseqpp provides does not establish scanner or patient safety.</p>
 <ul class="simple">
 <li><p>Protocol resolution: the echo time, repetition time and bandwidth a design
 achieves, the scan time, and the design error for an infeasible prescription.</p></li>
-<li><p>Stateless design calls for every PSD host process of a scanner, one command
-per call or through a warm server, and a store of immutable designs named by
-their content.</p></li>
+<li><p>Stateless design calls for every interpreter host process of a scanner, one
+command per call or through a warm server, and a store of immutable designs
+named by their content.</p></li>
 <li><p>Segmentation of a <code class="docutils literal notranslate"><span class="pre">NextSequence</span></code> chain into a binary IR cache, read by an
 ANSI C library linked into the interpreter, with the prescribed field-of-view
 offset applied to the logical-frame design as RF and ADC frequency and phase.</p></li>
@@ -581,7 +581,7 @@ stream, an ISMRMRD file or an assembled acquisition bucket.</p></li>
 </pre></div>
 </div>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pulserver<span class="w"> </span>design<span class="w"> </span>serve<span class="w"> </span>--plugins<span class="w"> </span>sequences/<span class="w"> </span>--socket<span class="w"> </span>/tmp/pulserver.sock
-python<span class="w"> </span>-m<span class="w"> </span>pulserver.vre<span class="w"> </span>--store<span class="w"> </span>/srv/pulserver/designs<span class="w"> </span>--port<span class="w"> </span><span class="m">9002</span><span class="w"> </span>--plugins<span class="w"> </span>recon/
+python<span class="w"> </span>-m<span class="w"> </span>pulserver.proxy<span class="w"> </span>--store<span class="w"> </span>/srv/pulserver/designs<span class="w"> </span>--port<span class="w"> </span><span class="m">9002</span><span class="w"> </span>--plugins<span class="w"> </span>recon/
 </pre></div>
 </div>
 </section>

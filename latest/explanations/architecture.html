@@ -276,7 +276,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../api/design.html">Scanner sequences</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/host.html">Design calls</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/ir.html">IR conversion</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../api/vre.html">Reconstruction proxy</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/proxy.html">Reconstruction proxy</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/recon.html">Reconstruction plugins</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/mrd.html">MRD data</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/virtual.html">Virtual scanner</a></li>
@@ -575,16 +575,16 @@ calls push each design.</span><a class="headerlink" href="#id1" title="Link to t
 </figcaption>
 </figure>
 <p>The design calls, <code class="xref py py-mod docutils literal notranslate"><span class="pre">pulserver.host</span></code>, run on the scanner host and answer
-the PSD host process of each running sequence, one command per call or through
-a warm server. The reconstruction proxy, <code class="xref py py-mod docutils literal notranslate"><span class="pre">pulserver.vre</span></code>, runs on the
-reconstruction computer and answers the scanner’s reconstruction client. One
-acquisition proceeds as follows.</p>
+the interpreter host process of each running sequence, one command per call or
+through a warm server. The reconstruction proxy, <code class="xref py py-mod docutils literal notranslate"><span class="pre">pulserver.proxy</span></code>, runs on
+the reconstruction computer and answers the scanner’s reconstruction client.
+One acquisition proceeds as follows.</p>
 <ol class="arabic simple">
-<li><p>On each protocol edit, the PSD host process requests validation, naming the
-scanner-sequence plugin, the scanner limits and the requested protocol. The
-call constructs the application with pypulseqpp and replies with the
-protocol the design achieves and the scan time, or with the error the design
-raised (<a class="reference internal" href="protocol.html"><span class="doc">Protocol resolution</span></a>).</p></li>
+<li><p>On each protocol edit, the interpreter host process requests validation,
+naming the scanner-sequence plugin, the scanner limits and the requested
+protocol. The call constructs the application with pypulseqpp and replies
+with the protocol the design achieves and the scan time, or with the error
+the design raised (<a class="reference internal" href="protocol.html"><span class="doc">Protocol resolution</span></a>).</p></li>
 <li><p>When the scan is prepared, the process requests the design. The call designs
 the sequence, checks it, and stores the Pulseq files and the IR cache as a
 design of the design store, pushes the design to the proxy when the proxy
@@ -617,7 +617,7 @@ images return to the console through the client’s connection.</p></li>
 <td><p>pypulseqpp, in a design call</p></td>
 <td><p>The IR conversion and the reconstruction proxy</p></td>
 </tr>
-<tr class="row-even"><td><p>IR cache (<code class="docutils literal notranslate"><span class="pre">.pseg</span></code>; <code class="docutils literal notranslate"><span class="pre">.pge</span></code> on GE)</p></td>
+<tr class="row-even"><td><p>IR cache (<code class="docutils literal notranslate"><span class="pre">.pseg</span></code>)</p></td>
 <td><p><a class="reference internal" href="../generated/pulserver.ir.convert.html#pulserver.ir.convert" title="pulserver.ir.convert"><code class="xref py py-func docutils literal notranslate"><span class="pre">pulserver.ir.convert()</span></code></a></p></td>
 <td><p>The interpreter, through the C library in <code class="docutils literal notranslate"><span class="pre">src/c/</span></code></p></td>
 </tr>

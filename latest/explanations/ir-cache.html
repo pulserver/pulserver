@@ -278,7 +278,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../api/design.html">Scanner sequences</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/host.html">Design calls</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/ir.html">IR conversion</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../api/vre.html">Reconstruction proxy</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/proxy.html">Reconstruction proxy</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/recon.html">Reconstruction plugins</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/mrd.html">MRD data</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/virtual.html">Virtual scanner</a></li>
@@ -612,7 +612,7 @@ ringdown time of the scanner. Where the call’s limits carry them
 (<a class="reference internal" href="../generated/pulserver.ir.CheckLimits.html#pulserver.ir.CheckLimits" title="pulserver.ir.CheckLimits"><code class="xref py py-class docutils literal notranslate"><span class="pre">CheckLimits</span></code></a>), it also runs pypulseqpp’s PNS check
 under the scanner’s nerve model and its mechanical-resonance check against the
 scanner’s forbidden gradient bands. The waveforms are timed by the rasters the
-file declares. The PSD passes these limits with every design call
+file declares. The interpreter passes these limits with every design call
 (<a class="reference internal" href="../user-guide/running.html"><span class="doc">Running the services</span></a>); it computes the SAR and the gradient heating.</p>
 <p>No design is stored for a generated design or an imported chain that fails a
 check: <code class="docutils literal notranslate"><span class="pre">generate</span></code> and <code class="docutils literal notranslate"><span class="pre">import</span></code> reply with the problems, as they do with a
@@ -621,7 +621,7 @@ establish scanner or patient safety.</p>
 </section>
 <section id="sar-against-a-reference-pulse">
 <h2>SAR against a reference pulse<a class="headerlink" href="#sar-against-a-reference-pulse" title="Link to this heading">#</a></h2>
-<p>The PSD computes SAR under its own calibration of the transmit chain. Where
+<p>The interpreter computes SAR under its own calibration of the transmit chain. Where
 local SAR is computed from virtual observation points (VOPs), the energy a
 pulse deposits at VOP <span class="math notranslate nohighlight">\(v\)</span> is <span class="math notranslate nohighlight">\(\int \mathbf{b}(t)^H Q_v\, \mathbf{b}(t)\,dt\)</span>,
 with <span class="math notranslate nohighlight">\(\mathbf{b}\)</span> the drive of each transmit channel and <span class="math notranslate nohighlight">\(Q_v\)</span> the VOP’s
@@ -643,8 +643,8 @@ quarter of the reference, and the ratio is 1 for a repetition of reference
 pulses. The global SAR matrix of the VOP file gives the same ratio for global
 SAR. A scale common to every channel’s drive and to the VOPs cancels in both.</p>
 <p>The cache carries the two ratios of each subsequence in its
-<code class="docutils literal notranslate"><span class="pre">pulseg_subseq_info</span></code>, zero without VOPs or without RF, and the PSD computes
-the SAR of the subsequence as the ratio times its SAR for the reference
+<code class="docutils literal notranslate"><span class="pre">pulseg_subseq_info</span></code>, zero without VOPs or without RF, and the interpreter
+computes the SAR of the subsequence as the ratio times its SAR for the reference
 repetition.</p>
 </section>
 <section id="passes">
@@ -725,7 +725,7 @@ SEG, SET, ECO, PAR, LIN, ACQ.</p>
 <section id="cache-file">
 <h2>Cache file<a class="headerlink" href="#cache-file" title="Link to this heading">#</a></h2>
 <p>The cache has the name of the first sequence file with its extension replaced:
-<code class="docutils literal notranslate"><span class="pre">.pseg</span></code> by default and <code class="docutils literal notranslate"><span class="pre">.pge</span></code> on GE. It is divided into sections that a
+<code class="docutils literal notranslate"><span class="pre">.pseg</span></code> by default. It is divided into sections that a
 consumer loads independently. The pulse-generation stage of a playout reads the
 definitions and their waveforms; the scan loop also reads the per-block
 instances, the rotations and the execution stream, whose size scales with the

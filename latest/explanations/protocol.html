@@ -276,7 +276,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../api/design.html">Scanner sequences</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/host.html">Design calls</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/ir.html">IR conversion</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../api/vre.html">Reconstruction proxy</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/proxy.html">Reconstruction proxy</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/recon.html">Reconstruction plugins</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/mrd.html">MRD data</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/virtual.html">Virtual scanner</a></li>
@@ -587,11 +587,11 @@ carries the time the design achieved in place of the preset.</p>
 </section>
 <section id="units-and-precision">
 <h2>Units and precision<a class="headerlink" href="#units-and-precision" title="Link to this heading">#</a></h2>
-<p>The interpreter stores protocol values in scanner control variables. Time
-control variables hold integer microseconds, so time entries are exchanged in
-integer microseconds and converted to seconds for the application, rounding to
-the nearest microsecond. Other float entries are held in float32 control
-variables, whose round trip preserves six significant decimal digits, so they
+<p>The interpreter stores protocol values in scanner parameters. Time parameters
+hold integer microseconds, so time entries are exchanged in integer
+microseconds and converted to seconds for the application, rounding to the
+nearest microsecond. Other float entries are held in float32 parameters, whose
+round trip preserves six significant decimal digits, so they
 are exchanged at that precision. A float entry carries a scale between its UI
 unit and the application’s SI argument, such as <code class="docutils literal notranslate"><span class="pre">1e-3</span></code> for a field of view
 shown in mm and designed in m.</p>

@@ -63,9 +63,9 @@ Sequence and readout table
 
 The sequence is written as a stored design holds it, in the binary
 Pulseq form and in the logical frame, and tabulated with
-:class:`~pulserver.vre.SequenceTable`: one row per readout in play order,
+:class:`~pulserver.proxy.SequenceTable`: one row per readout in play order,
 with its encoding counters, flags and dwell time.
-:meth:`~pulserver.vre.SequenceTable.readout_k` returns the k-space location
+:meth:`~pulserver.proxy.SequenceTable.readout_k` returns the k-space location
 of each sample of a readout, in 1/m, integrated when it is asked for. The
 simulation below joins them over the scan.
 
@@ -84,7 +84,7 @@ simulation below joins them over the scan.
     from pypulseqpp.sequences.sequence.gre2D_sequence import Gre2DApp
 
     from pulserver.ir import prescribe
-    from pulserver.vre import SequenceTable, enrich_acquisition, enrich_header
+    from pulserver.proxy import SequenceTable, enrich_acquisition, enrich_header
 
     system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
     work = Path(tempfile.mkdtemp())
@@ -335,8 +335,8 @@ receiver channel, the readout samples, and a header with no encoding space.
 Enrichment
 ----------
 
-:func:`~pulserver.vre.enrich_header` describes the table's encoding space in
-the header. :func:`~pulserver.vre.enrich_acquisition` applies one table row
+:func:`~pulserver.proxy.enrich_header` describes the table's encoding space in
+the header. :func:`~pulserver.proxy.enrich_acquisition` applies one table row
 to each acquisition, in stream order, and leaves the samples as received.
 
 .. GENERATED FROM PYTHON SOURCE LINES 246-264
@@ -446,7 +446,7 @@ to the gradients or the trajectory.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 1.016 seconds)
+   **Total running time of the script:** (0 minutes 1.192 seconds)
 
 
 .. _sphx_glr_download_generated_gallery_03-reconstruction_01_enrichment.py:

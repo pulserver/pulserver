@@ -124,6 +124,23 @@ from.
    PreparationType
    TriggerType
 
+.. currentmodule:: pulserver.proxy
+
+.. autosummary::
+   :toctree: generated
+   :nosignatures:
+
+   ReconProxy
+   ReconServer
+   DesignCache
+   Design
+   DESIGN_PARAMETER
+   DesignIntake
+   SequenceTable
+   TableSpace
+   enrich_header
+   enrich_acquisition
+
 .. currentmodule:: pulserver.recon
 
 .. autosummary::
@@ -151,21 +168,4 @@ from.
    Phantom
    Ellipse
    send
-
-.. currentmodule:: pulserver.vre
-
-.. autosummary::
-   :toctree: generated
-   :nosignatures:
-
-   ReconProxy
-   ReconServer
-   DesignCache
-   Design
-   DESIGN_PARAMETER
-   DesignIntake
-   SequenceTable
-   TableSpace
-   enrich_header
-   enrich_acquisition
 

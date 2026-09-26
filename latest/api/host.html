@@ -276,7 +276,7 @@
 <li class="toctree-l2"><a class="reference internal" href="design.html">Scanner sequences</a></li>
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Design calls</a></li>
 <li class="toctree-l2"><a class="reference internal" href="ir.html">IR conversion</a></li>
-<li class="toctree-l2"><a class="reference internal" href="vre.html">Reconstruction proxy</a></li>
+<li class="toctree-l2"><a class="reference internal" href="proxy.html">Reconstruction proxy</a></li>
 <li class="toctree-l2"><a class="reference internal" href="recon.html">Reconstruction plugins</a></li>
 <li class="toctree-l2"><a class="reference internal" href="mrd.html">MRD data</a></li>
 <li class="toctree-l2"><a class="reference internal" href="virtual.html">Virtual scanner</a></li>
@@ -532,11 +532,11 @@
                   
   <section class="tex2jax_ignore mathjax_ignore" id="design-calls">
 <h1>Design calls<a class="headerlink" href="#design-calls" title="Link to this heading">#</a></h1>
-<p>The design calls of the PSD host processes of one scanner, and the store of the
-designs they generate.</p>
-<p>A PSD host process lists, validates, generates and imports through the
-<code class="docutils literal notranslate"><span class="pre">pulserver</span> <span class="pre">design</span></code> command, or <code class="docutils literal notranslate"><span class="pre">python</span> <span class="pre">-m</span> <span class="pre">pulserver.host</span></code>, answered in its own
-process or in a warm server’s; the calls, their replies and the store are
+<p>The design calls of the interpreter host processes of one scanner, and the
+store of the designs they generate.</p>
+<p>An interpreter host process lists, validates, generates and imports through
+the <code class="docutils literal notranslate"><span class="pre">pulserver</span> <span class="pre">design</span></code> command, or <code class="docutils literal notranslate"><span class="pre">python</span> <span class="pre">-m</span> <span class="pre">pulserver.host</span></code>, answered in its
+own process or in a warm server’s; the calls, their replies and the store are
 described in <a class="reference internal" href="../user-guide/running.html"><span class="doc">Running the services</span></a>, and the identity of a design in
 <a class="reference internal" href="../explanations/designs.html"><span class="doc">Designs and the design store</span></a>.</p>
 <section id="calls">

@@ -13,7 +13,7 @@ sent as the scanner's reconstruction client sends them.
 
 | Stand-in | Replaces | Built from | Exercises |
 | --- | --- | --- | --- |
-| Design call | The PSD host process's call | `pulserver design generate`, or {func}`~pulserver.host.call` | Request and reply blocks, presets, design errors, check failures |
+| Design call | The interpreter host process's call | `pulserver design generate`, or {func}`~pulserver.host.call` | Request and reply blocks, presets, design errors, check failures |
 | Virtual interpreter | The playout | The C library's cursor over the cache, {func}`~pulserver.ir.play` | Segmentation, execution stream, the waveforms and offsets the cache carries |
 | Physics | Magnet, coils and subject | {class}`~pulserver.virtual.Phantom`, {func}`~pulserver.virtual.acquire` | The trajectory the enrichment has to state, the demodulation of the prescription, the timing of every echo, the RF frequencies ppm offsets resolve to |
 | Reconstruction client | The scanner's reconstruction client | {func}`~pulserver.virtual.send` | The header and acquisition contract of {doc}`../user-guide/reconstruction-client` |

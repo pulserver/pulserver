@@ -276,7 +276,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../api/design.html">Scanner sequences</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/host.html">Design calls</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/ir.html">IR conversion</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../api/vre.html">Reconstruction proxy</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/proxy.html">Reconstruction proxy</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/recon.html">Reconstruction plugins</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/mrd.html">MRD data</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/virtual.html">Virtual scanner</a></li>
@@ -578,7 +578,7 @@ wording.</p>
 <td><p>the resolved protocol</p></td>
 </tr>
 <tr class="row-even"><td><p>the numbers the scanner keeps</p></td>
-<td><p>the scanner control variables (CVs)</p></td>
+<td><p>the scanner parameters</p></td>
 </tr>
 <tr class="row-odd"><td><p>a design written earlier</p></td>
 <td><p>a stored design, by its identifier</p></td>
@@ -590,7 +590,7 @@ wording.</p>
 <td><p>the interpreter</p></td>
 </tr>
 <tr class="row-even"><td><p>the host process for one sequence</p></td>
-<td><p>the PSD host process</p></td>
+<td><p>the interpreter host process</p></td>
 </tr>
 <tr class="row-odd"><td><p>the compiled form of a sequence</p></td>
 <td><p>the IR, the IR cache</p></td>
@@ -634,8 +634,8 @@ the file either kind is loaded from; say which kind.</p>
 immutable once written. Its <em>identity</em> is the hash of what it depends on; its
 <em>identifier</em> is the first 18 hexadecimal digits of the identity. The <em>design
 store</em> is the directory holding every design. A <em>design call</em> is one <code class="docutils literal notranslate"><span class="pre">list</span></code>,
-<code class="docutils literal notranslate"><span class="pre">validate</span></code>, <code class="docutils literal notranslate"><span class="pre">generate</span></code> or <code class="docutils literal notranslate"><span class="pre">import</span></code> of a PSD host process; no call keeps state
-beyond the designs it stores. A design is <em>pushed</em> to the <em>design intake</em>, the
+<code class="docutils literal notranslate"><span class="pre">validate</span></code>, <code class="docutils literal notranslate"><span class="pre">generate</span></code> or <code class="docutils literal notranslate"><span class="pre">import</span></code> of an interpreter host process; no call
+keeps state beyond the designs it stores. A design is <em>pushed</em> to the <em>design intake</em>, the
 proxy’s HTTP endpoint writing its store, as a <em>bundle</em> of the files of its
 directory.</p>
 <p><strong>IR.</strong> A <em>subsequence</em> is one file of a <code class="docutils literal notranslate"><span class="pre">NextSequence</span></code> chain. A <em>definition</em>
@@ -665,12 +665,13 @@ design is not a <code class="docutils literal notranslate"><span class="pre">.se
 <h3>Fixed vocabulary<a class="headerlink" href="#fixed-vocabulary" title="Link to this heading">#</a></h3>
 <ul class="simple">
 <li><p><strong>design calls</strong>, <strong>warm server</strong>, <strong>reconstruction proxy</strong>, <strong>reconstruction
-server</strong>; <code class="docutils literal notranslate"><span class="pre">pulserver.host</span></code> and <code class="docutils literal notranslate"><span class="pre">pulserver.vre</span></code> when the module is meant.</p></li>
-<li><p><strong>PSD host process</strong>, not “host PSD” or “PSD process”.</p></li>
+server</strong>; <code class="docutils literal notranslate"><span class="pre">pulserver.host</span></code> and <code class="docutils literal notranslate"><span class="pre">pulserver.proxy</span></code> when the module is meant.</p></li>
+<li><p><strong>interpreter host process</strong>, not “host interpreter” or “interpreter
+process”.</p></li>
 <li><p><strong>interpreter</strong> for the scanner-side program; <strong>reconstruction client</strong> for
 the scanner-side sender of raw data.</p></li>
-<li><p><strong>IR</strong> and <strong>IR cache</strong>; <code class="docutils literal notranslate"><span class="pre">.pseg</span></code> and <code class="docutils literal notranslate"><span class="pre">.pge</span></code> are file extensions, not names
-for the representation.</p></li>
+<li><p><strong>IR</strong> and <strong>IR cache</strong>; <code class="docutils literal notranslate"><span class="pre">.pseg</span></code> is a file extension, not a name for the
+representation.</p></li>
 <li><p><strong>MRD</strong> for the format; <strong>ISMRMRD</strong> for the library and the HDF5 file.</p></li>
 </ul>
 </section>
@@ -714,7 +715,7 @@ verb that classifies the operation: “Return…”, “Read…”, “Format…
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><p>Time entry of a protocol, on the wire and in a CV</p></td>
+<tr class="row-even"><td><p>Time entry of a protocol, on the wire and in a scanner parameter</p></td>
 <td><p>integer µs</p></td>
 </tr>
 <tr class="row-odd"><td><p>Time argument of a sequence application</p></td>
@@ -784,10 +785,10 @@ significant digits.</p>
 <h2>5. Safety language<a class="headerlink" href="#safety-language" title="Link to this heading">#</a></h2>
 <p>Pulserver performs no safety check of its own. The timing, gradient, PNS,
 mechanical-resonance and SAR checks belong to pypulseqpp and compute
-estimates. The host runs all but the SAR check, under the limits the PSD
-passes, before it writes an IR cache; from the SAR check it writes each
-subsequence’s SAR relative to a reference pulse into the cache, and the PSD
-computes the SAR and the gradient heating. Passing these checks does not
+estimates. The host runs all but the SAR check, under the limits the
+interpreter passes, before it writes an IR cache; from the SAR check it writes
+each subsequence’s SAR relative to a reference pulse into the cache, and the
+interpreter computes the SAR and the gradient heating. Passing these checks does not
 establish scanner or patient safety.</p>
 <ul class="simple">
 <li><p>Never write “safe”, “validated”, “compliant” or “approved” of a sequence, a

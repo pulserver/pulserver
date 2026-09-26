@@ -274,7 +274,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../api/design.html">Scanner sequences</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/host.html">Design calls</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/ir.html">IR conversion</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../api/vre.html">Reconstruction proxy</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/proxy.html">Reconstruction proxy</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/recon.html">Reconstruction plugins</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/mrd.html">MRD data</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/virtual.html">Virtual scanner</a></li>
@@ -535,7 +535,7 @@
 <dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/builtins/functions.html#object" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
 <p>A time UI entry bound to an <code class="docutils literal notranslate"><span class="pre">init_sequence</span></code> argument in seconds.</p>
 <p>Values, ranges and options are integer microseconds, the unit of the
-scanner’s time CVs, so the value a CV holds is the value the design
+scanner’s time parameters, so the value a parameter holds is the value the design
 reported. Each key of <code class="docutils literal notranslate"><span class="pre">presets</span></code> is a dropdown preset; its value is the
 time it requests: seconds, <code class="docutils literal notranslate"><span class="pre">None</span></code> for the application’s own shortest
 choice, or a function of the scanner limits. The entry is a dropdown when

@@ -10,7 +10,7 @@ the design calls and the scanner interpreter.
 A protocol entry has a kind, a current value and the schema the scanner UI
 presents it with: a range and increment for a numeric entry, and options for a
 dropdown. Times are integer microseconds, the unit of the scanner's time
-control variables. A preset is a negative value that the UI shows as a word and
+parameters. A preset is a negative value that the UI shows as a word and
 that a scanner sequence maps to a design choice, such as the shortest echo
 time. The grammar of the blocks is the one `pulseg_protocol_parse` reads on the
 interpreter side.

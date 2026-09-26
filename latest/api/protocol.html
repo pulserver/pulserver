@@ -276,7 +276,7 @@
 <li class="toctree-l2"><a class="reference internal" href="design.html">Scanner sequences</a></li>
 <li class="toctree-l2"><a class="reference internal" href="host.html">Design calls</a></li>
 <li class="toctree-l2"><a class="reference internal" href="ir.html">IR conversion</a></li>
-<li class="toctree-l2"><a class="reference internal" href="vre.html">Reconstruction proxy</a></li>
+<li class="toctree-l2"><a class="reference internal" href="proxy.html">Reconstruction proxy</a></li>
 <li class="toctree-l2"><a class="reference internal" href="recon.html">Reconstruction plugins</a></li>
 <li class="toctree-l2"><a class="reference internal" href="mrd.html">MRD data</a></li>
 <li class="toctree-l2"><a class="reference internal" href="virtual.html">Virtual scanner</a></li>
@@ -539,7 +539,7 @@ the design calls and the scanner interpreter.</p>
 <p>A protocol entry has a kind, a current value and the schema the scanner UI
 presents it with: a range and increment for a numeric entry, and options for a
 dropdown. Times are integer microseconds, the unit of the scanner’s time
-control variables. A preset is a negative value that the UI shows as a word and
+parameters. A preset is a negative value that the UI shows as a word and
 that a scanner sequence maps to a design choice, such as the shortest echo
 time. The grammar of the blocks is the one <code class="docutils literal notranslate"><span class="pre">pulseg_protocol_parse</span></code> reads on the
 interpreter side.</p>

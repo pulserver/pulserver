@@ -274,7 +274,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../api/design.html">Scanner sequences</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/host.html">Design calls</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/ir.html">IR conversion</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../api/vre.html">Reconstruction proxy</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/proxy.html">Reconstruction proxy</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/recon.html">Reconstruction plugins</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/mrd.html">MRD data</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/virtual.html">Virtual scanner</a></li>
@@ -542,8 +542,8 @@ omits keep the application’s defaults. An entry resolves to the value its
 argument took in the design, as the application records it with
 <code class="docutils literal notranslate"><span class="pre">SequenceApp.resolve</span></code>, and otherwise keeps the requested value. Times
 travel as integer microseconds; other float values are read and reported
-to six significant digits, the precision of a float32 CV. Either way a
-reply stored in a CV and sent back resolves to itself.</p>
+to six significant digits, the precision of a float32 parameter. Either way
+a reply stored in scanner parameters and sent back resolves to itself.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Attributes<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>recon</strong> (<em>str</em>) – Reconstruction plugin the data of this sequence is reconstructed with,

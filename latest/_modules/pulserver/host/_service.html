@@ -271,7 +271,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../../../api/design.html">Scanner sequences</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../api/host.html">Design calls</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../api/ir.html">IR conversion</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../api/vre.html">Reconstruction proxy</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/proxy.html">Reconstruction proxy</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../api/recon.html">Reconstruction plugins</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../api/mrd.html">MRD data</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../api/virtual.html">Virtual scanner</a></li>
@@ -450,7 +450,7 @@
                 <article class="bd-article">
                   
   <h1>Source code for pulserver.host._service</h1><div class="highlight"><pre>
-<span></span><span class="sd">"""The design calls of a PSD host process, each a function of its inputs.</span>
+<span></span><span class="sd">"""The design calls of an interpreter host process, each a function of its inputs.</span>
 
 <span class="sd">A call returns the reply the interpreter parses: the text blocks of</span>
 <span class="sd">:mod:`pulserver.protocol` and one status line. Nothing outlives a call but</span>

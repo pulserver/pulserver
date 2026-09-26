@@ -278,7 +278,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../api/design.html">Scanner sequences</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/host.html">Design calls</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/ir.html">IR conversion</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../api/vre.html">Reconstruction proxy</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/proxy.html">Reconstruction proxy</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/recon.html">Reconstruction plugins</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/mrd.html">MRD data</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/virtual.html">Virtual scanner</a></li>
@@ -546,7 +546,7 @@ reconstruction plugin are exercised together, through the production design
 calls and proxy.</p>
 <section id="generate-a-design">
 <h2>Generate a design<a class="headerlink" href="#generate-a-design" title="Link to this heading">#</a></h2>
-<p>Generate the design as the PSD host process does, with the prescribed
+<p>Generate the design as the interpreter host process does, with the prescribed
 field-of-view offset in the protocol block (<a class="reference internal" href="running.html"><span class="doc">Running the services</span></a>):</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">printf</span><span class="w"> </span><span class="s1">'[NimPulseqGUI Protocol]\nTE: 5000\nnx: 64\nny: 64\nfov_offset_x: 20.0\n[NimPulseqGUI Protocol End]\n'</span><span class="w"> </span><span class="se">\</span>
 <span class="w">  </span><span class="p">|</span><span class="w"> </span>pulserver<span class="w"> </span>design<span class="w"> </span>generate<span class="w"> </span>--plugins<span class="w"> </span>sequences<span class="w"> </span>--plugin<span class="w"> </span>gre2d<span class="w"> </span>--limits<span class="w"> </span>limits.txt<span class="w"> </span>--store<span class="w"> </span>designs
@@ -557,7 +557,7 @@ field-of-view offset in the protocol block (<a class="reference internal" href="
 <section id="start-a-proxy">
 <h2>Start a proxy<a class="headerlink" href="#start-a-proxy" title="Link to this heading">#</a></h2>
 <p>Start a reconstruction proxy on the same store (<a class="reference internal" href="running.html"><span class="doc">Running the services</span></a>):</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>-m<span class="w"> </span>pulserver.vre<span class="w"> </span>--store<span class="w"> </span>designs<span class="w"> </span>--port<span class="w"> </span><span class="m">9002</span><span class="w"> </span>--plugins<span class="w"> </span>recon
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>-m<span class="w"> </span>pulserver.proxy<span class="w"> </span>--store<span class="w"> </span>designs<span class="w"> </span>--port<span class="w"> </span><span class="m">9002</span><span class="w"> </span>--plugins<span class="w"> </span>recon
 </pre></div>
 </div>
 </section>

@@ -276,7 +276,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../../../api/design.html">Scanner sequences</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../api/host.html">Design calls</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../api/ir.html">IR conversion</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../api/vre.html">Reconstruction proxy</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/proxy.html">Reconstruction proxy</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../api/recon.html">Reconstruction plugins</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../api/mrd.html">MRD data</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../api/virtual.html">Virtual scanner</a></li>
@@ -616,9 +616,9 @@ fov_rotation_33: float|off|1.0|-1.0|1.0|1e-06|
 [NimPulseqGUI Protocol End]
 </pre></div>
 </div>
-<p>The scanner limits are those a PSD host process sends with each call. The
-rasters are stated explicitly because the achieved bandwidth depends on
-them.</p>
+<p>The scanner limits are those an interpreter host process sends with each
+call. The rasters are stated explicitly because the achieved bandwidth
+depends on them.</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><a class="sphx-glr-backref-module-pypulseqpp sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.Opts.html#pypulseqpp.Opts" title="pypulseqpp.Opts"><span class="n">system</span></a> <span class="o">=</span> <a class="sphx-glr-backref-module-pypulseqpp sphx-glr-backref-type-py-class reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.Opts.html#pypulseqpp.Opts" title="pypulseqpp.Opts"><span class="n">pp</span><span class="o">.</span><span class="n">Opts</span></a><span class="p">(</span><span class="w">
 </span>    <span class="n">max_grad</span><span class="o">=</span><span class="mi">40</span><span class="p">,</span><span class="w">
 </span>    <span class="n">grad_unit</span><span class="o">=</span><span class="s2">&quot;</span><span class="s2">mT/m</span><span class="s2">&quot;</span><span class="p">,</span><span class="w">
@@ -700,7 +700,7 @@ the requested TE of 1.500 ms is shorter than the 3.550 ms this readout can achie
 </pre></div>
 </div>
 <p>A valid reply carries the resolved protocol at the precision a scanner
-control variable stores. Sending it back resolves to the same protocol,
+parameter stores. Sending it back resolves to the same protocol,
 which is what lets a design be identified by its resolved protocol
 (<a class="reference internal" href="../../../explanations/designs.html"><span class="doc">Designs and the design store</span></a>).</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><a class="sphx-glr-backref-module-pulserver-protocol sphx-glr-backref-type-py-class sphx-glr-backref-instance reference internal" href="../../pulserver.protocol.Validation.html#pulserver.protocol.Validation" title="pulserver.protocol.Validation"><span class="n">first</span></a> <span class="o">=</span> <a class="sphx-glr-backref-module-pulserver-design sphx-glr-backref-type-py-method reference internal" href="../../pulserver.design.ScannerSequence.validate.html#pulserver.design.ScannerSequence.validate" title="pulserver.design.ScannerSequence.validate"><span class="n">gre</span><span class="o">.</span><span class="n">validate</span></a><span class="p">(</span><a class="sphx-glr-backref-module-pypulseqpp sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.Opts.html#pypulseqpp.Opts" title="pypulseqpp.Opts"><span class="n">system</span></a><span class="p">,</span> <span class="p">{</span><span class="s2">&quot;</span><span class="s2">TE</span><span class="s2">&quot;</span><span class="p">:</span> <a class="sphx-glr-backref-module-pulserver-protocol sphx-glr-backref-type-py-class sphx-glr-backref-instance reference internal" href="../../pulserver.protocol.TEPreset.html#pulserver.protocol.TEPreset" title="pulserver.protocol.TEPreset"><span class="n">TEPreset</span><span class="o">.</span><span class="n">MINIMUM</span></a><span class="p">,</span> <span class="s2">&quot;</span><span class="s2">nx</span><span class="s2">&quot;</span><span class="p">:</span> <span class="mi">192</span><span class="p">,</span> <span class="s2">&quot;</span><span class="s2">bandwidth</span><span class="s2">&quot;</span><span class="p">:</span> <span class="mf">150e3</span><span class="p">}</span><span class="p">)</span><span class="w">
@@ -712,7 +712,7 @@ which is what lets a design be identified by its resolved protocol
 True scan time 36.0 s
 </pre></div>
 </div>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 3.095 seconds)</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 2.522 seconds)</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-generated-gallery-01-protocol-01-protocol-resolution-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
 <p><a class="reference download internal" download="" href="../../../_downloads/7417ea07f7e079f1bb4b10cb04fae4e2/01_protocol_resolution.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">01_protocol_resolution.ipynb</span></code></a></p>

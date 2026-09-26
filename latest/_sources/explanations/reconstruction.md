@@ -18,7 +18,7 @@ sequence as designed, in the logical frame.
 
 The header names the design the series was acquired with
 ({doc}`designs`). The proxy reads that design's sequence chain and tabulates
-its readouts in play order ({class}`~pulserver.vre.SequenceTable`). The table
+its readouts in play order ({class}`~pulserver.proxy.SequenceTable`). The table
 is applied to the stream as follows.
 
 - The header receives one encoding space for the imaging readouts of each
@@ -107,7 +107,7 @@ past which the worker is terminated and the client told so.
 
 A proxy given a server to forward to reconstructs no series itself. It
 enriches each series as it arrives and sends it on over TCP to that MRD server:
-a reconstruction server ({class}`~pulserver.vre.ReconServer`) on another
+a reconstruction server ({class}`~pulserver.proxy.ReconServer`) on another
 computer, or any server that reads the MRD streaming protocol. The server
 receives a config file message naming the reconstruction plugin of the series,
 or a name the proxy is configured with, then the enriched header and
@@ -128,6 +128,6 @@ relays, and the client receives a text naming the message's type.
 
 * {doc}`../user-guide/reconstruction-plugins` — writing a reconstruction.
 * {doc}`../user-guide/reconstruction-client` — the MRD stream a reconstruction client sends.
-* {doc}`../api/vre` — the proxy, the reconstruction server and the enrichment interface.
+* {doc}`../api/proxy` — the proxy, the reconstruction server and the enrichment interface.
 * {doc}`../api/recon` — the reconstruction plugin interface.
 * {doc}`/generated/gallery/03-reconstruction/01_enrichment` — enrichment and reconstruction of a simulated series.

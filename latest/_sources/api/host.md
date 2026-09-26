@@ -1,15 +1,15 @@
 # Design calls
 
-The design calls of the PSD host processes of one scanner, and the store of the
-designs they generate.
+The design calls of the interpreter host processes of one scanner, and the
+store of the designs they generate.
 
 ```{eval-rst}
 .. currentmodule:: pulserver.host
 ```
 
-A PSD host process lists, validates, generates and imports through the
-`pulserver design` command, or `python -m pulserver.host`, answered in its own
-process or in a warm server's; the calls, their replies and the store are
+An interpreter host process lists, validates, generates and imports through
+the `pulserver design` command, or `python -m pulserver.host`, answered in its
+own process or in a warm server's; the calls, their replies and the store are
 described in {doc}`../user-guide/running`, and the identity of a design in
 {doc}`../explanations/designs`.
 

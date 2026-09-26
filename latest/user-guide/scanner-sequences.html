@@ -276,7 +276,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../api/design.html">Scanner sequences</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/host.html">Design calls</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/ir.html">IR conversion</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../api/vre.html">Reconstruction proxy</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/proxy.html">Reconstruction proxy</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/recon.html">Reconstruction plugins</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/mrd.html">MRD data</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/virtual.html">Virtual scanner</a></li>
@@ -537,7 +537,7 @@
 It defines one <a class="reference internal" href="../generated/pulserver.design.ScannerSequence.html#pulserver.design.ScannerSequence" title="pulserver.design.ScannerSequence"><code class="xref py py-class docutils literal notranslate"><span class="pre">ScannerSequence</span></code></a> subclass, which binds
 a pypulseqpp <a class="reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.sequences.SequenceApp.html#pypulseqpp.sequences.SequenceApp" title="(in pypulseqpp latest)"><code class="xref py py-class docutils literal notranslate"><span class="pre">SequenceApp</span></code></a> to the entries of the
 scanner protocol. A design call loads the file by its stem: <code class="docutils literal notranslate"><span class="pre">gre2d.py</span></code> is the
-plugin a PSD host process names with <code class="docutils literal notranslate"><span class="pre">--plugin</span> <span class="pre">gre2d</span></code>.</p>
+plugin an interpreter host process names with <code class="docutils literal notranslate"><span class="pre">--plugin</span> <span class="pre">gre2d</span></code>.</p>
 <section id="binding-the-protocol">
 <h2>Binding the protocol<a class="headerlink" href="#binding-the-protocol" title="Link to this heading">#</a></h2>
 <p><code class="docutils literal notranslate"><span class="pre">app</span></code> is the sequence application and <code class="docutils literal notranslate"><span class="pre">ui</span></code> maps parameters of the interpreter’s
@@ -666,7 +666,7 @@ application records with <a class="reference external" href="https://pulserver.g
 <code class="docutils literal notranslate"><span class="pre">init_sequence</span></code>, as <a class="reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.sequences.SequenceApp.resolved.html#pypulseqpp.sequences.SequenceApp.resolved" title="(in pypulseqpp latest)"><code class="xref py py-attr docutils literal notranslate"><span class="pre">resolved</span></code></a> reports
 it. An entry whose argument the application does not record keeps the
 requested value. Resolved values are reported at the precision a scanner
-control variable stores, so a resolved protocol sent back resolves to itself.</p>
+parameter stores, so a resolved protocol sent back resolves to itself.</p>
 <p>A protocol the design refuses is invalid, and the error the application raised
 is the reply’s <code class="docutils literal notranslate"><span class="pre">info</span></code>:</p>
 <div class="highlight-pycon notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">reply</span> <span class="o">=</span> <span class="n">Gre2D</span><span class="p">()</span><span class="o">.</span><span class="n">validate</span><span class="p">(</span><span class="n">system</span><span class="p">,</span> <span class="p">{</span><span class="s2">"TE"</span><span class="p">:</span> <span class="mi">1000</span><span class="p">})</span>

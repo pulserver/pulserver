@@ -131,9 +131,9 @@ bandwidth its design achieves, and the reply carries those values.
 
 .. GENERATED FROM PYTHON SOURCE LINES 78-81
 
-The scanner limits are those a PSD host process sends with each call. The
-rasters are stated explicitly because the achieved bandwidth depends on
-them.
+The scanner limits are those an interpreter host process sends with each
+call. The rasters are stated explicitly because the achieved bandwidth
+depends on them.
 
 .. GENERATED FROM PYTHON SOURCE LINES 81-91
 
@@ -309,7 +309,7 @@ interpreter shows to the operator.
 .. GENERATED FROM PYTHON SOURCE LINES 198-202
 
 A valid reply carries the resolved protocol at the precision a scanner
-control variable stores. Sending it back resolves to the same protocol,
+parameter stores. Sending it back resolves to the same protocol,
 which is what lets a design be identified by its resolved protocol
 (:doc:`/explanations/designs`).
 
@@ -339,7 +339,7 @@ which is what lets a design be identified by its resolved protocol
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 3.095 seconds)
+   **Total running time of the script:** (0 minutes 2.522 seconds)
 
 
 .. _sphx_glr_download_generated_gallery_01-protocol_01_protocol_resolution.py:

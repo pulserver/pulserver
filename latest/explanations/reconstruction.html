@@ -276,7 +276,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../api/design.html">Scanner sequences</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/host.html">Design calls</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/ir.html">IR conversion</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../api/vre.html">Reconstruction proxy</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/proxy.html">Reconstruction proxy</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/recon.html">Reconstruction plugins</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/mrd.html">MRD data</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/virtual.html">Virtual scanner</a></li>
@@ -551,7 +551,7 @@ sequence as designed, in the logical frame.</p>
 <h2>Enrichment<a class="headerlink" href="#enrichment" title="Link to this heading">#</a></h2>
 <p>The header names the design the series was acquired with
 (<a class="reference internal" href="designs.html"><span class="doc">Designs and the design store</span></a>). The proxy reads that design’s sequence chain and tabulates
-its readouts in play order (<a class="reference internal" href="../generated/pulserver.vre.SequenceTable.html#pulserver.vre.SequenceTable" title="pulserver.vre.SequenceTable"><code class="xref py py-class docutils literal notranslate"><span class="pre">SequenceTable</span></code></a>). The table
+its readouts in play order (<a class="reference internal" href="../generated/pulserver.proxy.SequenceTable.html#pulserver.proxy.SequenceTable" title="pulserver.proxy.SequenceTable"><code class="xref py py-class docutils literal notranslate"><span class="pre">SequenceTable</span></code></a>). The table
 is applied to the stream as follows.</p>
 <ul class="simple">
 <li><p>The header receives one encoding space for the imaging readouts of each
@@ -635,7 +635,7 @@ past which the worker is terminated and the client told so.</p>
 <h2>Reconstruction server<a class="headerlink" href="#reconstruction-server" title="Link to this heading">#</a></h2>
 <p>A proxy given a server to forward to reconstructs no series itself. It
 enriches each series as it arrives and sends it on over TCP to that MRD server:
-a reconstruction server (<a class="reference internal" href="../generated/pulserver.vre.ReconServer.html#pulserver.vre.ReconServer" title="pulserver.vre.ReconServer"><code class="xref py py-class docutils literal notranslate"><span class="pre">ReconServer</span></code></a>) on another
+a reconstruction server (<a class="reference internal" href="../generated/pulserver.proxy.ReconServer.html#pulserver.proxy.ReconServer" title="pulserver.proxy.ReconServer"><code class="xref py py-class docutils literal notranslate"><span class="pre">ReconServer</span></code></a>) on another
 computer, or any server that reads the MRD streaming protocol. The server
 receives a config file message naming the reconstruction plugin of the series,
 or a name the proxy is configured with, then the enriched header and
@@ -655,7 +655,7 @@ relays, and the client receives a text naming the message’s type.</p>
 <ul class="simple">
 <li><p><a class="reference internal" href="../user-guide/reconstruction-plugins.html"><span class="doc">Reconstruction plugins</span></a> — writing a reconstruction.</p></li>
 <li><p><a class="reference internal" href="../user-guide/reconstruction-client.html"><span class="doc">Reconstruction clients</span></a> — the MRD stream a reconstruction client sends.</p></li>
-<li><p><a class="reference internal" href="../api/vre.html"><span class="doc">Reconstruction proxy</span></a> — the proxy, the reconstruction server and the enrichment interface.</p></li>
+<li><p><a class="reference internal" href="../api/proxy.html"><span class="doc">Reconstruction proxy</span></a> — the proxy, the reconstruction server and the enrichment interface.</p></li>
 <li><p><a class="reference internal" href="../api/recon.html"><span class="doc">Reconstruction plugins</span></a> — the reconstruction plugin interface.</p></li>
 <li><p><a class="reference internal" href="../generated/gallery/03-reconstruction/01_enrichment.html"><span class="doc">Raw-data enrichment and reconstruction</span></a> — enrichment and reconstruction of a simulated series.</p></li>
 </ul>
