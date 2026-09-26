@@ -146,6 +146,17 @@ amplitude is written as the rotation leaves it, so the k-space of a file
 exported under an oblique prescription agrees with the played trajectory to a
 relative $10^{-5}$ of its extent.
 
+A scheduled job simulates every fixture and every sequence pypulseqpp ships
+with KomaMRI twice, as designed and as exported from its cache, over one
+phantom whose density, relaxation times and off-resonance vary across it, and
+compares the two signals sample by sample. KomaMRI drops the ppm term of an
+offset, so a design file carrying one is given to it as Pulseq 1.4.1, whose
+writer resolves the term; and its rotation of a block can drop a corner a
+gradient holds twice, such as the peak of a trapezoid without a flat top, so
+the job turns a design's gradients itself. The two simulations then differ
+only where the cache plays something other than the design, or by the rounding
+of the text format.
+
 ## What a run establishes
 
 - The trajectory the cache plays is the one each file designs, for the
@@ -178,6 +189,9 @@ relative $10^{-5}$ of its extent.
   integrated by pypulseqpp, has the trajectory the cache plays, under an
   axial, an oblique and a reflected prescription, and holds each RF pulse with
   the samples, offsets, centre and use of the design's.
+- In the scheduled KomaMRI job, the signal simulated from the exported file of
+  every fixture and every shipped sequence is the one simulated from its
+  design, to the rounding of the text format.
 
 ## See also
 
