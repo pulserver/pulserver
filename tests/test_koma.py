@@ -31,6 +31,9 @@ TOLERANCE = 1e-3
 #: through an RF pulse on different grids, and KomaMRI plays the 10 ns ramp the
 #: file holds where the cache plays a gradient's step.
 ENGINE_TOLERANCE = 1e-2
+#: Fraction of a sample's interval by which the two times ``_held`` gives the
+#: sample lie inside the interval's ends.
+HOLD_INSET = 1e-3
 NAMES = sorted(
     p.stem for p in FIXTURES.glob("*.seq") if not p.stem.endswith("_b")
 ) + sorted(SMALL)
@@ -80,16 +83,41 @@ def _write_phantom(spins, path):
             column.astype("<f8").tofile(file)
 
 
+def _held(t, signal):
+    """Return the times and samples at which KomaMRI plays a pulse as the playout does.
+
+    The playout holds each sample of a pulse sampled at the middles of equal
+    intervals over its interval, as pypulseqpp's Bloch simulation does.
+    KomaMRI joins a pulse's samples linearly and takes the field at the start
+    of each time step, so it would play such a pulse half an interval late.
+    Each sample is therefore given at both ends of its interval, inset by
+    ``HOLD_INSET`` of it. Both simulators join the samples of any other pulse
+    linearly, and its times and samples are returned as they are.
+    """
+    if t.size < 2:
+        return t, signal
+    interval = t[1] - t[0]
+    at_middles = np.all(
+        np.abs(np.diff(t) - interval) <= 1e-9 * interval
+    ) and math.isclose(t[0], 0.5 * interval, rel_tol=1e-9)
+    if not at_middles:
+        return t, signal
+    starts = interval * np.arange(t.size)
+    inset = HOLD_INSET * interval
+    times = np.column_stack([starts + inset, starts + interval - inset]).ravel()
+    return times, np.repeat(signal, 2)
+
+
 def _as_komamri_plays_it(exported, path):
     """Write the exported file with each RF pulse in KomaMRI's convention.
 
     KomaMRI adds a pulse's phase shape and phase offset to its field with the
     opposite sign to pypulseqpp's Bloch simulation, and refers the phase the
     frequency offset f accrues to the pulse's centre t_c. With the samples
-    conjugated and the phase offset phi replaced by -phi - 2 pi f t_c, KomaMRI plays
-    the field pypulseqpp plays of the pulse. The offset is written within one
-    turn of zero, where the text format keeps it to its six significant figures
-    of a radian or less.
+    conjugated and held as :func:`_held` holds them, and the phase offset phi
+    replaced by -phi - 2 pi f t_c, KomaMRI plays the field pypulseqpp plays of
+    the pulse. The offset is written within one turn of zero, where the text
+    format keeps it to its six significant figures of a radian or less.
     """
     seq = pp.Sequence(SYSTEM)
     seq.read(str(exported))
@@ -99,11 +127,12 @@ def _as_komamri_plays_it(exported, path):
         events = [e for e in (block.gx, block.gy, block.gz, block.adc) if e is not None]
         if block.rf is not None:
             rf = block.rf
+            times, samples = _held(np.asarray(rf.t), np.conj(np.asarray(rf.signal)))
             events.append(
                 SimpleNamespace(
                     type="rf",
-                    signal=np.conj(np.asarray(rf.signal)),
-                    t=np.asarray(rf.t),
+                    signal=samples,
+                    t=times,
                     shape_dur=rf.shape_dur,
                     delay=rf.delay,
                     freq_offset=rf.freq_offset,

@@ -227,12 +227,17 @@ design, or by the rounding of the text format.
 The same job compares KomaMRI with pypulseqpp's Bloch simulation. KomaMRI adds
 a pulse's phase shape and phase offset to its field with the opposite sign to
 pypulseqpp, and refers the phase its frequency offset accrues to the pulse's
-centre. The exported file is therefore simulated a third time with each pulse
-rewritten in KomaMRI's convention, its samples conjugated and its phase offset
-$\phi$ replaced by $-\phi - 2\pi f t_c$, for the frequency offset $f$ and the
-centre $t_c$, so that KomaMRI plays the field pypulseqpp plays. That signal,
-demodulated by the receiver phase the export returns, is compared with
-pypulseqpp's simulation of the cache on the same spins.
+centre. It also joins a pulse's samples linearly and takes the field at the
+start of each time step, where the playout holds each sample of a pulse sampled
+at the middles of equal intervals over its interval; read as written, such a
+pulse would play half an interval late. The exported file is therefore
+simulated a third time with each pulse rewritten in KomaMRI's convention: its
+samples conjugated, each sample of a pulse sampled at the middles of equal
+intervals given at both ends of its interval, and its phase offset $\phi$
+replaced by $-\phi - 2\pi f t_c$, for the frequency offset $f$ and the centre
+$t_c$. KomaMRI then plays the field pypulseqpp plays. That signal, demodulated
+by the receiver phase the export returns, is compared with pypulseqpp's
+simulation of the cache on the same spins.
 
 ## What a run establishes
 
