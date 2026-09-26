@@ -136,6 +136,59 @@ def test_a_pulse_carries_its_phase_and_frequency_offsets_in_its_samples(tmp_path
         )
 
 
+# The file holds no RF pulse, so there is no use to detect.
+@pytest.mark.filterwarnings("ignore:read\\(\\)\\x3a detect_rf_use had nothing to do")
+def test_a_gradient_that_starts_and_ends_away_from_zero_inside_its_block_steps_there(
+    tmp_path,
+):
+    """A lobe held at its first and last samples out to its edges, beside a trapezoid spanning it."""
+    raster = SYSTEM.grad_raster_time
+    count = 20
+    lobe = pp.make_arbitrary_grad(
+        "x",
+        2e4 * np.sin(np.pi * (np.arange(count) + 0.5) / count),
+        first=0,
+        last=0,
+        delay=50 * raster,
+        system=SYSTEM,
+    )
+    spanning = pp.make_trapezoid(
+        "y", amplitude=1e4, rise_time=1e-4, flat_time=1.8e-3, system=SYSTEM
+    )
+    seq = pp.Sequence(SYSTEM)
+    seq.add_block(spanning, lobe)
+    seq.add_block(pp.make_adc(8, duration=8e-5, system=SYSTEM))
+    path = tmp_path / "lobe.seq"
+    seq.write(str(path))
+
+    back, _ = _exported(path, tmp_path / "exported.seq")
+
+    played = np.concatenate(virtual.trajectory(path), axis=1)
+    _assert_same_trajectory(back.calculate_kspace()[0], played)
+
+
+def test_a_pulse_sampled_every_two_rasters_holds_each_sample_over_both(tmp_path):
+    raster = SYSTEM.rf_raster_time
+    signal = np.sinc(np.linspace(-2.0, 2.0, 200)).astype(complex)
+    pulse = pp.make_arbitrary_rf(
+        signal, math.pi / 6, dwell=2 * raster, delay=SYSTEM.rf_dead_time, system=SYSTEM
+    )
+    seq = pp.Sequence(SYSTEM)
+    seq.add_block(pulse)
+    path = tmp_path / "pulse.seq"
+    seq.write(str(path))
+
+    back, _ = _exported(path, tmp_path / "exported.seq")
+
+    rf = back.get_block(1).rf
+    np.testing.assert_allclose(
+        rf.signal,
+        np.repeat(pulse.signal, 2),
+        rtol=0,
+        atol=1e-5 * np.abs(pulse.signal).max(),
+    )
+
+
 def test_the_receiver_phase_is_the_adc_offsets_advancing_from_its_start_and_its_modulation(
     tmp_path,
 ):
