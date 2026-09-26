@@ -42,7 +42,7 @@ calls push each design.
 
 The design calls, {mod}`pulserver.host`, run on the scanner host and answer
 the interpreter host process of each running sequence, one command per call or
-through a warm server. The reconstruction proxy, {mod}`pulserver.vre`, runs on
+through a warm server. The reconstruction proxy, {mod}`pulserver.proxy`, runs on
 the reconstruction computer and answers the scanner's reconstruction client.
 One acquisition proceeds as follows.
 

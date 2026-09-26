@@ -16,7 +16,7 @@ from _host import FIXTURE_LIMITS, FIXTURES, LIMITS, PLUGINS, generate
 from pulserver.host import DesignStore, call
 from pulserver.host._blocks import format_import
 from pulserver.host._push import push
-from pulserver.vre import DesignIntake
+from pulserver.proxy import DesignIntake
 
 
 @pytest.fixture

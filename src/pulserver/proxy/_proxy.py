@@ -32,7 +32,7 @@ from ._queue import QueueFile
 from ._workers import WorkerPool
 
 _PLUGIN_NAME = re.compile(r"[A-Za-z0-9_\-]+")
-_log = logging.getLogger("pulserver.vre")
+_log = logging.getLogger("pulserver.proxy")
 
 # A worker spawns, imports its plugin and connects; past this it is not coming.
 # Also how long a reconstruction server may take to accept a forwarded series.

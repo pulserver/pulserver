@@ -94,7 +94,7 @@ design is not a `.seq` file, and the IR cache is not the design of record.
 ### Fixed vocabulary
 
 - **design calls**, **warm server**, **reconstruction proxy**, **reconstruction
-  server**; `pulserver.host` and `pulserver.vre` when the module is meant.
+  server**; `pulserver.host` and `pulserver.proxy` when the module is meant.
 - **interpreter host process**, not "host interpreter" or "interpreter
   process".
 - **interpreter** for the scanner-side program; **reconstruction client** for

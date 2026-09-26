@@ -1,4 +1,4 @@
-"""Run the reconstruction proxy: ``python -m pulserver.vre --store DIR --port N (--plugins DIR | --forward HOST:PORT)``."""
+"""Run the reconstruction proxy: ``python -m pulserver.proxy --store DIR --port N (--plugins DIR | --forward HOST:PORT)``."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from ._proxy import ReconProxy
 
 
 def main(argv: list[str] | None = None) -> None:
-    parser = argparse.ArgumentParser(prog="python -m pulserver.vre")
+    parser = argparse.ArgumentParser(prog="python -m pulserver.proxy")
     parser.add_argument(
         "--store",
         type=Path,

@@ -191,8 +191,8 @@ permissions decide who may call.
 ## Reconstruction proxy
 
 ```bash
-python -m pulserver.vre --store DIR --port N --plugins DIR [--host ADDR] [--intake-port N] [--queue DIR] [--slots N] [--gpu-slots 1] [--spares 1] [--recon-timeout S]
-python -m pulserver.vre --store DIR --port N --forward HOST:PORT [--forward-config NAME] [--forward-dicom] [--host ADDR] [--intake-port N] [--recon-timeout S]
+python -m pulserver.proxy --store DIR --port N --plugins DIR [--host ADDR] [--intake-port N] [--queue DIR] [--slots N] [--gpu-slots 1] [--spares 1] [--recon-timeout S]
+python -m pulserver.proxy --store DIR --port N --forward HOST:PORT [--forward-config NAME] [--forward-dicom] [--host ADDR] [--intake-port N] [--recon-timeout S]
 ```
 
 | Option | Meaning |
@@ -233,7 +233,7 @@ server returns is relayed to the client; a message the proxy has no reader for
 ends the relay, and the client receives a `pulserver:` text naming its type.
 
 With `--intake-port`, the proxy runs a design intake beside it
-({class}`~pulserver.vre.DesignIntake`), an HTTP endpoint that writes the
+({class}`~pulserver.proxy.DesignIntake`), an HTTP endpoint that writes the
 designs pushed to it into `--store`: `HEAD /designs/<id>` answers 200 when the
 store holds the design and 404 otherwise, and `PUT /designs/<id>` stores a
 bundle, answering 201, 200 for a design already stored, or 400 with the reason
@@ -271,4 +271,4 @@ running.
 * {doc}`../explanations/architecture` — the services and what passes between them.
 * {doc}`../explanations/designs` — the design store and the identity of a design.
 * {doc}`reconstruction-client` — the MRD stream of a series.
-* {doc}`../api/host` and {doc}`../api/vre` — the design calls, the proxy and the reconstruction server.
+* {doc}`../api/host` and {doc}`../api/proxy` — the design calls, the proxy and the reconstruction server.

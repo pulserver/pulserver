@@ -48,7 +48,7 @@ pip install pulserver
 
 ```bash
 pulserver design serve --plugins sequences/ --socket /tmp/pulserver.sock
-python -m pulserver.vre --store /srv/pulserver/designs --port 9002 --plugins recon/
+python -m pulserver.proxy --store /srv/pulserver/designs --port 9002 --plugins recon/
 ```
 
 ## Documentation

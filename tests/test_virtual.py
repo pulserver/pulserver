@@ -30,7 +30,7 @@ from pulserver import ir, virtual
 from pulserver.host import DesignStore
 from pulserver.mrd import read_chain
 from pulserver.protocol import FOV_OFFSET, FOV_ROTATION
-from pulserver.vre import ReconProxy, SequenceTable
+from pulserver.proxy import ReconProxy, SequenceTable
 
 ROOT = Path(__file__).parents[1]
 FIXTURES = ROOT / "tests" / "fixtures" / "sequences"

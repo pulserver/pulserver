@@ -12,8 +12,8 @@ import ismrmrd
 import ismrmrd.xsd
 import numpy as np
 
+from ..proxy._designs import DESIGN_PARAMETER
 from ..recon._runtime.connection import Connection
-from ..vre._designs import DESIGN_PARAMETER
 
 # Placeholders for the schema's required encoding space, which the proxy
 # replaces with the sequence's.
