@@ -48,6 +48,7 @@
 /* Waveform memory errors (-250 to -259) */
 #define PULSEG_ERR_WAVE_MEMORY -250
 #define PULSEG_ERR_WAVE_LOADING -251
+#define PULSEG_ERR_WAVE_BUDGET -252
 
 /* Mechanical resonance errors (-400 to -449) */
 #define PULSEG_ERR_MECH_RESONANCES_NO_WAVEFORM -402

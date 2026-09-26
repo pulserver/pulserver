@@ -79,6 +79,7 @@ static int loads(const char *cache, int source_size, long max_samples, float ras
 {
     pulseg_collection *coll = pulseg_collection_alloc();
     pulseg_wave_budget budget = PULSEG_WAVE_BUDGET_INIT;
+    pulseg_wave_plan plan = PULSEG_WAVE_PLAN_INIT;
     pulseg_playout_backend backend;
     int rc;
 
@@ -90,9 +91,12 @@ static int loads(const char *cache, int source_size, long max_samples, float ras
     budget.max_samples = max_samples;
     budget.raster_us = raster_us;
     if (PULSEG_SUCCEEDED(rc))
-        rc = pulseg_playout_prepare(coll, &budget, &backend, NULL);
+        rc = pulseg_get_wave_plan(coll, &budget, &plan, NULL);
     if (PULSEG_SUCCEEDED(rc))
-        rc = pulseg_playout_scan(coll, &budget, &backend, NULL, NULL);
+        rc = pulseg_playout_prepare(coll, &plan, &backend);
+    if (PULSEG_SUCCEEDED(rc))
+        rc = pulseg_playout_scan(coll, &plan, &backend, NULL, NULL);
+    pulseg_free_wave_plan(&plan);
     pulseg_collection_free(coll);
     return PULSEG_SUCCEEDED(rc) ? 0 : 1;
 }

@@ -78,9 +78,12 @@ def test_every_wave_is_held_at_once_where_the_memory_affords_it(radial):
     assert plan["samples"][2] == 0
 
 
-def test_waves_that_do_not_fit_at_once_stream_through_two_slots_per_position(radial):
-    resident = _plan(radial)
-    plan = _plan(radial, max(resident["streamed_samples"]))
+@pytest.mark.parametrize("ring", [2, 3])
+def test_waves_that_do_not_fit_at_once_stream_through_a_ring_of_slots_per_position(
+    radial, ring
+):
+    resident = _plan(radial, slots=ring)
+    plan = _plan(radial, max(resident["streamed_samples"]), slots=ring)
     assert plan["mode"] == "streamed"
     assert plan["samples"] == plan["streamed_samples"]
     assert all(
@@ -89,13 +92,13 @@ def test_waves_that_do_not_fit_at_once_stream_through_two_slots_per_position(rad
             plan["samples"][:2], resident["resident_samples"][:2], strict=True
         )
     )
-    slots = [half for positions in plan["slots"] for pair in positions for half in pair]
+    slots = [slot for positions in plan["slots"] for each in positions for slot in each]
     for axis in range(3):
         assert _tiles(slots, axis)
     for positions in plan["slots"]:
-        for first, second in positions:
-            assert first["samples"] == second["samples"]
-            assert first["start_us"] == second["start_us"]
+        for each in positions:
+            assert len(each) == ring
+            assert len({(slot["samples"], slot["start_us"]) for slot in each}) == 1
 
 
 def test_a_memory_that_holds_neither_layout_is_refused(radial):
@@ -146,8 +149,69 @@ def test_an_instance_that_cannot_load_while_the_one_before_it_plays_is_refused(
     radial,
 ):
     fit = _plan(radial)
-    with pytest.raises(ValueError, match="longer to load"):
+    with pytest.raises(ValueError, match="cannot be loaded before it starts"):
         _plan(radial, max(fit["streamed_samples"]), load_us_per_sample=1e3)
+
+
+def _timeline(instances, loading, headroom, ring):
+    """The least spare time and where, the loading of each instance after the
+    first starting once the instance ``ring - 1`` before it has started and
+    the loading before it has ended, up to the first one late."""
+    starts = list(itertools.accumulate((d for _, d in instances), initial=0.0))
+    loaded, least, where = 0.0, math.inf, None
+    for i in range(1, len(instances)):
+        earliest = headroom * starts[i - ring + 1] if i >= ring - 1 else 0.0
+        loaded = max(loaded, earliest) + loading(instances[i][0])
+        spare = headroom * starts[i] - loaded
+        if spare < least:
+            least, where = spare, i
+        if spare < 0.0:
+            break
+    return least, where
+
+
+@pytest.mark.parametrize("ring", [2, 3, 4])
+@pytest.mark.parametrize("rate", [0.2, 1.0, 3.0])
+def test_the_loading_of_a_ring_of_slots_is_held_to_its_timeline(radial, ring, rate):
+    headroom = 0.5
+    streamed = max(_plan(radial, slots=ring)["streamed_samples"])
+    budget = WaveBudget(streamed, RASTER_US, rate, headroom, ring)
+    plan = ir.plan_waves(radial, WaveBudget(streamed, RASTER_US, slots=ring))
+
+    def loading(segment):
+        return rate * sum(
+            ring_of[0]["samples"] * sum(offset >= 0 for offset in ring_of[0]["offset"])
+            for ring_of in plan["slots"][segment]
+        )
+
+    instances = _instances(
+        ir.play(radial), ir.summary(radial, SYSTEM, cache_ext=".pseg")
+    )
+    least, where = _timeline(instances, loading, headroom, ring)
+    if least < 0.0:
+        with pytest.raises(ValueError, match=f"ends {-least:.1f} us after it starts"):
+            ir.plan_waves(radial, budget)
+        return
+    checked = ir.plan_waves(radial, budget)
+    assert checked["loading_checked"]
+    assert checked["least_spare_us"] == pytest.approx(least, rel=1e-6)
+    first = sum(
+        ir.summary(radial, SYSTEM, cache_ext=".pseg")["segments"][segment]["num_blocks"]
+        for segment, _ in instances[:where]
+    )
+    assert checked["tightest"] == (0, first)
+
+
+def test_more_slots_let_the_loading_run_ahead_of_the_playout(radial):
+    # The spokes alternate with a delay that plays no wave: two slots load a
+    # spoke's waves while the delay before it plays, three from the start of
+    # the spoke before.
+    streamed = max(_plan(radial, slots=3)["streamed_samples"])
+    with pytest.raises(ValueError, match="cannot be loaded before it starts"):
+        _plan(radial, streamed, load_us_per_sample=1.0, slots=2)
+    assert (
+        _plan(radial, streamed, load_us_per_sample=1.0, slots=3)["least_spare_us"] > 0.0
+    )
 
 
 def test_a_resident_layout_is_not_held_to_a_load_rate(radial):
@@ -190,8 +254,38 @@ def test_a_sampled_wave_is_the_played_wave_at_the_raster_centres(radial):
         (LOTS, RASTER_US, 0.0, 0.0),
         (-1, RASTER_US),
         (LOTS, RASTER_US, -1.0),
+        (LOTS, RASTER_US, 0.0, 0.5, 1),
     ],
 )
-def test_a_budget_without_a_raster_or_headroom_or_with_negative_room_is_refused(fields):
+def test_a_budget_without_a_raster_headroom_or_ring_or_with_negative_room_is_refused(
+    fields,
+):
     with pytest.raises(ValueError):
         WaveBudget(*fields)
+
+
+def test_a_cache_carries_the_layout_of_the_budget_it_was_converted_for(radial):
+    budget = WaveBudget(LOTS // 100, RASTER_US, 0.01, 0.25, 3)
+    ir.convert(radial, SYSTEM, wave_budget=budget)
+    stored = ir.plan_waves(radial)
+    assert stored == ir.plan_waves(radial, budget)
+    assert stored["budget"] == {
+        "max_samples": budget.max_samples,
+        "raster_us": budget.raster_us,
+        "load_us_per_sample": pytest.approx(budget.load_us_per_sample),
+        "headroom": budget.headroom,
+        "slots": budget.slots,
+    }
+
+
+def test_a_cache_converted_without_a_budget_holds_every_wave_on_the_file_raster(
+    radial,
+):
+    stored = ir.plan_waves(radial)
+    assert stored["mode"] == "resident"
+    assert stored["budget"]["raster_us"] == pytest.approx(SYSTEM.grad_raster_time * 1e6)
+
+
+def test_a_conversion_whose_waves_do_not_fit_its_budget_is_refused(radial):
+    with pytest.raises(ValueError, match="fit waveform memory"):
+        ir.convert(radial, SYSTEM, wave_budget=WaveBudget(10, RASTER_US))

@@ -90,11 +90,12 @@ const char *pulseg_get_error_message(int code)
     case PULSEG_ERR_SEG_NO_SEGMENTS_FOUND:
         return "No segment boundaries could be identified in TR";
     case PULSEG_ERR_WAVE_MEMORY:
-        return "The waves fit waveform memory neither all at once nor two slots per "
-               "position";
+        return "The waves fit waveform memory neither all at once nor in a ring of slots "
+               "per position";
     case PULSEG_ERR_WAVE_LOADING:
-        return "A segment instance's waves take longer to load than the instance "
-               "before it plays";
+        return "A segment instance's waves cannot be loaded before it starts";
+    case PULSEG_ERR_WAVE_BUDGET:
+        return "The cache lays its waves out for another waveform-memory budget";
     case PULSEG_ERR_SEG_ROTATION_MID_GRADIENT:
         return "Rotation state changes across a live gradient (no zero-gradient junction)";
     case PULSEG_ERR_MECH_RESONANCES_NO_WAVEFORM:
@@ -179,9 +180,12 @@ const char *pulseg_get_error_hint(int code)
                "rotation, one ratio between the gradients it turns and one shape across more "
                "blocks, or split the scan into subsequences.";
     case PULSEG_ERR_WAVE_LOADING:
-        return "The segment instance before the one named is too short to load the "
-               "waves of the next. Lengthen it, or let fewer positions of the next "
-               "segment play waves.";
+        return "The segment instances before the one named are too short to load its "
+               "waves. Lengthen them, give the playout more slots per position, or let "
+               "fewer positions of that segment play waves.";
+    case PULSEG_ERR_WAVE_BUDGET:
+        return "Convert the sequence with the playout's budget: its waveform memory, "
+               "gradient raster, load rate, headroom and slots per position.";
     case PULSEG_ERR_MAX_GRAD_EXCEEDED:
         return "The gradient sum-of-squares amplitude exceeds the system limit. "
                "See diagnostic message for details.";

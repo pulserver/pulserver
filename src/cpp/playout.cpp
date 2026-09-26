@@ -42,8 +42,9 @@ bool overlap(const Span &a, const Span &b)
 
 /* What the first stage prepares at one segment position: where it plays no
  * wave, its gradient events at unit amplitude, as corners from the block's
- * start; where it does, the points its longest wave takes and the slots its
- * waves play from; and its RF pulse at unit amplitude and its readout. */
+ * start; where it does, the points its longest wave takes and the ring of
+ * slots its waves play from; and its RF pulse at unit amplitude and its
+ * readout. */
 struct Position
 {
     std::array<std::vector<float>, 3> time_us, shape;
@@ -54,7 +55,7 @@ struct Position
     float rf_centre_us = std::numeric_limits<float>::quiet_NaN();
     int adc_def = -1;
     int adc_delay_us = 0;
-    std::array<pulseg_wave_region, 2> slot{};
+    std::vector<pulseg_wave_region> slots;
     bool waves = false;
 };
 
@@ -88,14 +89,15 @@ Position prepare_position(
     int segment,
     int position,
     const pulseg_block_info &info,
-    const pulseg_wave_region *slot)
+    const pulseg_wave_region *slots,
+    int count)
 {
     Position p;
-    for (int axis = 0; axis < 3 && !slot; ++axis)
+    for (int axis = 0; axis < 3 && !slots; ++axis)
         prepare_event(coll, segment, position, axis, info, p);
-    if (slot)
+    if (slots)
     {
-        p.slot = {slot[0], slot[1]};
+        p.slots.assign(slots, slots + count);
         p.waves = true;
         p.wave_points = info.wave_points;
     }
@@ -266,7 +268,7 @@ void put_registers(
     c.put("segment", segment.segment);
     c.put("position", block.position);
     c.put("instance", segment.instance);
-    c.put("half", segment.half);
+    c.put("slot", segment.slot);
     c.put("rotate", segment.rotate);
     c.put("await_trigger", segment.await_trigger);
     c.put("first_position", segment.first_position);
@@ -319,10 +321,12 @@ void put_prepared(
 }
 
 /* The prepared positions as pulserver.ir.playout returns them, one row per
- * position in segment order. */
+ * position in segment order, with @p slots slots each. */
 class PreparedRows
 {
   public:
+    explicit PreparedRows(int slots) : slots_(slots) {}
+
     void add(int segment, int position, const Position &p)
     {
         segment_.push_back(segment);
@@ -334,12 +338,13 @@ class PreparedRows
             shape_.insert(shape_.end(), p.shape[a].begin(), p.shape[a].end());
             span_.push_back(static_cast<py::ssize_t>(time_us_.size()));
         }
-        for (const pulseg_wave_region &slot : p.slot)
+        for (size_t k = 0; k < static_cast<size_t>(slots_); ++k)
         {
+            const bool held = p.waves && k < p.slots.size();
             for (int a = 0; a < 3; ++a)
-                slot_offset_.push_back(p.waves ? slot.offset[a] : -1);
-            slot_samples_.push_back(p.waves ? slot.samples : 0);
-            slot_start_us_.push_back(p.waves ? slot.start_us : 0.0f);
+                slot_offset_.push_back(held ? p.slots[k].offset[a] : -1);
+            slot_samples_.push_back(held ? p.slots[k].samples : 0);
+            slot_start_us_.push_back(held ? p.slots[k].start_us : 0.0f);
         }
     }
 
@@ -353,22 +358,24 @@ class PreparedRows
         out["event_time_us"] = as_array(time_us_, {corners});
         out["event_shape"] = as_array(shape_, {corners});
         out["event_span"] = as_array(span_, {n, 3, 2});
-        out["slot_offset"] = as_array(slot_offset_, {n, 2, 3});
-        out["slot_samples"] = as_array(slot_samples_, {n, 2});
-        out["slot_start_us"] = as_array(slot_start_us_, {n, 2});
+        const auto k = static_cast<py::ssize_t>(slots_);
+        out["slot_offset"] = as_array(slot_offset_, {n, k, 3});
+        out["slot_samples"] = as_array(slot_samples_, {n, k});
+        out["slot_start_us"] = as_array(slot_start_us_, {n, k});
         return out;
     }
 
   private:
+    int slots_;
     std::vector<int> segment_, position_;
     std::vector<float> time_us_, shape_, slot_start_us_;
     std::vector<py::ssize_t> span_;
     std::vector<long> slot_offset_, slot_samples_;
 };
 
-py::dict positions_dict(const std::map<std::pair<int, int>, Position> &positions)
+py::dict positions_dict(const std::map<std::pair<int, int>, Position> &positions, int slots)
 {
-    PreparedRows rows;
+    PreparedRows rows(slots);
     for (const auto &entry : positions)
         rows.add(entry.first.first, entry.first.second, entry.second);
     return rows.result();
@@ -387,15 +394,17 @@ class Recorder
     int reserve(const pulseg_wave_plan &plan)
     {
         mode_ = plan.mode;
+        slots_ = plan.budget.slots;
         for (int axis = 0; axis < 3; ++axis)
             memory_[static_cast<size_t>(axis)].assign(
                 static_cast<size_t>(plan.samples[axis]), std::numeric_limits<float>::quiet_NaN());
         return PULSEG_SUCCESS;
     }
 
-    int prepare(int segment, int position, const pulseg_block_info &info, const pulseg_wave_region *slot)
+    int prepare(int segment, int position, const pulseg_block_info &info, const pulseg_wave_region *slots)
     {
-        positions_[{segment, position}] = prepare_position(coll_, segment, position, info, slot);
+        positions_[{segment, position}] =
+            prepare_position(coll_, segment, position, info, slots, slots_);
         return PULSEG_SUCCESS;
     }
 
@@ -458,7 +467,8 @@ class Recorder
         out["mode"] = modes[mode_];
         out["memory_samples"] =
             py::make_tuple(memory_[0].size(), memory_[1].size(), memory_[2].size());
-        out["positions"] = positions_dict(positions_);
+        out["slots"] = slots_;
+        out["positions"] = positions_dict(positions_, slots_);
         out["blocks"] = blocks;
         out["instances"] = instances_;
         out["loads"] = loads_;
@@ -501,6 +511,7 @@ class Recorder
     std::vector<py::ssize_t> read_span_;
     py::ssize_t blocks_ = 0;
     int mode_ = PULSEG_WAVES_NONE;
+    int slots_ = 0;
     long instances_ = 0;
     long loads_ = 0;
     long overwrites_ = 0;
@@ -540,10 +551,10 @@ pulseg_playout_backend backend_for(Session &session)
     { return guarded(ctx, [plan](Recorder &r) { return r.reserve(*plan); }); };
     backend.prepare_block =
         [](void *ctx, int segment, int position, const pulseg_block_info *info,
-           const pulseg_wave_region *slot)
+           const pulseg_wave_region *slots)
     {
         return guarded(
-            ctx, [=](Recorder &r) { return r.prepare(segment, position, *info, slot); });
+            ctx, [=](Recorder &r) { return r.prepare(segment, position, *info, slots); });
     };
     backend.load_wave = [](void *ctx, const pulseg_wave_load *load)
     { return guarded(ctx, [load](Recorder &r) { return r.load(*load); }); };
@@ -559,16 +570,16 @@ pulseg_playout_backend backend_for(Session &session)
 
 py::dict record_playout(
     pulseg_collection *coll,
-    const pulseg_wave_budget &budget,
+    const pulseg_wave_plan &plan,
     const pulseg_playout_options &options,
     bool waveforms)
 {
     Session session(coll, waveforms);
     const pulseg_playout_backend backend = backend_for(session);
     pulseg_diagnostic diag = PULSEG_DIAGNOSTIC_INIT;
-    int rc = pulseg_playout_prepare(coll, &budget, &backend, &diag);
+    int rc = pulseg_playout_prepare(coll, &plan, &backend);
     if (PULSEG_SUCCEEDED(rc))
-        rc = pulseg_playout_scan(coll, &budget, &backend, &options, &diag);
+        rc = pulseg_playout_scan(coll, &plan, &backend, &options, &diag);
     if (session.failure)
         std::rethrow_exception(session.failure);
     if (PULSEG_FAILED(rc))

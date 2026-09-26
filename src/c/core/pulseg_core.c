@@ -233,6 +233,7 @@ void pulseg_sequence_descriptor_free(pulseg_sequence_descriptor *d)
         d->block_wave = NULL;
     }
     d->num_waves = 0;
+    pulseg_corner_point_stream_free(&d->repetition);
 }
 
 void pulseg_collection_free(pulseg_collection *c)
@@ -249,18 +250,21 @@ void pulseg_collection_free(pulseg_collection *c)
     if (c->subsequence_info)
         PULSEG_FREE(c->subsequence_info);
     free_segment_remap(c);
+    pulseg_free_wave_plan(&c->wave_plan);
     /* Free the struct itself (allocated by pulseg_read) */
     PULSEG_FREE(c);
 }
 
 pulseg_collection *pulseg_collection_alloc(void)
 {
+    static const pulseg_wave_plan no_plan = PULSEG_WAVE_PLAN_INIT;
     pulseg_collection *c = (pulseg_collection *)PULSEG_ALLOC(sizeof(pulseg_collection));
     if (!c)
         return NULL;
     memset(c, 0, sizeof(*c));
     c->block_cursor.exec_stream_position = -1;
     c->num_repetitions = 1;
+    c->wave_plan = no_plan;
     return c;
 }
 

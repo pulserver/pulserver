@@ -415,21 +415,28 @@ struct WavePlan
     WavePlan() = default;
     WavePlan(const WavePlan &) = delete;
     WavePlan &operator=(const WavePlan &) = delete;
+    WavePlan(WavePlan &&other) noexcept : plan(other.plan)
+    {
+        static const pulseg_wave_plan empty = PULSEG_WAVE_PLAN_INIT;
+        other.plan = empty;
+    }
+    WavePlan &operator=(WavePlan &&) = delete;
     ~WavePlan() { pulseg_free_wave_plan(&plan); }
 };
 
-/* The waveform memory a playout on @p budget gives the waves. */
-py::dict plan_waves(const pulseg_collection *coll, const pulseg_wave_budget &budget)
+/* A layout of the waves as pulserver.ir.plan_waves returns it. */
+py::dict plan_dict(const pulseg_wave_plan &plan)
 {
-    WavePlan planned;
-    const pulseg_wave_plan &plan = planned.plan;
-    pulseg_diagnostic diag = PULSEG_DIAGNOSTIC_INIT;
-    const int rc = pulseg_plan_waves(coll, &budget, &planned.plan, &diag);
-    if (PULSEG_FAILED(rc))
-        native::raise_diagnosed(rc, diag);
-
     static const char *const modes[] = {"none", "resident", "streamed"};
+    const pulseg_wave_budget &b = plan.budget;
+    py::dict budget;
+    budget["max_samples"] = b.max_samples;
+    budget["raster_us"] = b.raster_us;
+    budget["load_us_per_sample"] = b.load_us_per_sample;
+    budget["headroom"] = b.headroom;
+    budget["slots"] = b.slots;
     py::dict out;
+    out["budget"] = budget;
     out["mode"] = modes[plan.mode];
     out["samples"] = py::make_tuple(plan.samples[0], plan.samples[1], plan.samples[2]);
     out["resident_samples"] = py::make_tuple(
@@ -449,9 +456,13 @@ py::dict plan_waves(const pulseg_collection *coll, const pulseg_wave_budget &bud
     for (int g = 0; g < plan.num_segments; ++g)
     {
         py::list positions;
-        for (int b = 0; b < plan.num_positions[g]; ++b)
-            positions.append(py::make_tuple(
-                region_dict(plan.slots[g][2 * b]), region_dict(plan.slots[g][2 * b + 1])));
+        for (int p = 0; p < plan.num_positions[g]; ++p)
+        {
+            py::list ring;
+            for (int k = 0; k < b.slots; ++k)
+                ring.append(region_dict(plan.slots[g][b.slots * p + k]));
+            positions.append(py::tuple(ring));
+        }
         slots.append(positions);
     }
     out["slots"] = slots;
@@ -463,9 +474,9 @@ py::dict plan_waves(const pulseg_collection *coll, const pulseg_wave_budget &bud
     return out;
 }
 
-/* A playout's waveform memory, gradient raster, load rate and headroom, as
- * pulserver.ir.WaveBudget holds them. */
-using Budget = std::tuple<long, float, float, float>;
+/* A playout's waveform memory, gradient raster, load rate, headroom and
+ * slots per position, as pulserver.ir.WaveBudget holds them. */
+using Budget = std::tuple<long, float, float, float, int>;
 
 /* The budget @p given, or, without one, every wave held at once on the
  * gradient raster of the chain's first file. */
@@ -478,13 +489,35 @@ pulseg_wave_budget budget_for(const pulseg_collection *coll, const std::optional
         b.raster_us = std::get<1>(*given);
         b.load_us_per_sample = std::get<2>(*given);
         b.headroom = std::get<3>(*given);
+        b.slots = std::get<4>(*given);
         return b;
     }
     pulseg_subseq_info first = PULSEG_SUBSEQ_INFO_INIT;
     require(pulseg_get_subseq_info(coll, &first, 0), "subsequence info");
-    b.max_samples = std::numeric_limits<long>::max();
+    /* The cache holds a sample count in four bytes. */
+    b.max_samples = std::numeric_limits<int>::max();
     b.raster_us = first.grad_raster_us;
     return b;
+}
+
+/* The layout of @p coll's waves on @p given, laid out here; without a
+ * budget, the layout the collection carries. */
+WavePlan wave_plan(const pulseg_collection *coll, const std::optional<Budget> &given)
+{
+    WavePlan planned;
+    pulseg_diagnostic diag = PULSEG_DIAGNOSTIC_INIT;
+    if (given)
+    {
+        const pulseg_wave_budget budget = budget_for(coll, given);
+        const int rc = pulseg_plan_waves(coll, &budget, &planned.plan, &diag);
+        if (PULSEG_FAILED(rc))
+            native::raise_diagnosed(rc, diag);
+        return planned;
+    }
+    const int rc = pulseg_get_wave_plan(coll, nullptr, &planned.plan, &diag);
+    if (PULSEG_FAILED(rc))
+        native::raise_diagnosed(rc, diag);
+    return planned;
 }
 
 /* A corner-point stream, released with it. */
@@ -604,7 +637,8 @@ PYBIND11_MODULE(_ext, module)
            float block_raster_us,
            int vendor,
            const std::array<int, 3> &label_column_map,
-           const std::string &cache_ext)
+           const std::string &cache_ext,
+           const std::optional<Budget> &wave_budget)
         {
             const pulseg_opts opts = make_opts(
                 rf_raster_us,
@@ -615,6 +649,12 @@ PYBIND11_MODULE(_ext, module)
                 label_column_map,
                 cache_ext);
             const Collection coll = convert(chain, opts);
+            const pulseg_wave_budget budget = budget_for(coll.get(), wave_budget);
+            pulseg_diagnostic diag = PULSEG_DIAGNOSTIC_INIT;
+            const int rc = pulseg_store_wave_plan(coll.get(), &budget, &diag);
+            if (PULSEG_FAILED(rc))
+                native::raise_diagnosed(rc, diag);
+            require(pulseg_store_repetitions(coll.get()), "heaviest repetitions");
             if (PULSEG_FAILED(pulseg_save_cache(coll.get(), seq_path.c_str(), &opts)))
                 throw std::invalid_argument("cannot write the cache beside " + seq_path);
         },
@@ -658,21 +698,12 @@ PYBIND11_MODULE(_ext, module)
 
     module.def(
         "plan_waves_from_cache",
-        [](const std::string &cache_path,
-           int source_size,
-           long max_samples,
-           float raster_us,
-           float load_us_per_sample,
-           float headroom)
+        [](const std::string &cache_path, int source_size, const std::optional<Budget> &budget)
         {
-            pulseg_wave_budget budget = PULSEG_WAVE_BUDGET_INIT;
-            budget.max_samples = max_samples;
-            budget.raster_us = raster_us;
-            budget.load_us_per_sample = load_us_per_sample;
-            budget.headroom = headroom;
-            return plan_waves(load(cache_path, source_size).get(), budget);
+            const Collection coll = load(cache_path, source_size);
+            return plan_dict(wave_plan(coll.get(), budget).plan);
         },
-        "Lay out a written cache's waves in a playout's waveform memory.");
+        "Lay out a written cache's waves in a playout's waveform memory, or read its layout.");
 
     module.def(
         "playout_from_cache",
@@ -683,11 +714,11 @@ PYBIND11_MODULE(_ext, module)
            bool waveforms)
         {
             const Collection coll = load(cache_path, source_size);
+            const WavePlan planned = wave_plan(coll.get(), budget);
             pulseg_playout_options options = PULSEG_PLAYOUT_OPTIONS_INIT;
             options.prescan_subsequence = prescan[0];
             options.prescan_readouts = prescan[1];
-            return native::record_playout(
-                coll.get(), budget_for(coll.get(), budget), options, waveforms);
+            return native::record_playout(coll.get(), planned.plan, options, waveforms);
         },
         "Play a written cache's two stages over a backend that records them.");
 
