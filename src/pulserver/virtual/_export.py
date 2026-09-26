@@ -77,8 +77,7 @@ def export(
         it out.
     """
     played = ir.play(seq_path, cache_ext, waveforms=True)
-    identity = np.eye(3)
-    turn = identity if rotation is None else np.asarray(rotation, dtype=float)
+    turn = np.eye(3) if rotation is None else np.asarray(rotation, dtype=float)
     span = played["gradient_span"]
     corners = played["gradient_time_us"].astype(float)
     values = played["gradient_waveform_hz_per_m"].astype(float)
@@ -89,7 +88,7 @@ def export(
     receiver = []
     for block in range(played["duration_us"].size):
         duration_us = float(played["duration_us"][block])
-        turned = identity if played["norot"][block] else turn
+        turned = np.eye(3) if played["norot"][block] else turn
         waves = [
             (corners[slice(*span[block, axis])], values[slice(*span[block, axis])])
             for axis in range(3)
