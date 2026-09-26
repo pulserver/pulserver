@@ -809,6 +809,17 @@ the segment instance that completes the readouts its sequence declares
 drives no digital output, and every gradient whose amplitude varies across
 repetitions, a phase encoding for instance, plays at zero, as does a wave any
 of whose logical axes varies.</p>
+<p>Waveform memory holds samples of the type and scale a scanner build defines
+before it includes the library: <code class="docutils literal notranslate"><span class="pre">PULSEG_WAVE_SAMPLE</span></code>, the type;
+<code class="docutils literal notranslate"><span class="pre">PULSEG_WAVE_FULL_SCALE</span></code>, the sample at the peak of a waveform normalised to
+unit peak; <code class="docutils literal notranslate"><span class="pre">PULSEG_WAVE_PHASE_FULL_SCALE</span></code>, the phase in radians that sample
+plays on a phase waveform; and <code class="docutils literal notranslate"><span class="pre">PULSEG_WAVE_QUANTIZE</span></code>, which turns a scaled
+value into a sample. A wave, an arbitrary gradient shape or an RF magnitude is
+normalised to unit peak, scaled, and clamped to the full scale
+(<code class="docutils literal notranslate"><span class="pre">pulseg_wave_samples</span></code>); its physical scale is the amplitude each block plays
+it at. A phase is wrapped into <span class="math notranslate nohighlight">\([-\pi, \pi)\)</span> before it is scaled
+(<code class="docutils literal notranslate"><span class="pre">pulseg_phase_samples</span></code>). The defaults are single-precision samples at a full
+scale of one, and a phase full scale of <span class="math notranslate nohighlight">\(\pi\)</span>.</p>
 <p><a class="reference internal" href="../generated/pulserver.ir.playout.html#pulserver.ir.playout" title="pulserver.ir.playout"><code class="xref py py-func docutils literal notranslate"><span class="pre">playout()</span></code></a> runs both stages over a backend that plays
 nothing and records what each stage hands it, with a model of the waveform
 memory. The test suite holds every block the record plays, the events its
@@ -816,7 +827,8 @@ position prepared at the amplitudes the scan loop set or the samples its wave
 read from memory, to the block <a class="reference internal" href="../generated/pulserver.ir.play.html#pulserver.ir.play" title="pulserver.ir.play"><code class="xref py py-func docutils literal notranslate"><span class="pre">play()</span></code></a> resolves; checks
 that no load writes over memory the instance in play reads; and compiles both
 stages into the 32-bit scanner reader, which plays the same instances and
-waves as the host.</p>
+waves as the host and, built with 16-bit samples, loads the same waves scaled
+to that type.</p>
 </section>
 <section id="the-heaviest-repetition">
 <h2>The heaviest repetition<a class="headerlink" href="#the-heaviest-repetition" title="Link to this heading">#</a></h2>
