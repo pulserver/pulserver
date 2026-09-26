@@ -80,8 +80,8 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--phantom",
         type=Path,
-        help="JSON file of the phantom's ellipses; vials of several T1 and T2 "
-        "without one",
+        help="JSON file of the phantom's ellipses, or brainweb for BrainWeb's "
+        "normal brain (the brainweb extra); vials of several T1 and T2 without one",
     )
     parser.add_argument(
         "--spacing", type=float, default=1.0, help="isochromat spacing, in mm"
@@ -283,11 +283,7 @@ def _scan(args: argparse.Namespace, store: Path, design: str) -> int:
 
     rotation, _ = prescription(args)
     field = float(parse_limits(args.limits.read_text())["B0"])
-    tissue = (
-        default_phantom(args.coils)
-        if args.phantom is None
-        else read_phantom(args.phantom, args.coils)
-    )
+    tissue = _phantom(args)
     scan = Scan(
         DesignStore(store).directory(design) / "sequence.seq",
         tissue.isochromats(1e-3 * args.spacing, field_t=field),
@@ -319,6 +315,16 @@ def _scan(args: argparse.Namespace, store: Path, design: str) -> int:
     if args.mrd is not None:
         record(args.mrd, design, acquired, **series)
     return status
+
+
+def _phantom(args: argparse.Namespace) -> Any:
+    from . import BrainWeb
+
+    if args.phantom is None:
+        return default_phantom(args.coils)
+    if str(args.phantom) == "brainweb":
+        return BrainWeb(coils=args.coils)
+    return read_phantom(args.phantom, args.coils)
 
 
 def _kept(

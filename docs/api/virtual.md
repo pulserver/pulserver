@@ -45,6 +45,7 @@ scanner's centre frequency.
 | Object | Description |
 | --- | --- |
 | {obj}`~pulserver.virtual.Phantom` | Ellipses whose signals add, received by one coil or several of analytic sensitivity, placed in the physical frame by a rotation and a position; sampled as isochromats for the Bloch simulation. |
+| {obj}`~pulserver.virtual.BrainWeb` | BrainWeb's normal brain, downloaded on first use, placed head first and supine with its tissues' T1, T2 and proton density; sampled as isochromats for the Bloch simulation. |
 | {obj}`~pulserver.virtual.Ellipse` | An ellipse of uniform magnetization in a plane of constant z, of one chemical shift and one pair of relaxation times. |
 
 ## Reconstruction client

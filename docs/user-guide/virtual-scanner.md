@@ -167,9 +167,12 @@ line, is written to standard output, and the scan clock to standard error.
   ]}
   ```
 
-  Without it, the phantom is seven vials of water around one of fat, with T1
-  from 0.3 s to 2.0 s and T2 from 0.04 s to 0.3 s. `--spacing`, in mm, and
-  `--coils` set its isochromats and its receive coils.
+  `--phantom brainweb` scans {class}`~pulserver.virtual.BrainWeb`, BrainWeb's
+  normal brain, downloaded on first use by the `brainweb` extra
+  (`pip install 'pulserver[brainweb]'`); its `--spacing` is a whole number of
+  millimetres. Without `--phantom`, the phantom is seven vials of water around
+  one of fat, with T1 from 0.3 s to 2.0 s and T2 from 0.04 s to 0.3 s.
+  `--spacing`, in mm, and `--coils` set its isochromats and its receive coils.
 - `--recon` streams the series to a reconstruction proxy, which looks the
   design up in its store: give that store as `--store`, or the proxy's design
   intake as `--push`. The images go to `images.h5` in `--output`, the DICOM
