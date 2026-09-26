@@ -613,6 +613,9 @@
 <span class="sd">    written with, zero when the chain is read and segmented again.</span>
 <span class="sd">    ``readout_labels`` lists, per readout in play order, the values of the</span>
 <span class="sd">    three labels ``label_column_map`` selects, as in force at that readout.</span>
+<span class="sd">    ``waves`` lists the subsequence's rotated waves, as :func:`play` indexes</span>
+<span class="sd">    them: each one's point count, and its largest magnitude along x, y and z</span>
+<span class="sd">    over that of the largest gradient event it combines.</span>
 
 <span class="sd">    With ``cache_ext``, the cache beside the file is loaded instead of the</span>
 <span class="sd">    chain being read and segmented again; this build loads only vendor-neutral</span>
@@ -716,11 +719,17 @@
 <span class="sd">          carries no rotation, so the scanner may move the excitation by a</span>
 <span class="sd">          carrier offset; and ``(blocks, 3)``, that gradient along x, y and z</span>
 <span class="sd">          over the amplitude of the event playing it there;</span>
-<span class="sd">        - ``gradient_hz_per_m``: ``(blocks, 3)``, the amplitude of each</span>
-<span class="sd">          gradient event along x, y and z; an arbitrary gradient's shape</span>
-<span class="sd">          carries its own sign;</span>
-<span class="sd">        - ``rotation``: ``(blocks, 3, 3)``, the block's rotation, identity</span>
-<span class="sd">          without one;</span>
+<span class="sd">        - ``gradient_hz_per_m``: ``(blocks, 3)``, the amplitude along the</span>
+<span class="sd">          logical x, y and z axes: the factor on the shape of the gradient</span>
+<span class="sd">          event, or on the rotated wave, the block plays there, each</span>
+<span class="sd">          normalised to a largest magnitude of one;</span>
+<span class="sd">        - ``wave``: the rotated wave the block plays, as indexed by the</span>
+<span class="sd">          subsequence's ``waves`` in :func:`summary`, or -1 for a block that</span>
+<span class="sd">          plays its gradient events as they are. A block plays one at every</span>
+<span class="sd">          segment position where an instance carries a rotation other than</span>
+<span class="sd">          the identity: its gradient events combined and turned by its</span>
+<span class="sd">          rotation, so that the prescription's rotation is the only one the</span>
+<span class="sd">          scanner applies;</span>
 <span class="sd">        - ``norot``, ``nopos``: the block's NOROT and NOPOS flags;</span>
 <span class="sd">        - ``adc``, ``adc_freq_hz``, ``adc_phase_rad``: whether the block</span>
 <span class="sd">          acquires, and its frequency and phase offsets;</span>
@@ -744,10 +753,13 @@
 <span class="sd">          RF in those arrays; empty without RF;</span>
 <span class="sd">        - ``gradient_time_us``, ``gradient_waveform_hz_per_m``: the corners of</span>
 <span class="sd">          every played gradient, concatenated in play order: their times from</span>
-<span class="sd">          the block's start, in µs, and the gradient there, the instance's</span>
-<span class="sd">          amplitude times the shape the instance plays. A waveform on the</span>
+<span class="sd">          the block's start, in µs, and the gradient there, the amplitude</span>
+<span class="sd">          times the shape or wave the instance plays. A waveform on the</span>
 <span class="sd">          gradient raster holds its end values over the half raster</span>
-<span class="sd">          intervals before its first sample and after its last;</span>
+<span class="sd">          intervals before its first sample and after its last. A rotated</span>
+<span class="sd">          wave takes the corners of every gradient event it combines, or the</span>
+<span class="sd">          raster centres across them when one is an arbitrary gradient on</span>
+<span class="sd">          the raster;</span>
 <span class="sd">        - ``gradient_span``: ``(blocks, 3, 2)``, the start and stop of each</span>
 <span class="sd">          block's gradient along x, y and z in those arrays; empty without</span>
 <span class="sd">          one;</span>
@@ -765,7 +777,8 @@
 <span class="sd">        If the cache cannot be loaded.</span>
 <span class="sd">    RuntimeError</span>
 <span class="sd">        With ``waveforms``, if a block's gradient holds another number of</span>
-<span class="sd">        samples than the segment position it plays at is prepared with.</span>
+<span class="sd">        samples than the segment position it plays at is prepared with, or</span>
+<span class="sd">        its rotated wave more points than that position reserves.</span>
 <span class="sd">    """</span>
     <span class="n">seq_path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">seq_path</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">require</span><span class="p">(</span><span class="s2">"play_cache"</span><span class="p">)(</span>

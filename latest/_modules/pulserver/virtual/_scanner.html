@@ -496,13 +496,14 @@
 
 <span class="sd">    One ``(3, samples)`` array per readout, in play order, in 1/m along the</span>
 <span class="sd">    physical axes. The locations are integrated from the gradients the cache</span>
-<span class="sd">    plays (:func:`pulserver.ir.play`), turned by each block's rotation and</span>
-<span class="sd">    then, except in blocks labelled ``NOROT``, by the prescription's</span>
-<span class="sd">    ``rotation`` from logical to physical axes, a reflection included, as</span>
-<span class="sd">    :func:`pulserver.ir.check` turns them. Under the default identity the</span>
-<span class="sd">    physical axes are the logical ones. An excitation returns k to zero, and</span>
-<span class="sd">    a refocusing pulse negates it, at the RF centre the cache records</span>
-<span class="sd">    (``rf_center_us``); each file of a chain starts from zero.</span>
+<span class="sd">    plays (:func:`pulserver.ir.play`), along the logical axes, each block's</span>
+<span class="sd">    own rotation included, turned, except in blocks labelled ``NOROT``, by</span>
+<span class="sd">    the prescription's ``rotation`` from logical to physical axes, a</span>
+<span class="sd">    reflection included, as :func:`pulserver.ir.check` turns them. Under the</span>
+<span class="sd">    default identity the physical axes are the logical ones. An excitation</span>
+<span class="sd">    returns k to zero, and a refocusing pulse negates it, at the RF centre</span>
+<span class="sd">    the cache records (``rf_center_us``); each file of a chain starts from</span>
+<span class="sd">    zero.</span>
 <span class="sd">    """</span>
     <span class="k">return</span> <span class="p">[</span><span class="n">readout</span><span class="o">.</span><span class="n">kspace</span> <span class="k">for</span> <span class="n">readout</span> <span class="ow">in</span> <span class="n">_play</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="n">seq_path</span><span class="p">),</span> <span class="n">cache_ext</span><span class="p">,</span> <span class="n">rotation</span><span class="p">)]</span></div>
 
@@ -594,9 +595,7 @@
             <span class="n">precession_origin_us</span> <span class="o">=</span> <span class="mf">0.0</span>
             <span class="n">longitudinal</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">frequencies</span><span class="o">.</span><span class="n">size</span><span class="p">)</span>
             <span class="n">tipped</span> <span class="o">=</span> <span class="n">longitudinal</span>
-        <span class="n">rotation</span> <span class="o">=</span> <span class="n">played</span><span class="p">[</span><span class="s2">"rotation"</span><span class="p">][</span><span class="n">block</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">float</span><span class="p">)</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="n">played</span><span class="p">[</span><span class="s2">"norot"</span><span class="p">][</span><span class="n">block</span><span class="p">]:</span>
-            <span class="n">rotation</span> <span class="o">=</span> <span class="n">turn</span> <span class="o">@</span> <span class="n">rotation</span>
+        <span class="n">rotation</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span> <span class="k">if</span> <span class="n">played</span><span class="p">[</span><span class="s2">"norot"</span><span class="p">][</span><span class="n">block</span><span class="p">]</span> <span class="k">else</span> <span class="n">turn</span>
         <span class="n">waves</span> <span class="o">=</span> <span class="p">[</span>
             <span class="p">(</span><span class="n">corners</span><span class="p">[</span><span class="nb">slice</span><span class="p">(</span><span class="o">*</span><span class="n">span</span><span class="p">[</span><span class="n">block</span><span class="p">,</span> <span class="n">axis</span><span class="p">])],</span> <span class="n">values</span><span class="p">[</span><span class="nb">slice</span><span class="p">(</span><span class="o">*</span><span class="n">span</span><span class="p">[</span><span class="n">block</span><span class="p">,</span> <span class="n">axis</span><span class="p">])])</span>
             <span class="k">for</span> <span class="n">axis</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span>

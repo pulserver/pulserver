@@ -565,11 +565,17 @@ steady from the pulse’s first sample to its last as
 carries no rotation, so the scanner may move the excitation by a
 carrier offset; and <code class="docutils literal notranslate"><span class="pre">(blocks,</span> <span class="pre">3)</span></code>, that gradient along x, y and z
 over the amplitude of the event playing it there;</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">gradient_hz_per_m</span></code>: <code class="docutils literal notranslate"><span class="pre">(blocks,</span> <span class="pre">3)</span></code>, the amplitude of each
-gradient event along x, y and z; an arbitrary gradient’s shape
-carries its own sign;</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">rotation</span></code>: <code class="docutils literal notranslate"><span class="pre">(blocks,</span> <span class="pre">3,</span> <span class="pre">3)</span></code>, the block’s rotation, identity
-without one;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">gradient_hz_per_m</span></code>: <code class="docutils literal notranslate"><span class="pre">(blocks,</span> <span class="pre">3)</span></code>, the amplitude along the
+logical x, y and z axes: the factor on the shape of the gradient
+event, or on the rotated wave, the block plays there, each
+normalised to a largest magnitude of one;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">wave</span></code>: the rotated wave the block plays, as indexed by the
+subsequence’s <code class="docutils literal notranslate"><span class="pre">waves</span></code> in <a class="reference internal" href="pulserver.ir.summary.html#pulserver.ir.summary" title="pulserver.ir.summary"><code class="xref py py-func docutils literal notranslate"><span class="pre">summary()</span></code></a>, or -1 for a block that
+plays its gradient events as they are. A block plays one at every
+segment position where an instance carries a rotation other than
+the identity: its gradient events combined and turned by its
+rotation, so that the prescription’s rotation is the only one the
+scanner applies;</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">norot</span></code>, <code class="docutils literal notranslate"><span class="pre">nopos</span></code>: the block’s NOROT and NOPOS flags;</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">adc</span></code>, <code class="docutils literal notranslate"><span class="pre">adc_freq_hz</span></code>, <code class="docutils literal notranslate"><span class="pre">adc_phase_rad</span></code>: whether the block
 acquires, and its frequency and phase offsets;</p></li>
@@ -593,10 +599,13 @@ time base;</p></li>
 RF in those arrays; empty without RF;</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">gradient_time_us</span></code>, <code class="docutils literal notranslate"><span class="pre">gradient_waveform_hz_per_m</span></code>: the corners of
 every played gradient, concatenated in play order: their times from
-the block’s start, in µs, and the gradient there, the instance’s
-amplitude times the shape the instance plays. A waveform on the
+the block’s start, in µs, and the gradient there, the amplitude
+times the shape or wave the instance plays. A waveform on the
 gradient raster holds its end values over the half raster
-intervals before its first sample and after its last;</p></li>
+intervals before its first sample and after its last. A rotated
+wave takes the corners of every gradient event it combines, or the
+raster centres across them when one is an arbitrary gradient on
+the raster;</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">gradient_span</span></code>: <code class="docutils literal notranslate"><span class="pre">(blocks,</span> <span class="pre">3,</span> <span class="pre">2)</span></code>, the start and stop of each
 block’s gradient along x, y and z in those arrays; empty without
 one;</p></li>
@@ -617,7 +626,8 @@ block’s modulation in that array; empty without one.</p></li>
 <dd class="field-odd"><ul class="simple">
 <li><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If the cache cannot be loaded.</p></li>
 <li><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#RuntimeError" title="(in Python v3.14)"><strong>RuntimeError</strong></a> – With <code class="docutils literal notranslate"><span class="pre">waveforms</span></code>, if a block’s gradient holds another number of
-    samples than the segment position it plays at is prepared with.</p></li>
+    samples than the segment position it plays at is prepared with, or
+    its rotated wave more points than that position reserves.</p></li>
 </ul>
 </dd>
 </dl>

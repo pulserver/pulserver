@@ -591,7 +591,10 @@ start. The accessors that answer for a segment position,
 its representative, the instance of largest energy; where the instances of
 one position play distinct shapes, as the interleaves of a spiral drawn as
 distinct shapes do, <code class="docutils literal notranslate"><span class="pre">pulseg_get_cursor_grad_waveform</span></code> returns the shape of
-the instance at the cursor. It also returns each played RF pulse: the
+the instance at the cursor. A block at a position whose blocks carry a
+rotation plays its rotated wave instead, which <code class="docutils literal notranslate"><span class="pre">pulseg_materialize_wave</span></code>
+returns, at the amplitudes the instance sets (<a class="reference internal" href="ir-cache.html"><span class="doc">The scanner IR</span></a>). It also
+returns each played RF pulse: the
 instance’s amplitude times the magnitude and phase shapes of its definition,
 which <code class="docutils literal notranslate"><span class="pre">pulseg_get_rf_magnitude</span></code> and <code class="docutils literal notranslate"><span class="pre">pulseg_get_rf_phase</span></code> return, the phase in
 cycles as Pulseq stores it.</p>
@@ -599,9 +602,9 @@ cycles as Pulseq stores it.</p>
 k-space location <span class="math notranslate nohighlight">\(\mathbf{k}\)</span> of every ADC sample, in 1/m along the physical
 axes. The rotation <span class="math notranslate nohighlight">\(R\)</span> of the prescription, from logical to physical axes, is
 not in the cache (<a class="reference internal" href="ir-cache.html"><span class="doc">The scanner IR</span></a>): the virtual interpreter is given it, as a
-playout is, and turns each block’s gradients by the block’s own rotation and
-then by <span class="math notranslate nohighlight">\(R\)</span>, except in blocks labelled <code class="docutils literal notranslate"><span class="pre">NOROT</span></code>, which play turned by their own
-rotation alone. This is the frame <a class="reference internal" href="../generated/pulserver.ir.check.html#pulserver.ir.check" title="pulserver.ir.check"><code class="xref py py-func docutils literal notranslate"><span class="pre">check()</span></code></a> checks in. Under
+playout is, and turns each block’s gradients, which carry the block’s own
+rotation, by <span class="math notranslate nohighlight">\(R\)</span>, except in blocks labelled <code class="docutils literal notranslate"><span class="pre">NOROT</span></code>, which play as the cache
+holds them. This is the frame <a class="reference internal" href="../generated/pulserver.ir.check.html#pulserver.ir.check" title="pulserver.ir.check"><code class="xref py py-func docutils literal notranslate"><span class="pre">check()</span></code></a> checks in. Under
 the identity the physical axes are the logical ones. An excitation returns
 <span class="math notranslate nohighlight">\(\mathbf{k}\)</span> to zero, and a refocusing pulse negates it, at the RF centre the
 design records, which the cache carries for each RF event with its use; each
@@ -686,9 +689,9 @@ play one pulse; KomaMRI simulates the offset in the pulse’s rotating frame
 but takes the samples’ phase in the opposite sense of rotation, so from the
 ramp it would excite the mirror image of an offset slice. It refers the
 offset’s phase to the pulse’s centre, which the file therefore records.</p></li>
-<li><p>The gradients along the physical axes, turned by the block’s rotation and
-then by <span class="math notranslate nohighlight">\(R\)</span> except in blocks labelled <code class="docutils literal notranslate"><span class="pre">NOROT</span></code>, as the virtual interpreter
-turns them. A time-shaped gradient through the corners of all three axes
+<li><p>The gradients along the physical axes: those the cache plays, the block’s
+rotation in them, turned by <span class="math notranslate nohighlight">\(R\)</span> except in blocks labelled <code class="docutils literal notranslate"><span class="pre">NOROT</span></code>, as the
+virtual interpreter turns them. A time-shaped gradient through the corners of all three axes
 carries each, and a step from or to zero at a gradient’s first or last
 corner is a ramp 10 ns wide, since a time shape holds one value per time.
 The file therefore needs no rotation extension.</p></li>

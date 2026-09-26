@@ -495,9 +495,10 @@
 <span class="sd">      frequency and phase offsets with their ppm terms resolved, its centre</span>
 <span class="sd">      and its use, with the channels of a pTx pulse summed, as at unit,</span>
 <span class="sd">      in-phase sensitivity;</span>
-<span class="sd">    - its gradients along the physical axes: turned by the block's rotation</span>
-<span class="sd">      and then, except in a block labelled ``NOROT``, by the prescription's</span>
-<span class="sd">      ``rotation`` from logical to physical axes, as</span>
+<span class="sd">    - its gradients along the physical axes: those the cache plays along the</span>
+<span class="sd">      logical axes, the block's own rotation included, turned, except in a</span>
+<span class="sd">      block labelled ``NOROT``, by the prescription's ``rotation`` from</span>
+<span class="sd">      logical to physical axes, as</span>
 <span class="sd">      :func:`~pulserver.virtual.trajectory` turns them, each as a time-shaped</span>
 <span class="sd">      gradient through the corners the cache plays, a step from or to zero</span>
 <span class="sd">      as a ramp 10 ns wide;</span>
@@ -541,9 +542,7 @@
     <span class="n">receiver</span> <span class="o">=</span> <span class="p">[]</span>
     <span class="k">for</span> <span class="n">block</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">played</span><span class="p">[</span><span class="s2">"duration_us"</span><span class="p">]</span><span class="o">.</span><span class="n">size</span><span class="p">):</span>
         <span class="n">duration_us</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">played</span><span class="p">[</span><span class="s2">"duration_us"</span><span class="p">][</span><span class="n">block</span><span class="p">])</span>
-        <span class="n">turned</span> <span class="o">=</span> <span class="n">played</span><span class="p">[</span><span class="s2">"rotation"</span><span class="p">][</span><span class="n">block</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">float</span><span class="p">)</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="n">played</span><span class="p">[</span><span class="s2">"norot"</span><span class="p">][</span><span class="n">block</span><span class="p">]:</span>
-            <span class="n">turned</span> <span class="o">=</span> <span class="n">turn</span> <span class="o">@</span> <span class="n">turned</span>
+        <span class="n">turned</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span> <span class="k">if</span> <span class="n">played</span><span class="p">[</span><span class="s2">"norot"</span><span class="p">][</span><span class="n">block</span><span class="p">]</span> <span class="k">else</span> <span class="n">turn</span>
         <span class="n">waves</span> <span class="o">=</span> <span class="p">[</span>
             <span class="p">(</span><span class="n">corners</span><span class="p">[</span><span class="nb">slice</span><span class="p">(</span><span class="o">*</span><span class="n">span</span><span class="p">[</span><span class="n">block</span><span class="p">,</span> <span class="n">axis</span><span class="p">])],</span> <span class="n">values</span><span class="p">[</span><span class="nb">slice</span><span class="p">(</span><span class="o">*</span><span class="n">span</span><span class="p">[</span><span class="n">block</span><span class="p">,</span> <span class="n">axis</span><span class="p">])])</span>
             <span class="k">for</span> <span class="n">axis</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span>
@@ -586,7 +585,7 @@
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">types</span><span class="o">.</span><span class="n">SimpleNamespace</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">"""Return one block's gradients along the physical axes, as time-shaped gradient events.</span>
 
-<span class="sd">    ``waves`` are the corners of the block's gradients along its channel</span>
+<span class="sd">    ``waves`` are the corners of the block's gradients along the logical</span>
 <span class="sd">    axes, in µs from the block's start, zero outside them; ``turned`` takes</span>
 <span class="sd">    those axes to the physical ones. The events share the corners of all</span>
 <span class="sd">    three, and start and end on the gradient raster.</span>

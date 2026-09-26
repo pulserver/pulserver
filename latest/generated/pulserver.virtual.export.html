@@ -541,9 +541,10 @@ cache plays in it:</p>
 frequency and phase offsets with their ppm terms resolved, its centre
 and its use, with the channels of a pTx pulse summed, as at unit,
 in-phase sensitivity;</p></li>
-<li><p>its gradients along the physical axes: turned by the block’s rotation
-and then, except in a block labelled <code class="docutils literal notranslate"><span class="pre">NOROT</span></code>, by the prescription’s
-<code class="docutils literal notranslate"><span class="pre">rotation</span></code> from logical to physical axes, as
+<li><p>its gradients along the physical axes: those the cache plays along the
+logical axes, the block’s own rotation included, turned, except in a
+block labelled <code class="docutils literal notranslate"><span class="pre">NOROT</span></code>, by the prescription’s <code class="docutils literal notranslate"><span class="pre">rotation</span></code> from
+logical to physical axes, as
 <a class="reference internal" href="pulserver.virtual.trajectory.html#pulserver.virtual.trajectory" title="pulserver.virtual.trajectory"><code class="xref py py-func docutils literal notranslate"><span class="pre">trajectory()</span></code></a> turns them, each as a time-shaped
 gradient through the corners the cache plays, a step from or to zero
 as a ramp 10 ns wide;</p></li>
