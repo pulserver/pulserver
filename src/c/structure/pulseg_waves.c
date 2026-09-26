@@ -475,6 +475,17 @@ float pulseg__wave_scale(
     return scale;
 }
 
+/* The wave block-table entry @p block_idx plays, -1 where it plays none. */
+static int block_wave_index(const pulseg_sequence_descriptor *desc, int block_idx)
+{
+    int w;
+
+    if (!desc->block_wave || block_idx < 0 || block_idx >= desc->num_blocks)
+        return -1;
+    w = desc->block_wave[block_idx];
+    return (desc->waves && w < desc->num_waves) ? w : -1;
+}
+
 void pulseg__block_wave(
     const pulseg_sequence_descriptor *desc,
     int block_idx,
@@ -489,10 +500,8 @@ void pulseg__block_wave(
     amp_hz_per_m[0] = 0.0f;
     amp_hz_per_m[1] = 0.0f;
     amp_hz_per_m[2] = 0.0f;
-    if (!desc->block_wave || !desc->waves || block_idx < 0 || block_idx >= desc->num_blocks)
-        return;
-    w = desc->block_wave[block_idx];
-    if (w < 0 || w >= desc->num_waves)
+    w = block_wave_index(desc, block_idx);
+    if (w < 0)
         return;
 
     scale = pulseg__wave_scale(desc, &desc->block_table[block_idx]);

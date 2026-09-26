@@ -162,7 +162,7 @@ def test_a_rotated_block_plays_its_gradients_turned_by_its_rotation(tmp_path):
     seq = _copy("zte_3d.seq", tmp_path)
     convert(seq, SYSTEM)
     played = ir.play(seq, waveforms=True)
-    ((_, sequence),) = read_chain(seq)
+    _, sequence = read_chain(seq)[0]
     rotated = np.flatnonzero(played["wave"] >= 0)
     assert rotated.size
     for block in rotated:
@@ -198,7 +198,7 @@ def test_a_rotated_wave_on_the_raster_keeps_the_area_of_the_gradients_it_turns(
     lobe, trapezoid, _ = _turned_on_the_raster(seq, 1.0)
     convert(seq, SYSTEM)
     played = ir.play(seq, waveforms=True)
-    ((_, sequence),) = read_chain(seq)
+    _, sequence = read_chain(seq)[0]
     angle = np.pi / 6
     turn = np.array([[np.cos(angle), -np.sin(angle)], [np.sin(angle), np.cos(angle)]])
     designed = turn @ [lobe.sum() * SYSTEM.grad_raster_time, trapezoid.area]
