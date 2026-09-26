@@ -695,13 +695,14 @@ typedef struct pulseg_block_info
                             *   duration is runtime-adjustable via setperiod, so
                             *   two segments differing only in such a block's
                             *   duration share one segment definition. */
-    int rf_grad_constant;   /**< 1 if RF is present and every accompanying gradient is
-                            *   flat across the RF's active window -- the excitation
-                            *   can then be moved at run time by a carrier offset
-                            *   alone.  A nonselective pulse qualifies with a zero
-                            *   level.  0 when the block carries a rotation extension,
-                            *   and 0 for a block with no RF. */
-    float rf_grad_level[3]; /**< normalised gradient level over that window, per axis;
+    int rf_grad_constant;   /**< 1 if RF is present and every accompanying gradient
+                            *   holds one value from the pulse's first sample to its
+                            *   last -- the excitation can then be moved at run time
+                            *   by a carrier offset alone.  A nonselective pulse
+                            *   qualifies with a zero level.  0 when the block
+                            *   carries a rotation extension, and 0 for a block with
+                            *   no RF. */
+    float rf_grad_level[3]; /**< normalised gradient level across the pulse, per axis;
                              *   multiply by the instance amplitude for the physical
                              *   gradient.  Meaningless when rf_grad_constant is 0. */
 } pulseg_block_info;

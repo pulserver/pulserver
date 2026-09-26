@@ -77,6 +77,8 @@ const char *pulseg_get_error_message(int code)
         return "Number of waveform shots exceeds maximum allowed";
     case PULSEG_ERR_SEG_TOO_MANY_ADC_VARIANTS:
         return "A segment is played with too many distinct readout patterns";
+    case PULSEG_ERR_SEG_TOO_MANY_PULSE_VARIANTS:
+        return "A segment is played with too many distinct pulse patterns";
     case PULSEG_ERR_TR_NO_BLOCKS:
         return "Sequence contains no blocks";
     case PULSEG_ERR_TR_NO_PERIODIC_PATTERN:
@@ -161,6 +163,12 @@ const char *pulseg_get_error_hint(int code)
                "segment of its own to bind its receive filters. Reuse one ADC "
                "structure across repetitions, or split the readouts into separate "
                "subsequences.";
+    case PULSEG_ERR_SEG_TOO_MANY_PULSE_VARIANTS:
+        return "One segment is played with more distinct combinations of RF and "
+               "gradient events than the scanner can hold prepared, because each "
+               "combination needs a segment of its own. Vary a pulse by its "
+               "amplitude, phase or frequency rather than its shape, or split the "
+               "repetitions into separate subsequences.";
     case PULSEG_ERR_MAX_GRAD_EXCEEDED:
         return "The gradient sum-of-squares amplitude exceeds the system limit. "
                "See diagnostic message for details.";

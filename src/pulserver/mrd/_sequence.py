@@ -17,17 +17,14 @@ from typing import Any
 
 import numpy as np
 
-#: ADC samples a range of blocks holds before an excitation may start the next.
-_RANGE_SAMPLES = 1 << 17
+#: ADC samples after which a run of readouts ends and the next starts.
+_RUN_SAMPLES = 1 << 17
 
-#: Ranges whose k-space a table keeps.
-_KEPT_RANGES = 2
+#: Runs whose k-space a table keeps.
+_KEPT_RUNS = 2
 
-#: RF uses whose pulse centre resets k-space to zero, as pypulseqpp integrates it.
-_RESETTING = frozenset({"excitation", "undefined"})
-
-#: RF and ADC columns of ``Sequence.block_events``, and the number of columns.
-_RF, _ADC, _COLUMNS = 1, 5, 7
+#: ADC column of ``Sequence.block_events``, and the number of columns.
+_ADC, _COLUMNS = 5, 7
 
 
 def read_chain(path: Path | str, *, verify: bool = False) -> list[tuple[Path, Any]]:
@@ -131,12 +128,12 @@ class SequenceDefinitions:
 class ReadoutTable:
     """Every ADC readout of one sequence, in play order.
 
-    k-space is integrated over ranges of blocks, each starting at the first
-    block or at an excitation without a readout, whose pulse centre resets k:
-    a range needs nothing from the blocks before it. Tabulating integrates
-    every range once; :meth:`readout_k` integrates a readout's range again
-    when it is not among the last few kept. The table holds the sequence for
-    this, which must not change once tabulated.
+    k-space is integrated a run of consecutive readouts at a time, by
+    ``Sequence.adc_kspace(readouts=...)``, from the last pulse before the run
+    that resets it. Tabulating integrates the whole sequence once, to find
+    each readout's echo; :meth:`readout_k` integrates a readout's run when it
+    is not among the last few kept. The table holds the sequence for this,
+    which must not change once tabulated.
 
     Attributes
     ----------
@@ -179,7 +176,7 @@ class ReadoutTable:
     labels: dict[str, np.ndarray]
     center_sample: np.ndarray
     trajectory_dimensions: np.ndarray
-    _ranges: _Ranges = field(repr=False)
+    _runs: _Runs = field(repr=False)
 
     def __len__(self) -> int:
         return int(self.num_samples.size)
@@ -197,9 +194,6 @@ class ReadoutTable:
         dwell = np.array([float(adc.dwell) for adc in adcs])[which]
         labels = _labels_at(seq, block)
 
-        ranges = _Ranges(
-            seq, _range_starts(seq, events, block, num_samples), block, num_samples
-        )
         reverse = labels.get("REV", np.zeros(count, dtype=np.int64)) != 0
         moves = echoes.moving.any(axis=1)
         center_sample = np.where(
@@ -215,7 +209,7 @@ class ReadoutTable:
             labels=labels,
             center_sample=center_sample,
             trajectory_dimensions=dimensions,
-            _ranges=ranges,
+            _runs=_Runs(seq, num_samples),
         )
 
     def readout_k(self, index: int) -> np.ndarray:
@@ -224,54 +218,43 @@ class ReadoutTable:
         ``(3, num_samples)``, absolute, with block rotations applied, as
         ``Sequence.adc_kspace`` returns it.
         """
-        ranges = self._ranges
-        k = ranges.k(int(ranges.of_readout[index]))
-        start = int(ranges.start[index])
-        return k[:, start : start + int(self.num_samples[index])].copy()
+        runs = self._runs
+        run = int(np.searchsorted(runs.first, index, side="right")) - 1
+        start = int(runs.before[index] - runs.before[runs.first[run]])
+        return runs.k(run)[:, start : start + int(self.num_samples[index])].copy()
 
 
-class _Ranges:
-    """The ranges of blocks a sequence's k-space is integrated over, and the last few integrated."""
+class _Runs:
+    """Consecutive readouts whose k-space is integrated together, and the last few integrated.
 
-    def __init__(
-        self,
-        seq: Any,
-        starts: np.ndarray,
-        readout_blocks: np.ndarray,
-        num_samples: np.ndarray,
-    ) -> None:
+    A run starts at each readout whose first sample, counted over the whole
+    sequence, is the first at or past a multiple of ``_RUN_SAMPLES``.
+    """
+
+    def __init__(self, seq: Any, num_samples: np.ndarray) -> None:
         self._sequence = seq
-        self._first = starts
-        self._last = np.append(starts[1:] - 1, len(seq))
-        before = np.concatenate(([0], np.cumsum(num_samples, dtype=np.int64)))
-        first_readout = np.append(
-            np.searchsorted(readout_blocks, starts), num_samples.size
+        #: Samples before each readout, and after the last.
+        self.before = np.concatenate(([0], np.cumsum(num_samples, dtype=np.int64)))
+        #: First readout of each run.
+        self.first = np.flatnonzero(
+            np.diff(self.before[:-1] // _RUN_SAMPLES, prepend=-1)
         )
-        self._samples = np.diff(before[first_readout])
-        #: Range of each readout, and its first sample's column in that range.
-        self.of_readout = np.searchsorted(starts, readout_blocks, side="right") - 1
-        self.start = before[:-1] - before[first_readout[self.of_readout]]
+        self._stop = np.append(self.first[1:], num_samples.size)
         self._kept: OrderedDict[int, np.ndarray] = OrderedDict()
         self._lock = threading.Lock()
 
-    def k(self, part: int) -> np.ndarray:
-        """Return the ``(3, samples)`` k of every ADC sample in a range, in 1/m."""
+    def k(self, run: int) -> np.ndarray:
+        """Return the ``(3, samples)`` k of every ADC sample of a run, in 1/m."""
         with self._lock:
-            if part in self._kept:
-                self._kept.move_to_end(part)
-                return self._kept[part]
-            first, last = int(self._first[part]), int(self._last[part])
+            if run in self._kept:
+                self._kept.move_to_end(run)
+                return self._kept[run]
+            readouts = (int(self.first[run]), int(self._stop[run]))
             k = np.asarray(
-                self._sequence.adc_kspace(block_range=(first, last)),
-                dtype=np.float64,
+                self._sequence.adc_kspace(readouts=readouts), dtype=np.float64
             ).reshape(3, -1)
-            if k.shape[1] != self._samples[part]:
-                raise RuntimeError(
-                    f"blocks {first} to {last} play {k.shape[1]} ADC samples, "
-                    f"their readouts {self._samples[part]}"
-                )
-            self._kept[part] = k
-            while len(self._kept) > _KEPT_RANGES:
+            self._kept[run] = k
+            while len(self._kept) > _KEPT_RUNS:
                 self._kept.popitem(last=False)
             return k
 
@@ -310,30 +293,6 @@ def _labels_at(seq: Any, block: np.ndarray) -> dict[str, np.ndarray]:
         ]
         for name, value in seq.evaluate_labels(evolution="blocks").items()
     }
-
-
-def _range_starts(
-    seq: Any, events: np.ndarray, readout_blocks: np.ndarray, num_samples: np.ndarray
-) -> np.ndarray:
-    """Return the first block of each k-space range.
-
-    Block 1, then each excitation without a readout that follows at least
-    ``_RANGE_SAMPLES`` samples of the range before it. A block holding a
-    readout never starts a range, whatever its RF, so no readout precedes a
-    pulse centre in the block its range starts at.
-    """
-    rf_blocks = np.flatnonzero(events[:, _RF]) + 1
-    pulses, which = _events_by_id(seq, events[rf_blocks - 1, _RF], rf_blocks, "rf")
-    resetting = np.array([pulse.use in _RESETTING for pulse in pulses], dtype=bool)
-    candidates = rf_blocks[resetting[which] & (events[rf_blocks - 1, _ADC] == 0)]
-    before = np.concatenate(([0], np.cumsum(num_samples, dtype=np.int64)))
-    reached = before[np.searchsorted(readout_blocks, candidates)]
-    starts, since = [1], 0
-    for block, samples in zip(candidates.tolist(), reached.tolist(), strict=True):
-        if samples - since >= _RANGE_SAMPLES:
-            starts.append(block)
-            since = samples
-    return np.array(starts, dtype=np.int64)
 
 
 def _measured(seq: Any) -> tuple[tuple[float, ...], ...]:

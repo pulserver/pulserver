@@ -12,7 +12,7 @@ import pytest
 from _seqtext import rf_use, sections, shapes, table
 from pypulseqpp import _ext as core
 
-from pulserver.ir._source import sequence_libraries
+from pulserver.ir._source import conversion_payload, sequence_libraries
 
 FIXTURES = Path(__file__).parent / "fixtures" / "sequences"
 # The file writes its cells at six significant digits, so every comparison is
@@ -164,3 +164,24 @@ def test_a_pulse_the_file_does_not_label_reads_as_an_unknown_use(tmp_path):
     loaded = pp.Sequence()
     loaded.read(path)
     assert int(sequence_libraries(loaded).rf_use[0]) == 0
+
+
+@pytest.mark.parametrize("name", fixtures())
+def test_each_played_gradient_carries_the_statistics_pypulseqpp_measures_for_it(name):
+    """The payload renumbers the gradients it plays; their statistics follow them."""
+    sequence = pp.Sequence()
+    sequence.read(FIXTURES / name)
+    measured = sequence.gradient_statistics()
+    by_id = np.stack(
+        (measured.peak_slew, measured.energy, measured.slew_energy), axis=1
+    )
+    played = sorted(
+        {int(v) for row in sequence.block_events.values() for v in row[2:5]} - {0}
+    )
+
+    payload = conversion_payload(sequence, pp.Opts(B0=3.0))
+
+    assert payload["grad_statistics"].shape == (len(played), 3)
+    np.testing.assert_array_equal(
+        payload["grad_statistics"], by_id[[i - 1 for i in played]]
+    )

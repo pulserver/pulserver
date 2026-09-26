@@ -282,6 +282,13 @@ void build_pulseq_file(pulseq_file &seq, const py::dict &libraries)
     seq.block_rotations = integers(libraries["block_rotations"], seq.num_blocks);
     seq.block_shims = integers(libraries["block_shims"], seq.num_blocks);
     seq.block_trid_set = integers(libraries["trid_set"], seq.num_blocks);
+    seq.block_rf_steady = integers(libraries["rf_steady"], seq.num_blocks);
+    {
+        int pulses = 0;
+        seq.block_rf_gradient = rows<3>(libraries["rf_gradient"], pulses);
+        if (pulses != seq.num_blocks)
+            throw std::invalid_argument("an RF gradient table of the wrong length");
+    }
     {
         int flagged = 0;
         seq.block_flags =
@@ -308,6 +315,12 @@ void build_pulseq_file(pulseq_file &seq, const py::dict &libraries)
 
     seq.grad_library = rows<7>(libraries["grad"], seq.grad_library_size);
     seq.is_grad_library_parsed = 1;
+    {
+        int measured = 0;
+        seq.grad_statistics = rows<3>(libraries["grad_statistics"], measured);
+        if (measured != seq.grad_library_size)
+            throw std::invalid_argument("a gradient statistics table of the wrong length");
+    }
 
     seq.adc_library = rows<8>(libraries["adc"], seq.adc_library_size);
     seq.is_adc_library_parsed = 1;

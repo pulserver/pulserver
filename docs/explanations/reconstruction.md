@@ -47,13 +47,13 @@ reconstruction runs on by these flags.
 
 The k-space location of each sample is the integral of the sequence's
 gradients, with block rotations applied, in 1/m. The table does not hold it for
-the whole scan: it is integrated over ranges of blocks, each beginning at an
-excitation. An excitation resets k to zero at the pulse centre, so the samples
-that follow it do not depend on the gradients played before it, and a range
-integrated on its own gives the k-space locations of the scan integrated from
-its first block. A refocusing pulse reverses k rather than resetting it and
-does not begin a range, nor does an excitation in a block that also holds a
-readout.
+the whole scan: it is integrated a run of consecutive readouts at a time, by
+pypulseqpp's `Sequence.adc_kspace`, from the last excitation before the run.
+An excitation resets k to zero at the pulse centre, so the samples that follow
+it do not depend on the gradients played before it, and a run integrated from
+there gives the k-space locations of the scan integrated from its first block.
+A refocusing pulse reverses k rather than resetting it and does not begin an
+integration, nor does an excitation in a block that also holds a readout.
 
 An acquisition carries as its trajectory every axis its encoding space varies
 along, up to the last, whether or not its own k moves along it: the line of a

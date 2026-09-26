@@ -336,6 +336,12 @@ typedef struct pulseq_file
     int *block_shims;
     int (*block_flags)[PULSEQ_BLOCK_FLAG_WIDTH];
     int *block_trid_set;
+    /* Per block, the gradient its RF pulse plays under, as pypulseqpp's
+     * Sequence.rf_gradients gives it: 1 where every channel axis holds one
+     * value across the pulse, 0 otherwise and without RF; and the gradient
+     * along x, y and z at the pulse's centre, in Hz/m. */
+    int *block_rf_steady;
+    PULSEQ_REAL (*block_rf_gradient)[3];
     /* Per acquiring block, in block order: the SLC, PHS, REP, AVG, SEG, SET,
      * ECO, PAR, LIN, ACQ and OFF (0 or 1) values in force, as
      * Sequence.evaluate_labels gives them. */
@@ -361,6 +367,11 @@ typedef struct pulseq_file
     int is_grad_library_parsed;
     int grad_library_size;
     PULSEQ_REAL (*grad_library)[7];
+    /* Per gradient event, as pypulseqpp's Sequence.gradient_statistics
+     * measures the waveform it plays: the steepest slew rate, in Hz/m/s, and
+     * the integrals of the squared gradient, in (Hz/m)^2 s, and of the
+     * squared slew rate, in (Hz/m/s)^2 s. */
+    PULSEQ_REAL (*grad_statistics)[3];
     int is_adc_library_parsed;
     int adc_library_size;
     PULSEQ_REAL (*adc_library)[8];

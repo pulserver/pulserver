@@ -238,7 +238,9 @@ float recorded_rf_centre_us(
  * block's start, and the instance's amplitude times its normalised waveform.
  * A waveform on the gradient raster is sampled at the middle of each raster
  * interval; over the half intervals at its ends it holds its end values,
- * which keeps the area its samples give. */
+ * which keeps the area its samples give. The instance's shape is played in
+ * the waveform its segment position is prepared with, so the two must hold
+ * as many samples. */
 void played_gradient(
     const pulseg_collection *coll,
     int axis,
@@ -252,6 +254,11 @@ void played_gradient(
         pulseg_get_cursor_grad_waveform(coll, axis, &shape.samples, &time.samples);
     if (samples < 0)
         throw std::runtime_error("cannot read the gradient a block plays");
+    if (samples != std::max(b.grad_num_samples[axis], 0))
+        throw std::runtime_error(
+            "a block plays a gradient of " + std::to_string(samples) +
+            " samples at a segment position prepared for " +
+            std::to_string(std::max(b.grad_num_samples[axis], 0)));
     if (samples == 0)
         return;
     const float *t = time.samples;
@@ -330,8 +337,9 @@ void played_modulation(const pulseg_collection *coll, std::vector<float> &phases
 py::dict play(pulseg_collection *coll, bool waveforms)
 {
     std::vector<int> subsequence, segment, duration_us, adc, trid, norot, nopos, rf_use;
-    std::vector<int> rf_channels;
+    std::vector<int> rf_channels, rf_grad_constant;
     std::vector<float> rf_amp, rf_freq, rf_phase, adc_freq, adc_phase, gradient, rotation;
+    std::vector<float> rf_grad_level;
     std::vector<int> rf_delay_us, adc_delay_us, adc_dwell_ns, adc_samples;
     std::vector<float> rf_centre_us, rf_time, grad_time, grad_value, modulation;
     std::vector<std::complex<float>> rf_value;
@@ -370,6 +378,8 @@ py::dict play(pulseg_collection *coll, bool waveforms)
             require(pulseg_get_adc_def(coll, &window, b.adc_def_id), "ADC definition");
         rf_delay_us.push_back(b.has_rf ? b.rf_delay_us : 0);
         rf_channels.push_back(b.has_rf ? b.rf_num_channels : 0);
+        rf_grad_constant.push_back(b.rf_grad_constant);
+        rf_grad_level.insert(rf_grad_level.end(), b.rf_grad_level, b.rf_grad_level + 3);
         adc_delay_us.push_back(block.adc_flag ? b.adc_delay_us : 0);
         adc_dwell_ns.push_back(window.dwell_ns);
         adc_samples.push_back(window.num_samples);
@@ -405,6 +415,8 @@ py::dict play(pulseg_collection *coll, bool waveforms)
     out["rf_use"] = as_array(rf_use, {count});
     out["rf_delay_us"] = as_array(rf_delay_us, {count});
     out["rf_channels"] = as_array(rf_channels, {count});
+    out["rf_grad_constant"] = as_array(rf_grad_constant, {count});
+    out["rf_grad_level"] = as_array(rf_grad_level, {count, 3});
     out["gradient_hz_per_m"] = as_array(gradient, {count, 3});
     out["rotation"] = as_array(rotation, {count, 3, 3});
     out["norot"] = as_array(norot, {count});

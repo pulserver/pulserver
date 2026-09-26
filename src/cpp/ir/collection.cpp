@@ -133,7 +133,7 @@ static int convert_collection(
             goto fail;
 
         /* Scan-table-only segmentation */
-        result = pulseg__get_exec_stream_segments(&desc, diag, opts);
+        result = pulseg__get_exec_stream_segments(&desc, &files[i], diag, opts);
         if (PULSEG_FAILED(diag->code))
             goto fail;
 

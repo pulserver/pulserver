@@ -175,6 +175,11 @@ class SequenceLibraries:
         rise, flat and fall times in µs, delay in µs. An arbitrary gradient
         (1): amplitude in Hz/m, the waveform's first and last values in Hz/m,
         the waveform and time shape ids, delay in µs.
+    grad_statistics : NDArray[np.float64]
+        ``(G, 3)``: the steepest slew rate in Hz/m/s, and the integrals of the
+        squared gradient in (Hz/m)^2 s and of the squared slew rate in
+        (Hz/m/s)^2 s, of the waveform each row plays, as
+        ``pypulseqpp.Sequence.gradient_statistics`` measures them.
     adc : NDArray[np.float64]
         ``(A, 8)``: sample count; dwell in ns; delay in µs; the frequency and
         phase ppm offsets; the frequency offset in Hz; the phase offset in
@@ -191,6 +196,7 @@ class SequenceLibraries:
     rf_channels: NDArray[np.int32]
     rf_b1sq_integral: NDArray[np.float64]
     grad: NDArray[np.float64]
+    grad_statistics: NDArray[np.float64]
     adc: NDArray[np.float64]
     shapes: tuple[Shape, ...]
 
@@ -260,8 +266,9 @@ def conversion_payload(sequence: Any, system: pp.Opts) -> dict[str, Any]:
     ``pypulseqpp.io.SequenceLibraries.absolute_offsets``, and the ppm columns
     are zero. The repetition the conversion segments is the one
     ``pypulseqpp.Sequence.repetition`` finds. Each block's rotation and shim,
-    the flags in force at it and the labels at each readout are pypulseqpp's
-    ``block_rotations``, ``block_shims``, ``evaluate_labels`` and
+    the flags in force at it, the gradient its RF pulse plays under and the
+    labels at each readout are pypulseqpp's ``block_rotations``,
+    ``block_shims``, ``evaluate_labels``, ``rf_gradients`` and
     ``label_blocks``; the conversion reads the chain rows for triggers alone.
 
     Raises
@@ -276,9 +283,17 @@ def conversion_payload(sequence: Any, system: pp.Opts) -> dict[str, Any]:
     _resolve_ppm(libraries, tables, system)
     specifications = _specification_libraries(tables)
     blocks = libraries.blocks.copy()
-    rf, grad, adc, rf_use, rf_spectra, rf_flip_deg, rf_channels, rf_b1sq = _compact(
-        blocks, libraries
-    )
+    (
+        rf,
+        grad,
+        grad_statistics,
+        adc,
+        rf_use,
+        rf_spectra,
+        rf_flip_deg,
+        rf_channels,
+        rf_b1sq,
+    ) = _compact(blocks, libraries)
     declared = sequence.definitions
 
     return {
@@ -321,6 +336,7 @@ def conversion_payload(sequence: Any, system: pp.Opts) -> dict[str, Any]:
         "rf_channels": rf_channels,
         "rf_b1sq_integral": rf_b1sq,
         "grad": grad,
+        "grad_statistics": grad_statistics,
         "adc": adc,
         "shapes": [
             (shape.num_uncompressed_samples, shape.samples)
@@ -363,6 +379,10 @@ def _sequence_libraries(sequence: Any, tables: Any) -> SequenceLibraries:
     shapes = _ShapeTable(tables.shapes)
     rf, rf_use, rf_spectra, rf_b1sq = _rf_library(sequence, tables, blocks)
     grad = _grad_library(tables, shapes)
+    measured = sequence.gradient_statistics()
+    grad_statistics = np.stack(
+        (measured.peak_slew, measured.energy, measured.slew_energy), axis=1
+    ).reshape(-1, 3)
     adc = _adc_library(tables)
     return SequenceLibraries(
         blocks,
@@ -373,6 +393,7 @@ def _sequence_libraries(sequence: Any, tables: Any) -> SequenceLibraries:
         np.asarray(sequence.rf_channels(), dtype=np.int32),
         rf_b1sq,
         grad,
+        grad_statistics,
         adc,
         shapes.entries(),
     )
@@ -567,8 +588,8 @@ def _label_rows(values: Any, labels: Any) -> NDArray[np.float64]:
 
 def _block_states(
     sequence: Any, blocks: NDArray[np.float64]
-) -> dict[str, NDArray[np.int32]]:
-    """Per block, the rows it plays and the flags in force; per readout, the labels.
+) -> dict[str, NDArray[Any]]:
+    """Per block, the rows it plays, the flags in force and the gradient under its RF; per readout, the labels.
 
     ``block_rotations`` and ``block_shims`` count the ROTATIONS and RF_SHIMS
     rows from 0, -1 for none. ``block_flags`` holds :data:`_BLOCK_FLAGS` and
@@ -577,6 +598,9 @@ def _block_states(
     apply, PMC starting at 1 and every other label at 0, with OFF as 0 or 1.
     ``trid_set`` is 1 at a block that sets TRID, which is where a repetition of
     that group starts even when it sets the value already in force.
+    ``rf_steady`` is 1 at a block whose RF pulse plays under a gradient that
+    holds one value along every channel axis, and ``rf_gradient`` is the
+    gradient along x, y and z at the pulse's centre, in Hz/m.
     """
     count = blocks.shape[0]
     start = dict.fromkeys((*_BLOCK_FLAGS, *_READOUT_LABELS), 0)
@@ -591,11 +615,19 @@ def _block_states(
     labels[:, -1] = labels[:, -1] != 0
     trid_set = np.zeros(count, dtype=np.int32)
     trid_set[np.asarray(sequence.label_blocks("TRID"), dtype=np.int64) - 1] = 1
+    under = sequence.rf_gradients()
+    pulsed = under.block.astype(np.int64) - 1
+    rf_steady = np.zeros(count, dtype=np.int32)
+    rf_steady[pulsed] = under.steady.all(axis=1)
+    rf_gradient = np.zeros((count, 3), dtype=np.float64)
+    rf_gradient[pulsed] = under.gradient
     return {
         "block_rotations": np.asarray(sequence.block_rotations(), dtype=np.int32) - 1,
         "block_shims": np.asarray(sequence.block_shims(), dtype=np.int32) - 1,
         "block_flags": np.stack([state[name] for name in _BLOCK_FLAGS], axis=1),
         "trid_set": trid_set,
+        "rf_steady": rf_steady,
+        "rf_gradient": rf_gradient,
         "adc_labels": labels,
     }
 
@@ -630,6 +662,7 @@ def _compact(
     """
     rf, rf_map = _played(libraries.rf, blocks, (1,))
     grad, grad_map = _played(libraries.grad, blocks, (2, 3, 4))
+    grad_statistics, _ = _played(libraries.grad_statistics, blocks, (2, 3, 4))
     adc, adc_map = _played(libraries.adc, blocks, (5,))
     played_rf = [old - 1 for old in sorted(rf_map, key=rf_map.get)]
     uses = np.array([libraries.rf_use[row] for row in played_rf], dtype=np.int32)
@@ -642,7 +675,7 @@ def _compact(
             blocks[:, column] = [
                 mapping.get(int(value), 0) for value in blocks[:, column]
             ]
-    return rf, grad, adc, uses, spectra, flips, channels, integrals
+    return rf, grad, grad_statistics, adc, uses, spectra, flips, channels, integrals
 
 
 def _played(
