@@ -290,10 +290,11 @@ typedef struct pulseg_segment_timing
 /* ================================================================== */
 /* Resolved ONCE at parse time from the representative (max-energy) scan
  * instance of the segment, so that consumers which materialise segment
- * memory -- the pulsegen pass and the cross-subsequence dedup key -- never
- * need the O(scan-length) per-instance tables (exec_stream, block_table,
- * rf_table, grad_table).  Runtime per-instance values (amplitudes actually
- * played, wave swaps, rotations) still come from the scan cursor.
+ * memory -- the pulse-generation pass and the cross-subsequence dedup key --
+ * never need the O(scan-length) per-instance tables (exec_stream,
+ * block_table, rf_table, grad_table).  Runtime per-instance values
+ * (amplitudes actually played, wave swaps, rotations) still come from the
+ * scan cursor.
  *
  * Fallback values match the pre-computation behaviour when no representative
  * instance existed: rf_amplitude_hz = the RF definition's base amplitude,
@@ -356,7 +357,7 @@ typedef struct pulseg_virtual_segment
                               pure delay (see is_adjustable_delay_at) AND its duration
                               actually differs across at least two scan-table instances
                               of this segment.  0 for a "static" delay -- same duration
-                              in every instance -- which needs no runtime setperiod wait
+                              in every instance -- which needs no per-instance period
                               and is represented purely by block position/offset.       */
     pulseg_block_initial_state *initial_states; /* [num_blocks], see above */
     int max_energy_start_block;
@@ -415,7 +416,7 @@ typedef struct pulseg_sequence_descriptor
     float adc_raster_us;
     float block_raster_us;
     int enable_pmc;
-    int num_gain_cal_readouts; /**< calibration readouts for APS2 receive gain (pislquant) */
+    int num_gain_cal_readouts; /**< readouts of the receive-gain calibration prescan */
     float vop_sar_ratio;        /**< see pulseg_subseq_info.vop_sar_ratio */
     float vop_global_sar_ratio; /**< see pulseg_subseq_info.vop_global_sar_ratio */
     int vendor;                /**< PULSEG_VENDOR_* runtime constant */
@@ -525,7 +526,7 @@ typedef struct pulseg_sequence_descriptor
     int *seg_run_start;
     int *seg_run_id;
 
-    /* Sequential-access hints. scancore walks the stream in order, so a
+    /* Sequential-access hints. The scan loop walks the stream in order, so a
      * remembered run index makes the accessors O(1) amortized (check the
      * cached run, then its successor) and keeps the binary search purely as
      * a random-access fallback. Pure caches: they never change the value
@@ -551,7 +552,7 @@ typedef struct pulseg_sequence_descriptor
     pulseg_label_limits label_limits;
     /* Per-ADC OFF flag (parallel to label_table rows; entries == label_num_entries).
      * Pulseq v1.5.1 LABELSET column "OFF". 1 = acquisition should be discarded
-     * downstream (LiveSDK), 0 = keep. NULL when no LABELSET OFF is present. */
+     * downstream, 0 = keep. NULL when no LABELSET OFF is present. */
     int *off_table;
 
     /* Copy of pulseg_opts.cache_ext at dedup time. Not part of the
@@ -625,7 +626,7 @@ struct pulseg_collection
     int total_blocks;
     int total_readouts; /* ADC-bearing exec_stream positions, frozen at
                            assembly (the tables it derives from are not
-                           loaded on the pulsegen cache path) */
+                           loaded on the pulse-generation cache path) */
     float total_duration_us;
 
     /* Cross-subsequence segment deduplication remap (DERIVED state; rebuilt

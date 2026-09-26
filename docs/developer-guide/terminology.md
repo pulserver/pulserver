@@ -29,11 +29,11 @@ Use the established term. Do not explain around it.
 |---|---|
 | what the operator asks for | the requested protocol, the prescription |
 | what the sequence will actually play | the resolved protocol |
-| the numbers the scanner keeps | the scanner control variables (CVs) |
+| the numbers the scanner keeps | the scanner parameters |
 | a design written earlier | a stored design, by its identifier |
 | the folder both sides look at | the design store |
 | the scanner program | the interpreter |
-| the host process for one sequence | the PSD host process |
+| the host process for one sequence | the interpreter host process |
 | the compiled form of a sequence | the IR, the IR cache |
 | the part that repeats | the repeating unit, the TR |
 | pieces of a TR | segments |
@@ -60,8 +60,8 @@ the file either kind is loaded from; say which kind.
 immutable once written. Its *identity* is the hash of what it depends on; its
 *identifier* is the first 18 hexadecimal digits of the identity. The *design
 store* is the directory holding every design. A *design call* is one `list`,
-`validate`, `generate` or `import` of a PSD host process; no call keeps state
-beyond the designs it stores. A design is *pushed* to the *design intake*, the
+`validate`, `generate` or `import` of an interpreter host process; no call
+keeps state beyond the designs it stores. A design is *pushed* to the *design intake*, the
 proxy's HTTP endpoint writing its store, as a *bundle* of the files of its
 directory.
 
@@ -95,11 +95,12 @@ design is not a `.seq` file, and the IR cache is not the design of record.
 
 - **design calls**, **warm server**, **reconstruction proxy**, **reconstruction
   server**; `pulserver.host` and `pulserver.vre` when the module is meant.
-- **PSD host process**, not "host PSD" or "PSD process".
+- **interpreter host process**, not "host interpreter" or "interpreter
+  process".
 - **interpreter** for the scanner-side program; **reconstruction client** for
   the scanner-side sender of raw data.
-- **IR** and **IR cache**; `.pseg` and `.pge` are file extensions, not names
-  for the representation.
+- **IR** and **IR cache**; `.pseg` is a file extension, not a name for the
+  representation.
 - **MRD** for the format; **ISMRMRD** for the library and the HDF5 file.
 
 ## 2. Register
@@ -143,7 +144,7 @@ Every documented quantity carries its unit.
 
 | Quantity | Unit |
 |---|---|
-| Time entry of a protocol, on the wire and in a CV | integer µs |
+| Time entry of a protocol, on the wire and in a scanner parameter | integer µs |
 | Time argument of a sequence application | s |
 | Float protocol entry | the entry's `unit`; the argument is the value times `scale` |
 | Scan time in a `VALIDATE` reply | s |
@@ -178,10 +179,10 @@ significant digits.
 
 Pulserver performs no safety check of its own. The timing, gradient, PNS,
 mechanical-resonance and SAR checks belong to pypulseqpp and compute
-estimates. The host runs all but the SAR check, under the limits the PSD
-passes, before it writes an IR cache; from the SAR check it writes each
-subsequence's SAR relative to a reference pulse into the cache, and the PSD
-computes the SAR and the gradient heating. Passing these checks does not
+estimates. The host runs all but the SAR check, under the limits the
+interpreter passes, before it writes an IR cache; from the SAR check it writes
+each subsequence's SAR relative to a reference pulse into the cache, and the
+interpreter computes the SAR and the gradient heating. Passing these checks does not
 establish scanner or patient safety.
 
 - Never write "safe", "validated", "compliant" or "approved" of a sequence, a

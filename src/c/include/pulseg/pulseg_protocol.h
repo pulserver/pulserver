@@ -4,7 +4,7 @@
  *
  * Maps the standard NimPulseqGUI preamble wire format to a fixed set
  * of parameter IDs (mirroring the Python UIParam enum).  No vendor-
- * specific units, CV names, or UI concepts appear here.
+ * specific units, parameter names or UI concepts appear here.
  *
  * Wire format (standard NimPulseqGUI preamble):
  *   [NimPulseqGUI Protocol]
@@ -27,7 +27,7 @@ extern "C"
     /*  Parameter IDs  (mirror Python UIParam enum + User1..19)           */
     /*                                                                    */
     /*  Expressed as #define + typedef rather than C enum for              */
-    /*  compatibility with older EPIC compilers that reject C enums.      */
+    /*  compatibility with sequence toolchains that reject C enums.       */
     /* ================================================================== */
 
     typedef int pulseg_param_id;
@@ -51,10 +51,8 @@ extern "C"
 #define PULSEG_PARAM_RF_SPOILING 12
 /* Info (read-only) */
 #define PULSEG_PARAM_TA 13
-/* User CV slots. Meaning of the wire-protocol slot -> vendor CV mapping
- * is vendor-defined; see the private vendor layer for specifics (e.g.
- * pulserver_ge_protocol.h in pulserver-interpreter for GE's opuser
- * mapping). */
+/* User parameter slots. Which scanner parameter holds a slot is the vendor
+ * layer's choice. */
 #define PULSEG_PARAM_USER1 14
 #define PULSEG_PARAM_USER2 15
 #define PULSEG_PARAM_USER3 16
@@ -122,7 +120,7 @@ extern "C"
 #define PULSEG_PARAM_SAT_X_THICK 69
 #define PULSEG_PARAM_SAT_Y_THICK 70
 #define PULSEG_PARAM_SAT_Z_THICK 71
-/* User CV name labels (description type; mirror USER1..USER19 value slots) */
+/* User parameter name labels (description type; one per USER1..USER19 slot) */
 #define PULSEG_PARAM_USER1_NAME 72
 #define PULSEG_PARAM_USER2_NAME 73
 #define PULSEG_PARAM_USER3_NAME 74
@@ -144,7 +142,7 @@ extern "C"
 #define PULSEG_PARAM_USER19_NAME 90
 /* --- FOV offset ---
  * The prescribed field-of-view offset, in millimetres along the logical
- * readout, phase-encoding and slice axes (the frame of GE's xloc/yloc/zloc).
+ * readout, phase-encoding and slice axes.
  * The interpreter fills these from its prescription and sends them with the
  * protocol; the host applies the offset to the logical-frame design as RF and
  * ADC frequency and phase when it builds the IR, so the cache is played

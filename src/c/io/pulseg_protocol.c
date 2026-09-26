@@ -98,7 +98,7 @@ static const pulseg_param_entry g_param_table[] = {
     {"sat_z_thickness", PULSEG_PARAM_SAT_Z_THICK, PULSEG_PTYPE_FLOAT},
     /* Info */
     {"TA", PULSEG_PARAM_TA, PULSEG_PTYPE_FLOAT},
-    /* User CVs: user0..user16 map to GE opuser3..opuser19. */
+    /* User parameters: the wire's user0..user18 fill slots USER1..USER19. */
     {"user0_value", PULSEG_PARAM_USER1, PULSEG_PTYPE_FLOAT},
     {"user1_value", PULSEG_PARAM_USER2, PULSEG_PTYPE_FLOAT},
     {"user2_value", PULSEG_PARAM_USER3, PULSEG_PTYPE_FLOAT},
@@ -118,7 +118,7 @@ static const pulseg_param_entry g_param_table[] = {
     {"user16_value", PULSEG_PARAM_USER17, PULSEG_PTYPE_FLOAT},
     {"user17_value", PULSEG_PARAM_USER18, PULSEG_PTYPE_FLOAT},
     {"user18_value", PULSEG_PARAM_USER19, PULSEG_PTYPE_FLOAT},
-    /* User CV name labels */
+    /* User parameter name labels */
     {"user0_name", PULSEG_PARAM_USER1_NAME, PULSEG_PTYPE_DESCRIPTION},
     {"user1_name", PULSEG_PARAM_USER2_NAME, PULSEG_PTYPE_DESCRIPTION},
     {"user2_name", PULSEG_PARAM_USER3_NAME, PULSEG_PTYPE_DESCRIPTION},

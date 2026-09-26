@@ -41,16 +41,16 @@ calls push each design.
 ```
 
 The design calls, {mod}`pulserver.host`, run on the scanner host and answer
-the PSD host process of each running sequence, one command per call or through
-a warm server. The reconstruction proxy, {mod}`pulserver.vre`, runs on the
-reconstruction computer and answers the scanner's reconstruction client. One
-acquisition proceeds as follows.
+the interpreter host process of each running sequence, one command per call or
+through a warm server. The reconstruction proxy, {mod}`pulserver.vre`, runs on
+the reconstruction computer and answers the scanner's reconstruction client.
+One acquisition proceeds as follows.
 
-1. On each protocol edit, the PSD host process requests validation, naming the
-   scanner-sequence plugin, the scanner limits and the requested protocol. The
-   call constructs the application with pypulseqpp and replies with the
-   protocol the design achieves and the scan time, or with the error the design
-   raised ({doc}`protocol`).
+1. On each protocol edit, the interpreter host process requests validation,
+   naming the scanner-sequence plugin, the scanner limits and the requested
+   protocol. The call constructs the application with pypulseqpp and replies
+   with the protocol the design achieves and the scan time, or with the error
+   the design raised ({doc}`protocol`).
 2. When the scan is prepared, the process requests the design. The call designs
    the sequence, checks it, and stores the Pulseq files and the IR cache as a
    design of the design store, pushes the design to the proxy when the proxy
@@ -70,7 +70,7 @@ acquisition proceeds as follows.
 | --- | --- | --- |
 | Protocol block (`[NimPulseqGUI Protocol]`) | Design calls and interpreter | Both; the grammar is in {mod}`pulserver.protocol` and `pulseg_protocol.h` |
 | Pulseq files, binary form | pypulseqpp, in a design call | The IR conversion and the reconstruction proxy |
-| IR cache (`.pseg`; `.pge` on GE) | {func}`pulserver.ir.convert` | The interpreter, through the C library in `src/c/` |
+| IR cache (`.pseg`) | {func}`pulserver.ir.convert` | The interpreter, through the C library in `src/c/` |
 | MRD stream | Reconstruction client; the proxy, forwarding | Reconstruction proxy and its workers; a reconstruction server |
 
 The reconstruction side reads the Pulseq files of a design, not its IR cache:

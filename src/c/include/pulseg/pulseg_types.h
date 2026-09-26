@@ -155,15 +155,14 @@ typedef struct pulseg_opts
      * @brief Which Pulseq label fills output column 0/1/2 of the 3-column
      * ADC label table. Values are Pulseq label *state-array* indices:
      * 0=SLC, 1=PHS, 2=REP, 3=AVG, 4=SEG, 5=SET, 6=ECO, 7=PAR, 8=LIN, 9=ACQ.
-     * Example (GE convention): {8, 0, 6} = [LIN, SLC, ECO]. Public default
-     * is the identity {0, 1, 2} = [SLC, PHS, REP]; vendor layers override
-     * this before parsing (see pulserver_ge_config.h in the private
-     * pulserver-interpreter for the GE values).
+     * The default is the identity {0, 1, 2} = [SLC, PHS, REP]; a vendor
+     * layer overrides it before parsing, e.g. with {8, 0, 6} =
+     * [LIN, SLC, ECO].
      */
     int label_column_map[3];
 
     /** Binary cache file extension, including the dot. Default
-     *  ".pseg"; GE overrides to ".pge" (see pulserver_ge_config.h). Only
+     *  ".pseg"; a vendor layer may override it. Only
      *  the main pulseg_read()/pulseg_save_cache() path honors this;
      *  standalone cache utilities (pulseg_load_cache, pulseg_clear_cache,
      *  etc.) that run before any collection exists always use the public
@@ -171,7 +170,7 @@ typedef struct pulseg_opts
     char cache_ext[PULSEG_CACHE_EXT_MAX];
 
     /** Optional opaque vendor cache section. Writer emits a section
-     *  only when set; GE leaves this unused. ctx/buf ownership: the
+     *  only when set. ctx/buf ownership: the
      *  callback allocates *out_buf via PULSEG_ALLOC; the cache writer
      *  frees it after use. */
     int (*vendor_section_write_fn)(void *ctx, unsigned char **out_buf, int *out_len);
@@ -242,12 +241,12 @@ typedef struct pulseg_rf_stats
                               *  worst-B1rms TR instance at this position
                               *  (not a synthetic per-position envelope) --
                               *  feeds time-averaged SAR / amplifier-duty
-                              *  consumers (GE minseqrfamp/maxsar). See
+                              *  consumers. See
                               *  peak_amplitude_hz for the peak-dominant
                               *  counterpart. */
     float peak_amplitude_hz; /**< positional-max |gamma*B1| amplitude (Hz)
                                *  across every TR instance at this position
-                               *  -- for peak-only consumers (GE peakB1())
+                               *  -- for peak-only consumers (peak-B1 checks)
                                *  that need per-position dominance across
                                *  ALL instances, which act_amplitude_hz no
                                *  longer guarantees once it tracks a single
@@ -255,9 +254,8 @@ typedef struct pulseg_rf_stats
                                *  act_amplitude_hz for periodic sequences. */
     float area;              /**< integral of |B1(t)| dt  (a.u.)        */
     /** Vendor-specific envelope statistics, filled by the optional
-     *  pulseg_opts.vendor_rf_stats_fn callback; all 0 when unset. Meaning
-     *  is vendor-defined -- e.g. GE's abswidth/effwidth/dtycyc/maxpw live
-     *  in src_gelib/pulserver_ge_rf_stats.h as PULSERVER_GE_RF_* accessors. */
+     *  pulseg_opts.vendor_rf_stats_fn callback; all 0 when unset. Their
+     *  meaning is the vendor layer's. */
     float vendor_stat[4];
     float duration_us;       /**< shape duration (us): the samples on the RF
                                *  raster, or the last sample time rounded up
@@ -277,7 +275,7 @@ typedef struct pulseg_rf_stats
      *     vendor-specific interpretation of the fields above; for new
      *     vendor variants, a sibling struct may be added later and
      *     selected via this field) ---                                 */
-    int vendor; /**< PULSEG_VENDOR_* constant (0 = unspecified -> GEHC for back-compat) */
+    int vendor; /**< PULSEG_VENDOR_* constant of the conversion, 0 when unspecified */
     /* --- safety-group label (appended; do not reorder above) --- */
     int trid; /**< sticky pulseq TRID of the originating block, 0 = ungrouped */
 } pulseg_rf_stats;
@@ -295,10 +293,10 @@ typedef struct pulseg_rf_stats
  * materialized scan table. See pulseg_get_tr_groups() for the identify ->
  * verify-structural-identity -> dedup algorithm.
  *
- * TRID is Pulseq's own label for "the repeating unit of the sequence"
- * (mr.getSupportedLabels: "an integer ID of the TR (sequence segment) used by
- * the GE interpreter (and some others) to optimize the execution on the
- * scanner"), which is exactly the grouping a per-contrast SAR check wants --
+ * TRID is Pulseq's own label for the repeating unit of the sequence
+ * (mr.getSupportedLabels: an integer ID of the TR, or sequence segment, that
+ * interpreters use to optimise execution on the scanner), which is exactly
+ * the grouping a per-contrast SAR check wants --
  * see the NeuroMix scheme, where each contrast is evaluated against the 10 s
  * limit and the whole run against the 6 min one.
  */
@@ -551,7 +549,7 @@ typedef struct pulseg_subseq_info
     int segment_offset;        /**< global segment index offset         */
     int num_adc_occurrences;   /**< ADC entries in label table          */
     int num_label_columns;     /**< label columns (vendor-dependent)    */
-    int num_gain_cal_readouts; /**< calibration readouts for APS2 gain cal (pislquant) */
+    int num_gain_cal_readouts; /**< readouts of the receive-gain calibration prescan */
     /** TR instances the subsequence plays; always >= 1. */
     int num_tr_instances;
     /** 1 where the RF amplitude at some position differs between TR
@@ -692,7 +690,7 @@ typedef struct pulseg_block_info
     int norot_flag;         /**< 1 if no-rotation override         */
     int nopos_flag;         /**< 1 if no-position override         */
     int is_variable_delay;  /**< 1 if a pure-delay block (no RF/grad/ADC): its
-                            *   duration is runtime-adjustable via setperiod, so
+                            *   duration is set per instance at run time, so
                             *   two segments differing only in such a block's
                             *   duration share one segment definition. */
     int rf_grad_constant;   /**< 1 if RF is present and every accompanying gradient

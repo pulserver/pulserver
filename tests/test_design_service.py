@@ -12,7 +12,7 @@ from pathlib import Path
 import numpy as np
 import pypulseqpp as pp
 import pytest
-from _host import ANY_ORIENTATION, FIXTURE_LIMITS, GE_IR, LIMITS, PLUGINS
+from _host import ANY_ORIENTATION, FIXTURE_LIMITS, LIMITS, PLUGINS, VENDOR_IR
 from _virtual import OBLIQUE
 
 from pulserver.host import DesignStore, design_id, design_identity
@@ -202,12 +202,12 @@ def test_an_invalid_protocol_is_an_error_and_stores_nothing(store):
 
 def test_a_design_carries_its_cache_tagged_with_the_vendor(store):
     design = generated(
-        generate(store, "tiny", {"TE": 8000}, limits={**LIMITS, **GE_IR})
+        generate(store, "tiny", {"TE": 8000}, limits={**LIMITS, **VENDOR_IR})
     )
     directory = store.directory(design)
-    assert (directory / "sequence.pge").is_file()
-    vendor = struct.unpack("<6i", (directory / "sequence.pge").read_bytes()[:24])[4]
-    assert vendor == 2
+    assert (directory / "sequence.cache").is_file()
+    vendor = struct.unpack("<6i", (directory / "sequence.cache").read_bytes()[:24])[4]
+    assert vendor == 5
 
 
 def test_a_design_is_written_in_the_binary_form(store):

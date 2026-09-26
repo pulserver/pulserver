@@ -705,7 +705,7 @@ int pulseg_format_error(char *buf, int buf_size, int code, const pulseg_diagnost
 /*  Cross-subsequence segment deduplication (footprint minimisation)   */
 /*                                                                     */
 /*  Two segments in DIFFERENT subsequences materialise byte-identical  */
-/*  EPIC instruction memory whenever their normalised waveform shapes, */
+/*  instruction memory whenever their normalised waveform shapes,      */
 /*  timing and event topology match — per-instance amplitude / phase / */
 /*  rotation are applied at scan time from the REAL subsequence's block */
 /*  instance (pulseg_get_block_instance), never baked into the shared   */
@@ -900,7 +900,8 @@ static int seg_trigger_type(
 }
 
 /* Deep content equality of two segments (possibly in different subsequences).
- * Returns 1 iff their EPIC-materialised instruction memory is identical. */
+ * Returns 1 iff the instruction memory a playout materialises for them is
+ * identical. */
 static int segments_content_equal(
     const pulseg_collection *coll,
     int subseq_a,
@@ -938,13 +939,14 @@ static int segments_content_equal(
         /* Block duration must match, EXCEPT a DYNAMIC adjustable pure-delay
          * block: no RF/grad/ADC AND no digital-output trigger or rotation,
          * AND its duration actually varies across its own subsequence's
-         * instances, so it is applied per-instance at scan time (setperiod)
-         * and two segments differing only there can share one definition.
+         * instances, so its period is set per instance at scan time and two
+         * segments differing only there can share one definition.
          * This must match pulseg_get_block_info()'s is_variable_delay
-         * exactly -- otherwise a merged block that EPIC does NOT setperiod
-         * would play a fixed (wrong) duration.  A STATIC adjustable delay
-         * (is_dynamic_delay == 0) is never setperiod'd by EPIC, so its baked
-         * duration must still match exactly, same as any other fixed block --
+         * exactly -- otherwise a merged block whose period a playout does NOT
+         * set per instance would play a fixed (wrong) duration.  A STATIC
+         * adjustable delay (is_dynamic_delay == 0) never gets a per-instance
+         * period, so its baked duration must still match exactly, same as any
+         * other fixed block --
          * skipping the check for it here would merge two definitions that
          * silently disagree on duration.  The digitalout/rotation presence
          * checks below are still enforced (they must be equal), so a
@@ -989,8 +991,9 @@ static int segments_content_equal(
             return 0;
 
         /* Per-block topology flags (OR-reduced across instances). These drive
-         * OMEGA / ISI / TTL / rotation instruction allocation, so they must
-         * match for the shared buffer to be valid.                          */
+         * the allocation of frequency-modulation, rotation-update, trigger and
+         * rotation instructions, so they must match for the shared buffer to
+         * be valid. */
         if (sa->has_rotation[b] != sb->has_rotation[b])
             return 0;
         if (sa->has_digitalout[b] != sb->has_digitalout[b])

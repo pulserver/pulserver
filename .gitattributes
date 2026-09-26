@@ -8,9 +8,8 @@
 *.mat binary
 *.h5 binary
 *.dcm binary
-# The IR cache a sequence is converted to, under its default and GE names.
+# The IR cache a sequence is converted to.
 *.pseg binary
-*.pge binary
 
 # Sequence files written by pypulseqpp for the tests: collapsed in diffs and
 # left out of the language statistics.

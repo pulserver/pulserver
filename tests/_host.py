@@ -20,7 +20,7 @@ FIXTURE_LIMITS = {
     "adc_raster_time": 1e-7,
     "block_duration_raster": 1e-5,
 }
-GE_IR = {"ir_vendor": 2, "ir_label_column_map": "8 0 6", "ir_cache_ext": ".pge"}
+VENDOR_IR = {"ir_vendor": 5, "ir_label_column_map": "8 7 6", "ir_cache_ext": ".cache"}
 LIMITS = {
     "max_grad": 40.0,
     "grad_unit": "mT/m",

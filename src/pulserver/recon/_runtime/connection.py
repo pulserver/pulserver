@@ -434,7 +434,7 @@ class Connection:
     def shutdown_close(self) -> None:
         """Send CLOSE, then shut down and close the socket; ends reading and sending.
 
-        CLOSE goes first: the Orchestra client connector waits for it and does
+        CLOSE goes first: a scanner's reconstruction client can wait for it and
         not return on a bare TCP close. A connection already closed for sending
         does not send a second CLOSE.
         """

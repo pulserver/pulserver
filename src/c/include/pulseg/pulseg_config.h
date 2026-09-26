@@ -14,7 +14,7 @@
 
 /* Suppress -Wfloat-equal for intentional exact float comparisons
  * (shape decompression RLE, zero-detection, etc.).
- * Required when building with GE EPIC's -Werror -Wfloat-equal. */
+ * Required by toolchains that build with -Werror -Wfloat-equal. */
 #if defined(__GNUC__)
 #pragma GCC diagnostic ignored "-Wfloat-equal"
 #endif
@@ -32,9 +32,8 @@
 #define PULSEG_VENDOR_BRUKER 5
 
 /* Compile-time default (overrideable via -DPULSEG_VENDOR=N). Public
- * builds are vendor-neutral; vendor layers (e.g. the private
- * pulserver-interpreter's src_gelib/pulserver_ge_config.h) define
- * PULSEG_VENDOR=PULSEG_VENDOR_GEHC before including any pulseg header. */
+ * builds are vendor-neutral; a vendor layer defines PULSEG_VENDOR before
+ * including any pulseg header. */
 #ifndef PULSEG_VENDOR
 #define PULSEG_VENDOR PULSEG_VENDOR_UNSPECIFIED
 #endif

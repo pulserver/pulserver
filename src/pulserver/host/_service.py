@@ -1,4 +1,4 @@
-"""The design calls of a PSD host process, each a function of its inputs.
+"""The design calls of an interpreter host process, each a function of its inputs.
 
 A call returns the reply the interpreter parses: the text blocks of
 :mod:`pulserver.protocol` and one status line. Nothing outlives a call but

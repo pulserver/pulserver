@@ -32,7 +32,7 @@ Preset = float | Callable[[pp.Opts], float] | None
 #: Range of each prescription entry, in mm either side of the isocentre.
 OFFSET_LIMIT_MM = 1000.0
 
-# FLT_DIG: the significant decimal digits a float32 CV holds through a round trip.
+# FLT_DIG: the significant decimal digits a float32 parameter holds through a round trip.
 _SIGNIFICANT_DIGITS = 6
 _MICROSECOND = Decimal("1e-6")
 
@@ -59,7 +59,7 @@ class TimeParam:
     """A time UI entry bound to an ``init_sequence`` argument in seconds.
 
     Values, ranges and options are integer microseconds, the unit of the
-    scanner's time CVs, so the value a CV holds is the value the design
+    scanner's time parameters, so the value a parameter holds is the value the design
     reported. Each key of ``presets`` is a dropdown preset; its value is the
     time it requests: seconds, ``None`` for the application's own shortest
     choice, or a function of the scanner limits. The entry is a dropdown when
@@ -224,8 +224,8 @@ class ScannerSequence:
     argument took in the design, as the application records it with
     ``SequenceApp.resolve``, and otherwise keeps the requested value. Times
     travel as integer microseconds; other float values are read and reported
-    to six significant digits, the precision of a float32 CV. Either way a
-    reply stored in a CV and sent back resolves to itself.
+    to six significant digits, the precision of a float32 parameter. Either way
+    a reply stored in scanner parameters and sent back resolves to itself.
 
     Attributes
     ----------

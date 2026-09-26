@@ -192,7 +192,8 @@ static int convert_collection(
         /* Accumulate actual scan-table duration (not the peek-style
          * tr_duration × num_trs approximation) and the readout count.  Both
          * are frozen here because the per-instance tables they are derived
-         * from are not loaded on every cache path (pulsegen loads neither). */
+         * from are not loaded on every cache path (the pulse-generation load
+         * reads neither). */
         {
             float subseq_dur = 0.0f;
             int n;

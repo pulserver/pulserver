@@ -6,8 +6,8 @@ import pytest
 from pulserver import ir
 
 SYSTEM = pp.Opts(B0=3.0)
-# LIN, SLC and ECO: the three label columns a GE interpreter records per readout.
-GE_LABELS = (8, 0, 6)
+# LIN, SLC and ECO: three label columns an interpreter records per readout.
+LABELS = (8, 0, 6)
 
 
 @pytest.fixture
@@ -50,7 +50,7 @@ def test_the_scanner_plays_each_block_under_the_flags_in_force_at_it(labelled):
 
 def test_each_readout_records_the_labels_in_force_at_it(labelled):
     """A slice counted up after a repetition's readouts is recorded from the next."""
-    (unit,) = ir.summary(labelled, SYSTEM, label_column_map=GE_LABELS)["subsequences"]
+    (unit,) = ir.summary(labelled, SYSTEM, label_column_map=LABELS)["subsequences"]
     assert unit["readout_labels"] == [
         [line, line, echo] for line in range(4) for echo in (0, 1)
     ]

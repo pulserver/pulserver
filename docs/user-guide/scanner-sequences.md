@@ -4,7 +4,7 @@ A scanner sequence is a plugin file in the `--plugins` directory of the design c
 It defines one {class}`~pulserver.design.ScannerSequence` subclass, which binds
 a pypulseqpp {class}`~pypulseqpp.sequences.SequenceApp` to the entries of the
 scanner protocol. A design call loads the file by its stem: `gre2d.py` is the
-plugin a PSD host process names with `--plugin gre2d`.
+plugin an interpreter host process names with `--plugin gre2d`.
 
 ## Binding the protocol
 
@@ -115,7 +115,7 @@ application records with {meth}`~pypulseqpp.sequences.SequenceApp.resolve` in
 `init_sequence`, as {attr}`~pypulseqpp.sequences.SequenceApp.resolved` reports
 it. An entry whose argument the application does not record keeps the
 requested value. Resolved values are reported at the precision a scanner
-control variable stores, so a resolved protocol sent back resolves to itself.
+parameter stores, so a resolved protocol sent back resolves to itself.
 
 A protocol the design refuses is invalid, and the error the application raised
 is the reply's `info`:

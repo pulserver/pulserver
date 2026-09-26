@@ -17,7 +17,7 @@
 #define PULSEQ_CONFIG_H
 
 /* Suppress -Wfloat-equal for intentional exact float comparisons (shape
- * decompression RLE, zero-detection).  Required when building with GE EPIC's
+ * decompression RLE, zero-detection).  Required by toolchains that build with
  * -Werror -Wfloat-equal. */
 #if defined(__GNUC__)
 #pragma GCC diagnostic ignored "-Wfloat-equal"
@@ -53,7 +53,7 @@
  * The type every library row, shape sample and raster time is stored in.
  *
  * It is `float`, and that is what the scanner builds: the raw model of a
- * two-million-block scan is tens of megabytes of library rows, and the PSD
+ * two-million-block scan is tens of megabytes of library rows, and the playout
  * carries them on a 32-bit target where halving that matters more than the
  * digits do.
  *

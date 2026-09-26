@@ -54,11 +54,11 @@ carries the time the design achieved in place of the preset.
 
 ## Units and precision
 
-The interpreter stores protocol values in scanner control variables. Time
-control variables hold integer microseconds, so time entries are exchanged in
-integer microseconds and converted to seconds for the application, rounding to
-the nearest microsecond. Other float entries are held in float32 control
-variables, whose round trip preserves six significant decimal digits, so they
+The interpreter stores protocol values in scanner parameters. Time parameters
+hold integer microseconds, so time entries are exchanged in integer
+microseconds and converted to seconds for the application, rounding to the
+nearest microsecond. Other float entries are held in float32 parameters, whose
+round trip preserves six significant decimal digits, so they
 are exchanged at that precision. A float entry carries a scale between its UI
 unit and the application's SI argument, such as `1e-3` for a field of view
 shown in mm and designed in m.

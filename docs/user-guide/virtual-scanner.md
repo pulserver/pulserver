@@ -9,7 +9,7 @@ calls and proxy.
 
 ## Generate a design
 
-Generate the design as the PSD host process does, with the prescribed
+Generate the design as the interpreter host process does, with the prescribed
 field-of-view offset in the protocol block ({doc}`running`):
 
 ```bash

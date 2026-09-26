@@ -37,8 +37,8 @@ SYSTEM = pp.Opts(
     adc_raster_time=1e-7,
     block_duration_raster=1e-5,
 )
-GEHC = 2
-GE_LABELS = (8, 0, 6)
+VENDOR = 5
+LABELS = (8, 7, 6)
 # The PULSEG_RF_USE_* code of each RF use pypulseqpp tags.
 RF_USES = {
     "excitation": 1,
@@ -160,20 +160,20 @@ def test_the_chain_lists_every_file_in_play_order(tmp_path):
 
 def test_the_cache_is_named_by_the_extension_it_was_given(tmp_path):
     seq = _copy("gre_2d_3sl.seq", tmp_path)
-    assert convert(seq, SYSTEM, cache_ext=".pge") == tmp_path / "gre_2d_3sl.pge"
+    assert convert(seq, SYSTEM, cache_ext=".cache") == tmp_path / "gre_2d_3sl.cache"
     assert not (tmp_path / "gre_2d_3sl.pseg").exists()
 
 
 def test_the_cache_header_carries_the_vendor_and_file_size_it_was_given(tmp_path):
     seq = _copy("gre_2d_3sl.seq", tmp_path)
-    header = convert(seq, SYSTEM, vendor=GEHC).read_bytes()[:24]
+    header = convert(seq, SYSTEM, vendor=VENDOR).read_bytes()[:24]
     _marker, _major, _minor, _revision, vendor, size = struct.unpack("<6i", header)
-    assert (vendor, size) == (GEHC, seq.stat().st_size)
+    assert (vendor, size) == (VENDOR, seq.stat().st_size)
 
 
 def test_a_reader_built_for_another_vendor_refuses_the_cache(tmp_path):
     seq = _copy("gre_2d_3sl.seq", tmp_path)
-    convert(seq, SYSTEM, vendor=GEHC)
+    convert(seq, SYSTEM, vendor=VENDOR)
     with pytest.raises(ValueError, match="cannot load"):
         summary(seq, SYSTEM, cache_ext=".pseg")
 
@@ -297,7 +297,7 @@ def _reader_lines(s):
 
 @pytest.fixture(scope="module")
 def scanner_reader(tmp_path_factory):
-    """The cache reader compiled as the scanner builds it: 32-bit, GE vendor."""
+    """The cache reader compiled as a scanner builds it: 32-bit, for one vendor."""
     directory = tmp_path_factory.mktemp("reader")
     probe = directory / "probe.c"
     probe.write_text("int main(void) { return 0; }\n")
@@ -322,7 +322,7 @@ def scanner_reader(tmp_path_factory):
             "gcc",
             "-m32",
             "-std=c89",
-            f"-DPULSEG_VENDOR={GEHC}",
+            f"-DPULSEG_VENDOR={VENDOR}",
             *includes,
             str(ROOT / "tests" / "native" / "read_cache_summary.c"),
             *sources,
@@ -338,12 +338,12 @@ def scanner_reader(tmp_path_factory):
 @pytest.mark.parametrize(
     "name", ["gre_2d_3sl.seq", "epi_2d_main.seq", "mprage_stack_of_spirals_3d.seq"]
 )
-def test_a_ge_cache_written_here_loads_in_the_scanner_reader(
+def test_a_vendor_cache_written_here_loads_in_the_scanner_reader(
     name, tmp_path, scanner_reader
 ):
     seq = _copy(name, tmp_path)
     cache = convert(
-        seq, SYSTEM, vendor=GEHC, label_column_map=GE_LABELS, cache_ext=".pge"
+        seq, SYSTEM, vendor=VENDOR, label_column_map=LABELS, cache_ext=".cache"
     )
     printed = subprocess.run(
         [str(scanner_reader), str(cache), str(seq.stat().st_size)],
@@ -351,7 +351,7 @@ def test_a_ge_cache_written_here_loads_in_the_scanner_reader(
         text=True,
         check=True,
     ).stdout
-    expected = summary(seq, SYSTEM, label_column_map=GE_LABELS)
+    expected = summary(seq, SYSTEM, label_column_map=LABELS)
     assert printed.splitlines() == _reader_lines(expected)
 
 
@@ -362,9 +362,9 @@ def test_the_scanner_reader_reads_the_sar_ratios_a_cache_carries(
     cache = convert(
         seq,
         SYSTEM,
-        vendor=GEHC,
-        label_column_map=GE_LABELS,
-        cache_ext=".pge",
+        vendor=VENDOR,
+        label_column_map=LABELS,
+        cache_ext=".cache",
         sar_ratios=[ir.SarRatio(0.75, 0.5)],
     )
     printed = subprocess.run(
