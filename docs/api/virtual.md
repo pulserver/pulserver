@@ -2,7 +2,8 @@
 
 The stand-ins for the scanner: the cache played, an analytic phantom acquired
 along the trajectory it plays, and the raw data sent as the scanner's
-reconstruction client sends them.
+reconstruction client sends them; and the blocks the cache plays, written as a
+Pulseq file for a simulator that reads one.
 
 ```{eval-rst}
 .. currentmodule:: pulserver.virtual
@@ -22,6 +23,12 @@ scanner's centre frequency.
 | --- | --- |
 | {obj}`~pulserver.virtual.trajectory` | The k-space location of every ADC sample the cache beside a sequence file plays. |
 | {obj}`~pulserver.virtual.acquire` | The samples the cache beside a sequence file acquires of a phantom, demodulated as the playout demodulates. |
+
+## External simulators
+
+| Object | Description |
+| --- | --- |
+| {obj}`~pulserver.virtual.export` | Write the blocks the cache beside a sequence file plays as one Pulseq 1.4.1 file, and return the receiver phase of every readout. |
 
 ## Phantom
 
