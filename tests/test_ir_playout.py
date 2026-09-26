@@ -36,13 +36,13 @@ def _converted(name, directory):
     return directory / name
 
 
-def _budgets(seq):
+def _budgets(seq, ring=2):
     """The budget that holds every wave at once, and one that streams them."""
-    plan = ir.plan_waves(seq, WaveBudget(LOTS, RASTER_US))
-    budgets = {"resident": WaveBudget(LOTS, RASTER_US)}
+    plan = ir.plan_waves(seq, WaveBudget(LOTS, RASTER_US, slots=ring))
+    budgets = {"resident": WaveBudget(LOTS, RASTER_US, slots=ring)}
     streamed = max(plan["streamed_samples"])
     if 0 < streamed < max(plan["resident_samples"]):
-        budgets["streamed"] = WaveBudget(streamed, RASTER_US)
+        budgets["streamed"] = WaveBudget(streamed, RASTER_US, slots=ring)
     return budgets
 
 
@@ -170,28 +170,53 @@ def test_nothing_is_read_before_it_is_loaded_or_loaded_over_what_plays(played):
         assert record["overwrites"] == 0
 
 
-@pytest.mark.parametrize("name", WAVED)
-def test_the_instances_of_a_segment_play_the_two_halves_in_turn(name, tmp_path):
+# Three slots per position of the stack of spirals take more memory than
+# every wave at once, which is then how a playout holds them.
+@pytest.mark.parametrize(
+    ("name", "ring"), [(name, 2) for name in WAVED] + [("zte_3d.seq", 3)]
+)
+def test_the_instances_of_a_segment_play_the_slots_of_its_ring_in_turn(
+    name, ring, tmp_path
+):
     seq = _converted(name, tmp_path)
-    record = ir.playout(seq, _budgets(seq)["streamed"])
+    record = ir.playout(seq, _budgets(seq, ring)["streamed"])
     blocks = record["blocks"]
     assert record["mode"] == "streamed"
+    assert record["slots"] == ring
     firsts = np.flatnonzero(blocks["position"] == 0)
     for segment in np.unique(blocks["segment"]):
         mine = firsts[blocks["segment"][firsts] == segment]
         np.testing.assert_array_equal(blocks["instance"][mine], np.arange(mine.size))
-    np.testing.assert_array_equal(blocks["half"], blocks["instance"] % 2)
+    np.testing.assert_array_equal(blocks["slot"], blocks["instance"] % ring)
     positions = record["positions"]
+    assert positions["slot_offset"].shape[1:] == (ring, 3)
     for block in np.flatnonzero(blocks["wave"] >= 0):
         (row,) = np.flatnonzero(
             (positions["segment"] == blocks["segment"][block])
             & (positions["position"] == blocks["position"][block])
         )
-        half = blocks["half"][block]
+        slot = blocks["slot"][block]
         np.testing.assert_array_equal(
-            blocks["wave_offset"][block], positions["slot_offset"][row, half]
+            blocks["wave_offset"][block], positions["slot_offset"][row, slot]
         )
-        assert blocks["wave_samples"][block] == positions["slot_samples"][row, half]
+        assert blocks["wave_samples"][block] == positions["slot_samples"][row, slot]
+    assert record["unloaded"] == 0
+    assert record["overwrites"] == 0
+
+
+def test_without_a_budget_the_playout_holds_the_waves_as_the_cache_lays_them_out(
+    tmp_path,
+):
+    seq = _converted("zte_3d.seq", tmp_path)
+    budget = _budgets(seq, 3)["streamed"]
+    ir.convert(seq, SYSTEM, wave_budget=budget)
+    stored = ir.playout(seq)
+    assert (stored["mode"], stored["slots"]) == ("streamed", 3)
+    given = ir.playout(seq, budget)
+    np.testing.assert_array_equal(stored["blocks"]["slot"], given["blocks"]["slot"])
+    np.testing.assert_array_equal(
+        stored["blocks"]["wave_offset"], given["blocks"]["wave_offset"]
+    )
 
 
 def test_every_wave_a_position_plays_covers_the_span_it_prepares(played):

@@ -18,6 +18,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <errno.h>
+#include <limits.h>
 
 #include "pulseg_internal.h"
 #include "pulseg.h"
@@ -32,7 +33,7 @@
 /* The full (major, minor, revision) triple must match exactly on read: a
  * cache at any other revision is rejected outright and the .seq is
  * re-parsed, never partially or heuristically read. */
-#define PULSEG_CACHE_VERSION_REVISION 21
+#define PULSEG_CACHE_VERSION_REVISION 22
 
 /* Per-consumer sections. Each carries its own distinct payload.
  * COMMON establishes the collection + descriptor framing; the others
@@ -179,6 +180,87 @@ static int read_waves(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
     if (do_swap)
         pulseg__swap4_array(d->waves, d->num_waves * PULSEG_WAVE_WORDS);
     return 1;
+}
+
+static int read_int(FILE *f, int *value, int do_swap)
+{
+    if (!pulseg__read4(f, value, 1))
+        return 0;
+    if (do_swap)
+        pulseg__swap4(value);
+    return 1;
+}
+
+static int read_float(FILE *f, float *value, int do_swap)
+{
+    if (!pulseg__read4(f, value, 1))
+        return 0;
+    if (do_swap)
+        pulseg__swap4(value);
+    return 1;
+}
+
+/* A long, as the 4-byte integer the cache holds it in. */
+static int write_long(FILE *f, long value)
+{
+    const int word = value > INT_MAX ? INT_MAX : value < INT_MIN ? INT_MIN : (int)value;
+
+    return pulseg__write4(f, &word, 1);
+}
+
+static int read_long(FILE *f, long *value, int do_swap)
+{
+    int word;
+
+    if (!read_int(f, &word, do_swap))
+        return 0;
+    *value = (long)word;
+    return 1;
+}
+
+static float *read_floats(FILE *f, int count, int do_swap)
+{
+    float *values = (float *)PULSEG_ALLOC((size_t)count * sizeof(float));
+
+    if (values && !pulseg__read4(f, values, count))
+    {
+        PULSEG_FREE(values);
+        return NULL;
+    }
+    if (values && do_swap)
+        pulseg__swap4_array(values, count);
+    return values;
+}
+
+/* The heaviest repetition's gradients, in COMMON: the point count, the
+ * scalars, then time and the three axes. */
+static int write_repetition(FILE *f, const pulseg_corner_point_stream *s)
+{
+    const int n = s->num_points > 0 ? s->num_points : 0;
+
+    if (!pulseg__write4(f, &n, 1) || !pulseg__write4(f, &s->first_position, 1) ||
+        !pulseg__write4(f, &s->energy, 1) || !pulseg__write4(f, &s->duration_us, 1))
+        return 0;
+    return n == 0 ||
+        (pulseg__write4(f, s->time_us, n) && pulseg__write4(f, s->gx_hz_per_m, n) &&
+         pulseg__write4(f, s->gy_hz_per_m, n) && pulseg__write4(f, s->gz_hz_per_m, n));
+}
+
+static int read_repetition(FILE *f, pulseg_corner_point_stream *s, int do_swap)
+{
+    int n;
+
+    if (!read_int(f, &n, do_swap) || n < 0 || !read_int(f, &s->first_position, do_swap) ||
+        !read_float(f, &s->energy, do_swap) || !read_float(f, &s->duration_us, do_swap))
+        return 0;
+    if (n == 0)
+        return 1;
+    s->time_us = read_floats(f, n, do_swap);
+    s->gx_hz_per_m = s->time_us ? read_floats(f, n, do_swap) : NULL;
+    s->gy_hz_per_m = s->gx_hz_per_m ? read_floats(f, n, do_swap) : NULL;
+    s->gz_hz_per_m = s->gy_hz_per_m ? read_floats(f, n, do_swap) : NULL;
+    s->num_points = n;
+    return s->gz_hz_per_m != NULL;
 }
 
 /* The wave each block plays, in INSTANCES: one word per block, -1
@@ -513,7 +595,7 @@ static int write_common(FILE *f, const pulseg_sequence_descriptor *d)
     /* exec_stream + variable_grad_flags: emitted in the SCANLOOP section
      * (write_scanloop) */
 
-    return 1;
+    return write_repetition(f, &d->repetition);
 }
 
 /* ------ Serialize the ROTATIONS region of a descriptor ------ */
@@ -1195,7 +1277,7 @@ static int read_common(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
     /* exec_stream + variable_grad_flags: read from the SCANLOOP section
      * (read_scanloop) */
 
-    return 1;
+    return read_repetition(f, &d->repetition, do_swap);
 }
 
 /* ------ Deserialize the INSTANCES region into an existing descriptor ------ */
@@ -1509,6 +1591,172 @@ static int read_scanloop(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
     return 1;
 }
 
+/* ------ The waves' layout in waveform memory, in COMMON ------ */
+
+static int write_region(FILE *f, const pulseg_wave_region *r)
+{
+    return write_long(f, r->offset[0]) && write_long(f, r->offset[1]) &&
+        write_long(f, r->offset[2]) && write_long(f, r->samples) &&
+        pulseg__write4(f, &r->start_us, 1);
+}
+
+static int read_region(FILE *f, pulseg_wave_region *r, int do_swap)
+{
+    return read_long(f, &r->offset[0], do_swap) && read_long(f, &r->offset[1], do_swap) &&
+        read_long(f, &r->offset[2], do_swap) && read_long(f, &r->samples, do_swap) &&
+        read_float(f, &r->start_us, do_swap);
+}
+
+/* @p count tables of @p lengths[i] times @p per regions: the count, then
+ * each table's length and regions. */
+static int write_region_tables(
+    FILE *f,
+    pulseg_wave_region *const *tables,
+    const int *lengths,
+    int count,
+    int per)
+{
+    int i, j;
+
+    if (!pulseg__write4(f, &count, 1))
+        return 0;
+    for (i = 0; i < count; ++i)
+    {
+        const int length = (lengths && tables && tables[i]) ? lengths[i] : 0;
+        if (!pulseg__write4(f, &length, 1))
+            return 0;
+        for (j = 0; j < length * per; ++j)
+            if (!write_region(f, &tables[i][j]))
+                return 0;
+    }
+    return 1;
+}
+
+static int read_region_table(FILE *f, pulseg_wave_region **table, int regions, int do_swap)
+{
+    int j;
+
+    if (regions <= 0)
+        return 1;
+    *table = (pulseg_wave_region *)PULSEG_ALLOC((size_t)regions * sizeof(pulseg_wave_region));
+    if (!*table)
+        return 0;
+    for (j = 0; j < regions; ++j)
+        if (!read_region(f, &(*table)[j], do_swap))
+            return 0;
+    return 1;
+}
+
+/* @p count empty tables and their lengths; 1 on success. */
+static int alloc_region_tables(pulseg_wave_region ***tables, int **lengths, int count)
+{
+    int i;
+
+    *lengths = (int *)PULSEG_ALLOC((size_t)count * sizeof(int));
+    *tables = (pulseg_wave_region **)PULSEG_ALLOC((size_t)count * sizeof(pulseg_wave_region *));
+    if (!*lengths || !*tables)
+        return 0;
+    for (i = 0; i < count; ++i)
+    {
+        (*lengths)[i] = 0;
+        (*tables)[i] = NULL;
+    }
+    return 1;
+}
+
+static int read_sized_table(
+    FILE *f,
+    pulseg_wave_region **table,
+    int *length,
+    int per,
+    int do_swap)
+{
+    return read_int(f, length, do_swap) && *length >= 0 &&
+        read_region_table(f, table, *length * per, do_swap);
+}
+
+static int read_region_tables(
+    FILE *f,
+    pulseg_wave_region ***tables,
+    int **lengths,
+    int *count,
+    int per,
+    int do_swap)
+{
+    int i;
+
+    if (!read_int(f, count, do_swap) || *count < 0)
+        return 0;
+    if (*count == 0)
+        return 1;
+    if (!alloc_region_tables(tables, lengths, *count))
+        return 0;
+    for (i = 0; i < *count; ++i)
+        if (!read_sized_table(f, &(*tables)[i], &(*lengths)[i], per, do_swap))
+            return 0;
+    return 1;
+}
+
+static int write_axes(FILE *f, const long values[3])
+{
+    return write_long(f, values[0]) && write_long(f, values[1]) && write_long(f, values[2]);
+}
+
+static int read_axes(FILE *f, long values[3], int do_swap)
+{
+    return read_long(f, &values[0], do_swap) && read_long(f, &values[1], do_swap) &&
+        read_long(f, &values[2], do_swap);
+}
+
+/* The plan: the budget it was laid out for, the mode and sizes, the
+ * resident regions, the streamed slots, then the loading check. */
+static int write_budget(FILE *f, const pulseg_wave_budget *b)
+{
+    return write_long(f, b->max_samples) && pulseg__write4(f, &b->raster_us, 1) &&
+        pulseg__write4(f, &b->load_us_per_sample, 1) && pulseg__write4(f, &b->headroom, 1) &&
+        pulseg__write4(f, &b->slots, 1);
+}
+
+static int write_loading(FILE *f, const pulseg_wave_plan *p)
+{
+    return pulseg__write4(f, &p->loading_checked, 1) && pulseg__write4(f, &p->least_spare_us, 1) &&
+        pulseg__write4(f, &p->tightest_subseq, 1) && pulseg__write4(f, &p->tightest_position, 1);
+}
+
+static int write_plan(FILE *f, const pulseg_wave_plan *p)
+{
+    return write_budget(f, &p->budget) && pulseg__write4(f, &p->mode, 1) &&
+        write_axes(f, p->samples) && write_axes(f, p->resident_samples) &&
+        write_axes(f, p->streamed_samples) &&
+        write_region_tables(f, p->waves, p->num_waves, p->num_subsequences, 1) &&
+        write_region_tables(f, p->slots, p->num_positions, p->num_segments, p->budget.slots) &&
+        write_loading(f, p);
+}
+
+static int read_budget(FILE *f, pulseg_wave_budget *b, int do_swap)
+{
+    return read_long(f, &b->max_samples, do_swap) && read_float(f, &b->raster_us, do_swap) &&
+        read_float(f, &b->load_us_per_sample, do_swap) && read_float(f, &b->headroom, do_swap) &&
+        read_int(f, &b->slots, do_swap) && b->slots >= 1;
+}
+
+static int read_loading(FILE *f, pulseg_wave_plan *p, int do_swap)
+{
+    return read_int(f, &p->loading_checked, do_swap) && read_float(f, &p->least_spare_us, do_swap) &&
+        read_int(f, &p->tightest_subseq, do_swap) && read_int(f, &p->tightest_position, do_swap);
+}
+
+static int read_plan(FILE *f, pulseg_wave_plan *p, int do_swap)
+{
+    return read_budget(f, &p->budget, do_swap) && read_int(f, &p->mode, do_swap) &&
+        read_axes(f, p->samples, do_swap) && read_axes(f, p->resident_samples, do_swap) &&
+        read_axes(f, p->streamed_samples, do_swap) &&
+        read_region_tables(f, &p->waves, &p->num_waves, &p->num_subsequences, 1, do_swap) &&
+        read_region_tables(
+            f, &p->slots, &p->num_positions, &p->num_segments, p->budget.slots, do_swap) &&
+        read_loading(f, p, do_swap);
+}
+
 /* ------ Write collection payload (header handled by caller) ------ */
 
 static int write_common_payload(FILE *f, const pulseg_collection *coll)
@@ -1575,7 +1823,7 @@ static int write_common_payload(FILE *f, const pulseg_collection *coll)
         }
     }
 
-    return 1;
+    return write_plan(f, &coll->wave_plan);
 }
 
 /* ------ Augment-section payloads (ROTATIONS / SHAPES / SCANLOOP) ------ */
@@ -1876,7 +2124,7 @@ static int read_common_payload(FILE *f, pulseg_collection *coll, int do_swap)
     memset(&coll->block_cursor, 0, sizeof(coll->block_cursor));
     coll->block_cursor.exec_stream_position = -1;
 
-    return 1;
+    return read_plan(f, &coll->wave_plan, do_swap);
 }
 
 /* ------ Augment-section readers (ROTATIONS / SHAPES / SCANLOOP) ------ */

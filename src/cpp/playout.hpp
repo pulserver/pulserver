@@ -12,12 +12,13 @@
 namespace native
 {
 
-/* Run pulseg_playout_prepare() and pulseg_playout_scan() on @p coll over a
- * backend that plays nothing and records what each stage hands it, with the
- * waveforms each block plays where @p waveforms; see pulserver.ir.playout. */
+/* Run pulseg_playout_prepare() and pulseg_playout_scan() on @p coll with the
+ * layout @p plan, over a backend that plays nothing and records what each
+ * stage hands it, with the waveforms each block plays where @p waveforms;
+ * see pulserver.ir.playout. */
 pybind11::dict record_playout(
     pulseg_collection *coll,
-    const pulseg_wave_budget &budget,
+    const pulseg_wave_plan &plan,
     const pulseg_playout_options &options,
     bool waveforms);
 

@@ -26,6 +26,8 @@ pybind11_add_module(_ext
     ${CMAKE_SOURCE_DIR}/src/cpp/ir/structure.cpp
     ${CMAKE_SOURCE_DIR}/src/cpp/ir/collection.cpp
     ${CMAKE_SOURCE_DIR}/src/cpp/ir/waves.cpp
+    ${CMAKE_SOURCE_DIR}/src/cpp/ir/wave_plan.cpp
+    ${CMAKE_SOURCE_DIR}/src/cpp/ir/repetition.cpp
 )
 target_link_libraries(_ext PRIVATE pulseg)
 # The passes are pulseg's own and see its private headers.

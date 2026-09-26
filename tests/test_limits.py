@@ -104,6 +104,55 @@ def test_a_design_under_a_vop_file_carries_its_sar_ratios_in_the_cache(tmp_path)
     assert loaded["vop_global_sar_ratio"] == 0.0
 
 
+WAVE_MEMORY = {
+    "ir_wave_max_samples": 4096,
+    "ir_wave_raster_us": 4.0,
+    "ir_wave_load_us_per_sample": 0.01,
+    "ir_wave_headroom": 0.25,
+    "ir_wave_slots": 3,
+}
+
+
+def test_the_waveform_memory_is_read_into_the_conversion_options():
+    _, options, _ = split_limits({**SCANNER, **WAVE_MEMORY})
+    assert options["wave_budget"] == ir.WaveBudget(4096, 4.0, 0.01, 0.25, 3)
+
+
+@pytest.mark.parametrize("missing", ["ir_wave_max_samples", "ir_wave_raster_us"])
+def test_a_waveform_memory_without_its_size_or_raster_is_refused(missing):
+    partial = {k: v for k, v in WAVE_MEMORY.items() if k != missing}
+    with pytest.raises(ValueError, match="ir_wave_max_samples and ir_wave_raster_us"):
+        split_limits({**SCANNER, **partial})
+
+
+def test_an_imported_design_carries_the_waveform_memory_it_was_converted_for(
+    tmp_path,
+):
+    system = pp.Opts(**SCANNER)
+    seq = pp.Sequence(system)
+    seq.add_block(
+        pp.make_block_pulse(flip_angle=np.pi / 2, duration=1e-3, system=system)
+    )
+    path = tmp_path / "sequence.seq"
+    seq.write(path)
+    store = DesignStore(tmp_path / "designs")
+    status, reply = call(
+        "import",
+        limits={**SCANNER, **WAVE_MEMORY},
+        block=format_import(path),
+        store=store,
+    )
+    assert status == 0, reply
+    stored = store.directory(reply.split()[1]) / "sequence.seq"
+    assert ir.plan_waves(stored)["budget"] == {
+        "max_samples": 4096,
+        "raster_us": 4.0,
+        "load_us_per_sample": pytest.approx(0.01),
+        "headroom": 0.25,
+        "slots": 3,
+    }
+
+
 def test_design_limits_cap_the_design_and_leave_the_scanner_limits_to_the_checks():
     limits = {**SCANNER, "design_max_grad": 23.0, "design_max_slew": 86.0}
     scanner = pp.Opts(**SCANNER)

@@ -99,11 +99,10 @@ typedef struct pulseg_rf_shim_definition
  * One representative instance of a gradient definition.
  *
  * A definition is played many times, at different amplitudes and -- for an
- * arbitrary gradient -- with different waveforms.  Enumerating them all in the
- * definition is what imposed the old 16-shot ceiling; the per-instance shape
- * id lives in the grad table (and so in the exec stream) instead, and what the
- * definition keeps is the instance safety has to look at when it cannot look
- * at the instance that actually plays.
+ * arbitrary gradient -- with different waveforms.  The per-instance shape id
+ * lives in the grad table (and so in the exec stream); what the definition
+ * keeps is the instance safety has to look at when it cannot look at the
+ * instance that actually plays.
  *
  * `spectral` maximises the second moment of
  *
@@ -609,6 +608,10 @@ typedef struct pulseg_sequence_descriptor
     pulseg_wave *waves;
     int *block_wave;
 
+    /* The gradients of the heaviest repetition, computed at conversion and
+     * serialized in COMMON.  See pulseg_get_tr_corner_points(). */
+    pulseg_corner_point_stream repetition;
+
     /* Copy of pulseg_opts.cache_ext at dedup time. Not part of the
      * cache payload itself (it only names the cache FILE, not its
      * contents) -- deliberately placed after all cache-serialized fields
@@ -635,7 +638,7 @@ typedef struct pulseg_sequence_descriptor
     /* hints */ 0, 0, /* tr_start anchor */ -1, NULL, 0, 0, NULL, \
     {{0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, \
     {0, 0}, {0, 0}, {0, 0}, {0, 0}}, NULL, /* waves */ 0, NULL, NULL, \
-    PULSEG_CACHE_EXT_DEFAULT, 0, 0 \
+    PULSEG_CORNER_POINT_STREAM_INIT, PULSEG_CACHE_EXT_DEFAULT, 0, 0 \
     }
 /* clang-format on */
 
@@ -699,6 +702,10 @@ struct pulseg_collection
     int seg_l2g_len;          /* == pre-dedup sum of num_unique_segments    */
     int *seg_repr_subseq;     /* [total_unique_segments] global->repr subseq */
     int *seg_repr_local;      /* [total_unique_segments] global->repr local  */
+
+    /* The waves' layout in waveform memory, for the budget the conversion
+     * was given; serialized in COMMON.  See pulseg_get_wave_plan(). */
+    pulseg_wave_plan wave_plan;
 };
 
 /* ================================================================== */
@@ -954,6 +961,7 @@ int pulseg__calc_segment_timing(pulseg_sequence_descriptor *desc, pulseg_diagnos
  * stream are built: the waves, the wave each block-table entry plays and each
  * segment position's record of the waves it plays. */
 int pulseg__build_waves(pulseg_sequence_descriptor *desc);
+
 
 /* Per position and axis within the TR, whether the gradient amplitude varies
  * across TR instances. Allocates desc->variable_grad_flags (tr_size * 3 ints)

@@ -493,19 +493,28 @@ def _plan_lines(plan):
     for i, waves in enumerate(plan["waves"]):
         lines += [region("wave", i, j, r) for j, r in enumerate(waves)]
     for i, positions in enumerate(plan["slots"]):
-        halves = [half for pair in positions for half in pair]
-        lines += [region("slot", i, j, r) for j, r in enumerate(halves)]
+        slots = [slot for ring in positions for slot in ring]
+        lines += [region("slot", i, j, r) for j, r in enumerate(slots)]
     return lines
 
 
+def _vendor_cache(seq, budget):
+    return convert(
+        seq,
+        SYSTEM,
+        vendor=VENDOR,
+        label_column_map=LABELS,
+        cache_ext=".cache",
+        wave_budget=budget,
+    )
+
+
 @pytest.mark.parametrize("max_samples", [10**6, 3000])
-def test_the_scanner_reader_lays_out_the_rotated_waves_as_the_host_does(
+def test_the_scanner_reader_reads_the_layout_the_host_gave_the_waves(
     max_samples, tmp_path, scanner_reader
 ):
     seq = _copy("zte_3d.seq", tmp_path)
-    cache = convert(
-        seq, SYSTEM, vendor=VENDOR, label_column_map=LABELS, cache_ext=".cache"
-    )
+    cache = _vendor_cache(seq, ir.WaveBudget(max_samples, 4.0))
     printed = subprocess.run(
         [
             str(scanner_reader),
@@ -540,7 +549,7 @@ def _playout_lines(record):
         if blocks["position"][n] == 0:
             lines.append(
                 f"instance {blocks['subsequence'][n]} {blocks['segment'][n]} "
-                f"{blocks['instance'][n]} {blocks['half'][n]} {blocks['first_position'][n]}"
+                f"{blocks['instance'][n]} {blocks['slot'][n]} {blocks['first_position'][n]}"
             )
         if blocks["wave"][n] >= 0:
             offsets = " ".join(str(o) for o in blocks["wave_offset"][n])
@@ -560,9 +569,7 @@ def test_the_scanner_reader_plays_the_waves_as_the_host_records_them(
     max_samples, tmp_path, scanner_reader
 ):
     seq = _copy("zte_3d.seq", tmp_path)
-    cache = convert(
-        seq, SYSTEM, vendor=VENDOR, label_column_map=LABELS, cache_ext=".cache"
-    )
+    cache = _vendor_cache(seq, ir.WaveBudget(max_samples, 4.0))
     printed = subprocess.run(
         [
             str(scanner_reader),
@@ -581,6 +588,21 @@ def test_the_scanner_reader_plays_the_waves_as_the_host_records_them(
     record = ir.playout(seq, ir.WaveBudget(max_samples, 4.0))
     assert record["mode"] == ("resident" if max_samples == 10**6 else "streamed")
     assert printed[first:] == _playout_lines(record)
+
+
+def test_the_scanner_reader_refuses_a_layout_made_for_another_budget(
+    tmp_path, scanner_reader
+):
+    seq = _copy("zte_3d.seq", tmp_path)
+    cache = _vendor_cache(seq, ir.WaveBudget(3000, 4.0))
+    printed = subprocess.run(
+        [str(scanner_reader), str(cache), str(seq.stat().st_size), "3000", "2"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.splitlines()
+    assert "wave_plan rc -252 mode 0 samples 0 0 0" in printed
+    assert not any(line.startswith("prepare") for line in printed)
 
 
 # A scanner build whose waveform memory holds signed 16-bit samples.
@@ -663,9 +685,7 @@ def test_a_scanner_build_loads_each_wave_as_its_float_samples_at_its_own_sample_
     max_samples, tmp_path, sample_printers
 ):
     seq = _copy("zte_3d.seq", tmp_path)
-    cache = convert(
-        seq, SYSTEM, vendor=VENDOR, label_column_map=LABELS, cache_ext=".cache"
-    )
+    cache = _vendor_cache(seq, ir.WaveBudget(max_samples, 4.0))
     args = ("loads", cache, seq.stat().st_size, max_samples, 4)
     floats, shorts = (_printed(p, *args) for p in sample_printers)
     assert len(floats) == len(shorts) > 0

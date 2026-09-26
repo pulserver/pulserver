@@ -42,8 +42,9 @@ extern "C"
                                  physiological trigger input; the segment's
                                  own trigger says only that one of its
                                  instances does                            */
-        int half;           /**< the half of its positions' wave slots it
-                                 plays; -1 unless the waves are streamed   */
+        int slot;           /**< the slot of its positions' rings it plays,
+                                 @c instance modulo the plan's slots; -1
+                                 unless the waves are streamed             */
     } pulseg_playout_segment;
 
     /**
@@ -117,22 +118,25 @@ extern "C"
         /** First stage: a segment, before its positions. */
         int (*prepare_segment)(void *ctx, int segment, const pulseg_segment_info *info);
 
-        /** First stage: a position of @p segment.  @p slot is NULL where the
-         *  position plays no wave.  Otherwise both entries hold the span every
-         *  wave it plays covers, and, where the waves are streamed, the two
-         *  slots they play from; where they are resident, the offsets are -1
-         *  and each wave's own region says where it is held. */
+        /** First stage: a position of @p segment.  @p slots is NULL where
+         *  the position plays no wave.  Otherwise it holds one entry per slot
+         *  of the plan, each with the span every wave the position plays
+         *  covers: where the waves are streamed, the ring of slots they play
+         *  from; where they are resident, offsets of -1, each wave's own
+         *  region saying where it is held. */
         int (*prepare_block)(
             void *ctx,
             int segment,
             int position,
             const pulseg_block_info *info,
-            const pulseg_wave_region *slot);
+            const pulseg_wave_region *slots);
 
         /** Both stages: samples into waveform memory.  Resident waves are
          *  loaded in the first stage; streamed ones in the second, into the
-         *  half the instance plays, after the instance before it has
-         *  started. */
+         *  slot the instance plays, once the instance before it has been
+         *  handed over.  That slot was last read by the instance of its
+         *  segment the plan's number of slots earlier, which the backend lets
+         *  end before it writes. */
         int (*load_wave)(void *ctx, const pulseg_wave_load *load);
 
         /** Second stage: a segment instance, before its blocks. */
@@ -170,20 +174,19 @@ extern "C"
     /**
      * @brief The first stage: prepare every segment and load resident waves.
      *
-     * Lays out the waves with pulseg_plan_waves() on @p budget, reserves
-     * their memory, hands the backend every global segment and each of its
-     * positions in order, and, where the waves are resident, loads every
-     * wave of every subsequence into its region.  Needs the definitions
-     * alone, as the pulse-generation cache holds them.
+     * Reserves the memory @p plan holds the waves in, hands the backend every
+     * global segment and each of its positions in order, and, where the
+     * waves are resident, loads every wave of every subsequence into its
+     * region, on the plan's raster.  Needs the definitions alone, as the
+     * pulse-generation cache holds them.
      *
-     * @return PULSEG_SUCCESS; a pulseg_plan_waves() error, with @p diag
-     *         filled; or the first negative code the backend returns.
+     * @param[in] plan  The layout, as pulseg_get_wave_plan() copies it.
+     * @return PULSEG_SUCCESS, or the first negative code the backend returns.
      */
     int pulseg_playout_prepare(
         const pulseg_collection *coll,
-        const pulseg_wave_budget *budget,
-        const pulseg_playout_backend *backend,
-        pulseg_diagnostic *diag);
+        const pulseg_wave_plan *plan,
+        const pulseg_playout_backend *backend);
 
     /**
      * @brief The second stage: play the execution stream, instance by instance.
@@ -191,10 +194,8 @@ extern "C"
      * For each segment instance, in play order: begin_instance(); for each
      * of its blocks, load its wave where the waves are streamed, then
      * set_block(); then play_instance().  The n-th instance of a segment
-     * plays half n % 2 of the streamed slots, so its waves are loaded while
-     * the instance before it plays.  The wave layout is recomputed from
-     * @p budget as the first stage computed it, and a streamed layout that
-     * cannot be loaded in time is refused before anything plays.
+     * plays slot n % slots of its positions' rings, so its waves are loaded
+     * while the instances before it play.
      *
      * The prescan plays one subsequence from its start and ends with the
      * instance that completes its readouts.  It waits for no trigger, drives
@@ -204,13 +205,15 @@ extern "C"
      *
      * @param[in,out] coll     Collection with its execution stream loaded;
      *                         its cursor is reset and moved.
+     * @param[in]     plan     The layout the first stage prepared.
      * @param[in]     options  NULL plays the scan.
-     * @return PULSEG_SUCCESS; a pulseg_plan_waves() error, with @p diag
-     *         filled; or the first negative code the backend returns.
+     * @return PULSEG_SUCCESS; PULSEG_ERR_INVALID_ARGUMENT, with @p diag
+     *         filled, when the execution stream is not loaded; or the first
+     *         negative code the backend returns.
      */
     int pulseg_playout_scan(
         pulseg_collection *coll,
-        const pulseg_wave_budget *budget,
+        const pulseg_wave_plan *plan,
         const pulseg_playout_backend *backend,
         const pulseg_playout_options *options,
         pulseg_diagnostic *diag);

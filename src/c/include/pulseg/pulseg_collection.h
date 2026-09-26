@@ -536,8 +536,8 @@ extern "C"
      * Writes the wave pulseg_materialize_wave() returns, normalised to unit
      * peak, at the centres start_us + (i + 0.5) raster_us of @p num_samples
      * raster intervals: linear between its points, zero outside them.  What
-     * a playout loads into the region pulseg_plan_waves() assigns, from that
-     * region's start_us.
+     * a playout loads into the region pulseg_get_wave_plan() assigns, from
+     * that region's start_us, once pulseg_wave_samples() converts it.
      *
      * @return PULSEG_SUCCESS or a negative error code.
      */
@@ -552,37 +552,38 @@ extern "C"
         float *out);
 
     /**
-     * @brief Lay out the waves of a collection in a playout's waveform
+     * @brief Copy the layout of a collection's waves in a playout's waveform
      * memory.
      *
-     * Every wave is held at once (PULSEG_WAVES_RESIDENT) where that fits the
-     * budget on every axis, and otherwise each segment position that plays
-     * waves holds two slots (PULSEG_WAVES_STREAMED), refilled for each
-     * segment instance while the instance before it plays.  Each wave or slot
-     * holds its span on the playout's raster, on the axes it drives.  The
-     * layout needs the definitions alone, so the pulse-generation stage and
-     * the scan loop compute the same one.  When the execution stream is
-     * loaded, a streamed layout with a load rate is also checked for time:
-     * every instance but the first loads its waves while the instance before
-     * it plays, within the budget's headroom.
+     * The conversion lays the waves out for the budget it is given, and the
+     * cache carries the layout.  Every wave is held at once
+     * (PULSEG_WAVES_RESIDENT) where that fits the budget on every axis, and
+     * otherwise each segment position that plays waves holds a ring of
+     * budget.slots slots (PULSEG_WAVES_STREAMED): the n-th instance of a
+     * segment plays slot n % budget.slots.  With a load rate, a streamed
+     * layout is one whose loading keeps up: the waves of each instance are
+     * loaded once the loading before them has ended and the instance
+     * budget.slots - 1 before it has started, and before it starts, on the
+     * playout's timeline scaled by the headroom.  The conversion refuses a
+     * layout that does not.
      *
-     * @param[in]  coll    Loaded collection.
-     * @param[in]  budget  The playout's waveform memory, raster and load rate.
+     * @param[in]  coll    Loaded collection; COMMON suffices.
+     * @param[in]  budget  The playout's budget, which has to be the one the
+     *                     layout was made for unless the collection plays no
+     *                     wave; NULL takes the layout whatever its budget.
      * @param[out] plan    Overwritten; release with pulseg_free_wave_plan(),
      *                     whatever the result.
-     * @param[out] diag    States the shortfall on failure; may be NULL.
-     * @return PULSEG_SUCCESS; PULSEG_ERR_WAVE_MEMORY when neither layout fits,
-     *         with the sizes filled; PULSEG_ERR_WAVE_LOADING when an instance
-     *         cannot be loaded in time, with the plan filled and the instance
-     *         named; or another negative error code.
+     * @param[out] diag    States both budgets on a mismatch; may be NULL.
+     * @return PULSEG_SUCCESS; PULSEG_ERR_WAVE_BUDGET when the layout was made
+     *         for another budget; or another negative error code.
      */
-    int pulseg_plan_waves(
+    int pulseg_get_wave_plan(
         const pulseg_collection *coll,
         const pulseg_wave_budget *budget,
         pulseg_wave_plan *plan,
         pulseg_diagnostic *diag);
 
-    /** @brief Release what pulseg_plan_waves() allocated and reset @p plan. */
+    /** @brief Release what pulseg_get_wave_plan() allocated and reset @p plan. */
     void pulseg_free_wave_plan(pulseg_wave_plan *plan);
 
     /* ================================================================== */
@@ -604,9 +605,10 @@ extern "C"
      * The points run from 0, zero where no gradient plays at the
      * repetition's start, to its duration, zero where none plays up to its
      * end; where one block's gradient meets the next's, the later block's
-     * corner stands.  Needs the execution stream: a full cache.
+     * corner stands.  The conversion computes them, and the cache carries
+     * them.
      *
-     * @param[in]  coll        Loaded collection.
+     * @param[in]  coll        Loaded collection; COMMON suffices.
      * @param[out] out         Overwritten; release with
      *                         pulseg_corner_point_stream_free().
      * @param[out] diag        Diagnostic on failure; may be NULL.

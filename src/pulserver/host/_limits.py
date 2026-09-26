@@ -15,6 +15,13 @@ from pypulseqpp import safety
 from .. import ir
 
 _IR_OPTIONS = ("ir_vendor", "ir_label_column_map", "ir_cache_ext")
+_WAVE_BUDGET = {
+    "ir_wave_max_samples": ("max_samples", int),
+    "ir_wave_raster_us": ("raster_us", float),
+    "ir_wave_load_us_per_sample": ("load_us_per_sample", float),
+    "ir_wave_headroom": ("headroom", float),
+    "ir_wave_slots": ("slots", int),
+}
 _CHECK_PREFIXES = ("pns_", "forbidden_band_", "vop_")
 _DESIGN_LIMITS = {"design_max_grad": "max_grad", "design_max_slew": "max_slew"}
 _CHRONAXIE = {
@@ -33,8 +40,11 @@ def split_limits(
     """Separate a call's limits into scanner limits, IR conversion options and check limits.
 
     Keys starting with ``ir_`` are conversion options: ``ir_vendor``,
-    ``ir_label_column_map`` (three integers separated by spaces) and
-    ``ir_cache_ext``. Keys starting with ``pns_``, ``forbidden_band_`` and
+    ``ir_label_column_map`` (three integers separated by spaces),
+    ``ir_cache_ext``, and the playout's waveform memory the cache lays the
+    waves out for, the fields of :class:`pulserver.ir.WaveBudget` prefixed
+    ``ir_wave_``, of which ``ir_wave_max_samples`` and ``ir_wave_raster_us``
+    are required together. Keys starting with ``pns_``, ``forbidden_band_`` and
     ``vop_`` are the check limits of :func:`check_limits`, and those starting
     with ``design_`` the design limits of :func:`design_system`. The other keys
     are ``pypulseqpp.Opts`` keyword arguments, among which ``B0`` is required:
@@ -43,15 +53,20 @@ def split_limits(
     Raises
     ------
     ValueError
-        If ``B0`` is missing, an ``ir_`` key is not a conversion option, or
-        the design or check limits are malformed.
+        If ``B0`` is missing, an ``ir_`` key is not a conversion option, the
+        waveform memory is incomplete or out of range, or the design or check
+        limits are malformed.
     """
     if "B0" not in limits:
         raise ValueError(
             "the limits give no B0: the field in T the scan runs at, which ppm "
             "offsets are resolved at"
         )
-    unknown = [k for k in limits if k.startswith("ir_") and k not in _IR_OPTIONS]
+    unknown = [
+        k
+        for k in limits
+        if k.startswith("ir_") and k not in _IR_OPTIONS and k not in _WAVE_BUDGET
+    ]
     if unknown:
         raise ValueError(f"not IR conversion options: {unknown}")
     _design_ceilings(limits)
@@ -64,7 +79,25 @@ def split_limits(
         options["label_column_map"] = tuple(int(v) for v in values)
     if "ir_cache_ext" in limits:
         options["cache_ext"] = str(limits["ir_cache_ext"])
+    budget = _wave_budget(limits)
+    if budget is not None:
+        options["wave_budget"] = budget
     return system, options, check_limits(limits)
+
+
+def _wave_budget(limits: Mapping[str, Any]) -> ir.WaveBudget | None:
+    given = {
+        field: kind(limits[key])
+        for key, (field, kind) in _WAVE_BUDGET.items()
+        if key in limits
+    }
+    if not given:
+        return None
+    if "max_samples" not in given or "raster_us" not in given:
+        raise ValueError(
+            "a waveform memory needs ir_wave_max_samples and ir_wave_raster_us"
+        )
+    return ir.WaveBudget(**given)
 
 
 def design_system(limits: Mapping[str, Any]) -> pp.Opts:

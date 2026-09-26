@@ -3,9 +3,10 @@
  * "key value" line per quantity, in the order pulserver.ir.summary returns
  * them, and each subsequence's heaviest repetition, as
  * pulserver.ir.repetition_gradients returns it; and, given a waveform memory
- * and a raster, the layout of its waves, as pulserver.ir.plan_waves returns
- * it, and what both stages of a playout set, as pulserver.ir.playout records
- * it.  Compiled by tests/test_ir.py with the scanner's word size and vendor.
+ * and a raster, the layout of its waves the cache carries for them, as
+ * pulserver.ir.plan_waves returns it, and what both stages of a playout set
+ * with it, as pulserver.ir.playout records it.  Compiled by tests/test_ir.py
+ * with the scanner's word size and vendor.
  */
 
 #include <stdio.h>
@@ -62,24 +63,29 @@ static void print_region(const char *what, int i, int j, const pulseg_wave_regio
            (double)region->start_us);
 }
 
-static void print_wave_plan(const pulseg_collection *coll, long max_samples, float raster_us)
+/* Print the layout the cache carries for a waveform memory and a raster;
+ * its result code. */
+static int print_wave_plan(
+    const pulseg_collection *coll,
+    long max_samples,
+    float raster_us,
+    pulseg_wave_plan *plan)
 {
     pulseg_wave_budget budget = PULSEG_WAVE_BUDGET_INIT;
-    pulseg_wave_plan plan = PULSEG_WAVE_PLAN_INIT;
     int i, j, rc;
 
     budget.max_samples = max_samples;
     budget.raster_us = raster_us;
-    rc = pulseg_plan_waves(coll, &budget, &plan, NULL);
-    printf("wave_plan rc %d mode %d samples %ld %ld %ld\n", rc, plan.mode, plan.samples[0],
-           plan.samples[1], plan.samples[2]);
-    for (i = 0; i < plan.num_subsequences; ++i)
-        for (j = 0; j < plan.num_waves[i]; ++j)
-            print_region("wave", i, j, &plan.waves[i][j]);
-    for (i = 0; i < plan.num_segments; ++i)
-        for (j = 0; j < 2 * plan.num_positions[i]; ++j)
-            print_region("slot", i, j, &plan.slots[i][j]);
-    pulseg_free_wave_plan(&plan);
+    rc = pulseg_get_wave_plan(coll, &budget, plan, NULL);
+    printf("wave_plan rc %d mode %d samples %ld %ld %ld\n", rc, plan->mode, plan->samples[0],
+           plan->samples[1], plan->samples[2]);
+    for (i = 0; i < plan->num_subsequences; ++i)
+        for (j = 0; j < plan->num_waves[i]; ++j)
+            print_region("wave", i, j, &plan->waves[i][j]);
+    for (i = 0; i < plan->num_segments; ++i)
+        for (j = 0; j < plan->budget.slots * plan->num_positions[i]; ++j)
+            print_region("slot", i, j, &plan->slots[i][j]);
+    return rc;
 }
 
 /* What a playout backend was handed, counted. */
@@ -115,7 +121,7 @@ static int count_load(void *ctx, const pulseg_wave_load *load)
 
 static int print_instance(void *ctx, const pulseg_playout_segment *s)
 {
-    printf("instance %d %d %d %d %d\n", s->subsequence, s->segment, s->instance, s->half,
+    printf("instance %d %d %d %d %d\n", s->subsequence, s->segment, s->instance, s->slot,
            s->first_position);
     ((counts *)ctx)->instances += 1;
     return PULSEG_SUCCESS;
@@ -133,9 +139,8 @@ static int print_block(void *ctx, const pulseg_playout_segment *s, const pulseg_
     return PULSEG_SUCCESS;
 }
 
-static void print_playout(pulseg_collection *coll, long max_samples, float raster_us)
+static void print_playout(pulseg_collection *coll, const pulseg_wave_plan *plan)
 {
-    pulseg_wave_budget budget = PULSEG_WAVE_BUDGET_INIT;
     pulseg_playout_backend backend;
     counts c;
     int rc;
@@ -147,13 +152,22 @@ static void print_playout(pulseg_collection *coll, long max_samples, float raste
     backend.load_wave = count_load;
     backend.begin_instance = print_instance;
     backend.set_block = print_block;
-    budget.max_samples = max_samples;
-    budget.raster_us = raster_us;
-    rc = pulseg_playout_prepare(coll, &budget, &backend, NULL);
+    rc = pulseg_playout_prepare(coll, plan, &backend);
     printf("prepare rc %d positions %ld loads %ld\n", rc, c.positions, c.loads);
     c.loads = 0;
-    rc = pulseg_playout_scan(coll, &budget, &backend, NULL, NULL);
+    rc = pulseg_playout_scan(coll, plan, &backend, NULL, NULL);
     printf("scan rc %d instances %ld blocks %ld loads %ld\n", rc, c.instances, c.blocks, c.loads);
+}
+
+/* The layout the cache carries for a waveform memory and a raster, and, where
+ * it was laid out for them, what both stages of a playout set with it. */
+static void print_waves(pulseg_collection *coll, long max_samples, float raster_us)
+{
+    pulseg_wave_plan plan = PULSEG_WAVE_PLAN_INIT;
+
+    if (PULSEG_SUCCEEDED(print_wave_plan(coll, max_samples, raster_us, &plan)))
+        print_playout(coll, &plan);
+    pulseg_free_wave_plan(&plan);
 }
 
 int main(int argc, char **argv)
@@ -197,10 +211,7 @@ int main(int argc, char **argv)
         print_repetition(coll, i);
 
     if (argc == 5)
-    {
-        print_wave_plan(coll, atol(argv[3]), (float)atof(argv[4]));
-        print_playout(coll, atol(argv[3]), (float)atof(argv[4]));
-    }
+        print_waves(coll, atol(argv[3]), (float)atof(argv[4]));
 
     pulseg_collection_free(coll);
     return 0;

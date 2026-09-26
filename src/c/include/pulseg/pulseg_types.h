@@ -780,9 +780,9 @@ typedef struct pulseg_corner_point_stream
 #define PULSEG_WAVES_NONE 0     /**< the collection plays no wave             */
 #define PULSEG_WAVES_RESIDENT 1 /**< every wave held at once, loaded before
                                      the scan                                 */
-#define PULSEG_WAVES_STREAMED 2 /**< two slots per position that plays waves;
-                                     each segment instance's waves loaded
-                                     while the instance before it plays      */
+#define PULSEG_WAVES_STREAMED 2 /**< a ring of slots per position that plays
+                                     waves; each segment instance's waves
+                                     loaded into the next slot ahead of it   */
 
 /**
  * @brief What a playout's waveform memory affords the waves.
@@ -797,12 +797,16 @@ typedef struct pulseg_wave_budget
                                    sample                                  */
     float load_us_per_sample; /**< time to sample and load one sample on one
                                    axis; 0 leaves the loading unchecked    */
-    float headroom;           /**< share of a segment instance's duration
-                                   the next instance's loading may take    */
+    float headroom;           /**< share of the playout's time its loading
+                                   may take                                */
+    int slots;                /**< slots per position a streamed layout
+                                   rings through, at least 2: how many
+                                   segment instances the loading may run
+                                   ahead of the playout, plus one          */
 } pulseg_wave_budget;
 
 /* clang-format off */
-#define PULSEG_WAVE_BUDGET_INIT {0L, 0.0f, 0.0f, 0.5f}
+#define PULSEG_WAVE_BUDGET_INIT {0L, 0.0f, 0.0f, 0.5f, 2}
 /* clang-format on */
 
 /**
@@ -822,35 +826,38 @@ typedef struct pulseg_wave_region
 } pulseg_wave_region;
 
 /**
- * @brief Where a playout holds the waves, from pulseg_plan_waves().
+ * @brief Where a playout holds the waves, laid out by the conversion for
+ * the budget it was given; see pulseg_get_wave_plan().
  *
  * Both layouts are filled; @c mode says which the budget affords.
  * RESIDENT holds each wave of each subsequence in a region of its own.
- * STREAMED holds two slots per segment position that plays waves; the n-th
- * instance of a segment in the scan plays the slots of half n % 2, loaded
- * while the instance before it plays.
+ * STREAMED holds a ring of @c budget.slots slots per segment position that
+ * plays waves; the n-th instance of a segment in the scan plays slot
+ * n % @c budget.slots, loaded ahead of it.
  */
 typedef struct pulseg_wave_plan
 {
+    pulseg_wave_budget budget; /**< the budget it was laid out for          */
     int mode;                  /**< PULSEG_WAVES_*                          */
     long samples[3];           /**< per axis, what @c mode holds            */
     long resident_samples[3];  /**< per axis, every wave at once            */
-    long streamed_samples[3];  /**< per axis, the two slots of every
-                                    position                                */
+    long streamed_samples[3];  /**< per axis, the slots of every position   */
     int num_subsequences;
     int *num_waves;            /**< [subsequence]                           */
     pulseg_wave_region **waves; /**< [subsequence][wave]: RESIDENT           */
     int num_segments;
     int *num_positions;        /**< [segment]: its blocks                   */
-    pulseg_wave_region **slots; /**< [segment][2 * position + half]:
-                                    STREAMED; samples 0 where the position
-                                    plays no wave                           */
+    pulseg_wave_region **slots; /**< [segment][budget.slots * position +
+                                    slot]: STREAMED; samples 0 where the
+                                    position plays no wave                  */
     int loading_checked;       /**< 1 when the fields below were computed:
-                                    STREAMED, a load rate, and the execution
-                                    stream loaded                           */
-    float least_spare_us;      /**< least, over segment instances, of the
-                                    headroom times the preceding instance's
-                                    duration less the instance's loading    */
+                                    STREAMED with a load rate               */
+    float least_spare_us;      /**< least, over the segment instances after
+                                    the first up to the first whose loading
+                                    ends after it starts, of how long before
+                                    its start its loading ends, on the
+                                    playout's timeline scaled by the
+                                    headroom                                */
     int tightest_subseq;       /**< the instance it is found at, -1 when
                                     none                                    */
     int tightest_position;     /**< execution-stream position of that
@@ -860,8 +867,8 @@ typedef struct pulseg_wave_plan
 /* clang-format off */
 #define PULSEG_WAVE_PLAN_INIT \
     { \
-    PULSEG_WAVES_NONE, {0L, 0L, 0L}, {0L, 0L, 0L}, {0L, 0L, 0L}, 0, NULL, NULL, 0, NULL, \
-    NULL, 0, 0.0f, -1, -1 \
+    PULSEG_WAVE_BUDGET_INIT, PULSEG_WAVES_NONE, {0L, 0L, 0L}, {0L, 0L, 0L}, {0L, 0L, 0L}, 0, \
+    NULL, NULL, 0, NULL, NULL, 0, 0.0f, -1, -1 \
     }
 /* clang-format on */
 

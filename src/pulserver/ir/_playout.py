@@ -7,8 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from .._accelerators import require
-from ._convert import cache_path
-from ._waves import WaveBudget
+from ._convert import WaveBudget, _held, cache_path
 
 
 @dataclass(frozen=True)
@@ -44,8 +43,8 @@ def playout(
     the first stage prepares at each segment position, a model of the
     waveform memory the waves are loaded into, and the registers the scan
     loop sets on each block, with the samples its wave reads from that
-    memory when it is set. Without a ``budget``, the playout holds every
-    wave at once on the gradient raster of the chain's first file.
+    memory when it is set. The waves are held as :func:`plan_waves` lays
+    them out for ``budget``, or, without one, as the cache lays them out.
 
     With ``prescan``, the scan loop plays that receive-gain calibration
     instead. It waits for no trigger, drives no digital output, and plays at
@@ -54,20 +53,21 @@ def playout(
     Returns
     -------
     dict of str to Any
-        - ``mode``, ``memory_samples``: how :func:`plan_waves` holds the
-          waves, and the samples per axis it reserves;
+        - ``mode``, ``memory_samples``, ``slots``: how :func:`plan_waves`
+          holds the waves, the samples per axis it reserves, and the slots
+          of a position's ring;
         - ``positions``: per prepared segment position, in segment order,
           ``segment`` and ``position``; where the position plays no wave, its
           gradient events as corners at unit amplitude, ``event_time_us`` from
           the block's start and ``event_shape``, with ``event_span``
           ``(positions, 3, 2)`` into them; where it does, ``slot_offset``
-          ``(positions, 2, 3)``, ``slot_samples`` and ``slot_start_us``: its
-          two slots, or, with offsets -1, the span every resident wave it
-          plays covers;
+          ``(positions, slots, 3)``, ``slot_samples`` and ``slot_start_us``:
+          its ring of slots, or, with offsets -1, the span every resident wave
+          it plays covers;
         - ``blocks``: per played block, in play order, ``subsequence``,
           ``segment``, ``position``, ``instance`` (instances of its segment
-          played before its own), ``half`` (of the streamed slots, -1
-          otherwise), ``rotate`` (0 where NOROT keeps the prescription
+          played before its own), ``slot`` (of its position's ring, -1 unless
+          the waves are streamed), ``rotate`` (0 where NOROT keeps the prescription
           rotation out), ``await_trigger``, ``first_position`` (the
           execution-stream position of its instance's first block) and
           ``duration_us``; the registers ``rf_amp_hz``, ``rf_phase_rad``,
@@ -100,23 +100,13 @@ def playout(
         exist.
     """
     seq_path = Path(seq_path)
-    held = (
-        None
-        if budget is None
-        else (
-            budget.max_samples,
-            budget.raster_us,
-            budget.load_us_per_sample,
-            budget.headroom,
-        )
-    )
     calibration = (
         (-1, 0) if prescan is None else (prescan.subsequence, prescan.readouts)
     )
     return require("playout_from_cache")(
         str(cache_path(seq_path, cache_ext)),
         seq_path.stat().st_size,
-        held,
+        _held(budget),
         calibration,
         waveforms,
     )

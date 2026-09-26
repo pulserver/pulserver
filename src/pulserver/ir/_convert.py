@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -21,6 +22,65 @@ def _rasters(system: pp.Opts) -> tuple[float, ...]:
         system.grad_raster_time * 1e6,
         system.adc_raster_time * 1e6,
         system.block_duration_raster * 1e6,
+    )
+
+
+@dataclass(frozen=True)
+class WaveBudget:
+    """What a playout's waveform memory affords the waves.
+
+    A property of the playout, not of the sequence: the C library's
+    ``pulseg_wave_budget``. :func:`convert` lays the waves out for it, and a
+    playout refuses a cache laid out for another budget.
+
+    Attributes
+    ----------
+    max_samples
+        Samples each gradient axis holds for waves.
+    raster_us
+        The playout's gradient raster, in µs per sample.
+    load_us_per_sample
+        Time to sample and load one sample on one axis, in µs; 0 leaves the
+        loading unchecked.
+    headroom
+        Share of the playout's time its loading may take.
+    slots
+        Slots per segment position a streamed layout rings through, at least
+        2: one more than the segment instances the loading may run ahead of
+        the playout.
+
+    Raises
+    ------
+    ValueError
+        If the raster or the headroom is not positive, the memory or the load
+        rate is negative, or there are fewer than two slots.
+    """
+
+    max_samples: int
+    raster_us: float
+    load_us_per_sample: float = 0.0
+    headroom: float = 0.5
+    slots: int = 2
+
+    def __post_init__(self) -> None:
+        if self.raster_us <= 0.0 or self.headroom <= 0.0:
+            raise ValueError("the raster and the headroom must be positive")
+        if self.max_samples < 0 or self.load_us_per_sample < 0.0:
+            raise ValueError("the memory and the load rate cannot be negative")
+        if self.slots < 2:
+            raise ValueError("a streamed layout rings through at least two slots")
+
+
+def _held(budget: WaveBudget | None) -> tuple[int, float, float, float, int] | None:
+    """Return the budget as the extension takes it."""
+    if budget is None:
+        return None
+    return (
+        budget.max_samples,
+        budget.raster_us,
+        budget.load_us_per_sample,
+        budget.headroom,
+        budget.slots,
     )
 
 
@@ -52,6 +112,7 @@ def convert(
     cache_ext: str = ".pseg",
     verify_signature: bool = True,
     sar_ratios: Sequence[SarRatio] | None = None,
+    wave_budget: WaveBudget | None = None,
 ) -> Path:
     """Segment a sequence file and write its IR cache beside it.
 
@@ -88,6 +149,10 @@ def convert(
     sar_ratios
         One per file of the chain, as :func:`sar_ratios` returns them, written
         into each subsequence of the cache; zero when None.
+    wave_budget
+        The waveform memory of the playout the cache is for, which the cache
+        lays the waves out in (:func:`plan_waves`); None holds every wave at
+        once on the gradient raster of the chain's first file.
 
     Returns
     -------
@@ -97,8 +162,9 @@ def convert(
     Raises
     ------
     ValueError
-        If a file of the chain cannot be read, verified or segmented, or
-        ``sar_ratios`` does not give one per file.
+        If a file of the chain cannot be read, verified or segmented,
+        ``sar_ratios`` does not give one per file, or the waves fit neither
+        layout of ``wave_budget`` or cannot be loaded in time.
     OSError
         If no cache was written.
     """
@@ -122,6 +188,7 @@ def convert(
         int(vendor),
         list(label_column_map),
         cache_ext,
+        _held(wave_budget),
     )
     if not target.is_file():
         raise OSError(f"no cache was written for {seq_path}")

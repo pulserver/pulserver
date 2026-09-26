@@ -2,85 +2,51 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 
 from .._accelerators import require
-from ._convert import cache_path
-
-
-@dataclass(frozen=True)
-class WaveBudget:
-    """What a playout's waveform memory affords the waves.
-
-    A property of the playout, not of the sequence: the C library's
-    ``pulseg_wave_budget``.
-
-    Attributes
-    ----------
-    max_samples
-        Samples each gradient axis holds for waves.
-    raster_us
-        The playout's gradient raster, in µs per sample.
-    load_us_per_sample
-        Time to sample and load one sample on one axis, in µs; 0 leaves the
-        loading unchecked.
-    headroom
-        Share of a segment instance's duration that loading the next one may
-        take.
-
-    Raises
-    ------
-    ValueError
-        If the raster or the headroom is not positive, or the memory or the
-        load rate is negative.
-    """
-
-    max_samples: int
-    raster_us: float
-    load_us_per_sample: float = 0.0
-    headroom: float = 0.5
-
-    def __post_init__(self) -> None:
-        if self.raster_us <= 0.0 or self.headroom <= 0.0:
-            raise ValueError("the raster and the headroom must be positive")
-        if self.max_samples < 0 or self.load_us_per_sample < 0.0:
-            raise ValueError("the memory and the load rate cannot be negative")
+from ._convert import WaveBudget, _held, cache_path
 
 
 def plan_waves(
-    seq_path: Path | str, budget: WaveBudget, cache_ext: str = ".pseg"
+    seq_path: Path | str, budget: WaveBudget | None = None, cache_ext: str = ".pseg"
 ) -> dict[str, Any]:
     """Lay out the waves of the cache beside a sequence file in a playout's waveform memory.
 
-    The layout is the C library's, computed from the definitions alone, as
-    both stages of a playout compute it. Every wave is held at once where
-    that fits the budget's memory on each gradient axis; otherwise each
-    segment position that plays waves holds two slots, and the n-th instance
-    of a segment in the scan plays the slots of half ``n % 2``, loaded while
-    the instance before it plays. With a load rate, that loading is checked
-    against the headroom times the duration of the instance before, for
-    every instance but the first.
+    With ``budget``, the layout is computed for it here, as :func:`convert`
+    computes the one a cache carries; without one, it is the layout the cache
+    carries. Every wave is held at once where that fits the budget's memory
+    on each gradient axis; otherwise each segment position that plays waves
+    holds a ring of ``slots`` slots, and the n-th instance of a segment in the
+    scan plays slot ``n % slots``. With a load rate, the loading is checked
+    on the playout's timeline scaled by the headroom: the scan starts with
+    its first instance's waves loaded, and the waves of each later instance
+    are loaded one instance after another, from once the instance
+    ``slots - 1`` before it has started, and have to be loaded before it
+    starts.
 
     Returns
     -------
     dict of str to Any
+        - ``budget``: the budget it is laid out for, as :class:`WaveBudget`
+          fields;
         - ``mode``: ``"none"``, ``"resident"`` or ``"streamed"``;
         - ``samples``, ``resident_samples``, ``streamed_samples``: per axis,
-          what the mode holds, every wave at once, and two slots per
+          what the mode holds, every wave at once, and the slots of every
           position;
         - ``waves``: per subsequence, the region of each wave, for a resident
           layout;
-        - ``slots``: per segment, the regions of each position's two halves,
-          for a streamed layout; ``samples`` is 0 where the position plays no
-          wave;
+        - ``slots``: per segment, the ring of regions of each position, for a
+          streamed layout; ``samples`` is 0 where the position plays no wave;
         - ``loading_checked``, ``least_spare_us``, ``tightest``: whether the
-          loading was checked, the least spare time over segment instances in
-          µs, and the subsequence and execution-stream position of the
-          instance it is found at.
+          loading was checked; the least, over the instances after the first
+          up to the first whose loading ends after it starts, of how long
+          before its start its loading ends, on the scaled timeline, in µs;
+          and the subsequence and execution-stream position of the instance
+          it is found at.
 
         A region holds ``samples`` samples on each axis it drives, from
         ``offset`` in that axis's memory, -1 on another, sampled at the
@@ -95,12 +61,7 @@ def plan_waves(
     """
     seq_path = Path(seq_path)
     return require("plan_waves_from_cache")(
-        str(cache_path(seq_path, cache_ext)),
-        seq_path.stat().st_size,
-        budget.max_samples,
-        budget.raster_us,
-        budget.load_us_per_sample,
-        budget.headroom,
+        str(cache_path(seq_path, cache_ext)), seq_path.stat().st_size, _held(budget)
     )
 
 

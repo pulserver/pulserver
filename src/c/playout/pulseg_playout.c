@@ -53,14 +53,17 @@ void pulseg_phase_samples(
 
 /* Loading waves into waveform memory: on which raster, through which
  * backend, with room for the longest region the layout holds, sampled and
- * converted. */
+ * converted, and for the span a resident position hands the backend in each
+ * of its slots. */
 typedef struct wave_loader
 {
     const pulseg_collection *coll;
     const pulseg_playout_backend *backend;
     float raster_us;
+    int slots;
     float *scratch;
     PULSEG_WAVE_SAMPLE *samples;
+    pulseg_wave_region *span;
 } wave_loader;
 
 static long longest_region(const pulseg_wave_plan *plan)
@@ -73,7 +76,7 @@ static long longest_region(const pulseg_wave_plan *plan)
             if (plan->waves[i][j].samples > longest)
                 longest = plan->waves[i][j].samples;
     for (i = 0; i < plan->num_segments; ++i)
-        for (j = 0; j < 2 * plan->num_positions[i]; ++j)
+        for (j = 0; j < plan->budget.slots * plan->num_positions[i]; ++j)
             if (plan->slots[i][j].samples > longest)
                 longest = plan->slots[i][j].samples;
     return longest;
@@ -83,17 +86,18 @@ static int loader_open(
     wave_loader *l,
     const pulseg_collection *coll,
     const pulseg_playout_backend *backend,
-    float raster_us,
     const pulseg_wave_plan *plan)
 {
     const size_t longest = (size_t)longest_region(plan);
 
     l->coll = coll;
     l->backend = backend;
-    l->raster_us = raster_us;
+    l->raster_us = plan->budget.raster_us;
+    l->slots = plan->budget.slots;
     l->scratch = (float *)PULSEG_ALLOC(longest * sizeof(float));
     l->samples = (PULSEG_WAVE_SAMPLE *)PULSEG_ALLOC(longest * sizeof(PULSEG_WAVE_SAMPLE));
-    return (l->scratch && l->samples) ? PULSEG_SUCCESS : PULSEG_ERR_ALLOC_FAILED;
+    l->span = (pulseg_wave_region *)PULSEG_ALLOC((size_t)l->slots * sizeof(pulseg_wave_region));
+    return (l->scratch && l->samples && l->span) ? PULSEG_SUCCESS : PULSEG_ERR_ALLOC_FAILED;
 }
 
 static void loader_close(wave_loader *l)
@@ -102,8 +106,11 @@ static void loader_close(wave_loader *l)
         PULSEG_FREE(l->scratch);
     if (l->samples)
         PULSEG_FREE(l->samples);
+    if (l->span)
+        PULSEG_FREE(l->span);
     l->scratch = NULL;
     l->samples = NULL;
+    l->span = NULL;
 }
 
 /* Sample wave @p w of subsequence @p s over @p region and load each axis it
@@ -136,10 +143,13 @@ static int load_wave(const wave_loader *l, int s, int w, const pulseg_wave_regio
 
 static int playout_arguments(
     const pulseg_collection *coll,
-    const pulseg_wave_budget *budget,
+    const pulseg_wave_plan *plan,
     const pulseg_playout_backend *backend)
 {
-    return (coll && budget && backend) ? PULSEG_SUCCESS : PULSEG_ERR_NULL_POINTER;
+    if (!coll || !plan || !backend)
+        return PULSEG_ERR_NULL_POINTER;
+    return (plan->budget.raster_us > 0.0f && plan->budget.slots >= 1) ? PULSEG_SUCCESS
+                                                                       : PULSEG_ERR_INVALID_ARGUMENT;
 }
 
 /* ================================================================== */
@@ -147,17 +157,18 @@ static int playout_arguments(
 /* ================================================================== */
 
 /* The span every wave of a resident layout at position @p info covers, in
- * both entries of @p slot, held nowhere. */
-static void resident_span(const pulseg_block_info *info, float raster_us, pulseg_wave_region slot[2])
+ * each of the loader's slots, held nowhere. */
+static const pulseg_wave_region *resident_span(const wave_loader *l, const pulseg_block_info *info)
 {
-    int h, a;
+    int k, a;
 
-    for (h = 0; h < 2; ++h)
+    for (k = 0; k < l->slots; ++k)
     {
-        pulseg__wave_cover(info->wave_start_us, info->wave_end_us, raster_us, &slot[h]);
+        pulseg__wave_cover(info->wave_start_us, info->wave_end_us, l->raster_us, &l->span[k]);
         for (a = 0; a < 3; ++a)
-            slot[h].offset[a] = -1;
+            l->span[k].offset[a] = -1;
     }
+    return l->span;
 }
 
 static int prepare_positions(
@@ -166,26 +177,22 @@ static int prepare_positions(
     int g,
     int num_blocks)
 {
-    pulseg_wave_region span[2];
     int b, rc = PULSEG_SUCCESS;
 
     for (b = 0; b < num_blocks && PULSEG_SUCCEEDED(rc); ++b)
     {
         pulseg_block_info info = PULSEG_BLOCK_INFO_INIT;
-        const pulseg_wave_region *slot = NULL;
+        const pulseg_wave_region *slots = NULL;
 
         rc = pulseg_get_block_info(l->coll, &info, g, b);
         if (PULSEG_FAILED(rc))
             break;
         if (info.wave_points > 0 && plan->mode == PULSEG_WAVES_STREAMED)
-            slot = &plan->slots[g][2 * b];
+            slots = &plan->slots[g][l->slots * b];
         else if (info.wave_points > 0)
-        {
-            resident_span(&info, l->raster_us, span);
-            slot = span;
-        }
+            slots = resident_span(l, &info);
         if (l->backend->prepare_block)
-            rc = l->backend->prepare_block(l->backend->ctx, g, b, &info, slot);
+            rc = l->backend->prepare_block(l->backend->ctx, g, b, &info, slots);
     }
     return rc;
 }
@@ -219,27 +226,22 @@ static int load_resident(const wave_loader *l, const pulseg_wave_plan *plan)
 
 int pulseg_playout_prepare(
     const pulseg_collection *coll,
-    const pulseg_wave_budget *budget,
-    const pulseg_playout_backend *backend,
-    pulseg_diagnostic *diag)
+    const pulseg_wave_plan *plan,
+    const pulseg_playout_backend *backend)
 {
-    pulseg_wave_plan plan = PULSEG_WAVE_PLAN_INIT;
     wave_loader loader;
-    int rc = playout_arguments(coll, budget, backend);
+    int rc = playout_arguments(coll, plan, backend);
 
     memset(&loader, 0, sizeof(loader));
     if (PULSEG_SUCCEEDED(rc))
-        rc = pulseg_plan_waves(coll, budget, &plan, diag);
-    if (PULSEG_SUCCEEDED(rc))
-        rc = loader_open(&loader, coll, backend, budget->raster_us, &plan);
+        rc = loader_open(&loader, coll, backend, plan);
     if (PULSEG_SUCCEEDED(rc) && backend->reserve_waves)
-        rc = backend->reserve_waves(backend->ctx, &plan);
+        rc = backend->reserve_waves(backend->ctx, plan);
     if (PULSEG_SUCCEEDED(rc))
-        rc = prepare_segments(&loader, &plan);
-    if (PULSEG_SUCCEEDED(rc) && plan.mode == PULSEG_WAVES_RESIDENT)
-        rc = load_resident(&loader, &plan);
+        rc = prepare_segments(&loader, plan);
+    if (PULSEG_SUCCEEDED(rc) && plan->mode == PULSEG_WAVES_RESIDENT)
+        rc = load_resident(&loader, plan);
     loader_close(&loader);
-    pulseg_free_wave_plan(&plan);
     return rc;
 }
 
@@ -406,7 +408,7 @@ static int begin_instance(scan_walk *w, const pulseg_collection *coll, int s, in
     p->num_blocks = seg->num_blocks;
     p->rotate = instance_rotates(desc, n);
     p->await_trigger = w->prescan < 0 && instance_awaits_trigger(desc, n, w->local);
-    p->half = (w->plan->mode == PULSEG_WAVES_STREAMED) ? p->instance % 2 : -1;
+    p->slot = (w->plan->mode == PULSEG_WAVES_STREAMED) ? p->instance % w->plan->budget.slots : -1;
     return backend->begin_instance ? backend->begin_instance(backend->ctx, p) : PULSEG_SUCCESS;
 }
 
@@ -446,7 +448,7 @@ static int place_wave(const scan_walk *w, int s, pulseg_playout_block *block)
     if (plan->mode != PULSEG_WAVES_STREAMED || g >= plan->num_segments ||
         block->position >= plan->num_positions[g])
         return PULSEG_ERR_INDEX;
-    block->wave = &plan->slots[g][2 * block->position + w->segment.half];
+    block->wave = &plan->slots[g][plan->budget.slots * block->position + w->segment.slot];
     return load_wave(&w->loader, s, id, block->wave);
 }
 
@@ -509,29 +511,25 @@ static int play_entry(scan_walk *w, const pulseg_collection *coll)
 
 int pulseg_playout_scan(
     pulseg_collection *coll,
-    const pulseg_wave_budget *budget,
+    const pulseg_wave_plan *plan,
     const pulseg_playout_backend *backend,
     const pulseg_playout_options *options,
     pulseg_diagnostic *diag)
 {
-    pulseg_wave_plan plan = PULSEG_WAVE_PLAN_INIT;
     scan_walk walk;
-    int rc = playout_arguments(coll, budget, backend);
+    int rc = playout_arguments(coll, plan, backend);
 
     memset(&walk, 0, sizeof(walk));
     if (PULSEG_SUCCEEDED(rc))
         rc = stream_loaded(coll, diag);
     if (PULSEG_SUCCEEDED(rc))
-        rc = pulseg_plan_waves(coll, budget, &plan, diag);
+        rc = loader_open(&walk.loader, coll, backend, plan);
     if (PULSEG_SUCCEEDED(rc))
-        rc = loader_open(&walk.loader, coll, backend, budget->raster_us, &plan);
-    if (PULSEG_SUCCEEDED(rc))
-        rc = walk_open(&walk, coll, &plan, options);
+        rc = walk_open(&walk, coll, plan, options);
     if (PULSEG_SUCCEEDED(rc))
         pulseg_cursor_reset(coll);
     while (PULSEG_SUCCEEDED(rc) && !walk.done && pulseg_cursor_next(coll) == PULSEG_CURSOR_BLOCK)
         rc = play_entry(&walk, coll);
     walk_close(&walk);
-    pulseg_free_wave_plan(&plan);
     return rc;
 }
