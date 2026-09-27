@@ -56,3 +56,4 @@ scanner's centre frequency.
 | --- | --- |
 | {obj}`~pulserver.virtual.send` | Send one series to a reconstruction proxy as the scanner's client sends it, each readout as it is acquired; return what comes back. |
 | {obj}`~pulserver.virtual.record` | Write one series to an ISMRMRD file as `send` sends it. |
+| {obj}`~pulserver.virtual.Console` | A scanner console's calls answered in process: the design calls on the interpreter's text blocks, an exam's localizer, and a scan of a stored design whose clock and DICOM images stream back; `pulserver console` serves them over a WebSocket. |
