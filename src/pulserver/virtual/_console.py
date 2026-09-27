@@ -136,21 +136,25 @@ class Console:
         centre_mm: Sequence[float],
         emit: Callable[[dict], None],
         cancelled: Callable[[], bool] = lambda: False,
+        sound: bool = False,
     ) -> int:
         """Scan a stored design on the exam's phantom; return the reconstruction's status.
 
         ``emit`` receives the scan clock after each span played, as
         ``{"clock": s, "duration": s}``, then the reconstruction's images as
         DICOM, ``{"dicom": base64, "name": file name}``, converting those the
-        proxy returns as MRD, and its texts as ``{"text": ...}``. The status is 1 when a text reports a refused or
-        failed series, or when the scan is cancelled.
+        proxy returns as MRD, and its texts as ``{"text": ...}``. With
+        ``sound``, each clock also carries the span's sound as ``sound``,
+        base64 of 16-bit little-endian stereo samples at ``rate`` Hz. The
+        status is 1 when a text reports a refused or failed series, or when
+        the scan is cancelled.
         """
         import ismrmrd
         import pypulseqpp as pp
 
         from ..host import DesignStore
         from ..recon._runtime.mrd2dicom import DicomWithName, MrdDicomBuilder
-        from . import Scan, send
+        from . import SAMPLE_RATE, Scan, send
         from ._client import _header
 
         rotation = np.asarray(rotation, dtype=float).reshape(3, 3)
@@ -162,11 +166,18 @@ class Console:
         stopped = threading.Event()
 
         def played() -> Iterator[np.ndarray]:
-            for chunk in scan.chunks(0.1, speed=self.speed, sound=False):
+            for chunk in scan.chunks(0.1, speed=self.speed, sound=sound):
                 if cancelled():
                     stopped.set()
                     return
-                emit({"clock": chunk.stop, "duration": scan.duration})
+                clock = {"clock": chunk.stop, "duration": scan.duration}
+                if sound:
+                    samples = np.round(32767 * np.clip(chunk.sound.T, -1.0, 1.0))
+                    clock["sound"] = base64.b64encode(
+                        samples.astype("<i2").tobytes()
+                    ).decode()
+                    clock["rate"] = SAMPLE_RATE
+                emit(clock)
                 yield from chunk.readouts
 
         if self.recon is None:
@@ -249,6 +260,7 @@ async def _connection(console: Console, websocket: Any) -> None:
                     centre_mm=request.get("centre_mm", (0.0, 0.0, 0.0)),
                     emit=lambda message: reply(ident, message),
                     cancelled=cancel.is_set,
+                    sound=bool(request.get("sound", False)),
                 )
                 reply(ident, {"done": status})
             else:

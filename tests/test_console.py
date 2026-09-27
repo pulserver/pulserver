@@ -155,6 +155,34 @@ def test_a_cancelled_scan_stops_and_reports_it(tmp_path):
     assert len(messages) == 1
 
 
+def test_a_scan_asked_for_its_sound_streams_it_with_its_clock(tmp_path):
+    console = _console(tmp_path)
+    design = console.design("generate", "gre2d", _block(TE=5000, nx=32, ny=32))[
+        "design"
+    ]
+    messages = []
+
+    status = console.scan(
+        design,
+        rotation=np.eye(3),
+        centre_mm=(0.0, 0.0, 0.0),
+        emit=messages.append,
+        sound=True,
+    )
+
+    samples = np.concatenate(
+        [
+            np.frombuffer(base64.b64decode(m["sound"]), dtype="<i2").reshape(-1, 2)
+            for m in messages
+        ]
+    )
+    assert status == 0
+    assert {m["rate"] for m in messages} == {virtual.SAMPLE_RATE}
+    expected = messages[-1]["duration"] * virtual.SAMPLE_RATE
+    assert abs(len(samples) - expected) <= len(messages)
+    assert np.abs(samples).max() > 0
+
+
 def test_the_gateway_answers_a_consoles_calls_over_a_websocket(tmp_path):
     console = _console(tmp_path)
     loop = asyncio.new_event_loop()

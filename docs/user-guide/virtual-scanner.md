@@ -233,14 +233,17 @@ it repeats:
 | `plugins` | | `plugins`: the plugin names |
 | `list`, `validate`, `generate`, `import` | `plugin`, `block` | `status` and `reply`, as `pulserver design` answers; `design` for a generated or imported design |
 | `exam` | `subject` | `localizer`: the axial, coronal and sagittal images of the subject's phantom, as base64 DICOM files |
-| `scan` | `design`, `rotation` (nine elements), `centre_mm` | `clock` and `duration` after each span played, `dicom` and `name` for each image the reconstruction returns, `text`, then `done` with the status |
+| `scan` | `design`, `rotation` (nine elements), `centre_mm`, `sound` | `clock` and `duration` after each span played, with the span's `sound` when asked, as base64 of 16-bit little-endian stereo samples at `rate` Hz; `dicom` and `name` for each image the reconstruction returns, `text`, then `done` with the status |
 | `cancel` | | stops the scan in progress |
 
 A subject named `brainweb` is BrainWeb's normal brain; any other is the vials.
 The localizer is drawn from the phantom's proton density, so an exam can be
 planned before any scan. MaRGE is such a console when `MARGE_PULSERVER` holds
 the address, `ws://127.0.0.1:8765` here: its sequences are then the plugins,
-its subject names the phantom, and it opens each exam on the localizer.
+its subject names the phantom, and it opens each exam on the localizer. The
+browser build of MaRGE in [pulserver/MaRGE](https://github.com/pulserver/MaRGE)
+runs it in a browser tab, opened with `?console=ws://127.0.0.1:8765`, and plays
+each scan's sound as it streams.
 
 ## See also
 
