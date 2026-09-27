@@ -1,0 +1,50 @@
+# The console of the virtual scanner with Gadgetron reconstructing behind
+# pulserver's proxy. The console generates each design into the shared store,
+# plays it on the subject's phantom and streams the series to the proxy, which
+# enriches it and forwards it to Gadgetron's Cartesian pipeline; the images
+# return to the console as DICOM. Plugins and limits are mounted from
+# PULSERVER_PLUGINS and PULSERVER_LIMITS.
+services:
+  gadgetron:
+    image: ghcr.io/gadgetron/gadgetron/gadgetron_ubuntu_rt_nocuda:latest
+
+  proxy:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    entrypoint: ["python", "-m", "pulserver.proxy"]
+    command:
+      - --store=/designs
+      - --host=0.0.0.0
+      - --port=9020
+      - --forward=gadgetron:9002
+      - --forward-config=default.xml
+      - --forward-dicom
+    volumes:
+      - designs:/designs
+    depends_on:
+      - gadgetron
+
+  console:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    command:
+      - console
+      - --plugins=/plugins
+      - --limits=/limits/limits.txt
+      - --store=/designs
+      - --recon=proxy:9020
+      - --host=0.0.0.0
+      - --port=8765
+    volumes:
+      - designs:/designs
+      - ${PULSERVER_PLUGINS:-../tests/plugins}:/plugins:ro
+      - ${PULSERVER_LIMITS:-./limits}:/limits:ro
+    ports:
+      - "8765:8765"
+    depends_on:
+      - proxy
+
+volumes:
+  designs:

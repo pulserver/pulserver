@@ -1,0 +1,9 @@
+[Limits]
+max_grad: 40.0
+grad_unit: mT/m
+max_slew: 150.0
+slew_unit: T/m/s
+B0: 3.0
+design_max_grad: 23.094010767585033
+design_max_slew: 86.60254037844388
+[Limits End]
