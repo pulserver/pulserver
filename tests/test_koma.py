@@ -101,7 +101,7 @@ def _held(t, signal):
     ``HOLD_INSET`` of it. Both simulators join the samples of any other pulse
     linearly, and its times and samples are returned as they are.
     """
-    if t.size < 2:
+    if t.size < 2 or os.environ.get("PULSERVER_KOMA_DIAGNOSTIC") != "hold":
         return t, signal
     interval = t[1] - t[0]
     at_middles = np.all(
