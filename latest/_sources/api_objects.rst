@@ -170,8 +170,14 @@ from.
 
    trajectory
    acquire
+   simulate
+   Scan
+   Chunk
+   SAMPLE_RATE
    export
    Phantom
+   BrainWeb
    Ellipse
    send
+   record
 

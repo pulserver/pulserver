@@ -522,6 +522,8 @@
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#stand-ins">Stand-ins</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#played-trajectory">Played trajectory</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#signal-model">Signal model</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#bloch-simulation">Bloch simulation</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#scan-clock-and-sound">Scan clock and sound</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#external-simulators">External simulators</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#what-a-run-establishes">What a run establishes</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See also</a></li>
@@ -544,8 +546,9 @@ enrichment computes cannot test the enrichment, and a design compared only
 with itself cannot test the IR. The virtual scanner stands in for the scanner
 and nothing else: the design calls, the IR, the reconstruction proxy and the
 reconstruction plugins it drives are the production code. Its data are
-acquired from an analytic phantom along the trajectory the cache plays, and
-sent as the scanner’s reconstruction client sends them.</p>
+acquired along the trajectory the cache plays, from an analytic phantom or by a
+Bloch simulation of the blocks the cache plays, and sent as the scanner’s
+reconstruction client sends them.</p>
 <section id="stand-ins">
 <h2>Stand-ins<a class="headerlink" href="#stand-ins" title="Link to this heading">#</a></h2>
 <div class="pst-scrollable-table-container"><table class="table">
@@ -569,10 +572,15 @@ sent as the scanner’s reconstruction client sends them.</p>
 </tr>
 <tr class="row-even"><td><p>Physics</p></td>
 <td><p>Magnet, coils and subject</p></td>
-<td><p><a class="reference internal" href="../generated/pulserver.virtual.Phantom.html#pulserver.virtual.Phantom" title="pulserver.virtual.Phantom"><code class="xref py py-class docutils literal notranslate"><span class="pre">Phantom</span></code></a>, <a class="reference internal" href="../generated/pulserver.virtual.acquire.html#pulserver.virtual.acquire" title="pulserver.virtual.acquire"><code class="xref py py-func docutils literal notranslate"><span class="pre">acquire()</span></code></a></p></td>
-<td><p>The trajectory the enrichment has to state, the demodulation of the prescription, the timing of every echo, the RF frequencies ppm offsets resolve to</p></td>
+<td><p><a class="reference internal" href="../generated/pulserver.virtual.Phantom.html#pulserver.virtual.Phantom" title="pulserver.virtual.Phantom"><code class="xref py py-class docutils literal notranslate"><span class="pre">Phantom</span></code></a>, <a class="reference internal" href="../generated/pulserver.virtual.acquire.html#pulserver.virtual.acquire" title="pulserver.virtual.acquire"><code class="xref py py-func docutils literal notranslate"><span class="pre">acquire()</span></code></a>, <a class="reference internal" href="../generated/pulserver.virtual.simulate.html#pulserver.virtual.simulate" title="pulserver.virtual.simulate"><code class="xref py py-func docutils literal notranslate"><span class="pre">simulate()</span></code></a></p></td>
+<td><p>The trajectory the enrichment has to state, the demodulation of the prescription, the timing of every echo, the RF frequencies ppm offsets resolve to; in the Bloch simulation, every RF pulse, gradient and receiver phase the cache plays</p></td>
 </tr>
-<tr class="row-odd"><td><p>Reconstruction client</p></td>
+<tr class="row-odd"><td><p>Scan clock</p></td>
+<td><p>The scanner’s acquisition in real time, and its gradient coils’ sound</p></td>
+<td><p><a class="reference internal" href="../generated/pulserver.virtual.Scan.html#pulserver.virtual.Scan" title="pulserver.virtual.Scan"><code class="xref py py-class docutils literal notranslate"><span class="pre">Scan</span></code></a></p></td>
+<td><p>The rate at which readouts reach the reconstruction; the sound of the gradients the cache plays</p></td>
+</tr>
+<tr class="row-even"><td><p>Reconstruction client</p></td>
 <td><p>The scanner’s reconstruction client</p></td>
 <td><p><a class="reference internal" href="../generated/pulserver.virtual.send.html#pulserver.virtual.send" title="pulserver.virtual.send"><code class="xref py py-func docutils literal notranslate"><span class="pre">send()</span></code></a></p></td>
 <td><p>The header and acquisition contract of <a class="reference internal" href="../user-guide/reconstruction-client.html"><span class="doc">Reconstruction clients</span></a></p></td>
@@ -628,12 +636,14 @@ default <span class="math notranslate nohighlight">\(\gamma\)</span>, in Hz/T, p
 spin.</p>
 <p>After an excitation of RF phase <span class="math notranslate nohighlight">\(\phi_e\)</span> at its centre, the magnetization is
 transverse, at the phantom’s density <span class="math notranslate nohighlight">\(\rho_\sigma(\mathbf{r})\)</span> whatever the
-flip angle, with phase <span class="math notranslate nohighlight">\(-\phi_e - \pi/2\)</span>, and it precesses as
+flip angle, with phase <span class="math notranslate nohighlight">\(\pi/2 - \phi_e\)</span>, and it precesses as
 <span class="math notranslate nohighlight">\(\exp(-2\pi i\,(\mathbf{k}\cdot\mathbf{r} + f_\sigma\tau))\)</span>, with
 <span class="math notranslate nohighlight">\(\mathbf{r}\)</span> and <span class="math notranslate nohighlight">\(\mathbf{k}\)</span> along the physical axes and <span class="math notranslate nohighlight">\(\tau\)</span> the time it
 has precessed freely: counted from the excitation’s centre and, as
 <span class="math notranslate nohighlight">\(\mathbf{k}\)</span> is, negated about the centre of each refocusing pulse, so that a
-spin echo refocuses it. A refocusing pulse of phase <span class="math notranslate nohighlight">\(\phi_r\)</span> conjugates the
+spin echo refocuses it. A pulse of phase zero turns the magnetization from
+<span class="math notranslate nohighlight">\(+z\)</span> towards <span class="math notranslate nohighlight">\(+y\)</span>, as it turns the magnetic moment of a nucleus of positive
+gyromagnetic ratio. A refocusing pulse of phase <span class="math notranslate nohighlight">\(\phi_r\)</span> conjugates the
 magnetization about <span class="math notranslate nohighlight">\(-\phi_r\)</span>. The RF phase at the centre is the pulse’s
 phase offset plus its frequency offset times the time since the pulse began.
 Coil <span class="math notranslate nohighlight">\(c\)</span>, of sensitivity <span class="math notranslate nohighlight">\(s_c(\mathbf{r})\)</span>, receives</p>
@@ -674,6 +684,59 @@ angle: pypulseqpp’s <code class="docutils literal notranslate"><span class="pr
 <span class="math notranslate nohighlight">\(\cos 110° \approx -0.34\)</span> of its magnetization. A readout before the first
 excitation of its file acquires zeros.</p>
 </section>
+<section id="bloch-simulation">
+<h2>Bloch simulation<a class="headerlink" href="#bloch-simulation" title="Link to this heading">#</a></h2>
+<p>The signal model leaves out what an RF pulse does beyond an ideal excitation,
+refocusing or saturation, and what the magnetization does between them.
+<a class="reference internal" href="../generated/pulserver.virtual.simulate.html#pulserver.virtual.simulate" title="pulserver.virtual.simulate"><code class="xref py py-func docutils literal notranslate"><span class="pre">simulate()</span></code></a> plays the blocks
+<a class="reference internal" href="../generated/pulserver.ir.playout.html#pulserver.ir.playout" title="pulserver.ir.playout"><code class="xref py py-func docutils literal notranslate"><span class="pre">playout()</span></code></a> returns on isochromats instead, with
+pypulseqpp’s Bloch simulation (<a class="reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.Isochromats.html#pypulseqpp.Isochromats" title="(in pypulseqpp latest)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pypulseqpp.Isochromats</span></code></a>): flip angles,
+slice profiles, relaxation and the coherences one repetition leaves to the next
+act as the Bloch equation gives them, and the magnetization is carried from
+each block to the next, across the files of a chain. Each block’s gradients are
+those of the played trajectory, turned by <span class="math notranslate nohighlight">\(R\)</span> except in blocks labelled
+<code class="docutils literal notranslate"><span class="pre">NOROT</span></code>. Its RF pulse and its ADC play as pypulseqpp plays the RF and ADC
+events of a Pulseq block, with the frequency and phase offsets the playout
+sets, and each sample is demodulated by <span class="math notranslate nohighlight">\(\exp(i\theta(t))\)</span> as above. A 90°
+excitation of phase <span class="math notranslate nohighlight">\(\phi_e\)</span> leaves the magnetization at the phase
+<span class="math notranslate nohighlight">\(\pi/2 - \phi_e\)</span> of the signal model.</p>
+<p><a class="reference internal" href="../generated/pulserver.virtual.Phantom.isochromats.html#pulserver.virtual.Phantom.isochromats" title="pulserver.virtual.Phantom.isochromats"><code class="xref py py-meth docutils literal notranslate"><span class="pre">isochromats()</span></code></a> samples the phantom on a square
+grid aligned with its axes. Each ellipse contributes the points of the grid
+inside it, each an isochromat of proton density the ellipse’s intensity times
+the area of a grid cell, relaxing with the ellipse’s <span class="math notranslate nohighlight">\(T_1\)</span> and <span class="math notranslate nohighlight">\(T_2\)</span> and
+precessing at its <span class="math notranslate nohighlight">\(f_\sigma\)</span>; the coil sensitivities are sampled at the same
+points. The sum over the isochromats approximates each ellipse’s transform
+below the grid’s Nyquist frequency, <span class="math notranslate nohighlight">\(1/(2\Delta)\)</span> for a spacing <span class="math notranslate nohighlight">\(\Delta\)</span>, and
+converges to it as the grid is refined, so a grid several times finer than the
+image’s pixel acquires the analytic phantom wherever the signal model holds.</p>
+<p>The cache played on isochromats samples what pypulseqpp’s <code class="docutils literal notranslate"><span class="pre">Sequence.simulate</span></code>
+samples of the design, turned as the checks turn it, to the single precision
+of the cache’s waveforms. A gradient turned by a block’s rotation is stored as
+the rotation leaves it, in single precision, and in a sequence that leaves its
+transverse magnetization unspoiled from one repetition to the next, the phase
+that rounding accrues is what separates the two.</p>
+</section>
+<section id="scan-clock-and-sound">
+<h2>Scan clock and sound<a class="headerlink" href="#scan-clock-and-sound" title="Link to this heading">#</a></h2>
+<p>A scanner acquires in real time: each readout reaches the reconstruction once
+the scanner has played it, and the gradients sound as they play.
+<a class="reference internal" href="../generated/pulserver.virtual.Scan.html#pulserver.virtual.Scan" title="pulserver.virtual.Scan"><code class="xref py py-class docutils literal notranslate"><span class="pre">Scan</span></code></a> plays the cache on isochromats against a scan
+clock, the sum of the durations of the blocks played, in spans of whole blocks.
+Each span carries the readouts of its blocks, as
+<a class="reference internal" href="../generated/pulserver.virtual.simulate.html#pulserver.virtual.simulate" title="pulserver.virtual.simulate"><code class="xref py py-func docutils literal notranslate"><span class="pre">simulate()</span></code></a> returns them, and the sound of the gradients
+it plays. At a speed, a span is released once the wall clock, running that many
+times as fast as the scan, has passed its end, so that a reconstruction
+receives the readouts at the rate a scanner acquires them;
+<a class="reference internal" href="../generated/pulserver.virtual.send.html#pulserver.virtual.send" title="pulserver.virtual.send"><code class="xref py py-func docutils literal notranslate"><span class="pre">send()</span></code></a> sends each readout as it is released.</p>
+<p>The sound is MATLAB Pulseq’s, from <code class="docutils literal notranslate"><span class="pre">pypulseqpp.gradient_sound</span></code>: the gradients
+along the physical axes, the x axis on the left channel, the y axis on the
+right and half of the z axis on both, smoothed by MATLAB’s Gaussian window of
+<span class="math notranslate nohighlight">\(2\,\mathrm{round}(f_s/6000) + 1\)</span> samples at the sample rate <span class="math notranslate nohighlight">\(f_s\)</span>, and scaled
+so that the loudest sample of the scan is 0.95. The window reaches past the
+ends of each span into the gradients on either side, so the spans’ sounds,
+joined, are the sound of the whole scan: that of <code class="docutils literal notranslate"><span class="pre">Sequence.sound</span></code> of the design
+under the same prescription, to the single precision of the cache.</p>
+</section>
 <section id="external-simulators">
 <h2>External simulators<a class="headerlink" href="#external-simulators" title="Link to this heading">#</a></h2>
 <p>A Bloch simulator that reads Pulseq files, KomaMRI for example, models what
@@ -711,16 +774,29 @@ gradient’s amplitude to six significant figures, and a turned gradient’s
 amplitude is written as the rotation leaves it, so the k-space of a file
 exported under an oblique prescription agrees with the played trajectory to a
 relative <span class="math notranslate nohighlight">\(10^{-5}\)</span> of its extent.</p>
-<p>A scheduled job simulates every fixture and every sequence pypulseqpp ships
-with KomaMRI twice, as designed and as exported from its cache, over one
-phantom whose density, relaxation times and off-resonance vary across it, and
-compares the two signals sample by sample. KomaMRI drops the ppm term of an
-offset, so a design file carrying one is given to it as Pulseq 1.4.1, whose
-writer resolves the term; and its rotation of a block can drop a corner a
-gradient holds twice, such as the peak of a trapezoid without a flat top, so
-the job turns a design’s gradients itself. The two simulations then differ
-only where the cache plays something other than the design, or by the rounding
-of the text format.</p>
+<p>A job run every night and on demand simulates every fixture and every sequence
+pypulseqpp ships with KomaMRI, over one phantom whose density, relaxation times
+and off-resonance vary across it: as designed, and as exported from its cache.
+KomaMRI drops the ppm term of an offset, so a design file carrying one is given
+to it as Pulseq 1.4.1, whose writer resolves the term; and its rotation of a
+block can drop a corner a gradient holds twice, such as the peak of a trapezoid
+without a flat top, so the job turns a design’s gradients itself. The two
+simulations then differ only where the cache plays something other than the
+design, or by the rounding of the text format.</p>
+<p>The same job compares KomaMRI with pypulseqpp’s Bloch simulation. KomaMRI adds
+a pulse’s phase shape and phase offset to its field with the opposite sign to
+pypulseqpp, and refers the phase its frequency offset accrues to the pulse’s
+centre. It also joins a pulse’s samples linearly and takes the field at the
+start of each time step, where the playout holds each sample of a pulse sampled
+at the middles of equal intervals over its interval; read as written, such a
+pulse would play half an interval late. The exported file is therefore
+simulated a third time with each pulse rewritten in KomaMRI’s convention: its
+samples conjugated, each sample of a pulse sampled at the middles of equal
+intervals held from the start of its interval, and its phase offset <span class="math notranslate nohighlight">\(\phi\)</span>
+replaced by <span class="math notranslate nohighlight">\(-\phi - 2\pi f t_c\)</span>, for the frequency offset <span class="math notranslate nohighlight">\(f\)</span> and the centre
+<span class="math notranslate nohighlight">\(t_c\)</span>. KomaMRI then plays the field pypulseqpp plays. That signal, demodulated
+by the receiver phase the export returns, is compared with pypulseqpp’s
+simulation of the cache on the same spins.</p>
 </section>
 <section id="what-a-run-establishes">
 <h2>What a run establishes<a class="headerlink" href="#what-a-run-establishes" title="Link to this heading">#</a></h2>
@@ -751,13 +827,36 @@ reflected prescription is reconstructed into the image of the phantom at the
 isocentre, and the image carries the prescribed centre and the columns of
 <span class="math notranslate nohighlight">\(R\)</span> as its read, phase and slice directions; a series short of a readout is
 refused.</p></li>
+<li><p>Played on isochromats, the cache of every fixture samples what pypulseqpp’s
+simulation of its design samples, under an axial, an oblique and a reflected
+prescription, with the magnetization carried across the files of a chain.</p></li>
+<li><p>The phantom sampled as isochromats, posed where an axial, an oblique or a
+reflected prescription places the field of view and scanned by a
+single-shot EPI, is acquired as the analytic phantom is: a 90° excitation
+leaves its density at the phase the signal model states. Each ellipse’s
+isochromats relax with its <span class="math notranslate nohighlight">\(T_1\)</span> and <span class="math notranslate nohighlight">\(T_2\)</span> and precess at its chemical shift
+at the magnet’s field.</p></li>
+<li><p>Played in spans, the scan of every fixture plays each block once: the
+spans’ readouts are those of the whole scan, and the sound of a single-file
+fixture, joined across its spans, is <code class="docutils literal notranslate"><span class="pre">Sequence.sound</span></code> of its design as the
+checks turn it, under an axial, an oblique and a reflected prescription. A
+span played at a speed is released once the clock has passed it, and a
+series streamed readout by readout is reconstructed as the same series sent
+whole.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">pulserver</span> <span class="pre">scan</span></code> records the series the virtual scanner acquires of an
+imported file, sample for sample, and streams a generated design to a
+reconstruction proxy, whose image carries the prescribed centre and
+directions.</p></li>
 <li><p>The exported file of every fixture and every shipped sequence, read and
 integrated by pypulseqpp, has the trajectory the cache plays, under an
 axial, an oblique and a reflected prescription, and holds each RF pulse with
 the samples, offsets, centre and use of the design’s.</p></li>
 <li><p>In the scheduled KomaMRI job, the signal simulated from the exported file of
 every fixture and every shipped sequence is the one simulated from its
-design, to the rounding of the text format.</p></li>
+design, to the rounding of the text format, and pypulseqpp’s Bloch
+simulation of the cache gives the signal KomaMRI simulates of the exported
+file in its own RF convention, to the difference of the two simulators’ time
+steps through an RF pulse.</p></li>
 </ul>
 </section>
 <section id="see-also">
@@ -765,7 +864,8 @@ design, to the rounding of the text format.</p></li>
 <ul class="simple">
 <li><p><a class="reference internal" href="ir-cache.html"><span class="doc">The scanner IR</span></a> — the IR, its prescription and its playback.</p></li>
 <li><p><a class="reference internal" href="../user-guide/reconstruction-client.html"><span class="doc">Reconstruction clients</span></a> — the stream the virtual reconstruction client sends.</p></li>
-<li><p><a class="reference internal" href="../api/virtual.html"><span class="doc">Virtual scanner</span></a> — the phantom, the acquisition, the client and the export.</p></li>
+<li><p><a class="reference internal" href="../api/virtual.html"><span class="doc">Virtual scanner</span></a> — the phantom, the acquisition, the Bloch simulation, the scan clock, the client and the export.</p></li>
+<li><p><a class="reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.Isochromats.html#pypulseqpp.Isochromats" title="(in pypulseqpp latest)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pypulseqpp.Isochromats</span></code></a> — the Bloch simulation the cache is played with, and how it plays each Pulseq event.</p></li>
 </ul>
 </section>
 </section>
@@ -820,6 +920,8 @@ design, to the rounding of the text format.</p></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#stand-ins">Stand-ins</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#played-trajectory">Played trajectory</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#signal-model">Signal model</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#bloch-simulation">Bloch simulation</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#scan-clock-and-sound">Scan clock and sound</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#external-simulators">External simulators</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#what-a-run-establishes">What a run establishes</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See also</a></li>

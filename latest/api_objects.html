@@ -853,17 +853,35 @@ from.</p>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.virtual.acquire.html#pulserver.virtual.acquire" title="pulserver.virtual.acquire"><code class="xref py py-obj docutils literal notranslate"><span class="pre">acquire</span></code></a></p></td>
 <td><p>Return the samples the cache beside a sequence file acquires of a phantom.</p></td>
 </tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.virtual.simulate.html#pulserver.virtual.simulate" title="pulserver.virtual.simulate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">simulate</span></code></a></p></td>
+<td><p>Return what each coil receives at every ADC sample the cache beside a sequence file plays on isochromats.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.virtual.Scan.html#pulserver.virtual.Scan" title="pulserver.virtual.Scan"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Scan</span></code></a></p></td>
+<td><p>The cache beside a sequence file played on isochromats block by block, against a scan clock.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.virtual.Chunk.html#pulserver.virtual.Chunk" title="pulserver.virtual.Chunk"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Chunk</span></code></a></p></td>
+<td><p>A span of a virtual scan between two block boundaries.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.virtual.SAMPLE_RATE.html#pulserver.virtual.SAMPLE_RATE" title="pulserver.virtual.SAMPLE_RATE"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SAMPLE_RATE</span></code></a></p></td>
+<td><p>Convert a string or number to a floating-point number, if possible.</p></td>
+</tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.virtual.export.html#pulserver.virtual.export" title="pulserver.virtual.export"><code class="xref py py-obj docutils literal notranslate"><span class="pre">export</span></code></a></p></td>
 <td><p>Write the blocks the cache beside a sequence file plays as one Pulseq 1.5.1 file.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.virtual.Phantom.html#pulserver.virtual.Phantom" title="pulserver.virtual.Phantom"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Phantom</span></code></a></p></td>
 <td><p>Ellipses whose signals add, received by one coil or several.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.virtual.Ellipse.html#pulserver.virtual.Ellipse" title="pulserver.virtual.Ellipse"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Ellipse</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.virtual.BrainWeb.html#pulserver.virtual.BrainWeb" title="pulserver.virtual.BrainWeb"><code class="xref py py-obj docutils literal notranslate"><span class="pre">BrainWeb</span></code></a></p></td>
+<td><p>BrainWeb's normal brain, received by one coil or several.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.virtual.Ellipse.html#pulserver.virtual.Ellipse" title="pulserver.virtual.Ellipse"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Ellipse</span></code></a></p></td>
 <td><p>An ellipse of uniform magnetization in a plane of constant z.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.virtual.send.html#pulserver.virtual.send" title="pulserver.virtual.send"><code class="xref py py-obj docutils literal notranslate"><span class="pre">send</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.virtual.send.html#pulserver.virtual.send" title="pulserver.virtual.send"><code class="xref py py-obj docutils literal notranslate"><span class="pre">send</span></code></a></p></td>
 <td><p>Send one series to the proxy at <code class="docutils literal notranslate"><span class="pre">address</span></code>; return what it sends back.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.virtual.record.html#pulserver.virtual.record" title="pulserver.virtual.record"><code class="xref py py-obj docutils literal notranslate"><span class="pre">record</span></code></a></p></td>
+<td><p>Write one series to an ISMRMRD file as <a class="reference internal" href="generated/pulserver.virtual.send.html#pulserver.virtual.send" title="pulserver.virtual.send"><code class="xref py py-func docutils literal notranslate"><span class="pre">send()</span></code></a> sends it; return the readouts written.</p></td>
 </tr>
 </tbody>
 </table>

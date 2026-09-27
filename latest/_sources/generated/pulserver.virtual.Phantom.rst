@@ -14,6 +14,7 @@
    :toctree:
    :nosignatures:
 
+   ~Phantom.isochromats
    ~Phantom.kspace
 
 

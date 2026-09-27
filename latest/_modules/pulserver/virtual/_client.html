@@ -450,14 +450,15 @@
                 <article class="bd-article">
                   
   <h1>Source code for pulserver.virtual._client</h1><div class="highlight"><pre>
-<span></span><span class="sd">"""The virtual reconstruction client: one series sent to a reconstruction proxy as the scanner's client sends it."""</span>
+<span></span><span class="sd">"""The virtual reconstruction client: one series sent to a reconstruction proxy as the scanner's client sends it, or recorded."""</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
-<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"send"</span><span class="p">]</span>
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"record"</span><span class="p">,</span> <span class="s2">"send"</span><span class="p">]</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">socket</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Sequence</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Iterable</span><span class="p">,</span> <span class="n">Iterator</span><span class="p">,</span> <span class="n">Sequence</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">ismrmrd</span>
@@ -477,7 +478,7 @@
 <span class="k">def</span><span class="w"> </span><span class="nf">send</span><span class="p">(</span>
     <span class="n">address</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">],</span>
     <span class="n">design</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
-    <span class="n">readouts</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">],</span>
+    <span class="n">readouts</span><span class="p">:</span> <span class="n">Iterable</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">],</span>
     <span class="o">*</span><span class="p">,</span>
     <span class="n">frequency_hz</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">123_200_000.0</span><span class="p">,</span>
     <span class="n">position_mm</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span>
@@ -497,33 +498,97 @@
 <span class="sd">    by default. Nothing else of the sequence is sent, as</span>
 <span class="sd">    :doc:`/user-guide/reconstruction-client` specifies. The reply is the</span>
 <span class="sd">    images, DICOM datasets and texts in the order they arrive.</span>
+
+<span class="sd">    ``readouts`` may be an iterator: the header is sent once its first</span>
+<span class="sd">    readout is taken, and each readout once the next one is, so that the</span>
+<span class="sd">    last carries its flag.</span>
 <span class="sd">    """</span>
-    <span class="n">coils</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">readouts</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">readouts</span><span class="p">)</span> <span class="k">else</span> <span class="mi">1</span>
-    <span class="n">directions</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span> <span class="k">if</span> <span class="n">rotation</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">rotation</span><span class="p">,</span> <span class="nb">float</span><span class="p">)</span>
+    <span class="n">header</span><span class="p">,</span> <span class="n">acquisitions</span> <span class="o">=</span> <span class="n">_series</span><span class="p">(</span>
+        <span class="n">design</span><span class="p">,</span> <span class="n">readouts</span><span class="p">,</span> <span class="n">frequency_hz</span><span class="p">,</span> <span class="n">position_mm</span><span class="p">,</span> <span class="n">rotation</span><span class="p">,</span> <span class="n">exam</span>
+    <span class="p">)</span>
     <span class="n">stream</span> <span class="o">=</span> <span class="n">socket</span><span class="o">.</span><span class="n">create_connection</span><span class="p">(</span><span class="n">address</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">)</span>
     <span class="n">connection</span> <span class="o">=</span> <span class="n">Connection</span><span class="p">(</span><span class="n">stream</span><span class="p">)</span>
     <span class="k">try</span><span class="p">:</span>
         <span class="k">if</span> <span class="n">config</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">connection</span><span class="o">.</span><span class="n">send_config</span><span class="p">(</span><span class="n">config</span><span class="p">)</span>
-        <span class="n">connection</span><span class="o">.</span><span class="n">send_header</span><span class="p">(</span><span class="n">_header</span><span class="p">(</span><span class="n">design</span><span class="p">,</span> <span class="n">coils</span><span class="p">,</span> <span class="n">frequency_hz</span><span class="p">,</span> <span class="n">exam</span><span class="p">))</span>
-        <span class="n">last</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">readouts</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span>
-        <span class="k">for</span> <span class="n">index</span><span class="p">,</span> <span class="n">samples</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">readouts</span><span class="p">):</span>
-            <span class="n">acquisition</span> <span class="o">=</span> <span class="n">ismrmrd</span><span class="o">.</span><span class="n">Acquisition</span><span class="o">.</span><span class="n">from_array</span><span class="p">(</span>
-                <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">samples</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">complex64</span><span class="p">)</span>
-            <span class="p">)</span>
-            <span class="n">acquisition</span><span class="o">.</span><span class="n">scan_counter</span> <span class="o">=</span> <span class="n">index</span> <span class="o">+</span> <span class="mi">1</span>
-            <span class="n">acquisition</span><span class="o">.</span><span class="n">position</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">position_mm</span>
-            <span class="n">acquisition</span><span class="o">.</span><span class="n">read_dir</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">directions</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]</span>
-            <span class="n">acquisition</span><span class="o">.</span><span class="n">phase_dir</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">directions</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">]</span>
-            <span class="n">acquisition</span><span class="o">.</span><span class="n">slice_dir</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">directions</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">]</span>
-            <span class="k">if</span> <span class="n">index</span> <span class="o">==</span> <span class="n">last</span><span class="p">:</span>
-                <span class="n">acquisition</span><span class="o">.</span><span class="n">setFlag</span><span class="p">(</span><span class="n">ismrmrd</span><span class="o">.</span><span class="n">ACQ_LAST_IN_MEASUREMENT</span><span class="p">)</span>
+        <span class="n">connection</span><span class="o">.</span><span class="n">send_header</span><span class="p">(</span><span class="n">header</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">acquisition</span> <span class="ow">in</span> <span class="n">acquisitions</span><span class="p">:</span>
             <span class="n">connection</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">acquisition</span><span class="p">)</span>
         <span class="n">connection</span><span class="o">.</span><span class="n">send_close</span><span class="p">()</span>
         <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="n">connection</span><span class="p">)</span>
     <span class="k">finally</span><span class="p">:</span>
         <span class="n">connection</span><span class="o">.</span><span class="n">shutdown_close</span><span class="p">()</span></div>
 
+
+
+<div class="viewcode-block" id="record">
+<a class="viewcode-back" href="../../../generated/pulserver.virtual.record.html#pulserver.virtual.record">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">record</span><span class="p">(</span>
+    <span class="n">path</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">design</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">readouts</span><span class="p">:</span> <span class="n">Iterable</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">],</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">frequency_hz</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">123_200_000.0</span><span class="p">,</span>
+    <span class="n">position_mm</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span>
+    <span class="n">rotation</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">exam</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Write one series to an ISMRMRD file as :func:`send` sends it; return the readouts written.</span>
+
+<span class="sd">    The header and the acquisitions are those :func:`send` sends, in the</span>
+<span class="sd">    group ``dataset`` of the file, which is created where it does not exist.</span>
+<span class="sd">    """</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">ismrmrd.hdf5</span>
+
+    <span class="n">header</span><span class="p">,</span> <span class="n">acquisitions</span> <span class="o">=</span> <span class="n">_series</span><span class="p">(</span>
+        <span class="n">design</span><span class="p">,</span> <span class="n">readouts</span><span class="p">,</span> <span class="n">frequency_hz</span><span class="p">,</span> <span class="n">position_mm</span><span class="p">,</span> <span class="n">rotation</span><span class="p">,</span> <span class="n">exam</span>
+    <span class="p">)</span>
+    <span class="n">dataset</span> <span class="o">=</span> <span class="n">ismrmrd</span><span class="o">.</span><span class="n">hdf5</span><span class="o">.</span><span class="n">Dataset</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">path</span><span class="p">),</span> <span class="s2">"dataset"</span><span class="p">,</span> <span class="n">create_if_needed</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">dataset</span><span class="o">.</span><span class="n">write_xml_header</span><span class="p">(</span><span class="n">header</span><span class="p">)</span>
+        <span class="n">written</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">for</span> <span class="n">acquisition</span> <span class="ow">in</span> <span class="n">acquisitions</span><span class="p">:</span>
+            <span class="n">dataset</span><span class="o">.</span><span class="n">append_acquisition</span><span class="p">(</span><span class="n">acquisition</span><span class="p">)</span>
+            <span class="n">written</span> <span class="o">+=</span> <span class="mi">1</span>
+    <span class="k">finally</span><span class="p">:</span>
+        <span class="n">dataset</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+    <span class="k">return</span> <span class="n">written</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_series</span><span class="p">(</span>
+    <span class="n">design</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">readouts</span><span class="p">:</span> <span class="n">Iterable</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">],</span>
+    <span class="n">frequency_hz</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="n">position_mm</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">float</span><span class="p">],</span>
+    <span class="n">rotation</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">exam</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">ismrmrd</span><span class="o">.</span><span class="n">Acquisition</span><span class="p">]]:</span>
+<span class="w">    </span><span class="sd">"""Return the header of a series, its first readout taken, and its acquisitions."""</span>
+    <span class="n">pending</span> <span class="o">=</span> <span class="nb">iter</span><span class="p">(</span><span class="n">readouts</span><span class="p">)</span>
+    <span class="n">current</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="n">pending</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="n">coils</span> <span class="o">=</span> <span class="mi">1</span> <span class="k">if</span> <span class="n">current</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="nb">int</span><span class="p">(</span><span class="n">current</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+    <span class="n">directions</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span> <span class="k">if</span> <span class="n">rotation</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">rotation</span><span class="p">,</span> <span class="nb">float</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">acquisitions</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">ismrmrd</span><span class="o">.</span><span class="n">Acquisition</span><span class="p">]:</span>
+        <span class="n">counter</span><span class="p">,</span> <span class="n">samples</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span> <span class="n">current</span>
+        <span class="k">while</span> <span class="n">samples</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">following</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="n">pending</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="n">counter</span> <span class="o">+=</span> <span class="mi">1</span>
+            <span class="n">acquisition</span> <span class="o">=</span> <span class="n">ismrmrd</span><span class="o">.</span><span class="n">Acquisition</span><span class="o">.</span><span class="n">from_array</span><span class="p">(</span>
+                <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">samples</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">complex64</span><span class="p">)</span>
+            <span class="p">)</span>
+            <span class="n">acquisition</span><span class="o">.</span><span class="n">scan_counter</span> <span class="o">=</span> <span class="n">counter</span>
+            <span class="n">acquisition</span><span class="o">.</span><span class="n">position</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">position_mm</span>
+            <span class="n">acquisition</span><span class="o">.</span><span class="n">read_dir</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">directions</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]</span>
+            <span class="n">acquisition</span><span class="o">.</span><span class="n">phase_dir</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">directions</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">]</span>
+            <span class="n">acquisition</span><span class="o">.</span><span class="n">slice_dir</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">directions</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">]</span>
+            <span class="k">if</span> <span class="n">following</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">acquisition</span><span class="o">.</span><span class="n">setFlag</span><span class="p">(</span><span class="n">ismrmrd</span><span class="o">.</span><span class="n">ACQ_LAST_IN_MEASUREMENT</span><span class="p">)</span>
+            <span class="k">yield</span> <span class="n">acquisition</span>
+            <span class="n">samples</span> <span class="o">=</span> <span class="n">following</span>
+
+    <span class="k">return</span> <span class="n">_header</span><span class="p">(</span><span class="n">design</span><span class="p">,</span> <span class="n">coils</span><span class="p">,</span> <span class="n">frequency_hz</span><span class="p">,</span> <span class="n">exam</span><span class="p">),</span> <span class="n">acquisitions</span><span class="p">()</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_header</span><span class="p">(</span><span class="n">design</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">coils</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">frequency_hz</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">exam</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>

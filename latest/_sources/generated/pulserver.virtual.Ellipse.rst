@@ -27,5 +27,7 @@
    ~Ellipse.angle
    ~Ellipse.intensity
    ~Ellipse.shift_ppm
+   ~Ellipse.t1
+   ~Ellipse.t2
    ~Ellipse.centre
    ~Ellipse.semi_axes

@@ -542,6 +542,9 @@ prescription’s <code class="docutils literal notranslate"><span class="pre">ro
 by default. Nothing else of the sequence is sent, as
 <a class="reference internal" href="../user-guide/reconstruction-client.html"><span class="doc">Reconstruction clients</span></a> specifies. The reply is the
 images, DICOM datasets and texts in the order they arrive.</p>
+<p><code class="docutils literal notranslate"><span class="pre">readouts</span></code> may be an iterator: the header is sent once its first
+readout is taken, and each readout once the next one is, so that the
+last carries its flag.</p>
 </dd></dl>
 
 </section>
