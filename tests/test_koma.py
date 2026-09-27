@@ -30,7 +30,7 @@ TOLERANCE = 1e-3
 #: Relative to the peak sample of KomaMRI's signal: the two simulators step
 #: through an RF pulse on different grids, and KomaMRI plays the 10 ns ramp the
 #: file holds where the cache plays a gradient's step.
-ENGINE_TOLERANCE = 1e-2
+ENGINE_TOLERANCE = 2e-3
 #: The cases ``PULSERVER_KOMA_CASES`` names, comma-separated; every one without it.
 NAMES = [
     name
