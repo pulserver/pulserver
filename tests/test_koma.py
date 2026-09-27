@@ -274,6 +274,18 @@ def test_komamri_and_pypulseqpps_bloch_simulation_give_one_signal_of_the_cache(
         f"{name}: {_apart(engine, komamri):.1e} of KomaMRI's peak; "
         f"{_apart(engine, gain * komamri):.1e} after a gain of {gain:.3f}"
     )
-    np.testing.assert_allclose(
-        engine, komamri, rtol=0, atol=ENGINE_TOLERANCE * np.abs(komamri).max()
-    )
+    try:
+        np.testing.assert_allclose(
+            engine, komamri, rtol=0, atol=ENGINE_TOLERANCE * np.abs(komamri).max()
+        )
+    except AssertionError:
+        print(f"{name}: KomaMRI's samples of the file in its RF convention:")
+        print(_listed(komamri))
+        print(f"{name}: KomaMRI's samples of the exported file, not demodulated:")
+        print(_listed(simulated[name].exported))
+        raise
+
+
+def _listed(signal):
+    """The samples of a signal as real,imaginary pairs, to five significant figures."""
+    return " ".join(f"{sample.real:.5g},{sample.imag:.5g}" for sample in signal)
