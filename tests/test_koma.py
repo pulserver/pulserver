@@ -94,9 +94,14 @@ def _held(t, signal):
     intervals over its interval, as pypulseqpp's Bloch simulation does.
     KomaMRI joins a pulse's samples linearly and takes the field at the start
     of each time step, so it would play such a pulse half an interval late.
-    Each sample is therefore given at the start of its interval, and the last
-    again at the pulse's end. Both simulators join the samples of any other
-    pulse linearly, and its times and samples are returned as they are.
+    Each sample is therefore given at the start of its interval and a quarter
+    of the way through it, and the last again at the pulse's end, so that each
+    of KomaMRI's steps starts at a knot holding the sample. A time shape whose
+    i-th time lies within the i-th raster step is written as the default
+    raster, one sample at the middle of each step, as the reference writer
+    writes it; no knot a quarter of the way through an interval lies there.
+    Both simulators join the samples of any other pulse linearly, and its
+    times and samples are returned as they are.
     """
     if t.size < 2:
         return t, signal
@@ -106,7 +111,11 @@ def _held(t, signal):
     ) and math.isclose(t[0], 0.5 * interval, rel_tol=1e-9)
     if not at_middles:
         return t, signal
-    return interval * np.arange(t.size + 1), np.append(signal, signal[-1])
+    starts = interval * np.arange(t.size)
+    times = np.append(
+        np.column_stack([starts, starts + 0.25 * interval]), t.size * interval
+    )
+    return times, np.append(np.repeat(signal, 2), signal[-1])
 
 
 def _as_komamri_plays_it(exported, path):

@@ -233,7 +233,7 @@ at the middles of equal intervals over its interval; read as written, such a
 pulse would play half an interval late. The exported file is therefore
 simulated a third time with each pulse rewritten in KomaMRI's convention: its
 samples conjugated, each sample of a pulse sampled at the middles of equal
-intervals given at the start of its interval, and its phase offset $\phi$
+intervals held from the start of its interval, and its phase offset $\phi$
 replaced by $-\phi - 2\pi f t_c$, for the frequency offset $f$ and the centre
 $t_c$. KomaMRI then plays the field pypulseqpp plays. That signal, demodulated
 by the receiver phase the export returns, is compared with pypulseqpp's
